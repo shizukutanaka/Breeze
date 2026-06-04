@@ -1,6 +1,14 @@
 # Dependencies
 node_modules/
 
+# GitHub Actions workflows are intentionally not tracked here: the automation
+# account used for commits lacks the GitHub `workflows` permission, so it cannot
+# push .github/workflows/*. The files exist locally (and inside breeze.zip); add
+# them to the repo from an account that has `workflows` permission. The intended
+# ci.yml runs: npm ci -> syntax check -> npm test -> validate.sh -> build+upload
+# breeze.zip. To track them, remove this rule or `git add -f`.
+.github/workflows/
+
 # Cloudflare
 .wrangler/
 .dev.vars
