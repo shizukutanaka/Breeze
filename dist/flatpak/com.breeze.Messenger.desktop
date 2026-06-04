@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Breeze
+Comment=P2P Encrypted Messenger
+Exec=breeze
+Icon=com.breeze.Messenger
+Type=Application
+Categories=Network;InstantMessaging;Chat;
+Keywords=messenger;encrypted;p2p;chat;privacy;
+StartupWMClass=breeze

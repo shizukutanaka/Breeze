@@ -1,0 +1,29 @@
+# winget manifest v1.6.0
+# Submit: https://github.com/microsoft/winget-pkgs
+# After building .exe, update InstallerUrl and InstallerSha256
+
+PackageIdentifier: Breeze.Messenger
+PackageVersion: 3.5.0
+PackageLocale: en-US
+Publisher: Breeze Project
+PackageName: Breeze
+License: MIT
+ShortDescription: P2P Encrypted Messenger
+Description: |-
+  Peer-to-peer encrypted messenger. No phone number. No registration.
+  Messages go directly between devices via WebRTC with ECDH P-256 + AES-256-GCM.
+Tags:
+  - messenger
+  - encrypted
+  - p2p
+  - chat
+  - privacy
+  - security
+PackageUrl: https://github.com/shizukutanaka/breeze
+InstallerType: nsis
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/shizukutanaka/breeze/releases/latest/download/Breeze-Setup.exe
+    InstallerSha256: # UPDATE after build
+ManifestType: singleton
+ManifestVersion: 1.6.0

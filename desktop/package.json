@@ -1,0 +1,193 @@
+{
+  "name": "breeze-desktop",
+  "version": "3.6.0",
+  "description": "Breeze \u2014 P2P encrypted messenger",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "BREEZE_URL= electron .",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "build:all": "electron-builder --win --mac --linux",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "electron-updater": "^6.1.7"
+  },
+  "devDependencies": {
+    "electron": "^29.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.breeze.messenger",
+    "productName": "Breeze",
+    "copyright": "Copyright \u00a9 2026 Breeze",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "files": [
+      "main.js",
+      "preload.js",
+      "icon.*",
+      "tray*.png"
+    ],
+    "extraResources": [
+      {
+        "from": "../index.html",
+        "to": "index.html"
+      },
+      {
+        "from": "../sw.js",
+        "to": "sw.js"
+      },
+      {
+        "from": "../manifest.json",
+        "to": "manifest.json"
+      },
+      {
+        "from": "../lang.js",
+        "to": "lang.js"
+      },
+      {
+        "from": "../icon-192.png",
+        "to": "icon-192.png"
+      },
+      {
+        "from": "../icon-512.png",
+        "to": "icon-512.png"
+      }
+    ],
+    "asar": true,
+    "compression": "maximum",
+    "publish": {
+      "provider": "github",
+      "owner": "shizukutanaka",
+      "repo": "breeze"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icon.ico",
+      "sign": false,
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
+      "installerHeaderIcon": "icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Breeze"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "icon": "icon.png",
+      "category": "public.app-category.social-networking",
+      "darkModeSupport": true,
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "entitlements.mac.plist",
+      "entitlementsInherit": "entitlements.mac.plist",
+      "extendInfo": {
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLName": "Breeze Protocol",
+            "CFBundleURLSchemes": [
+              "breeze"
+            ]
+          }
+        ]
+      }
+    },
+    "dmg": {
+      "artifactName": "${productName}-${version}-mac.${ext}",
+      "title": "${productName}",
+      "icon": "icon.png",
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "rpm",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icon.png",
+      "category": "Network;InstantMessaging;Chat",
+      "synopsis": "P2P encrypted messenger",
+      "description": "Breeze is a P2P encrypted messenger. No phone number. No email. Zero dependencies.",
+      "desktop": {
+        "StartupWMClass": "breeze-desktop",
+        "MimeType": "x-scheme-handler/breeze"
+      }
+    },
+    "deb": {
+      "depends": [
+        "libnotify4",
+        "libsecret-1-0",
+        "libappindicator3-1"
+      ],
+      "priority": "optional",
+      "afterInstall": "scripts/postinst.sh"
+    },
+    "rpm": {
+      "depends": [
+        "libnotify",
+        "libsecret",
+        "libappindicator-gtk3"
+      ]
+    },
+    "appImage": {
+      "artifactName": "${productName}-${version}-linux-${arch}.${ext}"
+    }
+  }
+}

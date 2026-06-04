@@ -1,0 +1,72 @@
+name = "breeze"
+pages_build_output_dir = "."
+compatibility_date = "2024-12-01"
+
+# KV Binding (create via Dashboard or CLI)
+# wrangler kv:namespace create KV
+# Then paste the ID below (or bind via Dashboard: Pages > Settings > Functions > KV)
+[[kv_namespaces]]
+binding = "KV"
+id = ""  # ← REQUIRED: paste your KV namespace ID here
+
+# === SECRETS (set via CLI — never commit values) ===
+#
+# --- Stripe Billing ---
+# wrangler pages secret put STRIPE_SECRET_KEY         # sk_live_... or sk_test_...
+# wrangler pages secret put STRIPE_WEBHOOK_SECRET     # whsec_...
+# wrangler pages secret put STRIPE_PRICE_LITE          # price_... ($0.99/mo, Lite)
+# wrangler pages secret put STRIPE_PRICE_PLUS          # price_... ($5.99/mo, Plus)
+# wrangler pages secret put STRIPE_PRICE_PRO           # price_... ($19.99/mo, Pro)
+#
+# --- Web Push ---
+# npx web-push generate-vapid-keys
+# wrangler pages secret put VAPID_PUBLIC_KEY
+# wrangler pages secret put VAPID_PRIVATE_KEY
+#
+# --- TURN Relay ---
+# Option A (recommended): Cloudflare Calls TURN ($0.05/GB, global anycast)
+# wrangler pages secret put TURN_KEY_ID               # From Dashboard > Calls > TURN App
+# wrangler pages secret put TURN_KEY_API_TOKEN         # From Dashboard > Calls > TURN App
+# Option B: Custom HMAC (Coturn self-hosted)
+# wrangler pages secret put TURN_URL                  # turn:host:3478
+# wrangler pages secret put TURN_SECRET               # HMAC shared secret
+# Option C: Static credentials (metered.ca, twilio, etc.)
+# wrangler pages secret put TURN_URL                  # turn:relay.example:80
+# wrangler pages secret put TURN_USERNAME              # static username
+# wrangler pages secret put TURN_CREDENTIAL            # static credential
+# Option D: No config → auto-falls to free Open Relay (20GB/month)
+#
+# --- Translation (optional — cascading fallback) ---
+# wrangler pages secret put DEEPL_API_KEY             # DeepL API key (free or pro)
+# wrangler pages secret put GOOGLE_TRANSLATE_KEY       # Google Cloud Translation API key
+# wrangler pages secret put TRANSLATE_URL              # LibreTranslate URL (self-hosted)
+# wrangler pages secret put TRANSLATE_KEY              # LibreTranslate API key
+# If none set, falls back to MyMemory (free, 5K chars/day)
+#
+# --- AI (optional — cascading fallback) ---
+# wrangler pages secret put ANTHROPIC_API_KEY          # Claude (sonnet-4 default)
+# wrangler pages secret put OPENAI_API_KEY             # GPT-4o-mini default
+# wrangler pages secret put GROQ_API_KEY               # Llama 3.3 70B default
+# Optional model override:
+# wrangler pages secret put ANTHROPIC_MODEL            # e.g. claude-sonnet-4-20250514
+# wrangler pages secret put OPENAI_MODEL               # e.g. gpt-4o
+# wrangler pages secret put GROQ_MODEL                 # e.g. llama-3.3-70b-versatile
+# wrangler pages secret put OPENAI_BASE_URL            # e.g. https://api.openai.com
+#
+# === STRIPE SETUP ===
+#
+# Products (1):
+#   "Breeze Lite"  → $0.99/month (USD, Recurring) — +1 account
+#   "Breeze Plus"  → $5.99/month (USD, Recurring) — +3 accounts
+#   "Breeze Pro"   → $19.99/month (USD, Recurring) — unlimited accounts
+#   1st account is always free.
+#
+# Webhook:
+#   URL: https://your-domain/api/webhook
+#   Events: checkout.session.completed, customer.subscription.deleted,
+#           customer.subscription.paused, customer.subscription.updated,
+#           invoice.payment_failed, invoice.paid
+#
+# Enable:
+#   - Settings → Customer Portal → Activate
+#   - Settings → Tax → Enable Stripe Tax (optional)

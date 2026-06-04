@@ -1,0 +1,60 @@
+{
+  "appId": "com.breeze.messenger",
+  "appName": "Breeze",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https",
+    "iosScheme": "https",
+    "hostname": "app.breeze.local",
+    "allowNavigation": ["*.pages.dev", "checkout.stripe.com"]
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 800,
+      "launchAutoHide": true,
+      "backgroundColor": "#050505",
+      "androidScaleType": "CENTER_CROP",
+      "showSpinner": false,
+      "splashFullScreen": true,
+      "splashImmersive": true
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#050505",
+      "overlaysWebView": false
+    },
+    "Keyboard": {
+      "resize": "body",
+      "scrollAssist": true,
+      "scrollPadding": false
+    },
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_breeze",
+      "iconColor": "#10b981",
+      "sound": "breeze_notify.wav"
+    },
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    }
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false,
+    "backgroundColor": "#050505",
+    "minSdkVersion": 24,
+    "buildOptions": {
+      "keystorePath": "release.keystore",
+      "keystoreAlias": "breeze"
+    }
+  },
+  "ios": {
+    "contentInset": "automatic",
+    "allowsLinkPreview": false,
+    "backgroundColor": "#050505",
+    "preferredContentMode": "mobile",
+    "scrollEnabled": true,
+    "scheme": "Breeze",
+    "limitsNavigationsToAppBoundDomains": true
+  }
+}

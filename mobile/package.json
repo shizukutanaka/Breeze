@@ -1,0 +1,34 @@
+{
+  "name": "breeze-mobile",
+  "version": "3.6.0",
+  "private": true,
+  "scripts": {
+    "prepare:www": "node prepare.js",
+    "check": "node prepare.js --check",
+    "android:sync": "npm run prepare:www && npx cap sync android",
+    "android:open": "npm run android:sync && npx cap open android",
+    "android:build": "npm run android:sync && cd android && ./gradlew assembleRelease",
+    "android:build:debug": "npm run android:sync && cd android && ./gradlew assembleDebug",
+    "ios:sync": "npm run prepare:www && npx cap sync ios",
+    "ios:open": "npm run ios:sync && npx cap open ios",
+    "clean": "rm -rf www/ android/ ios/ node_modules/"
+  },
+  "dependencies": {
+    "@capacitor/core": "^6.2.0",
+    "@capacitor/cli": "^6.2.0",
+    "@capacitor/android": "^6.2.0",
+    "@capacitor/ios": "^6.2.0",
+    "@capacitor/app": "^6.0.1",
+    "@capacitor/haptics": "^6.0.1",
+    "@capacitor/keyboard": "^6.0.2",
+    "@capacitor/status-bar": "^6.0.1",
+    "@capacitor/splash-screen": "^6.0.2",
+    "@capacitor/local-notifications": "^6.1.0",
+    "@capacitor/push-notifications": "^6.0.2",
+    "@capacitor/share": "^6.0.2",
+    "@capacitor/browser": "^6.0.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

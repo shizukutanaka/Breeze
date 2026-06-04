@@ -1,0 +1,29 @@
+app-id: com.breeze.Messenger
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+base: org.electronjs.Electron2.BaseApp
+base-version: '24.08'
+command: breeze
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=x11
+  - --socket=wayland
+  - --socket=pulseaudio
+  - --device=dri
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.kde.StatusNotifierWatcher
+modules:
+  - name: breeze
+    buildsystem: simple
+    sources:
+      - type: dir
+        path: ../..
+    build-commands:
+      - install -d /app/share/breeze
+      - cp index.html sw.js manifest.json /app/share/breeze/
+      - cp -r desktop/* /app/share/breeze/
+      - cd /app/share/breeze && npm install --production
+      - install -Dm644 dist/flatpak/com.breeze.Messenger.desktop /app/share/applications/com.breeze.Messenger.desktop
+      - install -Dm644 dist/flatpak/com.breeze.Messenger.metainfo.xml /app/share/metainfo/com.breeze.Messenger.metainfo.xml

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Breeze Messenger</title>
+<script>
+// SPA routing: redirect all paths to root with hash
+const path = window.location.pathname;
+if (path !== '/' && !path.startsWith('/api/')) {
+  window.location.replace('/' + window.location.search + window.location.hash);
+}
+</script>
+<style>
+body { background: #0a0a0a; color: #f5f5f5; font-family: system-ui; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0 }
+a { color: #10b981; text-decoration: none }
+</style>
+</head>
+<body>
+<div style="text-align:center">
+<h1 style="font-size:48px;margin:0">🌊</h1>
+<p>Page not found</p>
+<a href="/">Go to Breeze</a>
+</div>
+</body>
+</html>

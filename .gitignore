@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+
+# Cloudflare
+.wrangler/
+.dev.vars
+
+# Build artifacts
+breeze.zip
+coverage/
+*.apk
+*.dmg
+*.exe
+*.AppImage
+*.deb
+*.rpm
+*.snap
+*.flatpak
+
+# Capacitor generated
+android/
+ios/
+
+# Test files
+test.js
+e2e.js
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Env
+.env
+.env.local
+.env.production
+
+# Claude Code project settings (share with team)
+!.claude/
+!.claude/settings.json
+!.claude/commands/
+
+# Mobile build artifacts
+mobile/www/
+mobile/android/
+mobile/ios/
+mobile/node_modules/
