@@ -132,6 +132,38 @@ describe('replay & duplicate protection', () => {
   });
 });
 
+describe('key commitment (I16 — anti invisible-salamander)', () => {
+  it('emits a commitment and round-trips when it matches', async () => {
+    const { sender, receiver } = R.pairFromSharedChain(randomChain());
+    const obj = JSON.parse(await R.ratchetEncrypt(sender, 'committed hi'));
+    expect(obj.cm).toBeDefined();
+    expect(obj.cm.length).toBe(32);
+    expect(await R.ratchetDecrypt(receiver, obj)).toBe('committed hi');
+  });
+
+  it('rejects a message whose commitment does not match the key', async () => {
+    const { sender, receiver } = R.pairFromSharedChain(randomChain());
+    const obj = JSON.parse(await R.ratchetEncrypt(sender, 'secret'));
+    obj.cm[0] ^= 0xff; // commitment no longer matches the derived message key
+    expect(await R.ratchetDecrypt(receiver, obj)).toBe(null);
+  });
+
+  it('still decrypts legacy messages with no commitment field (back-compat)', async () => {
+    const { sender, receiver } = R.pairFromSharedChain(randomChain());
+    const obj = JSON.parse(await R.ratchetEncrypt(sender, 'legacy'));
+    delete obj.cm;
+    expect(await R.ratchetDecrypt(receiver, obj)).toBe('legacy');
+  });
+
+  it('commitment is a deterministic function of the key', async () => {
+    const mk = crypto.getRandomValues(new Uint8Array(32));
+    const a = await R.keyCommitment(mk);
+    const b = await R.keyCommitment(mk);
+    expect(R.ctEqual(a, b)).toBe(true);
+    expect(R.ctEqual(a, await R.keyCommitment(crypto.getRandomValues(new Uint8Array(32))))).toBe(false);
+  });
+});
+
 describe('DH ratchet primitives', () => {
   it('produces a shared secret via ECDH (both directions agree)', async () => {
     const a = await R.genRatchetKey();

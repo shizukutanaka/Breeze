@@ -140,13 +140,31 @@ export function createRatchet(opts = {}) {
     return new TextDecoder().decode(raw);
   }
 
+  // --- I16: key commitment (defeats "invisible salamanders" / partitioning) ---
+  // AES-GCM is not key-committing: a single ciphertext can be crafted to open
+  // validly under two different keys. We bind each message to exactly one key by
+  // shipping cm = HKDF(msgKey, 0^32, 'breeze-commit', 32) and verifying it (in
+  // constant time) before trusting the AEAD result. Matters most for the group /
+  // sealed-sender multi-key paths; also the building block for franking (I17).
+  async function keyCommitment(msgKey) {
+    return hkdf(u8(msgKey), new Uint8Array(32), 'breeze-commit', 32);
+  }
+  function ctEqual(a, b) {
+    const x = u8(a), y = u8(b);
+    if (x.length !== y.length) return false;
+    let d = 0;
+    for (let i = 0; i < x.length; i++) d |= x[i] ^ y[i];
+    return d === 0;
+  }
+
   // --- Encrypt one message on the send chain (mirrors encryptFor's ratchet body) ---
   async function ratchetEncrypt(sess, text) {
     const { msgKey, nextChain } = await kdfChain(sess.sendChainKey);
     sess.sendChainKey = nextChain;
     sess.sendCounter = (sess.sendCounter || 0) + 1;
     const { iv, ct } = await frameEncrypt(msgKey, text);
-    return JSON.stringify({ v: 4, i: arr(iv), d: arr(ct), rk: sess.ratchetPub, c: sess.sendCounter });
+    const cm = await keyCommitment(msgKey);
+    return JSON.stringify({ v: 4, i: arr(iv), d: arr(ct), rk: sess.ratchetPub, c: sess.sendCounter, cm: arr(cm) });
   }
 
   // --- Decrypt one message (mirrors decryptFrom's v3/v4 ratchet branch) ---
@@ -180,6 +198,7 @@ export function createRatchet(opts = {}) {
       if (sess.skippedKeys?.[skKey]) {
         const mkData = sess.skippedKeys[skKey].k;
         delete sess.skippedKeys[skKey];
+        if (p.cm && !ctEqual(await keyCommitment(mkData), p.cm)) { dbg(null, 'key commitment mismatch'); return null; }
         const key = await subtle.importKey('raw', u8(mkData), { name: 'AES-GCM' }, false, ['decrypt']);
         const padded = new Uint8Array(await subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, key, u8(p.d)));
         return unpadAndDecompress(padded);
@@ -214,6 +233,8 @@ export function createRatchet(opts = {}) {
     }
 
     const { msgKey, nextChain } = await kdfChain(sess.recvChainKey);
+    // I16: verify key commitment before advancing dedup state / trusting the AEAD.
+    if (p.cm && !ctEqual(await keyCommitment(msgKey), p.cm)) { dbg(null, 'key commitment mismatch'); return null; }
     sess.recvChainKey = nextChain;
     sess.recvCounter = p.c;
     if (!sess.seenMsgIds) sess.seenMsgIds = [];
@@ -243,7 +264,7 @@ export function createRatchet(opts = {}) {
   return {
     hkdf, kdfChain, genRatchetKey, ecdhBits, dhRatchetStep,
     frameEncrypt, unpadAndDecompress, ratchetEncrypt, ratchetDecrypt,
-    pairFromSharedChain, _cfg: cfg,
+    keyCommitment, ctEqual, pairFromSharedChain, _cfg: cfg,
   };
 }
 

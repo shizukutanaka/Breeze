@@ -19,7 +19,7 @@
 | ID | Item | Effort | Why now | Dep |
 |----|------|--------|---------|-----|
 | I1 | Authenticated X3DH — sign + verify the pre-key | S | Closes an **active first-contact MITM**; voids the premise every Signal proof needs (ePrint 2016/1013). Wire-versioned (v5) w/ v4 read path. | tests ✅ |
-| I16 | Key commitment on AEAD (HKDF commitment tag) | S | AES-GCM isn't committing → "invisible salamanders" in group/sealed/multi-key paths (ePrint 2020/1456). | — |
+| I16 | Key commitment on AEAD (HKDF commitment tag) | S | AES-GCM isn't committing → "invisible salamanders" in group/sealed/multi-key paths (ePrint 2020/1456). | — | ✅ **done in `src/crypto/ratchet.js`** (cm tag + constant-time verify, both decrypt paths; +4 tests); port to index.html/group/sealed pending |
 | I15 | Stop pre-encryption compression (1:1 `encryptFor`) | S | CRIME/BREACH-class length leak; partly defeats the 256-B padding. Pure removal. | — |
 | I7 | Bound **+ time-expire** skipped-key cache | S | Lingering skipped keys = FS leak + DoS (ePrint 2018/1037). Count bound already exists; add TTL. | — | ✅ **done in `src/crypto/ratchet.js`** (TTL + tests); port to index.html pending |
 | I20 | Known-answer test vectors (RFC/NIST/Wycheproof) | S–M | Catches HKDF-info/nonce/tag glue bugs incl. the I15/I16 class; slots into the new harness. | tests ✅ | ✅ **done** — `tests/kat.test.js` (HKDF RFC 5869, X25519 RFC 7748, AES-256-GCM NIST + tamper-reject) |
