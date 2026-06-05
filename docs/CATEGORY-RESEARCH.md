@@ -14,11 +14,11 @@
 | 3 | Metadata privacy, anonymity & traffic analysis | ✅ done |
 | 4 | P2P transport & connectivity (WebRTC/NAT/ICE) | ✅ done |
 | 5 | Real-time media — voice/video calls | ✅ done |
-| 6 | Trust & safety in E2EE — abuse, spam, moderation | ⏳ researching |
-| 7 | Key lifecycle — multi-device, backup, transparency | ⬜ pending |
-| 8 | Web client security & supply-chain integrity | ⬜ pending |
-| 9 | Local-first storage & sync (offline, CRDT, search) | ⬜ pending |
-| 10 | Serverless edge backend — scale, cost, reliability | ⬜ pending |
+| 6 | Trust & safety in E2EE — abuse, spam, moderation | ✅ done |
+| 7 | Key lifecycle — multi-device, backup, transparency | ✅ done |
+| 8 | Web client security & supply-chain integrity | ✅ done |
+| 9 | Local-first storage & sync (offline, CRDT, search) | ✅ done |
+| 10 | Serverless edge backend — scale, cost, reliability | ✅ done |
 
 ---
 
@@ -157,4 +157,155 @@ keep media E2E through the server, with **MLS** for group-call keys; adopt
 **transport-cc/GCC** adaptive bitrate, **FEC/RED** for loss, and **Opus DTX** to
 reduce bandwidth.
 
-<!-- Categories 6–10 appended in subsequent loop iterations. -->
+## 6 — Trust & safety in E2EE — abuse, spam, moderation
+
+Breeze: PoW + Worker rate limits; no abuse reporting; no content scanning (a feature,
+not a bug). Cross-ref: I16, I17, I18. Principle: preserve E2EE while enabling
+*consensual* reporting.
+
+**arXiv / academic**
+1. Grubbs–Lu–Ristenpart, *Message Franking via Committing AEAD*, [2017/664](https://eprint.iacr.org/2017/664) → verifiable reporting without plaintext escrow (I17).
+2. Tyagi et al., *Asymmetric Message Franking*, [2019/565](https://eprint.iacr.org/2019/565) → franking compatible with **sealed sender**.
+3. Issa–Alhaddad–Varia, *Hecate*, [2021/1686](https://eprint.iacr.org/2021/1686) → fast sealed-sender abuse reporting + source tracing, keeps deniability for unreported msgs.
+4. Tyagi–Miers–Ristenpart, *Traceback for E2E Messaging*, [2019/981](https://eprint.iacr.org/2019/981) → trace virally-forwarded abusive content without breaking E2E.
+5. Davidson et al., *Privacy Pass*, [PETS 2018](https://petsymposium.org/2018/files/papers/issue3/popets-2018-0026.pdf) → **anonymous anti-abuse tokens** vs CPU-taxing PoW (I18).
+6. Albertini et al., *Abuse & Fix AE Without Key Commitment*, [2020/1456](https://eprint.iacr.org/2020/1456) → committing-AEAD fix that franking depends on (I16).
+7. Abelson et al., *Bugs in Our Pockets: Risks of Client-Side Scanning*, [arXiv 2110.07450](https://arxiv.org/abs/2110.07450) → why CSS is dangerous → **keep Breeze CSS-free**, document the stance.
+8. Struppek et al., *Learning to Break Deep Perceptual Hashing (NeuralHash)*, [arXiv 2111.06628](https://arxiv.org/abs/2111.06628) → perceptual-hash scanning is evadable/forgeable — reinforces the anti-CSS position.
+
+**GitHub**
+9. [raphaelrobert/privacypass](https://github.com/raphaelrobert/privacypass) / [cloudflare/pat-app](https://github.com/cloudflare/pat-app) → Privacy Pass / Private Access Token references for the Worker issuer.
+10. [matrix-org/mjolnir](https://github.com/matrix-org/mjolnir) → community **policy/ban lists** — opt-in, decentralized moderation for groups (no central authority).
+11. [signalapp/libsignal](https://github.com/signalapp/libsignal) → committing-AEAD / franking primitives reference.
+
+**Improvement points:** add **committing AEAD** (I16) → **AMF/Hecate franking** for
+verifiable, backdoor-free reporting (I17); **anonymous tokens** to complement PoW
+(I18); user-side **block/mute + report-with-proof**; opt-in **policy lists**
+(mjolnir-style) for group moderation; explicitly **reject client-side scanning** and
+say so in SECURITY.md (Abelson/Struppek).
+
+## 7 — Key lifecycle — multi-device, backup, transparency
+
+Breeze: single device; keys plaintext at rest; pure TOFU. Cross-ref: I4, I11, I12, I13.
+
+**arXiv / academic**
+1. Melara et al., *CONIKS*, [2014/1004](https://eprint.iacr.org/2014/1004) → privacy-preserving verifiable key directory (lightweight KT) (I11).
+2. Chase et al., *SEEMless*, [2018/607](https://eprint.iacr.org/2018/607) → scalable append-only key transparency.
+3. Malvai et al., *Parakeet*, [2023/081](https://eprint.iacr.org/2023/081) → production-scale KT (deployed by WhatsApp).
+4. Signal, *Secret Key Recovery (SVR2/3)*, [2024/887](https://eprint.iacr.org/2024/887) → PIN backup with enclave guess-limits (I13).
+5. Unger et al., *SoK: Secure Messaging*, [IEEE S&P 2015](https://oaklandsok.github.io/papers/unger2015.pdf) → framework for trust establishment + multi-device trade-offs.
+6. *Threema Ibex multi-device* ([blog](https://threema.com/en/blog/ibex)) → **Device Group Key** the server never sees (I12).
+7. *Matrix cross-signing* ([spec](https://spec.matrix.org/latest/client-server-api/#cross-signing)) → master/self/user-signing keys endorse new devices (I12).
+
+**GitHub**
+8. [google/keytransparency](https://github.com/google/keytransparency) → reference KT server.
+9. [facebook/akd](https://github.com/facebook/akd) → Auditable Key Directory (the library behind WhatsApp KT) — directly adaptable to a Worker+KV log.
+10. [signalapp/SecureValueRecovery2](https://github.com/signalapp/SecureValueRecovery2) → SVR2 design for PIN backup.
+11. [matrix-org/vodozemac](https://github.com/matrix-org/vodozemac) → cross-signing + device-key handling reference.
+
+**Improvement points:** encrypt keys at rest (I4); **multi-device via DGK +
+cross-signing** (I12); **PIN-based encrypted backup** with Worker-enforced
+guess-limit (I13); **akd/CONIKS-style key-transparency log** on the Worker so a
+malicious relay can't silently swap keys (I11). Order: I4 → I11 → I12/I13.
+
+## 8 — Web client security & supply-chain integrity
+
+Breeze: single-file inline app; CSP + Trusted Types (`safeSetHTML`); SRI on `lang.js`.
+The hardest web-E2EE problem: **the server can serve malicious JS**.
+
+**Academic / standards**
+1. *W3C Trusted Types* ([spec](https://www.w3.org/TR/trusted-types/)) → enforce `require-trusted-types-for 'script'` to kill DOM-XSS sinks (Breeze already has a sanitizer policy — enforce it; cf. Phase 2d).
+2. *W3C CSP Level 3* ([spec](https://www.w3.org/TR/CSP3/)) → tighten script-src; the inline single-file design forces `'unsafe-inline'` via hash/nonce — pin via hash.
+3. *Subresource Integrity* ([W3C SRI](https://www.w3.org/TR/SRI/)) → already on `lang.js`; extend to every external asset.
+4. *Reproducible Builds* ([reproducible-builds.org](https://reproducible-builds.org/)) → deterministic build of `breeze.zip` so third parties can verify the published artifact matches source.
+5. *Binary/Code Transparency* (e.g. Google's, [arXiv 2011.04551 — "Contour"/transparency]) → publish app-hash to an append-only log so a targeted malicious build is detectable.
+6. "JavaScript Cryptography Considered Harmful" (classic) → the threat model code-signing addresses; counter it with verified delivery, not avoidance.
+
+**GitHub**
+7. [facebookincubator/meta-code-verify](https://github.com/facebookincubator/meta-code-verify) → **WhatsApp/Messenger Web "Code Verify"**: a browser extension that checks the loaded JS against a published, Cloudflare-audited hash — *the* answer to "is the served app authentic?" Adapt for Breeze's single file.
+8. [sigstore/cosign](https://github.com/sigstore/cosign) → sign `breeze.zip` + publish provenance (SLSA) to a transparency log.
+9. [C2SP/wycheproof](https://github.com/C2SP/wycheproof) → crypto KATs (I20) — also a supply-chain check on the WebCrypto glue.
+10. [OWASP/ASVS](https://github.com/OWASP/ASVS) + [CSP Evaluator](https://github.com/google/csp-evaluator) → audit checklist for the client.
+
+**Improvement points:** ship a **Code-Verify-style integrity check** (publish a signed
+hash of the single-file app; a verifier extension or the **service worker** pins the
+hash and refuses unverified updates) — closes the fundamental "server serves bad JS"
+hole for web E2EE; **enforce Trusted Types**; **reproducible build + Sigstore
+provenance** for `breeze.zip` with a **binary-transparency** log; tighten CSP via
+script hashes; keep SRI. (The service worker is a natural pin point — it already
+controls caching/updates.)
+
+## 9 — Local-first storage & sync (offline, CRDT, search)
+
+Breeze: IndexedDB (keys plaintext — I4), message store, PWA offline; single device.
+
+**Academic**
+1. Kleppmann et al., *Local-First Software* ([Ink & Switch 2019](https://www.inkandswitch.com/local-first/)) → principles for offline-first, multi-device-convergent apps.
+2. Shapiro et al., *Conflict-free Replicated Data Types (CRDTs)*, [INRIA 2011](https://hal.inria.fr/inria-00609399/document) → conflict-free multi-replica convergence (needed for multi-device, cat 7).
+3. Kleppmann, *A Highly-Available Move Operation for Replicated Trees*, [arXiv 2103.04828](https://arxiv.org/abs/2103.04828) → ordered lists/trees (message threads, folders) under concurrency.
+4. Fuller et al., *SoK: Cryptographically Protected Database Search*, [arXiv 1703.02014](https://arxiv.org/abs/1703.02014) → encrypted-search trade-offs (client-side search over decrypted data is the safe path).
+5. *E2EE message-history backup* (WhatsApp/Signal designs) → encrypted, key-separated history export.
+
+**GitHub**
+6. [yjs/yjs](https://github.com/yjs/yjs) → high-perf CRDT (design reference for multi-device state/read-receipt/edit convergence; vanilla-JS-friendly).
+7. [automerge/automerge](https://github.com/automerge/automerge) → CRDT with rich history — reference for editable, mergeable transcripts (also enables I10 "local transcript editing" deniability).
+8. [rhashimoto/wa-sqlite](https://github.com/rhashimoto/wa-sqlite) / [jlongster/absurd-sql](https://github.com/jlongster/absurd-sql) → SQLite-over-IndexedDB for a robust local store + **full-text search**.
+9. [dexie/Dexie.js](https://github.com/dexie/Dexie.js) → ergonomic IndexedDB + encryption addon reference.
+10. [localfirstweb/awesome-local-first](https://github.com/localfirstweb/awesome-local-first) → ecosystem index.
+
+**Improvement points:** **encrypt the message store at rest** (extend I4 from identity
+keys to IndexedDB message bodies via a derived DB key); adopt a **CRDT model**
+(Yjs/Automerge) so the multi-device feature (cat 7) converges read-state/edits/deletes
+without conflicts; consider **wa-sqlite** for durable local storage + **client-side
+full-text search** over plaintext the client already holds; add **E2EE history
+backup/export** (ties to I13). Single-device today → local-first unlocks multi-device.
+
+## 10 — Serverless edge backend — scale, cost, reliability
+
+Breeze: Cloudflare Pages Functions + KV; **in-memory per-isolate rate limiter**
+(`globalThis._rateLimitMap`); long-polling (`/msg/poll`, `/sealed/poll`); free-tier
+KV budget (~1000 writes/day) is a real constraint.
+
+**Academic**
+1. Shahrad et al., *Serverless in the Wild* (Azure Functions trace), [ATC 2020 / arXiv 2003.03423](https://arxiv.org/abs/2003.03423) → invocation/cold-start patterns informing keep-warm & batching.
+2. Sreekanti et al., *Cloudburst: Stateful Functions-as-a-Service*, [arXiv 2001.04592](https://arxiv.org/abs/2001.04592) → patterns for consistent state over stateless functions.
+3. Jia & Witchel, *Boki: Stateful Serverless with Shared Logs*, [SOSP 2021](https://www.cs.utexas.edu/~zjia/boki-sosp21.pdf) → durable consistency for serverless — model for ordered message logs.
+4. *GCRA / sliding-window rate limiting* (leaky-bucket theory) → accurate limiter vs the current minute-bucket that undercounts across isolates.
+
+**GitHub / docs**
+5. [Cloudflare Durable Objects](https://developers.cloudflare.com/durable-objects/) → **strongly-consistent coordination**: move rate-limiting, presence, and signaling rendezvous to a DO (fixes the per-isolate `_rateLimitMap` undercount).
+6. [cloudflare/workers-chat-demo](https://github.com/cloudflare/workers-chat-demo) → canonical **DO + hibernatable WebSockets** chat — replace long-polling with push (lower latency, **far fewer KV writes**).
+7. [Cloudflare R2](https://developers.cloudflare.com/r2/) → object storage for backup blobs / large files instead of KV.
+8. [Cloudflare D1](https://developers.cloudflare.com/d1/) → relational store for group membership (vs JSON-in-KV).
+9. [upstash/ratelimit](https://github.com/upstash/ratelimit) → GCRA/sliding-window algorithm reference.
+10. [Cloudflare Queues](https://developers.cloudflare.com/queues/) → async fan-out for push/relay delivery.
+
+**Improvement points:** migrate rate-limiting + presence + signaling to **Durable
+Objects** for cross-isolate correctness (the in-memory limiter undercounts today);
+adopt **hibernatable WebSockets** to replace `/msg/poll` + `/sealed/poll` polling →
+lower latency and **drastically fewer KV writes** (eases the free-tier budget);
+**R2** for backup/large files, **D1** for group data; **GCRA** rate limiting. These
+are correctness + cost wins tied to concrete limits already visible in `_worker.js`.
+
+---
+
+## Summary — top cross-category improvements
+
+The 10-category sweep reinforces `docs/IMPROVEMENTS.md` and surfaces several
+**newly-prominent, in-scope** items:
+
+- **Web app integrity / Code Verify** (cat 8) — arguably the biggest *unaddressed*
+  threat for a web E2EE app: without it, the host can serve malicious JS that
+  defeats every protocol fix. Service-worker hash-pinning is a tractable first step.
+- **Durable Objects + WebSocket push** (cat 10) — fixes the per-isolate rate-limiter
+  correctness bug *and* the KV-write cost ceiling at once.
+- **Encrypt the message store at rest + CRDT multi-device** (cat 9 + cat 7) —
+  extends at-rest protection beyond keys and unlocks the most-requested feature.
+- **SFrame + SAS for calls** (cat 5) — E2E media through any future group/SFU path,
+  plus call-MITM defense.
+- **Franking + anonymous tokens** (cat 6) — consensual abuse reporting and
+  battery-friendly anti-spam without weakening E2EE.
+
+Together with Part A/B of `IMPROVEMENTS.md`, this gives a full-surface backlog:
+protocol (I1–I20), transport/media (cat 4–5), trust & safety (cat 6), key lifecycle
+(cat 7), client supply-chain (cat 8), storage/sync (cat 9), and backend (cat 10).
