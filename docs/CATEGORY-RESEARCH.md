@@ -12,9 +12,9 @@
 | 1 | 1:1 cryptographic protocol & key agreement | ✅ done |
 | 2 | Secure group messaging | ✅ done |
 | 3 | Metadata privacy, anonymity & traffic analysis | ✅ done |
-| 4 | P2P transport & connectivity (WebRTC/NAT/ICE) | ⏳ researching |
-| 5 | Real-time media — voice/video calls | ⏳ researching |
-| 6 | Trust & safety in E2EE — abuse, spam, moderation | ⬜ pending |
+| 4 | P2P transport & connectivity (WebRTC/NAT/ICE) | ✅ done |
+| 5 | Real-time media — voice/video calls | ✅ done |
+| 6 | Trust & safety in E2EE — abuse, spam, moderation | ⏳ researching |
 | 7 | Key lifecycle — multi-device, backup, transparency | ⬜ pending |
 | 8 | Web client security & supply-chain integrity | ⬜ pending |
 | 9 | Local-first storage & sync (offline, CRDT, search) | ⬜ pending |
@@ -99,4 +99,62 @@ length-bucketed padding + optional cover traffic (I6); drop pre-encryption compr
 unlinkable-queue relay redesign or an optional Nym transport for high-threat users.
 
 ---
-<!-- Categories 4–10 appended in subsequent loop iterations. -->
+## 4 — P2P transport & connectivity (WebRTC / NAT / ICE)
+
+Breeze: WebRTC DataChannels + Cloudflare relay fallback (dual-path); STUN
+(Google/Mozilla) + optional TURN; backpressure via `DC_BUFFER_MAX/LOW`;
+heartbeat ping/pong → ICE restart; suppresses non-mDNS host candidates. Already
+fairly mature — focus is incremental robustness.
+
+**IETF / academic**
+1. *RFC 8445 — ICE* ([rfc-editor](https://www.rfc-editor.org/rfc/rfc8445)) → connectivity-check state machine; baseline for diagnosing failed P2P.
+2. *RFC 8838 — Trickle ICE* ([rfc-editor](https://www.rfc-editor.org/rfc/rfc8838)) → send candidates incrementally → **lower call/connect setup latency**; confirm Breeze trickles rather than waiting for full gathering.
+3. *RFC 8831 / 8832 — WebRTC Data Channels over SCTP & DCEP* ([rfc 8831](https://www.rfc-editor.org/rfc/rfc8831)) → ordered/unordered + reliability config; use **unordered+partial-reliability** for real-time, reliable for files.
+4. *RFC 8656 (TURN) / RFC 8489 (STUN)* → relay fallback; TURN cost scales with relayed traffic (informs item 10).
+5. *Google Congestion Control (GCC)*, draft-ietf-rmcat-gcc + transport-wide-cc → **bandwidth estimation for large DataChannel transfers** (files), not just media.
+6. *Perfect Negotiation* pattern (W3C WebRTC §, [MDN](https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Perfect_negotiation)) → **glare-free renegotiation** (polite/impolite peer) — eliminates offer/answer races on reconnection.
+
+**GitHub**
+7. [feross/simple-peer](https://github.com/feross/simple-peer) → minimal, battle-tested WebRTC wrapper — reference for connection lifecycle/edge cases.
+8. [libp2p/specs (WebRTC)](https://github.com/libp2p/specs/tree/master/webrtc) → **WebRTC-direct + certhash** enables browser P2P with *no* dedicated signaling server — reduces relay dependence.
+9. [pion/webrtc](https://github.com/pion/webrtc) → well-documented Go stack; reference for a future SFU/relay or server-side peer.
+10. [libp2p hole-punching (DCUtR)](https://github.com/libp2p/specs/blob/master/relay/DCUtR.md) + [Tailscale "How NAT traversal works"](https://tailscale.com/blog/how-nat-traversal-works) → practical NAT-traversal success techniques (simultaneous open, relay-assisted hole punching).
+11. [w3c/webtransport](https://github.com/w3c/webtransport) → WebTransport over HTTP/3 — an alternative low-latency relay transport to evaluate vs the current Worker fetch relay.
+
+**Improvement points:** adopt the **Perfect Negotiation** pattern for race-free
+reconnect; verify **trickle ICE** is used; tune DataChannel reliability per traffic
+type (unordered/partial for chat presence, reliable for files); add **GCC-style flow
+control** for big file transfers; offer **connection migration** on network change
+(beyond ICE restart); evaluate **libp2p WebRTC-direct/certhash** to cut signaling
+dependence and **WebTransport** as a relay-transport upgrade. (Backpressure and ICE
+restart are already implemented — keep.)
+
+## 5 — Real-time media — voice/video calls
+
+Breeze: pure P2P 1:1 calls over WebRTC (DTLS-SRTP), per-session ECDSA cert, RTT/quality
+display. 1:1 media is already E2E hop-free; gaps appear for **group calls** and
+**call authentication**.
+
+**IETF / academic**
+1. *RFC 8826 / 8827 — WebRTC Security (Architecture)* ([rfc 8827](https://www.rfc-editor.org/rfc/rfc8827)) → the trust model; confirms 1:1 DTLS-SRTP is E2E only without an SFU.
+2. *RFC 5764 — DTLS-SRTP* ([rfc-editor](https://www.rfc-editor.org/rfc/rfc5764)) → keying for SRTP; what Breeze relies on today.
+3. **RFC 9605 — SFrame** ([rfc-editor](https://www.rfc-editor.org/rfc/rfc9605)) → **E2E media that survives an SFU/relay** (server sees only metadata) — required if Breeze ever adds group calls or server-mixed media.
+4. *W3C WebRTC Encoded Transform / Insertable Streams* ([spec](https://www.w3.org/TR/webrtc-encoded-transform/)) → the **browser mechanism** to apply SFrame in a vanilla-JS app (no native code).
+5. *RFC 6189 — ZRTP* ([rfc-editor](https://www.rfc-editor.org/rfc/rfc6189)) → **Short Authentication String (SAS)**: verbal/visual call-MITM defense independent of the identity-key store — strong defense-in-depth.
+6. *RFC 6716 — Opus* + DTX → bandwidth-adaptive audio; enable **DTX** to cut silence bandwidth.
+7. *RFC 8627 (FlexFEC) / RFC 2198 (RED)* → **loss resilience** for lossy mobile networks.
+8. *MLS for group-call keys* (RFC 9420 + SFrame), as used by Element Call → scalable group-call key management.
+
+**GitHub**
+9. [w3c/webrtc-encoded-transform samples](https://github.com/w3c/webrtc-encoded-transform) / [WebRTC samples e2ee](https://github.com/webrtc/samples) → working Insertable-Streams E2EE demo to copy.
+10. [jitsi/jitsi-meet](https://github.com/jitsi/jitsi-meet) → production E2EE group calls via insertable streams — closest reference design.
+11. [sframe-wg/sframe](https://github.com/sframe-wg/sframe) / [cisco/libsframe] → SFrame reference implementations.
+
+**Improvement points:** keep 1:1 DTLS-SRTP (already E2E); add a **ZRTP-style SAS**
+for call authentication (defends against identity-key compromise/MITM on calls);
+if/when group or SFU-mixed calls are added, use **SFrame via Encoded Transform** to
+keep media E2E through the server, with **MLS** for group-call keys; adopt
+**transport-cc/GCC** adaptive bitrate, **FEC/RED** for loss, and **Opus DTX** to
+reduce bandwidth.
+
+<!-- Categories 6–10 appended in subsequent loop iterations. -->
