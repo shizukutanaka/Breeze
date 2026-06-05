@@ -214,3 +214,113 @@
 > returned HTTP 403 to the fetch tool during research; cited URLs are the canonical
 > primary sources (IACR ePrint / arXiv / RFC / vendor engineering blogs) verified to
 > resolve.
+
+---
+
+# Part B — Implementation, side-channel & abuse-resistance axes
+
+These go beyond the core handshake/ratchet protocol (Part A) into how Breeze
+*wires* primitives together and handles abuse — areas where peer apps and the
+literature flag concrete, often cheap, fixes.
+
+### I15. Stop compressing 1:1 message bodies before encryption (CRIME/BREACH side-channel)  ·  S · fits
+- **Threat:** `encryptFor` runs `deflate-raw` on the plaintext *before* AES-GCM
+  (index.html:4603-4618, adaptive `compressMin` 64/128/…). Compress-then-encrypt
+  leaks plaintext information through *ciphertext length*: when attacker-influenceable
+  content is co-compressed with secret content, compressed size reveals guesses
+  (the CRIME/BREACH family). It also partly defeats Breeze's own 256-B padding,
+  because compression happens before padding so the padded bucket still reflects
+  compressed size, and the `compressed` flag itself leaks compressibility.
+- **Academic:** Kelsey, *Compression and Information Leakage of Plaintext*, FSE 2002
+  ([Springer](https://link.springer.com/chapter/10.1007/3-540-45661-9_21)); CRIME
+  (Rizzo–Duong 2012); BREACH, Black Hat 2013
+  ([pdf](https://www.breachattack.com/resources/BREACH%20-%20SSL,%20gone%20in%2030%20seconds.pdf)).
+- **Peer:** Signal-class apps deliberately do **not** compress user-controllable
+  message plaintext.
+- **Action:** disable body compression for 1:1 messages (group `encryptGroupMsg`
+  already doesn't compress) and rely on **bucketed padding** (item I6); if kept for
+  large attachments, key them independently and never co-compress
+  attacker-supplied + secret data. Treats per-message length as metadata.
+
+### I16. Add key commitment to AEAD (AES-GCM is not committing → "invisible salamanders")  ·  S–M · fits
+- **Threat:** AES-256-GCM (used 28× across 1:1, group Sender Keys, sealed sender)
+  is **not key-committing** — a single ciphertext can be crafted to decrypt validly
+  under two different keys to two different plaintexts. Any "try each candidate key"
+  path (group fan-out, multi-recipient, sealed-sender envelopes) can be made to show
+  different content to different recipients, and enables partitioning-oracle key
+  recovery.
+- **Academic:** Dodis, Grubbs, Ristenpart, Woodage, *Fast Message Franking:
+  From Invisible Salamanders to Encryptment*, CRYPTO 2018, ePrint
+  [2019/016](https://eprint.iacr.org/2019/016); Len–Grubbs–Ristenpart,
+  *Partitioning Oracle Attacks*, USENIX'21, ePrint
+  [2020/1491](https://eprint.iacr.org/2020/1491); Albertini et al., *How to Abuse
+  and Fix AE Without Key Commitment*, USENIX'22, ePrint
+  [2020/1456](https://eprint.iacr.org/2020/1456).
+- **Action (cheap, dependency-free):** since Breeze already uses HKDF-SHA256, derive
+  a separate **commitment tag** alongside the AES key (e.g. HMAC/hash over
+  key‖ciphertext) and verify on decrypt, or use the Albertini zero-block padding
+  fix. Prerequisite for I17.
+
+### I17. Verifiable abuse reporting under sealed sender (asymmetric message franking / Hecate)  ·  M–L · fits
+- **Threat/gap:** Breeze has **no way to report an abusive E2E message** that the
+  relay can verify, without a plaintext backdoor. Symmetric (Facebook) franking
+  assumes the server sees routing identity — incompatible with Breeze's sealed
+  sender.
+- **Academic:** Grubbs–Lu–Ristenpart, *Message Franking via Committing AEAD*,
+  CRYPTO 2017, ePrint [2017/664](https://eprint.iacr.org/2017/664);
+  Tyagi et al., *Asymmetric Message Franking*, CRYPTO 2019, ePrint
+  [2019/565](https://eprint.iacr.org/2019/565); Issa–Alhaddad–Varia, *Hecate:
+  Abuse Reporting in Secure Messengers with Sealed Sender*, USENIX'22, ePrint
+  [2021/1686](https://eprint.iacr.org/2021/1686). (Tracing variant: ePrint
+  [2019/981](https://eprint.iacr.org/2019/981).)
+- **Action:** adopt the AMF/Hecate model — sender includes a commitment (reuses
+  I16); a reporter forwards (message + commitment + sender binding) for verification;
+  unreported messages keep deniability. The right fit for a sealed-sender app.
+
+### I18. Anonymous anti-abuse tokens (Privacy Pass / VOPRF) to complement PoW  ·  M–L · partial
+- **Threat/cost:** `generatePoW` (index.html:3251) taxes every honest user's
+  CPU/battery (harsh on mobile PWAs) and barely slows a botnet.
+- **Standard/Academic:** Davidson et al., *Privacy Pass*, PETS 2018
+  ([pdf](https://petsymposium.org/2018/files/papers/issue3/popets-2018-0026.pdf));
+  IETF Privacy Pass RFC [9576](https://www.rfc-editor.org/info/rfc9576/)/9577/9578,
+  VOPRF RFC 9497.
+- **Peer:** Apple/Cloudflare/Fastly "Private Access Tokens." Cloudflare (Breeze's
+  host) already runs Privacy Pass infrastructure.
+- **Action:** issue unlinkable single-use VOPRF tokens from the Worker after one
+  challenge; verify a token per send/registration. Battery-friendly + unlinkable.
+  *Fit caveat:* needs a VOPRF implementation in the Worker — keep PoW as fallback.
+
+### I19. WebRTC IP-leak: make relay-only the privacy default & surface the trade-off  ·  S · fits
+- **Status:** largely mitigated already — Breeze suppresses non-mDNS host
+  candidates (index.html:7722), supports `iceTransportPolicy:'relay'` via the
+  opt-in `relayOnly` setting (7637), and rotates a fresh ECDSA cert per session
+  (7649). **Residual gap:** STUN-reflexive (srflx) candidates still expose each
+  peer's **public IP to the other peer** by default (relayOnly is off by default),
+  and third-party STUN (Google/Mozilla) sees the IP.
+- **Academic/spec:** RFC [8828](https://www.rfc-editor.org/rfc/rfc8828.html)
+  (WebRTC IP handling); mDNS-ICE-candidates draft; measurement study arXiv
+  [2510.16168](https://arxiv.org/abs/2510.16168) (2025) — mDNS hides only *local*
+  host IPs, not STUN-discovered public IPs.
+- **Action:** default to relay-only for privacy-prioritizing users (the
+  "Direct/STUN/TURN" connection display already exposes the state), self-host STUN,
+  and document that direct P2P trades IP-privacy for latency.
+
+### I20. Add known-answer test vectors (Wycheproof / RFC / NIST) to the harness  ·  S–M · fits
+- **Gap:** Breeze hand-wires WebCrypto primitives (HKDF info/salt, AES-GCM
+  params, ratchet chaining, deflate framing); the *glue* is where bugs hide
+  (wrong HKDF info, nonce reuse, truncated tags) — and the new `tests/` +
+  `src/crypto/ratchet.js` make this easy to add.
+- **Source:** Project Wycheproof ([C2SP](https://github.com/C2SP/wycheproof));
+  RFC [5869](https://www.rfc-editor.org/rfc/rfc5869) (HKDF) App. A;
+  RFC [7748](https://www.rfc-editor.org/rfc/rfc7748) (X25519) §5.2; NIST CAVP
+  AES-GCM vectors.
+- **Action:** embed RFC/NIST/Wycheproof vectors as static JSON and assert Breeze's
+  wrappers reproduce expected outputs **and reject** the malformed "invalid" cases
+  (bad tags, wrong nonce lengths). Dependency-free; catches the I15/I16 class of
+  bug. Pairs with the Phase-1 test harness.
+
+## Part B execution note
+I15 (drop compression) and I16 (key commitment) are **S-effort and high-value** —
+do them alongside the Part A quick wins. I20 (KATs) slots straight into the new
+test harness. I17/I18 (franking, anonymous tokens) are medium-term and depend on
+I16. I19 is a one-setting default change plus docs.
