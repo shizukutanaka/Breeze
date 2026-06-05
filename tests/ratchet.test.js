@@ -72,6 +72,30 @@ describe('out-of-order & skipped keys', () => {
     expect(await R.ratchetDecrypt(receiver, next)).toBe('after');
   });
 
+  it('expires retained skipped keys after the TTL (forward secrecy, I7)', async () => {
+    let clock = 1000;
+    const Rt = createRatchet({ skippedKeyTTL: 5000, now: () => clock });
+    const { sender, receiver } = Rt.pairFromSharedChain(randomChain());
+    const c1 = await Rt.ratchetEncrypt(sender, 'one');
+    const c2 = await Rt.ratchetEncrypt(sender, 'two');
+    const c3 = await Rt.ratchetEncrypt(sender, 'three');
+    expect(await Rt.ratchetDecrypt(receiver, c1)).toBe('one');
+    expect(await Rt.ratchetDecrypt(receiver, c3)).toBe('three'); // stores skipped key for #2 at t=1000
+    clock += 10000; // advance well past the 5s TTL
+    expect(await Rt.ratchetDecrypt(receiver, c2)).toBe(null); // expired → unrecoverable
+  });
+
+  it('still recovers a skipped key that arrives within the TTL', async () => {
+    let clock = 1000;
+    const Rt = createRatchet({ skippedKeyTTL: 60000, now: () => clock });
+    const { sender, receiver } = Rt.pairFromSharedChain(randomChain());
+    const c1 = await Rt.ratchetEncrypt(sender, 'one');
+    const c2 = await Rt.ratchetEncrypt(sender, 'two');
+    expect(await Rt.ratchetDecrypt(receiver, c2)).toBe('two'); // skips #1
+    clock += 1000; // within TTL
+    expect(await Rt.ratchetDecrypt(receiver, c1)).toBe('one'); // recovered
+  });
+
   it('rejects an absurd forged gap (> MAX_GAP) without advancing the chain', async () => {
     const Rsmall = createRatchet({ MAX_GAP: 50 });
     const { sender, receiver } = Rsmall.pairFromSharedChain(randomChain());

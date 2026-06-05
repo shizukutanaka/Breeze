@@ -29,6 +29,7 @@ const DEFAULTS = {
   REPLAY_CACHE_SIZE: 2000,
   MAX_SKIP: 100,
   MAX_GAP: 2000,
+  skippedKeyTTL: 7 * 24 * 60 * 60 * 1000, // I7: expire retained skipped keys after 7 days (forward secrecy)
   compressMin: Infinity, // disable compression by default for deterministic tests
 };
 
@@ -40,6 +41,7 @@ export function createRatchet(opts = {}) {
   const subtle = cfg.subtle || globalThis.crypto.subtle;
   const getRandomValues = cfg.getRandomValues || ((a) => globalThis.crypto.getRandomValues(a));
   const dbg = cfg.dbg || (() => {});
+  const now = cfg.now || (() => Date.now());
 
   // --- HKDF (RFC 5869) ---
   async function hkdf(ikm, salt, info, length) {
@@ -153,6 +155,15 @@ export function createRatchet(opts = {}) {
     const p = typeof payload === 'string' ? JSON.parse(payload) : payload;
     if (!((p.v === 3 || p.v === 4) && p.rk)) throw new Error('not a v3/v4 ratchet message');
 
+    // I7: time-expire stale skipped message keys. Retaining them indefinitely is
+    // both a forward-secrecy leak (old keys sitting in storage) and a DoS amplifier.
+    if (sess.skippedKeys) {
+      const cutoff = now() - cfg.skippedKeyTTL;
+      for (const k of Object.keys(sess.skippedKeys)) {
+        if ((sess.skippedKeys[k]?.t ?? 0) < cutoff) delete sess.skippedKeys[k];
+      }
+    }
+
     const peerRK = new Uint8Array(p.rk);
     if (!sess.peerRatchetPub || JSON.stringify(p.rk) !== JSON.stringify(sess.peerRatchetPub)) {
       if (!sess.ratchetPriv) {
@@ -167,7 +178,7 @@ export function createRatchet(opts = {}) {
     if (p.c <= sess.recvCounter && sess.recvCounter > 0) {
       const skKey = 'p:' + p.c;
       if (sess.skippedKeys?.[skKey]) {
-        const mkData = sess.skippedKeys[skKey];
+        const mkData = sess.skippedKeys[skKey].k;
         delete sess.skippedKeys[skKey];
         const key = await subtle.importKey('raw', u8(mkData), { name: 'AES-GCM' }, false, ['decrypt']);
         const padded = new Uint8Array(await subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, key, u8(p.d)));
@@ -192,7 +203,7 @@ export function createRatchet(opts = {}) {
       for (let i = 0; i < gap; i++) {
         const { msgKey: skMk, nextChain: skNext } = await kdfChain(tmpChain);
         const skIdx = sess.recvCounter + 1 + i;
-        if (gap - i <= cfg.MAX_SKIP) sess.skippedKeys['p:' + skIdx] = arr(skMk);
+        if (gap - i <= cfg.MAX_SKIP) sess.skippedKeys['p:' + skIdx] = { k: arr(skMk), t: now() };
         tmpChain = skNext;
       }
       sess.recvChainKey = tmpChain;
