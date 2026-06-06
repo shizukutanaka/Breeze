@@ -4,6 +4,10 @@ import worker, {
   handlePreKeyUpload,
   handlePreKeyFetch,
   handlePushSubscribe,
+  handleGroupCreate,
+  handleGroupJoin,
+  handleGroupInfo,
+  handleGroupKick,
   validateUserId,
 } from '../_worker.js';
 import { makeKV, makeEnv, apiRequest, stripeSigHeader } from './helpers/mockKV.js';
@@ -153,6 +157,43 @@ describe('prekey signed-prekey signature verification (I1/G2)', () => {
       env, apiRequest('/api/prekey/upload', {}),
     );
     expect(up.status).toBe(200);
+  });
+});
+
+describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {
+  const req = (b) => apiRequest('/api/group/x', b);
+  async function setupGroup(env) {
+    const create = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+    const { token } = await create.json();
+    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bpub', memberName: 'B' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'cpub2', memberName: 'Ca' }, env, req({}));
+    return token;
+  }
+
+  it('starts at epoch 0 and bumps on each kick', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const info0 = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info0.epoch).toBe(0);
+
+    const kick = await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
+    const kj = await kick.json();
+    expect(kj.ok).toBe(true);
+    expect(kj.epoch).toBe(1); // bumped → remaining members rotate sender keys
+
+    const info1 = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info1.epoch).toBe(1);
+    expect(info1.members.some((m) => m.id === 'carol001')).toBe(false); // actually removed
+  });
+
+  it('only the creator can kick (no epoch bump otherwise)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupKick({ token, kickId: 'carol001', adminId: 'bob00001' }, env, req({}));
+    expect(res.status).toBe(403);
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.epoch).toBe(0); // unchanged
   });
 });
 

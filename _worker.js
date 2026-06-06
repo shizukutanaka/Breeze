@@ -685,6 +685,7 @@ async function handleGroupCreate(body, env, request) {
     creatorPub,
     creatorName: (creatorName || 'Creator').slice(0, 30),
     members: [{ id: creatorId, pub: creatorPub, name: (creatorName || 'Creator').slice(0, 30) }],
+    epoch: 0, // I3: group sender-key epoch; bumped on kick so members rotate keys
     createdAt: Date.now(),
   };
 
@@ -716,7 +717,7 @@ async function handleGroupJoin(body, env, request) {
   group.members.push({ id: memberId, pub: memberPub, name: (memberName || 'Member').slice(0, 30) });
   await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
 
-  return json({ ok: true, name: group.name, members: group.members }, 200, request);
+  return json({ ok: true, name: group.name, members: group.members, epoch: group.epoch || 0 }, 200, request);
 }
 
 async function handleGroupInfo(body, env, request) {
@@ -727,7 +728,7 @@ async function handleGroupInfo(body, env, request) {
   if (!data) return json({ error: 'Not found', code: 'NOT_FOUND' }, 404, request);
 
   const group = JSON.parse(data);
-  return json({ name: group.name, members: group.members, creatorName: group.creatorName, createdAt: group.createdAt }, 200, request);
+  return json({ name: group.name, members: group.members, creatorName: group.creatorName, epoch: group.epoch || 0, createdAt: group.createdAt }, 200, request);
 }
 
 // v3.3: Enterprise — Group member management
@@ -748,9 +749,12 @@ async function handleGroupKick(body, env, request) {
 
   group.members = (group.members || []).filter(m => m.id !== kickId);
   if (group.admins) group.admins = group.admins.filter(id => id !== kickId);
+  // I3: post-compromise removal. Bump the epoch so remaining members generate and
+  // redistribute fresh sender keys (kicked member can't decrypt the new epoch).
+  group.epoch = (group.epoch || 0) + 1;
   await kvPut(env, `grp:${token}`, JSON.stringify(group));
 
-  return json({ ok: true, remaining: group.members.length }, 200, request);
+  return json({ ok: true, remaining: group.members.length, epoch: group.epoch }, 200, request);
 }
 
 // ============================================================
@@ -1517,6 +1521,7 @@ export {
   handlePushSubscribe,
   handleGroupCreate,
   handleGroupJoin,
+  handleGroupInfo,
   handleGroupKick,
   handleAliasSet,
   handleAliasGet,

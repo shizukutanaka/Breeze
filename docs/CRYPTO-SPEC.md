@@ -125,8 +125,10 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   fetch returns the ed identity key + sig. **Pending (client/browser)**: sign the
   SPK, persist SPK/OPK **private** keys, send `signedPreKeySig` + EdIK, and verify
   on the initiator side.
-- G3. Port `index.html` group functions onto `src/crypto/group.js`; worker
-  `/api/group/kick` to bump + return the epoch.
+- G3. ✅ **Worker side done**: `/api/group/kick` bumps + returns `epoch`; create
+  starts at 0; join/info surface the current `epoch` so members know to rotate.
+  **Pending (client/browser)**: port `index.html` group functions onto
+  `src/crypto/group.js` and rotate sender keys when the epoch advances.
 - G4. Port `index.html` `encryptFor`/`decryptFrom` onto `src/crypto/ratchet.js`
   (single source of truth) — and drop pre-encryption compression (I15).
 - G5. `loadIdentity`/keystore → `src/crypto/atrest.js` wrapping + migration (I4).
