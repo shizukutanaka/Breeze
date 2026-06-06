@@ -8,6 +8,9 @@ import worker, {
 } from '../_worker.js';
 import { makeKV, makeEnv, apiRequest, stripeSigHeader } from './helpers/mockKV.js';
 
+// base64 helper for building signed prekey bundles in tests.
+const toB64 = (bytes) => Buffer.from(bytes).toString('base64');
+
 // The worker's in-memory rate limiter lives on globalThis; reset between tests
 // so per-test request counts start clean.
 beforeEach(() => { globalThis._rateLimitMap = new Map(); });
@@ -105,6 +108,51 @@ describe('prekey upload + fetch (OTP consumption)', () => {
   it('404s when no bundle exists', async () => {
     const res = await handlePreKeyFetch({ userId: 'nobody0001' }, makeEnv(), apiRequest('/api/prekey/fetch', {}));
     expect(res.status).toBe(404);
+  });
+});
+
+describe('prekey signed-prekey signature verification (I1/G2)', () => {
+  // Build a signed prekey bundle: an Ed25519 identity key signs the (raw) SPK bytes.
+  async function signedBundle(userId) {
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
+    const spk = crypto.getRandomValues(new Uint8Array(32)); // raw SPK public bytes
+    const sig = new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, spk));
+    return {
+      userId, identityKey: 'IKx25519',
+      edIdentityKey: toB64(edPub), signedPreKey: toB64(spk), signedPreKeySig: toB64(sig),
+      ed, spk,
+    };
+  }
+
+  it('accepts a validly signed bundle and returns the ed identity key on fetch', async () => {
+    const env = makeEnv();
+    const b = await signedBundle('signer001');
+    const up = await handlePreKeyUpload(b, env, apiRequest('/api/prekey/upload', {}));
+    expect(up.status).toBe(200);
+    const res = await handlePreKeyFetch({ userId: 'signer001' }, env, apiRequest('/api/prekey/fetch', {}));
+    const bundle = await res.json();
+    expect(bundle.edIdentityKey).toBe(b.edIdentityKey);
+    expect(bundle.signedPreKeySig).toBe(b.signedPreKeySig);
+  });
+
+  it('rejects a bundle whose signature does not match (MITM injection)', async () => {
+    const env = makeEnv();
+    const b = await signedBundle('signer002');
+    // Attacker swaps in a different SPK but cannot forge the Ed25519 signature.
+    b.signedPreKey = toB64(crypto.getRandomValues(new Uint8Array(32)));
+    const up = await handlePreKeyUpload(b, env, apiRequest('/api/prekey/upload', {}));
+    expect(up.status).toBe(400);
+    expect((await up.json()).code).toBe('PREKEY_SIG_INVALID');
+  });
+
+  it('still accepts a legacy unsigned bundle (v4 transition)', async () => {
+    const env = makeEnv();
+    const up = await handlePreKeyUpload(
+      { userId: 'legacy001', identityKey: 'IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0'] },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    expect(up.status).toBe(200);
   });
 });
 

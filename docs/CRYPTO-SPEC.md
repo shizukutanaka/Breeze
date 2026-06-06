@@ -119,8 +119,12 @@ These are **specified + implemented in modules but not yet wired into the live a
 they change `index.html`/`_worker.js` runtime and must be validated in a browser:
 
 - G1. Wire X3DH (§2/§3) into `index.html` session init (replace bare `DH(IK,IK)`).
-- G2. Client: sign the SPK; persist SPK/OPK **private** keys; send `signedPreKeySig`
-  + EdIK in the bundle. Worker `handlePreKeyUpload`: **verify** the signature.
+- G2. ✅ **Worker side done**: `handlePreKeyUpload` now verifies `signedPreKeySig`
+  against `edIdentityKey` (Ed25519) and rejects invalid signatures
+  (`PREKEY_SIG_INVALID`), accepting unsigned bundles during the v4→v5 transition;
+  fetch returns the ed identity key + sig. **Pending (client/browser)**: sign the
+  SPK, persist SPK/OPK **private** keys, send `signedPreKeySig` + EdIK, and verify
+  on the initiator side.
 - G3. Port `index.html` group functions onto `src/crypto/group.js`; worker
   `/api/group/kick` to bump + return the epoch.
 - G4. Port `index.html` `encryptFor`/`decryptFrom` onto `src/crypto/ratchet.js`

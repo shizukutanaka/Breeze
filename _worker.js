@@ -972,10 +972,30 @@ async function handleAccountSlots(body, env, request) {
 // Other clients fetch PreKeyBundle for session initiation
 // ============================================================
 
+// I1/G2: decode base64 to bytes + verify an Ed25519 signature. Used to
+// authenticate uploaded signed pre-keys so a malicious relay can't inject its own.
+function b64ToBytes(s) {
+  return Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+}
+async function verifyEd25519(edPubB64, msgB64, sigB64) {
+  try {
+    const pub = await crypto.subtle.importKey('raw', b64ToBytes(edPubB64), { name: 'Ed25519' }, false, ['verify']);
+    return await crypto.subtle.verify({ name: 'Ed25519' }, pub, b64ToBytes(sigB64), b64ToBytes(msgB64));
+  } catch { return false; }
+}
+
 async function handlePreKeyUpload(body, env, request) {
-  const { userId, identityKey, signedPreKey, signedPreKeySig, oneTimePreKeys } = body;
+  const { userId, identityKey, edIdentityKey, signedPreKey, signedPreKeySig, oneTimePreKeys } = body;
   if (!userId || !identityKey || !signedPreKey) return json({ error: 'userId, identityKey, signedPreKey required' }, 400, request);
-  const bundle = { identityKey, signedPreKey, signedPreKeySig, uploadedAt: Date.now() };
+  // I1/G2: authenticated X3DH. If a signature + Ed25519 identity key are supplied,
+  // verify the signature over the signed pre-key and REJECT if invalid. Unsigned
+  // bundles are still accepted during the v4->v5 transition, but an invalid
+  // signature is never stored (that would defeat the whole point).
+  if (signedPreKeySig && edIdentityKey) {
+    const ok = await verifyEd25519(edIdentityKey, signedPreKey, signedPreKeySig);
+    if (!ok) return json({ error: 'Invalid signed pre-key signature', code: 'PREKEY_SIG_INVALID' }, 400, request);
+  }
+  const bundle = { identityKey, edIdentityKey, signedPreKey, signedPreKeySig, uploadedAt: Date.now() };
   await kvPut(env, `prekey:${userId}`, JSON.stringify(bundle), { expirationTtl: 86400 * 30 });
   // Store one-time prekeys individually
   if (Array.isArray(oneTimePreKeys)) {
@@ -1493,6 +1513,7 @@ export {
   verifyStripeSignature,
   handlePreKeyUpload,
   handlePreKeyFetch,
+  verifyEd25519,
   handlePushSubscribe,
   handleGroupCreate,
   handleGroupJoin,
