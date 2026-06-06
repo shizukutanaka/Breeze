@@ -34,8 +34,8 @@ I1 is wire-versioned with a v4 read path, so it's safe to roll out.
 
 | ID | Item | Effort | Why | Dep |
 |----|------|--------|-----|-----|
-| I2 | Group forward secrecy — ratchet chain **+ signing** key | S–M | One leak exposes all group msgs today (arXiv 2301.07045). | I20 |
-| I3 | Group PCS — epoch bump + redistribute on kick/leave | M | Removed members keep decrypting today (ePrint 2017/666). | I2 |
+| I2 | Group forward secrecy — ratchet chain **+ signing** key | S–M | One leak exposes all group msgs today (arXiv 2301.07045). | I20 | ✅ **chain ratchet done in `src/crypto/group.js`** (+ I16 commitment, out-of-order, FS tests); signing-key ratchet + index.html port pending |
+| I3 | Group PCS — epoch bump + redistribute on kick/leave | M | Removed members keep decrypting today (ePrint 2017/666). | I2 | ✅ **done in `src/crypto/group.js`** (`rotateEpoch` + epoch gate; kicked-member-can't-read test); worker `/api/group/kick` epoch bump pending |
 | I4 | Encrypt identity/signing keys at rest (app-lock) | M | Plaintext JWK in IndexedDB → XSS/forensics (ePrint 2024/887). | — |
 | C8 | Web-app integrity ("Code Verify" / SW hash-pin) | M | Biggest *unaddressed* web-E2EE threat: host can serve malicious JS. SW is the pin point. | — |
 | C13 | QR **scan-to-verify** as default ceremony | S–M | Human out-of-band channel closes the I1 MITM gap *before* key transparency. | — |
