@@ -35,6 +35,12 @@ const DEFAULTS = {
 
 const arr = (u) => Array.from(u);
 const u8 = (a) => (a instanceof Uint8Array ? a : Uint8Array.from(a));
+const concatBytes = (arrs) => {
+  const len = arrs.reduce((s, a) => s + a.length, 0);
+  const out = new Uint8Array(len); let o = 0;
+  for (const a of arrs) { out.set(a, o); o += a.length; }
+  return out;
+};
 
 export function createRatchet(opts = {}) {
   const cfg = { ...DEFAULTS, ...opts };
@@ -261,10 +267,59 @@ export function createRatchet(opts = {}) {
     return { sender, receiver };
   }
 
+  // ==========================================================================
+  // I1 — Authenticated X3DH (the fix for unverified/unsigned pre-keys).
+  //
+  // Today Breeze ships the signed pre-key WITHOUT a signature and never verifies
+  // it, and initSession does a bare DH(IK_A, IK_B) — so the relay can MITM first
+  // contact. Real X3DH: the responder signs its SPK with its long-term Ed25519
+  // identity key; the initiator VERIFIES that signature before deriving the
+  // session, then combines DH1..DH4 into the root key. Security is conditional on
+  // this verification (Cohn-Gordon et al., ePrint 2016/1013).
+  // ==========================================================================
+  async function genSigningKey() {
+    const kp = await subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    return {
+      pub: new Uint8Array(await subtle.exportKey('raw', kp.publicKey)),
+      privateKey: kp.privateKey, publicKey: kp.publicKey,
+    };
+  }
+  async function signSPK(edPrivateKey, spkPubRaw) {
+    return new Uint8Array(await subtle.sign({ name: 'Ed25519' }, edPrivateKey, u8(spkPubRaw)));
+  }
+  async function verifySPK(edPubRaw, spkPubRaw, sig) {
+    try {
+      const pub = await subtle.importKey('raw', u8(edPubRaw), { name: 'Ed25519' }, false, ['verify']);
+      return await subtle.verify({ name: 'Ed25519' }, pub, u8(sig), u8(spkPubRaw));
+    } catch { return false; }
+  }
+
+  // Initiator (Alice): IK_A×SPK_B, EK_A×IK_B, EK_A×SPK_B, [EK_A×OPK_B] → root key.
+  async function x3dhInitiator({ ikPriv, ekPriv, ikPubPeer, spkPubPeer, opkPubPeer, info = 'breeze-x3dh-v5' }) {
+    const parts = [
+      await ecdhBits(ikPriv, spkPubPeer),
+      await ecdhBits(ekPriv, ikPubPeer),
+      await ecdhBits(ekPriv, spkPubPeer),
+    ];
+    if (opkPubPeer) parts.push(await ecdhBits(ekPriv, opkPubPeer));
+    return hkdf(concatBytes(parts), new Uint8Array(32), info, 32);
+  }
+  // Responder (Bob): the mirror DHs from his SPK/IK/OPK private keys.
+  async function x3dhResponder({ ikPriv, spkPriv, opkPriv, ikPubPeer, ekPubPeer, info = 'breeze-x3dh-v5' }) {
+    const parts = [
+      await ecdhBits(spkPriv, ikPubPeer),
+      await ecdhBits(ikPriv, ekPubPeer),
+      await ecdhBits(spkPriv, ekPubPeer),
+    ];
+    if (opkPriv) parts.push(await ecdhBits(opkPriv, ekPubPeer));
+    return hkdf(concatBytes(parts), new Uint8Array(32), info, 32);
+  }
+
   return {
     hkdf, kdfChain, genRatchetKey, ecdhBits, dhRatchetStep,
     frameEncrypt, unpadAndDecompress, ratchetEncrypt, ratchetDecrypt,
-    keyCommitment, ctEqual, pairFromSharedChain, _cfg: cfg,
+    keyCommitment, ctEqual, pairFromSharedChain,
+    genSigningKey, signSPK, verifySPK, x3dhInitiator, x3dhResponder, _cfg: cfg,
   };
 }
 
