@@ -65,17 +65,21 @@ out-of-order, large-gap regression, replay, TTL expiry, commitment).
 ## 5. Group sender keys
 
 ```
-{ v:5, g:true, ep:epoch, c:counter, i:[iv], d:[ct‖tag], cm:[keyCommitment] }
+{ v:5, g:true, ep:epoch, c:counter, i:[iv], d:[ct‖tag], cm:[keyCommitment], s:[ed25519Sig] }
 ```
 - FS (I2): chain hash-ratchets per message; consumed chain dropped.
 - PCS (I3): kick → `rotateEpoch` (fresh chain key, `epoch+1`) distributed to remaining
   members only; decrypt gates on `ep` (old/future epoch ⇒ reject).
+- Auth (N2): each message is **Ed25519-signed** by the sender; `s` covers
+  `iv‖ct‖cm‖ep‖counter`. The signing public key travels with the sender key; the
+  private key never does. Verified before any ratchet work (also a DoS guard), so a
+  member holding only the symmetric chain key cannot forge another member's messages.
 - Carries `cm` (I16); bounded out-of-order recovery + replay reject.
 
 Impl: `src/crypto/group.js`. Tests: `tests/group.test.js` (FS, epoch rotation,
-kicked-member-blocked, replay, commitment). **Implemented (module).**
-Gap: **per-message signing-key ratchet** (sender authentication) — see §9; and
-index.html/worker port (§8).
+kicked-member-blocked, replay, commitment, **forgery/tamper/stripped-sig reject**).
+**Implemented (module).** Refinement: a signing-key *ratchet* (authentication forward
+secrecy, Balbás et al.) — see §9 N2. Gap: index.html/worker port (§8).
 
 ## 6. At-rest key protection (I4)
 
@@ -115,8 +119,10 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   the receive counter, so the first message of a new receiving chain can be
   misclassified as a replay. The module is fixed (§4); `index.html` is not — fix
   when porting (G4). **Real correctness bug.**
-- N2. **Group per-message authentication** (I2 part b): a signing-key ratchet so a
-  member cannot forge another member's group messages. Not implemented.
+- N2. **Group per-message authentication** — ✅ implemented (Ed25519 signature per
+  message, §5). Remaining refinement: ratchet the *signing* key per message
+  (authentication forward secrecy; Balbás et al.) so a leaked signing key can't
+  forge past/future. Not yet done.
 - N3. **Protocol-version negotiation** v4↔v5 (capability flag in presence/bundle)
   for staged rollout. Designed in `docs/IMPROVEMENTS.md`; not implemented.
 - N4. **PQXDH / PQ ratchet** (I8/I9), **key transparency** (I11), **franking** (I17)
