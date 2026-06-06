@@ -100,7 +100,11 @@ export function createRatchet(opts = {}) {
     sess.sendChainKey = derived.slice(32, 64);
     sess.ratchetPub = arr(new Uint8Array(newRK.pub));
     sess.ratchetPriv = newRK.privateKey;
+    // A DH ratchet step starts BOTH a new sending and a new receiving chain, so
+    // reset both message counters (Signal's Ns=0, Nr=0). Resetting only sendCounter
+    // makes the new receive chain's first message (counter 1) look like a replay.
     sess.sendCounter = 0;
+    sess.recvCounter = 0;
   }
 
   // --- Message framing (v4): [flags:1][len:2][data], pad→boundary, AES-256-GCM ---
@@ -315,11 +319,43 @@ export function createRatchet(opts = {}) {
     return hkdf(concatBytes(parts), new Uint8Array(32), info, 32);
   }
 
+  // --- Session bootstrap: X3DH shared secret → Double Ratchet session ---
+  // Initiator (Alice) seeds the ratchet using the responder's signed pre-key as the
+  // first DH-ratchet partner (it is the public key she already authenticated in
+  // X3DH). Her first ciphertext carries her ratchet public key (rk), which lets the
+  // responder complete the matching DH ratchet on receipt.
+  async function initiatorSession(rootKey, spkPubPeer) {
+    const rk = await genRatchetKey();
+    const dh = await ecdhBits(rk.privateKey, spkPubPeer);
+    const derived = await hkdf(dh, u8(rootKey), 'ratchet', 64);
+    return {
+      rootKey: derived.slice(0, 32),
+      sendChainKey: derived.slice(32, 64),
+      ratchetPriv: rk.privateKey,
+      ratchetPub: arr(new Uint8Array(rk.pub)),
+      peerRatchetPub: arr(u8(spkPubPeer)),
+      sendCounter: 0, recvCounter: 0, seenMsgIds: [], skippedKeys: {},
+    };
+  }
+  // Responder (Bob) holds the signed pre-key private as his initial ratchet key and
+  // waits for the initiator's first message; ratchetDecrypt then performs the DH
+  // ratchet step that derives his receive chain (matching Alice's send chain).
+  function responderSession(rootKey, spkPrivateKey) {
+    return {
+      rootKey: u8(rootKey),
+      ratchetPriv: spkPrivateKey,
+      ratchetPub: null,
+      peerRatchetPub: null,
+      sendCounter: 0, recvCounter: 0, seenMsgIds: [], skippedKeys: {},
+    };
+  }
+
   return {
     hkdf, kdfChain, genRatchetKey, ecdhBits, dhRatchetStep,
     frameEncrypt, unpadAndDecompress, ratchetEncrypt, ratchetDecrypt,
     keyCommitment, ctEqual, pairFromSharedChain,
-    genSigningKey, signSPK, verifySPK, x3dhInitiator, x3dhResponder, _cfg: cfg,
+    genSigningKey, signSPK, verifySPK, x3dhInitiator, x3dhResponder,
+    initiatorSession, responderSession, _cfg: cfg,
   };
 }
 
