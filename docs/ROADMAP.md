@@ -51,7 +51,7 @@ I1 is wire-versioned with a v4 read path, so it's safe to roll out.
 | I6 | Length-bucketed padding + optional cover traffic | S–M | Flat 256-B pad leaks size buckets (Loopix). | I15 |
 | C10 | Durable Objects (rate-limit/presence/signaling) + WebSocket push | M–L | Fixes the per-isolate `_rateLimitMap` undercount **and** the KV write-budget ceiling; replaces polling. | — |
 | C12 | Encrypted, preview-less push (RFC 8291) | S–M | Push service sees ciphertext only; no message preview. | — |
-| I17 | Verifiable abuse reporting (Hecate / AMF franking) | M–L | Consensual reporting, no backdoor (USENIX'22). | I16 |
+| I17 | Verifiable abuse reporting (Hecate / AMF franking) | M–L | Consensual reporting, no backdoor (USENIX'22). | I16 | 🟡 **core done in `src/crypto/franking.js`** (HMAC commit/verify/report; +6 tests); sealed-sender sender-binding + relay endpoints pending |
 | I18 | Anonymous anti-abuse tokens (Privacy Pass/VOPRF) | M–L | Battery-friendly, unlinkable vs PoW. | — |
 | C11 | Background Sync + persistent storage | S | Reliable offline send; no keystore eviction. | — |
 

@@ -92,6 +92,21 @@ Impl: `src/crypto/atrest.js`. Tests: `tests/atrest.test.js` (round-trip,
 wrong-passphrase reject, tamper reject, fresh salt/iv, migration, ≥600k floor).
 **Implemented (module).** Gap: `index.html` `loadIdentity`/keystore migration (§8).
 
+## 6a. Message franking — verifiable abuse reporting (I17)
+
+- Sender draws a random opening `Kf` and computes `Cf = HMAC-SHA256(Kf, message)`.
+  `Cf` is attached in the clear (relay records it at send time); `Kf` is sent
+  **encrypted** inside the E2E payload (recipient-only).
+- To report, the recipient reveals `(message, Kf)`; the relay checks
+  `HMAC(Kf, message) == Cf` → proof the message was genuinely sent. No plaintext
+  escrow; un-reported messages stay hidden (HMAC hiding under a secret key).
+
+Impl: `src/crypto/franking.js` (`commit`/`verify`/`verifyReport`). Tests:
+`tests/franking.test.js` (genuine report verifies, binding reject, wrong/tampered
+opening reject, hiding via fresh randomness, binary/unicode). **Implemented (core).**
+Gap: bind the **sender** under sealed sender via asymmetric franking / Hecate (§9 N4);
+relay-side `Cf` recording + report endpoint (§8).
+
 ## 7. Worker endpoints (security-relevant)
 
 Covered by `tests/worker.test.js`: routing/validation, rate-limit 429, prekey OTP
@@ -125,8 +140,9 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   forge past/future. Not yet done.
 - N3. **Protocol-version negotiation** v4↔v5 (capability flag in presence/bundle)
   for staged rollout. Designed in `docs/IMPROVEMENTS.md`; not implemented.
-- N4. **PQXDH / PQ ratchet** (I8/I9), **key transparency** (I11), **franking** (I17)
-  — backlog, not started.
+- N4. **Franking core** (I17) — ✅ implemented (§6a); remaining: sealed-sender
+  sender-binding (asymmetric franking / Hecate) + relay record/report endpoints (§8).
+  **PQXDH / PQ ratchet** (I8/I9), **key transparency** (I11) — backlog, not started.
 
 ## Test status
 6 suites, 59 tests passing (`npm test`); `validate.sh` 32/35. The crypto **cores**
