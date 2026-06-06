@@ -101,11 +101,13 @@ wrong-passphrase reject, tamper reject, fresh salt/iv, migration, ≥600k floor)
   `HMAC(Kf, message) == Cf` → proof the message was genuinely sent. No plaintext
   escrow; un-reported messages stay hidden (HMAC hiding under a secret key).
 
-Impl: `src/crypto/franking.js` (`commit`/`verify`/`verifyReport`). Tests:
-`tests/franking.test.js` (genuine report verifies, binding reject, wrong/tampered
-opening reject, hiding via fresh randomness, binary/unicode). **Implemented (core).**
-Gap: bind the **sender** under sealed sender via asymmetric franking / Hecate (§9 N4);
-relay-side `Cf` recording + report endpoint (§8).
+Impl: client core `src/crypto/franking.js` (`commit`/`verify`/`verifyReport`) +
+**relay endpoints** `_worker.js` `/api/abuse/record` (store `Cf`) and
+`/api/abuse/report` (verify revealed `(message, Kf)` against the recorded `Cf`).
+Tests: `tests/franking.test.js` (core) + `tests/worker.test.js` (end-to-end:
+client commitment → relay verifies; binding reject, unknown-id 404, no-overwrite).
+**Implemented (core + relay).** Gap: bind the **sender** under sealed sender via
+asymmetric franking / Hecate (§9 N4); client send/report UI wiring (browser).
 
 ## 7. Worker endpoints (security-relevant)
 

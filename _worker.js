@@ -130,6 +130,8 @@ export default {
         '/api/backup/download': 5,
         '/api/drop/create': 10,
         '/api/drop/read': 20,
+        '/api/abuse/record': 30,
+        '/api/abuse/report': 10,
         '/api/ogp': 20,
         '/api/account/purchase': 3,
         '/api/alias/set': 10,
@@ -252,6 +254,8 @@ export default {
         case '/api/ai':               return await handleAI(body, env, request);
         case '/api/drop/create':      return await handleDropCreate(body, env, request);
         case '/api/drop/read':        return await handleDropRead(body, env, request);
+        case '/api/abuse/record':     return await handleAbuseRecord(body, env, request);
+        case '/api/abuse/report':     return await handleAbuseReport(body, env, request);
         default:            return json({ error: 'Not found', code: 'NOT_FOUND' }, 404, request, reqId);
       }
     } catch (e) {
@@ -1035,6 +1039,51 @@ async function handlePreKeyFetch(body, env, request) {
 }
 
 // ============================================================
+// MESSAGE FRANKING — verifiable abuse reporting (I17), no plaintext escrow.
+//
+// At send the sender computes Cf = HMAC(Kf, plaintext); the relay RECORDS Cf
+// (keyed by a frankId) and the recipient receives Kf inside the E2E payload. To
+// report, the recipient reveals (frankId, plaintext, Kf); the relay recomputes
+// HMAC(Kf, plaintext) and checks it equals the recorded Cf. The relay never sees
+// plaintext of un-reported messages.
+// ============================================================
+async function hmacVerifyFrank(commitmentB64, openingB64, message) {
+  try {
+    const key = await crypto.subtle.importKey('raw', b64ToBytes(openingB64), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(message)));
+    const expected = b64ToBytes(commitmentB64);
+    if (mac.length !== expected.length) return false;
+    let d = 0;
+    for (let i = 0; i < mac.length; i++) d |= mac[i] ^ expected[i];
+    return d === 0;
+  } catch { return false; }
+}
+
+// Sender/relay records the franking commitment at send time.
+async function handleAbuseRecord(body, env, request) {
+  const { frankId, commitment } = body;
+  if (!frankId || !commitment) return json({ error: 'frankId and commitment required' }, 400, request);
+  if (typeof commitment !== 'string' || commitment.length > 128) return json({ error: 'invalid commitment' }, 400, request);
+  // Do not overwrite an existing commitment (a frankId binds one message).
+  if (await kvGet(env, `frank:${frankId}`)) return json({ ok: true, existing: true }, 200, request);
+  await kvPut(env, `frank:${frankId}`, commitment, { expirationTtl: 86400 * 30 });
+  return json({ ok: true }, 200, request);
+}
+
+// Recipient reports an abusive message by revealing (frankId, message, opening).
+async function handleAbuseReport(body, env, request) {
+  const { frankId, message, opening } = body;
+  if (!frankId || typeof message !== 'string' || !opening) return json({ error: 'frankId, message, opening required' }, 400, request);
+  const commitment = await kvGet(env, `frank:${frankId}`);
+  if (!commitment) return json({ error: 'No such franking record', code: 'NOT_FOUND' }, 404, request);
+  const verified = await hmacVerifyFrank(commitment, opening, message);
+  if (!verified) return json({ verified: false, error: 'Report does not match the sent message', code: 'FRANK_MISMATCH' }, 400, request);
+  // Record the verified report for moderation (idempotent on frankId).
+  await kvPut(env, `report:${frankId}`, JSON.stringify({ at: Date.now(), len: message.length }), { expirationTtl: 86400 * 90 });
+  return json({ verified: true }, 200, request);
+}
+
+// ============================================================
 // SEALED SENDER (v3 — metadata protection)
 //
 // Worker only sees recipient ID. Sender is encrypted inside payload.
@@ -1518,6 +1567,9 @@ export {
   handlePreKeyUpload,
   handlePreKeyFetch,
   verifyEd25519,
+  handleAbuseRecord,
+  handleAbuseReport,
+  hmacVerifyFrank,
   handlePushSubscribe,
   handleGroupCreate,
   handleGroupJoin,

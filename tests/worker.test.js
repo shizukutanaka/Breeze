@@ -8,9 +8,12 @@ import worker, {
   handleGroupJoin,
   handleGroupInfo,
   handleGroupKick,
+  handleAbuseRecord,
+  handleAbuseReport,
   validateUserId,
 } from '../_worker.js';
 import { makeKV, makeEnv, apiRequest, stripeSigHeader } from './helpers/mockKV.js';
+import { createFranking } from '../src/crypto/franking.js';
 
 // base64 helper for building signed prekey bundles in tests.
 const toB64 = (bytes) => Buffer.from(bytes).toString('base64');
@@ -194,6 +197,51 @@ describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {
     expect(res.status).toBe(403);
     const info = await (await handleGroupInfo({ token }, env, req({}))).json();
     expect(info.epoch).toBe(0); // unchanged
+  });
+});
+
+describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => {
+  const F = createFranking();
+  const b64 = (a) => Buffer.from(Uint8Array.from(a)).toString('base64');
+  const req = (b) => apiRequest('/api/abuse/x', b);
+
+  it('records a commitment and verifies a genuine report end-to-end', async () => {
+    const env = makeEnv();
+    const message = 'abusive content';
+    const { commitment, opening } = await F.commit(message); // client-side franking
+    const rec = await handleAbuseRecord({ frankId: 'm-001', commitment: b64(commitment) }, env, req({}));
+    expect(rec.status).toBe(200);
+    const rep = await handleAbuseReport({ frankId: 'm-001', message, opening: b64(opening) }, env, req({}));
+    expect(rep.status).toBe(200);
+    expect((await rep.json()).verified).toBe(true);
+    expect(await env.KV.get('report:m-001')).toBeTruthy(); // recorded for moderation
+  });
+
+  it('rejects a report claiming a different message (binding)', async () => {
+    const env = makeEnv();
+    const { commitment, opening } = await F.commit('what was sent');
+    await handleAbuseRecord({ frankId: 'm-002', commitment: b64(commitment) }, env, req({}));
+    const rep = await handleAbuseReport({ frankId: 'm-002', message: 'a lie', opening: b64(opening) }, env, req({}));
+    expect(rep.status).toBe(400);
+    expect((await rep.json()).code).toBe('FRANK_MISMATCH');
+  });
+
+  it('404s a report for an unknown frankId', async () => {
+    const env = makeEnv();
+    const rep = await handleAbuseReport({ frankId: 'nope', message: 'x', opening: b64([1, 2, 3]) }, env, req({}));
+    expect(rep.status).toBe(404);
+  });
+
+  it('does not overwrite an existing commitment for a frankId', async () => {
+    const env = makeEnv();
+    const a = await F.commit('first');
+    await handleAbuseRecord({ frankId: 'm-003', commitment: b64(a.commitment) }, env, req({}));
+    const b = await F.commit('second');
+    const rec2 = await handleAbuseRecord({ frankId: 'm-003', commitment: b64(b.commitment) }, env, req({}));
+    expect((await rec2.json()).existing).toBe(true);
+    // The original commitment still stands.
+    const rep = await handleAbuseReport({ frankId: 'm-003', message: 'first', opening: b64(a.opening) }, env, req({}));
+    expect((await rep.json()).verified).toBe(true);
   });
 });
 
