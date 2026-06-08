@@ -105,7 +105,8 @@ export default {
 
     // Webhook needs raw body — handle before JSON parsing
     if (path === '/api/webhook' && request.method === 'POST') {
-      return await handleWebhook(request, env);
+      try { return await handleWebhook(request, env); }
+      catch { return new Response('Internal error', { status: 500 }); }
     }
 
     // All other API routes: POST only
@@ -552,7 +553,9 @@ async function handleWebhook(request, env) {
   const verified = await verifyStripeSignature(body, sig, env.STRIPE_WEBHOOK_SECRET);
   if (!verified) return new Response('Invalid signature', { status: 400 });
 
-  const event = JSON.parse(body);
+  let event;
+  try { event = JSON.parse(body); }
+  catch { return new Response('Invalid JSON', { status: 400 }); }
 
   // P1 FIX: Idempotency — check if we've already processed this event.
   // Mark *after* processing (process-then-mark): slot assignment is an idempotent
