@@ -168,3 +168,21 @@ describe('N2 — per-message sender authentication', () => {
     expect(await G.decryptGroupMsg(bob, obj)).toBe(null);
   });
 });
+
+describe('AEAD auth failure does not desync group sender-key state', () => {
+  it('returns null and preserves chain state when ciphertext auth fails', async () => {
+    // Use a sender key without a signing key so the tampering reaches the AEAD check.
+    const G2 = createGroup({ ratchet: (await import('../src/crypto/ratchet.js')).createRatchet() });
+    const sk = await G2.newSenderKey();
+    const bob = G2.receiverFrom(sk);
+    const legitMsg = await G2.encryptGroupMsg(sk, 'real group message');
+    // Craft an injected message: same counter, but corrupted ciphertext + no cm.
+    const crafted = JSON.parse(legitMsg);
+    crafted.d[0] ^= 0xff;
+    delete crafted.cm;
+    delete crafted.s; // strip signature so it doesn't short-circuit
+    expect(await G2.decryptGroupMsg(bob, crafted)).toBe(null);
+    // Legitimate message must still decrypt (state not desynced by the injection).
+    expect(await G2.decryptGroupMsg(bob, legitMsg)).toBe('real group message');
+  });
+});

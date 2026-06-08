@@ -141,10 +141,13 @@ export function createGroup(opts = {}) {
     if (p.c <= peerKey.counter) {
       const sk = peerKey.skipped?.['c:' + p.c];
       if (sk) {
-        delete peerKey.skipped['c:' + p.c];
         const skBytes = sk.k !== undefined ? u8(sk.k) : u8(sk);
         if (p.cm && !R.ctEqual(await R.keyCommitment(skBytes), p.cm)) return null;
-        return frameDecrypt(skBytes, p.i, p.d);
+        let result;
+        try { result = await frameDecrypt(skBytes, p.i, p.d); } catch { return null; }
+        // Delete the consumed skipped key only after successful decrypt.
+        delete peerKey.skipped['c:' + p.c];
+        return result;
       }
       return null; // replay
     }
@@ -162,12 +165,16 @@ export function createGroup(opts = {}) {
       else if (p.c - n < cfg.MAX_SKIP) peerKey.skipped['c:' + n] = { k: arr(msgKey), t: now() };
       ck = nextChain;
     }
-    peerKey.chainKey = arr(ck); // advance + drop consumed chain (forward secrecy)
-    peerKey.counter = p.c;
 
     // I16 key commitment check before trusting the AEAD.
     if (p.cm && !R.ctEqual(await R.keyCommitment(targetKey), p.cm)) return null;
-    return frameDecrypt(targetKey, p.i, p.d);
+    let result;
+    try { result = await frameDecrypt(targetKey, p.i, p.d); } catch { return null; }
+    // Advance chain state only after successful decrypt — injected messages whose
+    // ciphertext fails the AES-GCM auth tag must not desync the sender-key state.
+    peerKey.chainKey = arr(ck);
+    peerKey.counter = p.c;
+    return result;
   }
 
   return { newSenderKey, rotateEpoch, receiverFrom, encryptGroupMsg, decryptGroupMsg, _cfg: cfg };
