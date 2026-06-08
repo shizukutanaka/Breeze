@@ -768,14 +768,118 @@ async function handleGroupKick(body, env, request) {
 
 // ============================================================
 // ============================================================
-// WEB PUSH — store subscriptions, send notifications
+// WEB PUSH — RFC 8291 encrypted push + VAPID JWT signing (C12)
 //
-// Requires VAPID keys:
-//   VAPID_PUBLIC_KEY  — shared with client
-//   VAPID_PRIVATE_KEY — server only
+// Requires VAPID keys (generate: npx web-push generate-vapid-keys):
+//   VAPID_PUBLIC_KEY  — uncompressed P-256 base64url (65 bytes), shared with client
+//   VAPID_PRIVATE_KEY — raw P-256 scalar base64url (32 bytes), server-only
 //
-// Generate: npx web-push generate-vapid-keys
+// push service only sees aes128gcm ciphertext; payload never exposed.
 // ============================================================
+
+// base64url ↔ bytes (VAPID keys and RFC 8291 subscription keys are base64url)
+function b64urlToBytes(s) {
+  const b64 = s.replace(/-/g, '+').replace(/_/g, '/').padEnd(
+    s.length + (4 - s.length % 4) % 4, '='
+  );
+  return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+}
+function bytesToB64url(bytes) {
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+function concatBytes(...arrs) {
+  const total = arrs.reduce((n, a) => n + a.length, 0);
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const a of arrs) { out.set(a, off); off += a.length; }
+  return out;
+}
+
+// RFC 8291 + RFC 8188: encrypt `plaintext` for a browser push subscription.
+// Returns a Uint8Array in aes128gcm content-encoding format, or null if the
+// subscription is missing keys (silently skipped by the caller).
+async function encryptPushPayload(subtle, subscription, plaintext) {
+  const { p256dh, auth } = (subscription.keys || {});
+  if (!p256dh || !auth) return null;
+
+  const clientPubRaw = b64urlToBytes(p256dh); // 65-byte uncompressed P-256 point
+  const authSecret   = b64urlToBytes(auth);   // 16-byte auth secret
+
+  // Ephemeral server key pair
+  const serverKP     = await subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+  const serverPubRaw = new Uint8Array(await subtle.exportKey('raw', serverKP.publicKey));
+
+  // ECDH shared secret
+  const clientPub  = await subtle.importKey('raw', clientPubRaw, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const sharedBits = await subtle.deriveBits({ name: 'ECDH', public: clientPub }, serverKP.privateKey, 256);
+
+  // RFC 8291 §3.3: IKM = HKDF(salt=auth, IKM=ECDH, info="WebPush: info\0"+ua_pub+as_pub, 32)
+  const keyinfo = concatBytes(
+    new TextEncoder().encode('WebPush: info\x00'),
+    clientPubRaw, serverPubRaw
+  );
+  const ikmKey  = await subtle.importKey('raw', new Uint8Array(sharedBits), 'HKDF', false, ['deriveBits']);
+  const ikmBits = await subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt: authSecret, info: keyinfo },
+    ikmKey, 256
+  );
+
+  // RFC 8188 §2: random salt → CEK (128-bit) + nonce (96-bit)
+  const salt2   = crypto.getRandomValues(new Uint8Array(16));
+  const ikm2Key = await subtle.importKey('raw', new Uint8Array(ikmBits), 'HKDF', false, ['deriveBits']);
+  const cekBits   = await subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt: salt2,
+      info: new TextEncoder().encode('Content-Encoding: aes128gcm\x00\x01') },
+    ikm2Key, 128
+  );
+  const nonceBits = await subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt: salt2,
+      info: new TextEncoder().encode('Content-Encoding: nonce\x00\x01') },
+    ikm2Key, 96
+  );
+
+  // Encrypt: plaintext + 0x02 delimiter (last-record marker per RFC 8188)
+  const ptBytes = new TextEncoder().encode(typeof plaintext === 'string' ? plaintext : JSON.stringify(plaintext));
+  const padded  = concatBytes(ptBytes, new Uint8Array([0x02]));
+  const aesKey  = await subtle.importKey('raw', new Uint8Array(cekBits), 'AES-GCM', false, ['encrypt']);
+  const ct      = new Uint8Array(await subtle.encrypt(
+    { name: 'AES-GCM', iv: new Uint8Array(nonceBits) }, aesKey, padded
+  ));
+
+  // RFC 8188 header: salt(16) + rs(4,BE) + idlen(1) + server_pub(65) + ciphertext
+  // rs = full encrypted record size = plaintext + delimiter(1) + GCM tag(16)
+  const rs      = ptBytes.length + 17;
+  const rsField = new Uint8Array(4);
+  new DataView(rsField.buffer).setUint32(0, rs, false);
+  return concatBytes(salt2, rsField, new Uint8Array([65]), serverPubRaw, ct);
+}
+
+// Build a VAPID JWT for the push Authorization header.
+// Returns the JWT token string (without "vapid " prefix).
+async function buildVapidJwt(subtle, vapidPrivB64url, vapidPubB64url, endpoint) {
+  const privBytes = b64urlToBytes(vapidPrivB64url); // 32 bytes
+  const pubBytes  = b64urlToBytes(vapidPubB64url);  // 65 bytes: 0x04 + x(32) + y(32)
+  const jwk = {
+    kty: 'EC', crv: 'P-256',
+    d: bytesToB64url(privBytes),
+    x: bytesToB64url(pubBytes.slice(1, 33)),
+    y: bytesToB64url(pubBytes.slice(33, 65)),
+  };
+  const signingKey = await subtle.importKey(
+    'jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']
+  );
+  const origin  = new URL(endpoint).origin;
+  const header  = bytesToB64url(new TextEncoder().encode(JSON.stringify({ typ: 'JWT', alg: 'ES256' })));
+  const payload = bytesToB64url(new TextEncoder().encode(JSON.stringify({
+    aud: origin,
+    exp: Math.floor(Date.now() / 1000) + 43200, // 12-hour token
+    sub: 'mailto:vapid@breeze.chat',
+  })));
+  const sigInput = new TextEncoder().encode(`${header}.${payload}`);
+  const sigBytes = new Uint8Array(await subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, signingKey, sigInput));
+  return `${header}.${payload}.${bytesToB64url(sigBytes)}`;
+}
 
 async function handlePushSubscribe(body, env, request) {
   const { userId, subscription } = body;
@@ -810,22 +914,25 @@ async function sendPushToUser(userId, payload, env) {
   const data = await kvGet(env, key);
   if (!data) return;
   const subs = JSON.parse(data);
-  const body = JSON.stringify(payload);
-  // Send to all devices
+  const plaintextStr = JSON.stringify(payload);
   for (const sub of subs) {
     try {
-      // Web Push with VAPID — requires crypto signing
-      // Use Cloudflare Workers compatible Web Push
+      const [encrypted, jwt] = await Promise.all([
+        encryptPushPayload(crypto.subtle, sub, plaintextStr),
+        buildVapidJwt(crypto.subtle, env.VAPID_PRIVATE_KEY, env.VAPID_PUBLIC_KEY, sub.endpoint),
+      ]);
+      if (!encrypted) continue; // subscription missing keys
       const resp = await fetchWithTimeout(sub.endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/octet-stream',
           'Content-Encoding': 'aes128gcm',
+          'Authorization': `vapid t=${jwt},k=${env.VAPID_PUBLIC_KEY}`,
           'TTL': '86400',
         },
-        body: body,
+        body: encrypted,
       }, 5000);
-      // Remove expired subscriptions (410 Gone)
+      // Remove expired subscriptions
       if (resp.status === 410) {
         const remaining = subs.filter(s => s.endpoint !== sub.endpoint);
         await kvPut(env, key, JSON.stringify(remaining), { expirationTtl: 86400 * 30 });
@@ -1627,5 +1734,10 @@ export {
   kvGet,
   kvPut,
   kvDel,
+  encryptPushPayload,
+  buildVapidJwt,
+  b64urlToBytes,
+  bytesToB64url,
+  concatBytes,
 };
 

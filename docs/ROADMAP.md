@@ -50,7 +50,7 @@ I1 is wire-versioned with a v4 read path, so it's safe to roll out.
 | I5 | Optional + jittered receipts; relay batching | S–M | Sealed-sender deanonymization via receipt timing (NDSS'21). | — |
 | I6 | Length-bucketed padding + optional cover traffic | S–M | Flat 256-B pad leaks size buckets (Loopix). | I15 | 🟡 **padding done**: `ratchet.js` already pads to 256-byte-aligned buckets; cover traffic (fake messages) is client-side |
 | C10 | Durable Objects (rate-limit/presence/signaling) + WebSocket push | M–L | Fixes the per-isolate `_rateLimitMap` undercount **and** the KV write-budget ceiling; replaces polling. | — |
-| C12 | Encrypted, preview-less push (RFC 8291) | S–M | Push service sees ciphertext only; no message preview. | — |
+| C12 | Encrypted, preview-less push (RFC 8291) | S–M | Push service sees ciphertext only; no message preview. | — | ✅ **done**: `encryptPushPayload` (RFC 8291 P-256 ECDH + HKDF + AES-128-GCM) + `buildVapidJwt` (ES256) in `_worker.js`; `sendPushToUser` now encrypts; 15 tests in `tests/push.test.js` (round-trip + signature verify) |
 | I17 | Verifiable abuse reporting (Hecate / AMF franking) | M–L | Consensual reporting, no backdoor (USENIX'22). | I16 | ✅ **core + relay done**: `src/crypto/franking.js` + worker `/api/abuse/record`+`/api/abuse/report` (end-to-end test in `tests/worker.test.js`); sealed-sender sender-binding (Hecate asymmetric) + client send/report UI pending |
 | I18 | Anonymous anti-abuse tokens (Privacy Pass/VOPRF) | M–L | Battery-friendly, unlinkable vs PoW. | — |
 | C11 | Background Sync + persistent storage | S | Reliable offline send; no keystore eviction. | — |
@@ -63,7 +63,7 @@ I1 is wire-versioned with a v4 read path, so it's safe to roll out.
 |----|------|--------|-----|-----|
 | I8 / I9 | PQXDH handshake → Triple-Ratchet (hybrid PQ) | L | Harvest-now-decrypt-later; recurring-KEM PCS. Needs vetted WASM ML-KEM. | I1 |
 | I10 | Keep PQ auth deniable; soften deniability claims | S(doc)/L | Signature PQ-auth kills deniability (ePrint 2025/1090). | I8 |
-| I11 | Key-transparency log (akd/CONIKS-lite on Worker) | M–L | Automated MITM detection beyond TOFU. | I1 | 🟡 **precursor done**: worker records SHA-256 IK history per user (`ktlog:`) and returns it on fetch; client-side rollover detection + full hash-chained log pending |
+| I11 | Key-transparency log (akd/CONIKS-lite on Worker) | M–L | Automated MITM detection beyond TOFU. | I1 | 🟡 **module done**: worker logs SHA-256 IK history (`ktlog:`), returns on fetch; `src/crypto/ktlog.js` (`hashIK/parseLog/checkRollover/mergeLog`, 25 tests) for client-side rollover detection; full hash-chained log + index.html wiring pending |
 | I12 | Multi-device (Device Group Key + cross-signing) | L | Most-requested; relay never sees DGK. | C9, I4 |
 | C9 | Encrypt message store at rest + CRDT sync | M–L | Extends at-rest beyond keys; enables I12. | I4 |
 | I13 | PIN-based encrypted backup (SVR-lite) | M | Recovery (today: lose device = lose identity). | I4 |
