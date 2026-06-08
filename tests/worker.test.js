@@ -593,6 +593,12 @@ describe('sealed sender send / poll / ack', () => {
     expect((await res.json()).code).toBe('PAYLOAD_TOO_LARGE');
   });
 
+  it('send rejects a malformed recipient id (KV key injection guard)', async () => {
+    const res = await handleSealedSend({ to: 'bad id!', envelope: 'ENC' }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_USER_ID');
+  });
+
   it('poll rejects an id that does not match the userId format', async () => {
     const e = makeEnv();
     const r1 = await handleSealedPoll({ id: 'bad id!' }, e, req({})); // space + ! not in charset
@@ -691,6 +697,23 @@ describe('msg send / poll (1:1 relay path)', () => {
     expect(r2.status).toBe(400);
     const r3 = await handleMsgSend({ to: 'bob00001', from: 'alice001', ts }, ip, e, req({}));
     expect(r3.status).toBe(400);
+  });
+
+  it('rejects send with malformed to or from userId (KV key injection guard)', async () => {
+    const e = makeEnv();
+    const ts = Date.now();
+    const r1 = await handleMsgSend({ to: 'bad id!', from: 'alice001', payload: 'x', ts }, ip, e, req({}));
+    expect(r1.status).toBe(400);
+    expect((await r1.json()).code).toBe('INVALID_USER_ID');
+    const r2 = await handleMsgSend({ to: 'bob00001', from: 'bad id!', payload: 'x', ts }, ip, e, req({}));
+    expect(r2.status).toBe(400);
+    expect((await r2.json()).code).toBe('INVALID_USER_ID');
+  });
+
+  it('rejects poll with malformed id (KV key injection guard)', async () => {
+    const res = await handleMsgPoll({ id: 'bad id!' }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_ID');
   });
 });
 
@@ -952,6 +975,18 @@ describe('backup upload / download', () => {
     expect(res.status).toBe(404);
     expect((await res.json()).code).toBe('NOT_FOUND');
   });
+
+  it('rejects upload with malformed userId (KV key injection guard)', async () => {
+    const res = await handleBackupUpload({ userId: 'bad id!', backup: 'data' }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_USER_ID');
+  });
+
+  it('rejects download with malformed userId (KV key injection guard)', async () => {
+    const res = await handleBackupDownload({ userId: 'bad id!' }, makeEnv(), dlReq({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_USER_ID');
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1184,6 +1219,12 @@ describe('TURN credentials', () => {
     const res = await handleTurn({}, e, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('MISSING_USER_ID');
+  });
+
+  it('rejects malformed userId (KV key injection / credential injection guard)', async () => {
+    const res = await handleTurn({ userId: 'bad id!' }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_USER_ID');
   });
 
   it('falls back to free open-relay when no env vars are set', async () => {

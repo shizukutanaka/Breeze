@@ -315,6 +315,7 @@ async function handleMsgSend(body, ip, env, request) {
   if (!to || !from || !payload) return json({ error: 'to, from, payload required', code: 'MISSING_FIELDS' }, 400, request);
   // v3.3: Input type validation
   if (typeof to !== 'string' || typeof from !== 'string' || typeof payload !== 'string') return json({ error: 'Invalid types', code: 'INVALID_TYPE' }, 400, request);
+  if (!validateUserId(to) || !validateUserId(from)) return json({ error: 'invalid userId format', code: 'INVALID_USER_ID' }, 400, request);
   if (to === from && !body.type) return json({ error: 'Cannot send to self', code: 'SELF_SEND' }, 400, request);
   if (payload.length > 256 * 1024) return json({ error: 'Payload too large', code: 'PAYLOAD_TOO_LARGE' }, 400, request);
 
@@ -371,6 +372,7 @@ async function handleMsgSend(body, ip, env, request) {
 async function handleMsgPoll(body, env, request) {
   const { id, lastTs } = body;
   if (!id) return json({ error: 'id required', code: 'MISSING_ID' }, 400, request);
+  if (!validateUserId(id)) return json({ error: 'invalid id', code: 'INVALID_ID' }, 400, request);
 
   const key = `inbox:${id}`;
   const data = await kvGet(env, key);
@@ -962,6 +964,7 @@ async function sendPushToUser(userId, payload, env) {
 async function handleTurn(body, env, request) {
   const { userId } = body;
   if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
+  if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
 
   // ═══════════════════════════════════════════════════════
   // v3.6: Cost-optimized TURN credential chain
@@ -1263,6 +1266,7 @@ async function handleAbuseReport(body, env, request) {
 async function handleSealedSend(body, env, request) {
   const { to, envelope } = body;
   if (!to || !envelope) return json({ error: 'to and envelope required' }, 400, request);
+  if (!validateUserId(to)) return json({ error: 'invalid recipient id', code: 'INVALID_USER_ID' }, 400, request);
   if (typeof envelope !== 'string' || envelope.length > 256 * 1024) return json({ error: 'Envelope too large', code: 'PAYLOAD_TOO_LARGE' }, 400, request);
   // v3.6: In-memory dedup (saves 1 KV read + 1 KV write per sealed send)
   if (!globalThis._sealedDedup) globalThis._sealedDedup = new Map();
@@ -1316,6 +1320,7 @@ async function handleSealedAck(body, env, request) {
 async function handleBackupUpload(body, env, request) {
   const { userId, backup } = body;
   if (!userId || !backup) return json({ error: 'userId and backup required' }, 400, request);
+  if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
 
   // Store (max 5MB per backup)
   if (backup.length > 5 * 1024 * 1024) return json({ error: 'Backup too large', code: 'PAYLOAD_TOO_LARGE' }, 413, request);
@@ -1326,6 +1331,7 @@ async function handleBackupUpload(body, env, request) {
 async function handleBackupDownload(body, env, request) {
   const { userId } = body;
   if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
+  if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   const backup = await kvGet(env, `backup:${userId}`);
   if (!backup) return json({ error: 'No backup found', code: 'NOT_FOUND' }, 404, request);
   return json({ backup }, 200, request);
