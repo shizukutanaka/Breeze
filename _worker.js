@@ -680,6 +680,7 @@ async function handleGroupCreate(body, env, request) {
   // Cap public keys at 200 chars (X25519/P-256 base64 is ≤88 chars; large values are abuse).
   const creatorPub = typeof rawCreatorPub === 'string' ? rawCreatorPub.slice(0, 200) : rawCreatorPub;
   if (!name || !creatorId || !creatorPub) return json({ error: 'name, creatorId, creatorPub required' }, 400, request);
+  if (!validateUserId(creatorId)) return json({ error: 'invalid creatorId', code: 'INVALID_USER_ID' }, 400, request);
   // v3.1: Validate name length
   if (name.length > 50) return json({ error: 'Group name max 50 chars' }, 400, request);
   // v3.1: Validate initial member count
@@ -711,6 +712,7 @@ async function handleGroupJoin(body, env, request) {
   const memberName = sanitizeString(rawMemberName, 64);
   const memberPub = typeof rawMemberPub === 'string' ? rawMemberPub.slice(0, 200) : rawMemberPub;
   if (!token || !memberId || !memberPub) return json({ error: 'token, memberId, memberPub required' }, 400, request);
+  if (!validateUserId(memberId)) return json({ error: 'invalid memberId', code: 'INVALID_USER_ID' }, 400, request);
 
   const data = await kvGet(env, `grp:${token}`);
   if (!data) return json({ error: 'Invite link expired or invalid', code: 'EXPIRED' }, 404, request);
@@ -747,6 +749,7 @@ async function handleGroupInfo(body, env, request) {
 async function handleGroupKick(body, env, request) {
   const { token, kickId, adminId } = body;
   if (!token || !kickId || !adminId) return json({ error: 'token, kickId, adminId required' }, 400, request);
+  if (!validateUserId(kickId) || !validateUserId(adminId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
 
   const data = await kvGet(env, `grp:${token}`);
   if (!data) return json({ error: 'Group not found', code: 'NOT_FOUND' }, 404, request);
@@ -892,6 +895,7 @@ async function buildVapidJwt(subtle, vapidPrivB64url, vapidPubB64url, endpoint) 
 async function handlePushSubscribe(body, env, request) {
   const { userId, subscription } = body;
   if (!userId || !subscription?.endpoint) return json({ error: 'userId and subscription required' }, 400, request);
+  if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   // v3.6: Validate push endpoint URL (SSRF prevention)
   try {
     const epUrl = new URL(subscription.endpoint);
@@ -1088,6 +1092,7 @@ async function handleAccountPurchase(body, env, request) {
 async function handleAccountSlots(body, env, request) {
   const { userId } = body;
   if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
+  if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   const data = await kvGet(env, `slots:${userId}`);
   if (!data) return json({ slots: 1, plan: 'free' }, 200, request);
   const parsed = JSON.parse(data);

@@ -815,6 +815,15 @@ describe('push subscribe SSRF guard', () => {
     expect((await res.json()).ok).toBe(true);
   });
 
+  it('rejects malformed userId (KV key injection guard)', async () => {
+    const res = await handlePushSubscribe(
+      { userId: 'bad id!', subscription: { endpoint: 'https://fcm.googleapis.com/fcm/send/x' } },
+      makeEnv(), apiRequest('/api/push/subscribe', {})
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_USER_ID');
+  });
+
   it('caps at 5 subscriptions per user (evicts oldest when 6th device registers)', async () => {
     const env = makeEnv();
     const req = apiRequest('/api/push/subscribe', {});
@@ -1310,6 +1319,12 @@ describe('account slots', () => {
     const res = await handleAccountSlots({}, env, req({}));
     expect(res.status).toBe(400);
   });
+
+  it('rejects malformed userId (KV key injection guard)', async () => {
+    const res = await handleAccountSlots({ userId: 'bad id!' }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_USER_ID');
+  });
 });
 
 describe('group create / join / info validation', () => {
@@ -1392,5 +1407,34 @@ describe('group create / join / info validation', () => {
       { token, memberId: 'overflow1', memberPub: 'opub' }, env, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('GROUP_FULL');
+  });
+
+  it('create rejects malformed creatorId (KV member injection guard)', async () => {
+    const res = await handleGroupCreate(
+      { name: 'g', creatorId: 'bad id!', creatorPub: 'cpub' }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_USER_ID');
+  });
+
+  it('join rejects malformed memberId (KV member injection guard)', async () => {
+    const env = makeEnv();
+    const { token } = await (await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    const res = await handleGroupJoin({ token, memberId: 'bad id!', memberPub: 'mpub' }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_USER_ID');
+  });
+
+  it('kick rejects malformed adminId or kickId (member injection guard)', async () => {
+    const env = makeEnv();
+    const { token } = await (await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'mpub' }, env, req({}));
+    const r1 = await handleGroupKick({ token, kickId: 'bad id!', adminId: 'creator1' }, env, req({}));
+    expect(r1.status).toBe(400);
+    expect((await r1.json()).code).toBe('INVALID_USER_ID');
+    const r2 = await handleGroupKick({ token, kickId: 'member01', adminId: 'bad id!' }, env, req({}));
+    expect(r2.status).toBe(400);
+    expect((await r2.json()).code).toBe('INVALID_USER_ID');
   });
 });
