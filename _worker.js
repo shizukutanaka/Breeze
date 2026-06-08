@@ -431,7 +431,9 @@ async function handlePresence(body, env, request) {
   if (!globalThis._presenceCache) globalThis._presenceCache = new Map();
   const presKey = `presence:${id}`;
   const lastWrite = globalThis._presenceCache.get(presKey) || 0;
-  const presData = { pub, name: sanitizeString(name, 64), at: Date.now() };
+  // Cap pub to 200 chars (a base64 X25519/P-256 key is ≤88 chars; large values are abuse).
+  const safePub = typeof pub === 'string' ? pub.slice(0, 200) : undefined;
+  const presData = { pub: safePub, name: sanitizeString(name, 64), at: Date.now() };
   if (Date.now() - lastWrite > 300000) { // Only write to KV every 5 min
     await kvPut(env, presKey, JSON.stringify(presData), { expirationTtl: 360 }); // 6min TTL (covers 5min interval + slack)
     globalThis._presenceCache.set(presKey, Date.now());
@@ -669,9 +671,11 @@ async function verifyStripeSignature(payload, header, secret) {
 // ============================================================
 
 async function handleGroupCreate(body, env, request) {
-  const { name: rawName, creatorId, creatorPub, creatorName: rawCreatorName, members, ttl } = body;
+  const { name: rawName, creatorId, creatorPub: rawCreatorPub, creatorName: rawCreatorName, members, ttl } = body;
   const name = sanitizeString(rawName, 50);
   const creatorName = sanitizeString(rawCreatorName, 64);
+  // Cap public keys at 200 chars (X25519/P-256 base64 is ≤88 chars; large values are abuse).
+  const creatorPub = typeof rawCreatorPub === 'string' ? rawCreatorPub.slice(0, 200) : rawCreatorPub;
   if (!name || !creatorId || !creatorPub) return json({ error: 'name, creatorId, creatorPub required' }, 400, request);
   // v3.1: Validate name length
   if (name.length > 50) return json({ error: 'Group name max 50 chars' }, 400, request);
@@ -700,8 +704,9 @@ async function handleGroupCreate(body, env, request) {
 }
 
 async function handleGroupJoin(body, env, request) {
-  const { token, memberId, memberPub, memberName: rawMemberName } = body;
+  const { token, memberId, memberPub: rawMemberPub, memberName: rawMemberName } = body;
   const memberName = sanitizeString(rawMemberName, 64);
+  const memberPub = typeof rawMemberPub === 'string' ? rawMemberPub.slice(0, 200) : rawMemberPub;
   if (!token || !memberId || !memberPub) return json({ error: 'token, memberId, memberPub required' }, 400, request);
 
   const data = await kvGet(env, `grp:${token}`);
