@@ -788,6 +788,12 @@ describe('msg send / poll (1:1 relay path)', () => {
 describe('alias set / get (PoW anti-spam)', () => {
   const req = (b) => apiRequest('/api/alias/x', b);
 
+  it('rejects oversized pub field (KV inflation guard)', async () => {
+    const res = await handleAliasSet({ alias: 'alice', pub: 'x'.repeat(2001) }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('FIELD_TOO_LARGE');
+  });
+
   it('rejects a request with no PoW token', async () => {
     const res = await handleAliasSet({ alias: 'alice', pub: 'PUBKEY' }, makeEnv(), req({}));
     expect(res.status).toBe(400);

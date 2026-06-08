@@ -485,6 +485,8 @@ async function handleAliasSet(body, env, request) {
   // zero (matches the client's generatePoW: first32 < 2^(32-difficulty)). The
   // challenge must embed this identity key so a solved token can't be replayed for
   // a different pubkey.
+  // Cap pub size: P-256 JWK is ≤~300 chars, X25519 raw base64url is 44 chars.
+  if (typeof pub !== 'string' || pub.length > 2000) return json({ error: 'pub too large', code: 'FIELD_TOO_LARGE' }, 400, request);
   if (!pow || typeof pow.nonce !== 'number' || typeof pow.challenge !== 'string') {
     return json({ error: 'Proof-of-work token required', code: 'POW_REQUIRED' }, 400, request);
   }
