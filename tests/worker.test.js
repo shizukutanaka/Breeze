@@ -585,6 +585,15 @@ describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => 
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('MSG_TOO_LARGE');
   });
+
+  it('rejects an oversized opening field (DoS guard)', async () => {
+    const env = makeEnv();
+    const { commitment } = await F.commit('any message');
+    await handleAbuseRecord({ frankId: 'm-ovr', commitment: b64(commitment) }, env, req({}));
+    const res = await handleAbuseReport({ frankId: 'm-ovr', message: 'any message', opening: 'x'.repeat(129) }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_OPENING');
+  });
 });
 
 describe('sealed sender send / poll / ack', () => {
@@ -1459,13 +1468,24 @@ describe('OGP SSRF guard', () => {
 
   it('returns cached result without outbound fetch', async () => {
     const e   = makeEnv();
+    const url = 'https://example.com/page';
+    // Mirror sha256Short: first 8 bytes of SHA-256 as lowercase hex
+    const buf  = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(url));
+    const hash = Array.from(new Uint8Array(buf)).slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join('');
     const cached = { title: 'Cached', description: 'desc', image: '' };
-    const cacheKey = 'ogp:https://example.com/page';
-    await e.KV.put(cacheKey, JSON.stringify(cached));
-    const res = await handleOGP({ url: 'https://example.com/page' }, e, req({}));
+    await e.KV.put(`ogp:${hash}`, JSON.stringify(cached));
+    const res = await handleOGP({ url }, e, req({}));
     expect(res.status).toBe(200);
     const j   = await res.json();
     expect(j.title).toBe('Cached');
+  });
+
+  it('rejects a url longer than 2048 chars', async () => {
+    const e   = makeEnv();
+    const url = 'https://example.com/' + 'a'.repeat(2048);
+    const res = await handleOGP({ url }, e, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('URL_TOO_LONG');
   });
 
   it('returns 200 with empty body for a malformed URL (URL constructor throws)', async () => {

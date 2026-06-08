@@ -1303,6 +1303,8 @@ async function handleAbuseReport(body, env, request) {
   if (!frankId || typeof message !== 'string' || !opening) return json({ error: 'frankId, message, opening required' }, 400, request);
   if (typeof frankId !== 'string' || frankId.length > 128) return json({ error: 'invalid frankId' }, 400, request);
   if (message.length > 256 * 1024) return json({ error: 'message too large', code: 'MSG_TOO_LARGE' }, 400, request);
+  // HMAC opening key is 32 bytes (base64 = 44 chars); 128 chars is generous.
+  if (typeof opening !== 'string' || opening.length > 128) return json({ error: 'invalid opening', code: 'INVALID_OPENING' }, 400, request);
   const commitment = await kvGet(env, `frank:${frankId}`);
   if (!commitment) return json({ error: 'No such franking record', code: 'NOT_FOUND' }, 404, request);
   const verified = await hmacVerifyFrank(commitment, opening, message);
@@ -1426,6 +1428,7 @@ async function handleDropRead(body, env, request) {
 async function handleOGP(body, env, request) {
   const { url } = body;
   if (!url || !url.startsWith('http')) return json({ error: 'url required', code: 'MISSING_URL' }, 400, request);
+  if (typeof url !== 'string' || url.length > 2048) return json({ error: 'url too long (max 2048)', code: 'URL_TOO_LONG' }, 400, request);
 
   // SSRF protection: block private/internal IPs and non-http schemes
   try {
@@ -1446,8 +1449,9 @@ async function handleOGP(body, env, request) {
     }
   } catch(e) { return json({}, 200, request); }
 
-  // Cache OGP results for 24h
-  const cacheKey = `ogp:${url.slice(0, 200)}`;
+  // Cache OGP results for 24h — hash the URL so two URLs sharing a 200-char prefix
+  // don't collide, and so very long URLs don't inflate the KV key.
+  const cacheKey = `ogp:${await sha256Short(url)}`;
   const cached = await kvGet(env, cacheKey);
   if (cached) return json(JSON.parse(cached), 200, request);
 
