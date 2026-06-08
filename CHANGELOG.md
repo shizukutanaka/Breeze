@@ -1,5 +1,57 @@
 # Changelog
 
+## Security Hardening Batch 2 (branch claude/nice-ride-T6yb0, 2026-06-08)
+
+### Crypto Modules (`src/crypto/`)
+- **`group.js` — N2 two-layer group authentication (partial AFKS)**: Each encrypted group
+  message now carries two Ed25519 signatures: `es` (epoch signature, long-lived per-epoch
+  key signs iv‖ct‖cm‖ep‖c‖spk‖nsk) and `s` (per-message signature, fresh keypair discarded
+  after use). Both signatures must verify before any key derivation — forging requires
+  compromising both keys simultaneously. A leaked per-message key cannot forge other messages
+  (epoch sig would fail) and vice versa. The epoch signature authenticates `spk` (per-message
+  public key), enabling out-of-order delivery without tracking a signing-key-ratchet chain.
+  `newSenderKey` / `rotateEpoch` now generate fresh per-message key pairs; `encryptGroupMsg`
+  produces and advances the per-message keypair chain; `decryptGroupMsg` verifies both
+  signatures with a legacy single-sig fallback for pre-N2 messages.
+
+### Worker (`_worker.js`) — security fixes
+- **KV injection guards**: Added `validateUserId()` to `handlePresence` (single-id path and
+  batch-check path using filter), `handleAccountPurchase`, `handleWebhook` (checkout.session
+  .completed, subscription.deleted, subscription.updated — Stripe metadata is user-controlled;
+  invalid IDs silently skipped to prevent Stripe retries).
+- **Public key field size caps**: `handlePreKeyUpload` rejects `identityKey` / `signedPreKey`
+  > 5000 chars and `edIdentityKey` / `signedPreKeySig` > 500 chars (`FIELD_TOO_LARGE`);
+  each OTP entry capped at 5000 chars. `handleAliasSet` rejects `pub` > 2000 chars.
+- **AI prompt injection prevention**: `translate_context` action sanitizes `lang` to BCP-47
+  charset `[a-zA-Z0-9-]`, max 20 chars, rejecting empty after sanitization (`invalid lang`).
+- **AI summarize memory bound**: Per-message `sender` capped at 100 chars and `text` at 500
+  chars before joining, bounding peak memory independent of the 4000-char aggregate truncation.
+- **PoW freshness check**: `handleAliasSet` now rejects tokens with a timestamp embedded in
+  the challenge (makeChallengeString format `${pub}:${ts}`) if older than 10 minutes
+  (POW_EXPIRED). Backward-compatible: old-format challenges (no parseable last segment) skip
+  the freshness check (`Number.isFinite(NaN)` is false).
+- **Group token length cap**: `handleGroupJoin`, `handleGroupInfo`, `handleGroupKick` reject
+  tokens > 128 chars (server tokens are 12 chars; oversized inputs would hit KV's 512-byte
+  key limit).
+- **Translate type guard**: `handleTranslate` rejects non-string `to` field (would throw
+  TypeError on `.slice()`) and normalizes `from` type defensively.
+- **Exported handlers**: `handleAI`, `handleTranslate` added to named exports for testing.
+
+### Test Suite (`tests/`) — additions
+- **11 suites, 319 tests** passing (`npm test`); `validate.sh` 32/35 (PASSED).
+- Group: DoS guards — MAX_GAP reject, MAX_SKIP window semantics (keys beyond MAX_SKIP-1
+  from target are dropped), MAX_GAP boundary acceptance (3 tests). Total: 22 group tests.
+- Worker: prekey field size caps (4), webhook userId KV injection guard (3), AI handler
+  input validation (6), translate input validation (4), alias pub size cap (1), PoW
+  freshness check — expired-reject + fresh-accept (2). Total: 162 worker tests.
+- PoW freshness test: 30s timeout added (probabilistic solve, occasionally slow on cold JIT).
+
+### Documentation
+- `docs/CRYPTO-SPEC.md`: test count updated (316 → 319), security additions list extended
+  with all batch-2 hardening, worker test coverage description expanded.
+
+---
+
 ## Security Sprint — continued (branch claude/nice-ride-T6yb0, 2026-06-08)
 
 ### Crypto Modules (`src/crypto/`) — additions
