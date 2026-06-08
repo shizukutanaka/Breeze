@@ -1631,7 +1631,12 @@ async function handleAI(body, env, request) {
     case 'summarize':
       if (!messages || !Array.isArray(messages)) return json({ error: 'messages array required' }, 400, request);
       systemPrompt = 'Summarize this chat conversation in 3-5 bullet points. Identify key topics, decisions, and action items. Reply in the same language as the messages.';
-      userContent = messages.slice(-50).map(m => `${m.sender}: ${m.text}`).join('\n');
+      // Cap individual fields before joining to bound peak memory (not just the aggregate).
+      userContent = messages.slice(-50).map(m => {
+        const s = String(m.sender || '').slice(0, 100);
+        const t = String(m.text   || '').slice(0, 500);
+        return `${s}: ${t}`;
+      }).join('\n');
       if (userContent.length > 4000) userContent = userContent.slice(-4000);
       break;
 
@@ -1830,5 +1835,7 @@ export {
   handleOGP,
   handleTurn,
   handleAccountSlots,
+  handleAI,
+  handleTranslate,
 };
 
