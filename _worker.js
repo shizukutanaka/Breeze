@@ -1718,8 +1718,7 @@ async function sha256Short(text) {
 
 function corsHeaders(request) {
   const origin = request?.headers?.get('Origin') || '';
-  return {
-    'Access-Control-Allow-Origin': origin || 'null',
+  const hdrs = {
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Max-Age': '86400',
@@ -1731,6 +1730,11 @@ function corsHeaders(request) {
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
     'X-Breeze-Version': '3.6.0',
   };
+  // Only echo the Origin back if it is a real browser origin (not the string "null"
+  // produced by sandboxed iframes / file:// which would allow those sources to read
+  // API responses). Missing-Origin requests (curl, server-side) don't need CORS.
+  if (origin && origin !== 'null') hdrs['Access-Control-Allow-Origin'] = origin;
+  return hdrs;
 }
 
 // v3.5: KV safety helpers (FIXED: was calling itself recursively!)
