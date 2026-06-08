@@ -53,6 +53,7 @@ beforeEach(() => {
   globalThis._presenceCache = new Map();
   globalThis._onlineCounter = null;
   globalThis._msgDedup      = new Map();
+  globalThis._sealedDedup   = new Map();
 });
 
 describe('routing & request validation (export default fetch)', () => {
@@ -405,8 +406,6 @@ describe('sealed sender send / poll / ack', () => {
   });
 
   it('deduplicates identical envelopes sent twice (replay guard)', async () => {
-    // Reset in-memory dedup map between tests
-    globalThis._sealedDedup = new Map();
     const env = makeEnv();
     await handleSealedSend({ to: 'dave0001', envelope: 'SAME_PAYLOAD_XYZ' }, env, req({}));
     await handleSealedSend({ to: 'dave0001', envelope: 'SAME_PAYLOAD_XYZ' }, env, req({}));
