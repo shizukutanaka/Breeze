@@ -968,6 +968,16 @@ describe('dead drop (create + read)', () => {
     const res = await handleDropRead({ id: 'no-such-drop' }, e, readReq({}));
     expect(res.status).toBe(404);
   });
+
+  it('rejects id with characters outside A-Za-z0-9_-. (KV key injection guard)', async () => {
+    const e = makeEnv();
+    const r1 = await handleDropCreate({ id: 'bad id!', ct: 'x' }, e, req({}));
+    expect(r1.status).toBe(400);
+    const r2 = await handleDropCreate({ id: '../secret', ct: 'x' }, e, req({}));
+    expect(r2.status).toBe(400);
+    const r3 = await handleDropRead({ id: 'bad id!' }, e, readReq({}));
+    expect(r3.status).toBe(400);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

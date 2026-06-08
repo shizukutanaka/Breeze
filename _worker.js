@@ -1364,7 +1364,7 @@ async function handleBackupDownload(body, env, request) {
 async function handleDropCreate(body, env, request) {
   const { id, ct, ttl } = body;
   if (!id || !ct) return json({ error: 'id and ct required' }, 400, request);
-  if (typeof id !== 'string' || id.length > 64) return json({ error: 'invalid id' }, 400, request);
+  if (typeof id !== 'string' || id.length < 1 || id.length > 64 || !/^[A-Za-z0-9_\-.]+$/.test(id)) return json({ error: 'invalid id (1-64 alphanumeric/_/./- chars)' }, 400, request);
   if (typeof ct !== 'string' || ct.length > 100000) return json({ error: 'ct too large (max 100KB)' }, 400, request);
   const ttlSec = Math.min(Math.max(parseInt(ttl) || 86400, 300), 604800); // 5min - 7days, default 24h
   const key = `drop:${id}`;
@@ -1376,7 +1376,7 @@ async function handleDropCreate(body, env, request) {
 
 async function handleDropRead(body, env, request) {
   const { id } = body;
-  if (!id || typeof id !== 'string' || id.length > 64) return json({ error: 'invalid id' }, 400, request);
+  if (!id || typeof id !== 'string' || id.length > 64 || !/^[A-Za-z0-9_\-.]+$/.test(id)) return json({ error: 'invalid id' }, 400, request);
   const key = `drop:${id}`;
   const raw = await kvGet(env, key);
   if (!raw) return json({ error: 'Not found or already read', code: 'NOT_FOUND' }, 404, request);
