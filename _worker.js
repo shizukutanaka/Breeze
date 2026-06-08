@@ -1010,6 +1010,31 @@ async function handlePreKeyUpload(body, env, request) {
   }
   const bundle = { identityKey, edIdentityKey, signedPreKey, signedPreKeySig, uploadedAt: Date.now() };
   await kvPut(env, `prekey:${userId}`, JSON.stringify(bundle), { expirationTtl: 86400 * 30 });
+
+  // I11 (key-history precursor): append a SHA-256 digest of the identity key to a
+  // capped audit log. Clients can fetch this log to detect unexpected key rollovers
+  // (TOFU+). The log itself is not tamper-proof without external witnesses; it is a
+  // lightweight step toward full key transparency.
+  try {
+    const ikHash = btoa(String.fromCharCode(...new Uint8Array(
+      await crypto.subtle.digest('SHA-256', new TextEncoder().encode(identityKey))
+    )));
+    const logKey = `ktlog:${userId}`;
+    const existing = await kvGet(env, logKey);
+    const log = existing ? JSON.parse(existing) : [];
+    const latest = log[log.length - 1];
+    // Append only if the IK changed or this is the first entry.
+    if (!latest || latest.h !== ikHash) {
+      log.push({ ts: Date.now(), h: ikHash });
+    } else {
+      // Same IK: just refresh the timestamp of the last entry.
+      latest.ts = Date.now();
+    }
+    // Cap at 10 entries (enough to show a suspicious rollover history).
+    const trimmed = log.slice(-10);
+    await kvPut(env, logKey, JSON.stringify(trimmed), { expirationTtl: 86400 * 90 });
+  } catch (e) { /* log failure is non-fatal */ }
+
   // Store one-time prekeys individually
   if (Array.isArray(oneTimePreKeys)) {
     for (let i = 0; i < Math.min(oneTimePreKeys.length, 100); i++) {
@@ -1044,6 +1069,9 @@ async function handlePreKeyFetch(body, env, request) {
   }
   // Signal the owner to replenish one-time prekeys before they are exhausted.
   if (remainingOTP <= 5) bundle.replenishOTP = true;
+  // I11: include key-history log so the initiator can detect unexpected IK rollovers.
+  const ktLog = await kvGet(env, `ktlog:${userId}`);
+  if (ktLog) bundle.keyHistory = JSON.parse(ktLog);
   return json(bundle, 200, request);
 }
 

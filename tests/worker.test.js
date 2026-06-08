@@ -129,6 +129,61 @@ describe('prekey upload + fetch (OTP consumption)', () => {
   });
 });
 
+describe('prekey key-history audit log (I11 precursor)', () => {
+  it('records an IK hash on first upload and returns it on fetch', async () => {
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'hist0001', identityKey: 'IK-A', signedPreKey: 'SPK' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    const res = await handlePreKeyFetch({ userId: 'hist0001' }, env, apiRequest('/api/prekey/fetch', {}));
+    const bundle = await res.json();
+    expect(bundle.keyHistory).toBeDefined();
+    expect(bundle.keyHistory.length).toBe(1);
+    expect(bundle.keyHistory[0].h).toBeTruthy();
+  });
+
+  it('appends a new entry when the IK changes (rollover detection)', async () => {
+    const env = makeEnv();
+    const upload = (ik) => handlePreKeyUpload(
+      { userId: 'hist0002', identityKey: ik, signedPreKey: 'SPK' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    await upload('IK-original');
+    await upload('IK-changed'); // key rollover
+    const res = await handlePreKeyFetch({ userId: 'hist0002' }, env, apiRequest('/api/prekey/fetch', {}));
+    const bundle = await res.json();
+    expect(bundle.keyHistory.length).toBe(2);
+    // The two entries have different hashes.
+    expect(bundle.keyHistory[0].h).not.toBe(bundle.keyHistory[1].h);
+  });
+
+  it('does not duplicate an entry when uploading the same IK again', async () => {
+    const env = makeEnv();
+    const upload = () => handlePreKeyUpload(
+      { userId: 'hist0003', identityKey: 'IK-stable', signedPreKey: 'SPK' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    await upload();
+    await upload();
+    await upload();
+    const res = await handlePreKeyFetch({ userId: 'hist0003' }, env, apiRequest('/api/prekey/fetch', {}));
+    expect((await res.json()).keyHistory.length).toBe(1);
+  });
+
+  it('caps the log at 10 entries', async () => {
+    const env = makeEnv();
+    for (let i = 0; i < 15; i++) {
+      await handlePreKeyUpload(
+        { userId: 'hist0004', identityKey: `IK-${i}`, signedPreKey: 'SPK' },
+        env, apiRequest('/api/prekey/upload', {}),
+      );
+    }
+    const res = await handlePreKeyFetch({ userId: 'hist0004' }, env, apiRequest('/api/prekey/fetch', {}));
+    expect((await res.json()).keyHistory.length).toBe(10);
+  });
+});
+
 describe('prekey signed-prekey signature verification (I1/G2)', () => {
   // Build a signed prekey bundle: an Ed25519 identity key signs the (raw) SPK bytes.
   async function signedBundle(userId) {
