@@ -930,6 +930,15 @@ describe('OGP SSRF guard', () => {
     const j   = await res.json();
     expect(j.title).toBe('Cached');
   });
+
+  it('returns 200 with empty body for a malformed URL (URL constructor throws)', async () => {
+    // 'http://' has no hostname — new URL() throws — the catch returns 200+{}
+    // rather than leaking an unhandled exception.
+    const e   = makeEnv();
+    const res = await handleOGP({ url: 'http://' }, e, req({}));
+    expect(res.status).toBe(200);
+    expect(Object.keys(await res.json()).length).toBe(0);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1084,5 +1093,21 @@ describe('group create / join / info validation', () => {
     const env = makeEnv();
     const res = await handleGroupInfo({}, env, req({}));
     expect(res.status).toBe(400);
+  });
+
+  it('join rejects when group is full (100 members)', async () => {
+    const env = makeEnv();
+    const { token } = await (await handleGroupCreate(
+      { name: 'big', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    // Fill to 100 members (creator is already 1, add 99 more).
+    for (let i = 0; i < 99; i++) {
+      await handleGroupJoin(
+        { token, memberId: `member${String(i).padStart(3,'0')}`, memberPub: `pub${i}` }, env, req({}));
+    }
+    // 101st join must fail.
+    const res = await handleGroupJoin(
+      { token, memberId: 'overflow1', memberPub: 'opub' }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('GROUP_FULL');
   });
 });
