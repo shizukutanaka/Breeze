@@ -216,4 +216,20 @@ visible to FCM (verify via browser DevTools → Application → Push Messages).
 ## Cross-reference
 - What/why per item: `docs/IMPROVEMENTS.md` (I1–I20), `docs/ROADMAP.md` (priority).
 - Exact wire formats + status: `docs/CRYPTO-SPEC.md` (§2–§6a, gaps §8–§9).
-- Tested behavior to mirror: `src/crypto/*.js` + `tests/*` (172 tests, 10 suites).
+- Tested behavior to mirror: `src/crypto/*.js` + `tests/*` (232 tests, 11 suites).
+
+## Security notes for browser port
+
+**AEAD desync fix (important when porting G4):** In `src/crypto/ratchet.js` and
+`group.js`, all chain-state advances (`recvChainKey`, `recvCounter`, `skipped` key
+deletion) now happen **after** a successful AES-GCM auth. The old index.html inline
+copy does NOT have this fix — an on-path attacker injecting a message with a corrupt
+ciphertext permanently desyncs the receive chain until the session is renegotiated.
+Apply the fix when porting (move state advance to after `subtle.decrypt` succeeds).
+
+**N1 Nr reset (G4):** `dhRatchetStep` in index.html resets only `sendCounter`; it
+must also reset `recvCounter` = 0. The module is fixed; apply when porting.
+
+**Key commitment (G4):** Do not skip the `cm` check for back-compat — check it for
+v5 messages and skip only when `cm` is absent (legacy). This is the fix for
+"invisible salamanders" (I16).
