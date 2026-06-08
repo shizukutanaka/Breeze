@@ -941,6 +941,25 @@ describe('push subscribe SSRF guard', () => {
     expect(stored.some(s => s.endpoint.includes('device1'))).toBe(false);
     expect(stored.some(s => s.endpoint.includes('device6'))).toBe(true);
   });
+
+  it('sanitizes subscription: extra fields stripped, oversized key fields truncated', async () => {
+    const env = makeEnv();
+    const req = apiRequest('/api/push/subscribe', {});
+    const sub = {
+      endpoint: 'https://fcm.googleapis.com/fcm/send/abc',
+      keys: { p256dh: 'p'.repeat(200), auth: 'a'.repeat(100), extra: 'should-not-appear' },
+      expirationTime: 1234567890,
+      injectedField: 'x'.repeat(10000), // extra top-level field — must be dropped
+    };
+    await handlePushSubscribe({ userId: 'u0000002', subscription: sub }, env, req);
+    const stored = JSON.parse(await env.KV.get('push:u0000002'));
+    const saved = stored[0];
+    expect(Object.keys(saved)).toEqual(expect.arrayContaining(['endpoint', 'keys', 'expirationTime']));
+    expect(saved).not.toHaveProperty('injectedField');
+    expect(saved.keys.p256dh.length).toBeLessThanOrEqual(100);
+    expect(saved.keys.auth.length).toBeLessThanOrEqual(50);
+    expect(saved.keys).not.toHaveProperty('extra');
+  });
 });
 
 describe('webhook signature + idempotency', () => {

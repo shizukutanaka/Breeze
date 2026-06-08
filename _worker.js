@@ -938,13 +938,23 @@ async function handlePushSubscribe(body, env, request) {
       return json({ error: 'Untrusted push endpoint' }, 400, request);
     }
   } catch { return json({ error: 'Invalid push endpoint URL' }, 400, request); }
+  // Sanitize: only store the three fields needed for push delivery.
+  // Storing the full client object would allow oversized extra fields to inflate KV.
+  const safeSub = {
+    endpoint: subscription.endpoint.slice(0, 512),
+    keys: {
+      p256dh: typeof subscription.keys?.p256dh === 'string' ? subscription.keys.p256dh.slice(0, 100) : '',
+      auth:   typeof subscription.keys?.auth   === 'string' ? subscription.keys.auth.slice(0, 50)   : '',
+    },
+  };
+  if (typeof subscription.expirationTime === 'number') safeSub.expirationTime = subscription.expirationTime;
   // Store subscription (user can have multiple devices)
   const key = `push:${userId}`;
   const existing = await kvGet(env, key);
   let subs = existing ? JSON.parse(existing) : [];
   // Deduplicate by endpoint
-  subs = subs.filter(s => s.endpoint !== subscription.endpoint);
-  subs.push(subscription);
+  subs = subs.filter(s => s.endpoint !== safeSub.endpoint);
+  subs.push(safeSub);
   // Keep last 5 devices
   if (subs.length > 5) subs = subs.slice(-5);
   await kvPut(env, key, JSON.stringify(subs), { expirationTtl: 86400 * 30 });
