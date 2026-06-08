@@ -116,6 +116,17 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     const res = await handlePreKeyFetch({ userId: 'nobody0001' }, makeEnv(), apiRequest('/api/prekey/fetch', {}));
     expect(res.status).toBe(404);
   });
+
+  it('sets replenishOTP when OTP count drops to 5 or below', async () => {
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'low00001', identityKey: 'IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0', 'o1', 'o2', 'o3', 'o4', 'o5'] },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    // Consume down to count=5 (should set replenishOTP flag on the 6th fetch).
+    const r1 = await handlePreKeyFetch({ userId: 'low00001' }, env, apiRequest('/api/prekey/fetch', {}));
+    expect((await r1.json()).replenishOTP).toBe(true); // count was 6 → now 5
+  });
 });
 
 describe('prekey signed-prekey signature verification (I1/G2)', () => {
@@ -198,6 +209,16 @@ describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {
     const info = await (await handleGroupInfo({ token }, env, req({}))).json();
     expect(info.epoch).toBe(0); // unchanged
   });
+
+  it('kicking a non-member returns 404 without bumping epoch', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupKick({ token, kickId: 'nobody00', adminId: 'creator1' }, env, req({}));
+    expect(res.status).toBe(404);
+    expect((await res.json()).code).toBe('NOT_MEMBER');
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.epoch).toBe(0); // no wasteful epoch churn
+  });
 });
 
 describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => {
@@ -242,6 +263,22 @@ describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => 
     // The original commitment still stands.
     const rep = await handleAbuseReport({ frankId: 'm-003', message: 'first', opening: b64(a.opening) }, env, req({}));
     expect((await rep.json()).verified).toBe(true);
+  });
+
+  it('rejects an oversized frankId on record', async () => {
+    const env = makeEnv();
+    const { commitment } = await F.commit('x');
+    const res = await handleAbuseRecord({ frankId: 'x'.repeat(129), commitment: b64(commitment) }, env, req({}));
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects an oversized report message (DoS guard)', async () => {
+    const env = makeEnv();
+    const { commitment } = await F.commit('x');
+    await handleAbuseRecord({ frankId: 'm-dos', commitment: b64(commitment) }, env, req({}));
+    const res = await handleAbuseReport({ frankId: 'm-dos', message: 'x'.repeat(256 * 1024 + 1), opening: b64([0]) }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('MSG_TOO_LARGE');
   });
 });
 

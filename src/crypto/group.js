@@ -33,7 +33,8 @@ export function createGroup(opts = {}) {
   const R = opts.ratchet || createRatchet(opts);
   const subtle = opts.subtle || globalThis.crypto.subtle;
   const getRandomValues = opts.getRandomValues || ((a) => globalThis.crypto.getRandomValues(a));
-  const cfg = { MAX_SKIP: 1000, MAX_GAP: 5000, ...opts };
+  const cfg = { MAX_SKIP: 1000, MAX_GAP: 5000, skippedKeyTTL: 7 * 24 * 60 * 60 * 1000, ...opts };
+  const now = opts.now || (() => Date.now());
   const zeros = new Uint8Array(32);
 
   // --- N2: per-message sender authentication ---
@@ -122,6 +123,15 @@ export function createGroup(opts = {}) {
     // hold a key for → cannot/should not decrypt.
     if (p.ep !== peerKey.epoch) return null;
 
+    // I7 (group): time-expire stale skipped message keys — retaining them indefinitely
+    // is a forward-secrecy leak (old symmetric keys in memory) and a DoS amplifier.
+    if (peerKey.skipped) {
+      const cutoff = now() - cfg.skippedKeyTTL;
+      for (const k of Object.keys(peerKey.skipped)) {
+        if ((peerKey.skipped[k]?.t ?? 0) < cutoff) delete peerKey.skipped[k];
+      }
+    }
+
     // N2: verify the sender's signature before doing any key-ratchet work (also a
     // DoS guard — a forged message can't force chain derivation). Covers iv/ct/cm/
     // ep/counter, so tampering or reordering is rejected too.
@@ -132,8 +142,9 @@ export function createGroup(opts = {}) {
       const sk = peerKey.skipped?.['c:' + p.c];
       if (sk) {
         delete peerKey.skipped['c:' + p.c];
-        if (p.cm && !R.ctEqual(await R.keyCommitment(u8(sk)), p.cm)) return null;
-        return frameDecrypt(sk, p.i, p.d);
+        const skBytes = sk.k !== undefined ? u8(sk.k) : u8(sk);
+        if (p.cm && !R.ctEqual(await R.keyCommitment(skBytes), p.cm)) return null;
+        return frameDecrypt(skBytes, p.i, p.d);
       }
       return null; // replay
     }
@@ -147,7 +158,8 @@ export function createGroup(opts = {}) {
     for (let n = peerKey.counter + 1; n <= p.c; n++) {
       const { msgKey, nextChain } = await deriveGroupMsgKey(ck);
       if (n === p.c) targetKey = msgKey;
-      else if (p.c - n < cfg.MAX_SKIP) peerKey.skipped['c:' + n] = arr(msgKey); // retain recent skipped only
+      // Retain recent skipped keys with timestamp for TTL expiry (I7-group).
+      else if (p.c - n < cfg.MAX_SKIP) peerKey.skipped['c:' + n] = { k: arr(msgKey), t: now() };
       ck = nextChain;
     }
     peerKey.chainKey = arr(ck); // advance + drop consumed chain (forward secrecy)

@@ -1,5 +1,5 @@
 // Group sender-key tests: I2 forward secrecy, I3 epoch-on-kick, I16 commitment,
-// N2 per-message sender authentication.
+// N2 per-message sender authentication, I7-group skipped-key TTL.
 import { describe, it, expect } from 'vitest';
 import { createGroup } from '../src/crypto/group.js';
 
@@ -88,6 +88,42 @@ describe('I16 — key commitment on group messages', () => {
     // Tampering cm changes the signed bytes too, so the signature also fails — either
     // way the message is rejected.
     expect(await G.decryptGroupMsg(bob, obj)).toBe(null);
+  });
+});
+
+describe('I7 (group) — skipped-key TTL: stale keys are expired', () => {
+  it('expires a skipped key past TTL; fresh keys within TTL are still recoverable', async () => {
+    const TTL = 60_000; // 1 minute for this test
+    let fakeNow = Date.now();
+    const Gttl = createGroup({ skippedKeyTTL: TTL, now: () => fakeNow });
+
+    const sk = await Gttl.newSenderKey();
+    const bob = Gttl.receiverFrom(sk);
+
+    // Encrypt three messages; deliver c3 first → c1 and c2 stored as skipped keys.
+    const c1 = await Gttl.encryptGroupMsg(sk, 'msg1');
+    const c2 = await Gttl.encryptGroupMsg(sk, 'msg2');
+    const c3 = await Gttl.encryptGroupMsg(sk, 'msg3');
+    expect(await Gttl.decryptGroupMsg(bob, c3)).toBe('msg3'); // c1,c2 now in skipped
+
+    // c2 is within TTL — should still be recoverable.
+    fakeNow += TTL - 1;
+    const c4 = await Gttl.encryptGroupMsg(sk, 'msg4');
+    expect(await Gttl.decryptGroupMsg(bob, c4)).toBe('msg4'); // triggers TTL prune (c1,c2 kept)
+    expect(await Gttl.decryptGroupMsg(bob, c2)).toBe('msg2'); // still there
+
+    // Now advance past TTL and store c1 as expired.
+    const sk2 = await Gttl.newSenderKey();
+    const bob2 = Gttl.receiverFrom(sk2);
+    const a1 = await Gttl.encryptGroupMsg(sk2, 'a1');
+    const a2 = await Gttl.encryptGroupMsg(sk2, 'a2');
+    const a3 = await Gttl.encryptGroupMsg(sk2, 'a3');
+    await Gttl.decryptGroupMsg(bob2, a3); // populates skipped[a1,a2] at time fakeNow
+    fakeNow += TTL + 1; // advance past TTL
+    const a4 = await Gttl.encryptGroupMsg(sk2, 'a4');
+    await Gttl.decryptGroupMsg(bob2, a4); // triggers TTL prune → a1 and a2 deleted
+    expect(await Gttl.decryptGroupMsg(bob2, a1)).toBe(null); // key expired
+    expect(await Gttl.decryptGroupMsg(bob2, a2)).toBe(null); // key expired
   });
 });
 

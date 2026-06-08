@@ -750,8 +750,13 @@ async function handleGroupKick(body, env, request) {
   }
   // Cannot kick creator
   if (kickId === group.creatorId) return json({ error: 'Cannot kick group creator', code: 'FORBIDDEN' }, 400, request);
+  // Kick target must actually be a member; bumping the epoch on a no-op is wasteful
+  // and would cause unnecessary sender-key churn in remaining members.
+  if (!(group.members || []).some(m => m.id === kickId)) {
+    return json({ error: 'Member not found', code: 'NOT_MEMBER' }, 404, request);
+  }
 
-  group.members = (group.members || []).filter(m => m.id !== kickId);
+  group.members = group.members.filter(m => m.id !== kickId);
   if (group.admins) group.admins = group.admins.filter(id => id !== kickId);
   // I3: post-compromise removal. Bump the epoch so remaining members generate and
   // redistribute fresh sender keys (kicked member can't decrypt the new epoch).
@@ -1024,6 +1029,7 @@ async function handlePreKeyFetch(body, env, request) {
   // Consume one-time prekey (if available)
   const countStr = await kvGet(env, `prekey:otp:${userId}:count`);
   const count = parseInt(countStr || '0');
+  let remainingOTP = count;
   if (count > 0) {
     for (let i = count - 1; i >= 0; i--) {
       const otp = await kvGet(env, `prekey:otp:${userId}:${i}`);
@@ -1031,10 +1037,13 @@ async function handlePreKeyFetch(body, env, request) {
         bundle.oneTimePreKey = JSON.parse(otp);
         await kvDel(env, `prekey:otp:${userId}:${i}`);
         await kvPut(env, `prekey:otp:${userId}:count`, String(i), { expirationTtl: 86400 * 30 });
+        remainingOTP = i;
         break;
       }
     }
   }
+  // Signal the owner to replenish one-time prekeys before they are exhausted.
+  if (remainingOTP <= 5) bundle.replenishOTP = true;
   return json(bundle, 200, request);
 }
 
@@ -1063,6 +1072,7 @@ async function hmacVerifyFrank(commitmentB64, openingB64, message) {
 async function handleAbuseRecord(body, env, request) {
   const { frankId, commitment } = body;
   if (!frankId || !commitment) return json({ error: 'frankId and commitment required' }, 400, request);
+  if (typeof frankId !== 'string' || frankId.length > 128) return json({ error: 'invalid frankId' }, 400, request);
   if (typeof commitment !== 'string' || commitment.length > 128) return json({ error: 'invalid commitment' }, 400, request);
   // Do not overwrite an existing commitment (a frankId binds one message).
   if (await kvGet(env, `frank:${frankId}`)) return json({ ok: true, existing: true }, 200, request);
@@ -1074,6 +1084,8 @@ async function handleAbuseRecord(body, env, request) {
 async function handleAbuseReport(body, env, request) {
   const { frankId, message, opening } = body;
   if (!frankId || typeof message !== 'string' || !opening) return json({ error: 'frankId, message, opening required' }, 400, request);
+  if (typeof frankId !== 'string' || frankId.length > 128) return json({ error: 'invalid frankId' }, 400, request);
+  if (message.length > 256 * 1024) return json({ error: 'message too large', code: 'MSG_TOO_LARGE' }, 400, request);
   const commitment = await kvGet(env, `frank:${frankId}`);
   if (!commitment) return json({ error: 'No such franking record', code: 'NOT_FOUND' }, 404, request);
   const verified = await hmacVerifyFrank(commitment, opening, message);
