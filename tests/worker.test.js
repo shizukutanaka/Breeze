@@ -241,6 +241,56 @@ describe('prekey key-history audit log (I11 precursor)', () => {
     const res = await handlePreKeyFetch({ userId: 'hist0004' }, env, apiRequest('/api/prekey/fetch', {}));
     expect((await res.json()).keyHistory.length).toBe(10);
   });
+
+  it('N5: each key-history entry carries a chain hash (c field)', async () => {
+    // The worker computes c = SHA-256(prevC ‖ h) and stores it on each entry.
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'chain001', identityKey: 'IK-1', signedPreKey: 'SPK' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    const b1 = await (await handlePreKeyFetch({ userId: 'chain001' }, env, apiRequest('/api/prekey/fetch', {}))).json();
+    expect(typeof b1.keyHistory[0].c).toBe('string');
+    expect(b1.keyHistory[0].c.length).toBeGreaterThan(20);
+  });
+
+  it('N5: chain hash links correctly between two IK rollovers', async () => {
+    // Upload two different IKs. The second entry's c must equal
+    // SHA-256(firstEntry.c ‖ secondEntry.h) — verified via the ktlog module.
+    const { verifyChain } = await import('../src/crypto/ktlog.js');
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'chain002', identityKey: 'IK-A', signedPreKey: 'SPK' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    await handlePreKeyUpload(
+      { userId: 'chain002', identityKey: 'IK-B', signedPreKey: 'SPK' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    const bundle = await (await handlePreKeyFetch({ userId: 'chain002' }, env, apiRequest('/api/prekey/fetch', {}))).json();
+    expect(bundle.keyHistory.length).toBe(2);
+    const result = await verifyChain(crypto.subtle, bundle.keyHistory);
+    expect(result.ok).toBe(true);
+  });
+
+  it('N5: a tampered chain hash is detected by verifyChain', async () => {
+    const { verifyChain } = await import('../src/crypto/ktlog.js');
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'chain003', identityKey: 'IK-X', signedPreKey: 'SPK' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    await handlePreKeyUpload(
+      { userId: 'chain003', identityKey: 'IK-Y', signedPreKey: 'SPK' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    const bundle = await (await handlePreKeyFetch({ userId: 'chain003' }, env, apiRequest('/api/prekey/fetch', {}))).json();
+    const tampered = bundle.keyHistory.map((e, i) =>
+      i === 1 ? { ...e, c: btoa('tampered-chain-hash-value-xxxx') } : e
+    );
+    const result = await verifyChain(crypto.subtle, tampered);
+    expect(result.ok).toBe(false);
+  });
 });
 
 describe('prekey signed-prekey signature verification (I1/G2)', () => {

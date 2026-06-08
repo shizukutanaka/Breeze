@@ -1130,10 +1130,9 @@ async function handlePreKeyUpload(body, env, request) {
   if (typeof x3dh === 'string') bundle.x3dh = x3dh.slice(0, 4);
   await kvPut(env, `prekey:${userId}`, JSON.stringify(bundle), { expirationTtl: 86400 * 30 });
 
-  // I11 (key-history precursor): append a SHA-256 digest of the identity key to a
-  // capped audit log. Clients can fetch this log to detect unexpected key rollovers
-  // (TOFU+). The log itself is not tamper-proof without external witnesses; it is a
-  // lightweight step toward full key transparency.
+  // I11/N5: append a SHA-256 digest of the identity key to a hash-chained audit log.
+  // Each entry binds to the previous via c = SHA-256(prevC ‖ h), making the
+  // append-only property detectable by clients (tamper-evident chain).
   try {
     const ikHash = btoa(String.fromCharCode(...new Uint8Array(
       await crypto.subtle.digest('SHA-256', new TextEncoder().encode(identityKey))
@@ -1142,9 +1141,17 @@ async function handlePreKeyUpload(body, env, request) {
     const existing = await kvGet(env, logKey);
     const log = existing ? JSON.parse(existing) : [];
     const latest = log[log.length - 1];
-    // Append only if the IK changed or this is the first entry.
     if (!latest || latest.h !== ikHash) {
-      log.push({ ts: Date.now(), h: ikHash });
+      // New IK (or first upload): compute chain hash and append.
+      const prevC = latest?.c ?? null;
+      const prevB = prevC ? Uint8Array.from(atob(prevC), c => c.charCodeAt(0)) : new Uint8Array(32);
+      const hB    = Uint8Array.from(atob(ikHash), c => c.charCodeAt(0));
+      const buf   = new Uint8Array(prevB.length + hB.length);
+      buf.set(prevB, 0); buf.set(hB, prevB.length);
+      const c = btoa(String.fromCharCode(...new Uint8Array(
+        await crypto.subtle.digest('SHA-256', buf)
+      )));
+      log.push({ ts: Date.now(), h: ikHash, c });
     } else {
       // Same IK: just refresh the timestamp of the last entry.
       latest.ts = Date.now();

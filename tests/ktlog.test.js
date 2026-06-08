@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hashIK, parseLog, checkRollover, mergeLog } from '../src/crypto/ktlog.js';
+import { hashIK, parseLog, checkRollover, mergeLog, chainHash, appendChainEntry, verifyChain } from '../src/crypto/ktlog.js';
 
 const subtle = globalThis.crypto.subtle;
 
@@ -206,5 +206,93 @@ describe('mergeLog', () => {
     const merged = mergeLog(a, b);
     expect(merged).toHaveLength(1);
     expect(merged[0].h).toBe('ok');
+  });
+});
+
+describe('N5 — hash-chained log (tamper-evident)', () => {
+  // Helper: a fake base64-encoded 32-byte hash.
+  const fakeH = (n) => btoa(String.fromCharCode(...new Uint8Array(32).fill(n)));
+
+  it('chainHash is deterministic for the same prevC and h', async () => {
+    const h = fakeH(1);
+    const c1 = await chainHash(subtle, null, h);
+    const c2 = await chainHash(subtle, null, h);
+    expect(c1).toBe(c2);
+  });
+
+  it('chainHash differs for different prevC values', async () => {
+    const h = fakeH(1);
+    const c1 = await chainHash(subtle, null, h);           // prevC = zero vector
+    const c2 = await chainHash(subtle, fakeH(2), h);       // prevC = non-zero
+    expect(c1).not.toBe(c2);
+  });
+
+  it('chainHash differs for different h values', async () => {
+    const c1 = await chainHash(subtle, null, fakeH(1));
+    const c2 = await chainHash(subtle, null, fakeH(2));
+    expect(c1).not.toBe(c2);
+  });
+
+  it('appendChainEntry creates a linked chain of entries', async () => {
+    const h1 = fakeH(1), h2 = fakeH(2), h3 = fakeH(3);
+    const e1 = await appendChainEntry(subtle, [], h1, 1000);
+    expect(e1.h).toBe(h1);
+    expect(typeof e1.c).toBe('string');
+    expect(e1.c.length).toBeGreaterThan(20);
+
+    const e2 = await appendChainEntry(subtle, [e1], h2, 2000);
+    // e2.c must be chainHash(e1.c, h2)
+    const expected2 = await chainHash(subtle, e1.c, h2);
+    expect(e2.c).toBe(expected2);
+
+    const e3 = await appendChainEntry(subtle, [e1, e2], h3, 3000);
+    const expected3 = await chainHash(subtle, e2.c, h3);
+    expect(e3.c).toBe(expected3);
+  });
+
+  it('verifyChain accepts a valid 3-entry chain', async () => {
+    const h1 = fakeH(10), h2 = fakeH(11), h3 = fakeH(12);
+    const e1 = await appendChainEntry(subtle, [], h1, 1000);
+    const e2 = await appendChainEntry(subtle, [e1], h2, 2000);
+    const e3 = await appendChainEntry(subtle, [e1, e2], h3, 3000);
+    const r = await verifyChain(subtle, [e1, e2, e3]);
+    expect(r.ok).toBe(true);
+  });
+
+  it('verifyChain detects a tampered chain hash', async () => {
+    const h1 = fakeH(20), h2 = fakeH(21);
+    const e1 = await appendChainEntry(subtle, [], h1, 1000);
+    const e2 = await appendChainEntry(subtle, [e1], h2, 2000);
+    // Tamper e2.c
+    const bad = { ...e2, c: fakeH(99) };
+    const r = await verifyChain(subtle, [e1, bad]);
+    expect(r.ok).toBe(false);
+    expect(r.invalidIdx).toBe(1);
+  });
+
+  it('verifyChain detects a tampered h in an entry (chain hash no longer matches)', async () => {
+    const h1 = fakeH(30), h2 = fakeH(31);
+    const e1 = await appendChainEntry(subtle, [], h1, 1000);
+    const e2 = await appendChainEntry(subtle, [e1], h2, 2000);
+    // Tamper e1.h (but leave e1.c intact → e2.c now incorrect)
+    const badE1 = { ...e1, h: fakeH(99) };
+    const r = await verifyChain(subtle, [badE1, e2]);
+    expect(r.ok).toBe(false);
+  });
+
+  it('verifyChain skips legacy entries without c and continues the chain', async () => {
+    const h1 = fakeH(40), h2 = fakeH(41);
+    // e_legacy has no c field — it is from before the chain feature
+    const e_legacy = { ts: 500, h: fakeH(39) };
+    const e1 = await appendChainEntry(subtle, [], h1, 1000);
+    const e2 = await appendChainEntry(subtle, [e1], h2, 2000);
+    // Mix legacy + chained entries
+    const r = await verifyChain(subtle, [e_legacy, e1, e2]);
+    expect(r.ok).toBe(true);
+  });
+
+  it('verifyChain returns ok for an empty or all-legacy log', async () => {
+    expect((await verifyChain(subtle, [])).ok).toBe(true);
+    expect((await verifyChain(subtle, [{ ts: 1, h: fakeH(1) }])).ok).toBe(true); // no c
   });
 });

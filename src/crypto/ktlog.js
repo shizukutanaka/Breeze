@@ -5,6 +5,13 @@
 //   1. Hash an incoming identity key and compare it to the stored pin.
 //   2. Detect unexpected key rollovers (possible MITM).
 //   3. Merge log fragments received at different times.
+//   4. (N5) Verify the hash-chain binding between successive log entries,
+//      making the append-only property detectable by clients.
+//
+// Chain format: each entry { ts, h, c? } where c = SHA-256(prevC ‖ h) (both
+// base64-decoded to bytes). Entries without c are legacy (pre-chain) and are
+// skipped during verification. The chain starts fresh from the first entry
+// with a c field, using a 32-byte zero vector as the initial prevC.
 //
 // All functions are pure / dependency-injected (subtle passed in) so they
 // work in browser (WebCrypto), Node ≥20, and Miniflare without modification.
@@ -96,4 +103,55 @@ export function mergeLog(existingLog, incomingLog) {
     if (!prev || e.ts < prev.ts) byHash.set(e.h, e);
   }
   return [...byHash.values()].sort((a, b) => a.ts - b.ts).slice(-20);
+}
+
+// --- N5: hash-chained log (tamper-evident append-only log) ---
+
+const _b64d = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+const _b64e = (u) => { let s = ''; u.forEach((b) => { s += String.fromCharCode(b); }); return btoa(s); };
+
+/**
+ * Compute one step of the chain: SHA-256(prevC ‖ h) where prevC and h are base64.
+ * prevC is null for the first entry (treated as 32 zero bytes).
+ */
+export async function chainHash(subtle, prevC, h) {
+  const prev = prevC ? _b64d(prevC) : new Uint8Array(32);
+  const hb   = _b64d(h);
+  const buf  = new Uint8Array(prev.length + hb.length);
+  buf.set(prev, 0);
+  buf.set(hb, prev.length);
+  return _b64e(new Uint8Array(await subtle.digest('SHA-256', buf)));
+}
+
+/**
+ * Create a new chain entry to append to a sorted log.
+ * sortedLog is the output of parseLog() — already validated and sorted.
+ * Returns { ts, h, c } ready to push onto the log array.
+ */
+export async function appendChainEntry(subtle, sortedLog, h, ts = Date.now()) {
+  const last = sortedLog.length ? sortedLog[sortedLog.length - 1] : null;
+  const prevC = last?.c ?? null;
+  const c = await chainHash(subtle, prevC, h);
+  return { ts, h, c };
+}
+
+/**
+ * Verify the chain hashes of a key-history log.
+ * Entries without a c field are legacy (unchained) and are skipped.
+ * Once the chain starts (first entry with c), subsequent chained entries must
+ * link correctly; a break returns { ok: false, invalidIdx }.
+ *
+ * @returns {{ ok: boolean, invalidIdx?: number }}
+ */
+export async function verifyChain(subtle, log) {
+  const sorted = parseLog(log);
+  let prevC = null;
+  for (let i = 0; i < sorted.length; i++) {
+    const e = sorted[i];
+    if (!e.c) continue;
+    const expected = await chainHash(subtle, prevC, e.h);
+    if (expected !== e.c) return { ok: false, invalidIdx: i };
+    prevC = e.c;
+  }
+  return { ok: true };
 }
