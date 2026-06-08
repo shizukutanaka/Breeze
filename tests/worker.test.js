@@ -28,6 +28,13 @@ import worker, {
   handleMsgPoll,
   handleAliasSet,
   handleAliasGet,
+  handleDropCreate,
+  handleDropRead,
+  handleBackupUpload,
+  handleBackupDownload,
+  handleSignal,
+  handlePresence,
+  handleOnlineCount,
   validateUserId,
 } from '../_worker.js';
 import { makeKV, makeEnv, apiRequest, stripeSigHeader } from './helpers/mockKV.js';
@@ -558,5 +565,175 @@ describe('webhook signature + idempotency', () => {
     const res2 = await handleWebhook(webhookReq(event, await stripeSigHeader(event, secret)), e);
     expect(res2.status).toBe(200);
     expect(await res2.text()).toBe('Already processed');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dead Drop — one-time encrypted secret sharing
+// ─────────────────────────────────────────────────────────────────────────────
+describe('dead drop (create + read)', () => {
+  const req = (body) => apiRequest('/api/drop/create', body);
+  const readReq = (body) => apiRequest('/api/drop/read', body);
+
+  it('creates a drop and returns ok + ttl', async () => {
+    const e = makeEnv();
+    const res = await handleDropCreate({ id: 'abc123', ct: 'ciphertext' }, e, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.ok).toBe(true);
+    expect(typeof j.ttl).toBe('number');
+    expect(j.ttl).toBeGreaterThanOrEqual(300);
+  });
+
+  it('rejects id collision on second create with same id', async () => {
+    const e = makeEnv();
+    await handleDropCreate({ id: 'dup1', ct: 'ct1' }, e, req({}));
+    const res2 = await handleDropCreate({ id: 'dup1', ct: 'ct2' }, e, req({}));
+    expect(res2.status).toBe(409);
+    const j = await res2.json();
+    expect(j.code).toBe('COLLISION');
+  });
+
+  it('rejects id > 64 chars', async () => {
+    const e = makeEnv();
+    const res = await handleDropCreate({ id: 'x'.repeat(65), ct: 'ct' }, e, req({}));
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects ct > 100KB', async () => {
+    const e = makeEnv();
+    const res = await handleDropCreate({ id: 'big', ct: 'x'.repeat(100001) }, e, req({}));
+    expect(res.status).toBe(400);
+  });
+
+  it('clamps ttl to [300, 604800]', async () => {
+    const e = makeEnv();
+    const r1 = await (await handleDropCreate({ id: 'ttl1', ct: 'x', ttl: 1 }, e, req({}))).json();
+    expect(r1.ttl).toBe(300);
+    const r2 = await (await handleDropCreate({ id: 'ttl2', ct: 'x', ttl: 9999999 }, e, req({}))).json();
+    expect(r2.ttl).toBe(604800);
+  });
+
+  it('read returns the ciphertext and deletes the drop (one-time)', async () => {
+    const e = makeEnv();
+    await handleDropCreate({ id: 'onetimeX', ct: 'sekret' }, e, req({}));
+    const r1 = await handleDropRead({ id: 'onetimeX' }, e, readReq({}));
+    expect(r1.status).toBe(200);
+    const j1 = await r1.json();
+    expect(j1.ct).toBe('sekret');
+    // Second read must 404
+    const r2 = await handleDropRead({ id: 'onetimeX' }, e, readReq({}));
+    expect(r2.status).toBe(404);
+    expect((await r2.json()).code).toBe('NOT_FOUND');
+  });
+
+  it('read of non-existent id returns 404', async () => {
+    const e = makeEnv();
+    const res = await handleDropRead({ id: 'no-such-drop' }, e, readReq({}));
+    expect(res.status).toBe(404);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Backup upload + download
+// ─────────────────────────────────────────────────────────────────────────────
+describe('backup upload / download', () => {
+  const req = (body) => apiRequest('/api/backup/upload', body);
+  const dlReq = (body) => apiRequest('/api/backup/download', body);
+
+  it('stores a backup and retrieves it', async () => {
+    const e   = makeEnv();
+    const bak = 'encrypted-backup-data';
+    const up  = await handleBackupUpload({ userId: 'user00001', backup: bak }, e, req({}));
+    expect(up.status).toBe(200);
+    const j = await up.json();
+    expect(j.ok).toBe(true);
+    expect(j.size).toBe(bak.length);
+
+    const dl = await handleBackupDownload({ userId: 'user00001' }, e, dlReq({}));
+    expect(dl.status).toBe(200);
+    const dj = await dl.json();
+    expect(dj.backup).toBe(bak);
+  });
+
+  it('overwrites an existing backup on re-upload', async () => {
+    const e = makeEnv();
+    await handleBackupUpload({ userId: 'user00001', backup: 'v1' }, e, req({}));
+    await handleBackupUpload({ userId: 'user00001', backup: 'v2' }, e, req({}));
+    const dl = await handleBackupDownload({ userId: 'user00001' }, e, dlReq({}));
+    expect((await dl.json()).backup).toBe('v2');
+  });
+
+  it('rejects backup larger than 5MB', async () => {
+    const e   = makeEnv();
+    const big = 'x'.repeat(5 * 1024 * 1024 + 1);
+    const res = await handleBackupUpload({ userId: 'user00001', backup: big }, e, req({}));
+    expect(res.status).toBe(413);
+    expect((await res.json()).code).toBe('PAYLOAD_TOO_LARGE');
+  });
+
+  it('returns 404 for missing backup', async () => {
+    const e   = makeEnv();
+    const res = await handleBackupDownload({ userId: 'nobody001' }, e, dlReq({}));
+    expect(res.status).toBe(404);
+    expect((await res.json()).code).toBe('NOT_FOUND');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Signal relay (WebRTC signaling)
+// ─────────────────────────────────────────────────────────────────────────────
+describe('signal relay', () => {
+  const req = (body) => apiRequest('/api/signal', body);
+
+  it('stores a signal and returns ok', async () => {
+    const e   = makeEnv();
+    const res = await handleSignal(
+      { room: 'r1', sender: 'alice', type: 'offer', data: 'sdp-blob' },
+      '1.2.3.4', e, req({})
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()).ok).toBe(true);
+  });
+
+  it('poll returns signals from other senders, not own', async () => {
+    const e = makeEnv();
+    // Alice sends an offer
+    await handleSignal({ room: 'r2', sender: 'alice', type: 'offer', data: 'd1' }, '1.2.3.4', e, req({}));
+    // Bob polls — should see Alice's offer
+    const r1 = await handleSignal({ room: 'r2', sender: 'bob', type: 'poll' }, '1.2.3.5', e, req({}));
+    const msgs = (await r1.json()).messages;
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0].sender).toBe('alice');
+    // Alice polls — should NOT see her own offer
+    const r2 = await handleSignal({ room: 'r2', sender: 'alice', type: 'poll' }, '1.2.3.4', e, req({}));
+    const aliceMsgs = (await r2.json()).messages;
+    expect(aliceMsgs.every(m => m.sender !== 'alice')).toBe(true);
+  });
+
+  it('returns empty messages for a room with no signals', async () => {
+    const e   = makeEnv();
+    const res = await handleSignal({ room: 'empty-room', sender: 'x', type: 'poll' }, '1.2.3.4', e, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).messages).toEqual([]);
+  });
+
+  it('rejects missing room / sender / type', async () => {
+    const e = makeEnv();
+    const r1 = await handleSignal({ sender: 'a', type: 'offer' }, '1.2.3.4', e, req({}));
+    expect(r1.status).toBe(400);
+    const r2 = await handleSignal({ room: 'r', type: 'offer' }, '1.2.3.4', e, req({}));
+    expect(r2.status).toBe(400);
+  });
+
+  it('keeps at most 50 signals per room', async () => {
+    const e = makeEnv();
+    for (let i = 0; i < 55; i++) {
+      await handleSignal({ room: 'big', sender: `s${i}`, type: 'offer', data: `d${i}` }, '1.2.3.4', e, req({}));
+    }
+    // Poll as someone not in the room — should see at most 50
+    const r = await handleSignal({ room: 'big', sender: 'observer', type: 'poll' }, '1.2.3.5', e, req({}));
+    const msgs = (await r.json()).messages;
+    expect(msgs.length).toBeLessThanOrEqual(50);
   });
 });

@@ -1739,5 +1739,12 @@ export {
   b64urlToBytes,
   bytesToB64url,
   concatBytes,
+  handleDropCreate,
+  handleDropRead,
+  handleBackupUpload,
+  handleBackupDownload,
+  handleSignal,
+  handlePresence,
+  handleOnlineCount,
 };
 
