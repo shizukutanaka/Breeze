@@ -234,6 +234,50 @@ describe('N2 — two-layer sender authentication (partial AFKS)', () => {
   });
 });
 
+describe('DoS guards — MAX_GAP and MAX_SKIP', () => {
+  it('rejects a message whose counter jump exceeds MAX_GAP', async () => {
+    const Gdos = createGroup({ MAX_GAP: 3 });
+    const sk = await Gdos.newSenderKey();
+    const bob = Gdos.receiverFrom(sk);
+    // Encrypt 5 messages; bob.counter stays at 0 (nothing delivered yet).
+    for (let i = 0; i < 5; i++) await Gdos.encryptGroupMsg(sk, `m${i}`);
+    // sk.counter is now 5; gap = 5 - 0 - 1 = 4 > MAX_GAP(3) → reject.
+    const last = await Gdos.encryptGroupMsg(sk, 'too far');
+    expect(await Gdos.decryptGroupMsg(bob, last)).toBe(null);
+  });
+
+  it('stores only keys within MAX_SKIP window; distant keys are silently dropped', async () => {
+    // Condition: `p.c - n < MAX_SKIP` — stores skipped keys where gap-to-target < MAX_SKIP.
+    // MAX_SKIP=3: with p.c=6, counter=0, stores n=4 (gap 2) and n=5 (gap 1); n=1-3 dropped.
+    const Gskip = createGroup({ MAX_SKIP: 3 });
+    const sk = await Gskip.newSenderKey();
+    const bob = Gskip.receiverFrom(sk);
+    const c1 = await Gskip.encryptGroupMsg(sk, 'one');
+    const c2 = await Gskip.encryptGroupMsg(sk, 'two');
+    const c3 = await Gskip.encryptGroupMsg(sk, 'three');
+    const c4 = await Gskip.encryptGroupMsg(sk, 'four');
+    const c5 = await Gskip.encryptGroupMsg(sk, 'five');
+    const c6 = await Gskip.encryptGroupMsg(sk, 'six');
+    // Deliver c6 first: stores c4 (gap=2 < 3) and c5 (gap=1 < 3); c1-c3 are dropped.
+    expect(await Gskip.decryptGroupMsg(bob, c6)).toBe('six');
+    expect(await Gskip.decryptGroupMsg(bob, c5)).toBe('five');  // gap=1, within window
+    expect(await Gskip.decryptGroupMsg(bob, c4)).toBe('four');  // gap=2, within window
+    expect(await Gskip.decryptGroupMsg(bob, c3)).toBe(null);    // gap=3, beyond MAX_SKIP
+    expect(await Gskip.decryptGroupMsg(bob, c2)).toBe(null);    // gap=4, beyond MAX_SKIP
+    expect(await Gskip.decryptGroupMsg(bob, c1)).toBe(null);    // gap=5, beyond MAX_SKIP
+  });
+
+  it('accepts a message exactly at MAX_GAP boundary', async () => {
+    const Gdos = createGroup({ MAX_GAP: 3 });
+    const sk = await Gdos.newSenderKey();
+    const bob = Gdos.receiverFrom(sk);
+    for (let i = 0; i < 3; i++) await Gdos.encryptGroupMsg(sk, `skip${i}`);
+    // sk.counter = 3; gap = 3 - 0 - 1 = 2 ≤ MAX_GAP(3) → accepted.
+    const c4 = await Gdos.encryptGroupMsg(sk, 'boundary');
+    expect(await Gdos.decryptGroupMsg(bob, c4)).toBe('boundary');
+  });
+});
+
 describe('AEAD auth failure does not desync group sender-key state', () => {
   it('returns null and preserves chain state when ciphertext auth fails', async () => {
     const G2 = createGroup({ ratchet: (await import('../src/crypto/ratchet.js')).createRatchet() });

@@ -828,7 +828,7 @@ describe('alias set / get (PoW anti-spam)', () => {
     const pow = await solvePoW(pub, 16, freshChallenge);
     const res = await handleAliasSet({ alias: 'freshuser', pub, pow }, makeEnv(), req({}));
     expect(res.status).toBe(200);
-  });
+  }, 30000); // PoW solve is probabilistic; allow 30s
 
   it('accepts a validly solved PoW and registers the alias', async () => {
     const pub = 'TESTPUB123';
