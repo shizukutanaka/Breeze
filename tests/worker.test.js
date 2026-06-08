@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 // Solve a difficulty-N PoW puzzle for testing (brute-force, fast enough at N≤16).
-async function solvePoW(pub, difficulty = 16) {
-  const challenge = `${pub}:breeze-test`;
+// challenge defaults to "${pub}:breeze-test" (no timestamp → freshness check skipped).
+async function solvePoW(pub, difficulty = 16, challenge) {
+  const ch = challenge ?? `${pub}:breeze-test`;
   const target = (2 ** (32 - difficulty)) >>> 0;
   for (let nonce = 0; nonce < 10_000_000; nonce++) {
-    const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${challenge}:${nonce}`));
-    if (new DataView(d).getUint32(0, false) < target) return { challenge, nonce, difficulty };
+    const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${ch}:${nonce}`));
+    if (new DataView(d).getUint32(0, false) < target) return { challenge: ch, nonce, difficulty };
   }
   throw new Error('PoW unsolved');
 }
@@ -807,6 +808,26 @@ describe('alias set / get (PoW anti-spam)', () => {
     );
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('POW_INVALID');
+  });
+
+  it('rejects an expired PoW (timestamp > 10 min old) when challenge uses makeChallengeString format', async () => {
+    // Challenge format: "${pub}:${ts}" — expired timestamp should trigger POW_EXPIRED.
+    const pub = 'FRESHPUB01';
+    const staleTs = Date.now() - (11 * 60 * 1000); // 11 minutes ago
+    const staleChallenge = `${pub}:${staleTs}`;
+    // Solve the puzzle with the stale challenge (still valid hash-wise).
+    const pow = await solvePoW(pub, 16, staleChallenge);
+    const res = await handleAliasSet({ alias: 'staleuser', pub, pow }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('POW_EXPIRED');
+  });
+
+  it('accepts a fresh timestamp-bearing PoW', async () => {
+    const pub = 'FRESHPUB02';
+    const freshChallenge = `${pub}:${Date.now()}`;
+    const pow = await solvePoW(pub, 16, freshChallenge);
+    const res = await handleAliasSet({ alias: 'freshuser', pub, pow }, makeEnv(), req({}));
+    expect(res.status).toBe(200);
   });
 
   it('accepts a validly solved PoW and registers the alias', async () => {

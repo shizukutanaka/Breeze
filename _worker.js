@@ -495,6 +495,17 @@ async function handleAliasSet(body, env, request) {
     if (difficulty < 16 || pow.challenge.length > 512 || !pow.challenge.includes(pub)) {
       return json({ error: 'Invalid proof-of-work', code: 'POW_INVALID' }, 400, request);
     }
+    // Freshness check: makeChallengeString embeds a Unix-ms timestamp as the last
+    // colon-delimited segment. If parseable + older than 10 min → expired.
+    // Old-format challenges (e.g. "pubkey:breeze-test") have a non-numeric last
+    // segment so parseInt returns NaN and Number.isFinite skips the check —
+    // backward-compatible with pre-timestamp clients.
+    const MAX_POW_AGE_MS = 10 * 60 * 1000;
+    const parts = pow.challenge.split(':');
+    const challengeTs = parseInt(parts[parts.length - 1], 10);
+    if (Number.isFinite(challengeTs) && Date.now() - challengeTs > MAX_POW_AGE_MS) {
+      return json({ error: 'Proof-of-work expired', code: 'POW_EXPIRED' }, 400, request);
+    }
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pow.challenge + ':' + pow.nonce));
     const first32 = new DataView(digest).getUint32(0, false);
     const target = Math.pow(2, 32 - difficulty) >>> 0;
