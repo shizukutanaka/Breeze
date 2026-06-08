@@ -207,10 +207,14 @@ export function createRatchet(opts = {}) {
       const skKey = 'p:' + p.c;
       if (sess.skippedKeys?.[skKey]) {
         const mkData = sess.skippedKeys[skKey].k;
-        delete sess.skippedKeys[skKey];
         if (p.cm && !ctEqual(await keyCommitment(mkData), p.cm)) { dbg(null, 'key commitment mismatch'); return null; }
         const key = await subtle.importKey('raw', u8(mkData), { name: 'AES-GCM' }, false, ['decrypt']);
-        const padded = new Uint8Array(await subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, key, u8(p.d)));
+        let padded;
+        try {
+          padded = new Uint8Array(await subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, key, u8(p.d)));
+        } catch { dbg(null, 'AEAD auth failure (skipped key)'); return null; }
+        // Advance dedup state only after successful decrypt (prevents desync on injected messages).
+        delete sess.skippedKeys[skKey];
         return unpadAndDecompress(padded);
       }
       dbg(null, 'replay rejected');
@@ -243,16 +247,20 @@ export function createRatchet(opts = {}) {
     }
 
     const { msgKey, nextChain } = await kdfChain(sess.recvChainKey);
-    // I16: verify key commitment before advancing dedup state / trusting the AEAD.
+    // I16: verify key commitment before advancing state / trusting the AEAD.
     if (p.cm && !ctEqual(await keyCommitment(msgKey), p.cm)) { dbg(null, 'key commitment mismatch'); return null; }
+    const key = await subtle.importKey('raw', msgKey, { name: 'AES-GCM' }, false, ['decrypt']);
+    let padded;
+    try {
+      padded = new Uint8Array(await subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, key, u8(p.d)));
+    } catch { dbg(null, 'AEAD auth failure'); return null; }
+    // Advance all receive state only after successful decrypt — an injected message
+    // whose ciphertext fails the auth tag must not desync the chain.
     sess.recvChainKey = nextChain;
     sess.recvCounter = p.c;
     if (!sess.seenMsgIds) sess.seenMsgIds = [];
     sess.seenMsgIds.push(msgId);
     if (sess.seenMsgIds.length > cfg.REPLAY_CACHE_SIZE) sess.seenMsgIds = sess.seenMsgIds.slice(-cfg.REPLAY_CACHE_SIZE);
-
-    const key = await subtle.importKey('raw', msgKey, { name: 'AES-GCM' }, false, ['decrypt']);
-    const padded = new Uint8Array(await subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, key, u8(p.d)));
     return unpadAndDecompress(padded);
   }
 

@@ -112,6 +112,21 @@ describe('out-of-order & skipped keys', () => {
   });
 });
 
+describe('AEAD auth failure does not desync chain (injected-message resistance)', () => {
+  it('returns null and preserves chain state when ciphertext auth fails', async () => {
+    const { sender, receiver } = R.pairFromSharedChain(randomChain());
+    const legitMsg = await R.ratchetEncrypt(sender, 'real message');
+    // Craft an injection: same counter and ratchetPub, but corrupted ciphertext.
+    const crafted = JSON.parse(legitMsg);
+    crafted.d[0] ^= 0xff; // flip a byte → AES-GCM auth tag mismatch
+    delete crafted.cm;    // strip commitment so the cm-check doesn't catch it first
+    // Injected crafted message must return null, NOT throw or advance chain.
+    expect(await R.ratchetDecrypt(receiver, crafted)).toBe(null);
+    // The legitimate message must still decrypt correctly (chain not desynced).
+    expect(await R.ratchetDecrypt(receiver, legitMsg)).toBe('real message');
+  });
+});
+
 describe('replay & duplicate protection', () => {
   it('rejects a replayed counter that has already advanced', async () => {
     const { sender, receiver } = R.pairFromSharedChain(randomChain());
