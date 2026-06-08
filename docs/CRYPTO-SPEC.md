@@ -211,26 +211,27 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   `POW_EXPIRED`, preventing indefinite replay of a solved token.
 
 ## Test status
-11 suites, **316 tests** passing (`npm test`); `validate.sh` 32/35. All `src/crypto/`
+11 suites, **322 tests** passing (`npm test`); `validate.sh` 32/35. All `src/crypto/`
 modules have test suites: ratchet (21), group (19), atrest (10), franking (6),
-negotiate (12), ktlog (34), pow (19), x3dh (6), kat (6), push (15); worker (162).
+negotiate (12), ktlog (34), pow (19), x3dh (6), kat (6), push (15); worker (168).
 Worker coverage: routing, rate-limit, userId validation (length bounds + charset),
 prekey (0-OTP replenish hint + caps round-trip + caps sanitization + x3dh legacy
 field + N5 chain hash round-trip + tamper detection + upload/fetch malformed-id guard
 + field size caps: identityKey/edIdentityKey/signedPreKey/signedPreKeySig/OTP entries),
 group create/join/info/kick/epoch (self-kick guard + post-kick join epoch + malformed-id
-guards + token length cap), account slots (malformed-id guard), franking relay,
-sealed sender (multi-sender + missing-id + send validation + malformed-to guard),
-msg send/poll (payload-size limit + lastTs cursor + MISSING_FIELDS + malformed-id guards),
-alias PoW (PoW freshness check + pub size cap), key-history log (N5 chain), dead drop,
-backup (malformed-id guard), signal relay (sanitizeString strip ctrl chars + data size cap),
-presence (heartbeat + malformed-id guards + batch filter), online count, OGP SSRF guard
-(11 blocked patterns + IPv4-mapped IPv6 bypass + malformed URL), push subscribe
-(SSRF + 5-device cap + malformed-id guard), push encryption (RFC 8291), TURN credentials
-(malformed-id guard), webhook (signature verify + idempotency + userId KV injection guard),
-body size enforcement (Content-Length spoof), AI handler input validation (lang injection
-strip + empty lang reject + oversized summarize fields + unknown action), translate
-handler (missing-field + type guards).
+guards + token length cap), account slots (malformed-id guard), franking relay
+(opening DoS guard), sealed sender (multi-sender + missing-id + send validation +
+malformed-to guard), msg send/poll (payload-size limit + lastTs cursor + MISSING_FIELDS
++ malformed-id guards), alias PoW (PoW freshness check + pub size cap), key-history
+log (N5 chain), dead drop, backup (malformed-id guard), signal relay (sanitizeString
+strip ctrl chars + data size cap), presence (heartbeat + malformed-id guards + batch
+filter), online count, OGP SSRF guard (11 blocked patterns + IPv4-mapped IPv6 bypass
++ malformed URL + URL length cap + hash cache key), push subscribe (SSRF + 5-device
+cap + malformed-id guard + subscription field sanitization), push encryption (RFC 8291),
+TURN credentials (malformed-id guard), webhook (signature verify + idempotency + userId
+KV injection guard), body size enforcement (Content-Length spoof), AI handler input
+validation (lang injection strip + empty lang reject + oversized summarize fields +
+unknown action), translate handler (missing-field + type guards).
 Security additions: ratchet MAX_SKIP storage-bound (forward secrecy), consumed-
 skipped-key replay guard (ratchet + group), group future-epoch rejection, N3 caps +
 x3dh legacy compat persistence in worker prekey bundle (v5 capability advertisement
@@ -247,6 +248,10 @@ handler lang prompt-injection prevention (BCP-47 charset sanitization), AI summa
 per-field bounds (sender ≤100 chars, text ≤500 chars), translate `to` type guard, PoW
 freshness check in handleAliasSet (10 min maxAge, backward-compatible with old-format
 challenges), N2 two-layer group authentication (partial AFKS: epoch sig + per-message
-sig, both required; forging requires simultaneous compromise of both keys).
+sig, both required; forging requires simultaneous compromise of both keys), OGP URL
+length cap (2048 chars) + sha256Short hash cache key (fixes URL prefix-collision bug),
+abuse report `opening` field size cap (128 chars, HMAC key is 44 base64 chars),
+push subscription object sanitization (whitelist endpoint/keys/expirationTime, cap
+p256dh ≤100 chars, auth ≤50 chars; extra fields stripped before KV storage).
 Remaining: browser integration (§8) + N1 index.html Nr fix (module has regression
 test) + N4 sealed-sender franking (§9).
