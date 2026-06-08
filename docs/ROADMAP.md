@@ -18,10 +18,10 @@
 
 | ID | Item | Effort | Why now | Dep |
 |----|------|--------|---------|-----|
-| I1 | Authenticated X3DH — sign + verify the pre-key | S | Closes an **active first-contact MITM**; voids the premise every Signal proof needs (ePrint 2016/1013). Wire-versioned (v5) w/ v4 read path. | tests ✅ | 🟡 **core done in `src/crypto/ratchet.js`** (Ed25519 sign/verify SPK + x3dhInitiator/Responder DH1-4 + MITM-defense tests, `tests/x3dh.test.js`); **pending**: wire into index.html init + worker verify-on-upload (browser-validated) |
-| I16 | Key commitment on AEAD (HKDF commitment tag) | S | AES-GCM isn't committing → "invisible salamanders" in group/sealed/multi-key paths (ePrint 2020/1456). | — | ✅ **done in `src/crypto/ratchet.js`** (cm tag + constant-time verify, both decrypt paths; +4 tests); port to index.html/group/sealed pending |
-| I15 | Stop pre-encryption compression (1:1 `encryptFor`) | S | CRIME/BREACH-class length leak; partly defeats the 256-B padding. Pure removal. | — |
-| I7 | Bound **+ time-expire** skipped-key cache | S | Lingering skipped keys = FS leak + DoS (ePrint 2018/1037). Count bound already exists; add TTL. | — | ✅ **done in `src/crypto/ratchet.js`** (TTL + tests); port to index.html pending |
+| I1 | Authenticated X3DH — sign + verify the pre-key | S | Closes an **active first-contact MITM**; voids the premise every Signal proof needs (ePrint 2016/1013). Wire-versioned (v5) w/ v4 read path. | tests ✅ | ✅ **module + worker done**: `src/crypto/ratchet.js` (Ed25519 sign/verify SPK + x3dhInitiator/Responder DH1-4 + MITM-defense, `tests/x3dh.test.js`); worker `handlePreKeyUpload` verifies sig (G2); **pending**: wire into index.html init (browser-validated) |
+| I16 | Key commitment on AEAD (HKDF commitment tag) | S | AES-GCM isn't committing → "invisible salamanders" in group/sealed/multi-key paths (ePrint 2020/1456). | — | ✅ **done** in `src/crypto/ratchet.js` + `src/crypto/group.js` (cm tag + constant-time verify; also in group messages N2); port to index.html/sealed pending |
+| I15 | Stop pre-encryption compression (1:1 `encryptFor`) | S | CRIME/BREACH-class length leak; partly defeats the 256-B padding. Pure removal. | — | 🔜 module: `ratchet.js` `compressMin:Infinity` default (off); index.html wiring pending (docs/INTEGRATION.md §G4) |
+| I7 | Bound **+ time-expire** skipped-key cache | S | Lingering skipped keys = FS leak + DoS (ePrint 2018/1037). Count bound already exists; add TTL. | — | ✅ **done** in `src/crypto/ratchet.js` (1:1 TTL) + `src/crypto/group.js` (group TTL, both configurable); port to index.html pending |
 | I20 | Known-answer test vectors (RFC/NIST/Wycheproof) | S–M | Catches HKDF-info/nonce/tag glue bugs incl. the I15/I16 class; slots into the new harness. | tests ✅ | ✅ **done** — `tests/kat.test.js` (HKDF RFC 5869, X25519 RFC 7748, AES-256-GCM NIST + tamper-reject) |
 
 **P0 = one focused security sprint.** All S-effort, all unit-testable against
@@ -34,9 +34,9 @@ I1 is wire-versioned with a v4 read path, so it's safe to roll out.
 
 | ID | Item | Effort | Why | Dep |
 |----|------|--------|-----|-----|
-| I2 | Group forward secrecy — ratchet chain **+ signing** key | S–M | One leak exposes all group msgs today (arXiv 2301.07045). | I20 | ✅ **chain ratchet done in `src/crypto/group.js`** (+ I16 commitment, out-of-order, FS tests); signing-key ratchet + index.html port pending |
-| I3 | Group PCS — epoch bump + redistribute on kick/leave | M | Removed members keep decrypting today (ePrint 2017/666). | I2 | ✅ **done in `src/crypto/group.js`** (`rotateEpoch` + epoch gate; kicked-member-can't-read test); worker `/api/group/kick` epoch bump pending |
-| I4 | Encrypt identity/signing keys at rest (app-lock) | M | Plaintext JWK in IndexedDB → XSS/forensics (ePrint 2024/887). | — | ✅ **done in `src/crypto/atrest.js`** (PBKDF2≥600k wrap/unwrap + migration; +8 tests); index.html loadIdentity port pending |
+| I2 | Group forward secrecy — ratchet chain **+ signing** key | S–M | One leak exposes all group msgs today (arXiv 2301.07045). | I20 | ✅ **done** in `src/crypto/group.js` (chain ratchet + I16 commitment + N2 per-msg Ed25519 auth + I7 TTL, `tests/group.test.js`); signing-key ratchet (auth FS) blocked by WebCrypto Ed25519 key-derivation; index.html port pending |
+| I3 | Group PCS — epoch bump + redistribute on kick/leave | M | Removed members keep decrypting today (ePrint 2017/666). | I2 | ✅ **done** in `src/crypto/group.js` + worker (G3): `rotateEpoch` + epoch gate + `handleGroupKick` bumps epoch; kicked-member-blocked test; index.html client-side redistribution pending |
+| I4 | Encrypt identity/signing keys at rest (app-lock) | M | Plaintext JWK in IndexedDB → XSS/forensics (ePrint 2024/887). | — | ✅ **done** in `src/crypto/atrest.js` (PBKDF2≥600k, btoa/atob browser-compat, wrapJWK/unwrapJWK/migrate/zeroBuffer, +10 tests); index.html loadIdentity port pending |
 | C8 | Web-app integrity ("Code Verify" / SW hash-pin) | M | Biggest *unaddressed* web-E2EE threat: host can serve malicious JS. SW is the pin point. | — |
 | C13 | QR **scan-to-verify** as default ceremony | S–M | Human out-of-band channel closes the I1 MITM gap *before* key transparency. | — |
 | I19 | WebRTC: relay-only privacy default + STUN self-host | S | srflx still leaks public IP to peer by default (arXiv 2510.16168). | — |
@@ -48,10 +48,10 @@ I1 is wire-versioned with a v4 read path, so it's safe to roll out.
 | ID | Item | Effort | Why | Dep |
 |----|------|--------|-----|-----|
 | I5 | Optional + jittered receipts; relay batching | S–M | Sealed-sender deanonymization via receipt timing (NDSS'21). | — |
-| I6 | Length-bucketed padding + optional cover traffic | S–M | Flat 256-B pad leaks size buckets (Loopix). | I15 |
+| I6 | Length-bucketed padding + optional cover traffic | S–M | Flat 256-B pad leaks size buckets (Loopix). | I15 | 🟡 **padding done**: `ratchet.js` already pads to 256-byte-aligned buckets; cover traffic (fake messages) is client-side |
 | C10 | Durable Objects (rate-limit/presence/signaling) + WebSocket push | M–L | Fixes the per-isolate `_rateLimitMap` undercount **and** the KV write-budget ceiling; replaces polling. | — |
 | C12 | Encrypted, preview-less push (RFC 8291) | S–M | Push service sees ciphertext only; no message preview. | — |
-| I17 | Verifiable abuse reporting (Hecate / AMF franking) | M–L | Consensual reporting, no backdoor (USENIX'22). | I16 | 🟡 **core done in `src/crypto/franking.js`** (HMAC commit/verify/report; +6 tests); sealed-sender sender-binding + relay endpoints pending |
+| I17 | Verifiable abuse reporting (Hecate / AMF franking) | M–L | Consensual reporting, no backdoor (USENIX'22). | I16 | ✅ **core + relay done**: `src/crypto/franking.js` + worker `/api/abuse/record`+`/api/abuse/report` (end-to-end test in `tests/worker.test.js`); sealed-sender sender-binding (Hecate asymmetric) + client send/report UI pending |
 | I18 | Anonymous anti-abuse tokens (Privacy Pass/VOPRF) | M–L | Battery-friendly, unlinkable vs PoW. | — |
 | C11 | Background Sync + persistent storage | S | Reliable offline send; no keystore eviction. | — |
 
@@ -63,7 +63,7 @@ I1 is wire-versioned with a v4 read path, so it's safe to roll out.
 |----|------|--------|-----|-----|
 | I8 / I9 | PQXDH handshake → Triple-Ratchet (hybrid PQ) | L | Harvest-now-decrypt-later; recurring-KEM PCS. Needs vetted WASM ML-KEM. | I1 |
 | I10 | Keep PQ auth deniable; soften deniability claims | S(doc)/L | Signature PQ-auth kills deniability (ePrint 2025/1090). | I8 |
-| I11 | Key-transparency log (akd/CONIKS-lite on Worker) | M–L | Automated MITM detection beyond TOFU. | I1 |
+| I11 | Key-transparency log (akd/CONIKS-lite on Worker) | M–L | Automated MITM detection beyond TOFU. | I1 | 🟡 **precursor done**: worker records SHA-256 IK history per user (`ktlog:`) and returns it on fetch; client-side rollover detection + full hash-chained log pending |
 | I12 | Multi-device (Device Group Key + cross-signing) | L | Most-requested; relay never sees DGK. | C9, I4 |
 | C9 | Encrypt message store at rest + CRDT sync | M–L | Extends at-rest beyond keys; enables I12. | I4 |
 | I13 | PIN-based encrypted backup (SVR-lite) | M | Recovery (today: lose device = lose identity). | I4 |
