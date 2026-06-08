@@ -146,13 +146,18 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   message, §5). Remaining refinement: ratchet the *signing* key per message
   (authentication forward secrecy; Balbás et al.) so a leaked signing key can't
   forge past/future. Not yet done.
-- N3. **Protocol-version negotiation** v4↔v5 (capability flag in presence/bundle)
-  for staged rollout. Designed in `docs/IMPROVEMENTS.md`; not implemented.
+- N3. **Protocol-version negotiation** v4↔v5 — ✅ implemented in
+  `src/crypto/negotiate.js` (`advertise`/`parsePeerCaps`/`negotiate`, 12 tests).
+  Pending: wire the `advertise()` output into presence/bundle in `index.html`
+  and call `negotiate()` before session init to select v4 vs v5 path.
 - N4. **Franking core** (I17) — ✅ implemented (§6a); remaining: sealed-sender
   sender-binding (asymmetric franking / Hecate) + relay record/report endpoints (§8).
   **PQXDH / PQ ratchet** (I8/I9), **key transparency** (I11) — backlog, not started.
 
 ## Test status
-6 suites, 59 tests passing (`npm test`); `validate.sh` 32/35. The crypto **cores**
-of X3DH, Double Ratchet, group FS/PCS, key commitment, KATs, and at-rest wrapping
-are implemented and tested; remaining work is integration (§8) + N1–N4 (§9).
+8 suites, 95 tests passing (`npm test`); `validate.sh` 32/35. The crypto **cores**
+of X3DH, Double Ratchet (with I7 TTL + I16 commitment), group FS/PCS (with N2 auth
++ I7 TTL), at-rest wrapping, franking, and KATs are implemented and tested; worker
+endpoints for G2/G3/franking are integrated with tests; N3 negotiation module done.
+Remaining work is browser integration (§8) + N1 index.html Nr fix + N2 signing-key
+ratchet + N4 sealed-sender binding (§9).
