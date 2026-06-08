@@ -176,14 +176,21 @@ export default {
       rlMap.set(rlKey, rlCount + 1);
     }
 
-    // v3.3: Reject oversized requests before parsing
+    // Reject oversized requests. Fast-path: check Content-Length header early to avoid
+    // reading a large body. Belt-and-suspenders: also check actual body size after reading
+    // (Content-Length can be omitted or spoofed to bypass the header-only check).
     const contentLength = parseInt(request.headers.get('Content-Length') || '0');
     if (contentLength > MAX_BODY_BYTES) {
       return json({ error: 'Request too large', code: 'BODY_TOO_LARGE', max: MAX_BODY_BYTES }, 413, request);
     }
+    let bodyText;
+    try { bodyText = await request.text(); } catch { return json({ error: 'Invalid body', code: 'INVALID_BODY' }, 400, request); }
+    if (bodyText.length > MAX_BODY_BYTES) {
+      return json({ error: 'Request too large', code: 'BODY_TOO_LARGE', max: MAX_BODY_BYTES }, 413, request);
+    }
 
     let body;
-    try { body = await request.json(); } catch { return json({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400, request); }
+    try { body = JSON.parse(bodyText); } catch { return json({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400, request); }
 
     // Validate userId if present (business-grade: reject malformed early)
     if (body.userId && !validateUserId(body.userId)) {

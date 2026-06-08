@@ -94,6 +94,21 @@ describe('routing & request validation (export default fetch)', () => {
     expect(res.status).toBe(413);
   });
 
+  it('rejects oversized bodies (413) when Content-Length is spoofed/absent (actual body size check)', async () => {
+    // Attacker sends Content-Length: 0 (or omits it) with a large body.
+    // The actual body size check must catch this even if the header-based check passes.
+    const largeBody = 'x'.repeat(524288 + 1); // MAX_BODY_BYTES + 1
+    const req = new Request('https://breeze.test/api/presence', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '203.0.113.2' },
+      // No Content-Length header — forces the actual-body-size check path.
+      body: `{"pad":"${largeBody}"}`,
+    });
+    const res = await worker.fetch(req, makeEnv());
+    expect(res.status).toBe(413);
+    expect((await res.json()).code).toBe('BODY_TOO_LARGE');
+  });
+
   it('returns 503 when KV is not bound', async () => {
     const res = await worker.fetch(apiRequest('/api/presence', { userId: 'abc12345' }), {});
     expect(res.status).toBe(503);
