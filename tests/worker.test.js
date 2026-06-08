@@ -938,6 +938,43 @@ describe('webhook signature + idempotency', () => {
     expect(res2.status).toBe(200);
     expect(await res2.text()).toBe('Already processed');
   });
+
+  it('silently ignores checkout event with invalid userId (KV injection guard)', async () => {
+    const e = env();
+    const badEvent = JSON.stringify({
+      id: 'evt_bad_uid', type: 'checkout.session.completed',
+      data: { object: { metadata: { userId: 'bad id!!', type: 'account_plan', slots: '4', plan: 'plus' } } },
+    });
+    const sig = await stripeSigHeader(badEvent, secret);
+    const res = await handleWebhook(webhookReq(badEvent, sig), e);
+    // Webhook returns ok (to prevent Stripe retries), but no KV write occurred.
+    expect(res.status).toBe(200);
+    expect(await e.KV.get('slots:bad id!!')).toBeNull();
+  });
+
+  it('silently ignores subscription.deleted event with invalid userId (KV injection guard)', async () => {
+    const e = env();
+    const subEvent = JSON.stringify({
+      id: 'evt_sub_del', type: 'customer.subscription.deleted',
+      data: { object: { metadata: { userId: '../etc/passwd' }, customer: 'cus_test' } },
+    });
+    const sig = await stripeSigHeader(subEvent, secret);
+    const res = await handleWebhook(webhookReq(subEvent, sig), e);
+    expect(res.status).toBe(200);
+    expect(await e.KV.get('slots:../etc/passwd')).toBeNull();
+  });
+
+  it('silently ignores subscription.updated event with invalid userId (KV injection guard)', async () => {
+    const e = env();
+    const subEvent = JSON.stringify({
+      id: 'evt_sub_upd', type: 'customer.subscription.updated',
+      data: { object: { metadata: { userId: 'bad\x00user', slots: '4', plan: 'plus' }, customer: 'cus_test' } },
+    });
+    const sig = await stripeSigHeader(subEvent, secret);
+    const res = await handleWebhook(webhookReq(subEvent, sig), e);
+    expect(res.status).toBe(200);
+    expect(await e.KV.get('slots:bad\x00user')).toBeNull();
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

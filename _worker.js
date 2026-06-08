@@ -556,7 +556,10 @@ async function handleWebhook(request, env) {
     const userId = session.metadata?.userId || session.client_reference_id;
     const customerId = session.customer;
 
-    if (userId && session.metadata?.type === 'account_plan') {
+    // validateUserId: userId originates from Stripe checkout metadata (client-supplied).
+    // Invalid IDs are silently ignored — failing would cause Stripe retries for an
+    // unparseable event, which is worse than a no-op.
+    if (userId && validateUserId(userId) && session.metadata?.type === 'account_plan') {
       // Plan-based slot assignment: Lite=2, Plus=4, Pro=999
       const planSlots = parseInt(session.metadata.slots || '2');
       await kvPut(env, `slots:${userId}`, JSON.stringify({ slots: planSlots, plan: session.metadata.plan || 'lite', customerId, updatedAt: Date.now() }));
@@ -571,7 +574,8 @@ async function handleWebhook(request, env) {
     if (!userId && sub.customer) {
       userId = await kvGet(env, `cust:${sub.customer}`);
     }
-    if (userId) {
+    // Re-validate after KV retrieval: the stored value could be stale pre-validation data.
+    if (userId && validateUserId(userId)) {
       // Reset to free tier (1 account)
       await kvPut(env, `slots:${userId}`, JSON.stringify({ slots: 1, plan: 'free', updatedAt: Date.now() }));
     }
@@ -592,7 +596,7 @@ async function handleWebhook(request, env) {
     const sub = event.data.object;
     let userId = sub.metadata?.userId;
     if (!userId && sub.customer) userId = await kvGet(env, `cust:${sub.customer}`);
-    if (userId && sub.metadata?.slots) {
+    if (userId && validateUserId(userId) && sub.metadata?.slots) {
       const newSlots = parseInt(sub.metadata.slots);
       await kvPut(env, `slots:${userId}`, JSON.stringify({
         slots: newSlots, plan: sub.metadata.plan || 'lite',
