@@ -313,6 +313,30 @@ describe('prekey signed-prekey signature verification (I1/G2)', () => {
     expect(bundle.caps.length).toBeLessThanOrEqual(20);
     expect(bundle.caps[0].length).toBe(32); // truncated to 32 chars
   });
+
+  it('x3dh legacy compat field is stored and returned alongside caps (N3 advertise() round-trip)', async () => {
+    // advertise() returns both { caps: [...], x3dh: 'v5' }; the worker must preserve
+    // x3dh so parsePeerCaps()'s fallback branch works for transition clients that
+    // understand x3dh but not caps.
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'v5user03', identityKey: 'IK', signedPreKey: 'SPK', caps: ['x3dh-v5'], x3dh: 'v5' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    const bundle = await (await handlePreKeyFetch({ userId: 'v5user03' }, env, apiRequest('/api/prekey/fetch', {}))).json();
+    expect(bundle.caps).toEqual(['x3dh-v5']);
+    expect(bundle.x3dh).toBe('v5');
+  });
+
+  it('x3dh field is capped at 4 chars to prevent oversized storage', async () => {
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'v5user04', identityKey: 'IK', signedPreKey: 'SPK', x3dh: 'malicious-extra-long-value' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    const bundle = await (await handlePreKeyFetch({ userId: 'v5user04' }, env, apiRequest('/api/prekey/fetch', {}))).json();
+    expect(bundle.x3dh.length).toBeLessThanOrEqual(4);
+  });
 });
 
 describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {

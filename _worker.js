@@ -1105,7 +1105,7 @@ async function verifyEd25519(edPubB64, msgB64, sigB64) {
 }
 
 async function handlePreKeyUpload(body, env, request) {
-  const { userId, identityKey, edIdentityKey, signedPreKey, signedPreKeySig, oneTimePreKeys, caps } = body;
+  const { userId, identityKey, edIdentityKey, signedPreKey, signedPreKeySig, oneTimePreKeys, caps, x3dh } = body;
   if (!userId || !identityKey || !signedPreKey) return json({ error: 'userId, identityKey, signedPreKey required' }, 400, request);
   // I1/G2: authenticated X3DH. If a signature + Ed25519 identity key are supplied,
   // verify the signature over the signed pre-key and REJECT if invalid. Unsigned
@@ -1124,6 +1124,10 @@ async function handlePreKeyUpload(body, env, request) {
       .filter(c => typeof c === 'string')
       .map(c => c.slice(0, 32));
   }
+  // Legacy compat: preserve the x3dh field from advertise() so parsePeerCaps()'s
+  // fallback path (bundle.x3dh === 'v5') works for transition-period clients that
+  // don't yet understand the `caps` array. Only 'v4'/'v5' are meaningful; cap to 4.
+  if (typeof x3dh === 'string') bundle.x3dh = x3dh.slice(0, 4);
   await kvPut(env, `prekey:${userId}`, JSON.stringify(bundle), { expirationTtl: 86400 * 30 });
 
   // I11 (key-history precursor): append a SHA-256 digest of the identity key to a
