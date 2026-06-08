@@ -193,18 +193,17 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   (`makeChallengeString`/`solve`/`verify`, 15 tests).
 
 ## Test status
-11 suites, **241 tests** passing (`npm test`); `validate.sh` 32/35. All `src/crypto/`
+11 suites, **244 tests** passing (`npm test`); `validate.sh` 32/35. All `src/crypto/`
 modules have test suites: ratchet (21), group (15), atrest (10), franking (6),
-negotiate (12), ktlog (25), pow (15), x3dh (6), kat (6), push (15); worker (110).
+negotiate (12), ktlog (25), pow (15), x3dh (6), kat (6), push (15); worker (113).
 Worker coverage: routing, rate-limit, prekey (including 0-OTP replenish hint),
-group create/join/info/kick/epoch (including self-kick guard), account slots,
-franking relay, sealed sender (including multi-sender poll + missing-id 400),
-msg send/poll (including payload-size limit + lastTs cursor), alias PoW, key-history
-log, dead drop, backup, signal relay, presence, online count, OGP SSRF guard
-(11 blocked patterns + malformed URL), push subscribe (SSRF guard + 5-device cap),
-push encryption (RFC 8291), TURN credentials, webhook.
-Security additions: ratchet MAX_SKIP storage-bound (forward secrecy property of
-skipped-key store), consumed-skipped-key replay guard (both ratchet + group),
-group future-epoch rejection (epoch gate forward direction).
+group create/join/info/kick/epoch (self-kick guard + post-kick join epoch),
+account slots, franking relay, sealed sender (multi-sender + missing-id + send
+validation), msg send/poll (payload-size limit + lastTs cursor + MISSING_FIELDS),
+alias PoW, key-history log, dead drop, backup, signal relay, presence, online count,
+OGP SSRF guard (11 blocked patterns + malformed URL), push subscribe (SSRF + 5-device
+cap), push encryption (RFC 8291), TURN credentials, webhook.
+Security additions: ratchet MAX_SKIP storage-bound (forward secrecy), consumed-
+skipped-key replay guard (ratchet + group), group future-epoch rejection.
 Remaining: browser integration (§8) + N1 index.html Nr fix (module has regression
 test) + N2 signing-key ratchet + N4 sealed-sender franking (§9).

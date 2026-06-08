@@ -333,6 +333,16 @@ describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {
     const info = await (await handleGroupInfo({ token }, env, req({}))).json();
     expect(info.epoch).toBe(0);
   });
+
+  it('join after kick returns the bumped epoch so new members know which sender key to request', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
+    // Dave joins the group after the kick — should see epoch 1, not 0.
+    const res = await handleGroupJoin({ token, memberId: 'dave0001', memberPub: 'dpub', memberName: 'D' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).epoch).toBe(1);
+  });
 });
 
 describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => {
@@ -453,6 +463,14 @@ describe('sealed sender send / poll / ack', () => {
     const envelopes = messages.map(m => m.envelope).sort();
     expect(envelopes).toEqual(['from-alice', 'from-bob']);
   });
+
+  it('send returns 400 when to or envelope is missing', async () => {
+    const e = makeEnv();
+    const r1 = await handleSealedSend({ envelope: 'x' }, e, req({}));
+    expect(r1.status).toBe(400);
+    const r2 = await handleSealedSend({ to: 'bob00001' }, e, req({}));
+    expect(r2.status).toBe(400);
+  });
 });
 
 describe('msg send / poll (1:1 relay path)', () => {
@@ -531,6 +549,18 @@ describe('msg send / poll (1:1 relay path)', () => {
     const { messages } = await poll.json();
     expect(messages.length).toBe(1);
     expect(messages[0].payload).toBe('NEW');
+  });
+
+  it('returns 400 MISSING_FIELDS when to, from, or payload is absent', async () => {
+    const e = makeEnv();
+    const ts = Date.now();
+    const r1 = await handleMsgSend({ from: 'alice001', payload: 'x', ts }, ip, e, req({}));
+    expect(r1.status).toBe(400);
+    expect((await r1.json()).code).toBe('MISSING_FIELDS');
+    const r2 = await handleMsgSend({ to: 'bob00001', payload: 'x', ts }, ip, e, req({}));
+    expect(r2.status).toBe(400);
+    const r3 = await handleMsgSend({ to: 'bob00001', from: 'alice001', ts }, ip, e, req({}));
+    expect(r3.status).toBe(400);
   });
 });
 
