@@ -13,8 +13,9 @@
 // Tested reference; index.html loadIdentity()/key storage to be migrated onto it
 // in a browser-validated pass.
 // ============================================================================
-const b64 = (bytes) => Buffer.from(bytes).toString('base64');
-const unb64 = (s) => new Uint8Array(Buffer.from(s, 'base64'));
+// Use btoa/atob instead of Buffer so the module works in both Node ≥16 and browsers.
+const b64 = (bytes) => { let s = ''; bytes.forEach((b) => { s += String.fromCharCode(b); }); return btoa(s); };
+const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 const u8 = (a) => (a instanceof Uint8Array ? a : Uint8Array.from(a));
 
 export function createAtRest(opts = {}) {
@@ -61,7 +62,14 @@ export function createAtRest(opts = {}) {
     return { ...rest, wrapped };
   }
 
-  return { wrapJWK, unwrapJWK, migrate, _cfg: cfg };
+  // Best-effort zeroing of plaintext key material after use. JS GC may retain
+  // copies; this limits exposure to memory dumps / heap dumps taken right after use.
+  function zeroBuffer(buf) {
+    if (buf instanceof Uint8Array) buf.fill(0);
+    else if (buf instanceof ArrayBuffer) new Uint8Array(buf).fill(0);
+  }
+
+  return { wrapJWK, unwrapJWK, migrate, zeroBuffer, _cfg: cfg };
 }
 
 export default createAtRest;

@@ -65,3 +65,17 @@ describe('security floor', () => {
     expect(createAtRest()._cfg.iterations).toBeGreaterThanOrEqual(600000);
   });
 });
+
+describe('zeroBuffer', () => {
+  it('fills a Uint8Array with zeros', () => {
+    const buf = new Uint8Array([1, 2, 3, 4]);
+    A.zeroBuffer(buf);
+    expect(Array.from(buf)).toEqual([0, 0, 0, 0]);
+  });
+
+  it('fills an ArrayBuffer with zeros', () => {
+    const ab = new Uint8Array([5, 6, 7]).buffer;
+    A.zeroBuffer(ab);
+    expect(Array.from(new Uint8Array(ab))).toEqual([0, 0, 0]);
+  });
+});
