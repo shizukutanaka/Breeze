@@ -111,12 +111,13 @@ asymmetric franking / Hecate (§9 N4); client send/report UI wiring (browser).
 
 ## 7. Worker endpoints (security-relevant)
 
-Covered by `tests/worker.test.js` (84 tests):
+Covered by `tests/worker.test.js` (98 tests):
 - Routing & validation, rate-limit 429, userId format check.
 - Prekey: OTP consume-and-decrement, replenish hint (≤5 remaining), Ed25519
   SPK signature verify (PREKEY_SIG_INVALID on tamper), key-history audit log
   (I11 precursor: SHA-256 IK log, rollover detection on duplicate/change).
-- Group: create/join/info, kick with epoch bump, NOT_MEMBER guard, I3 epoch gate.
+- Group: create/join/info (validation, idempotency), kick with epoch bump,
+  NOT_MEMBER guard, I3 epoch gate, creator-only enforcement.
 - Franking: record (no-overwrite), report (HMAC verify, FRANK_MISMATCH),
   frankId/message size limits.
 - Sealed sender: queue+poll round-trip, ack deletion, dedup.
@@ -126,10 +127,12 @@ Covered by `tests/worker.test.js` (84 tests):
 - Backup: upload/download round-trip, 5MB limit, 404 on missing.
 - Signal relay: store/poll, filters own-signals, 50-msg cap.
 - Presence: heartbeat + single/batch check, online counter.
+- Account slots: free default, stored plan, missing userId.
 - OGP SSRF guard: 11 private/internal URL patterns blocked (return 200+{}).
 - Push subscribe: trusted endpoint allow/deny.
 - Push encryption (C12): RFC 8291 round-trip decrypt, VAPID JWT ES256 verify.
 - Webhook: Stripe signature verify + idempotency.
+- TURN credentials: missing-userId, openrelay fallback, HMAC, static.
 **Implemented.** Gaps: §8.
 
 ## 8. Gaps — integration (needs browser / two-device validation)
@@ -184,11 +187,12 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   (`makeChallengeString`/`solve`/`verify`, 15 tests).
 
 ## Test status
-11 suites, **208 tests** passing (`npm test`); `validate.sh` 32/35. All `src/crypto/`
-modules have test suites: ratchet (17), group (12), atrest (10), franking (6),
-negotiate (12), ktlog (25), pow (15), x3dh (6), kat (6), push (15); worker (84).
-Worker coverage: routing, rate-limit, prekey, group kick/join/info/epoch, franking
-relay, sealed sender, msg send/poll, alias PoW, key-history log, dead drop, backup,
-signal relay, presence, online count, OGP SSRF guard, push subscribe, webhook.
-Remaining: browser integration (§8) + N1 index.html Nr fix + N2 signing-key
-ratchet + N4 sealed-sender franking (§9).
+11 suites, **223 tests** passing (`npm test`); `validate.sh` 32/35. All `src/crypto/`
+modules have test suites: ratchet (18), group (12), atrest (10), franking (6),
+negotiate (12), ktlog (25), pow (15), x3dh (6), kat (6), push (15); worker (98).
+Worker coverage: routing, rate-limit, prekey, group create/join/info/kick/epoch,
+account slots, franking relay, sealed sender, msg send/poll, alias PoW, key-history
+log, dead drop, backup, signal relay, presence, online count, OGP SSRF guard,
+push subscribe, push encryption (RFC 8291), TURN credentials, webhook.
+Remaining: browser integration (§8) + N1 index.html Nr fix (module has regression
+test) + N2 signing-key ratchet + N4 sealed-sender franking (§9).
