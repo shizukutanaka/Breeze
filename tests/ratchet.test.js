@@ -187,4 +187,21 @@ describe('DH ratchet primitives', () => {
     expect(sess.recvChainKey?.length).toBe(32);
     expect(sess.sendChainKey?.length).toBe(32);
   });
+
+  it('N1 regression: dhRatchetStep also resets recvCounter (Nr) to 0', async () => {
+    // Bug in index.html: only sendCounter (Ns) was reset; recvCounter (Nr) was not,
+    // so the first message on a new receiving chain (counter=1) could be misclassified
+    // as a replay of the last message from the old chain. The module is fixed; this
+    // test guards against regression.
+    const a = await R.genRatchetKey();
+    const peer = await R.genRatchetKey();
+    const sess = {
+      rootKey: new Uint8Array(32).fill(9),
+      ratchetPriv: a.privateKey, ratchetPub: [...a.pub],
+      sendCounter: 5, recvCounter: 42, // simulates a chain that's been active
+    };
+    await R.dhRatchetStep(sess, peer.pub);
+    expect(sess.sendCounter).toBe(0); // Ns reset
+    expect(sess.recvCounter).toBe(0); // Nr reset — the N1 fix
+  });
 });
