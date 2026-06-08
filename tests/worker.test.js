@@ -1057,6 +1057,16 @@ describe('signal relay', () => {
     expect(msgs.length).toBe(1);
     expect(msgs[0].sender).toBe('alice');
   });
+
+  it('rejects a signal with data larger than 64KB (DoS guard)', async () => {
+    const e   = makeEnv();
+    const res = await handleSignal(
+      { room: 'r1', sender: 'alice', type: 'offer', data: 'x'.repeat(64 * 1024 + 1) },
+      '1.2.3.4', e, req({})
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('PAYLOAD_TOO_LARGE');
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

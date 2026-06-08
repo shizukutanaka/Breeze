@@ -276,6 +276,7 @@ async function handleSignal(body, ip, env, request) {
   const type = sanitizeString(body.type, 32);
   const data = body.data; // Opaque encrypted payload — don't sanitize
   if (!room || !sender || !type) return json({ error: 'room, sender, type required', code: 'MISSING_FIELDS' }, 400, request);
+  if (data !== undefined && (typeof data !== 'string' || data.length > 64 * 1024)) return json({ error: 'data too large (max 64KB)', code: 'PAYLOAD_TOO_LARGE' }, 400, request);
 
   if (type === 'poll') {
     // Return all signaling messages for this room (excluding own)
