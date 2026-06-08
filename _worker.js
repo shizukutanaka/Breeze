@@ -352,7 +352,9 @@ async function handleMsgSend(body, ip, env, request) {
   const key = `inbox:${to}`;
   const existing = await kvGet(env, key);
   const inbox = existing ? JSON.parse(existing) : [];
-  const msg = { from, fromPub, fromName, payload, ts: ts || Date.now() };
+  const safePub  = typeof fromPub  === 'string' ? fromPub.slice(0, 200)  : undefined;
+  const safeName = typeof fromName === 'string' ? fromName.slice(0, 64)  : undefined;
+  const msg = { from, fromPub: safePub, fromName: safeName, payload, ts: ts || Date.now() };
   if (isFile) msg.isFile = true;
   if (isGroupInvite) msg.isGroupInvite = true;
   if (isVoice) msg.isVoice = true;
@@ -360,11 +362,11 @@ async function handleMsgSend(body, ip, env, request) {
   if (isVideoCall) msg.isVideoCall = true;
   if (isSenderKey) msg.isSenderKey = true;
   if (isGroupSK) msg.isGroupSK = true;
-  if (groupId) { msg.groupId = groupId; msg.groupName = groupName; }
-  if (replyTo) msg.replyTo = replyTo;
-  if (disappearAt) msg.disappearAt = disappearAt;
-  if (sig) msg.sig = sig;
-  if (sigPub) msg.sigPub = sigPub;
+  if (groupId) { msg.groupId = String(groupId).slice(0, 64); msg.groupName = typeof groupName === 'string' ? groupName.slice(0, 50) : undefined; }
+  if (replyTo) msg.replyTo = String(replyTo).slice(0, 128);
+  if (disappearAt) msg.disappearAt = typeof disappearAt === 'number' ? disappearAt : undefined;
+  if (sig) msg.sig = typeof sig === 'string' ? sig.slice(0, 200) : undefined;
+  if (sigPub) msg.sigPub = typeof sigPub === 'string' ? sigPub.slice(0, 200) : undefined;
   inbox.push(msg);
   const trimmed = inbox.slice(-100);
   await kvPut(env, key, JSON.stringify(trimmed), { expirationTtl: 604800 });
