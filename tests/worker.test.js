@@ -544,6 +544,32 @@ describe('alias set / get (PoW anti-spam)', () => {
     const res = await handleAliasGet({ alias: 'nobody' }, makeEnv(), req({}));
     expect(res.status).toBe(404);
   });
+
+  it('sanitizes alias to lowercase a-z0-9_', async () => {
+    const pub = 'SANITIZEPUB'; const pow = await solvePoW(pub);
+    const res = await handleAliasSet({ alias: 'Hello-World!', pub, pow }, makeEnv(), req({}));
+    expect(res.status).toBe(200);
+    // After sanitization: 'helloworld' (hyphen and ! stripped)
+    expect((await res.json()).alias).toBe('helloworld');
+  });
+
+  it('rejects an alias that is too short after sanitization', async () => {
+    const pub = 'SHORTPUB'; const pow = await solvePoW(pub);
+    // '!!' sanitizes to '' (empty → < 3 chars)
+    const res = await handleAliasSet({ alias: '!!', pub, pow }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+  });
+
+  it('allows the same pub to re-register (update name)', async () => {
+    const env = makeEnv();
+    const pub = 'SAMEPUB123'; const pow = await solvePoW(pub);
+    await handleAliasSet({ alias: 'myalias', pub, name: 'Alice', pow }, env, req({}));
+    const pow2 = await solvePoW(pub);
+    const res = await handleAliasSet({ alias: 'myalias', pub, name: 'Alice Updated', pow: pow2 }, env, req({}));
+    expect(res.status).toBe(200);
+    const got = await (await handleAliasGet({ alias: 'myalias' }, env, req({}))).json();
+    expect(got.pub).toBe(pub);
+  });
 });
 
 describe('push subscribe SSRF guard', () => {
