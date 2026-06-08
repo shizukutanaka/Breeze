@@ -1111,6 +1111,11 @@ describe('OGP SSRF guard', () => {
     'http://host.local/page',
     'http://external.com:8080/page',   // non-standard port
     'http://0.0.0.0/root',
+    // IPv4-mapped IPv6 SSRF bypass vectors (::ffff:private-ip)
+    'http://[::ffff:192.168.1.1]/bypass',
+    'http://[::ffff:10.0.0.1]/bypass',
+    'http://[::ffff:127.0.0.1]/bypass',
+    'http://[::ffff:169.254.169.254]/bypass',
   ];
 
   it.each(blocked.map(u => [u]))('blocks SSRF target: %s', async (url) => {

@@ -1372,6 +1372,7 @@ async function handleOGP(body, env, request) {
         host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80') ||
         host.endsWith('.internal') || host.endsWith('.local') || host.endsWith('.localhost') ||
         host === '[::1]' || host === 'metadata.google.internal' ||
+        host.startsWith('::ffff:') ||  // IPv4-mapped IPv6 bypass (e.g. ::ffff:c0a8:101 = 192.168.1.1)
         parsed.port && !['80', '443', ''].includes(parsed.port)) {
       return json({}, 200, request);
     }
