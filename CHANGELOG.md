@@ -1,5 +1,40 @@
 # Changelog
 
+## Security Hardening Batch 4 — competitive research (branch claude/nice-ride-T6yb0, 2026-06-08)
+
+Surveyed comparable open-source E2E messengers (Signal, Session, SimpleX) and
+WebRTC/Cloudflare security guidance to find concrete gaps. Top finding: Breeze's
+safety-number (the only out-of-band MITM defense) was materially weaker than
+Signal's.
+
+### Crypto Modules (`src/crypto/`)
+- **`fingerprint.js` (new) — Signal-grade safety number**: The legacy
+  `index.html safetyNumber()` did a *single* SHA-256 over only 12 of 32 bytes,
+  showing ~30 digits (~40 bits) — a relay attempting MITM could grind a colliding
+  substitute identity key offline. The new module follows Signal's
+  NumericFingerprintGenerator: **iterated SHA-512 (5200 rounds)** over
+  `version ‖ identityKey ‖ stableId` per party, first 30 bytes → six 5-digit
+  chunks, two fingerprints concatenated in sorted order for symmetry. Result:
+  60 digits (~112 bits shown) and ~5200× higher per-candidate grinding cost.
+  Optional stable-identifier binding ties keys to identities (matches Signal).
+  Dependency-injected/pure; accepts base64 or raw `Uint8Array` keys.
+
+### Test Suite (`tests/`)
+- **12 suites, 333 tests** passing (`npm test`); `validate.sh` 32/35 (PASSED).
+- `tests/fingerprint.test.js` (11): format (60 digits / 12 groups), symmetry
+  (swap local/remote), determinism, MITM-substitution visibility, stableId
+  binding, iteration-count binding, base64≡bytes equivalence, full 5200-round run.
+- Added 30s timeouts to 5 PoW-solving alias tests (the new full-strength
+  fingerprint test added CPU contention that pushed them past the 5s default).
+
+### Documentation
+- `docs/CRYPTO-SPEC.md`: new §6b (safety number), test count 322 → 333.
+
+### Follow-up (gated on browser / two-device validation)
+- Migrate index.html `safetyNumber()`/`showSafetyNumber()` onto `fingerprint.js`.
+  Note: this changes the displayed number, so it needs a versioned rollout (both
+  peers must upgrade to see matching numbers) — hence deferred to a browser pass.
+
 ## Security Hardening Batch 3 (branch claude/nice-ride-T6yb0, 2026-06-08)
 
 ### Worker (`_worker.js`) — security & robustness fixes

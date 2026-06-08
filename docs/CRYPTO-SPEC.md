@@ -119,9 +119,34 @@ Impl: client core `src/crypto/franking.js` (`commit`/`verify`/`verifyReport`) +
 **relay endpoints** `_worker.js` `/api/abuse/record` (store `Cf`) and
 `/api/abuse/report` (verify revealed `(message, Kf)` against the recorded `Cf`).
 Tests: `tests/franking.test.js` (core) + `tests/worker.test.js` (end-to-end:
-client commitment → relay verifies; binding reject, unknown-id 404, no-overwrite).
+client commitment → relay verifies; binding reject, unknown-id 404, no-overwrite,
+oversized-message + oversized-opening DoS guards).
 **Implemented (core + relay).** Gap: bind the **sender** under sealed sender via
 asymmetric franking / Hecate (§9 N4); client send/report UI wiring (browser).
+
+## 6b. Safety number — out-of-band MITM verification (key fingerprint)
+
+Two users compare a 60-digit number over an independent channel (voice, in
+person, QR). Matching numbers prove neither party's identity key was swapped by
+a malicious relay — the only protocol-level defense against an active MITM that
+substitutes pre-key bundles (X3DH alone cannot prevent it without a trust root).
+
+Algorithm (`src/crypto/fingerprint.js`, faithful to Signal's
+NumericFingerprintGenerator):
+- Per party: `H₀ = SHA-512(version ‖ identityKey ‖ stableId)`, then
+  `Hₙ = SHA-512(Hₙ₋₁ ‖ identityKey)` for **5200 iterations**; the first 30 bytes
+  → six 5-digit chunks (`byteArray5 % 100000`) = 30 digits per party.
+- The two per-party fingerprints are concatenated in **sorted** order, so both
+  participants compute the identical 60-digit string regardless of who is local.
+- The iterated hash makes grinding a colliding substitute key ~5200× more
+  expensive per candidate; 60 shown digits ≈ 112 bits vs the legacy single-hash
+  `safetyNumber()` in index.html (one SHA-256 over 12 bytes, ~40 bits shown).
+
+Impl: `src/crypto/fingerprint.js` (`createFingerprint` → `safetyNumber` /
+`fingerprintFor`). Tests: `tests/fingerprint.test.js` (11 — format, symmetry,
+determinism, MITM-substitution visibility, stableId binding, iteration binding,
+bytes≡base64, full 5200-round run). **Implemented (module).** Gap: migrate
+index.html `safetyNumber()`/`showSafetyNumber()` onto it (browser-validated pass).
 
 ## 7. Worker endpoints (security-relevant)
 
@@ -211,9 +236,10 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   `POW_EXPIRED`, preventing indefinite replay of a solved token.
 
 ## Test status
-11 suites, **322 tests** passing (`npm test`); `validate.sh` 32/35. All `src/crypto/`
+12 suites, **333 tests** passing (`npm test`); `validate.sh` 32/35. All `src/crypto/`
 modules have test suites: ratchet (21), group (19), atrest (10), franking (6),
-negotiate (12), ktlog (34), pow (19), x3dh (6), kat (6), push (15); worker (168).
+negotiate (12), ktlog (34), pow (19), x3dh (6), kat (6), push (15), fingerprint (11);
+worker (168).
 Worker coverage: routing, rate-limit, userId validation (length bounds + charset),
 prekey (0-OTP replenish hint + caps round-trip + caps sanitization + x3dh legacy
 field + N5 chain hash round-trip + tamper detection + upload/fetch malformed-id guard
