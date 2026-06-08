@@ -740,6 +740,7 @@ async function handleGroupJoin(body, env, request) {
   const memberName = sanitizeString(rawMemberName, 64);
   const memberPub = typeof rawMemberPub === 'string' ? rawMemberPub.slice(0, 200) : rawMemberPub;
   if (!token || !memberId || !memberPub) return json({ error: 'token, memberId, memberPub required' }, 400, request);
+  if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(memberId)) return json({ error: 'invalid memberId', code: 'INVALID_USER_ID' }, 400, request);
 
   const data = await kvGet(env, `grp:${token}`);
@@ -765,6 +766,7 @@ async function handleGroupJoin(body, env, request) {
 async function handleGroupInfo(body, env, request) {
   const { token } = body;
   if (!token) return json({ error: 'token required', code: 'MISSING_TOKEN' }, 400, request);
+  if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
 
   const data = await kvGet(env, `grp:${token}`);
   if (!data) return json({ error: 'Not found', code: 'NOT_FOUND' }, 404, request);
@@ -777,6 +779,7 @@ async function handleGroupInfo(body, env, request) {
 async function handleGroupKick(body, env, request) {
   const { token, kickId, adminId } = body;
   if (!token || !kickId || !adminId) return json({ error: 'token, kickId, adminId required' }, 400, request);
+  if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(kickId) || !validateUserId(adminId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
 
   const data = await kvGet(env, `grp:${token}`);
@@ -1520,7 +1523,8 @@ async function handleTranslate(body, env, request) {
   const { text, from, to } = body;
   if (!text || !to) return json({ error: 'text and to required' }, 400, request);
   if (typeof text !== 'string' || text.length > 2000) return json({ error: 'text too long (max 2000)' }, 400, request);
-  const src = (from || 'auto').slice(0, 10);
+  if (typeof to !== 'string') return json({ error: 'to must be a string', code: 'INVALID_FIELD' }, 400, request);
+  const src = typeof from === 'string' ? from.slice(0, 10) : 'auto';
   const tgt = to.slice(0, 10);
 
   // KV cache (7-day TTL)

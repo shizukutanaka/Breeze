@@ -1060,6 +1060,34 @@ describe('AI handler input validation', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Translate handler — input validation
+// ─────────────────────────────────────────────────────────────────────────────
+describe('translate handler input validation', () => {
+  const req = () => apiRequest('/api/translate', {});
+
+  it('returns 400 when text is missing', async () => {
+    const res = await handleTranslate({ to: 'ja' }, makeEnv(), req());
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when to is missing', async () => {
+    const res = await handleTranslate({ text: 'hello' }, makeEnv(), req());
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when text exceeds 2000 chars', async () => {
+    const res = await handleTranslate({ text: 'x'.repeat(2001), to: 'ja' }, makeEnv(), req());
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when to is not a string (type guard)', async () => {
+    const res = await handleTranslate({ text: 'hello', to: 99 }, makeEnv(), req());
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_FIELD');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Dead Drop — one-time encrypted secret sharing
 // ─────────────────────────────────────────────────────────────────────────────
 describe('dead drop (create + read)', () => {
