@@ -183,33 +183,39 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   sender-binding (asymmetric franking / Hecate) + relay record/report endpoints (§8).
   **PQXDH / PQ ratchet** (I8/I9) — backlog; pending vetted WASM ML-KEM.
 
-- N5. **Key transparency** (I11) — ✅ worker precursor done (`ktlog:` SHA-256 IK
-  log, returned in prekey bundles); `src/crypto/ktlog.js` module done
-  (`hashIK`/`parseLog`/`checkRollover`/`mergeLog`, 25 tests). Pending: full
-  hash-chained log + `index.html` rollover-detection wiring (§8 I11 runbook).
+- N5. **Key transparency** (I11) — ✅ `src/crypto/ktlog.js` module done with full
+  hash-chained log (`chainHash`/`appendChainEntry`/`verifyChain`, 34 tests). Each
+  prekey-history entry now carries `c = SHA-256(prevC ‖ h)` binding it to its
+  predecessor; `verifyChain` detects gaps/tampering; legacy entries without `c` are
+  skipped (backward-compatible transition). Worker `handlePreKeyUpload` computes and
+  stores chain hashes. Pending: `index.html` rollover-detection wiring (§8 I11 runbook).
 
 - N6. **RFC 8291 push encryption** (C12) — ✅ `encryptPushPayload` + `buildVapidJwt`
   implemented in `_worker.js`; `sendPushToUser` now fully encrypts. 15 tests
   including round-trip decrypt + ES256 signature verify (`tests/push.test.js`).
 
 - N7. **PoW challenge/solve/verify** — ✅ `src/crypto/pow.js`
-  (`makeChallengeString`/`solve`/`verify`, 15 tests).
+  (`makeChallengeString`/`solve`/`verify`, 19 tests). Freshness check: optional
+  `{ maxAge, now }` parameter rejects tokens older than `maxAge` ms with
+  `POW_EXPIRED`, preventing indefinite replay of a solved token.
 
 ## Test status
-11 suites, **249 tests** passing (`npm test`); `validate.sh` 32/35. All `src/crypto/`
+11 suites, **267 tests** passing (`npm test`); `validate.sh` 32/35. All `src/crypto/`
 modules have test suites: ratchet (21), group (15), atrest (10), franking (6),
-negotiate (12), ktlog (25), pow (15), x3dh (6), kat (6), push (15); worker (117).
+negotiate (12), ktlog (34), pow (19), x3dh (6), kat (6), push (15); worker (123).
 Worker coverage: routing, rate-limit, userId validation (length bounds + charset),
-prekey (0-OTP replenish hint + caps round-trip + caps sanitization), group
-create/join/info/kick/epoch (self-kick guard + post-kick join epoch), account slots,
-franking relay, sealed sender (multi-sender + missing-id + send validation),
-msg send/poll (payload-size limit + lastTs cursor + MISSING_FIELDS), alias PoW,
-key-history log, dead drop, backup, signal relay (sanitizeString strip ctrl chars),
+prekey (0-OTP replenish hint + caps round-trip + caps sanitization + x3dh legacy
+field + N5 chain hash round-trip + tamper detection), group create/join/info/kick/
+epoch (self-kick guard + post-kick join epoch), account slots, franking relay,
+sealed sender (multi-sender + missing-id + send validation), msg send/poll
+(payload-size limit + lastTs cursor + MISSING_FIELDS), alias PoW, key-history log
+(N5 chain), dead drop, backup, signal relay (sanitizeString strip ctrl chars),
 presence, online count, OGP SSRF guard (11 blocked patterns + malformed URL),
 push subscribe (SSRF + 5-device cap), push encryption (RFC 8291), TURN credentials,
 webhook.
 Security additions: ratchet MAX_SKIP storage-bound (forward secrecy), consumed-
-skipped-key replay guard (ratchet + group), group future-epoch rejection, N3 caps
-persistence in worker prekey bundle (v5 capability advertisement flow complete).
+skipped-key replay guard (ratchet + group), group future-epoch rejection, N3 caps +
+x3dh legacy compat persistence in worker prekey bundle (v5 capability advertisement
+flow complete), PoW freshness check (maxAge), N5 hash-chained key-transparency log.
 Remaining: browser integration (§8) + N1 index.html Nr fix (module has regression
 test) + N2 signing-key ratchet + N4 sealed-sender franking (§9).
