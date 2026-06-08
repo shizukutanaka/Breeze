@@ -1,5 +1,59 @@
 # Changelog
 
+## Security Sprint (branch claude/nice-ride-T6yb0, 2026-06-08)
+
+### Crypto Modules (`src/crypto/`)
+- **`ratchet.js`**: Full Double Ratchet reference module — X25519/P-256 DH ratchet,
+  AES-256-GCM, HKDF-SHA256; I7 skipped-key TTL expiry (7-day default); I16 key
+  commitment (HKDF 'breeze-commit', constant-time verify); I1 authenticated X3DH
+  (Ed25519 sign/verify SPK, DH1-4 → HKDF 'breeze-x3dh-v5', initiatorSession/
+  responderSession); Nr reset fix (both Ns and Nr reset on DH ratchet step). Multi-
+  bucket padding (256-byte-aligned). Browser-compatible (no Node-only APIs).
+- **`group.js`**: Group sender-key ratchet — I2 forward secrecy (chain hash-ratchet,
+  consumed keys dropped); I3 PCS via `rotateEpoch` (fresh chain+signing key, epoch+1);
+  N2 per-message Ed25519 signatures (sign on send, verify before ratchet work);
+  I16 key commitment; I7 TTL expiry on group skipped keys.
+- **`atrest.js`**: I4 at-rest key wrapping — PBKDF2 ≥600k SHA-256 + AES-256-GCM;
+  `wrapJWK`/`unwrapJWK`/`migrate` (legacy plaintext→wrapped, idempotent); `zeroBuffer`
+  helper. Fixed browser compat: replaced `Buffer.from` with `btoa`/`atob`.
+- **`franking.js`**: I17 message franking — HMAC-SHA256 commitment/opening; `commit`/
+  `verify`/`verifyReport`; binding + hiding properties.
+- **`negotiate.js`**: N3 version negotiation — `CAPS` constants, `advertise`/
+  `parsePeerCaps`/`negotiate`; backward compat with legacy x3dh:'v5' field; 'AND' rule
+  prevents peer coercion into weaker path.
+
+### Worker (`_worker.js`)
+- **G2 (I1 server half)**: `handlePreKeyUpload` verifies Ed25519 `signedPreKeySig`
+  against `edIdentityKey`; PREKEY_SIG_INVALID on failure; unsigned bundles accepted
+  during v4→v5 transition.
+- **G3 (I3 server signal)**: `handleGroupKick` bumps + returns `epoch`; epoch
+  initialized to 0 on create; `handleGroupInfo`/`handleGroupJoin` surface epoch.
+  Fixed bug: kick of non-member now returns 404 (NOT_MEMBER) without epoch churn.
+- **I17 relay**: `/api/abuse/record` (stores commitment, no-overwrite) + `/api/abuse/report`
+  (HMAC verify, FRANK_MISMATCH on binding fail). frankId and message size limits added.
+- **I11 precursor**: `ktlog:{userId}` audit log — SHA-256 of each IK appended on upload,
+  capped at 10 entries; returned on fetch as `keyHistory`. Clients can detect rollovers.
+- **OTP replenish hint**: `replenishOTP: true` in fetch response when remaining OTP ≤ 5.
+- **Validation improvements**: frankId length limit (128), abuse report message size
+  limit (256 KB), sealed sender handlers exported for testing.
+
+### Test Suite (`tests/`)
+- 8 suites, **110 tests** passing (`npm test`), validate.sh 32/35 (PASSED).
+- New suites: `kat.test.js` (RFC/NIST KATs), `x3dh.test.js` (X3DH+full session),
+  `group.test.js` (FS/PCS/N2), `atrest.test.js` (wrap/unwrap/migrate/zeroBuffer),
+  `franking.test.js`, `negotiate.test.js`.
+- Worker tests extended: G2 signed-prekey, G3 epoch, I17 franking, I11 key-history,
+  sealed sender round-trip/dedup/ack, msg send/poll with timestamp/self-send/dedup.
+
+### Documentation
+- `docs/CRYPTO-SPEC.md`: formal spec of `src/crypto/` modules, wire formats, test status.
+- `docs/IMPROVEMENTS.md`: I1–I20 from peer software + arXiv/ePrint survey.
+- `docs/ROADMAP.md`: prioritized P0–P3 backlog with dependency graph + updated status.
+- `docs/INTEGRATION.md`: turnkey browser-side integration runbook (index.html wiring
+  for N1/G4/G1+G2/G3/G5/I17), with exact line references and two-device test checklists.
+- `docs/CATEGORY-RESEARCH.md` / `docs/CATEGORY-RESEARCH-2.md`: 20 product categories,
+  10 arxiv/GitHub references each.
+
 ## v3.6.0 (2026-03-15)
 
 ### P2P Core (Session 2)
