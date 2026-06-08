@@ -1238,7 +1238,9 @@ async function handlePreKeyUpload(body, env, request) {
       if (otpStr.length > 5000) continue; // silently skip oversized entries
       await kvPut(env, `prekey:otp:${userId}:${i}`, otpStr, { expirationTtl: 86400 * 30 });
     }
-    await kvPut(env, `prekey:otp:${userId}:count`, String(oneTimePreKeys.length), { expirationTtl: 86400 * 30 });
+    // Store the capped count so the fetch loop doesn't iterate past the highest
+    // possible stored index (avoids up to 100 wasted KV reads when length > 100).
+    await kvPut(env, `prekey:otp:${userId}:count`, String(Math.min(oneTimePreKeys.length, 100)), { expirationTtl: 86400 * 30 });
   }
   return json({ ok: true }, 200, request);
 }

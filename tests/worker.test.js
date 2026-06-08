@@ -829,7 +829,7 @@ describe('alias set / get (PoW anti-spam)', () => {
     const res = await handleAliasSet({ alias: 'staleuser', pub, pow }, makeEnv(), req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('POW_EXPIRED');
-  });
+  }, 30000); // PoW solve is probabilistic; allow 30s
 
   it('accepts a fresh timestamp-bearing PoW', async () => {
     const pub = 'FRESHPUB02';
