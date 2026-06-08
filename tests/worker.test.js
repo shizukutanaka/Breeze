@@ -535,7 +535,7 @@ describe('sealed sender send / poll / ack', () => {
   });
 
   it('returns empty array when no sealed messages exist', async () => {
-    const { messages } = await (await handleSealedPoll({ id: 'nobody1' }, makeEnv(), req({}))).json();
+    const { messages } = await (await handleSealedPoll({ id: 'nobody001' }, makeEnv(), req({}))).json();
     expect(messages).toEqual([]);
   });
 
@@ -581,6 +581,24 @@ describe('sealed sender send / poll / ack', () => {
     const r1 = await handleSealedSend({ envelope: 'x' }, e, req({}));
     expect(r1.status).toBe(400);
     const r2 = await handleSealedSend({ to: 'bob00001' }, e, req({}));
+    expect(r2.status).toBe(400);
+  });
+
+  it('send rejects an envelope larger than 256 KB (DoS guard)', async () => {
+    const e = makeEnv();
+    const res = await handleSealedSend(
+      { to: 'bob00001', envelope: 'x'.repeat(256 * 1024 + 1) }, e, req({})
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('PAYLOAD_TOO_LARGE');
+  });
+
+  it('poll rejects an id that does not match the userId format', async () => {
+    const e = makeEnv();
+    const r1 = await handleSealedPoll({ id: 'bad id!' }, e, req({})); // space + ! not in charset
+    expect(r1.status).toBe(400);
+    expect((await r1.json()).code).toBe('INVALID_ID');
+    const r2 = await handleSealedPoll({ id: 'short' }, e, req({})); // < 8 chars
     expect(r2.status).toBe(400);
   });
 });

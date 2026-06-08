@@ -1258,6 +1258,7 @@ async function handleAbuseReport(body, env, request) {
 async function handleSealedSend(body, env, request) {
   const { to, envelope } = body;
   if (!to || !envelope) return json({ error: 'to and envelope required' }, 400, request);
+  if (typeof envelope !== 'string' || envelope.length > 256 * 1024) return json({ error: 'Envelope too large', code: 'PAYLOAD_TOO_LARGE' }, 400, request);
   // v3.6: In-memory dedup (saves 1 KV read + 1 KV write per sealed send)
   if (!globalThis._sealedDedup) globalThis._sealedDedup = new Map();
   const dedupKey = `${to}:${envelope.slice(0, 32)}`;
@@ -1278,6 +1279,7 @@ async function handleSealedSend(body, env, request) {
 async function handleSealedPoll(body, env, request) {
   const { id } = body;
   if (!id) return json({ error: 'id required', code: 'MISSING_ID' }, 400, request);
+  if (!validateUserId(id)) return json({ error: 'invalid id', code: 'INVALID_ID' }, 400, request);
   const key = `sealed:${id}`;
   const data = await kvGet(env, key);
   if (!data) return json({ messages: [] }, 200, request);
