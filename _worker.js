@@ -206,7 +206,7 @@ export default {
     }
 
     // Input validation — prevent KV abuse + injection
-    for (const key of ['id', 'room', 'sender', 'type', 'userId', 'to', 'from', 'alias']) {
+    for (const key of ['id', 'room', 'sender', 'type', 'userId', 'to', 'from', 'alias', 'token']) {
       if (body[key] && typeof body[key] === 'string' && body[key].length > 128) {
         return json({ error: key + ' too long (max 128)' }, 400, request);
       }
