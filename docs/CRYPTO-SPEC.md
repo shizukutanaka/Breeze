@@ -58,9 +58,12 @@ conversation with direction-flipping DH ratchets (`tests/x3dh.test.js`).
   before trusting the AEAD (I16).
 
 Impl: `ratchetEncrypt/ratchetDecrypt`. Tests: `tests/ratchet.test.js` (round-trip,
-out-of-order, large-gap regression, replay, TTL expiry, commitment).
-**Implemented (module).** Gap: `index.html` still emits/decrypts its own inline copy
-(see §8) and **lacks the `Nr` reset** — see §9.
+out-of-order, large-gap regression, replay, TTL expiry, commitment, N1 Nr-reset
+regression, AEAD-auth-failure-does-not-desync).
+**Implemented (module).** Security fix: state advance deferred until after AEAD
+auth succeeds (injected message with corrupt ciphertext no longer desyncs chain).
+Gap: `index.html` still emits/decrypts its own inline copy (see §8) and **lacks
+the `Nr` reset** — see §9.
 
 ## 5. Group sender keys
 
@@ -77,9 +80,12 @@ out-of-order, large-gap regression, replay, TTL expiry, commitment).
 - Carries `cm` (I16); bounded out-of-order recovery + replay reject.
 
 Impl: `src/crypto/group.js`. Tests: `tests/group.test.js` (FS, epoch rotation,
-kicked-member-blocked, replay, commitment, **forgery/tamper/stripped-sig reject**).
-**Implemented (module).** Refinement: a signing-key *ratchet* (authentication forward
-secrecy, Balbás et al.) — see §9 N2. Gap: index.html/worker port (§8).
+kicked-member-blocked, replay, commitment, **forgery/tamper/stripped-sig reject**,
+AEAD-auth-failure-does-not-desync).
+**Implemented (module).** Security fix: chain advance deferred until after AEAD
+auth succeeds (same injected-message desync fix as §4). Refinement: signing-key
+*ratchet* (authentication forward secrecy, Balbás et al.) — see §9 N2.
+Gap: index.html/worker port (§8).
 
 ## 6. At-rest key protection (I4)
 
