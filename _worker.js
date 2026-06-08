@@ -1134,6 +1134,19 @@ async function handlePreKeyUpload(body, env, request) {
   const { userId, identityKey, edIdentityKey, signedPreKey, signedPreKeySig, oneTimePreKeys, caps, x3dh } = body;
   if (!userId || !identityKey || !signedPreKey) return json({ error: 'userId, identityKey, signedPreKey required' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
+  // Size-guard public key fields. Valid keys are small (P-256 JWK ≤~300 chars,
+  // X25519/Ed25519 raw base64 ≤88 chars). Cap here blocks KV inflation via a
+  // single huge field bypassing the aggregate body limit.
+  const _IK_MAX  = 5000; // generous: full P-256 JWK with all optional fields
+  const _SIG_MAX = 500;  // Ed25519 key/sig base64 is ≤88 chars; 500 is very safe
+  if (typeof identityKey === 'string' && identityKey.length > _IK_MAX)
+    return json({ error: 'identityKey too large', code: 'FIELD_TOO_LARGE' }, 400, request);
+  if (typeof edIdentityKey === 'string' && edIdentityKey.length > _SIG_MAX)
+    return json({ error: 'edIdentityKey too large', code: 'FIELD_TOO_LARGE' }, 400, request);
+  if (typeof signedPreKey === 'string' && signedPreKey.length > _IK_MAX)
+    return json({ error: 'signedPreKey too large', code: 'FIELD_TOO_LARGE' }, 400, request);
+  if (typeof signedPreKeySig === 'string' && signedPreKeySig.length > _SIG_MAX)
+    return json({ error: 'signedPreKeySig too large', code: 'FIELD_TOO_LARGE' }, 400, request);
   // I1/G2: authenticated X3DH. If a signature + Ed25519 identity key are supplied,
   // verify the signature over the signed pre-key and REJECT if invalid. Unsigned
   // bundles are still accepted during the v4->v5 transition, but an invalid
@@ -1188,10 +1201,12 @@ async function handlePreKeyUpload(body, env, request) {
     await kvPut(env, logKey, JSON.stringify(trimmed), { expirationTtl: 86400 * 90 });
   } catch (e) { /* log failure is non-fatal */ }
 
-  // Store one-time prekeys individually
+  // Store one-time prekeys individually; cap each entry to prevent KV inflation.
   if (Array.isArray(oneTimePreKeys)) {
     for (let i = 0; i < Math.min(oneTimePreKeys.length, 100); i++) {
-      await kvPut(env, `prekey:otp:${userId}:${i}`, JSON.stringify(oneTimePreKeys[i]), { expirationTtl: 86400 * 30 });
+      const otpStr = JSON.stringify(oneTimePreKeys[i]);
+      if (otpStr.length > 5000) continue; // silently skip oversized entries
+      await kvPut(env, `prekey:otp:${userId}:${i}`, otpStr, { expirationTtl: 86400 * 30 });
     }
     await kvPut(env, `prekey:otp:${userId}:count`, String(oneTimePreKeys.length), { expirationTtl: 86400 * 30 });
   }

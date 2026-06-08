@@ -216,6 +216,42 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_USER_ID');
   });
+
+  it('rejects oversized identityKey (KV inflation guard)', async () => {
+    const res = await handlePreKeyUpload(
+      { userId: 'sizetest1', identityKey: 'x'.repeat(5001), signedPreKey: 'SPK' },
+      makeEnv(), apiRequest('/api/prekey/upload', {})
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('FIELD_TOO_LARGE');
+  });
+
+  it('rejects oversized signedPreKey (KV inflation guard)', async () => {
+    const res = await handlePreKeyUpload(
+      { userId: 'sizetest2', identityKey: 'IK', signedPreKey: 'x'.repeat(5001) },
+      makeEnv(), apiRequest('/api/prekey/upload', {})
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('FIELD_TOO_LARGE');
+  });
+
+  it('rejects oversized edIdentityKey (KV inflation guard)', async () => {
+    const res = await handlePreKeyUpload(
+      { userId: 'sizetest3', identityKey: 'IK', signedPreKey: 'SPK', edIdentityKey: 'x'.repeat(501) },
+      makeEnv(), apiRequest('/api/prekey/upload', {})
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('FIELD_TOO_LARGE');
+  });
+
+  it('rejects oversized signedPreKeySig (KV inflation guard)', async () => {
+    const res = await handlePreKeyUpload(
+      { userId: 'sizetest4', identityKey: 'IK', signedPreKey: 'SPK', signedPreKeySig: 'x'.repeat(501) },
+      makeEnv(), apiRequest('/api/prekey/upload', {})
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('FIELD_TOO_LARGE');
+  });
 });
 
 describe('prekey key-history audit log (I11 precursor)', () => {
