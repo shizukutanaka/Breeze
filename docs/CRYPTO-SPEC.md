@@ -211,33 +211,42 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   `POW_EXPIRED`, preventing indefinite replay of a solved token.
 
 ## Test status
-11 suites, **296 tests** passing (`npm test`); `validate.sh` 32/35. All `src/crypto/`
+11 suites, **316 tests** passing (`npm test`); `validate.sh` 32/35. All `src/crypto/`
 modules have test suites: ratchet (21), group (19), atrest (10), franking (6),
-negotiate (12), ktlog (34), pow (19), x3dh (6), kat (6), push (15); worker (148).
+negotiate (12), ktlog (34), pow (19), x3dh (6), kat (6), push (15); worker (162).
 Worker coverage: routing, rate-limit, userId validation (length bounds + charset),
 prekey (0-OTP replenish hint + caps round-trip + caps sanitization + x3dh legacy
-field + N5 chain hash round-trip + tamper detection + upload/fetch malformed-id guard),
+field + N5 chain hash round-trip + tamper detection + upload/fetch malformed-id guard
++ field size caps: identityKey/edIdentityKey/signedPreKey/signedPreKeySig/OTP entries),
 group create/join/info/kick/epoch (self-kick guard + post-kick join epoch + malformed-id
-guards), account slots (malformed-id guard), franking relay, sealed sender (multi-sender
-+ missing-id + send validation + malformed-to guard), msg send/poll (payload-size limit
-+ lastTs cursor + MISSING_FIELDS + malformed-id guards), alias PoW, key-history log
-(N5 chain), dead drop, backup (malformed-id guard), signal relay (sanitizeString strip
-ctrl chars + data size cap), presence (heartbeat + malformed-id guards + batch filter),
-online count, OGP SSRF guard (11 blocked patterns + IPv4-mapped IPv6 bypass + malformed
-URL), push subscribe (SSRF + 5-device cap + malformed-id guard), push encryption
-(RFC 8291), TURN credentials (malformed-id guard), webhook, body size enforcement
-(Content-Length spoof).
+guards + token length cap), account slots (malformed-id guard), franking relay,
+sealed sender (multi-sender + missing-id + send validation + malformed-to guard),
+msg send/poll (payload-size limit + lastTs cursor + MISSING_FIELDS + malformed-id guards),
+alias PoW (PoW freshness check + pub size cap), key-history log (N5 chain), dead drop,
+backup (malformed-id guard), signal relay (sanitizeString strip ctrl chars + data size cap),
+presence (heartbeat + malformed-id guards + batch filter), online count, OGP SSRF guard
+(11 blocked patterns + IPv4-mapped IPv6 bypass + malformed URL), push subscribe
+(SSRF + 5-device cap + malformed-id guard), push encryption (RFC 8291), TURN credentials
+(malformed-id guard), webhook (signature verify + idempotency + userId KV injection guard),
+body size enforcement (Content-Length spoof), AI handler input validation (lang injection
+strip + empty lang reject + oversized summarize fields + unknown action), translate
+handler (missing-field + type guards).
 Security additions: ratchet MAX_SKIP storage-bound (forward secrecy), consumed-
 skipped-key replay guard (ratchet + group), group future-epoch rejection, N3 caps +
 x3dh legacy compat persistence in worker prekey bundle (v5 capability advertisement
 flow complete), PoW freshness check (maxAge), N5 hash-chained key-transparency log,
-validateUserId() on all KV-key-constructing handlers including presence heartbeat/check
-and account purchase (KV key injection prevention + Stripe metadata hygiene),
-Origin:null CORS bypass blocked (sandboxed iframe protection), actual body size
-enforcement (Content-Length spoof bypass fix), signal data size cap (64KB DoS guard),
-batch presence id filter via validateUserId (JS coercion + KV injection guard),
-public key field size caps (200 chars), AI handler lang prompt-injection prevention
-(BCP-47 charset sanitization), N2 two-layer group authentication (partial AFKS: epoch
-sig + per-message sig, both required; forging requires simultaneous compromise of both).
+validateUserId() on all KV-key-constructing handlers including presence heartbeat/check,
+account purchase, webhook (checkout/subscription.deleted/updated metadata) and OTP
+write path (KV key injection prevention + Stripe metadata hygiene), Origin:null CORS
+bypass blocked (sandboxed iframe protection), actual body size enforcement (Content-Length
+spoof bypass fix), signal data size cap (64KB DoS guard), batch presence id filter via
+validateUserId (JS coercion + KV injection guard), public key field size caps (identityKey/
+signedPreKey ≤5000 chars, edIdentityKey/signedPreKeySig ≤500 chars, alias pub ≤2000
+chars), OTP per-entry size cap (5000 chars), group token length cap (128 chars), AI
+handler lang prompt-injection prevention (BCP-47 charset sanitization), AI summarize
+per-field bounds (sender ≤100 chars, text ≤500 chars), translate `to` type guard, PoW
+freshness check in handleAliasSet (10 min maxAge, backward-compatible with old-format
+challenges), N2 two-layer group authentication (partial AFKS: epoch sig + per-message
+sig, both required; forging requires simultaneous compromise of both keys).
 Remaining: browser integration (§8) + N1 index.html Nr fix (module has regression
 test) + N4 sealed-sender franking (§9).
