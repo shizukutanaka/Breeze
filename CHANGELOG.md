@@ -1,5 +1,39 @@
 # Changelog
 
+## Security Sprint — continued (branch claude/nice-ride-T6yb0, 2026-06-08)
+
+### Crypto Modules (`src/crypto/`) — additions
+- **`ktlog.js`**: I11 key-transparency client module — `hashIK` (SHA-256 of IK JSON),
+  `parseLog` (filter/sort history), `checkRollover` (compare stored vs incoming IK,
+  returns 'ok'/'new'/'rolled'/'unknown' with `storedSeenInHistory` + `rolloverTs`),
+  `mergeLog` (dedup by hash, keep earliest ts, cap 20). 25 tests.
+
+### Worker (`_worker.js`) — additions
+- **C12 (RFC 8291 encrypted push)**: `encryptPushPayload` (P-256 ECDH + HKDF-SHA256 +
+  AES-128-GCM per RFC 8291/8188) + `buildVapidJwt` (ES256 VAPID JWT). `sendPushToUser`
+  now encrypts every push notification; push service sees only aes128gcm ciphertext.
+  Helpers: `b64urlToBytes`, `bytesToB64url`, `concatBytes`.
+- **Dead Drop, Backup, Signal**: exported for testing (`handleDropCreate`,
+  `handleDropRead`, `handleBackupUpload`, `handleBackupDownload`, `handleSignal`,
+  `handlePresence`, `handleOnlineCount`).
+
+### Test Suite (`tests/`) — additions
+- **10 suites, 172 tests** passing (`npm test`).
+- New: `ktlog.test.js` (25 tests: hashIK, parseLog, checkRollover, mergeLog);
+  `push.test.js` (15 tests: RFC 8291 round-trip decrypt, VAPID JWT signature verify,
+  format/header checks, b64url helpers).
+- Worker extended: Dead Drop (6 tests: create/collision/size-limits/TTL/one-time-read),
+  Backup (4 tests: store/overwrite/5MB-limit/404), Signal relay (5 tests: store/poll/
+  filter-own/empty-room/50-cap).
+
+### Documentation
+- `SECURITY.md` architecture table updated to reflect sprint implementations.
+- `docs/INTEGRATION.md` extended with §7 (N3 negotiate wiring), §8 (I11 ktlog wiring),
+  §9 (C12 push subscription client side).
+- `docs/ROADMAP.md` updated: C12 done, I11 module done, status notes updated.
+
+---
+
 ## Security Sprint (branch claude/nice-ride-T6yb0, 2026-06-08)
 
 ### Crypto Modules (`src/crypto/`)

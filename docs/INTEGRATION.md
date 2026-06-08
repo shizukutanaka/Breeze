@@ -121,12 +121,99 @@ wrong passphrase rejected; existing users (plaintext) migrate transparently on e
 **Test:** send A→B; B reports → relay returns `verified:true`; B editing the text
 before reporting → `FRANK_MISMATCH`.
 
+## 7. N3 — version negotiation (use negotiate.js before session init)
+
+`src/crypto/negotiate.js` provides `advertise()`, `parsePeerCaps()`, and
+`negotiate()`. Wire it so the initiator checks peer capabilities before choosing
+X3DH v4 vs v5 and group-v4 vs group-v5.
+
+```js
+import { advertise, parsePeerCaps, negotiate } from './src/crypto/negotiate.js';
+window.__breezeNegotiate = { advertise, parsePeerCaps, negotiate };
+```
+
+- **Advertise:** include `advertise()` in the presence heartbeat and prekey
+  bundle so peers know which versions are supported.
+- **Init:** when fetching a bundle, call `parsePeerCaps(bundle)` then
+  `negotiate(localCaps, peerCaps)` → use `result.useX3dhV5` to pick the code
+  path; use `result.useGroupV5` to pick group protocol.
+- **Rule:** feature enabled only when BOTH sides advertise it — the library
+  enforces this (AND rule). Never coerce the peer to a weaker path.
+
+Flag: integrated into `CONFIG.X3DH_V5_ENABLED` / `CONFIG.GROUP_RATCHET_V5`.
+**Test:** A (v5 capable) ↔ B (v4 only): A falls back to v4. A ↔ A: v5 used.
+
+## 8. I11 — key-transparency rollover detection (use ktlog.js at prekey fetch)
+
+`src/crypto/ktlog.js` exposes `hashIK`, `parseLog`, `checkRollover`, `mergeLog`.
+After fetching a peer's prekey bundle (which now includes `bundle.keyHistory`):
+
+```js
+import { checkRollover, mergeLog } from './src/crypto/ktlog.js';
+window.__breezeKtlog = { checkRollover, mergeLog };
+```
+
+In the `initSession` / `initSessionV5` path (after bundle fetch):
+
+```js
+const storedIK   = await dbGet('contacts', peerId + ':ik'); // null on first contact
+const rollover   = await checkRollover(crypto.subtle, storedIK, bundle.keyHistory);
+if (rollover.status === 'rolled') {
+  // Show key-change banner (reuse the existing MITM banner ~line 4745)
+  showKeyChangeBanner(peerId, rollover);
+  if (!rollover.storedSeenInHistory) return; // hard abort on unseen rollover
+}
+// On 'ok' or 'new': store/update the IK
+await dbPut('contacts', peerId + ':ik', bundle.identityKey);
+// Merge and persist the log
+const merged = mergeLog(existingLog, bundle.keyHistory);
+await dbPut('contacts', peerId + ':ktlog', merged);
+```
+
+**Test:** first contact — status 'new', IK stored; same peer, same IK — status 'ok';
+tamper the bundle to a different key — status 'rolled', banner shown, session aborted.
+
+## 9. C12 — push notification subscription setup (client side)
+
+The worker (`sendPushToUser`) now encrypts every notification via RFC 8291. The
+client side only needs to register the subscription and pass VAPID public key:
+
+```js
+// VAPID public key from worker env (returned in /api/health { vapidPublicKey })
+const reg  = await navigator.serviceWorker.ready;
+const sub  = await reg.pushManager.subscribe({
+  userVisibleOnly: true,
+  applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+});
+// POST subscription to worker
+await postAPIRaw('/api/push/subscribe', { userId: _myId, subscription: sub.toJSON() });
+```
+
+The SW needs a `push` event handler to show the notification:
+
+```js
+// In sw.js:
+self.addEventListener('push', e => {
+  const data = e.data?.json() ?? {};
+  e.waitUntil(self.registration.showNotification(data.title ?? 'Breeze', {
+    body: data.body ?? 'New message',
+    icon: '/icon-192.png',
+    tag: data.tag ?? 'breeze-msg',
+    renotify: true,
+  }));
+});
+```
+
+**Test:** subscribe from two devices; send a message from device B to device A
+while A is backgrounded → A's SW fires a push notification with no plaintext
+visible to FCM (verify via browser DevTools → Application → Push Messages).
+
 ## Rollout & rollback
 - Each feature behind a `CONFIG.*` flag; all read paths keep v3/v4 compatibility.
 - Disable a flag to stop emitting the new format while still reading it.
-- Worker changes (G2/G3/franking) are already live and backward-compatible.
+- Worker changes (G2/G3/franking/push-encrypt) are already live and backward-compatible.
 
 ## Cross-reference
 - What/why per item: `docs/IMPROVEMENTS.md` (I1–I20), `docs/ROADMAP.md` (priority).
 - Exact wire formats + status: `docs/CRYPTO-SPEC.md` (§2–§6a, gaps §8–§9).
-- Tested behavior to mirror: `src/crypto/*.js` + `tests/*` (78 tests).
+- Tested behavior to mirror: `src/crypto/*.js` + `tests/*` (172 tests, 10 suites).
