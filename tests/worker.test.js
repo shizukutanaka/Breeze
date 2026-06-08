@@ -36,6 +36,7 @@ import worker, {
   handlePresence,
   handleOnlineCount,
   handleOGP,
+  handleTurn,
   validateUserId,
 } from '../_worker.js';
 import { makeKV, makeEnv, apiRequest, stripeSigHeader } from './helpers/mockKV.js';
@@ -876,5 +877,64 @@ describe('OGP SSRF guard', () => {
     expect(res.status).toBe(200);
     const j   = await res.json();
     expect(j.title).toBe('Cached');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TURN credential provisioning
+// ─────────────────────────────────────────────────────────────────────────────
+describe('TURN credentials', () => {
+  const req = (body) => apiRequest('/api/turn', body);
+
+  it('rejects missing userId', async () => {
+    const e   = makeEnv();
+    const res = await handleTurn({}, e, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('MISSING_USER_ID');
+  });
+
+  it('falls back to free open-relay when no env vars are set', async () => {
+    const e   = makeEnv(); // no TURN_* vars
+    const res = await handleTurn({ userId: 'user00001' }, e, req({}));
+    expect(res.status).toBe(200);
+    const j   = await res.json();
+    expect(j.provider).toBe('openrelay');
+    expect(Array.isArray(j.iceServers)).toBe(true);
+    // Always includes STUN servers
+    expect(j.iceServers.some(s => s.urls.startsWith('stun:'))).toBe(true);
+    // Includes free relay TURN servers
+    expect(j.iceServers.some(s => s.urls.startsWith('turn:'))).toBe(true);
+  });
+
+  it('uses HMAC custom TURN when TURN_SECRET + TURN_URL are set', async () => {
+    const e = { ...makeEnv(), TURN_SECRET: 'supersecret', TURN_URL: 'turn:turn.example.com:3478' };
+    const res = await handleTurn({ userId: 'user00001' }, e, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.provider).toBe('custom');
+    const turnServer = j.iceServers.find(s => s.urls.startsWith('turn:'));
+    expect(turnServer).toBeDefined();
+    expect(turnServer.credential).toBeTruthy(); // HMAC-SHA1 credential
+    // Username should be "{expiry}:{userId}"
+    const [expiry, uid] = turnServer.username.split(':');
+    expect(uid).toBe('user00001');
+    expect(parseInt(expiry)).toBeGreaterThan(Math.floor(Date.now() / 1000));
+  });
+
+  it('uses static credentials when TURN_URL + TURN_USERNAME + TURN_CREDENTIAL are set', async () => {
+    const e = {
+      ...makeEnv(),
+      TURN_URL:        'turn:static.example.com:3478',
+      TURN_USERNAME:   'staticuser',
+      TURN_CREDENTIAL: 'staticpass',
+    };
+    const res = await handleTurn({ userId: 'user00001' }, e, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.provider).toBe('static');
+    const turnServer = j.iceServers.find(s => s.urls === 'turn:static.example.com:3478');
+    expect(turnServer).toBeDefined();
+    expect(turnServer.username).toBe('staticuser');
+    expect(turnServer.credential).toBe('staticpass');
   });
 });
