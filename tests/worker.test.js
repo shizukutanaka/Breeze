@@ -1,4 +1,15 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+// Solve a difficulty-N PoW puzzle for testing (brute-force, fast enough at N≤16).
+async function solvePoW(pub, difficulty = 16) {
+  const challenge = `${pub}:breeze-test`;
+  const target = (2 ** (32 - difficulty)) >>> 0;
+  for (let nonce = 0; nonce < 10_000_000; nonce++) {
+    const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${challenge}:${nonce}`));
+    if (new DataView(d).getUint32(0, false) < target) return { challenge, nonce, difficulty };
+  }
+  throw new Error('PoW unsolved');
+}
+
 import worker, {
   handleWebhook,
   handlePreKeyUpload,
@@ -15,6 +26,8 @@ import worker, {
   handleSealedAck,
   handleMsgSend,
   handleMsgPoll,
+  handleAliasSet,
+  handleAliasGet,
   validateUserId,
 } from '../_worker.js';
 import { makeKV, makeEnv, apiRequest, stripeSigHeader } from './helpers/mockKV.js';
@@ -437,6 +450,58 @@ describe('msg send / poll (1:1 relay path)', () => {
     expect((await r2.json()).dedup).toBe(true);
     const { messages } = await (await handleMsgPoll({ id: 'carol001', lastTs: 0 }, env, req({}))).json();
     expect(messages.length).toBe(1);
+  });
+});
+
+describe('alias set / get (PoW anti-spam)', () => {
+  const req = (b) => apiRequest('/api/alias/x', b);
+
+  it('rejects a request with no PoW token', async () => {
+    const res = await handleAliasSet({ alias: 'alice', pub: 'PUBKEY' }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('POW_REQUIRED');
+  });
+
+  it('rejects a PoW whose challenge does not include the pub key', async () => {
+    const res = await handleAliasSet(
+      { alias: 'alice', pub: 'PUBKEY', pow: { challenge: 'no-pub-here', nonce: 0, difficulty: 16 } },
+      makeEnv(), req({}),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('POW_INVALID');
+  });
+
+  it('accepts a validly solved PoW and registers the alias', async () => {
+    const pub = 'TESTPUB123';
+    const pow = await solvePoW(pub);
+    const res = await handleAliasSet({ alias: 'testuser', pub, pow }, makeEnv(), req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).alias).toBe('testuser');
+  });
+
+  it('rejects an alias collision from a different pub key', async () => {
+    const env = makeEnv();
+    const pub1 = 'PUB1'; const pow1 = await solvePoW(pub1);
+    await handleAliasSet({ alias: 'takenname', pub: pub1, pow: pow1 }, env, req({}));
+    const pub2 = 'PUB2'; const pow2 = await solvePoW(pub2);
+    const res = await handleAliasSet({ alias: 'takenname', pub: pub2, pow: pow2 }, env, req({}));
+    expect(res.status).toBe(409);
+    expect((await res.json()).code).toBe('ALIAS_TAKEN');
+  });
+
+  it('returns the stored pub and name on alias get', async () => {
+    const env = makeEnv();
+    const pub = 'PUBFORGET'; const pow = await solvePoW(pub);
+    await handleAliasSet({ alias: 'getme', pub, name: 'Alice', pow }, env, req({}));
+    const res = await handleAliasGet({ alias: 'getme' }, env, req({}));
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.pub).toBe(pub);
+  });
+
+  it('404s a get for a nonexistent alias', async () => {
+    const res = await handleAliasGet({ alias: 'nobody' }, makeEnv(), req({}));
+    expect(res.status).toBe(404);
   });
 });
 
