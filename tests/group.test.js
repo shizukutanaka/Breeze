@@ -76,6 +76,29 @@ describe('I3 — epoch rotation on member removal (post-compromise)', () => {
     const bob = G.receiverFrom(sk);
     expect(await G.decryptGroupMsg(bob, m0)).toBe(null);
   });
+
+  it('rejects a future-epoch message the receiver has no key for', async () => {
+    // A receiver holding epoch 0 cannot decrypt a message from epoch 1 even if
+    // the epoch field is not tampered — the epoch gate must reject both directions.
+    let sk0 = await G.newSenderKey(); // epoch 0
+    const bob = G.receiverFrom(sk0);  // bob holds epoch 0 receiver
+    const sk1 = await G.rotateEpoch(sk0); // epoch 1 (bob never received this key)
+    const future = await G.encryptGroupMsg(sk1, 'future msg');
+    expect(await G.decryptGroupMsg(bob, future)).toBe(null);
+  });
+
+  it('consumed skipped group key cannot be replayed after first use', async () => {
+    const sk = await G.newSenderKey();
+    const bob = G.receiverFrom(sk);
+    const c1 = await G.encryptGroupMsg(sk, 'one');
+    const c2 = await G.encryptGroupMsg(sk, 'two');
+    const c3 = await G.encryptGroupMsg(sk, 'three');
+    expect(await G.decryptGroupMsg(bob, c1)).toBe('one');
+    expect(await G.decryptGroupMsg(bob, c3)).toBe('three'); // stores skipped key for #2
+    expect(await G.decryptGroupMsg(bob, c2)).toBe('two');   // consumes skipped key
+    // Second delivery of #2: key deleted → null (no replay).
+    expect(await G.decryptGroupMsg(bob, c2)).toBe(null);
+  });
 });
 
 describe('I16 — key commitment on group messages', () => {

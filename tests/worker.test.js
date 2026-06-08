@@ -161,6 +161,20 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     const r1 = await handlePreKeyFetch({ userId: 'low00001' }, env, apiRequest('/api/prekey/fetch', {}));
     expect((await r1.json()).replenishOTP).toBe(true); // count was 6 → now 5
   });
+
+  it('sets replenishOTP when no one-time prekeys were ever uploaded (count = 0)', async () => {
+    // A bundle uploaded with no OTPs must still signal replenishment so the client
+    // knows to generate and upload one-time prekeys on its next connection.
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'noOTP001', identityKey: 'IK', signedPreKey: 'SPK' }, // no oneTimePreKeys
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    const res = await handlePreKeyFetch({ userId: 'noOTP001' }, env, apiRequest('/api/prekey/fetch', {}));
+    const b = await res.json();
+    expect(b.replenishOTP).toBe(true);
+    expect(b.oneTimePreKey).toBeUndefined(); // nothing to consume
+  });
 });
 
 describe('prekey key-history audit log (I11 precursor)', () => {
@@ -308,6 +322,17 @@ describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {
     const info = await (await handleGroupInfo({ token }, env, req({}))).json();
     expect(info.epoch).toBe(0); // no wasteful epoch churn
   });
+
+  it('creator cannot kick themselves (self-kick returns 400)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupKick({ token, kickId: 'creator1', adminId: 'creator1' }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('FORBIDDEN');
+    // Epoch must not change.
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.epoch).toBe(0);
+  });
 });
 
 describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => {
@@ -411,6 +436,22 @@ describe('sealed sender send / poll / ack', () => {
     await handleSealedSend({ to: 'dave0001', envelope: 'SAME_PAYLOAD_XYZ' }, env, req({}));
     const { messages } = await (await handleSealedPoll({ id: 'dave0001' }, env, req({}))).json();
     expect(messages.length).toBe(1);
+  });
+
+  it('poll returns 400 when id is missing', async () => {
+    const res = await handleSealedPoll({}, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('MISSING_ID');
+  });
+
+  it('multiple envelopes from different senders all appear on poll', async () => {
+    const env = makeEnv();
+    await handleSealedSend({ to: 'eve00001', envelope: 'from-alice' }, env, req({}));
+    await handleSealedSend({ to: 'eve00001', envelope: 'from-bob' }, env, req({}));
+    const { messages } = await (await handleSealedPoll({ id: 'eve00001' }, env, req({}))).json();
+    expect(messages.length).toBe(2);
+    const envelopes = messages.map(m => m.envelope).sort();
+    expect(envelopes).toEqual(['from-alice', 'from-bob']);
   });
 });
 
@@ -589,6 +630,20 @@ describe('push subscribe SSRF guard', () => {
     const res = await handlePushSubscribe(base('https://fcm.googleapis.com/fcm/send/abc'), makeEnv(), apiRequest('/api/push/subscribe', {}));
     expect(res.status).toBe(200);
     expect((await res.json()).ok).toBe(true);
+  });
+
+  it('caps at 5 subscriptions per user (evicts oldest when 6th device registers)', async () => {
+    const env = makeEnv();
+    const req = apiRequest('/api/push/subscribe', {});
+    for (let i = 1; i <= 6; i++) {
+      const sub = { endpoint: `https://fcm.googleapis.com/fcm/send/device${i}` };
+      await handlePushSubscribe({ userId: 'u0000001', subscription: sub }, env, req);
+    }
+    const stored = JSON.parse(await env.KV.get('push:u0000001'));
+    expect(stored.length).toBe(5);
+    // device1 (oldest) was evicted; device6 (newest) is present.
+    expect(stored.some(s => s.endpoint.includes('device1'))).toBe(false);
+    expect(stored.some(s => s.endpoint.includes('device6'))).toBe(true);
   });
 });
 

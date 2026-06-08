@@ -110,6 +110,37 @@ describe('out-of-order & skipped keys', () => {
     // align receiver expectation: counter 3 is a gap of 1 from recvCounter(1)
     expect(await Rsmall.ratchetDecrypt(receiver, c2)).toBe('two');
   });
+
+  it('MAX_SKIP storage bound: keys older than MAX_SKIP positions are dropped (forward secrecy)', async () => {
+    // With MAX_SKIP=5 and a gap of 10, only the last 5 skipped keys are retained.
+    // Keys for earlier positions are intentionally discarded for forward secrecy.
+    const Rs = createRatchet({ MAX_SKIP: 5, MAX_GAP: 200 });
+    const { sender, receiver } = Rs.pairFromSharedChain(randomChain());
+    const msgs = [];
+    for (let i = 0; i < 11; i++) msgs.push(await Rs.ratchetEncrypt(sender, `msg${i + 1}`));
+    // Deliver only message #11 (counter=11): gap of 10, stores keys for #6–#10 only.
+    expect(await Rs.ratchetDecrypt(receiver, msgs[10])).toBe('msg11');
+    // Messages #6–#10 are recoverable from skipped keys.
+    for (let i = 5; i < 10; i++) {
+      expect(await Rs.ratchetDecrypt(receiver, msgs[i])).toBe(`msg${i + 1}`);
+    }
+    // Messages #1–#5 are unrecoverable (forward-secrecy drop, never stored).
+    for (let i = 0; i < 5; i++) {
+      expect(await Rs.ratchetDecrypt(receiver, msgs[i])).toBe(null);
+    }
+  });
+
+  it('consumed skipped key cannot be replayed (key deleted after first use)', async () => {
+    const { sender, receiver } = R.pairFromSharedChain(randomChain());
+    const c1 = await R.ratchetEncrypt(sender, 'one');
+    const c2 = await R.ratchetEncrypt(sender, 'two');
+    const c3 = await R.ratchetEncrypt(sender, 'three');
+    expect(await R.ratchetDecrypt(receiver, c1)).toBe('one');
+    expect(await R.ratchetDecrypt(receiver, c3)).toBe('three'); // stores skipped key for #2
+    expect(await R.ratchetDecrypt(receiver, c2)).toBe('two');   // consumes skipped key #2
+    // Second delivery of #2: key is deleted → must not decrypt again.
+    expect(await R.ratchetDecrypt(receiver, c2)).toBe(null);
+  });
 });
 
 describe('AEAD auth failure does not desync chain (injected-message resistance)', () => {
