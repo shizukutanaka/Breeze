@@ -35,6 +35,7 @@ import worker, {
   handleSignal,
   handlePresence,
   handleOnlineCount,
+  handleOGP,
   validateUserId,
 } from '../_worker.js';
 import { makeKV, makeEnv, apiRequest, stripeSigHeader } from './helpers/mockKV.js';
@@ -826,5 +827,54 @@ describe('online count', () => {
     const j = await res.json();
     expect(j.online).toBe(0);
     expect(typeof j.ts).toBe('number');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OGP link-preview — SSRF guard (URL validation only; no outbound fetch in tests)
+// ─────────────────────────────────────────────────────────────────────────────
+describe('OGP SSRF guard', () => {
+  const req = (body) => apiRequest('/api/ogp', body);
+
+  // Private/internal http(s) URLs that must be silently rejected (return 200 with {})
+  const blocked = [
+    'http://localhost/secret',
+    'http://127.0.0.1/admin',
+    'http://10.0.0.1/data',
+    'http://192.168.1.1/router',
+    'http://172.16.0.1/internal',
+    'http://169.254.169.254/latest/meta-data',
+    'http://metadata.google.internal/computeMetadata/v1/',
+    'http://example.internal/api',
+    'http://host.local/page',
+    'http://external.com:8080/page',   // non-standard port
+    'http://0.0.0.0/root',
+  ];
+
+  it.each(blocked.map(u => [u]))('blocks SSRF target: %s', async (url) => {
+    const e   = makeEnv();
+    const res = await handleOGP({ url }, e, req({}));
+    // Should return 200 with empty body (silently blocked, not 4xx, to avoid oracle)
+    expect(res.status).toBe(200);
+    const j   = await res.json();
+    expect(Object.keys(j).length).toBe(0);
+  });
+
+  it('returns 400 when url is missing', async () => {
+    const e   = makeEnv();
+    const res = await handleOGP({}, e, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('MISSING_URL');
+  });
+
+  it('returns cached result without outbound fetch', async () => {
+    const e   = makeEnv();
+    const cached = { title: 'Cached', description: 'desc', image: '' };
+    const cacheKey = 'ogp:https://example.com/page';
+    await e.KV.put(cacheKey, JSON.stringify(cached));
+    const res = await handleOGP({ url: 'https://example.com/page' }, e, req({}));
+    expect(res.status).toBe(200);
+    const j   = await res.json();
+    expect(j.title).toBe('Cached');
   });
 });
