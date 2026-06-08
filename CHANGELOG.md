@@ -1,5 +1,38 @@
 # Changelog
 
+## Security Hardening Batch 3 (branch claude/nice-ride-T6yb0, 2026-06-08)
+
+### Worker (`_worker.js`) — security & robustness fixes
+- **OGP hash cache key**: Replaced `url.slice(0, 200)` KV key with
+  `sha256Short(url)` (reuses existing helper). Two URLs sharing a 200-char
+  prefix no longer collide on the same cache entry. Added 2048-char URL
+  length cap; inputs beyond this return 400 `URL_TOO_LONG`.
+- **Abuse report `opening` size guard**: `handleAbuseReport` now rejects
+  `opening` fields longer than 128 chars before crypto processing. An HMAC
+  key is 32 bytes (44 base64 chars); the 128-char cap prevents DoS via large
+  inputs to `hmacVerifyFrank`.
+- **Push subscription sanitization**: `handlePushSubscribe` previously stored
+  the full client-supplied subscription object. Now only `endpoint`, `keys`
+  (`p256dh` ≤100 chars, `auth` ≤50 chars), and `expirationTime` are stored;
+  extra top-level and nested fields are silently stripped.
+- **OTP count fix**: `handlePreKeyUpload` stored the raw `oneTimePreKeys.length`
+  as the count even though only `Math.min(length, 100)` entries are written.
+  If length > 100 the fetch loop started from an over-capped index, wasting up
+  to 100 KV reads. Now stores `Math.min(oneTimePreKeys.length, 100)`.
+- **Webhook robustness**: `handleWebhook` call site wrapped in try/catch (it
+  was the only API path outside the main try/catch at lines 230–270). Also
+  added a try/catch around `JSON.parse(body)` inside the handler; invalid JSON
+  now returns 400 instead of propagating as an uncaught exception.
+
+### Test Suite (`tests/`) — additions
+- **11 suites, 322 tests** passing (`npm test`); `validate.sh` 32/35 (PASSED).
+- Worker: OGP URL length cap + hash key test (2), abuse report oversized-opening
+  test (1), push subscription field-sanitization test (1); expired PoW test
+  timeout raised to 30s. Total: 168 worker tests.
+- `CRYPTO-SPEC.md`: test count updated (319 → 322), security additions updated.
+
+---
+
 ## Security Hardening Batch 2 (branch claude/nice-ride-T6yb0, 2026-06-08)
 
 ### Crypto Modules (`src/crypto/`)
