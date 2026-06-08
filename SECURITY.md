@@ -27,18 +27,22 @@ Breeze uses the following cryptographic primitives:
 
 | Layer | Algorithm | Purpose |
 |-------|-----------|---------|
-| Key Exchange | X25519 (preferred), P-256 (fallback) | Ephemeral key agreement |
-| Signing | Ed25519 (preferred), HMAC-SHA256 (fallback) | Message authentication |
+| Key Exchange (1:1) | X3DH v5: Ed25519-signed SPK, DH(IK,SPK)+DH(EK,IK)+DH(EK,SPK)+DH(EK,OPK) | Authenticated first-contact key agreement (I1) |
+| Key Exchange (DH) | X25519 (preferred), P-256 (fallback) | DH ratchet + X3DH DHs |
+| Signing | Ed25519 | SPK signing (X3DH auth), group per-message auth (N2) |
 | Encryption | AES-256-GCM | Message confidentiality |
-| Key Derivation | HKDF-SHA256 | Root/Chain key derivation |
-| Password | PBKDF2 (600,000 iterations) | Lock screen |
-| Protocol | Double Ratchet | Forward secrecy |
-| Group | Sender Key O(1) | Efficient group encryption |
-| Anti-Replay | LRU cache (2,000 entries) + IDB dedup | Message replay protection |
+| Key Derivation | HKDF-SHA256 | Root/chain/commitment/ratchet/X3DH KDF |
+| Key Commitment | HKDF(msgKey,'breeze-commit') + constant-time verify | Invisible-salamanders defense (I16) |
+| At-Rest | PBKDF2 ≥600k SHA-256 + AES-256-GCM | App-lock / identity key wrapping (I4) |
+| Protocol (1:1) | Signal Double Ratchet (v4/v5) | Per-message FS; Nr reset on DH step |
+| Protocol (group) | Sender Key chain-ratchet + epoch rotation | Group FS (I2) + PCS/kick (I3) |
+| Group Auth | Ed25519 per-message signature | Forgery resistance within group (N2) |
+| Franking | HMAC-SHA256 commitment/opening | Verifiable abuse reporting without escrow (I17) |
+| Anti-Replay | Counter + msgId dedup + TTL-expiring skipped-key cache | Replay + stale-key FS (I7) |
 | Trusted Types | breeze-sanitizer policy | DOM XSS prevention |
 | File Validation | Magic bytes (PE/ELF/Mach-O/shebang) | Executable upload blocking |
-| Timing | Double HMAC-SHA256 | Constant-time comparison |
-| Memory | zeroBuffer() | Key material erasure |
+| Timing | Constant-time ctEqual() | Commitment + MAC comparisons |
+| Memory | zeroBuffer() | Key material erasure after use |
 
 ## Security Headers
 
