@@ -1180,11 +1180,39 @@ describe('presence heartbeat and check', () => {
 
   it('increments online counter on each heartbeat', async () => {
     const e = makeEnv();
-    await handlePresence({ id: 'u1', pub: 'p1', name: 'A' }, e, req({}));
-    await handlePresence({ id: 'u2', pub: 'p2', name: 'B' }, e, req({}));
+    await handlePresence({ id: 'user00010', pub: 'p1', name: 'A' }, e, req({}));
+    await handlePresence({ id: 'user00011', pub: 'p2', name: 'B' }, e, req({}));
     const countRes = await handleOnlineCount({}, e, req({}));
     const j = await countRes.json();
     expect(j.online).toBe(2);
+  });
+
+  it('rejects malformed id on heartbeat (KV key injection guard)', async () => {
+    const e   = makeEnv();
+    const res = await handlePresence({ id: 'bad id!!' }, e, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_USER_ID');
+  });
+
+  it('rejects malformed id on single check (KV key injection guard)', async () => {
+    const e   = makeEnv();
+    const res = await handlePresence({ id: 'bad id!!', check: true }, e, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_USER_ID');
+  });
+
+  it('batch check silently skips malformed ids (KV key injection guard)', async () => {
+    const e = makeEnv();
+    await e.KV.put('presence:user00001', JSON.stringify({ at: Date.now(), name: 'Alice', pub: 'p' }));
+    const r = await handlePresence(
+      { ids: ['user00001', 'bad id!!', '../etc/passwd'], check: true }, e, req({})
+    );
+    expect(r.status).toBe(200);
+    const j = await r.json();
+    expect(j.online['user00001']).toBe(true);
+    // malformed IDs must not appear in results at all (no KV lookup attempted)
+    expect(j.online['bad id!!']).toBeUndefined();
+    expect(j.online['../etc/passwd']).toBeUndefined();
   });
 });
 

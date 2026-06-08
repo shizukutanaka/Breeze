@@ -150,60 +150,103 @@ describe('I7 (group) — skipped-key TTL: stale keys are expired', () => {
   });
 });
 
-describe('N2 — per-message sender authentication', () => {
-  it('attaches a signature and verifies it on decrypt', async () => {
+describe('N2 — two-layer sender authentication (partial AFKS)', () => {
+  it('attaches both epoch sig (es) and per-message sig (s), plus spk and nsk', async () => {
     const sk = await G.newSenderKey();
     const bob = G.receiverFrom(sk);
     const obj = JSON.parse(await G.encryptGroupMsg(sk, 'authentic'));
-    expect(obj.s).toBeDefined();
+    expect(obj.s).toBeDefined();    // per-message sig
+    expect(obj.es).toBeDefined();   // epoch sig
+    expect(obj.spk).toBeDefined();  // current per-message public key
+    expect(obj.nsk).toBeDefined();  // next per-message public key
     expect(bob.signPub).toBeDefined();
     expect(await G.decryptGroupMsg(bob, obj)).toBe('authentic');
   });
 
-  it('rejects a message forged by another member (different signing key)', async () => {
+  it('rejects a message forged by another member (different epoch key)', async () => {
     const alice = await G.newSenderKey();
-    const bob = G.receiverFrom(alice); // bob expects messages signed by Alice
-    // Mallory holds the same group CHAIN key (e.g. a member) but signs with her own
-    // key, trying to impersonate Alice. She crafts a valid ciphertext on the chain…
+    const bob = G.receiverFrom(alice); // bob expects messages signed by Alice's epoch key
+    // Mallory holds the same group CHAIN key but has a different epoch signing key.
     const mallory = await G.newSenderKey();
     mallory.chainKey = alice.chainKey.slice(); // same symmetric chain
     mallory.counter = alice.counter;
     const forged = JSON.parse(await G.encryptGroupMsg(mallory, 'i am alice'));
-    // …but signs with mallory.signPriv. Bob verifies with Alice's signPub → reject.
+    // Mallory's es is signed with her own epoch key; bob verifies with alice's → reject.
     expect(await G.decryptGroupMsg(bob, forged)).toBe(null);
   });
 
-  it('rejects a stripped or tampered signature', async () => {
+  it('rejects when epoch sig (es) is stripped — per-message sig alone is not enough', async () => {
+    // Security property: even with a valid per-message signature, a message without
+    // the epoch sig is rejected. Prevents forgery with only a per-message key.
     const sk = await G.newSenderKey();
     const bob = G.receiverFrom(sk);
     const obj = JSON.parse(await G.encryptGroupMsg(sk, 'x'));
-    const noSig = { ...obj }; delete noSig.s;
-    expect(await G.decryptGroupMsg(bob, noSig)).toBe(null);
-    const badSig = { ...obj, s: obj.s.slice() }; badSig.s[0] ^= 0xff;
-    expect(await G.decryptGroupMsg(bob, badSig)).toBe(null);
+    const noEpochSig = { ...obj }; delete noEpochSig.es;
+    // Falls back to legacy path (no es field) → requires s to verify against epoch pub.
+    // Since spk != epoch pub, verification fails.
+    expect(await G.decryptGroupMsg(bob, noEpochSig)).toBe(null);
   });
 
-  it('rejects ciphertext tampering (signature covers ct)', async () => {
+  it('rejects when per-message sig (s) is stripped — epoch sig alone is not enough', async () => {
+    const sk = await G.newSenderKey();
+    const bob = G.receiverFrom(sk);
+    const obj = JSON.parse(await G.encryptGroupMsg(sk, 'x'));
+    const noMsgSig = { ...obj }; delete noMsgSig.s;
+    expect(await G.decryptGroupMsg(bob, noMsgSig)).toBe(null);
+  });
+
+  it('rejects tampered epoch sig (es)', async () => {
+    const sk = await G.newSenderKey();
+    const bob = G.receiverFrom(sk);
+    const obj = JSON.parse(await G.encryptGroupMsg(sk, 'x'));
+    const badEs = { ...obj, es: obj.es.slice() }; badEs.es[0] ^= 0xff;
+    expect(await G.decryptGroupMsg(bob, badEs)).toBe(null);
+  });
+
+  it('rejects tampered per-message sig (s)', async () => {
+    const sk = await G.newSenderKey();
+    const bob = G.receiverFrom(sk);
+    const obj = JSON.parse(await G.encryptGroupMsg(sk, 'x'));
+    const badS = { ...obj, s: obj.s.slice() }; badS.s[0] ^= 0xff;
+    expect(await G.decryptGroupMsg(bob, badS)).toBe(null);
+  });
+
+  it('rejects ciphertext tampering (both sigs cover ct)', async () => {
     const sk = await G.newSenderKey();
     const bob = G.receiverFrom(sk);
     const obj = JSON.parse(await G.encryptGroupMsg(sk, 'integrity'));
-    obj.d[0] ^= 0xff; // flip a ciphertext byte
+    obj.d[0] ^= 0xff; // flip a ciphertext byte — invalidates both es and s
     expect(await G.decryptGroupMsg(bob, obj)).toBe(null);
+  });
+
+  it('epoch sig authenticates spk so out-of-order messages verify correctly', async () => {
+    // All three messages use fresh per-message signing keys. Bob can verify each
+    // because the epoch sig (with the static epoch pub) binds the per-message key.
+    const sk = await G.newSenderKey();
+    const bob = G.receiverFrom(sk);
+    const c1 = await G.encryptGroupMsg(sk, 'first');
+    const c2 = await G.encryptGroupMsg(sk, 'second');
+    const c3 = await G.encryptGroupMsg(sk, 'third');
+    // Deliver out-of-order: 1, 3, 2
+    expect(await G.decryptGroupMsg(bob, c1)).toBe('first');
+    expect(await G.decryptGroupMsg(bob, c3)).toBe('third');
+    expect(await G.decryptGroupMsg(bob, c2)).toBe('second');
   });
 });
 
 describe('AEAD auth failure does not desync group sender-key state', () => {
   it('returns null and preserves chain state when ciphertext auth fails', async () => {
-    // Use a sender key without a signing key so the tampering reaches the AEAD check.
     const G2 = createGroup({ ratchet: (await import('../src/crypto/ratchet.js')).createRatchet() });
     const sk = await G2.newSenderKey();
     const bob = G2.receiverFrom(sk);
     const legitMsg = await G2.encryptGroupMsg(sk, 'real group message');
-    // Craft an injected message: same counter, but corrupted ciphertext + no cm.
+    // Craft an injected message: tamper ciphertext + remove cm and per-message sig.
+    // The epoch sig (es) covers ct, so it also fails — message is rejected before
+    // any chain state is modified, preserving chain alignment for the legit message.
     const crafted = JSON.parse(legitMsg);
     crafted.d[0] ^= 0xff;
     delete crafted.cm;
-    delete crafted.s; // strip signature so it doesn't short-circuit
+    delete crafted.s;
     expect(await G2.decryptGroupMsg(bob, crafted)).toBe(null);
     // Legitimate message must still decrypt (state not desynced by the injection).
     expect(await G2.decryptGroupMsg(bob, legitMsg)).toBe('real group message');

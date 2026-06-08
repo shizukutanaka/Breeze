@@ -14,6 +14,18 @@
 // Also carries the I16 key-commitment tag. O(1) per message (two HKDFs);
 // redistribution is O(members) only on membership change.
 //
+// N2 two-layer authentication (partial AFKS):
+//   Each message carries TWO Ed25519 signatures:
+//     es — epoch signature: long-lived per-epoch key signs (content + spk + nsk).
+//          Lets the receiver authenticate the per-message key without needing to
+//          track a signing-key-ratchet chain, so out-of-order delivery works.
+//     s  — per-message signature: a fresh keypair used once then discarded.
+//          Forging requires *both* keys: an attacker who leaks only the per-message
+//          key cannot fabricate es; an attacker who leaks only the epoch key cannot
+//          fabricate s without the ephemeral private key (already deleted).
+//   The epoch signing key (signPriv / signPub) plays the same role as before;
+//   spk and nsk carry the per-message public keys and are included in signed bytes.
+//
 // This is the tested reference; index.html's inline group functions
 // (getGroupSenderKey/encryptGroupMsg/decryptGroupMsg/distributeSenderKey) should
 // be migrated onto it in a browser-validated pass.
@@ -37,48 +49,84 @@ export function createGroup(opts = {}) {
   const now = opts.now || (() => Date.now());
   const zeros = new Uint8Array(32);
 
-  // --- N2: per-message sender authentication ---
-  // Each sender holds an Ed25519 signing key; every group message is signed so a
-  // recipient can verify it came from the legitimate sender. Without this, anyone
-  // holding the (symmetric) group chain key — e.g. another member — could forge
-  // messages attributed to a different member. The signing PUBLIC key travels with
-  // the sender key over the authenticated 1:1 channel; the private key never does.
+  // --- N2: two-layer sender authentication ---
+  // - Epoch key (signPriv / signPub): stable within an epoch, distributed over the
+  //   1:1 channel. Used to sign `es`, which covers the per-message public key so
+  //   the receiver can authenticate it without in-order state.
+  // - Per-message key (msgSignKey / nextMsgSignKey): fresh for every message; the
+  //   private half is discarded after signing. Used to sign `s` (content auth).
+  //   Both `es` and `s` must verify for a message to be accepted, so an attacker
+  //   needs both keys simultaneously to forge — limiting the damage of either leak.
   async function genSign() {
     const kp = await subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
     return { signPriv: kp.privateKey, signPub: arr(new Uint8Array(await subtle.exportKey('raw', kp.publicKey))) };
   }
-  // Canonical bytes covered by the signature: iv ‖ ct ‖ cm ‖ epoch(u32) ‖ counter(u32).
+  async function genMsgSignKey() {
+    const kp = await subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    return {
+      priv: kp.privateKey,
+      pub: arr(new Uint8Array(await subtle.exportKey('raw', kp.publicKey))),
+    };
+  }
+
+  // Canonical signed bytes — covers all mutable fields plus the per-message public
+  // keys so neither content nor key substitution can go undetected.
+  // Format: iv ‖ ct ‖ cm ‖ epoch(u32be) ‖ counter(u32be) ‖ spk ‖ nsk
   function signedBytes(p) {
     const meta = new Uint8Array(8);
     const dv = new DataView(meta.buffer);
     dv.setUint32(0, p.ep >>> 0); dv.setUint32(4, p.c >>> 0);
-    return concatBytes([u8(p.i), u8(p.d), u8(p.cm || []), meta]);
+    const spkB = p.spk ? u8(p.spk) : new Uint8Array(0);
+    const nskB = p.nsk ? u8(p.nsk) : new Uint8Array(0);
+    return concatBytes([u8(p.i), u8(p.d), u8(p.cm || []), meta, spkB, nskB]);
   }
-  async function verifyMsg(signPubRaw, p) {
+
+  // Verify the epoch signature es (covers content + spk + nsk).
+  async function verifyEpochSig(epochPubRaw, p) {
     try {
-      if (!p.s) return false;
-      const pub = await subtle.importKey('raw', u8(signPubRaw), { name: 'Ed25519' }, false, ['verify']);
+      if (!p.es) return false;
+      const pub = await subtle.importKey('raw', u8(epochPubRaw), { name: 'Ed25519' }, false, ['verify']);
+      return await subtle.verify({ name: 'Ed25519' }, pub, u8(p.es), signedBytes(p));
+    } catch { return false; }
+  }
+  // Verify the per-message signature s with the included spk.
+  async function verifyMsgSig(p) {
+    try {
+      if (!p.s || !p.spk) return false;
+      const pub = await subtle.importKey('raw', u8(p.spk), { name: 'Ed25519' }, false, ['verify']);
       return await subtle.verify({ name: 'Ed25519' }, pub, u8(p.s), signedBytes(p));
     } catch { return false; }
   }
 
-  // A sender key: a chain key + message counter + signing key, scoped to an epoch.
+  // A sender key: a chain key + message counter + two-layer signing state, epoch-scoped.
   async function newSenderKey(epoch = 0) {
-    const s = await genSign();
-    return { chainKey: arr(getRandomValues(new Uint8Array(32))), counter: 0, epoch, ...s };
+    const epochKey  = await genSign();
+    const msgKey0   = await genMsgSignKey();
+    const msgKey1   = await genMsgSignKey();
+    return {
+      chainKey: arr(getRandomValues(new Uint8Array(32))), counter: 0, epoch,
+      signPriv: epochKey.signPriv, signPub: epochKey.signPub,
+      msgSignKey: msgKey0, nextMsgSignKey: msgKey1,
+    };
   }
 
-  // Bump epoch with a fresh chain key (and fresh signing key) — call on member
-  // removal, then distribute to the REMAINING members only (the kicked member
-  // never receives it).
+  // Bump epoch with fresh chain key and fresh signing keys — call on member removal,
+  // then distribute to the REMAINING members only (kicked member never receives it).
   async function rotateEpoch(senderKey) {
-    const s = await genSign();
-    return { chainKey: arr(getRandomValues(new Uint8Array(32))), counter: 0, epoch: (senderKey?.epoch ?? 0) + 1, ...s };
+    const epochKey = await genSign();
+    const msgKey0  = await genMsgSignKey();
+    const msgKey1  = await genMsgSignKey();
+    return {
+      chainKey: arr(getRandomValues(new Uint8Array(32))), counter: 0,
+      epoch: (senderKey?.epoch ?? 0) + 1,
+      signPriv: epochKey.signPriv, signPub: epochKey.signPub,
+      msgSignKey: msgKey0, nextMsgSignKey: msgKey1,
+    };
   }
 
-  // A receiver copy of someone's sender key (as distributed over the 1:1 channel).
+  // Receiver copy of the sender's key (distributed over the authenticated 1:1 channel).
   // Carries the sender's CURRENT counter (mid-stream joiners can't reach earlier
-  // counters — forward secrecy) and the sender's signing PUBLIC key only.
+  // counters — forward secrecy) and the epoch signing PUBLIC key only.
   function receiverFrom(senderKey) {
     return {
       chainKey: senderKey.chainKey.slice(), counter: senderKey.counter, epoch: senderKey.epoch,
@@ -105,11 +153,27 @@ export function createGroup(opts = {}) {
     senderKey.counter++;
     const { iv, ct } = await R.frameEncrypt(msgKey, text);
     const cm = await R.keyCommitment(msgKey);
-    const env = { v: 5, g: true, ep: senderKey.epoch, c: senderKey.counter, i: arr(iv), d: arr(ct), cm: arr(cm) };
-    // N2: sign the message so recipients can verify the sender.
-    if (senderKey.signPriv) {
-      const sig = new Uint8Array(await subtle.sign({ name: 'Ed25519' }, senderKey.signPriv, signedBytes(env)));
-      env.s = arr(sig);
+    const env = {
+      v: 5, g: true, ep: senderKey.epoch, c: senderKey.counter,
+      i: arr(iv), d: arr(ct), cm: arr(cm),
+    };
+
+    // N2: two-layer signing.
+    if (senderKey.msgSignKey && senderKey.signPriv) {
+      const spk = senderKey.msgSignKey.pub;
+      const nsk = senderKey.nextMsgSignKey.pub;
+      env.spk = spk;
+      env.nsk = nsk;
+      const sb  = signedBytes(env); // covers iv, ct, cm, ep, c, spk, nsk
+      env.s  = arr(new Uint8Array(await subtle.sign({ name: 'Ed25519' }, senderKey.msgSignKey.priv, sb)));
+      env.es = arr(new Uint8Array(await subtle.sign({ name: 'Ed25519' }, senderKey.signPriv, sb)));
+      // Advance per-message signing key: discard current, promote next, pre-generate new next.
+      senderKey.msgSignKey     = senderKey.nextMsgSignKey;
+      senderKey.nextMsgSignKey = await genMsgSignKey();
+    } else if (senderKey.signPriv) {
+      // Fallback: epoch-only signature (no per-message key available — shouldn't happen
+      // for new sender keys, but kept for safety during transition).
+      env.s = arr(new Uint8Array(await subtle.sign({ name: 'Ed25519' }, senderKey.signPriv, signedBytes(env))));
     }
     return JSON.stringify(env);
   }
@@ -132,10 +196,22 @@ export function createGroup(opts = {}) {
       }
     }
 
-    // N2: verify the sender's signature before doing any key-ratchet work (also a
-    // DoS guard — a forged message can't force chain derivation). Covers iv/ct/cm/
-    // ep/counter, so tampering or reordering is rejected too.
-    if (peerKey.signPub && !(await verifyMsg(peerKey.signPub, p))) return null;
+    // N2: verify signatures before any key-ratchet work (DoS guard + auth check).
+    // Two-layer path: verify epoch sig (es) then per-message sig (s with spk).
+    // Epoch sig authenticates spk so out-of-order delivery works without state.
+    // Legacy path (no es/spk): fall back to single-sig with epoch key (s only).
+    if (peerKey.signPub) {
+      if (p.es !== undefined) {
+        // Two-layer mode: both must pass.
+        if (!(await verifyEpochSig(peerKey.signPub, p))) return null;
+        if (!(await verifyMsgSig(p))) return null;
+      } else {
+        // Legacy single-sig mode (old messages without per-message keys).
+        if (!p.s) return null;
+        const pub = await subtle.importKey('raw', u8(peerKey.signPub), { name: 'Ed25519' }, false, ['verify']);
+        if (!(await subtle.verify({ name: 'Ed25519' }, pub, u8(p.s), signedBytes(p)))) return null;
+      }
+    }
 
     // Replay / out-of-order recovery via stored skipped keys.
     if (p.c <= peerKey.counter) {

@@ -408,7 +408,7 @@ async function handlePresence(body, env, request) {
   // Batch check: { ids: ['abc','def'], check: true }
   if (isCheck && ids && Array.isArray(ids)) {
     const online = {};
-    for (const cid of ids.slice(0, 50).filter(x => typeof x === 'string' && x.length <= 512)) {
+    for (const cid of ids.slice(0, 50).filter(x => typeof x === 'string' && validateUserId(x))) {
       const data = await kvGet(env, `presence:${cid}`);
       if (data) {
         const p = JSON.parse(data);
@@ -421,6 +421,7 @@ async function handlePresence(body, env, request) {
   }
 
   if (!id) return json({ error: 'id required', code: 'MISSING_ID' }, 400, request);
+  if (!validateUserId(id)) return json({ error: 'invalid id', code: 'INVALID_USER_ID' }, 400, request);
 
   if (isCheck) {
     // v3.6: Check in-memory cache first (same isolate = instant, no KV read)
@@ -1059,6 +1060,7 @@ async function handleAccountPurchase(body, env, request) {
   if (!env.STRIPE_SECRET_KEY) return json({ error: 'Billing not configured', code: 'NOT_CONFIGURED' }, 503, request);
   const { userId, plan } = body;
   if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
+  if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
 
   const priceMap = {
     lite: env.STRIPE_PRICE_LITE,
@@ -1620,11 +1622,16 @@ async function handleAI(body, env, request) {
       userContent = context.slice(-1000);
       break;
 
-    case 'translate_context':
+    case 'translate_context': {
       if (!text || !lang) return json({ error: 'text and lang required' }, 400, request);
-      systemPrompt = `Translate the following message to ${lang}. Preserve tone, formality level, and emoji. Return ONLY the translation.`;
+      // Sanitize lang to a valid BCP-47 tag (e.g. 'en', 'ja', 'zh-CN') to prevent
+      // prompt injection via a crafted language string in the system prompt.
+      const safeLang = String(lang).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 20);
+      if (!safeLang) return json({ error: 'invalid lang code' }, 400, request);
+      systemPrompt = `Translate the following message to ${safeLang}. Preserve tone, formality level, and emoji. Return ONLY the translation.`;
       userContent = text.slice(0, 2000);
       break;
+    }
 
     default:
       return json({ error: 'Unknown action: ' + action }, 400, request);

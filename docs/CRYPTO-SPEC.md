@@ -68,24 +68,32 @@ the `Nr` reset** — see §9.
 ## 5. Group sender keys
 
 ```
-{ v:5, g:true, ep:epoch, c:counter, i:[iv], d:[ct‖tag], cm:[keyCommitment], s:[ed25519Sig] }
+{ v:5, g:true, ep:epoch, c:counter, i:[iv], d:[ct‖tag], cm:[keyCommitment],
+  s:[perMsgSig], es:[epochSig], spk:[perMsgPub], nsk:[nextPerMsgPub] }
 ```
 - FS (I2): chain hash-ratchets per message; consumed chain dropped.
 - PCS (I3): kick → `rotateEpoch` (fresh chain key, `epoch+1`) distributed to remaining
   members only; decrypt gates on `ep` (old/future epoch ⇒ reject).
-- Auth (N2): each message is **Ed25519-signed** by the sender; `s` covers
-  `iv‖ct‖cm‖ep‖counter`. The signing public key travels with the sender key; the
-  private key never does. Verified before any ratchet work (also a DoS guard), so a
-  member holding only the symmetric chain key cannot forge another member's messages.
+- Auth (N2): **two-layer Ed25519 signatures** (partial AFKS):
+  - `es` — epoch signature: long-lived per-epoch key signs `iv‖ct‖cm‖ep‖c‖spk‖nsk`.
+    Lets the receiver authenticate the per-message key without tracking a ratchet
+    chain, so out-of-order delivery works.
+  - `s`  — per-message signature: fresh keypair used once then discarded, signs the
+    same bytes. Forging requires both keys simultaneously — leaking either alone is
+    insufficient. Both must verify before any key derivation (DoS guard).
+  - `spk` / `nsk` — current and next per-message signing public keys, covered by both
+    signatures to prevent key substitution.
 - Carries `cm` (I16); bounded out-of-order recovery + replay reject.
 
 Impl: `src/crypto/group.js`. Tests: `tests/group.test.js` (FS, epoch rotation,
-kicked-member-blocked, replay, commitment, **forgery/tamper/stripped-sig reject**,
-AEAD-auth-failure-does-not-desync).
+kicked-member-blocked, replay, commitment, **forgery/tamper/stripped-es/stripped-s
+reject**, out-of-order with two-layer sigs, AEAD-auth-failure-does-not-desync).
 **Implemented (module).** Security fix: chain advance deferred until after AEAD
-auth succeeds (same injected-message desync fix as §4). Refinement: signing-key
-*ratchet* (authentication forward secrecy, Balbás et al.) — see §9 N2.
-Gap: index.html/worker port (§8).
+auth succeeds (same injected-message desync fix as §4).
+Gap: index.html/worker port (§8). Remaining N2 refinement: full per-message signing-
+key ratchet (pure AFKS, Balbás et al.) requires either in-order delivery guarantee or
+WebCrypto hierarchical key derivation — neither available; two-layer scheme is the
+practical maximum with WebCrypto + arbitrary message ordering.
 
 ## 6. At-rest key protection (I4)
 
@@ -168,10 +176,13 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   the receive counter, so the first message of a new receiving chain can be
   misclassified as a replay. The module is fixed (§4); `index.html` is not — fix
   when porting (G4). **Real correctness bug.**
-- N2. **Group per-message authentication** — ✅ implemented (Ed25519 signature per
-  message, §5). Remaining refinement: ratchet the *signing* key per message
-  (authentication forward secrecy; Balbás et al.) so a leaked signing key can't
-  forge past/future. Not yet done.
+- N2. **Group per-message authentication** — ✅ implemented as two-layer Ed25519
+  (epoch sig `es` + per-message sig `s`, §5). Partial AFKS: forging requires
+  compromising both keys simultaneously; a leaked per-message key cannot forge other
+  messages (epoch sig would fail) and vice versa. Pure per-message signing-key ratchet
+  (full Balbás et al. AFKS) is not achievable with WebCrypto + arbitrary message
+  ordering: out-of-order delivery requires the epoch sig to authenticate the per-message
+  key, which necessitates a stable long-lived epoch key — i.e. the two-layer design.
 - N3. **Protocol-version negotiation** v4↔v5 — ✅ implemented in
   `src/crypto/negotiate.js` (`advertise`/`parsePeerCaps`/`negotiate`, 12 tests).
   ✅ **Worker side done**: `handlePreKeyUpload` now persists `caps` from the bundle
@@ -200,9 +211,9 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   `POW_EXPIRED`, preventing indefinite replay of a solved token.
 
 ## Test status
-11 suites, **288 tests** passing (`npm test`); `validate.sh` 32/35. All `src/crypto/`
-modules have test suites: ratchet (21), group (15), atrest (10), franking (6),
-negotiate (12), ktlog (34), pow (19), x3dh (6), kat (6), push (15); worker (141).
+11 suites, **296 tests** passing (`npm test`); `validate.sh` 32/35. All `src/crypto/`
+modules have test suites: ratchet (21), group (19), atrest (10), franking (6),
+negotiate (12), ktlog (34), pow (19), x3dh (6), kat (6), push (15); worker (148).
 Worker coverage: routing, rate-limit, userId validation (length bounds + charset),
 prekey (0-OTP replenish hint + caps round-trip + caps sanitization + x3dh legacy
 field + N5 chain hash round-trip + tamper detection + upload/fetch malformed-id guard),
@@ -211,17 +222,22 @@ guards), account slots (malformed-id guard), franking relay, sealed sender (mult
 + missing-id + send validation + malformed-to guard), msg send/poll (payload-size limit
 + lastTs cursor + MISSING_FIELDS + malformed-id guards), alias PoW, key-history log
 (N5 chain), dead drop, backup (malformed-id guard), signal relay (sanitizeString strip
-ctrl chars + data size cap), presence, online count, OGP SSRF guard (11 blocked patterns
-+ IPv4-mapped IPv6 bypass + malformed URL), push subscribe (SSRF + 5-device cap +
-malformed-id guard), push encryption (RFC 8291), TURN credentials (malformed-id guard),
-webhook, body size enforcement (Content-Length spoof).
+ctrl chars + data size cap), presence (heartbeat + malformed-id guards + batch filter),
+online count, OGP SSRF guard (11 blocked patterns + IPv4-mapped IPv6 bypass + malformed
+URL), push subscribe (SSRF + 5-device cap + malformed-id guard), push encryption
+(RFC 8291), TURN credentials (malformed-id guard), webhook, body size enforcement
+(Content-Length spoof).
 Security additions: ratchet MAX_SKIP storage-bound (forward secrecy), consumed-
 skipped-key replay guard (ratchet + group), group future-epoch rejection, N3 caps +
 x3dh legacy compat persistence in worker prekey bundle (v5 capability advertisement
 flow complete), PoW freshness check (maxAge), N5 hash-chained key-transparency log,
-validateUserId() on all KV-key-constructing handlers (KV key injection prevention),
+validateUserId() on all KV-key-constructing handlers including presence heartbeat/check
+and account purchase (KV key injection prevention + Stripe metadata hygiene),
 Origin:null CORS bypass blocked (sandboxed iframe protection), actual body size
 enforcement (Content-Length spoof bypass fix), signal data size cap (64KB DoS guard),
-batch presence type filter (JS coercion guard), public key field size caps (200 chars).
+batch presence id filter via validateUserId (JS coercion + KV injection guard),
+public key field size caps (200 chars), AI handler lang prompt-injection prevention
+(BCP-47 charset sanitization), N2 two-layer group authentication (partial AFKS: epoch
+sig + per-message sig, both required; forging requires simultaneous compromise of both).
 Remaining: browser integration (§8) + N1 index.html Nr fix (module has regression
-test) + N2 signing-key ratchet + N4 sealed-sender franking (§9).
+test) + N4 sealed-sender franking (§9).
