@@ -1121,6 +1121,7 @@ async function verifyEd25519(edPubB64, msgB64, sigB64) {
 async function handlePreKeyUpload(body, env, request) {
   const { userId, identityKey, edIdentityKey, signedPreKey, signedPreKeySig, oneTimePreKeys, caps, x3dh } = body;
   if (!userId || !identityKey || !signedPreKey) return json({ error: 'userId, identityKey, signedPreKey required' }, 400, request);
+  if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   // I1/G2: authenticated X3DH. If a signature + Ed25519 identity key are supplied,
   // verify the signature over the signed pre-key and REJECT if invalid. Unsigned
   // bundles are still accepted during the v4->v5 transition, but an invalid
@@ -1188,6 +1189,7 @@ async function handlePreKeyUpload(body, env, request) {
 async function handlePreKeyFetch(body, env, request) {
   const { userId } = body;
   if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
+  if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   const data = await kvGet(env, `prekey:${userId}`);
   if (!data) return json({ error: 'No prekeys found', code: 'NOT_FOUND' }, 404, request);
   const bundle = JSON.parse(data);

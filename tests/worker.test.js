@@ -186,6 +186,21 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     expect(b.replenishOTP).toBe(true);
     expect(b.oneTimePreKey).toBeUndefined(); // nothing to consume
   });
+
+  it('upload rejects malformed userId (KV key injection guard)', async () => {
+    const res = await handlePreKeyUpload(
+      { userId: 'bad id!', identityKey: 'IK', signedPreKey: 'SPK' },
+      makeEnv(), apiRequest('/api/prekey/upload', {})
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_USER_ID');
+  });
+
+  it('fetch rejects malformed userId (KV key injection guard)', async () => {
+    const res = await handlePreKeyFetch({ userId: 'bad id!' }, makeEnv(), apiRequest('/api/prekey/fetch', {}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_USER_ID');
+  });
 });
 
 describe('prekey key-history audit log (I11 precursor)', () => {
