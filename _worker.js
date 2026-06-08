@@ -601,6 +601,7 @@ async function handlePortal(body, env, request) {
 
   const { userId } = body;
   if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
+  if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
 
   // Get customerId from slots data or reverse lookup
   const data = await kvGet(env, `slots:${userId}`);
