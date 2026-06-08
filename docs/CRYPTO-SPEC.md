@@ -200,22 +200,28 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   `POW_EXPIRED`, preventing indefinite replay of a solved token.
 
 ## Test status
-11 suites, **267 tests** passing (`npm test`); `validate.sh` 32/35. All `src/crypto/`
+11 suites, **288 tests** passing (`npm test`); `validate.sh` 32/35. All `src/crypto/`
 modules have test suites: ratchet (21), group (15), atrest (10), franking (6),
-negotiate (12), ktlog (34), pow (19), x3dh (6), kat (6), push (15); worker (123).
+negotiate (12), ktlog (34), pow (19), x3dh (6), kat (6), push (15); worker (141).
 Worker coverage: routing, rate-limit, userId validation (length bounds + charset),
 prekey (0-OTP replenish hint + caps round-trip + caps sanitization + x3dh legacy
-field + N5 chain hash round-trip + tamper detection), group create/join/info/kick/
-epoch (self-kick guard + post-kick join epoch), account slots, franking relay,
-sealed sender (multi-sender + missing-id + send validation), msg send/poll
-(payload-size limit + lastTs cursor + MISSING_FIELDS), alias PoW, key-history log
-(N5 chain), dead drop, backup, signal relay (sanitizeString strip ctrl chars),
-presence, online count, OGP SSRF guard (11 blocked patterns + malformed URL),
-push subscribe (SSRF + 5-device cap), push encryption (RFC 8291), TURN credentials,
-webhook.
+field + N5 chain hash round-trip + tamper detection + upload/fetch malformed-id guard),
+group create/join/info/kick/epoch (self-kick guard + post-kick join epoch + malformed-id
+guards), account slots (malformed-id guard), franking relay, sealed sender (multi-sender
++ missing-id + send validation + malformed-to guard), msg send/poll (payload-size limit
++ lastTs cursor + MISSING_FIELDS + malformed-id guards), alias PoW, key-history log
+(N5 chain), dead drop, backup (malformed-id guard), signal relay (sanitizeString strip
+ctrl chars + data size cap), presence, online count, OGP SSRF guard (11 blocked patterns
++ IPv4-mapped IPv6 bypass + malformed URL), push subscribe (SSRF + 5-device cap +
+malformed-id guard), push encryption (RFC 8291), TURN credentials (malformed-id guard),
+webhook, body size enforcement (Content-Length spoof).
 Security additions: ratchet MAX_SKIP storage-bound (forward secrecy), consumed-
 skipped-key replay guard (ratchet + group), group future-epoch rejection, N3 caps +
 x3dh legacy compat persistence in worker prekey bundle (v5 capability advertisement
-flow complete), PoW freshness check (maxAge), N5 hash-chained key-transparency log.
+flow complete), PoW freshness check (maxAge), N5 hash-chained key-transparency log,
+validateUserId() on all KV-key-constructing handlers (KV key injection prevention),
+Origin:null CORS bypass blocked (sandboxed iframe protection), actual body size
+enforcement (Content-Length spoof bypass fix), signal data size cap (64KB DoS guard),
+batch presence type filter (JS coercion guard), public key field size caps (200 chars).
 Remaining: browser integration (§8) + N1 index.html Nr fix (module has regression
 test) + N2 signing-key ratchet + N4 sealed-sender franking (§9).
