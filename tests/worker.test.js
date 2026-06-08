@@ -43,9 +43,14 @@ import { createFranking } from '../src/crypto/franking.js';
 // base64 helper for building signed prekey bundles in tests.
 const toB64 = (bytes) => Buffer.from(bytes).toString('base64');
 
-// The worker's in-memory rate limiter lives on globalThis; reset between tests
-// so per-test request counts start clean.
-beforeEach(() => { globalThis._rateLimitMap = new Map(); });
+// The worker uses several in-memory globals; reset all between tests so they
+// don't bleed across test cases.
+beforeEach(() => {
+  globalThis._rateLimitMap  = new Map();
+  globalThis._presenceCache = new Map();
+  globalThis._onlineCounter = null;
+  globalThis._msgDedup      = new Map();
+});
 
 describe('routing & request validation (export default fetch)', () => {
   it('serves /api/health ok when KV is bound', async () => {
@@ -735,5 +740,91 @@ describe('signal relay', () => {
     const r = await handleSignal({ room: 'big', sender: 'observer', type: 'poll' }, '1.2.3.5', e, req({}));
     const msgs = (await r.json()).messages;
     expect(msgs.length).toBeLessThanOrEqual(50);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Presence heartbeat + check
+// ─────────────────────────────────────────────────────────────────────────────
+describe('presence heartbeat and check', () => {
+  const req = (body) => apiRequest('/api/presence', body);
+
+  it('stores a heartbeat and returns ok', async () => {
+    const e   = makeEnv();
+    const res = await handlePresence(
+      { id: 'user00001', pub: 'mypub', name: 'Alice' }, e, req({})
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()).ok).toBe(true);
+  });
+
+  it('check returns online=true immediately after heartbeat (in-memory cache)', async () => {
+    const e = makeEnv();
+    await handlePresence({ id: 'user00002', pub: 'p', name: 'Bob' }, e, req({}));
+    const r = await handlePresence({ id: 'user00002', check: true }, e, req({}));
+    expect(r.status).toBe(200);
+    const j = await r.json();
+    expect(j.online).toBe(true);
+    expect(j.name).toBe('Bob');
+  });
+
+  it('check returns online=false for unknown user', async () => {
+    const e   = makeEnv();
+    const res = await handlePresence({ id: 'nobody001', check: true }, e, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).online).toBe(false);
+  });
+
+  it('batch check: returns map of ids → online status', async () => {
+    const e = makeEnv();
+    // Pre-populate KV for one user (simulates a previous heartbeat written to KV)
+    await e.KV.put('presence:user00001', JSON.stringify({ at: Date.now(), name: 'Alice', pub: 'p1' }));
+    const r = await handlePresence(
+      { ids: ['user00001', 'user99999'], check: true }, e, req({})
+    );
+    expect(r.status).toBe(200);
+    const j = await r.json();
+    expect(j.online['user00001']).toBe(true);
+    expect(j.online['user99999']).toBe(false);
+  });
+
+  it('batch check caps at 50 ids', async () => {
+    const e    = makeEnv();
+    const many = Array.from({ length: 60 }, (_, i) => `user${String(i).padStart(5, '0')}`);
+    const r    = await handlePresence({ ids: many, check: true }, e, req({}));
+    const j    = await r.json();
+    expect(Object.keys(j.online).length).toBeLessThanOrEqual(50);
+  });
+
+  it('requires id for single check', async () => {
+    const e   = makeEnv();
+    const res = await handlePresence({ check: true }, e, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('MISSING_ID');
+  });
+
+  it('increments online counter on each heartbeat', async () => {
+    const e = makeEnv();
+    await handlePresence({ id: 'u1', pub: 'p1', name: 'A' }, e, req({}));
+    await handlePresence({ id: 'u2', pub: 'p2', name: 'B' }, e, req({}));
+    const countRes = await handleOnlineCount({}, e, req({}));
+    const j = await countRes.json();
+    expect(j.online).toBe(2);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Online count
+// ─────────────────────────────────────────────────────────────────────────────
+describe('online count', () => {
+  const req = () => apiRequest('/api/online', {});
+
+  it('returns zero when no heartbeats recorded', async () => {
+    const e   = makeEnv();
+    const res = await handleOnlineCount({}, e, req());
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.online).toBe(0);
+    expect(typeof j.ts).toBe('number');
   });
 });
