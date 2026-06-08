@@ -1,0 +1,132 @@
+# Breeze — Integration Runbook (wiring the tested crypto into the live app)
+
+> The tested reference modules in `src/crypto/` (+ the worker changes already
+> shipped) implement the security backlog. This runbook is the **turnkey guide**
+> to wire them into the live `index.html` / `_worker.js` runtime. Every step here
+> changes browser-executed code, so each needs a **manual two-device test**
+> (checklists below) — that's why these were not auto-applied.
+>
+> Principle: **the `src/crypto/` modules are the source of truth.** index.html
+> should consume them, not keep a divergent inline copy. Roll out behind `CONFIG`
+> flags with a v4 read path so deployed clients keep working.
+> Line numbers are approximate (one ~13k-line file).
+
+## 0. Make index.html consume the ESM modules
+
+Two options (pick one):
+
+- **(A) Runtime import (no build).** Add near the top of the app bootstrap:
+  ```html
+  <script type="module">
+    import { createRatchet } from './src/crypto/ratchet.js';
+    import { createGroup }   from './src/crypto/group.js';
+    import { createAtRest }  from './src/crypto/atrest.js';
+    import { createFranking } from './src/crypto/franking.js';
+    window.__breezeCrypto = { createRatchet, createGroup, createAtRest, createFranking };
+  </script>
+  ```
+  The classic inline `<script>` (line 1213) then reads `window.__breezeCrypto`.
+  Caveat: ESM is deferred, so guard first use (the app already `await`s identity
+  setup). Ship the `src/crypto/` files as static assets (they already are — Pages
+  serves the repo root) and add them to `build.sh`'s `WEB_FILES`/zip + SW precache.
+- **(B) Build-time inline.** A small `scripts/inline-crypto.mjs` strips the
+  `export`/`import` lines and injects the module bodies into index.html between
+  marker comments. Keeps the single-file deploy; adds a build step (tension with
+  "no build"). Prefer (A) unless single-file is a hard requirement.
+
+Update `validate.sh`/CI extractor if a second `<script>` tag is added (it greps the
+first literal `<script>` — keep app logic there; see `.github/workflows/ci.yml`).
+
+## 1. N1 — fix the DH-ratchet `Nr` bug (do first; tiny, high-value)
+
+`index.html` `dhRatchetStep` (~line 4547-4565) sets `sess.sendCounter = 0` but
+**not** `sess.recvCounter`. A DH step starts a new receiving chain, so the first
+inbound message (counter 1) is misread as a replay. Add:
+```js
+sess.sendCounter = 0;
+sess.recvCounter = 0;   // ← add: new receiving chain resets Nr (see CRYPTO-SPEC §9 N1)
+```
+Module proof: `tests/x3dh.test.js` "full session establishment" fails without it.
+**Test:** two devices, A↔B several back-and-forth messages crossing ≥2 ratchet
+turns; all decrypt. (Today the 3rd direction-flip can silently drop.)
+
+## 2. G4 — port `encryptFor`/`decryptFrom` onto the module + drop compression (I15)
+
+- Replace the inline ratchet body (`encryptFor` ~4594, `decryptFrom` ~4646) with
+  calls into a `createRatchet({...})` instance (DI: pass `subtle`, the session
+  store via `getSession`/`saveSession`, `_hasX25519`, `CONFIG`). Keep the v3/v4
+  read path in `decryptFrom`.
+- **Drop compression (I15):** delete the `CompressionStream('deflate-raw')` block
+  (~4606-4618) so bodies aren't compressed before AES-GCM (CRIME/BREACH class);
+  keep `_unpadAndDecompress` for reading legacy compressed messages. The module's
+  `frameEncrypt` defaults `compressMin: Infinity` (off) — match that.
+- Adopt the module's **key commitment** (`cm`) and **skipped-key TTL** automatically
+  by using `ratchetEncrypt`/`ratchetDecrypt`.
+- Flag: `CONFIG.RATCHET_MODULE = true`.
+**Test:** A↔B text/emoji/empty/long messages; out-of-order delivery; a legacy
+peer (old build) still interoperates; verify no `compressed` flag is set on new
+messages.
+
+## 3. G1 + G2(client) — authenticated X3DH
+
+- **Upload (client, ~line 4451-4465):** generate SPK; **sign `spkPub`** with the
+  Ed25519 `_signingKey` (~3833-3853) → `signedPreKeySig`; **persist SPK and OPK
+  private keys** in IDB (today discarded); send
+  `{ userId, identityKey, edIdentityKey: <Ed25519 pub>, signedPreKey, signedPreKeySig, oneTimePreKeys }`.
+  Worker already verifies (shipped G2) and returns these on fetch.
+- **Init (client, replace `initSession` ~4569):** fetch peer bundle via
+  `/api/prekey/fetch`; **verify `signedPreKeySig`** against the peer's
+  `edIdentityKey` (`R.verifySPK`) — on failure, abort + show the existing
+  key-change/MITM banner (~4745); else `R.x3dhInitiator(...)` →
+  `R.initiatorSession(SK, spkPub)`. Responder side uses `R.x3dhResponder` +
+  `R.responderSession`. First message carries EK + consumed-OPK index.
+- **Negotiation (N3):** advertise `x3dh:'v5'` in presence + bundle; initiator uses
+  v5 only when the peer advertises it and the signature verifies, else falls back
+  to the current path. Flag: `CONFIG.X3DH_V5_ENABLED`.
+**Test:** new contact first-message works; **tamper test** — a MITM/modified
+bundle must trigger the banner and NOT establish a session; a v4-only peer still
+connects via fallback.
+
+## 4. G3(client) — group epoch rotation
+
+- Poll `/api/group/info` `epoch` (shipped). On a kick the admin client calls
+  `/api/group/kick` (returns new epoch); **all remaining members**, on seeing a
+  higher epoch, run `G.rotateEpoch(senderKey)` and **redistribute** the fresh
+  sender key to remaining members via the 1:1 channel (`distributeSenderKey`,
+  ~5032). Port the group functions (~4980-5041) onto `src/crypto/group.js`
+  (`encryptGroupMsg`/`decryptGroupMsg`/`receiverFrom`), which also adds per-message
+  **signatures** (N2) and **commitment**.
+- Flag: `CONFIG.GROUP_RATCHET_V5`. Keep the `v:3` group read path.
+**Test:** 3 members; kick one; the kicked device can no longer read new messages
+while the other two can; pre-kick history still readable by those who had it.
+
+## 5. G5 — at-rest key wrapping (opt-in app-lock)
+
+- In `loadIdentity` (~4404) and key storage (~4444 identity, ~3852 signing):
+  branch on a `kdf` marker. If app-lock enabled, wrap private JWKs with
+  `createAtRest().wrapJWK(jwk, passphrase)`; on load prompt for the passphrase and
+  `unwrapJWK`. On enable, `migrate` the existing plaintext records and `zeroBuffer`
+  the plaintext. Default no-passphrase path unchanged.
+- Optional: derive the passphrase via **WebAuthn/passkey PRF** for a device unlock.
+**Test:** enable app-lock → reload requires passphrase, keys load, messaging works;
+wrong passphrase rejected; existing users (plaintext) migrate transparently on enable.
+
+## 6. I17(client) — franking send + report UI
+
+- **Send:** compute `F.commit(plaintext)` → `{commitment, opening}`; POST
+  `/api/abuse/record { frankId, commitment }` (frankId = the message id) — shipped;
+  include `opening` **inside** the E2E ciphertext so only the recipient gets it.
+- **Report:** a "Report message" action POSTs `/api/abuse/report { frankId, message, opening }`
+  (shipped); show the relay's `verified` result.
+**Test:** send A→B; B reports → relay returns `verified:true`; B editing the text
+before reporting → `FRANK_MISMATCH`.
+
+## Rollout & rollback
+- Each feature behind a `CONFIG.*` flag; all read paths keep v3/v4 compatibility.
+- Disable a flag to stop emitting the new format while still reading it.
+- Worker changes (G2/G3/franking) are already live and backward-compatible.
+
+## Cross-reference
+- What/why per item: `docs/IMPROVEMENTS.md` (I1–I20), `docs/ROADMAP.md` (priority).
+- Exact wire formats + status: `docs/CRYPTO-SPEC.md` (§2–§6a, gaps §8–§9).
+- Tested behavior to mirror: `src/crypto/*.js` + `tests/*` (78 tests).
