@@ -120,6 +120,17 @@ describe('userId validation helper', () => {
     expect(validateUserId('has space')).toBeFalsy();
     expect(validateUserId('bad!')).toBeFalsy();
   });
+
+  it('enforces length bounds (>= 8, <= 512)', () => {
+    expect(validateUserId('a'.repeat(7))).toBeFalsy();   // too short
+    expect(validateUserId('a'.repeat(8))).toBeTruthy();  // exactly 8
+    expect(validateUserId('a'.repeat(512))).toBeTruthy(); // exactly 512
+    expect(validateUserId('a'.repeat(513))).toBeFalsy(); // too long
+  });
+
+  it('accepts the base64url alphabet (+, /, =, _, -) in addition to alphanumeric', () => {
+    expect(validateUserId('aA0+/=_-xx')).toBeTruthy(); // all allowed special chars
+  });
 });
 
 describe('prekey upload + fetch (OTP consumption)', () => {
@@ -274,6 +285,33 @@ describe('prekey signed-prekey signature verification (I1/G2)', () => {
       env, apiRequest('/api/prekey/upload', {}),
     );
     expect(up.status).toBe(200);
+  });
+
+  it('stores and returns caps array so the initiator can call parsePeerCaps (N3)', async () => {
+    // A v5 client includes caps in its prekey upload so peers discover its capabilities
+    // when they fetch the bundle and call parsePeerCaps(bundle) → negotiate().
+    const env = makeEnv();
+    const caps = ['x3dh-v5', 'group-v5', 'franking'];
+    await handlePreKeyUpload(
+      { userId: 'v5user01', identityKey: 'IK', signedPreKey: 'SPK', caps },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    const res = await handlePreKeyFetch({ userId: 'v5user01' }, env, apiRequest('/api/prekey/fetch', {}));
+    const bundle = await res.json();
+    expect(bundle.caps).toEqual(caps);
+  });
+
+  it('caps array is sanitized on upload (oversized strings and entries are bounded)', async () => {
+    const env = makeEnv();
+    const longCap = 'x'.repeat(100); // exceeds 32-char cap
+    const manyCaps = Array.from({ length: 25 }, (_, i) => `cap-${i}`); // exceeds 20-entry cap
+    await handlePreKeyUpload(
+      { userId: 'v5user02', identityKey: 'IK', signedPreKey: 'SPK', caps: [longCap, ...manyCaps] },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    const bundle = await (await handlePreKeyFetch({ userId: 'v5user02' }, env, apiRequest('/api/prekey/fetch', {}))).json();
+    expect(bundle.caps.length).toBeLessThanOrEqual(20);
+    expect(bundle.caps[0].length).toBe(32); // truncated to 32 chars
   });
 });
 
@@ -879,6 +917,18 @@ describe('signal relay', () => {
     const r = await handleSignal({ room: 'big', sender: 'observer', type: 'poll' }, '1.2.3.5', e, req({}));
     const msgs = (await r.json()).messages;
     expect(msgs.length).toBeLessThanOrEqual(50);
+  });
+
+  it('sanitizeString strips control characters — room with null byte resolves to clean name', async () => {
+    // sanitizeString strips 0x00-0x08, 0x0b, 0x0c, 0x0e-0x1f.
+    // "room\x00safe" becomes "roomsafe" — sender who stores under the tainted name
+    // and a poller using the clean name both land on the same KV key.
+    const e = makeEnv();
+    await handleSignal({ room: 'room\x00safe', sender: 'alice', type: 'offer', data: 'sdp' }, '1.2.3.4', e, req({}));
+    const r = await handleSignal({ room: 'roomsafe', sender: 'bob', type: 'poll' }, '1.2.3.5', e, req({}));
+    const msgs = (await r.json()).messages;
+    expect(msgs.length).toBe(1);
+    expect(msgs[0].sender).toBe('alice');
   });
 });
 

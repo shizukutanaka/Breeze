@@ -174,8 +174,11 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   forge past/future. Not yet done.
 - N3. **Protocol-version negotiation** v4↔v5 — ✅ implemented in
   `src/crypto/negotiate.js` (`advertise`/`parsePeerCaps`/`negotiate`, 12 tests).
-  Pending: wire the `advertise()` output into presence/bundle in `index.html`
-  and call `negotiate()` before session init to select v4 vs v5 path.
+  ✅ **Worker side done**: `handlePreKeyUpload` now persists `caps` from the bundle
+  (sanitized: each string capped at 32 chars, array capped at 20 entries); `caps` is
+  returned on fetch so the initiator can call `parsePeerCaps(bundle)` and `negotiate()`
+  to select v4 vs v5 path. Pending: wire `advertise()` into presence/bundle in
+  `index.html` and call `negotiate()` before session init.
 - N4. **Franking core** (I17) — ✅ implemented (§6a); remaining: sealed-sender
   sender-binding (asymmetric franking / Hecate) + relay record/report endpoints (§8).
   **PQXDH / PQ ratchet** (I8/I9) — backlog; pending vetted WASM ML-KEM.
@@ -193,17 +196,20 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   (`makeChallengeString`/`solve`/`verify`, 15 tests).
 
 ## Test status
-11 suites, **244 tests** passing (`npm test`); `validate.sh` 32/35. All `src/crypto/`
+11 suites, **249 tests** passing (`npm test`); `validate.sh` 32/35. All `src/crypto/`
 modules have test suites: ratchet (21), group (15), atrest (10), franking (6),
-negotiate (12), ktlog (25), pow (15), x3dh (6), kat (6), push (15); worker (113).
-Worker coverage: routing, rate-limit, prekey (including 0-OTP replenish hint),
-group create/join/info/kick/epoch (self-kick guard + post-kick join epoch),
-account slots, franking relay, sealed sender (multi-sender + missing-id + send
-validation), msg send/poll (payload-size limit + lastTs cursor + MISSING_FIELDS),
-alias PoW, key-history log, dead drop, backup, signal relay, presence, online count,
-OGP SSRF guard (11 blocked patterns + malformed URL), push subscribe (SSRF + 5-device
-cap), push encryption (RFC 8291), TURN credentials, webhook.
+negotiate (12), ktlog (25), pow (15), x3dh (6), kat (6), push (15); worker (117).
+Worker coverage: routing, rate-limit, userId validation (length bounds + charset),
+prekey (0-OTP replenish hint + caps round-trip + caps sanitization), group
+create/join/info/kick/epoch (self-kick guard + post-kick join epoch), account slots,
+franking relay, sealed sender (multi-sender + missing-id + send validation),
+msg send/poll (payload-size limit + lastTs cursor + MISSING_FIELDS), alias PoW,
+key-history log, dead drop, backup, signal relay (sanitizeString strip ctrl chars),
+presence, online count, OGP SSRF guard (11 blocked patterns + malformed URL),
+push subscribe (SSRF + 5-device cap), push encryption (RFC 8291), TURN credentials,
+webhook.
 Security additions: ratchet MAX_SKIP storage-bound (forward secrecy), consumed-
-skipped-key replay guard (ratchet + group), group future-epoch rejection.
+skipped-key replay guard (ratchet + group), group future-epoch rejection, N3 caps
+persistence in worker prekey bundle (v5 capability advertisement flow complete).
 Remaining: browser integration (§8) + N1 index.html Nr fix (module has regression
 test) + N2 signing-key ratchet + N4 sealed-sender franking (§9).

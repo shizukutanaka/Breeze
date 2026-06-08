@@ -33,7 +33,7 @@
   pattern for both the main path and the skipped-key path. Fixed identically.
 
 ### Test Suite (`tests/`) — additions
-- **11 suites, 244 tests** passing (`npm test`).
+- **11 suites, 249 tests** passing (`npm test`).
 - New: `ktlog.test.js` (25 tests: hashIK, parseLog, checkRollover, mergeLog);
   `push.test.js` (15 tests: RFC 8291 round-trip decrypt, VAPID JWT signature verify,
   format/header checks, b64url helpers); `pow.test.js` (15 tests: challenge format,
@@ -43,12 +43,14 @@
   consumed-skipped-key replay guard (key deleted on first use).
 - Group extended: AEAD-auth-failure-does-not-desync, future-epoch rejection
   (epoch gate forward direction), consumed-skipped-key replay guard.
-- Worker extended: Dead Drop (6), Backup (4), Signal relay (5), Presence (7),
-  OGP SSRF guard (13 + malformed URL), TURN credentials (4), account slots (3),
-  group create/join/info/kick validation (7 + creator self-kick guard + post-kick
-  join epoch), msg payload-size limit (1), msg poll lastTs cursor (1), msg
-  MISSING_FIELDS (1), prekey 0-OTP replenish hint (1), push subscribe 5-device cap
-  (1), sealed sender missing-id (1) + multi-sender (1) + send validation (1).
+- Worker extended: Dead Drop (6), Backup (4), Signal relay (5 + sanitizeString ctrl
+  chars), Presence (7), OGP SSRF guard (13 + malformed URL), TURN credentials (4),
+  account slots (3), userId validation (length bounds + charset), group
+  create/join/info/kick validation (7 + creator self-kick guard + post-kick join
+  epoch), msg payload-size limit (1), msg poll lastTs cursor (1), msg MISSING_FIELDS
+  (1), prekey 0-OTP replenish hint (1) + caps round-trip (1) + caps sanitization (1),
+  push subscribe 5-device cap (1), sealed sender missing-id (1) + multi-sender (1) +
+  send validation (1).
 
 ### Documentation
 - `SECURITY.md` architecture table updated to reflect sprint implementations.
