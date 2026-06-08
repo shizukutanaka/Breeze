@@ -396,7 +396,7 @@ async function handlePresence(body, env, request) {
   // Batch check: { ids: ['abc','def'], check: true }
   if (isCheck && ids && Array.isArray(ids)) {
     const online = {};
-    for (const cid of ids.slice(0, 50)) {
+    for (const cid of ids.slice(0, 50).filter(x => typeof x === 'string' && x.length <= 512)) {
       const data = await kvGet(env, `presence:${cid}`);
       if (data) {
         const p = JSON.parse(data);
