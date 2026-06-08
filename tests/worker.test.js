@@ -466,6 +466,32 @@ describe('msg send / poll (1:1 relay path)', () => {
     const { messages } = await (await handleMsgPoll({ id: 'carol001', lastTs: 0 }, env, req({}))).json();
     expect(messages.length).toBe(1);
   });
+
+  it('rejects a payload larger than 256 KB (DoS guard)', async () => {
+    const env = makeEnv();
+    const res = await handleMsgSend(
+      { to: 'bob00001', from: 'alice001', payload: 'x'.repeat(256 * 1024 + 1), ts: Date.now() },
+      ip, env, req({}),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('PAYLOAD_TOO_LARGE');
+  });
+
+  it('poll lastTs cursor returns only messages newer than the cursor', async () => {
+    const env = makeEnv();
+    const now = Date.now();
+    // Send two messages with distinct timestamps.
+    await handleMsgSend(
+      { to: 'bob00001', from: 'alice001', payload: 'OLD', ts: now - 5000 }, ip, env, req({}));
+    globalThis._msgDedup = new Map(); // reset dedup so the second send isn't collapsed
+    await handleMsgSend(
+      { to: 'bob00001', from: 'alice001', payload: 'NEW', ts: now }, ip, env, req({}));
+    // Cursor set to after the first message: should return only the second.
+    const poll = await handleMsgPoll({ id: 'bob00001', lastTs: now - 2000 }, env, req({}));
+    const { messages } = await poll.json();
+    expect(messages.length).toBe(1);
+    expect(messages[0].payload).toBe('NEW');
+  });
 });
 
 describe('alias set / get (PoW anti-spam)', () => {
