@@ -111,8 +111,25 @@ asymmetric franking / Hecate (§9 N4); client send/report UI wiring (browser).
 
 ## 7. Worker endpoints (security-relevant)
 
-Covered by `tests/worker.test.js`: routing/validation, rate-limit 429, prekey OTP
-consume-and-decrement, push SSRF guard, Stripe webhook signature + idempotency.
+Covered by `tests/worker.test.js` (84 tests):
+- Routing & validation, rate-limit 429, userId format check.
+- Prekey: OTP consume-and-decrement, replenish hint (≤5 remaining), Ed25519
+  SPK signature verify (PREKEY_SIG_INVALID on tamper), key-history audit log
+  (I11 precursor: SHA-256 IK log, rollover detection on duplicate/change).
+- Group: create/join/info, kick with epoch bump, NOT_MEMBER guard, I3 epoch gate.
+- Franking: record (no-overwrite), report (HMAC verify, FRANK_MISMATCH),
+  frankId/message size limits.
+- Sealed sender: queue+poll round-trip, ack deletion, dedup.
+- Msg: store+poll, INVALID_TIMESTAMP, SELF_SEND, content-keyed dedup.
+- Alias: PoW challenge-pub binding, difficulty-16 min, ALIAS_TAKEN, get.
+- Dead Drop: one-time read-then-delete, collision, TTL clamping, size limits.
+- Backup: upload/download round-trip, 5MB limit, 404 on missing.
+- Signal relay: store/poll, filters own-signals, 50-msg cap.
+- Presence: heartbeat + single/batch check, online counter.
+- OGP SSRF guard: 11 private/internal URL patterns blocked (return 200+{}).
+- Push subscribe: trusted endpoint allow/deny.
+- Push encryption (C12): RFC 8291 round-trip decrypt, VAPID JWT ES256 verify.
+- Webhook: Stripe signature verify + idempotency.
 **Implemented.** Gaps: §8.
 
 ## 8. Gaps — integration (needs browser / two-device validation)
@@ -152,12 +169,26 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   and call `negotiate()` before session init to select v4 vs v5 path.
 - N4. **Franking core** (I17) — ✅ implemented (§6a); remaining: sealed-sender
   sender-binding (asymmetric franking / Hecate) + relay record/report endpoints (§8).
-  **PQXDH / PQ ratchet** (I8/I9), **key transparency** (I11) — backlog, not started.
+  **PQXDH / PQ ratchet** (I8/I9) — backlog; pending vetted WASM ML-KEM.
+
+- N5. **Key transparency** (I11) — ✅ worker precursor done (`ktlog:` SHA-256 IK
+  log, returned in prekey bundles); `src/crypto/ktlog.js` module done
+  (`hashIK`/`parseLog`/`checkRollover`/`mergeLog`, 25 tests). Pending: full
+  hash-chained log + `index.html` rollover-detection wiring (§8 I11 runbook).
+
+- N6. **RFC 8291 push encryption** (C12) — ✅ `encryptPushPayload` + `buildVapidJwt`
+  implemented in `_worker.js`; `sendPushToUser` now fully encrypts. 15 tests
+  including round-trip decrypt + ES256 signature verify (`tests/push.test.js`).
+
+- N7. **PoW challenge/solve/verify** — ✅ `src/crypto/pow.js`
+  (`makeChallengeString`/`solve`/`verify`, 15 tests).
 
 ## Test status
-8 suites, 95 tests passing (`npm test`); `validate.sh` 32/35. The crypto **cores**
-of X3DH, Double Ratchet (with I7 TTL + I16 commitment), group FS/PCS (with N2 auth
-+ I7 TTL), at-rest wrapping, franking, and KATs are implemented and tested; worker
-endpoints for G2/G3/franking are integrated with tests; N3 negotiation module done.
-Remaining work is browser integration (§8) + N1 index.html Nr fix + N2 signing-key
-ratchet + N4 sealed-sender binding (§9).
+11 suites, **208 tests** passing (`npm test`); `validate.sh` 32/35. All `src/crypto/`
+modules have test suites: ratchet (17), group (12), atrest (10), franking (6),
+negotiate (12), ktlog (25), pow (15), x3dh (6), kat (6), push (15); worker (84).
+Worker coverage: routing, rate-limit, prekey, group kick/join/info/epoch, franking
+relay, sealed sender, msg send/poll, alias PoW, key-history log, dead drop, backup,
+signal relay, presence, online count, OGP SSRF guard, push subscribe, webhook.
+Remaining: browser integration (§8) + N1 index.html Nr fix + N2 signing-key
+ratchet + N4 sealed-sender franking (§9).
