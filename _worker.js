@@ -1748,5 +1748,6 @@ export {
   handleOnlineCount,
   handleOGP,
   handleTurn,
+  handleAccountSlots,
 };
 

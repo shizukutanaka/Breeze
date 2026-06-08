@@ -7,30 +7,38 @@
   `parseLog` (filter/sort history), `checkRollover` (compare stored vs incoming IK,
   returns 'ok'/'new'/'rolled'/'unknown' with `storedSeenInHistory` + `rolloverTs`),
   `mergeLog` (dedup by hash, keep earliest ts, cap 20). 25 tests.
+- **`pow.js`**: N7 PoW challenge/solve/verify — SHA-256 brute-force, difficulty-16
+  minimum, `makeChallengeString` (pub-bound, timestamp-embedded), `solve` (clamps
+  16–32), `verify` (POW_REQUIRED / POW_TOO_EASY / POW_CHALLENGE_TOO_LONG /
+  POW_PUB_MISMATCH / POW_INVALID). Pure, dependency-injected. 15 tests.
 
 ### Worker (`_worker.js`) — additions
 - **C12 (RFC 8291 encrypted push)**: `encryptPushPayload` (P-256 ECDH + HKDF-SHA256 +
   AES-128-GCM per RFC 8291/8188) + `buildVapidJwt` (ES256 VAPID JWT). `sendPushToUser`
   now encrypts every push notification; push service sees only aes128gcm ciphertext.
   Helpers: `b64urlToBytes`, `bytesToB64url`, `concatBytes`.
-- **Dead Drop, Backup, Signal**: exported for testing (`handleDropCreate`,
-  `handleDropRead`, `handleBackupUpload`, `handleBackupDownload`, `handleSignal`,
-  `handlePresence`, `handleOnlineCount`).
+- **Dead Drop, Backup, Signal, Presence, TURN, OGP**: exported for testing
+  (`handleDropCreate`, `handleDropRead`, `handleBackupUpload`, `handleBackupDownload`,
+  `handleSignal`, `handlePresence`, `handleOnlineCount`, `handleOGP`, `handleTurn`).
 
 ### Test Suite (`tests/`) — additions
-- **10 suites, 172 tests** passing (`npm test`).
+- **11 suites, 212 tests** passing (`npm test`).
 - New: `ktlog.test.js` (25 tests: hashIK, parseLog, checkRollover, mergeLog);
   `push.test.js` (15 tests: RFC 8291 round-trip decrypt, VAPID JWT signature verify,
-  format/header checks, b64url helpers).
+  format/header checks, b64url helpers); `pow.test.js` (15 tests: challenge format,
+  solve token structure + hash bits, difficulty clamp, verify accept/reject codes).
 - Worker extended: Dead Drop (6 tests: create/collision/size-limits/TTL/one-time-read),
   Backup (4 tests: store/overwrite/5MB-limit/404), Signal relay (5 tests: store/poll/
-  filter-own/empty-room/50-cap).
+  filter-own/empty-room/50-cap), Presence (7 tests: heartbeat/check/batch/online-counter),
+  OGP SSRF guard (11 private/internal URLs → 200+{}, missing URL → 400, KV cache hit),
+  TURN credentials (4 tests: missing-userId/400, no-env openrelay, HMAC custom, static).
 
 ### Documentation
 - `SECURITY.md` architecture table updated to reflect sprint implementations.
 - `docs/INTEGRATION.md` extended with §7 (N3 negotiate wiring), §8 (I11 ktlog wiring),
   §9 (C12 push subscription client side).
-- `docs/ROADMAP.md` updated: C12 done, I11 module done, status notes updated.
+- `docs/ROADMAP.md` updated: C12 done, I11 module done, N7 pow done, status notes updated.
+- `docs/CRYPTO-SPEC.md` §7 worker test categories expanded; §9 N5/N6/N7 marked done.
 
 ---
 

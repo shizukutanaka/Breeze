@@ -37,6 +37,7 @@ import worker, {
   handleOnlineCount,
   handleOGP,
   handleTurn,
+  handleAccountSlots,
   validateUserId,
 } from '../_worker.js';
 import { makeKV, makeEnv, apiRequest, stripeSigHeader } from './helpers/mockKV.js';
@@ -936,5 +937,101 @@ describe('TURN credentials', () => {
     expect(turnServer).toBeDefined();
     expect(turnServer.username).toBe('staticuser');
     expect(turnServer.credential).toBe('staticpass');
+  });
+});
+
+describe('account slots', () => {
+  const req = (b) => apiRequest('/api/account/slots', b);
+
+  it('returns free/1 for a userId with no KV entry', async () => {
+    const env = makeEnv();
+    const res = await handleAccountSlots({ userId: 'user00001' }, env, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.slots).toBe(1);
+    expect(j.plan).toBe('free');
+  });
+
+  it('returns stored slots and plan after they are written', async () => {
+    const env = makeEnv();
+    env.KV.put('slots:user00001', JSON.stringify({ slots: 4, plan: 'plus', customerId: 'cus_123' }));
+    const res = await handleAccountSlots({ userId: 'user00001' }, env, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.slots).toBe(4);
+    expect(j.plan).toBe('plus');
+  });
+
+  it('rejects missing userId', async () => {
+    const env = makeEnv();
+    const res = await handleAccountSlots({}, env, req({}));
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('group create / join / info validation', () => {
+  const req = (b) => apiRequest('/api/group/x', b);
+
+  it('rejects create with missing required fields', async () => {
+    const env = makeEnv();
+    const res = await handleGroupCreate({ name: 'g' }, env, req({}));
+    expect(res.status).toBe(400);
+  });
+
+  it('create returns a token and memberCount 1', async () => {
+    const env = makeEnv();
+    const res = await handleGroupCreate(
+      { name: 'TestGroup', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'Alice' },
+      env, req({}));
+    expect(res.status).toBe(201);
+    const j = await res.json();
+    expect(typeof j.token).toBe('string');
+    expect(j.memberCount).toBe(1);
+    expect(j.name).toBe('TestGroup');
+  });
+
+  it('join 404s on an unknown/expired token', async () => {
+    const env = makeEnv();
+    const res = await handleGroupJoin(
+      { token: 'nosuchtoken', memberId: 'bob00001', memberPub: 'bpub' }, env, req({}));
+    expect(res.status).toBe(404);
+    expect((await res.json()).code).toBe('EXPIRED');
+  });
+
+  it('join returns alreadyMember:true for duplicate join without adding again', async () => {
+    const env = makeEnv();
+    const { token } = await (await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    // creator1 joins again
+    const res = await handleGroupJoin(
+      { token, memberId: 'creator1', memberPub: 'cpub' }, env, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.alreadyMember).toBe(true);
+    // member list should still have exactly 1 entry
+    expect(j.members.filter(m => m.id === 'creator1').length).toBe(1);
+  });
+
+  it('info returns epoch 0 on a freshly created group', async () => {
+    const env = makeEnv();
+    const { token } = await (await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    const res = await handleGroupInfo({ token }, env, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.epoch).toBe(0);
+    expect(j.members.length).toBe(1);
+  });
+
+  it('info 404s for unknown token', async () => {
+    const env = makeEnv();
+    const res = await handleGroupInfo({ token: 'ghost' }, env, req({}));
+    expect(res.status).toBe(404);
+  });
+
+  it('info 400s when token is missing', async () => {
+    const env = makeEnv();
+    const res = await handleGroupInfo({}, env, req({}));
+    expect(res.status).toBe(400);
   });
 });
