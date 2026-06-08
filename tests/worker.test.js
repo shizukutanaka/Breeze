@@ -10,6 +10,9 @@ import worker, {
   handleGroupKick,
   handleAbuseRecord,
   handleAbuseReport,
+  handleSealedSend,
+  handleSealedPoll,
+  handleSealedAck,
   validateUserId,
 } from '../_worker.js';
 import { makeKV, makeEnv, apiRequest, stripeSigHeader } from './helpers/mockKV.js';
@@ -334,6 +337,51 @@ describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => 
     const res = await handleAbuseReport({ frankId: 'm-dos', message: 'x'.repeat(256 * 1024 + 1), opening: b64([0]) }, env, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('MSG_TOO_LARGE');
+  });
+});
+
+describe('sealed sender send / poll / ack', () => {
+  const req = (b) => apiRequest('/api/sealed/x', b);
+
+  it('queues an envelope and returns it on poll', async () => {
+    const env = makeEnv();
+    const send = await handleSealedSend({ to: 'bob00001', envelope: 'ENCRYPTED_PAYLOAD' }, env, req({}));
+    expect(send.status).toBe(200);
+    expect((await send.json()).ok).toBe(true);
+
+    const poll = await handleSealedPoll({ id: 'bob00001' }, env, req({}));
+    expect(poll.status).toBe(200);
+    const { messages } = await poll.json();
+    expect(messages.length).toBe(1);
+    expect(messages[0].envelope).toBe('ENCRYPTED_PAYLOAD');
+  });
+
+  it('returns empty array when no sealed messages exist', async () => {
+    const { messages } = await (await handleSealedPoll({ id: 'nobody1' }, makeEnv(), req({}))).json();
+    expect(messages).toEqual([]);
+  });
+
+  it('ack deletes the sealed queue', async () => {
+    const env = makeEnv();
+    await handleSealedSend({ to: 'charlie1', envelope: 'payload' }, env, req({}));
+    await handleSealedAck({ id: 'charlie1' }, env, req({}));
+    const { messages } = await (await handleSealedPoll({ id: 'charlie1' }, env, req({}))).json();
+    expect(messages).toEqual([]);
+  });
+
+  it('rejects ack with an invalid userId', async () => {
+    const res = await handleSealedAck({ id: 'bad id!' }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+  });
+
+  it('deduplicates identical envelopes sent twice (replay guard)', async () => {
+    // Reset in-memory dedup map between tests
+    globalThis._sealedDedup = new Map();
+    const env = makeEnv();
+    await handleSealedSend({ to: 'dave0001', envelope: 'SAME_PAYLOAD_XYZ' }, env, req({}));
+    await handleSealedSend({ to: 'dave0001', envelope: 'SAME_PAYLOAD_XYZ' }, env, req({}));
+    const { messages } = await (await handleSealedPoll({ id: 'dave0001' }, env, req({}))).json();
+    expect(messages.length).toBe(1);
   });
 });
 
