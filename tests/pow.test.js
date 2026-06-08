@@ -127,4 +127,40 @@ describe('verify', () => {
     const result = await verify(subtle, token, PUB);
     expect(result.ok).toBe(true);
   }, 30000);
+
+  it('accepts a fresh token within maxAge window', async () => {
+    const token = await getToken();
+    // token was just solved — its timestamp is ≤1s old; maxAge=60000 should accept it
+    const r = await verify(subtle, token, PUB, { maxAge: 60_000 });
+    expect(r.ok).toBe(true);
+  }, 30000);
+
+  it('rejects a token older than maxAge (POW_EXPIRED)', async () => {
+    const token = await getToken();
+    // fake "now" as 2 minutes after the token was created → token is stale
+    const ts = parseInt(token.challenge.split(':').pop(), 10);
+    const futureNow = () => ts + 120_001;
+    const r = await verify(subtle, token, PUB, { maxAge: 120_000, now: futureNow });
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe('POW_EXPIRED');
+  }, 30000);
+
+  it('omitting maxAge skips freshness check (backward-compatible)', async () => {
+    const token = await getToken();
+    // Simulate a very old token by faking now = ts + 1 year
+    const ts = parseInt(token.challenge.split(':').pop(), 10);
+    const futureNow = () => ts + 365 * 24 * 3600 * 1000;
+    // Without maxAge, the clock override has no effect → still accepted
+    const r = await verify(subtle, token, PUB, { now: futureNow });
+    expect(r.ok).toBe(true);
+  }, 30000);
+
+  it('rejects when challenge has no parseable timestamp and maxAge is set', async () => {
+    const token = await getToken();
+    // Replace the challenge with one that has no numeric tail
+    const bad = { ...token, challenge: `${PUB}:no-timestamp-here` };
+    const r = await verify(subtle, bad, PUB, { maxAge: 60_000 });
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe('POW_EXPIRED');
+  }, 30000);
 });

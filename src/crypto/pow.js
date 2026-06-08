@@ -40,11 +40,17 @@ export async function solve(subtle, challenge, difficulty = MIN_DIFFICULTY) {
  *
  * @param {SubtleCrypto} subtle
  * @param {{ challenge: string, nonce: number, difficulty: number }} pow
- * @param {string} pub  — the identity public key that must appear in the challenge
+ * @param {string} pub     — the identity public key that must appear in the challenge
+ * @param {{ maxAge?: number, now?: () => number }} opts
+ *   maxAge: reject tokens whose embedded timestamp is older than this many ms.
+ *           The timestamp is the last colon-delimited segment of the challenge,
+ *           as produced by makeChallengeString. Omit (or leave undefined) to
+ *           skip the freshness check (backward-compatible default).
+ *   now:    override Date.now() for testing.
  *
  * @returns {Promise<{ ok: boolean, code?: string, difficulty?: number }>}
  */
-export async function verify(subtle, pow, pub) {
+export async function verify(subtle, pow, pub, { maxAge, now: nowFn } = {}) {
   if (!pow || typeof pow.nonce !== 'number' || typeof pow.challenge !== 'string') {
     return { ok: false, code: 'POW_REQUIRED' };
   }
@@ -57,6 +63,18 @@ export async function verify(subtle, pow, pub) {
   }
   if (!pow.challenge.includes(pub)) {
     return { ok: false, code: 'POW_PUB_MISMATCH' };
+  }
+  // Freshness check: the challenge string encodes a timestamp as its last
+  // colon-delimited segment (see makeChallengeString). When maxAge is provided,
+  // reject tokens older than maxAge ms — prevents indefinite replay of a solved
+  // token, which would defeat the rate-limiting purpose of PoW.
+  if (maxAge != null) {
+    const parts = pow.challenge.split(':');
+    const ts = parseInt(parts[parts.length - 1], 10);
+    const current = nowFn ? nowFn() : Date.now();
+    if (!Number.isFinite(ts) || current - ts > maxAge) {
+      return { ok: false, code: 'POW_EXPIRED' };
+    }
   }
   const digest  = await subtle.digest('SHA-256', new TextEncoder().encode(`${pow.challenge}:${pow.nonce}`));
   const first32 = new DataView(digest).getUint32(0, false);
