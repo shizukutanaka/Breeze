@@ -21,24 +21,37 @@
   (`handleDropCreate`, `handleDropRead`, `handleBackupUpload`, `handleBackupDownload`,
   `handleSignal`, `handlePresence`, `handleOnlineCount`, `handleOGP`, `handleTurn`).
 
+### Security Fixes — `src/crypto/` modules
+- **`ratchet.js` — injected-message chain desync**: `ratchetDecrypt` previously
+  advanced `recvChainKey`, `recvCounter`, and `seenMsgIds` BEFORE calling
+  `subtle.decrypt`. An on-path attacker injecting a message whose ciphertext fails
+  the AES-GCM auth tag would permanently desync the receive chain. Fixed: state
+  advance deferred until after successful decrypt. Same fix applied to the
+  skipped-key recovery path (key was deleted before decrypt). N1 `recvCounter`
+  reset regression test also added.
+- **`group.js` — same injected-message desync**: `decryptGroupMsg` had the same
+  pattern for both the main path and the skipped-key path. Fixed identically.
+
 ### Test Suite (`tests/`) — additions
-- **11 suites, 212 tests** passing (`npm test`).
+- **11 suites, 227 tests** passing (`npm test`).
 - New: `ktlog.test.js` (25 tests: hashIK, parseLog, checkRollover, mergeLog);
   `push.test.js` (15 tests: RFC 8291 round-trip decrypt, VAPID JWT signature verify,
   format/header checks, b64url helpers); `pow.test.js` (15 tests: challenge format,
   solve token structure + hash bits, difficulty clamp, verify accept/reject codes).
-- Worker extended: Dead Drop (6 tests: create/collision/size-limits/TTL/one-time-read),
-  Backup (4 tests: store/overwrite/5MB-limit/404), Signal relay (5 tests: store/poll/
-  filter-own/empty-room/50-cap), Presence (7 tests: heartbeat/check/batch/online-counter),
-  OGP SSRF guard (11 private/internal URLs → 200+{}, missing URL → 400, KV cache hit),
-  TURN credentials (4 tests: missing-userId/400, no-env openrelay, HMAC custom, static).
+- Ratchet extended: N1 Nr-reset regression, AEAD-auth-failure-does-not-desync.
+- Group extended: AEAD-auth-failure-does-not-desync.
+- Worker extended: Dead Drop (6), Backup (4), Signal relay (5), Presence (7),
+  OGP SSRF guard (13), TURN credentials (4), account slots (3),
+  group create/join/info validation (7), msg payload-size limit (1),
+  msg poll lastTs cursor (1).
 
 ### Documentation
 - `SECURITY.md` architecture table updated to reflect sprint implementations.
 - `docs/INTEGRATION.md` extended with §7 (N3 negotiate wiring), §8 (I11 ktlog wiring),
   §9 (C12 push subscription client side).
 - `docs/ROADMAP.md` updated: C12 done, I11 module done, N7 pow done, status notes updated.
-- `docs/CRYPTO-SPEC.md` §7 worker test categories expanded; §9 N5/N6/N7 marked done.
+- `docs/CRYPTO-SPEC.md` §4/§5 security fix noted; §7 worker categories expanded;
+  §9 N5/N6/N7 marked done; test counts updated (ratchet 19, group 13, worker 100).
 
 ---
 
