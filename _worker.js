@@ -1618,6 +1618,8 @@ export {
   handleSealedSend,
   handleSealedPoll,
   handleSealedAck,
+  handleMsgSend,
+  handleMsgPoll,
   handleAliasSet,
   handleAliasGet,
   validateUserId,

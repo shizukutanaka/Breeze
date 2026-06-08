@@ -13,6 +13,8 @@ import worker, {
   handleSealedSend,
   handleSealedPoll,
   handleSealedAck,
+  handleMsgSend,
+  handleMsgPoll,
   validateUserId,
 } from '../_worker.js';
 import { makeKV, makeEnv, apiRequest, stripeSigHeader } from './helpers/mockKV.js';
@@ -381,6 +383,59 @@ describe('sealed sender send / poll / ack', () => {
     await handleSealedSend({ to: 'dave0001', envelope: 'SAME_PAYLOAD_XYZ' }, env, req({}));
     await handleSealedSend({ to: 'dave0001', envelope: 'SAME_PAYLOAD_XYZ' }, env, req({}));
     const { messages } = await (await handleSealedPoll({ id: 'dave0001' }, env, req({}))).json();
+    expect(messages.length).toBe(1);
+  });
+});
+
+describe('msg send / poll (1:1 relay path)', () => {
+  const ip = '10.0.0.1';
+  const req = (b) => apiRequest('/api/msg/x', b);
+  // Reset per-isolate dedup map between tests.
+  beforeEach(() => { globalThis._msgDedup = new Map(); });
+
+  it('stores a message and returns it on poll', async () => {
+    const env = makeEnv();
+    const send = await handleMsgSend(
+      { to: 'bob00001', from: 'alice001', payload: 'ENCRYPTED', ts: Date.now() },
+      ip, env, req({}),
+    );
+    expect(send.status).toBe(200);
+    expect((await send.json()).ok).toBe(true);
+
+    const poll = await handleMsgPoll({ id: 'bob00001', lastTs: 0 }, env, req({}));
+    const { messages } = await poll.json();
+    expect(messages.length).toBe(1);
+    expect(messages[0].payload).toBe('ENCRYPTED');
+  });
+
+  it('rejects a message with a timestamp outside ±5 min (replay guard)', async () => {
+    const env = makeEnv();
+    const stale = Date.now() - 6 * 60 * 1000; // 6 minutes ago
+    const res = await handleMsgSend(
+      { to: 'bob00001', from: 'alice001', payload: 'X', ts: stale },
+      ip, env, req({}),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_TIMESTAMP');
+  });
+
+  it('rejects self-send', async () => {
+    const env = makeEnv();
+    const res = await handleMsgSend(
+      { to: 'alice001', from: 'alice001', payload: 'X', ts: Date.now() },
+      ip, env, req({}),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('SELF_SEND');
+  });
+
+  it('deduplicates an immediately repeated send (content-keyed)', async () => {
+    const env = makeEnv();
+    const body = { to: 'carol001', from: 'alice001', payload: 'SAME', ts: Date.now() };
+    await handleMsgSend(body, ip, env, req({}));
+    const r2 = await handleMsgSend(body, ip, env, req({}));
+    expect((await r2.json()).dedup).toBe(true);
+    const { messages } = await (await handleMsgPoll({ id: 'carol001', lastTs: 0 }, env, req({}))).json();
     expect(messages.length).toBe(1);
   });
 });
