@@ -1709,7 +1709,7 @@ async function handleAI(body, env, request) {
     }
 
     default:
-      return json({ error: 'Unknown action: ' + action }, 400, request);
+      return json({ error: 'Unknown action: ' + String(action).slice(0, 32) }, 400, request);
   }
 
   // KV cache (1h for chat, 24h for summarize/translate)

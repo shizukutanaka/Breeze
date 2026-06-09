@@ -52,4 +52,25 @@ describe('commit / verify', () => {
     const r2 = await F.commit(uni);
     expect(await F.verify(uni, r2.commitment, r2.opening)).toBe(true);
   });
+
+  it('works on an empty message (zero-length content)', async () => {
+    const { commitment, opening } = await F.commit('');
+    expect(await F.verify('', commitment, opening)).toBe(true);
+    expect(await F.verify('not empty', commitment, opening)).toBe(false);
+  });
+
+  it('rejects a tampered commitment (binding — commit flipped)', async () => {
+    const msg = 'tamper test';
+    const { commitment, opening } = await F.commit(msg);
+    const bad = commitment.slice(); bad[0] ^= 0xff;
+    expect(await F.verify(msg, bad, opening)).toBe(false);
+  });
+
+  it('ctEqual returns false for different-length inputs (no throw)', () => {
+    const a = new Uint8Array(32).fill(1);
+    const b = new Uint8Array(16).fill(1);
+    expect(F.ctEqual(a, b)).toBe(false);
+    expect(F.ctEqual(b, a)).toBe(false);
+    expect(F.ctEqual(new Uint8Array(0), new Uint8Array(0))).toBe(true);
+  });
 });
