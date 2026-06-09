@@ -1105,9 +1105,30 @@ describe('AI handler input validation', () => {
     expect(typeof res.status).toBe('number');
   });
 
-  it('returns 400 for unknown action', async () => {
-    const res = await handleAI({ action: 'nonexistent' }, env(), req({}));
+  it('returns 400 for unknown action (capped echo — no large string in error)', async () => {
+    const longAction = 'x'.repeat(100);
+    const res = await handleAI({ action: longAction }, env(), req({}));
     expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.length).toBeLessThanOrEqual(80); // "Unknown action: " + 32 chars max
+  });
+
+  it('reply_suggest rejects non-string context (type guard)', async () => {
+    const res = await handleAI({ action: 'reply_suggest', context: { nested: 'object' } }, env(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/context required/);
+  });
+
+  it('reply_suggest rejects missing context', async () => {
+    const res = await handleAI({ action: 'reply_suggest' }, env(), req({}));
+    expect(res.status).toBe(400);
+  });
+
+  it('chat rejects non-string or oversized text', async () => {
+    const r1 = await handleAI({ action: 'chat', text: 12345 }, env(), req({}));
+    expect(r1.status).toBe(400);
+    const r2 = await handleAI({ action: 'chat', text: 'x'.repeat(2001) }, env(), req({}));
+    expect(r2.status).toBe(400);
   });
 });
 

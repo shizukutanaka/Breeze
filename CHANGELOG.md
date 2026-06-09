@@ -14,11 +14,30 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
   the raw uncapped request field. An oversized groupName could bloat the encrypted Web
   Push payload past the RFC 8030 4096-byte per-message limit, causing silent delivery
   failures. Fixed: cap to 50 chars via sanitizeString (matches stored msg.groupName).
-- **Defensive JSON.parse on KV data**: Three `JSON.parse()` calls on KV-fetched strings
-  had no try/catch — a corrupt or partially-overwritten KV value would throw and return
-  500 instead of a graceful failure. Fixed: `handlePreKeyFetch` OTP parse, `handlePreKeyFetch`
-  ktLog parse, `handleOGP` cache parse. The OGP fix also falls through to a fresh fetch
-  on corrupt cache rather than erroring.
+- **Defensive JSON.parse on KV data (initial)**: Three `JSON.parse()` calls on KV-fetched
+  strings had no try/catch — a corrupt or partially-overwritten KV value would throw and
+  return 500 instead of a graceful failure. Fixed: `handlePreKeyFetch` OTP parse,
+  `handlePreKeyFetch` ktLog parse, `handleOGP` cache parse.
+- **`safeJsonParse` — comprehensive KV hardening**: Systematic audit found ~18 additional
+  unguarded `JSON.parse(kvData)` sites across 15+ handlers: `handleSignal` (poll + store),
+  `handleMsgSend` inbox, `handleMsgPoll`, `handlePresence` (batch + single mem + single KV),
+  `handleAliasSet`, `handleAliasGet`, `handlePortal`, `handleGroupJoin`, `handleGroupInfo`,
+  `handleGroupKick`, `handlePushSubscribe`, `sendPushToUser`, `handleAccountSlots`,
+  `handlePreKeyFetch` bundle, `handlePreKeyUpload` ktlog, `handleSealedSend`, `handleSealedPoll`,
+  `handleDropRead`. All now call `safeJsonParse(raw, fallback)` which returns the fallback
+  instead of throwing; each handler returns the correct 404/200-with-empty response on
+  corrupt data rather than an unhandled 500.
+- **`_presenceCache` in-memory growth cap**: The presence heartbeat handler stored one
+  entry per unique userId with no eviction policy; a long-lived isolate serving many
+  users could grow the map without bound. Added a prune-to-1000 cap when size exceeds
+  2000 (same pattern as `_msgDedup` and `_sealedDedup`).
+- **Backup and AI context type guards**: `handleBackupUpload` rejected non-string values
+  with a misleading size error instead of a type error (a non-string `backup` bypasses
+  the `.length` size check). Now returns 400 `INVALID_FIELD` for non-string inputs.
+  `handleAI reply_suggest` similarly now rejects non-string `context` explicitly.
+- **handleAI error echo cap**: Unknown `action` values were echoed verbatim in the 400
+  error message; capped echoed value to 32 chars to prevent large strings being
+  bounced back in error responses.
 - **API endpoint count**: Health endpoint reported `endpoints: 28`; actual count is 32
   (30 switch cases + `/api/health` + `/api/webhook`). Fixed in health response, worker
   header comment, CLAUDE.md, SPEC.md §3.2 (table now lists all 32 endpoints including the
@@ -30,14 +49,24 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
   - `CLAUDE.md`: client 12,696→13,116 lines, worker 1,347→1,888, sw 140→145,
     endpoints 28→32, i18n keys 406→420.
   - `README.md`: validate score 32/35→33/36.
-  - `CRYPTO-SPEC.md`: 347→348 tests, 32/35→33/36, worker test count 173→174,
-    §7 worker tests 98→174.
+  - `CRYPTO-SPEC.md`: 347→364 tests, 32/35→33/36, worker test count 173→182,
+    §7 worker tests 98→182.
   - `SPEC.md §3.2`: heading 25→32 endpoints; 7 missing endpoints added to table.
 - `validate.sh` SRI gate confirmed correct (sha384 matches lang.js).
 
 ### Test Suite (`tests/`)
-- **12 suites, 348 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
-- Worker: group kick TTL regression test (1). Total: 174 worker tests.
+- **12 suites, 367 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
+- Worker: group kick TTL regression test (1); corrupt KV data resilience via
+  `safeJsonParse` (7); backup type guard (1); AI handler — `reply_suggest` non-string
+  context, missing context, capped error echo, `chat` non-string/oversized text (4).
+  Total: 185 worker tests.
+- Franking: empty message commit/verify (zero-length), tampered commitment bytes
+  rejected (binding property), `ctEqual` returns false for different-length inputs
+  without throwing. Total: 9 franking tests.
+- Negotiate: empty caps array → `[]`, non-array caps treated as absent (no crash),
+  `advertise([])` → `x3dh:v4 + caps:[]`. Total: 15 negotiate tests.
+- Ratchet: non-v3/v4 message throws (not returns null), `MAX_SKIP*2` eviction prunes
+  oversized skipped-key map keeping newest `MAX_SKIP` entries. Total: 23 ratchet tests.
 
 ---
 
