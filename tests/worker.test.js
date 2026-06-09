@@ -267,6 +267,22 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('FIELD_TOO_LARGE');
   });
+
+  it('fetch succeeds (200, no oneTimePreKey) when the OTP KV value is corrupt JSON', async () => {
+    const env = makeEnv();
+    const uid = 'corruptotp1'; // ≥8 chars, passes validateUserId
+    // Upload a valid bundle without OTPs.
+    await handlePreKeyUpload({ userId: uid, identityKey: 'IK', signedPreKey: 'SPK' }, env, apiRequest('/api/prekey/upload', {}));
+    // Manually plant one corrupt OTP entry (simulates a KV corruption event).
+    await env.KV.put(`prekey:otp:${uid}:0`, '{corrupt json');
+    await env.KV.put(`prekey:otp:${uid}:count`, '1');
+    const res = await handlePreKeyFetch({ userId: uid }, env, apiRequest('/api/prekey/fetch', {}));
+    expect(res.status).toBe(200);
+    const bundle = await res.json();
+    expect(bundle.identityKey).toBe('IK');
+    // Corrupt OTP was consumed (deleted) but must not be attached to the bundle.
+    expect(bundle.oneTimePreKey).toBeUndefined();
+  });
 });
 
 describe('prekey key-history audit log (I11 precursor)', () => {

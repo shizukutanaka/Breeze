@@ -1306,7 +1306,10 @@ async function handlePreKeyFetch(body, env, request) {
     for (let i = count - 1; i >= 0; i--) {
       const otp = await kvGet(env, `prekey:otp:${userId}:${i}`);
       if (otp) {
-        try { bundle.oneTimePreKey = JSON.parse(otp); } catch { /* skip corrupted OTP */ }
+        const parsed = safeJsonParse(otp);
+        // Only attach the OTP if it parsed cleanly; still consume and delete either way
+        // so a corrupted entry doesn't permanently block the slot.
+        if (parsed !== null) bundle.oneTimePreKey = parsed;
         await kvDel(env, `prekey:otp:${userId}:${i}`);
         await kvPut(env, `prekey:otp:${userId}:count`, String(i), { expirationTtl: 86400 * 30 });
         remainingOTP = i;
@@ -1318,7 +1321,10 @@ async function handlePreKeyFetch(body, env, request) {
   if (remainingOTP <= 5) bundle.replenishOTP = true;
   // I11: include key-history log so the initiator can detect unexpected IK rollovers.
   const ktLog = await kvGet(env, `ktlog:${userId}`);
-  if (ktLog) { try { bundle.keyHistory = JSON.parse(ktLog); } catch { /* skip corrupted log */ } }
+  if (ktLog) {
+    const parsedLog = safeJsonParse(ktLog);
+    if (parsedLog !== null) bundle.keyHistory = parsedLog;
+  }
   return json(bundle, 200, request);
 }
 
