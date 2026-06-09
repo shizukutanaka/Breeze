@@ -181,8 +181,16 @@ export function createGroup(opts = {}) {
   // Decrypt with the receiver copy of the sender's key. Returns plaintext, or null
   // on wrong/old epoch, replay, or gap-too-large.
   async function decryptGroupMsg(peerKey, payload) {
-    const p = typeof payload === 'string' ? JSON.parse(payload) : payload;
-    if (!p.g) return null;
+    // Group messages arrive from many peers via the relay; a malformed or
+    // non-group payload must yield null (the documented contract), never throw.
+    let p;
+    try { p = typeof payload === 'string' ? JSON.parse(payload) : payload; }
+    catch { return null; }
+    if (!p || typeof p !== 'object' || !p.g) return null;
+    // Reject non-numeric epoch/counter early: without them the ratchet math below
+    // would derive from a null key and throw (the no-signPub path skips the
+    // signature gate that would otherwise catch this).
+    if (typeof p.ep !== 'number' || typeof p.c !== 'number') return null;
     // I3: epoch gate. Old epoch (we've rotated past it) or a future epoch we don't
     // hold a key for → cannot/should not decrypt.
     if (p.ep !== peerKey.epoch) return null;

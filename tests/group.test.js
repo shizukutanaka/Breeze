@@ -296,3 +296,30 @@ describe('AEAD auth failure does not desync group sender-key state', () => {
     expect(await G2.decryptGroupMsg(bob, legitMsg)).toBe('real group message');
   });
 });
+
+describe('malformed-input hardening (returns null, never throws)', () => {
+  const Gh = createGroup();
+
+  it('returns null on malformed JSON instead of throwing', async () => {
+    const sk = await Gh.newSenderKey();
+    const bob = Gh.receiverFrom(sk);
+    expect(await Gh.decryptGroupMsg(bob, '{not valid json')).toBe(null);
+    expect(await Gh.decryptGroupMsg(bob, 'null')).toBe(null);
+  });
+
+  it('returns null on a non-group / non-object payload', async () => {
+    const sk = await Gh.newSenderKey();
+    const bob = Gh.receiverFrom(sk);
+    expect(await Gh.decryptGroupMsg(bob, JSON.stringify({ v: 4, d: [1, 2] }))).toBe(null); // no g
+    expect(await Gh.decryptGroupMsg(bob, '42')).toBe(null);
+    expect(await Gh.decryptGroupMsg(bob, JSON.stringify([1, 2, 3]))).toBe(null);
+  });
+
+  it('returns null on non-numeric epoch/counter (no throw on the no-signPub path)', async () => {
+    const sk = await Gh.newSenderKey();
+    const bob = Gh.receiverFrom(sk);
+    delete bob.signPub; // exercise the path that skips the signature gate
+    expect(await Gh.decryptGroupMsg(bob, JSON.stringify({ g: true, ep: 0, c: 'x', i: [], d: [] }))).toBe(null);
+    expect(await Gh.decryptGroupMsg(bob, JSON.stringify({ g: true, ep: null, c: 1, i: [], d: [] }))).toBe(null);
+  });
+});
