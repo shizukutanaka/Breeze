@@ -808,6 +808,19 @@ describe('msg send / poll (1:1 relay path)', () => {
     expect(messages[0].payload).toBe('NEW');
   });
 
+  it('poll with a non-numeric lastTs falls back to cursor 0 (still delivers, no data loss)', async () => {
+    const env = makeEnv();
+    // A buggy/hostile string lastTs must not make every `m.ts > cutoff` NaN→false,
+    // which would both starve the poller and (via the shared cutoff) delete still-
+    // undelivered messages older than the 10s grace window.
+    await handleMsgSend(
+      { to: 'bob00001', from: 'alice001', payload: 'HELLO', ts: Date.now() }, ip, env, req({}));
+    const poll = await handleMsgPoll({ id: 'bob00001', lastTs: 'not-a-number' }, env, req({}));
+    const { messages } = await poll.json();
+    expect(messages.length).toBe(1);
+    expect(messages[0].payload).toBe('HELLO');
+  });
+
   it('returns 400 MISSING_FIELDS when to, from, or payload is absent', async () => {
     const e = makeEnv();
     const ts = Date.now();

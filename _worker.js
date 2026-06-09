@@ -415,8 +415,11 @@ async function handleMsgPoll(body, env, request) {
 
   const all = safeJsonParse(data, []);
   if (!Array.isArray(all)) return json({ messages: [] }, 200, request);
-  // P4 FIX: Return only messages newer than lastTs, keep rest for other tabs
-  const cutoff = lastTs || 0;
+  // P4 FIX: Return only messages newer than lastTs, keep rest for other tabs.
+  // Coerce a non-numeric lastTs to 0: a string cursor makes every `m.ts > cutoff`
+  // comparison NaN→false, which both starves the poller AND (via the same cutoff in
+  // the cleanup filter below) deletes still-undelivered messages older than 10s.
+  const cutoff = (typeof lastTs === 'number' && Number.isFinite(lastTs)) ? lastTs : 0;
   const newMsgs = all.filter(m => (m.ts || 0) > cutoff);
   // Remove delivered messages older than 10 seconds (grace period for multi-tab)
   const keep = all.filter(m => (m.ts || 0) > cutoff || (Date.now() - (m.ts || 0)) < 10000);
