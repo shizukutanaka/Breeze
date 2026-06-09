@@ -20,6 +20,12 @@ describe('advertise', () => {
     expect(ad.caps).toContain(CAPS.FRANKING);
     expect(ad.caps).not.toContain(CAPS.GROUP_V5);
   });
+
+  it('advertise([]) emits x3dh:v4 and an empty caps array', () => {
+    const ad = advertise([]);
+    expect(ad.x3dh).toBe('v4');
+    expect(ad.caps).toEqual([]);
+  });
 });
 
 describe('parsePeerCaps', () => {
@@ -38,6 +44,16 @@ describe('parsePeerCaps', () => {
 
   it('returns empty array for a legacy v4 peer with no caps', () => {
     expect(parsePeerCaps({ identityKey: 'IK', signedPreKey: 'SPK' })).toEqual([]);
+  });
+
+  it('returns empty array when caps is an empty array', () => {
+    expect(parsePeerCaps({ caps: [] })).toEqual([]);
+  });
+
+  it('returns empty array when caps is a non-array (malformed bundle)', () => {
+    // A non-array caps field is treated as absent; no crash.
+    expect(parsePeerCaps({ caps: 'x3dh-v5' })).toEqual([]);
+    expect(parsePeerCaps({ caps: 42 })).toEqual([]);
   });
 });
 
