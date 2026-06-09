@@ -81,6 +81,18 @@ describe('routing & request validation (export default fetch)', () => {
     expect(res.status).toBe(400);
   });
 
+  it('returns 400 (not 500) for a body of literal null / primitives / arrays', async () => {
+    // `null` is valid JSON but would throw on body.userId below → 500 without the guard.
+    for (const raw of ['null', '42', '"hello"', '[1,2,3]']) {
+      const req = new Request('https://breeze.test/api/presence', {
+        method: 'POST', headers: { 'CF-Connecting-IP': '203.0.113.9' }, body: raw,
+      });
+      const res = await worker.fetch(req, makeEnv());
+      expect(res.status).toBe(400);
+      expect((await res.json()).code).toBe('INVALID_BODY');
+    }
+  });
+
   it('returns 400 for malformed userId', async () => {
     const res = await worker.fetch(apiRequest('/api/presence', { userId: 'bad id!!' }), makeEnv());
     expect(res.status).toBe(400);

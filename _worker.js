@@ -193,6 +193,13 @@ export default {
     let body;
     try { body = JSON.parse(bodyText); } catch { return json({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400, request); }
 
+    // The body must be a JSON object. Literal `null` is valid JSON but throws on
+    // `body.userId` below (→ 500); primitives (numbers/strings/arrays) would flow
+    // into handlers as non-objects. Reject all of them with a clean 400.
+    if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+      return json({ error: 'Body must be a JSON object', code: 'INVALID_BODY' }, 400, request);
+    }
+
     // Validate userId if present (business-grade: reject malformed early)
     if (body.userId && !validateUserId(body.userId)) {
       return json({ error: 'Invalid userId format', code: 'INVALID_USER_ID' }, 400, request);
