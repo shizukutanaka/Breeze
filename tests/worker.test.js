@@ -1776,3 +1776,63 @@ describe('group create / join / info validation', () => {
     expect(ij.members[0].id).toBe('creator1');
   });
 });
+
+describe('corrupted KV data resilience (safeJsonParse guard)', () => {
+  const req = (b) => apiRequest('/api/x', b);
+
+  it('groupInfo returns 404 (not 500) when group KV value is corrupt JSON', async () => {
+    const env = makeEnv();
+    const kv  = makeKV({ 'grp:badtoken': '{not valid json' });
+    env.KV = kv;
+    const res = await handleGroupInfo({ token: 'badtoken' }, env, req({}));
+    expect(res.status).toBe(404);
+    expect((await res.json()).code).toBe('NOT_FOUND');
+  });
+
+  it('groupJoin returns 404 (not 500) when group KV value is corrupt JSON', async () => {
+    const env = makeEnv();
+    env.KV = makeKV({ 'grp:badtoken': '!!!notjson' });
+    const res = await handleGroupJoin({ token: 'badtoken', memberId: 'member01', memberPub: 'mpub' }, env, req({}));
+    expect(res.status).toBe(404);
+  });
+
+  it('groupKick returns 404 (not 500) when group KV value is corrupt JSON', async () => {
+    const env = makeEnv();
+    env.KV = makeKV({ 'grp:badtoken': 'null' });
+    const res = await handleGroupKick({ token: 'badtoken', kickId: 'member01', adminId: 'creator1' }, env, req({}));
+    expect(res.status).toBe(404);
+  });
+
+  it('msgPoll returns empty messages (not 500) when inbox KV value is corrupt JSON', async () => {
+    const env = makeEnv();
+    env.KV = makeKV({ 'inbox:alice123x': '{corrupted' });
+    const res = await handleMsgPoll({ id: 'alice123x' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).messages).toEqual([]);
+  });
+
+  it('sealedPoll returns empty messages (not 500) when sealed KV value is corrupt JSON', async () => {
+    const env = makeEnv();
+    env.KV = makeKV({ 'sealed:alice123x': '[not json' });
+    const res = await handleSealedPoll({ id: 'alice123x' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).messages).toEqual([]);
+  });
+
+  it('accountSlots returns free/1 (not 500) when slots KV value is corrupt JSON', async () => {
+    const env = makeEnv();
+    env.KV = makeKV({ 'slots:alice123x': '{bad json' });
+    const res = await handleAccountSlots({ userId: 'alice123x' }, env, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.slots).toBe(1);
+    expect(j.plan).toBe('free');
+  });
+
+  it('preKeyFetch returns 404 (not 500) when prekey bundle KV value is corrupt JSON', async () => {
+    const env = makeEnv();
+    env.KV = makeKV({ 'prekey:alice123x': '{bad bundle json' });
+    const res = await handlePreKeyFetch({ userId: 'alice123x' }, env, req({}));
+    expect(res.status).toBe(404);
+  });
+});

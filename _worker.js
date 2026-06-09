@@ -26,6 +26,11 @@ function validateUserId(id) {
   return typeof id === 'string' && id.length >= 8 && id.length <= 512 && /^[A-Za-z0-9+/=_-]+$/.test(id);
 }
 
+// Defensive JSON.parse: returns fallback instead of throwing on corrupt KV data.
+function safeJsonParse(str, fallback = null) {
+  try { return JSON.parse(str); } catch { return fallback; }
+}
+
 // v3.6: External API timeout wrapper (prevents Worker hanging on slow 3rd-party APIs)
 async function fetchWithTimeout(url, opts, timeoutMs = 10000) {
   const controller = new AbortController();
@@ -297,7 +302,8 @@ async function handleSignal(body, ip, env, request) {
     // Return all signaling messages for this room (excluding own)
     const raw = await kvGet(env, `sig:${room}`);
     if (!raw) return json({ messages: [] }, 200, request);
-    const signals = JSON.parse(raw);
+    const signals = safeJsonParse(raw, []);
+    if (!Array.isArray(signals)) return json({ messages: [] }, 200, request);
     const filtered = signals.filter(s => s.sender !== sender);
     // v3.6: Clean consumed signals — keep only unread ones + those <30s old
     const now = Date.now();
@@ -311,7 +317,8 @@ async function handleSignal(body, ip, env, request) {
 
   // Store signaling message
   const raw = await kvGet(env, `sig:${room}`);
-  const signals = raw ? JSON.parse(raw) : [];
+  const parsed = safeJsonParse(raw, []);
+  const signals = Array.isArray(parsed) ? parsed : [];
   signals.push({ sender, type, data, ts: Date.now() });
   // Keep last 50 signals, expire in 5 min (allow slow NAT traversal)
   const trimmed = signals.slice(-50);
@@ -359,7 +366,8 @@ async function handleMsgSend(body, ip, env, request) {
 
   const key = `inbox:${to}`;
   const existing = await kvGet(env, key);
-  const inbox = existing ? JSON.parse(existing) : [];
+  const inboxParsed = existing ? safeJsonParse(existing, []) : [];
+  const inbox = Array.isArray(inboxParsed) ? inboxParsed : [];
   const safePub  = typeof fromPub  === 'string' ? fromPub.slice(0, 200)  : undefined;
   const safeName = typeof fromName === 'string' ? fromName.slice(0, 64)  : undefined;
   const msg = { from, fromPub: safePub, fromName: safeName, payload, ts: ts || Date.now() };
@@ -400,7 +408,8 @@ async function handleMsgPoll(body, env, request) {
   const data = await kvGet(env, key);
   if (!data) return json({ messages: [] }, 200, request);
 
-  const all = JSON.parse(data);
+  const all = safeJsonParse(data, []);
+  if (!Array.isArray(all)) return json({ messages: [] }, 200, request);
   // P4 FIX: Return only messages newer than lastTs, keep rest for other tabs
   const cutoff = lastTs || 0;
   const newMsgs = all.filter(m => (m.ts || 0) > cutoff);
@@ -423,8 +432,8 @@ async function handlePresence(body, env, request) {
     for (const cid of ids.slice(0, 50).filter(x => typeof x === 'string' && validateUserId(x))) {
       const data = await kvGet(env, `presence:${cid}`);
       if (data) {
-        const p = JSON.parse(data);
-        online[cid] = (Date.now() - p.at) < 60000;
+        const p = safeJsonParse(data);
+        online[cid] = p ? (Date.now() - p.at) < 60000 : false;
       } else {
         online[cid] = false;
       }
@@ -440,12 +449,14 @@ async function handlePresence(body, env, request) {
     if (!globalThis._presenceCache) globalThis._presenceCache = new Map();
     const memData = globalThis._presenceCache.get(`presence:${id}:data`);
     if (memData) {
-      const p = JSON.parse(memData);
+      const p = safeJsonParse(memData);
+      if (!p) return json({ online: false }, 200, request);
       return json({ online: (Date.now() - p.at) < 60000, name: p.name }, 200, request);
     }
     const data = await kvGet(env, `presence:${id}`);
     if (!data) return json({ online: false }, 200, request);
-    const p = JSON.parse(data);
+    const p = safeJsonParse(data);
+    if (!p) return json({ online: false }, 200, request);
     return json({ online: (Date.now() - p.at) < 60000, name: p.name }, 200, request);
   }
 
@@ -543,8 +554,8 @@ async function handleAliasSet(body, env, request) {
   // Check if taken
   const existing = await kvGet(env, `alias:${clean}`);
   if (existing) {
-    const data = JSON.parse(existing);
-    if (data.pub !== pub) return json({ error: 'Alias already taken', code: 'ALIAS_TAKEN' }, 409, request);
+    const data = safeJsonParse(existing);
+    if (data && data.pub !== pub) return json({ error: 'Alias already taken', code: 'ALIAS_TAKEN' }, 409, request);
   }
 
   // Store (no TTL — aliases are permanent)
@@ -561,7 +572,9 @@ async function handleAliasGet(body, env, request) {
   const data = await kvGet(env, `alias:${clean}`);
   if (!data) return json({ error: 'Not found', code: 'NOT_FOUND' }, 404, request);
 
-  return json(JSON.parse(data), 200, request);
+  const aliasData = safeJsonParse(data);
+  if (!aliasData) return json({ error: 'Not found', code: 'NOT_FOUND' }, 404, request);
+  return json(aliasData, 200, request);
 }
 
 async function handleWebhook(request, env) {
@@ -659,8 +672,8 @@ async function handlePortal(body, env, request) {
   const data = await kvGet(env, `slots:${userId}`);
   let customerId = null;
   if (data) {
-    const parsed = JSON.parse(data);
-    customerId = parsed.customerId;
+    const parsed = safeJsonParse(data);
+    customerId = parsed?.customerId ?? null;
   }
   if (!customerId) return json({ error: 'No subscription found', code: 'NOT_FOUND' }, 404, request);
 
@@ -771,7 +784,8 @@ async function handleGroupJoin(body, env, request) {
   const data = await kvGet(env, `grp:${token}`);
   if (!data) return json({ error: 'Invite link expired or invalid', code: 'EXPIRED' }, 404, request);
 
-  const group = JSON.parse(data);
+  const group = safeJsonParse(data);
+  if (!group || !Array.isArray(group.members)) return json({ error: 'Invite link expired or invalid', code: 'EXPIRED' }, 404, request);
 
   // Check if already a member
   if (group.members.some(m => m.id === memberId)) {
@@ -796,7 +810,8 @@ async function handleGroupInfo(body, env, request) {
   const data = await kvGet(env, `grp:${token}`);
   if (!data) return json({ error: 'Not found', code: 'NOT_FOUND' }, 404, request);
 
-  const group = JSON.parse(data);
+  const group = safeJsonParse(data);
+  if (!group) return json({ error: 'Not found', code: 'NOT_FOUND' }, 404, request);
   return json({ name: group.name, members: group.members, creatorName: group.creatorName, epoch: group.epoch || 0, createdAt: group.createdAt }, 200, request);
 }
 
@@ -810,7 +825,8 @@ async function handleGroupKick(body, env, request) {
   const data = await kvGet(env, `grp:${token}`);
   if (!data) return json({ error: 'Group not found', code: 'NOT_FOUND' }, 404, request);
 
-  const group = JSON.parse(data);
+  const group = safeJsonParse(data);
+  if (!group) return json({ error: 'Group not found', code: 'NOT_FOUND' }, 404, request);
   // Only creator can kick
   if (group.creatorId !== adminId) {
     return json({ error: 'Admin permission required', code: 'FORBIDDEN' }, 403, request);
@@ -976,7 +992,8 @@ async function handlePushSubscribe(body, env, request) {
   // Store subscription (user can have multiple devices)
   const key = `push:${userId}`;
   const existing = await kvGet(env, key);
-  let subs = existing ? JSON.parse(existing) : [];
+  let subs = existing ? (safeJsonParse(existing, []) || []) : [];
+  if (!Array.isArray(subs)) subs = [];
   // Deduplicate by endpoint
   subs = subs.filter(s => s.endpoint !== safeSub.endpoint);
   subs.push(safeSub);
@@ -991,7 +1008,8 @@ async function sendPushToUser(userId, payload, env) {
   const key = `push:${userId}`;
   const data = await kvGet(env, key);
   if (!data) return;
-  const subs = JSON.parse(data);
+  const subs = safeJsonParse(data, []);
+  if (!Array.isArray(subs)) return;
   const plaintextStr = JSON.stringify(payload);
   for (const sub of subs) {
     try {
@@ -1162,7 +1180,8 @@ async function handleAccountSlots(body, env, request) {
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   const data = await kvGet(env, `slots:${userId}`);
   if (!data) return json({ slots: 1, plan: 'free' }, 200, request);
-  const parsed = JSON.parse(data);
+  const parsed = safeJsonParse(data);
+  if (!parsed) return json({ slots: 1, plan: 'free' }, 200, request);
   return json({ slots: parsed.slots || 1, plan: parsed.plan || 'free' }, 200, request);
 }
 
@@ -1234,7 +1253,8 @@ async function handlePreKeyUpload(body, env, request) {
     )));
     const logKey = `ktlog:${userId}`;
     const existing = await kvGet(env, logKey);
-    const log = existing ? JSON.parse(existing) : [];
+    const logParsed = existing ? safeJsonParse(existing, []) : [];
+    const log = Array.isArray(logParsed) ? logParsed : [];
     const latest = log[log.length - 1];
     if (!latest || latest.h !== ikHash) {
       // New IK (or first upload): compute chain hash and append.
@@ -1276,7 +1296,8 @@ async function handlePreKeyFetch(body, env, request) {
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   const data = await kvGet(env, `prekey:${userId}`);
   if (!data) return json({ error: 'No prekeys found', code: 'NOT_FOUND' }, 404, request);
-  const bundle = JSON.parse(data);
+  const bundle = safeJsonParse(data);
+  if (!bundle) return json({ error: 'No prekeys found', code: 'NOT_FOUND' }, 404, request);
   // Consume one-time prekey (if available)
   const countStr = await kvGet(env, `prekey:otp:${userId}:count`);
   const count = parseInt(countStr || '0');
@@ -1371,7 +1392,8 @@ async function handleSealedSend(body, env, request) {
 
   const key = `sealed:${to}`;
   const existing = await kvGet(env, key);
-  const queue = existing ? JSON.parse(existing) : [];
+  const queueParsed = existing ? safeJsonParse(existing, []) : [];
+  const queue = Array.isArray(queueParsed) ? queueParsed : [];
   queue.push({ envelope, ts: Date.now() });
   const trimmed = queue.slice(-100);
   await kvPut(env, key, JSON.stringify(trimmed), { expirationTtl: 604800 });
@@ -1386,7 +1408,8 @@ async function handleSealedPoll(body, env, request) {
   const key = `sealed:${id}`;
   const data = await kvGet(env, key);
   if (!data) return json({ messages: [] }, 200, request);
-  const messages = JSON.parse(data);
+  const messages = safeJsonParse(data, []);
+  if (!Array.isArray(messages)) return json({ messages: [] }, 200, request);
   // v3.6: Grace period — set short TTL instead of immediate delete
   // If client crashes after poll but before processing, messages survive 5 min
   // Client-side _replayCache + IDB dedup prevents re-rendering on re-poll
@@ -1456,7 +1479,8 @@ async function handleDropRead(body, env, request) {
   const key = `drop:${id}`;
   const raw = await kvGet(env, key);
   if (!raw) return json({ error: 'Not found or already read', code: 'NOT_FOUND' }, 404, request);
-  const data = JSON.parse(raw);
+  const data = safeJsonParse(raw);
+  if (!data) return json({ error: 'Not found or already read', code: 'NOT_FOUND' }, 404, request);
   // One-time read: delete immediately
   await kvDel(env, key);
   return json({ ct: data.ct, createdAt: data.createdAt }, 200, request);
