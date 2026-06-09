@@ -1278,7 +1278,7 @@ async function handlePreKeyFetch(body, env, request) {
     for (let i = count - 1; i >= 0; i--) {
       const otp = await kvGet(env, `prekey:otp:${userId}:${i}`);
       if (otp) {
-        bundle.oneTimePreKey = JSON.parse(otp);
+        try { bundle.oneTimePreKey = JSON.parse(otp); } catch { /* skip corrupted OTP */ }
         await kvDel(env, `prekey:otp:${userId}:${i}`);
         await kvPut(env, `prekey:otp:${userId}:count`, String(i), { expirationTtl: 86400 * 30 });
         remainingOTP = i;
@@ -1290,7 +1290,7 @@ async function handlePreKeyFetch(body, env, request) {
   if (remainingOTP <= 5) bundle.replenishOTP = true;
   // I11: include key-history log so the initiator can detect unexpected IK rollovers.
   const ktLog = await kvGet(env, `ktlog:${userId}`);
-  if (ktLog) bundle.keyHistory = JSON.parse(ktLog);
+  if (ktLog) { try { bundle.keyHistory = JSON.parse(ktLog); } catch { /* skip corrupted log */ } }
   return json(bundle, 200, request);
 }
 
@@ -1483,7 +1483,7 @@ async function handleOGP(body, env, request) {
   // don't collide, and so very long URLs don't inflate the KV key.
   const cacheKey = `ogp:${await sha256Short(url)}`;
   const cached = await kvGet(env, cacheKey);
-  if (cached) return json(JSON.parse(cached), 200, request);
+  if (cached) { try { return json(JSON.parse(cached), 200, request); } catch { /* fall through on corrupt cache */ } }
 
   try {
     const resp = await fetchWithTimeout(url, {
