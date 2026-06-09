@@ -163,4 +163,25 @@ describe('verify', () => {
     expect(r.ok).toBe(false);
     expect(r.code).toBe('POW_EXPIRED');
   }, 30000);
+
+  it('rejects a far-future timestamp (replay-via-future-ts guard)', async () => {
+    const token = await getToken();
+    const ts = parseInt(token.challenge.split(':').pop(), 10);
+    // Attacker embeds a ts 1 hour in the future so (now - ts) stays negative forever,
+    // which a past-only freshness check would accept indefinitely. The future bound
+    // (default 5 min skew) must reject it as POW_EXPIRED.
+    const pastNow = () => ts - 3600_000;
+    const r = await verify(subtle, token, PUB, { maxAge: 600_000, now: pastNow });
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe('POW_EXPIRED');
+  }, 30000);
+
+  it('tolerates a small future timestamp within the skew window', async () => {
+    const token = await getToken();
+    const ts = parseInt(token.challenge.split(':').pop(), 10);
+    // ts is 1 minute "ahead" of now — within the default 5-min skew → still accepted.
+    const pastNow = () => ts - 60_000;
+    const r = await verify(subtle, token, PUB, { maxAge: 600_000, now: pastNow });
+    expect(r.ok).toBe(true);
+  }, 30000);
 });

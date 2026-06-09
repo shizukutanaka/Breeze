@@ -6,6 +6,13 @@ Exhaustive category-by-category audit of the full product (crypto modules, worke
 endpoints, service worker, documentation, test coverage). Findings and fixes:
 
 ### Worker (`_worker.js`) — robustness & correctness fixes
+- **PoW replay via future timestamp (`handleAliasSet`)**: the proof-of-work freshness
+  check bounded only the *past* (`now - ts > 10min` → expired). The challenge string is
+  fully client-controlled, so an attacker could embed a far-future timestamp, making
+  `now - ts` negative — passing the past-only check indefinitely — and replay ONE solved
+  token to register unlimited aliases (the challenge binds `pub`, not the alias). Fixed:
+  also reject `ts - now > 5min` (clock-skew tolerance), keeping the replay window bounded.
+  Mirrored in the `pow.js` reference module's `verify()` (new `futureSkew` option).
 - **SSRF: redirect-following bypass (`handleOGP`)**: the link-preview fetcher validated
   only the *initial* URL's host against the private-IP/metadata blocklist, then fetched
   with `redirect: 'follow'`. A public URL could 302-redirect to `http://169.254.169.254/`
@@ -75,13 +82,13 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
 - `validate.sh` SRI gate confirmed correct (sha384 matches lang.js).
 
 ### Test Suite (`tests/`)
-- **12 suites, 377 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
+- **12 suites, 380 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
 - Worker: group kick TTL regression test (1); corrupt KV data resilience via
   `safeJsonParse` (7); backup type guard (1); AI handler — `reply_suggest` non-string
   context, missing context, capped error echo, `chat` non-string/oversized text (4);
   OTP corruption graceful handling (1); msg-send non-numeric `ts` type guard (1);
-  msg-poll non-numeric `lastTs` cursor fallback (1); SSRF redirect-revalidation + IPv4-mapped-IPv6 guard (5).
-  Total: 193 worker tests.
+  msg-poll non-numeric `lastTs` cursor fallback (1); SSRF redirect-revalidation + IPv4-mapped-IPv6 guard (5); PoW future-ts replay guard (1).
+  Total: 194 worker tests.
 - Franking: empty message commit/verify (zero-length), tampered commitment bytes
   rejected (binding property), `ctEqual` returns false for different-length inputs
   without throwing. Total: 9 franking tests.
@@ -92,6 +99,8 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
 - At-rest: `unwrapJWK` rejects an attacker-set absurd/non-finite/non-positive iteration
   count (DoS guard — PBKDF2 hang) in <1s; ceiling-boundary record rejected while the
   legitimate record still round-trips. Total: 12 atrest tests.
+- PoW: `verify()` rejects a far-future timestamp (replay-via-future-ts guard) and
+  tolerates a small future ts within the skew window. Total: 21 pow tests.
 
 ---
 

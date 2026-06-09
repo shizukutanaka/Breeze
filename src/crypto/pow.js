@@ -50,7 +50,7 @@ export async function solve(subtle, challenge, difficulty = MIN_DIFFICULTY) {
  *
  * @returns {Promise<{ ok: boolean, code?: string, difficulty?: number }>}
  */
-export async function verify(subtle, pow, pub, { maxAge, now: nowFn } = {}) {
+export async function verify(subtle, pow, pub, { maxAge, futureSkew = 5 * 60 * 1000, now: nowFn } = {}) {
   if (!pow || typeof pow.nonce !== 'number' || typeof pow.challenge !== 'string') {
     return { ok: false, code: 'POW_REQUIRED' };
   }
@@ -68,11 +68,15 @@ export async function verify(subtle, pow, pub, { maxAge, now: nowFn } = {}) {
   // colon-delimited segment (see makeChallengeString). When maxAge is provided,
   // reject tokens older than maxAge ms — prevents indefinite replay of a solved
   // token, which would defeat the rate-limiting purpose of PoW.
+  // The challenge is fully client-controlled, so we must ALSO bound the future:
+  // a far-future ts makes (current - ts) negative, passing the past-only check
+  // forever and letting ONE solved token be replayed indefinitely. futureSkew
+  // (default 5 min) tolerates clock skew while keeping the replay window bounded.
   if (maxAge != null) {
     const parts = pow.challenge.split(':');
     const ts = parseInt(parts[parts.length - 1], 10);
     const current = nowFn ? nowFn() : Date.now();
-    if (!Number.isFinite(ts) || current - ts > maxAge) {
+    if (!Number.isFinite(ts) || current - ts > maxAge || ts - current > futureSkew) {
       return { ok: false, code: 'POW_EXPIRED' };
     }
   }

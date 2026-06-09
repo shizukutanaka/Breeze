@@ -897,6 +897,19 @@ describe('alias set / get (PoW anti-spam)', () => {
     expect(res.status).toBe(200);
   }, 30000); // PoW solve is probabilistic; allow 30s
 
+  it('rejects a far-future PoW timestamp (replay-via-future-ts guard)', async () => {
+    // The challenge is fully client-controlled. A far-future ts makes (now - ts)
+    // negative, which a past-only freshness check accepts forever — letting one
+    // solved token register unlimited aliases. The future bound must reject it.
+    const pub = 'FUTUREPUB1';
+    const futureTs = Date.now() + (60 * 60 * 1000); // 1 hour ahead
+    const futureChallenge = `${pub}:${futureTs}`;
+    const pow = await solvePoW(pub, 16, futureChallenge);
+    const res = await handleAliasSet({ alias: 'futureuser', pub, pow }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('POW_EXPIRED');
+  }, 30000); // PoW solve is probabilistic; allow 30s
+
   it('accepts a validly solved PoW and registers the alias', async () => {
     const pub = 'TESTPUB123';
     const pow = await solvePoW(pub);

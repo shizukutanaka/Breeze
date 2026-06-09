@@ -541,10 +541,17 @@ async function handleAliasSet(body, env, request) {
     // Old-format challenges (e.g. "pubkey:breeze-test") have a non-numeric last
     // segment so parseInt returns NaN and Number.isFinite skips the check —
     // backward-compatible with pre-timestamp clients.
+    // The challenge is fully client-controlled, so we must ALSO bound the future:
+    // a far-future timestamp makes (now - ts) negative — passing the past-only
+    // check forever — letting ONE solved token be replayed indefinitely to register
+    // unlimited aliases (the challenge binds pub, not the alias). MAX_POW_FUTURE_MS
+    // is the clock-skew tolerance; beyond it the token's replay window stays bounded.
     const MAX_POW_AGE_MS = 10 * 60 * 1000;
+    const MAX_POW_FUTURE_MS = 5 * 60 * 1000;
     const parts = pow.challenge.split(':');
     const challengeTs = parseInt(parts[parts.length - 1], 10);
-    if (Number.isFinite(challengeTs) && Date.now() - challengeTs > MAX_POW_AGE_MS) {
+    if (Number.isFinite(challengeTs) &&
+        (Date.now() - challengeTs > MAX_POW_AGE_MS || challengeTs - Date.now() > MAX_POW_FUTURE_MS)) {
       return json({ error: 'Proof-of-work expired', code: 'POW_EXPIRED' }, 400, request);
     }
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pow.challenge + ':' + pow.nonce));
