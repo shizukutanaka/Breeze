@@ -116,7 +116,7 @@ Sender                          Server                         Receiver
   └──────┘                               └─────────┘
 ```
 
-### 3.2 Worker API Endpoints (25)
+### 3.2 Worker API Endpoints (32)
 
 | Endpoint | Rate Limit | Purpose |
 |----------|------------|---------|
@@ -143,6 +143,13 @@ Sender                          Server                         Receiver
 | /api/account/slots | default | Account slot query |
 | /api/backup/upload | 2/min | Encrypted backup upload |
 | /api/backup/download | 5/min | Encrypted backup download |
+| /api/sealed/ack | default | Acknowledge sealed message delivery |
+| /api/drop/create | default | Create file drop (encrypted transfer) |
+| /api/drop/read | default | Download file drop |
+| /api/ai | 5/min | AI assistant (operator-gated) |
+| /api/translate | 10/min | Message translation (operator-gated) |
+| /api/abuse/record | default | Record abuse metadata for reporting |
+| /api/abuse/report | default | Submit abuse report |
 | /api/health | unlimited | Health check (no auth) |
 | /api/webhook | unlimited | Stripe webhook receiver |
 
