@@ -485,6 +485,9 @@ async function handleOnlineCount(body, env, request) {
 async function handleAliasSet(body, env, request) {
   const { alias, pub, name, pow } = body;
   if (!alias || !pub) return json({ error: 'alias and pub required', code: 'MISSING_FIELDS' }, 400, request);
+  // alias must be a string — a numeric/array alias is truthy, passes the global
+  // string-only guard, and would throw on .toLowerCase() below (→ 500).
+  if (typeof alias !== 'string') return json({ error: 'alias must be a string', code: 'INVALID_FIELD' }, 400, request);
 
   // v3.5 SPEC: Proof-of-Work anti-spam verification.
   // Previously this only checked that the fields existed — the puzzle was never
@@ -541,6 +544,7 @@ async function handleAliasSet(body, env, request) {
 async function handleAliasGet(body, env, request) {
   const { alias } = body;
   if (!alias) return json({ error: 'alias required', code: 'MISSING_FIELDS' }, 400, request);
+  if (typeof alias !== 'string') return json({ error: 'alias must be a string', code: 'INVALID_FIELD' }, 400, request);
 
   const clean = alias.toLowerCase().replace(/[^a-z0-9_]/g, '');
   const data = await kvGet(env, `alias:${clean}`);

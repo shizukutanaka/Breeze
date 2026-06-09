@@ -884,6 +884,18 @@ describe('alias set / get (PoW anti-spam)', () => {
     expect(res.status).toBe(404);
   });
 
+  it('returns 400 (not 500) for a non-string alias on get/set', async () => {
+    // A numeric alias is truthy and passes the global string-only field guard;
+    // without an explicit type check, alias.toLowerCase() would throw → 500.
+    const g = await handleAliasGet({ alias: 12345 }, makeEnv(), req({}));
+    expect(g.status).toBe(400);
+    expect((await g.json()).code).toBe('INVALID_FIELD');
+    // On set the guard fires before PoW, so no puzzle needs solving.
+    const s = await handleAliasSet({ alias: ['arr'], pub: 'PUBX' }, makeEnv(), req({}));
+    expect(s.status).toBe(400);
+    expect((await s.json()).code).toBe('INVALID_FIELD');
+  });
+
   it('sanitizes alias to lowercase a-z0-9_', async () => {
     const pub = 'SANITIZEPUB'; const pow = await solvePoW(pub);
     const res = await handleAliasSet({ alias: 'Hello-World!', pub, pow }, makeEnv(), req({}));
