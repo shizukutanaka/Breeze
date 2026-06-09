@@ -1,5 +1,46 @@
 # Changelog
 
+## Security Hardening Batch 5 — systematic category audit (branch claude/nice-ride-T6yb0, 2026-06-09)
+
+Exhaustive category-by-category audit of the full product (crypto modules, worker
+endpoints, service worker, documentation, test coverage). Findings and fixes:
+
+### Worker (`_worker.js`) — robustness & correctness fixes
+- **Group kick TTL regression**: `handleGroupKick` was saving the updated group record
+  without an `expirationTtl`, silently removing the 30-day TTL set on create/join and
+  making kicked groups permanent in KV (unbounded storage growth). Fixed: added
+  `{ expirationTtl: 86400 * 30 }` to the kick kvPut.
+- **Push notification title length cap**: The push title (groupName or senderName) used
+  the raw uncapped request field. An oversized groupName could bloat the encrypted Web
+  Push payload past the RFC 8030 4096-byte per-message limit, causing silent delivery
+  failures. Fixed: cap to 50 chars via sanitizeString (matches stored msg.groupName).
+- **Defensive JSON.parse on KV data**: Three `JSON.parse()` calls on KV-fetched strings
+  had no try/catch — a corrupt or partially-overwritten KV value would throw and return
+  500 instead of a graceful failure. Fixed: `handlePreKeyFetch` OTP parse, `handlePreKeyFetch`
+  ktLog parse, `handleOGP` cache parse. The OGP fix also falls through to a fresh fetch
+  on corrupt cache rather than erroring.
+- **API endpoint count**: Health endpoint reported `endpoints: 28`; actual count is 32
+  (30 switch cases + `/api/health` + `/api/webhook`). Fixed in health response, worker
+  header comment, CLAUDE.md, SPEC.md §3.2 (table now lists all 32 endpoints including the
+  7 previously absent: sealed/ack, drop/create, drop/read, ai, translate, abuse/record,
+  abuse/report).
+
+### Documentation (`CLAUDE.md`, `README.md`, `docs/CRYPTO-SPEC.md`, `SPEC.md`)
+- All stale line/endpoint/test counts corrected:
+  - `CLAUDE.md`: client 12,696→13,116 lines, worker 1,347→1,888, sw 140→145,
+    endpoints 28→32, i18n keys 406→420.
+  - `README.md`: validate score 32/35→33/36.
+  - `CRYPTO-SPEC.md`: 347→348 tests, 32/35→33/36, worker test count 173→174,
+    §7 worker tests 98→174.
+  - `SPEC.md §3.2`: heading 25→32 endpoints; 7 missing endpoints added to table.
+- `validate.sh` SRI gate confirmed correct (sha384 matches lang.js).
+
+### Test Suite (`tests/`)
+- **12 suites, 348 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
+- Worker: group kick TTL regression test (1). Total: 174 worker tests.
+
+---
+
 ## Security Hardening Batch 4 — competitive research (branch claude/nice-ride-T6yb0, 2026-06-08)
 
 Surveyed comparable open-source E2E messengers (Signal, Session, SimpleX) and
