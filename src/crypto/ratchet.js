@@ -224,29 +224,33 @@ export function createRatchet(opts = {}) {
     const msgId = arr(u8(p.d).slice(0, 8)).join('');
     if (sess.seenMsgIds?.includes(msgId)) { dbg(null, 'duplicate rejected'); return null; }
 
-    // Store skipped message keys for out-of-order delivery (Signal spec §3.4)
+    // Compute skipped message keys for out-of-order delivery (Signal spec §3.4) into
+    // LOCALS. Previously this mutated sess.recvChainKey/skippedKeys here — BEFORE the
+    // AEAD check below — so an injected message with a valid counter GAP but forged
+    // ciphertext advanced the receive chain while recvCounter stayed put, permanently
+    // desyncing the session (a one-packet DoS: the legit gap-filling messages then
+    // derive from the wrong chain position and never decrypt). Mirror the group path:
+    // stage everything and commit only after a successful decrypt.
+    let stagedChain = sess.recvChainKey;  // chain to derive the target message key from
+    let stagedSkipped = null;             // skipped keys to merge into the session on success
     if (p.c > sess.recvCounter + 1) {
       const gap = p.c - sess.recvCounter - 1;
       // Reject absurd gaps rather than desyncing the chain (regression: the advance
       // was previously capped at MAX_SKIP while recvCounter jumped to p.c, permanently
       // misaligning the receive chain so every later message failed).
       if (gap > cfg.MAX_GAP) { dbg(null, 'ratchet gap too large (' + gap + '), rejecting'); return null; }
-      if (!sess.skippedKeys) sess.skippedKeys = {};
+      stagedSkipped = {};
       let tmpChain = sess.recvChainKey;
       for (let i = 0; i < gap; i++) {
         const { msgKey: skMk, nextChain: skNext } = await kdfChain(tmpChain);
         const skIdx = sess.recvCounter + 1 + i;
-        if (gap - i <= cfg.MAX_SKIP) sess.skippedKeys['p:' + skIdx] = { k: arr(skMk), t: now() };
+        if (gap - i <= cfg.MAX_SKIP) stagedSkipped['p:' + skIdx] = { k: arr(skMk), t: now() };
         tmpChain = skNext;
       }
-      sess.recvChainKey = tmpChain;
-      const skKeys = Object.keys(sess.skippedKeys);
-      if (skKeys.length > cfg.MAX_SKIP * 2) {
-        for (const k of skKeys.slice(0, skKeys.length - cfg.MAX_SKIP)) delete sess.skippedKeys[k];
-      }
+      stagedChain = tmpChain;
     }
 
-    const { msgKey, nextChain } = await kdfChain(sess.recvChainKey);
+    const { msgKey, nextChain } = await kdfChain(stagedChain);
     // I16: verify key commitment before advancing state / trusting the AEAD.
     if (p.cm && !ctEqual(await keyCommitment(msgKey), p.cm)) { dbg(null, 'key commitment mismatch'); return null; }
     const key = await subtle.importKey('raw', msgKey, { name: 'AES-GCM' }, false, ['decrypt']);
@@ -254,8 +258,17 @@ export function createRatchet(opts = {}) {
     try {
       padded = new Uint8Array(await subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, key, u8(p.d)));
     } catch { dbg(null, 'AEAD auth failure'); return null; }
-    // Advance all receive state only after successful decrypt — an injected message
-    // whose ciphertext fails the auth tag must not desync the chain.
+    // Decrypt succeeded — NOW commit all receive state. An injected message whose
+    // ciphertext fails the auth tag (or key-commitment check) returns above without
+    // having mutated the session, so the chain stays aligned for the real next message.
+    if (stagedSkipped) {
+      if (!sess.skippedKeys) sess.skippedKeys = {};
+      Object.assign(sess.skippedKeys, stagedSkipped);
+      const skKeys = Object.keys(sess.skippedKeys);
+      if (skKeys.length > cfg.MAX_SKIP * 2) {
+        for (const k of skKeys.slice(0, skKeys.length - cfg.MAX_SKIP)) delete sess.skippedKeys[k];
+      }
+    }
     sess.recvChainKey = nextChain;
     sess.recvCounter = p.c;
     if (!sess.seenMsgIds) sess.seenMsgIds = [];

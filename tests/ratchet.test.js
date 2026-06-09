@@ -156,6 +156,32 @@ describe('AEAD auth failure does not desync chain (injected-message resistance)'
     // The legitimate message must still decrypt correctly (chain not desynced).
     expect(await R.ratchetDecrypt(receiver, legitMsg)).toBe('real message');
   });
+
+  it('a forged message with a counter GAP does not desync the chain (staged-commit regression)', async () => {
+    // Regression: the skip-ahead block used to mutate recvChainKey/skippedKeys BEFORE
+    // the AEAD check, so an injected message with a valid counter gap but corrupted
+    // ciphertext advanced the receive chain while recvCounter stayed put — permanently
+    // desyncing the session (one-packet DoS). State must only advance after a real decrypt.
+    const { sender, receiver } = R.pairFromSharedChain(randomChain());
+    const c1 = await R.ratchetEncrypt(sender, 'one');
+    const c2 = await R.ratchetEncrypt(sender, 'two');
+    const c3 = await R.ratchetEncrypt(sender, 'three');
+    const c4 = await R.ratchetEncrypt(sender, 'four');
+    expect(await R.ratchetDecrypt(receiver, c1)).toBe('one');
+    expect(await R.ratchetDecrypt(receiver, c2)).toBe('two'); // recvCounter = 2
+
+    // Forge a message claiming counter 4 (gap of 1 over recvCounter+1=3) with corrupted
+    // ciphertext + stripped commitment so only the AEAD tag rejects it.
+    const forged = JSON.parse(c4);
+    forged.d[0] ^= 0xff;
+    delete forged.cm;
+    expect(await R.ratchetDecrypt(receiver, forged)).toBe(null);
+
+    // The chain must NOT be desynced: the legit gap-filling message #3 still decrypts,
+    // then #4. With the pre-fix code, recvChainKey had jumped ahead and these returned null.
+    expect(await R.ratchetDecrypt(receiver, c3)).toBe('three');
+    expect(await R.ratchetDecrypt(receiver, c4)).toBe('four');
+  });
 });
 
 describe('replay & duplicate protection', () => {

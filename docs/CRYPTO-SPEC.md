@@ -244,8 +244,8 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   `POW_EXPIRED`, preventing indefinite replay of a solved token.
 
 ## Test status
-12 suites, **380 tests** passing (`npm test`); `validate.sh` 33/36. All `src/crypto/`
-modules have test suites: ratchet (23), group (25), atrest (12), franking (9),
+12 suites, **381 tests** passing (`npm test`); `validate.sh` 33/36. All `src/crypto/`
+modules have test suites: ratchet (24), group (25), atrest (12), franking (9),
 negotiate (15), ktlog (37), pow (21), x3dh (6), kat (6), push (15), fingerprint (17);
 worker (194).
 Worker coverage: routing, rate-limit, userId validation (length bounds + charset),

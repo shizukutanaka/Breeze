@@ -71,6 +71,27 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
   7 previously absent: sealed/ack, drop/create, drop/read, ai, translate, abuse/record,
   abuse/report).
 
+### Crypto Modules (`src/crypto/`) — correctness fixes
+- **`ratchet.js` — one-packet desync DoS in the skip-ahead path**: `ratchetDecrypt`
+  mutated `sess.recvChainKey` and stored skipped keys *before* the AEAD / key-commitment
+  check when a message carried a counter gap (`p.c > recvCounter + 1`). An injected
+  message with a valid gap but forged ciphertext therefore advanced the receive chain
+  while `recvCounter` stayed put — permanently desyncing the session, so every subsequent
+  legitimate message derived from the wrong chain position and failed to decrypt (a
+  one-packet denial-of-service against any 1:1 session). Fixed by mirroring the `group.js`
+  pattern: stage the skipped keys and the advanced chain into locals, committing them to
+  the session only after a successful decrypt. Added a regression test (forged gap message
+  → null, then the real gap-filling messages still decrypt); verified it fails against the
+  pre-fix code ("expected null to be 'three'"). The existing no-gap injection test was
+  insufficient because a same-counter forgery never enters the skip-ahead block.
+- **`atrest.js` — PBKDF2 work-factor DoS**: `unwrapJWK` derived the AES key using
+  `record.iter` read straight from the (XSS-writable / corruptible) IndexedDB record; a
+  value like `1e12` would hang the main thread in PBKDF2. Now rejects a non-finite,
+  non-positive, or above-ceiling (10M) iteration count before deriving.
+- **`pow.js` — future-timestamp replay**: `verify()` bounded only the past; a client-set
+  far-future challenge timestamp passed the freshness check forever. Added a `futureSkew`
+  bound (default 5 min) so the replay window stays finite.
+
 ### Documentation (`CLAUDE.md`, `README.md`, `docs/CRYPTO-SPEC.md`, `SPEC.md`)
 - All stale line/endpoint/test counts corrected:
   - `CLAUDE.md`: client 12,696→13,116 lines, worker 1,347→1,888, sw 140→145,
@@ -82,7 +103,7 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
 - `validate.sh` SRI gate confirmed correct (sha384 matches lang.js).
 
 ### Test Suite (`tests/`)
-- **12 suites, 380 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
+- **12 suites, 381 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
 - Worker: group kick TTL regression test (1); corrupt KV data resilience via
   `safeJsonParse` (7); backup type guard (1); AI handler — `reply_suggest` non-string
   context, missing context, capped error echo, `chat` non-string/oversized text (4);
@@ -95,7 +116,8 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
 - Negotiate: empty caps array → `[]`, non-array caps treated as absent (no crash),
   `advertise([])` → `x3dh:v4 + caps:[]`. Total: 15 negotiate tests.
 - Ratchet: non-v3/v4 message throws (not returns null), `MAX_SKIP*2` eviction prunes
-  oversized skipped-key map keeping newest `MAX_SKIP` entries. Total: 23 ratchet tests.
+  oversized skipped-key map keeping newest `MAX_SKIP` entries; forged gap message does not
+  desync the chain (staged-commit regression). Total: 24 ratchet tests.
 - At-rest: `unwrapJWK` rejects an attacker-set absurd/non-finite/non-positive iteration
   count (DoS guard — PBKDF2 hang) in <1s; ceiling-boundary record rejected while the
   legitimate record still round-trips. Total: 12 atrest tests.
