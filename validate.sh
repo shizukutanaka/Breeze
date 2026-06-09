@@ -51,6 +51,17 @@ if echo "$H" | grep -q 'Content-Security-Policy'; then pass "CSP meta tag presen
 # No hardcoded API keys
 KEYS=$(echo "$JS_CONTENT" | grep -cE "(sk-[a-zA-Z0-9]{20,}|pk_live_[a-zA-Z0-9]+|whsec_[a-zA-Z0-9]+|AKIA[A-Z0-9]{16})" || true)
 if [ "$KEYS" -eq 0 ]; then pass "No hardcoded API keys" 10; else fail "$KEYS potential API keys found" 10; fi
+
+# Subresource Integrity: the sha384 declared for lang.js in index.html must match
+# the actual file. A stale hash makes browsers silently refuse to load lang.js,
+# breaking all 900+ language translations — invisible to a normal smoke test.
+if [ -f lang.js ]; then
+  DECLARED=$(echo "$H" | grep -o 'src="lang.js"[^>]*integrity="sha384-[^"]*"' | grep -o 'sha384-[^"]*' | head -1)
+  ACTUAL="sha384-$(node -e "const c=require('crypto'),fs=require('fs');process.stdout.write(c.createHash('sha384').update(fs.readFileSync('lang.js')).digest('base64'))" 2>/dev/null)"
+  if [ -z "$DECLARED" ]; then warn "lang.js SRI: no integrity attribute found" 5
+  elif [ "$DECLARED" = "$ACTUAL" ]; then pass "lang.js SRI matches file" 5
+  else fail "lang.js SRI MISMATCH — translations will fail to load (declared $DECLARED, actual $ACTUAL)" 5; fi
+fi
 echo ""
 
 # ═══ Gate 3: i18n ═══
