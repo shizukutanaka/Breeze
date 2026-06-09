@@ -2,7 +2,7 @@
 
 **Document version**: 2026-03-14 R210
 **Status**: Production-ready
-**Total codebase**: 11,884 (client) + 1,321 (worker) + 111 (SW) = 13,316 lines
+**Total codebase**: 13,116 (client) + 1,930 (worker) + 145 (SW) = 15,191 lines
 
 ---
 
