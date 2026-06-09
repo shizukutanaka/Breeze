@@ -55,11 +55,11 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
 - `validate.sh` SRI gate confirmed correct (sha384 matches lang.js).
 
 ### Test Suite (`tests/`)
-- **12 suites, 367 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
+- **12 suites, 368 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
 - Worker: group kick TTL regression test (1); corrupt KV data resilience via
   `safeJsonParse` (7); backup type guard (1); AI handler — `reply_suggest` non-string
-  context, missing context, capped error echo, `chat` non-string/oversized text (4).
-  Total: 185 worker tests.
+  context, missing context, capped error echo, `chat` non-string/oversized text (4);
+  OTP corruption graceful handling (1). Total: 186 worker tests.
 - Franking: empty message commit/verify (zero-length), tampered commitment bytes
   rejected (binding property), `ctEqual` returns false for different-length inputs
   without throwing. Total: 9 franking tests.
