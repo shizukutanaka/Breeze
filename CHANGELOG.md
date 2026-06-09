@@ -75,7 +75,7 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
 - `validate.sh` SRI gate confirmed correct (sha384 matches lang.js).
 
 ### Test Suite (`tests/`)
-- **12 suites, 369 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
+- **12 suites, 377 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
 - Worker: group kick TTL regression test (1); corrupt KV data resilience via
   `safeJsonParse` (7); backup type guard (1); AI handler — `reply_suggest` non-string
   context, missing context, capped error echo, `chat` non-string/oversized text (4);
@@ -89,6 +89,9 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
   `advertise([])` → `x3dh:v4 + caps:[]`. Total: 15 negotiate tests.
 - Ratchet: non-v3/v4 message throws (not returns null), `MAX_SKIP*2` eviction prunes
   oversized skipped-key map keeping newest `MAX_SKIP` entries. Total: 23 ratchet tests.
+- At-rest: `unwrapJWK` rejects an attacker-set absurd/non-finite/non-positive iteration
+  count (DoS guard — PBKDF2 hang) in <1s; ceiling-boundary record rejected while the
+  legitimate record still round-trips. Total: 12 atrest tests.
 
 ---
 

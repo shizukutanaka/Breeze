@@ -34,6 +34,26 @@ describe('wrap / unwrap', () => {
     expect(await A.unwrapJWK(rec, 'pw')).toBe(null);
   });
 
+  it('rejects an absurd iteration count without hanging (DoS guard on attacker-set iter)', async () => {
+    const rec = await A.wrapJWK(sampleJWK, 'pw');
+    // A tampered/corrupt record could carry iter=1e12, hanging PBKDF2 on the main
+    // thread. The unwrap must reject it fast (before deriving) rather than execute it.
+    for (const badIter of [1e12, Infinity, NaN, -1, 0, '1000', undefined]) {
+      const tampered = { ...rec, iter: badIter };
+      const t0 = Date.now();
+      expect(await A.unwrapJWK(tampered, 'pw')).toBe(null);
+      expect(Date.now() - t0).toBeLessThan(1000); // returned quickly, did not run PBKDF2
+    }
+  });
+
+  it('still unwraps a record at exactly the ceiling boundary is rejected above it', async () => {
+    // A record whose iter is just over the ceiling is rejected; the legitimate
+    // record (cfg.iterations = 1000, well under the ceiling) still round-trips.
+    const rec = await A.wrapJWK(sampleJWK, 'pw');
+    expect(await A.unwrapJWK({ ...rec, iter: 10_000_001 }, 'pw')).toBe(null);
+    expect(await A.unwrapJWK(rec, 'pw')).toEqual(sampleJWK);
+  });
+
   it('uses a fresh salt+iv each time (records differ for same input)', async () => {
     const a = await A.wrapJWK(sampleJWK, 'pw');
     const b = await A.wrapJWK(sampleJWK, 'pw');

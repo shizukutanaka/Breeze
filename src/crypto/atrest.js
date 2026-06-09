@@ -18,6 +18,13 @@ const b64 = (bytes) => { let s = ''; bytes.forEach((b) => { s += String.fromChar
 const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 const u8 = (a) => (a instanceof Uint8Array ? a : Uint8Array.from(a));
 
+// PBKDF2 work-factor ceiling for the UNWRAP path. The iteration count is read
+// from the stored record, which an XSS-planted or corrupted IndexedDB entry
+// controls; an absurd value (e.g. 1e12) would hang the main thread deriving the
+// key. Anything above this generous ceiling (≈16× the 600k default) is rejected
+// rather than executed.
+const MAX_UNWRAP_ITER = 10_000_000;
+
 export function createAtRest(opts = {}) {
   const subtle = opts.subtle || globalThis.crypto.subtle;
   const getRandomValues = opts.getRandomValues || ((a) => globalThis.crypto.getRandomValues(a));
@@ -45,7 +52,11 @@ export function createAtRest(opts = {}) {
   // passphrase / tampering (AES-GCM auth failure).
   async function unwrapJWK(record, passphrase) {
     try {
-      const key = await deriveWrapKey(passphrase, unb64(record.salt), record.iter, record.hash);
+      // Guard the attacker-controllable iteration count: a non-finite, non-positive,
+      // or absurdly large value would otherwise hang the main thread in PBKDF2.
+      const iter = record.iter;
+      if (!Number.isFinite(iter) || iter <= 0 || iter > MAX_UNWRAP_ITER) return null;
+      const key = await deriveWrapKey(passphrase, unb64(record.salt), iter, record.hash);
       const pt = await subtle.decrypt({ name: 'AES-GCM', iv: unb64(record.iv) }, key, unb64(record.ct));
       return JSON.parse(new TextDecoder().decode(new Uint8Array(pt)));
     } catch { return null; }
