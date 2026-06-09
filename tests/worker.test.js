@@ -1271,6 +1271,13 @@ describe('backup upload / download', () => {
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_USER_ID');
   });
+
+  it('rejects upload when backup field is not a string (type guard)', async () => {
+    const e = makeEnv();
+    const res = await handleBackupUpload({ userId: 'user00001', backup: { data: 'object' } }, e, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_FIELD');
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

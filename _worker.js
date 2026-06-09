@@ -1438,6 +1438,7 @@ async function handleBackupUpload(body, env, request) {
   const { userId, backup } = body;
   if (!userId || !backup) return json({ error: 'userId and backup required' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
+  if (typeof backup !== 'string') return json({ error: 'backup must be a string', code: 'INVALID_FIELD' }, 400, request);
 
   // Store (max 5MB per backup)
   if (backup.length > 5 * 1024 * 1024) return json({ error: 'Backup too large', code: 'PAYLOAD_TOO_LARGE' }, 413, request);
@@ -1723,7 +1724,7 @@ async function handleAI(body, env, request) {
       break;
 
     case 'reply_suggest':
-      if (!context) return json({ error: 'context required' }, 400, request);
+      if (!context || typeof context !== 'string') return json({ error: 'context required (string)' }, 400, request);
       systemPrompt = 'Generate 3 short reply suggestions (each under 30 chars) for the last message in this chat. Return ONLY a JSON array of 3 strings. Reply in the same language as the conversation.';
       userContent = context.slice(-1000);
       break;
