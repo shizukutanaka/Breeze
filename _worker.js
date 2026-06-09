@@ -454,6 +454,13 @@ async function handlePresence(body, env, request) {
   // Free tier: 1000 writes/day. 30s heartbeat = 2880/day per user = over limit!
   // 5min write interval = 288/day per user = safe for 3 users on free tier
   if (!globalThis._presenceCache) globalThis._presenceCache = new Map();
+  // Cap: prune to 1000 most-recently-inserted entries when the map exceeds 2000.
+  // Each unique user adds 2 entries (timer + data); 2000 / 2 = 1000 distinct users.
+  // Cloudflare isolates are ephemeral but can serve many unique users before restart.
+  if (globalThis._presenceCache.size > 2000) {
+    const entries = [...globalThis._presenceCache.entries()];
+    globalThis._presenceCache = new Map(entries.slice(-1000));
+  }
   const presKey = `presence:${id}`;
   const lastWrite = globalThis._presenceCache.get(presKey) || 0;
   // Cap pub to 200 chars (a base64 X25519/P-256 key is ≤88 chars; large values are abuse).
