@@ -251,3 +251,37 @@ describe('DH ratchet primitives', () => {
     expect(sess.recvCounter).toBe(0); // Nr reset — the N1 fix
   });
 });
+
+describe('ratchetDecrypt error handling', () => {
+  it('throws for a non-v3/v4 message (distinct from null return)', async () => {
+    const { receiver } = R.pairFromSharedChain(randomChain());
+    await expect(R.ratchetDecrypt(receiver, JSON.stringify({ v: 2, i: [1], d: [2], rk: [3] }))).rejects.toThrow('not a v3/v4 ratchet message');
+    await expect(R.ratchetDecrypt(receiver, JSON.stringify({ v: 4, d: [2], c: 1 }))).rejects.toThrow('not a v3/v4 ratchet message'); // missing rk
+  });
+});
+
+describe('skipped-key cache pruning (MAX_SKIP * 2 eviction)', () => {
+  it('prunes oversized skippedKeys map, keeping the newest MAX_SKIP entries', async () => {
+    const Rs = createRatchet({ MAX_SKIP: 5, MAX_GAP: 2000 });
+    const { sender, receiver } = Rs.pairFromSharedChain(randomChain());
+    // Encrypt enough messages to fill the skipped-key cache beyond MAX_SKIP*2.
+    // Deliver only the last one so the gap walk fills skipped keys.
+    const msgs = [];
+    for (let i = 0; i < 12; i++) msgs.push(await Rs.ratchetEncrypt(sender, `m${i}`));
+    // Deliver msg #12 (index 11): gap = 11, stores keys #7–#11 (MAX_SKIP=5 → gap-i < 5)
+    expect(await Rs.ratchetDecrypt(receiver, msgs[11])).toBe('m11');
+    // Now fill the cache to trigger the prune. We need skippedKeys.length > MAX_SKIP*2=10.
+    // Reset the receiver to simulate a fresh accumulation.
+    const { sender: s2, receiver: r2 } = Rs.pairFromSharedChain(randomChain());
+    const bigMsgs = [];
+    for (let i = 0; i < 25; i++) bigMsgs.push(await Rs.ratchetEncrypt(s2, `big${i}`));
+    // Deliver #25 — with MAX_SKIP=5 only the last 5 skipped keys are stored (prune fires)
+    expect(await Rs.ratchetDecrypt(r2, bigMsgs[24])).toBe('big24');
+    // Keys near the end (within MAX_SKIP) are retained
+    expect(await Rs.ratchetDecrypt(r2, bigMsgs[23])).toBe('big23');
+    expect(await Rs.ratchetDecrypt(r2, bigMsgs[22])).toBe('big22');
+    // Keys far back are dropped (forward secrecy)
+    expect(await Rs.ratchetDecrypt(r2, bigMsgs[0])).toBe(null);
+    expect(await Rs.ratchetDecrypt(r2, bigMsgs[5])).toBe(null);
+  });
+});
