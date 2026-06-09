@@ -380,7 +380,11 @@ async function handleMsgSend(body, ip, env, request) {
   await kvPut(env, key, JSON.stringify(trimmed), { expirationTtl: 604800 });
 
   // Trigger Web Push notification (non-blocking)
-  const pushTitle = groupName ? groupName : (fromName || 'Breeze');
+  // Cap push title to match the stored msg.groupName limit (50 chars) — prevents
+  // an oversized raw groupName from bloating the encrypted Web Push payload past
+  // the RFC 8030 4096-byte per-message limit and causing silent delivery failures.
+  const rawTitle = groupName ? String(groupName).slice(0, 50) : (fromName || 'Breeze');
+  const pushTitle = sanitizeString(rawTitle, 50);
   const pushBody = isCall ? (isVideoCall ? 'Video call' : 'Voice call') : isFile ? '📎 File' : isVoice ? '🎤 Voice' : 'New message';
   sendPushToUser(to, { title: pushTitle, body: pushBody, tag: 'breeze-' + (groupId || from), contactId: from }, env).catch(() => {});
 
@@ -817,7 +821,7 @@ async function handleGroupKick(body, env, request) {
   // I3: post-compromise removal. Bump the epoch so remaining members generate and
   // redistribute fresh sender keys (kicked member can't decrypt the new epoch).
   group.epoch = (group.epoch || 0) + 1;
-  await kvPut(env, `grp:${token}`, JSON.stringify(group));
+  await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
 
   return json({ ok: true, remaining: group.members.length, epoch: group.epoch }, 200, request);
 }

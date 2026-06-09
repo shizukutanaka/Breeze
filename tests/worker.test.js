@@ -1751,4 +1751,28 @@ describe('group create / join / info validation', () => {
     expect(r2.status).toBe(400);
     expect((await r2.json()).code).toBe('INVALID_USER_ID');
   });
+
+  it('kick preserves group record (TTL regression — kick must not make group permanent)', async () => {
+    // A missing expirationTtl on the kick kvPut would silently remove the
+    // 30-day TTL set on create, causing groups to live forever in KV.
+    // This test verifies the group is still retrievable after a kick (not
+    // corrupted) and that the returned epoch is incremented.
+    const env = makeEnv();
+    const { token } = await (await handleGroupCreate(
+      { name: 'ratchet-group', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'mpub' }, env, req({}));
+    const kick = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' }, env, req({}));
+    expect(kick.status).toBe(200);
+    const kj = await kick.json();
+    expect(kj.ok).toBe(true);
+    expect(kj.epoch).toBe(1);
+    expect(kj.remaining).toBe(1); // only creator left
+    // Group is still readable after kick
+    const info = await handleGroupInfo({ token }, env, req({}));
+    expect(info.status).toBe(200);
+    const ij = await info.json();
+    expect(ij.epoch).toBe(1);
+    expect(ij.members.length).toBe(1);
+    expect(ij.members[0].id).toBe('creator1');
+  });
 });
