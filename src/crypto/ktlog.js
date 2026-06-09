@@ -32,10 +32,18 @@ export async function hashIK(subtle, ikJsonString) {
  * Parse and sort key-history entries from a raw prekey bundle.
  * Invalid / missing entries are silently dropped.
  * Returns entries sorted ascending by timestamp.
+ *
+ * The input is RELAY-SUPPLIED (bundle.keyHistory) and therefore untrusted: a
+ * malicious relay could return a huge array to force an O(n log n) sort DoS on
+ * the client at prekey-fetch time. The worker only ever stores ≤10 entries, so
+ * we bound the input to MAX_LOG_ENTRIES (generous headroom) before processing.
  */
+const MAX_LOG_ENTRIES = 256;
+
 export function parseLog(raw) {
   if (!Array.isArray(raw)) return [];
-  return raw
+  const bounded = raw.length > MAX_LOG_ENTRIES ? raw.slice(-MAX_LOG_ENTRIES) : raw;
+  return bounded
     .filter(e => e && typeof e.ts === 'number' && typeof e.h === 'string' && e.h.length > 0)
     .sort((a, b) => a.ts - b.ts);
 }
@@ -148,8 +156,19 @@ export async function verifyChain(subtle, log) {
   let prevC = null;
   for (let i = 0; i < sorted.length; i++) {
     const e = sorted[i];
-    if (!e.c) continue;
-    const expected = await chainHash(subtle, prevC, e.h);
+    // Legacy (pre-chain) entries have no c — skip. A present-but-non-string c is
+    // malformed (tampering), not legacy, so it must fail rather than be skipped.
+    if (e.c === undefined || e.c === null) continue;
+    if (typeof e.c !== 'string') return { ok: false, invalidIdx: i };
+    let expected;
+    try {
+      // chainHash base64-decodes prevC and e.h; a relay that injects malformed
+      // base64 would otherwise throw an uncaught exception. Treat it as a broken
+      // chain instead of crashing the verification.
+      expected = await chainHash(subtle, prevC, e.h);
+    } catch {
+      return { ok: false, invalidIdx: i };
+    }
     if (expected !== e.c) return { ok: false, invalidIdx: i };
     prevC = e.c;
   }

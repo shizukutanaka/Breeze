@@ -296,3 +296,34 @@ describe('N5 — hash-chained log (tamper-evident)', () => {
     expect((await verifyChain(subtle, [{ ts: 1, h: fakeH(1) }])).ok).toBe(true); // no c
   });
 });
+
+describe('untrusted-relay hardening (DoS / malformed input)', () => {
+  const fakeH = (n) => btoa(String.fromCharCode(...new Uint8Array(32).fill(n)));
+
+  it('parseLog bounds a huge relay-supplied array (keeps the newest 256)', () => {
+    // 5000 valid entries with ascending ts; only the last 256 should survive.
+    const huge = Array.from({ length: 5000 }, (_, i) => ({ ts: i, h: `h${i}` }));
+    const out = parseLog(huge);
+    expect(out).toHaveLength(256);
+    // slice(-256) keeps ts 4744..4999 → after sort the newest is 4999.
+    expect(out[out.length - 1].ts).toBe(4999);
+    expect(out[0].ts).toBe(4744);
+  });
+
+  it('verifyChain fails (does not throw) on a malformed-base64 h in a chained entry', async () => {
+    const e1 = await appendChainEntry(subtle, [], fakeH(1), 1000);
+    // e2 claims to be chained (has a string c) but its h is not valid base64.
+    const e2 = { ts: 2000, h: '!!!not-base64!!!', c: fakeH(9) };
+    const r = await verifyChain(subtle, [e1, e2]);
+    expect(r.ok).toBe(false);
+    expect(r.invalidIdx).toBe(1);
+  });
+
+  it('verifyChain fails on a non-string c (tampering, not legacy)', async () => {
+    const e1 = await appendChainEntry(subtle, [], fakeH(1), 1000);
+    const e2 = { ts: 2000, h: fakeH(2), c: 12345 }; // c present but wrong type
+    const r = await verifyChain(subtle, [e1, e2]);
+    expect(r.ok).toBe(false);
+    expect(r.invalidIdx).toBe(1);
+  });
+});
