@@ -28,6 +28,16 @@ const FINGERPRINT_VERSION = 0;
 const DIGITS_PER_PARTY = 30;     // 6 chunks of 5 digits, one per 5 fingerprint bytes
 
 const b64ToBytes = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+const bytesToB64 = (bytes) => { let s = ''; for (const b of bytes) s += String.fromCharCode(b); return btoa(s); };
+
+// Constant-time byte-array equality (no early-exit on first mismatch). Length is
+// not secret here (fixed 30-byte fingerprints), but we still avoid short-circuit.
+function ctEqual(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
+}
 
 function concat(...arrs) {
   let total = 0;
@@ -108,5 +118,47 @@ export function createFingerprint(opts = {}) {
     return combined.match(/.{5}/g).join(' ');
   }
 
-  return { fingerprintFor, safetyNumber, iterations, version };
+  /**
+   * Scannable (QR) safety number — the stronger verification path. Manually
+   * comparing 60 digits is error-prone (users skip digits); a QR scan compares
+   * the FULL 30-byte fingerprints instead of the 40-bit-per-chunk truncation.
+   *
+   * Encodes `version(1) ‖ myFingerprint(30) ‖ peerFingerprint(30)` as base64
+   * (mirrors Signal's CombinedFingerprints, sans protobuf). This is order-
+   * SPECIFIC: it embeds who is local — verification uses the cross-match below.
+   */
+  async function scannable(localKey, remoteKey, { localId = '', remoteId = '' } = {}) {
+    const [l, r] = await Promise.all([
+      fingerprintBytes(localKey, localId),
+      fingerprintBytes(remoteKey, remoteId),
+    ]);
+    return bytesToB64(concat(new Uint8Array([version & 0xff]), l, r));
+  }
+
+  /**
+   * Verify a scannable code obtained out-of-band from the peer (e.g. via QR).
+   * The peer's code embeds (their local = peer's key, their remote = my key), so
+   * a genuine match requires: scanned.local == my remote AND scanned.remote ==
+   * my local, with matching version. Any MITM-substituted key breaks the cross-
+   * match. Comparison is constant-time. Pass the SAME (localKey, remoteKey, ids)
+   * you would pass to scannable()/safetyNumber() from your own perspective.
+   *
+   * @returns {Promise<{ match: boolean, code?: string }>}
+   */
+  async function verifyScannable(scannedB64, localKey, remoteKey, { localId = '', remoteId = '' } = {}) {
+    let scanned;
+    try { scanned = b64ToBytes(scannedB64); } catch { return { match: false, code: 'MALFORMED' }; }
+    if (scanned.length !== 1 + 2 * DIGITS_PER_PARTY) return { match: false, code: 'MALFORMED' };
+    if (scanned[0] !== (version & 0xff)) return { match: false, code: 'VERSION_MISMATCH' };
+    const sLocal  = scanned.slice(1, 1 + DIGITS_PER_PARTY);                   // peer's local  = fp(peer)
+    const sRemote = scanned.slice(1 + DIGITS_PER_PARTY, 1 + 2 * DIGITS_PER_PARTY); // peer's remote = fp(me)
+    const [myLocal, myRemote] = await Promise.all([
+      fingerprintBytes(localKey, localId),   // fp(me)
+      fingerprintBytes(remoteKey, remoteId), // fp(peer)
+    ]);
+    const match = ctEqual(sLocal, myRemote) && ctEqual(sRemote, myLocal);
+    return match ? { match: true } : { match: false, code: 'NO_MATCH' };
+  }
+
+  return { fingerprintFor, safetyNumber, scannable, verifyScannable, iterations, version };
 }

@@ -19,12 +19,24 @@ Signal's.
   Optional stable-identifier binding ties keys to identities (matches Signal).
   Dependency-injected/pure; accepts base64 or raw `Uint8Array` keys.
 
+- **`fingerprint.js` — scannable (QR) verification path**: Manual 60-digit
+  comparison is error-prone (users skip digits) and only checks the truncated
+  ~40-bit-per-chunk display. Added `scannable()` (encodes
+  `version(1) ‖ myFp(30) ‖ peerFp(30)` as base64 — a QR payload mirroring
+  Signal's CombinedFingerprints) and `verifyScannable()` which cross-matches a
+  peer's scanned code (`scanned.local == my remote ∧ scanned.remote == my local`)
+  in **constant time** over the full 30-byte fingerprints. Detects MITM key
+  substitution, malformed/wrong-length codes, and version mismatch; binds stable
+  identifiers like the digit path.
+
 ### Test Suite (`tests/`)
-- **12 suites, 333 tests** passing (`npm test`); `validate.sh` 32/35 (PASSED).
-- `tests/fingerprint.test.js` (11): format (60 digits / 12 groups), symmetry
+- **12 suites, 339 tests** passing (`npm test`); `validate.sh` 32/35 (PASSED).
+- `tests/fingerprint.test.js` (17): format (60 digits / 12 groups), symmetry
   (swap local/remote), determinism, MITM-substitution visibility, stableId
-  binding, iteration-count binding, base64≡bytes equivalence, full 5200-round run.
-- Added 30s timeouts to 5 PoW-solving alias tests (the new full-strength
+  binding, iteration-count binding, base64≡bytes equivalence, full 5200-round run;
+  scannable: encoding length, cross-party match, MITM reject, malformed +
+  version-mismatch reject, stableId binding.
+- Added 30s timeouts to 5 PoW-solving alias tests (the full-strength
   fingerprint test added CPU contention that pushed them past the 5s default).
 
 ### Documentation

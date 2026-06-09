@@ -143,9 +143,17 @@ NumericFingerprintGenerator):
   `safetyNumber()` in index.html (one SHA-256 over 12 bytes, ~40 bits shown).
 
 Impl: `src/crypto/fingerprint.js` (`createFingerprint` → `safetyNumber` /
-`fingerprintFor`). Tests: `tests/fingerprint.test.js` (11 — format, symmetry,
-determinism, MITM-substitution visibility, stableId binding, iteration binding,
-bytes≡base64, full 5200-round run). **Implemented (module).** Gap: migrate
+`fingerprintFor` / `scannable` / `verifyScannable`). The scannable path is the
+stronger verification: `scannable()` encodes `version(1) ‖ myFp(30) ‖ peerFp(30)`
+as base64 (a QR payload, mirroring Signal's CombinedFingerprints) and
+`verifyScannable()` cross-matches a peer's scanned code (scanned.local == my
+remote ∧ scanned.remote == my local) in constant time — comparing the full
+30-byte fingerprints rather than the 40-bit-per-chunk display truncation, so it
+is immune to the digit-skipping errors of manual comparison. Tests:
+`tests/fingerprint.test.js` (17 — format, symmetry, determinism, MITM-substitution
+visibility, stableId binding, iteration binding, bytes≡base64, full 5200-round
+run; scannable: encoding length, cross-party match, MITM reject, malformed/
+version-mismatch reject, stableId binding). **Implemented (module).** Gap: migrate
 index.html `safetyNumber()`/`showSafetyNumber()` onto it (browser-validated pass).
 
 ## 7. Worker endpoints (security-relevant)
@@ -236,9 +244,9 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   `POW_EXPIRED`, preventing indefinite replay of a solved token.
 
 ## Test status
-12 suites, **333 tests** passing (`npm test`); `validate.sh` 32/35. All `src/crypto/`
+12 suites, **339 tests** passing (`npm test`); `validate.sh` 32/35. All `src/crypto/`
 modules have test suites: ratchet (21), group (19), atrest (10), franking (6),
-negotiate (12), ktlog (34), pow (19), x3dh (6), kat (6), push (15), fingerprint (11);
+negotiate (12), ktlog (34), pow (19), x3dh (6), kat (6), push (15), fingerprint (17);
 worker (168).
 Worker coverage: routing, rate-limit, userId validation (length bounds + charset),
 prekey (0-OTP replenish hint + caps round-trip + caps sanitization + x3dh legacy

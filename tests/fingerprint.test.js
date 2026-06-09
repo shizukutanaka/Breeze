@@ -88,3 +88,57 @@ describe('full-strength run (5200 iterations) completes and is well-formed', () 
     expect(sn.replace(/ /g, '')).toMatch(/^\d{60}$/);
   }, 30000); // 5200×2 sequential SHA-512 awaits — generous timeout for cold CI
 });
+
+describe('scannable (QR) safety number', () => {
+  const f = createFingerprint({ subtle, iterations: 8 });
+
+  it('encodes version(1) + two 30-byte fingerprints = 61 bytes base64', async () => {
+    const code = await f.scannable(KEY_A, KEY_B);
+    const bytes = Uint8Array.from(atob(code), (c) => c.charCodeAt(0));
+    expect(bytes).toHaveLength(61);
+    expect(bytes[0]).toBe(0); // version
+  });
+
+  it('cross-matches between the two parties (genuine, no MITM)', async () => {
+    // Alice's perspective: local = A, remote = B.
+    const aliceCode = await f.scannable(KEY_A, KEY_B);
+    // Bob's perspective: local = B, remote = A.
+    const bobCode = await f.scannable(KEY_B, KEY_A);
+    // Alice scans Bob's code and verifies against her own (local=A, remote=B).
+    expect((await f.verifyScannable(bobCode, KEY_A, KEY_B)).match).toBe(true);
+    // Bob scans Alice's code and verifies against his own (local=B, remote=A).
+    expect((await f.verifyScannable(aliceCode, KEY_B, KEY_A)).match).toBe(true);
+  });
+
+  it('rejects a code where the peer key was substituted (MITM)', async () => {
+    const KEY_M = Buffer.from(Uint8Array.from({ length: 32 }, (_, i) => (i * 13) & 0xff)).toString('base64');
+    // Bob's real code is (local=B, remote=A). A MITM relay shows Alice a code
+    // built from the attacker's key instead of Bob's.
+    const mitmCode = await f.scannable(KEY_M, KEY_A); // attacker poses as "Bob"
+    const res = await f.verifyScannable(mitmCode, KEY_A, KEY_B); // Alice expects real B
+    expect(res.match).toBe(false);
+    expect(res.code).toBe('NO_MATCH');
+  });
+
+  it('rejects a malformed base64 / wrong-length code', async () => {
+    expect((await f.verifyScannable('!!!notb64', KEY_A, KEY_B)).code).toBe('MALFORMED');
+    expect((await f.verifyScannable(btoa('short'), KEY_A, KEY_B)).code).toBe('MALFORMED');
+  });
+
+  it('rejects a version mismatch', async () => {
+    const v1 = createFingerprint({ subtle, iterations: 8, version: 1 });
+    const code = await v1.scannable(KEY_A, KEY_B); // version byte = 1
+    const res = await f.verifyScannable(code, KEY_B, KEY_A); // f is version 0
+    expect(res.code).toBe('VERSION_MISMATCH');
+  });
+
+  it('binds stable identifiers in the scannable path too', async () => {
+    const bobCode = await f.scannable(KEY_B, KEY_A, { localId: 'bob', remoteId: 'alice' });
+    // Alice verifies with matching ids → match
+    const ok = await f.verifyScannable(bobCode, KEY_A, KEY_B, { localId: 'alice', remoteId: 'bob' });
+    expect(ok.match).toBe(true);
+    // Alice verifies with wrong ids → no match
+    const bad = await f.verifyScannable(bobCode, KEY_A, KEY_B, { localId: 'alice', remoteId: 'eve' });
+    expect(bad.match).toBe(false);
+  });
+});
