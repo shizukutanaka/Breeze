@@ -6,6 +6,13 @@ Exhaustive category-by-category audit of the full product (crypto modules, worke
 endpoints, service worker, documentation, test coverage). Findings and fixes:
 
 ### Worker (`_worker.js`) — robustness & correctness fixes
+- **Message timestamp type guard (replay-window bypass)**: `handleMsgSend` accepted a
+  client-supplied `ts` of any type. A non-numeric `ts` (string/object/array/`NaN`/`Infinity`)
+  made `Math.abs(now - ts)` evaluate to `NaN`, which is never `> 300000` — silently
+  bypassing the ±5 min replay guard AND storing a non-numeric `msg.ts` that breaks the
+  numeric poll-cursor comparison in `handleMsgPoll` (message could never be delivered or
+  cleaned up). Fixed: reject a non-finite/non-numeric `ts` with 400 `INVALID_TIMESTAMP`
+  before the window check; an absent `ts` still defaults to `now`.
 - **Group kick TTL regression**: `handleGroupKick` was saving the updated group record
   without an `expirationTtl`, silently removing the 30-day TTL set on create/join and
   making kicked groups permanent in KV (unbounded storage growth). Fixed: added
@@ -55,11 +62,12 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
 - `validate.sh` SRI gate confirmed correct (sha384 matches lang.js).
 
 ### Test Suite (`tests/`)
-- **12 suites, 368 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
+- **12 suites, 369 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
 - Worker: group kick TTL regression test (1); corrupt KV data resilience via
   `safeJsonParse` (7); backup type guard (1); AI handler — `reply_suggest` non-string
   context, missing context, capped error echo, `chat` non-string/oversized text (4);
-  OTP corruption graceful handling (1). Total: 186 worker tests.
+  OTP corruption graceful handling (1); msg-send non-numeric `ts` type guard (1).
+  Total: 187 worker tests.
 - Franking: empty message commit/verify (zero-length), tampered commitment bytes
   rejected (binding property), `ctEqual` returns false for different-length inputs
   without throwing. Total: 9 franking tests.

@@ -747,6 +747,21 @@ describe('msg send / poll (1:1 relay path)', () => {
     expect((await res.json()).code).toBe('INVALID_TIMESTAMP');
   });
 
+  it('rejects a non-numeric ts (type guard — prevents replay-window bypass + poisoned msg.ts)', async () => {
+    const env = makeEnv();
+    // A string/object ts makes Math.abs(now - ts) NaN, which is never > 300000, so the
+    // ±5 min replay guard would silently pass and store a non-numeric ts that breaks
+    // the numeric poll cursor. The type guard must reject it before that happens.
+    for (const badTs of ['not-a-number', { evil: 1 }, [123], NaN, Infinity]) {
+      const res = await handleMsgSend(
+        { to: 'bob00001', from: 'alice001', payload: 'X', ts: badTs },
+        ip, env, req({}),
+      );
+      expect(res.status).toBe(400);
+      expect((await res.json()).code).toBe('INVALID_TIMESTAMP');
+    }
+  });
+
   it('rejects self-send', async () => {
     const env = makeEnv();
     const res = await handleMsgSend(

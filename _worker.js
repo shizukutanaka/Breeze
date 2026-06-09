@@ -342,8 +342,13 @@ async function handleMsgSend(body, ip, env, request) {
   if (to === from && !body.type) return json({ error: 'Cannot send to self', code: 'SELF_SEND' }, 400, request);
   if (payload.length > 256 * 1024) return json({ error: 'Payload too large', code: 'PAYLOAD_TOO_LARGE' }, 400, request);
 
-  // v3.5: Replay protection — reject messages with timestamps outside ±5 min window
+  // v3.5: Replay protection — reject messages with timestamps outside ±5 min window.
+  // A non-numeric ts (string/object) makes Math.abs(now - ts) === NaN, which is never
+  // > 300000 — silently bypassing this guard AND poisoning the stored msg.ts below,
+  // which breaks the numeric poll-cursor comparison in handleMsgPoll. Reject a
+  // non-numeric ts outright; an absent ts defaults to now.
   const now = Date.now();
+  if (ts !== undefined && (typeof ts !== 'number' || !Number.isFinite(ts))) return json({ error: 'Invalid timestamp', code: 'INVALID_TIMESTAMP' }, 400, request);
   const msgTs = ts || now;
   if (Math.abs(now - msgTs) > 300000) return json({ error: 'Timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
 
