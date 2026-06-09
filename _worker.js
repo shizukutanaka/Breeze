@@ -1501,28 +1501,66 @@ async function handleDropRead(body, env, request) {
   return json({ ct: data.ct, createdAt: data.createdAt }, 200, request);
 }
 
+// SSRF host/scheme blocklist (RFC 1918, loopback, link-local, cloud metadata).
+// Returns true when the given parsed URL must NOT be fetched. Shared by the initial
+// OGP request AND every redirect hop — validating only the initial URL is a bypass:
+// a public URL can 302-redirect to http://169.254.169.254/ (metadata) or an internal
+// host, and `redirect: 'follow'` would chase it past the guard.
+function isSSRFBlocked(parsed) {
+  if (!['http:', 'https:'].includes(parsed.protocol)) return true;
+  const host = parsed.hostname.toLowerCase();
+  // IPv6 literals arrive BRACKETED ([::1], [::ffff:a00:1]) and the URL parser
+  // compresses the embedded IPv4 to hex (::ffff:10.0.0.1 → ::ffff:a00:1). The old
+  // code checked `host.startsWith('::ffff:')` against the bracketed+compressed form,
+  // so it NEVER matched — the IPv4-mapped-IPv6 bypass guard was inert. Strip the
+  // brackets first so the ::1 / ::ffff: / fc / fd / fe80 prefix checks actually fire
+  // (hostnames have no brackets, so h === host for them — no behavior change there).
+  const h = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
+  // Coerce to a strict boolean: the trailing `parsed.port && …` returns the empty
+  // string (not false) for default ports, which callers comparing === false trip on.
+  return !!(h === 'localhost' || h.startsWith('127.') || h === '::1' || h === '::' || h === '0.0.0.0' ||
+    h.startsWith('10.') || h.startsWith('192.168.') ||
+    (h.startsWith('172.') && parseInt(h.split('.')[1]) >= 16 && parseInt(h.split('.')[1]) <= 31) ||
+    h === '169.254.169.254' || h.startsWith('169.254.') ||
+    h.startsWith('fc') || h.startsWith('fd') || h.startsWith('fe80') ||
+    h.startsWith('::ffff:') ||  // IPv4-mapped IPv6 (any embedded IPv4; parser compresses to hex)
+    h.endsWith('.internal') || h.endsWith('.local') || h.endsWith('.localhost') ||
+    h === 'metadata.google.internal' ||
+    (parsed.port && !['80', '443', ''].includes(parsed.port)));
+}
+
+// Fetch following up to maxHops redirects MANUALLY, re-applying the SSRF guard to
+// each Location. Returns the final non-redirect Response, or null if a hop is blocked
+// / the chain is malformed / too long. Replaces `redirect: 'follow'`, which would
+// bypass isSSRFBlocked() on every hop after the first.
+async function ssrfSafeFetch(initialUrl, opts, timeoutMs, maxHops = 3) {
+  let current = initialUrl;
+  for (let hop = 0; hop <= maxHops; hop++) {
+    const resp = await fetchWithTimeout(current, { ...opts, redirect: 'manual' }, timeoutMs);
+    // Cloudflare surfaces opaqueredirect via status 0 when redirect is 'manual' in
+    // some modes; treat 3xx + a Location header as a redirect to re-validate.
+    if (resp.status >= 300 && resp.status < 400) {
+      const loc = resp.headers.get('Location');
+      if (!loc) return resp; // redirect with no target — nothing to follow
+      let next;
+      try { next = new URL(loc, current); } catch { return null; }
+      if (isSSRFBlocked(next)) return null; // blocked internal/metadata target
+      current = next.toString();
+      continue;
+    }
+    return resp;
+  }
+  return null; // too many redirects
+}
+
 async function handleOGP(body, env, request) {
   const { url } = body;
   if (!url || !url.startsWith('http')) return json({ error: 'url required', code: 'MISSING_URL' }, 400, request);
   if (typeof url !== 'string' || url.length > 2048) return json({ error: 'url too long (max 2048)', code: 'URL_TOO_LONG' }, 400, request);
 
-  // SSRF protection: block private/internal IPs and non-http schemes
+  // SSRF protection: block private/internal IPs and non-http schemes (initial URL).
   try {
-    const parsed = new URL(url);
-    if (!['http:', 'https:'].includes(parsed.protocol)) return json({}, 200, request);
-    const host = parsed.hostname.toLowerCase();
-    // v3.3: Comprehensive SSRF protection (RFC 1918, loopback, link-local, metadata)
-    if (host === 'localhost' || host.startsWith('127.') || host === '::1' || host === '0.0.0.0' ||
-        host.startsWith('10.') || host.startsWith('192.168.') ||
-        host.startsWith('172.') && parseInt(host.split('.')[1]) >= 16 && parseInt(host.split('.')[1]) <= 31 ||
-        host === '169.254.169.254' || host.startsWith('169.254.') ||
-        host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80') ||
-        host.endsWith('.internal') || host.endsWith('.local') || host.endsWith('.localhost') ||
-        host === '[::1]' || host === 'metadata.google.internal' ||
-        host.startsWith('::ffff:') ||  // IPv4-mapped IPv6 bypass (e.g. ::ffff:c0a8:101 = 192.168.1.1)
-        parsed.port && !['80', '443', ''].includes(parsed.port)) {
-      return json({}, 200, request);
-    }
+    if (isSSRFBlocked(new URL(url))) return json({}, 200, request);
   } catch(e) { return json({}, 200, request); }
 
   // Cache OGP results for 24h — hash the URL so two URLs sharing a 200-char prefix
@@ -1532,12 +1570,13 @@ async function handleOGP(body, env, request) {
   if (cached) { try { return json(JSON.parse(cached), 200, request); } catch { /* fall through on corrupt cache */ } }
 
   try {
-    const resp = await fetchWithTimeout(url, {
+    // SSRF-safe manual redirect following: each hop's target is re-validated against
+    // isSSRFBlocked(), so a public URL can't 302-bounce us into an internal/metadata host.
+    const resp = await ssrfSafeFetch(url, {
       headers: { 'User-Agent': 'BreezeBot/1.0 (link preview)', 'Accept': 'text/html' },
-      redirect: 'follow',
       cf: { cacheTtl: 3600 },
     }, 5000);
-    if (!resp.ok) return json({}, 200, request);
+    if (!resp || !resp.ok) return json({}, 200, request);
 
     const ct = resp.headers.get('content-type') || '';
     if (!ct.includes('text/html')) return json({}, 200, request);
@@ -1930,6 +1969,8 @@ export {
   handlePresence,
   handleOnlineCount,
   handleOGP,
+  isSSRFBlocked,
+  ssrfSafeFetch,
   handleTurn,
   handleAccountSlots,
   handleAI,

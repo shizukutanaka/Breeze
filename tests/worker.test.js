@@ -37,6 +37,8 @@ import worker, {
   handlePresence,
   handleOnlineCount,
   handleOGP,
+  isSSRFBlocked,
+  ssrfSafeFetch,
   handleTurn,
   handleAccountSlots,
   handleAI,
@@ -1610,6 +1612,80 @@ describe('OGP SSRF guard', () => {
     const res = await handleOGP({ url: 'http://' }, e, req({}));
     expect(res.status).toBe(200);
     expect(Object.keys(await res.json()).length).toBe(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SSRF host blocklist + redirect-following guard (isSSRFBlocked / ssrfSafeFetch).
+// Validating only the initial URL is a bypass: a public URL can 302-redirect into
+// an internal/metadata host, and `redirect: 'follow'` would chase it past the guard.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('SSRF guard internals (isSSRFBlocked + redirect re-validation)', () => {
+  it('isSSRFBlocked flags private/loopback/link-local/metadata hosts and bad schemes', () => {
+    for (const u of [
+      'http://localhost/', 'http://127.0.0.1/', 'http://10.1.2.3/', 'http://192.168.0.1/',
+      'http://172.16.0.1/', 'http://169.254.169.254/', 'http://metadata.google.internal/',
+      'http://foo.internal/', 'http://bar.local/', 'http://0.0.0.0/',
+      'http://[::ffff:10.0.0.1]/', 'http://example.com:8080/', 'ftp://example.com/',
+      'file:///etc/passwd', 'gopher://example.com/',
+    ]) {
+      expect(isSSRFBlocked(new URL(u))).toBe(true);
+    }
+  });
+
+  it('isSSRFBlocked permits ordinary public http(s) URLs on standard ports', () => {
+    for (const u of ['https://example.com/page', 'http://example.com:80/x', 'https://a.b.co:443/y']) {
+      expect(isSSRFBlocked(new URL(u))).toBe(false);
+    }
+  });
+
+  it('ssrfSafeFetch returns null when a redirect points at an internal host (the bypass)', async () => {
+    // Simulate a public URL that 302-redirects to the cloud-metadata endpoint.
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = async (u) => {
+      if (String(u).startsWith('https://public.example')) {
+        return new Response(null, { status: 302, headers: { Location: 'http://169.254.169.254/latest/meta-data' } });
+      }
+      // If the guard is broken and we follow, this would be the metadata response.
+      return new Response('SECRET', { status: 200 });
+    };
+    try {
+      const r = await ssrfSafeFetch('https://public.example/start', {}, 5000);
+      expect(r).toBe(null); // blocked at the redirect hop, never fetched metadata
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+
+  it('ssrfSafeFetch follows a redirect to another public host and returns its response', async () => {
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = async (u) => {
+      if (String(u).startsWith('https://public.example')) {
+        return new Response(null, { status: 301, headers: { Location: 'https://other-public.example/final' } });
+      }
+      return new Response('<title>OK</title>', { status: 200 });
+    };
+    try {
+      const r = await ssrfSafeFetch('https://public.example/start', {}, 5000);
+      expect(r).not.toBe(null);
+      expect(r.status).toBe(200);
+      expect(await r.text()).toContain('OK');
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+
+  it('ssrfSafeFetch returns null on a redirect loop exceeding maxHops', async () => {
+    const origFetch = globalThis.fetch;
+    // Always redirect to a different public host → never resolves to a final 200.
+    let n = 0;
+    globalThis.fetch = async () => new Response(null, { status: 302, headers: { Location: `https://pub${n++}.example/x` } });
+    try {
+      const r = await ssrfSafeFetch('https://pub.example/start', {}, 5000, 3);
+      expect(r).toBe(null);
+    } finally {
+      globalThis.fetch = origFetch;
+    }
   });
 });
 

@@ -6,6 +6,19 @@ Exhaustive category-by-category audit of the full product (crypto modules, worke
 endpoints, service worker, documentation, test coverage). Findings and fixes:
 
 ### Worker (`_worker.js`) — robustness & correctness fixes
+- **SSRF: redirect-following bypass (`handleOGP`)**: the link-preview fetcher validated
+  only the *initial* URL's host against the private-IP/metadata blocklist, then fetched
+  with `redirect: 'follow'`. A public URL could 302-redirect to `http://169.254.169.254/`
+  (cloud metadata) or any internal host and `fetch` would chase it past the guard. Fixed:
+  extracted the blocklist into `isSSRFBlocked(parsed)` and added `ssrfSafeFetch()` which
+  follows redirects MANUALLY (max 3 hops), re-validating each `Location` against the same
+  guard and aborting on a blocked/looping/malformed chain.
+- **SSRF: inert IPv4-mapped-IPv6 guard**: the old `host.startsWith('::ffff:')` check never
+  matched — the URL parser returns IPv6 literals bracketed and compresses the embedded
+  IPv4 to hex (`[::ffff:10.0.0.1]` → `[::ffff:a00:1]`), so `[::1]`/`::ffff:` targets slipped
+  through (the existing tests only "passed" because the outbound fetch failed in the test
+  env and the catch-all returned `{}`). Fixed: strip brackets before the IPv6 prefix
+  checks so `::1`, `::`, `::ffff:*`, `fc`/`fd`/`fe80` literals are actually blocked.
 - **Message timestamp type guard (replay-window bypass)**: `handleMsgSend` accepted a
   client-supplied `ts` of any type. A non-numeric `ts` (string/object/array/`NaN`/`Infinity`)
   made `Math.abs(now - ts)` evaluate to `NaN`, which is never `> 300000` — silently
@@ -67,8 +80,8 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
   `safeJsonParse` (7); backup type guard (1); AI handler — `reply_suggest` non-string
   context, missing context, capped error echo, `chat` non-string/oversized text (4);
   OTP corruption graceful handling (1); msg-send non-numeric `ts` type guard (1);
-  msg-poll non-numeric `lastTs` cursor fallback (1).
-  Total: 188 worker tests.
+  msg-poll non-numeric `lastTs` cursor fallback (1); SSRF redirect-revalidation + IPv4-mapped-IPv6 guard (5).
+  Total: 193 worker tests.
 - Franking: empty message commit/verify (zero-length), tampered commitment bytes
   rejected (binding property), `ctEqual` returns false for different-length inputs
   without throwing. Total: 9 franking tests.
