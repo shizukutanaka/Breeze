@@ -146,7 +146,7 @@ Run `./validate.sh` or `./build.sh validate`:
 - Gate 6: Protocol Spec (6 crypto features)
 - Gate 7: Required Files (10 files)
 
-Current score: **32/35 (93%)**
+Current score: **33/36 (93%)**
 
 ## Development & Tests
 

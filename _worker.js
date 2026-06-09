@@ -1,6 +1,6 @@
 /**
  * Breeze Worker v3.6.0
- * 28 API endpoints. Cloudflare Pages Functions.
+ * 32 API endpoints. Cloudflare Pages Functions.
  *
  * KV schema:
  *   slots:{userId}     → { slots, plan, customerId, updatedAt }
