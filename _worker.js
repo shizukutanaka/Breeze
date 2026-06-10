@@ -428,9 +428,12 @@ async function handleMsgPoll(body, env, request) {
   // comparison NaN→false, which both starves the poller AND (via the same cutoff in
   // the cleanup filter below) deletes still-undelivered messages older than 10s.
   const cutoff = (typeof lastTs === 'number' && Number.isFinite(lastTs)) ? lastTs : 0;
-  const newMsgs = all.filter(m => (m.ts || 0) > cutoff);
+  // Use Number.isFinite to coerce non-finite ts values (NaN, Infinity) to 0.
+  // (m.ts || 0) handles NaN (falsy) but not Infinity (truthy): a stored message
+  // with ts:Infinity would pass every cutoff check and never be cleaned up.
+  const newMsgs = all.filter(m => (Number.isFinite(m.ts) ? m.ts : 0) > cutoff);
   // Remove delivered messages older than 10 seconds (grace period for multi-tab)
-  const keep = all.filter(m => (m.ts || 0) > cutoff || (Date.now() - (m.ts || 0)) < 10000);
+  const keep = all.filter(m => { const t = Number.isFinite(m.ts) ? m.ts : 0; return t > cutoff || (Date.now() - t) < 10000; });
   if (keep.length < all.length) {
     if (keep.length === 0) await kvDel(env, key);
     else await kvPut(env, key, JSON.stringify(keep), { expirationTtl: 604800 });

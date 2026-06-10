@@ -955,6 +955,33 @@ describe('msg send / poll (1:1 relay path)', () => {
     const { messages: msgs2 } = await (await handleMsgPoll({ id: 'bob00001', lastTs: now }, env, req({}))).json();
     expect(msgs2[0].disappearAt).toBe(validExpiry);
   });
+
+  it('poll does not return a zombie message whose stored ts is Infinity (Number.isFinite guard)', async () => {
+    // (m.ts || 0) handles NaN (falsy) but not Infinity (truthy): a stored message
+    // with ts:Infinity would satisfy Infinity > any_cutoff on every poll, being
+    // returned every time and never cleaned from KV.  Number.isFinite coerces
+    // Infinity to 0, so it behaves like an oldest-possible timestamp: NOT returned
+    // when cutoff=0 (0 > 0 is false), and deleted from KV (not kept).
+    const env = makeEnv();
+    const now = Date.now();
+    // Directly write a malformed KV entry with ts:Infinity (bypasses send-side guard
+    // to simulate old data or corrupted KV).
+    await env.KV.put('inbox:dave0001', JSON.stringify([
+      { from: 'alice001', payload: 'zombie', ts: Infinity },
+      { from: 'alice001', payload: 'valid',  ts: now },
+    ]));
+    // With cutoff=0: zombie coerced to ts=0, 0>0 is false — NOT returned.
+    // Only the valid message (ts=now > 0) is returned.
+    const poll1 = await handleMsgPoll({ id: 'dave0001', lastTs: 0 }, env, apiRequest('/api/msg/x', {}));
+    const { messages: m1 } = await poll1.json();
+    expect(m1.length).toBe(1);
+    expect(m1[0].payload).toBe('valid');
+    // Second poll with cutoff=now: valid message also excluded now. Zombie still
+    // excluded (coerced 0 <= now). Zero messages returned — no zombie resurrection.
+    const poll2 = await handleMsgPoll({ id: 'dave0001', lastTs: now }, env, apiRequest('/api/msg/x', {}));
+    const { messages: m2 } = await poll2.json();
+    expect(m2.length).toBe(0);
+  });
 });
 
 describe('alias set / get (PoW anti-spam)', () => {
