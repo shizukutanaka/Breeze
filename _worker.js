@@ -26,6 +26,14 @@ function validateUserId(id) {
   return typeof id === 'string' && id.length >= 8 && id.length <= 512 && /^[A-Za-z0-9+/=_-]+$/.test(id);
 }
 
+// N3: sanitize a client-advertised capability array (prekey bundle + presence). Keeps
+// ≤20 string entries, each ≤32 chars; drops non-strings. Returns undefined for a
+// non-array so callers can omit the field entirely (backward-compat for v4 clients).
+function sanitizeCaps(caps) {
+  if (!Array.isArray(caps)) return undefined;
+  return caps.slice(0, 20).filter((c) => typeof c === 'string').map((c) => c.slice(0, 32));
+}
+
 // Defensive JSON.parse: returns fallback instead of throwing on corrupt KV data.
 function safeJsonParse(str, fallback = null) {
   try { return JSON.parse(str); } catch { return fallback; }
@@ -436,11 +444,8 @@ async function handlePresence(body, env, request) {
   // N3: capability advertisement carried in the heartbeat so a peer can negotiate the
   // protocol version (x3dh-v5 / group-v5) BEFORE fetching a 1:1 bundle — important for
   // groups, where a member learns the group's capability floor without fetching every
-  // member's prekey bundle. Sanitized like the prekey bundle: ≤20 string entries, ≤32
-  // chars each; non-strings dropped. (advertise() from src/crypto/negotiate.js.)
-  const safeCaps = Array.isArray(caps)
-    ? caps.slice(0, 20).filter((c) => typeof c === 'string').map((c) => c.slice(0, 32))
-    : undefined;
+  // member's prekey bundle. (advertise() from src/crypto/negotiate.js.)
+  const safeCaps = sanitizeCaps(caps);
 
   // Batch check: { ids: ['abc','def'], check: true }
   if (isCheck && ids && Array.isArray(ids)) {
@@ -1255,13 +1260,10 @@ async function handlePreKeyUpload(body, env, request) {
   }
   const bundle = { identityKey, edIdentityKey, signedPreKey, signedPreKeySig, uploadedAt: Date.now() };
   // N3: persist capability set so the initiator can call parsePeerCaps(bundle) and
-  // negotiate() to pick the right protocol path. Cap each string to 32 chars and the
-  // array to 20 entries to prevent DoS; non-string entries are silently dropped.
-  if (Array.isArray(caps)) {
-    bundle.caps = caps.slice(0, 20)
-      .filter(c => typeof c === 'string')
-      .map(c => c.slice(0, 32));
-  }
+  // negotiate() to pick the right protocol path (same sanitization as the presence
+  // heartbeat — ≤20 strings, ≤32 chars; non-string entries silently dropped).
+  const caps_ = sanitizeCaps(caps);
+  if (caps_) bundle.caps = caps_;
   // Legacy compat: preserve the x3dh field from advertise() so parsePeerCaps()'s
   // fallback path (bundle.x3dh === 'v5') works for transition-period clients that
   // don't yet understand the `caps` array. Only 'v4'/'v5' are meaningful; cap to 4.
