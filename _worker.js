@@ -1448,7 +1448,7 @@ async function handleAccountSlots(body, env, request) {
 // expires via the TTLs above.
 // ============================================================
 async function handleAccountDelete(body, env, request) {
-  const { userId, ts, sig, alias } = body;
+  const { userId, ts, sig, alias, groups } = body;
   if (!userId || !sig || ts === undefined) return json({ error: 'userId, ts, sig required', code: 'MISSING_FIELDS' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   if (typeof sig !== 'string' || sig.length > 500) return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
@@ -1507,10 +1507,49 @@ async function handleAccountDelete(body, env, request) {
   globalThis._presenceCache?.delete(`presence:${userId}`);
   globalThis._presenceCache?.delete(`presence:${userId}:data`);
 
+  // Optional group membership cleanup. There is no reverse index (user → groups),
+  // so without the client supplying the tokens, a deleted account's id/pub/name
+  // lingers in every group it joined for the 30-day group TTL — the same residual
+  // data the rest of this handler erases. The request is already authenticated by
+  // the Ed25519 signature over userId, so removing *this* user from the groups it
+  // names is legitimate self-removal. Per token:
+  //   - creator → delete the whole group (a creator-less group is unmoderatable;
+  //     the proper survival path is /api/group/transfer BEFORE deletion).
+  //   - member  → remove + epoch bump (PCS: the departed account can't decrypt new
+  //     traffic), mirroring handleGroupLeave.
+  const groupsLeft = [];
+  const groupsDeleted = [];
+  if (Array.isArray(groups)) {
+    // Cap at 50 to bound KV operations on a single request (KV write budget guard).
+    const tokens = groups
+      .map(g => (typeof g === 'string' ? g : (g && typeof g.token === 'string' ? g.token : null)))
+      .filter(tok => typeof tok === 'string' && tok.length > 0 && tok.length <= 128)
+      .slice(0, 50);
+    for (const tok of tokens) {
+      const graw = await kvGet(env, `grp:${tok}`);
+      if (!graw) continue;
+      const group = safeJsonParse(graw);
+      if (!group || !Array.isArray(group.members)) continue;
+      if (!group.members.some(m => m.id === userId)) continue; // not a member — ignore
+      if (group.creatorId === userId) {
+        await kvDel(env, `grp:${tok}`);
+        groupsDeleted.push(tok);
+      } else {
+        group.members = group.members.filter(m => m.id !== userId);
+        if (Array.isArray(group.admins)) group.admins = group.admins.filter(id => id !== userId);
+        group.epoch = (group.epoch | 0) + 1;
+        await kvPut(env, `grp:${tok}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+        groupsLeft.push(tok);
+      }
+    }
+  }
+
   return json({
     ok: true,
     erased: ['inbox', 'sealed', 'prekeys', 'ktlog', 'push', 'backup', 'presence', 'slots'],
     aliasDeleted,
+    groupsLeft: groupsLeft.length,
+    groupsDeleted: groupsDeleted.length,
   }, 200, request);
 }
 

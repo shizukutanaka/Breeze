@@ -1,5 +1,25 @@
 # Changelog
 
+## Account deletion now cleans up group memberships (branch claude/nice-ride-T6yb0, 2026-06-10)
+
+Closed a residual-data hole in the account-deletion feature itself: there is no
+reverse index (user → groups), so a deleted account's id/pub/name lingered in
+every group it had joined for the 30-day group TTL — exactly the residual data
+the rest of `/api/account/delete` erases. 508 tests (+2); no endpoint change
+(enhancement to the existing handler).
+
+- **`/api/account/delete` accepts an optional `groups: [token,…]`** (or
+  `[{token},…]`, cap 50). The request is already Ed25519-authenticated over
+  `userId`, so removing *that* user from the groups it names is legitimate
+  self-removal. Per token: **creator** → the whole group is deleted (a
+  creator-less group is unmoderatable; the survival path is
+  `/api/group/transfer` *before* deletion); **member** → removed + epoch bump
+  (PCS — the departed account can't decrypt new traffic), mirroring
+  `handleGroupLeave`. Tokens where the account isn't a member are ignored.
+  Response gains `groupsLeft` / `groupsDeleted` counts.
+- **Tests (+2)**: member-group removal + epoch bump alongside created-group
+  deletion; non-membership tokens ignored + 50-cap doesn't throw.
+
 ## Group rename — lifecycle CRUD completion (branch claude/nice-ride-T6yb0, 2026-06-10)
 
 The group name was frozen at `create()` with no way to edit it

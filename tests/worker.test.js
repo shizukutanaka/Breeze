@@ -1033,6 +1033,63 @@ describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
     expect(res2.status).toBe(403);
     expect((await res2.json()).code).toBe('NO_IDENTITY_KEY');
   });
+
+  it('removes the account from member groups and deletes groups it created', async () => {
+    const env = makeEnv();
+    const gReq = (b) => apiRequest('/api/group/x', b);
+    const userId = 'deluser06';
+    const { ed } = await registeredAccount(env, userId);
+
+    // A group the user only joined (someone else is creator).
+    const created = await handleGroupCreate(
+      { name: 'theirs', creatorId: 'owner001', creatorPub: 'opub', creatorName: 'O' }, env, gReq({}));
+    const memberToken = (await created.json()).token;
+    await handleGroupJoin({ token: memberToken, memberId: userId, memberPub: 'mpub', memberName: 'Me' }, env, gReq({}));
+
+    // A group the user created.
+    const ownCreate = await handleGroupCreate(
+      { name: 'mine', creatorId: userId, creatorPub: 'mpub', creatorName: 'Me' }, env, gReq({}));
+    const ownToken = (await ownCreate.json()).token;
+    await handleGroupJoin({ token: ownToken, memberId: 'friend01', memberPub: 'fpub', memberName: 'F' }, env, gReq({}));
+
+    const ts = Date.now();
+    const res = await handleAccountDelete(
+      { userId, ts, sig: await signDelete(ed, userId, ts), groups: [memberToken, ownToken] }, env, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.groupsLeft).toBe(1);
+    expect(j.groupsDeleted).toBe(1);
+
+    // Member group: still exists, but the deleted user is gone + epoch bumped.
+    const memberGroup = JSON.parse(await env.KV.get(`grp:${memberToken}`));
+    expect(memberGroup.members.some((m) => m.id === userId)).toBe(false);
+    expect(memberGroup.epoch).toBe(1);
+    // Created group: gone entirely (creator-less groups are unmoderatable).
+    expect(await env.KV.get(`grp:${ownToken}`)).toBeNull();
+  });
+
+  it('ignores group tokens where the account is not a member, and caps at 50', async () => {
+    const env = makeEnv();
+    const gReq = (b) => apiRequest('/api/group/x', b);
+    const userId = 'deluser07';
+    const { ed } = await registeredAccount(env, userId);
+    // A group the user is NOT in.
+    const created = await handleGroupCreate(
+      { name: 'other', creatorId: 'owner002', creatorPub: 'opub', creatorName: 'O' }, env, gReq({}));
+    const otherToken = (await created.json()).token;
+
+    const ts = Date.now();
+    // 60 tokens (mostly garbage) — must not throw, must cap, must skip non-membership.
+    const tokens = [otherToken, ...Array.from({ length: 60 }, (_, i) => `tok${i}`)];
+    const res = await handleAccountDelete(
+      { userId, ts, sig: await signDelete(ed, userId, ts), groups: tokens }, env, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.groupsLeft).toBe(0);
+    expect(j.groupsDeleted).toBe(0);
+    // The other user's group is untouched.
+    expect(await env.KV.get(`grp:${otherToken}`)).not.toBeNull();
+  });
 });
 
 describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => {
