@@ -202,6 +202,36 @@ describe('replay & duplicate protection', () => {
     // Exact duplicate delivery: counter equals recvCounter -> replay path -> null.
     expect(await R.ratchetDecrypt(receiver, c1)).toBe(null);
   });
+
+  it('rejects a NaN counter that would corrupt sess.recvCounter (relay-tamper guard)', async () => {
+    // The counter `c` is not inside the AES-GCM AEAD, so a relay can change it without
+    // invalidating the auth tag.  A NaN counter bypasses both the replay check
+    // (p.c <= NaN is false) and the gap guard (p.c > NaN+1 is false), then writes
+    // NaN into sess.recvCounter — permanently breaking future replay detection.
+    const { sender, receiver } = R.pairFromSharedChain(randomChain());
+    const c1 = await R.ratchetEncrypt(sender, 'legit');
+    const tampered = { ...JSON.parse(c1), c: NaN };
+    expect(await R.ratchetDecrypt(receiver, tampered)).toBe(null);
+    // Session must not be corrupted — recvCounter stays at 0.
+    expect(receiver.recvCounter).toBe(0);
+    // The original message can still decrypt.
+    expect(await R.ratchetDecrypt(receiver, c1)).toBe('legit');
+  });
+
+  it('rejects an Infinity counter (same relay-tamper guard)', async () => {
+    const { sender, receiver } = R.pairFromSharedChain(randomChain());
+    const c1 = await R.ratchetEncrypt(sender, 'legit');
+    const tampered = { ...JSON.parse(c1), c: Infinity };
+    expect(await R.ratchetDecrypt(receiver, tampered)).toBe(null);
+    expect(receiver.recvCounter).toBe(0);
+  });
+
+  it('rejects a negative counter', async () => {
+    const { sender, receiver } = R.pairFromSharedChain(randomChain());
+    const c1 = await R.ratchetEncrypt(sender, 'legit');
+    const tampered = { ...JSON.parse(c1), c: -1 };
+    expect(await R.ratchetDecrypt(receiver, tampered)).toBe(null);
+  });
 });
 
 describe('key commitment (I16 — anti invisible-salamander)', () => {

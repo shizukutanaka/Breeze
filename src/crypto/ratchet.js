@@ -179,6 +179,11 @@ export function createRatchet(opts = {}) {
   async function ratchetDecrypt(sess, payload) {
     const p = typeof payload === 'string' ? JSON.parse(payload) : payload;
     if (!((p.v === 3 || p.v === 4) && p.rk)) throw new Error('not a v3/v4 ratchet message');
+    // The counter `c` is not inside the AEAD so a relay can modify it without
+    // breaking the auth tag. NaN / Infinity counters bypass the replay / gap
+    // checks and corrupt sess.recvCounter on successful decrypt, permanently
+    // breaking the session.  Reject early.
+    if (!Number.isFinite(p.c) || p.c < 0) return null;
 
     // I7: time-expire stale skipped message keys. Retaining them indefinitely is
     // both a forward-secrecy leak (old keys sitting in storage) and a DoS amplifier.
