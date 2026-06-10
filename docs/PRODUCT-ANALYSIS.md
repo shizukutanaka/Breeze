@@ -55,6 +55,7 @@
 | 5 | **メッセージ ID** | 同一ミリ秒に 2 通格納されると ts のみのカーソルが 2 通目を取りこぼす | `/msg/send` でサーバ側 12-hex ID を付与(将来の排他カーソルの土台。現行クライアントは未知フィールドを無視するため無害) |
 | 6 | **複数管理者グループ** | `admins` 配列は kick/leave で維持(削除時にフィルタ)されるのに、任命 API がなく kick も無視 — 作成者単一障害点の「作りかけ」機能 | `/api/group/admin`(作成者限定の昇格/降格)。kick は admins 対応に(管理者は一般メンバーを kick 可、管理者同士は不可・作成者のみ)。info は `creatorId`+`admins` を返す |
 | 7 | **グループ所有権の移譲** | `creatorId` が不変。作成者がアカウント削除すると delete/admin 管理が永久に不能(複数管理者で緩和したが移譲は別途必要) | `/api/group/transfer`(作成者限定)。creator* フィールドが新所有者に追従、旧作成者は admin として残留、新所有者は admins から除外(権限は暗黙化) |
+| 8 | **グループ改名** | 名前が `create()` で固定され編集手段なし(CRUD の "update" 動詞が欠落) | `/api/group/rename`(作成者または管理者)。create と同一サニタイズ(≤50字)。空名は拒否、超過は切詰 |
 
 ### 未実装(優先度順・理由つき)
 
@@ -75,12 +76,14 @@
 
 ## 検証
 
-- `npm test` — 13 スイート / 502 件全成功(本セッションで +30 件:アカウント削除/
+- `npm test` — 13 スイート / 506 件全成功(本セッションで +34 件:アカウント削除/
   グループ leave・delete/disappearAt パージ/メッセージ ID で +14、複数管理者で +10、
-  所有権移譲で +6)
+  所有権移譲で +6、改名で +4)
 - `./validate.sh` — 33/36(ベースライン維持、⚠3 は既知の許容警告)
 - `node -c _worker.js && node -c sw.js` — 構文 OK
 - 新エンドポイント(account/delete・group/leave・group/delete・group/admin・
-  group/transfer)はすべて追加(additive)のため、既存クライアントとの後方互換性は
-  ワイヤ変更なしで保たれる(disappearAt パージのみ挙動変更だが、クライアントは同条件で
-  描画拒否済みのため観測可能な差分なし。kick 認可拡張も従来の作成者経路は不変)
+  group/transfer・group/rename)はすべて追加(additive)のため、既存クライアントとの
+  後方互換性はワイヤ変更なしで保たれる(disappearAt パージのみ挙動変更だが、クライアントは
+  同条件で描画拒否済みのため観測可能な差分なし。kick 認可拡張も従来の作成者経路は不変)。
+  グループ操作は create/join/info/rename/kick/admin/transfer/leave/delete で
+  CRUD ライフサイクル完成。

@@ -22,6 +22,7 @@ import worker, {
   handleGroupKick,
   handleGroupAdmin,
   handleGroupTransfer,
+  handleGroupRename,
   handleGroupLeave,
   handleGroupDelete,
   handleAccountDelete,
@@ -780,6 +781,59 @@ describe('group ownership transfer (companion to multi-admin)', () => {
     const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'creator1' }, env, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('NO_OP');
+  });
+});
+
+describe('group rename (lifecycle CRUD — name was frozen at create)', () => {
+  const req = (b) => apiRequest('/api/group/rename', b);
+  async function setupGroup(env) {
+    const create = await handleGroupCreate(
+      { name: 'Old Name', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+    const { token } = await create.json();
+    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bpub', memberName: 'B' }, env, req({}));
+    return token;
+  }
+
+  it('the creator can rename the group, reflected in info', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupRename({ token, adminId: 'creator1', name: 'New Name' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).name).toBe('New Name');
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.name).toBe('New Name');
+  });
+
+  it('a promoted admin can rename; a regular member cannot', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    // Regular member blocked.
+    const blocked = await handleGroupRename({ token, adminId: 'bob00001', name: 'Hijacked' }, env, req({}));
+    expect(blocked.status).toBe(403);
+    // Promote bob → now allowed.
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    const ok = await handleGroupRename({ token, adminId: 'bob00001', name: 'Renamed' }, env, req({}));
+    expect(ok.status).toBe(200);
+    expect((await ok.json()).name).toBe('Renamed');
+  });
+
+  it('rejects an empty name (after sanitization) and caps at 50 chars', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    // Pure control characters sanitize to an empty string (same rule as create()).
+    const empty = await handleGroupRename({ token, adminId: 'creator1', name: '\x00\x01\x02' }, env, req({}));
+    expect(empty.status).toBe(400);
+    expect((await empty.json()).code).toBe('INVALID_NAME');
+    // Oversized name is capped, not rejected.
+    const long = await handleGroupRename({ token, adminId: 'creator1', name: 'x'.repeat(80) }, env, req({}));
+    expect(long.status).toBe(200);
+    expect((await long.json()).name.length).toBe(50);
+  });
+
+  it('rename on a missing group returns 404', async () => {
+    const env = makeEnv();
+    const res = await handleGroupRename({ token: 'nosuchtoken1', adminId: 'creator1', name: 'X' }, env, req({}));
+    expect(res.status).toBe(404);
   });
 });
 

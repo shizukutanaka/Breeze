@@ -1,5 +1,20 @@
 # Changelog
 
+## Group rename — lifecycle CRUD completion (branch claude/nice-ride-T6yb0, 2026-06-10)
+
+The group name was frozen at `create()` with no way to edit it
+(create/join/info/kick/admin/transfer/leave/delete all existed; "update
+metadata" was the last missing CRUD verb). 37 → 38 API endpoints, 502 → 506 tests.
+
+- **`/api/group/rename` — creator OR any admin renames the group**: same
+  authorization set as kick. Sanitized identically to `create()` (`sanitizeString`,
+  ≤50 chars) so a relay-side push title can't be inflated past the RFC 8030 limit;
+  rejects a name that sanitizes to empty (`INVALID_NAME`), caps oversized names at
+  50 chars rather than rejecting. No epoch bump — the name is plaintext relay
+  metadata (already in info responses + push titles), not key material.
+- **Tests (+4)**: creator rename reflected in info, admin-can/member-cannot,
+  empty-after-sanitization rejected + 50-char cap, missing-group 404.
+
 ## Group ownership transfer (branch claude/nice-ride-T6yb0, 2026-06-10)
 
 The companion to multi-admin: `creatorId` was immutable, so if the creator

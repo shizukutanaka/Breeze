@@ -157,6 +157,7 @@ export default {
         '/api/group/kick': 5,
         '/api/group/admin': 10,
         '/api/group/transfer': 5,
+        '/api/group/rename': 10,
         '/api/group/leave': 10,
         '/api/group/delete': 5,
         '/api/account/delete': 3,
@@ -285,6 +286,7 @@ export default {
         case '/api/group/kick':       return await handleGroupKick(body, env, request);
         case '/api/group/admin':      return await handleGroupAdmin(body, env, request);
         case '/api/group/transfer':   return await handleGroupTransfer(body, env, request);
+        case '/api/group/rename':     return await handleGroupRename(body, env, request);
         case '/api/group/leave':      return await handleGroupLeave(body, env, request);
         case '/api/group/delete':     return await handleGroupDelete(body, env, request);
         case '/api/account/delete':   return await handleAccountDelete(body, env, request);
@@ -1010,6 +1012,36 @@ async function handleGroupTransfer(body, env, request) {
 
   await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
   return json({ ok: true, creatorId: newCreatorId, admins }, 200, request);
+}
+
+// Group rename — completes the lifecycle CRUD. The name was frozen at create() with
+// no way to edit it; create/join/info/kick/admin/transfer/leave/delete all existed but
+// "update metadata" was missing. Creator OR any admin may rename. No epoch bump — the
+// name is plaintext relay metadata (already visible in info responses and push titles),
+// not key material. Sanitized identically to create() so a relay-side push title can't
+// be inflated past the RFC 8030 limit.
+async function handleGroupRename(body, env, request) {
+  const { token, adminId, name: rawName } = body;
+  if (!token || !adminId) return json({ error: 'token, adminId required' }, 400, request);
+  if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
+  if (!validateUserId(adminId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
+  const name = sanitizeString(rawName, 50);
+  if (!name) return json({ error: 'name required (1-50 chars)', code: 'INVALID_NAME' }, 400, request);
+
+  const data = await kvGet(env, `grp:${token}`);
+  if (!data) return json({ error: 'Group not found', code: 'NOT_FOUND' }, 404, request);
+  const group = safeJsonParse(data);
+  if (!group || !Array.isArray(group.members)) return json({ error: 'Group not found', code: 'NOT_FOUND' }, 404, request);
+
+  // Authorization: the creator OR any promoted admin may rename (same set as kick).
+  const admins = Array.isArray(group.admins) ? group.admins : [];
+  if (group.creatorId !== adminId && !admins.includes(adminId)) {
+    return json({ error: 'Admin permission required', code: 'FORBIDDEN' }, 403, request);
+  }
+
+  group.name = name.slice(0, 50);
+  await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+  return json({ ok: true, name: group.name }, 200, request);
 }
 
 // Member SELF-removal — the voluntary counterpart to kick. Without this a member
@@ -2249,6 +2281,7 @@ export {
   handleGroupKick,
   handleGroupAdmin,
   handleGroupTransfer,
+  handleGroupRename,
   handleGroupLeave,
   handleGroupDelete,
   handleAccountDelete,
