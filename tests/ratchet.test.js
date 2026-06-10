@@ -232,6 +232,21 @@ describe('replay & duplicate protection', () => {
     const tampered = { ...JSON.parse(c1), c: -1 };
     expect(await R.ratchetDecrypt(receiver, tampered)).toBe(null);
   });
+
+  it('rejects c=0 (session-desync guard: c=0 advances recvChainKey without advancing recvCounter)', async () => {
+    // Senders always start at c=1; c=0 is never legitimate. A c=0 message passes
+    // the replay check (recvCounter>0 guard exempts the initial state) and the gap
+    // check (0 > 1 is false), then derives msgKey from the same chain position as
+    // the real c=1 — consuming recvChainKey. If it authenticated, recvCounter would
+    // stay 0 while recvChainKey advanced, making the real c=1 derive the wrong key.
+    const { sender, receiver } = R.pairFromSharedChain(randomChain());
+    const c1 = await R.ratchetEncrypt(sender, 'legit');
+    const tampered = { ...JSON.parse(c1), c: 0 };
+    expect(await R.ratchetDecrypt(receiver, tampered)).toBe(null);
+    expect(receiver.recvCounter).toBe(0); // session not corrupted
+    // The real c=1 must still decrypt correctly.
+    expect(await R.ratchetDecrypt(receiver, c1)).toBe('legit');
+  });
 });
 
 describe('key commitment (I16 — anti invisible-salamander)', () => {

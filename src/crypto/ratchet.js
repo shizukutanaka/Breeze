@@ -182,8 +182,12 @@ export function createRatchet(opts = {}) {
     // The counter `c` is not inside the AEAD so a relay can modify it without
     // breaking the auth tag. NaN / Infinity counters bypass the replay / gap
     // checks and corrupt sess.recvCounter on successful decrypt, permanently
-    // breaking the session.  Reject early.
-    if (!Number.isFinite(p.c) || p.c < 0) return null;
+    // breaking the session.  Senders always start at c=1 (sendCounter is
+    // incremented before encoding), so c=0 is also illegitimate: it passes
+    // both the replay check (recvCounter>0 exemption) and the gap check, then
+    // advances recvChainKey without advancing recvCounter, desyncing the
+    // session for the real c=1 message.  Reject early.
+    if (!Number.isFinite(p.c) || p.c < 1) return null;
 
     // I7: time-expire stale skipped message keys. Retaining them indefinitely is
     // both a forward-secrecy leak (old keys sitting in storage) and a DoS amplifier.
