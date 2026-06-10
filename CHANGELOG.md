@@ -1,5 +1,25 @@
 # Changelog
 
+## Group ownership transfer (branch claude/nice-ride-T6yb0, 2026-06-10)
+
+The companion to multi-admin: `creatorId` was immutable, so if the creator
+deleted their account (now possible via `/api/account/delete`) or went dark,
+the creator-only operations (group delete, admin management) became permanently
+impossible. 36 → 37 API endpoints, 496 → 502 tests.
+
+- **`/api/group/transfer` — creator hands ownership to an existing member**:
+  the `creator*` fields (creatorId/creatorPub/creatorName) follow the new owner,
+  resolved from that member's record so `handleGroupInfo` and the 1:1 sender-key
+  distribution path get the right pub/name. The incoming creator's authority
+  becomes implicit (dropped from `admins`); the **outgoing** creator is retained
+  as an admin so they keep moderation rights. No epoch bump — ownership is an
+  authorization label, not key material (every member's sender key is unchanged).
+  Guards: current-creator-only, target-must-be-member, no-op-on-self.
+- **Tests (+6)**: transfer happy path (creator* fields follow, admins rebuilt),
+  post-transfer authorization flip (new creator can delete, old cannot),
+  transfer-to-existing-admin idempotency, non-creator rejected, non-member
+  rejected, self-transfer no-op. `docs/PRODUCT-ANALYSIS.md` updated (item 7 → done).
+
 ## Multi-admin group management (branch claude/nice-ride-T6yb0, 2026-06-10)
 
 Completed a feature that was already half-built: the `group.admins` array was

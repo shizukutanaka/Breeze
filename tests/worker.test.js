@@ -21,6 +21,7 @@ import worker, {
   handleGroupInfo,
   handleGroupKick,
   handleGroupAdmin,
+  handleGroupTransfer,
   handleGroupLeave,
   handleGroupDelete,
   handleAccountDelete,
@@ -704,6 +705,81 @@ describe('group multi-admin management (completes the half-built admins array)',
     await handleGroupLeave({ token, memberId: 'bob00001' }, env, req({}));
     const info = await (await handleGroupInfo({ token }, env, req({}))).json();
     expect(info.admins).toEqual([]); // leave filtered bob out of admins
+  });
+});
+
+describe('group ownership transfer (companion to multi-admin)', () => {
+  const req = (b) => apiRequest('/api/group/transfer', b);
+  async function setupGroup(env) {
+    const create = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+    const { token } = await create.json();
+    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bpub', memberName: 'Bob' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'cpub2', memberName: 'Ca' }, env, req({}));
+    return token;
+  }
+
+  it('the creator transfers ownership; creator* fields follow the new owner', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'bob00001' }, env, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.creatorId).toBe('bob00001');
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.creatorId).toBe('bob00001');
+    expect(info.creatorName).toBe('Bob'); // resolved from the member record
+    // Outgoing creator retained as admin so they keep moderation rights.
+    expect(info.admins).toContain('creator1');
+    // Incoming creator's authority is now implicit — not duplicated in admins.
+    expect(info.admins).not.toContain('bob00001');
+  });
+
+  it('after transfer the new creator can perform creator-only actions; the old cannot', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'bob00001' }, env, req({}));
+    // Old creator (now an admin) cannot delete the group.
+    const del1 = await handleGroupDelete({ token, adminId: 'creator1' }, env, req({}));
+    expect(del1.status).toBe(403);
+    // New creator can.
+    const del2 = await handleGroupDelete({ token, adminId: 'bob00001' }, env, req({}));
+    expect(del2.status).toBe(200);
+  });
+
+  it('promoting the new owner out of admins is idempotent (was already an admin)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    // Transfer to bob who is currently an admin → bob's implicit authority, dropped from admins.
+    await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'bob00001' }, env, req({}));
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.admins).not.toContain('bob00001');
+    expect(info.admins).toContain('creator1');
+  });
+
+  it('a non-creator cannot transfer ownership', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupTransfer({ token, adminId: 'bob00001', newCreatorId: 'carol001' }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('FORBIDDEN');
+  });
+
+  it('cannot transfer to a non-member', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'nobody00' }, env, req({}));
+    expect(res.status).toBe(404);
+    expect((await res.json()).code).toBe('NOT_MEMBER');
+  });
+
+  it('transferring to the current creator is a no-op error', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'creator1' }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('NO_OP');
   });
 });
 

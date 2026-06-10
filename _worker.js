@@ -156,6 +156,7 @@ export default {
         '/api/group/info': 20,
         '/api/group/kick': 5,
         '/api/group/admin': 10,
+        '/api/group/transfer': 5,
         '/api/group/leave': 10,
         '/api/group/delete': 5,
         '/api/account/delete': 3,
@@ -283,6 +284,7 @@ export default {
         case '/api/backup/download':  return await handleBackupDownload(body, env, request);
         case '/api/group/kick':       return await handleGroupKick(body, env, request);
         case '/api/group/admin':      return await handleGroupAdmin(body, env, request);
+        case '/api/group/transfer':   return await handleGroupTransfer(body, env, request);
         case '/api/group/leave':      return await handleGroupLeave(body, env, request);
         case '/api/group/delete':     return await handleGroupDelete(body, env, request);
         case '/api/account/delete':   return await handleAccountDelete(body, env, request);
@@ -968,6 +970,46 @@ async function handleGroupAdmin(body, env, request) {
   group.admins = admins;
   await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
   return json({ ok: true, admins }, 200, request);
+}
+
+// Ownership transfer — the companion to multi-admin. `creatorId` was immutable, so if
+// the creator deleted their account (or went dark) the creator-only operations
+// (delete / admin management) became permanently impossible. The current creator hands
+// ownership to an existing member; the outgoing creator is retained as an admin so they
+// keep moderation rights. No epoch bump — ownership is an authorization label, not key
+// material, and every member's sender key is unchanged.
+async function handleGroupTransfer(body, env, request) {
+  const { token, adminId, newCreatorId } = body;
+  if (!token || !adminId || !newCreatorId) return json({ error: 'token, adminId, newCreatorId required' }, 400, request);
+  if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
+  if (!validateUserId(adminId) || !validateUserId(newCreatorId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
+
+  const data = await kvGet(env, `grp:${token}`);
+  if (!data) return json({ error: 'Group not found', code: 'NOT_FOUND' }, 404, request);
+  const group = safeJsonParse(data);
+  if (!group || !Array.isArray(group.members)) return json({ error: 'Group not found', code: 'NOT_FOUND' }, 404, request);
+
+  // Only the current creator can transfer ownership.
+  if (group.creatorId !== adminId) return json({ error: 'Only the creator can transfer ownership', code: 'FORBIDDEN' }, 403, request);
+  if (newCreatorId === group.creatorId) return json({ error: 'Already the creator', code: 'NO_OP' }, 400, request);
+  const newCreator = group.members.find(m => m.id === newCreatorId);
+  if (!newCreator) return json({ error: 'Member not found', code: 'NOT_MEMBER' }, 404, request);
+
+  const oldCreatorId = group.creatorId;
+  // Reflect the new creator's identity in the creator* fields so handleGroupInfo and the
+  // 1:1 sender-key distribution path resolve the right pub/name.
+  group.creatorId = newCreatorId;
+  group.creatorPub = typeof newCreator.pub === 'string' ? newCreator.pub : group.creatorPub;
+  group.creatorName = (typeof newCreator.name === 'string' && newCreator.name) ? newCreator.name.slice(0, 30) : 'Creator';
+
+  // Rebuild admins: the incoming creator's authority is now implicit (drop them from the
+  // list), and the outgoing creator is retained as an admin so they keep moderation rights.
+  const admins = Array.isArray(group.admins) ? group.admins.filter(id => typeof id === 'string' && id !== newCreatorId) : [];
+  if (!admins.includes(oldCreatorId)) admins.push(oldCreatorId);
+  group.admins = admins;
+
+  await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+  return json({ ok: true, creatorId: newCreatorId, admins }, 200, request);
 }
 
 // Member SELF-removal — the voluntary counterpart to kick. Without this a member
@@ -2206,6 +2248,7 @@ export {
   handleGroupInfo,
   handleGroupKick,
   handleGroupAdmin,
+  handleGroupTransfer,
   handleGroupLeave,
   handleGroupDelete,
   handleAccountDelete,
