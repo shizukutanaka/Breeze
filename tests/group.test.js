@@ -372,6 +372,23 @@ describe('malformed-input hardening (returns null, never throws)', () => {
     expect(await G.decryptGroupMsg(bob, JSON.stringify({ g: true, ep: 0, c: Infinity, i: [], d: [] }))).toBe(null);
     expect(await G.decryptGroupMsg(bob, JSON.stringify({ g: true, ep: Infinity, c: 1, i: [], d: [] }))).toBe(null);
   });
+
+  it('returns null (never throws) when i or d fields are missing (signedBytes null-safety)', async () => {
+    // signedBytes(p) calls u8(p.i) and u8(p.d). Before the fix, Uint8Array.from(null)
+    // would throw, escaping the try/catch in verifyEpochSig and propagating as an
+    // unhandled rejection — violating the "never throw" contract.
+    const sk = await G.newSenderKey();
+    const bob = G.receiverFrom(sk);
+    // A relay that strips `i` (IV) from a signed message should not crash the receiver.
+    const missingI = await expect(
+      G.decryptGroupMsg(bob, JSON.stringify({ g: true, ep: 0, c: 1, d: [1, 2, 3] }))
+    ).resolves.toBe(null);
+    const missingD = await expect(
+      G.decryptGroupMsg(bob, JSON.stringify({ g: true, ep: 0, c: 1, i: [1, 2, 3] }))
+    ).resolves.toBe(null);
+    // Verify the session counter was not corrupted.
+    expect(bob.counter).toBe(0);
+  });
 });
 
 describe('sender-key distribution envelope (buildSenderKeyDistribution / parse)', () => {

@@ -64,13 +64,19 @@ export function createGroup(opts = {}) {
   // Canonical signed bytes — covers all mutable fields plus the per-message public
   // keys so neither content nor key substitution can go undetected.
   // Format: iv ‖ ct ‖ cm ‖ epoch(u32be) ‖ counter(u32be) ‖ spk ‖ nsk
+  // All array-typed fields default to zero-length so a relay that strips `i` or `d`
+  // (to probe the "never throw" contract) doesn't propagate a Uint8Array.from(null)
+  // exception past the signature-verification try/catch.
   function signedBytes(p) {
     const meta = new Uint8Array(8);
     const dv = new DataView(meta.buffer);
     dv.setUint32(0, p.ep >>> 0); dv.setUint32(4, p.c >>> 0);
+    const ivB  = p.i   ? u8(p.i)   : new Uint8Array(0);
+    const ctB  = p.d   ? u8(p.d)   : new Uint8Array(0);
+    const cmB  = u8(p.cm || []);
     const spkB = p.spk ? u8(p.spk) : new Uint8Array(0);
     const nskB = p.nsk ? u8(p.nsk) : new Uint8Array(0);
-    return concatBytes([u8(p.i), u8(p.d), u8(p.cm || []), meta, spkB, nskB]);
+    return concatBytes([ivB, ctB, cmB, meta, spkB, nskB]);
   }
 
   // Ed25519 verify a detached signature over msgBytes with a raw public key. Returns
