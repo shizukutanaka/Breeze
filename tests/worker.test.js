@@ -932,6 +932,22 @@ describe('msg send / poll (1:1 relay path)', () => {
     expect((await res.json()).code).toBe('INVALID_ID');
   });
 
+  it('drops non-string groupId/replyTo silently (consistent with sig/sigPub guards)', async () => {
+    // String(object) = '[object Object]' — storing this corrupts the groupId that
+    // clients use for group detection.  Like sig/sigPub/fromPub, non-string optional
+    // fields must be treated as absent rather than coerced.
+    const env = makeEnv();
+    const ts = Date.now();
+    await handleMsgSend({
+      to: 'bob00001', from: 'alice001', payload: 'ENC', ts,
+      groupId: { id: 'group1' }, replyTo: ['some-msg-id'],
+    }, ip, env, req({}));
+    const { messages } = await (await handleMsgPoll({ id: 'bob00001', lastTs: 0 }, env, req({}))).json();
+    expect(messages.length).toBe(1);
+    expect(messages[0].groupId).toBeUndefined();
+    expect(messages[0].replyTo).toBeUndefined();
+  });
+
   it('rejects Infinity disappearAt but stores a valid finite timestamp', async () => {
     const env = makeEnv();
     const now = Date.now();

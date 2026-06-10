@@ -391,8 +391,8 @@ async function handleMsgSend(body, ip, env, request) {
   if (isVideoCall) msg.isVideoCall = true;
   if (isSenderKey) msg.isSenderKey = true;
   if (isGroupSK) msg.isGroupSK = true;
-  if (groupId) { msg.groupId = String(groupId).slice(0, 64); msg.groupName = typeof groupName === 'string' ? groupName.slice(0, 50) : undefined; }
-  if (replyTo) msg.replyTo = String(replyTo).slice(0, 128);
+  if (typeof groupId === 'string' && groupId) { msg.groupId = groupId.slice(0, 64); msg.groupName = typeof groupName === 'string' ? groupName.slice(0, 50) : undefined; }
+  if (typeof replyTo === 'string' && replyTo) msg.replyTo = replyTo.slice(0, 128);
   if (disappearAt) msg.disappearAt = (typeof disappearAt === 'number' && Number.isFinite(disappearAt)) ? disappearAt : undefined;
   if (sig) msg.sig = typeof sig === 'string' ? sig.slice(0, 200) : undefined;
   if (sigPub) msg.sigPub = typeof sigPub === 'string' ? sigPub.slice(0, 200) : undefined;
