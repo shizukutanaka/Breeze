@@ -393,7 +393,7 @@ async function handleMsgSend(body, ip, env, request) {
   if (isGroupSK) msg.isGroupSK = true;
   if (groupId) { msg.groupId = String(groupId).slice(0, 64); msg.groupName = typeof groupName === 'string' ? groupName.slice(0, 50) : undefined; }
   if (replyTo) msg.replyTo = String(replyTo).slice(0, 128);
-  if (disappearAt) msg.disappearAt = typeof disappearAt === 'number' ? disappearAt : undefined;
+  if (disappearAt) msg.disappearAt = (typeof disappearAt === 'number' && Number.isFinite(disappearAt)) ? disappearAt : undefined;
   if (sig) msg.sig = typeof sig === 'string' ? sig.slice(0, 200) : undefined;
   if (sigPub) msg.sigPub = typeof sigPub === 'string' ? sigPub.slice(0, 200) : undefined;
   inbox.push(msg);

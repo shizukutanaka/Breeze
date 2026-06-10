@@ -895,6 +895,30 @@ describe('msg send / poll (1:1 relay path)', () => {
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_ID');
   });
+
+  it('rejects Infinity disappearAt but stores a valid finite timestamp', async () => {
+    const env = makeEnv();
+    const now = Date.now();
+    // Infinity passes `typeof x === 'number'` so the old guard stored it as-is,
+    // creating a disappearAt that never fires on the client (Infinity > Date.now() always).
+    const bad = await handleMsgSend(
+      { to: 'bob00001', from: 'alice001', payload: 'X', ts: now, disappearAt: Infinity },
+      ip, env, req({}),
+    );
+    expect(bad.status).toBe(200);
+    const { messages: msgs1 } = await (await handleMsgPoll({ id: 'bob00001', lastTs: 0 }, env, req({}))).json();
+    expect(msgs1[0].disappearAt).toBeUndefined();
+
+    globalThis._msgDedup = new Map();
+    const validExpiry = now + 60_000;
+    const good = await handleMsgSend(
+      { to: 'bob00001', from: 'alice001', payload: 'Y', ts: now + 1, disappearAt: validExpiry },
+      ip, env, req({}),
+    );
+    expect(good.status).toBe(200);
+    const { messages: msgs2 } = await (await handleMsgPoll({ id: 'bob00001', lastTs: now }, env, req({}))).json();
+    expect(msgs2[0].disappearAt).toBe(validExpiry);
+  });
 });
 
 describe('alias set / get (PoW anti-spam)', () => {
