@@ -261,7 +261,45 @@ export function createGroup(opts = {}) {
     return result;
   }
 
-  return { newSenderKey, rotateEpoch, receiverFrom, encryptGroupMsg, decryptGroupMsg, _cfg: cfg };
+  // --- Sender-key distribution envelope --------------------------------------
+  // When a member creates or rotates a sender key, it hands the RECEIVE half (current
+  // chain key + counter + epoch + epoch-signature PUBLIC key) to each other member over
+  // the authenticated 1:1 channel. This serializes exactly that half — never the signing
+  // PRIVATE key, never the per-message signing keys — into a typed, versioned envelope,
+  // and parses it back into a receiver key usable by decryptGroupMsg. Single source of
+  // truth for the browser port's `distributeSenderKey` wire format (INTEGRATION.md §4).
+  //
+  // Shape: { v:5, t:'skd', ep:epoch, c:counter, ck:[chainKey], spk:[epochSignPub] }
+  function buildSenderKeyDistribution(senderKey) {
+    if (!senderKey || senderKey.chainKey == null || senderKey.signPub == null) {
+      throw new Error('buildSenderKeyDistribution: senderKey missing chainKey/signPub');
+    }
+    return JSON.stringify({
+      v: 5, t: 'skd',
+      ep: senderKey.epoch ?? 0,
+      c: senderKey.counter ?? 0,
+      ck: arr(u8(senderKey.chainKey)),
+      spk: arr(u8(senderKey.signPub)),
+    });
+  }
+
+  // Parse a distribution envelope into a fresh receiver key (same shape as
+  // receiverFrom). Returns null on malformed / non-skd input (never throws — the
+  // payload arrives over the untrusted relay, even if E2E-encrypted to us).
+  function parseSenderKeyDistribution(payload) {
+    let p;
+    try { p = typeof payload === 'string' ? JSON.parse(payload) : payload; }
+    catch { return null; }
+    if (!p || typeof p !== 'object' || p.v !== 5 || p.t !== 'skd') return null;
+    if (!Array.isArray(p.ck) || !Array.isArray(p.spk)) return null;
+    if (typeof p.ep !== 'number' || typeof p.c !== 'number') return null;
+    return { chainKey: p.ck.slice(), counter: p.c, epoch: p.ep, signPub: p.spk.slice(), skipped: {} };
+  }
+
+  return {
+    newSenderKey, rotateEpoch, receiverFrom, encryptGroupMsg, decryptGroupMsg,
+    buildSenderKeyDistribution, parseSenderKeyDistribution, _cfg: cfg,
+  };
 }
 
 export default createGroup;

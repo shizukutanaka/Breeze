@@ -323,3 +323,61 @@ describe('malformed-input hardening (returns null, never throws)', () => {
     expect(await Gh.decryptGroupMsg(bob, JSON.stringify({ g: true, ep: null, c: 1, i: [], d: [] }))).toBe(null);
   });
 });
+
+describe('sender-key distribution envelope (buildSenderKeyDistribution / parse)', () => {
+  it('round-trips a sender key into a working receiver via the wire envelope', async () => {
+    const sk = await G.newSenderKey();
+    // Distribute over the (E2E-encrypted) 1:1 channel: serialize → parse on the peer.
+    const wire = G.buildSenderKeyDistribution(sk);
+    const bob = G.parseSenderKeyDistribution(wire);
+    expect(bob).not.toBe(null);
+    // The reconstructed receiver decrypts messages from the original sender key.
+    expect(await G.decryptGroupMsg(bob, await G.encryptGroupMsg(sk, 'distributed hi'))).toBe('distributed hi');
+    expect(await G.decryptGroupMsg(bob, await G.encryptGroupMsg(sk, '日本語'))).toBe('日本語');
+  });
+
+  it('never leaks the signing private key (only the epoch public key is on the wire)', async () => {
+    const sk = await G.newSenderKey();
+    const wire = JSON.parse(G.buildSenderKeyDistribution(sk));
+    expect(wire.spk).toBeDefined();      // epoch sign PUBLIC key
+    expect(wire.signPriv).toBeUndefined();
+    expect(wire.msgSignKey).toBeUndefined();
+    expect(wire.nextMsgSignKey).toBeUndefined();
+    // The serialized envelope carries no CryptoKey objects at all.
+    expect(JSON.stringify(wire)).not.toContain('CryptoKey');
+  });
+
+  it('carries the current counter so a mid-stream joiner cannot read earlier messages (FS)', async () => {
+    const sk = await G.newSenderKey();
+    await G.encryptGroupMsg(sk, 'before-join-1');
+    await G.encryptGroupMsg(sk, 'before-join-2'); // sk.counter advances to 2
+    // Distribute AFTER two messages: the joiner's receiver starts at counter 2.
+    const late = G.parseSenderKeyDistribution(G.buildSenderKeyDistribution(sk));
+    expect(late.counter).toBe(2);
+    const fresh = await G.encryptGroupMsg(sk, 'after-join'); // counter 3
+    expect(await G.decryptGroupMsg(late, fresh)).toBe('after-join');
+  });
+
+  it('distributes the rotated epoch so kicked-epoch receivers are correctly scoped', async () => {
+    let sk = await G.newSenderKey();          // epoch 0
+    sk = await G.rotateEpoch(sk);             // epoch 1 (kick)
+    const wire = JSON.parse(G.buildSenderKeyDistribution(sk));
+    expect(wire.ep).toBe(1);
+    const bob = G.parseSenderKeyDistribution(JSON.stringify(wire));
+    expect(bob.epoch).toBe(1);
+    expect(await G.decryptGroupMsg(bob, await G.encryptGroupMsg(sk, 'epoch1'))).toBe('epoch1');
+  });
+
+  it('parse returns null on malformed / non-skd payloads (no throw)', () => {
+    expect(G.parseSenderKeyDistribution('not json')).toBe(null);
+    expect(G.parseSenderKeyDistribution(JSON.stringify({ v: 4, t: 'skd', ck: [], spk: [], ep: 0, c: 0 }))).toBe(null);
+    expect(G.parseSenderKeyDistribution(JSON.stringify({ v: 5, t: 'skd', ck: 'x', spk: [], ep: 0, c: 0 }))).toBe(null);
+    expect(G.parseSenderKeyDistribution(JSON.stringify({ v: 5, t: 'skd', ck: [], spk: [], ep: 'a', c: 0 }))).toBe(null);
+    expect(G.parseSenderKeyDistribution(null)).toBe(null);
+  });
+
+  it('build throws when the sender key is missing chainKey/signPub', () => {
+    expect(() => G.buildSenderKeyDistribution({ counter: 0, epoch: 0 })).toThrow();
+    expect(() => G.buildSenderKeyDistribution(null)).toThrow();
+  });
+});

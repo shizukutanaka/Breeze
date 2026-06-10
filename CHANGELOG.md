@@ -72,6 +72,17 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
   abuse/report).
 
 ### Crypto Modules (`src/crypto/`) — features & correctness fixes
+- **`group.js` — sender-key distribution envelope (G3 port-enabler)**: added
+  `buildSenderKeyDistribution(senderKey)` / `parseSenderKeyDistribution(wire)` so the
+  module owns the wire format `{ v:5, t:'skd', ep, c, ck, spk }` used to hand a member's
+  RECEIVE half (chain key + counter + epoch + epoch-sign PUBLIC key) to other members
+  over the authenticated 1:1 channel on create/rotate. Only the public epoch-sign key
+  crosses the wire — never the signing private or per-message keys. The `counter` is
+  included so a mid-stream joiner can't read earlier messages (FS); the `epoch` scopes
+  the key to a membership generation. `parse` never throws on the relay-supplied payload.
+  Previously the browser port (INTEGRATION.md §4) would have to hand-roll this. Added 6
+  `tests/group.test.js` cases (round-trip+decrypt, no-private-key-leak, FS-on-join,
+  rotated-epoch scope, malformed→null, build-throws-on-missing-fields).
 - **`ratchet.js` — one-call X3DH handshake; signature verification made unskippable**:
   added `initiatorHandshake` / `responderHandshake` orchestrators that wrap verify →
   derive → bootstrap → (en|de)crypt into a single call per side. Critically,
@@ -124,7 +135,7 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
 - `validate.sh` SRI gate confirmed correct (sha384 matches lang.js).
 
 ### Test Suite (`tests/`)
-- **12 suites, 391 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
+- **12 suites, 397 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
 - Worker: group kick TTL regression test (1); corrupt KV data resilience via
   `safeJsonParse` (7); backup type guard (1); AI handler — `reply_suggest` non-string
   context, missing context, capped error echo, `chat` non-string/oversized text (4);

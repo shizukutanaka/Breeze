@@ -101,9 +101,19 @@ the `Nr` reset** — see §9.
     signatures to prevent key substitution.
 - Carries `cm` (I16); bounded out-of-order recovery + replay reject.
 
+**Sender-key distribution envelope:** when a member creates/rotates a sender key it
+hands the RECEIVE half to each other member over the authenticated 1:1 channel via
+`buildSenderKeyDistribution(senderKey)` → `{ v:5, t:'skd', ep, c, ck:[chainKey],
+spk:[epochSignPub] }` and `parseSenderKeyDistribution(wire)` → a receiver key (same
+shape as `receiverFrom`). Only the epoch sign PUBLIC key crosses the wire — never the
+signing private or per-message keys. The current `counter` is included so a mid-stream
+joiner cannot read earlier messages (forward secrecy); the `epoch` scopes the key to a
+membership generation. Single source of truth for the browser port's `distributeSenderKey`.
+
 Impl: `src/crypto/group.js`. Tests: `tests/group.test.js` (FS, epoch rotation,
 kicked-member-blocked, replay, commitment, **forgery/tamper/stripped-es/stripped-s
-reject**, out-of-order with two-layer sigs, AEAD-auth-failure-does-not-desync).
+reject**, out-of-order with two-layer sigs, AEAD-auth-failure-does-not-desync,
+sender-key distribution round-trip + no-private-key-leak + FS-on-join + epoch scope).
 **Implemented (module).** Security fix: chain advance deferred until after AEAD
 auth succeeds (same injected-message desync fix as §4).
 Gap: index.html/worker port (§8). Remaining N2 refinement: full per-message signing-
@@ -260,8 +270,8 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   `POW_EXPIRED`, preventing indefinite replay of a solved token.
 
 ## Test status
-12 suites, **391 tests** passing (`npm test`); `validate.sh` 33/36. All `src/crypto/`
-modules have test suites: ratchet (24), group (25), atrest (12), franking (9),
+12 suites, **397 tests** passing (`npm test`); `validate.sh` 33/36. All `src/crypto/`
+modules have test suites: ratchet (24), group (31), atrest (12), franking (9),
 negotiate (15), ktlog (37), pow (21), x3dh (16), kat (6), push (15), fingerprint (17);
 worker (194).
 Worker coverage: routing, rate-limit, userId validation (length bounds + charset),
