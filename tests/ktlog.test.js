@@ -51,6 +51,20 @@ describe('parseLog', () => {
     expect(log[0]).toEqual({ ts: 1000, h: 'abc' });
   });
 
+  it('rejects entries with NaN or Infinity timestamps (Number.isFinite guard)', () => {
+    // NaN satisfies typeof ts === 'number' but sorts unpredictably — the old
+    // guard would include it and produce a broken chain sort order.
+    // Infinity would sort to end of history, again corrupting the chain ordering.
+    const log = parseLog([
+      { ts: NaN, h: 'nan-entry' },
+      { ts: Infinity, h: 'inf-entry' },
+      { ts: -Infinity, h: 'neginf-entry' },
+      { ts: 1000, h: 'valid' },
+    ]);
+    expect(log).toHaveLength(1);
+    expect(log[0].h).toBe('valid');
+  });
+
   it('sorts entries by ts ascending', () => {
     const log = parseLog([
       { ts: 3000, h: 'c' },

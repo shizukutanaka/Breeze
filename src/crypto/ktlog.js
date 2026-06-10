@@ -44,7 +44,7 @@ export function parseLog(raw) {
   if (!Array.isArray(raw)) return [];
   const bounded = raw.length > MAX_LOG_ENTRIES ? raw.slice(-MAX_LOG_ENTRIES) : raw;
   return bounded
-    .filter(e => e && typeof e.ts === 'number' && typeof e.h === 'string' && e.h.length > 0)
+    .filter(e => e && Number.isFinite(e.ts) && typeof e.h === 'string' && e.h.length > 0)
     .sort((a, b) => a.ts - b.ts);
 }
 

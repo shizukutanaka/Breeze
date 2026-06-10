@@ -275,6 +275,42 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     expect((await res.json()).code).toBe('FIELD_TOO_LARGE');
   });
 
+  it('rejects non-string identityKey or signedPreKey (type guard)', async () => {
+    // An object passes the !identityKey presence check but bypasses size guards
+    // and would be stored as a JSON object, breaking every client that decodes it.
+    const e = makeEnv();
+    const r1 = await handlePreKeyUpload(
+      { userId: 'typgrd001', identityKey: { key: 'data' }, signedPreKey: 'SPK' },
+      e, apiRequest('/api/prekey/upload', {}),
+    );
+    expect(r1.status).toBe(400);
+    expect((await r1.json()).code).toBe('INVALID_TYPE');
+
+    const r2 = await handlePreKeyUpload(
+      { userId: 'typgrd002', identityKey: 'IK', signedPreKey: ['S', 'P', 'K'] },
+      e, apiRequest('/api/prekey/upload', {}),
+    );
+    expect(r2.status).toBe(400);
+    expect((await r2.json()).code).toBe('INVALID_TYPE');
+  });
+
+  it('rejects non-string edIdentityKey or signedPreKeySig when present (type guard)', async () => {
+    const e = makeEnv();
+    const r1 = await handlePreKeyUpload(
+      { userId: 'typgrd003', identityKey: 'IK', signedPreKey: 'SPK', edIdentityKey: 42 },
+      e, apiRequest('/api/prekey/upload', {}),
+    );
+    expect(r1.status).toBe(400);
+    expect((await r1.json()).code).toBe('INVALID_TYPE');
+
+    const r2 = await handlePreKeyUpload(
+      { userId: 'typgrd004', identityKey: 'IK', signedPreKey: 'SPK', signedPreKeySig: { sig: 'x' } },
+      e, apiRequest('/api/prekey/upload', {}),
+    );
+    expect(r2.status).toBe(400);
+    expect((await r2.json()).code).toBe('INVALID_TYPE');
+  });
+
   it('fetch succeeds (200, no oneTimePreKey) when the OTP KV value is corrupt JSON', async () => {
     const env = makeEnv();
     const uid = 'corruptotp1'; // ≥8 chars, passes validateUserId

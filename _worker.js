@@ -1017,7 +1017,7 @@ async function handlePushSubscribe(body, env, request) {
       auth:   typeof subscription.keys?.auth   === 'string' ? subscription.keys.auth.slice(0, 50)   : '',
     },
   };
-  if (typeof subscription.expirationTime === 'number') safeSub.expirationTime = subscription.expirationTime;
+  if (typeof subscription.expirationTime === 'number' && Number.isFinite(subscription.expirationTime)) safeSub.expirationTime = subscription.expirationTime;
   // Store subscription (user can have multiple devices)
   const key = `push:${userId}`;
   const existing = await kvGet(env, key);
@@ -1237,18 +1237,27 @@ async function handlePreKeyUpload(body, env, request) {
   const { userId, identityKey, edIdentityKey, signedPreKey, signedPreKeySig, oneTimePreKeys, caps, x3dh } = body;
   if (!userId || !identityKey || !signedPreKey) return json({ error: 'userId, identityKey, signedPreKey required' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
+  // Type guard: public key fields must be strings. An object/array passes the !x
+  // presence check but bypasses the size guards below and gets stored as an object,
+  // which breaks every client that tries to use it as a string (e.g. base64 decode).
+  if (typeof identityKey !== 'string' || typeof signedPreKey !== 'string')
+    return json({ error: 'identityKey/signedPreKey must be strings', code: 'INVALID_TYPE' }, 400, request);
+  if (edIdentityKey !== undefined && typeof edIdentityKey !== 'string')
+    return json({ error: 'edIdentityKey must be a string', code: 'INVALID_TYPE' }, 400, request);
+  if (signedPreKeySig !== undefined && typeof signedPreKeySig !== 'string')
+    return json({ error: 'signedPreKeySig must be a string', code: 'INVALID_TYPE' }, 400, request);
   // Size-guard public key fields. Valid keys are small (P-256 JWK ≤~300 chars,
   // X25519/Ed25519 raw base64 ≤88 chars). Cap here blocks KV inflation via a
   // single huge field bypassing the aggregate body limit.
   const _IK_MAX  = 5000; // generous: full P-256 JWK with all optional fields
   const _SIG_MAX = 500;  // Ed25519 key/sig base64 is ≤88 chars; 500 is very safe
-  if (typeof identityKey === 'string' && identityKey.length > _IK_MAX)
+  if (identityKey.length > _IK_MAX)
     return json({ error: 'identityKey too large', code: 'FIELD_TOO_LARGE' }, 400, request);
-  if (typeof edIdentityKey === 'string' && edIdentityKey.length > _SIG_MAX)
+  if (edIdentityKey && edIdentityKey.length > _SIG_MAX)
     return json({ error: 'edIdentityKey too large', code: 'FIELD_TOO_LARGE' }, 400, request);
-  if (typeof signedPreKey === 'string' && signedPreKey.length > _IK_MAX)
+  if (signedPreKey.length > _IK_MAX)
     return json({ error: 'signedPreKey too large', code: 'FIELD_TOO_LARGE' }, 400, request);
-  if (typeof signedPreKeySig === 'string' && signedPreKeySig.length > _SIG_MAX)
+  if (signedPreKeySig && signedPreKeySig.length > _SIG_MAX)
     return json({ error: 'signedPreKeySig too large', code: 'FIELD_TOO_LARGE' }, 400, request);
   // I1/G2: authenticated X3DH. If a signature + Ed25519 identity key are supplied,
   // verify the signature over the signed pre-key and REJECT if invalid. Unsigned
