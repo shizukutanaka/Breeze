@@ -128,8 +128,14 @@ practical maximum with WebCrypto + arbitrary message ordering.
 - Migrate legacy `{ priv:jwk }` → `{ …, wrapped }` (plaintext removed), idempotent.
 - No-passphrase default path preserved (opt-in app-lock).
 
+- Load helpers: `isWrapped(record)` detects wrapped vs. legacy-plaintext records;
+  `loadKey(record, passphrase?)` returns the JWK for either form (and **throws** when a
+  wrapped record is loaded with no passphrase, so `loadIdentity` knows to prompt rather
+  than silently treating a locked record as empty). Single source of truth for the §8 port.
+
 Impl: `src/crypto/atrest.js`. Tests: `tests/atrest.test.js` (round-trip,
-wrong-passphrase reject, tamper reject, fresh salt/iv, migration, ≥600k floor).
+wrong-passphrase reject, tamper reject, fresh salt/iv, migration, ≥600k floor,
+iter-DoS ceiling, isWrapped/loadKey detection + unwrap + prompt-throw).
 **Implemented (module).** Gap: `index.html` `loadIdentity`/keystore migration (§8).
 
 ## 6a. Message franking — verifiable abuse reporting (I17)
@@ -270,8 +276,8 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   `POW_EXPIRED`, preventing indefinite replay of a solved token.
 
 ## Test status
-12 suites, **397 tests** passing (`npm test`); `validate.sh` 33/36. All `src/crypto/`
-modules have test suites: ratchet (24), group (31), atrest (12), franking (9),
+12 suites, **402 tests** passing (`npm test`); `validate.sh` 33/36. All `src/crypto/`
+modules have test suites: ratchet (24), group (31), atrest (17), franking (9),
 negotiate (15), ktlog (37), pow (21), x3dh (16), kat (6), push (15), fingerprint (17);
 worker (194).
 Worker coverage: routing, rate-limit, userId validation (length bounds + charset),

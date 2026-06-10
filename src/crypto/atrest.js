@@ -73,6 +73,29 @@ export function createAtRest(opts = {}) {
     return { ...rest, wrapped };
   }
 
+  // Detect whether a stored keystore record is passphrase-wrapped (a nested
+  // { wrapped: {...} } from migrate(), or a bare wrap record from wrapJWK()) vs.
+  // legacy plaintext ({ priv }). Lets loadIdentity decide whether to prompt for a
+  // passphrase before reading the key (INTEGRATION.md §5). Single source of truth.
+  function isWrapped(record) {
+    return !!(record && (record.wrapped || record.kdf === 'pbkdf2'));
+  }
+
+  // Load the private JWK from a keystore record regardless of form:
+  //   - wrapped ({ wrapped:{...} } or a bare wrap record) → unwrapJWK(passphrase)
+  //   - legacy plaintext ({ priv }) → returns priv directly (passphrase ignored)
+  // Returns the JWK, or null on wrong passphrase / tamper. THROWS if the record is
+  // wrapped but no passphrase was supplied, so the caller knows to prompt rather than
+  // silently treating a locked record as empty.
+  async function loadKey(record, passphrase) {
+    if (!record) return null;
+    if (isWrapped(record)) {
+      if (passphrase == null) throw new Error('atrest loadKey: passphrase required for a wrapped record');
+      return unwrapJWK(record.wrapped || record, passphrase);
+    }
+    return record.priv ?? null;
+  }
+
   // Best-effort zeroing of plaintext key material after use. JS GC may retain
   // copies; this limits exposure to memory dumps / heap dumps taken right after use.
   function zeroBuffer(buf) {
@@ -80,7 +103,7 @@ export function createAtRest(opts = {}) {
     else if (buf instanceof ArrayBuffer) new Uint8Array(buf).fill(0);
   }
 
-  return { wrapJWK, unwrapJWK, migrate, zeroBuffer, _cfg: cfg };
+  return { wrapJWK, unwrapJWK, migrate, isWrapped, loadKey, zeroBuffer, _cfg: cfg };
 }
 
 export default createAtRest;

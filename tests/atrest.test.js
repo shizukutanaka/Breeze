@@ -80,6 +80,40 @@ describe('migration of legacy plaintext records', () => {
   });
 });
 
+describe('keystore record detection + load (isWrapped / loadKey — G5 port-enabler)', () => {
+  it('isWrapped distinguishes wrapped, migrated, and legacy-plaintext records', async () => {
+    const wrapRec = await A.wrapJWK(sampleJWK, 'pw');           // bare wrap record
+    const migrated = await A.migrate({ priv: sampleJWK, pubB64: 'P' }, 'pw'); // { wrapped }
+    expect(A.isWrapped(wrapRec)).toBe(true);
+    expect(A.isWrapped(migrated)).toBe(true);
+    expect(A.isWrapped({ priv: sampleJWK })).toBe(false);       // legacy plaintext
+    expect(A.isWrapped(null)).toBe(false);
+    expect(A.isWrapped({})).toBe(false);
+  });
+
+  it('loadKey returns plaintext priv directly (no passphrase needed)', async () => {
+    expect(await A.loadKey({ priv: sampleJWK, pubB64: 'P' })).toEqual(sampleJWK);
+    expect(await A.loadKey({ priv: sampleJWK }, 'ignored')).toEqual(sampleJWK);
+    expect(await A.loadKey(null)).toBe(null);
+  });
+
+  it('loadKey unwraps a migrated record with the correct passphrase', async () => {
+    const migrated = await A.migrate({ priv: sampleJWK, pubB64: 'P' }, 'pw');
+    expect(await A.loadKey(migrated, 'pw')).toEqual(sampleJWK);
+    expect(await A.loadKey(migrated, 'wrong')).toBe(null); // wrong passphrase → null (no throw)
+  });
+
+  it('loadKey unwraps a bare wrap record too', async () => {
+    const wrapRec = await A.wrapJWK(sampleJWK, 'pw');
+    expect(await A.loadKey(wrapRec, 'pw')).toEqual(sampleJWK);
+  });
+
+  it('loadKey THROWS when a wrapped record is loaded without a passphrase (prompt signal)', async () => {
+    const migrated = await A.migrate({ priv: sampleJWK, pubB64: 'P' }, 'pw');
+    await expect(A.loadKey(migrated)).rejects.toThrow(/passphrase required/);
+  });
+});
+
 describe('security floor', () => {
   it('defaults to >= 600k PBKDF2 iterations', () => {
     expect(createAtRest()._cfg.iterations).toBeGreaterThanOrEqual(600000);

@@ -72,6 +72,14 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
   abuse/report).
 
 ### Crypto Modules (`src/crypto/`) — features & correctness fixes
+- **`atrest.js` — keystore detection + load helpers (G5 port-enabler)**: added
+  `isWrapped(record)` (distinguishes passphrase-wrapped, migrated, and legacy-plaintext
+  records) and `loadKey(record, passphrase?)` (returns the JWK for either form). `loadKey`
+  **throws** when a wrapped record is loaded with no passphrase, so `loadIdentity` knows
+  to prompt rather than silently treating a locked record as empty. Encodes the trickiest
+  part of the at-rest port (INTEGRATION.md §5) as the single source of truth. Added 5
+  `tests/atrest.test.js` cases (detection across forms, plaintext passthrough, unwrap of
+  migrated + bare records, wrong-passphrase→null, prompt-throw).
 - **`group.js` — sender-key distribution envelope (G3 port-enabler)**: added
   `buildSenderKeyDistribution(senderKey)` / `parseSenderKeyDistribution(wire)` so the
   module owns the wire format `{ v:5, t:'skd', ep, c, ck, spk }` used to hand a member's
@@ -135,7 +143,7 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
 - `validate.sh` SRI gate confirmed correct (sha384 matches lang.js).
 
 ### Test Suite (`tests/`)
-- **12 suites, 397 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
+- **12 suites, 402 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
 - Worker: group kick TTL regression test (1); corrupt KV data resilience via
   `safeJsonParse` (7); backup type guard (1); AI handler — `reply_suggest` non-string
   context, missing context, capped error echo, `chat` non-string/oversized text (4);
