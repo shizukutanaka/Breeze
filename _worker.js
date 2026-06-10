@@ -155,6 +155,9 @@ export default {
         '/api/group/join': 10,
         '/api/group/info': 20,
         '/api/group/kick': 5,
+        '/api/group/leave': 10,
+        '/api/group/delete': 5,
+        '/api/account/delete': 3,
         '/api/push/subscribe': 5,
         '/api/turn': 10,
         '/api/account/slots': 20,
@@ -278,6 +281,9 @@ export default {
         case '/api/backup/upload':    return await handleBackupUpload(body, env, request);
         case '/api/backup/download':  return await handleBackupDownload(body, env, request);
         case '/api/group/kick':       return await handleGroupKick(body, env, request);
+        case '/api/group/leave':      return await handleGroupLeave(body, env, request);
+        case '/api/group/delete':     return await handleGroupDelete(body, env, request);
+        case '/api/account/delete':   return await handleAccountDelete(body, env, request);
         case '/api/translate':        return await handleTranslate(body, env, request);
         case '/api/ai':               return await handleAI(body, env, request);
         case '/api/drop/create':      return await handleDropCreate(body, env, request);
@@ -384,6 +390,13 @@ async function handleMsgSend(body, ip, env, request) {
   const safePub  = typeof fromPub  === 'string' ? fromPub.slice(0, 200)  : undefined;
   const safeName = typeof fromName === 'string' ? fromName.slice(0, 64)  : undefined;
   const msg = { from, fromPub: safePub, fromName: safeName, payload, ts: ts || Date.now() };
+  // Server-assigned unique message id — groundwork for an exclusive poll cursor.
+  // Two messages stored in the same millisecond share a ts, and the ts-only cursor
+  // (`m.ts > lastTs`) drops the second one if a poll lands between them. Current
+  // clients ignore unknown fields; a future client can cursor/dedup on (ts, id).
+  const idBytes = new Uint8Array(6);
+  crypto.getRandomValues(idBytes);
+  msg.id = Array.from(idBytes, b => b.toString(16).padStart(2, '0')).join('');
   if (isFile) msg.isFile = true;
   if (isGroupInvite) msg.isGroupInvite = true;
   if (isVoice) msg.isVoice = true;
@@ -428,12 +441,19 @@ async function handleMsgPoll(body, env, request) {
   // comparison NaN→false, which both starves the poller AND (via the same cutoff in
   // the cleanup filter below) deletes still-undelivered messages older than 10s.
   const cutoff = (typeof lastTs === 'number' && Number.isFinite(lastTs)) ? lastTs : 0;
+  // Server-side enforcement of disappearing messages. The client sets an ABSOLUTE
+  // expiry (send time + timer) in msg.disappearAt and filters it at render — but an
+  // UNDELIVERED expired message would otherwise sit in KV for up to the 7-day inbox
+  // TTL. Expired messages are excluded from delivery AND from the keep-list below,
+  // so the ciphertext is purged from KV on the first poll after expiry.
+  const nowPoll = Date.now();
+  const isExpired = (m) => Number.isFinite(m.disappearAt) && m.disappearAt <= nowPoll;
   // Use Number.isFinite to coerce non-finite ts values (NaN, Infinity) to 0.
   // (m.ts || 0) handles NaN (falsy) but not Infinity (truthy): a stored message
   // with ts:Infinity would pass every cutoff check and never be cleaned up.
-  const newMsgs = all.filter(m => (Number.isFinite(m.ts) ? m.ts : 0) > cutoff);
+  const newMsgs = all.filter(m => !isExpired(m) && (Number.isFinite(m.ts) ? m.ts : 0) > cutoff);
   // Remove delivered messages older than 10 seconds (grace period for multi-tab)
-  const keep = all.filter(m => { const t = Number.isFinite(m.ts) ? m.ts : 0; return t > cutoff || (Date.now() - t) < 10000; });
+  const keep = all.filter(m => { if (isExpired(m)) return false; const t = Number.isFinite(m.ts) ? m.ts : 0; return t > cutoff || (Date.now() - t) < 10000; });
   if (keep.length < all.length) {
     if (keep.length === 0) await kvDel(env, key);
     else await kvPut(env, key, JSON.stringify(keep), { expirationTtl: 604800 });
@@ -894,6 +914,56 @@ async function handleGroupKick(body, env, request) {
   return json({ ok: true, remaining: group.members.length, epoch: group.epoch }, 200, request);
 }
 
+// Member SELF-removal — the voluntary counterpart to kick. Without this a member
+// who leaves a group client-side stays in the server registry (id + pub + name
+// readable by anyone holding the invite token) for the full 30-day TTL. Bumps the
+// epoch like kick so remaining members rotate sender keys: a departed member must
+// not keep decrypting new traffic (I3 PCS applies to voluntary leave too).
+async function handleGroupLeave(body, env, request) {
+  const { token, memberId } = body;
+  if (!token || !memberId) return json({ error: 'token, memberId required' }, 400, request);
+  if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
+  if (!validateUserId(memberId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
+
+  const data = await kvGet(env, `grp:${token}`);
+  if (!data) return json({ error: 'Group not found', code: 'NOT_FOUND' }, 404, request);
+  const group = safeJsonParse(data);
+  if (!group || !Array.isArray(group.members)) return json({ error: 'Group not found', code: 'NOT_FOUND' }, 404, request);
+
+  // The creator cannot leave their own group — a creator-less group would have
+  // nobody able to kick or delete. They delete the group instead (group/delete).
+  if (memberId === group.creatorId) return json({ error: 'Creator cannot leave; delete the group instead', code: 'CREATOR_CANNOT_LEAVE' }, 400, request);
+  if (!group.members.some(m => m.id === memberId)) return json({ error: 'Member not found', code: 'NOT_MEMBER' }, 404, request);
+
+  group.members = group.members.filter(m => m.id !== memberId);
+  if (group.admins) group.admins = group.admins.filter(id => id !== memberId);
+  // Same PCS epoch bump + integer coercion as handleGroupKick (see comment there).
+  group.epoch = (group.epoch | 0) + 1;
+  await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+
+  return json({ ok: true, remaining: group.members.length, epoch: group.epoch }, 200, request);
+}
+
+// Creator-only group deletion — the lifecycle terminator. create/join/info/kick/
+// leave all existed but delete was missing, so an abandoned group lingered in KV
+// for the full 30-day TTL with every member's id/pub/name readable by anyone
+// holding the invite token.
+async function handleGroupDelete(body, env, request) {
+  const { token, adminId } = body;
+  if (!token || !adminId) return json({ error: 'token, adminId required' }, 400, request);
+  if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
+  if (!validateUserId(adminId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
+
+  const data = await kvGet(env, `grp:${token}`);
+  if (!data) return json({ error: 'Group not found', code: 'NOT_FOUND' }, 404, request);
+  const group = safeJsonParse(data);
+  if (!group) return json({ error: 'Group not found', code: 'NOT_FOUND' }, 404, request);
+  if (group.creatorId !== adminId) return json({ error: 'Admin permission required', code: 'FORBIDDEN' }, 403, request);
+
+  await kvDel(env, `grp:${token}`);
+  return json({ ok: true }, 200, request);
+}
+
 // ============================================================
 // ============================================================
 // WEB PUSH — RFC 8291 encrypted push + VAPID JWT signing (C12)
@@ -1228,6 +1298,90 @@ async function handleAccountSlots(body, env, request) {
   const parsed = safeJsonParse(data);
   if (!parsed) return json({ slots: 1, plan: 'free' }, 200, request);
   return json({ slots: parsed.slots || 1, plan: parsed.plan || 'free' }, 200, request);
+}
+
+// ============================================================
+// ACCOUNT DELETION — server-side data erasure (GDPR Art. 17)
+//
+// The client's /wipe deletes LOCAL data only. Without this endpoint the
+// server retains inbox + sealed queues (up to 7 days), prekeys + push
+// subscriptions (30 days), the key-transparency log and encrypted backup
+// (90 days), and the billing slots record (no TTL) until KV TTLs lapse —
+// while the privacy policy promises full deletion. This erases them now.
+//
+// Auth: the request is signed with the account's Ed25519 identity key (the
+// same key that signs the pre-key bundle, stored server-side on upload):
+//   sig = Ed25519-sign(`breeze-account-delete:${userId}:${ts}`)
+// An unauthenticated delete would let anyone destroy a victim's prekeys
+// (blocking new-session establishment) and backup. Accounts that never
+// uploaded an Ed25519 key cannot be authenticated → 403; their data
+// expires via the TTLs above.
+// ============================================================
+async function handleAccountDelete(body, env, request) {
+  const { userId, ts, sig, alias } = body;
+  if (!userId || !sig || ts === undefined) return json({ error: 'userId, ts, sig required', code: 'MISSING_FIELDS' }, 400, request);
+  if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
+  if (typeof sig !== 'string' || sig.length > 500) return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
+  // ±5 min freshness window bounds replay of a captured request. Replay inside
+  // the window is harmless: deletion is idempotent and the prekey bundle (the
+  // verification key source) is gone after the first call anyway.
+  if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > 300000) {
+    return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
+  }
+
+  const data = await kvGet(env, `prekey:${userId}`);
+  const bundle = data ? safeJsonParse(data) : null;
+  if (!bundle || typeof bundle.edIdentityKey !== 'string' || !bundle.edIdentityKey) {
+    return json({ error: 'No registered identity key to authenticate deletion', code: 'NO_IDENTITY_KEY' }, 403, request);
+  }
+  // userId is [A-Za-z0-9+/=_-] (validateUserId) and ts is a number, so the
+  // challenge string is pure ASCII — btoa() is safe.
+  const challenge = `breeze-account-delete:${userId}:${ts}`;
+  const ok = await verifyEd25519(bundle.edIdentityKey, btoa(challenge), sig);
+  if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
+
+  // One-time prekeys first — the count key is needed before the bundle goes away.
+  const countStr = await kvGet(env, `prekey:otp:${userId}:count`);
+  const otpCount = Math.min(Math.max(parseInt(countStr || '0') || 0, 0), 100);
+  const otpDels = [];
+  for (let i = 0; i < otpCount; i++) otpDels.push(kvDel(env, `prekey:otp:${userId}:${i}`));
+  otpDels.push(kvDel(env, `prekey:otp:${userId}:count`));
+  await Promise.all(otpDels);
+
+  // Optional alias release: only when the stored alias record's pub matches this
+  // account's registered identity key — otherwise anyone could free up (squat)
+  // a third party's alias by including it in their own delete request.
+  let aliasDeleted = false;
+  if (typeof alias === 'string' && alias) {
+    const clean = alias.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
+    if (clean.length >= 3) {
+      const aliasRec = safeJsonParse(await kvGet(env, `alias:${clean}`));
+      if (aliasRec && aliasRec.pub === bundle.identityKey) {
+        aliasDeleted = await kvDel(env, `alias:${clean}`);
+      }
+    }
+  }
+
+  await Promise.all([
+    kvDel(env, `inbox:${userId}`),
+    kvDel(env, `sealed:${userId}`),
+    kvDel(env, `prekey:${userId}`),
+    kvDel(env, `ktlog:${userId}`),
+    kvDel(env, `push:${userId}`),
+    kvDel(env, `backup:${userId}`),
+    kvDel(env, `presence:${userId}`),
+    kvDel(env, `slots:${userId}`),
+  ]);
+  // Evict the in-memory presence cache too, or a same-isolate presence check
+  // would keep answering "online" from stale cached data after erasure.
+  globalThis._presenceCache?.delete(`presence:${userId}`);
+  globalThis._presenceCache?.delete(`presence:${userId}:data`);
+
+  return json({
+    ok: true,
+    erased: ['inbox', 'sealed', 'prekeys', 'ktlog', 'push', 'backup', 'presence', 'slots'],
+    aliasDeleted,
+  }, 200, request);
 }
 
 // ============================================================
@@ -1995,6 +2149,9 @@ export {
   handleGroupJoin,
   handleGroupInfo,
   handleGroupKick,
+  handleGroupLeave,
+  handleGroupDelete,
+  handleAccountDelete,
   handleSealedSend,
   handleSealedPoll,
   handleSealedAck,

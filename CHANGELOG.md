@@ -1,5 +1,56 @@
 # Changelog
 
+## Product gap analysis + missing-feature implementation (branch claude/nice-ride-T6yb0, 2026-06-10)
+
+Full product analysis (strengths / weaknesses / missing features) documented in
+`docs/PRODUCT-ANALYSIS.md`; the top implementable gaps were closed worker-side
+(all additive — zero wire change for current clients). 32 → 35 API endpoints,
+472 → 486 tests.
+
+### New endpoints
+- **`/api/account/delete` — server-side data erasure (GDPR Art. 17)**: the client's
+  `/wipe` deletes local data only, while the privacy policy promises full deletion;
+  server KV retained inbox/sealed (7d), prekeys + push subscriptions (30d), the
+  key-transparency log + encrypted backup (90d), and the billing slots record (no
+  TTL). The new endpoint erases all of them immediately, plus all one-time prekeys,
+  plus an optional alias release (only when the stored alias `pub` matches the
+  account's registered `identityKey` — prevents third-party alias squatting).
+  Auth: Ed25519 signature over `breeze-account-delete:{userId}:{ts}` (±5 min
+  freshness window) verified against the `edIdentityKey` from the user's pre-key
+  bundle; accounts without a registered Ed25519 key get 403 (an unauthenticated
+  delete would let anyone destroy a victim's prekeys/backup). Replay after erasure
+  fails closed (the verification key itself is erased). Rate limit 3/min.
+- **`/api/group/leave` — member self-removal**: only admin `kick` existed; a member
+  who left client-side stayed in the server registry (id/pub/name readable by anyone
+  holding the invite token) for the full 30-day TTL. Leave removes the member and
+  bumps the epoch like kick — PCS applies to voluntary departure too (the departed
+  member must not keep decrypting new traffic). The creator cannot leave
+  (`CREATOR_CANNOT_LEAVE` — a creator-less group could never be kicked/deleted).
+- **`/api/group/delete` — creator-only group deletion**: completes the lifecycle
+  (create/join/info/kick/leave existed; abandoned groups lingered in KV for 30 days).
+
+### Behavior changes
+- **Server-side disappearing-message enforcement (`/api/msg/poll`)**: `disappearAt`
+  (absolute, send-time + timer) was only filtered at client render; an undelivered
+  expired message sat in KV for up to the 7-day inbox TTL. Poll now excludes expired
+  messages from delivery AND from the keep-list, purging the ciphertext on the first
+  poll after expiry. No observable client change (the client already refuses to
+  render expired messages).
+- **Server-assigned message id (`/api/msg/send`)**: each stored message gets a
+  12-hex random `id` — groundwork for an exclusive poll cursor fixing the
+  same-millisecond message-loss window (two messages sharing a `ts` + a poll landing
+  between them drops the second). Current clients ignore unknown fields.
+
+### Tests (+14)
+- Account deletion: full-erasure sweep across all 11 KV keys, invalid-signature
+  rejection (nothing deleted), no-identity-key 403, stale/future timestamp 400,
+  alias release pub-match (own alias deleted / third-party alias blocked), replay
+  after erasure fails closed.
+- Group leave/delete: leave removes + bumps epoch, creator-leave 400, non-member
+  404, missing-group 404, creator delete (KV gone + info 404), non-creator 403.
+- Msg relay: unique 12-hex id on same-ts messages; expired disappearAt purged from
+  both delivery and KV, live + plain messages unaffected.
+
 ## Security Hardening Batch 5 — systematic category audit (branch claude/nice-ride-T6yb0, 2026-06-09)
 
 Exhaustive category-by-category audit of the full product (crypto modules, worker

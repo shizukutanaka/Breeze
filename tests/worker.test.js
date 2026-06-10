@@ -20,6 +20,9 @@ import worker, {
   handleGroupJoin,
   handleGroupInfo,
   handleGroupKick,
+  handleGroupLeave,
+  handleGroupDelete,
+  handleAccountDelete,
   handleAbuseRecord,
   handleAbuseReport,
   handleSealedSend,
@@ -597,6 +600,204 @@ describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {
   });
 });
 
+describe('group leave / delete (lifecycle completion)', () => {
+  const req = (b) => apiRequest('/api/group/x', b);
+  async function setupGroup(env) {
+    const create = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+    const { token } = await create.json();
+    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bpub', memberName: 'B' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'cpub2', memberName: 'Ca' }, env, req({}));
+    return token;
+  }
+
+  it('a member can leave; they are removed and the epoch bumps (PCS on voluntary leave)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupLeave({ token, memberId: 'bob00001' }, env, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.ok).toBe(true);
+    expect(j.remaining).toBe(2);
+    expect(j.epoch).toBe(1); // departed member must not decrypt the new epoch
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.members.some((m) => m.id === 'bob00001')).toBe(false);
+    expect(info.epoch).toBe(1);
+  });
+
+  it('the creator cannot leave (must delete the group instead)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupLeave({ token, memberId: 'creator1' }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('CREATOR_CANNOT_LEAVE');
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.epoch).toBe(0); // no epoch churn on a rejected leave
+  });
+
+  it('leaving a group you are not in returns 404 without epoch churn', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupLeave({ token, memberId: 'nobody00' }, env, req({}));
+    expect(res.status).toBe(404);
+    expect((await res.json()).code).toBe('NOT_MEMBER');
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.epoch).toBe(0);
+  });
+
+  it('leave on a missing group returns 404', async () => {
+    const env = makeEnv();
+    const res = await handleGroupLeave({ token: 'nosuchtoken1', memberId: 'bob00001' }, env, req({}));
+    expect(res.status).toBe(404);
+  });
+
+  it('the creator can delete the group; it is gone from KV', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupDelete({ token, adminId: 'creator1' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).ok).toBe(true);
+    expect(await env.KV.get(`grp:${token}`)).toBeNull();
+    const info = await handleGroupInfo({ token }, env, req({}));
+    expect(info.status).toBe(404);
+  });
+
+  it('a non-creator cannot delete the group', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupDelete({ token, adminId: 'bob00001' }, env, req({}));
+    expect(res.status).toBe(403);
+    expect(await env.KV.get(`grp:${token}`)).not.toBeNull(); // still there
+  });
+});
+
+describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
+  const req = (b) => apiRequest('/api/account/delete', b);
+
+  // Register an account with a fully signed prekey bundle, then seed every
+  // userId-keyed store the delete endpoint is responsible for erasing.
+  async function registeredAccount(env, userId) {
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
+    const spk = crypto.getRandomValues(new Uint8Array(32));
+    const spkSig = new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, spk));
+    await handlePreKeyUpload({
+      userId, identityKey: 'IK-' + userId,
+      edIdentityKey: toB64(edPub), signedPreKey: toB64(spk), signedPreKeySig: toB64(spkSig),
+      oneTimePreKeys: ['otp0', 'otp1'],
+    }, env, apiRequest('/api/prekey/upload', {}));
+    await env.KV.put(`inbox:${userId}`, JSON.stringify([{ from: 'x', payload: 'ct', ts: Date.now() }]));
+    await env.KV.put(`sealed:${userId}`, JSON.stringify([{ envelope: 'ct', ts: Date.now() }]));
+    await env.KV.put(`push:${userId}`, JSON.stringify([{ endpoint: 'https://fcm.googleapis.com/x' }]));
+    await env.KV.put(`backup:${userId}`, 'encrypted-backup-blob');
+    await env.KV.put(`presence:${userId}`, JSON.stringify({ at: Date.now() }));
+    await env.KV.put(`slots:${userId}`, JSON.stringify({ slots: 4, plan: 'plus' }));
+    return { ed };
+  }
+
+  async function signDelete(ed, userId, ts) {
+    const msg = new TextEncoder().encode(`breeze-account-delete:${userId}:${ts}`);
+    return toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, msg)));
+  }
+
+  it('erases every userId-keyed store on a validly signed request', async () => {
+    const env = makeEnv();
+    const userId = 'deluser01';
+    const { ed } = await registeredAccount(env, userId);
+    const ts = Date.now();
+    const res = await handleAccountDelete({ userId, ts, sig: await signDelete(ed, userId, ts) }, env, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.ok).toBe(true);
+    for (const key of [`inbox:${userId}`, `sealed:${userId}`, `prekey:${userId}`,
+      `ktlog:${userId}`, `push:${userId}`, `backup:${userId}`,
+      `presence:${userId}`, `slots:${userId}`,
+      `prekey:otp:${userId}:0`, `prekey:otp:${userId}:1`, `prekey:otp:${userId}:count`]) {
+      expect(await env.KV.get(key)).toBeNull();
+    }
+    // Prekey fetch after deletion behaves like an unknown user.
+    const fetch2 = await handlePreKeyFetch({ userId }, env, apiRequest('/api/prekey/fetch', {}));
+    expect(fetch2.status).toBe(404);
+  });
+
+  it('rejects an invalid signature without deleting anything', async () => {
+    const env = makeEnv();
+    const userId = 'deluser02';
+    const { ed } = await registeredAccount(env, userId);
+    const ts = Date.now();
+    // Signature over the wrong ts → must not verify against the claimed ts.
+    const sig = await signDelete(ed, userId, ts - 1234);
+    const res = await handleAccountDelete({ userId, ts, sig }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+    expect(await env.KV.get(`backup:${userId}`)).toBe('encrypted-backup-blob'); // untouched
+  });
+
+  it('rejects when no Ed25519 identity key is registered (cannot authenticate)', async () => {
+    const env = makeEnv();
+    // Legacy v4 upload: no edIdentityKey.
+    await handlePreKeyUpload(
+      { userId: 'legacydel1', identityKey: 'IK', signedPreKey: 'SPK' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    const res = await handleAccountDelete(
+      { userId: 'legacydel1', ts: Date.now(), sig: 'AAAA' }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('NO_IDENTITY_KEY');
+  });
+
+  it('rejects a stale or future timestamp (bounded replay window)', async () => {
+    const env = makeEnv();
+    const userId = 'deluser03';
+    const { ed } = await registeredAccount(env, userId);
+    for (const ts of [Date.now() - 6 * 60 * 1000, Date.now() + 6 * 60 * 1000]) {
+      const res = await handleAccountDelete({ userId, ts, sig: await signDelete(ed, userId, ts) }, env, req({}));
+      expect(res.status).toBe(400);
+      expect((await res.json()).code).toBe('INVALID_TIMESTAMP');
+    }
+    expect(await env.KV.get(`backup:${userId}`)).not.toBeNull();
+  });
+
+  it('releases the alias only when its pub matches the registered identity key', async () => {
+    const env = makeEnv();
+    const userId = 'deluser04';
+    const { ed } = await registeredAccount(env, userId);
+    // Alias owned by this account (pub === bundle.identityKey).
+    await env.KV.put('alias:mine', JSON.stringify({ pub: 'IK-' + userId, name: 'Me', setAt: Date.now() }));
+    // Alias owned by someone else — must NOT be deletable via this request.
+    await env.KV.put('alias:other', JSON.stringify({ pub: 'IK-victim', name: 'V', setAt: Date.now() }));
+
+    const ts1 = Date.now();
+    const res1 = await handleAccountDelete(
+      { userId, ts: ts1, sig: await signDelete(ed, userId, ts1), alias: 'other' }, env, req({}));
+    expect((await res1.json()).aliasDeleted).toBe(false);
+    expect(await env.KV.get('alias:other')).not.toBeNull(); // squat attempt blocked
+
+    // Re-register (prekey bundle was erased by the first call).
+    const { ed: ed2 } = await registeredAccount(env, userId);
+    const ts2 = Date.now();
+    const res2 = await handleAccountDelete(
+      { userId, ts: ts2, sig: await signDelete(ed2, userId, ts2), alias: 'mine' }, env, req({}));
+    expect((await res2.json()).aliasDeleted).toBe(true);
+    expect(await env.KV.get('alias:mine')).toBeNull();
+  });
+
+  it('a replayed delete after erasure fails closed (verification key is gone)', async () => {
+    const env = makeEnv();
+    const userId = 'deluser05';
+    const { ed } = await registeredAccount(env, userId);
+    const ts = Date.now();
+    const sig = await signDelete(ed, userId, ts);
+    const res1 = await handleAccountDelete({ userId, ts, sig }, env, req({}));
+    expect(res1.status).toBe(200);
+    // Replay of the captured request: prekey bundle (the verification key source)
+    // was erased, so the replay cannot authenticate. Idempotent + fail-closed.
+    const res2 = await handleAccountDelete({ userId, ts, sig }, env, req({}));
+    expect(res2.status).toBe(403);
+    expect((await res2.json()).code).toBe('NO_IDENTITY_KEY');
+  });
+});
+
 describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => {
   const F = createFranking();
   const b64 = (a) => Buffer.from(Uint8Array.from(a)).toString('base64');
@@ -799,6 +1000,36 @@ describe('msg send / poll (1:1 relay path)', () => {
     const { messages } = await poll.json();
     expect(messages.length).toBe(1);
     expect(messages[0].payload).toBe('ENCRYPTED');
+  });
+
+  it('assigns a unique server-side message id (same-millisecond cursor groundwork)', async () => {
+    const env = makeEnv();
+    const ts = Date.now();
+    await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'CT-A', ts }, ip, env, req({}));
+    await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'CT-B', ts }, ip, env, req({}));
+    const stored = JSON.parse(await env.KV.get('inbox:bob00001'));
+    expect(stored.length).toBe(2);
+    for (const m of stored) expect(m.id).toMatch(/^[0-9a-f]{12}$/);
+    expect(stored[0].id).not.toBe(stored[1].id);
+  });
+
+  it('purges expired disappearing messages at poll (server-side disappearAt enforcement)', async () => {
+    const env = makeEnv();
+    const now = Date.now();
+    // Seed the inbox directly: one expired, one still-live, one non-disappearing.
+    await env.KV.put('inbox:bob00001', JSON.stringify([
+      { from: 'alice001', payload: 'EXPIRED', ts: now - 5000, disappearAt: now - 1000 },
+      { from: 'alice001', payload: 'LIVE',    ts: now - 4000, disappearAt: now + 60000 },
+      { from: 'alice001', payload: 'PLAIN',   ts: now - 3000 },
+    ]));
+    const poll = await handleMsgPoll({ id: 'bob00001', lastTs: 0 }, env, req({}));
+    const { messages } = await poll.json();
+    // The expired message is neither delivered…
+    expect(messages.map((m) => m.payload).sort()).toEqual(['LIVE', 'PLAIN']);
+    // …nor retained in KV (ciphertext purged on the first poll after expiry,
+    // instead of sitting out the 7-day inbox TTL).
+    const kept = JSON.parse(await env.KV.get('inbox:bob00001'));
+    expect(kept.some((m) => m.payload === 'EXPIRED')).toBe(false);
   });
 
   it('rejects a message with a timestamp outside ±5 min (replay guard)', async () => {
