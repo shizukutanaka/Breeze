@@ -873,6 +873,23 @@ describe('msg send / poll (1:1 relay path)', () => {
     expect((await r2.json()).code).toBe('INVALID_USER_ID');
   });
 
+  it('rejects non-string to/from/payload (INVALID_TYPE type guard)', async () => {
+    const e = makeEnv();
+    const ts = Date.now();
+    // Non-string `to` — would bypass validateUserId and form a bad KV key
+    const r1 = await handleMsgSend({ to: 42, from: 'alice001', payload: 'x', ts }, ip, e, req({}));
+    expect(r1.status).toBe(400);
+    expect((await r1.json()).code).toBe('INVALID_TYPE');
+    // Non-string `payload` — would corrupt the message store
+    const r2 = await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: { secret: 1 }, ts }, ip, e, req({}));
+    expect(r2.status).toBe(400);
+    expect((await r2.json()).code).toBe('INVALID_TYPE');
+    // Array `from` — would also produce a bad KV key
+    const r3 = await handleMsgSend({ to: 'bob00001', from: ['alice001'], payload: 'x', ts }, ip, e, req({}));
+    expect(r3.status).toBe(400);
+    expect((await r3.json()).code).toBe('INVALID_TYPE');
+  });
+
   it('rejects poll with malformed id (KV key injection guard)', async () => {
     const res = await handleMsgPoll({ id: 'bad id!' }, makeEnv(), req({}));
     expect(res.status).toBe(400);
