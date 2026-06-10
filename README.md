@@ -66,6 +66,8 @@ Cloudflare Worker
   ├── Signal relay (/api/signal)
   ├── Message relay (/api/msg/send, /poll)
   ├── Sealed Sender (/api/sealed/send, /poll)
+  ├── Groups (create/join/info/rename/kick/admin/transfer/leave/delete)
+  ├── Account management (slots, purchase, portal, delete)
   ├── Presence + TURN + Push
   └── Stripe billing
 
