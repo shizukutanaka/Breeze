@@ -89,7 +89,7 @@ export default {
         ok: kvOk,
         version: '3.6.0',
         protocol: 4,
-        endpoints: 32,
+        endpoints: 38,
         reqId,
         serverTime: Date.now(), // v3.6: Client can detect clock drift
         kv: kvOk,
@@ -110,6 +110,15 @@ export default {
           ai: !!(env.ANTHROPIC_API_KEY || env.OPENAI_API_KEY || env.GROQ_API_KEY),
           translate: !!(env.DEEPL_API_KEY || env.GOOGLE_TRANSLATE_KEY || env.TRANSLATE_URL),
         },
+        // Always-on endpoint capabilities (independent of env config) so a client can
+        // feature-detect during a staged rollout — e.g. show the delete-account /
+        // leave-group / transfer-ownership UI only when the relay actually supports it,
+        // instead of probing each endpoint or hard-coding a minimum server version.
+        capabilities: [
+          'account-delete', 'group-leave', 'group-delete', 'group-admin',
+          'group-transfer', 'group-rename', 'msg-disappear-enforce',
+          'sealed-sender', 'franking', 'prekey-x3dh',
+        ],
         crypto: ['X25519', 'Ed25519', 'AES-256-GCM', 'HKDF-SHA256', 'Double Ratchet', 'Sender Key O(1)'],
         ts: Date.now(),
         responseMs: Date.now() - _startMs,

@@ -76,6 +76,16 @@ describe('routing & request validation (export default fetch)', () => {
     expect(j.kv).toBe(true);
   });
 
+  it('health advertises an endpoint capabilities array for client feature-detection', async () => {
+    const res = await worker.fetch(new Request('https://breeze.test/api/health'), makeEnv());
+    const j = await res.json();
+    expect(Array.isArray(j.capabilities)).toBe(true);
+    // The lifecycle endpoints added this session must be discoverable.
+    for (const cap of ['account-delete', 'group-leave', 'group-delete', 'group-transfer', 'group-rename']) {
+      expect(j.capabilities).toContain(cap);
+    }
+  });
+
   it('rejects non-POST on API routes with 405', async () => {
     const res = await worker.fetch(new Request('https://breeze.test/api/presence'), makeEnv());
     expect(res.status).toBe(405);
