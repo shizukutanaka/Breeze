@@ -73,21 +73,24 @@ export function createGroup(opts = {}) {
     return concatBytes([u8(p.i), u8(p.d), u8(p.cm || []), meta, spkB, nskB]);
   }
 
+  // Ed25519 verify a detached signature over msgBytes with a raw public key. Returns
+  // false (never throws) on a bad key/sig — the single primitive the three group
+  // signature checks below route through (epoch sig, per-message sig, legacy single sig).
+  async function ed25519Verify(pubRaw, sig, msgBytes) {
+    try {
+      const pub = await subtle.importKey('raw', u8(pubRaw), { name: 'Ed25519' }, false, ['verify']);
+      return await subtle.verify({ name: 'Ed25519' }, pub, u8(sig), msgBytes);
+    } catch { return false; }
+  }
   // Verify the epoch signature es (covers content + spk + nsk).
   async function verifyEpochSig(epochPubRaw, p) {
-    try {
-      if (!p.es) return false;
-      const pub = await subtle.importKey('raw', u8(epochPubRaw), { name: 'Ed25519' }, false, ['verify']);
-      return await subtle.verify({ name: 'Ed25519' }, pub, u8(p.es), signedBytes(p));
-    } catch { return false; }
+    if (!p.es) return false;
+    return ed25519Verify(epochPubRaw, p.es, signedBytes(p));
   }
   // Verify the per-message signature s with the included spk.
   async function verifyMsgSig(p) {
-    try {
-      if (!p.s || !p.spk) return false;
-      const pub = await subtle.importKey('raw', u8(p.spk), { name: 'Ed25519' }, false, ['verify']);
-      return await subtle.verify({ name: 'Ed25519' }, pub, u8(p.s), signedBytes(p));
-    } catch { return false; }
+    if (!p.s || !p.spk) return false;
+    return ed25519Verify(p.spk, p.s, signedBytes(p));
   }
 
   // A sender key: a chain key + message counter + two-layer signing state, epoch-scoped.
@@ -208,8 +211,7 @@ export function createGroup(opts = {}) {
       } else {
         // Legacy single-sig mode (old messages without per-message keys).
         if (!p.s) return null;
-        const pub = await subtle.importKey('raw', u8(peerKey.signPub), { name: 'Ed25519' }, false, ['verify']);
-        if (!(await subtle.verify({ name: 'Ed25519' }, pub, u8(p.s), signedBytes(p)))) return null;
+        if (!(await ed25519Verify(peerKey.signPub, p.s, signedBytes(p)))) return null;
       }
     }
 
