@@ -1,6 +1,6 @@
 // Protocol version negotiation tests (N3)
 import { describe, it, expect } from 'vitest';
-import { CAPS, ALL_V5, advertise, parsePeerCaps, negotiate } from '../src/crypto/negotiate.js';
+import { CAPS, ALL_V5, advertise, parsePeerCaps, negotiate, negotiateGroup } from '../src/crypto/negotiate.js';
 
 describe('advertise', () => {
   it('includes all v5 caps and the x3dh:v5 compat field by default', () => {
@@ -91,5 +91,43 @@ describe('negotiate', () => {
     expect(res.useX3dhV5).toBe(true);
     expect(res.useGroupV5).toBe(false); // peer doesn't support it
     expect(res.useFranking).toBe(false);
+  });
+});
+
+describe('negotiateGroup (group capability floor — N-party AND)', () => {
+  it('enables group-v5 only when every member advertises it', () => {
+    const res = negotiateGroup(ALL_V5, [[CAPS.GROUP_V5, CAPS.FRANKING], [CAPS.GROUP_V5, CAPS.FRANKING]]);
+    expect(res.useGroupV5).toBe(true);
+    expect(res.useFranking).toBe(true);
+  });
+
+  it('one legacy member keeps the whole group on the compatible path', () => {
+    const res = negotiateGroup(ALL_V5, [[CAPS.GROUP_V5], []]); // 2nd member has no caps
+    expect(res.useGroupV5).toBe(false);
+    expect(res.useFranking).toBe(false);
+  });
+
+  it('a member missing only franking still allows group-v5 (per-feature floor)', () => {
+    const res = negotiateGroup(ALL_V5, [[CAPS.GROUP_V5, CAPS.FRANKING], [CAPS.GROUP_V5]]);
+    expect(res.useGroupV5).toBe(true);
+    expect(res.useFranking).toBe(false);
+  });
+
+  it('empty member list means "just us" (uses our own caps)', () => {
+    expect(negotiateGroup(ALL_V5).useGroupV5).toBe(true);
+    expect(negotiateGroup([CAPS.X3DH_V5]).useGroupV5).toBe(false); // we don't advertise group-v5
+  });
+
+  it('tolerates non-array member entries (treated as no caps)', () => {
+    const res = negotiateGroup(ALL_V5, [null, undefined, 'x3dh-v5', { group: true }]);
+    expect(res.useGroupV5).toBe(false);
+  });
+
+  it('round-trips through presence-style caps arrays', () => {
+    // Each member's `caps` as it would arrive from a presence check.
+    const members = [parsePeerCaps({ caps: ALL_V5 }), parsePeerCaps({ caps: [CAPS.GROUP_V5] })];
+    const res = negotiateGroup(ALL_V5, members);
+    expect(res.useGroupV5).toBe(true);
+    expect(res.useFranking).toBe(false); // 2nd member lacks franking
   });
 });

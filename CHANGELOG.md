@@ -86,6 +86,13 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
   abuse/report).
 
 ### Crypto Modules (`src/crypto/`) — features & correctness fixes
+- **`negotiate.js` — group capability floor (`negotiateGroup`)**: 1:1 `negotiate()` had no
+  N-party equivalent, but the runbook (§7) requires "group-v5 only when ALL members
+  advertise it." Added `negotiateGroup(localCaps, memberCapsList)` — the N-party AND across
+  every member's caps (now obtainable from each member's presence `caps`). A single legacy
+  member keeps the whole group on the backward-compatible path (no silent split where some
+  members emit v5 the rest can't read); the floor is per-feature; non-array member entries
+  are treated as no-caps. Added 6 `tests/negotiate.test.js` cases.
 - **`atrest.js` — keystore detection + load helpers (G5 port-enabler)**: added
   `isWrapped(record)` (distinguishes passphrase-wrapped, migrated, and legacy-plaintext
   records) and `loadKey(record, passphrase?)` (returns the JWK for either form). `loadKey`
@@ -157,7 +164,7 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
 - `validate.sh` SRI gate confirmed correct (sha384 matches lang.js).
 
 ### Test Suite (`tests/`)
-- **12 suites, 405 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
+- **12 suites, 411 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
 - Worker: group kick TTL regression test (1); corrupt KV data resilience via
   `safeJsonParse` (7); backup type guard (1); AI handler — `reply_suggest` non-string
   context, missing context, capped error echo, `chat` non-string/oversized text (4);

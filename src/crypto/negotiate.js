@@ -57,3 +57,17 @@ export function negotiate(localCaps, peerCaps) {
     useFranking: both(CAPS.FRANKING),
   };
 }
+
+// Group capability floor: a group feature is enabled only when EVERY member — us plus
+// each peer in `memberCapsList` (e.g. each member's presence `caps` array) — advertises
+// it. This is the N-party generalization of negotiate()'s AND rule: a single legacy
+// member keeps the whole group on the backward-compatible path (no silent split where
+// some members emit v5 the others can't read). An empty member list means "just us".
+export function negotiateGroup(localCaps, memberCapsList = []) {
+  const sets = [new Set(localCaps), ...memberCapsList.map((c) => new Set(Array.isArray(c) ? c : []))];
+  const all = (cap) => sets.every((s) => s.has(cap));
+  return {
+    useGroupV5: all(CAPS.GROUP_V5),
+    useFranking: all(CAPS.FRANKING),
+  };
+}
