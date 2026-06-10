@@ -1996,6 +1996,41 @@ describe('group create / join / info validation', () => {
     expect((await res.json()).code).toBe('INVALID_USER_ID');
   });
 
+  it('kick returns 404 when the group token does not exist', async () => {
+    const res = await handleGroupKick({ token: 'nosuchtoken', kickId: 'member01', adminId: 'creator1' }, makeEnv(), req({}));
+    expect(res.status).toBe(404);
+    expect((await res.json()).code).toBe('NOT_FOUND');
+  });
+
+  it('kick returns 403 when the adminId is not the group creator', async () => {
+    const env = makeEnv();
+    const { token } = await (await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'mpub' }, env, req({}));
+    const res = await handleGroupKick({ token, kickId: 'member01', adminId: 'member01' }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('FORBIDDEN');
+  });
+
+  it('kick returns 400 when adminId tries to kick the creator (self-kick guard)', async () => {
+    const env = makeEnv();
+    const { token } = await (await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'mpub' }, env, req({}));
+    const res = await handleGroupKick({ token, kickId: 'creator1', adminId: 'creator1' }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('FORBIDDEN');
+  });
+
+  it('kick returns 404 when kickId is not a member of the group', async () => {
+    const env = makeEnv();
+    const { token } = await (await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    const res = await handleGroupKick({ token, kickId: 'notamember', adminId: 'creator1' }, env, req({}));
+    expect(res.status).toBe(404);
+    expect((await res.json()).code).toBe('NOT_MEMBER');
+  });
+
   it('kick rejects malformed adminId or kickId (member injection guard)', async () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
