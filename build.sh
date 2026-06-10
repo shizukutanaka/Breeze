@@ -4,6 +4,10 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"; cd "$SCRIPT_DIR"
 
 VERSION="3.6.0"
 WEB_FILES=(index.html sw.js manifest.json lang.js icon-192.png icon-512.png)
+# ESM crypto reference modules. index.html loads these via `import './src/crypto/*.js'`
+# once the browser port lands (docs/INTEGRATION.md §0), so packaged builds must ship the
+# directory — flattening into the app root would break the relative import path.
+CRYPTO_DIR="src/crypto"
 
 echo "=== Breeze Build v${VERSION} ==="
 echo ""
@@ -13,6 +17,13 @@ copy_web() {
   for f in "${WEB_FILES[@]}"; do
     [ -f "$f" ] && cp "$f" "$dst/" || { echo "✗ $f missing"; exit 1; }
   done
+  # Ship the crypto modules with their path preserved so `./src/crypto/*.js` resolves
+  # in Electron/mobile bundles (Cloudflare Pages already serves the repo tree directly).
+  if [ -d "$CRYPTO_DIR" ]; then
+    mkdir -p "$dst/$CRYPTO_DIR"
+    cp "$CRYPTO_DIR"/*.js "$dst/$CRYPTO_DIR/"
+    echo "✓ Crypto modules copied to $dst/$CRYPTO_DIR/"
+  fi
   echo "✓ Web files copied to $dst/"
 }
 

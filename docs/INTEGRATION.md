@@ -27,8 +27,10 @@ Two options (pick one):
   ```
   The classic inline `<script>` (line 1213) then reads `window.__breezeCrypto`.
   Caveat: ESM is deferred, so guard first use (the app already `await`s identity
-  setup). Ship the `src/crypto/` files as static assets (they already are — Pages
-  serves the repo root) and add them to `build.sh`'s `WEB_FILES`/zip + SW precache.
+  setup). Packaging is **already handled**: Pages serves the repo tree directly, the
+  `zip` target includes them via `git ls-files`, and `build.sh`'s `copy_web` now ships
+  `src/crypto/` (path preserved) into Electron/mobile builds. Remaining: add the module
+  paths to the **SW precache** list in `sw.js` (browser-gated) when wiring the import.
 - **(B) Build-time inline.** A small `scripts/inline-crypto.mjs` strips the
   `export`/`import` lines and injects the module bodies into index.html between
   marker comments. Keeps the single-file deploy; adds a build step (tension with
