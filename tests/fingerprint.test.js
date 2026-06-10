@@ -81,6 +81,29 @@ describe('safety number security properties', () => {
   });
 });
 
+describe('input validation', () => {
+  const f = createFingerprint({ subtle, iterations: 8 });
+
+  it('throws (rejected promise) for a key that is neither Uint8Array nor base64 string', async () => {
+    await expect(f.fingerprintFor(12345)).rejects.toThrow();
+    await expect(f.safetyNumber(KEY_A, null)).rejects.toThrow();
+  });
+
+  it('version > 255 wraps the stored byte but still produces consistent output', async () => {
+    const fHigh = createFingerprint({ subtle, iterations: 8, version: 256 });
+    const code = await fHigh.scannable(KEY_A, KEY_B);
+    // version byte should be 256 & 0xff = 0 — same as default version 0 stored byte
+    const bytes = Uint8Array.from(atob(code), (c) => c.charCodeAt(0));
+    expect(bytes[0]).toBe(0);
+    // But fingerprint hash differs (versionBytes = [0x01, 0x00] vs [0x00, 0x00])
+    const f0 = createFingerprint({ subtle, iterations: 8, version: 0 });
+    expect(code).not.toBe(await f0.scannable(KEY_A, KEY_B));
+    // verifyScannable with fHigh must match: same version byte (0), same hash
+    const bobCode = await fHigh.scannable(KEY_B, KEY_A);
+    expect((await fHigh.verifyScannable(bobCode, KEY_A, KEY_B)).match).toBe(true);
+  });
+});
+
 describe('full-strength run (5200 iterations) completes and is well-formed', () => {
   it('produces a valid 60-digit number at the production iteration count', async () => {
     const f = createFingerprint({ subtle }); // default 5200

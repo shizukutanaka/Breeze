@@ -315,7 +315,7 @@ async function handleSignal(body, ip, env, request) {
     const filtered = signals.filter(s => s.sender !== sender);
     // v3.6: Clean consumed signals — keep only unread ones + those <30s old
     const now = Date.now();
-    const remaining = signals.filter(s => s.sender === sender || (now - s.ts) < 30000);
+    const remaining = signals.filter(s => s.sender === sender || (typeof s.ts === 'number' && Number.isFinite(s.ts) && now - s.ts < 30000));
     if (remaining.length < signals.length) {
       if (remaining.length > 0) await kvPut(env, `sig:${room}`, JSON.stringify(remaining), { expirationTtl: 300 });
       else await kvDel(env, `sig:${room}`);
@@ -779,7 +779,7 @@ async function handleGroupCreate(body, env, request) {
   // v3.1: Validate name length
   if (name.length > 50) return json({ error: 'Group name max 50 chars' }, 400, request);
   // v3.1: Validate initial member count
-  if (members && members.length > 100) return json({ error: 'Max 100 members' }, 400, request);
+  if (Array.isArray(members) && members.length > 100) return json({ error: 'Max 100 members' }, 400, request);
 
   // Generate short invite token
   const bytes = new Uint8Array(8);

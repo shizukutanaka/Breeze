@@ -1443,6 +1443,25 @@ describe('signal relay', () => {
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('PAYLOAD_TOO_LARGE');
   });
+
+  it('signal cleanup drops signals with non-numeric ts (Number.isFinite guard)', async () => {
+    // Old-format signals (stored before the ts field was added) could have
+    // undefined or non-numeric ts. The cleanup filter must not silently retain
+    // them via NaN < 30000 === false. After the explicit guard, they are
+    // dropped immediately on the next poll, so the second poller gets nothing.
+    const e = makeEnv();
+    // Directly inject an old-format signal without ts.
+    await e.KV.put('sig:testroom-nots', JSON.stringify([
+      { sender: 'alice', type: 'offer', data: 'sdp' },           // no ts field
+      { sender: 'alice', type: 'offer', data: 'sdp2', ts: 'x' }, // non-numeric ts
+    ]));
+    // Bob polls — gets both of Alice's signals (neither is from Bob).
+    const r1 = await handleSignal({ room: 'testroom-nots', sender: 'bob', type: 'poll' }, '1.2.3.5', e, req({}));
+    expect((await r1.json()).messages).toHaveLength(2);
+    // After the poll the KV should be cleaned. Carol polls the same room → empty.
+    const r2 = await handleSignal({ room: 'testroom-nots', sender: 'carol', type: 'poll' }, '1.2.3.6', e, req({}));
+    expect((await r2.json()).messages).toHaveLength(0);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1919,6 +1938,24 @@ describe('group create / join / info validation', () => {
       { token, memberId: 'overflow1', memberPub: 'opub' }, env, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('GROUP_FULL');
+  });
+
+  it('create rejects array members with more than 100 entries', async () => {
+    const res = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', members: new Array(101).fill({ id: 'x', pub: 'p' }) },
+      makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/Max 100/);
+  });
+
+  it('create accepts a non-array members field without false rejection (Array.isArray guard)', async () => {
+    // Before the Array.isArray fix, a string members value with length > 100 would
+    // have triggered the "Max 100 members" guard (falsy .length property match on
+    // a string). After the fix, only genuine arrays are checked.
+    const res = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', members: 'x'.repeat(200) },
+      makeEnv(), req({}));
+    expect(res.status).toBe(201);
   });
 
   it('create rejects malformed creatorId (KV member injection guard)', async () => {
