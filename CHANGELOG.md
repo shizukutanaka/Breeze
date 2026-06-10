@@ -6,6 +6,13 @@ Exhaustive category-by-category audit of the full product (crypto modules, worke
 endpoints, service worker, documentation, test coverage). Findings and fixes:
 
 ### Worker (`_worker.js`) — robustness & correctness fixes
+- **Presence heartbeat carries capabilities (`caps`) — N3 negotiation enabler**: the
+  heartbeat stored only `{ pub, name, at }`, so a peer could not negotiate the protocol
+  version (x3dh-v5 / group-v5) without fetching a 1:1 prekey bundle — a problem for
+  groups, where a member would otherwise have to fetch every member's bundle to learn the
+  group's capability floor. `handlePresence` now accepts an `advertise()` `caps` array
+  (sanitized like the bundle: ≤20 string entries, ≤32 chars, non-strings dropped), stores
+  it, and returns it on a single check. Backward-compatible (absent for legacy v4 clients).
 - **Prekey fetch now returns the consumed OTP index (`oneTimePreKeyId`) — X3DH v5 enabler**:
   `handlePreKeyFetch` consumed the one-time pre-key at index `i` and returned its value
   but never which index it was. The X3DH v5 handshake needs that index: the initiator
@@ -150,13 +157,13 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
 - `validate.sh` SRI gate confirmed correct (sha384 matches lang.js).
 
 ### Test Suite (`tests/`)
-- **12 suites, 402 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
+- **12 suites, 405 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
 - Worker: group kick TTL regression test (1); corrupt KV data resilience via
   `safeJsonParse` (7); backup type guard (1); AI handler — `reply_suggest` non-string
   context, missing context, capped error echo, `chat` non-string/oversized text (4);
   OTP corruption graceful handling (1); msg-send non-numeric `ts` type guard (1);
   msg-poll non-numeric `lastTs` cursor fallback (1); SSRF redirect-revalidation + IPv4-mapped-IPv6 guard (5); PoW future-ts replay guard (1).
-  Total: 194 worker tests.
+  Total: 197 worker tests.
 - Franking: empty message commit/verify (zero-length), tampered commitment bytes
   rejected (binding property), `ctEqual` returns false for different-length inputs
   without throwing. Total: 9 franking tests.

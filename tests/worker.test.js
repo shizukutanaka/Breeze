@@ -1470,6 +1470,38 @@ describe('presence heartbeat and check', () => {
     expect(j.name).toBe('Bob');
   });
 
+  it('round-trips advertised capabilities (N3 negotiation before bundle fetch)', async () => {
+    const e = makeEnv();
+    // advertise() output: a heartbeat carrying the supported protocol caps.
+    await handlePresence(
+      { id: 'capsuser1', pub: 'p', name: 'Caro', caps: ['x3dh-v5', 'group-v5', 'franking'] }, e, req({}),
+    );
+    const j = await (await handlePresence({ id: 'capsuser1', check: true }, e, req({}))).json();
+    expect(j.online).toBe(true);
+    expect(j.caps).toEqual(['x3dh-v5', 'group-v5', 'franking']);
+  });
+
+  it('sanitizes advertised caps (≤20 string entries, ≤32 chars; non-strings dropped)', async () => {
+    const e = makeEnv();
+    await handlePresence(
+      { id: 'capsuser2', pub: 'p', name: 'X', caps: ['ok', 123, { a: 1 }, 'y'.repeat(50), ...Array(30).fill('z')] },
+      e, req({}),
+    );
+    const j = await (await handlePresence({ id: 'capsuser2', check: true }, e, req({}))).json();
+    expect(j.caps.length).toBeLessThanOrEqual(20);
+    expect(j.caps).toContain('ok');
+    expect(j.caps.every((c) => typeof c === 'string' && c.length <= 32)).toBe(true);
+    expect(j.caps).not.toContain(123);
+  });
+
+  it('omits caps for a heartbeat that advertised none (legacy v4 client)', async () => {
+    const e = makeEnv();
+    await handlePresence({ id: 'capsuser3', pub: 'p', name: 'Z' }, e, req({}));
+    const j = await (await handlePresence({ id: 'capsuser3', check: true }, e, req({}))).json();
+    expect(j.online).toBe(true);
+    expect(j.caps).toBeUndefined();
+  });
+
   it('check returns online=false for unknown user', async () => {
     const e   = makeEnv();
     const res = await handlePresence({ id: 'nobody001', check: true }, e, req({}));

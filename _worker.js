@@ -432,7 +432,15 @@ async function handleMsgPoll(body, env, request) {
 }
 
 async function handlePresence(body, env, request) {
-  const { id, ids, pub, name, check: isCheck } = body;
+  const { id, ids, pub, name, caps, check: isCheck } = body;
+  // N3: capability advertisement carried in the heartbeat so a peer can negotiate the
+  // protocol version (x3dh-v5 / group-v5) BEFORE fetching a 1:1 bundle — important for
+  // groups, where a member learns the group's capability floor without fetching every
+  // member's prekey bundle. Sanitized like the prekey bundle: ≤20 string entries, ≤32
+  // chars each; non-strings dropped. (advertise() from src/crypto/negotiate.js.)
+  const safeCaps = Array.isArray(caps)
+    ? caps.slice(0, 20).filter((c) => typeof c === 'string').map((c) => c.slice(0, 32))
+    : undefined;
 
   // Batch check: { ids: ['abc','def'], check: true }
   if (isCheck && ids && Array.isArray(ids)) {
@@ -459,13 +467,13 @@ async function handlePresence(body, env, request) {
     if (memData) {
       const p = safeJsonParse(memData);
       if (!p) return json({ online: false }, 200, request);
-      return json({ online: (Date.now() - p.at) < 60000, name: p.name }, 200, request);
+      return json({ online: (Date.now() - p.at) < 60000, name: p.name, caps: p.caps }, 200, request);
     }
     const data = await kvGet(env, `presence:${id}`);
     if (!data) return json({ online: false }, 200, request);
     const p = safeJsonParse(data);
     if (!p) return json({ online: false }, 200, request);
-    return json({ online: (Date.now() - p.at) < 60000, name: p.name }, 200, request);
+    return json({ online: (Date.now() - p.at) < 60000, name: p.name, caps: p.caps }, 200, request);
   }
 
   // Store presence heartbeat
@@ -485,6 +493,7 @@ async function handlePresence(body, env, request) {
   // Cap pub to 200 chars (a base64 X25519/P-256 key is ≤88 chars; large values are abuse).
   const safePub = typeof pub === 'string' ? pub.slice(0, 200) : undefined;
   const presData = { pub: safePub, name: sanitizeString(name, 64), at: Date.now() };
+  if (safeCaps) presData.caps = safeCaps;
   if (Date.now() - lastWrite > 300000) { // Only write to KV every 5 min
     await kvPut(env, presKey, JSON.stringify(presData), { expirationTtl: 360 }); // 6min TTL (covers 5min interval + slack)
     globalThis._presenceCache.set(presKey, Date.now());
