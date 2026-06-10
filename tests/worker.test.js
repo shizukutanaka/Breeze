@@ -1751,6 +1751,18 @@ describe('OGP SSRF guard', () => {
     expect((await res.json()).code).toBe('MISSING_URL');
   });
 
+  it('returns 400 when url is a non-string (type guard — array.startsWith would throw)', async () => {
+    // If the type check came AFTER url.startsWith('http'), an array url like
+    // ['http://evil.com'] would throw "startsWith is not a function" instead of
+    // returning 400.  The type check must come first.
+    const e = makeEnv();
+    const r1 = await handleOGP({ url: ['http://example.com'] }, e, req({}));
+    expect(r1.status).toBe(400);
+    expect((await r1.json()).code).toBe('MISSING_URL');
+    const r2 = await handleOGP({ url: 42 }, e, req({}));
+    expect(r2.status).toBe(400);
+  });
+
   it('returns cached result without outbound fetch', async () => {
     const e   = makeEnv();
     const url = 'https://example.com/page';

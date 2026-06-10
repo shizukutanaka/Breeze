@@ -1585,8 +1585,9 @@ async function ssrfSafeFetch(initialUrl, opts, timeoutMs, maxHops = 3) {
 
 async function handleOGP(body, env, request) {
   const { url } = body;
-  if (!url || !url.startsWith('http')) return json({ error: 'url required', code: 'MISSING_URL' }, 400, request);
-  if (typeof url !== 'string' || url.length > 2048) return json({ error: 'url too long (max 2048)', code: 'URL_TOO_LONG' }, 400, request);
+  if (!url || typeof url !== 'string') return json({ error: 'url required', code: 'MISSING_URL' }, 400, request);
+  if (url.length > 2048) return json({ error: 'url too long (max 2048)', code: 'URL_TOO_LONG' }, 400, request);
+  if (!url.startsWith('http')) return json({ error: 'url required', code: 'MISSING_URL' }, 400, request);
 
   // SSRF protection: block private/internal IPs and non-http schemes (initial URL).
   try {
