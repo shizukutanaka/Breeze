@@ -1324,7 +1324,10 @@ async function handlePreKeyFetch(body, env, request) {
         const parsed = safeJsonParse(otp);
         // Only attach the OTP if it parsed cleanly; still consume and delete either way
         // so a corrupted entry doesn't permanently block the slot.
-        if (parsed !== null) bundle.oneTimePreKey = parsed;
+        // Return the consumed index as oneTimePreKeyId: the X3DH v5 initiator echoes it
+        // in the prekey message (opkId) so the responder can select the matching OTP
+        // PRIVATE key (opkResolver). Without it the responder can't complete DH4.
+        if (parsed !== null) { bundle.oneTimePreKey = parsed; bundle.oneTimePreKeyId = i; }
         await kvDel(env, `prekey:otp:${userId}:${i}`);
         await kvPut(env, `prekey:otp:${userId}:count`, String(i), { expirationTtl: 86400 * 30 });
         remainingOTP = i;

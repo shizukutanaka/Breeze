@@ -179,6 +179,10 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     const b1 = await res1.json();
     expect(b1.identityKey).toBe('IK');
     expect(b1.oneTimePreKey).toBeDefined();
+    // The consumed index must be returned so the X3DH v5 initiator can echo it (opkId)
+    // and the responder can select the matching OTP private key.
+    expect(b1.oneTimePreKeyId).toBe(2); // highest index consumed first
+    expect(b1.oneTimePreKey).toBe('o2');
     expect(await env.KV.get('prekey:otp:alice0001:count')).toBe('2');
 
     // Second fetch consumes a different OTP.
@@ -186,6 +190,7 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     const b2 = await res2.json();
     expect(b2.oneTimePreKey).toBeDefined();
     expect(b2.oneTimePreKey).not.toEqual(b1.oneTimePreKey);
+    expect(b2.oneTimePreKeyId).toBe(1);
     expect(await env.KV.get('prekey:otp:alice0001:count')).toBe('1');
   });
 

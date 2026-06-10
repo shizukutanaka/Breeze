@@ -6,6 +6,13 @@ Exhaustive category-by-category audit of the full product (crypto modules, worke
 endpoints, service worker, documentation, test coverage). Findings and fixes:
 
 ### Worker (`_worker.js`) — robustness & correctness fixes
+- **Prekey fetch now returns the consumed OTP index (`oneTimePreKeyId`) — X3DH v5 enabler**:
+  `handlePreKeyFetch` consumed the one-time pre-key at index `i` and returned its value
+  but never which index it was. The X3DH v5 handshake needs that index: the initiator
+  echoes it as `opkId` in the prekey message so the responder can select the matching OTP
+  *private* key (`opkResolver`) and complete DH4. Without it the v5 OTP path can't work.
+  Fixed: return `bundle.oneTimePreKeyId = i` alongside the OTP (only when it parsed
+  cleanly; absent when OTPs are exhausted → initiator sends `opkId:null`).
 - **PoW replay via future timestamp (`handleAliasSet`)**: the proof-of-work freshness
   check bounded only the *past* (`now - ts > 10min` → expired). The challenge string is
   fully client-controlled, so an attacker could embed a far-future timestamp, making
