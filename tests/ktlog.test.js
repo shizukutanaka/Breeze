@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hashIK, parseLog, checkRollover, mergeLog, chainHash, appendChainEntry, verifyChain } from '../src/crypto/ktlog.js';
+import { hashIK, parseLog, checkRollover, mergeLog, chainHash, appendChainEntry, verifyChain, auditBundle } from '../src/crypto/ktlog.js';
 
 const subtle = globalThis.crypto.subtle;
 
@@ -325,5 +325,58 @@ describe('untrusted-relay hardening (DoS / malformed input)', () => {
     const r = await verifyChain(subtle, [e1, e2]);
     expect(r.ok).toBe(false);
     expect(r.invalidIdx).toBe(1);
+  });
+});
+
+describe('auditBundle (full on-fetch audit: chain integrity + rollover)', () => {
+  const ikJson = (n) => JSON.stringify({ crv: 'X25519', kty: 'OKP', x: `key${n}` });
+  async function chainedLog(...ns) {
+    let log = [];
+    for (let i = 0; i < ns.length; i++) {
+      const h = await hashIK(subtle, ikJson(ns[i]));
+      log = [...log, await appendChainEntry(subtle, log, h, 1000 + i)];
+    }
+    return log;
+  }
+
+  it("verdict 'ok' when the chain is valid and the stored key matches the latest", async () => {
+    const log = await chainedLog(1);
+    const r = await auditBundle(subtle, ikJson(1), log);
+    expect(r.chainOk).toBe(true);
+    expect(r.verdict).toBe('ok');
+    expect(r.rollover.status).toBe('ok');
+  });
+
+  it("verdict 'new' on first contact (chain valid, no stored key)", async () => {
+    const log = await chainedLog(1);
+    const r = await auditBundle(subtle, null, log);
+    expect(r.chainOk).toBe(true);
+    expect(r.verdict).toBe('new');
+  });
+
+  it("verdict 'rolled' when the chain is valid but the identity key changed", async () => {
+    const log = await chainedLog(1, 2);          // IK1 → IK2, properly chained
+    const r = await auditBundle(subtle, ikJson(1), log); // we still pin IK1
+    expect(r.chainOk).toBe(true);
+    expect(r.verdict).toBe('rolled');
+    expect(r.rollover.storedSeenInHistory).toBe(true);
+  });
+
+  it("verdict 'tampered' beats a clean rollover when the hash chain is broken", async () => {
+    const log = await chainedLog(1, 2);
+    log[1] = { ...log[1], c: log[1].c.slice(0, -2) + 'XY' }; // corrupt the chain link
+    // Stored key matches the latest (rollover would say 'ok'), but the chain is broken,
+    // so the relay rewrote the log → must surface as 'tampered', not 'ok'.
+    const r = await auditBundle(subtle, ikJson(2), log);
+    expect(r.chainOk).toBe(false);
+    expect(r.chainInvalidIdx).toBe(1);
+    expect(r.verdict).toBe('tampered');
+  });
+
+  it("verdict 'ok' (proceed) on an empty/unknown log", async () => {
+    const r = await auditBundle(subtle, ikJson(1), []);
+    expect(r.chainOk).toBe(true);     // empty chain vacuously valid
+    expect(r.verdict).toBe('ok');
+    expect(r.rollover.status).toBe('unknown');
   });
 });

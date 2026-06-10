@@ -86,6 +86,14 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
   abuse/report).
 
 ### Crypto Modules (`src/crypto/`) — features & correctness fixes
+- **`ktlog.js` — combined on-fetch audit (`auditBundle`)**: the runbook (§8) called only
+  `checkRollover` (detects an identity-key swap), missing `verifyChain` (detects a relay
+  that rewrote/forked the append-only log). `auditBundle(subtle, storedIK, keyHistory)`
+  runs BOTH and returns a single `verdict`: `tampered` (chain broken — chain integrity
+  beats everything, so a hostile relay can't hide a swap behind a clean-looking key),
+  `rolled` (key changed), `new` (first contact), or `ok`. Added 5 `tests/ktlog.test.js`
+  cases incl. the key one — a broken chain surfaces as `tampered` even when the stored key
+  matches the latest (rollover alone would have said `ok`).
 - **`negotiate.js` — group capability floor (`negotiateGroup`)**: 1:1 `negotiate()` had no
   N-party equivalent, but the runbook (§7) requires "group-v5 only when ALL members
   advertise it." Added `negotiateGroup(localCaps, memberCapsList)` — the N-party AND across
@@ -164,7 +172,7 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
 - `validate.sh` SRI gate confirmed correct (sha384 matches lang.js).
 
 ### Test Suite (`tests/`)
-- **12 suites, 411 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
+- **12 suites, 416 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
 - Worker: group kick TTL regression test (1); corrupt KV data resilience via
   `safeJsonParse` (7); backup type guard (1); AI handler — `reply_suggest` non-string
   context, missing context, capped error echo, `chat` non-string/oversized text (4);

@@ -174,3 +174,37 @@ export async function verifyChain(subtle, log) {
   }
   return { ok: true };
 }
+
+/**
+ * Full audit a client should run on every prekey fetch: BOTH the hash-chain integrity
+ * (verifyChain — catches a relay that rewrote/forked the append-only log) AND the
+ * key-rollover check (checkRollover — catches an identity-key swap / MITM). Doing only
+ * checkRollover (as a naive port might) misses log tampering; doing only verifyChain
+ * misses an honestly-logged-but-unexpected key change.
+ *
+ * Returns { chainOk, chainInvalidIdx?, rollover } where `rollover` is the checkRollover
+ * result. `verdict` summarizes the action the caller should take:
+ *   'ok'        — chain valid, key unchanged → proceed.
+ *   'new'       — chain valid, first contact → pin the key, proceed.
+ *   'tampered'  — chain broken → treat as hostile relay; do NOT trust keyHistory.
+ *   'rolled'    — chain valid but the identity key changed → show key-change banner.
+ *
+ * @param {SubtleCrypto} subtle
+ * @param {string|null}  storedIkJson  locally-pinned identity key JSON, or null.
+ * @param {Array}        keyHistory    bundle.keyHistory from the worker.
+ */
+export async function auditBundle(subtle, storedIkJson, keyHistory) {
+  const chain = await verifyChain(subtle, keyHistory);
+  const rollover = await checkRollover(subtle, storedIkJson, keyHistory);
+  let verdict;
+  if (!chain.ok) verdict = 'tampered';          // chain integrity beats everything
+  else if (rollover.status === 'rolled') verdict = 'rolled';
+  else if (rollover.status === 'new') verdict = 'new';
+  else verdict = 'ok';                           // 'ok' or 'unknown'(empty log) → proceed
+  return {
+    chainOk: chain.ok,
+    ...(chain.ok ? {} : { chainInvalidIdx: chain.invalidIdx }),
+    rollover,
+    verdict,
+  };
+}
