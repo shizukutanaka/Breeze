@@ -182,10 +182,11 @@ export function createGroup(opts = {}) {
     try { p = typeof payload === 'string' ? JSON.parse(payload) : payload; }
     catch { return null; }
     if (!p || typeof p !== 'object' || !p.g) return null;
-    // Reject non-numeric epoch/counter early: without them the ratchet math below
-    // would derive from a null key and throw (the no-signPub path skips the
-    // signature gate that would otherwise catch this).
-    if (typeof p.ep !== 'number' || typeof p.c !== 'number') return null;
+    // Reject non-numeric/non-finite epoch/counter early: without them the ratchet math
+    // below would derive from a null key and throw (the no-signPub path skips the
+    // signature gate that would otherwise catch this). NaN has typeof 'number' but is
+    // not a valid epoch/counter — use Number.isFinite to reject NaN and Infinity too.
+    if (!Number.isFinite(p.ep) || !Number.isFinite(p.c)) return null;
     // I3: epoch gate. Old epoch (we've rotated past it) or a future epoch we don't
     // hold a key for → cannot/should not decrypt.
     if (p.ep !== peerKey.epoch) return null;
@@ -286,7 +287,7 @@ export function createGroup(opts = {}) {
     catch { return null; }
     if (!p || typeof p !== 'object' || p.v !== 5 || p.t !== 'skd') return null;
     if (!Array.isArray(p.ck) || !Array.isArray(p.spk)) return null;
-    if (typeof p.ep !== 'number' || typeof p.c !== 'number') return null;
+    if (!Number.isFinite(p.ep) || !Number.isFinite(p.c)) return null;
     return { chainKey: p.ck.slice(), counter: p.c, epoch: p.ep, signPub: p.spk.slice(), skipped: {} };
   }
 

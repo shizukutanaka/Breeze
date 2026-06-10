@@ -362,6 +362,16 @@ describe('malformed-input hardening (returns null, never throws)', () => {
     expect(await Gh.decryptGroupMsg(bob, JSON.stringify({ g: true, ep: 0, c: 'x', i: [], d: [] }))).toBe(null);
     expect(await Gh.decryptGroupMsg(bob, JSON.stringify({ g: true, ep: null, c: 1, i: [], d: [] }))).toBe(null);
   });
+
+  it('returns null for NaN / Infinity epoch or counter (Number.isFinite guard)', async () => {
+    // typeof NaN === 'number' — without Number.isFinite, a NaN epoch/counter would
+    // slip through the old typeof-only guard and break the ratchet loop silently.
+    const sk = await G.newSenderKey();
+    const bob = G.receiverFrom(sk);
+    expect(await G.decryptGroupMsg(bob, JSON.stringify({ g: true, ep: NaN, c: 0, i: [], d: [] }))).toBe(null);
+    expect(await G.decryptGroupMsg(bob, JSON.stringify({ g: true, ep: 0, c: Infinity, i: [], d: [] }))).toBe(null);
+    expect(await G.decryptGroupMsg(bob, JSON.stringify({ g: true, ep: Infinity, c: 1, i: [], d: [] }))).toBe(null);
+  });
 });
 
 describe('sender-key distribution envelope (buildSenderKeyDistribution / parse)', () => {
@@ -414,6 +424,15 @@ describe('sender-key distribution envelope (buildSenderKeyDistribution / parse)'
     expect(G.parseSenderKeyDistribution(JSON.stringify({ v: 5, t: 'skd', ck: 'x', spk: [], ep: 0, c: 0 }))).toBe(null);
     expect(G.parseSenderKeyDistribution(JSON.stringify({ v: 5, t: 'skd', ck: [], spk: [], ep: 'a', c: 0 }))).toBe(null);
     expect(G.parseSenderKeyDistribution(null)).toBe(null);
+  });
+
+  it('parse returns null for NaN / Infinity epoch or counter (Number.isFinite guard)', () => {
+    // NaN has typeof 'number' — without Number.isFinite, a NaN epoch would create a
+    // broken receiver key where every decryption fails silently (NaN !== NaN is always true).
+    const good = { v: 5, t: 'skd', ck: [], spk: [], ep: 0, c: 0 };
+    expect(G.parseSenderKeyDistribution(JSON.stringify({ ...good, ep: NaN }))).toBe(null);
+    expect(G.parseSenderKeyDistribution(JSON.stringify({ ...good, c: Infinity }))).toBe(null);
+    expect(G.parseSenderKeyDistribution(JSON.stringify({ ...good, ep: -Infinity }))).toBe(null);
   });
 
   it('build throws when the sender key is missing chainKey/signPub', () => {
