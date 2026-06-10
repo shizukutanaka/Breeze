@@ -55,6 +55,13 @@ describe('parsePeerCaps', () => {
     expect(parsePeerCaps({ caps: 'x3dh-v5' })).toEqual([]);
     expect(parsePeerCaps({ caps: 42 })).toEqual([]);
   });
+
+  it('filters non-string entries out of caps (adversarial mixed-type array)', () => {
+    // parsePeerCaps must return only strings so negotiate()'s Set intersection
+    // never includes non-capability objects that could coerce to valid strings.
+    const r = parsePeerCaps({ caps: ['x3dh-v5', 42, null, undefined, {}, 'group-v5'] });
+    expect(r).toEqual(['x3dh-v5', 'group-v5']);
+  });
 });
 
 describe('negotiate', () => {

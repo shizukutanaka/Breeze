@@ -97,6 +97,20 @@ describe('verify', () => {
     expect(r.code).toBe('POW_TOO_EASY');
   }, 30000);
 
+  it('rejects negative difficulty (clamped to 0 < MIN_DIFFICULTY → POW_TOO_EASY)', async () => {
+    const token = await getToken();
+    const r = await verify(subtle, { ...token, difficulty: -99 }, PUB);
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe('POW_TOO_EASY');
+  }, 30000);
+
+  it('rejects non-numeric difficulty string (parseInt(NaN)||0 → 0 < 16 → POW_TOO_EASY)', async () => {
+    const token = await getToken();
+    const r = await verify(subtle, { ...token, difficulty: 'hard' }, PUB);
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe('POW_TOO_EASY');
+  }, 30000);
+
   it('rejects challenge > 512 chars (POW_CHALLENGE_TOO_LONG)', async () => {
     const token = await getToken();
     const bad   = { ...token, challenge: PUB + ':' + 'x'.repeat(500) };

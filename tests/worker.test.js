@@ -629,6 +629,28 @@ describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => 
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_OPENING');
   });
+
+  it('returns FRANK_MISMATCH (not 500) for malformed base64 opening (b64ToBytes throw path)', async () => {
+    // atob('!!!notb64') throws; hmacVerifyFrank's try/catch catches it → returns false.
+    const env = makeEnv();
+    const { commitment } = await F.commit('some message');
+    await handleAbuseRecord({ frankId: 'm-b64', commitment: b64(commitment) }, env, req({}));
+    const res = await handleAbuseReport({ frankId: 'm-b64', message: 'some message', opening: '!!!notb64' }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('FRANK_MISMATCH');
+  });
+
+  it('hmacVerifyFrank rejects wrong-length commitment (mac.length !== expected.length guard)', async () => {
+    // HMAC-SHA256 always produces 32 bytes. A commitment decoded to a different
+    // length must return false without throwing.
+    const shortCommitment = b64(Array.from({ length: 16 }, (_, i) => i)); // 16 bytes → wrong length
+    const { opening } = await F.commit('x');
+    const env = makeEnv();
+    await handleAbuseRecord({ frankId: 'm-len', commitment: shortCommitment }, env, req({}));
+    const res = await handleAbuseReport({ frankId: 'm-len', message: 'x', opening: b64(opening) }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('FRANK_MISMATCH');
+  });
 });
 
 describe('sealed sender send / poll / ack', () => {

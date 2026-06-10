@@ -37,7 +37,7 @@ export function advertise(localCaps = ALL_V5) {
 // Returns an array of capability strings. Empty for a legacy v4 peer.
 export function parsePeerCaps(bundle) {
   if (!bundle) return [];
-  if (Array.isArray(bundle.caps)) return bundle.caps;
+  if (Array.isArray(bundle.caps)) return bundle.caps.filter((c) => typeof c === 'string');
   // Legacy fallback: infer from the `x3dh` field.
   const caps = [];
   if (bundle.x3dh === 'v5') caps.push(CAPS.X3DH_V5);
