@@ -31,15 +31,7 @@
 // be migrated onto it in a browser-validated pass.
 // ============================================================================
 import { createRatchet } from './ratchet.js';
-
-const arr = (u) => Array.from(u);
-const u8 = (a) => (a instanceof Uint8Array ? a : Uint8Array.from(a));
-const concatBytes = (parts) => {
-  const len = parts.reduce((s, a) => s + a.length, 0);
-  const out = new Uint8Array(len); let o = 0;
-  for (const a of parts) { out.set(a, o); o += a.length; }
-  return out;
-};
+import { arr, u8, concatBytes } from './bytes.js';
 
 export function createGroup(opts = {}) {
   const R = opts.ratchet || createRatchet(opts);

@@ -21,9 +21,7 @@
 // hiding via PRF). This is the symmetric core; for Breeze's SEALED SENDER, bind
 // the sender too via asymmetric franking / Hecate (see CRYPTO-SPEC §9 N4).
 // ============================================================================
-const arr = (u) => Array.from(u);
-const u8 = (a) => (a instanceof Uint8Array ? a : Uint8Array.from(a));
-const toBytes = (m) => (typeof m === 'string' ? new TextEncoder().encode(m) : u8(m));
+import { arr, u8, toBytes, ctEqual } from './bytes.js';
 
 export function createFranking(opts = {}) {
   const subtle = opts.subtle || globalThis.crypto.subtle;
@@ -32,13 +30,6 @@ export function createFranking(opts = {}) {
   async function hmac(keyBytes, msgBytes) {
     const key = await subtle.importKey('raw', u8(keyBytes), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
     return new Uint8Array(await subtle.sign('HMAC', key, msgBytes));
-  }
-  function ctEqual(a, b) {
-    const x = u8(a), y = u8(b);
-    if (x.length !== y.length) return false;
-    let d = 0;
-    for (let i = 0; i < x.length; i++) d |= x[i] ^ y[i];
-    return d === 0;
   }
 
   // Sender side: commit to a message. Returns { commitment, opening }.

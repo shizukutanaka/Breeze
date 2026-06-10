@@ -33,14 +33,7 @@ const DEFAULTS = {
   compressMin: Infinity, // disable compression by default for deterministic tests
 };
 
-const arr = (u) => Array.from(u);
-const u8 = (a) => (a instanceof Uint8Array ? a : Uint8Array.from(a));
-const concatBytes = (arrs) => {
-  const len = arrs.reduce((s, a) => s + a.length, 0);
-  const out = new Uint8Array(len); let o = 0;
-  for (const a of arrs) { out.set(a, o); o += a.length; }
-  return out;
-};
+import { arr, u8, concatBytes, ctEqual } from './bytes.js';
 
 export function createRatchet(opts = {}) {
   const cfg = { ...DEFAULTS, ...opts };
@@ -159,13 +152,8 @@ export function createRatchet(opts = {}) {
   async function keyCommitment(msgKey) {
     return hkdf(u8(msgKey), new Uint8Array(32), 'breeze-commit', 32);
   }
-  function ctEqual(a, b) {
-    const x = u8(a), y = u8(b);
-    if (x.length !== y.length) return false;
-    let d = 0;
-    for (let i = 0; i < x.length; i++) d |= x[i] ^ y[i];
-    return d === 0;
-  }
+  // ctEqual is the shared constant-time compare (imported from ./bytes.js); still
+  // exposed on the factory return so group.js can use it as R.ctEqual.
 
   // --- Encrypt one message on the send chain (mirrors encryptFor's ratchet body) ---
   async function ratchetEncrypt(sess, text) {

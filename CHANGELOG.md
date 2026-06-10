@@ -171,6 +171,18 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
   far-future challenge timestamp passed the freshness check forever. Added a `futureSkew`
   bound (default 5 min) so the replay window stays finite.
 
+### Refactoring (`src/crypto/`) — DRY the shared primitives
+- **`bytes.js` (new) — one home for the duplicated byte/encoding helpers**: `u8`, `arr`,
+  `toBytes`, `concatBytes`, `b64`, `unb64`, and the constant-time `ctEqual` had been
+  copy-pasted across `ratchet.js` / `group.js` / `franking.js` / `atrest.js` /
+  `fingerprint.js` (4–5 copies each). Extracted to `src/crypto/bytes.js` and imported by
+  all consumers — most importantly a single audited `ctEqual` instead of copies that could
+  silently diverge (the comparison every commitment/signature/tag check depends on).
+  `ratchet.js` still re-exposes `ctEqual` on its factory return for `group.js`'s
+  `R.ctEqual`; `fingerprint.js` imports the shared `unb64`/`b64` under its historical local
+  aliases so call sites are untouched. Pure refactor — no behavior change; all pre-existing
+  suites stay green and a new `tests/bytes.test.js` (12) pins the shared helpers directly.
+
 ### Documentation (`CLAUDE.md`, `README.md`, `docs/CRYPTO-SPEC.md`, `SPEC.md`)
 - All stale line/endpoint/test counts corrected:
   - `CLAUDE.md`: client 12,696→13,116 lines, worker 1,347→1,888, sw 140→145,
@@ -182,7 +194,7 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
 - `validate.sh` SRI gate confirmed correct (sha384 matches lang.js).
 
 ### Test Suite (`tests/`)
-- **12 suites, 421 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
+- **13 suites, 433 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
 - Worker: group kick TTL regression test (1); corrupt KV data resilience via
   `safeJsonParse` (7); backup type guard (1); AI handler — `reply_suggest` non-string
   context, missing context, capped error echo, `chat` non-string/oversized text (4);

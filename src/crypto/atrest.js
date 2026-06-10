@@ -13,10 +13,8 @@
 // Tested reference; index.html loadIdentity()/key storage to be migrated onto it
 // in a browser-validated pass.
 // ============================================================================
-// Use btoa/atob instead of Buffer so the module works in both Node ≥16 and browsers.
-const b64 = (bytes) => { let s = ''; bytes.forEach((b) => { s += String.fromCharCode(b); }); return btoa(s); };
-const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
-const u8 = (a) => (a instanceof Uint8Array ? a : Uint8Array.from(a));
+// Shared byte/encoding helpers (btoa/atob-based, browser + Node ≥16 + Miniflare).
+import { b64, unb64, u8 } from './bytes.js';
 
 // PBKDF2 work-factor ceiling for the UNWRAP path. The iteration count is read
 // from the stored record, which an XSS-planted or corrupted IndexedDB entry

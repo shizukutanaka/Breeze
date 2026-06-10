@@ -283,10 +283,12 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   `POW_EXPIRED`, preventing indefinite replay of a solved token.
 
 ## Test status
-12 suites, **421 tests** passing (`npm test`); `validate.sh` 33/36. All `src/crypto/`
-modules have test suites: ratchet (24), group (31), atrest (17), franking (9),
+13 suites, **433 tests** passing (`npm test`); `validate.sh` 33/36. All `src/crypto/`
+modules have test suites: bytes (12), ratchet (24), group (31), atrest (17), franking (9),
 negotiate (21), ktlog (42), pow (21), x3dh (21), kat (6), push (15), fingerprint (17);
-worker (197).
+worker (197). `src/crypto/bytes.js` is the shared byte/encoding + constant-time-compare
+helper module (`u8`/`arr`/`toBytes`/`concatBytes`/`b64`/`unb64`/`ctEqual`) consumed by the
+others — one audited `ctEqual` rather than copies that can drift.
 Worker coverage: routing, rate-limit, userId validation (length bounds + charset),
 prekey (0-OTP replenish hint + caps round-trip + caps sanitization + x3dh legacy
 field + N5 chain hash round-trip + tamper detection + upload/fetch malformed-id guard

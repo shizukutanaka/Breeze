@@ -27,17 +27,9 @@ const DEFAULT_ITERATIONS = 5200; // Signal's NumericFingerprintGenerator constan
 const FINGERPRINT_VERSION = 0;
 const DIGITS_PER_PARTY = 30;     // 6 chunks of 5 digits, one per 5 fingerprint bytes
 
-const b64ToBytes = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
-const bytesToB64 = (bytes) => { let s = ''; for (const b of bytes) s += String.fromCharCode(b); return btoa(s); };
-
-// Constant-time byte-array equality (no early-exit on first mismatch). Length is
-// not secret here (fixed 30-byte fingerprints), but we still avoid short-circuit.
-function ctEqual(a, b) {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
-  return diff === 0;
-}
+// Shared byte/encoding + constant-time-compare helpers (aliased to this module's
+// historical local names so call sites stay unchanged).
+import { unb64 as b64ToBytes, b64 as bytesToB64, ctEqual } from './bytes.js';
 
 function concat(...arrs) {
   let total = 0;
