@@ -1293,6 +1293,15 @@ describe('AI handler input validation', () => {
     const r2 = await handleAI({ action: 'chat', text: 'x'.repeat(2001) }, env(), req({}));
     expect(r2.status).toBe(400);
   });
+
+  it('translate_context rejects non-string text (type guard)', async () => {
+    // translate_context had no typeof check — an array text would call .slice() and
+    // return an array, passing as userContent to the AI API call.
+    const r1 = await handleAI({ action: 'translate_context', text: ['en'], lang: 'ja' }, env(), req({}));
+    expect(r1.status).toBe(400);
+    const r2 = await handleAI({ action: 'translate_context', text: { payload: 'x' }, lang: 'ja' }, env(), req({}));
+    expect(r2.status).toBe(400);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

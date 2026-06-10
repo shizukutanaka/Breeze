@@ -1814,7 +1814,7 @@ async function handleAI(body, env, request) {
       break;
 
     case 'translate_context': {
-      if (!text || !lang) return json({ error: 'text and lang required' }, 400, request);
+      if (!text || typeof text !== 'string' || !lang) return json({ error: 'text and lang required' }, 400, request);
       // Sanitize lang to a valid BCP-47 tag (e.g. 'en', 'ja', 'zh-CN') to prevent
       // prompt injection via a crafted language string in the system prompt.
       const safeLang = String(lang).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 20);
