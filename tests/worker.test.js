@@ -2085,6 +2085,18 @@ describe('group create / join / info validation', () => {
     expect((await res.json()).code).toBe('INVALID_USER_ID');
   });
 
+  it('create rejects non-string creatorPub (type guard)', async () => {
+    // An object passes !creatorPub but bypasses the string size cap and gets
+    // stored as a JSON object in the member record, breaking key import on fetch.
+    const r1 = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: { key: 'data' } }, makeEnv(), req({}));
+    expect(r1.status).toBe(400);
+    expect((await r1.json()).code).toBe('INVALID_TYPE');
+    const r2 = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: ['cpub'] }, makeEnv(), req({}));
+    expect(r2.status).toBe(400);
+  });
+
   it('join rejects malformed memberId (KV member injection guard)', async () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
@@ -2092,6 +2104,15 @@ describe('group create / join / info validation', () => {
     const res = await handleGroupJoin({ token, memberId: 'bad id!', memberPub: 'mpub' }, env, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_USER_ID');
+  });
+
+  it('join rejects non-string memberPub (type guard)', async () => {
+    const env = makeEnv();
+    const { token } = await (await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    const r1 = await handleGroupJoin({ token, memberId: 'member01', memberPub: { key: 'x' } }, env, req({}));
+    expect(r1.status).toBe(400);
+    expect((await r1.json()).code).toBe('INVALID_TYPE');
   });
 
   it('kick returns 404 when the group token does not exist', async () => {

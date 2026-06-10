@@ -772,8 +772,11 @@ async function handleGroupCreate(body, env, request) {
   const { name: rawName, creatorId, creatorPub: rawCreatorPub, creatorName: rawCreatorName, members, ttl } = body;
   const name = sanitizeString(rawName, 50);
   const creatorName = sanitizeString(rawCreatorName, 64);
+  // Public keys must be strings: a non-string object passes the !x presence check
+  // but cannot be used as a base64 key and would corrupt the group member record.
+  if (typeof rawCreatorPub !== 'string') return json({ error: 'creatorPub must be a string', code: 'INVALID_TYPE' }, 400, request);
   // Cap public keys at 200 chars (X25519/P-256 base64 is ≤88 chars; large values are abuse).
-  const creatorPub = typeof rawCreatorPub === 'string' ? rawCreatorPub.slice(0, 200) : rawCreatorPub;
+  const creatorPub = rawCreatorPub.slice(0, 200);
   if (!name || !creatorId || !creatorPub) return json({ error: 'name, creatorId, creatorPub required' }, 400, request);
   if (!validateUserId(creatorId)) return json({ error: 'invalid creatorId', code: 'INVALID_USER_ID' }, 400, request);
   // v3.1: Validate name length
@@ -805,7 +808,8 @@ async function handleGroupCreate(body, env, request) {
 async function handleGroupJoin(body, env, request) {
   const { token, memberId, memberPub: rawMemberPub, memberName: rawMemberName } = body;
   const memberName = sanitizeString(rawMemberName, 64);
-  const memberPub = typeof rawMemberPub === 'string' ? rawMemberPub.slice(0, 200) : rawMemberPub;
+  if (typeof rawMemberPub !== 'string') return json({ error: 'memberPub must be a string', code: 'INVALID_TYPE' }, 400, request);
+  const memberPub = rawMemberPub.slice(0, 200);
   if (!token || !memberId || !memberPub) return json({ error: 'token, memberId, memberPub required' }, 400, request);
   if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(memberId)) return json({ error: 'invalid memberId', code: 'INVALID_USER_ID' }, 400, request);
@@ -1335,7 +1339,9 @@ async function handlePreKeyFetch(body, env, request) {
   if (!bundle) return json({ error: 'No prekeys found', code: 'NOT_FOUND' }, 404, request);
   // Consume one-time prekey (if available)
   const countStr = await kvGet(env, `prekey:otp:${userId}:count`);
-  const count = parseInt(countStr || '0');
+  // Cap at the upload-side limit (100). A corrupted or adversarially-inflated
+  // KV count would otherwise iterate hundreds of thousands of KV reads.
+  const count = Math.min(Math.max(parseInt(countStr || '0') || 0, 0), 100);
   let remainingOTP = count;
   if (count > 0) {
     for (let i = count - 1; i >= 0; i--) {
