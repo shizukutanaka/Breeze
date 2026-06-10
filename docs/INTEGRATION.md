@@ -216,7 +216,23 @@ visible to FCM (verify via browser DevTools → Application → Push Messages).
 ## Cross-reference
 - What/why per item: `docs/IMPROVEMENTS.md` (I1–I20), `docs/ROADMAP.md` (priority).
 - Exact wire formats + status: `docs/CRYPTO-SPEC.md` (§2–§6a, gaps §8–§9).
-- Tested behavior to mirror: `src/crypto/*.js` + `tests/*` (232 tests, 11 suites).
+- Tested behavior to mirror: `src/crypto/*.js` + `tests/*` (402 tests, 12 suites).
+
+## Module helpers that make the port turnkey (call these — don't hand-roll)
+
+The wire formats and the security-critical sequencing now live in the modules as the
+single source of truth, so each port step is a function call rather than a re-implementation:
+
+- **§3 X3DH (I1):** `R.initiatorHandshake({ myIdentity, bundle, firstMessage })` →
+  `{ session, wire }` and `R.responderHandshake({ myKeys, wire, opkResolver })` →
+  `{ session, plaintext }`. `initiatorHandshake` **throws** on a bad/absent pre-key
+  signature, so the MITM check can't be skipped. Lower-level pieces
+  (`buildPreKeyMessage`/`parsePreKeyMessage`, `x3dhInitiator/Responder`) remain exported.
+- **§4 group (G3):** `G.buildSenderKeyDistribution(senderKey)` /
+  `G.parseSenderKeyDistribution(wire)` for the `distributeSenderKey` channel (only the
+  public epoch-sign key crosses the wire; the joiner's counter enforces FS).
+- **§5 at-rest (G5):** `A.isWrapped(record)` + `A.loadKey(record, passphrase?)`
+  (`loadKey` throws when a wrapped record is loaded without a passphrase → prompt signal).
 
 ## Security notes for browser port
 
