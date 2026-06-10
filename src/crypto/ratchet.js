@@ -126,6 +126,15 @@ export function createRatchet(opts = {}) {
     return { iv, ct };
   }
 
+  // AES-GCM decrypt a frame back to the padded plaintext bytes. THROWS on an auth-tag
+  // failure (the caller catches it → returns null without mutating session state).
+  // Mirrors frameEncrypt and group.js's frameDecrypt — both ratchetDecrypt paths
+  // (skipped-key recovery and the main chain) route through here instead of inlining.
+  async function frameDecrypt(msgKey, iv, ct) {
+    const key = await subtle.importKey('raw', u8(msgKey), { name: 'AES-GCM' }, false, ['decrypt']);
+    return new Uint8Array(await subtle.decrypt({ name: 'AES-GCM', iv: u8(iv) }, key, u8(ct)));
+  }
+
   async function unpadAndDecompress(padded) {
     const flags = padded[0];
     const dataLen = new DataView(padded.buffer, padded.byteOffset).getUint16(1);
@@ -196,11 +205,9 @@ export function createRatchet(opts = {}) {
       if (sess.skippedKeys?.[skKey]) {
         const mkData = sess.skippedKeys[skKey].k;
         if (p.cm && !ctEqual(await keyCommitment(mkData), p.cm)) { dbg(null, 'key commitment mismatch'); return null; }
-        const key = await subtle.importKey('raw', u8(mkData), { name: 'AES-GCM' }, false, ['decrypt']);
         let padded;
-        try {
-          padded = new Uint8Array(await subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, key, u8(p.d)));
-        } catch { dbg(null, 'AEAD auth failure (skipped key)'); return null; }
+        try { padded = await frameDecrypt(mkData, p.i, p.d); }
+        catch { dbg(null, 'AEAD auth failure (skipped key)'); return null; }
         // Advance dedup state only after successful decrypt (prevents desync on injected messages).
         delete sess.skippedKeys[skKey];
         return unpadAndDecompress(padded);
@@ -241,11 +248,9 @@ export function createRatchet(opts = {}) {
     const { msgKey, nextChain } = await kdfChain(stagedChain);
     // I16: verify key commitment before advancing state / trusting the AEAD.
     if (p.cm && !ctEqual(await keyCommitment(msgKey), p.cm)) { dbg(null, 'key commitment mismatch'); return null; }
-    const key = await subtle.importKey('raw', msgKey, { name: 'AES-GCM' }, false, ['decrypt']);
     let padded;
-    try {
-      padded = new Uint8Array(await subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, key, u8(p.d)));
-    } catch { dbg(null, 'AEAD auth failure'); return null; }
+    try { padded = await frameDecrypt(msgKey, p.i, p.d); }
+    catch { dbg(null, 'AEAD auth failure'); return null; }
     // Decrypt succeeded — NOW commit all receive state. An injected message whose
     // ciphertext fails the auth tag (or key-commitment check) returns above without
     // having mutated the session, so the chain stays aligned for the real next message.
@@ -474,7 +479,7 @@ export function createRatchet(opts = {}) {
 
   return {
     hkdf, kdfChain, genRatchetKey, ecdhBits, dhRatchetStep,
-    frameEncrypt, unpadAndDecompress, ratchetEncrypt, ratchetDecrypt,
+    frameEncrypt, frameDecrypt, unpadAndDecompress, ratchetEncrypt, ratchetDecrypt,
     keyCommitment, ctEqual, pairFromSharedChain,
     genSigningKey, signSPK, verifySPK, x3dhInitiator, x3dhResponder,
     initiatorSession, responderSession,
