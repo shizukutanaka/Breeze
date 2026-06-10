@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 // Solve a difficulty-N PoW puzzle for testing (brute-force, fast enough at N≤16).
 // challenge defaults to "${pub}:breeze-test" (no timestamp → freshness check skipped).
 async function solvePoW(pub, difficulty = 16, challenge) {
@@ -47,6 +47,8 @@ import worker, {
   ssrfSafeFetch,
   handleTurn,
   handleAccountSlots,
+  handleAccountPurchase,
+  handlePortal,
   handleAI,
   handleTranslate,
   validateUserId,
@@ -2608,6 +2610,134 @@ describe('account slots', () => {
     const res = await handleAccountSlots({ userId: 'bad id!' }, makeEnv(), req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_USER_ID');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Billing endpoints — checkout purchase + customer portal. These were 0-coverage
+// despite being revenue-critical (a webhook idempotency bug here was a real find).
+// Guard paths run with no fetch; the happy/error paths stub globalThis.fetch
+// (fetchWithTimeout calls the global fetch) to simulate Stripe.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('account purchase (Stripe checkout)', () => {
+  const req = (b) => apiRequest('/api/account/purchase', b);
+  afterEach(() => vi.unstubAllGlobals());
+
+  // env with billing fully configured (all three plan prices present).
+  const billedEnv = () => makeEnv({
+    STRIPE_SECRET_KEY: 'sk_test', STRIPE_PRICE_LITE: 'price_lite',
+    STRIPE_PRICE_PLUS: 'price_plus', STRIPE_PRICE_PRO: 'price_pro',
+  });
+
+  it('returns 503 when billing is not configured (no STRIPE_SECRET_KEY)', async () => {
+    const res = await handleAccountPurchase({ userId: 'user00001', plan: 'plus' }, makeEnv(), req({}));
+    expect(res.status).toBe(503);
+    expect((await res.json()).code).toBe('NOT_CONFIGURED');
+  });
+
+  it('rejects missing / malformed userId', async () => {
+    const miss = await handleAccountPurchase({ plan: 'plus' }, billedEnv(), req({}));
+    expect(miss.status).toBe(400);
+    expect((await miss.json()).code).toBe('MISSING_USER_ID');
+    const bad = await handleAccountPurchase({ userId: 'bad id!', plan: 'plus' }, billedEnv(), req({}));
+    expect(bad.status).toBe(400);
+    expect((await bad.json()).code).toBe('INVALID_USER_ID');
+  });
+
+  it('returns 503 when no plan price is configured (lite fallback also unpriced)', async () => {
+    // An unconfigured plan gracefully falls back to lite; with NO price vars at all,
+    // even the lite fallback has no priceId → 503 before any Stripe call.
+    const env = makeEnv({ STRIPE_SECRET_KEY: 'sk_test' });
+    const res = await handleAccountPurchase({ userId: 'user00001', plan: 'pro' }, env, req({}));
+    expect(res.status).toBe(503);
+  });
+
+  it('creates a checkout session and forwards the plan slot mapping to Stripe', async () => {
+    let captured = null;
+    vi.stubGlobal('fetch', async (url, opts) => {
+      captured = { url, body: opts.body };
+      return { ok: true, json: async () => ({ url: 'https://checkout.stripe.com/c/sess_123' }) };
+    });
+    const res = await handleAccountPurchase({ userId: 'user00001', plan: 'plus' }, billedEnv(), req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).url).toBe('https://checkout.stripe.com/c/sess_123');
+    // Business-critical: plus → 4 slots, and the price id + metadata are bound correctly.
+    expect(captured.url).toContain('checkout/sessions');
+    expect(captured.body).toContain('metadata%5Bslots%5D=4');
+    expect(captured.body).toContain('metadata%5Bplan%5D=plus');
+    expect(captured.body).toContain('price_plus');
+  });
+
+  it('an unknown plan falls back to lite (2 slots)', async () => {
+    let body = null;
+    vi.stubGlobal('fetch', async (_url, opts) => {
+      body = opts.body;
+      return { ok: true, json: async () => ({ url: 'https://checkout.stripe.com/c/x' }) };
+    });
+    const res = await handleAccountPurchase({ userId: 'user00001', plan: 'enterprise' }, billedEnv(), req({}));
+    expect(res.status).toBe(200);
+    expect(body).toContain('metadata%5Bplan%5D=lite');
+    expect(body).toContain('metadata%5Bslots%5D=2');
+  });
+
+  it('returns 500 when Stripe rejects the checkout creation', async () => {
+    vi.stubGlobal('fetch', async () => ({ ok: false, status: 400, json: async () => ({}) }));
+    const res = await handleAccountPurchase({ userId: 'user00001', plan: 'plus' }, billedEnv(), req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('CHECKOUT_FAILED');
+  });
+});
+
+describe('billing portal (Stripe customer portal)', () => {
+  const req = (b) => apiRequest('/api/portal', b);
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('returns 503 when billing is not configured', async () => {
+    const res = await handlePortal({ userId: 'user00001' }, makeEnv(), req({}));
+    expect(res.status).toBe(503);
+    expect((await res.json()).code).toBe('NOT_CONFIGURED');
+  });
+
+  it('rejects missing / malformed userId', async () => {
+    const env = makeEnv({ STRIPE_SECRET_KEY: 'sk_test' });
+    const miss = await handlePortal({}, env, req({}));
+    expect(miss.status).toBe(400);
+    const bad = await handlePortal({ userId: '../etc' }, env, req({}));
+    expect(bad.status).toBe(400);
+    expect((await bad.json()).code).toBe('INVALID_USER_ID');
+  });
+
+  it('returns 404 when the account has no Stripe customer on file', async () => {
+    const env = makeEnv({ STRIPE_SECRET_KEY: 'sk_test' });
+    // slots record exists but without a customerId (free tier).
+    await env.KV.put('slots:user00001', JSON.stringify({ slots: 1, plan: 'free' }));
+    const res = await handlePortal({ userId: 'user00001' }, env, req({}));
+    expect(res.status).toBe(404);
+    expect((await res.json()).code).toBe('NOT_FOUND');
+  });
+
+  it('creates a portal session for a paying customer', async () => {
+    let captured = null;
+    vi.stubGlobal('fetch', async (url, opts) => {
+      captured = { url, body: opts.body };
+      return { ok: true, json: async () => ({ url: 'https://billing.stripe.com/p/sess_9' }) };
+    });
+    const env = makeEnv({ STRIPE_SECRET_KEY: 'sk_test' });
+    await env.KV.put('slots:user00001', JSON.stringify({ slots: 4, plan: 'plus', customerId: 'cus_abc' }));
+    const res = await handlePortal({ userId: 'user00001' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).url).toBe('https://billing.stripe.com/p/sess_9');
+    expect(captured.url).toContain('billing_portal/sessions');
+    expect(captured.body).toContain('customer=cus_abc');
+  });
+
+  it('returns 500 when Stripe rejects the portal creation', async () => {
+    vi.stubGlobal('fetch', async () => ({ ok: false, status: 400, json: async () => ({}) }));
+    const env = makeEnv({ STRIPE_SECRET_KEY: 'sk_test' });
+    await env.KV.put('slots:user00001', JSON.stringify({ customerId: 'cus_abc' }));
+    const res = await handlePortal({ userId: 'user00001' }, env, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('PORTAL_FAILED');
   });
 });
 

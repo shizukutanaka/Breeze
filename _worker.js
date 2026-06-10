@@ -2362,6 +2362,8 @@ export {
   ssrfSafeFetch,
   handleTurn,
   handleAccountSlots,
+  handleAccountPurchase,
+  handlePortal,
   handleAI,
   handleTranslate,
 };
