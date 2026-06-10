@@ -2229,6 +2229,30 @@ describe('group create / join / info validation', () => {
     expect(ij.members.length).toBe(1);
     expect(ij.members[0].id).toBe('creator1');
   });
+
+  it('kick epoch arithmetic uses integer coercion (prevents string-concat on corrupted KV epoch)', async () => {
+    // If group.epoch is stored as the string '5' (corrupted KV), the old
+    // (group.epoch || 0) + 1 produced '5' + 1 = '51' (string concatenation)
+    // instead of 6.  The epoch gate uses ===, so '51' !== 51 breaks decryption.
+    // The fix uses (group.epoch | 0) + 1 which coerces strings to integers.
+    const env = makeEnv();
+    const { token } = await (await handleGroupCreate(
+      { name: 'ep-test', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'mpub' }, env, req({}));
+    // Corrupt the epoch: write '5' (a string) into the stored group record.
+    const raw = await env.KV.get(`grp:${token}`);
+    const g = JSON.parse(raw);
+    g.epoch = '5'; // string, not number
+    await env.KV.put(`grp:${token}`, JSON.stringify(g));
+    // Kick should produce epoch 6 (integer), not '51' (string).
+    const kick = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' }, env, req({}));
+    const kj = await kick.json();
+    expect(kj.epoch).toBe(6);
+    expect(typeof kj.epoch).toBe('number');
+    // Info must also return a number epoch.
+    const info = await handleGroupInfo({ token }, env, req({}));
+    expect((await info.json()).epoch).toBe(6);
+  });
 });
 
 describe('corrupted KV data resilience (safeJsonParse guard)', () => {

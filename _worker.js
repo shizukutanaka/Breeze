@@ -835,7 +835,7 @@ async function handleGroupJoin(body, env, request) {
   group.members.push({ id: memberId, pub: memberPub, name: (memberName || 'Member').slice(0, 30) });
   await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
 
-  return json({ ok: true, name: group.name, members: group.members, epoch: group.epoch || 0 }, 200, request);
+  return json({ ok: true, name: group.name, members: group.members, epoch: group.epoch | 0 }, 200, request);
 }
 
 async function handleGroupInfo(body, env, request) {
@@ -848,7 +848,7 @@ async function handleGroupInfo(body, env, request) {
 
   const group = safeJsonParse(data);
   if (!group) return json({ error: 'Not found', code: 'NOT_FOUND' }, 404, request);
-  return json({ name: group.name, members: group.members, creatorName: group.creatorName, epoch: group.epoch || 0, createdAt: group.createdAt }, 200, request);
+  return json({ name: group.name, members: group.members, creatorName: group.creatorName, epoch: group.epoch | 0, createdAt: group.createdAt }, 200, request);
 }
 
 // v3.3: Enterprise — Group member management
@@ -879,7 +879,10 @@ async function handleGroupKick(body, env, request) {
   if (group.admins) group.admins = group.admins.filter(id => id !== kickId);
   // I3: post-compromise removal. Bump the epoch so remaining members generate and
   // redistribute fresh sender keys (kicked member can't decrypt the new epoch).
-  group.epoch = (group.epoch || 0) + 1;
+  // Coerce to integer first: a corrupted KV entry with epoch stored as a string
+  // would make '5' + 1 = '51' (concatenation), which the epoch gate '===' never
+  // matches against a numeric p.ep, permanently breaking the group.
+  group.epoch = (group.epoch | 0) + 1;
   await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
 
   return json({ ok: true, remaining: group.members.length, epoch: group.epoch }, 200, request);
