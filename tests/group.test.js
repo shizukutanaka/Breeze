@@ -234,6 +234,46 @@ describe('N2 — two-layer sender authentication (partial AFKS)', () => {
   });
 });
 
+describe('legacy single-sig path (epoch-only, no per-message key)', () => {
+  it('decryptGroupMsg accepts a legacy message signed only with the epoch key', async () => {
+    // Old-format clients that don't generate per-message keys use the fallback path:
+    //   encryptGroupMsg branches to `signPriv`-only and omits es/spk/nsk.
+    // decryptGroupMsg's legacy branch (no p.es) verifies p.s against peerKey.signPub.
+    const sk = await G.newSenderKey();
+    // Strip per-message keys to force the fallback branch in encryptGroupMsg.
+    delete sk.msgSignKey;
+    delete sk.nextMsgSignKey;
+    const bob = G.receiverFrom(sk);
+    const wire = await G.encryptGroupMsg(sk, 'legacy message');
+    const obj = JSON.parse(wire);
+    // Fallback path: no es/spk/nsk fields, only s (epoch sig over signed bytes).
+    expect(obj.es).toBeUndefined();
+    expect(obj.spk).toBeUndefined();
+    expect(obj.s).toBeDefined(); // epoch-key sig still present
+    expect(await G.decryptGroupMsg(bob, wire)).toBe('legacy message');
+  });
+
+  it('rejects a legacy message when the single sig is tampered', async () => {
+    const sk = await G.newSenderKey();
+    delete sk.msgSignKey;
+    delete sk.nextMsgSignKey;
+    const bob = G.receiverFrom(sk);
+    const obj = JSON.parse(await G.encryptGroupMsg(sk, 'x'));
+    obj.s[0] ^= 0xff; // corrupt the epoch sig
+    expect(await G.decryptGroupMsg(bob, JSON.stringify(obj))).toBe(null);
+  });
+
+  it('rejects a legacy message with no s field at all', async () => {
+    const sk = await G.newSenderKey();
+    delete sk.msgSignKey;
+    delete sk.nextMsgSignKey;
+    const bob = G.receiverFrom(sk);
+    const obj = JSON.parse(await G.encryptGroupMsg(sk, 'x'));
+    delete obj.s;
+    expect(await G.decryptGroupMsg(bob, JSON.stringify(obj))).toBe(null);
+  });
+});
+
 describe('DoS guards — MAX_GAP and MAX_SKIP', () => {
   it('rejects a message whose counter jump exceeds MAX_GAP', async () => {
     const Gdos = createGroup({ MAX_GAP: 3 });
