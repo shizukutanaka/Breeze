@@ -116,6 +116,74 @@ describe('full session establishment (X3DH → Double Ratchet)', () => {
   });
 });
 
+describe('X3DH v5 prekey-message envelope (first-message handshake header)', () => {
+  it('round-trips the handshake fields and the inner ratchet message', async () => {
+    const alice = await party();
+    const ek = await R.genRatchetKey();
+    const inner = await R.ratchetEncrypt(
+      (await R.pairFromSharedChain(new Uint8Array(32).fill(7))).sender, 'inner',
+    );
+    const envelope = R.buildPreKeyMessage({ ikPub: alice.ik.pub, ekPub: ek.pub, opkId: 3, ratchetMessage: inner });
+    const parsed = R.parsePreKeyMessage(envelope);
+    expect(hex(parsed.ikPub)).toBe(hex(new Uint8Array(alice.ik.pub)));
+    expect(hex(parsed.ekPub)).toBe(hex(new Uint8Array(ek.pub)));
+    expect(parsed.opkId).toBe(3);
+    expect(parsed.ratchetMessage).toBe(inner);
+  });
+
+  it('carries opkId:null when the responder OPKs are exhausted', async () => {
+    const alice = await party();
+    const ek = await R.genRatchetKey();
+    const env = R.buildPreKeyMessage({ ikPub: alice.ik.pub, ekPub: ek.pub, ratchetMessage: '{}' });
+    expect(R.parsePreKeyMessage(env).opkId).toBe(null);
+  });
+
+  it('parsePreKeyMessage returns null for non-pkm / malformed payloads (no throw)', () => {
+    expect(R.parsePreKeyMessage('not json')).toBe(null);
+    expect(R.parsePreKeyMessage(JSON.stringify({ v: 4, d: [] }))).toBe(null); // a plain ratchet msg
+    expect(R.parsePreKeyMessage(JSON.stringify({ v: 5, t: 'pkm', ik: 'x', ek: [], msg: 'm' }))).toBe(null); // ik not array
+    expect(R.parsePreKeyMessage(JSON.stringify({ v: 5, t: 'pkm', ik: [], ek: [], msg: 42 }))).toBe(null); // msg not string
+    expect(R.parsePreKeyMessage(null)).toBe(null);
+  });
+
+  it('buildPreKeyMessage rejects missing keys / non-string inner message', () => {
+    expect(() => R.buildPreKeyMessage({ ekPub: [1], ratchetMessage: 'm' })).toThrow();
+    expect(() => R.buildPreKeyMessage({ ikPub: [1], ekPub: [2], ratchetMessage: 42 })).toThrow();
+  });
+
+  it('drives a full first-contact handshake: Alice wraps, Bob unwraps → derives SK → decrypts', async () => {
+    const alice = await party();
+    const bob = await party();
+    const ek = await R.genRatchetKey();
+
+    // Alice verifies Bob's signed pre-key, derives SK, bootstraps her session, and
+    // sends her first ratchet message wrapped in the prekey-message envelope.
+    const sig = await R.signSPK(bob.ed.privateKey, bob.spk.pub);
+    expect(await R.verifySPK(bob.ed.pub, bob.spk.pub, sig)).toBe(true);
+    const skA = await R.x3dhInitiator({
+      ikPriv: alice.ik.privateKey, ekPriv: ek.privateKey,
+      ikPubPeer: bob.ik.pub, spkPubPeer: bob.spk.pub, opkPubPeer: bob.opk.pub,
+    });
+    const aSess = await R.initiatorSession(skA, bob.spk.pub);
+    const firstMsg = await R.ratchetEncrypt(aSess, 'hello from first contact');
+    const wire = R.buildPreKeyMessage({ ikPub: alice.ik.pub, ekPub: ek.pub, opkId: 0, ratchetMessage: firstMsg });
+
+    // Bob receives the wire envelope, extracts the handshake fields, selects the
+    // consumed OPK (opkId 0), derives the SAME SK, bootstraps his session, decrypts.
+    const hs = R.parsePreKeyMessage(wire);
+    expect(hs).not.toBe(null);
+    const skB = await R.x3dhResponder({
+      ikPriv: bob.ik.privateKey, spkPriv: bob.spk.privateKey, opkPriv: bob.opk.privateKey,
+      ikPubPeer: hs.ikPub, ekPubPeer: hs.ekPub,
+    });
+    expect(hex(skB)).toBe(hex(skA));
+    const bSess = R.responderSession(skB, bob.spk.privateKey);
+    expect(await R.ratchetDecrypt(bSess, hs.ratchetMessage)).toBe('hello from first contact');
+    // And the conversation continues with plain ratchet messages (no envelope).
+    expect(await R.ratchetDecrypt(aSess, await R.ratchetEncrypt(bSess, 'hi back'))).toBe('hi back');
+  });
+});
+
 describe('MITM defense (why the signature matters — the I1 fix)', () => {
   it('detects a relay that swaps in its own pre-key', async () => {
     const bob = await party();

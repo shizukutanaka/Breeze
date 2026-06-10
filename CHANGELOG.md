@@ -71,7 +71,18 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
   7 previously absent: sealed/ack, drop/create, drop/read, ai, translate, abuse/record,
   abuse/report).
 
-### Crypto Modules (`src/crypto/`) — correctness fixes
+### Crypto Modules (`src/crypto/`) — features & correctness fixes
+- **`ratchet.js` — X3DH v5 first-message envelope (I1 port-enabler)**: added
+  `buildPreKeyMessage`/`parsePreKeyMessage` so the module owns the v5 handshake wire
+  format `{ v:5, t:'pkm', ik, ek, opkId, msg }`. The responder needs the initiator's
+  identity key (IK_A), ephemeral key (EK_A), and the consumed one-time-prekey index to
+  derive `SK` before it can decrypt the first ciphertext; previously the module had no
+  helper for this, so the pending browser port (docs/INTEGRATION.md §3) would have to
+  hand-roll the format and risk drift. `parsePreKeyMessage` never throws on the
+  relay-supplied payload (returns null on malformed/non-pkm input so the caller can fall
+  back to a plain ratchet message). Added 5 `tests/x3dh.test.js` cases incl. a full
+  first-contact handshake: Alice wraps → Bob unwraps → derives identical SK → decrypts,
+  then the conversation continues with plain ratchet messages.
 - **`ratchet.js` — one-packet desync DoS in the skip-ahead path**: `ratchetDecrypt`
   mutated `sess.recvChainKey` and stored skipped keys *before* the AEAD / key-commitment
   check when a message carried a counter gap (`p.c > recvCounter + 1`). An injected
@@ -103,7 +114,7 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
 - `validate.sh` SRI gate confirmed correct (sha384 matches lang.js).
 
 ### Test Suite (`tests/`)
-- **12 suites, 381 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
+- **12 suites, 386 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
 - Worker: group kick TTL regression test (1); corrupt KV data resilience via
   `safeJsonParse` (7); backup type guard (1); AI handler — `reply_suggest` non-string
   context, missing context, capped error echo, `chat` non-string/oversized text (4);

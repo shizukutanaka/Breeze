@@ -371,12 +371,54 @@ export function createRatchet(opts = {}) {
     };
   }
 
+  // --- X3DH v5 first-message ("prekey message") envelope ---------------------
+  // The responder cannot derive the shared secret SK until it knows the initiator's
+  // identity key (IK_A) and ephemeral key (EK_A) and which one-time pre-key was
+  // consumed. The initiator therefore wraps its FIRST ratchet message in this
+  // envelope; every subsequent message is a plain ratchet message. Keeping the wire
+  // format in the module (not hand-rolled at the call site) makes it the single
+  // source of truth for the browser port (see docs/INTEGRATION.md §3).
+  //
+  // Shape: { v:5, t:'pkm', ik:[IK_A], ek:[EK_A], opkId:<number|string|null>, msg:<ratchet JSON> }
+  // opkId is the index/identifier of the consumed one-time pre-key, or null when the
+  // responder's OPKs were exhausted (X3DH still completes via SPK, see x3dhResponder).
+  function buildPreKeyMessage({ ikPub, ekPub, opkId = null, ratchetMessage }) {
+    if (ikPub == null || ekPub == null) throw new Error('buildPreKeyMessage: ikPub and ekPub required');
+    if (typeof ratchetMessage !== 'string') throw new Error('buildPreKeyMessage: ratchetMessage must be the ratchetEncrypt() JSON string');
+    return JSON.stringify({
+      v: 5, t: 'pkm',
+      ik: arr(u8(ikPub)),
+      ek: arr(u8(ekPub)),
+      opkId: opkId ?? null,
+      msg: ratchetMessage,
+    });
+  }
+
+  // Parse a prekey-message envelope. Returns { ikPub, ekPub, opkId, ratchetMessage }
+  // or null if the payload is not a well-formed v5 prekey message (so a caller can
+  // fall back to treating it as a plain ratchet message). Never throws on bad input —
+  // the payload arrives over the untrusted relay.
+  function parsePreKeyMessage(payload) {
+    let p;
+    try { p = typeof payload === 'string' ? JSON.parse(payload) : payload; }
+    catch { return null; }
+    if (!p || typeof p !== 'object' || p.v !== 5 || p.t !== 'pkm') return null;
+    if (!Array.isArray(p.ik) || !Array.isArray(p.ek) || typeof p.msg !== 'string') return null;
+    return {
+      ikPub: u8(p.ik),
+      ekPub: u8(p.ek),
+      opkId: p.opkId ?? null,
+      ratchetMessage: p.msg,
+    };
+  }
+
   return {
     hkdf, kdfChain, genRatchetKey, ecdhBits, dhRatchetStep,
     frameEncrypt, unpadAndDecompress, ratchetEncrypt, ratchetDecrypt,
     keyCommitment, ctEqual, pairFromSharedChain,
     genSigningKey, signSPK, verifySPK, x3dhInitiator, x3dhResponder,
-    initiatorSession, responderSession, _cfg: cfg,
+    initiatorSession, responderSession,
+    buildPreKeyMessage, parsePreKeyMessage, _cfg: cfg,
   };
 }
 

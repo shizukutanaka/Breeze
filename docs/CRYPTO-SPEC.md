@@ -39,9 +39,19 @@ per-session uniqueness, and the **MITM defense** (swapped pre-key fails verify).
   `derived = HKDF(DH(rk_A, SPK_B), SK, 'ratchet', 64)`; sendChainKey = `derived[32:64]`.
 - Responder holds `SPK_B` private as its initial ratchet key; the initiator's first
   message (carrying `rk_A`) triggers the matching DH step → responder's recv chain.
+- **First-message ("prekey message") envelope:** the initiator's FIRST message is
+  wrapped so the responder can derive `SK` before decrypting:
+  `{ v:5, t:'pkm', ik:[IK_A], ek:[EK_A], opkId:<id|null>, msg:<ratchet JSON> }`.
+  `opkId` identifies the consumed one-time pre-key (`null` when OPKs are exhausted).
+  Every subsequent message is a plain ratchet message.
 
-Impl: `initiatorSession/responderSession` + `dhRatchetStep`. Test: full bidirectional
-conversation with direction-flipping DH ratchets (`tests/x3dh.test.js`).
+Impl: `initiatorSession/responderSession` + `dhRatchetStep`;
+`buildPreKeyMessage`/`parsePreKeyMessage` for the first-message envelope (the single
+source of truth for the v5 handshake header — the browser port calls these, never
+hand-rolls the format). Tests (`tests/x3dh.test.js`): full bidirectional conversation
+with direction-flipping DH ratchets; envelope round-trip, `opkId:null`, malformed
+payload → null (no throw), and a full first-contact handshake (Alice wraps → Bob
+unwraps → derives identical SK → decrypts).
 **Implemented (module).**
 
 ## 4. Double Ratchet message format (1:1)
@@ -244,9 +254,9 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   `POW_EXPIRED`, preventing indefinite replay of a solved token.
 
 ## Test status
-12 suites, **381 tests** passing (`npm test`); `validate.sh` 33/36. All `src/crypto/`
+12 suites, **386 tests** passing (`npm test`); `validate.sh` 33/36. All `src/crypto/`
 modules have test suites: ratchet (24), group (25), atrest (12), franking (9),
-negotiate (15), ktlog (37), pow (21), x3dh (6), kat (6), push (15), fingerprint (17);
+negotiate (15), ktlog (37), pow (21), x3dh (11), kat (6), push (15), fingerprint (17);
 worker (194).
 Worker coverage: routing, rate-limit, userId validation (length bounds + charset),
 prekey (0-OTP replenish hint + caps round-trip + caps sanitization + x3dh legacy
