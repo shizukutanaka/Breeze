@@ -20,6 +20,7 @@ import worker, {
   handleGroupJoin,
   handleGroupInfo,
   handleGroupKick,
+  handleGroupAdmin,
   handleGroupLeave,
   handleGroupDelete,
   handleAccountDelete,
@@ -597,6 +598,112 @@ describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {
     const res = await handleGroupJoin({ token, memberId: 'dave0001', memberPub: 'dpub', memberName: 'D' }, env, req({}));
     expect(res.status).toBe(200);
     expect((await res.json()).epoch).toBe(1);
+  });
+});
+
+describe('group multi-admin management (completes the half-built admins array)', () => {
+  const req = (b) => apiRequest('/api/group/admin', b);
+  async function setupGroup(env) {
+    const create = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+    const { token } = await create.json();
+    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bpub', memberName: 'B' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'cpub2', memberName: 'Ca' }, env, req({}));
+    return token;
+  }
+
+  it('the creator can promote a member to admin, surfaced in group info', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).admins).toEqual(['bob00001']);
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.admins).toEqual(['bob00001']);
+    expect(info.creatorId).toBe('creator1');
+  });
+
+  it('promote is idempotent (re-promoting an admin does not duplicate)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    const j = await res.json();
+    expect(j.alreadyAdmin).toBe(true);
+    expect(j.admins).toEqual(['bob00001']);
+  });
+
+  it('the creator can demote an admin back to a regular member', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'demote' }, env, req({}));
+    expect((await res.json()).admins).toEqual([]);
+  });
+
+  it('a non-creator cannot manage admins (no privilege escalation)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    // bob is an admin but still cannot mint another admin.
+    const res = await handleGroupAdmin({ token, adminId: 'bob00001', targetId: 'carol001', action: 'promote' }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('FORBIDDEN');
+  });
+
+  it('cannot promote the creator (creator authority is implicit)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'creator1', action: 'promote' }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_TARGET');
+  });
+
+  it('cannot promote a non-member', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'nobody00', action: 'promote' }, env, req({}));
+    expect(res.status).toBe(404);
+    expect((await res.json()).code).toBe('NOT_MEMBER');
+  });
+
+  it('rejects an unknown action', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'destroy' }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_ACTION');
+  });
+
+  it('a promoted admin can kick a regular member (authorization honors admins)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    const kick = await handleGroupKick({ token, kickId: 'carol001', adminId: 'bob00001' }, env, req({}));
+    expect(kick.status).toBe(200);
+    expect((await kick.json()).epoch).toBe(1);
+  });
+
+  it('an admin cannot kick a fellow admin — only the creator can', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'carol001', action: 'promote' }, env, req({}));
+    // bob (admin) tries to kick carol (admin) → blocked.
+    const blocked = await handleGroupKick({ token, kickId: 'carol001', adminId: 'bob00001' }, env, req({}));
+    expect(blocked.status).toBe(403);
+    // creator can.
+    const ok = await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
+    expect(ok.status).toBe(200);
+  });
+
+  it('demoting a kicked/removed admin is handled (leave strips admin status)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    await handleGroupLeave({ token, memberId: 'bob00001' }, env, req({}));
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.admins).toEqual([]); // leave filtered bob out of admins
   });
 });
 

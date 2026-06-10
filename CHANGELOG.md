@@ -1,5 +1,30 @@
 # Changelog
 
+## Multi-admin group management (branch claude/nice-ride-T6yb0, 2026-06-10)
+
+Completed a feature that was already half-built: the `group.admins` array was
+*maintained* on member removal (kick/leave filtered departing members out of it)
+but nothing ever **populated** it and `kick` ignored it — so the creator was a
+single point of failure for moderation. 35 → 36 API endpoints, 486 → 496 tests.
+
+- **`/api/group/admin` — creator-only promote/demote** (`action: 'promote'|'demote'`):
+  adds/removes a member to/from `group.admins`. Idempotent (re-promote/re-demote is a
+  no-op). Guards: only the creator manages admins (no escalation chains — the privilege
+  graph stays a flat creator→admins tree); the creator can't be promoted (their
+  authority is implicit and never stored in `admins`); the target must be a member. No
+  epoch bump — admin status is an authorization label, not key material.
+- **`handleGroupKick` now honors `admins`**: the creator OR any promoted admin may kick.
+  A regular admin can kick a regular member but **cannot** kick a fellow admin (only the
+  creator can — prevents admin-vs-admin removal wars); nobody can kick the creator. Was
+  previously creator-only.
+- **`handleGroupInfo` now returns `creatorId` + `admins`** so clients can render
+  moderation badges and gate the kick/admin UI (the server still re-authorizes every
+  action server-side; the response is advisory only).
+- **Tests (+10)**: promote/demote happy paths + idempotency, non-creator escalation
+  blocked, creator-as-target rejected, non-member rejected, unknown action rejected,
+  admin-can-kick-member, admin-cannot-kick-admin (creator can), leave strips admin
+  status. `docs/PRODUCT-ANALYSIS.md` updated (item 6 → done).
+
 ## Product gap analysis + missing-feature implementation (branch claude/nice-ride-T6yb0, 2026-06-10)
 
 Full product analysis (strengths / weaknesses / missing features) documented in

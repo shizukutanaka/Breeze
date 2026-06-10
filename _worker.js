@@ -155,6 +155,7 @@ export default {
         '/api/group/join': 10,
         '/api/group/info': 20,
         '/api/group/kick': 5,
+        '/api/group/admin': 10,
         '/api/group/leave': 10,
         '/api/group/delete': 5,
         '/api/account/delete': 3,
@@ -281,6 +282,7 @@ export default {
         case '/api/backup/upload':    return await handleBackupUpload(body, env, request);
         case '/api/backup/download':  return await handleBackupDownload(body, env, request);
         case '/api/group/kick':       return await handleGroupKick(body, env, request);
+        case '/api/group/admin':      return await handleGroupAdmin(body, env, request);
         case '/api/group/leave':      return await handleGroupLeave(body, env, request);
         case '/api/group/delete':     return await handleGroupDelete(body, env, request);
         case '/api/account/delete':   return await handleAccountDelete(body, env, request);
@@ -874,7 +876,13 @@ async function handleGroupInfo(body, env, request) {
 
   const group = safeJsonParse(data);
   if (!group) return json({ error: 'Not found', code: 'NOT_FOUND' }, 404, request);
-  return json({ name: group.name, members: group.members, creatorName: group.creatorName, epoch: group.epoch | 0, createdAt: group.createdAt }, 200, request);
+  // Expose creatorId + admins so clients can render moderation badges and gate the
+  // kick/admin UI to the right members (the server still re-authorizes every action).
+  return json({
+    name: group.name, members: group.members, creatorName: group.creatorName,
+    creatorId: group.creatorId, admins: Array.isArray(group.admins) ? group.admins : [],
+    epoch: group.epoch | 0, createdAt: group.createdAt,
+  }, 200, request);
 }
 
 // v3.3: Enterprise — Group member management
@@ -889,12 +897,21 @@ async function handleGroupKick(body, env, request) {
 
   const group = safeJsonParse(data);
   if (!group) return json({ error: 'Group not found', code: 'NOT_FOUND' }, 404, request);
-  // Only creator can kick
-  if (group.creatorId !== adminId) {
+  // Authorization: the creator OR any promoted admin (group.admins) may kick.
+  // (group.admins is populated by handleGroupAdmin; legacy groups have only a creator.)
+  const admins = Array.isArray(group.admins) ? group.admins : [];
+  const requesterIsCreator = group.creatorId === adminId;
+  const requesterIsAdmin = requesterIsCreator || admins.includes(adminId);
+  if (!requesterIsAdmin) {
     return json({ error: 'Admin permission required', code: 'FORBIDDEN' }, 403, request);
   }
   // Cannot kick creator
   if (kickId === group.creatorId) return json({ error: 'Cannot kick group creator', code: 'FORBIDDEN' }, 400, request);
+  // Only the creator can kick a fellow admin — a regular admin cannot remove its peers
+  // (prevents an admin-vs-admin removal war; mirrors how most messengers scope moderation).
+  if (!requesterIsCreator && admins.includes(kickId)) {
+    return json({ error: 'Only the creator can remove an admin', code: 'FORBIDDEN' }, 403, request);
+  }
   // Kick target must actually be a member; bumping the epoch on a no-op is wasteful
   // and would cause unnecessary sender-key churn in remaining members.
   if (!(group.members || []).some(m => m.id === kickId)) {
@@ -912,6 +929,45 @@ async function handleGroupKick(body, env, request) {
   await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
 
   return json({ ok: true, remaining: group.members.length, epoch: group.epoch }, 200, request);
+}
+
+// Multi-admin management — the missing half of a feature that was already half-built:
+// the `group.admins` array was maintained on removal (kick/leave filter it) but nothing
+// ever populated it and kick ignored it, leaving the creator a single point of failure.
+// Creator-only promote/demote of an existing member to/from admin. No epoch bump:
+// admin status is an authorization label, not key material, so it doesn't affect crypto.
+async function handleGroupAdmin(body, env, request) {
+  const { token, adminId, targetId, action } = body;
+  if (!token || !adminId || !targetId || !action) return json({ error: 'token, adminId, targetId, action required' }, 400, request);
+  if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
+  if (!validateUserId(adminId) || !validateUserId(targetId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
+  if (action !== 'promote' && action !== 'demote') return json({ error: "action must be 'promote' or 'demote'", code: 'INVALID_ACTION' }, 400, request);
+
+  const data = await kvGet(env, `grp:${token}`);
+  if (!data) return json({ error: 'Group not found', code: 'NOT_FOUND' }, 404, request);
+  const group = safeJsonParse(data);
+  if (!group || !Array.isArray(group.members)) return json({ error: 'Group not found', code: 'NOT_FOUND' }, 404, request);
+
+  // Only the creator manages admins — an admin cannot mint or remove other admins
+  // (keeps the privilege graph a flat creator→admins tree, no escalation chains).
+  if (group.creatorId !== adminId) return json({ error: 'Only the creator can manage admins', code: 'FORBIDDEN' }, 403, request);
+  // The creator's authority is implicit and immutable; it is never stored in `admins`.
+  if (targetId === group.creatorId) return json({ error: 'Creator is always an admin', code: 'INVALID_TARGET' }, 400, request);
+  if (!group.members.some(m => m.id === targetId)) return json({ error: 'Member not found', code: 'NOT_MEMBER' }, 404, request);
+
+  const admins = Array.isArray(group.admins) ? group.admins.filter(id => typeof id === 'string') : [];
+  const isAdmin = admins.includes(targetId);
+  if (action === 'promote') {
+    if (isAdmin) return json({ ok: true, admins, alreadyAdmin: true }, 200, request);
+    admins.push(targetId);
+  } else { // demote
+    if (!isAdmin) return json({ ok: true, admins, notAdmin: true }, 200, request);
+    const i = admins.indexOf(targetId);
+    admins.splice(i, 1);
+  }
+  group.admins = admins;
+  await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+  return json({ ok: true, admins }, 200, request);
 }
 
 // Member SELF-removal — the voluntary counterpart to kick. Without this a member
@@ -2149,6 +2205,7 @@ export {
   handleGroupJoin,
   handleGroupInfo,
   handleGroupKick,
+  handleGroupAdmin,
   handleGroupLeave,
   handleGroupDelete,
   handleAccountDelete,

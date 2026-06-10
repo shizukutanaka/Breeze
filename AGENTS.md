@@ -88,7 +88,7 @@ index.html          — Client: HTML + CSS + JS (single file, ~10K lines)
     UI              — Contact list, chat, modals, commands
     Slash commands  — 52+ commands (/help, /security, /network, etc.)
 
-_worker.js          — Cloudflare Worker: 35 API endpoints (~2K lines)
+_worker.js          — Cloudflare Worker: 36 API endpoints (~2K lines)
   Rate limiting     — Per-IP, per-endpoint, per-minute
   Input validation  — sanitizeString, validateUserId, size limits
   Billing           — Stripe (Lite $0.99, Plus $5.99, Pro $19.99)
