@@ -644,7 +644,11 @@ async function handleWebhook(request, env) {
     // unparseable event, which is worse than a no-op.
     if (userId && validateUserId(userId) && session.metadata?.type === 'account_plan') {
       // Plan-based slot assignment: Lite=2, Plus=4, Pro=999
-      const planSlots = parseInt(session.metadata.slots || '2');
+      // Use || 2 fallback: parseInt returns NaN for non-numeric strings (e.g. corrupted
+      // Stripe metadata), and NaN stored in KV silently downgrades users to 1 slot via
+      // the `parsed.slots || 1` read path.  Our code always sends a numeric string, but
+      // a Stripe metadata edit or replay of a tampered event would reach this path.
+      const planSlots = parseInt(session.metadata.slots) || 2;
       await kvPut(env, `slots:${userId}`, JSON.stringify({ slots: planSlots, plan: session.metadata.plan || 'lite', customerId, updatedAt: Date.now() }));
       if (customerId) await kvPut(env, `cust:${customerId}`, userId);
     }
@@ -680,7 +684,9 @@ async function handleWebhook(request, env) {
     let userId = sub.metadata?.userId;
     if (!userId && sub.customer) userId = await kvGet(env, `cust:${sub.customer}`);
     if (userId && validateUserId(userId) && sub.metadata?.slots) {
-      const newSlots = parseInt(sub.metadata.slots);
+      // Same NaN guard as checkout.session.completed: fall back to 1 (free tier) on
+      // parse failure so a bad metadata value doesn't store NaN in KV.
+      const newSlots = parseInt(sub.metadata.slots) || 1;
       await kvPut(env, `slots:${userId}`, JSON.stringify({
         slots: newSlots, plan: sub.metadata.plan || 'lite',
         customerId: sub.customer, updatedAt: Date.now()
@@ -1811,9 +1817,11 @@ async function handleAI(body, env, request) {
       if (!messages || !Array.isArray(messages)) return json({ error: 'messages array required' }, 400, request);
       systemPrompt = 'Summarize this chat conversation in 3-5 bullet points. Identify key topics, decisions, and action items. Reply in the same language as the messages.';
       // Cap individual fields before joining to bound peak memory (not just the aggregate).
+      // Guard against null/undefined items: JSON.parse on a client-crafted array can
+      // produce sparse arrays or explicit nulls, which would throw TypeError on m.sender.
       userContent = messages.slice(-50).map(m => {
-        const s = String(m.sender || '').slice(0, 100);
-        const t = String(m.text   || '').slice(0, 500);
+        const s = String((m && m.sender) || '').slice(0, 100);
+        const t = String((m && m.text)   || '').slice(0, 500);
         return `${s}: ${t}`;
       }).join('\n');
       if (userContent.length > 4000) userContent = userContent.slice(-4000);

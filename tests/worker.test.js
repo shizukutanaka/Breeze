@@ -1262,6 +1262,44 @@ describe('webhook signature + idempotency', () => {
     expect(res.status).toBe(200);
     expect(await e.KV.get('slots:bad\x00user')).toBeNull();
   });
+
+  it('falls back to 2 slots when checkout metadata.slots is non-numeric (NaN guard)', async () => {
+    // parseInt('abc') = NaN; without the || 2 guard NaN would be stored in KV.
+    // handleAccountSlots reads `parsed.slots || 1` so NaN would silently downgrade
+    // a paying user to 1 slot.  The fix ensures parseInt(x) || 2 clamps to 2.
+    const e = env();
+    const badSlotsEvent = JSON.stringify({
+      id: 'evt_nan_slots', type: 'checkout.session.completed',
+      data: { object: {
+        metadata: { userId: 'user00002', type: 'account_plan', slots: 'not-a-number', plan: 'plus' },
+        client_reference_id: 'user00002',
+      }},
+    });
+    const sig = await stripeSigHeader(badSlotsEvent, secret);
+    const res = await handleWebhook(webhookReq(badSlotsEvent, sig), e);
+    expect(res.status).toBe(200);
+    const stored = JSON.parse(await e.KV.get('slots:user00002'));
+    // Must be 2 (the || 2 fallback), never NaN.
+    expect(stored.slots).toBe(2);
+    expect(Number.isNaN(stored.slots)).toBe(false);
+  });
+
+  it('falls back to 1 slot when subscription.updated metadata.slots is non-numeric (NaN guard)', async () => {
+    const e = env();
+    // Pre-populate KV so we can observe the update write.
+    await e.KV.put('slots:user00003', JSON.stringify({ slots: 4, plan: 'plus' }));
+    const subEvent = JSON.stringify({
+      id: 'evt_sub_nan', type: 'customer.subscription.updated',
+      data: { object: { metadata: { userId: 'user00003', slots: 'bad', plan: 'plus' }, customer: 'cus_nan' } },
+    });
+    const sig = await stripeSigHeader(subEvent, secret);
+    const res = await handleWebhook(webhookReq(subEvent, sig), e);
+    expect(res.status).toBe(200);
+    const stored = JSON.parse(await e.KV.get('slots:user00003'));
+    // Must be 1 (the || 1 fallback) — never NaN.
+    expect(stored.slots).toBe(1);
+    expect(Number.isNaN(stored.slots)).toBe(false);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1344,6 +1382,23 @@ describe('AI handler input validation', () => {
     expect(r1.status).toBe(400);
     const r2 = await handleAI({ action: 'translate_context', text: { payload: 'x' }, lang: 'ja' }, env(), req({}));
     expect(r2.status).toBe(400);
+  });
+
+  it('summarize handles null/undefined items in messages array without throwing TypeError', async () => {
+    // A JSON.parse of a client-crafted array can contain explicit nulls or undefined.
+    // m.sender would throw TypeError if m is null; the guard uses (m && m.sender).
+    const messagesWithNulls = [
+      null,
+      { sender: 'alice', text: 'hello' },
+      undefined,
+      { sender: 'bob', text: 'world' },
+      null,
+    ];
+    // The call will fail at the AI-fetch step (no real key), but must not throw.
+    const res = await handleAI({ action: 'summarize', messages: messagesWithNulls }, env(), req({}));
+    expect(typeof res.status).toBe('number');
+    // Must not be a 500 from an unhandled TypeError.
+    expect(res.status).not.toBe(500);
   });
 });
 
