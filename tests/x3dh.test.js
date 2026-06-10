@@ -184,6 +184,92 @@ describe('X3DH v5 prekey-message envelope (first-message handshake header)', () 
   });
 });
 
+describe('one-call handshake orchestration (initiatorHandshake / responderHandshake)', () => {
+  // Build a published bundle for Bob (what the relay serves to Alice).
+  async function bundleFor(bob, { withOpk = true } = {}) {
+    const spkSig = await R.signSPK(bob.ed.privateKey, bob.spk.pub);
+    return {
+      ikPub: bob.ik.pub, edIkPub: bob.ed.pub, spkPub: bob.spk.pub, spkSig,
+      ...(withOpk ? { opkPub: bob.opk.pub, opkId: 0 } : {}),
+    };
+  }
+
+  it('completes a full first-contact handshake in two calls (with OPK)', async () => {
+    const alice = await party();
+    const bob = await party();
+    const bundle = await bundleFor(bob);
+
+    const { session: aSess, wire } = await R.initiatorHandshake({
+      myIdentity: { ikPriv: alice.ik.privateKey, ikPub: alice.ik.pub },
+      bundle, firstMessage: 'hello via orchestrator',
+    });
+    const { session: bSess, plaintext, opkId } = await R.responderHandshake({
+      myKeys: { ikPriv: bob.ik.privateKey, spkPriv: bob.spk.privateKey },
+      wire,
+      opkResolver: (id) => (id === 0 ? bob.opk.privateKey : null),
+    });
+    expect(plaintext).toBe('hello via orchestrator');
+    expect(opkId).toBe(0);
+    // The bootstrapped sessions carry the rest of the conversation.
+    expect(await R.ratchetDecrypt(aSess, await R.ratchetEncrypt(bSess, 'reply'))).toBe('reply');
+  });
+
+  it('completes the handshake when the responder OPK is exhausted (no OPK in bundle)', async () => {
+    const alice = await party();
+    const bob = await party();
+    const bundle = await bundleFor(bob, { withOpk: false });
+    const { wire } = await R.initiatorHandshake({
+      myIdentity: { ikPriv: alice.ik.privateKey, ikPub: alice.ik.pub },
+      bundle, firstMessage: 'no opk path',
+    });
+    const { plaintext } = await R.responderHandshake({
+      myKeys: { ikPriv: bob.ik.privateKey, spkPriv: bob.spk.privateKey },
+      wire, // opkResolver omitted — opkId is null so it is never called
+    });
+    expect(plaintext).toBe('no opk path');
+  });
+
+  it('THROWS (does not establish a session) when the bundle signature is forged — I1 MITM defense is unskippable', async () => {
+    const alice = await party();
+    const bob = await party();
+    const mallory = await party(); // on-path relay swaps in her own pre-key
+    // Bundle presents Mallory's SPK but is "signed" with a signature that cannot match
+    // Bob's published Ed25519 identity. initiatorHandshake must abort BEFORE deriving.
+    const forged = {
+      ikPub: bob.ik.pub, edIkPub: bob.ed.pub,
+      spkPub: mallory.spk.pub,
+      spkSig: await R.signSPK(mallory.ed.privateKey, mallory.spk.pub),
+      opkPub: mallory.opk.pub, opkId: 0,
+    };
+    await expect(R.initiatorHandshake({
+      myIdentity: { ikPriv: alice.ik.privateKey, ikPub: alice.ik.pub },
+      bundle: forged, firstMessage: 'should never be sent',
+    })).rejects.toThrow(/MITM|INVALID/);
+  });
+
+  it('THROWS when the bundle lacks the signature material (cannot authenticate)', async () => {
+    const alice = await party();
+    const bob = await party();
+    await expect(R.initiatorHandshake({
+      myIdentity: { ikPriv: alice.ik.privateKey, ikPub: alice.ik.pub },
+      bundle: { ikPub: bob.ik.pub, spkPub: bob.spk.pub }, // no edIkPub / spkSig
+      firstMessage: 'x',
+    })).rejects.toThrow();
+  });
+
+  it('responderHandshake returns null for a non-prekey (plain ratchet) wire', async () => {
+    const bob = await party();
+    const plainRatchet = await R.ratchetEncrypt(
+      (await R.pairFromSharedChain(new Uint8Array(32).fill(9))).sender, 'plain',
+    );
+    const r = await R.responderHandshake({
+      myKeys: { ikPriv: bob.ik.privateKey, spkPriv: bob.spk.privateKey },
+      wire: plainRatchet,
+    });
+    expect(r).toBe(null);
+  });
+});
+
 describe('MITM defense (why the signature matters — the I1 fix)', () => {
   it('detects a relay that swaps in its own pre-key', async () => {
     const bob = await party();

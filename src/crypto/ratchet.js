@@ -412,13 +412,65 @@ export function createRatchet(opts = {}) {
     };
   }
 
+  // --- One-call X3DH v5 handshake orchestration ------------------------------
+  // These wrap verify → derive → bootstrap → (en|de)crypt so the browser port is a
+  // single call per side AND the MANDATORY signature verification (CRYPTO-SPEC §2.2,
+  // the I1 MITM defense) is unskippable: initiatorHandshake THROWS if the bundle's
+  // signed pre-key signature does not verify, so the MITM-vulnerable "derive without
+  // checking" path is simply not reachable from this API.
+
+  // Initiator (Alice). bundle = { ikPub, edIkPub, spkPub, spkSig, opkPub?, opkId? }.
+  // Returns { session, wire } — send `wire`, then use `session` with ratchetEncrypt/
+  // ratchetDecrypt for every later message.
+  async function initiatorHandshake({ myIdentity, bundle, firstMessage, info = 'breeze-x3dh-v5' }) {
+    if (!bundle || bundle.spkSig == null || bundle.edIkPub == null) {
+      throw new Error('X3DH initiatorHandshake: bundle missing edIkPub/spkSig (cannot authenticate pre-key)');
+    }
+    // MUST verify before deriving — abort on failure (no silent downgrade).
+    if (!(await verifySPK(bundle.edIkPub, bundle.spkPub, bundle.spkSig))) {
+      throw new Error('X3DH: signed pre-key signature INVALID — possible MITM; aborting handshake');
+    }
+    const ek = await genRatchetKey();
+    const sk = await x3dhInitiator({
+      ikPriv: myIdentity.ikPriv, ekPriv: ek.privateKey,
+      ikPubPeer: bundle.ikPub, spkPubPeer: bundle.spkPub, opkPubPeer: bundle.opkPub, info,
+    });
+    const session = await initiatorSession(sk, bundle.spkPub);
+    const inner = await ratchetEncrypt(session, firstMessage);
+    const wire = buildPreKeyMessage({
+      ikPub: myIdentity.ikPub, ekPub: ek.pub, opkId: bundle.opkId ?? null, ratchetMessage: inner,
+    });
+    return { session, wire };
+  }
+
+  // Responder (Bob). myKeys = { ikPriv, spkPriv }. opkResolver(opkId) → the matching
+  // one-time pre-key PRIVATE key (or null/undefined if consumed/unknown — X3DH still
+  // completes via SPK). Returns { session, plaintext, opkId } or null when `wire` is
+  // not a v5 prekey message (so the caller can treat it as a plain ratchet message).
+  async function responderHandshake({ myKeys, wire, opkResolver, info = 'breeze-x3dh-v5' }) {
+    const hs = parsePreKeyMessage(wire);
+    if (!hs) return null;
+    let opkPriv = null;
+    if (hs.opkId != null && typeof opkResolver === 'function') {
+      opkPriv = await opkResolver(hs.opkId);
+    }
+    const sk = await x3dhResponder({
+      ikPriv: myKeys.ikPriv, spkPriv: myKeys.spkPriv, opkPriv,
+      ikPubPeer: hs.ikPub, ekPubPeer: hs.ekPub, info,
+    });
+    const session = responderSession(sk, myKeys.spkPriv);
+    const plaintext = await ratchetDecrypt(session, hs.ratchetMessage);
+    return { session, plaintext, opkId: hs.opkId };
+  }
+
   return {
     hkdf, kdfChain, genRatchetKey, ecdhBits, dhRatchetStep,
     frameEncrypt, unpadAndDecompress, ratchetEncrypt, ratchetDecrypt,
     keyCommitment, ctEqual, pairFromSharedChain,
     genSigningKey, signSPK, verifySPK, x3dhInitiator, x3dhResponder,
     initiatorSession, responderSession,
-    buildPreKeyMessage, parsePreKeyMessage, _cfg: cfg,
+    buildPreKeyMessage, parsePreKeyMessage,
+    initiatorHandshake, responderHandshake, _cfg: cfg,
   };
 }
 

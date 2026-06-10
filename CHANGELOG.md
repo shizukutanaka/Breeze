@@ -72,6 +72,16 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
   abuse/report).
 
 ### Crypto Modules (`src/crypto/`) — features & correctness fixes
+- **`ratchet.js` — one-call X3DH handshake; signature verification made unskippable**:
+  added `initiatorHandshake` / `responderHandshake` orchestrators that wrap verify →
+  derive → bootstrap → (en|de)crypt into a single call per side. Critically,
+  `initiatorHandshake` **throws** if the bundle's signed-pre-key signature does not
+  verify (or the signature material is absent), so CRYPTO-SPEC §2 step 2 ("MUST verify …
+  abort on failure", the I1 MITM defense) is unskippable from the public API — the
+  MITM-vulnerable "derive without checking" path is unreachable. The pending browser port
+  calls these two functions instead of re-implementing the 6-step sequence and risking a
+  dropped verify. Added 5 `tests/x3dh.test.js` cases: two-call handshake (±OPK), forged
+  bundle → reject (no session), missing signature material → reject, non-prekey wire → null.
 - **`ratchet.js` — X3DH v5 first-message envelope (I1 port-enabler)**: added
   `buildPreKeyMessage`/`parsePreKeyMessage` so the module owns the v5 handshake wire
   format `{ v:5, t:'pkm', ik, ek, opkId, msg }`. The responder needs the initiator's
@@ -114,7 +124,7 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
 - `validate.sh` SRI gate confirmed correct (sha384 matches lang.js).
 
 ### Test Suite (`tests/`)
-- **12 suites, 386 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
+- **12 suites, 391 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
 - Worker: group kick TTL regression test (1); corrupt KV data resilience via
   `safeJsonParse` (7); backup type guard (1); AI handler — `reply_suggest` non-string
   context, missing context, capped error echo, `chat` non-string/oversized text (4);

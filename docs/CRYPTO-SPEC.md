@@ -29,8 +29,14 @@ Conformance: pinned by `tests/kat.test.js` against RFC 5869 (HKDF), RFC 7748
 4. Responder derives the same `SK` from its private SPK/IK/OPK and the initiator's IK/EK.
 
 Impl: `genSigningKey/signSPK/verifySPK`, `x3dhInitiator/x3dhResponder`
-(`src/crypto/ratchet.js`). Tests: `tests/x3dh.test.js` — agreement (±OPK),
-per-session uniqueness, and the **MITM defense** (swapped pre-key fails verify).
+(`src/crypto/ratchet.js`). One-call orchestration `initiatorHandshake` /
+`responderHandshake` wraps verify → derive → bootstrap → (en|de)crypt; crucially
+`initiatorHandshake` **throws** when the bundle signature does not verify, so step 2's
+"MUST verify ... abort on failure" is *unskippable* from the public API (the
+MITM-vulnerable derive-without-checking path is unreachable). Tests:
+`tests/x3dh.test.js` — agreement (±OPK), per-session uniqueness, the **MITM defense**
+(swapped pre-key fails verify), and orchestration (two-call handshake ±OPK, forged-bundle
+abort, missing-signature abort, non-prekey wire → null).
 **Implemented (module).** Gap: index.html init + worker verify-on-upload (§8).
 
 ## 3. Session establishment (X3DH → Double Ratchet)
@@ -254,9 +260,9 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   `POW_EXPIRED`, preventing indefinite replay of a solved token.
 
 ## Test status
-12 suites, **386 tests** passing (`npm test`); `validate.sh` 33/36. All `src/crypto/`
+12 suites, **391 tests** passing (`npm test`); `validate.sh` 33/36. All `src/crypto/`
 modules have test suites: ratchet (24), group (25), atrest (12), franking (9),
-negotiate (15), ktlog (37), pow (21), x3dh (11), kat (6), push (15), fingerprint (17);
+negotiate (15), ktlog (37), pow (21), x3dh (16), kat (6), push (15), fingerprint (17);
 worker (194).
 Worker coverage: routing, rate-limit, userId validation (length bounds + charset),
 prekey (0-OTP replenish hint + caps round-trip + caps sanitization + x3dh legacy
