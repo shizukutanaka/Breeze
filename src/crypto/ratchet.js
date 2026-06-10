@@ -463,6 +463,27 @@ export function createRatchet(opts = {}) {
     return { session, plaintext, opkId: hs.opkId };
   }
 
+  // Map a relay prekey-fetch JSON to the initiatorHandshake `bundle` shape. The relay
+  // (_worker.js handlePreKeyFetch) uses verbose names (identityKey, edIdentityKey,
+  // signedPreKey, signedPreKeySig, oneTimePreKey, oneTimePreKeyId); the handshake uses
+  // short ones (ikPub, edIkPub, spkPub, spkSig, opkPub, opkId). Centralizing the rename
+  // here removes the #1 port footgun: a field-name typo that silently drops the signature
+  // material would make initiatorHandshake skip the MITM check — here it's done once and
+  // tested. `decode` (default identity) converts the relay's opaque string encoding to the
+  // byte/key form x3dhInitiator needs; the encoding is the app's concern, not the module's.
+  function bundleFromRelay(fetched, decode = (x) => x) {
+    if (!fetched) return null;
+    const d = (x) => (x == null ? undefined : decode(x));
+    return {
+      ikPub:  d(fetched.identityKey),
+      edIkPub: d(fetched.edIdentityKey),
+      spkPub: d(fetched.signedPreKey),
+      spkSig: d(fetched.signedPreKeySig),
+      opkPub: d(fetched.oneTimePreKey),
+      opkId:  fetched.oneTimePreKeyId ?? null,
+    };
+  }
+
   return {
     hkdf, kdfChain, genRatchetKey, ecdhBits, dhRatchetStep,
     frameEncrypt, unpadAndDecompress, ratchetEncrypt, ratchetDecrypt,
@@ -470,7 +491,7 @@ export function createRatchet(opts = {}) {
     genSigningKey, signSPK, verifySPK, x3dhInitiator, x3dhResponder,
     initiatorSession, responderSession,
     buildPreKeyMessage, parsePreKeyMessage,
-    initiatorHandshake, responderHandshake, _cfg: cfg,
+    initiatorHandshake, responderHandshake, bundleFromRelay, _cfg: cfg,
   };
 }
 

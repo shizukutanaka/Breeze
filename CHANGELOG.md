@@ -86,6 +86,16 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
   abuse/report).
 
 ### Crypto Modules (`src/crypto/`) — features & correctness fixes
+- **`ratchet.js` — `bundleFromRelay` worker→handshake bundle adapter**: the relay's
+  prekey-fetch JSON uses verbose field names (`identityKey/edIdentityKey/signedPreKey/
+  signedPreKeySig/oneTimePreKey/oneTimePreKeyId`) while `initiatorHandshake` takes short
+  ones (`ikPub/edIkPub/spkPub/spkSig/opkPub/opkId`). A hand-rolled mapping in the port is
+  the #1 footgun: a field-name typo would drop the signature material and make the
+  handshake skip the MITM check. `bundleFromRelay(fetched, decode?)` does the rename once,
+  in a tested place (`decode` converts the relay's opaque strings to bytes; the encoding
+  stays the app's concern). Added 5 `tests/x3dh.test.js` cases incl. an end-to-end check
+  (mapped relay bundle drives a real handshake) and the safety check (a bundle missing
+  `signedPreKeySig` still aborts — no silent bypass).
 - **`ktlog.js` — combined on-fetch audit (`auditBundle`)**: the runbook (§8) called only
   `checkRollover` (detects an identity-key swap), missing `verifyChain` (detects a relay
   that rewrote/forked the append-only log). `auditBundle(subtle, storedIK, keyHistory)`
@@ -172,7 +182,7 @@ endpoints, service worker, documentation, test coverage). Findings and fixes:
 - `validate.sh` SRI gate confirmed correct (sha384 matches lang.js).
 
 ### Test Suite (`tests/`)
-- **12 suites, 416 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
+- **12 suites, 421 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
 - Worker: group kick TTL regression test (1); corrupt KV data resilience via
   `safeJsonParse` (7); backup type guard (1); AI handler — `reply_suggest` non-string
   context, missing context, capped error echo, `chat` non-string/oversized text (4);

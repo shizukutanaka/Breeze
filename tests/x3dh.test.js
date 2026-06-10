@@ -270,6 +270,82 @@ describe('one-call handshake orchestration (initiatorHandshake / responderHandsh
   });
 });
 
+describe('bundleFromRelay (worker JSON → handshake bundle mapping)', () => {
+  it('renames every relay field to the handshake bundle shape', () => {
+    const relay = {
+      identityKey: 'IK', edIdentityKey: 'ED', signedPreKey: 'SPK', signedPreKeySig: 'SIG',
+      oneTimePreKey: 'OPK', oneTimePreKeyId: 3, replenishOTP: true, keyHistory: [],
+    };
+    const b = R.bundleFromRelay(relay);
+    expect(b).toEqual({ ikPub: 'IK', edIkPub: 'ED', spkPub: 'SPK', spkSig: 'SIG', opkPub: 'OPK', opkId: 3 });
+  });
+
+  it('leaves absent optional fields undefined and defaults opkId to null', () => {
+    const b = R.bundleFromRelay({ identityKey: 'IK', signedPreKey: 'SPK' }); // OTP exhausted, no sig
+    expect(b.ikPub).toBe('IK');
+    expect(b.spkPub).toBe('SPK');
+    expect(b.edIkPub).toBeUndefined();
+    expect(b.spkSig).toBeUndefined();
+    expect(b.opkPub).toBeUndefined();
+    expect(b.opkId).toBe(null);
+    expect(R.bundleFromRelay(null)).toBe(null);
+  });
+
+  it('applies the decode function to key fields but not to opkId', () => {
+    const b = R.bundleFromRelay(
+      { identityKey: 'a2V5', signedPreKey: 'c3Br', oneTimePreKeyId: 7 },
+      (s) => `decoded:${s}`,
+    );
+    expect(b.ikPub).toBe('decoded:a2V5');
+    expect(b.spkPub).toBe('decoded:c3Br');
+    expect(b.opkId).toBe(7); // numeric id passes through untouched
+  });
+
+  it('drives a real handshake when fed a mapped relay bundle (decode → bytes)', async () => {
+    const alice = await party();
+    const bob = await party();
+    // Simulate what the relay stored/returns: keys as base64 strings + a real signature.
+    const b64 = (u8) => Buffer.from(u8).toString('base64');
+    const sig = await R.signSPK(bob.ed.privateKey, bob.spk.pub);
+    const relay = {
+      identityKey: b64(new Uint8Array(bob.ik.pub)),
+      edIdentityKey: b64(new Uint8Array(bob.ed.pub)),
+      signedPreKey: b64(new Uint8Array(bob.spk.pub)),
+      signedPreKeySig: b64(new Uint8Array(sig)),
+      oneTimePreKey: b64(new Uint8Array(bob.opk.pub)),
+      oneTimePreKeyId: 0,
+    };
+    const decode = (s) => new Uint8Array(Buffer.from(s, 'base64'));
+    const bundle = R.bundleFromRelay(relay, decode);
+
+    const { wire } = await R.initiatorHandshake({
+      myIdentity: { ikPriv: alice.ik.privateKey, ikPub: alice.ik.pub },
+      bundle, firstMessage: 'mapped-bundle hello',
+    });
+    const { plaintext } = await R.responderHandshake({
+      myKeys: { ikPriv: bob.ik.privateKey, spkPriv: bob.spk.privateKey },
+      wire, opkResolver: (id) => (id === 0 ? bob.opk.privateKey : null),
+    });
+    expect(plaintext).toBe('mapped-bundle hello');
+  });
+
+  it('a relay bundle missing signedPreKeySig still aborts the handshake (no silent bypass)', async () => {
+    const alice = await party();
+    const bob = await party();
+    const b64 = (u8) => Buffer.from(u8).toString('base64');
+    const relay = { // edIdentityKey present but signedPreKeySig dropped by a hostile relay
+      identityKey: b64(new Uint8Array(bob.ik.pub)),
+      edIdentityKey: b64(new Uint8Array(bob.ed.pub)),
+      signedPreKey: b64(new Uint8Array(bob.spk.pub)),
+    };
+    const bundle = R.bundleFromRelay(relay, (s) => new Uint8Array(Buffer.from(s, 'base64')));
+    await expect(R.initiatorHandshake({
+      myIdentity: { ikPriv: alice.ik.privateKey, ikPub: alice.ik.pub },
+      bundle, firstMessage: 'x',
+    })).rejects.toThrow();
+  });
+});
+
 describe('MITM defense (why the signature matters — the I1 fix)', () => {
   it('detects a relay that swaps in its own pre-key', async () => {
     const bob = await party();
