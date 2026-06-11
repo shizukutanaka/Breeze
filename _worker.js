@@ -872,9 +872,24 @@ async function handleGroupJoin(body, env, request) {
   const group = safeJsonParse(data);
   if (!group || !Array.isArray(group.members)) return json({ error: 'Invite link expired or invalid', code: 'EXPIRED' }, 404, request);
 
-  // Check if already a member
-  if (group.members.some(m => m.id === memberId)) {
-    return json({ ok: true, name: group.name, members: group.members, alreadyMember: true }, 200, request);
+  // Already a member: refresh the mutable fields (pub/name/caps) rather than no-op.
+  // Clients re-call join on reconnect; without this, the N3 capability snapshot would
+  // stay frozen at first-join, so a client that upgrades (gains group-v5/franking)
+  // could never raise the group floor without leaving and rejoining. pub/name can also
+  // legitimately change (key rotation, rename). Persist only when something changed to
+  // avoid a wasteful KV write on every reconnect.
+  const existing = group.members.find(m => m.id === memberId);
+  if (existing) {
+    const newName = (memberName || existing.name || 'Member').slice(0, 30);
+    const newCaps = sanitizeCaps(caps);
+    let changed = false;
+    if (existing.pub !== memberPub) { existing.pub = memberPub; changed = true; }
+    if (existing.name !== newName) { existing.name = newName; changed = true; }
+    // Only overwrite caps when the rejoin actually advertised them (a legacy reconnect
+    // with no caps must not erase a previously-recorded capability set).
+    if (newCaps && JSON.stringify(existing.caps) !== JSON.stringify(newCaps)) { existing.caps = newCaps; changed = true; }
+    if (changed) await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+    return json({ ok: true, name: group.name, members: group.members, epoch: group.epoch | 0, alreadyMember: true, refreshed: changed }, 200, request);
   }
 
   // Max 50 members per group

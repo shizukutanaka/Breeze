@@ -2795,6 +2795,39 @@ describe('group member capability negotiation (N3 — unblocks negotiate.js nego
     expect(creator.caps).toEqual(['ok', 'y'.repeat(32)]); // non-strings dropped, capped at 32
     expect(bob.caps).toBeUndefined(); // legacy client → field omitted
   });
+
+  it('a rejoin refreshes a member\'s caps so an upgraded client can raise the floor', async () => {
+    const env = makeEnv();
+    const create = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', caps: ['group-v5'] }, env, req({}));
+    const { token } = await create.json();
+    // Bob first joins as a legacy client (no group-v5).
+    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bpub', caps: [] }, env, req({}));
+    let info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    let floor = negotiateGroup([CAPS.GROUP_V5], info.members.map((m) => m.caps || []));
+    expect(floor.useGroupV5).toBe(false); // bob can't yet
+
+    // Bob upgrades and reconnects (re-calls join) advertising group-v5.
+    const rejoin = await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bpub', caps: ['group-v5'] }, env, req({}));
+    const rj = await rejoin.json();
+    expect(rj.alreadyMember).toBe(true);
+    expect(rj.refreshed).toBe(true);
+    info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    floor = negotiateGroup([CAPS.GROUP_V5], info.members.map((m) => m.caps || []));
+    expect(floor.useGroupV5).toBe(true); // now every member supports it
+  });
+
+  it('a legacy rejoin (no caps) does not erase a previously recorded capability set', async () => {
+    const env = makeEnv();
+    const create = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}));
+    const { token } = await create.json();
+    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bpub', caps: ['group-v5', 'franking'] }, env, req({}));
+    // Reconnect without advertising caps (e.g. an older code path) must not wipe them.
+    const rejoin = await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bpub' }, env, req({}));
+    expect((await rejoin.json()).refreshed).toBe(false);
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.members.find((m) => m.id === 'bob00001').caps).toEqual(['group-v5', 'franking']);
+  });
 });
 
 describe('group create / join / info validation', () => {

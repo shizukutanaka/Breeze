@@ -1,5 +1,21 @@
 # Changelog
 
+## Group rejoin refreshes member fields (caps staleness fix) (branch claude/nice-ride-T6yb0, 2026-06-10)
+
+Follow-on to the group capability snapshot: the `handleGroupJoin` "already a
+member" branch was a pure no-op, so the N3 caps recorded at first join stayed
+frozen — a client that upgraded (gaining group-v5/franking) could never raise
+the group floor without leaving and rejoining. 525 tests (+2); no endpoint change.
+
+- The already-member branch now refreshes the member's mutable fields
+  (`pub`/`name`/`caps`) from the rejoin request. Clients already re-call join on
+  reconnect, so a capability upgrade propagates naturally. Persists only when a
+  field actually changed (no wasteful KV write on every reconnect), and a legacy
+  rejoin that advertises no caps does **not** erase a previously-recorded set.
+  Response gains `refreshed` (bool) and now includes `epoch`.
+- **Tests (+2)**: an upgraded rejoin raises the negotiateGroup floor end-to-end;
+  a legacy (capless) rejoin preserves the existing capability set.
+
 ## Group member capability negotiation — unblocks negotiate.js (branch claude/nice-ride-T6yb0, 2026-06-10)
 
 Completed the server half of N3 capability negotiation for groups. `negotiate.js`
