@@ -55,6 +55,7 @@ import worker, {
 } from '../_worker.js';
 import { makeKV, makeEnv, apiRequest, stripeSigHeader } from './helpers/mockKV.js';
 import { createFranking } from '../src/crypto/franking.js';
+import { negotiateGroup, CAPS } from '../src/crypto/negotiate.js';
 
 // base64 helper for building signed prekey bundles in tests.
 const toB64 = (bytes) => Buffer.from(bytes).toString('base64');
@@ -2738,6 +2739,61 @@ describe('billing portal (Stripe customer portal)', () => {
     const res = await handlePortal({ userId: 'user00001' }, env, req({}));
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe('PORTAL_FAILED');
+  });
+});
+
+describe('group member capability negotiation (N3 — unblocks negotiate.js negotiateGroup)', () => {
+  const req = (b) => apiRequest('/api/group/x', b);
+
+  it('stores creator + member caps and surfaces them via group/info', async () => {
+    const env = makeEnv();
+    const create = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C',
+        caps: ['x3dh-v5', 'group-v5', 'franking'] }, env, req({}));
+    const { token } = await create.json();
+    await handleGroupJoin(
+      { token, memberId: 'bob00001', memberPub: 'bpub', memberName: 'B',
+        caps: ['x3dh-v5', 'group-v5'] }, env, req({}));
+
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    const creator = info.members.find((m) => m.id === 'creator1');
+    const bob = info.members.find((m) => m.id === 'bob00001');
+    expect(creator.caps).toEqual(['x3dh-v5', 'group-v5', 'franking']);
+    expect(bob.caps).toEqual(['x3dh-v5', 'group-v5']);
+  });
+
+  it('the surfaced caps drive negotiateGroup: group-v5 floor holds, franking floor does not', async () => {
+    const env = makeEnv();
+    const create = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub',
+        caps: ['group-v5', 'franking'] }, env, req({}));
+    const { token } = await create.json();
+    // One member supports group-v5 but NOT franking.
+    await handleGroupJoin(
+      { token, memberId: 'bob00001', memberPub: 'bpub', caps: ['group-v5'] }, env, req({}));
+
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    // A client computes the floor across every member's caps from the single info call.
+    const memberCapsList = info.members.map((m) => m.caps || []);
+    const result = negotiateGroup([CAPS.GROUP_V5, CAPS.FRANKING], memberCapsList);
+    expect(result.useGroupV5).toBe(true);   // every member supports it
+    expect(result.useFranking).toBe(false); // bob does not → floor excludes it
+  });
+
+  it('drops non-string / oversized caps and omits the field for legacy clients', async () => {
+    const env = makeEnv();
+    const create = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub',
+        caps: ['ok', 42, { x: 1 }, 'y'.repeat(50)] }, env, req({}));
+    const { token } = await create.json();
+    // Legacy member: no caps field at all.
+    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bpub' }, env, req({}));
+
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    const creator = info.members.find((m) => m.id === 'creator1');
+    const bob = info.members.find((m) => m.id === 'bob00001');
+    expect(creator.caps).toEqual(['ok', 'y'.repeat(32)]); // non-strings dropped, capped at 32
+    expect(bob.caps).toBeUndefined(); // legacy client → field omitted
   });
 });
 

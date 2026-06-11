@@ -813,7 +813,7 @@ async function verifyStripeSignature(payload, header, secret) {
 // ============================================================
 
 async function handleGroupCreate(body, env, request) {
-  const { name: rawName, creatorId, creatorPub: rawCreatorPub, creatorName: rawCreatorName, members, ttl } = body;
+  const { name: rawName, creatorId, creatorPub: rawCreatorPub, creatorName: rawCreatorName, members, ttl, caps } = body;
   const name = sanitizeString(rawName, 50);
   const creatorName = sanitizeString(rawCreatorName, 64);
   // Public keys must be strings: a non-string object passes the !x presence check
@@ -833,12 +833,20 @@ async function handleGroupCreate(body, env, request) {
   crypto.getRandomValues(bytes);
   const token = Array.from(bytes).map(b => b.toString(36)).join('').slice(0, 12);
 
+  // N3 (group): persist the creator's advertised capabilities on the member record so
+  // a peer can compute the group capability floor (negotiate.js negotiateGroup) from a
+  // single group/info call instead of a presence check per member. Sanitized identically
+  // to the presence/bundle path (≤20 strings, ≤32 chars). Omitted for legacy clients.
+  const creatorRecord = { id: creatorId, pub: creatorPub, name: (creatorName || 'Creator').slice(0, 30) };
+  const creatorCaps = sanitizeCaps(caps);
+  if (creatorCaps) creatorRecord.caps = creatorCaps;
+
   const group = {
     name: name.slice(0, 50),
     creatorId,
     creatorPub,
     creatorName: (creatorName || 'Creator').slice(0, 30),
-    members: [{ id: creatorId, pub: creatorPub, name: (creatorName || 'Creator').slice(0, 30) }],
+    members: [creatorRecord],
     epoch: 0, // I3: group sender-key epoch; bumped on kick so members rotate keys
     createdAt: Date.now(),
   };
@@ -850,7 +858,7 @@ async function handleGroupCreate(body, env, request) {
 }
 
 async function handleGroupJoin(body, env, request) {
-  const { token, memberId, memberPub: rawMemberPub, memberName: rawMemberName } = body;
+  const { token, memberId, memberPub: rawMemberPub, memberName: rawMemberName, caps } = body;
   const memberName = sanitizeString(rawMemberName, 64);
   if (typeof rawMemberPub !== 'string') return json({ error: 'memberPub must be a string', code: 'INVALID_TYPE' }, 400, request);
   const memberPub = rawMemberPub.slice(0, 200);
@@ -872,8 +880,11 @@ async function handleGroupJoin(body, env, request) {
   // Max 50 members per group
   if (group.members.length >= 100) return json({ error: 'Group is full', code: 'GROUP_FULL' }, 400, request);
 
-  // Add new member
-  group.members.push({ id: memberId, pub: memberPub, name: (memberName || 'Member').slice(0, 30) });
+  // Add new member (with N3 capability snapshot — see handleGroupCreate).
+  const memberRecord = { id: memberId, pub: memberPub, name: (memberName || 'Member').slice(0, 30) };
+  const memberCaps = sanitizeCaps(caps);
+  if (memberCaps) memberRecord.caps = memberCaps;
+  group.members.push(memberRecord);
   await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
 
   return json({ ok: true, name: group.name, members: group.members, epoch: group.epoch | 0 }, 200, request);

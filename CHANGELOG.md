@@ -1,5 +1,26 @@
 # Changelog
 
+## Group member capability negotiation — unblocks negotiate.js (branch claude/nice-ride-T6yb0, 2026-06-10)
+
+Completed the server half of N3 capability negotiation for groups. `negotiate.js`
+`negotiateGroup(localCaps, memberCapsList)` computes the group capability floor
+(a feature is enabled only when *every* member supports it) — but it was
+effectively dead code: the relay never surfaced member capabilities, so a client
+could only obtain them with one presence check per member. 523 tests (+3); no
+endpoint change (enhancement to create/join/info).
+
+- **`/api/group/create` and `/api/group/join` accept an optional `caps` array**,
+  sanitized identically to the presence/bundle path (`sanitizeCaps` — ≤20
+  strings, ≤32 chars, non-strings dropped), stored on the member record. Omitted
+  for legacy clients.
+- **`/api/group/info` surfaces them** (it already returns the member array
+  wholesale), so a client computes the floor from a single call instead of N
+  presence checks.
+- **Tests (+3)**: caps stored on create+join and surfaced via info; the surfaced
+  caps drive `negotiateGroup` end-to-end (group-v5 floor holds when all support
+  it, franking floor drops when one member lacks it); non-string/oversized caps
+  sanitized + field omitted for legacy clients.
+
 ## Account deletion now cleans up group memberships (branch claude/nice-ride-T6yb0, 2026-06-10)
 
 Closed a residual-data hole in the account-deletion feature itself: there is no
