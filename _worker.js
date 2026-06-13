@@ -437,7 +437,8 @@ async function handleMsgSend(body, ip, env, request) {
   if (sigPub) msg.sigPub = typeof sigPub === 'string' ? sigPub.slice(0, 200) : undefined;
   inbox.push(msg);
   const trimmed = inbox.slice(-100);
-  await kvPut(env, key, JSON.stringify(trimmed), { expirationTtl: 604800 });
+  const stored = await kvPut(env, key, JSON.stringify(trimmed), { expirationTtl: 604800 });
+  if (!stored) return json({ error: 'Failed to store message', code: 'STORE_FAILED' }, 500, request);
 
   // Trigger Web Push notification (non-blocking)
   // Cap push title to match the stored msg.groupName limit (50 chars) — prevents
@@ -2023,7 +2024,8 @@ async function handleSealedSend(body, env, request) {
   const queue = Array.isArray(queueParsed) ? queueParsed : [];
   queue.push({ envelope, ts: Date.now() });
   const trimmed = queue.slice(-100);
-  await kvPut(env, key, JSON.stringify(trimmed), { expirationTtl: 604800 });
+  const stored = await kvPut(env, key, JSON.stringify(trimmed), { expirationTtl: 604800 });
+  if (!stored) return json({ error: 'Failed to store sealed message', code: 'STORE_FAILED' }, 500, request);
   sendPushToUser(to, { title: 'Breeze', body: 'New message', tag: 'breeze-sealed', contactId: to }, env).catch(() => {});
   return json({ ok: true, ack: Date.now() }, 200, request);
 }
@@ -2049,7 +2051,10 @@ async function handleSealedAck(body, env, request) {
   const { id } = body;
   if (!id || typeof id !== 'string') return json({ error: 'id required', code: 'MISSING_ID' }, 400, request);
   if (!validateUserId(id)) return json({ error: 'invalid id', code: 'INVALID_ID' }, 400, request);
-  await kvDel(env, `sealed:${id}`);
+  // kvDel returns false on a genuine KV API error (not on key-not-found, which is idempotent).
+  // Report failure so the client can retry rather than silently believing messages were cleared.
+  const deleted = await kvDel(env, `sealed:${id}`);
+  if (!deleted) return json({ error: 'Failed to confirm delivery', code: 'ACK_FAILED' }, 500, request);
   return json({ ok: true }, 200, request);
 }
 

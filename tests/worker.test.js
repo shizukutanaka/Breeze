@@ -1522,6 +1522,24 @@ describe('sealed sender send / poll / ack', () => {
     const r2 = await handleSealedPoll({ id: 'short' }, e, req({})); // < 8 chars
     expect(r2.status).toBe(400);
   });
+
+  // ── KV failure propagation (item 27) ─────────────────────────────────────────
+  it('send returns STORE_FAILED 500 when KV put throws (not false success)', async () => {
+    const e = makeEnv();
+    e.KV.put = async () => { throw new Error('KV_QUOTA_EXCEEDED'); };
+    const res = await handleSealedSend({ to: 'bob00001', envelope: 'ENC' }, e, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+  });
+
+  it('ack returns ACK_FAILED 500 when KV delete throws (not false success)', async () => {
+    const e = makeEnv();
+    await handleSealedSend({ to: 'frank001', envelope: 'ENC' }, e, req({}));
+    e.KV.delete = async () => { throw new Error('KV_TRANSIENT_ERROR'); };
+    const res = await handleSealedAck({ id: 'frank001' }, e, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('ACK_FAILED');
+  });
 });
 
 describe('msg send / poll (1:1 relay path)', () => {
@@ -1771,6 +1789,18 @@ describe('msg send / poll (1:1 relay path)', () => {
     const poll2 = await handleMsgPoll({ id: 'dave0001', lastTs: now }, env, apiRequest('/api/msg/x', {}));
     const { messages: m2 } = await poll2.json();
     expect(m2.length).toBe(0);
+  });
+
+  // ── KV failure propagation (item 27) ─────────────────────────────────────────
+  it('send returns STORE_FAILED 500 when KV put throws (not false success)', async () => {
+    const e = makeEnv();
+    e.KV.put = async () => { throw new Error('KV_QUOTA_EXCEEDED'); };
+    const res = await handleMsgSend(
+      { to: 'bob00001', from: 'alice001', payload: 'ENC', ts: Date.now() },
+      ip, e, req({}),
+    );
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
   });
 });
 

@@ -1,5 +1,18 @@
 # Changelog
 
+## KV write/delete failure propagation — item 27 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+568 tests (+3); no breaking wire change.
+
+- **`handleMsgSend`**: if `kvPut` returns false (KV quota/transient error), now returns
+  `{ error, code: 'STORE_FAILED' }` 500 instead of `{ok: true}`. Client can retry.
+- **`handleSealedSend`**: same fix — `kvPut` failure → `STORE_FAILED` 500.
+- **`handleSealedAck`**: if `kvDel` returns false, now returns `{ error, code: 'ACK_FAILED' }` 500
+  instead of `{ok: true}`. Previously the client would stop polling the sealed queue believing
+  delivery was confirmed, while the server queue remained and expired silently after 7 days.
+- **Tests (+3)**: one per fixed handler — each injects a throwing KV mock and asserts the
+  correct 500 status code.
+
 ## Optional Ed25519 auth for backup upload/download — item 26 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 565 tests (+9); no breaking wire change.
