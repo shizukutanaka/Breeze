@@ -1,5 +1,30 @@
 # Changelog
 
+## Abuse-report webhook idempotency (Socratic audit) — item 35 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+600 tests (+2); no breaking wire change.
+
+Found by interrogating a code comment rather than trusting it: `handleAbuseReport`
+documented the report as *"idempotent on frankId"*, but only the KV write was idempotent —
+the moderation webhook fired on **every** call.
+
+- **Webhook amplification**: the franking opening key `Kf` is delivered to the recipient
+  inside the E2E payload, so a recipient (or a client that retries) can re-POST the same
+  valid `(frankId, message, opening)` tuple. Each repeat re-fired the operator's
+  `ABUSE_WEBHOOK_URL` (up to the 10/min rate limit), flooding the moderation queue with
+  duplicate notifications of a single report.
+- **Fix**: check `report:${frankId}` before firing. The webhook (and report stamp) now fire
+  only on the first report; repeats return `{ verified: true, duplicate: true }` with no new
+  webhook. The documented idempotency now holds for the webhook, not just the KV write.
+- **Bonus**: the previously-unchecked `report:${frankId}` write now returns
+  `500 STORE_FAILED` on KV failure (the one instance missed by the item 33/34 sweep).
+- **Tests (+2)**: three identical reports fire the webhook exactly once (2nd/3rd flagged
+  `duplicate:true`); report write failure returns `STORE_FAILED`.
+
+> Note: this round also Socratically refuted two proposed "client-controlled timestamp"
+> findings (presence `p.at`, signal `ts`) — both are set server-side with `Date.now()`,
+> so the client never controls them and no validation was warranted.
+
 ## kvDel failure propagation: group delete, alias delete, drop one-time read — item 34 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 598 tests (+4); no breaking wire change.

@@ -1448,6 +1448,57 @@ describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => 
       vi.unstubAllGlobals();
     }
   });
+
+  // Item 35: webhook must fire ONCE per frankId. A recipient (or retrying client) can
+  // re-POST the same valid (frankId, message, opening); each repeat previously re-fired
+  // the operator webhook, flooding moderation with duplicates of a single report.
+  it('fires the moderation webhook only on the first report of a frankId (idempotency)', async () => {
+    const calls = [];
+    vi.stubGlobal('fetch', async (url, opts) => {
+      calls.push({ url, body: JSON.parse(opts.body) });
+      return { ok: true };
+    });
+    try {
+      const env = makeEnv({ ABUSE_WEBHOOK_URL: 'https://hooks.example.com/abuse' });
+      const message = 'repeat-report message';
+      const { commitment, opening } = await F.commit(message);
+      await handleAbuseRecord({ frankId: 'dup-001', commitment: b64(commitment) }, env, req({}));
+
+      // First report → verified, not a duplicate, webhook fires.
+      const rep1 = await handleAbuseReport({ frankId: 'dup-001', message, opening: b64(opening) }, env, req({}));
+      const j1 = await rep1.json();
+      expect(j1.verified).toBe(true);
+      expect(j1.duplicate).toBe(false);
+
+      // Second + third identical reports → still verified, flagged duplicate, NO new webhook.
+      const rep2 = await handleAbuseReport({ frankId: 'dup-001', message, opening: b64(opening) }, env, req({}));
+      const j2 = await rep2.json();
+      expect(j2.verified).toBe(true);
+      expect(j2.duplicate).toBe(true);
+      await handleAbuseReport({ frankId: 'dup-001', message, opening: b64(opening) }, env, req({}));
+
+      await new Promise(r => setTimeout(r, 10));
+      const hookCalls = calls.filter(c => c.url === 'https://hooks.example.com/abuse');
+      expect(hookCalls.length).toBe(1); // fired exactly once despite 3 reports
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('returns 500 STORE_FAILED when the report KV write fails', async () => {
+    const env = makeEnv();
+    const message = 'store-fail message';
+    const { commitment, opening } = await F.commit(message);
+    await handleAbuseRecord({ frankId: 'sf-001', commitment: b64(commitment) }, env, req({}));
+    const real = env.KV.put.bind(env.KV);
+    env.KV.put = async (key, ...rest) => {
+      if (key.startsWith('report:')) throw new Error('KV unavailable');
+      return real(key, ...rest);
+    };
+    const res = await handleAbuseReport({ frankId: 'sf-001', message, opening: b64(opening) }, env, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+  });
 });
 
 describe('sealed sender send / poll / ack', () => {

@@ -2019,18 +2019,27 @@ async function handleAbuseReport(body, env, request) {
   if (!commitment) return json({ error: 'No such franking record', code: 'NOT_FOUND' }, 404, request);
   const verified = await hmacVerifyFrank(commitment, opening, message);
   if (!verified) return json({ verified: false, error: 'Report does not match the sent message', code: 'FRANK_MISMATCH' }, 400, request);
+  // Idempotency: fire the moderation webhook (and stamp the report) only the FIRST time
+  // a given frankId is reported. The opening key Kf is delivered to the recipient inside
+  // the E2E payload, so a recipient holding a valid (frankId, message, opening) tuple — or
+  // a client that simply retries — could re-POST the same report. Previously every call
+  // re-fired the operator webhook (up to the 10/min rate limit), flooding the moderation
+  // queue with duplicates of a single report. Check-before-fire makes the documented
+  // "idempotent on frankId" guarantee true for the webhook, not just the KV write.
+  const alreadyReported = await kvGet(env, `report:${frankId}`);
   // Record the verified report for moderation (idempotent on frankId).
-  await kvPut(env, `report:${frankId}`, JSON.stringify({ at: Date.now(), len: message.length }), { expirationTtl: 86400 * 90 });
+  const stored = await kvPut(env, `report:${frankId}`, JSON.stringify({ at: Date.now(), len: message.length }), { expirationTtl: 86400 * 90 });
+  if (!stored) return json({ error: 'Failed to record report', code: 'STORE_FAILED' }, 500, request);
   // Notify the operator's moderation webhook if configured (fire-and-forget).
   // Payload deliberately contains NO message content — just metadata.
-  if (env.ABUSE_WEBHOOK_URL && typeof env.ABUSE_WEBHOOK_URL === 'string') {
+  if (!alreadyReported && env.ABUSE_WEBHOOK_URL && typeof env.ABUSE_WEBHOOK_URL === 'string') {
     fetchWithTimeout(env.ABUSE_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'abuse_report', frankId, messageLen: message.length, at: Date.now() }),
     }, 5000).catch(() => {});
   }
-  return json({ verified: true }, 200, request);
+  return json({ verified: true, duplicate: !!alreadyReported }, 200, request);
 }
 
 // ============================================================
