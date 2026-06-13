@@ -1,5 +1,20 @@
 # Changelog
 
+## Batch alias resolution — one request for N contacts (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+`/api/alias/get` now accepts a `{ aliases: [...] }` batch payload in addition to
+the existing `{ alias: string }` single-alias form. Resolves up to 50 aliases in
+one round-trip instead of N, eliminating the major KV-read amplification that
+occurred when a client loaded its full contact list. 527 tests (+2).
+
+- **Batch path**: accepts `aliases` array, deduplicates after lowercase+sanitize
+  (`[^a-z0-9_]` stripped), caps at 50, returns `{ results: { alias: data|null } }`.
+  Missing aliases map to `null` (caller can distinguish resolved vs. not-found).
+  Non-string entries are silently skipped.
+- **Single-alias path unchanged** — existing clients unaffected.
+- **Tests (+2)**: batch resolves multiple aliases and maps misses to `null`;
+  dedup + sanitize + 50-cap enforced; both test via the public `SELF.fetch` path.
+
 ## Group rejoin refreshes member fields (caps staleness fix) (branch claude/nice-ride-T6yb0, 2026-06-10)
 
 Follow-on to the group capability snapshot: the `handleGroupJoin` "already a

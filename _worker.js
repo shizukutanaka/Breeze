@@ -631,7 +631,33 @@ async function handleAliasSet(body, env, request) {
 }
 
 async function handleAliasGet(body, env, request) {
-  const { alias } = body;
+  const { alias, aliases } = body;
+
+  // Batch mode: { aliases: ['alice','bob',...] } → { results: { alice: {...}, bob: null } }.
+  // Resolving a contact list of @handles one-by-one is N requests + N KV reads; the
+  // batch path cuts it to one request (mirrors the presence batch-check pattern) and
+  // eases free-tier KV read pressure. Unresolved/invalid entries map to null rather
+  // than failing the whole call.
+  if (Array.isArray(aliases)) {
+    const results = {};
+    // Dedup + sanitize + cap at 50 to bound KV reads per request.
+    const seen = new Set();
+    const cleaned = [];
+    for (const a of aliases) {
+      if (typeof a !== 'string') continue;
+      const c = a.toLowerCase().replace(/[^a-z0-9_]/g, '');
+      if (c.length < 3 || c.length > 20 || seen.has(c)) continue;
+      seen.add(c);
+      cleaned.push(c);
+      if (cleaned.length >= 50) break;
+    }
+    for (const c of cleaned) {
+      const raw = await kvGet(env, `alias:${c}`);
+      results[c] = raw ? (safeJsonParse(raw) || null) : null;
+    }
+    return json({ results }, 200, request);
+  }
+
   if (!alias) return json({ error: 'alias required', code: 'MISSING_FIELDS' }, 400, request);
   if (typeof alias !== 'string') return json({ error: 'alias must be a string', code: 'INVALID_FIELD' }, 400, request);
 

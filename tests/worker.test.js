@@ -1665,6 +1665,32 @@ describe('alias set / get (PoW anti-spam)', () => {
     const got = await (await handleAliasGet({ alias: 'myalias' }, env, req({}))).json();
     expect(got.pub).toBe(pub);
   }, 30000);
+
+  it('batch get resolves many aliases in one call; misses map to null', async () => {
+    const env = makeEnv();
+    // Seed directly (avoids N PoW solves in the test).
+    await env.KV.put('alias:alice', JSON.stringify({ pub: 'PUBA', name: 'Alice', setAt: 1 }));
+    await env.KV.put('alias:bob', JSON.stringify({ pub: 'PUBB', name: 'Bob', setAt: 2 }));
+    const res = await handleAliasGet({ aliases: ['alice', 'BOB', 'nobody', 'x'] }, env, req({}));
+    expect(res.status).toBe(200);
+    const { results } = await res.json();
+    expect(results.alice.pub).toBe('PUBA');
+    expect(results.bob.pub).toBe('PUBB');   // case-normalized
+    expect(results.nobody).toBeNull();       // unknown → null, not an error
+    expect('x' in results).toBe(false);      // too short (<3) → filtered out entirely
+  });
+
+  it('batch get dedups, sanitizes and caps at 50 entries', async () => {
+    const env = makeEnv();
+    await env.KV.put('alias:alice', JSON.stringify({ pub: 'PUBA', name: 'Alice', setAt: 1 }));
+    // 60 distinct + duplicates + a non-string; only valid, deduped, capped-50 are read.
+    const many = Array.from({ length: 60 }, (_, i) => `user${i}`);
+    const res = await handleAliasGet({ aliases: ['alice', 'alice', 'ALICE', 42, ...many] }, env, req({}));
+    expect(res.status).toBe(200);
+    const { results } = await res.json();
+    expect(results.alice.pub).toBe('PUBA');
+    expect(Object.keys(results).length).toBeLessThanOrEqual(50);
+  });
 });
 
 describe('push subscribe SSRF guard', () => {
