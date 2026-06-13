@@ -2969,6 +2969,41 @@ describe('online count', () => {
     expect(j.online).toBe(0);
     expect(typeof j.ts).toBe('number');
   });
+
+  // ── Minute-boundary fallback (item 30) ───────────────────────────────────────
+  it('returns previous minute count at minute boundary instead of 0', async () => {
+    const e = makeEnv();
+    // Simulate 3 heartbeats in minute M
+    globalThis._onlineCounter = { minute: 999, count: 3, prev: 0 };
+    // Advance to minute M+1 — current counter is now for a different minute
+    globalThis._onlineCounter = { minute: 1000, count: 0, prev: 3 };
+    const res = await handleOnlineCount({}, e, req());
+    const j = await res.json();
+    // Current minute count is 0, but prev=3 should be returned as fallback
+    expect(j.online).toBe(3);
+  });
+
+  it('returns current minute count when heartbeats exist in the current minute', async () => {
+    const e = makeEnv();
+    const minuteKey = Math.floor(Date.now() / 60000);
+    globalThis._onlineCounter = { minute: minuteKey, count: 7, prev: 2 };
+    const res = await handleOnlineCount({}, e, req());
+    const j = await res.json();
+    expect(j.online).toBe(7); // current minute wins over prev
+  });
+
+  it('handlePresence records prev count when minute rolls over', async () => {
+    const e = makeEnv();
+    const minuteKey = Math.floor(Date.now() / 60000);
+    // Prime with count=5 in the current minute
+    globalThis._onlineCounter = { minute: minuteKey, count: 5, prev: 0 };
+    // Simulate rollover by resetting to an old minute and calling handlePresence
+    globalThis._onlineCounter.minute = minuteKey - 1; // force rollover on next heartbeat
+    await handlePresence({ id: 'user00001', pub: 'IK' }, e, apiRequest('/api/presence', {}));
+    // After rollover: prev should be the old count (5), new count should be 1
+    expect(globalThis._onlineCounter.prev).toBe(5);
+    expect(globalThis._onlineCounter.count).toBe(1);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

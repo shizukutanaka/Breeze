@@ -568,9 +568,13 @@ async function handlePresence(body, env, request) {
   // Always update in-memory for fast reads within same isolate
   globalThis._presenceCache.set(presKey + ':data', JSON.stringify(presData));
   // v3.6: In-memory online counter (saves 1 KV read + 1 KV write per heartbeat)
-  if (!globalThis._onlineCounter) globalThis._onlineCounter = { minute: 0, count: 0 };
+  if (!globalThis._onlineCounter) globalThis._onlineCounter = { minute: 0, count: 0, prev: 0 };
   const currentMinute = Math.floor(Date.now() / 60000);
-  if (globalThis._onlineCounter.minute !== currentMinute) { globalThis._onlineCounter = { minute: currentMinute, count: 0 }; }
+  if (globalThis._onlineCounter.minute !== currentMinute) {
+    // Preserve the previous minute's count as a fallback so handleOnlineCount does not
+    // report 0 at the start of each minute before the first heartbeat arrives.
+    globalThis._onlineCounter = { minute: currentMinute, count: 0, prev: globalThis._onlineCounter.count };
+  }
   globalThis._onlineCounter.count++;
   return json({ ok: true }, 200, request);
 }
@@ -578,9 +582,13 @@ async function handlePresence(body, env, request) {
 // v3.3: Online user count (approximate)
 async function handleOnlineCount(body, env, request) {
   // v3.6: In-memory counter (no KV read needed)
-  if (!globalThis._onlineCounter) globalThis._onlineCounter = { minute: 0, count: 0 };
+  if (!globalThis._onlineCounter) globalThis._onlineCounter = { minute: 0, count: 0, prev: 0 };
   const minuteKey = Math.floor(Date.now() / 60000);
-  const count = (globalThis._onlineCounter.minute === minuteKey) ? globalThis._onlineCounter.count : 0;
+  // At a minute boundary the new minute's count is 0 until the first heartbeat. Return
+  // the previous minute's count as a fallback to avoid a false "0 online" spike.
+  const count = (globalThis._onlineCounter.minute === minuteKey)
+    ? globalThis._onlineCounter.count
+    : globalThis._onlineCounter.prev;
   return json({ online: count, ts: Date.now() }, 200, request);
 }
 

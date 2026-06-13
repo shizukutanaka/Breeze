@@ -1,5 +1,18 @@
 # Changelog
 
+## Online counter minute-boundary fallback — item 30 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+575 tests (+3); no breaking wire change.
+
+- **`handleOnlineCount`** previously returned `0` at the start of each minute (before the
+  first heartbeat arrived in the new window), causing a brief "0 online users" spike in
+  every connected client's presence UI.
+- **Fix**: `_onlineCounter` now tracks a `prev` field (the previous minute's count). At a
+  minute boundary, `handleOnlineCount` returns `prev` as a fallback when the new-minute
+  count is 0. `handlePresence` saves the old count into `prev` on rollover.
+- **Tests (+3)**: minute-boundary returns `prev`; current-minute count wins when non-zero;
+  heartbeat rollover correctly sets `prev` and resets `count` to 1.
+
 ## Language code sanitization in handleTranslate — item 29 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 572 tests (+3); no breaking wire change.
