@@ -2309,8 +2309,13 @@ async function handleTranslate(body, env, request) {
   if (!text || !to) return json({ error: 'text and to required', code: 'MISSING_FIELDS' }, 400, request);
   if (typeof text !== 'string' || text.length > 2000) return json({ error: 'text too long (max 2000)', code: 'PAYLOAD_TOO_LARGE' }, 400, request);
   if (typeof to !== 'string') return json({ error: 'to must be a string', code: 'INVALID_FIELD' }, 400, request);
-  const src = typeof from === 'string' ? from.slice(0, 10) : 'auto';
-  const tgt = to.slice(0, 10);
+  // Sanitize language codes to BCP-47 safe characters ([a-zA-Z0-9-]) before passing to
+  // third-party APIs (DeepL, LibreTranslate, Google, MyMemory). handleAI uses the same
+  // strip — keep both consistent. Raw slice() alone allows newlines or special chars that
+  // could inject into URL params or HTTP headers in providers that don't further encode.
+  const src = (typeof from === 'string' ? from.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 20) : '') || 'auto';
+  const tgt = to.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 20);
+  if (!tgt) return json({ error: 'invalid target language code', code: 'INVALID_LANG' }, 400, request);
 
   // KV cache (7-day TTL)
   const hash = await sha256Short(text + src + tgt);

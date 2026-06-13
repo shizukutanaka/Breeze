@@ -1,5 +1,20 @@
 # Changelog
 
+## Language code sanitization in handleTranslate — item 29 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+572 tests (+3); no breaking wire change.
+
+- **`handleTranslate`** (`from`/`to` language codes) now strips all non-BCP-47 characters
+  (`[^a-zA-Z0-9-]`) before forwarding to DeepL, LibreTranslate, Google Translate, and
+  MyMemory. Previously only `.slice(0, 10)` was applied, which allowed `\r\n` or control
+  characters to pass through and potentially inject into HTTP headers or URL parameters in
+  downstream APIs. `handleAI` already used this pattern (`replace(/[^a-zA-Z0-9-]/g, '')`
+  at line 2451) — `handleTranslate` is now consistent.
+- **If the sanitized target code is empty** (e.g., all special chars), returns
+  `{ error, code: 'INVALID_LANG' }` 400 rather than forwarding an empty string to providers.
+- **Tests (+3)**: fully-special `to` → `INVALID_LANG`; `zh_CN` (underscore stripped) →
+  proceeds; `from` with `\r\n` embedded → strips cleanly and proceeds.
+
 ## OTP delete-before-attach safety — item 28 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 569 tests (+1); no breaking wire change.

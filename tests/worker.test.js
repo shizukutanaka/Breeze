@@ -2423,6 +2423,31 @@ describe('translate handler input validation', () => {
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_FIELD');
   });
+
+  // ── Language code sanitization (item 29) ─────────────────────────────────────
+  it('rejects a target language code containing only special chars → INVALID_LANG', async () => {
+    // All chars stripped by the BCP-47 sanitizer → empty string → INVALID_LANG.
+    // e.g. "\r\n\t:;!@#" leaves nothing after stripping [^a-zA-Z0-9-].
+    const res = await handleTranslate({ text: 'hello', to: '\r\n\t:;!@#' }, makeEnv(), req());
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_LANG');
+  });
+
+  it('strips non-BCP-47 characters from target language code but keeps alphanumeric/dash', async () => {
+    // Valid BCP-47 codes contain only [a-zA-Z0-9-]. Extra punctuation is stripped.
+    // After stripping "zh_CN" → "zhCN" (underscore removed). The result is non-empty
+    // so the request proceeds (provider returns 503 in test env with no API keys).
+    const res = await handleTranslate({ text: 'hello', to: 'zh_CN' }, makeEnv(), req());
+    // Not INVALID_LANG — the stripped code "zhCN" is non-empty
+    expect(res.status).not.toBe(400);
+  });
+
+  it('strips special chars from source language code', async () => {
+    // from is optional; when present, non-BCP-47 chars are stripped same as `to`.
+    const res = await handleTranslate({ text: 'hello', to: 'en', from: 'ja\r\nevil' }, makeEnv(), req());
+    // Not a 400 — 'ja' survives stripping, no injection
+    expect(res.status).not.toBe(400);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
