@@ -1,5 +1,20 @@
 # Changelog
 
+## OTP type guard at upload — prevent null entries from consuming prekey slots (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+304 tests (+2); no breaking wire change.
+
+- **OTP non-string entries are now silently skipped at upload** — `JSON.stringify(null)` produces
+  the 4-char string `'null'`, which passed the size guard and was stored. On fetch, `safeJsonParse('null')`
+  returns `null`, which fails the `parsed !== null` guard — the slot is consumed (deleted) without
+  delivering a key. One null entry in the `oneTimePreKeys` array permanently wasted a prekey slot
+  with no error signal. Added `typeof oneTimePreKeys[i] !== 'string'` guard.
+- **Count reflects the highest valid stored index** — Previously `count = Math.min(array.length, 100)`
+  counted all entries including non-strings. Now `count = maxStoredIdx + 1` (only written when at
+  least one key was stored), consistent with how the fetch loop uses count as an upper-bound index.
+- **Tests (+2)**: null/non-string entries skipped and not stored; all-non-string array writes no
+  count key and fetch correctly signals `replenishOTP`.
+
 ## Batch presence cache hit + sealed-send dedup key length fix (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 302 tests (+3); no breaking wire change.

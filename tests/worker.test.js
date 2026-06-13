@@ -375,6 +375,47 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     // Corrupt OTP was consumed (deleted) but must not be attached to the bundle.
     expect(bundle.oneTimePreKey).toBeUndefined();
   });
+
+  it('OTP type guard: skips null/non-string entries; count reflects highest valid index only', async () => {
+    // Without the type guard, JSON.stringify(null) = 'null' is stored, then
+    // consumed on fetch without delivering a key — silently wasting the slot.
+    const env = makeEnv();
+    const uid = 'otptypgrd1';
+    // Upload array with non-string entries interspersed with valid keys.
+    await handlePreKeyUpload(
+      { userId: uid, identityKey: 'IK', signedPreKey: 'SPK',
+        oneTimePreKeys: ['key0', null, 'key2', 42, 'key4'] },
+      env, apiRequest('/api/prekey/upload', {})
+    );
+    // Count should reflect the highest valid index + 1 = 4+1 = 5, not array length (5 same here).
+    // The important thing: null at index 1 and 42 at index 3 must NOT be stored.
+    expect(await env.KV.get(`prekey:otp:${uid}:1`)).toBeNull();  // null not stored
+    expect(await env.KV.get(`prekey:otp:${uid}:3`)).toBeNull();  // number not stored
+    // Valid keys are stored
+    expect(await env.KV.get(`prekey:otp:${uid}:0`)).toBe(JSON.stringify('key0'));
+    expect(await env.KV.get(`prekey:otp:${uid}:2`)).toBe(JSON.stringify('key2'));
+    expect(await env.KV.get(`prekey:otp:${uid}:4`)).toBe(JSON.stringify('key4'));
+    // Fetch consumes a valid key, not a null slot
+    const res = await handlePreKeyFetch({ userId: uid }, env, apiRequest('/api/prekey/fetch', {}));
+    const b = await res.json();
+    expect(b.oneTimePreKey).toBe('key4'); // highest valid index
+  });
+
+  it('OTP type guard: count is not written when all entries are non-string', async () => {
+    const env = makeEnv();
+    const uid = 'otptypgrd2';
+    await handlePreKeyUpload(
+      { userId: uid, identityKey: 'IK', signedPreKey: 'SPK',
+        oneTimePreKeys: [null, 42, { a: 1 }] },
+      env, apiRequest('/api/prekey/upload', {})
+    );
+    // No valid keys → count key must not be written
+    expect(await env.KV.get(`prekey:otp:${uid}:count`)).toBeNull();
+    // Fetch still works (no OTPs to deliver, replenishOTP set)
+    const res = await handlePreKeyFetch({ userId: uid }, env, apiRequest('/api/prekey/fetch', {}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).replenishOTP).toBe(true);
+  });
 });
 
 describe('prekey key-history audit log (I11 precursor)', () => {

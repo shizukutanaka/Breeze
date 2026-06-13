@@ -1800,15 +1800,26 @@ async function handlePreKeyUpload(body, env, request) {
   } catch (e) { /* log failure is non-fatal */ }
 
   // Store one-time prekeys individually; cap each entry to prevent KV inflation.
+  // Type guard: only store string entries. JSON.stringify(null) = 'null' (4 chars)
+  // passes the size check and is stored, but safeJsonParse('null') = null fails the
+  // bundle.oneTimePreKey assignment guard in handlePreKeyFetch — the slot is consumed
+  // (deleted) without delivering a key. A single null in the uploaded array permanently
+  // wastes a prekey slot for the owner without any error signal. The count must also
+  // track the highest valid index, not the raw array length.
   if (Array.isArray(oneTimePreKeys)) {
+    let maxStoredIdx = -1;
     for (let i = 0; i < Math.min(oneTimePreKeys.length, 100); i++) {
+      if (typeof oneTimePreKeys[i] !== 'string') continue; // skip non-string entries
       const otpStr = JSON.stringify(oneTimePreKeys[i]);
       if (otpStr.length > 5000) continue; // silently skip oversized entries
       await kvPut(env, `prekey:otp:${userId}:${i}`, otpStr, { expirationTtl: 86400 * 30 });
+      maxStoredIdx = i;
     }
-    // Store the capped count so the fetch loop doesn't iterate past the highest
-    // possible stored index (avoids up to 100 wasted KV reads when length > 100).
-    await kvPut(env, `prekey:otp:${userId}:count`, String(Math.min(oneTimePreKeys.length, 100)), { expirationTtl: 86400 * 30 });
+    // Store count only when at least one key was stored (highest index + 1).
+    // Avoids writing a zero count that would make replenishOTP fire unnecessarily.
+    if (maxStoredIdx >= 0) {
+      await kvPut(env, `prekey:otp:${userId}:count`, String(maxStoredIdx + 1), { expirationTtl: 86400 * 30 });
+    }
   }
   return json({ ok: true }, 200, request);
 }
