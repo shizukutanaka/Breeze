@@ -68,6 +68,7 @@ Cloudflare Worker
   ├── Sealed Sender (/api/sealed/send, /poll)
   ├── Groups (create/join/info/rename/kick/admin/transfer/leave/delete)
   ├── Account management (slots, purchase, portal, delete)
+  ├── Key transparency (/api/ktlog/get — audit peer key history without OTP cost)
   ├── Presence + TURN + Push
   └── Stripe billing
 
