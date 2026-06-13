@@ -1,5 +1,28 @@
 # Changelog
 
+## Sealed-sender ACK no longer drops messages sent in the poll→ack window — item 40 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+613 tests (+4); server-side only, backward-compatible (no client change required).
+
+Socratic read of the sealed-sender flow (the path CLAUDE.md calls "reliable") against
+`handleSealedAck`: the ACK took only `{id}` and blind-deleted the entire `sealed:${id}`
+queue. Trace: client polls `[m1,m2]` (grace TTL set) → a sender's `handleSealedSend`
+appends `m3` → client ACKs → `kvDel` wipes the whole key, so **m3 is destroyed
+undelivered**. Any envelope arriving in the poll→ack window was silently lost.
+
+- **Fix (fully server-side)**: `handleSealedPoll` records a high-water mark
+  (`sealed:${id}:hwm` = max ts of the returned batch, 5-min TTL). `handleSealedAck` keeps
+  any envelope with `ts > hwm` (arrived after the poll) and clears the rest — selective
+  delete instead of blind delete. No high-water mark (client never polled / pre-hwm ACK) →
+  falls back to the original full delete, so existing clients are unaffected and benefit
+  immediately without any change.
+- **KV budget**: the hwm write happens only when a poll actually returns messages; idle
+  polls still do zero KV writes.
+- **Tests (+4)**: envelope sent in the poll→ack window survives (`kept:1`); fully-polled
+  queue deletes (`kept:0`, hwm cleaned up); ack with no prior poll still full-deletes
+  (backward compat); selective-delete KV failure → `ACK_FAILED` 500. Mutation-verified
+  (forcing the blind-delete path fails the window-preservation test).
+
 ## Web Push dead-subscription cleanup removes ALL stale subs per cycle — item 39 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 609 tests (+3); additive, no wire change.

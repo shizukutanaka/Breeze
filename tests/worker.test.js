@@ -1601,6 +1601,58 @@ describe('sealed sender send / poll / ack', () => {
     expect(res.status).toBe(400);
   });
 
+  // Item 40: an envelope that arrives AFTER a poll but BEFORE the ack must survive the ack
+  // (the ack clears only up to the polled high-water mark, not the whole queue).
+  it('preserves an envelope sent in the poll->ack window (no blind full-delete)', async () => {
+    const env = makeEnv();
+    await handleSealedSend({ to: 'window01', envelope: 'm1-polled' }, env, req({}));
+    // Poll returns m1 and records the high-water mark.
+    const polled = await (await handleSealedPoll({ id: 'window01' }, env, req({}))).json();
+    expect(polled.messages.map(m => m.envelope)).toEqual(['m1-polled']);
+    // A new envelope arrives before the client ACKs. (Distinct content + a later ts.)
+    await new Promise(r => setTimeout(r, 2)); // ensure Date.now() advances past the hwm
+    await handleSealedSend({ to: 'window01', envelope: 'm2-after-poll' }, env, req({}));
+    // ACK clears only the polled batch; m2 must remain.
+    const ack = await handleSealedAck({ id: 'window01' }, env, req({}));
+    expect(ack.status).toBe(200);
+    expect((await ack.json()).kept).toBe(1);
+    const after = await (await handleSealedPoll({ id: 'window01' }, env, req({}))).json();
+    expect(after.messages.map(m => m.envelope)).toEqual(['m2-after-poll']);
+  });
+
+  it('full-deletes (kept 0) when every queued envelope was polled', async () => {
+    const env = makeEnv();
+    await handleSealedSend({ to: 'window02', envelope: 'only-msg' }, env, req({}));
+    await handleSealedPoll({ id: 'window02' }, env, req({}));
+    const ack = await handleSealedAck({ id: 'window02' }, env, req({}));
+    expect((await ack.json()).kept).toBe(0);
+    expect((await (await handleSealedPoll({ id: 'window02' }, env, req({}))).json()).messages).toEqual([]);
+    // The high-water-mark marker is cleaned up too.
+    expect(await env.KV.get('sealed:window02:hwm')).toBeNull();
+  });
+
+  it('ack with no prior poll (no high-water mark) still full-deletes (backward compat)', async () => {
+    const env = makeEnv();
+    await handleSealedSend({ to: 'window03', envelope: 'unpolled' }, env, req({}));
+    const ack = await handleSealedAck({ id: 'window03' }, env, req({}));
+    expect(ack.status).toBe(200);
+    expect((await (await handleSealedPoll({ id: 'window03' }, env, req({}))).json()).messages).toEqual([]);
+  });
+
+  it('returns 500 ACK_FAILED when the selective-delete KV write fails', async () => {
+    const env = makeEnv();
+    await handleSealedSend({ to: 'window04', envelope: 'm1' }, env, req({}));
+    await handleSealedPoll({ id: 'window04' }, env, req({}));
+    await new Promise(r => setTimeout(r, 2));
+    await handleSealedSend({ to: 'window04', envelope: 'm2' }, env, req({}));
+    // A survivor exists → ack takes the kvPut path; make that throw.
+    const realPut = env.KV.put.bind(env.KV);
+    env.KV.put = async (key, ...rest) => { if (key === 'sealed:window04') throw new Error('KV down'); return realPut(key, ...rest); };
+    const ack = await handleSealedAck({ id: 'window04' }, env, req({}));
+    expect(ack.status).toBe(500);
+    expect((await ack.json()).code).toBe('ACK_FAILED');
+  });
+
   it('deduplicates identical envelopes sent twice (replay guard)', async () => {
     const env = makeEnv();
     await handleSealedSend({ to: 'dave0001', envelope: 'SAME_PAYLOAD_XYZ' }, env, req({}));

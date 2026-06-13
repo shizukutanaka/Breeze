@@ -2139,6 +2139,14 @@ async function handleSealedPoll(body, env, request) {
   // If client crashes after poll but before processing, messages survive 5 min
   // Client-side _replayCache + IDB dedup prevents re-rendering on re-poll
   await kvPut(env, key, data, { expirationTtl: 300 }); // 5 min grace
+  // Record a high-water mark (max ts returned) so the later ACK clears ONLY what was
+  // actually polled. handleSealedAck previously blind-deleted the whole queue, so any
+  // envelope appended by handleSealedSend in the poll→ack window was destroyed
+  // undelivered — a silent loss on the "reliable" sealed path. Only written when there
+  // are messages, so idle polls (the common case) still do zero extra KV writes.
+  let maxTs = 0;
+  for (const m of messages) { if (Number.isFinite(m?.ts) && m.ts > maxTs) maxTs = m.ts; }
+  if (maxTs > 0) await kvPut(env, `${key}:hwm`, String(maxTs), { expirationTtl: 300 });
   return json({ messages }, 200, request);
 }
 
@@ -2147,8 +2155,26 @@ async function handleSealedAck(body, env, request) {
   const { id } = body;
   if (!id || typeof id !== 'string') return json({ error: 'id required', code: 'MISSING_ID' }, 400, request);
   if (!validateUserId(id)) return json({ error: 'invalid id', code: 'INVALID_ID' }, 400, request);
-  // kvDel returns false on a genuine KV API error (not on key-not-found, which is idempotent).
-  // Report failure so the client can retry rather than silently believing messages were cleared.
+  // Clear only what the client actually polled. handleSealedPoll records a high-water mark
+  // (max ts of the returned batch); here we keep any envelope with ts > hwm, i.e. one that
+  // arrived in the poll→ack window, instead of blind-deleting the whole queue and losing it.
+  // kvDel/kvPut return false on a genuine KV API error (not on key-not-found, which is
+  // idempotent); report failure so the client retries rather than believing it was cleared.
+  const hwmKey = `sealed:${id}:hwm`;
+  const hwmRaw = await kvGet(env, hwmKey);
+  const hwm = hwmRaw !== null ? parseInt(hwmRaw) : NaN;
+  if (Number.isFinite(hwm)) {
+    const raw = await kvGet(env, `sealed:${id}`);
+    const queue = raw ? safeJsonParse(raw, []) : [];
+    const remaining = Array.isArray(queue) ? queue.filter(m => Number.isFinite(m?.ts) && m.ts > hwm) : [];
+    let ok;
+    if (remaining.length === 0) ok = await kvDel(env, `sealed:${id}`);
+    else ok = await kvPut(env, `sealed:${id}`, JSON.stringify(remaining), { expirationTtl: 604800 });
+    if (!ok) return json({ error: 'Failed to confirm delivery', code: 'ACK_FAILED' }, 500, request);
+    await kvDel(env, hwmKey); // best-effort marker cleanup (also expires via its own TTL)
+    return json({ ok: true, kept: remaining.length }, 200, request);
+  }
+  // No high-water mark (client never polled, or a pre-hwm ACK): fall back to full delete.
   const deleted = await kvDel(env, `sealed:${id}`);
   if (!deleted) return json({ error: 'Failed to confirm delivery', code: 'ACK_FAILED' }, 500, request);
   return json({ ok: true }, 200, request);
