@@ -790,8 +790,12 @@ async function handleWebhook(request, env) {
       // the `parsed.slots || 1` read path.  Our code always sends a numeric string, but
       // a Stripe metadata edit or replay of a tampered event would reach this path.
       const planSlots = parseInt(session.metadata.slots) || 2;
-      await kvPut(env, `slots:${userId}`, JSON.stringify({ slots: planSlots, plan: session.metadata.plan || 'lite', customerId, updatedAt: Date.now() }));
-      if (customerId) await kvPut(env, `cust:${customerId}`, userId);
+      const slotsOk = await kvPut(env, `slots:${userId}`, JSON.stringify({ slots: planSlots, plan: session.metadata.plan || 'lite', customerId, updatedAt: Date.now() }));
+      if (!slotsOk) return new Response('KV write failed', { status: 500 });
+      if (customerId) {
+        const custOk = await kvPut(env, `cust:${customerId}`, userId);
+        if (!custOk) return new Response('KV write failed', { status: 500 });
+      }
     }
   }
 
@@ -805,7 +809,8 @@ async function handleWebhook(request, env) {
     // Re-validate after KV retrieval: the stored value could be stale pre-validation data.
     if (userId && validateUserId(userId)) {
       // Reset to free tier (1 account)
-      await kvPut(env, `slots:${userId}`, JSON.stringify({ slots: 1, plan: 'free', updatedAt: Date.now() }));
+      const slotsOk = await kvPut(env, `slots:${userId}`, JSON.stringify({ slots: 1, plan: 'free', updatedAt: Date.now() }));
+      if (!slotsOk) return new Response('KV write failed', { status: 500 });
     }
   }
 
@@ -828,10 +833,11 @@ async function handleWebhook(request, env) {
       // Same NaN guard as checkout.session.completed: fall back to 1 (free tier) on
       // parse failure so a bad metadata value doesn't store NaN in KV.
       const newSlots = parseInt(sub.metadata.slots) || 1;
-      await kvPut(env, `slots:${userId}`, JSON.stringify({
+      const slotsOk = await kvPut(env, `slots:${userId}`, JSON.stringify({
         slots: newSlots, plan: sub.metadata.plan || 'lite',
         customerId: sub.customer, updatedAt: Date.now()
       }));
+      if (!slotsOk) return new Response('KV write failed', { status: 500 });
     }
   }
 

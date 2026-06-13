@@ -2295,6 +2295,62 @@ describe('webhook signature + idempotency', () => {
     expect(stored.slots).toBe(1);
     expect(Number.isNaN(stored.slots)).toBe(false);
   });
+
+  // Item 32: KV failure in billing writes must return 500 so Stripe retries
+  it('returns 500 if slots KV write fails on checkout.session.completed (billing not lost)', async () => {
+    const e = env();
+    const realPut = e.KV.put.bind(e.KV);
+    e.KV.put = async (key, ...rest) => {
+      if (key.startsWith('slots:')) throw new Error('KV unavailable');
+      return realPut(key, ...rest);
+    };
+    const ev = JSON.stringify({
+      id: 'evt_kv_fail_checkout', type: 'checkout.session.completed',
+      data: { object: { metadata: { userId: 'user00010', type: 'account_plan', slots: '4', plan: 'plus' } } },
+    });
+    const sig = await stripeSigHeader(ev, secret);
+    const res = await handleWebhook(webhookReq(ev, sig), e);
+    // Must 500 so Stripe retries — NOT 200 with lost billing
+    expect(res.status).toBe(500);
+    // Event must NOT be marked processed (so Stripe retry can succeed)
+    expect(await e.KV.get('evt:evt_kv_fail_checkout')).toBeNull();
+  });
+
+  it('returns 500 if slots KV write fails on subscription.deleted (downgrade not lost)', async () => {
+    const e = env();
+    await e.KV.put('slots:user00011', JSON.stringify({ slots: 4, plan: 'plus' }));
+    const realPut = e.KV.put.bind(e.KV);
+    e.KV.put = async (key, ...rest) => {
+      if (key.startsWith('slots:')) throw new Error('KV unavailable');
+      return realPut(key, ...rest);
+    };
+    const ev = JSON.stringify({
+      id: 'evt_kv_fail_sub_del', type: 'customer.subscription.deleted',
+      data: { object: { metadata: { userId: 'user00011' }, customer: 'cus_del' } },
+    });
+    const sig = await stripeSigHeader(ev, secret);
+    const res = await handleWebhook(webhookReq(ev, sig), e);
+    expect(res.status).toBe(500);
+    expect(await e.KV.get('evt:evt_kv_fail_sub_del')).toBeNull();
+  });
+
+  it('returns 500 if slots KV write fails on subscription.updated (upgrade not lost)', async () => {
+    const e = env();
+    await e.KV.put('slots:user00012', JSON.stringify({ slots: 2, plan: 'lite' }));
+    const realPut = e.KV.put.bind(e.KV);
+    e.KV.put = async (key, ...rest) => {
+      if (key.startsWith('slots:')) throw new Error('KV unavailable');
+      return realPut(key, ...rest);
+    };
+    const ev = JSON.stringify({
+      id: 'evt_kv_fail_sub_upd', type: 'customer.subscription.updated',
+      data: { object: { metadata: { userId: 'user00012', slots: '4', plan: 'plus' }, customer: 'cus_upd' } },
+    });
+    const sig = await stripeSigHeader(ev, secret);
+    const res = await handleWebhook(webhookReq(ev, sig), e);
+    expect(res.status).toBe(500);
+    expect(await e.KV.get('evt:evt_kv_fail_sub_upd')).toBeNull();
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

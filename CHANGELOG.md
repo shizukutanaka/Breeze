@@ -1,5 +1,22 @@
 # Changelog
 
+## Webhook billing KV failure propagation — item 32 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+586 tests (+3); no breaking wire change.
+
+- **`handleWebhook`** previously called `kvPut` for billing state changes
+  (`checkout.session.completed`, `subscription.deleted`, `subscription.updated`) without
+  checking the return value. If Cloudflare KV was temporarily unavailable, the event was
+  still marked as processed (line 839), preventing Stripe from retrying — the user's slot
+  assignment was silently lost.
+- **Fix**: each billing `kvPut` result is now checked. On failure the handler returns
+  `500` immediately (before the "mark processed" write), so Stripe retries the webhook on
+  its normal backoff schedule. The idempotency key is never written on 500, so the retry
+  is correctly re-processed.
+- **Tests (+3)**: KV failure on `checkout.session.completed` → 500 + event not marked;
+  KV failure on `subscription.deleted` → 500 + event not marked; KV failure on
+  `subscription.updated` → 500 + event not marked.
+
 ## Drop server-side ID generation + unknown IP rate limit cap — item 31 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 583 tests (+8); no breaking wire change.
