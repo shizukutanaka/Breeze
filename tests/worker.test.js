@@ -91,7 +91,7 @@ describe('routing & request validation (export default fetch)', () => {
     // The lifecycle endpoints added this session must be discoverable.
     for (const cap of [
       'account-delete', 'group-leave', 'group-delete', 'group-transfer', 'group-rename',
-      'batch-alias', 'group-caps', 'backup-auth',
+      'batch-alias', 'group-caps', 'backup-auth', 'drop-server-id',
     ]) {
       expect(j.capabilities).toContain(cap);
     }
@@ -2523,6 +2523,101 @@ describe('dead drop (create + read)', () => {
     expect(r2.status).toBe(400);
     const r3 = await handleDropRead({ id: 'bad id!' }, e, readReq({}));
     expect(r3.status).toBe(400);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Item 31 — Drop server-side ID generation + unknown IP rate limit
+// ─────────────────────────────────────────────────────────────────────────────
+describe('dead drop — server-side ID generation (item 31)', () => {
+  const req = (body) => apiRequest('/api/drop/create', body);
+
+  it('generates a server-side id and returns it when client omits id', async () => {
+    const e = makeEnv();
+    const res = await handleDropCreate({ ct: 'encrypted-payload' }, e, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.ok).toBe(true);
+    expect(typeof j.id).toBe('string');
+    expect(j.id.length).toBeGreaterThanOrEqual(32);
+    expect(/^[a-f0-9]+$/.test(j.id)).toBe(true); // UUID hex, no dashes
+    expect(typeof j.ttl).toBe('number');
+  });
+
+  it('client-provided id is accepted and echoed back in response', async () => {
+    const e = makeEnv();
+    const res = await handleDropCreate({ id: 'client-chosen-id', ct: 'x' }, e, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).id).toBe('client-chosen-id');
+  });
+
+  it('response always includes id even for legacy client-provided ids', async () => {
+    const e = makeEnv();
+    const j = await (await handleDropCreate({ id: 'abc123', ct: 'x' }, e, req({}))).json();
+    expect(j.id).toBe('abc123');
+    expect(j.ok).toBe(true);
+  });
+
+  it('server-generated id stored in KV can be read back immediately', async () => {
+    const e = makeEnv();
+    const created = await (await handleDropCreate({ ct: 'secret' }, e, req({}))).json();
+    const { handleDropRead: readFn } = await import('../_worker.js');
+    const res = await readFn({ id: created.id }, e, apiRequest('/api/drop/read', {}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).ct).toBe('secret');
+  });
+
+  it('returns 500 STORE_FAILED when KV put throws on drop create', async () => {
+    const e = makeEnv();
+    const realPut = e.KV.put.bind(e.KV);
+    e.KV.put = async (key) => { if (key.startsWith('drop:')) throw new Error('KV unavailable'); return realPut(...arguments); };
+    const res = await handleDropCreate({ ct: 'x' }, e, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+  });
+
+  it('two server-generated ids for concurrent creates are always distinct', async () => {
+    const e = makeEnv();
+    const [r1, r2] = await Promise.all([
+      handleDropCreate({ ct: 'ct1' }, e, req({})),
+      handleDropCreate({ ct: 'ct2' }, e, req({})),
+    ]);
+    const j1 = await r1.json();
+    const j2 = await r2.json();
+    expect(j1.id).not.toBe(j2.id);
+  });
+});
+
+describe('rate limiting — unknown IP gets stricter cap', () => {
+  function noIpRequest(path, body) {
+    return new Request('https://breeze.test' + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it('caps unknown-IP requests at 5 rpm (not the normal path limit)', async () => {
+    const env = makeEnv();
+    let last;
+    for (let i = 0; i < 6; i++) {
+      last = await worker.fetch(noIpRequest('/api/presence', { userId: 'abc123' }), env);
+    }
+    expect(last.status).toBe(429);
+    expect((await last.json()).code).toBe('RATE_LIMITED');
+  });
+
+  it('normal IP is not rate-limited until the full path limit (20 for /api/presence)', async () => {
+    const env = makeEnv();
+    let last;
+    for (let i = 0; i < 20; i++) {
+      last = await worker.fetch(apiRequest('/api/presence', { userId: 'abc123' }), env);
+    }
+    // 20 requests exactly at the limit — the 20th should still pass
+    expect(last.status).not.toBe(429);
+    // 21st exceeds the limit
+    const over = await worker.fetch(apiRequest('/api/presence', { userId: 'abc123' }), env);
+    expect(over.status).toBe(429);
   });
 });
 

@@ -1,5 +1,30 @@
 # Changelog
 
+## Drop server-side ID generation + unknown IP rate limit cap — item 31 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+583 tests (+8); no breaking wire change.
+
+- **`handleDropCreate`** now supports **server-side ID generation**: when the client omits
+  `id` from the request body, the server generates a UUID-derived 32-char hex ID
+  (`crypto.randomUUID().replace(/-/g,'')`) and returns it as `{ ok: true, id, ttl }`.
+  This completely eliminates the check-then-set collision race (Cloudflare KV has no atomic
+  CAS, so two concurrent requests with the same client-provided ID could both pass the
+  collision check and overwrite each other). Clients that still provide their own `id`
+  continue to work unchanged.
+- **Response now includes `id`** always (even for client-provided IDs), enabling callers to
+  build the drop URL from the response rather than from state — a cleaner API contract.
+- **STORE_FAILED propagation**: `handleDropCreate` now checks the return value of
+  `kvPut` and returns `500 STORE_FAILED` on failure (consistent with items 27).
+- **Health capability** `'drop-server-id'` advertised.
+- **Unknown IP rate limit cap**: requests with no `CF-Connecting-IP` header (all appear as
+  `'unknown'`) are now capped at `min(path_limit, 5)` rpm — previously they all shared one
+  bucket at the full path limit, so a burst from one non-CF source could fill the shared
+  `unknown` bucket and rate-limit all other non-CF requests on the same endpoint.
+- **Tests (+8)**: server-generated ID is 32-char hex; client-provided ID echoed back;
+  legacy short IDs still accepted; server-generated ID readable after create; STORE_FAILED
+  on KV throw; two concurrent server-generated IDs are always distinct; unknown IP rate-
+  limited after 5 rpm; normal IP not rate-limited until 21st request.
+
 ## Online counter minute-boundary fallback — item 30 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 575 tests (+3); no breaking wire change.

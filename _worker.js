@@ -118,7 +118,7 @@ export default {
           'account-delete', 'group-leave', 'group-delete', 'group-admin',
           'group-transfer', 'group-rename', 'msg-disappear-enforce',
           'sealed-sender', 'franking', 'prekey-x3dh',
-          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'backup-auth',
+          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'backup-auth', 'drop-server-id',
         ],
         crypto: ['X25519', 'Ed25519', 'AES-256-GCM', 'HKDF-SHA256', 'Double Ratchet', 'Sender Key O(1)'],
         ts: Date.now(),
@@ -183,7 +183,9 @@ export default {
         '/api/translate': 15,
         '/api/ai': 10,
       };
-      const limit = limits[path] || 30;
+      // Cap 'unknown' IP (no CF-Connecting-IP) at 5 rpm regardless of path —
+      // prevents a shared bucket from being monopolized in non-CF deployments.
+      const limit = ip === 'unknown' ? Math.min(limits[path] || 30, 5) : (limits[path] || 30);
 
       // v3.6: In-memory rate limiter (saves KV writes — critical for free tier)
       // KV free tier: 1000 writes/day. In-memory resets per isolate (~5min).
@@ -2148,16 +2150,25 @@ async function handleBackupDownload(body, env, request) {
 // Server stores ciphertext → single read → auto-delete
 // ═══════════════════════════════════════════════════════════
 async function handleDropCreate(body, env, request) {
-  const { id, ct, ttl } = body;
-  if (!id || !ct) return json({ error: 'id and ct required', code: 'MISSING_FIELDS' }, 400, request);
-  if (typeof id !== 'string' || id.length < 1 || id.length > 64 || !/^[A-Za-z0-9_\-.]+$/.test(id)) return json({ error: 'invalid id (1-64 alphanumeric/_/./- chars)', code: 'INVALID_ID' }, 400, request);
+  const { ct, ttl } = body;
+  let id = body.id;
+  // Server-generated IDs eliminate the check-then-set collision race entirely.
+  // Client-provided IDs are accepted for backward compatibility (e.g. existing clients).
+  if (id !== undefined) {
+    if (typeof id !== 'string' || id.length < 1 || id.length > 64 || !/^[A-Za-z0-9_\-.]+$/.test(id))
+      return json({ error: 'invalid id (1-64 alphanumeric/_/./- chars)', code: 'INVALID_ID' }, 400, request);
+  } else {
+    id = crypto.randomUUID().replace(/-/g, '');
+  }
+  if (!ct) return json({ error: 'ct required', code: 'MISSING_FIELDS' }, 400, request);
   if (typeof ct !== 'string' || ct.length > 100000) return json({ error: 'ct too large (max 100KB)', code: 'PAYLOAD_TOO_LARGE' }, 400, request);
   const ttlSec = Math.min(Math.max(parseInt(ttl) || 86400, 300), 604800); // 5min - 7days, default 24h
   const key = `drop:${id}`;
   const existing = await kvGet(env, key);
   if (existing) return json({ error: 'id collision', code: 'COLLISION' }, 409, request);
-  await kvPut(env, key, JSON.stringify({ ct, createdAt: Date.now(), reads: 0 }), { expirationTtl: ttlSec });
-  return json({ ok: true, ttl: ttlSec }, 200, request);
+  const stored = await kvPut(env, key, JSON.stringify({ ct, createdAt: Date.now() }), { expirationTtl: ttlSec });
+  if (!stored) return json({ error: 'Failed to store drop', code: 'STORE_FAILED' }, 500, request);
+  return json({ ok: true, id, ttl: ttlSec }, 200, request);
 }
 
 async function handleDropRead(body, env, request) {
