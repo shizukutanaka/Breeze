@@ -1,5 +1,21 @@
 # Changelog
 
+## Standalone alias delete — release alias without account deletion (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+299 tests (+6); no breaking wire change.
+
+- **`/api/alias/delete`** — Ed25519-authenticated endpoint to release a vanity `@handle`
+  while keeping identity, contacts, messages, and billing record intact. Previously the
+  only way to free an alias was to delete the entire account. Challenge string
+  `breeze-alias-delete:{alias}:{ts}` (distinct from the account-delete challenge) prevents
+  cross-endpoint replay. Ownership double-check: `alias.pub` must equal the requester's
+  `identityKey` from their prekey bundle — no third-party alias squatting. Returns
+  `{ ok, removed }` — idempotent; a missing alias returns `removed: false`, not 404.
+  Rate-limited at 5 req/min. Added `alias-delete` to health capabilities.
+- Endpoint count updated to 43.
+- **Tests (+6)**: valid delete removes KV record; no-op on nonexistent alias; 403 on
+  non-owner pub; 403 on tampered signature; 400 on missing fields; 400 on stale timestamp.
+
 ## Abuse report moderation webhook (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 545 tests (+1); no breaking wire change.

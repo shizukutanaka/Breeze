@@ -118,7 +118,7 @@ export default {
           'account-delete', 'group-leave', 'group-delete', 'group-admin',
           'group-transfer', 'group-rename', 'msg-disappear-enforce',
           'sealed-sender', 'franking', 'prekey-x3dh',
-          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status',
+          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete',
         ],
         crypto: ['X25519', 'Ed25519', 'AES-256-GCM', 'HKDF-SHA256', 'Double Ratchet', 'Sender Key O(1)'],
         ts: Date.now(),
@@ -163,6 +163,7 @@ export default {
         '/api/account/purchase': 3,
         '/api/alias/set': 10,
         '/api/alias/get': 30,
+        '/api/alias/delete': 5,
         '/api/portal': 5,
         '/api/group/create': 5,
         '/api/group/join': 10,
@@ -279,6 +280,7 @@ export default {
         case '/api/presence':  return await handlePresence(body, env, request);
         case '/api/alias/set': return await handleAliasSet(body, env, request);
         case '/api/alias/get': return await handleAliasGet(body, env, request);
+        case '/api/alias/delete': return await handleAliasDelete(body, env, request);
         
         case '/api/portal':    return await handlePortal(body, env, request);
         case '/api/group/create': return await handleGroupCreate(body, env, request);
@@ -637,6 +639,52 @@ async function handleAliasSet(body, env, request) {
   // Store (no TTL — aliases are permanent)
   await kvPut(env, `alias:${clean}`, JSON.stringify({ pub, name: sanitizeString(name, 64), setAt: Date.now() }));
   return json({ ok: true, alias: clean }, 200, request);
+}
+
+// ============================================================
+// ALIAS DELETE — release a vanity alias without deleting the account
+//
+// Without this, the only way to free an alias is to delete the entire account.
+// This endpoint lets a user reclaim or reassign their @handle while keeping
+// their identity, contacts, messages and billing record intact.
+//
+// Auth: same Ed25519 pattern as handleAccountDelete but with a different
+// challenge to prevent cross-endpoint replay:
+//   sig = Ed25519-sign(`breeze-alias-delete:{alias}:{ts}`)
+// Ownership is double-verified: the stored alias record's `pub` must equal
+// the `identityKey` in the requester's prekey bundle — the same check
+// handleAccountDelete does for optional alias release.
+// ============================================================
+async function handleAliasDelete(body, env, request) {
+  const { alias, userId, ts, sig } = body;
+  if (!alias || !userId || !sig || ts === undefined)
+    return json({ error: 'alias, userId, ts, sig required', code: 'MISSING_FIELDS' }, 400, request);
+  if (typeof alias !== 'string' || typeof sig !== 'string')
+    return json({ error: 'invalid field types', code: 'INVALID_FIELD' }, 400, request);
+  if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
+  if (sig.length > 500) return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
+  if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > 300000)
+    return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
+
+  const clean = alias.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
+  if (clean.length < 3) return json({ error: 'invalid alias', code: 'INVALID_FIELD' }, 400, request);
+
+  const data = await kvGet(env, `prekey:${userId}`);
+  const bundle = data ? safeJsonParse(data) : null;
+  if (!bundle || typeof bundle.edIdentityKey !== 'string' || !bundle.edIdentityKey)
+    return json({ error: 'No registered identity key to authenticate deletion', code: 'NO_IDENTITY_KEY' }, 403, request);
+
+  const challenge = `breeze-alias-delete:${clean}:${ts}`;
+  const ok = await verifyEd25519(bundle.edIdentityKey, btoa(challenge), sig);
+  if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
+
+  const aliasRec = safeJsonParse(await kvGet(env, `alias:${clean}`));
+  if (!aliasRec) return json({ ok: true, removed: false }, 200, request);
+  if (aliasRec.pub !== bundle.identityKey)
+    return json({ error: 'Alias not owned by this identity', code: 'NOT_OWNER' }, 403, request);
+
+  await kvDel(env, `alias:${clean}`);
+  return json({ ok: true, removed: true }, 200, request);
 }
 
 async function handleAliasGet(body, env, request) {
@@ -2504,6 +2552,7 @@ export {
   handleMsgPoll,
   handleAliasSet,
   handleAliasGet,
+  handleAliasDelete,
   validateUserId,
   sanitizeString,
   kvGet,

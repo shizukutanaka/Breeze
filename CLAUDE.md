@@ -5,7 +5,7 @@ Strictly follow ./AGENTS.md for full rules. Key points below.
 ## Architecture
 Single-file app: index.html (CSS+HTML+JS), _worker.js (Cloudflare Worker), sw.js.
 No build step. No framework. No npm dependencies. Vanilla JS only.
-v3.6.0: 13,116 client + ~2,330 worker + 145 SW lines. 42 API endpoints. 420 i18n keys (EN+JA).
+v3.6.0: 13,116 client + ~2,340 worker + 145 SW lines. 43 API endpoints. 420 i18n keys (EN+JA).
 
 ## Must Use
 - `t('key')` for ALL UI text (never hardcode English)

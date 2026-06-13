@@ -35,6 +35,7 @@ import worker, {
   handleMsgPoll,
   handleAliasSet,
   handleAliasGet,
+  handleAliasDelete,
   handleDropCreate,
   handleDropRead,
   handleBackupUpload,
@@ -1872,6 +1873,99 @@ describe('alias set / get (PoW anti-spam)', () => {
     const { results } = await res.json();
     expect(results.alice.pub).toBe('PUBA');
     expect(Object.keys(results).length).toBeLessThanOrEqual(50);
+  });
+});
+
+describe('alias delete — standalone alias release without account deletion', () => {
+  const req = (b) => apiRequest('/api/alias/delete', b);
+
+  async function registeredWithAlias(env, userId, aliasName) {
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
+    const spk = crypto.getRandomValues(new Uint8Array(32));
+    const spkSig = new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, spk));
+    await handlePreKeyUpload({
+      userId, identityKey: 'IK-' + userId,
+      edIdentityKey: toB64(edPub), signedPreKey: toB64(spk), signedPreKeySig: toB64(spkSig),
+      oneTimePreKeys: [],
+    }, env, apiRequest('/api/prekey/upload', {}));
+    await env.KV.put(`alias:${aliasName}`, JSON.stringify({ pub: 'IK-' + userId, name: 'Me', setAt: Date.now() }));
+    return { ed };
+  }
+
+  async function signAliasDel(ed, alias, ts) {
+    const msg = new TextEncoder().encode(`breeze-alias-delete:${alias}:${ts}`);
+    return toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, msg)));
+  }
+
+  it('removes the alias and returns { ok: true, removed: true } for a valid signed request', async () => {
+    const env = makeEnv();
+    const userId = 'alsdel01';
+    const { ed } = await registeredWithAlias(env, userId, 'myhandle');
+    const ts = Date.now();
+    const sig = await signAliasDel(ed, 'myhandle', ts);
+    const res = await handleAliasDelete({ alias: 'myhandle', userId, ts, sig }, env, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).removed).toBe(true);
+    expect(await env.KV.get('alias:myhandle')).toBeNull();
+  });
+
+  it('returns { ok: true, removed: false } for an alias that does not exist', async () => {
+    const env = makeEnv();
+    const userId = 'alsdel02';
+    const { ed } = await registeredWithAlias(env, userId, 'phantom');
+    // Delete the alias from KV so it no longer exists
+    await env.KV.delete('alias:phantom');
+    const ts = Date.now();
+    const sig = await signAliasDel(ed, 'phantom', ts);
+    const res = await handleAliasDelete({ alias: 'phantom', userId, ts, sig }, env, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).removed).toBe(false);
+  });
+
+  it('rejects with 403 when the alias is owned by a different identity', async () => {
+    const env = makeEnv();
+    const userId = 'alsdel03';
+    const { ed } = await registeredWithAlias(env, userId, 'taken');
+    // Overwrite the alias so it belongs to a different pub
+    await env.KV.put('alias:taken', JSON.stringify({ pub: 'IK-someone-else', name: 'Other', setAt: Date.now() }));
+    const ts = Date.now();
+    const sig = await signAliasDel(ed, 'taken', ts);
+    const res = await handleAliasDelete({ alias: 'taken', userId, ts, sig }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('NOT_OWNER');
+    // Alias must still exist
+    expect(await env.KV.get('alias:taken')).not.toBeNull();
+  });
+
+  it('rejects with 403 on a tampered signature', async () => {
+    const env = makeEnv();
+    const userId = 'alsdel04';
+    const { ed } = await registeredWithAlias(env, userId, 'secure');
+    const ts = Date.now();
+    // Sign the wrong challenge
+    const badSig = await signAliasDel(ed, 'wrongalias', ts);
+    const res = await handleAliasDelete({ alias: 'secure', userId, ts, sig: badSig }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+    expect(await env.KV.get('alias:secure')).not.toBeNull();
+  });
+
+  it('rejects missing required fields', async () => {
+    const res = await handleAliasDelete({ alias: 'x', userId: 'alsdel05' }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('MISSING_FIELDS');
+  });
+
+  it('rejects a stale timestamp (±5 min window)', async () => {
+    const env = makeEnv();
+    const userId = 'alsdel06';
+    const { ed } = await registeredWithAlias(env, userId, 'staletest');
+    const oldTs = Date.now() - 10 * 60 * 1000; // 10 minutes ago
+    const sig = await signAliasDel(ed, 'staletest', oldTs);
+    const res = await handleAliasDelete({ alias: 'staletest', userId, ts: oldTs, sig }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_TIMESTAMP');
   });
 });
 
