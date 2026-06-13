@@ -57,6 +57,7 @@ import worker, {
   handlePushUnsubscribe,
   handlePreKeyFetchBatch,
   handlePreKeyStatus,
+  sendPushToUser,
 } from '../_worker.js';
 import { makeKV, makeEnv, apiRequest, stripeSigHeader } from './helpers/mockKV.js';
 import { createFranking } from '../src/crypto/franking.js';
@@ -2261,6 +2262,67 @@ describe('push subscribe SSRF guard', () => {
     expect(saved.keys.p256dh.length).toBeLessThanOrEqual(100);
     expect(saved.keys.auth.length).toBeLessThanOrEqual(50);
     expect(saved.keys).not.toHaveProperty('extra');
+  });
+});
+
+// Item 39: sendPushToUser must remove ALL dead subscriptions in one push cycle. The old
+// in-loop filter recomputed `subs.filter(...)` from the original array each time, so with
+// two stale subs it clobbered the first removal and left one resurrected.
+describe('push delivery dead-subscription cleanup (item 39)', () => {
+  const b64url = (bytes) => Buffer.from(bytes).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+  // Generate a VAPID env (ECDSA P-256) and a valid client push key (ECDH P-256 + auth)
+  // so encryptPushPayload/buildVapidJwt succeed and delivery actually reaches fetch().
+  async function pushEnv() {
+    const vapid = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+    const vapidJwk = await crypto.subtle.exportKey('jwk', vapid.privateKey);
+    const vapidPubRaw = new Uint8Array(await crypto.subtle.exportKey('raw', vapid.publicKey));
+    return makeEnv({ VAPID_PRIVATE_KEY: vapidJwk.d, VAPID_PUBLIC_KEY: b64url(vapidPubRaw) });
+  }
+  async function clientSubKeys() {
+    const kp = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+    const pubRaw = new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey));
+    return { p256dh: b64url(pubRaw), auth: b64url(crypto.getRandomValues(new Uint8Array(16))) };
+  }
+  function sub(endpoint, keys) { return { endpoint, keys }; }
+
+  it('removes BOTH subscriptions when both return 410 (no clobber/resurrection)', async () => {
+    const env = await pushEnv();
+    const keys = await clientSubKeys();
+    const a = sub('https://fcm.googleapis.com/fcm/send/A', keys);
+    const b = sub('https://fcm.googleapis.com/fcm/send/B', keys);
+    await env.KV.put('push:race0001', JSON.stringify([a, b]));
+    vi.stubGlobal('fetch', async () => ({ status: 410 }));
+    try {
+      await sendPushToUser('race0001', { title: 'x', body: 'y' }, env);
+      // Both dead → key deleted entirely. The buggy version left one sub resurrected.
+      expect(await env.KV.get('push:race0001')).toBeNull();
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it('removes only the dead subscription and keeps the healthy one', async () => {
+    const env = await pushEnv();
+    const keys = await clientSubKeys();
+    const good = sub('https://fcm.googleapis.com/fcm/send/GOOD', keys);
+    const dead = sub('https://fcm.googleapis.com/fcm/send/DEAD', keys);
+    await env.KV.put('push:race0002', JSON.stringify([good, dead]));
+    vi.stubGlobal('fetch', async (url) => ({ status: String(url).includes('DEAD') ? 410 : 201 }));
+    try {
+      await sendPushToUser('race0002', { title: 'x', body: 'y' }, env);
+      const remaining = JSON.parse(await env.KV.get('push:race0002'));
+      expect(remaining.map(s => s.endpoint)).toEqual([good.endpoint]);
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it('also removes a subscription on 404 Not Found', async () => {
+    const env = await pushEnv();
+    const keys = await clientSubKeys();
+    await env.KV.put('push:race0003', JSON.stringify([sub('https://fcm.googleapis.com/fcm/send/X', keys)]));
+    vi.stubGlobal('fetch', async () => ({ status: 404 }));
+    try {
+      await sendPushToUser('race0003', { title: 'x', body: 'y' }, env);
+      expect(await env.KV.get('push:race0003')).toBeNull();
+    } finally { vi.unstubAllGlobals(); }
   });
 });
 

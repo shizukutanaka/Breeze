@@ -1,5 +1,27 @@
 # Changelog
 
+## Web Push dead-subscription cleanup removes ALL stale subs per cycle — item 39 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+609 tests (+3); additive, no wire change.
+
+Socratic trace of `sendPushToUser`'s "Remove expired subscriptions" comment (plural) against
+its code revealed it removed only **one** when several expired together. The removal ran
+*inside* the per-sub loop as `subs.filter(s => s.endpoint !== sub.endpoint)` recomputed from
+the **original** array each time, so for two stale subs `[A,B]`: the A-pass wrote `[B]`, then
+the B-pass wrote `subs−B = [A]` — resurrecting A. Net: one stale sub lingered every cycle,
+wasting a failed delivery until eventually cleaned.
+
+- **Fix**: accumulate stale endpoints in a `Set` during the loop and prune them in ONE
+  cumulative write after it (`subs.filter(s => !stale.has(s.endpoint))`, or `kvDel` when none
+  remain). Correct for any number of dead subs, and one KV write instead of N.
+- **Also**: treat `404 Not Found` as dead alongside `410 Gone` (standard Web Push cleanup
+  semantics; both mean the subscription no longer exists).
+- **Test seam**: `sendPushToUser` is now exported for unit testing.
+- **Tests (+3)**: both subs 410 → key deleted (no resurrection); one dead + one healthy →
+  only the dead removed; single 404 → removed. Mutation-verified (the old in-loop filter
+  fails the "removes BOTH" test). Tests use real VAPID + ECDH push keys so encryption and
+  delivery reach `fetch`.
+
 ## Account deletion erases the cust:{customerId} reverse mapping — item 38 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 606 tests (+2); additive, no wire change for existing clients.

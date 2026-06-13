@@ -1435,6 +1435,13 @@ async function sendPushToUser(userId, payload, env) {
   const subs = safeJsonParse(data, []);
   if (!Array.isArray(subs)) return;
   const plaintextStr = JSON.stringify(payload);
+  // Collect stale endpoints and prune them in ONE write after the loop. Removing inside
+  // the loop with `subs.filter(...)` recomputed each time from the ORIGINAL `subs` clobbers
+  // earlier removals: with two stale subs [A,B], the A-removal writes [B], then the
+  // B-removal writes subs−B = [A] (A resurrected). Net effect was "remove only the last
+  // failed sub per cycle" despite the plural intent. A cumulative post-loop prune fixes
+  // that and costs one KV write instead of N.
+  const stale = new Set();
   for (const sub of subs) {
     try {
       const [encrypted, jwt] = await Promise.all([
@@ -1452,12 +1459,14 @@ async function sendPushToUser(userId, payload, env) {
         },
         body: encrypted,
       }, 5000);
-      // Remove expired subscriptions
-      if (resp.status === 410) {
-        const remaining = subs.filter(s => s.endpoint !== sub.endpoint);
-        await kvPut(env, key, JSON.stringify(remaining), { expirationTtl: 86400 * 30 });
-      }
+      // 410 Gone (and 404 Not Found) mean the subscription is dead — mark for removal.
+      if (resp.status === 410 || resp.status === 404) stale.add(sub.endpoint);
     } catch {}
+  }
+  if (stale.size > 0) {
+    const remaining = subs.filter(s => !stale.has(s.endpoint));
+    if (remaining.length === 0) await kvDel(env, key);
+    else await kvPut(env, key, JSON.stringify(remaining), { expirationTtl: 86400 * 30 });
   }
 }
 
@@ -2735,6 +2744,7 @@ export {
   kvDel,
   encryptPushPayload,
   buildVapidJwt,
+  sendPushToUser,
   b64urlToBytes,
   bytesToB64url,
   concatBytes,
