@@ -1,5 +1,23 @@
 # Changelog
 
+## Batch presence cache hit + sealed-send dedup key length fix (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+302 tests (+3); no breaking wire change.
+
+- **Batch presence check uses in-memory cache first** — The batch `{ ids: [...], check: true }` path
+  unconditionally read KV for every user ID, costing N KV reads per group presence poll even when all
+  users had heartbeated recently (and their data was already in `_presenceCache`). The single-user check
+  path correctly read the cache first. Now the batch path does the same: cache hit → skip KV, miss →
+  fall through to KV. For a 10-member group polling every 5 s this drops ~120 KV reads/min to ~0 reads/min
+  while the isolate is warm.
+- **Sealed send dedup key now includes envelope length** — Dedup key was `${to}:${envelope.slice(0,32)}`;
+  two envelopes with the same 32-character prefix but different total lengths (distinct messages) would match
+  and the second would be silently dropped as a false duplicate. Key is now
+  `${to}:${envelope.length}:${envelope.slice(0,32)}`, matching the `handleMsgSend` pattern.
+- **Tests (+3)**: batch check serves from in-memory cache even when KV is empty for that user; batch
+  reports stale cached heartbeat as offline; distinct same-prefix envelopes of different lengths both
+  stored (length-keyed dedup regression test).
+
 ## Standalone alias delete — release alias without account deletion (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 299 tests (+6); no breaking wire change.

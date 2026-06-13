@@ -1422,6 +1422,18 @@ describe('sealed sender send / poll / ack', () => {
     expect(messages.length).toBe(1);
   });
 
+  it('does NOT dedup envelopes that share a 32-char prefix but differ in length (length-keyed dedup)', async () => {
+    // Without the length in the dedup key, 'AAAA...32...AAAA' and 'AAAA...32...AAAAextra' would
+    // share the same key and the second message would be silently dropped.
+    const env = makeEnv();
+    globalThis._sealedDedup = new Map(); // reset cross-test dedup state
+    const prefix = 'A'.repeat(32);
+    await handleSealedSend({ to: 'lentest1', envelope: prefix }, env, req({}));
+    await handleSealedSend({ to: 'lentest1', envelope: prefix + 'EXTRA' }, env, req({}));
+    const { messages } = await (await handleSealedPoll({ id: 'lentest1' }, env, req({}))).json();
+    expect(messages.length).toBe(2);
+  });
+
   it('poll returns 400 when id is missing', async () => {
     const res = await handleSealedPoll({}, makeEnv(), req({}));
     expect(res.status).toBe(400);
@@ -2676,6 +2688,33 @@ describe('presence heartbeat and check', () => {
     // malformed IDs must not appear in results at all (no KV lookup attempted)
     expect(j.online['bad id!!']).toBeUndefined();
     expect(j.online['../etc/passwd']).toBeUndefined();
+  });
+
+  it('batch check serves from in-memory cache when available (no KV reads for cached users)', async () => {
+    const e = makeEnv();
+    // Heartbeat writes to _presenceCache (in-memory) and to KV (after 5-min window).
+    // The test forces the write by resetting _presenceCache so the TTL guard is reset.
+    globalThis._presenceCache = new Map();
+    await handlePresence({ id: 'cacheuser1', pub: 'p', name: 'Alice' }, e, req({}));
+    // Now _presenceCache has the data. Remove the KV entry to prove the batch check
+    // does NOT fall through to KV for this user.
+    await e.KV.delete('presence:cacheuser1');
+    const r = await handlePresence({ ids: ['cacheuser1', 'noexist11'], check: true }, e, req({}));
+    const j = await r.json();
+    // In-memory cache hit → online even though KV is empty.
+    expect(j.online['cacheuser1']).toBe(true);
+    // Unknown user with no cache and no KV → offline.
+    expect(j.online['noexist11']).toBe(false);
+  });
+
+  it('batch check correctly reports offline for users whose cached heartbeat is stale (>60s)', async () => {
+    const e = makeEnv();
+    globalThis._presenceCache = new Map();
+    // Manually seed a stale cache entry (at = 2 minutes ago)
+    globalThis._presenceCache.set('presence:staleuser1:data', JSON.stringify({ at: Date.now() - 120000, name: 'Bob', pub: 'p' }));
+    const r = await handlePresence({ ids: ['staleuser1'], check: true }, e, req({}));
+    const j = await r.json();
+    expect(j.online['staleuser1']).toBe(false);
   });
 });
 

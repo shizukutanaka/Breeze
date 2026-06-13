@@ -497,9 +497,21 @@ async function handlePresence(body, env, request) {
   const safeCaps = sanitizeCaps(caps);
 
   // Batch check: { ids: ['abc','def'], check: true }
+  // v3.6: Check in-memory presence cache before KV for each id — the single-check
+  // path always did this, but the batch path hit KV unconditionally, costing N reads
+  // per group presence poll. A group of 10 members polling every 5 s = 10 KV reads/5s
+  // → 120 reads/min per user. Hitting the cache for recently-active users drops this
+  // to near 0 reads/min while isolates are warm.
   if (isCheck && ids && Array.isArray(ids)) {
     const online = {};
+    const memCache = globalThis._presenceCache || null;
     for (const cid of ids.slice(0, 50).filter(x => typeof x === 'string' && validateUserId(x))) {
+      const memRaw = memCache ? memCache.get(`presence:${cid}:data`) : null;
+      if (memRaw) {
+        const p = safeJsonParse(memRaw);
+        online[cid] = p ? (Date.now() - p.at) < 60000 : false;
+        continue;
+      }
       const data = await kvGet(env, `presence:${cid}`);
       if (data) {
         const p = safeJsonParse(data);
@@ -1985,8 +1997,11 @@ async function handleSealedSend(body, env, request) {
   if (!validateUserId(to)) return json({ error: 'invalid recipient id', code: 'INVALID_USER_ID' }, 400, request);
   if (typeof envelope !== 'string' || envelope.length > 256 * 1024) return json({ error: 'Envelope too large', code: 'PAYLOAD_TOO_LARGE' }, 400, request);
   // v3.6: In-memory dedup (saves 1 KV read + 1 KV write per sealed send)
+  // Include envelope.length in the dedup key (mirrors handleMsgSend). Two envelopes
+  // with identical first 32 bytes but different total sizes are distinct messages;
+  // without length the second would be silently dropped as a false duplicate.
   if (!globalThis._sealedDedup) globalThis._sealedDedup = new Map();
-  const dedupKey = `${to}:${envelope.slice(0, 32)}`;
+  const dedupKey = `${to}:${envelope.length}:${envelope.slice(0, 32)}`;
   if (globalThis._sealedDedup.has(dedupKey)) return json({ ok: true, dedup: true }, 200, request);
   globalThis._sealedDedup.set(dedupKey, 1);
   if (globalThis._sealedDedup.size > 500) { const e = [...globalThis._sealedDedup.entries()]; globalThis._sealedDedup = new Map(e.slice(-200)); }
