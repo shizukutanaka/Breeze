@@ -1,5 +1,17 @@
 # Changelog
 
+## Abuse report moderation webhook (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+545 tests (+1); no breaking wire change.
+
+- **`ABUSE_WEBHOOK_URL` env var** — when configured, a verified abuse report triggers a
+  non-blocking POST to that URL with `{ type, frankId, messageLen, at }`. The payload
+  contains NO message content — only metadata (frankId + size + timestamp). Previously
+  verified reports sat silently in KV for 90 days with no operator notification, making
+  the abuse system a dead end without a separate dashboard.
+- Fire-and-forget (`catch(() => {})`) — a failed webhook never blocks the reporter.
+- **Test (+1)**: verified report POSTs to the configured webhook URL with correct payload.
+
 ## Prekey status endpoint — non-destructive OTP/SPK health check (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 544 tests (+4); no breaking wire change.

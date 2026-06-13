@@ -68,6 +68,7 @@
 | 18 | **プッシュ通知の解除手段なし** | `/api/push/subscribe` で登録したサブスクリプションは 30 日の KV TTL まで削除不能。ブラウザから通知を無効化しても KV 側は残存し続ける | `/api/push/unsubscribe` を追加。`{ userId, endpoint }` で特定のデバイスのサブスクリプションを即時削除。`removed: 0` で冪等 |
 | 19 | **プリキー取得の N+1 問題** | グループ参加時に N 人分のセッション確立で `/api/prekey/fetch` を N 回呼ぶ必要がある — 往復 N 回 + N OTP 消費 | `/api/prekey/fetch/batch` を追加。最大10件を1リクエストで解決。OTP は各ユーザ分消費(レイテンシ最適化) |
 | 20 | **OTP/SPK 残量をオーナー自身が確認する手段なし** | `replenishOTP`/`replenishSPK` は `/api/prekey/fetch` でのみ返され、OTP を不可逆に消費する。IDB 消失後に自分のプリキー状態を確認できない | `/api/prekey/status` を追加。OTP を消費せず `{ otpCount, uploadedAt, replenishOTP, replenishSPK }` を返却 |
+| 21 | **通報が KV に死蔵される** | 検証済み通報(`report:{frankId}`)が 90 日間 KV に格納されるだけでオペレーターへの通知がなく、モデレーションの起点がない | `ABUSE_WEBHOOK_URL` env var サポートを追加。検証済み通報時に `{ type, frankId, messageLen, at }` を非同期 POST(メッセージ内容は含まない) |
 
 ### 未実装(優先度順・理由つき)
 
@@ -88,11 +89,11 @@
 
 ## 検証
 
-- `npm test` — 13 スイート / 544 件全成功(本セッションで +57 件:アカウント削除/
+- `npm test` — 13 スイート / 545 件全成功(本セッションで +57 件:アカウント削除/
   グループ leave・delete/disappearAt パージ/メッセージ ID で +14、複数管理者で +10、
   所有権移譲で +6、改名で +4、アカウント削除のグループ清掃で +2、health capabilities
   +1、課金エンドポイントで +11、グループ能力ネゴシエーションで +3、caps リフレッシュで +2、
-  バッチエイリアス解決で +2、replenishSPK + capabilities更新で +2、ktlog-get + OGP cap で +4、push unsubscribe で +4、prekey batch fetch で +3、prekey status で +4)
+  バッチエイリアス解決で +2、replenishSPK + capabilities更新で +2、ktlog-get + OGP cap で +4、push unsubscribe で +4、prekey batch fetch で +3、prekey status で +4、通報 webhook で +1)
 - `./validate.sh` — 33/36(ベースライン維持、⚠3 は既知の許容警告)
 - `node -c _worker.js && node -c sw.js` — 構文 OK
 - 新エンドポイント(account/delete・group/leave・group/delete・group/admin・

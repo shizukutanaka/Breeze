@@ -1352,6 +1352,31 @@ describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => 
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('FRANK_MISMATCH');
   });
+
+  it('POSTs to ABUSE_WEBHOOK_URL when a verified report is recorded', async () => {
+    const calls = [];
+    vi.stubGlobal('fetch', async (url, opts) => {
+      calls.push({ url, body: JSON.parse(opts.body) });
+      return { ok: true };
+    });
+    try {
+      const env = makeEnv({ ABUSE_WEBHOOK_URL: 'https://hooks.example.com/abuse' });
+      const message = 'webhook test message';
+      const { commitment, opening } = await F.commit(message);
+      await handleAbuseRecord({ frankId: 'hook-001', commitment: b64(commitment) }, env, req({}));
+      const rep = await handleAbuseReport({ frankId: 'hook-001', message, opening: b64(opening) }, env, req({}));
+      expect((await rep.json()).verified).toBe(true);
+      // Give the fire-and-forget a tick to run
+      await new Promise(r => setTimeout(r, 10));
+      expect(calls.length).toBeGreaterThanOrEqual(1);
+      const notif = calls.find(c => c.url === 'https://hooks.example.com/abuse');
+      expect(notif).toBeTruthy();
+      expect(notif.body.type).toBe('abuse_report');
+      expect(notif.body.frankId).toBe('hook-001');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
 
 describe('sealed sender send / poll / ack', () => {
