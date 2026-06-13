@@ -1,5 +1,31 @@
 # Changelog
 
+## Abuse-report webhook: in-memory dedup closes same-isolate race + honest comment — item 36 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+601 tests (+1); no breaking wire change.
+
+A Socratic follow-up to item 35: item 35's comment claimed the check-before-fire made the
+"idempotent on frankId" guarantee *true* — but KV has no atomic compare-and-swap, so two
+concurrent reports can both read `report:${frankId}` as absent (KV is eventually
+consistent) and both fire the webhook. The item-35 comment overclaimed.
+
+- **Fix (same-isolate race)**: added a synchronous `globalThis._frankWebhookFired`
+  check-and-set — the same in-memory-dedup pattern already used by `_msgDedup`/`_sealedDedup`.
+  With no `await` between `.has()` and `.set()`, concurrent retries hitting one warm isolate
+  (the common duplicate source) are serialized by the event loop and only the first fires.
+- **Honest comment**: the cross-isolate race remains (KV-bound, fixable only with a Durable
+  Object — out of scope). The comment now states exactly what the code guarantees and notes
+  the payload carries `frankId` for operator-side dedup, rather than claiming exactly-once.
+- **Tests (+1)**: two concurrent reports with simulated KV read-lag (both see the record as
+  absent) fire the webhook exactly once — proving the in-memory layer, not the KV check, is
+  what suppresses the duplicate.
+
+> Method note: the Explore agent proposed a "fire-then-check `at === Date.now()`" fix —
+> Socratically rejected (the timestamp always advances between write and readback, so it
+> would never match and wouldn't fix the race). The agent also flagged a non-issue elsewhere;
+> `handleAccountPurchase` (plan whitelist) and `handlePreKeyFetchBatch` (cap 10) were
+> independently re-verified as already-correct.
+
 ## Abuse-report webhook idempotency (Socratic audit) — item 35 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 600 tests (+2); no breaking wire change.

@@ -2019,27 +2019,51 @@ async function handleAbuseReport(body, env, request) {
   if (!commitment) return json({ error: 'No such franking record', code: 'NOT_FOUND' }, 404, request);
   const verified = await hmacVerifyFrank(commitment, opening, message);
   if (!verified) return json({ verified: false, error: 'Report does not match the sent message', code: 'FRANK_MISMATCH' }, 400, request);
-  // Idempotency: fire the moderation webhook (and stamp the report) only the FIRST time
-  // a given frankId is reported. The opening key Kf is delivered to the recipient inside
-  // the E2E payload, so a recipient holding a valid (frankId, message, opening) tuple — or
-  // a client that simply retries — could re-POST the same report. Previously every call
+  // Fire the moderation webhook (and stamp the report) only the FIRST time a given
+  // frankId is reported. The opening key Kf is delivered to the recipient inside the E2E
+  // payload, so a recipient holding a valid (frankId, message, opening) tuple — or a
+  // client that simply retries — could re-POST the same report. Without dedup every call
   // re-fired the operator webhook (up to the 10/min rate limit), flooding the moderation
-  // queue with duplicates of a single report. Check-before-fire makes the documented
-  // "idempotent on frankId" guarantee true for the webhook, not just the KV write.
+  // queue with duplicates of one report.
+  //
+  // Two dedup layers, mirroring handleMsgSend/_msgDedup:
+  //  1. Same-isolate (primary): a SYNCHRONOUS check-and-set on globalThis — no `await`
+  //     between .has() and .set(), so concurrent retries hitting one warm isolate (the
+  //     common duplicate source) are serialized by the single-threaded event loop and
+  //     only the first fires.
+  //  2. Cross-isolate / persistent (secondary): the KV `report:` record below.
+  //
+  // KV has no atomic compare-and-swap, so a cross-isolate concurrent race can still fire
+  // the webhook more than once within the KV write-propagation window. The payload carries
+  // `frankId` so the operator dedups receiver-side; exactly-once would require a Durable
+  // Object (out of scope). This comment states what the code actually guarantees.
   const alreadyReported = await kvGet(env, `report:${frankId}`);
-  // Record the verified report for moderation (idempotent on frankId).
+  // Record the verified report for moderation (idempotent on frankId — same key).
   const stored = await kvPut(env, `report:${frankId}`, JSON.stringify({ at: Date.now(), len: message.length }), { expirationTtl: 86400 * 90 });
   if (!stored) return json({ error: 'Failed to record report', code: 'STORE_FAILED' }, 500, request);
+  // Decide whether THIS request fires the webhook: not already in KV, and not already
+  // fired by this isolate. The has()/set() pair is synchronous — do not insert an await.
+  let fireWebhook = !alreadyReported;
+  if (fireWebhook) {
+    const fired = (globalThis._frankWebhookFired ||= new Map());
+    if (fired.has(frankId)) {
+      fireWebhook = false;
+    } else {
+      fired.set(frankId, 1);
+      // Bounded prune (mirrors _msgDedup): keep the 500 most-recent on overflow.
+      if (fired.size > 1000) { globalThis._frankWebhookFired = new Map([...fired.entries()].slice(-500)); }
+    }
+  }
   // Notify the operator's moderation webhook if configured (fire-and-forget).
   // Payload deliberately contains NO message content — just metadata.
-  if (!alreadyReported && env.ABUSE_WEBHOOK_URL && typeof env.ABUSE_WEBHOOK_URL === 'string') {
+  if (fireWebhook && env.ABUSE_WEBHOOK_URL && typeof env.ABUSE_WEBHOOK_URL === 'string') {
     fetchWithTimeout(env.ABUSE_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'abuse_report', frankId, messageLen: message.length, at: Date.now() }),
     }, 5000).catch(() => {});
   }
-  return json({ verified: true, duplicate: !!alreadyReported }, 200, request);
+  return json({ verified: true, duplicate: !fireWebhook }, 200, request);
 }
 
 // ============================================================

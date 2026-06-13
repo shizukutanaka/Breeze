@@ -73,6 +73,7 @@ beforeEach(() => {
   globalThis._onlineCounter = null;
   globalThis._msgDedup      = new Map();
   globalThis._sealedDedup   = new Map();
+  globalThis._frankWebhookFired = new Map();
 });
 
 describe('routing & request validation (export default fetch)', () => {
@@ -1498,6 +1499,35 @@ describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => 
     const res = await handleAbuseReport({ frankId: 'sf-001', message, opening: b64(opening) }, env, req({}));
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe('STORE_FAILED');
+  });
+
+  // Item 36: in-memory dedup closes the same-isolate race the KV check alone leaves open.
+  // Simulate KV read-lag: both concurrent reports see report:* as absent (alreadyReported
+  // null), so only the synchronous globalThis check-and-set can prevent a double webhook.
+  it('fires the webhook once for same-isolate concurrent reports even when KV reads lag', async () => {
+    const calls = [];
+    vi.stubGlobal('fetch', async (url) => { calls.push(url); return { ok: true }; });
+    try {
+      const env = makeEnv({ ABUSE_WEBHOOK_URL: 'https://hooks.example.com/abuse' });
+      const message = 'race message';
+      const { commitment, opening } = await F.commit(message);
+      await handleAbuseRecord({ frankId: 'race-001', commitment: b64(commitment) }, env, req({}));
+      // KV never reflects the report: write to either concurrent request → isolates the
+      // in-memory dedup layer (without it, both would fire).
+      const realGet = env.KV.get.bind(env.KV);
+      env.KV.get = async (key) => (key.startsWith('report:') ? null : realGet(key));
+      const [r1, r2] = await Promise.all([
+        handleAbuseReport({ frankId: 'race-001', message, opening: b64(opening) }, env, req({})),
+        handleAbuseReport({ frankId: 'race-001', message, opening: b64(opening) }, env, req({})),
+      ]);
+      expect((await r1.json()).verified).toBe(true);
+      expect((await r2.json()).verified).toBe(true);
+      await new Promise(r => setTimeout(r, 10));
+      const hookCalls = calls.filter(u => u === 'https://hooks.example.com/abuse');
+      expect(hookCalls.length).toBe(1); // in-memory dedup suppresses the 2nd webhook
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 
