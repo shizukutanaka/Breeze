@@ -1,5 +1,18 @@
 # Changelog
 
+## replenishSPK signal + health capabilities update (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+Two minor but useful server-side improvements. 529 tests (+2).
+
+- **`/api/prekey/fetch` now returns `replenishSPK: true`** when the stored bundle's
+  `uploadedAt` is older than 25 days (KV TTL is 30 days). Symmetric with the existing
+  `replenishOTP` signal — gives clients a 5-day window to re-upload their signed
+  pre-key before becoming unreachable. No breaking change (clients that don't check
+  this field are unaffected).
+- **`/api/health` capabilities** now includes `batch-alias` and `group-caps`, so
+  clients can feature-detect these without probing each endpoint.
+- **Tests (+2)**: stale bundle (>25 days) triggers `replenishSPK`; fresh bundle does not.
+
 ## Batch alias resolution — one request for N contacts (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 `/api/alias/get` now accepts a `{ aliases: [...] }` batch payload in addition to

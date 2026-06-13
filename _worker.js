@@ -118,6 +118,7 @@ export default {
           'account-delete', 'group-leave', 'group-delete', 'group-admin',
           'group-transfer', 'group-rename', 'msg-disappear-enforce',
           'sealed-sender', 'franking', 'prekey-x3dh',
+          'batch-alias', 'group-caps',
         ],
         crypto: ['X25519', 'Ed25519', 'AES-256-GCM', 'HKDF-SHA256', 'Double Ratchet', 'Sender Key O(1)'],
         ts: Date.now(),
@@ -1759,6 +1760,9 @@ async function handlePreKeyFetch(body, env, request) {
   }
   // Signal the owner to replenish one-time prekeys before they are exhausted.
   if (remainingOTP <= 5) bundle.replenishOTP = true;
+  // Signal the owner to re-upload their signed pre-key before it expires.
+  // KV TTL is 30 days; warn at 25 days so there's a 5-day window to replenish.
+  if (bundle.uploadedAt && (Date.now() - bundle.uploadedAt) > 25 * 86400 * 1000) bundle.replenishSPK = true;
   // I11: include key-history log so the initiator can detect unexpected IK rollovers.
   const ktLog = await kvGet(env, `ktlog:${userId}`);
   if (ktLog) {

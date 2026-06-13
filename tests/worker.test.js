@@ -84,7 +84,10 @@ describe('routing & request validation (export default fetch)', () => {
     const j = await res.json();
     expect(Array.isArray(j.capabilities)).toBe(true);
     // The lifecycle endpoints added this session must be discoverable.
-    for (const cap of ['account-delete', 'group-leave', 'group-delete', 'group-transfer', 'group-rename']) {
+    for (const cap of [
+      'account-delete', 'group-leave', 'group-delete', 'group-transfer', 'group-rename',
+      'batch-alias', 'group-caps',
+    ]) {
       expect(j.capabilities).toContain(cap);
     }
   });
@@ -241,6 +244,28 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     const b = await res.json();
     expect(b.replenishOTP).toBe(true);
     expect(b.oneTimePreKey).toBeUndefined(); // nothing to consume
+  });
+
+  it('sets replenishSPK when the signed pre-key bundle is older than 25 days', async () => {
+    // The KV TTL for prekeys is 30 days. Warn at 25 days so there's a 5-day window.
+    const env = makeEnv();
+    // Manually inject a stale bundle (uploadedAt > 25 days ago).
+    const staleTs = Date.now() - 26 * 86400 * 1000;
+    await env.KV.put('prekey:staleusr1', JSON.stringify({ identityKey: 'IK', signedPreKey: 'SPK', uploadedAt: staleTs }));
+    const res = await handlePreKeyFetch({ userId: 'staleusr1' }, env, apiRequest('/api/prekey/fetch', {}));
+    const b = await res.json();
+    expect(b.replenishSPK).toBe(true);
+  });
+
+  it('does not set replenishSPK for a recently uploaded bundle', async () => {
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'freshusr1', identityKey: 'IK', signedPreKey: 'SPK' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    const res = await handlePreKeyFetch({ userId: 'freshusr1' }, env, apiRequest('/api/prekey/fetch', {}));
+    const b = await res.json();
+    expect(b.replenishSPK).toBeUndefined();
   });
 
   it('upload rejects malformed userId (KV key injection guard)', async () => {
