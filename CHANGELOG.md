@@ -1,5 +1,19 @@
 # Changelog
 
+## Prekey status endpoint — non-destructive OTP/SPK health check (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+544 tests (+4); no breaking wire change.
+
+- **`/api/prekey/status`** — non-destructive endpoint to check prekey health: returns
+  `{ otpCount, uploadedAt, replenishOTP, replenishSPK }`. Previously the only way to
+  learn `replenishOTP`/`replenishSPK` was through `/api/prekey/fetch`, which consumes an
+  irreversible OTP. This endpoint reads the same KV data without touching OTPs — useful
+  for clients self-auditing after reinstall/IDB loss, or checking state before deciding
+  to replenish. Rate-limited at 20 req/min. Added `prekey-status` to health capabilities.
+- Endpoint count updated to 42.
+- **Tests (+4)**: status does not consume OTP (count same before+after); replenishOTP
+  true when count ≤5; 404 when no prekeys; 400 on missing/invalid userId.
+
 ## Batch prekey fetch — one request for N session initiations (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 540 tests (+3); no breaking wire change.

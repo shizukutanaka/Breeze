@@ -55,6 +55,7 @@ import worker, {
   handleKtLogGet,
   handlePushUnsubscribe,
   handlePreKeyFetchBatch,
+  handlePreKeyStatus,
 } from '../_worker.js';
 import { makeKV, makeEnv, apiRequest, stripeSigHeader } from './helpers/mockKV.js';
 import { createFranking } from '../src/crypto/franking.js';
@@ -613,6 +614,50 @@ describe('batch prekey fetch (/api/prekey/fetch/batch)', () => {
     expect(r2.status).toBe(400);
     const r3 = await handlePreKeyFetchBatch({ userIds: ['bad id!'] }, makeEnv(), req);
     expect(r3.status).toBe(400); // all invalid → no valid userIds
+  });
+});
+
+describe('prekey status — non-destructive OTP/SPK health check (/api/prekey/status)', () => {
+  const req = apiRequest('/api/prekey/status', {});
+
+  it('returns otpCount, uploadedAt, and replenish flags without consuming an OTP', async () => {
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'pkstat01', identityKey: 'IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0', 'o1', 'o2', 'o3', 'o4', 'o5', 'o6', 'o7'] },
+      env, req,
+    );
+    const res = await handlePreKeyStatus({ userId: 'pkstat01' }, env, req);
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.otpCount).toBe(8);
+    expect(typeof j.uploadedAt).toBe('number');
+    expect(j.replenishOTP).toBe(false); // 8 > 5
+    expect(j.replenishSPK).toBe(false); // just uploaded
+    // OTP count unchanged after status check (non-destructive).
+    const r2 = await handlePreKeyStatus({ userId: 'pkstat01' }, env, req);
+    expect((await r2.json()).otpCount).toBe(8);
+  });
+
+  it('sets replenishOTP: true when OTP count is ≤ 5', async () => {
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'pkstat02', identityKey: 'IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0', 'o1', 'o2'] },
+      env, req,
+    );
+    const j = await (await handlePreKeyStatus({ userId: 'pkstat02' }, env, req)).json();
+    expect(j.replenishOTP).toBe(true);
+  });
+
+  it('returns 404 for a user with no prekeys', async () => {
+    const res = await handlePreKeyStatus({ userId: 'pkstat03' }, makeEnv(), req);
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 400 for missing or invalid userId', async () => {
+    const r1 = await handlePreKeyStatus({}, makeEnv(), req);
+    expect(r1.status).toBe(400);
+    const r2 = await handlePreKeyStatus({ userId: 'bad id!' }, makeEnv(), req);
+    expect(r2.status).toBe(400);
   });
 });
 

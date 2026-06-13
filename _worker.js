@@ -89,7 +89,7 @@ export default {
         ok: kvOk,
         version: '3.6.0',
         protocol: 4,
-        endpoints: 41,
+        endpoints: 42,
         reqId,
         serverTime: Date.now(), // v3.6: Client can detect clock drift
         kv: kvOk,
@@ -118,7 +118,7 @@ export default {
           'account-delete', 'group-leave', 'group-delete', 'group-admin',
           'group-transfer', 'group-rename', 'msg-disappear-enforce',
           'sealed-sender', 'franking', 'prekey-x3dh',
-          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch',
+          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status',
         ],
         crypto: ['X25519', 'Ed25519', 'AES-256-GCM', 'HKDF-SHA256', 'Double Ratchet', 'Sender Key O(1)'],
         ts: Date.now(),
@@ -151,6 +151,7 @@ export default {
         '/api/prekey/upload': 5,
         '/api/prekey/fetch': 10,
         '/api/prekey/fetch/batch': 5,
+        '/api/prekey/status': 20,
         '/api/ktlog/get': 20,
         '/api/backup/upload': 2,
         '/api/backup/download': 5,
@@ -292,6 +293,7 @@ export default {
         case '/api/prekey/upload':    return await handlePreKeyUpload(body, env, request);
         case '/api/prekey/fetch':     return await handlePreKeyFetch(body, env, request);
         case '/api/prekey/fetch/batch': return await handlePreKeyFetchBatch(body, env, request);
+        case '/api/prekey/status':      return await handlePreKeyStatus(body, env, request);
         case '/api/ktlog/get':        return await handleKtLogGet(body, env, request);
         case '/api/online':           return await handleOnlineCount(body, env, request);
         case '/api/sealed/send':      return await handleSealedSend(body, env, request);
@@ -1828,6 +1830,29 @@ async function handlePreKeyFetchBatch(body, env, request) {
   return json({ results }, 200, request);
 }
 
+// Non-destructive prekey status check for the bundle owner. Returns OTP count,
+// uploadedAt, and the replenish signals — without consuming any OTP. Useful for
+// a client to self-audit its prekey health after reinstall/IDB loss, or to check
+// state before deciding to replenish.
+async function handlePreKeyStatus(body, env, request) {
+  const { userId } = body;
+  if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
+  if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
+  const data = await kvGet(env, `prekey:${userId}`);
+  if (!data) return json({ error: 'No prekeys found', code: 'NOT_FOUND' }, 404, request);
+  const bundle = safeJsonParse(data);
+  if (!bundle) return json({ error: 'No prekeys found', code: 'NOT_FOUND' }, 404, request);
+  const countStr = await kvGet(env, `prekey:otp:${userId}:count`);
+  const otpCount = Math.min(Math.max(parseInt(countStr || '0') || 0, 0), 100);
+  const result = {
+    uploadedAt: bundle.uploadedAt,
+    otpCount,
+    replenishOTP: otpCount <= 5,
+    replenishSPK: !!(bundle.uploadedAt && (Date.now() - bundle.uploadedAt) > 25 * 86400 * 1000),
+  };
+  return json(result, 200, request);
+}
+
 // I11: Standalone key-transparency log fetch. The log is a public tamper-evident
 // hash chain (SHA-256 of IK hashes) — no private data, no auth required. Allows
 // clients to audit a peer's key history without consuming an irreversible OTP.
@@ -2445,6 +2470,7 @@ export {
   handlePreKeyUpload,
   handlePreKeyFetch,
   handlePreKeyFetchBatch,
+  handlePreKeyStatus,
   handleKtLogGet,
   verifyEd25519,
   handleAbuseRecord,
