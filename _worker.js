@@ -118,7 +118,7 @@ export default {
           'account-delete', 'group-leave', 'group-delete', 'group-admin',
           'group-transfer', 'group-rename', 'msg-disappear-enforce',
           'sealed-sender', 'franking', 'prekey-x3dh',
-          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'backup-auth', 'drop-server-id', 'portal-auth',
+          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'backup-auth', 'drop-server-id', 'portal-auth', 'group-auth',
         ],
         crypto: ['X25519', 'Ed25519', 'AES-256-GCM', 'HKDF-SHA256', 'Double Ratchet', 'Sender Key O(1)'],
         ts: Date.now(),
@@ -1091,12 +1091,43 @@ async function handleGroupInfo(body, env, request) {
   }, 200, request);
 }
 
+// Optional Ed25519 auth for group moderation. Group ops authorize by comparing a
+// client-supplied id (adminId/memberId) against group.creatorId/admins — but creatorId is
+// publicly readable via group/info, so without a caller signature ANY member (or anyone with
+// the invite token) could claim an authorized id and kick members, self-promote, transfer
+// ownership, rename, or delete the group. These are server-side state changes with no
+// client-side crypto recourse, so the E2E model does not cover them.
+//
+// Verified whenever {ts,sig} are supplied (forgeries rejected); required outright when
+// GROUP_REQUIRE_AUTH is set — flip that on once clients sign. Default (no sig + flag unset)
+// preserves the legacy flow so current clients keep working until updated. sig is Ed25519
+// over `breeze-group-${action}:${token}:${actorId}:${ts}`, verified against the actor's
+// registered edIdentityKey. Returns a Response on failure, or null to proceed.
+async function checkGroupAuth(env, request, action, token, actorId, ts, sig) {
+  const hasSig = ts !== undefined || sig !== undefined;
+  if (hasSig) {
+    if (ts === undefined || sig === undefined) return json({ error: 'ts and sig must both be provided', code: 'PARTIAL_AUTH' }, 400, request);
+    if (typeof sig !== 'string' || sig.length > 500) return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
+    if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > 300000) return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
+    const pkRaw = await kvGet(env, `prekey:${actorId}`);
+    const bundle = pkRaw ? safeJsonParse(pkRaw) : null;
+    if (!bundle || typeof bundle.edIdentityKey !== 'string' || !bundle.edIdentityKey) return json({ error: 'No registered identity key', code: 'NO_IDENTITY_KEY' }, 403, request);
+    const ok = await verifyEd25519(bundle.edIdentityKey, btoa(`breeze-group-${action}:${token}:${actorId}:${ts}`), sig);
+    if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
+    return null;
+  }
+  if (env.GROUP_REQUIRE_AUTH === 'true') return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+  return null;
+}
+
 // v3.3: Enterprise — Group member management
 async function handleGroupKick(body, env, request) {
   const { token, kickId, adminId } = body;
   if (!token || !kickId || !adminId) return json({ error: 'token, kickId, adminId required', code: 'MISSING_FIELDS' }, 400, request);
   if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(kickId) || !validateUserId(adminId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
+  const kAuth = await checkGroupAuth(env, request, 'kick', token, adminId, body.ts, body.sig);
+  if (kAuth) return kAuth;
 
   const data = await kvGet(env, `grp:${token}`);
   if (!data) return json({ error: 'Group not found', code: 'NOT_FOUND' }, 404, request);
@@ -1149,6 +1180,8 @@ async function handleGroupAdmin(body, env, request) {
   if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(adminId) || !validateUserId(targetId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   if (action !== 'promote' && action !== 'demote') return json({ error: "action must be 'promote' or 'demote'", code: 'INVALID_ACTION' }, 400, request);
+  const aAuth = await checkGroupAuth(env, request, 'admin', token, adminId, body.ts, body.sig);
+  if (aAuth) return aAuth;
 
   const data = await kvGet(env, `grp:${token}`);
   if (!data) return json({ error: 'Group not found', code: 'NOT_FOUND' }, 404, request);
@@ -1189,6 +1222,8 @@ async function handleGroupTransfer(body, env, request) {
   if (!token || !adminId || !newCreatorId) return json({ error: 'token, adminId, newCreatorId required', code: 'MISSING_FIELDS' }, 400, request);
   if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(adminId) || !validateUserId(newCreatorId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
+  const tAuth = await checkGroupAuth(env, request, 'transfer', token, adminId, body.ts, body.sig);
+  if (tAuth) return tAuth;
 
   const data = await kvGet(env, `grp:${token}`);
   if (!data) return json({ error: 'Group not found', code: 'NOT_FOUND' }, 404, request);
@@ -1232,6 +1267,8 @@ async function handleGroupRename(body, env, request) {
   if (!validateUserId(adminId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   const name = sanitizeString(rawName, 50);
   if (!name) return json({ error: 'name required (1-50 chars)', code: 'INVALID_NAME' }, 400, request);
+  const rAuth = await checkGroupAuth(env, request, 'rename', token, adminId, body.ts, body.sig);
+  if (rAuth) return rAuth;
 
   const data = await kvGet(env, `grp:${token}`);
   if (!data) return json({ error: 'Group not found', code: 'NOT_FOUND' }, 404, request);
@@ -1260,6 +1297,8 @@ async function handleGroupLeave(body, env, request) {
   if (!token || !memberId) return json({ error: 'token, memberId required', code: 'MISSING_FIELDS' }, 400, request);
   if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(memberId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
+  const lAuth = await checkGroupAuth(env, request, 'leave', token, memberId, body.ts, body.sig);
+  if (lAuth) return lAuth;
 
   const data = await kvGet(env, `grp:${token}`);
   if (!data) return json({ error: 'Group not found', code: 'NOT_FOUND' }, 404, request);
@@ -1290,6 +1329,8 @@ async function handleGroupDelete(body, env, request) {
   if (!token || !adminId) return json({ error: 'token, adminId required', code: 'MISSING_FIELDS' }, 400, request);
   if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(adminId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
+  const dAuth = await checkGroupAuth(env, request, 'delete', token, adminId, body.ts, body.sig);
+  if (dAuth) return dAuth;
 
   const data = await kvGet(env, `grp:${token}`);
   if (!data) return json({ error: 'Group not found', code: 'NOT_FOUND' }, 404, request);

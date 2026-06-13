@@ -1,5 +1,30 @@
 # Changelog
 
+## Group moderation caller authentication — optional Ed25519 + enforcement flag — item 45 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+626 tests (+4); additive, backward-compatible by default.
+
+Socratic audit of the group moderation endpoints: kick / admin / transfer / rename / leave /
+delete all authorize by comparing a **client-supplied** id (`adminId`/`memberId`) against
+`group.creatorId`/`group.admins` — but `creatorId` is **publicly readable via `/api/group/info`**.
+With no caller signature, any group member (or anyone holding the invite token) could read
+`creatorId`, claim it, and kick members, self-promote, transfer ownership to themselves, rename,
+or delete the group. Unlike message content, these are server-side state changes with no
+client-side crypto recourse, so the E2E model does not cover them — a genuine privilege
+escalation / group-takeover.
+
+- **Fix**: new `checkGroupAuth` helper wired into all six mutation endpoints — optional
+  `{ts, sig}` (Ed25519 over `breeze-group-${action}:${token}:${actorId}:${ts}`, verified
+  against the actor's registered `edIdentityKey`, ±5min). Verified when supplied (forgeries
+  rejected); required when `GROUP_REQUIRE_AUTH` is set — flip that on once clients sign. Default
+  (no sig + flag unset) preserves the legacy flow so current clients keep working until updated
+  (same staged-rollout pattern as the portal fix, item 42). Advertised as `group-auth` in
+  health capabilities.
+- **Tests (+4)**: legacy unauthenticated kick works by default; flag-on rejects unauthenticated
+  kick/transfer/delete with `AUTH_REQUIRED` (and mutates nothing); valid sig → 200, tampered →
+  `SIG_INVALID`; partial auth → `PARTIAL_AUTH`. Mutation-verified (bypassing the sig check fails
+  the tampered-sig test).
+
 ## Stripe webhook body-size DoS guard + endpoint-count doc fix — item 44 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 622 tests (+1); no wire change for legitimate traffic.

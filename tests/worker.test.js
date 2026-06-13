@@ -93,7 +93,7 @@ describe('routing & request validation (export default fetch)', () => {
     // The lifecycle endpoints added this session must be discoverable.
     for (const cap of [
       'account-delete', 'group-leave', 'group-delete', 'group-transfer', 'group-rename',
-      'batch-alias', 'group-caps', 'backup-auth', 'drop-server-id', 'portal-auth',
+      'batch-alias', 'group-caps', 'backup-auth', 'drop-server-id', 'portal-auth', 'group-auth',
     ]) {
       expect(j.capabilities).toContain(cap);
     }
@@ -1163,6 +1163,66 @@ describe('group leave / delete (lifecycle completion)', () => {
     const res = await handleGroupDelete({ token, adminId: 'bob00001' }, env, req({}));
     expect(res.status).toBe(403);
     expect(await env.KV.get(`grp:${token}`)).not.toBeNull(); // still there
+  });
+});
+
+// Item 45: group moderation ops authorize by a client-supplied id matched against the
+// (publicly-readable) creatorId, so any token-holder could take over/destroy a group.
+// Optional Ed25519 caller auth, verified when supplied, required when GROUP_REQUIRE_AUTH.
+describe('group moderation auth (item 45 — caller identity proof)', () => {
+  const req = (b) => apiRequest('/api/group/x', b);
+
+  async function setup(env, opts = {}) {
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
+    await env.KV.put('prekey:creator1', JSON.stringify({ identityKey: 'IK', edIdentityKey: toB64(edPub), uploadedAt: Date.now() }));
+    const { token } = await (await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'mpub' }, env, req({}));
+    return { token, ed };
+  }
+  const signGroup = async (ed, action, token, actorId, ts) =>
+    toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, new TextEncoder().encode(`breeze-group-${action}:${token}:${actorId}:${ts}`))));
+
+  it('legacy unauthenticated kick still works when GROUP_REQUIRE_AUTH is unset (backward compat)', async () => {
+    const env = makeEnv();
+    const { token } = await setup(env);
+    const res = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' }, env, req({}));
+    expect(res.status).toBe(200);
+  });
+
+  it('rejects unauthenticated group ops with 403 when GROUP_REQUIRE_AUTH is enabled', async () => {
+    const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
+    const { token } = await setup(env);
+    for (const res of [
+      await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' }, env, req({})),
+      await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'member01' }, env, req({})),
+      await handleGroupDelete({ token, adminId: 'creator1' }, env, req({})),
+    ]) {
+      expect(res.status).toBe(403);
+      expect((await res.json()).code).toBe('AUTH_REQUIRED');
+    }
+    expect(await env.KV.get(`grp:${token}`)).not.toBeNull(); // nothing mutated
+  });
+
+  it('accepts a validly signed op and rejects a tampered signature (flag on)', async () => {
+    const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
+    const { token, ed } = await setup(env);
+    const ts = Date.now();
+    const ok = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1', ts, sig: await signGroup(ed, 'kick', token, 'creator1', ts) }, env, req({}));
+    expect(ok.status).toBe(200);
+    // Tampered: signature over a different action than the one being called.
+    const { token: t2 } = await setup(env);
+    const bad = await handleGroupKick({ token: t2, kickId: 'member01', adminId: 'creator1', ts, sig: await signGroup(ed, 'delete', t2, 'creator1', ts) }, env, req({}));
+    expect(bad.status).toBe(403);
+    expect((await bad.json()).code).toBe('SIG_INVALID');
+  });
+
+  it('rejects partial auth (sig without ts) on a group op', async () => {
+    const env = makeEnv();
+    const { token } = await setup(env);
+    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'member01', sig: 'AA==' }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('PARTIAL_AUTH');
   });
 });
 
