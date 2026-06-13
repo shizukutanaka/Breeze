@@ -3926,3 +3926,112 @@ describe('corrupted KV data resilience (safeJsonParse guard)', () => {
     expect(res.status).toBe(404);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Item 33 — group mutation + prekey + backup STORE_FAILED propagation
+// ─────────────────────────────────────────────────────────────────────────────
+describe('group mutation KV failure propagation (item 33)', () => {
+  const req = (b) => apiRequest('/api/x', b);
+
+  async function makeGroup(env) {
+    const r = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}));
+    const { token } = await r.json();
+    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'mpub' }, env, req({}));
+    return token;
+  }
+
+  function failOnGroupPut(env) {
+    const real = env.KV.put.bind(env.KV);
+    env.KV.put = async (key, ...rest) => {
+      if (key.startsWith('grp:')) throw new Error('KV unavailable');
+      return real(key, ...rest);
+    };
+  }
+
+  it('handleGroupCreate returns 500 STORE_FAILED when KV put throws', async () => {
+    const env = makeEnv();
+    failOnGroupPut(env);
+    const res = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+  });
+
+  it('handleGroupJoin returns 500 STORE_FAILED when KV put throws', async () => {
+    const env = makeEnv();
+    const { token } = await (await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    failOnGroupPut(env);
+    const res = await handleGroupJoin({ token, memberId: 'member01', memberPub: 'mpub' }, env, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+  });
+
+  it('handleGroupKick returns 500 STORE_FAILED when KV put throws (security: kick must persist)', async () => {
+    const env = makeEnv();
+    const token = await makeGroup(env);
+    failOnGroupPut(env);
+    const res = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' }, env, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+  });
+
+  it('handleGroupLeave returns 500 STORE_FAILED when KV put throws (security: leave must persist)', async () => {
+    const env = makeEnv();
+    const token = await makeGroup(env);
+    failOnGroupPut(env);
+    const res = await handleGroupLeave({ token, memberId: 'member01' }, env, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+  });
+
+  it('handleGroupRename returns 500 STORE_FAILED when KV put throws', async () => {
+    const env = makeEnv();
+    const token = await makeGroup(env);
+    failOnGroupPut(env);
+    const res = await handleGroupRename({ token, adminId: 'creator1', name: 'NewName' }, env, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+  });
+
+  it('handleGroupTransfer returns 500 STORE_FAILED when KV put throws', async () => {
+    const env = makeEnv();
+    const token = await makeGroup(env);
+    failOnGroupPut(env);
+    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'member01' }, env, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+  });
+});
+
+describe('prekey upload + backup STORE_FAILED propagation (item 33)', () => {
+  const req = (b) => apiRequest('/api/x', b);
+
+  it('handlePreKeyUpload returns 500 STORE_FAILED when prekey KV put throws', async () => {
+    const env = makeEnv();
+    const real = env.KV.put.bind(env.KV);
+    env.KV.put = async (key, ...rest) => {
+      if (key.startsWith('prekey:user')) throw new Error('KV unavailable');
+      return real(key, ...rest);
+    };
+    const res = await handlePreKeyUpload(
+      { userId: 'user00020', identityKey: 'IK', signedPreKey: 'SPK' },
+      env, req({}),
+    );
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+  });
+
+  it('handleBackupUpload returns 500 STORE_FAILED when backup KV put throws', async () => {
+    const env = makeEnv();
+    const real = env.KV.put.bind(env.KV);
+    env.KV.put = async (key, ...rest) => {
+      if (key.startsWith('backup:')) throw new Error('KV unavailable');
+      return real(key, ...rest);
+    };
+    const res = await handleBackupUpload(
+      { userId: 'user00021', backup: 'encrypted-data' },
+      env, req({}),
+    );
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+  });
+});

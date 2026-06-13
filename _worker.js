@@ -660,7 +660,8 @@ async function handleAliasSet(body, env, request) {
   }
 
   // Store (no TTL — aliases are permanent)
-  await kvPut(env, `alias:${clean}`, JSON.stringify({ pub, name: sanitizeString(name, 64), setAt: Date.now() }));
+  const aliasSaved = await kvPut(env, `alias:${clean}`, JSON.stringify({ pub, name: sanitizeString(name, 64), setAt: Date.now() }));
+  if (!aliasSaved) return json({ error: 'Failed to store alias', code: 'STORE_FAILED' }, 500, request);
   return json({ ok: true, alias: clean }, 200, request);
 }
 
@@ -964,7 +965,8 @@ async function handleGroupCreate(body, env, request) {
   };
 
   // Store with 30-day TTL (invite link expires)
-  await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+  const created = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+  if (!created) return json({ error: 'Failed to create group', code: 'STORE_FAILED' }, 500, request);
 
   return json({ token, name: group.name, memberCount: 1 }, 201, request);
 }
@@ -1000,7 +1002,10 @@ async function handleGroupJoin(body, env, request) {
     // Only overwrite caps when the rejoin actually advertised them (a legacy reconnect
     // with no caps must not erase a previously-recorded capability set).
     if (newCaps && JSON.stringify(existing.caps) !== JSON.stringify(newCaps)) { existing.caps = newCaps; changed = true; }
-    if (changed) await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+    if (changed) {
+      const saved = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+      if (!saved) return json({ error: 'Failed to update group', code: 'STORE_FAILED' }, 500, request);
+    }
     return json({ ok: true, name: group.name, members: group.members, epoch: group.epoch | 0, alreadyMember: true, refreshed: changed }, 200, request);
   }
 
@@ -1012,7 +1017,8 @@ async function handleGroupJoin(body, env, request) {
   const memberCaps = sanitizeCaps(caps);
   if (memberCaps) memberRecord.caps = memberCaps;
   group.members.push(memberRecord);
-  await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+  const joined = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+  if (!joined) return json({ error: 'Failed to join group', code: 'STORE_FAILED' }, 500, request);
 
   return json({ ok: true, name: group.name, members: group.members, epoch: group.epoch | 0 }, 200, request);
 }
@@ -1077,7 +1083,8 @@ async function handleGroupKick(body, env, request) {
   // would make '5' + 1 = '51' (concatenation), which the epoch gate '===' never
   // matches against a numeric p.ep, permanently breaking the group.
   group.epoch = (group.epoch | 0) + 1;
-  await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+  const kicked = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+  if (!kicked) return json({ error: 'Failed to save group state', code: 'STORE_FAILED' }, 500, request);
 
   return json({ ok: true, remaining: group.members.length, epoch: group.epoch }, 200, request);
 }
@@ -1117,7 +1124,8 @@ async function handleGroupAdmin(body, env, request) {
     admins.splice(i, 1);
   }
   group.admins = admins;
-  await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+  const adminSaved = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+  if (!adminSaved) return json({ error: 'Failed to save admin changes', code: 'STORE_FAILED' }, 500, request);
   return json({ ok: true, admins }, 200, request);
 }
 
@@ -1157,7 +1165,8 @@ async function handleGroupTransfer(body, env, request) {
   if (!admins.includes(oldCreatorId)) admins.push(oldCreatorId);
   group.admins = admins;
 
-  await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+  const transferred = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+  if (!transferred) return json({ error: 'Failed to save ownership transfer', code: 'STORE_FAILED' }, 500, request);
   return json({ ok: true, creatorId: newCreatorId, admins }, 200, request);
 }
 
@@ -1187,7 +1196,8 @@ async function handleGroupRename(body, env, request) {
   }
 
   group.name = name.slice(0, 50);
-  await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+  const renamed = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+  if (!renamed) return json({ error: 'Failed to save group name', code: 'STORE_FAILED' }, 500, request);
   return json({ ok: true, name: group.name }, 200, request);
 }
 
@@ -1216,7 +1226,8 @@ async function handleGroupLeave(body, env, request) {
   if (group.admins) group.admins = group.admins.filter(id => id !== memberId);
   // Same PCS epoch bump + integer coercion as handleGroupKick (see comment there).
   group.epoch = (group.epoch | 0) + 1;
-  await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+  const left = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+  if (!left) return json({ error: 'Failed to save group state', code: 'STORE_FAILED' }, 500, request);
 
   return json({ ok: true, remaining: group.members.length, epoch: group.epoch }, 200, request);
 }
@@ -1782,7 +1793,8 @@ async function handlePreKeyUpload(body, env, request) {
   // fallback path (bundle.x3dh === 'v5') works for transition-period clients that
   // don't yet understand the `caps` array. Only 'v4'/'v5' are meaningful; cap to 4.
   if (typeof x3dh === 'string') bundle.x3dh = x3dh.slice(0, 4);
-  await kvPut(env, `prekey:${userId}`, JSON.stringify(bundle), { expirationTtl: 86400 * 30 });
+  const prekeySaved = await kvPut(env, `prekey:${userId}`, JSON.stringify(bundle), { expirationTtl: 86400 * 30 });
+  if (!prekeySaved) return json({ error: 'Failed to store prekeys', code: 'STORE_FAILED' }, 500, request);
 
   // I11/N5: append a SHA-256 digest of the identity key to a hash-chained audit log.
   // Each entry binds to the previous via c = SHA-256(prevC ‖ h), making the
@@ -2116,7 +2128,8 @@ async function handleBackupUpload(body, env, request) {
 
   // Store (max 5MB per backup)
   if (backup.length > 5 * 1024 * 1024) return json({ error: 'Backup too large', code: 'PAYLOAD_TOO_LARGE' }, 413, request);
-  await kvPut(env, `backup:${userId}`, backup, { expirationTtl: 86400 * 90 }); // 90 day retention
+  const backupSaved = await kvPut(env, `backup:${userId}`, backup, { expirationTtl: 86400 * 90 }); // 90 day retention
+  if (!backupSaved) return json({ error: 'Failed to store backup', code: 'STORE_FAILED' }, 500, request);
   return json({ ok: true, size: backup.length, authenticated: hasSig }, 200, request);
 }
 

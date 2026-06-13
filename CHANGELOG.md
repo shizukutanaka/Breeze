@@ -1,5 +1,24 @@
 # Changelog
 
+## Group mutation + prekey + backup STORE_FAILED propagation — item 33 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+594 tests (+8); no breaking wire change.
+
+- **All group state mutations** (`handleGroupCreate`, `handleGroupJoin`, `handleGroupKick`,
+  `handleGroupAdmin`, `handleGroupTransfer`, `handleGroupRename`, `handleGroupLeave`) now
+  check the return value of their terminal `kvPut`. On failure the endpoint returns
+  `500 STORE_FAILED` instead of silently returning success with the change never persisted.
+  The security-critical cases are **kick** and **leave** — if these fail silently, the
+  kicked/leaving member retains their sender-key epoch access despite the client believing
+  the operation succeeded, violating the post-compromise security guarantee.
+- **`handlePreKeyUpload`**: unchecked `kvPut` at `prekey:${userId}` — if it failed, the
+  user's contact card was never stored, making them unreachable, but they got `{ ok: true }`.
+- **`handleBackupUpload`**: unchecked `kvPut` at `backup:${userId}` — backup silently lost.
+- **`handleAliasSet`**: unchecked `kvPut` at `alias:${clean}` — alias not stored but client
+  showed success.
+- **Tests (+8)**: group create/join/kick/leave/rename/transfer each return 500 on KV throw;
+  prekey upload returns 500 on KV throw; backup upload returns 500 on KV throw.
+
 ## Webhook billing KV failure propagation — item 32 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 586 tests (+3); no breaking wire change.
