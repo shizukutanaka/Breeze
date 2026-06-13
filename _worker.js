@@ -639,7 +639,7 @@ async function handleAliasSet(body, env, request) {
 
   // Validate alias: 3-20 chars, a-z0-9_
   const clean = alias.toLowerCase().replace(/[^a-z0-9_]/g, '');
-  if (clean.length < 3 || clean.length > 20) return json({ error: 'Alias must be 3-20 chars (a-z, 0-9, _)' }, 400, request);
+  if (clean.length < 3 || clean.length > 20) return json({ error: 'Alias must be 3-20 chars (a-z, 0-9, _)', code: 'INVALID_ALIAS' }, 400, request);
 
   // Check if taken
   const existing = await kvGet(env, `alias:${clean}`);
@@ -916,12 +916,12 @@ async function handleGroupCreate(body, env, request) {
   if (typeof rawCreatorPub !== 'string') return json({ error: 'creatorPub must be a string', code: 'INVALID_TYPE' }, 400, request);
   // Cap public keys at 200 chars (X25519/P-256 base64 is ≤88 chars; large values are abuse).
   const creatorPub = rawCreatorPub.slice(0, 200);
-  if (!name || !creatorId || !creatorPub) return json({ error: 'name, creatorId, creatorPub required' }, 400, request);
+  if (!name || !creatorId || !creatorPub) return json({ error: 'name, creatorId, creatorPub required', code: 'MISSING_FIELDS' }, 400, request);
   if (!validateUserId(creatorId)) return json({ error: 'invalid creatorId', code: 'INVALID_USER_ID' }, 400, request);
   // v3.1: Validate name length
-  if (name.length > 50) return json({ error: 'Group name max 50 chars' }, 400, request);
+  if (name.length > 50) return json({ error: 'Group name max 50 chars', code: 'INVALID_NAME' }, 400, request);
   // v3.1: Validate initial member count
-  if (Array.isArray(members) && members.length > 100) return json({ error: 'Max 100 members' }, 400, request);
+  if (Array.isArray(members) && members.length > 100) return json({ error: 'Max 100 members', code: 'GROUP_FULL' }, 400, request);
 
   // Generate short invite token
   const bytes = new Uint8Array(8);
@@ -957,7 +957,7 @@ async function handleGroupJoin(body, env, request) {
   const memberName = sanitizeString(rawMemberName, 64);
   if (typeof rawMemberPub !== 'string') return json({ error: 'memberPub must be a string', code: 'INVALID_TYPE' }, 400, request);
   const memberPub = rawMemberPub.slice(0, 200);
-  if (!token || !memberId || !memberPub) return json({ error: 'token, memberId, memberPub required' }, 400, request);
+  if (!token || !memberId || !memberPub) return json({ error: 'token, memberId, memberPub required', code: 'MISSING_FIELDS' }, 400, request);
   if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(memberId)) return json({ error: 'invalid memberId', code: 'INVALID_USER_ID' }, 400, request);
 
@@ -1022,7 +1022,7 @@ async function handleGroupInfo(body, env, request) {
 // v3.3: Enterprise — Group member management
 async function handleGroupKick(body, env, request) {
   const { token, kickId, adminId } = body;
-  if (!token || !kickId || !adminId) return json({ error: 'token, kickId, adminId required' }, 400, request);
+  if (!token || !kickId || !adminId) return json({ error: 'token, kickId, adminId required', code: 'MISSING_FIELDS' }, 400, request);
   if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(kickId) || !validateUserId(adminId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
 
@@ -1072,7 +1072,7 @@ async function handleGroupKick(body, env, request) {
 // admin status is an authorization label, not key material, so it doesn't affect crypto.
 async function handleGroupAdmin(body, env, request) {
   const { token, adminId, targetId, action } = body;
-  if (!token || !adminId || !targetId || !action) return json({ error: 'token, adminId, targetId, action required' }, 400, request);
+  if (!token || !adminId || !targetId || !action) return json({ error: 'token, adminId, targetId, action required', code: 'MISSING_FIELDS' }, 400, request);
   if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(adminId) || !validateUserId(targetId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   if (action !== 'promote' && action !== 'demote') return json({ error: "action must be 'promote' or 'demote'", code: 'INVALID_ACTION' }, 400, request);
@@ -1112,7 +1112,7 @@ async function handleGroupAdmin(body, env, request) {
 // material, and every member's sender key is unchanged.
 async function handleGroupTransfer(body, env, request) {
   const { token, adminId, newCreatorId } = body;
-  if (!token || !adminId || !newCreatorId) return json({ error: 'token, adminId, newCreatorId required' }, 400, request);
+  if (!token || !adminId || !newCreatorId) return json({ error: 'token, adminId, newCreatorId required', code: 'MISSING_FIELDS' }, 400, request);
   if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(adminId) || !validateUserId(newCreatorId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
 
@@ -1152,7 +1152,7 @@ async function handleGroupTransfer(body, env, request) {
 // be inflated past the RFC 8030 limit.
 async function handleGroupRename(body, env, request) {
   const { token, adminId, name: rawName } = body;
-  if (!token || !adminId) return json({ error: 'token, adminId required' }, 400, request);
+  if (!token || !adminId) return json({ error: 'token, adminId required', code: 'MISSING_FIELDS' }, 400, request);
   if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(adminId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   const name = sanitizeString(rawName, 50);
@@ -1181,7 +1181,7 @@ async function handleGroupRename(body, env, request) {
 // not keep decrypting new traffic (I3 PCS applies to voluntary leave too).
 async function handleGroupLeave(body, env, request) {
   const { token, memberId } = body;
-  if (!token || !memberId) return json({ error: 'token, memberId required' }, 400, request);
+  if (!token || !memberId) return json({ error: 'token, memberId required', code: 'MISSING_FIELDS' }, 400, request);
   if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(memberId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
 
@@ -1210,7 +1210,7 @@ async function handleGroupLeave(body, env, request) {
 // holding the invite token.
 async function handleGroupDelete(body, env, request) {
   const { token, adminId } = body;
-  if (!token || !adminId) return json({ error: 'token, adminId required' }, 400, request);
+  if (!token || !adminId) return json({ error: 'token, adminId required', code: 'MISSING_FIELDS' }, 400, request);
   if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(adminId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
 
@@ -1341,19 +1341,19 @@ async function buildVapidJwt(subtle, vapidPrivB64url, vapidPubB64url, endpoint) 
 
 async function handlePushSubscribe(body, env, request) {
   const { userId, subscription } = body;
-  if (!userId || !subscription?.endpoint) return json({ error: 'userId and subscription required' }, 400, request);
+  if (!userId || !subscription?.endpoint) return json({ error: 'userId and subscription required', code: 'MISSING_FIELDS' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   // v3.6: Validate push endpoint URL (SSRF prevention)
   try {
     const epUrl = new URL(subscription.endpoint);
-    if (epUrl.protocol !== 'https:') return json({ error: 'Push endpoint must be HTTPS' }, 400, request);
+    if (epUrl.protocol !== 'https:') return json({ error: 'Push endpoint must be HTTPS', code: 'INVALID_ENDPOINT' }, 400, request);
     // Only allow known push service domains
     const trusted = ['fcm.googleapis.com', 'updates.push.services.mozilla.com', 'wns.windows.com', 'push.apple.com',
       'web.push.apple.com', 'push.services.mozilla.com', 'android.googleapis.com'];
     if (!trusted.some(d => epUrl.hostname === d || epUrl.hostname.endsWith('.' + d))) {
-      return json({ error: 'Untrusted push endpoint' }, 400, request);
+      return json({ error: 'Untrusted push endpoint', code: 'UNTRUSTED_ENDPOINT' }, 400, request);
     }
-  } catch { return json({ error: 'Invalid push endpoint URL' }, 400, request); }
+  } catch { return json({ error: 'Invalid push endpoint URL', code: 'INVALID_ENDPOINT' }, 400, request); }
   // Sanitize: only store the three fields needed for push delivery.
   // Storing the full client object would allow oversized extra fields to inflate KV.
   const safeSub = {
@@ -1723,7 +1723,7 @@ async function verifyEd25519(edPubB64, msgB64, sigB64) {
 
 async function handlePreKeyUpload(body, env, request) {
   const { userId, identityKey, edIdentityKey, signedPreKey, signedPreKeySig, oneTimePreKeys, caps, x3dh } = body;
-  if (!userId || !identityKey || !signedPreKey) return json({ error: 'userId, identityKey, signedPreKey required' }, 400, request);
+  if (!userId || !identityKey || !signedPreKey) return json({ error: 'userId, identityKey, signedPreKey required', code: 'MISSING_FIELDS' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   // Type guard: public key fields must be strings. An object/array passes the !x
   // presence check but bypasses the size guards below and gets stored as an object,
@@ -1961,9 +1961,9 @@ async function hmacVerifyFrank(commitmentB64, openingB64, message) {
 // Sender/relay records the franking commitment at send time.
 async function handleAbuseRecord(body, env, request) {
   const { frankId, commitment } = body;
-  if (!frankId || !commitment) return json({ error: 'frankId and commitment required' }, 400, request);
-  if (typeof frankId !== 'string' || frankId.length > 128) return json({ error: 'invalid frankId' }, 400, request);
-  if (typeof commitment !== 'string' || commitment.length > 128) return json({ error: 'invalid commitment' }, 400, request);
+  if (!frankId || !commitment) return json({ error: 'frankId and commitment required', code: 'MISSING_FIELDS' }, 400, request);
+  if (typeof frankId !== 'string' || frankId.length > 128) return json({ error: 'invalid frankId', code: 'INVALID_FIELD' }, 400, request);
+  if (typeof commitment !== 'string' || commitment.length > 128) return json({ error: 'invalid commitment', code: 'INVALID_FIELD' }, 400, request);
   // Do not overwrite an existing commitment (a frankId binds one message).
   if (await kvGet(env, `frank:${frankId}`)) return json({ ok: true, existing: true }, 200, request);
   await kvPut(env, `frank:${frankId}`, commitment, { expirationTtl: 86400 * 30 });
@@ -1973,8 +1973,8 @@ async function handleAbuseRecord(body, env, request) {
 // Recipient reports an abusive message by revealing (frankId, message, opening).
 async function handleAbuseReport(body, env, request) {
   const { frankId, message, opening } = body;
-  if (!frankId || typeof message !== 'string' || !opening) return json({ error: 'frankId, message, opening required' }, 400, request);
-  if (typeof frankId !== 'string' || frankId.length > 128) return json({ error: 'invalid frankId' }, 400, request);
+  if (!frankId || typeof message !== 'string' || !opening) return json({ error: 'frankId, message, opening required', code: 'MISSING_FIELDS' }, 400, request);
+  if (typeof frankId !== 'string' || frankId.length > 128) return json({ error: 'invalid frankId', code: 'INVALID_FIELD' }, 400, request);
   if (message.length > 256 * 1024) return json({ error: 'message too large', code: 'MSG_TOO_LARGE' }, 400, request);
   // HMAC opening key is 32 bytes (base64 = 44 chars); 128 chars is generous.
   if (typeof opening !== 'string' || opening.length > 128) return json({ error: 'invalid opening', code: 'INVALID_OPENING' }, 400, request);
@@ -2004,7 +2004,7 @@ async function handleAbuseReport(body, env, request) {
 
 async function handleSealedSend(body, env, request) {
   const { to, envelope } = body;
-  if (!to || !envelope) return json({ error: 'to and envelope required' }, 400, request);
+  if (!to || !envelope) return json({ error: 'to and envelope required', code: 'MISSING_FIELDS' }, 400, request);
   if (!validateUserId(to)) return json({ error: 'invalid recipient id', code: 'INVALID_USER_ID' }, 400, request);
   if (typeof envelope !== 'string' || envelope.length > 256 * 1024) return json({ error: 'Envelope too large', code: 'PAYLOAD_TOO_LARGE' }, 400, request);
   // v3.6: In-memory dedup (saves 1 KV read + 1 KV write per sealed send)

@@ -1,5 +1,24 @@
 # Changelog
 
+## Standardize error `code` fields across group/push/franking/alias handlers (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+304 tests (0 net new — updated existing tests); no breaking wire change.
+
+- **All group endpoints now return `code: 'MISSING_FIELDS'`** on missing-field 400s:
+  `handleGroupCreate`, `handleGroupJoin`, `handleGroupKick`, `handleGroupAdmin`,
+  `handleGroupTransfer`, `handleGroupRename`, `handleGroupLeave`, `handleGroupDelete`.
+- **`handleGroupCreate`** gets two new codes: `INVALID_NAME` (name > 50 chars) and
+  `GROUP_FULL` (initial members > 100) — previously bare messages only.
+- **`handlePushSubscribe`** gets `INVALID_ENDPOINT` (non-HTTPS, invalid URL parse) and
+  `UNTRUSTED_ENDPOINT` (host not in push-service allowlist) — client can distinguish the
+  two failure modes without parsing the error string.
+- **`handleAbuseRecord` / `handleAbuseReport`** get `MISSING_FIELDS` and `INVALID_FIELD`
+  codes on validation errors.
+- **`handleAliasSet`** gets `INVALID_ALIAS` on post-sanitization length failure.
+- **`handlePreKeyUpload`** gets `MISSING_FIELDS` on the required-field check.
+- **`handleSealedSend`** gets `MISSING_FIELDS` on the required-field check.
+- Two existing tests updated to assert the new codes.
+
 ## OTP type guard at upload — prevent null entries from consuming prekey slots (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 304 tests (+2); no breaking wire change.

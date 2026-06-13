@@ -1889,6 +1889,7 @@ describe('alias set / get (PoW anti-spam)', () => {
     // '!!' sanitizes to '' (empty → < 3 chars)
     const res = await handleAliasSet({ alias: '!!', pub, pow }, makeEnv(), req({}));
     expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_ALIAS');
   }, 30000);
 
   it('allows the same pub to re-register (update name)', async () => {
@@ -2028,12 +2029,15 @@ describe('push subscribe SSRF guard', () => {
   it('rejects non-HTTPS endpoints', async () => {
     const res = await handlePushSubscribe(base('http://fcm.googleapis.com/x'), makeEnv(), apiRequest('/api/push/subscribe', {}));
     expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_ENDPOINT');
   });
 
   it('rejects untrusted hosts (SSRF target)', async () => {
     const res = await handlePushSubscribe(base('https://169.254.169.254/latest/meta-data'), makeEnv(), apiRequest('/api/push/subscribe', {}));
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toMatch(/Untrusted/);
+    const j = await res.json();
+    expect(j.error).toMatch(/Untrusted/);
+    expect(j.code).toBe('UNTRUSTED_ENDPOINT');
   });
 
   it('accepts a trusted FCM endpoint', async () => {

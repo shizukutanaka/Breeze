@@ -71,7 +71,8 @@
 | 21 | **通報が KV に死蔵される** | 検証済み通報(`report:{frankId}`)が 90 日間 KV に格納されるだけでオペレーターへの通知がなく、モデレーションの起点がない | `ABUSE_WEBHOOK_URL` env var サポートを追加。検証済み通報時に `{ type, frankId, messageLen, at }` を非同期 POST(メッセージ内容は含まない) |
 | 22 | **エイリアスをアカウント削除なしで解放できない** | バニティ `@handle` を解放・再割り当てする唯一の方法がアカウント全削除。ユーザがアイデンティティ・連絡先・メッセージ・課金記録を残したまま `@handle` だけ変えることができない | `/api/alias/delete` を追加。Ed25519 署名認証(challenge `breeze-alias-delete:{alias}:{ts}`)。所有権二重確認(`alias.pub == identityKey`)でサードパーティ squat を防止。`{ ok, removed }` で冪等 |
 | 23 | **バッチ presence check が常に KV を叩く / sealed send dedup キー衝突** | (1) `{ ids:[...], check:true }` のバッチ path が in-memory `_presenceCache` をスキップして全ユーザを KV 読み取り → 10 人グループで 5 秒ごとに ~120 KV reads/min の浪費。単一 check は正しくキャッシュを先読みしていた。(2) sealed send の dedup キーが `${to}:${envelope.slice(0,32)}` でエンベロープ長を含まず、異なる 2 メッセージが 32 文字プレフィックス一致で偽 dedup → 片方が無音でドロップされる恐れ | (1) バッチ path でも `_presenceCache.get(\`presence:${cid}:data\`)` をキャッシュヒット先行、ミス時のみ KV フォールバック。(2) dedup キーを `${to}:${envelope.length}:${envelope.slice(0,32)}` に変更して `handleMsgSend` と統一 |
-| 24 | **OTP 配列に非 string エントリがあるとプリキースロットが永久消費される** | `JSON.stringify(null)` = `'null'` (4 chars) がサイズチェックを通過して KV に保存される。取得時 `safeJsonParse('null')` = `null` が返り、`parsed !== null` ガードでキーとして使えないにも関わらずスロットが削除 → 無音でスロット浪費。カウントも配列長で記録されるため null 含む場合に最大インデックスと一致しない | アップロード時に `typeof oneTimePreKeys[i] !== 'string'` の型ガードを追加してスキップ。カウントは最後の有効エントリのインデックス +1 に修正。有効エントリが 0 件の場合はカウントキー自体を書かない |
+| 24 | **OTP 配列の非 string エントリがプリキースロットを永久消費する** | `JSON.stringify(null)` = `'null'` (4 chars) がサイズチェックを通過して KV に保存される。取得時 `safeJsonParse('null')` = `null` が返り、`parsed !== null` ガードでキーとして使えないにも関わらずスロットが削除 → 無音でスロット浪費。カウントも配列長で記録されるため null 含む場合に最大インデックスと一致しない | アップロード時に `typeof oneTimePreKeys[i] !== 'string'` の型ガードを追加してスキップ。カウントは最後の有効エントリのインデックス +1 に修正。有効エントリが 0 件の場合はカウントキー自体を書かない |
+| 25 | **エラーレスポンスの `code` フィールド欠落** | グループ系全エンドポイント(create/join/kick/admin/transfer/rename/leave/delete)、push 購読、フランキング、エイリアス、sealed send、プリキーアップロードの必須フィールド不足エラーに `code` がなく、クライアントが HTTP ステータスコードかエラーメッセージ文字列のパースに頼らざるを得ない | `MISSING_FIELDS` / `INVALID_ENDPOINT` / `UNTRUSTED_ENDPOINT` / `INVALID_FIELD` / `INVALID_ALIAS` / `INVALID_NAME` / `GROUP_FULL` などを一斉追加。既存テスト 2 件を新コード検証に更新 |
 
 ### 未実装(優先度順・理由つき)
 
@@ -92,7 +93,7 @@
 
 ## 検証
 
-- `npm test` — 13 スイート / 304 件全成功(本セッションで +11 件:alias delete +6、batch presence cache + sealed dedup +3、OTP type guard +2)
+- `npm test` — 13 スイート / 304 件全成功(本セッションで +11 件:alias delete +6、batch presence cache + sealed dedup +3、OTP type guard +2、error code 統一はテスト数 net 0)
 - `./validate.sh` — 33/36(ベースライン維持、⚠3 は既知の許容警告)
 - `node -c _worker.js && node -c sw.js` — 構文 OK
 - 新エンドポイント(account/delete・group/leave・group/delete・group/admin・
