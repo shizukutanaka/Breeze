@@ -1,5 +1,24 @@
 # Changelog
 
+## Regression test for Stripe webhook replay window (Socratic coverage audit) — item 37 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+604 tests (+3); test-only change, no production code modified.
+
+This round's Socratic pass interrogated four security-critical claims and found the *code*
+sound in every case (Stripe constant-time double-HMAC, disappearing-message purge, OGP
+redirect re-validation, CORS origin reflection — all verified accurate, no fix manufactured).
+The real gap was in *coverage*: `verifyStripeSignature` documents a "5 min tolerance" replay
+window (line 897), but the only test exercising it used `t=1,v1=deadbeef` — which fails on a
+bad signature too, so it could not distinguish a freshness rejection from a signature
+rejection. The replay-window guard had **zero isolated regression coverage**; deleting it
+would have left the whole suite green.
+
+- **Tests (+3)**: a validly-signed webhook with a 10-min-stale timestamp → 400 (no billing
+  side effect); a validly-signed webhook with a far-future timestamp → 400; the *same* event
+  signed with a fresh timestamp → 200 (control isolating the timestamp as the only variable).
+- **Mutation-verified**: with the `> 300` freshness check disabled, the two rejection tests
+  fail and the control still passes — proving they pin the guard, not an incidental path.
+
 ## Abuse-report webhook: in-memory dedup closes same-isolate race + honest comment — item 36 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 601 tests (+1); no breaking wire change.

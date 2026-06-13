@@ -2287,6 +2287,42 @@ describe('webhook signature + idempotency', () => {
     expect(res.status).toBe(400);
   });
 
+  // Item 37: pin the replay-window guard. verifyStripeSignature claims "Reject if
+  // timestamp is too old (5 min tolerance)", but the invalid-signature test above also
+  // has a stale t=1, so it can't tell a freshness failure from a signature failure.
+  // These use a VALID signature over an out-of-window timestamp, so the ONLY reason for
+  // rejection is the ±300s freshness check — deleting that check flips these to 200.
+  it('rejects a validly-signed webhook whose timestamp is older than 5 min (replay window)', async () => {
+    const e = env();
+    const staleTs = Math.floor(Date.now() / 1000) - 600; // 10 min ago
+    const sig = await stripeSigHeader(event, secret, staleTs);
+    const res = await handleWebhook(webhookReq(event, sig), e);
+    expect(res.status).toBe(400);
+    // No billing side effect occurred (the stale event was never processed).
+    expect(await e.KV.get('slots:user00001')).toBeNull();
+  });
+
+  it('rejects a validly-signed webhook whose timestamp is in the far future', async () => {
+    const e = env();
+    const futureTs = Math.floor(Date.now() / 1000) + 600; // 10 min ahead
+    const sig = await stripeSigHeader(event, secret, futureTs);
+    const res = await handleWebhook(webhookReq(event, sig), e);
+    expect(res.status).toBe(400);
+    expect(await e.KV.get('slots:user00001')).toBeNull();
+  });
+
+  it('accepts the same event when signed with a fresh timestamp (isolates the freshness variable)', async () => {
+    // Control for the two tests above: identical event + secret, only the timestamp is
+    // in-window. A 200 here proves the signature itself is valid and the 400s above are
+    // attributable solely to the timestamp tolerance, not a signing mismatch.
+    const e = env();
+    const freshTs = Math.floor(Date.now() / 1000);
+    const sig = await stripeSigHeader(event, secret, freshTs);
+    const res = await handleWebhook(webhookReq(event, sig), e);
+    expect(res.status).toBe(200);
+    expect(JSON.parse(await e.KV.get('slots:user00001')).slots).toBe(4);
+  });
+
   it('processes a valid event then dedupes a retry (process-then-mark)', async () => {
     const e = env();
     const sig = await stripeSigHeader(event, secret);
