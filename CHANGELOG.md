@@ -1,23 +1,19 @@
 # Changelog
 
-## Standardize error `code` fields across group/push/franking/alias handlers (branch claude/nice-ride-T6yb0, 2026-06-13)
+## Complete error `code` field coverage — 0 bare errors remaining (branch claude/nice-ride-T6yb0, 2026-06-13)
 
-304 tests (0 net new — updated existing tests); no breaking wire change.
+304 tests (0 net new — two existing tests tightened); no breaking wire change.
 
-- **All group endpoints now return `code: 'MISSING_FIELDS'`** on missing-field 400s:
-  `handleGroupCreate`, `handleGroupJoin`, `handleGroupKick`, `handleGroupAdmin`,
-  `handleGroupTransfer`, `handleGroupRename`, `handleGroupLeave`, `handleGroupDelete`.
-- **`handleGroupCreate`** gets two new codes: `INVALID_NAME` (name > 50 chars) and
-  `GROUP_FULL` (initial members > 100) — previously bare messages only.
-- **`handlePushSubscribe`** gets `INVALID_ENDPOINT` (non-HTTPS, invalid URL parse) and
-  `UNTRUSTED_ENDPOINT` (host not in push-service allowlist) — client can distinguish the
-  two failure modes without parsing the error string.
-- **`handleAbuseRecord` / `handleAbuseReport`** get `MISSING_FIELDS` and `INVALID_FIELD`
-  codes on validation errors.
-- **`handleAliasSet`** gets `INVALID_ALIAS` on post-sanitization length failure.
-- **`handlePreKeyUpload`** gets `MISSING_FIELDS` on the required-field check.
-- **`handleSealedSend`** gets `MISSING_FIELDS` on the required-field check.
-- Two existing tests updated to assert the new codes.
+Every `json({ error: ... })` call in `_worker.js` now includes a `code` field.
+Zero bare errors remain. New codes added:
+- Group handlers: `MISSING_FIELDS`, `INVALID_NAME`, `GROUP_FULL`
+- Push subscribe: `INVALID_ENDPOINT`, `UNTRUSTED_ENDPOINT`
+- Franking: `MISSING_FIELDS`, `INVALID_FIELD`
+- Alias set/delete, prekey upload, sealed send: `MISSING_FIELDS`, `INVALID_ALIAS`
+- Backup, drop: `MISSING_FIELDS`, `INVALID_ID`, `PAYLOAD_TOO_LARGE`
+- Translate, AI: `MISSING_FIELDS`, `PAYLOAD_TOO_LARGE`, `INVALID_FIELD`, `INVALID_ACTION`
+- Generic request guard: `FIELD_TOO_LARGE`, `INVALID_FIELD`, `PAYLOAD_TOO_LARGE`
+- Server-level: `KV_NOT_CONFIGURED`, `PRICE_NOT_CONFIGURED`, `SERVER_ERROR`
 
 ## OTP type guard at upload — prevent null entries from consuming prekey slots (branch claude/nice-ride-T6yb0, 2026-06-13)
 

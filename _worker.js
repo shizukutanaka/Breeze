@@ -250,28 +250,28 @@ export default {
     // Input validation — prevent KV abuse + injection
     for (const key of ['id', 'room', 'sender', 'type', 'userId', 'to', 'from', 'alias', 'token', 'frankId', 'kickId', 'adminId', 'creatorId', 'memberId']) {
       if (body[key] && typeof body[key] === 'string' && body[key].length > 128) {
-        return json({ error: key + ' too long (max 128)' }, 400, request);
+        return json({ error: key + ' too long (max 128)', code: 'FIELD_TOO_LARGE' }, 400, request);
       }
       // Block control characters in identifiers
       if (body[key] && typeof body[key] === 'string' && /[\x00-\x1f]/.test(body[key])) {
-        return json({ error: key + ' contains invalid characters' }, 400, request);
+        return json({ error: key + ' contains invalid characters', code: 'INVALID_FIELD' }, 400, request);
       }
     }
     if (body.data && typeof body.data === 'string' && body.data.length > 65536) {
-      return json({ error: 'data too long (max 64KB)' }, 400, request);
+      return json({ error: 'data too long (max 64KB)', code: 'PAYLOAD_TOO_LARGE' }, 400, request);
     }
     // Payload size limit (encrypted messages)
     if (body.payload && typeof body.payload === 'string' && body.payload.length > 512 * 1024) {
-      return json({ error: 'payload too large (max 512KB)' }, 400, request);
+      return json({ error: 'payload too large (max 512KB)', code: 'PAYLOAD_TOO_LARGE' }, 400, request);
     }
     // Envelope size limit (sealed sender)
     if (body.envelope && typeof body.envelope === 'string' && body.envelope.length > 512 * 1024) {
-      return json({ error: 'envelope too large (max 512KB)' }, 400, request);
+      return json({ error: 'envelope too large (max 512KB)', code: 'PAYLOAD_TOO_LARGE' }, 400, request);
     }
 
     try {
       if (!env.KV) {
-        return json({ error: 'Storage not configured. Bind a KV namespace named "KV" in Pages settings.' }, 503, request);
+        return json({ error: 'Storage not configured. Bind a KV namespace named "KV" in Pages settings.', code: 'KV_NOT_CONFIGURED' }, 503, request);
       }
       switch (path) {
         case '/api/signal':    return await handleSignal(body, ip, env, request);
@@ -319,7 +319,7 @@ export default {
         default:            return json({ error: 'Not found', code: 'NOT_FOUND' }, 404, request, reqId);
       }
     } catch (e) {
-      return json({ error: 'Server error', rid: reqId }, 500, request, reqId);
+      return json({ error: 'Server error', code: 'SERVER_ERROR', rid: reqId }, 500, request, reqId);
     }
   }
 };
@@ -1538,7 +1538,7 @@ async function handleAccountPurchase(body, env, request) {
   const planKey = plan && priceMap[plan] ? plan : 'lite';
   const priceId = priceMap[planKey];
 
-  if (!priceId) return json({ error: 'Price not configured for plan: ' + planKey }, 503, request);
+  if (!priceId) return json({ error: 'Price not configured for plan: ' + planKey, code: 'PRICE_NOT_CONFIGURED' }, 503, request);
 
   const origin = request.headers.get('Origin') || request.headers.get('Referer')?.replace(/\/[^/]*$/, '') || '';
 
@@ -2063,7 +2063,7 @@ async function handleSealedAck(body, env, request) {
 
 async function handleBackupUpload(body, env, request) {
   const { userId, backup } = body;
-  if (!userId || !backup) return json({ error: 'userId and backup required' }, 400, request);
+  if (!userId || !backup) return json({ error: 'userId and backup required', code: 'MISSING_FIELDS' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   if (typeof backup !== 'string') return json({ error: 'backup must be a string', code: 'INVALID_FIELD' }, 400, request);
 
@@ -2090,9 +2090,9 @@ async function handleBackupDownload(body, env, request) {
 // ═══════════════════════════════════════════════════════════
 async function handleDropCreate(body, env, request) {
   const { id, ct, ttl } = body;
-  if (!id || !ct) return json({ error: 'id and ct required' }, 400, request);
-  if (typeof id !== 'string' || id.length < 1 || id.length > 64 || !/^[A-Za-z0-9_\-.]+$/.test(id)) return json({ error: 'invalid id (1-64 alphanumeric/_/./- chars)' }, 400, request);
-  if (typeof ct !== 'string' || ct.length > 100000) return json({ error: 'ct too large (max 100KB)' }, 400, request);
+  if (!id || !ct) return json({ error: 'id and ct required', code: 'MISSING_FIELDS' }, 400, request);
+  if (typeof id !== 'string' || id.length < 1 || id.length > 64 || !/^[A-Za-z0-9_\-.]+$/.test(id)) return json({ error: 'invalid id (1-64 alphanumeric/_/./- chars)', code: 'INVALID_ID' }, 400, request);
+  if (typeof ct !== 'string' || ct.length > 100000) return json({ error: 'ct too large (max 100KB)', code: 'PAYLOAD_TOO_LARGE' }, 400, request);
   const ttlSec = Math.min(Math.max(parseInt(ttl) || 86400, 300), 604800); // 5min - 7days, default 24h
   const key = `drop:${id}`;
   const existing = await kvGet(env, key);
@@ -2103,7 +2103,7 @@ async function handleDropCreate(body, env, request) {
 
 async function handleDropRead(body, env, request) {
   const { id } = body;
-  if (!id || typeof id !== 'string' || id.length > 64 || !/^[A-Za-z0-9_\-.]+$/.test(id)) return json({ error: 'invalid id' }, 400, request);
+  if (!id || typeof id !== 'string' || id.length > 64 || !/^[A-Za-z0-9_\-.]+$/.test(id)) return json({ error: 'invalid id', code: 'INVALID_ID' }, 400, request);
   const key = `drop:${id}`;
   const raw = await kvGet(env, key);
   if (!raw) return json({ error: 'Not found or already read', code: 'NOT_FOUND' }, 404, request);
@@ -2255,8 +2255,8 @@ function json(data, status, request, _rid) {
 // ================================================================
 async function handleTranslate(body, env, request) {
   const { text, from, to } = body;
-  if (!text || !to) return json({ error: 'text and to required' }, 400, request);
-  if (typeof text !== 'string' || text.length > 2000) return json({ error: 'text too long (max 2000)' }, 400, request);
+  if (!text || !to) return json({ error: 'text and to required', code: 'MISSING_FIELDS' }, 400, request);
+  if (typeof text !== 'string' || text.length > 2000) return json({ error: 'text too long (max 2000)', code: 'PAYLOAD_TOO_LARGE' }, 400, request);
   if (typeof to !== 'string') return json({ error: 'to must be a string', code: 'INVALID_FIELD' }, 400, request);
   const src = typeof from === 'string' ? from.slice(0, 10) : 'auto';
   const tgt = to.slice(0, 10);
@@ -2361,7 +2361,7 @@ async function handleTranslate(body, env, request) {
 // ================================================================
 async function handleAI(body, env, request) {
   const { action, messages, text, context, lang } = body;
-  if (!action) return json({ error: 'action required' }, 400, request);
+  if (!action) return json({ error: 'action required', code: 'MISSING_FIELDS' }, 400, request);
 
   // Check if any AI provider is configured
   const hasAI = env.ANTHROPIC_API_KEY || env.OPENAI_API_KEY || env.GROQ_API_KEY;
@@ -2374,13 +2374,13 @@ async function handleAI(body, env, request) {
   // Build prompt based on action
   switch (action) {
     case 'chat':
-      if (!text || typeof text !== 'string' || text.length > 2000) return json({ error: 'text required (max 2000)' }, 400, request);
+      if (!text || typeof text !== 'string' || text.length > 2000) return json({ error: 'text required (max 2000)', code: 'MISSING_FIELDS' }, 400, request);
       systemPrompt = 'You are a helpful assistant embedded in a P2P messenger. Keep answers concise (2-3 sentences). Reply in the same language as the user.';
       userContent = text;
       break;
 
     case 'summarize':
-      if (!messages || !Array.isArray(messages)) return json({ error: 'messages array required' }, 400, request);
+      if (!messages || !Array.isArray(messages)) return json({ error: 'messages array required', code: 'MISSING_FIELDS' }, 400, request);
       systemPrompt = 'Summarize this chat conversation in 3-5 bullet points. Identify key topics, decisions, and action items. Reply in the same language as the messages.';
       // Cap individual fields before joining to bound peak memory (not just the aggregate).
       // Guard against null/undefined items: JSON.parse on a client-crafted array can
@@ -2394,24 +2394,24 @@ async function handleAI(body, env, request) {
       break;
 
     case 'reply_suggest':
-      if (!context || typeof context !== 'string') return json({ error: 'context required (string)' }, 400, request);
+      if (!context || typeof context !== 'string') return json({ error: 'context required (string)', code: 'MISSING_FIELDS' }, 400, request);
       systemPrompt = 'Generate 3 short reply suggestions (each under 30 chars) for the last message in this chat. Return ONLY a JSON array of 3 strings. Reply in the same language as the conversation.';
       userContent = context.slice(-1000);
       break;
 
     case 'translate_context': {
-      if (!text || typeof text !== 'string' || !lang) return json({ error: 'text and lang required' }, 400, request);
+      if (!text || typeof text !== 'string' || !lang) return json({ error: 'text and lang required', code: 'MISSING_FIELDS' }, 400, request);
       // Sanitize lang to a valid BCP-47 tag (e.g. 'en', 'ja', 'zh-CN') to prevent
       // prompt injection via a crafted language string in the system prompt.
       const safeLang = String(lang).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 20);
-      if (!safeLang) return json({ error: 'invalid lang code' }, 400, request);
+      if (!safeLang) return json({ error: 'invalid lang code', code: 'INVALID_FIELD' }, 400, request);
       systemPrompt = `Translate the following message to ${safeLang}. Preserve tone, formality level, and emoji. Return ONLY the translation.`;
       userContent = text.slice(0, 2000);
       break;
     }
 
     default:
-      return json({ error: 'Unknown action: ' + String(action).slice(0, 32) }, 400, request);
+      return json({ error: 'Unknown action: ' + String(action).slice(0, 32), code: 'INVALID_ACTION' }, 400, request);
   }
 
   // KV cache (1h for chat, 24h for summarize/translate)
