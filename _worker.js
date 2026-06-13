@@ -89,7 +89,7 @@ export default {
         ok: kvOk,
         version: '3.6.0',
         protocol: 4,
-        endpoints: 39,
+        endpoints: 40,
         reqId,
         serverTime: Date.now(), // v3.6: Client can detect clock drift
         kv: kvOk,
@@ -118,7 +118,7 @@ export default {
           'account-delete', 'group-leave', 'group-delete', 'group-admin',
           'group-transfer', 'group-rename', 'msg-disappear-enforce',
           'sealed-sender', 'franking', 'prekey-x3dh',
-          'batch-alias', 'group-caps', 'ktlog-get',
+          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe',
         ],
         crypto: ['X25519', 'Ed25519', 'AES-256-GCM', 'HKDF-SHA256', 'Double Ratchet', 'Sender Key O(1)'],
         ts: Date.now(),
@@ -173,6 +173,7 @@ export default {
         '/api/group/delete': 5,
         '/api/account/delete': 3,
         '/api/push/subscribe': 5,
+        '/api/push/unsubscribe': 5,
         '/api/turn': 10,
         '/api/account/slots': 20,
         '/api/online': 20,
@@ -281,7 +282,8 @@ export default {
         case '/api/group/create': return await handleGroupCreate(body, env, request);
         case '/api/group/join':   return await handleGroupJoin(body, env, request);
         case '/api/group/info':   return await handleGroupInfo(body, env, request);
-        case '/api/push/subscribe': return await handlePushSubscribe(body, env, request);
+        case '/api/push/subscribe':   return await handlePushSubscribe(body, env, request);
+        case '/api/push/unsubscribe': return await handlePushUnsubscribe(body, env, request);
         case '/api/turn':           return await handleTurn(body, env, request);
         case '/api/ogp':            return await handleOGP(body, env, request);
         case '/api/account/purchase': return await handleAccountPurchase(body, env, request);
@@ -921,7 +923,7 @@ async function handleGroupJoin(body, env, request) {
     return json({ ok: true, name: group.name, members: group.members, epoch: group.epoch | 0, alreadyMember: true, refreshed: changed }, 200, request);
   }
 
-  // Max 50 members per group
+  // Max 100 members per group (matches README and UI cap)
   if (group.members.length >= 100) return json({ error: 'Group is full', code: 'GROUP_FULL' }, 400, request);
 
   // Add new member (with N3 capability snapshot — see handleGroupCreate).
@@ -1310,6 +1312,25 @@ async function handlePushSubscribe(body, env, request) {
   if (subs.length > 5) subs = subs.slice(-5);
   await kvPut(env, key, JSON.stringify(subs), { expirationTtl: 86400 * 30 });
   return json({ ok: true, devices: subs.length }, 200, request);
+}
+
+async function handlePushUnsubscribe(body, env, request) {
+  const { userId, endpoint } = body;
+  if (!userId || !endpoint) return json({ error: 'userId and endpoint required', code: 'MISSING_FIELDS' }, 400, request);
+  if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
+  if (typeof endpoint !== 'string' || endpoint.length > 512) return json({ error: 'invalid endpoint', code: 'INVALID_FIELD' }, 400, request);
+  const key = `push:${userId}`;
+  const data = await kvGet(env, key);
+  if (!data) return json({ ok: true, removed: 0 }, 200, request);
+  const subs = safeJsonParse(data, []);
+  if (!Array.isArray(subs)) return json({ ok: true, removed: 0 }, 200, request);
+  const filtered = subs.filter(s => s.endpoint !== endpoint);
+  const removed = subs.length - filtered.length;
+  if (removed > 0) {
+    if (filtered.length === 0) await kvDel(env, key);
+    else await kvPut(env, key, JSON.stringify(filtered), { expirationTtl: 86400 * 30 });
+  }
+  return json({ ok: true, removed }, 200, request);
 }
 
 async function sendPushToUser(userId, payload, env) {
@@ -2396,6 +2417,7 @@ export {
   handleAbuseReport,
   hmacVerifyFrank,
   handlePushSubscribe,
+  handlePushUnsubscribe,
   handleGroupCreate,
   handleGroupJoin,
   handleGroupInfo,

@@ -1,5 +1,22 @@
 # Changelog
 
+## Push unsubscribe endpoint + comment/count fixes (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+537 tests (+4); no breaking wire change.
+
+- **`/api/push/unsubscribe`** — new endpoint to explicitly remove a push subscription
+  by endpoint URL. Previously push subscriptions could only be removed by waiting for
+  the 30-day KV TTL, making "disable notifications on this device" impossible without
+  re-registering. Returns `{ ok, removed }` — `removed: 0` when the endpoint wasn't
+  registered (idempotent). Rate-limited at 5 req/min. Added `push-unsubscribe` to
+  health capabilities.
+- **Group full comment fix** — misleading `// Max 50 members` comment corrected to
+  `// Max 100 members` (the enforcement code was already `>= 100`; only the comment
+  was wrong — matches README and UI).
+- **Endpoint count updated** to 40 across `_worker.js`, `CLAUDE.md`, `AGENTS.md`.
+- **Tests (+4)**: removes endpoint + cleans up KV; returns `removed: 0` for unknown
+  endpoint; ok with no subscriptions; 400 on missing fields/invalid userId.
+
 ## Key-transparency log public endpoint + OGP HTML cap fix (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 Two robustness improvements. 533 tests (+4).

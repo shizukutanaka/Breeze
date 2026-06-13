@@ -53,6 +53,7 @@ import worker, {
   handleTranslate,
   validateUserId,
   handleKtLogGet,
+  handlePushUnsubscribe,
 } from '../_worker.js';
 import { makeKV, makeEnv, apiRequest, stripeSigHeader } from './helpers/mockKV.js';
 import { createFranking } from '../src/crypto/franking.js';
@@ -1823,6 +1824,45 @@ describe('push subscribe SSRF guard', () => {
     expect(saved.keys.p256dh.length).toBeLessThanOrEqual(100);
     expect(saved.keys.auth.length).toBeLessThanOrEqual(50);
     expect(saved.keys).not.toHaveProperty('extra');
+  });
+});
+
+describe('push unsubscribe', () => {
+  const FCM = 'https://fcm.googleapis.com/fcm/send/device1';
+  const req = apiRequest('/api/push/unsubscribe', {});
+
+  it('removes the matching endpoint and returns removed: 1', async () => {
+    const env = makeEnv();
+    await handlePushSubscribe({ userId: 'unsub001', subscription: { endpoint: FCM } }, env, req);
+    const res = await handlePushUnsubscribe({ userId: 'unsub001', endpoint: FCM }, env, req);
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.ok).toBe(true);
+    expect(j.removed).toBe(1);
+    // KV entry should be gone (no subscriptions left).
+    expect(await env.KV.get('push:unsub001')).toBeNull();
+  });
+
+  it('returns removed: 0 when endpoint is not in the list', async () => {
+    const env = makeEnv();
+    await handlePushSubscribe({ userId: 'unsub002', subscription: { endpoint: FCM } }, env, req);
+    const res = await handlePushUnsubscribe({ userId: 'unsub002', endpoint: 'https://fcm.googleapis.com/other' }, env, req);
+    expect((await res.json()).removed).toBe(0);
+    // Original subscription still present.
+    expect(JSON.parse(await env.KV.get('push:unsub002')).length).toBe(1);
+  });
+
+  it('returns ok: true with removed: 0 when user has no subscriptions', async () => {
+    const res = await handlePushUnsubscribe({ userId: 'unsub003', endpoint: FCM }, makeEnv(), req);
+    expect(res.status).toBe(200);
+    expect((await res.json()).removed).toBe(0);
+  });
+
+  it('returns 400 for missing fields or invalid userId', async () => {
+    const r1 = await handlePushUnsubscribe({ userId: 'unsub004' }, makeEnv(), req);
+    expect(r1.status).toBe(400);
+    const r2 = await handlePushUnsubscribe({ userId: 'bad id!', endpoint: FCM }, makeEnv(), req);
+    expect(r2.status).toBe(400);
   });
 });
 
