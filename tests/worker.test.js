@@ -416,6 +416,35 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     expect(res.status).toBe(200);
     expect((await res.json()).replenishOTP).toBe(true);
   });
+
+  // ── OTP delete-failure safety (item 28) ──────────────────────────────────────
+  it('OTP not attached when kvDel fails — prevents OTP reuse / X3DH forward-secrecy degradation', async () => {
+    // If the delete of the OTP KV slot fails, the OTP should NOT be included in the
+    // response. Returning an OTP whose slot wasn't actually consumed would let a second
+    // initiator receive the same OTP → DH4 component shared → X3DH FS degradation.
+    const env = makeEnv();
+    const uid = 'otpdelfail';
+    await handlePreKeyUpload(
+      { userId: uid, identityKey: 'IK', signedPreKey: 'SPK', oneTimePreKeys: ['otp-secret'] },
+      env, apiRequest('/api/prekey/upload', {})
+    );
+    // Inject a failing delete (simulates transient KV error)
+    const realDelete = env.KV.delete.bind(env.KV);
+    env.KV.delete = async (key) => {
+      if (key.startsWith(`prekey:otp:${uid}`)) throw new Error('KV_TRANSIENT_ERROR');
+      return realDelete(key);
+    };
+    const res = await handlePreKeyFetch({ userId: uid }, env, apiRequest('/api/prekey/fetch', {}));
+    expect(res.status).toBe(200);
+    const b = await res.json();
+    // No OTP should be attached — slot was not consumed
+    expect(b.oneTimePreKey).toBeUndefined();
+    expect(b.oneTimePreKeyId).toBeUndefined();
+    // replenishOTP should be set so the client knows to upload fresh OTPs
+    expect(b.replenishOTP).toBe(true);
+    // The OTP slot should still be in KV (delete failed = slot intact for next fetch)
+    expect(await env.KV.get(`prekey:otp:${uid}:0`)).not.toBeNull();
+  });
 });
 
 describe('prekey key-history audit log (I11 precursor)', () => {

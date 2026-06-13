@@ -1844,13 +1844,19 @@ async function handlePreKeyFetch(body, env, request) {
       const otp = await kvGet(env, `prekey:otp:${userId}:${i}`);
       if (otp) {
         const parsed = safeJsonParse(otp);
-        // Only attach the OTP if it parsed cleanly; still consume and delete either way
-        // so a corrupted entry doesn't permanently block the slot.
+        // Delete BEFORE attaching to the bundle. If the delete fails (transient KV error),
+        // skip this slot rather than returning an OTP we can't guarantee was exclusively
+        // consumed — reusing an OTP with a second initiator degrades X3DH forward secrecy
+        // (the DH4 component would no longer be per-session). A failed delete leaves the
+        // slot intact for the next fetch; set replenishOTP so the client knows to retry.
+        const consumed = await kvDel(env, `prekey:otp:${userId}:${i}`);
+        if (!consumed) continue;
+        // Only attach the OTP if it parsed cleanly; a corrupted entry was still consumed
+        // above so it doesn't permanently block the slot.
         // Return the consumed index as oneTimePreKeyId: the X3DH v5 initiator echoes it
         // in the prekey message (opkId) so the responder can select the matching OTP
         // PRIVATE key (opkResolver). Without it the responder can't complete DH4.
         if (parsed !== null) { bundle.oneTimePreKey = parsed; bundle.oneTimePreKeyId = i; }
-        await kvDel(env, `prekey:otp:${userId}:${i}`);
         await kvPut(env, `prekey:otp:${userId}:count`, String(i), { expirationTtl: 86400 * 30 });
         remainingOTP = i;
         break;

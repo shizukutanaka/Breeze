@@ -1,5 +1,21 @@
 # Changelog
 
+## OTP delete-before-attach safety — item 28 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+569 tests (+1); no breaking wire change.
+
+- **`handlePreKeyFetch`: delete OTP slot BEFORE attaching it to the response bundle.**
+  Previously the OTP value was stored in `bundle.oneTimePreKey` and then `kvDel` was called.
+  If the delete threw (transient KV error), the OTP was returned to the initiator while the
+  slot remained in KV — a subsequent fetch could return the same OTP to another initiator,
+  causing OTP reuse. Reusing an X3DH OTP means the DH4 component is no longer per-session,
+  degrading forward secrecy for both sessions.
+- **Fix**: `kvDel` is now called first; if it returns `false`, the loop `continue`s to the
+  next slot. The OTP value is only attached after a confirmed delete. `replenishOTP` signals
+  the owner to retry if all deletes failed.
+- **Test (+1)**: injected throwing KV.delete verifies the OTP is withheld and the slot
+  remains intact in KV.
+
 ## KV write/delete failure propagation — item 27 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 568 tests (+3); no breaking wire change.
