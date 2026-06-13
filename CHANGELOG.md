@@ -1,5 +1,22 @@
 # Changelog
 
+## Key-transparency log public endpoint + OGP HTML cap fix (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+Two robustness improvements. 533 tests (+4).
+
+- **`/api/ktlog/get`** — standalone public endpoint to fetch a user's key-history
+  audit log (`{ log: [{ts,h,c}] }`). Previously the log was only available
+  bundled inside `/api/prekey/fetch`, which irreversibly consumes a one-time prekey.
+  Now any client can audit a peer's identity-key rotation history without side effects.
+  Returns empty log (not 404) for users with no upload history. Rate-limited at 20
+  req/min. Added `ktlog-get` to health capabilities.
+- **OGP HTML read cap enforced per chunk** — the streaming read loop now truncates to
+  32 KB *after each chunk* (`slice(0, 32768)`), so a server that sends one large chunk
+  can no longer buffer beyond the cap. Previously a single oversized chunk would
+  accumulate the full chunk before the loop condition fired.
+- **Tests (+4)**: log empty for new user; log populated after upload; ktlog fetch does
+  not consume OTPs; 400 on missing/invalid userId.
+
 ## replenishSPK signal + health capabilities update (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 Two minor but useful server-side improvements. 529 tests (+2).

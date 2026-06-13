@@ -118,7 +118,7 @@ export default {
           'account-delete', 'group-leave', 'group-delete', 'group-admin',
           'group-transfer', 'group-rename', 'msg-disappear-enforce',
           'sealed-sender', 'franking', 'prekey-x3dh',
-          'batch-alias', 'group-caps',
+          'batch-alias', 'group-caps', 'ktlog-get',
         ],
         crypto: ['X25519', 'Ed25519', 'AES-256-GCM', 'HKDF-SHA256', 'Double Ratchet', 'Sender Key O(1)'],
         ts: Date.now(),
@@ -150,6 +150,7 @@ export default {
         '/api/presence': 20,
         '/api/prekey/upload': 5,
         '/api/prekey/fetch': 10,
+        '/api/ktlog/get': 20,
         '/api/backup/upload': 2,
         '/api/backup/download': 5,
         '/api/drop/create': 10,
@@ -287,6 +288,7 @@ export default {
         case '/api/account/slots':    return await handleAccountSlots(body, env, request);
         case '/api/prekey/upload':    return await handlePreKeyUpload(body, env, request);
         case '/api/prekey/fetch':     return await handlePreKeyFetch(body, env, request);
+        case '/api/ktlog/get':        return await handleKtLogGet(body, env, request);
         case '/api/online':           return await handleOnlineCount(body, env, request);
         case '/api/sealed/send':      return await handleSealedSend(body, env, request);
         case '/api/sealed/poll':      return await handleSealedPoll(body, env, request);
@@ -1772,6 +1774,19 @@ async function handlePreKeyFetch(body, env, request) {
   return json(bundle, 200, request);
 }
 
+// I11: Standalone key-transparency log fetch. The log is a public tamper-evident
+// hash chain (SHA-256 of IK hashes) — no private data, no auth required. Allows
+// clients to audit a peer's key history without consuming an irreversible OTP.
+async function handleKtLogGet(body, env, request) {
+  const { userId } = body;
+  if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
+  if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
+  const raw = await kvGet(env, `ktlog:${userId}`);
+  if (!raw) return json({ log: [] }, 200, request);
+  const log = safeJsonParse(raw, []);
+  return json({ log: Array.isArray(log) ? log : [] }, 200, request);
+}
+
 // ============================================================
 // MESSAGE FRANKING — verifiable abuse reporting (I17), no plaintext escrow.
 //
@@ -2018,13 +2033,14 @@ async function handleOGP(body, env, request) {
     const ct = resp.headers.get('content-type') || '';
     if (!ct.includes('text/html')) return json({}, 200, request);
 
-    // Read first 32KB only (performance)
+    // Read first 32KB only (performance). Truncate AFTER each chunk so a single
+    // large chunk (e.g. from a slow-drip attacker) can't bloat memory beyond cap.
     const reader = resp.body.getReader();
     let html = '';
     while (html.length < 32768) {
       const { done, value } = await reader.read();
       if (done) break;
-      html += new TextDecoder().decode(value);
+      html = (html + new TextDecoder().decode(value)).slice(0, 32768);
     }
     reader.cancel().catch(() => {});
 
@@ -2374,6 +2390,7 @@ export {
   verifyStripeSignature,
   handlePreKeyUpload,
   handlePreKeyFetch,
+  handleKtLogGet,
   verifyEd25519,
   handleAbuseRecord,
   handleAbuseReport,

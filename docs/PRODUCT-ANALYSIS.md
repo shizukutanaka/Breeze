@@ -63,6 +63,8 @@
 | 13 | **エイリアス解決の N+1 問題** | `/api/alias/get` が単一エイリアスのみ受け付けるため、コンタクトリスト(N人)の表示に N 回のラウンドトリップが発生 — 無料枠 KV 読み取り(1日10万回)の主要消費源 | `{ aliases: [...] }` バッチモードを追加。最大50件を1リクエストで解決、未登録は `null` として返却。単一エイリアスモード(後方互換)は変更なし |
 | 14 | **署名済みプリキー(SPK)の無言失効** | `replenishOTP` フラグで OTP 枯渇は警告するが、SPK(KV TTL 30日)が期限切れになるとユーザが連絡不能になる問題は無警告 | `/api/prekey/fetch` で `uploadedAt` が 25 日超の場合に `replenishSPK: true` を返却。5 日間の再アップロードウィンドウを確保 |
 | 15 | **健康エンドポイントの機能検出リスト陳腐化** | `batch-alias`・`group-caps` が実装済みにも関わらず `/api/health` の `capabilities` リストに未記載 — クライアントが機能を検出できない | `capabilities` 配列に `batch-alias` と `group-caps` を追加 |
+| 16 | **鍵透明性ログの閲覧に OTP 消費が必要** | KT ログ(`{ ts, h, c }` チェーン)は `/api/prekey/fetch` の中に埋め込まれているため、ピアのログ監査に不可逆な OTP 消費が伴う | `/api/ktlog/get` 独立エンドポイントを追加。公開データ(IK ハッシュのハッシュチェーン)のため認証不要、OTP 消費なし |
+| 17 | **OGP HTML バッファリングの上限バイパス** | `while (html.length < 32768)` はループ先頭のチェックのため、サーバが 1 MB チャンクを 1 回で送信すると 1 MB 全体がバッファされてから上限チェックが通る | チャンク追記後に即 `.slice(0, 32768)` で切り詰め。どのチャンクサイズでも上限が守られる |
 
 ### 未実装(優先度順・理由つき)
 
@@ -83,11 +85,11 @@
 
 ## 検証
 
-- `npm test` — 13 スイート / 529 件全成功(本セッションで +57 件:アカウント削除/
+- `npm test` — 13 スイート / 533 件全成功(本セッションで +57 件:アカウント削除/
   グループ leave・delete/disappearAt パージ/メッセージ ID で +14、複数管理者で +10、
   所有権移譲で +6、改名で +4、アカウント削除のグループ清掃で +2、health capabilities
   +1、課金エンドポイントで +11、グループ能力ネゴシエーションで +3、caps リフレッシュで +2、
-  バッチエイリアス解決で +2、replenishSPK + capabilities更新で +2)
+  バッチエイリアス解決で +2、replenishSPK + capabilities更新で +2、ktlog-get + OGP cap で +4)
 - `./validate.sh` — 33/36(ベースライン維持、⚠3 は既知の許容警告)
 - `node -c _worker.js && node -c sw.js` — 構文 OK
 - 新エンドポイント(account/delete・group/leave・group/delete・group/admin・

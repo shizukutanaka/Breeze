@@ -52,6 +52,7 @@ import worker, {
   handleAI,
   handleTranslate,
   validateUserId,
+  handleKtLogGet,
 } from '../_worker.js';
 import { makeKV, makeEnv, apiRequest, stripeSigHeader } from './helpers/mockKV.js';
 import { createFranking } from '../src/crypto/franking.js';
@@ -570,6 +571,50 @@ describe('prekey signed-prekey signature verification (I1/G2)', () => {
     );
     const bundle = await (await handlePreKeyFetch({ userId: 'v5user04' }, env, apiRequest('/api/prekey/fetch', {}))).json();
     expect(bundle.x3dh.length).toBeLessThanOrEqual(4);
+  });
+});
+
+describe('key-transparency log — standalone get endpoint (/api/ktlog/get)', () => {
+  it('returns an empty log for a user that has never uploaded prekeys', async () => {
+    const res = await handleKtLogGet({ userId: 'nokeys01' }, makeEnv(), apiRequest('/api/ktlog/get', {}));
+    const j = await res.json();
+    expect(res.status).toBe(200);
+    expect(j.log).toEqual([]);
+  });
+
+  it('returns the key history log after a prekey upload', async () => {
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'ktuser01', identityKey: 'IK', signedPreKey: 'SPK' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    const res = await handleKtLogGet({ userId: 'ktuser01' }, env, apiRequest('/api/ktlog/get', {}));
+    const j = await res.json();
+    expect(res.status).toBe(200);
+    expect(Array.isArray(j.log)).toBe(true);
+    expect(j.log.length).toBe(1);
+    expect(j.log[0]).toMatchObject({ ts: expect.any(Number), h: expect.any(String), c: expect.any(String) });
+  });
+
+  it('does not consume an OTP (log is readable independently of bundle fetch)', async () => {
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'ktuser02', identityKey: 'IK', signedPreKey: 'SPK', oneTimePreKeys: ['otp0'] },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    // Fetch log twice — OTP count should stay at 1 (not consumed).
+    await handleKtLogGet({ userId: 'ktuser02' }, env, apiRequest('/api/ktlog/get', {}));
+    await handleKtLogGet({ userId: 'ktuser02' }, env, apiRequest('/api/ktlog/get', {}));
+    // Now fetch the bundle — OTP should still be available.
+    const bundle = await (await handlePreKeyFetch({ userId: 'ktuser02' }, env, apiRequest('/api/prekey/fetch', {}))).json();
+    expect(bundle.oneTimePreKey).toBe('otp0');
+  });
+
+  it('returns 400 for missing or invalid userId', async () => {
+    const r1 = await handleKtLogGet({}, makeEnv(), apiRequest('/api/ktlog/get', {}));
+    expect(r1.status).toBe(400);
+    const r2 = await handleKtLogGet({ userId: 'bad id!' }, makeEnv(), apiRequest('/api/ktlog/get', {}));
+    expect(r2.status).toBe(400);
   });
 });
 
