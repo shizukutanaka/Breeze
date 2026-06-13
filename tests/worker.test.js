@@ -54,6 +54,7 @@ import worker, {
   validateUserId,
   handleKtLogGet,
   handlePushUnsubscribe,
+  handlePreKeyFetchBatch,
 } from '../_worker.js';
 import { makeKV, makeEnv, apiRequest, stripeSigHeader } from './helpers/mockKV.js';
 import { createFranking } from '../src/crypto/franking.js';
@@ -572,6 +573,46 @@ describe('prekey signed-prekey signature verification (I1/G2)', () => {
     );
     const bundle = await (await handlePreKeyFetch({ userId: 'v5user04' }, env, apiRequest('/api/prekey/fetch', {}))).json();
     expect(bundle.x3dh.length).toBeLessThanOrEqual(4);
+  });
+});
+
+describe('batch prekey fetch (/api/prekey/fetch/batch)', () => {
+  const req = apiRequest('/api/prekey/fetch/batch', {});
+
+  it('resolves multiple bundles in one call; unknown users map to null', async () => {
+    const env = makeEnv();
+    await handlePreKeyUpload({ userId: 'batchpk01', identityKey: 'IK1', signedPreKey: 'SPK1' }, env, req);
+    await handlePreKeyUpload({ userId: 'batchpk02', identityKey: 'IK2', signedPreKey: 'SPK2' }, env, req);
+    const res = await handlePreKeyFetchBatch({ userIds: ['batchpk01', 'batchpk02', 'nobody001'] }, env, req);
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.results['batchpk01'].identityKey).toBe('IK1');
+    expect(j.results['batchpk02'].identityKey).toBe('IK2');
+    expect(j.results['nobody001']).toBeNull();
+  });
+
+  it('deduplicates userIds and caps at 10', async () => {
+    const env = makeEnv();
+    // Register 12 distinct users
+    for (let i = 1; i <= 12; i++) {
+      const id = `batchi${String(i).padStart(3, '0')}`;
+      await handlePreKeyUpload({ userId: id, identityKey: `IK${i}`, signedPreKey: `SPK${i}` }, env, req);
+    }
+    const ids = Array.from({ length: 12 }, (_, i) => `batchi${String(i + 1).padStart(3, '0')}`);
+    // Also include a duplicate
+    ids.push(ids[0]);
+    const res = await handlePreKeyFetchBatch({ userIds: ids }, env, req);
+    const j = await res.json();
+    expect(Object.keys(j.results).length).toBe(10); // capped at 10, deduped
+  });
+
+  it('returns 400 when userIds is missing or empty', async () => {
+    const r1 = await handlePreKeyFetchBatch({}, makeEnv(), req);
+    expect(r1.status).toBe(400);
+    const r2 = await handlePreKeyFetchBatch({ userIds: [] }, makeEnv(), req);
+    expect(r2.status).toBe(400);
+    const r3 = await handlePreKeyFetchBatch({ userIds: ['bad id!'] }, makeEnv(), req);
+    expect(r3.status).toBe(400); // all invalid → no valid userIds
   });
 });
 

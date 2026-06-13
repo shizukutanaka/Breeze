@@ -1,5 +1,19 @@
 # Changelog
 
+## Batch prekey fetch — one request for N session initiations (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+540 tests (+3); no breaking wire change.
+
+- **`/api/prekey/fetch/batch`** — new endpoint that resolves up to 10 prekey bundles in
+  one round-trip. Useful when joining a group: instead of N serial `/prekey/fetch` calls
+  (each consuming an OTP for that user), one batch call returns `{ results: { userId:
+  bundle | null } }`. OTPs ARE consumed (same as the single-fetch path) — this is a
+  latency optimisation, not an OTP-free path. Deduplicates userIds before processing.
+  Rate-limited at 5 req/min (stricter than single-fetch since each call can consume up
+  to 10 OTPs). Added `prekey-fetch-batch` to health capabilities.
+- **Tests (+3)**: batch resolves multiple bundles + maps misses to null; dedup + 10-cap
+  enforced; 400 on missing/empty/all-invalid userIds.
+
 ## Push unsubscribe endpoint + comment/count fixes (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 537 tests (+4); no breaking wire change.

@@ -89,7 +89,7 @@ export default {
         ok: kvOk,
         version: '3.6.0',
         protocol: 4,
-        endpoints: 40,
+        endpoints: 41,
         reqId,
         serverTime: Date.now(), // v3.6: Client can detect clock drift
         kv: kvOk,
@@ -118,7 +118,7 @@ export default {
           'account-delete', 'group-leave', 'group-delete', 'group-admin',
           'group-transfer', 'group-rename', 'msg-disappear-enforce',
           'sealed-sender', 'franking', 'prekey-x3dh',
-          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe',
+          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch',
         ],
         crypto: ['X25519', 'Ed25519', 'AES-256-GCM', 'HKDF-SHA256', 'Double Ratchet', 'Sender Key O(1)'],
         ts: Date.now(),
@@ -150,6 +150,7 @@ export default {
         '/api/presence': 20,
         '/api/prekey/upload': 5,
         '/api/prekey/fetch': 10,
+        '/api/prekey/fetch/batch': 5,
         '/api/ktlog/get': 20,
         '/api/backup/upload': 2,
         '/api/backup/download': 5,
@@ -290,6 +291,7 @@ export default {
         case '/api/account/slots':    return await handleAccountSlots(body, env, request);
         case '/api/prekey/upload':    return await handlePreKeyUpload(body, env, request);
         case '/api/prekey/fetch':     return await handlePreKeyFetch(body, env, request);
+        case '/api/prekey/fetch/batch': return await handlePreKeyFetchBatch(body, env, request);
         case '/api/ktlog/get':        return await handleKtLogGet(body, env, request);
         case '/api/online':           return await handleOnlineCount(body, env, request);
         case '/api/sealed/send':      return await handleSealedSend(body, env, request);
@@ -1795,6 +1797,37 @@ async function handlePreKeyFetch(body, env, request) {
   return json(bundle, 200, request);
 }
 
+// Batch prekey fetch — resolves up to 10 bundles in one round-trip so an initiator
+// can set up sessions with several users (e.g. a group) without N serial requests.
+// Each fetch consumes one OTP for that user, same as the single-fetch path.
+// Cap at 10 to bound OTP consumption and response size.
+async function handlePreKeyFetchBatch(body, env, request) {
+  const { userIds } = body;
+  if (!Array.isArray(userIds) || userIds.length === 0)
+    return json({ error: 'userIds array required', code: 'MISSING_FIELDS' }, 400, request);
+  // Validate, deduplicate, cap at 10.
+  const seen = new Set();
+  const cleaned = [];
+  for (const id of userIds) {
+    if (typeof id !== 'string') continue;
+    if (!validateUserId(id) || seen.has(id)) continue;
+    seen.add(id);
+    cleaned.push(id);
+    if (cleaned.length >= 10) break;
+  }
+  if (cleaned.length === 0) return json({ error: 'no valid userIds', code: 'INVALID_FIELD' }, 400, request);
+  const results = {};
+  for (const userId of cleaned) {
+    const res = await handlePreKeyFetch({ userId }, env, request);
+    if (res.status === 200) {
+      try { results[userId] = await res.json(); } catch { results[userId] = null; }
+    } else {
+      results[userId] = null;
+    }
+  }
+  return json({ results }, 200, request);
+}
+
 // I11: Standalone key-transparency log fetch. The log is a public tamper-evident
 // hash chain (SHA-256 of IK hashes) — no private data, no auth required. Allows
 // clients to audit a peer's key history without consuming an irreversible OTP.
@@ -2411,6 +2444,7 @@ export {
   verifyStripeSignature,
   handlePreKeyUpload,
   handlePreKeyFetch,
+  handlePreKeyFetchBatch,
   handleKtLogGet,
   verifyEd25519,
   handleAbuseRecord,
