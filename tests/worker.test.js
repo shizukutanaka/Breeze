@@ -2478,6 +2478,14 @@ describe('webhook signature + idempotency', () => {
     expect(res.status).toBe(400);
   });
 
+  // Item 44: the webhook is dispatched before the global body-size guard, so it must cap
+  // the body itself — otherwise a huge body is buffered + HMACed before the sig check.
+  it('rejects an oversized webhook body with 413 before signature verification (DoS guard)', async () => {
+    const huge = 'x'.repeat(600000); // > MAX_BODY_BYTES (512KB)
+    const res = await handleWebhook(webhookReq(huge, 't=1,v1=deadbeef'), env());
+    expect(res.status).toBe(413); // size-checked ahead of the (invalid) signature's 400
+  });
+
   // Item 37: pin the replay-window guard. verifyStripeSignature claims "Reject if
   // timestamp is too old (5 min tolerance)", but the invalid-signature test above also
   // has a stale t=1, so it can't tell a freshness failure from a signature failure.

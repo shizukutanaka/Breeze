@@ -1,5 +1,26 @@
 # Changelog
 
+## Stripe webhook body-size DoS guard + endpoint-count doc fix — item 44 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+622 tests (+1); no wire change for legitimate traffic.
+
+Socratic trace of the request path: `/api/webhook` is dispatched at the top of `fetch`
+(before JSON parsing, to get the raw body for Stripe signature verification) — which means
+it runs **before** the global `MAX_BODY_BYTES` guard. `handleWebhook` then did
+`await request.text()` with no size limit of its own, so an attacker could POST an
+arbitrarily large body and force the worker to buffer it and run HMAC-SHA256 over the whole
+thing before the signature check rejected it — a resource-exhaustion vector unique to this
+unguarded path.
+
+- **Fix**: `handleWebhook` now caps the body itself — `Content-Length > MAX_BODY_BYTES` →
+  413 (fast path), and `body.length > MAX_BODY_BYTES` → 413 after reading (Content-Length can
+  be omitted/spoofed). Stripe events are far under 512KB, so legitimate webhooks are
+  unaffected; the size check runs ahead of signature verification.
+- **Doc accuracy**: the served endpoint count is 43 (41 switch cases + health + webhook). The
+  file header said "32 API endpoints" and `/api/health` reported `endpoints: 42` — both
+  corrected to 43.
+- **Tests (+1)**: a 600KB webhook body → 413 (before the invalid signature's 400).
+
 ## Rate-limit Retry-After correctness + honest "dual layer" comment — item 43 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 621 tests (+1); no wire change.

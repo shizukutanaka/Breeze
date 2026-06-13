@@ -1,6 +1,6 @@
 /**
  * Breeze Worker v3.6.0
- * 32 API endpoints. Cloudflare Pages Functions.
+ * 43 API endpoints. Cloudflare Pages Functions.
  *
  * KV schema:
  *   slots:{userId}     → { slots, plan, customerId, updatedAt }
@@ -89,7 +89,7 @@ export default {
         ok: kvOk,
         version: '3.6.0',
         protocol: 4,
-        endpoints: 42,
+        endpoints: 43,
         reqId,
         serverTime: Date.now(), // v3.6: Client can detect clock drift
         kv: kvOk,
@@ -775,7 +775,15 @@ async function handleWebhook(request, env) {
     return new Response('Not configured', { status: 503 });
   }
 
+  // The webhook is dispatched before the global MAX_BODY_BYTES guard (it needs the raw body
+  // for signature verification, ahead of JSON parsing), so it must cap the body itself —
+  // otherwise an attacker could force the worker to buffer + HMAC an arbitrarily large body
+  // before the signature check rejects it. Stripe events are far under this limit.
+  const contentLength = parseInt(request.headers.get('Content-Length') || '0');
+  if (contentLength > MAX_BODY_BYTES) return new Response('Payload too large', { status: 413 });
+
   const body = await request.text();
+  if (body.length > MAX_BODY_BYTES) return new Response('Payload too large', { status: 413 });
   const sig = request.headers.get('stripe-signature');
 
   const verified = await verifyStripeSignature(body, sig, env.STRIPE_WEBHOOK_SECRET);
