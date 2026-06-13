@@ -118,7 +118,7 @@ export default {
           'account-delete', 'group-leave', 'group-delete', 'group-admin',
           'group-transfer', 'group-rename', 'msg-disappear-enforce',
           'sealed-sender', 'franking', 'prekey-x3dh',
-          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete',
+          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'backup-auth',
         ],
         crypto: ['X25519', 'Ed25519', 'AES-256-GCM', 'HKDF-SHA256', 'Double Ratchet', 'Sender Key O(1)'],
         ts: Date.now(),
@@ -2062,24 +2062,64 @@ async function handleSealedAck(body, env, request) {
 // ============================================================
 
 async function handleBackupUpload(body, env, request) {
-  const { userId, backup } = body;
+  const { userId, backup, ts, sig } = body;
   if (!userId || !backup) return json({ error: 'userId and backup required', code: 'MISSING_FIELDS' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   if (typeof backup !== 'string') return json({ error: 'backup must be a string', code: 'INVALID_FIELD' }, 400, request);
 
+  // Optional Ed25519 auth: callers may include { ts, sig } to prove ownership of the
+  // account's identity key before overwriting the backup. When omitted the upload is
+  // unauthenticated (backward-compat). Both fields must be present or both absent.
+  const hasSig = ts !== undefined || sig !== undefined;
+  if (hasSig) {
+    if (ts === undefined || sig === undefined)
+      return json({ error: 'ts and sig must both be provided together', code: 'PARTIAL_AUTH' }, 400, request);
+    if (typeof sig !== 'string' || sig.length > 500)
+      return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
+    if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > 300000)
+      return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
+    const data = await kvGet(env, `prekey:${userId}`);
+    const bundle = data ? safeJsonParse(data) : null;
+    if (!bundle || typeof bundle.edIdentityKey !== 'string' || !bundle.edIdentityKey)
+      return json({ error: 'No registered identity key', code: 'NO_IDENTITY_KEY' }, 403, request);
+    const challenge = `breeze-backup-upload:${userId}:${ts}`;
+    const ok = await verifyEd25519(bundle.edIdentityKey, btoa(challenge), sig);
+    if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
+  }
+
   // Store (max 5MB per backup)
   if (backup.length > 5 * 1024 * 1024) return json({ error: 'Backup too large', code: 'PAYLOAD_TOO_LARGE' }, 413, request);
   await kvPut(env, `backup:${userId}`, backup, { expirationTtl: 86400 * 90 }); // 90 day retention
-  return json({ ok: true, size: backup.length }, 200, request);
+  return json({ ok: true, size: backup.length, authenticated: hasSig }, 200, request);
 }
 
 async function handleBackupDownload(body, env, request) {
-  const { userId } = body;
+  const { userId, ts, sig } = body;
   if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
+
+  // Optional Ed25519 auth: callers may include { ts, sig } to prove ownership before
+  // retrieving the backup. Both fields must be present or both absent.
+  const hasSig = ts !== undefined || sig !== undefined;
+  if (hasSig) {
+    if (ts === undefined || sig === undefined)
+      return json({ error: 'ts and sig must both be provided together', code: 'PARTIAL_AUTH' }, 400, request);
+    if (typeof sig !== 'string' || sig.length > 500)
+      return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
+    if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > 300000)
+      return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
+    const data = await kvGet(env, `prekey:${userId}`);
+    const bundle = data ? safeJsonParse(data) : null;
+    if (!bundle || typeof bundle.edIdentityKey !== 'string' || !bundle.edIdentityKey)
+      return json({ error: 'No registered identity key', code: 'NO_IDENTITY_KEY' }, 403, request);
+    const challenge = `breeze-backup-download:${userId}:${ts}`;
+    const ok = await verifyEd25519(bundle.edIdentityKey, btoa(challenge), sig);
+    if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
+  }
+
   const backup = await kvGet(env, `backup:${userId}`);
   if (!backup) return json({ error: 'No backup found', code: 'NOT_FOUND' }, 404, request);
-  return json({ backup }, 200, request);
+  return json({ backup, authenticated: hasSig }, 200, request);
 }
 
 // ═══════════════════════════════════════════════════════════

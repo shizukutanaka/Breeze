@@ -91,7 +91,7 @@ describe('routing & request validation (export default fetch)', () => {
     // The lifecycle endpoints added this session must be discoverable.
     for (const cap of [
       'account-delete', 'group-leave', 'group-delete', 'group-transfer', 'group-rename',
-      'batch-alias', 'group-caps',
+      'batch-alias', 'group-caps', 'backup-auth',
     ]) {
       expect(j.capabilities).toContain(cap);
     }
@@ -2504,6 +2504,114 @@ describe('backup upload / download', () => {
     const res = await handleBackupUpload({ userId: 'user00001', backup: { data: 'object' } }, e, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_FIELD');
+  });
+
+  // ── Optional Ed25519 authentication ─────────────────────────────────────────
+  // Helper: register a user with an Ed25519 prekey bundle; returns the key pair.
+  async function registerForBackup(env, userId) {
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
+    const spk = crypto.getRandomValues(new Uint8Array(32));
+    const spkSig = new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, spk));
+    await handlePreKeyUpload({
+      userId, identityKey: 'IK-' + userId,
+      edIdentityKey: toB64(edPub), signedPreKey: toB64(spk), signedPreKeySig: toB64(spkSig),
+    }, env, apiRequest('/api/prekey/upload', {}));
+    return ed;
+  }
+
+  async function signBackup(ed, action, userId, ts) {
+    const msg = new TextEncoder().encode(`breeze-backup-${action}:${userId}:${ts}`);
+    return toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, msg)));
+  }
+
+  it('authenticated upload succeeds and sets authenticated:true in response', async () => {
+    const e = makeEnv();
+    const userId = 'bakauth01';
+    const ed = await registerForBackup(e, userId);
+    const ts = Date.now();
+    const sig = await signBackup(ed, 'upload', userId, ts);
+    const res = await handleBackupUpload({ userId, backup: 'encrypted-blob', ts, sig }, e, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.ok).toBe(true);
+    expect(j.authenticated).toBe(true);
+  });
+
+  it('authenticated download succeeds and sets authenticated:true in response', async () => {
+    const e = makeEnv();
+    const userId = 'bakauth02';
+    const ed = await registerForBackup(e, userId);
+    await handleBackupUpload({ userId, backup: 'my-backup' }, e, req({}));
+    const ts = Date.now();
+    const sig = await signBackup(ed, 'download', userId, ts);
+    const res = await handleBackupDownload({ userId, ts, sig }, e, dlReq({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.backup).toBe('my-backup');
+    expect(j.authenticated).toBe(true);
+  });
+
+  it('upload with tampered sig is rejected with SIG_INVALID', async () => {
+    const e = makeEnv();
+    const userId = 'bakauth03';
+    await registerForBackup(e, userId);
+    const ts = Date.now();
+    const res = await handleBackupUpload({ userId, backup: 'blob', ts, sig: toB64(new Uint8Array(64)) }, e, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+  });
+
+  it('download with tampered sig is rejected with SIG_INVALID', async () => {
+    const e = makeEnv();
+    const userId = 'bakauth04';
+    await registerForBackup(e, userId);
+    await handleBackupUpload({ userId, backup: 'blob' }, e, req({}));
+    const ts = Date.now();
+    const res = await handleBackupDownload({ userId, ts, sig: toB64(new Uint8Array(64)) }, e, dlReq({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+  });
+
+  it('upload with sig but no registered ed key → NO_IDENTITY_KEY', async () => {
+    const e = makeEnv();
+    const userId = 'bakauth05';
+    const ts = Date.now();
+    const res = await handleBackupUpload({ userId, backup: 'blob', ts, sig: toB64(new Uint8Array(64)) }, e, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('NO_IDENTITY_KEY');
+  });
+
+  it('upload with only ts provided (no sig) → PARTIAL_AUTH', async () => {
+    const e = makeEnv();
+    const res = await handleBackupUpload({ userId: 'user00001', backup: 'blob', ts: Date.now() }, e, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('PARTIAL_AUTH');
+  });
+
+  it('download with only sig provided (no ts) → PARTIAL_AUTH', async () => {
+    const e = makeEnv();
+    const res = await handleBackupDownload({ userId: 'user00001', sig: toB64(new Uint8Array(64)) }, e, dlReq({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('PARTIAL_AUTH');
+  });
+
+  it('unauthenticated upload still works (backward-compat, authenticated:false)', async () => {
+    const e = makeEnv();
+    const res = await handleBackupUpload({ userId: 'user00001', backup: 'legacy-blob' }, e, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).authenticated).toBe(false);
+  });
+
+  it('stale ts (>5 min ago) rejected on upload with INVALID_TIMESTAMP', async () => {
+    const e = makeEnv();
+    const userId = 'bakauth06';
+    const ed = await registerForBackup(e, userId);
+    const ts = Date.now() - 400000; // >5 min
+    const sig = await signBackup(ed, 'upload', userId, ts);
+    const res = await handleBackupUpload({ userId, backup: 'blob', ts, sig }, e, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_TIMESTAMP');
   });
 });
 

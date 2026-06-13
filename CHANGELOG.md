@@ -1,5 +1,22 @@
 # Changelog
 
+## Optional Ed25519 auth for backup upload/download — item 26 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+565 tests (+9); no breaking wire change.
+
+- **`/api/backup/upload` and `/api/backup/download` now accept optional `{ ts, sig }` fields.**
+  When provided, both are required (`PARTIAL_AUTH` 400 if only one), freshness window ±5 min
+  (`INVALID_TIMESTAMP`), and the Ed25519 signature is verified against the user's registered
+  `edIdentityKey` from the prekey bundle (`SIG_INVALID` 403, `NO_IDENTITY_KEY` 403).
+  When omitted, both endpoints behave exactly as before (backward-compat — no wire change).
+- **Response now includes `authenticated: bool`** so clients can confirm whether the operation
+  was authenticated and surface a "protected" indicator in the UI.
+- **`backup-auth` added to `/api/health` capabilities** for client feature-detection during
+  staged rollout.
+- **Tests (+9)**: authenticated upload/download succeed; tampered sig rejected; no identity key
+  on upload/download with sig; partial auth (ts-only, sig-only) rejected; stale ts rejected;
+  unauthenticated path still works.
+
 ## Complete error `code` field coverage — 0 bare errors remaining (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 304 tests (0 net new — two existing tests tightened); no breaking wire change.
