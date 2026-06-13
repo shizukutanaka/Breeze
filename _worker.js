@@ -437,6 +437,18 @@ async function handleMsgSend(body, ip, env, request) {
   if (disappearAt) msg.disappearAt = (typeof disappearAt === 'number' && Number.isFinite(disappearAt)) ? disappearAt : undefined;
   if (sig) msg.sig = typeof sig === 'string' ? sig.slice(0, 200) : undefined;
   if (sigPub) msg.sigPub = typeof sigPub === 'string' ? sigPub.slice(0, 200) : undefined;
+  // Guarantee strictly-increasing ts within this inbox so the poll cursor (m.ts > lastTs)
+  // can never silently drop a message that shares a millisecond with an already-delivered
+  // one. The loss: client polls up to lastTs=T, a SECOND message then stores with ts=T,
+  // and the next poll's `m.ts > T` excludes it forever (cleanup eventually purges it
+  // undelivered). Bumping a colliding ts by 1ms makes the existing cursor lossless with no
+  // client change — appends are sequential so the last element always holds the max ts;
+  // display order is preserved and the sub-ms drift is invisible. (msg.id is the dedup key,
+  // so a bumped ts never causes a re-render.)
+  if (inbox.length > 0) {
+    const lastStoredTs = inbox[inbox.length - 1].ts;
+    if (Number.isFinite(lastStoredTs) && msg.ts <= lastStoredTs) msg.ts = lastStoredTs + 1;
+  }
   inbox.push(msg);
   const trimmed = inbox.slice(-100);
   const stored = await kvPut(env, key, JSON.stringify(trimmed), { expirationTtl: 604800 });

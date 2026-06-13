@@ -1,5 +1,27 @@
 # Changelog
 
+## Same-millisecond message loss on /msg/poll fixed server-side — item 41 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+615 tests (+2); server-side only, backward-compatible (no client change required).
+
+The implementation plan documented an unfixed bug: the 1:1 poll cursor uses `m.ts > lastTs`,
+so a second message that stores with the *same* millisecond ts as an already-delivered one
+is dropped forever. Loss path: client polls up to `lastTs=T` → a second message stores with
+`ts=T` → next poll's `m.ts > T` excludes it → the 10s cleanup later purges it undelivered.
+The plan's proposed fix required a client cursor change (msgId-exclusive); this lands a
+**fully server-side** fix instead.
+
+- **Fix**: `handleMsgSend` now guarantees strictly-increasing per-inbox timestamps — if an
+  incoming message's ts is `<=` the last stored message's ts, it's bumped to `last + 1`.
+  Appends are sequential so the last element always holds the max ts; the `m.ts > lastTs`
+  cursor becomes lossless with no client change. Display order is preserved, sub-ms drift is
+  invisible, and `msg.id` remains the dedup key so a bumped ts never causes a re-render.
+- **Scope**: only the 1:1 path uses a ts cursor; sealed-sender clears via ACK (item 40), so
+  no change needed there.
+- **Tests (+2)**: a message sharing a ms with an already-polled one is still delivered;
+  three same-ts sends store as strictly-increasing `[T, T+1, T+2]`. Mutation-verified
+  (disabling the bump fails both).
+
 ## Sealed-sender ACK no longer drops messages sent in the poll→ack window — item 40 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 613 tests (+4); server-side only, backward-compatible (no client change required).

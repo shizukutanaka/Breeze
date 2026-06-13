@@ -1772,6 +1772,33 @@ describe('msg send / poll (1:1 relay path)', () => {
     expect(stored[0].id).not.toBe(stored[1].id);
   });
 
+  // Item 41: a message that shares a millisecond with an already-polled one must still be
+  // delivered. The server bumps a colliding ts so the `m.ts > lastTs` cursor stays lossless.
+  it('does not lose a message sharing a ms with an already-polled one (monotonic ts cursor)', async () => {
+    const env = makeEnv();
+    const T = Date.now();
+    await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'FIRST', ts: T }, ip, env, req({}));
+    // First poll delivers FIRST; the client's cursor advances to the max ts it saw.
+    const p1 = await (await handleMsgPoll({ id: 'bob00001', lastTs: 0 }, env, req({}))).json();
+    expect(p1.messages.map(m => m.payload)).toEqual(['FIRST']);
+    const cursor = Math.max(...p1.messages.map(m => m.ts));
+    // A SECOND message arrives in the same millisecond as the first (same client ts).
+    await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'SECOND', ts: T }, ip, env, req({}));
+    // With the advanced cursor, SECOND must still be delivered (not dropped as ts == cursor).
+    const p2 = await (await handleMsgPoll({ id: 'bob00001', lastTs: cursor }, env, req({}))).json();
+    expect(p2.messages.map(m => m.payload)).toEqual(['SECOND']);
+  });
+
+  it('bumps a colliding stored ts by 1ms so inbox timestamps are strictly increasing', async () => {
+    const env = makeEnv();
+    const T = Date.now();
+    await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'A', ts: T }, ip, env, req({}));
+    await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'B', ts: T }, ip, env, req({}));
+    await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'C', ts: T }, ip, env, req({}));
+    const stored = JSON.parse(await env.KV.get('inbox:bob00001'));
+    expect(stored.map(m => m.ts)).toEqual([T, T + 1, T + 2]); // strictly increasing
+  });
+
   it('purges expired disappearing messages at poll (server-side disappearAt enforcement)', async () => {
     const env = makeEnv();
     const now = Date.now();
