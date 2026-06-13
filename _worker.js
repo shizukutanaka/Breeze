@@ -707,7 +707,8 @@ async function handleAliasDelete(body, env, request) {
   if (aliasRec.pub !== bundle.identityKey)
     return json({ error: 'Alias not owned by this identity', code: 'NOT_OWNER' }, 403, request);
 
-  await kvDel(env, `alias:${clean}`);
+  const aliasDeleted = await kvDel(env, `alias:${clean}`);
+  if (!aliasDeleted) return json({ error: 'Failed to delete alias', code: 'STORE_FAILED' }, 500, request);
   return json({ ok: true, removed: true }, 200, request);
 }
 
@@ -1248,7 +1249,8 @@ async function handleGroupDelete(body, env, request) {
   if (!group) return json({ error: 'Group not found', code: 'NOT_FOUND' }, 404, request);
   if (group.creatorId !== adminId) return json({ error: 'Admin permission required', code: 'FORBIDDEN' }, 403, request);
 
-  await kvDel(env, `grp:${token}`);
+  const groupDeleted = await kvDel(env, `grp:${token}`);
+  if (!groupDeleted) return json({ error: 'Failed to delete group', code: 'STORE_FAILED' }, 500, request);
   return json({ ok: true }, 200, request);
 }
 
@@ -2198,8 +2200,10 @@ async function handleDropRead(body, env, request) {
   if (!raw) return json({ error: 'Not found or already read', code: 'NOT_FOUND' }, 404, request);
   const data = safeJsonParse(raw);
   if (!data) return json({ error: 'Not found or already read', code: 'NOT_FOUND' }, 404, request);
-  // One-time read: delete immediately
-  await kvDel(env, key);
+  // One-time read: delete BEFORE returning so a KV failure keeps the drop intact
+  // for a retry rather than leaking the ciphertext without consuming the slot.
+  const consumed = await kvDel(env, key);
+  if (!consumed) return json({ error: 'Failed to consume drop', code: 'DEL_FAILED' }, 500, request);
   return json({ ct: data.ct, createdAt: data.createdAt }, 200, request);
 }
 

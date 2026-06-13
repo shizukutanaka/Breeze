@@ -1,5 +1,22 @@
 # Changelog
 
+## kvDel failure propagation: group delete, alias delete, drop one-time read — item 34 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+598 tests (+4); no breaking wire change.
+
+- **`handleGroupDelete`**: unchecked `kvDel` — if delete failed, group persisted but
+  client believed it was gone. Now returns `500 STORE_FAILED` on kvDel failure.
+- **`handleAliasDelete`**: unchecked `kvDel` — if delete failed, the alias was never freed
+  but `{ ok: true, removed: true }` was returned. Now returns `500 STORE_FAILED`.
+- **`handleDropRead`**: changed to **delete-before-return** (same pattern as OTP item 28).
+  Previously read → delete → return: if delete failed, the ciphertext was leaked to the
+  caller AND the drop remained in KV (violating one-time semantics). Now delete → return:
+  if delete fails, caller gets `500 DEL_FAILED` and can retry; the drop is preserved in KV.
+  On success, ciphertext is returned only after the delete confirms.
+- **Tests (+4)**: group delete 500 on kvDel throw (group still in KV); drop read 500 on
+  kvDel throw (drop still in KV, ciphertext not leaked); drop read success (delete-first
+  confirmed); alias delete 500 on kvDel throw (alias still in KV).
+
 ## Group mutation + prekey + backup STORE_FAILED propagation — item 33 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 594 tests (+8); no breaking wire change.

@@ -4035,3 +4035,76 @@ describe('prekey upload + backup STORE_FAILED propagation (item 33)', () => {
     expect((await res.json()).code).toBe('STORE_FAILED');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Item 34 — kvDel failure propagation: group delete, alias delete, drop read
+// ─────────────────────────────────────────────────────────────────────────────
+describe('kvDel failure propagation (item 34)', () => {
+  const req = (b) => apiRequest('/api/x', b);
+
+  function failOnDelete(env, keyPrefix) {
+    const real = env.KV.delete.bind(env.KV);
+    env.KV.delete = async (key, ...rest) => {
+      if (key.startsWith(keyPrefix)) throw new Error('KV unavailable');
+      return real(key, ...rest);
+    };
+  }
+
+  it('handleGroupDelete returns 500 STORE_FAILED when kvDel throws', async () => {
+    const env = makeEnv();
+    const { token } = await (await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    failOnDelete(env, 'grp:');
+    const res = await handleGroupDelete({ token, adminId: 'creator1' }, env, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+    // Group must still exist in KV (delete didn't go through)
+    expect(await env.KV.get('grp:' + token)).not.toBeNull();
+  });
+
+  it('handleDropRead returns 500 DEL_FAILED when kvDel throws (one-time property preserved)', async () => {
+    const env = makeEnv();
+    const { id } = await (await handleDropCreate({ ct: 'secret' }, env, req({}))).json();
+    failOnDelete(env, 'drop:');
+    const res = await handleDropRead({ id }, env, apiRequest('/api/drop/read', {}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('DEL_FAILED');
+    // Drop must still be in KV (ciphertext not leaked + not consumed)
+    expect(await env.KV.get('drop:' + id)).not.toBeNull();
+  });
+
+  it('handleDropRead with successful delete returns the ciphertext (delete-first order)', async () => {
+    const env = makeEnv();
+    const { id } = await (await handleDropCreate({ ct: 'my-secret' }, env, req({}))).json();
+    const res = await handleDropRead({ id }, env, apiRequest('/api/drop/read', {}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).ct).toBe('my-secret');
+    // Drop must be gone after successful read
+    expect(await env.KV.get('drop:' + id)).toBeNull();
+  });
+
+  it('handleAliasDelete returns 500 STORE_FAILED when kvDel throws', async () => {
+    const env = makeEnv();
+    // Set up a registered user with an alias manually (bypasses PoW for this unit test).
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const edPub = toB64(new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey)));
+    const spk = crypto.getRandomValues(new Uint8Array(32));
+    const spkSig = new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, spk));
+    await handlePreKeyUpload({
+      userId: 'alsdel99', identityKey: 'IK-alsdel99',
+      edIdentityKey: edPub, signedPreKey: toB64(spk), signedPreKeySig: toB64(spkSig),
+    }, env, apiRequest('/api/prekey/upload', {}));
+    await env.KV.put('alias:deltest99', JSON.stringify({ pub: 'IK-alsdel99', name: 'Me', setAt: Date.now() }));
+
+    const ts = Date.now();
+    const msg = new TextEncoder().encode(`breeze-alias-delete:deltest99:${ts}`);
+    const sig = toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, msg)));
+
+    failOnDelete(env, 'alias:');
+    const res = await handleAliasDelete({ alias: 'deltest99', userId: 'alsdel99', ts, sig }, env, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+    // Alias must still exist
+    expect(await env.KV.get('alias:deltest99')).not.toBeNull();
+  });
+});
