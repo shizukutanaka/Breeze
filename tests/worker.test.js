@@ -1199,6 +1199,41 @@ describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
     expect(fetch2.status).toBe(404);
   });
 
+  // Item 38: the reverse cust:{customerId} -> userId mapping must also be erased, or the
+  // payment-identity linkage (and a webhook resolution path to the deleted account)
+  // survives deletion. The handler reads slots:{userId}.customerId before deleting slots.
+  it('erases the cust:{customerId} reverse mapping when the billing record has a customerId', async () => {
+    const env = makeEnv();
+    const userId = 'delcust01';
+    const { ed } = await registeredAccount(env, userId);
+    // Overwrite the slots record with one carrying a Stripe customerId, and add the
+    // reverse mapping the webhook would have created.
+    await env.KV.put(`slots:${userId}`, JSON.stringify({ slots: 4, plan: 'plus', customerId: 'cus_del38' }));
+    await env.KV.put('cust:cus_del38', userId);
+
+    const ts = Date.now();
+    const res = await handleAccountDelete({ userId, ts, sig: await signDelete(ed, userId, ts) }, env, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.erased).toContain('cust');
+    expect(await env.KV.get('cust:cus_del38')).toBeNull(); // reverse mapping gone
+    expect(await env.KV.get(`slots:${userId}`)).toBeNull();
+  });
+
+  it('omits cust from erased and touches no cust mapping when the account has no customerId (free tier)', async () => {
+    const env = makeEnv();
+    const userId = 'delcust02';
+    const { ed } = await registeredAccount(env, userId); // slots has no customerId
+    // An unrelated cust mapping must NOT be deleted (we only erase this account's own).
+    await env.KV.put('cust:cus_other', 'someoneelse');
+
+    const ts = Date.now();
+    const res = await handleAccountDelete({ userId, ts, sig: await signDelete(ed, userId, ts) }, env, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).erased).not.toContain('cust');
+    expect(await env.KV.get('cust:cus_other')).toBe('someoneelse'); // untouched
+  });
+
   it('rejects an invalid signature without deleting anything', async () => {
     const env = makeEnv();
     const userId = 'deluser02';

@@ -1,5 +1,27 @@
 # Changelog
 
+## Account deletion erases the cust:{customerId} reverse mapping — item 38 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+606 tests (+2); additive, no wire change for existing clients.
+
+A Socratic re-check of item 36's claim that `handleAccountDelete` "deletes all relevant
+user data": enumerating every userId-keyed KV namespace against the handler showed one miss.
+The handler erases `inbox/sealed/prekey/otp/ktlog/push/backup/presence/slots` (+ optional
+alias/groups), but never the **reverse** `cust:{customerId} → userId` mapping — because it
+deleted `slots:${userId}` without first reading the `customerId` inside it.
+
+- **Gap**: the Stripe payment-identity → userId linkage survived account deletion (residual
+  user-linked data, contra item 1's GDPR Art. 17 intent), and a later subscription webhook
+  lacking `metadata.userId` could resolve the deleted account through it.
+- **Fix**: read `slots:${userId}` before deletion; if it carries a `customerId`, also
+  `kvDel(cust:${customerId})` and report `'cust'` in the `erased` array. Only this account's
+  own mapping is touched (the customerId comes from its own billing record). Documented
+  caveat: Breeze-created subscriptions also carry userId in their metadata, so users should
+  still cancel via the billing portal before deleting — this only removes the relay linkage.
+- **Tests (+2)**: a billing record with a customerId → `cust:` erased and `'cust'` in
+  `erased`; a free-tier account (no customerId) → `'cust'` absent and an unrelated `cust:`
+  mapping left untouched. Mutation-verified (disabling the `cust` delete fails the test).
+
 ## Regression test for Stripe webhook replay window (Socratic coverage audit) — item 37 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 604 tests (+3); test-only change, no production code modified.
