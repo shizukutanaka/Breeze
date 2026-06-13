@@ -118,7 +118,7 @@ export default {
           'account-delete', 'group-leave', 'group-delete', 'group-admin',
           'group-transfer', 'group-rename', 'msg-disappear-enforce',
           'sealed-sender', 'franking', 'prekey-x3dh',
-          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'backup-auth', 'drop-server-id',
+          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'backup-auth', 'drop-server-id', 'portal-auth',
         ],
         crypto: ['X25519', 'Ed25519', 'AES-256-GCM', 'HKDF-SHA256', 'Double Ratchet', 'Sender Key O(1)'],
         ts: Date.now(),
@@ -863,9 +863,31 @@ async function handleWebhook(request, env) {
 async function handlePortal(body, env, request) {
   if (!env.STRIPE_SECRET_KEY) return json({ error: 'Billing not configured', code: 'NOT_CONFIGURED' }, 503, request);
 
-  const { userId } = body;
+  const { userId, ts, sig } = body;
   if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
+
+  // Authorization. A Stripe billing-portal session is a BEARER link that exposes the
+  // customer's invoices (name/email/address/card last4) and lets the holder cancel the
+  // subscription. Handing it to anyone who merely knows a (publicly-discoverable via alias)
+  // userId is an IDOR / PII leak. Require Ed25519 ownership proof, same pattern as
+  // account-delete / backup: verified whenever {ts,sig} are supplied (forgeries always
+  // rejected), and required outright when PORTAL_REQUIRE_AUTH is set — flip that on once
+  // clients send the signature. Default (no sig + flag unset) preserves the legacy flow so
+  // the current client's portal button keeps working until it's updated.
+  const hasSig = ts !== undefined || sig !== undefined;
+  if (hasSig) {
+    if (ts === undefined || sig === undefined) return json({ error: 'ts and sig must both be provided', code: 'PARTIAL_AUTH' }, 400, request);
+    if (typeof sig !== 'string' || sig.length > 500) return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
+    if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > 300000) return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
+    const pkRaw = await kvGet(env, `prekey:${userId}`);
+    const bundle = pkRaw ? safeJsonParse(pkRaw) : null;
+    if (!bundle || typeof bundle.edIdentityKey !== 'string' || !bundle.edIdentityKey) return json({ error: 'No registered identity key', code: 'NO_IDENTITY_KEY' }, 403, request);
+    const ok = await verifyEd25519(bundle.edIdentityKey, btoa(`breeze-portal:${userId}:${ts}`), sig);
+    if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
+  } else if (env.PORTAL_REQUIRE_AUTH === 'true') {
+    return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+  }
 
   // Get customerId from slots data or reverse lookup
   const data = await kvGet(env, `slots:${userId}`);

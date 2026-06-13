@@ -93,7 +93,7 @@ describe('routing & request validation (export default fetch)', () => {
     // The lifecycle endpoints added this session must be discoverable.
     for (const cap of [
       'account-delete', 'group-leave', 'group-delete', 'group-transfer', 'group-rename',
-      'batch-alias', 'group-caps', 'backup-auth', 'drop-server-id',
+      'batch-alias', 'group-caps', 'backup-auth', 'drop-server-id', 'portal-auth',
     ]) {
       expect(j.capabilities).toContain(cap);
     }
@@ -3835,6 +3835,69 @@ describe('billing portal (Stripe customer portal)', () => {
     const res = await handlePortal({ userId: 'user00001' }, env, req({}));
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe('PORTAL_FAILED');
+  });
+
+  // Item 42: portal is a bearer link to a customer's billing PII + cancellation. Ed25519
+  // ownership proof — verified when supplied, required when PORTAL_REQUIRE_AUTH is set.
+  const toB64u = (bytes) => Buffer.from(bytes).toString('base64');
+  async function registerEd(env, userId) {
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
+    await env.KV.put(`prekey:${userId}`, JSON.stringify({ identityKey: 'IK', edIdentityKey: toB64u(edPub), uploadedAt: Date.now() }));
+    await env.KV.put(`slots:${userId}`, JSON.stringify({ slots: 4, plan: 'plus', customerId: 'cus_abc' }));
+    return ed;
+  }
+  const signPortal = async (ed, userId, ts) =>
+    toB64u(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, new TextEncoder().encode(`breeze-portal:${userId}:${ts}`))));
+
+  it('legacy unauthenticated portal still works when PORTAL_REQUIRE_AUTH is unset (backward compat)', async () => {
+    vi.stubGlobal('fetch', async () => ({ ok: true, json: async () => ({ url: 'https://billing.stripe.com/p/x' }) }));
+    const env = makeEnv({ STRIPE_SECRET_KEY: 'sk_test' });
+    await env.KV.put('slots:userAuth01', JSON.stringify({ customerId: 'cus_abc' }));
+    const res = await handlePortal({ userId: 'userAuth01' }, env, req({}));
+    expect(res.status).toBe(200);
+  });
+
+  it('rejects unauthenticated portal with 403 when PORTAL_REQUIRE_AUTH is enabled', async () => {
+    const env = makeEnv({ STRIPE_SECRET_KEY: 'sk_test', PORTAL_REQUIRE_AUTH: 'true' });
+    await env.KV.put('slots:userAuth02', JSON.stringify({ customerId: 'cus_abc' }));
+    const res = await handlePortal({ userId: 'userAuth02' }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
+  });
+
+  it('accepts a validly signed portal request (and rejects a tampered signature)', async () => {
+    vi.stubGlobal('fetch', async () => ({ ok: true, json: async () => ({ url: 'https://billing.stripe.com/p/ok' }) }));
+    const env = makeEnv({ STRIPE_SECRET_KEY: 'sk_test', PORTAL_REQUIRE_AUTH: 'true' });
+    const ed = await registerEd(env, 'userAuth03');
+    const ts = Date.now();
+    const ok = await handlePortal({ userId: 'userAuth03', ts, sig: await signPortal(ed, 'userAuth03', ts) }, env, req({}));
+    expect(ok.status).toBe(200);
+    // Tampered: sign a different ts than claimed.
+    const bad = await handlePortal({ userId: 'userAuth03', ts, sig: await signPortal(ed, 'userAuth03', ts - 999) }, env, req({}));
+    expect(bad.status).toBe(403);
+    expect((await bad.json()).code).toBe('SIG_INVALID');
+  });
+
+  it('rejects partial auth (ts without sig) and a stale timestamp', async () => {
+    const env = makeEnv({ STRIPE_SECRET_KEY: 'sk_test' });
+    const ed = await registerEd(env, 'userAuth04');
+    const partial = await handlePortal({ userId: 'userAuth04', ts: Date.now() }, env, req({}));
+    expect(partial.status).toBe(400);
+    expect((await partial.json()).code).toBe('PARTIAL_AUTH');
+    const staleTs = Date.now() - 600000;
+    const stale = await handlePortal({ userId: 'userAuth04', ts: staleTs, sig: await signPortal(ed, 'userAuth04', staleTs) }, env, req({}));
+    expect(stale.status).toBe(400);
+    expect((await stale.json()).code).toBe('INVALID_TIMESTAMP');
+  });
+
+  it('rejects a signed request when the user has no registered identity key', async () => {
+    const env = makeEnv({ STRIPE_SECRET_KEY: 'sk_test' });
+    await env.KV.put('slots:userAuth05', JSON.stringify({ customerId: 'cus_abc' })); // no prekey bundle
+    const ts = Date.now();
+    const res = await handlePortal({ userId: 'userAuth05', ts, sig: 'AA==' }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('NO_IDENTITY_KEY');
   });
 });
 

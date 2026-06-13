@@ -1,5 +1,29 @@
 # Changelog
 
+## Billing portal IDOR/PII exposure — optional Ed25519 auth + enforcement flag — item 42 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+620 tests (+5); additive, backward-compatible by default.
+
+Socratic audit of `handlePortal`: it took only `{userId}`, looked up `slots:${userId}.customerId`,
+and returned a Stripe **billing-portal session URL** — a bearer link exposing the customer's
+invoices (name/email/address/card last4) and allowing subscription cancellation — with **no
+proof the caller owns the account**. Since userId is publicly discoverable (alias lookup /
+being a contact), anyone who knew a paying user's userId could mint their billing-portal link.
+`handleAccountDelete`/`handleBackupUpload`/`handleAliasDelete` all require Ed25519 ownership
+proof; `handlePortal` did not.
+
+- **Fix (item-26 pattern + enforcement flag)**: `handlePortal` now accepts optional `{ts, sig}`
+  (Ed25519 over `breeze-portal:${userId}:${ts}`, verified against the user's registered
+  `edIdentityKey`, ±5min). When supplied it's verified and forgeries are rejected; when absent
+  it's allowed **only if `PORTAL_REQUIRE_AUTH` is unset** — set that env flag (once clients send
+  the signature) to require auth outright. Default path is byte-for-byte unchanged, so the
+  current client's portal button keeps working until updated (mandatory auth needs the
+  browser-gated client change). Advertised as `portal-auth` in health capabilities.
+- **Tests (+5)**: legacy unauthenticated works by default; flag on + no sig → `AUTH_REQUIRED`;
+  valid sig → 200, tampered → `SIG_INVALID`; partial auth → `PARTIAL_AUTH`, stale ts →
+  `INVALID_TIMESTAMP`; signed but no identity key → `NO_IDENTITY_KEY`. Mutation-verified
+  (bypassing the sig check fails the tampered-sig test).
+
 ## Same-millisecond message loss on /msg/poll fixed server-side — item 41 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 615 tests (+2); server-side only, backward-compatible (no client change required).
