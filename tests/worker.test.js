@@ -173,6 +173,21 @@ describe('rate limiting', () => {
     expect(last.headers.get('Retry-After')).toBeTruthy();
     expect((await last.json()).code).toBe('RATE_LIMITED');
   });
+
+  // Item 43: Retry-After must never be 0 (which says "retry now" while the bucket is still
+  // full) and the JSON body must agree with the header.
+  it('retryAfter is in [1,60] and the body matches the Retry-After header', async () => {
+    const env = makeEnv();
+    let last;
+    for (let i = 0; i < 21; i++) last = await worker.fetch(apiRequest('/api/presence', { userId: 'abc123' }), env);
+    expect(last.status).toBe(429);
+    const headerVal = parseInt(last.headers.get('Retry-After'));
+    const body = await last.json();
+    expect(headerVal).toBeGreaterThanOrEqual(1);
+    expect(headerVal).toBeLessThanOrEqual(60);
+    expect(body.retryAfter).toBe(headerVal); // body and header agree (no 0-vs-60 split)
+    expect(body.retryAfter).toBeGreaterThanOrEqual(1);
+  });
 });
 
 describe('userId validation helper', () => {

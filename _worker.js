@@ -137,7 +137,10 @@ export default {
       return json({ error: 'Method not allowed', code: 'METHOD_NOT_ALLOWED' }, 405, request);
     }
 
-    // Rate limit: per-IP + per-userId (dual layer)
+    // Rate limit: per-IP, per-path, per-minute (in-memory, per-isolate). Note: this is a
+    // single IP+path layer — there is no separate per-userId bucket (a true cross-isolate
+    // per-user limit needs a Durable Object; deferred). 'unknown' IPs are capped tighter
+    // below so requests without CF-Connecting-IP can't monopolise a shared bucket.
     const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
     if (env.KV) {
       const limits = {
@@ -204,10 +207,13 @@ export default {
       }
       const rlCount = rlMap.get(rlKey) || 0;
       if (rlCount >= limit) {
-        const retryAfter = 60 - (Date.now() / 1000 % 60) | 0;
+        // Seconds until the current minute bucket rolls over. Use ceil + a floor of 1 so we
+        // never return retryAfter:0 (which says "retry now" while the bucket is still full
+        // for up to ~1s) and so the JSON body and the Retry-After header always agree.
+        const retryAfter = Math.max(1, Math.ceil(60 - (Date.now() / 1000) % 60));
         return new Response(JSON.stringify({ error: 'Rate limited', code: 'RATE_LIMITED', retryAfter }), {
           status: 429,
-          headers: { 'Content-Type': 'application/json', 'Retry-After': String(retryAfter || 60), 'X-RateLimit-Limit': String(limit), 'X-RateLimit-Remaining': '0', ...corsHeaders(request) },
+          headers: { 'Content-Type': 'application/json', 'Retry-After': String(retryAfter), 'X-RateLimit-Limit': String(limit), 'X-RateLimit-Remaining': '0', ...corsHeaders(request) },
         });
       }
       rlMap.set(rlKey, rlCount + 1);

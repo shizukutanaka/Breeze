@@ -1,5 +1,24 @@
 # Changelog
 
+## Rate-limit Retry-After correctness + honest "dual layer" comment — item 43 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+621 tests (+1); no wire change.
+
+Socratic read of the rate limiter surfaced two stated-vs-actual gaps:
+
+- **`retryAfter` could be 0**: `60 - (Date.now()/1000 % 60) | 0` truncates, so near a minute
+  boundary it yields `0` — the JSON body then said `retryAfter:0` ("retry now", while the
+  bucket is still full for up to ~1s) while the header said `String(0 || 60)` = `60`. Body and
+  header disagreed and the body was wrong. Fixed to `Math.max(1, Math.ceil(60 - (Date.now()/1000) % 60))`
+  (range [1,60], never 0) with the header using the same value, so the two always agree.
+- **Comment overclaimed "per-IP + per-userId (dual layer)"**: the bucket key is
+  `${ip}:${path}:${minute}` — there is no per-userId layer. Corrected the comment to describe
+  what the code does (single per-IP/path/minute, in-memory per-isolate) and noted that a true
+  cross-isolate per-user limit needs a Durable Object (deferred); the 'unknown'-IP tighter cap
+  (item 31) is also documented there.
+- **Tests (+1)**: `retryAfter` is in [1,60] and the body value equals the `Retry-After` header
+  (no 0-vs-60 split).
+
 ## Billing portal IDOR/PII exposure — optional Ed25519 auth + enforcement flag — item 42 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 620 tests (+5); additive, backward-compatible by default.
