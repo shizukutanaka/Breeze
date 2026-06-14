@@ -1,5 +1,25 @@
 # Changelog
 
+## Relay queues bounded by bytes, not just count — item 48 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+633 tests (+3); server-side only, normal sends unaffected.
+
+The 1:1 inbox and the sealed-sender queue were capped at 100 messages but **not by total
+bytes**. Payloads/envelopes can be up to 256KB, so 100 of them ≈ 25.6MB — past Cloudflare
+KV's **25MB value limit**. Once a queue grew that large, every `kvPut` failed (→ `STORE_FAILED`
+since item 27), **wedging the queue**: an offline recipient with a near-full queue received
+nothing new until they polled, and senders just got 500s.
+
+- **Fix**: new `capQueueBytes(items, sizeOf, maxBytes=16MB)` helper, applied to both queues
+  after the count cap. It evicts oldest-first (FIFO) until the approximate serialized size is
+  under a 16MB budget (wide headroom below the 25MB KV cap), always keeping the newest
+  just-appended message — so a normal send is never blocked; a best-effort relay drops the
+  oldest undelivered instead. O(n), serializes once (size approximated from the dominant
+  payload/envelope field + per-message overhead).
+- **Tests (+3)**: evicts oldest until under budget keeping newest; never drops the sole/newest
+  item even if it alone exceeds budget; leaves an under-budget queue untouched. (Unit-tested on
+  the exported helper with a tiny budget to avoid 16MB test fixtures.)
+
 ## Open-redirect in Stripe checkout/portal URLs fixed — item 47 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 630 tests (+2); no behavior change for legitimate single-origin requests.

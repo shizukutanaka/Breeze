@@ -381,6 +381,21 @@ async function handleSignal(body, ip, env, request) {
 // Recipient polls and retrieves. Messages deleted after delivery.
 // ============================================================
 
+// Bound a relay queue by approximate serialized BYTES (not just message count), evicting
+// oldest first. KV's value limit is 25MB, and the count cap alone (100) doesn't prevent a
+// queue of large (up to 256KB) messages from exceeding it — which would make every kvPut
+// fail (STORE_FAILED) and wedge the queue, so an offline recipient receives nothing new
+// until they poll. FIFO eviction always keeps the newest (just-appended) item, so a normal
+// send is never blocked; a best-effort relay drops the oldest undelivered instead. Sizes are
+// approximated from the dominant field (payload/envelope) + per-message overhead to stay O(n)
+// and serialize only once. maxBytes leaves wide headroom under the 25MB KV cap.
+function capQueueBytes(items, sizeOf, maxBytes = 16 * 1024 * 1024) {
+  let total = 0;
+  for (const it of items) total += sizeOf(it);
+  while (items.length > 1 && total > maxBytes) total -= sizeOf(items.shift());
+  return items;
+}
+
 async function handleMsgSend(body, ip, env, request) {
   const { to, from, fromPub, fromName, payload, ts, isFile, isGroupInvite, isVoice, isCall, isVideoCall, isSenderKey, isGroupSK, groupId, groupName, replyTo, disappearAt, sig, sigPub } = body;
   if (!to || !from || !payload) return json({ error: 'to, from, payload required', code: 'MISSING_FIELDS' }, 400, request);
@@ -456,7 +471,7 @@ async function handleMsgSend(body, ip, env, request) {
     if (Number.isFinite(lastStoredTs) && msg.ts <= lastStoredTs) msg.ts = lastStoredTs + 1;
   }
   inbox.push(msg);
-  const trimmed = inbox.slice(-100);
+  const trimmed = capQueueBytes(inbox.slice(-100), m => (typeof m.payload === 'string' ? m.payload.length : 0) + 1024);
   const stored = await kvPut(env, key, JSON.stringify(trimmed), { expirationTtl: 604800 });
   if (!stored) return json({ error: 'Failed to store message', code: 'STORE_FAILED' }, 500, request);
 
@@ -2221,7 +2236,7 @@ async function handleSealedSend(body, env, request) {
   const queueParsed = existing ? safeJsonParse(existing, []) : [];
   const queue = Array.isArray(queueParsed) ? queueParsed : [];
   queue.push({ envelope, ts: Date.now() });
-  const trimmed = queue.slice(-100);
+  const trimmed = capQueueBytes(queue.slice(-100), m => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
   const stored = await kvPut(env, key, JSON.stringify(trimmed), { expirationTtl: 604800 });
   if (!stored) return json({ error: 'Failed to store sealed message', code: 'STORE_FAILED' }, 500, request);
   sendPushToUser(to, { title: 'Breeze', body: 'New message', tag: 'breeze-sealed', contactId: to }, env).catch(() => {});
@@ -2867,6 +2882,7 @@ export {
   handleAliasDelete,
   validateUserId,
   sanitizeString,
+  capQueueBytes,
   kvGet,
   kvPut,
   kvDel,

@@ -58,6 +58,7 @@ import worker, {
   handlePreKeyFetchBatch,
   handlePreKeyStatus,
   sendPushToUser,
+  capQueueBytes,
 } from '../_worker.js';
 import { makeKV, makeEnv, apiRequest, stripeSigHeader } from './helpers/mockKV.js';
 import { createFranking } from '../src/crypto/franking.js';
@@ -206,6 +207,29 @@ describe('userId validation helper', () => {
 
   it('accepts the base64url alphabet (+, /, =, _, -) in addition to alphanumeric', () => {
     expect(validateUserId('aA0+/=_-xx')).toBeTruthy(); // all allowed special chars
+  });
+});
+
+// Item 48: relay queues are bounded by bytes (not just the 100-count cap) so a queue of
+// large messages can't exceed KV's 25MB value limit and wedge delivery with STORE_FAILED.
+describe('capQueueBytes (relay queue byte bound)', () => {
+  it('evicts oldest until under the byte budget, keeping the newest', () => {
+    const items = [{ p: 'a'.repeat(400) }, { p: 'b'.repeat(400) }, { p: 'c'.repeat(400) }];
+    const out = capQueueBytes(items, it => it.p.length, 1000); // 400+400=800<1000; +400=1200>1000
+    expect(out.length).toBe(2);
+    expect(out.map(i => i.p[0])).toEqual(['b', 'c']); // oldest 'a' evicted, newest 'c' kept
+  });
+
+  it('never drops the only/newest item even if it alone exceeds the budget', () => {
+    const items = [{ p: 'x'.repeat(5000) }];
+    const out = capQueueBytes(items, it => it.p.length, 1000);
+    expect(out.length).toBe(1); // a single (newest) message is always kept so a send never blocks
+  });
+
+  it('leaves a queue under budget untouched', () => {
+    const items = [{ p: 'a' }, { p: 'b' }, { p: 'c' }];
+    const out = capQueueBytes(items, it => it.p.length, 1000);
+    expect(out.length).toBe(3);
   });
 });
 
