@@ -1,5 +1,23 @@
 # Changelog
 
+## PoW anti-spam floor + challenge-bound now have negative tests — item 50 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+638 tests (+2); test-only, no production change.
+
+A Socratic "new perspective" turned the lens on the test suite itself — the foundation every
+prior item leaned on. Mutation-testing the pre-existing security guards confirmed the X3DH
+signed-prekey check (MITM protection) and the franking HMAC binding are genuinely tested
+(neutralizing each fails its test). But the alias PoW guard had a coverage hole: of its three
+conditions (`difficulty < 16 || challenge.length > 512 || !challenge.includes(pub)`), only the
+`includes(pub)` branch had a negative test. The **difficulty-16 anti-spam floor** — the core
+cost of registering an alias — was untested, so a regression weakening it (cheap alias spam /
+squatting) would pass the whole suite.
+
+- **Tests (+2)**: a validly-solved but too-easy (difficulty 8) PoW is rejected with
+  `POW_INVALID` (isolating the floor branch); an oversized (>512-char) challenge is rejected.
+  Mutation-verified — lowering the floor to `< 4` lets the difficulty-8 solve through and fails
+  the test.
+
 ## Cross-protocol signature-replay invariant pinned — item 49 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 636 tests (+3); test-only, no production change.

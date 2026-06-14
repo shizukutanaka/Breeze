@@ -2217,6 +2217,30 @@ describe('alias set / get (PoW anti-spam)', () => {
     expect((await res.json()).code).toBe('POW_INVALID');
   });
 
+  // Item 50 (test-integrity perspective): the difficulty-16 anti-spam FLOOR had no negative
+  // test — only the !includes(pub) branch was exercised. A validly-solved but too-easy
+  // puzzle must still be rejected, or a regression weakening the floor (cheap alias spam)
+  // would pass the whole suite.
+  it('rejects a PoW below the difficulty-16 floor even when validly solved (anti-spam)', async () => {
+    const pub = 'LOWDIFF01';
+    const challenge = `${pub}:${Date.now()}`;            // includes pub, fresh, short
+    const pow = await solvePoW(pub, 8, challenge);        // a real difficulty-8 solution
+    expect(pow.difficulty).toBe(8);                       // the only failing condition is the floor
+    const res = await handleAliasSet({ alias: 'lowdiff', pub, pow }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('POW_INVALID');
+  });
+
+  it('rejects a PoW with an oversized challenge string (>512 chars)', async () => {
+    const pub = 'BIGCHAL01';
+    const challenge = pub + ':' + 'x'.repeat(520);        // includes pub + difficulty ok, but too long
+    const res = await handleAliasSet(
+      { alias: 'bigchal', pub, pow: { challenge, nonce: 0, difficulty: 16 } }, makeEnv(), req({}),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('POW_INVALID');
+  });
+
   it('rejects an expired PoW (timestamp > 10 min old) when challenge uses makeChallengeString format', async () => {
     // Challenge format: "${pub}:${ts}" — expired timestamp should trigger POW_EXPIRED.
     const pub = 'FRESHPUB01';
