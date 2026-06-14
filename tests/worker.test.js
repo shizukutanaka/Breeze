@@ -1462,6 +1462,18 @@ describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => 
     expect(await env.KV.get('report:m-001')).toBeTruthy(); // recorded for moderation
   });
 
+  // Item 46: a silently-dropped commitment makes the message unreportable later, so the
+  // sender must see the failure rather than a false ok.
+  it('returns 500 STORE_FAILED when the franking commitment KV write fails', async () => {
+    const env = makeEnv();
+    const { commitment } = await F.commit('x');
+    const real = env.KV.put.bind(env.KV);
+    env.KV.put = async (key, ...rest) => { if (key.startsWith('frank:')) throw new Error('KV down'); return real(key, ...rest); };
+    const rec = await handleAbuseRecord({ frankId: 'm-sf', commitment: b64(commitment) }, env, req({}));
+    expect(rec.status).toBe(500);
+    expect((await rec.json()).code).toBe('STORE_FAILED');
+  });
+
   it('rejects a report claiming a different message (binding)', async () => {
     const env = makeEnv();
     const { commitment, opening } = await F.commit('what was sent');
@@ -2360,6 +2372,16 @@ describe('push subscribe SSRF guard', () => {
     const res = await handlePushSubscribe(base('http://fcm.googleapis.com/x'), makeEnv(), apiRequest('/api/push/subscribe', {}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_ENDPOINT');
+  });
+
+  // Item 46: don't report a registered device when the KV write failed.
+  it('returns 500 STORE_FAILED when the subscription KV write fails', async () => {
+    const env = makeEnv();
+    const real = env.KV.put.bind(env.KV);
+    env.KV.put = async (key, ...rest) => { if (key.startsWith('push:')) throw new Error('KV down'); return real(key, ...rest); };
+    const res = await handlePushSubscribe(base('https://fcm.googleapis.com/fcm/send/abc'), env, apiRequest('/api/push/subscribe', {}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
   });
 
   it('rejects untrusted hosts (SSRF target)', async () => {

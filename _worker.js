@@ -1493,7 +1493,8 @@ async function handlePushSubscribe(body, env, request) {
   subs.push(safeSub);
   // Keep last 5 devices
   if (subs.length > 5) subs = subs.slice(-5);
-  await kvPut(env, key, JSON.stringify(subs), { expirationTtl: 86400 * 30 });
+  const stored = await kvPut(env, key, JSON.stringify(subs), { expirationTtl: 86400 * 30 });
+  if (!stored) return json({ error: 'Failed to store subscription', code: 'STORE_FAILED' }, 500, request);
   return json({ ok: true, devices: subs.length }, 200, request);
 }
 
@@ -2119,7 +2120,11 @@ async function handleAbuseRecord(body, env, request) {
   if (typeof commitment !== 'string' || commitment.length > 128) return json({ error: 'invalid commitment', code: 'INVALID_FIELD' }, 400, request);
   // Do not overwrite an existing commitment (a frankId binds one message).
   if (await kvGet(env, `frank:${frankId}`)) return json({ ok: true, existing: true }, 200, request);
-  await kvPut(env, `frank:${frankId}`, commitment, { expirationTtl: 86400 * 30 });
+  // Propagate a write failure: a silently-dropped commitment makes the message
+  // unreportable later (handleAbuseReport would 404 with no record), so the sender must
+  // know franking wasn't recorded rather than believe it was.
+  const stored = await kvPut(env, `frank:${frankId}`, commitment, { expirationTtl: 86400 * 30 });
+  if (!stored) return json({ error: 'Failed to record franking commitment', code: 'STORE_FAILED' }, 500, request);
   return json({ ok: true }, 200, request);
 }
 

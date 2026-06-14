@@ -1,5 +1,23 @@
 # Changelog
 
+## Complete the STORE_FAILED sweep — franking commit + push subscribe — item 46 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+628 tests (+2); no wire change for the success path.
+
+A fresh sweep for unchecked `kvPut`/`kvDel` (after items 27/33/34/35) confirmed the rest are
+intentionally best-effort (ephemeral signal relay, poll/cleanup, presence heartbeat, caches,
+the process-then-mark webhook dedup) — but two still returned `{ok:true}` while a silent write
+failure broke a real guarantee:
+
+- **`handleAbuseRecord`** (franking commitment): a dropped `frank:${frankId}` write left the
+  sender believing franking was recorded, but a later `handleAbuseReport` would `404`
+  (no commitment) — the message silently became unreportable. (Item 35 had fixed the *report*
+  write but not the *commit* write.) Now returns `500 STORE_FAILED`.
+- **`handlePushSubscribe`**: returned `{ok:true, devices:N}` even when the `push:${userId}`
+  write failed, so the client believed push was registered and silently received none. Now
+  returns `500 STORE_FAILED`.
+- **Tests (+2)**: franking commit write failure → 500; push subscribe write failure → 500.
+
 ## Group moderation caller authentication — optional Ed25519 + enforcement flag — item 45 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 626 tests (+4); additive, backward-compatible by default.
