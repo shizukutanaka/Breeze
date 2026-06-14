@@ -1,5 +1,27 @@
 # Changelog
 
+## Flaky pow.test.js de-flaked (test-integrity) — item 51 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+638 tests; test-only, no production change. Three consecutive full-suite runs now green.
+
+A Socratic "new perspective" pass first audited the cryptographic core (`src/crypto/`) — `group.js`
+(37 tests: forward secrecy, epoch revocation, key-commitment, two-layer signature stripping/
+tampering, legacy fallback) and `franking.js` (9 tests: binding, hiding, forged/tampered
+opening+commitment) are genuinely well-covered, confirmed non-vacuous by mutation-testing the
+worker's X3DH and franking guards. That left the recurring footnote: `pow.test.js` intermittently
+timed out at 30s under parallel load — and an intermittently-red test corrodes trust in the whole
+suite (the foundation item 50 was about).
+
+- **Root cause**: a difficulty-16 solve is ~65k awaited `subtle.digest` calls — the suite's
+  heaviest op — and the file did it twice (the shared token *and* a separate solve in the clamp
+  test). Under CPU contention the 30s budget was marginal.
+- **Fix (test-only — `pow.js` is browser-gated)**: solve once. `getToken()` now requests
+  difficulty 0, which the module clamps up to the 16 minimum, so the single shared token also
+  serves as the clamp test's evidence (its `.difficulty` is 16). Redundant second solve removed;
+  solve-dependent timeouts raised 30s→60s for margin.
+- **Result**: ~halved the suite's heaviest work; 3× full-run green. The "pow occasionally times
+  out" caveat is retired from the docs.
+
 ## PoW anti-spam floor + challenge-bound now have negative tests — item 50 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 638 tests (+2); test-only, no production change.

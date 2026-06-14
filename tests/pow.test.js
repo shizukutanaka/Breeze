@@ -36,10 +36,14 @@ describe('makeChallengeString', () => {
   });
 });
 
-// Shared token for the verify tests — solved once, reused to avoid redundant CPU work.
+// Shared token: solved ONCE and reused across every solve/verify test. A difficulty-16
+// solve is ~65k awaited SHA-256 calls — the suite's heaviest operation — and doing it twice
+// (here + the clamp test) was the source of intermittent 30s timeouts under parallel load.
+// We request difficulty 0, which the module CLAMPS up to the 16 minimum, so this single
+// token doubles as the clamp test's evidence (its .difficulty is 16, not 0).
 let _sharedToken;
 async function getToken() {
-  if (!_sharedToken) _sharedToken = await solve(subtle, makeChallengeString(PUB), 16);
+  if (!_sharedToken) _sharedToken = await solve(subtle, makeChallengeString(PUB), 0);
   return _sharedToken;
 }
 
@@ -51,7 +55,7 @@ describe('solve', () => {
     expect(typeof token.nonce).toBe('number');
     expect(token.nonce).toBeGreaterThanOrEqual(0);
     expect(token.difficulty).toBe(16);
-  }, 30000);
+  }, 60000);
 
   it('produces a hash whose top difficulty bits are zero', async () => {
     const { challenge, nonce, difficulty } = await getToken();
@@ -59,14 +63,15 @@ describe('solve', () => {
     const first32 = new DataView(digest).getUint32(0, false);
     const target  = (2 ** (32 - difficulty)) >>> 0;
     expect(first32).toBeLessThan(target);
-  }, 30000);
+  }, 60000);
 
   it('clamps difficulty below minimum to 16', async () => {
-    // Solve at an artificially low value — module clamps to 16 and still solves
-    const challenge = makeChallengeString(PUB);
-    const token     = await solve(subtle, challenge, 0);
+    // getToken() requested difficulty 0; the module must have clamped it up to the 16
+    // minimum. Reusing the shared solve here avoids a second ~65k-hash solve (de-flakes
+    // the suite) while still proving the clamp.
+    const token = await getToken();
     expect(token.difficulty).toBe(16);
-  }, 30000);
+  }, 60000);
 });
 
 describe('verify', () => {
@@ -75,7 +80,7 @@ describe('verify', () => {
     const r     = await verify(subtle, token, PUB);
     expect(r.ok).toBe(true);
     expect(r.difficulty).toBe(16);
-  }, 30000);
+  }, 60000);
 
   it('rejects null / undefined token', async () => {
     expect((await verify(subtle, null, PUB)).ok).toBe(false);
@@ -87,7 +92,7 @@ describe('verify', () => {
     const token = await getToken();
     const bad   = { ...token, nonce: 'abc' };
     expect((await verify(subtle, bad, PUB)).code).toBe('POW_REQUIRED');
-  }, 30000);
+  }, 60000);
 
   it('rejects difficulty < 16 (POW_TOO_EASY)', async () => {
     const token = await getToken();
@@ -95,21 +100,21 @@ describe('verify', () => {
     const r     = await verify(subtle, bad, PUB);
     expect(r.ok).toBe(false);
     expect(r.code).toBe('POW_TOO_EASY');
-  }, 30000);
+  }, 60000);
 
   it('rejects negative difficulty (clamped to 0 < MIN_DIFFICULTY → POW_TOO_EASY)', async () => {
     const token = await getToken();
     const r = await verify(subtle, { ...token, difficulty: -99 }, PUB);
     expect(r.ok).toBe(false);
     expect(r.code).toBe('POW_TOO_EASY');
-  }, 30000);
+  }, 60000);
 
   it('rejects non-numeric difficulty string (parseInt(NaN)||0 → 0 < 16 → POW_TOO_EASY)', async () => {
     const token = await getToken();
     const r = await verify(subtle, { ...token, difficulty: 'hard' }, PUB);
     expect(r.ok).toBe(false);
     expect(r.code).toBe('POW_TOO_EASY');
-  }, 30000);
+  }, 60000);
 
   it('rejects challenge > 512 chars (POW_CHALLENGE_TOO_LONG)', async () => {
     const token = await getToken();
@@ -117,7 +122,7 @@ describe('verify', () => {
     const r     = await verify(subtle, bad, PUB);
     expect(r.ok).toBe(false);
     expect(r.code).toBe('POW_CHALLENGE_TOO_LONG');
-  }, 30000);
+  }, 60000);
 
   it('rejects challenge that does not include pub (POW_PUB_MISMATCH)', async () => {
     const token = await getToken();
@@ -125,7 +130,7 @@ describe('verify', () => {
     const r     = await verify(subtle, bad, PUB);
     expect(r.ok).toBe(false);
     expect(r.code).toBe('POW_PUB_MISMATCH');
-  }, 30000);
+  }, 60000);
 
   it('rejects a tampered nonce (POW_INVALID)', async () => {
     const token = await getToken();
@@ -134,20 +139,20 @@ describe('verify', () => {
     // Incremented nonce almost certainly fails (P(valid adjacent) ≈ 2^-16)
     expect(r.ok).toBe(false);
     expect(r.code).toBe('POW_INVALID');
-  }, 30000);
+  }, 60000);
 
   it('round-trip: verify accepts a freshly solved token', async () => {
     const token  = await getToken();
     const result = await verify(subtle, token, PUB);
     expect(result.ok).toBe(true);
-  }, 30000);
+  }, 60000);
 
   it('accepts a fresh token within maxAge window', async () => {
     const token = await getToken();
     // token was just solved — its timestamp is ≤1s old; maxAge=60000 should accept it
     const r = await verify(subtle, token, PUB, { maxAge: 60_000 });
     expect(r.ok).toBe(true);
-  }, 30000);
+  }, 60000);
 
   it('rejects a token older than maxAge (POW_EXPIRED)', async () => {
     const token = await getToken();
@@ -157,7 +162,7 @@ describe('verify', () => {
     const r = await verify(subtle, token, PUB, { maxAge: 120_000, now: futureNow });
     expect(r.ok).toBe(false);
     expect(r.code).toBe('POW_EXPIRED');
-  }, 30000);
+  }, 60000);
 
   it('omitting maxAge skips freshness check (backward-compatible)', async () => {
     const token = await getToken();
@@ -167,7 +172,7 @@ describe('verify', () => {
     // Without maxAge, the clock override has no effect → still accepted
     const r = await verify(subtle, token, PUB, { now: futureNow });
     expect(r.ok).toBe(true);
-  }, 30000);
+  }, 60000);
 
   it('rejects when challenge has no parseable timestamp and maxAge is set', async () => {
     const token = await getToken();
@@ -176,7 +181,7 @@ describe('verify', () => {
     const r = await verify(subtle, bad, PUB, { maxAge: 60_000 });
     expect(r.ok).toBe(false);
     expect(r.code).toBe('POW_EXPIRED');
-  }, 30000);
+  }, 60000);
 
   it('rejects a far-future timestamp (replay-via-future-ts guard)', async () => {
     const token = await getToken();
@@ -188,7 +193,7 @@ describe('verify', () => {
     const r = await verify(subtle, token, PUB, { maxAge: 600_000, now: pastNow });
     expect(r.ok).toBe(false);
     expect(r.code).toBe('POW_EXPIRED');
-  }, 30000);
+  }, 60000);
 
   it('tolerates a small future timestamp within the skew window', async () => {
     const token = await getToken();
@@ -197,5 +202,5 @@ describe('verify', () => {
     const pastNow = () => ts - 60_000;
     const r = await verify(subtle, token, PUB, { maxAge: 600_000, now: pastNow });
     expect(r.ok).toBe(true);
-  }, 30000);
+  }, 60000);
 });
