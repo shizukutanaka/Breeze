@@ -1250,6 +1250,59 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
   });
 });
 
+// Item 49 (Socratic new perspective — system-level auth invariant): every signed operation
+// uses a DISTINCT challenge string, so a signature minted for one operation must never
+// authorize another (no cross-protocol replay). These tests pin that invariant on the
+// highest-impact pairs; a future endpoint that reused a challenge prefix would fail here.
+describe('cross-protocol signature replay rejection (item 49)', () => {
+  const toB64u = (b) => Buffer.from(b).toString('base64');
+  const enc = (s) => new TextEncoder().encode(s);
+
+  // Register a user with an Ed25519 identity key (the verification source for all auth ops).
+  async function registerEd(env, userId) {
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
+    await env.KV.put(`prekey:${userId}`, JSON.stringify({ identityKey: 'IK-' + userId, edIdentityKey: toB64u(edPub), uploadedAt: Date.now() }));
+    return ed;
+  }
+  const sign = async (ed, challenge) => toB64u(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, enc(challenge))));
+
+  it('a backup-UPLOAD signature is rejected by backup-DOWNLOAD (cannot replay write-auth to read)', async () => {
+    const env = makeEnv();
+    const ed = await registerEd(env, 'xproto01');
+    await env.KV.put('backup:xproto01', 'secret-blob');
+    const ts = Date.now();
+    // Sign the UPLOAD challenge, then try to DOWNLOAD (read) with it.
+    const uploadSig = await sign(ed, `breeze-backup-upload:xproto01:${ts}`);
+    const res = await handleBackupDownload({ userId: 'xproto01', ts, sig: uploadSig }, env, apiRequest('/api/backup/download', {}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID'); // download challenge differs → no replay
+  });
+
+  it('a portal signature is rejected by account-delete (cannot replay billing-auth to delete)', async () => {
+    const env = makeEnv({ STRIPE_SECRET_KEY: 'sk_test' });
+    const ed = await registerEd(env, 'xproto02');
+    const ts = Date.now();
+    const portalSig = await sign(ed, `breeze-portal:xproto02:${ts}`);
+    const res = await handleAccountDelete({ userId: 'xproto02', ts, sig: portalSig }, env, apiRequest('/api/account/delete', {}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+    expect(await env.KV.get('prekey:xproto02')).not.toBeNull(); // nothing deleted
+  });
+
+  it('a group-rename signature is rejected by group-delete (cannot replay rename-auth to delete)', async () => {
+    const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
+    const ed = await registerEd(env, 'creator1');
+    const { token } = await (await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, apiRequest('/api/group/create', {}))).json();
+    const ts = Date.now();
+    const renameSig = await sign(ed, `breeze-group-rename:${token}:creator1:${ts}`);
+    const res = await handleGroupDelete({ token, adminId: 'creator1', ts, sig: renameSig }, env, apiRequest('/api/group/delete', {}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+    expect(await env.KV.get(`grp:${token}`)).not.toBeNull(); // group not deleted
+  });
+});
+
 describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
   const req = (b) => apiRequest('/api/account/delete', b);
 

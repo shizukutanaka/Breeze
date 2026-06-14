@@ -1,5 +1,26 @@
 # Changelog
 
+## Cross-protocol signature-replay invariant pinned — item 49 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+636 tests (+3); test-only, no production change.
+
+A Socratic "new perspective" pass: instead of auditing handlers individually, audit the auth
+system as a whole for a cross-cutting invariant the six signed operation families (account-delete,
+alias-delete, backup-upload, backup-download, portal, group×6) all depend on but which no test
+enforced — **a signature minted for one operation must never authorize another**. Enumerating
+every challenge string confirmed the invariant holds: each uses a distinct namespaced prefix,
+backup up/down use different *verbs* (so a captured upload-auth can't be replayed to *read* the
+backup), and group challenges are per-action (`breeze-group-${action}`). That's a genuine
+strength — but a future endpoint reusing a prefix would silently reintroduce cross-protocol
+replay with nothing to catch it.
+
+- **Tests (+3)**: pin the invariant on the highest-impact pairs — a backup-upload sig is rejected
+  by backup-download (no write-auth→read replay); a portal sig is rejected by account-delete (no
+  billing-auth→delete replay, and nothing is deleted); a group-rename sig is rejected by
+  group-delete (no rename-auth→delete replay, and the group survives). Mutation-verified
+  (colliding the download challenge with upload makes the upload sig replay through, failing the
+  test).
+
 ## Relay queues bounded by bytes, not just count — item 48 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 633 tests (+3); server-side only, normal sends unaffected.
