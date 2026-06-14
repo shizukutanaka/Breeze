@@ -912,7 +912,12 @@ async function handlePortal(body, env, request) {
   }
   if (!customerId) return json({ error: 'No subscription found', code: 'NOT_FOUND' }, 404, request);
 
-  const origin = request.headers.get('Origin') || request.headers.get('Referer')?.replace(/\/[^/]*$/, '') || '';
+  // Redirect target = this worker's OWN origin, never the client-supplied Origin/Referer.
+  // Those headers are forgeable by a non-browser caller, and feeding them into the Stripe
+  // return_url is an open redirect: an attacker could mint a portal link that bounces the
+  // victim to a phishing page after the trusted Stripe flow. Breeze serves the app and the
+  // worker from the same origin, so request.url's origin is the correct, safe target.
+  const origin = new URL(request.url).origin;
 
   const params = new URLSearchParams();
   params.set('customer', customerId);
@@ -1669,7 +1674,10 @@ async function handleAccountPurchase(body, env, request) {
 
   if (!priceId) return json({ error: 'Price not configured for plan: ' + planKey, code: 'PRICE_NOT_CONFIGURED' }, 503, request);
 
-  const origin = request.headers.get('Origin') || request.headers.get('Referer')?.replace(/\/[^/]*$/, '') || '';
+  // Use this worker's OWN origin for the checkout success/cancel URLs, never the forgeable
+  // client Origin/Referer — otherwise an attacker could craft a checkout whose success_url
+  // redirects the paying victim to a phishing page (open redirect after the Stripe flow).
+  const origin = new URL(request.url).origin;
 
   const params = new URLSearchParams();
   params.set('mode', 'subscription');

@@ -3870,6 +3870,18 @@ describe('account purchase (Stripe checkout)', () => {
     expect(captured.body).toContain('price_plus');
   });
 
+  // Item 47: success/cancel URLs must use the worker's own origin, never a forgeable
+  // client Origin header — otherwise the post-checkout redirect is attacker-controlled.
+  it('ignores a forged Origin header for the checkout redirect URLs (open-redirect guard)', async () => {
+    let captured = null;
+    vi.stubGlobal('fetch', async (_url, opts) => { captured = opts.body; return { ok: true, json: async () => ({ url: 'https://checkout.stripe.com/c/x' }) }; });
+    const forged = apiRequest('/api/account/purchase', {}, { Origin: 'https://attacker.example' });
+    const res = await handleAccountPurchase({ userId: 'user00001', plan: 'plus' }, billedEnv(), forged);
+    expect(res.status).toBe(200);
+    expect(captured).toContain('breeze.test');   // the worker's own origin
+    expect(captured).not.toContain('attacker');  // never the forged Origin
+  });
+
   it('an unknown plan falls back to lite (2 slots)', async () => {
     let body = null;
     vi.stubGlobal('fetch', async (_url, opts) => {
@@ -3931,6 +3943,19 @@ describe('billing portal (Stripe customer portal)', () => {
     expect((await res.json()).url).toBe('https://billing.stripe.com/p/sess_9');
     expect(captured.url).toContain('billing_portal/sessions');
     expect(captured.body).toContain('customer=cus_abc');
+  });
+
+  // Item 47: return_url must use the worker's own origin, not a forged client Origin.
+  it('ignores a forged Origin header for the portal return_url (open-redirect guard)', async () => {
+    let captured = null;
+    vi.stubGlobal('fetch', async (_url, opts) => { captured = opts.body; return { ok: true, json: async () => ({ url: 'https://billing.stripe.com/p/x' }) }; });
+    const env = makeEnv({ STRIPE_SECRET_KEY: 'sk_test' });
+    await env.KV.put('slots:user00001', JSON.stringify({ customerId: 'cus_abc' }));
+    const forged = apiRequest('/api/portal', { userId: 'user00001' }, { Origin: 'https://attacker.example' });
+    const res = await handlePortal({ userId: 'user00001' }, env, forged);
+    expect(res.status).toBe(200);
+    expect(captured).toContain('breeze.test');
+    expect(captured).not.toContain('attacker');
   });
 
   it('returns 500 when Stripe rejects the portal creation', async () => {

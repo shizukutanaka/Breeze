@@ -1,5 +1,24 @@
 # Changelog
 
+## Open-redirect in Stripe checkout/portal URLs fixed — item 47 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+630 tests (+2); no behavior change for legitimate single-origin requests.
+
+`handleAccountPurchase` and `handlePortal` built Stripe `success_url`/`cancel_url`/`return_url`
+from `request.headers.get('Origin') || Referer`. The `Origin` header is forgeable by a
+non-browser caller, so an attacker could craft a checkout/portal session whose post-flow
+redirect points at their own domain — the victim completes the trusted `checkout.stripe.com`
+flow and is then bounced to `attacker.com/?billing=account-success`, a credential-harvesting
+phishing page riding the Stripe trust. Stripe does not restrict redirect domains by default.
+
+- **Fix**: derive the redirect origin from `new URL(request.url).origin` — the worker's own
+  served origin — instead of the client-supplied header. Breeze serves the app and the worker
+  from the same origin, so legitimate redirects are unchanged; only forged Origins are
+  neutralized. Applied to both billing handlers.
+- **Tests (+2)**: a request with `Origin: https://attacker.example` produces redirect URLs on
+  the worker's own origin (`breeze.test`) and never `attacker.example` — for both checkout and
+  portal. Mutation-verified (reintroducing the Origin-header source fails the test).
+
 ## Complete the STORE_FAILED sweep — franking commit + push subscribe — item 46 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 628 tests (+2); no wire change for the success path.
