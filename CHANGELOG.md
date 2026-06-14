@@ -1,5 +1,30 @@
 # Changelog
 
+## CI not enforced on GitHub — finding + activation runbook — item 52 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+638 tests; docs-only (the actionable fixes — push workflows, merge to main — require
+permissions/PR I don't have).
+
+A Socratic "process" audit verified the assumption every prior item rests on — that the test
+suite gates merges — and found it **false**:
+
+1. The default branch (`main`) root contains **only `breeze.zip`** — no source — so
+   `actions/checkout` sees no code and CI cannot run there (the Phase 0 blocker).
+2. The unpacked source + 638 tests + `src/crypto/` live on the working branch, **not merged**.
+3. `.github/workflows/` is `.gitignore`d on every branch because the automation account lacks
+   GitHub's `workflows` scope, so the CI config exists only in the ephemeral working tree.
+
+Net: `npm test` / `validate.sh` / syntax / zip-build do **not** run on GitHub; all the
+hardening from items 26–51 is locally green but **ungated**, and the CI config itself isn't
+version-controlled.
+
+- **`docs/CI-SETUP.md` (new)**: records the finding, **preserves the canonical `ci.yml` in
+  version control** (it was otherwise only inside the gitignored tree / `breeze.zip`), and
+  gives the maintainer a 3-step activation runbook (merge source to `main`; add the workflow
+  from a `workflows`-scoped account; verify via a no-op PR). Plus Node-version and
+  first-`<script>`-extraction caveats.
+- The branch is merge-ready: 638 tests green, `validate.sh` 33/36.
+
 ## Flaky pow.test.js de-flaked (test-integrity) — item 51 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 638 tests; test-only, no production change. Three consecutive full-suite runs now green.
