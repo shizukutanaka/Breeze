@@ -1,5 +1,24 @@
 # Changelog
 
+## OGP link-preview corrupted multibyte UTF-8 at chunk boundaries — item 56 (branch claude/nice-ride-T6yb0, 2026-06-15)
+
+397 worker tests (1 new); `_worker.js` only. `validate.sh` 33/36.
+
+長所短所改善点 stocktake: the relay is in good shape — crypto well-tested, KV-failure propagation
+swept, optional-auth pattern now consistent (portal/group/backup), SSRF hardened, rate limits
+complete, all in-memory caches bounded. The remaining gaps are infra-bound (per-user limits and
+one-time-read atomicity need Durable Objects; CI activation needs a maintainer — item 52). Hunting
+for a self-contained server-side win surfaced a real correctness bug in OGP.
+
+- **Bug**: `handleOGP` created a fresh `new TextDecoder()` per body chunk and decoded without
+  `{ stream: true }`. A multibyte UTF-8 sequence (e.g. a 3-byte Japanese character `あ` = E3 81 82)
+  split across a `reader.read()` boundary became two replacement characters (�) — corrupting
+  non-ASCII titles/descriptions. Direct hit for a Japanese-first app's link previews.
+- **Fix**: one streaming `TextDecoder` instance across the whole body (`decode(value, {stream:true})`
+  per chunk + a final flush on natural end), so partial multibyte bytes are held and reassembled.
+- **Test**: splits `あ` so its first two bytes land in chunk 1 and the last in chunk 2; asserts the
+  extracted `<title>` decodes to `あ`. Mutation-verified: the per-chunk decoder yields `�`.
+
 ## group/create + group/join missing from rate-limit table — item 55 (branch claude/nice-ride-T6yb0, 2026-06-15)
 
 396 worker tests (3 new); `_worker.js` only. `validate.sh` 33/36.

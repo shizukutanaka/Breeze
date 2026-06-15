@@ -2519,11 +2519,17 @@ async function handleOGP(body, env, request) {
     // Read first 32KB only (performance). Truncate AFTER each chunk so a single
     // large chunk (e.g. from a slow-drip attacker) can't bloat memory beyond cap.
     const reader = resp.body.getReader();
+    // One streaming TextDecoder for the whole body: a multibyte UTF-8 sequence (e.g. a
+    // 3-byte Japanese character) split across a chunk boundary is held and reassembled on
+    // the next chunk instead of becoming two replacement characters (�). A fresh per-chunk
+    // decoder without {stream:true} corrupted every non-ASCII title/description that
+    // happened to straddle a read boundary — common for JA/CJK link previews.
+    const decoder = new TextDecoder();
     let html = '';
     while (html.length < 32768) {
       const { done, value } = await reader.read();
-      if (done) break;
-      html = (html + new TextDecoder().decode(value)).slice(0, 32768);
+      if (done) { html = (html + decoder.decode()).slice(0, 32768); break; } // flush trailing bytes
+      html = (html + decoder.decode(value, { stream: true })).slice(0, 32768);
     }
     reader.cancel().catch(() => {});
 

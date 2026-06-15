@@ -3845,6 +3845,32 @@ describe('OGP SSRF guard', () => {
     expect(res.status).toBe(200);
     expect(Object.keys(await res.json()).length).toBe(0);
   });
+
+  // Item 56: a multibyte UTF-8 character split across two body-stream chunks must be
+  // reassembled (streaming TextDecoder), not turned into replacement characters. The
+  // title "あ" (U+3042 = E3 81 82) is split so the first two bytes land in chunk 1 and
+  // the last byte in chunk 2 — a per-chunk decoder would emit "�" on each side.
+  it('reassembles a multibyte UTF-8 char split across body chunks (JA/CJK previews)', async () => {
+    const e = makeEnv();
+    const origFetch = globalThis.fetch;
+    const pre  = new TextEncoder().encode('<title>');        // ends just before あ
+    const post = new TextEncoder().encode('</title><body>'); // starts just after あ
+    const chunk1 = new Uint8Array([...pre, 0xE3, 0x81]);     // あ's first 2 bytes (incomplete)
+    const chunk2 = new Uint8Array([0x82, ...post]);          // あ's last byte + rest
+    globalThis.fetch = async () => new Response(
+      new ReadableStream({
+        start(c) { c.enqueue(chunk1); c.enqueue(chunk2); c.close(); },
+      }),
+      { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } },
+    );
+    try {
+      const res = await handleOGP({ url: 'https://example.com/ja' }, e, req({}));
+      expect(res.status).toBe(200);
+      expect((await res.json()).title).toBe('あ');
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
