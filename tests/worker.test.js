@@ -3766,6 +3766,29 @@ describe('SSRF guard internals (isSSRFBlocked + redirect re-validation)', () => 
     }
   });
 
+  it('isSSRFBlocked does NOT over-block DNS hostnames that merely start with fc/fd/fe80', () => {
+    // The IPv6 ULA/link-local prefix checks (fc/fd/fe80, ::ffff:) must only apply to
+    // bracketed IPv6 literals. Bare hostnames like fc2.com (a major JP host) or
+    // fdroid.org are NOT internal — blocking them silently kills their link previews.
+    for (const u of [
+      'https://fc2.com/blog', 'http://fc2.com/', 'https://fdroid.org/packages',
+      'https://fd.example.com/', 'https://fe80.example.com/', 'https://feeds.example.com/',
+    ]) {
+      expect(isSSRFBlocked(new URL(u))).toBe(false);
+    }
+  });
+
+  it('isSSRFBlocked still blocks real IPv6 ULA / link-local / loopback literals', () => {
+    // Regression guard for the gate above: actual IPv6 literals (always bracketed) must
+    // remain blocked even though the prefix tests are now IPv6-only.
+    for (const u of [
+      'http://[::1]/', 'http://[fc00::1]/', 'http://[fd12:3456::1]/',
+      'http://[fe80::1]/', 'http://[::ffff:10.0.0.1]/',
+    ]) {
+      expect(isSSRFBlocked(new URL(u))).toBe(true);
+    }
+  });
+
   it('ssrfSafeFetch returns null when a redirect points at an internal host (the bypass)', async () => {
     // Simulate a public URL that 302-redirects to the cloud-metadata endpoint.
     const origFetch = globalThis.fetch;

@@ -2424,15 +2424,26 @@ function isSSRFBlocked(parsed) {
   // so it NEVER matched — the IPv4-mapped-IPv6 bypass guard was inert. Strip the
   // brackets first so the ::1 / ::ffff: / fc / fd / fe80 prefix checks actually fire
   // (hostnames have no brackets, so h === host for them — no behavior change there).
-  const h = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
+  const isIPv6 = host.startsWith('[') && host.endsWith(']');
+  const h = isIPv6 ? host.slice(1, -1) : host;
+  // IPv6-literal-only checks. These MUST be gated behind isIPv6: an unbracketed host
+  // is a DNS name or IPv4, and bare prefix tests like startsWith('fc')/startsWith('fd')
+  // would false-positive on legitimate hostnames (fc2.com, fdroid.org, …) and silently
+  // kill their link previews. IPv6 literals always arrive bracketed (the URL parser
+  // throws on unbracketed `::1`), so this gate is exact.
+  if (isIPv6) {
+    if (h === '::1' || h === '::' ||
+        h.startsWith('fc') || h.startsWith('fd') || h.startsWith('fe80') ||
+        h.startsWith('::ffff:')) {  // IPv4-mapped IPv6 (any embedded IPv4; parser compresses to hex)
+      return true;
+    }
+  }
   // Coerce to a strict boolean: the trailing `parsed.port && …` returns the empty
   // string (not false) for default ports, which callers comparing === false trip on.
-  return !!(h === 'localhost' || h.startsWith('127.') || h === '::1' || h === '::' || h === '0.0.0.0' ||
+  return !!(h === 'localhost' || h.startsWith('127.') || h === '0.0.0.0' ||
     h.startsWith('10.') || h.startsWith('192.168.') ||
     (h.startsWith('172.') && parseInt(h.split('.')[1]) >= 16 && parseInt(h.split('.')[1]) <= 31) ||
     h === '169.254.169.254' || h.startsWith('169.254.') ||
-    h.startsWith('fc') || h.startsWith('fd') || h.startsWith('fe80') ||
-    h.startsWith('::ffff:') ||  // IPv4-mapped IPv6 (any embedded IPv4; parser compresses to hex)
     h.endsWith('.internal') || h.endsWith('.local') || h.endsWith('.localhost') ||
     h === 'metadata.google.internal' ||
     (parsed.port && !['80', '443', ''].includes(parsed.port)));

@@ -1,5 +1,29 @@
 # Changelog
 
+## SSRF guard over-blocked fc*/fd* hostnames — item 53 (branch claude/nice-ride-T6yb0, 2026-06-15)
+
+388 worker tests (2 new); `_worker.js` only, no client change. `validate.sh` 33/36.
+
+A Socratic "verify the premise against real input" pass on the operator-misconfiguration /
+graceful-degradation audit confirmed the env-dependent handlers degrade cleanly (`handleTranslate`
+→ 502 `TRANSLATE_FAILED`, `handleAI` → 503 `NO_AI` / 502 `AI_FAILED`, `handleTurn` ships free
+fallbacks, router has a catch-all 500 with request id, `503 KV_NOT_CONFIGURED`). That audit came
+back clean — but the same "test the guard against actual values" lens on `isSSRFBlocked` surfaced
+a real over-blocking bug.
+
+- **Bug**: the IPv6 ULA/link-local prefix checks (`startsWith('fc')`, `startsWith('fd')`,
+  `startsWith('fe80')`, `startsWith('::ffff:')`) ran against **every** host, including bare DNS
+  hostnames. `'fc2.com'.startsWith('fc')` → `true`, so **FC2** (a major Japanese hosting/blog
+  service) and `fdroid.org` were silently blocked from link previews (`handleOGP` returns `{}`).
+- **Fix**: gate the IPv6-literal-only checks behind `host.startsWith('[')`. Verified via the URL
+  parser that IPv6 literals **always** arrive bracketed (unbracketed `::1` throws) and that
+  decimal/hex/octal IPv4 (`2130706433`, `0x7f000001`, `0177.0.0.1`) normalize to dotted-decimal —
+  so the unconditional IPv4 checks still catch them with no regression.
+- **Tests**: added "does NOT over-block fc/fd/fe80 hostnames" (fc2.com, fdroid.org, feeds.*) and a
+  regression guard "still blocks real IPv6 ULA/link-local/loopback literals" (`[::1]`, `[fc00::1]`,
+  `[fd12:3456::1]`, `[fe80::1]`, `[::ffff:10.0.0.1]`). Mutation-verified: removing the gate fails
+  the over-block test.
+
 ## CI not enforced on GitHub — finding + activation runbook — item 52 (branch claude/nice-ride-T6yb0, 2026-06-13)
 
 638 tests; docs-only (the actionable fixes — push workflows, merge to main — require
