@@ -118,7 +118,7 @@ export default {
           'account-delete', 'group-leave', 'group-delete', 'group-admin',
           'group-transfer', 'group-rename', 'msg-disappear-enforce',
           'sealed-sender', 'franking', 'prekey-x3dh',
-          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'alias-auth', 'backup-auth', 'drop-server-id', 'portal-auth', 'group-auth',
+          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'alias-auth', 'backup-auth', 'push-auth', 'drop-server-id', 'portal-auth', 'group-auth',
         ],
         crypto: ['X25519', 'Ed25519', 'AES-256-GCM', 'HKDF-SHA256', 'Double Ratchet', 'Sender Key O(1)'],
         ts: Date.now(),
@@ -1527,6 +1527,32 @@ async function handlePushSubscribe(body, env, request) {
   const { userId, subscription } = body;
   if (!userId || !subscription?.endpoint) return json({ error: 'userId and subscription required', code: 'MISSING_FIELDS' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
+  // Optional Ed25519 ownership auth. Without it, anyone who knows a userId can register THEIR
+  // OWN device under push:${userId} and then receive the victim's notifications: the Web Push
+  // payload is encrypted to the SUBSCRIBER-supplied p256dh/auth, so the attacker can decrypt the
+  // metadata (sender display name, message type, contactId, timing). They could also evict the
+  // victim's real devices via the 5-device cap (denial of notification). Verified-when-present;
+  // required when PUSH_REQUIRE_AUTH=true. Same pattern as portal/group/backup/alias auth.
+  {
+    const { ts, sig } = body;
+    const hasSig = ts !== undefined || sig !== undefined;
+    if (hasSig) {
+      if (ts === undefined || sig === undefined)
+        return json({ error: 'ts and sig must both be provided', code: 'PARTIAL_AUTH' }, 400, request);
+      if (typeof sig !== 'string' || sig.length > 500)
+        return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
+      if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > 300000)
+        return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
+      const pkRaw = await kvGet(env, `prekey:${userId}`);
+      const bundle = pkRaw ? safeJsonParse(pkRaw) : null;
+      if (!bundle || typeof bundle.edIdentityKey !== 'string' || !bundle.edIdentityKey)
+        return json({ error: 'No registered identity key', code: 'NO_IDENTITY_KEY' }, 403, request);
+      const ok = await verifyEd25519(bundle.edIdentityKey, btoa(`breeze-push-subscribe:${userId}:${ts}`), sig);
+      if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
+    } else if (env.PUSH_REQUIRE_AUTH === 'true') {
+      return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+    }
+  }
   // v3.6: Validate push endpoint URL (SSRF prevention)
   try {
     const epUrl = new URL(subscription.endpoint);

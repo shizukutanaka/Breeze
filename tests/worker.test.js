@@ -2625,6 +2625,60 @@ describe('push subscribe SSRF guard', () => {
   });
 });
 
+// Item 62 — optional Ed25519 ownership auth for push subscribe (anti-eavesdrop / anti-evict).
+// Without it, anyone who knows a userId could register their own device under push:${userId}
+// and decrypt the victim's notification metadata, or evict the victim's devices via the cap.
+describe('push subscribe — optional Ed25519 ownership auth (item 62)', () => {
+  const FCM = 'https://fcm.googleapis.com/fcm/send/abc';
+  const req = apiRequest('/api/push/subscribe', {});
+
+  async function account(env, userId) {
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
+    await env.KV.put(`prekey:${userId}`, JSON.stringify({ identityKey: 'IK', edIdentityKey: toB64(edPub), signedPreKey: 'x' }));
+    return { sign: async (uid, ts) => toB64(new Uint8Array(
+      await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, new TextEncoder().encode(`breeze-push-subscribe:${uid}:${ts}`)))) };
+  }
+
+  it('unsigned subscribe still works when the flag is unset (backward-compat)', async () => {
+    const res = await handlePushSubscribe({ userId: 'pushusr01', subscription: { endpoint: FCM } }, makeEnv(), req);
+    expect(res.status).toBe(200);
+  });
+
+  it('rejects unsigned subscribe when PUSH_REQUIRE_AUTH=true', async () => {
+    const env = makeEnv({ PUSH_REQUIRE_AUTH: 'true' });
+    const res = await handlePushSubscribe({ userId: 'pushusr02', subscription: { endpoint: FCM } }, env, req);
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
+  });
+
+  it('accepts a valid signed subscribe when PUSH_REQUIRE_AUTH=true', async () => {
+    const env = makeEnv({ PUSH_REQUIRE_AUTH: 'true' });
+    const acct = await account(env, 'pushusr03');
+    const ts = Date.now();
+    const res = await handlePushSubscribe(
+      { userId: 'pushusr03', subscription: { endpoint: FCM }, ts, sig: await acct.sign('pushusr03', ts) }, env, req);
+    expect(res.status).toBe(200);
+    expect((await res.json()).ok).toBe(true);
+  });
+
+  it('rejects a tampered signature (SIG_INVALID)', async () => {
+    const env = makeEnv();
+    await account(env, 'pushusr04');
+    const res = await handlePushSubscribe(
+      { userId: 'pushusr04', subscription: { endpoint: FCM }, ts: Date.now(), sig: toB64(new Uint8Array(64)) }, env, req);
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+  });
+
+  it('rejects partial auth (sig without ts)', async () => {
+    const res = await handlePushSubscribe(
+      { userId: 'pushusr05', subscription: { endpoint: FCM }, sig: toB64(new Uint8Array(64)) }, makeEnv(), req);
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('PARTIAL_AUTH');
+  });
+});
+
 // Item 39: sendPushToUser must remove ALL dead subscriptions in one push cycle. The old
 // in-loop filter recomputed `subs.filter(...)` from the original array each time, so with
 // two stale subs it clobbered the first removal and left one resurrected.

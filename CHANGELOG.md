@@ -1,5 +1,26 @@
 # Changelog
 
+## Optional Ed25519 ownership auth for push subscribe — item 62 (branch claude/nice-ride-T6yb0, 2026-06-15)
+
+414 worker tests (5 new); `_worker.js` only. `validate.sh` 33/36.
+
+Socratic lens: continuing the "knowing a userId shouldn't grant a sensitive action" sweep — does
+`handlePushSubscribe` verify the caller owns the userId? No. It stored any device under
+`push:${userId}` after only an SSRF check on the endpoint.
+
+- **Leak**: the Web Push payload is encrypted to the SUBSCRIBER-supplied `p256dh`/`auth` keys, so an
+  attacker who knows a victim's userId can register their **own** device and decrypt the victim's
+  notification metadata (sender display name, message type, contactId, timing). They could also
+  evict the victim's real devices via the 5-device cap (denial of notification).
+- **Change**: `handlePushSubscribe` now accepts optional `{ ts, sig }` over
+  `breeze-push-subscribe:${userId}:${ts}`, verified against the userId's registered `edIdentityKey`.
+  Enforced when `PUSH_REQUIRE_AUTH=true`; verified-when-present otherwise (unsigned clients keep
+  working). Added `push-auth` to the health capabilities list. This completes the optional-auth
+  sweep across portal / group / backup / alias / push.
+- **Tests (5)**: unsigned works (flag off); flag-on rejects unsigned (`AUTH_REQUIRED`); valid signed
+  succeeds with flag on; tampered sig → `SIG_INVALID`; partial auth (sig without ts) → 400. Flag and
+  signature guards mutation-verified.
+
 ## Optional Ed25519 ownership auth for alias registration — item 61 (branch claude/nice-ride-T6yb0, 2026-06-15)
 
 409 worker tests (6 new); `_worker.js` only. `validate.sh` 33/36.
