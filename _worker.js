@@ -167,6 +167,12 @@ export default {
         '/api/alias/set': 10,
         '/api/alias/get': 30,
         '/api/alias/delete': 5,
+        // Group create/join write to KV on every call; cap them like prekey/upload (5) and
+        // drop/create (10) to protect the free-tier KV write quota (1000/day).
+        // The 30 rpm default left both endpoints able to exhaust the daily write budget
+        // in ~33 minutes from a single IP.
+        '/api/group/create': 5,
+        '/api/group/join': 10,
         '/api/portal': 5,
         '/api/group/create': 5,
         '/api/group/join': 10,

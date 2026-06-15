@@ -1,5 +1,21 @@
 # Changelog
 
+## group/create + group/join missing from rate-limit table — item 55 (branch claude/nice-ride-T6yb0, 2026-06-15)
+
+396 worker tests (3 new); `_worker.js` only. `validate.sh` 33/36.
+
+Socratic lens: *"what does the rate limiter actually receive vs. what it assumes?"* Every path absent
+from the `limits` table defaults to 30 rpm. Both `/api/group/create` and `/api/group/join` write to
+KV on every call and were absent — so the effective limit was 30 rpm instead of the more careful
+rates used for other write-heavy endpoints (`prekey/upload: 5`, `backup/upload: 2`, `drop/create: 10`).
+
+- At 30 rpm, a single IP can exhaust the Cloudflare free-tier KV write budget (1000/day) in ~33
+  minutes, wedging the entire relay (all subsequent KV writes fail until midnight reset).
+- Added `/api/group/create: 5` and `/api/group/join: 10` to the explicit limits table, with a
+  comment explaining why.
+- Tests: pin the 5 rpm create limit (rejects on 6th, passes on 5th) and the 10 rpm join limit
+  (rejects on 11th). Mutation-verified: raising create limit to 60 causes the 429-at-6 test to fail.
+
 ## Backup BACKUP_REQUIRE_AUTH enforcement flag — item 54 (branch claude/nice-ride-T6yb0, 2026-06-15)
 
 393 worker tests (5 new); `_worker.js` only. `validate.sh` 33/36.

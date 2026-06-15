@@ -3176,6 +3176,48 @@ describe('rate limiting — unknown IP gets stricter cap', () => {
   });
 });
 
+// Item 55 — group/create and group/join rate-limit registration
+// Both endpoints write to KV on every call; the 30 rpm default would exhaust the
+// Cloudflare free-tier KV write budget (1000/day) in ~33 minutes from a single IP.
+// These tests pin the explicit limits (5 rpm for create, 10 rpm for join) so any
+// accidental removal triggers a test failure.
+describe('rate limiting — group create / join explicit limits (item 55)', () => {
+  it('rejects group/create on the 6th request per minute (limit=5)', async () => {
+    const env = makeEnv();
+    let last;
+    for (let i = 0; i < 6; i++) {
+      last = await worker.fetch(apiRequest('/api/group/create', {
+        name: 'g', creatorId: 'creator1', creatorPub: 'pub',
+      }), env);
+    }
+    expect(last.status).toBe(429);
+    expect((await last.json()).code).toBe('RATE_LIMITED');
+  });
+
+  it('allows exactly 5 group/create requests before hitting the limit', async () => {
+    const env = makeEnv();
+    let last;
+    for (let i = 0; i < 5; i++) {
+      last = await worker.fetch(apiRequest('/api/group/create', {
+        name: `g${i}`, creatorId: 'creator1', creatorPub: 'pub',
+      }), env);
+    }
+    expect(last.status).not.toBe(429);
+  });
+
+  it('rejects group/join on the 11th request per minute (limit=10)', async () => {
+    const env = makeEnv();
+    let last;
+    for (let i = 0; i < 11; i++) {
+      last = await worker.fetch(apiRequest('/api/group/join', {
+        token: 'tok', memberId: 'member01', memberPub: 'pub',
+      }), env);
+    }
+    expect(last.status).toBe(429);
+    expect((await last.json()).code).toBe('RATE_LIMITED');
+  });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Backup upload + download
 // ─────────────────────────────────────────────────────────────────────────────
