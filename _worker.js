@@ -479,7 +479,14 @@ async function handleMsgSend(body, ip, env, request) {
   inbox.push(msg);
   const trimmed = capQueueBytes(inbox.slice(-100), m => (typeof m.payload === 'string' ? m.payload.length : 0) + 1024);
   const stored = await kvPut(env, key, JSON.stringify(trimmed), { expirationTtl: 604800 });
-  if (!stored) return json({ error: 'Failed to store message', code: 'STORE_FAILED' }, 500, request);
+  if (!stored) {
+    // Un-mark the dedup key on a failed store: it was set BEFORE this write, so leaving it
+    // would make the client's retry of the identical ciphertext hit the dedup short-circuit
+    // (ok:true, dedup:true) and be silently dropped — a message lost despite never being
+    // stored. Deleting it lets the retry actually persist.
+    globalThis._msgDedup.delete(dedupKey);
+    return json({ error: 'Failed to store message', code: 'STORE_FAILED' }, 500, request);
+  }
 
   // Trigger Web Push notification (non-blocking)
   // Cap push title to match the stored msg.groupName limit (50 chars) — prevents
@@ -2244,7 +2251,13 @@ async function handleSealedSend(body, env, request) {
   queue.push({ envelope, ts: Date.now() });
   const trimmed = capQueueBytes(queue.slice(-100), m => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
   const stored = await kvPut(env, key, JSON.stringify(trimmed), { expirationTtl: 604800 });
-  if (!stored) return json({ error: 'Failed to store sealed message', code: 'STORE_FAILED' }, 500, request);
+  if (!stored) {
+    // Un-mark the dedup key on a failed store (set before this write): otherwise the
+    // client's retry of the identical envelope is swallowed as a duplicate and lost on
+    // the "reliable" sealed path. Mirrors handleMsgSend.
+    globalThis._sealedDedup.delete(dedupKey);
+    return json({ error: 'Failed to store sealed message', code: 'STORE_FAILED' }, 500, request);
+  }
   sendPushToUser(to, { title: 'Breeze', body: 'New message', tag: 'breeze-sealed', contactId: to }, env).catch(() => {});
   return json({ ok: true, ack: Date.now() }, 200, request);
 }

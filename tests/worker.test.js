@@ -4743,6 +4743,73 @@ describe('group mutation KV failure propagation (item 33)', () => {
   });
 });
 
+// Item 57 — dedup key must be released on STORE_FAILED so a client retry is not swallowed.
+// Both relay paths set an in-memory dedup key BEFORE the KV write. If the write fails, a
+// leftover key would make the client's retry of the identical ciphertext short-circuit as a
+// duplicate (ok:true, dedup:true) — a message silently lost despite never being stored.
+describe('relay dedup released on STORE_FAILED so retry persists (item 57)', () => {
+  const req = (b) => apiRequest('/api/x', b);
+
+  it('handleMsgSend: failed store un-marks dedup; identical retry then persists', async () => {
+    const env = makeEnv();
+    globalThis._msgDedup = new Map();
+    const real = env.KV.put.bind(env.KV);
+    let failInbox = true;
+    env.KV.put = async (key, ...rest) => {
+      if (failInbox && key.startsWith('inbox:')) throw new Error('KV unavailable');
+      return real(key, ...rest);
+    };
+    const body = { to: 'user00099', from: 'sender01', payload: 'ciphertext-abc' };
+    const r1 = await handleMsgSend(body, 'ip', env, req({}));
+    expect(r1.status).toBe(500);
+    expect((await r1.json()).code).toBe('STORE_FAILED');
+
+    // KV recovers; the SAME payload retried must actually store (not be deduped away).
+    failInbox = false;
+    const r2 = await handleMsgSend(body, 'ip', env, req({}));
+    expect(r2.status).toBe(200);
+    expect((await r2.json()).dedup).toBeUndefined(); // not swallowed as a duplicate
+    const inbox = JSON.parse(await env.KV.get('inbox:user00099'));
+    expect(inbox.length).toBe(1);
+    expect(inbox[0].payload).toBe('ciphertext-abc');
+  });
+
+  it('handleMsgSend: a genuine duplicate IS still deduped after a successful store', async () => {
+    const env = makeEnv();
+    globalThis._msgDedup = new Map();
+    const body = { to: 'user00098', from: 'sender01', payload: 'ciphertext-dup' };
+    const r1 = await handleMsgSend(body, 'ip', env, req({}));
+    expect(r1.status).toBe(200);
+    const r2 = await handleMsgSend(body, 'ip', env, req({}));
+    expect((await r2.json()).dedup).toBe(true); // second identical send is a duplicate
+    const inbox = JSON.parse(await env.KV.get('inbox:user00098'));
+    expect(inbox.length).toBe(1); // stored exactly once
+  });
+
+  it('handleSealedSend: failed store un-marks dedup; identical retry then persists', async () => {
+    const env = makeEnv();
+    globalThis._sealedDedup = new Map();
+    const real = env.KV.put.bind(env.KV);
+    let failSealed = true;
+    env.KV.put = async (key, ...rest) => {
+      if (failSealed && key.startsWith('sealed:')) throw new Error('KV unavailable');
+      return real(key, ...rest);
+    };
+    const body = { to: 'user00097', envelope: 'sealed-envelope-xyz' };
+    const r1 = await handleSealedSend(body, env, req({}));
+    expect(r1.status).toBe(500);
+    expect((await r1.json()).code).toBe('STORE_FAILED');
+
+    failSealed = false;
+    const r2 = await handleSealedSend(body, env, req({}));
+    expect(r2.status).toBe(200);
+    expect((await r2.json()).dedup).toBeUndefined();
+    const queue = JSON.parse(await env.KV.get('sealed:user00097'));
+    expect(queue.length).toBe(1);
+    expect(queue[0].envelope).toBe('sealed-envelope-xyz');
+  });
+});
+
 describe('prekey upload + backup STORE_FAILED propagation (item 33)', () => {
   const req = (b) => apiRequest('/api/x', b);
 

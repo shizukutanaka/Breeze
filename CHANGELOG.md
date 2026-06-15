@@ -1,5 +1,25 @@
 # Changelog
 
+## Relay dedup key not released on STORE_FAILED → lost message on retry — item 57 (branch claude/nice-ride-T6yb0, 2026-06-15)
+
+400 worker tests (3 new); `_worker.js` only. `validate.sh` 33/36.
+
+Socratic lens on the dedup/store ordering: both relay paths (`handleMsgSend`, `handleSealedSend`)
+set an in-memory dedup key **before** the KV write. Premise to test: *"what happens to that key when
+the write fails?"* — It stays set.
+
+- **Bug**: on a `STORE_FAILED` (transient KV error), the dedup key remains. The client, seeing a 500,
+  retries the **identical ciphertext** — which now hits the dedup short-circuit and returns
+  `{ok:true, dedup:true}`. The message is silently dropped despite never having been stored. This
+  defeats the at-least-once delivery the 500→retry contract is supposed to provide, on **both** the
+  1:1 inbox and the "reliable" sealed-sender path.
+- **Fix**: on a failed store, `delete(dedupKey)` before returning 500, so the retry actually persists.
+  Genuine duplicates (after a *successful* store) are still deduped — the key is only released on the
+  failure path.
+- **Tests (3)**: failed-store-then-retry persists exactly one message (msg + sealed paths); a genuine
+  duplicate after a successful store is still collapsed to one. Mutation-verified: removing either
+  un-mark fails the corresponding retry test while the duplicate test stays green.
+
 ## OGP link-preview corrupted multibyte UTF-8 at chunk boundaries — item 56 (branch claude/nice-ride-T6yb0, 2026-06-15)
 
 397 worker tests (1 new); `_worker.js` only. `validate.sh` 33/36.
