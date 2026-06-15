@@ -2540,11 +2540,27 @@ async function handleOGP(body, env, request) {
     // happened to straddle a read boundary — common for JA/CJK link previews.
     const decoder = new TextDecoder();
     let html = '';
-    while (html.length < 32768) {
-      const { done, value } = await reader.read();
-      if (done) { html = (html + decoder.decode()).slice(0, 32768); break; } // flush trailing bytes
-      html = (html + decoder.decode(value, { stream: true })).slice(0, 32768);
-    }
+    // The 5s timeout in ssrfSafeFetch only bounds time-to-HEADERS; it is cleared the moment
+    // headers arrive. Without a second bound here a slow-drip server (fast headers, then a
+    // byte-per-second body) keeps reader.read() trickling and ties the worker up far past the
+    // intended budget — the memory cap above does nothing against a TIME attack. Race each
+    // read against the remaining deadline so total body-read time is bounded. Operator-tunable
+    // via OGP_READ_BUDGET_MS (clamped 200ms–15s) for slow-link self-hosters.
+    const bodyReadBudgetMs = Math.min(Math.max(parseInt(env.OGP_READ_BUDGET_MS) || 5000, 200), 15000);
+    const readDeadline = Date.now() + bodyReadBudgetMs;
+    try {
+      while (html.length < 32768) {
+        const remaining = readDeadline - Date.now();
+        if (remaining <= 0) break;
+        let timer;
+        const { done, value } = await Promise.race([
+          reader.read(),
+          new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('OGP body read timeout')), remaining); }),
+        ]).finally(() => clearTimeout(timer));
+        if (done) { html = (html + decoder.decode()).slice(0, 32768); break; } // flush trailing bytes
+        html = (html + decoder.decode(value, { stream: true })).slice(0, 32768);
+      }
+    } catch { /* read timeout or stream error — proceed with whatever was read so far */ }
     reader.cancel().catch(() => {});
 
     // Extract OGP meta tags

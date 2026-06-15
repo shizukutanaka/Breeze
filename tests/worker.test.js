@@ -3873,6 +3873,37 @@ describe('OGP SSRF guard', () => {
       globalThis.fetch = origFetch;
     }
   });
+
+  // Item 59: a slow-drip body (fast headers, then a chunk that never completes) must not tie
+  // up the worker indefinitely. The body-read deadline (OGP_READ_BUDGET_MS) bounds total read
+  // time; the handler returns whatever was parsed before the deadline instead of hanging.
+  it('bounds body-read time against a slow-drip stream (does not hang)', async () => {
+    const e = makeEnv({ OGP_READ_BUDGET_MS: '300' }); // short budget for a fast test
+    const origFetch = globalThis.fetch;
+    // Deliver a complete <title>, then a chunk, then NEVER close — read() would hang forever
+    // without the deadline race.
+    globalThis.fetch = async () => new Response(
+      new ReadableStream({
+        start(c) {
+          c.enqueue(new TextEncoder().encode('<title>Hi</title><body>'));
+          // no further enqueue, no close() → the next read() never resolves
+        },
+      }),
+      { status: 200, headers: { 'content-type': 'text/html' } },
+    );
+    try {
+      const t0 = Date.now();
+      const res = await handleOGP({ url: 'https://example.com/slow' }, e, req({}));
+      const elapsed = Date.now() - t0;
+      expect(res.status).toBe(200);
+      // The first chunk was parsed before the deadline → title still extracted.
+      expect((await res.json()).title).toBe('Hi');
+      // Must have returned near the budget, not hung (generous upper bound).
+      expect(elapsed).toBeLessThan(3000);
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

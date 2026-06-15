@@ -1,5 +1,24 @@
 # Changelog
 
+## OGP body-read had no time bound (slow-drip tie-up) — item 59 (branch claude/nice-ride-T6yb0, 2026-06-15)
+
+401 worker tests (1 new); `_worker.js` only. `validate.sh` 33/36.
+
+Socratic lens on `fetchWithTimeout`: *"what exactly does the 5s timeout protect?"* It aborts on
+time-to-HEADERS and is cleared the instant headers arrive — so the subsequent 32KB body read in
+`handleOGP` had **no** time bound.
+
+- **Gap**: a slow-drip server (fast headers, then a byte-per-second body, or a chunk that never
+  completes) keeps `reader.read()` trickling and ties up the worker far past the intended budget.
+  The existing memory cap (truncate to 32KB) does nothing against a *time* attack.
+- **Fix**: race each `reader.read()` against a remaining-time deadline so total body-read time is
+  bounded; on timeout, proceed with whatever was parsed (the handler already returns `{}` / partial
+  preview gracefully). Budget is operator-tunable via `OGP_READ_BUDGET_MS` (clamped 200ms–15s,
+  default 5s) for slow-link self-hosters.
+- **Test**: a stream that emits one chunk then never closes; with a 300ms budget the handler returns
+  in ~300ms with the title still parsed from the first chunk. Mutation-verified: removing the
+  deadline makes the read hang until the 5s test-runner timeout.
+
 ## Account-delete left the sealed-poll high-water mark behind — item 58 (branch claude/nice-ride-T6yb0, 2026-06-15)
 
 400 worker tests (assertion extended); `_worker.js` only. `validate.sh` 33/36.
