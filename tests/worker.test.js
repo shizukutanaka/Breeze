@@ -94,7 +94,7 @@ describe('routing & request validation (export default fetch)', () => {
     // The lifecycle endpoints added this session must be discoverable.
     for (const cap of [
       'account-delete', 'group-leave', 'group-delete', 'group-transfer', 'group-rename',
-      'batch-alias', 'group-caps', 'backup-auth', 'drop-server-id', 'portal-auth', 'group-auth',
+      'batch-alias', 'group-caps', 'backup-auth', 'alias-auth', 'drop-server-id', 'portal-auth', 'group-auth',
     ]) {
       expect(j.capabilities).toContain(cap);
     }
@@ -2373,6 +2373,87 @@ describe('alias set / get (PoW anti-spam)', () => {
     expect(results.alice.pub).toBe('PUBA');
     expect(Object.keys(results).length).toBeLessThanOrEqual(50);
   });
+});
+
+// Item 61 — optional Ed25519 ownership binding for alias registration (anti-impersonation).
+// PoW only rate-limits; it never proves the registrant controls `pub`. Signed registration
+// binds the @handle to the account that owns the identity key; ALIAS_REQUIRE_AUTH enforces it.
+describe('alias set — optional Ed25519 ownership auth (item 61)', () => {
+  const req = (b) => apiRequest('/api/alias/set', b);
+
+  // Register a prekey bundle whose identityKey === pub (the alias target), and return a
+  // signer over breeze-alias-set:{alias}:{ts}.
+  async function account(env, userId, pub) {
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
+    await env.KV.put(`prekey:${userId}`, JSON.stringify({ identityKey: pub, edIdentityKey: toB64(edPub), signedPreKey: 'x' }));
+    return {
+      sign: async (alias, ts) => toB64(new Uint8Array(
+        await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, new TextEncoder().encode(`breeze-alias-set:${alias}:${ts}`)))),
+    };
+  }
+
+  it('legacy PoW-only registration still works when the flag is unset', async () => {
+    const env = makeEnv();
+    const pub = 'LEGACYPUB1';
+    const res = await handleAliasSet({ alias: 'legacy', pub, pow: await solvePoW(pub) }, env, req({}));
+    expect(res.status).toBe(200);
+  }, 30000);
+
+  it('rejects unsigned registration when ALIAS_REQUIRE_AUTH=true', async () => {
+    const env = makeEnv({ ALIAS_REQUIRE_AUTH: 'true' });
+    const pub = 'FLAGPUB001';
+    const res = await handleAliasSet({ alias: 'flagged', pub, pow: await solvePoW(pub) }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
+  }, 30000);
+
+  it('accepts a valid signed registration even when ALIAS_REQUIRE_AUTH=true', async () => {
+    const env = makeEnv({ ALIAS_REQUIRE_AUTH: 'true' });
+    const pub = 'SIGNEDPUB1';
+    const acct = await account(env, 'aliasusr1', pub);
+    const ts = Date.now();
+    const res = await handleAliasSet(
+      { alias: 'mine', pub, userId: 'aliasusr1', ts, sig: await acct.sign('mine', ts), pow: await solvePoW(pub) },
+      env, req({}));
+    expect(res.status).toBe(200);
+    expect((await (await handleAliasGet({ alias: 'mine' }, env, req({}))).json()).pub).toBe(pub);
+  }, 30000);
+
+  it('rejects a signed registration whose pub != the account identity key (PUB_MISMATCH)', async () => {
+    const env = makeEnv();
+    await account(env, 'aliasusr2', 'REALPUB123'); // bundle.identityKey = REALPUB123
+    const ts = Date.now();
+    const acct2 = await account(env, 'aliasusr2b', 'REALPUB123');
+    // Attacker tries to alias a DIFFERENT pub while signing with their own key.
+    const res = await handleAliasSet(
+      { alias: 'victim', pub: 'OTHERPUB99', userId: 'aliasusr2b', ts, sig: await acct2.sign('victim', ts), pow: await solvePoW('OTHERPUB99') },
+      env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('PUB_MISMATCH');
+  }, 30000);
+
+  it('rejects a tampered signature (SIG_INVALID)', async () => {
+    const env = makeEnv();
+    const pub = 'TAMPERPUB1';
+    await account(env, 'aliasusr3', pub);
+    const ts = Date.now();
+    const res = await handleAliasSet(
+      { alias: 'tamper', pub, userId: 'aliasusr3', ts, sig: toB64(new Uint8Array(64)), pow: await solvePoW(pub) },
+      env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+  }, 30000);
+
+  it('rejects partial auth (ts without sig)', async () => {
+    const env = makeEnv();
+    const pub = 'PARTIALPUB';
+    const res = await handleAliasSet(
+      { alias: 'partial', pub, userId: 'aliasusr4', ts: Date.now(), pow: await solvePoW(pub) },
+      env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('PARTIAL_AUTH');
+  }, 30000);
 });
 
 describe('alias delete — standalone alias release without account deletion', () => {

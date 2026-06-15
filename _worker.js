@@ -118,7 +118,7 @@ export default {
           'account-delete', 'group-leave', 'group-delete', 'group-admin',
           'group-transfer', 'group-rename', 'msg-disappear-enforce',
           'sealed-sender', 'franking', 'prekey-x3dh',
-          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'backup-auth', 'drop-server-id', 'portal-auth', 'group-auth',
+          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'alias-auth', 'backup-auth', 'drop-server-id', 'portal-auth', 'group-auth',
         ],
         crypto: ['X25519', 'Ed25519', 'AES-256-GCM', 'HKDF-SHA256', 'Double Ratchet', 'Sender Key O(1)'],
         ts: Date.now(),
@@ -697,6 +697,38 @@ async function handleAliasSet(body, env, request) {
   // Validate alias: 3-20 chars, a-z0-9_
   const clean = alias.toLowerCase().replace(/[^a-z0-9_]/g, '');
   if (clean.length < 3 || clean.length > 20) return json({ error: 'Alias must be 3-20 chars (a-z, 0-9, _)', code: 'INVALID_ALIAS' }, 400, request);
+
+  // Optional Ed25519 ownership binding (anti-impersonation). The PoW above only rate-limits;
+  // it does NOT prove the registrant controls `pub`, so a first-come registrant could point an
+  // unclaimed @handle at someone else's identity key (impersonation) or squat handles. When the
+  // caller supplies { userId, ts, sig }, require that the signer's registered identity key
+  // equals the alias target `pub` and that the signature is valid — binding the @handle to the
+  // account that owns the key (the same ownership check handleAliasDelete enforces). Enforced
+  // outright when ALIAS_REQUIRE_AUTH is set; otherwise verified-when-present and skipped when
+  // absent (backward-compatible with PoW-only clients). Challenge is distinct from alias-delete
+  // to prevent cross-endpoint replay.
+  const { userId: aliasUserId, ts: aliasTs, sig: aliasSig } = body;
+  const hasAliasSig = aliasTs !== undefined || aliasSig !== undefined;
+  if (hasAliasSig) {
+    if (aliasTs === undefined || aliasSig === undefined)
+      return json({ error: 'ts and sig must both be provided', code: 'PARTIAL_AUTH' }, 400, request);
+    if (typeof aliasSig !== 'string' || aliasSig.length > 500)
+      return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
+    if (typeof aliasTs !== 'number' || !Number.isFinite(aliasTs) || Math.abs(Date.now() - aliasTs) > 300000)
+      return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
+    if (!aliasUserId || !validateUserId(aliasUserId))
+      return json({ error: 'valid userId required for signed alias registration', code: 'INVALID_USER_ID' }, 400, request);
+    const bundleRaw = await kvGet(env, `prekey:${aliasUserId}`);
+    const bundle = bundleRaw ? safeJsonParse(bundleRaw) : null;
+    if (!bundle || typeof bundle.edIdentityKey !== 'string' || !bundle.edIdentityKey)
+      return json({ error: 'No registered identity key', code: 'NO_IDENTITY_KEY' }, 403, request);
+    if (bundle.identityKey !== pub)
+      return json({ error: 'alias target pub does not match the account identity key', code: 'PUB_MISMATCH' }, 403, request);
+    const ok = await verifyEd25519(bundle.edIdentityKey, btoa(`breeze-alias-set:${clean}:${aliasTs}`), aliasSig);
+    if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
+  } else if (env.ALIAS_REQUIRE_AUTH === 'true') {
+    return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+  }
 
   // Check if taken
   const existing = await kvGet(env, `alias:${clean}`);

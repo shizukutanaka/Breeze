@@ -1,5 +1,26 @@
 # Changelog
 
+## Optional Ed25519 ownership auth for alias registration — item 61 (branch claude/nice-ride-T6yb0, 2026-06-15)
+
+409 worker tests (6 new); `_worker.js` only. `validate.sh` 33/36.
+
+Socratic lens on the alias set/delete asymmetry: alias **delete** requires an Ed25519 ownership
+signature (and checks `aliasRec.pub === bundle.identityKey`), but alias **set** only requires PoW —
+which proves *work*, not *key ownership*. So a first-come registrant could point an unclaimed
+`@handle` at **someone else's** identity key (impersonation) or mass-squat handles; PoW only
+rate-limits this, it doesn't prevent it.
+
+- **Change**: `handleAliasSet` now accepts optional `{ userId, ts, sig }`. When present it requires
+  the signer's registered `edIdentityKey` to validly sign `breeze-alias-set:${alias}:${ts}` **and**
+  that `bundle.identityKey === pub` (you can only alias your own identity key) — binding the @handle
+  to the account that owns the key, exactly as alias-delete already does. Enforced outright when
+  `ALIAS_REQUIRE_AUTH=true`; verified-when-present and skipped when absent otherwise (PoW-only
+  clients keep working). Distinct challenge prefix prevents cross-endpoint replay. Added `alias-auth`
+  to the health capabilities list.
+- **Tests (6)**: legacy PoW-only works (flag off); flag-on rejects unsigned (`AUTH_REQUIRED`); valid
+  signed succeeds with flag on; `PUB_MISMATCH` when the signed pub ≠ account identity key; tampered
+  sig → `SIG_INVALID`; partial auth (ts without sig) → 400. Both core guards mutation-verified.
+
 ## Translation cache key collided across distinct inputs — item 60 (branch claude/nice-ride-T6yb0, 2026-06-15)
 
 403 worker tests (2 new); `_worker.js` only. `validate.sh` 33/36.
