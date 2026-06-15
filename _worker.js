@@ -2624,7 +2624,12 @@ async function handleTranslate(body, env, request) {
   if (!tgt) return json({ error: 'invalid target language code', code: 'INVALID_LANG' }, 400, request);
 
   // KV cache (7-day TTL)
-  const hash = await sha256Short(text + src + tgt);
+  // Cache key must unambiguously separate the three components. Plain `text + src + tgt`
+  // concatenation collides across distinct inputs because src/tgt are short, variable-length
+  // codes adjacent to free-form text — e.g. ("test","en","ja") and ("teste","n","ja") both
+  // yield "testenja", so one requester could be served the other's cached translation.
+  // JSON.stringify quotes/escapes each field, removing the boundary ambiguity.
+  const hash = await sha256Short(JSON.stringify([text, src, tgt]));
   const cacheKey = `tr:${hash}`;
   const cached = await kvGet(env, cacheKey);
   if (cached) {

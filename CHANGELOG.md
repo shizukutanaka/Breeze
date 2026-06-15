@@ -1,5 +1,25 @@
 # Changelog
 
+## Translation cache key collided across distinct inputs — item 60 (branch claude/nice-ride-T6yb0, 2026-06-15)
+
+403 worker tests (2 new); `_worker.js` only. `validate.sh` 33/36.
+
+Socratic lens on the translate cache key: *"does `text + src + tgt` uniquely identify a request?"*
+No — the three fields are concatenated with **no delimiter**, and src/tgt are short, variable-length
+language codes sitting right after free-form text.
+
+- **Bug**: `("test","en","ja")` and `("teste","n","ja")` both hash `"testenja"` → identical cache
+  key. The second requester is served the **first's cached translation** — wrong output, and a
+  cache-poisoning vector (an attacker can pre-seed a key a victim's request will collide with).
+- **Fix**: key on `JSON.stringify([text, src, tgt])`, which quotes/escapes each field so boundaries
+  are unambiguous. (Audited `handleAI`'s `action + userContent + systemPrompt` key — its fixed
+  action prefix and fixed per-action systemPrompt suffix bracket the variable middle, so it's
+  injective and not vulnerable; left unchanged.) One-time effect: existing `tr:` cache entries miss
+  once and re-populate under the new key.
+- **Tests (2)**: a colliding pair now returns each input's own translation with `cached:false`
+  (mutation-verified — the old concat fails this); an identical repeated request still hits the
+  cache exactly once (proves legitimate caching preserved).
+
 ## OGP body-read had no time bound (slow-drip tie-up) — item 59 (branch claude/nice-ride-T6yb0, 2026-06-15)
 
 401 worker tests (1 new); `_worker.js` only. `validate.sh` 33/36.

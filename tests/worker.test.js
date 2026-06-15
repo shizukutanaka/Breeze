@@ -3005,6 +3005,62 @@ describe('translate handler input validation', () => {
     // Not a 400 — 'ja' survives stripping, no injection
     expect(res.status).not.toBe(400);
   });
+
+  // Item 60: the cache key must not collide across distinct (text, src, tgt) tuples. Plain
+  // concatenation made ("test","en","ja") and ("teste","n","ja") share the key "testenja",
+  // so the second requester would be served the FIRST's cached translation. Mock the
+  // MyMemory provider (used when no API key is set) to echo its inputs so a cross-contaminated
+  // cache hit is detectable.
+  it('does not serve a cross-contaminated cached translation for colliding concatenations', async () => {
+    const e = makeEnv();
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = async (u) => {
+      const url = new URL(u);
+      const q  = url.searchParams.get('q');
+      const lp = url.searchParams.get('langpair');
+      return new Response(
+        JSON.stringify({ responseData: { translatedText: `TR(${q}|${lp})` }, responseStatus: 200 }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    };
+    try {
+      const r1 = await handleTranslate({ text: 'test',  from: 'en', to: 'ja' }, e, req());
+      const j1 = await r1.json();
+      expect(j1.translated).toBe('TR(test|en|ja)');
+      expect(j1.cached).toBe(false);
+
+      // Under the old concat key this collides with r1 → returns "TR(test|en|ja)" cached:true.
+      const r2 = await handleTranslate({ text: 'teste', from: 'n', to: 'ja' }, e, req());
+      const j2 = await r2.json();
+      expect(j2.translated).toBe('TR(teste|n|ja)'); // its OWN translation, not r1's
+      expect(j2.cached).toBe(false);                // a genuine miss, not a collided hit
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+
+  it('still serves a genuine cache hit for an identical repeated request', async () => {
+    const e = makeEnv();
+    const origFetch = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = async (u) => {
+      calls++;
+      const q = new URL(u).searchParams.get('q');
+      return new Response(
+        JSON.stringify({ responseData: { translatedText: `TR(${q})` }, responseStatus: 200 }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    };
+    try {
+      const r1 = await handleTranslate({ text: 'hi', from: 'en', to: 'ja' }, e, req());
+      expect((await r1.json()).cached).toBe(false);
+      const r2 = await handleTranslate({ text: 'hi', from: 'en', to: 'ja' }, e, req());
+      expect((await r2.json()).cached).toBe(true); // identical input → cache hit
+      expect(calls).toBe(1);                        // upstream hit exactly once
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
