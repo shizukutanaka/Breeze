@@ -1,5 +1,21 @@
 # Changelog
 
+## Account-delete left the sealed-poll high-water mark behind — item 58 (branch claude/nice-ride-T6yb0, 2026-06-15)
+
+400 worker tests (assertion extended); `_worker.js` only. `validate.sh` 33/36.
+
+Socratic lens on GDPR erasure: *"does the deletion list actually cover every key keyed by this
+userId?"* Enumerating all userId-keyed KV entries against `handleAccountDelete`'s `dels` array found
+one miss: `sealed:${userId}:hwm`, the sealed-poll high-water mark written by `handleSealedPoll`.
+
+- **Gap**: after a validated account deletion, `sealed:${userId}:hwm` lingered for its 300s TTL —
+  residual user-linked data (it reveals the account existed and the timestamp of its last polled
+  sealed message). The handler's own documented intent is to erase residual data *now* rather than
+  wait for TTLs (it already deletes the 6-min-TTL `presence:` key for exactly this reason).
+- **Fix**: add `kvDel(env, \`sealed:${userId}:hwm\`)` to the deletion batch.
+- **Test**: the "erases every userId-keyed store" test now seeds and asserts the hwm key is null
+  after deletion. Mutation-verified: removing the delete fails the test.
+
 ## Relay dedup key not released on STORE_FAILED → lost message on retry — item 57 (branch claude/nice-ride-T6yb0, 2026-06-15)
 
 400 worker tests (3 new); `_worker.js` only. `validate.sh` 33/36.

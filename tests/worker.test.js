@@ -1320,6 +1320,7 @@ describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
     }, env, apiRequest('/api/prekey/upload', {}));
     await env.KV.put(`inbox:${userId}`, JSON.stringify([{ from: 'x', payload: 'ct', ts: Date.now() }]));
     await env.KV.put(`sealed:${userId}`, JSON.stringify([{ envelope: 'ct', ts: Date.now() }]));
+    await env.KV.put(`sealed:${userId}:hwm`, String(Date.now())); // sealed-poll high-water mark
     await env.KV.put(`push:${userId}`, JSON.stringify([{ endpoint: 'https://fcm.googleapis.com/x' }]));
     await env.KV.put(`backup:${userId}`, 'encrypted-backup-blob');
     await env.KV.put(`presence:${userId}`, JSON.stringify({ at: Date.now() }));
@@ -1341,7 +1342,8 @@ describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
     expect(res.status).toBe(200);
     const j = await res.json();
     expect(j.ok).toBe(true);
-    for (const key of [`inbox:${userId}`, `sealed:${userId}`, `prekey:${userId}`,
+    for (const key of [`inbox:${userId}`, `sealed:${userId}`, `sealed:${userId}:hwm`,
+      `prekey:${userId}`,
       `ktlog:${userId}`, `push:${userId}`, `backup:${userId}`,
       `presence:${userId}`, `slots:${userId}`,
       `prekey:otp:${userId}:0`, `prekey:otp:${userId}:1`, `prekey:otp:${userId}:count`]) {

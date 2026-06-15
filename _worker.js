@@ -1823,6 +1823,7 @@ async function handleAccountDelete(body, env, request) {
   const dels = [
     kvDel(env, `inbox:${userId}`),
     kvDel(env, `sealed:${userId}`),
+    kvDel(env, `sealed:${userId}:hwm`), // sealed-poll high-water mark (else lingers ~5min, leaking last-delivery ts)
     kvDel(env, `prekey:${userId}`),
     kvDel(env, `ktlog:${userId}`),
     kvDel(env, `push:${userId}`),
