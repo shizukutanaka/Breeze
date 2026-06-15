@@ -2329,6 +2329,8 @@ async function handleBackupUpload(body, env, request) {
     const challenge = `breeze-backup-upload:${userId}:${ts}`;
     const ok = await verifyEd25519(bundle.edIdentityKey, btoa(challenge), sig);
     if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
+  } else if (env.BACKUP_REQUIRE_AUTH === 'true') {
+    return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
   }
 
   // Store (max 5MB per backup)
@@ -2345,6 +2347,10 @@ async function handleBackupDownload(body, env, request) {
 
   // Optional Ed25519 auth: callers may include { ts, sig } to prove ownership before
   // retrieving the backup. Both fields must be present or both absent.
+  // Set BACKUP_REQUIRE_AUTH=true to reject unauthenticated requests — recommended once
+  // all clients register an Ed25519 identity key (same pattern as PORTAL_REQUIRE_AUTH /
+  // GROUP_REQUIRE_AUTH). Without it, knowing a userId is enough to download the encrypted
+  // blob and brute-force the passphrase offline.
   const hasSig = ts !== undefined || sig !== undefined;
   if (hasSig) {
     if (ts === undefined || sig === undefined)
@@ -2360,6 +2366,8 @@ async function handleBackupDownload(body, env, request) {
     const challenge = `breeze-backup-download:${userId}:${ts}`;
     const ok = await verifyEd25519(bundle.edIdentityKey, btoa(challenge), sig);
     if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
+  } else if (env.BACKUP_REQUIRE_AUTH === 'true') {
+    return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
   }
 
   const backup = await kvGet(env, `backup:${userId}`);

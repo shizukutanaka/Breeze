@@ -1,5 +1,22 @@
 # Changelog
 
+## Backup BACKUP_REQUIRE_AUTH enforcement flag — item 54 (branch claude/nice-ride-T6yb0, 2026-06-15)
+
+393 worker tests (5 new); `_worker.js` only. `validate.sh` 33/36.
+
+Socratic lens: the same "optional-auth with enforcement flag" pattern used by `PORTAL_REQUIRE_AUTH`
+and `GROUP_REQUIRE_AUTH` was already in the health endpoint's `capabilities` list as `'backup-auth'`,
+but neither `handleBackupUpload` nor `handleBackupDownload` had a `BACKUP_REQUIRE_AUTH` enforcement
+path. The gap: **knowing a userId is enough to download the encrypted backup blob and brute-force
+the passphrase offline** — whereas the portal and group endpoints can be hardened the same way.
+
+- Added `} else if (env.BACKUP_REQUIRE_AUTH === 'true') { return 403 AUTH_REQUIRED }` to both
+  upload and download, after the `hasSig` branch — exactly the pattern of the other two flags.
+- No behavior change when flag is unset (backward-compat preserved).
+- Added comment to download explaining the security model and recommended activation order.
+- **Tests (5)**: flag-on rejects unsigned upload and download; valid signed upload/download succeed
+  with flag on; backward-compat path (flag unset) stays open. Mutation-verified.
+
 ## SSRF guard over-blocked fc*/fd* hostnames — item 53 (branch claude/nice-ride-T6yb0, 2026-06-15)
 
 388 worker tests (2 new); `_worker.js` only, no client change. `validate.sh` 33/36.

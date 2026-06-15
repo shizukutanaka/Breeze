@@ -3349,6 +3349,69 @@ describe('backup upload / download', () => {
   });
 });
 
+// BACKUP_REQUIRE_AUTH enforcement flag (item 54)
+// Without the flag: knowing a userId is enough to download the encrypted blob and
+// brute-force the passphrase offline. With BACKUP_REQUIRE_AUTH=true, both upload
+// and download require a valid Ed25519 signature — same pattern as PORTAL_REQUIRE_AUTH
+// and GROUP_REQUIRE_AUTH.
+describe('backup BACKUP_REQUIRE_AUTH enforcement (item 54)', () => {
+  const req  = (body) => apiRequest('/api/backup/upload', body);
+  const dlReq = (body) => apiRequest('/api/backup/download', body);
+
+  async function registerAndSign(env, userId, action) {
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const pubRaw = await crypto.subtle.exportKey('raw', ed.publicKey);
+    const edIdentityKey = toB64(new Uint8Array(pubRaw));
+    await env.KV.put(`prekey:${userId}`, JSON.stringify({ identityKey: 'x', signedPreKey: 'x', edIdentityKey }));
+    const ts = Date.now();
+    const msg = new TextEncoder().encode(`breeze-backup-${action}:${userId}:${ts}`);
+    const sigBytes = await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, msg);
+    const sig = toB64(new Uint8Array(sigBytes));
+    return { ts, sig };
+  }
+
+  it('unauthenticated upload is rejected when BACKUP_REQUIRE_AUTH=true', async () => {
+    const e = makeEnv({ BACKUP_REQUIRE_AUTH: 'true' });
+    const res = await handleBackupUpload({ userId: 'bakflg01', backup: 'blob' }, e, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
+  });
+
+  it('unauthenticated download is rejected when BACKUP_REQUIRE_AUTH=true', async () => {
+    const e = makeEnv({ BACKUP_REQUIRE_AUTH: 'true' });
+    await e.KV.put('backup:bakflg02', 'encrypted-data');
+    const res = await handleBackupDownload({ userId: 'bakflg02' }, e, dlReq({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
+  });
+
+  it('valid signed upload succeeds even when BACKUP_REQUIRE_AUTH=true', async () => {
+    const e = makeEnv({ BACKUP_REQUIRE_AUTH: 'true' });
+    const { ts, sig } = await registerAndSign(e, 'bakflg03', 'upload');
+    const res = await handleBackupUpload({ userId: 'bakflg03', backup: 'enc-blob', ts, sig }, e, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).authenticated).toBe(true);
+  });
+
+  it('valid signed download succeeds even when BACKUP_REQUIRE_AUTH=true', async () => {
+    const e = makeEnv({ BACKUP_REQUIRE_AUTH: 'true' });
+    await e.KV.put('backup:bakflg04', 'my-enc-backup');
+    const { ts, sig } = await registerAndSign(e, 'bakflg04', 'download');
+    const res = await handleBackupDownload({ userId: 'bakflg04', ts, sig }, e, dlReq({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).backup).toBe('my-enc-backup');
+  });
+
+  it('unauthenticated upload/download still works when flag is unset (backward-compat)', async () => {
+    const e = makeEnv();
+    const up = await handleBackupUpload({ userId: 'bakflg05', backup: 'blob' }, e, req({}));
+    expect(up.status).toBe(200);
+    await e.KV.put('backup:bakflg05', 'blob');
+    const dl = await handleBackupDownload({ userId: 'bakflg05' }, e, dlReq({}));
+    expect(dl.status).toBe(200);
+  });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Signal relay (WebRTC signaling)
 // ─────────────────────────────────────────────────────────────────────────────
