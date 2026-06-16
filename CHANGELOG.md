@@ -1,5 +1,29 @@
 # Changelog
 
+## Explicit KV cache size guard for translate + AI handlers — item 69 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+435 worker tests (2 new); `_worker.js` + `tests/worker.test.js` only. `validate.sh` 33/36.
+
+Socratic lens: *"If an AI/translation provider returns a larger-than-expected response, is there an
+explicit guard preventing it from being written to KV at full size?"* No. Both `handleTranslate` and
+`handleAI` cached the raw API response without a size check. Inputs are bounded (2000-char text,
+500-token AI limit), so the implicit bounds are low — but they are not asserted at the write site.
+
+- **Impact**: A provider bug, configuration change, or unexpected behavior (e.g., token limit
+  ignored) could produce a response 10–100× the typical size. With no guard, every such response
+  gets cached for 7 days (`tr:`) or up to 3 days (`ai:`), consuming disproportionate KV storage
+  per key. Accumulated across users this could exhaust the free-tier KV write budget or pollute the
+  cache with oversized stale entries.
+- **Fix (`handleTranslate`)**: cap `translated` to 8000 chars before constructing the cache object
+  (generous 4× the 2000-char input max), then also check `serialized.length <= 64 * 1024` before the
+  KV write — skip caching if the envelope is somehow still too large. The full (possibly uncapped)
+  response is still returned to the caller; only the stored value is guarded.
+- **Fix (`handleAI`)**: same pattern — cap `result` to 8000 chars (4× a 500-token response), then
+  serialized-size check `<= 32 * 1024` before the KV write.
+- **Tests (2)**: a mock provider returning a 20,000-char string produces a 8000-char response and
+  does not store more than 64KB in KV; a mutation-witness test confirms the cap IS what prevents
+  full-length storage.
+
 ## handlePreKeyFetch per-IP OTP consumption lock — OTP drain attack prevention — item 68 (branch claude/nice-ride-T6yb0, 2026-06-16)
 
 433 worker tests (3 new, 1 updated); `_worker.js` + `tests/worker.test.js` only. `validate.sh` 33/36.

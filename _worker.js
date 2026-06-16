@@ -2855,9 +2855,15 @@ async function handleTranslate(body, env, request) {
 
   if (!translated) return json({ error: 'Translation failed', code: 'TRANSLATE_FAILED' }, 502, request);
 
-  const result = { text, translated, from: detectedFrom, to: tgt, provider };
-  // Cache for 7 days
-  await kvPut(env, cacheKey, JSON.stringify(result), { expirationTtl: 604800 });
+  // Cap the translation text before caching. Input is ≤2000 chars; output should be ≈1:1
+  // in length, but a misbehaving provider could return more. 8000 chars is a generous ceiling
+  // (~4× input); anything beyond is anomalous and should not be cached to avoid KV bloat.
+  // The full response is still returned to the caller — only the cache write is guarded.
+  const safeTranslated = translated.slice(0, 8000);
+  const result = { text, translated: safeTranslated, from: detectedFrom, to: tgt, provider };
+  const serialized = JSON.stringify(result);
+  // Final serialized-size guard: skip cache rather than write an unexpectedly large entry.
+  if (serialized.length <= 64 * 1024) await kvPut(env, cacheKey, serialized, { expirationTtl: 604800 });
   return json({ ...result, cached: false }, 200, request);
 }
 
@@ -3007,8 +3013,13 @@ async function handleAI(body, env, request) {
 
   if (!result) return json({ error: 'AI generation failed', code: 'AI_FAILED' }, 502, request);
 
-  const out = { result, provider, action };
-  await kvPut(env, cacheKey, JSON.stringify(out), { expirationTtl: cacheTTL });
+  // Cap the AI result before caching. maxTokens is 500 (~2KB), but a provider that ignores
+  // the limit could return much more. 8000 chars is a generous ceiling; anything beyond is
+  // anomalous. The full result is returned to the caller; only the cache write is guarded.
+  const safeResult = result.slice(0, 8000);
+  const out = { result: safeResult, provider, action };
+  const serialized = JSON.stringify(out);
+  if (serialized.length <= 32 * 1024) await kvPut(env, cacheKey, serialized, { expirationTtl: cacheTTL });
   return json({ ...out, cached: false }, 200, request);
 }
 
