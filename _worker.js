@@ -1058,10 +1058,16 @@ async function handleGroupCreate(body, env, request) {
   // v3.1: Validate initial member count
   if (Array.isArray(members) && members.length > 100) return json({ error: 'Max 100 members', code: 'GROUP_FULL' }, 400, request);
 
-  // Generate short invite token
-  const bytes = new Uint8Array(8);
-  crypto.getRandomValues(bytes);
-  const token = Array.from(bytes).map(b => b.toString(36)).join('').slice(0, 12);
+  // Generate short invite token — uniform 12-char base-36.
+  // The old approach (8 bytes → b.toString(36) → join → slice(12)) produces variable-length
+  // output: when all 8 bytes are < 36 (each yields 1 char) the joined string is only 8 chars
+  // and slice(0,12) returns an 8-char token with ≈41 bits of entropy rather than 12 chars
+  // (≈62 bits). The new approach requests exactly 12 random bytes and maps each to one of 36
+  // chars via modulo. Modulo bias is (256 mod 36)/256 ≈ 1.5% — negligible for an invite token.
+  const TOKEN_CHARS = '0123456789abcdefghijklmnopqrstuvwxyz';
+  const tokenBytes = new Uint8Array(12);
+  crypto.getRandomValues(tokenBytes);
+  const token = Array.from(tokenBytes, b => TOKEN_CHARS[b % 36]).join('');
 
   // N3 (group): persist the creator's advertised capabilities on the member record so
   // a peer can compute the group capability floor (negotiate.js negotiateGroup) from a

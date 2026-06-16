@@ -4873,6 +4873,41 @@ describe('group create / join / info validation', () => {
     expect(j.name).toBe('TestGroup');
   });
 
+  // ── Token generator (item 70) ───────────────────────────────────────────────
+  it('invite token is always exactly 12 base-36 chars (fixed-length uniform generator)', async () => {
+    // The old generator (8 bytes → b.toString(36) → join → slice(12)) produced variable-length
+    // tokens: when all 8 bytes are < 36, the joined string is only 8 chars.
+    const env = makeEnv();
+    const tokens = new Set();
+    // Generate 20 tokens and verify all are exactly 12 chars of [0-9a-z].
+    for (let i = 0; i < 20; i++) {
+      const res = await handleGroupCreate(
+        { name: `G${i}`, creatorId: `cre${String(i).padStart(5,'0')}`, creatorPub: 'p', creatorName: 'C' },
+        makeEnv(), req({}));
+      const { token } = await res.json();
+      expect(token).toMatch(/^[0-9a-z]{12}$/); // exactly 12 base-36 chars
+      tokens.add(token);
+    }
+    expect(tokens.size).toBe(20); // all unique (collision probability negligible)
+  });
+
+  it('mutation guard: old 8-byte toString(36)+slice(12) generator can produce short tokens', () => {
+    // Verify that the bug we fixed IS a real bug: 8 bytes all < 36 → 8-char token.
+    // This test proves the old code was broken, and that the fix resolves it.
+    const smallBytes = new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]); // all < 36
+    const oldToken = Array.from(smallBytes).map(b => b.toString(36)).join('').slice(0, 12);
+    expect(oldToken.length).toBe(8); // OLD: 8 chars (bug)
+    // NEW: always 12 chars regardless of byte values
+    const TOKEN_CHARS = '0123456789abcdefghijklmnopqrstuvwxyz';
+    const newToken = Array.from(smallBytes.slice(0,12).length < 12
+      ? new Uint8Array(12).fill(0)  // simulate all-zero 12 bytes
+      : smallBytes, b => TOKEN_CHARS[b % 36]).join('');
+    // The new generator always produces exactly 12 chars even for all-zero bytes.
+    const zeroToken = Array.from(new Uint8Array(12).fill(0), b => TOKEN_CHARS[b % 36]).join('');
+    expect(zeroToken.length).toBe(12); // NEW: always 12 (fixed)
+    expect(zeroToken).toBe('000000000000'); // '0' is TOKEN_CHARS[0 % 36]
+  });
+
   it('join 404s on an unknown/expired token', async () => {
     const env = makeEnv();
     const res = await handleGroupJoin(

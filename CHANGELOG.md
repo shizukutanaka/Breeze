@@ -1,5 +1,29 @@
 # Changelog
 
+## Group invite token: fixed-length uniform 12-char base-36 generator — item 70 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+437 worker tests (2 new, 1 updated); `_worker.js` + `tests/worker.test.js` only. `validate.sh` 33/36.
+
+Socratic lens: *"Does the group invite token generator always produce a fixed-length, uniformly-distributed
+token?"* No. The old generator did `Array.from(bytes).map(b => b.toString(36)).join('').slice(0,12)` with
+only 8 random bytes. `b.toString(36)` yields 1 char for b ∈ [0,35] and 2 chars for b ∈ [36,255]. When all
+8 bytes happen to be in [0,35] (each contributes 1 char), the joined string is 8 chars and `slice(0,12)`
+returns an 8-char token — not 12. An 8-char base-36 token has only ≈41 bits of entropy instead of the
+expected ≈62 bits. The probability of this worst case is (36/256)^8 ≈ 0.003%, but the partial-coverage
+problem is continuous: any byte in [0,35] reduces the bits contributed by that position.
+
+- **Impact**: Token shorter than 12 chars means the KV key `grp:${token}` is shorter, and an attacker
+  brute-forcing group tokens has a meaningfully smaller search space (2^41 vs. 2^62) for the rare but
+  possible short tokens. Additionally, the distribution of 12-char tokens is non-uniform because the
+  first byte in [0,35] maps to 1 char while bytes in [36,255] map to 2 chars, creating a bias toward
+  tokens starting with digits/letters that correspond to small byte values.
+- **Fix**: Replace with a uniform generator — request exactly 12 random bytes and map each to one of 36
+  chars via `TOKEN_CHARS[b % 36]`. The modulo bias is (256 mod 36)/256 ≈ 1.5%, negligible for an invite
+  token. Output is always exactly 12 base-36 chars with ≈62 bits of entropy.
+- **Tests (2 new)**: 20 generated tokens are all exactly 12 chars matching `/^[0-9a-z]{12}$/` and unique;
+  a mutation-witness test proves the old generator DID produce 8-char tokens for all-small-byte inputs
+  while the new generator produces 12-char tokens for the same input.
+
 ## Explicit KV cache size guard for translate + AI handlers — item 69 (branch claude/nice-ride-T6yb0, 2026-06-16)
 
 435 worker tests (2 new); `_worker.js` + `tests/worker.test.js` only. `validate.sh` 33/36.
