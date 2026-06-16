@@ -1,5 +1,28 @@
 # Changelog
 
+## sha256Short extended from 8 to 16 bytes — KV cache key collision resistance — item 67 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+430 worker tests (0 new, 1 updated); `_worker.js` + `tests/worker.test.js` only. `validate.sh` 33/36.
+
+Socratic lens: *"Does `sha256Short` provide enough collision resistance for KV cache keys?"*  No.
+The function kept only the first 8 bytes (16 hex chars) of SHA-256, giving 2^32 birthday-collision
+resistance. For a cache serving an adversarial mix of user-supplied URLs (`ogp:`), translation payloads
+(`tr:`), and AI summaries (`ai:`), an attacker who can submit ~2^16 distinct inputs has a ~50 % chance
+of a cache-key collision. A collision causes one user's cached OGP card or AI summary to be served in
+place of another's — an information-disclosure side-channel (wrong preview shown) and a cache-poisoning
+vector (bad actor crafts a URL that collides with a legitimate key and poisons its cached value).
+
+- **Impact**: 2^32 birthday bound → ~65,000 unique inputs needed for a 50 % collision probability.
+  The KV namespace is shared across all users and URL inputs; an active attacker can reach that
+  threshold in minutes. Consequence: wrong OGP metadata served to other users, or stale/poisoned AI
+  summaries returned without re-fetching.
+- **Fix**: change `slice(0, 8)` → `slice(0, 16)` in `sha256Short`. Output grows from 16 to 32 hex
+  chars — a no-op from the KV key-limit perspective (16 extra chars vs. a 512-byte limit with
+  prefix lengths of ≤6 chars + separator). Birthday bound rises to 2^64 — computationally infeasible.
+- **Tests (1 updated)**: the OGP cache-hit test recomputes the expected KV key using `slice(0, 16)`
+  to mirror the new output. Mutation-verified (reverting to slice(0,8) causes the key-lookup to miss
+  and the test to fail).
+
 ## Monotonic timestamp bump for handleSealedSend — same-millisecond ACK race — item 66 (branch claude/nice-ride-T6yb0, 2026-06-16)
 
 430 worker tests (2 new); `_worker.js` only. `validate.sh` 33/36.

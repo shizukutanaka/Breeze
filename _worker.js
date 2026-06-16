@@ -3002,8 +3002,11 @@ async function handleAI(body, env, request) {
 }
 
 async function sha256Short(text) {
+  // 16 bytes (32 hex chars) → 2^64 birthday-collision resistance, up from 8 bytes (2^32).
+  // KV cache keys are 'ogp:', 'tr:', 'ai:' prefixed; the extra 16 chars are negligible
+  // vs. the 512-byte KV key limit and removes the theoretically-breakable 2^32 window.
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return Array.from(new Uint8Array(buf)).slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join('');
+  return Array.from(new Uint8Array(buf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 function corsHeaders(request) {

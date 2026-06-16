@@ -4156,9 +4156,9 @@ describe('OGP SSRF guard', () => {
   it('returns cached result without outbound fetch', async () => {
     const e   = makeEnv();
     const url = 'https://example.com/page';
-    // Mirror sha256Short: first 8 bytes of SHA-256 as lowercase hex
+    // Mirror sha256Short: first 16 bytes of SHA-256 as lowercase hex (item 67: was 8 bytes)
     const buf  = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(url));
-    const hash = Array.from(new Uint8Array(buf)).slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join('');
+    const hash = Array.from(new Uint8Array(buf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
     const cached = { title: 'Cached', description: 'desc', image: '' };
     await e.KV.put(`ogp:${hash}`, JSON.stringify(cached));
     const res = await handleOGP({ url }, e, req({}));
