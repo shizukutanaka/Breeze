@@ -1,5 +1,34 @@
 # Changelog
 
+## handlePreKeyFetch per-IP OTP consumption lock — OTP drain attack prevention — item 68 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+433 worker tests (3 new, 1 updated); `_worker.js` + `tests/worker.test.js` only. `validate.sh` 33/36.
+
+Socratic lens: *"Can an unauthenticated caller drain another user's one-time prekeys?"* Yes.
+`handlePreKeyFetch` required only a valid `userId` — no proof of caller identity. With the rate limit
+at 10 rpm per source IP, a single IP could exhaust all 100 OTPs in 10 minutes. An attacker who drains
+a user's OTPs forces all future X3DH session setups to fall back to the signed pre-key only (no DH4
+component), degrading forward secrecy for every new conversation.
+
+- **Impact**: 100 OTPs × 10 rpm → drained in 10 minutes from one IP. The `replenishOTP` flag would
+  fire, but the owner might be offline; in the window before replenishment every new initiator loses
+  DH4 forward secrecy silently.
+- **Fix**: Before consuming an OTP, hash the source IP (`CF-Connecting-IP` via `sha256Short`) and
+  check `otp_lock:{targetUserId}:{ipHash}` in KV. If the key exists (24 h TTL), skip OTP consumption
+  but still return the SPK-only bundle (200, no `oneTimePreKey`). Write the lock key **after**
+  successful consumption. Result: each source IP can consume at most one OTP per target user per 24 h.
+  Draining all 100 OTPs now requires 100 distinct source IPs.
+- **Reconciliation guard**: the existing stale-count reconciliation (`if (!consumed && count > 0)`)
+  was extended to `if (!consumed && count > 0 && !ipAlreadyConsumed)` — prevents the reconciliation
+  from incorrectly zeroing the stored OTP count when the loop was intentionally skipped due to the
+  IP lock (OTPs still exist in KV; count is accurate).
+- **Batch path**: `handlePreKeyFetchBatch` delegates to `handlePreKeyFetch` with the same `request`
+  object, so the per-IP lock applies to batch fetches automatically with no extra code.
+- **Tests (3 new, 1 updated)**: same-IP double-fetch returns bundle but no OTP; two different IPs each
+  consume one OTP independently; mutation guard (manually clearing lock re-enables consumption,
+  proving the lock is what prevents the drain). The existing "consumes exactly one OTP" test updated
+  to verify the new same-IP blocking behavior and cross-IP consumption separately.
+
 ## sha256Short extended from 8 to 16 bytes — KV cache key collision resistance — item 67 (branch claude/nice-ride-T6yb0, 2026-06-16)
 
 430 worker tests (0 new, 1 updated); `_worker.js` + `tests/worker.test.js` only. `validate.sh` 33/36.

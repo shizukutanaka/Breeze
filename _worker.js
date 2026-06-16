@@ -2115,7 +2115,14 @@ async function handlePreKeyFetch(body, env, request) {
   let remainingOTP = count;
   let foundAny = false;
   let consumed = false;
-  if (count > 0) {
+  // Prevent OTP drain: each source IP may consume at most one OTP per target user per 24h.
+  // Draining all 100 OTPs requires 100 distinct source IPs, not 100 sequential requests.
+  // The rate limit (10 rpm) bounds the rate; this bounds the total per-IP damage.
+  const srcIp = request.headers.get('CF-Connecting-IP') || '';
+  const ipHash = srcIp ? await sha256Short(srcIp) : '';
+  const otpLockKey = ipHash ? `otp_lock:${userId}:${ipHash}` : '';
+  const ipAlreadyConsumed = otpLockKey ? !!(await kvGet(env, otpLockKey)) : false;
+  if (count > 0 && !ipAlreadyConsumed) {
     for (let i = count - 1; i >= 0; i--) {
       const otp = await kvGet(env, `prekey:otp:${userId}:${i}`);
       if (otp) {
@@ -2137,6 +2144,8 @@ async function handlePreKeyFetch(body, env, request) {
         await kvPut(env, `prekey:otp:${userId}:count`, String(i), { expirationTtl: 86400 * 30 });
         remainingOTP = i;
         consumed = true;
+        // Record the consumption lock so this IP cannot drain further OTPs for this user today.
+        if (otpLockKey) await kvPut(env, otpLockKey, '1', { expirationTtl: 86400 });
         break;
       }
     }
@@ -2147,7 +2156,9 @@ async function handlePreKeyFetch(body, env, request) {
   // all expire while count lingers. If the scan consumed nothing despite count>0, the true
   // remaining is 0 — otherwise we'd report phantom OTPs and leave replenishOTP falsely false,
   // so the owner never refreshes and new X3DH sessions silently lose DH4.
-  if (!consumed && count > 0) {
+  // Skip reconciliation when ipAlreadyConsumed: the loop was intentionally bypassed; OTPs
+  // still exist and the stored count is still accurate.
+  if (!consumed && count > 0 && !ipAlreadyConsumed) {
     remainingOTP = 0;
     // Heal the stale count only when the entries are genuinely gone (found none). Don't touch
     // it on transient delete failures (foundAny) — those OTPs still exist and stay fetchable.

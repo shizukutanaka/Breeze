@@ -254,8 +254,16 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     expect(b1.oneTimePreKey).toBe('o2');
     expect(await env.KV.get('prekey:otp:alice0001:count')).toBe('2');
 
-    // Second fetch consumes a different OTP.
-    const res2 = await handlePreKeyFetch({ userId: 'alice0001' }, env, apiRequest('/api/prekey/fetch', {}));
+    // Second fetch from the SAME IP: per-IP lock prevents re-consumption (item 68).
+    // The bundle is still returned (200) but without an OTP.
+    const res2Same = await handlePreKeyFetch({ userId: 'alice0001' }, env, apiRequest('/api/prekey/fetch', {}));
+    const b2Same = await res2Same.json();
+    expect(b2Same.identityKey).toBe('IK'); // bundle still returned
+    expect(b2Same.oneTimePreKey).toBeUndefined(); // no OTP consumed (same IP)
+    expect(await env.KV.get('prekey:otp:alice0001:count')).toBe('2'); // unchanged
+
+    // Second fetch from a DIFFERENT IP: consumes the next OTP.
+    const res2 = await handlePreKeyFetch({ userId: 'alice0001' }, env, apiRequest('/api/prekey/fetch', {}, { 'CF-Connecting-IP': '203.0.113.8' }));
     const b2 = await res2.json();
     expect(b2.oneTimePreKey).toBeDefined();
     expect(b2.oneTimePreKey).not.toEqual(b1.oneTimePreKey);
@@ -499,6 +507,72 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     expect(b.replenishOTP).toBe(true);
     // The OTP slot should still be in KV (delete failed = slot intact for next fetch)
     expect(await env.KV.get(`prekey:otp:${uid}:0`)).not.toBeNull();
+  });
+
+  // ── OTP drain protection — per-IP consumption lock (item 68) ─────────────────
+  describe('OTP drain protection — per-IP consumption lock (item 68)', () => {
+    it('same source IP cannot consume a second OTP for the same target within 24 h', async () => {
+      const env = makeEnv();
+      await handlePreKeyUpload(
+        { userId: 'drainusr1', identityKey: 'IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0', 'o1'] },
+        env, apiRequest('/api/prekey/upload', {}),
+      );
+      // First fetch from IP A: should consume an OTP.
+      const r1 = await handlePreKeyFetch({ userId: 'drainusr1' }, env, apiRequest('/api/prekey/fetch', {}));
+      expect((await r1.json()).oneTimePreKey).toBeDefined();
+      expect(await env.KV.get('prekey:otp:drainusr1:count')).toBe('1');
+
+      // Second fetch from the SAME IP: lock must prevent OTP consumption.
+      const r2 = await handlePreKeyFetch({ userId: 'drainusr1' }, env, apiRequest('/api/prekey/fetch', {}));
+      const b2 = await r2.json();
+      expect(r2.status).toBe(200);          // bundle still returned (not blocked)
+      expect(b2.oneTimePreKey).toBeUndefined(); // but no OTP attached
+      expect(await env.KV.get('prekey:otp:drainusr1:count')).toBe('1'); // count unchanged
+    });
+
+    it('different source IPs each consume one OTP independently (legitimate multi-user contact)', async () => {
+      const env = makeEnv();
+      await handlePreKeyUpload(
+        { userId: 'drainusr2', identityKey: 'IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0', 'o1'] },
+        env, apiRequest('/api/prekey/upload', {}),
+      );
+      const rA = await handlePreKeyFetch(
+        { userId: 'drainusr2' }, env,
+        apiRequest('/api/prekey/fetch', {}, { 'CF-Connecting-IP': '10.0.0.1' }),
+      );
+      expect((await rA.json()).oneTimePreKey).toBeDefined();
+
+      const rB = await handlePreKeyFetch(
+        { userId: 'drainusr2' }, env,
+        apiRequest('/api/prekey/fetch', {}, { 'CF-Connecting-IP': '10.0.0.2' }),
+      );
+      expect((await rB.json()).oneTimePreKey).toBeDefined();
+      expect(await env.KV.get('prekey:otp:drainusr2:count')).toBe('0'); // both consumed
+    });
+
+    it('mutation guard: removing the lock check re-enables same-IP double-consumption', async () => {
+      // Verify the above test would FAIL without the guard (confirming it is effective).
+      // We simulate "no lock" by directly deleting the lock key after the first fetch.
+      const env = makeEnv();
+      await handlePreKeyUpload(
+        { userId: 'drainusr3', identityKey: 'IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0', 'o1'] },
+        env, apiRequest('/api/prekey/upload', {}),
+      );
+      const r1 = await handlePreKeyFetch({ userId: 'drainusr3' }, env, apiRequest('/api/prekey/fetch', {}));
+      expect((await r1.json()).oneTimePreKey).toBeDefined(); // first fetch OK
+
+      // Simulate absence of the guard by manually clearing the lock KV entry.
+      // In real production without the fix, the lock would never be written.
+      const lockKeys = [...env.KV.store.keys()].filter(k => k.startsWith('otp_lock:'));
+      for (const k of lockKeys) env.KV.store.delete(k);
+
+      // Without the guard, the same IP can consume a second OTP.
+      const r2 = await handlePreKeyFetch({ userId: 'drainusr3' }, env, apiRequest('/api/prekey/fetch', {}));
+      expect((await r2.json()).oneTimePreKey).toBeDefined(); // consumes second OTP
+      // This test PASSING proves the lock IS what prevents re-consumption above.
+      // If the production code still has the guard: the lock key would be re-set after
+      // r1 but we deleted it above to simulate "no guard" — so r2 can consume freely.
+    });
   });
 });
 
