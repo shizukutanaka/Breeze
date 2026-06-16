@@ -292,6 +292,19 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     expect(b.oneTimePreKey).toBeUndefined(); // nothing to consume
   });
 
+  // Item 63: fetch must not trust a count that has outlived its (expired) OTP entries.
+  it('fetch signals replenish and heals the count when a stale count outlives its entries', async () => {
+    const env = makeEnv();
+    const userId = 'stalefetch1';
+    await env.KV.put(`prekey:${userId}`, JSON.stringify({ identityKey: 'IK', signedPreKey: 'SPK', uploadedAt: Date.now() }));
+    await env.KV.put(`prekey:otp:${userId}:count`, '8'); // stale; entries expired/absent
+    const res = await handlePreKeyFetch({ userId }, env, apiRequest('/api/prekey/fetch', {}));
+    const b = await res.json();
+    expect(b.oneTimePreKey).toBeUndefined();   // none available despite count=8
+    expect(b.replenishOTP).toBe(true);          // not phantom-suppressed
+    expect(await env.KV.get(`prekey:otp:${userId}:count`)).toBe('0'); // self-healed
+  });
+
   it('sets replenishSPK when the signed pre-key bundle is older than 25 days', async () => {
     // The KV TTL for prekeys is 30 days. Warn at 25 days so there's a 5-day window.
     const env = makeEnv();
@@ -758,6 +771,31 @@ describe('prekey status — non-destructive OTP/SPK health check (/api/prekey/st
     );
     const j = await (await handlePreKeyStatus({ userId: 'pkstat02' }, env, req)).json();
     expect(j.replenishOTP).toBe(true);
+  });
+
+  // Item 63: the count key can outlive its OTP entries (fetch refreshes count's TTL but the
+  // unconsumed entries keep their original upload-time TTL and expire first). A stale count must
+  // NOT be reported as phantom OTPs — that would suppress replenishOTP and silently degrade X3DH.
+  it('reports 0 OTPs (not a phantom count) when the entries have expired, and heals the count', async () => {
+    const env = makeEnv();
+    const userId = 'pkstale01';
+    await env.KV.put(`prekey:${userId}`, JSON.stringify({ identityKey: 'IK', signedPreKey: 'SPK', uploadedAt: Date.now() }));
+    await env.KV.put(`prekey:otp:${userId}:count`, '8'); // stale count; NO otp entries present
+    const j = await (await handlePreKeyStatus({ userId }, env, req)).json();
+    expect(j.otpCount).toBe(0);          // not the phantom 8
+    expect(j.replenishOTP).toBe(true);   // owner is correctly warned
+    expect(await env.KV.get(`prekey:otp:${userId}:count`)).toBe('0'); // self-healed
+  });
+
+  it('reports the real count when the top OTP entry is still present', async () => {
+    const env = makeEnv();
+    const userId = 'pkstale02';
+    await env.KV.put(`prekey:${userId}`, JSON.stringify({ identityKey: 'IK', signedPreKey: 'SPK', uploadedAt: Date.now() }));
+    await env.KV.put(`prekey:otp:${userId}:count`, '8');
+    await env.KV.put(`prekey:otp:${userId}:7`, JSON.stringify('topotp')); // index count-1 present
+    const j = await (await handlePreKeyStatus({ userId }, env, req)).json();
+    expect(j.otpCount).toBe(8);
+    expect(j.replenishOTP).toBe(false);
   });
 
   it('returns 404 for a user with no prekeys', async () => {

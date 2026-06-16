@@ -1,5 +1,30 @@
 # Changelog
 
+## Stale OTP count outlived its entries → phantom prekeys, suppressed replenish — item 63 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+417 worker tests (3 new); `_worker.js` only. `validate.sh` 33/36.
+
+Socratic lens on the OTP accounting: *"can `prekey:otp:${userId}:count` and its OTP entries get out
+of sync?"* Yes. Upload writes the entries and `count` with a 30-day TTL; every fetch refreshes the
+**count** key's TTL to a fresh 30 days but never touches the unconsumed entries, which keep their
+**original** upload-time TTL. So after sporadic fetches, the entries can all expire while `count`
+lingers at e.g. 8.
+
+- **Impact**: `handlePreKeyFetch` then scans, finds nothing, but `remainingOTP` stayed at the stale
+  count → `replenishOTP` stayed **false** and no OTP was delivered → new X3DH sessions silently lose
+  the DH4/OTP component (forward-secrecy degradation) with no signal. Worse, `handlePreKeyStatus`
+  (the owner's self-audit) reported `otpCount: 8, replenishOTP: false` — telling the owner they have
+  8 OTPs when they have **zero**, so they never replenish.
+- **Fix A (`handlePreKeyFetch`)**: track whether the scan consumed anything; if `count>0` but nothing
+  was consumed, set `remainingOTP = 0` (honest replenish signal) and, when no entry was found at all,
+  heal the stale count to 0. Don't corrupt the count on transient delete failures.
+- **Fix B (`handlePreKeyStatus`)**: the entry at index `count-1` is always the next to be consumed
+  and all entries from one upload share a TTL, so one extra KV read of the top entry detects full
+  expiry; report `otpCount: 0` + `replenishOTP: true` and heal the count when so.
+- **Tests (3)**: stale-count-with-expired-entries → fetch returns no OTP + replenish + healed count;
+  status reports 0 + replenish + healed count; status still reports the real count when the top
+  entry is present. Both healing paths mutation-verified.
+
 ## Optional Ed25519 ownership auth for push subscribe — item 62 (branch claude/nice-ride-T6yb0, 2026-06-15)
 
 414 worker tests (5 new); `_worker.js` only. `validate.sh` 33/36.

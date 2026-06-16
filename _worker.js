@@ -2081,18 +2081,21 @@ async function handlePreKeyFetch(body, env, request) {
   // KV count would otherwise iterate hundreds of thousands of KV reads.
   const count = Math.min(Math.max(parseInt(countStr || '0') || 0, 0), 100);
   let remainingOTP = count;
+  let foundAny = false;
+  let consumed = false;
   if (count > 0) {
     for (let i = count - 1; i >= 0; i--) {
       const otp = await kvGet(env, `prekey:otp:${userId}:${i}`);
       if (otp) {
+        foundAny = true;
         const parsed = safeJsonParse(otp);
         // Delete BEFORE attaching to the bundle. If the delete fails (transient KV error),
         // skip this slot rather than returning an OTP we can't guarantee was exclusively
         // consumed — reusing an OTP with a second initiator degrades X3DH forward secrecy
         // (the DH4 component would no longer be per-session). A failed delete leaves the
         // slot intact for the next fetch; set replenishOTP so the client knows to retry.
-        const consumed = await kvDel(env, `prekey:otp:${userId}:${i}`);
-        if (!consumed) continue;
+        const deleted = await kvDel(env, `prekey:otp:${userId}:${i}`);
+        if (!deleted) continue;
         // Only attach the OTP if it parsed cleanly; a corrupted entry was still consumed
         // above so it doesn't permanently block the slot.
         // Return the consumed index as oneTimePreKeyId: the X3DH v5 initiator echoes it
@@ -2101,9 +2104,22 @@ async function handlePreKeyFetch(body, env, request) {
         if (parsed !== null) { bundle.oneTimePreKey = parsed; bundle.oneTimePreKeyId = i; }
         await kvPut(env, `prekey:otp:${userId}:count`, String(i), { expirationTtl: 86400 * 30 });
         remainingOTP = i;
+        consumed = true;
         break;
       }
     }
+  }
+  // Reconcile remainingOTP with what the scan actually found. It started at the stored count,
+  // but that count key can outlive its OTP entries: every fetch refreshes the count key's
+  // 30-day TTL while the unconsumed entries keep their original upload-time TTL, so they can
+  // all expire while count lingers. If the scan consumed nothing despite count>0, the true
+  // remaining is 0 — otherwise we'd report phantom OTPs and leave replenishOTP falsely false,
+  // so the owner never refreshes and new X3DH sessions silently lose DH4.
+  if (!consumed && count > 0) {
+    remainingOTP = 0;
+    // Heal the stale count only when the entries are genuinely gone (found none). Don't touch
+    // it on transient delete failures (foundAny) — those OTPs still exist and stay fetchable.
+    if (!foundAny) await kvPut(env, `prekey:otp:${userId}:count`, '0', { expirationTtl: 86400 * 30 });
   }
   // Signal the owner to replenish one-time prekeys before they are exhausted.
   if (remainingOTP <= 5) bundle.replenishOTP = true;
@@ -2163,7 +2179,20 @@ async function handlePreKeyStatus(body, env, request) {
   const bundle = safeJsonParse(data);
   if (!bundle) return json({ error: 'No prekeys found', code: 'NOT_FOUND' }, 404, request);
   const countStr = await kvGet(env, `prekey:otp:${userId}:count`);
-  const otpCount = Math.min(Math.max(parseInt(countStr || '0') || 0, 0), 100);
+  let otpCount = Math.min(Math.max(parseInt(countStr || '0') || 0, 0), 100);
+  // The count key can outlive its OTP entries (fetch refreshes count's 30-day TTL but the
+  // unconsumed entries keep their original upload-time TTL). A stale count would make this
+  // self-audit report phantom OTPs and suppress replenishOTP — the opposite of a health check's
+  // job. The entry at index count-1 is always the next one to be consumed, and all entries from
+  // one upload share a TTL, so if the top entry is gone they all are. One extra KV read detects
+  // full expiry; heal the stale count when so.
+  if (otpCount > 0) {
+    const top = await kvGet(env, `prekey:otp:${userId}:${otpCount - 1}`);
+    if (!top) {
+      otpCount = 0;
+      await kvPut(env, `prekey:otp:${userId}:count`, '0', { expirationTtl: 86400 * 30 });
+    }
+  }
   const result = {
     uploadedAt: bundle.uploadedAt,
     otpCount,
