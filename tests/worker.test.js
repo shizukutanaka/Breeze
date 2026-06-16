@@ -94,7 +94,7 @@ describe('routing & request validation (export default fetch)', () => {
     // The lifecycle endpoints added this session must be discoverable.
     for (const cap of [
       'account-delete', 'group-leave', 'group-delete', 'group-transfer', 'group-rename',
-      'batch-alias', 'group-caps', 'backup-auth', 'alias-auth', 'drop-server-id', 'portal-auth', 'group-auth',
+      'batch-alias', 'group-caps', 'backup-auth', 'alias-auth', 'drop-server-id', 'portal-auth', 'group-auth', 'group-ban',
     ]) {
       expect(j.capabilities).toContain(cap);
     }
@@ -920,6 +920,67 @@ describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {
     const res = await handleGroupJoin({ token, memberId: 'dave0001', memberPub: 'dpub', memberName: 'D' }, env, req({}));
     expect(res.status).toBe(200);
     expect((await res.json()).epoch).toBe(1);
+  });
+});
+
+// Item 64 — durable kick: a kicked member is banned from rejoining via the invite token
+// (otherwise kick is undone the moment they re-join + sender keys are redistributed). The
+// creator can lift the ban with group/admin action:'unban'.
+describe('group durable kick + unban (item 64)', () => {
+  const req = (b) => apiRequest('/api/group/x', b);
+  async function setupGroup(env) {
+    const create = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+    const { token } = await create.json();
+    await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'cpub2', memberName: 'Ca' }, env, req({}));
+    return token;
+  }
+
+  it('a kicked member cannot rejoin via the invite token', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
+    const rejoin = await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'cpub2', memberName: 'Ca' }, env, req({}));
+    expect(rejoin.status).toBe(403);
+    expect((await rejoin.json()).code).toBe('BANNED');
+    // and they are not silently re-added
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.members.some(m => m.id === 'carol001')).toBe(false);
+  });
+
+  it('a non-kicked member can still join normally (ban is targeted)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
+    const res = await handleGroupJoin({ token, memberId: 'dave0001', memberPub: 'dpub', memberName: 'D' }, env, req({}));
+    expect(res.status).toBe(200);
+  });
+
+  it('the creator can unban a kicked member, who may then rejoin', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
+    const unban = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'carol001', action: 'unban' }, env, req({}));
+    expect(unban.status).toBe(200);
+    expect((await unban.json()).banned).not.toContain('carol001');
+    const rejoin = await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'cpub2', memberName: 'Ca' }, env, req({}));
+    expect(rejoin.status).toBe(200);
+  });
+
+  it('unban is idempotent for a non-banned id (no-op success)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'carol001', action: 'unban' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).notBanned).toBe(true);
+  });
+
+  it('only the creator can unban (a regular member cannot)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
+    const res = await handleGroupAdmin({ token, adminId: 'carol001', targetId: 'carol001', action: 'unban' }, env, req({}));
+    expect(res.status).toBe(403);
   });
 });
 

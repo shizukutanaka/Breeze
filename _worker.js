@@ -118,7 +118,7 @@ export default {
           'account-delete', 'group-leave', 'group-delete', 'group-admin',
           'group-transfer', 'group-rename', 'msg-disappear-enforce',
           'sealed-sender', 'franking', 'prekey-x3dh',
-          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'alias-auth', 'backup-auth', 'push-auth', 'drop-server-id', 'portal-auth', 'group-auth',
+          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'alias-auth', 'backup-auth', 'push-auth', 'drop-server-id', 'portal-auth', 'group-auth', 'group-ban',
         ],
         crypto: ['X25519', 'Ed25519', 'AES-256-GCM', 'HKDF-SHA256', 'Double Ratchet', 'Sender Key O(1)'],
         ts: Date.now(),
@@ -1100,6 +1100,12 @@ async function handleGroupJoin(body, env, request) {
   const group = safeJsonParse(data);
   if (!group || !Array.isArray(group.members)) return json({ error: 'Invite link expired or invalid', code: 'EXPIRED' }, 404, request);
 
+  // Durable removal: a member the admins kicked cannot rejoin via the (still-valid) invite
+  // token. The creator can re-allow them with group/admin action:'unban'.
+  if (Array.isArray(group.banned) && group.banned.includes(memberId)) {
+    return json({ error: 'You have been removed from this group', code: 'BANNED' }, 403, request);
+  }
+
   // Already a member: refresh the mutable fields (pub/name/caps) rather than no-op.
   // Clients re-call join on reconnect; without this, the N3 capability snapshot would
   // stay frozen at first-join, so a client that upgrades (gains group-v5/franking)
@@ -1222,6 +1228,14 @@ async function handleGroupKick(body, env, request) {
 
   group.members = group.members.filter(m => m.id !== kickId);
   if (group.admins) group.admins = group.admins.filter(id => id !== kickId);
+  // Durable removal: record the kick in a bounded ban list. Without it, the kicked member can
+  // simply rejoin via the still-valid invite token (handleGroupJoin re-adds them and, after the
+  // remaining members redistribute sender keys, restores their access) — so kick alone causes
+  // only a momentary disruption. The creator can lift a ban via group/admin action:'unban'.
+  // Bounded to the 200 most-recent banned ids to cap KV growth.
+  const banned = Array.isArray(group.banned) ? group.banned.filter(id => typeof id === 'string') : [];
+  if (!banned.includes(kickId)) banned.push(kickId);
+  group.banned = banned.slice(-200);
   // I3: post-compromise removal. Bump the epoch so remaining members generate and
   // redistribute fresh sender keys (kicked member can't decrypt the new epoch).
   // Coerce to integer first: a corrupted KV entry with epoch stored as a string
@@ -1244,7 +1258,7 @@ async function handleGroupAdmin(body, env, request) {
   if (!token || !adminId || !targetId || !action) return json({ error: 'token, adminId, targetId, action required', code: 'MISSING_FIELDS' }, 400, request);
   if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(adminId) || !validateUserId(targetId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
-  if (action !== 'promote' && action !== 'demote') return json({ error: "action must be 'promote' or 'demote'", code: 'INVALID_ACTION' }, 400, request);
+  if (action !== 'promote' && action !== 'demote' && action !== 'unban') return json({ error: "action must be 'promote', 'demote' or 'unban'", code: 'INVALID_ACTION' }, 400, request);
   const aAuth = await checkGroupAuth(env, request, 'admin', token, adminId, body.ts, body.sig);
   if (aAuth) return aAuth;
 
@@ -1256,6 +1270,21 @@ async function handleGroupAdmin(body, env, request) {
   // Only the creator manages admins — an admin cannot mint or remove other admins
   // (keeps the privilege graph a flat creator→admins tree, no escalation chains).
   if (group.creatorId !== adminId) return json({ error: 'Only the creator can manage admins', code: 'FORBIDDEN' }, 403, request);
+
+  // Unban: lift a previous kick so the target may rejoin via the invite token. The target is
+  // NOT a member (they were removed), so this is handled before the member-existence checks
+  // below. Idempotent: unbanning a non-banned id is a no-op success.
+  if (action === 'unban') {
+    const banned = Array.isArray(group.banned) ? group.banned.filter(id => typeof id === 'string') : [];
+    const bi = banned.indexOf(targetId);
+    if (bi < 0) return json({ ok: true, banned, notBanned: true }, 200, request);
+    banned.splice(bi, 1);
+    group.banned = banned;
+    const unbanSaved = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+    if (!unbanSaved) return json({ error: 'Failed to save unban', code: 'STORE_FAILED' }, 500, request);
+    return json({ ok: true, banned }, 200, request);
+  }
+
   // The creator's authority is implicit and immutable; it is never stored in `admins`.
   if (targetId === group.creatorId) return json({ error: 'Creator is always an admin', code: 'INVALID_TARGET' }, 400, request);
   if (!group.members.some(m => m.id === targetId)) return json({ error: 'Member not found', code: 'NOT_MEMBER' }, 404, request);

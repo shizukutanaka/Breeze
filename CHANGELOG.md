@@ -1,5 +1,29 @@
 # Changelog
 
+## Durable group kick — banned member cannot rejoin via invite token — item 64 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+422 worker tests (5 new); `_worker.js` only. `validate.sh` 33/36.
+
+Socratic lens on the kick flow: *"what stops a kicked member from immediately rejoining with the
+same invite token?"* Nothing. `handleGroupKick` removed the target from `group.members` but left
+the group's invite token intact; as long as the kicked user still knew the token (they did — it
+never changes) they could call `/api/group/join` again and be re-added with no obstacle.
+
+- **Impact**: kick was cosmetic — the "removed" member rejoined instantly. They could also rejoin
+  mid-epoch and receive the next sender-key distribution, retaining full decrypt capability.
+- **Fix A (`handleGroupKick`)**: write a `group.banned` array (capped at 200 entries, sanitized
+  to strings) alongside the existing member-array removal. Each kick appends the kicked userId;
+  duplicate entries are suppressed.
+- **Fix B (`handleGroupJoin`)**: check `group.banned` before adding the caller to `members`; return
+  `403 BANNED` immediately to a banned member regardless of token validity.
+- **Fix C (`handleGroupAdmin`)**: add an `'unban'` action that lets the creator remove a userId
+  from `group.banned`; idempotent (returns `notBanned: true` if the id wasn't banned). The action
+  validator was expanded to accept `'promote' | 'demote' | 'unban'`. Added `'group-ban'` to the
+  health capabilities list.
+- **Tests (5)**: kicked member gets `403 BANNED` on rejoin; non-kicked member joins normally;
+  creator unbans → member may rejoin; unban is idempotent; non-creator cannot unban. Ban guard
+  and unban guard mutation-verified.
+
 ## Stale OTP count outlived its entries → phantom prekeys, suppressed replenish — item 63 (branch claude/nice-ride-T6yb0, 2026-06-16)
 
 417 worker tests (3 new); `_worker.js` only. `validate.sh` 33/36.
