@@ -23,7 +23,12 @@ function sanitizeString(val, maxLen = MAX_STRING_LEN) {
 }
 
 function validateUserId(id) {
-  return typeof id === 'string' && id.length >= 8 && id.length <= 512 && /^[A-Za-z0-9+/=_-]+$/.test(id);
+  // Upper bound 128: the longest KV key prefix is 'prekey:otp:...:99' (14 chars);
+  // 128+14 = 142 bytes — well within the Cloudflare KV 512-byte key limit.
+  // A 512-char userId would produce composite keys up to 526 bytes, causing silent
+  // kvGet→null / kvPut→false failures. The generic body guard (line ~266) already
+  // caps named userId fields at 128; this makes validateUserId consistent with it.
+  return typeof id === 'string' && id.length >= 8 && id.length <= 128 && /^[A-Za-z0-9+/=_-]+$/.test(id);
 }
 
 // N3: sanitize a client-advertised capability array (prekey bundle + presence). Keeps
@@ -173,10 +178,8 @@ export default {
         // in ~33 minutes from a single IP.
         '/api/group/create': 5,
         '/api/group/join': 10,
-        '/api/portal': 5,
-        '/api/group/create': 5,
-        '/api/group/join': 10,
         '/api/group/info': 20,
+        '/api/portal': 5,
         '/api/group/kick': 5,
         '/api/group/admin': 10,
         '/api/group/transfer': 5,

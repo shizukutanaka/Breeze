@@ -198,11 +198,12 @@ describe('userId validation helper', () => {
     expect(validateUserId('bad!')).toBeFalsy();
   });
 
-  it('enforces length bounds (>= 8, <= 512)', () => {
+  it('enforces length bounds (>= 8, <= 128)', () => {
     expect(validateUserId('a'.repeat(7))).toBeFalsy();   // too short
     expect(validateUserId('a'.repeat(8))).toBeTruthy();  // exactly 8
-    expect(validateUserId('a'.repeat(512))).toBeTruthy(); // exactly 512
-    expect(validateUserId('a'.repeat(513))).toBeFalsy(); // too long
+    expect(validateUserId('a'.repeat(128))).toBeTruthy(); // exactly 128 (KV-safe upper bound)
+    expect(validateUserId('a'.repeat(129))).toBeFalsy(); // one over
+    expect(validateUserId('a'.repeat(512))).toBeFalsy(); // old permissive bound — must now fail
   });
 
   it('accepts the base64url alphabet (+, /, =, _, -) in addition to alphanumeric', () => {
@@ -5237,5 +5238,52 @@ describe('kvDel failure propagation (item 34)', () => {
     expect((await res.json()).code).toBe('STORE_FAILED');
     // Alias must still exist
     expect(await env.KV.get('alias:deltest99')).not.toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// validateUserId upper-bound tightened (item 65)
+//
+// Composite KV keys like `prekey:otp:${userId}:99` add up to 14 chars of prefix
+// to the userId. The Cloudflare KV key limit is 512 bytes; a 512-char userId would
+// produce a 526-byte key, causing silent kvGet→null / kvPut→false. The generic body
+// guard at line ~266 caps named fields at 128 chars; validateUserId is now capped at
+// 128 too so array-element IDs (e.g. ids[] in presence batch) are consistently safe.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('validateUserId upper-bound (item 65)', () => {
+  it('accepts a 128-char userId (exact upper bound)', () => {
+    const uid128 = 'A'.repeat(120) + 'BBBBBBBB'; // 128 chars, all valid chars
+    expect(validateUserId(uid128)).toBe(true);
+  });
+
+  it('rejects a 129-char userId (one over the upper bound)', () => {
+    // Mutation guard: if the bound is accidentally raised back to 512 this test fails.
+    const uid129 = 'A'.repeat(129);
+    expect(validateUserId(uid129)).toBe(false);
+  });
+
+  it('rejects a 512-char userId (old permissive upper bound)', () => {
+    // A 512-char userId + 'prekey:otp::99' prefix = 526 bytes → exceeds KV 512-byte key limit.
+    const uid512 = 'A'.repeat(512);
+    expect(validateUserId(uid512)).toBe(false);
+  });
+
+  it('still accepts the minimum 8-char userId', () => {
+    expect(validateUserId('abcdefgh')).toBe(true);
+  });
+
+  it('still rejects a 7-char userId (below minimum)', () => {
+    expect(validateUserId('abcdefg')).toBe(false);
+  });
+
+  it('handlePreKeyUpload rejects a 129-char userId (KV key overflow guard)', async () => {
+    const e = makeEnv();
+    const uid129 = 'A'.repeat(129);
+    const res = await handlePreKeyUpload(
+      { userId: uid129, identityKey: 'IK', signedPreKey: 'SPK' },
+      e, apiRequest('/api/prekey/upload', {}),
+    );
+    // Either the generic body guard (FIELD_TOO_LARGE) or validateUserId (INVALID_USER_ID) rejects it.
+    expect([400, 413]).toContain(res.status);
   });
 });

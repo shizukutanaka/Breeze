@@ -1,5 +1,31 @@
 # Changelog
 
+## validateUserId upper bound tightened from 512 to 128 — KV key overflow prevention — item 65 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+428 worker tests (7 new, 1 updated); `_worker.js` + `tests/worker.test.js` only. `validate.sh` 33/36.
+
+Socratic lens: *"Can a userId that passes `validateUserId` produce a composite KV key exceeding the
+Cloudflare KV 512-byte key limit?"* Yes. The regex allowed IDs up to **512 chars**; the longest KV
+key prefix is `prekey:otp:...:99` (14 chars), so the composite key could reach **526 bytes** —
+silently causing every `kvGet` to return `null` and every `kvPut` to return `false` (write fails)
+for any user with a long ID.
+
+- **Impact**: Any endpoint that uses such an ID gets silent KV failures: `handleMsgSend` returns
+  `STORE_FAILED`, `handlePreKeyUpload` stores nothing and silently drops the bundle, `handlePresence`
+  batch-check returns `online: false` for the long-ID user. No real-world userId is 512 chars, so
+  this had zero practical effect — but the named-field body guard at line ~266 already caps
+  `userId`/`to`/`from` at 128, making the `validateUserId(512)` bound an inconsistency that could
+  bite array-element paths (e.g., `ids[]` in the presence batch) or direct-call sites.
+- **Fix A (`validateUserId`)**: cap at 128 chars (was 512). 128 + 14 = 142 bytes — well within the
+  512-byte KV limit. Still generous: real IDs are ≤88 chars (P-256 base64).
+- **Fix B (rate-limit map)**: removed duplicate `'/api/group/create': 5` and `'/api/group/join': 10`
+  entries that were left behind when item 55 inserted them before the `/api/portal` entry.
+  JavaScript objects silently keep the last value for duplicate keys; since the values were identical
+  the behavior was unchanged, but the dead entries were misleading to future maintainers.
+- **Tests (7 new, 1 updated)**: 128-char passes; 129-char and 512-char rejected; minimum 8-char
+  still passes; below-minimum 7-char still rejected; `handlePreKeyUpload` rejects a 129-char userId;
+  existing length-bounds test updated from `<= 512` to `<= 128`. Bound guard mutation-verified.
+
 ## Durable group kick — banned member cannot rejoin via invite token — item 64 (branch claude/nice-ride-T6yb0, 2026-06-16)
 
 422 worker tests (5 new); `_worker.js` only. `validate.sh` 33/36.
