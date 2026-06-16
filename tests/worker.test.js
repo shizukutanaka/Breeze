@@ -2004,6 +2004,51 @@ describe('sealed sender send / poll / ack', () => {
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe('ACK_FAILED');
   });
+
+  // Item 66 — monotonic timestamp bump for handleSealedSend.
+  // handleSealedAck filters with `m.ts > hwm` (strict greater-than). A second envelope
+  // stored with the SAME millisecond ts as the last polled entry would be lost by a
+  // timely ack — it shares ts with the hwm but was never polled. The bump applied
+  // here (mirrors handleMsgSend) gives every appended entry a strictly-larger ts,
+  // making the ack filter lossless.
+  it('two envelopes stored in the same millisecond get distinct, strictly-increasing ts values', async () => {
+    const env = makeEnv();
+    // Freeze Date.now() so both sends definitely share a timestamp
+    const frozenTs = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(frozenTs);
+    try {
+      await handleSealedSend({ to: 'mono0001', envelope: 'env-A' }, env, req({}));
+      await handleSealedSend({ to: 'mono0001', envelope: 'env-B' }, env, req({}));
+    } finally {
+      vi.restoreAllMocks();
+    }
+    const raw = await env.KV.get('sealed:mono0001');
+    const msgs = JSON.parse(raw);
+    expect(msgs.length).toBe(2);
+    expect(msgs[1].ts).toBeGreaterThan(msgs[0].ts); // strictly increasing
+  });
+
+  it('ack preserves a same-millisecond envelope that arrived after the poll (monotonic bump guard)', async () => {
+    // Without the bump, a second envelope stored at ts == hwm would be filtered out by `m.ts > hwm`.
+    const env = makeEnv();
+    const frozenTs = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(frozenTs);
+    try {
+      await handleSealedSend({ to: 'mono0002', envelope: 'm1' }, env, req({}));
+      // Poll records hwm = frozenTs (ts of m1)
+      const polled = await (await handleSealedPoll({ id: 'mono0002' }, env, req({}))).json();
+      expect(polled.messages.length).toBe(1);
+      // Second envelope arrives after poll, still at the same frozen Date.now()
+      await handleSealedSend({ to: 'mono0002', envelope: 'm2-same-ms' }, env, req({}));
+    } finally {
+      vi.restoreAllMocks();
+    }
+    // With the monotonic bump, m2 has ts = frozenTs + 1 > hwm = frozenTs → ack keeps it
+    const ack = await handleSealedAck({ id: 'mono0002' }, env, req({}));
+    expect((await ack.json()).kept).toBe(1);
+    const after = await (await handleSealedPoll({ id: 'mono0002' }, env, req({}))).json();
+    expect(after.messages.map(m => m.envelope)).toEqual(['m2-same-ms']);
+  });
 });
 
 describe('msg send / poll (1:1 relay path)', () => {

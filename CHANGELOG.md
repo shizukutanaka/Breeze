@@ -1,5 +1,27 @@
 # Changelog
 
+## Monotonic timestamp bump for handleSealedSend — same-millisecond ACK race — item 66 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+430 worker tests (2 new); `_worker.js` only. `validate.sh` 33/36.
+
+Socratic lens: *"Does `handleSealedSend` guarantee strictly-increasing timestamps, as `handleMsgSend`
+does?"* No. `handleSealedSend` pushed `{ envelope, ts: Date.now() }` without bumping on collision.
+`handleSealedAck` keeps survivors with `m.ts > hwm` (strict greater-than). If a new envelope arrives
+after a poll but in the **same millisecond** as the polled batch's max ts (the hwm), the new entry
+shares `ts == hwm` → `m.ts > hwm` is false → the ack deletes it even though it was never polled:
+a silent message loss on the "reliable" sealed path.
+
+- **Impact**: a message in flight at the exact millisecond boundary between poll and ack is silently
+  dropped. The window is sub-millisecond and requires the new KV write to land before the ack, so
+  probability is low — but the sealed path is specifically designed to be the reliable fallback, so
+  any loss violates that contract.
+- **Fix (`handleSealedSend`)**: before pushing, compute `newTs = max(Date.now(), lastEntry.ts + 1)`
+  (exact mirror of the existing fix in `handleMsgSend`). The last element always holds the max ts
+  because appends are sequential; no full-scan needed.
+- **Tests (2)**: two envelopes frozen to the same millisecond get distinct strictly-increasing ts
+  values; the same-millisecond second envelope survives a poll+ack cycle that would have deleted it
+  under the old behavior. Both mutation-verified (old code makes the survival test fail).
+
 ## validateUserId upper bound tightened from 512 to 128 — KV key overflow prevention — item 65 (branch claude/nice-ride-T6yb0, 2026-06-16)
 
 428 worker tests (7 new, 1 updated); `_worker.js` + `tests/worker.test.js` only. `validate.sh` 33/36.

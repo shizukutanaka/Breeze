@@ -2368,7 +2368,17 @@ async function handleSealedSend(body, env, request) {
   const existing = await kvGet(env, key);
   const queueParsed = existing ? safeJsonParse(existing, []) : [];
   const queue = Array.isArray(queueParsed) ? queueParsed : [];
-  queue.push({ envelope, ts: Date.now() });
+  // Guarantee strictly-increasing ts within the sealed queue (mirrors handleMsgSend).
+  // handleSealedAck uses `m.ts > hwm` (strict greater-than); if a new envelope
+  // arrives in the SAME millisecond as the last polled entry (hwm), it shares that
+  // ts and is deleted by the ack even though it was never polled. A +1ms bump makes
+  // every appended entry strictly newer than all preceding entries — the same fix
+  // already applied to the plain inbox path. The last element holds the max ts since
+  // appends are sequential; no full-scan needed.
+  const newTs = queue.length > 0 && Number.isFinite(queue[queue.length - 1].ts)
+    ? Math.max(Date.now(), queue[queue.length - 1].ts + 1)
+    : Date.now();
+  queue.push({ envelope, ts: newTs });
   const trimmed = capQueueBytes(queue.slice(-100), m => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
   const stored = await kvPut(env, key, JSON.stringify(trimmed), { expirationTtl: 604800 });
   if (!stored) {
