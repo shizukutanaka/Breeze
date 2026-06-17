@@ -43,9 +43,17 @@ export function createFranking(opts = {}) {
 
   // Verify a (message, commitment, opening) triple. Used by the relay on report,
   // and by the recipient to sanity-check before reporting.
+  // Fails CLOSED (returns false, never throws) on missing/malformed input: the relay may
+  // have no recordedCommitment (record lost/expired) and a reporter's (message, opening) is
+  // attacker-supplied. `u8(null)`/`toBytes(null)` would otherwise throw an uncaught
+  // exception — every sibling verify in this codebase (ktlog.verifyChain, group/ratchet
+  // decrypt) returns a clean negative on bad input rather than propagating one.
   async function verify(message, commitment, opening) {
-    const expected = await hmac(u8(opening), toBytes(message));
-    return ctEqual(expected, u8(commitment));
+    if (message == null || commitment == null || opening == null) return false;
+    try {
+      const expected = await hmac(u8(opening), toBytes(message));
+      return ctEqual(expected, u8(commitment));
+    } catch { return false; }
   }
 
   // Relay-side report verification: the relay holds `recordedCommitment` (seen at

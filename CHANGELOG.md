@@ -1,5 +1,26 @@
 # Changelog
 
+## franking verify() fails closed on missing/malformed input — item 74 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+698 tests (2 new); `src/crypto/franking.js` + `tests/franking.test.js` only. `validate.sh` 33/36.
+
+Socratic lens: *"Does franking `verify` follow the file-wide 'never throw on untrusted input' contract
+that ktlog/group/ratchet verify functions all uphold?"* No. `verify(message, commitment, opening)` did
+`u8(opening)` / `toBytes(message)` / `u8(commitment)` with no guard. `u8(null)` is `Uint8Array.from(null)`,
+which **throws** — so a missing `recordedCommitment` (the relay lost/expired the record) or an
+attacker-supplied null on report would propagate an uncaught exception out of `verifyReport` instead of
+returning a clean `false`.
+
+- **Impact**: A crash is fail-closed (no false "authentic" verdict), so not a forgery risk — but the
+  abuse-report path throwing on a missing commitment is an availability defect, and it diverges from the
+  graceful-negative contract every other verify in the module suite holds.
+- **Fix**: `verify` now returns `false` immediately when `message`/`commitment`/`opening` is `null`/`undefined`,
+  and wraps the HMAC + compare in a try/catch returning `false` (belt-and-suspenders for any other
+  malformed byte input). `verifyReport` inherits this via delegation.
+- **Tests (2, mutation-verified)**: `verify` returns `false` (no throw) for null/undefined commitment,
+  opening, or message; `verifyReport` returns `false` when the relay has no `recordedCommitment`.
+  Reverting the guard makes both throw and fail.
+
 ## negotiate() normalizes malformed caps and fails closed — item 73 (branch claude/nice-ride-T6yb0, 2026-06-16)
 
 696 tests (3 new); `src/crypto/negotiate.js` + `tests/negotiate.test.js` only. `validate.sh` 33/36.

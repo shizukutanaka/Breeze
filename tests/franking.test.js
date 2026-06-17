@@ -73,4 +73,22 @@ describe('commit / verify', () => {
     expect(F.ctEqual(b, a)).toBe(false);
     expect(F.ctEqual(new Uint8Array(0), new Uint8Array(0))).toBe(true);
   });
+
+  // Item 74: verify must fail CLOSED (false, no throw) on missing/malformed input. The relay
+  // may lack a recordedCommitment, and a reporter's (message, opening) is attacker-supplied;
+  // u8(null)/toBytes(null) would otherwise throw an uncaught exception out of the handler.
+  it('returns false (does not throw) on null/undefined commitment, opening, or message', async () => {
+    const { commitment, opening } = await F.commit('hello');
+    expect(await F.verify('hello', null, opening)).toBe(false);        // missing commitment
+    expect(await F.verify('hello', undefined, opening)).toBe(false);
+    expect(await F.verify('hello', commitment, null)).toBe(false);     // missing opening
+    expect(await F.verify('hello', commitment, undefined)).toBe(false);
+    expect(await F.verify(null, commitment, opening)).toBe(false);     // missing message
+  });
+
+  it('verifyReport returns false (does not throw) when the relay has no recordedCommitment', async () => {
+    const { opening } = await F.commit('abuse');
+    // Relay lost / never recorded the commitment → undefined. Must be a clean false.
+    expect(await F.verifyReport({ message: 'abuse', opening, recordedCommitment: undefined })).toBe(false);
+  });
 });
