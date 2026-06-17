@@ -1,5 +1,27 @@
 # Changelog
 
+## verifyStripeSignature freshness check fails closed on a non-numeric timestamp — item 71 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+438 worker tests (1 new); `_worker.js` + `tests/worker.test.js` only. `validate.sh` 33/36.
+
+Socratic lens: *"Does the Stripe webhook replay-window check enforce its ±300s tolerance for every
+parseable input?"* No. The check was `if (Math.abs(Date.now()/1000 - parseInt(timestamp)) > 300) return false;`.
+`parseInt('abc')` is `NaN`, and `Math.abs(now - NaN)` is `NaN`, and `NaN > 300` is `false` — so a
+non-numeric (but truthy) timestamp silently SKIPS the staleness check (fail-open). The freshness check
+is the replay-window guard; a guard that no-ops on malformed input is a defense-in-depth defect.
+
+- **Impact**: Not directly exploitable — the HMAC comparison (signed over `timestamp + '.' + payload`)
+  is the primary forgery gate, and a replay of a genuine Stripe event carries a real numeric timestamp
+  that the `> 300` check still catches. But the replay-window check itself failed open: a test that
+  produces a *valid* HMAC over a non-numeric timestamp (only the secret holder can) was accepted (200,
+  slots granted) under the old code, when it should have been rejected by the freshness guard.
+- **Fix**: parse explicitly and fail closed — `const tsNum = parseInt(timestamp, 10); if (!Number.isFinite(tsNum)) return false;`
+  before the tolerance comparison. Mirrors the `Number.isFinite` guards already used for the PoW
+  freshness check (~688), the `/msg/poll` cursor, and `disappearAt` elsewhere in the file.
+- **Test (1, mutation-verified)**: a validly-signed webhook with `t=abc` is now rejected (400) with no
+  billing side effect; reverting the fix flips it to 200 with slots granted (confirmed the guard is
+  what rejects it).
+
 ## Group invite token: fixed-length uniform 12-char base-36 generator — item 70 (branch claude/nice-ride-T6yb0, 2026-06-16)
 
 437 worker tests (2 new, 1 updated); `_worker.js` + `tests/worker.test.js` only. `validate.sh` 33/36.

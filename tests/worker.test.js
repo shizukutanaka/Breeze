@@ -3061,6 +3061,22 @@ describe('webhook signature + idempotency', () => {
     expect(JSON.parse(await e.KV.get('slots:user00001')).slots).toBe(4);
   });
 
+  // Item 71: the freshness check must FAIL CLOSED on a non-numeric timestamp. The old code
+  // did `Math.abs(now - parseInt(t)) > 300`; parseInt('abc') is NaN and `NaN > 300` is false,
+  // so the staleness guard was silently SKIPPED. Here we produce a VALID HMAC over a
+  // non-numeric timestamp (we hold the secret), so the only thing that can reject it is the
+  // explicit Number.isFinite guard. Under the old fail-open code this returned 200 and granted
+  // slots; it must now be 400 with no billing side effect.
+  it('rejects a validly-signed webhook whose timestamp is non-numeric (freshness fail-closed)', async () => {
+    const e = env();
+    // stripeSigHeader signs `${ts}.${payload}` — passing a non-numeric ts yields a valid v1
+    // over "abc." + payload and a header of `t=abc,v1=<valid>`.
+    const sig = await stripeSigHeader(event, secret, 'abc');
+    const res = await handleWebhook(webhookReq(event, sig), e);
+    expect(res.status).toBe(400);
+    expect(await e.KV.get('slots:user00001')).toBeNull(); // no billing side effect
+  });
+
   it('processes a valid event then dedupes a retry (process-then-mark)', async () => {
     const e = env();
     const sig = await stripeSigHeader(event, secret);

@@ -1009,8 +1009,15 @@ async function verifyStripeSignature(payload, header, secret) {
     const sig = parts.v1;
     if (!timestamp || !sig) return false;
 
-    // Reject if timestamp is too old (5 min tolerance)
-    if (Math.abs(Date.now() / 1000 - parseInt(timestamp)) > 300) return false;
+    // Reject if timestamp is too old (5 min tolerance). Parse explicitly and fail CLOSED
+    // on a non-numeric value: parseInt('abc') is NaN, and `Math.abs(now - NaN) > 300` is
+    // `false`, which would silently SKIP the staleness check (fail-open). The HMAC below is
+    // the primary forgery gate, but this freshness check is the replay-window guard and must
+    // not no-op on a malformed timestamp — mirrors the Number.isFinite guards used for the
+    // PoW freshness check (~688), the poll cursor, and disappearAt elsewhere in this file.
+    const tsNum = parseInt(timestamp, 10);
+    if (!Number.isFinite(tsNum)) return false;
+    if (Math.abs(Date.now() / 1000 - tsNum) > 300) return false;
 
     const signedPayload = timestamp + '.' + payload;
     const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
