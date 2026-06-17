@@ -1,5 +1,29 @@
 # Changelog
 
+## ktlog verifyChain fails closed on an all-malformed log — item 72 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+693 tests (3 new); `src/crypto/ktlog.js` + `tests/ktlog.test.js` only. `validate.sh` 33/36.
+
+Socratic lens: *"If a relay sends a key-transparency log whose entries are all malformed, does
+`verifyChain` detect tampering or silently pass?"* It passed. `verifyChain` calls `parseLog`, which
+drops entries failing its `ts`/`h` filter. When EVERY entry is malformed, `parseLog` returns `[]`, the
+verification loop never runs, and the function returned `{ ok: true }` — garbage silently verified as a
+clean log. This is the same fail-open the module already rejects for a non-string `c` field (line 162,
+"tampering, not legacy → fail"), just via a different path.
+
+- **Impact**: A hostile relay could replace a real append-only hash chain with malformed entries and
+  still have `verifyChain` (and therefore `auditBundle`) report success — `auditBundle` would return
+  `verdict: 'ok'` instead of `'tampered'`, defeating the N5 tamper-evidence layer. (This is the tested
+  reference module; index.html does not yet import it, so no production impact — but it is the
+  source-of-truth for the planned browser migration.)
+- **Fix**: fail closed when the raw input is a non-empty array but `parseLog` drops every entry —
+  `if (Array.isArray(log) && log.length > 0 && sorted.length === 0) return { ok: false, invalidIdx: 0 };`.
+  A genuinely empty array (`[]`, nothing to verify) and legacy entries (valid `ts`+`h`, no `c` — they
+  survive `parseLog`) are unaffected; both existing behaviors stay green.
+- **Tests (3, mutation-verified)**: an all-malformed log fails (`ok:false`, `invalidIdx:0`); an empty
+  `[]` still verifies ok (over-reach guard); `auditBundle` reports `verdict:'tampered'` for an
+  all-malformed log. Reverting the one-line guard flips the first test to a failure.
+
 ## verifyStripeSignature freshness check fails closed on a non-numeric timestamp — item 71 (branch claude/nice-ride-T6yb0, 2026-06-16)
 
 438 worker tests (1 new); `_worker.js` + `tests/worker.test.js` only. `validate.sh` 33/36.

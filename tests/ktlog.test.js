@@ -340,6 +340,29 @@ describe('untrusted-relay hardening (DoS / malformed input)', () => {
     expect(r.ok).toBe(false);
     expect(r.invalidIdx).toBe(1);
   });
+
+  // Item 72: a raw non-empty log whose entries are ALL malformed (fail parseLog's ts/h
+  // filter) must fail closed, not silently pass as an empty-and-therefore-ok log. A relay
+  // that replaces a real chain with garbage would otherwise be "verified".
+  it('verifyChain fails closed when the raw log had entries but all are malformed', async () => {
+    // None of these survive parseLog (bad ts, non-string h, empty h).
+    const garbage = [{ ts: 'x', h: 'abc' }, { ts: 1, h: 123 }, { ts: 2, h: '' }];
+    const r = await verifyChain(subtle, garbage);
+    expect(r.ok).toBe(false);
+    expect(r.invalidIdx).toBe(0);
+  });
+
+  it('verifyChain still returns ok for a genuinely empty array (nothing to verify)', async () => {
+    // Guard the fix above against over-reach: an empty [] is legitimate, not tampering.
+    expect((await verifyChain(subtle, [])).ok).toBe(true);
+  });
+
+  it('auditBundle reports tampered when the relay sends an all-malformed log', async () => {
+    const garbage = [{ ts: 'x', h: 'abc' }];
+    const res = await auditBundle(subtle, null, garbage);
+    expect(res.chainOk).toBe(false);
+    expect(res.verdict).toBe('tampered');
+  });
 });
 
 describe('auditBundle (full on-fetch audit: chain integrity + rollover)', () => {

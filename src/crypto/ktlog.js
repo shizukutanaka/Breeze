@@ -153,6 +153,13 @@ export async function appendChainEntry(subtle, sortedLog, h, ts = Date.now()) {
  */
 export async function verifyChain(subtle, log) {
   const sorted = parseLog(log);
+  // Fail closed when the raw input carried entries but NONE survived parsing: every entry
+  // was malformed (missing/invalid ts or non-string/empty h). That is a tampering signal —
+  // a relay replacing a real chain with garbage — not a legitimately-empty log, and silently
+  // returning ok would let such garbage pass as "verified" (the same fail-open the non-string
+  // c guard below already rejects). A genuinely empty array (length 0, nothing to verify) and
+  // legacy entries (valid ts+h, no c — they survive parseLog) are unaffected.
+  if (Array.isArray(log) && log.length > 0 && sorted.length === 0) return { ok: false, invalidIdx: 0 };
   let prevC = null;
   for (let i = 0; i < sorted.length; i++) {
     const e = sorted[i];
