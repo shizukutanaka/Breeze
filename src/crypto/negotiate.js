@@ -47,9 +47,14 @@ export function parsePeerCaps(bundle) {
 // Agree on which features to use given local and peer capability sets.
 // Returns a negotiation result object used by the session-init code path.
 // Rule: use a feature only when BOTH sides advertise it.
+// Inputs are normalized defensively (non-array → [], non-string elements dropped) so a
+// malformed peer caps value — these can arrive over the untrusted relay — fails CLOSED
+// (feature off) instead of throwing on `new Set(<non-iterable>)`. Matches the same
+// coercion negotiateGroup already applies to each member's caps.
 export function negotiate(localCaps, peerCaps) {
-  const local = new Set(localCaps);
-  const peer  = new Set(peerCaps);
+  const norm = (c) => (Array.isArray(c) ? c.filter((x) => typeof x === 'string') : []);
+  const local = new Set(norm(localCaps));
+  const peer  = new Set(norm(peerCaps));
   const both  = (cap) => local.has(cap) && peer.has(cap);
   return {
     useX3dhV5:  both(CAPS.X3DH_V5),
@@ -64,7 +69,8 @@ export function negotiate(localCaps, peerCaps) {
 // member keeps the whole group on the backward-compatible path (no silent split where
 // some members emit v5 the others can't read). An empty member list means "just us".
 export function negotiateGroup(localCaps, memberCapsList = []) {
-  const sets = [new Set(localCaps), ...memberCapsList.map((c) => new Set(Array.isArray(c) ? c : []))];
+  const norm = (c) => (Array.isArray(c) ? c.filter((x) => typeof x === 'string') : []);
+  const sets = [new Set(norm(localCaps)), ...(Array.isArray(memberCapsList) ? memberCapsList : []).map((c) => new Set(norm(c)))];
   const all = (cap) => sets.every((s) => s.has(cap));
   return {
     useGroupV5: all(CAPS.GROUP_V5),

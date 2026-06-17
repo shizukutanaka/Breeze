@@ -1,5 +1,27 @@
 # Changelog
 
+## negotiate() normalizes malformed caps and fails closed — item 73 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+696 tests (3 new); `src/crypto/negotiate.js` + `tests/negotiate.test.js` only. `validate.sh` 33/36.
+
+Socratic lens: *"Do the sibling functions `negotiate` (1:1) and `negotiateGroup` (N-party) handle a
+malformed capability value the same way?"* No. `negotiateGroup` defensively coerced each member's caps
+(`Array.isArray(c) ? c : []`), but `negotiate` did `new Set(peerCaps)` directly. `new Set(<non-iterable>)`
+(e.g. `new Set(42)`) **throws** — so a malformed peer caps value, which can arrive over the untrusted
+relay, would crash the session-init path instead of failing closed.
+
+- **Impact**: A crash is fail-closed (no feature wrongly enabled), so not a downgrade/forgery risk — but
+  a relay-supplied non-array `caps` field crashing 1:1 negotiation is an availability defect, and the
+  divergence from `negotiateGroup`'s graceful handling is an inconsistency a future caller could trip on.
+- **Fix**: a shared `norm(c) = Array.isArray(c) ? c.filter(x => typeof x === 'string') : []` is applied to
+  both `localCaps` and `peerCaps` in `negotiate`, and `negotiateGroup` is aligned to use the same helper
+  (also guarding a non-array `memberCapsList`). Non-array → `[]` (all features off, AND-rule fail-closed);
+  non-string elements are dropped so relay-injected junk can never match a capability id.
+- **Tests (3, mutation-verified)**: `negotiate` returns all-false (no throw) for non-array peer caps
+  (42/null/undefined/object/bool) and for a non-array local caps; junk elements in a caps array are
+  dropped while the genuine string cap is still honored. Reverting the coercion makes the non-array test
+  throw and fail.
+
 ## ktlog verifyChain fails closed on an all-malformed log — item 72 (branch claude/nice-ride-T6yb0, 2026-06-16)
 
 693 tests (3 new); `src/crypto/ktlog.js` + `tests/ktlog.test.js` only. `validate.sh` 33/36.

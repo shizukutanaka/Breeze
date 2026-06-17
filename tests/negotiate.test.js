@@ -99,6 +99,34 @@ describe('negotiate', () => {
     expect(res.useGroupV5).toBe(false); // peer doesn't support it
     expect(res.useFranking).toBe(false);
   });
+
+  // Item 73: negotiate must fail CLOSED (no crash, all features off) on a malformed peer
+  // caps value — these arrive over the untrusted relay. Without the defensive coercion,
+  // `new Set(42)` throws on a non-iterable; matches negotiateGroup's existing tolerance.
+  it('does not throw and disables all features on a non-array peer caps value', () => {
+    for (const bad of [42, null, undefined, { x3dh: true }, true]) {
+      const res = negotiate(ALL_V5, bad);
+      expect(res.useX3dhV5).toBe(false);
+      expect(res.useGroupV5).toBe(false);
+      expect(res.useFranking).toBe(false);
+    }
+  });
+
+  it('drops non-string elements in a peer caps array (no junk matches)', () => {
+    // A relay-injected array with junk entries must not enable any feature beyond the
+    // genuine string caps, and must not throw.
+    const res = negotiate(ALL_V5, [CAPS.X3DH_V5, 42, { group: true }, null]);
+    expect(res.useX3dhV5).toBe(true);   // the one valid string cap is honored
+    expect(res.useGroupV5).toBe(false); // junk does not enable anything
+    expect(res.useFranking).toBe(false);
+  });
+
+  it('tolerates a non-array local caps value (fails closed, no throw)', () => {
+    const res = negotiate(99, ALL_V5);
+    expect(res.useX3dhV5).toBe(false);
+    expect(res.useGroupV5).toBe(false);
+    expect(res.useFranking).toBe(false);
+  });
 });
 
 describe('negotiateGroup (group capability floor — N-party AND)', () => {
