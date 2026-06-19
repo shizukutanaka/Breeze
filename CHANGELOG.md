@@ -1,5 +1,31 @@
 # Changelog
 
+## sw.js contains relay-controlled notification URLs to our origin — item 75 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+704 tests (6 new, first `tests/sw.test.js`); `sw.js` + `tests/sw.test.js` only. `validate.sh` PASSED.
+
+Socratic lens: *"`notificationclick` feeds `data.url` — straight from the server-supplied push payload —
+into `clients.openWindow()`. In Breeze's threat model the relay is untrusted; what stops a malicious
+relay from making a notification tap open an arbitrary external page?"* Nothing did. `clients.openWindow()`
+navigates to any cross-origin `https://` URL, so a compromised/malicious relay could push
+`{url:"https://evil.example/phish"}` and turn a notification tap into a phishing redirect.
+
+- **Confirmation**: the worker's `sendPushToUser` (`_worker.js:501`) only ever sets `title`/`body`/`tag`/
+  `contactId` — it never sets `url`. So a cross-origin `url` can arise *only* outside the legitimate path,
+  i.e. from a hostile relay. The SW must not honor it.
+- **Fix**: new `safeAppUrl()` resolves `data.url` against our own origin and collapses anything that
+  escapes it — cross-origin, protocol-relative (`//evil`), `javascript:` — to the app root before
+  `openWindow()`. Separately, the three `client.url.includes(self.location.origin)` checks (a sloppy
+  substring match that would also match a foreign window carrying our origin in a query param) are
+  replaced with a proper `sameOrigin()` test, so an inline reply / mark-read postMessage can't be routed
+  into an attacker-controlled page.
+- **Tests (6, mutation-verified)**: first SW test harness — evaluates the real classic `sw.js` in a mocked
+  ServiceWorkerGlobalScope and dispatches synthetic `notificationclick` events. Asserts cross-origin /
+  protocol-relative / `javascript:` urls open the app root not the external page; same-origin deep-links
+  (path+hash) are preserved; an existing same-origin window is focused; and a foreign window merely
+  containing our origin in a query param does NOT receive the reply postMessage. Reverting either guard
+  fails 5 of the 6.
+
 ## franking verify() fails closed on missing/malformed input — item 74 (branch claude/nice-ride-T6yb0, 2026-06-16)
 
 698 tests (2 new); `src/crypto/franking.js` + `tests/franking.test.js` only. `validate.sh` 33/36.

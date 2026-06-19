@@ -92,6 +92,24 @@ self.addEventListener('push', (e) => {
   );
 });
 
+// Resolve a notification's target URL against our OWN origin and refuse anything that
+// escapes it. `data.url` arrives in the server-supplied push payload; the normal worker
+// path (sendPushToUser) never sets it, so a cross-origin value can only come from a
+// malicious/compromised relay trying to turn a notification tap into a phishing redirect
+// via clients.openWindow(). Cross-origin, protocol-relative (//evil), and javascript:
+// inputs all collapse to the app root.
+function safeAppUrl(raw) {
+  try {
+    const u = new URL(raw || '/', self.location.origin);
+    return u.origin === self.location.origin ? u.href : '/';
+  } catch { return '/'; }
+}
+// Proper same-origin test (not a substring match: includes() would also match a client
+// whose URL merely *contains* our origin in a query param).
+function sameOrigin(u) {
+  try { return new URL(u).origin === self.location.origin; } catch { return false; }
+}
+
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   const action = e.action;
@@ -103,7 +121,7 @@ self.addEventListener('notificationclick', (e) => {
       if (action === 'reply' && e.reply) {
         // Direct reply from notification (Chrome inline reply)
         for (const client of list) {
-          if (client.url.includes(self.location.origin)) {
+          if (sameOrigin(client.url)) {
             client.postMessage({ type: 'quick-reply', contactId: data.contactId, text: e.reply });
             return client.focus();
           }
@@ -112,7 +130,7 @@ self.addEventListener('notificationclick', (e) => {
       if (action === 'mark-read') {
         // Send mark-read to client
         for (const client of list) {
-          if (client.url.includes(self.location.origin)) {
+          if (sameOrigin(client.url)) {
             client.postMessage({ type: 'mark-read', contactId: data.contactId });
             return; // Don't focus — user wants to stay where they are
           }
@@ -121,9 +139,9 @@ self.addEventListener('notificationclick', (e) => {
       }
       // Default: focus existing window or open new
       for (const client of list) {
-        if (client.url.includes(self.location.origin) && 'focus' in client) return client.focus();
+        if (sameOrigin(client.url) && 'focus' in client) return client.focus();
       }
-      return clients.openWindow(data.url || '/');
+      return clients.openWindow(safeAppUrl(data.url));
     })
   );
 });
