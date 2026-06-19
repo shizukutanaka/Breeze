@@ -2925,8 +2925,11 @@ describe('push subscribe — optional Ed25519 ownership auth (item 62)', () => {
     const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
     const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
     await env.KV.put(`prekey:${userId}`, JSON.stringify({ identityKey: 'IK', edIdentityKey: toB64(edPub), signedPreKey: 'x' }));
-    return { sign: async (uid, ts) => toB64(new Uint8Array(
-      await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, new TextEncoder().encode(`breeze-push-subscribe:${uid}:${ts}`)))) };
+    // Sign userId+ts AND the subscription fields (endpoint+p256dh+auth), matching
+    // checkGroupAuth-style target binding (item 77).
+    return { sign: async (uid, ts, sub = {}) => toB64(new Uint8Array(
+      await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, new TextEncoder().encode(
+        `breeze-push-subscribe:${uid}:${ts}:${sub.endpoint || ''}:${sub.keys?.p256dh || ''}:${sub.keys?.auth || ''}`)))) };
   }
 
   it('unsigned subscribe still works when the flag is unset (backward-compat)', async () => {
@@ -2945,10 +2948,46 @@ describe('push subscribe — optional Ed25519 ownership auth (item 62)', () => {
     const env = makeEnv({ PUSH_REQUIRE_AUTH: 'true' });
     const acct = await account(env, 'pushusr03');
     const ts = Date.now();
+    const sub = { endpoint: FCM, keys: { p256dh: 'PUB', auth: 'SEC' } };
     const res = await handlePushSubscribe(
-      { userId: 'pushusr03', subscription: { endpoint: FCM }, ts, sig: await acct.sign('pushusr03', ts) }, env, req);
+      { userId: 'pushusr03', subscription: sub, ts, sig: await acct.sign('pushusr03', ts, sub) }, env, req);
     expect(res.status).toBe(200);
     expect((await res.json()).ok).toBe(true);
+  });
+
+  // Item 77: the signature binds the subscription, so the relay can't swap in its own
+  // endpoint/keys while keeping a valid signature (the "register their own device" attack).
+  it('rejects a subscribe whose endpoint was swapped by the relay after signing', async () => {
+    const env = makeEnv({ PUSH_REQUIRE_AUTH: 'true' });
+    const acct = await account(env, 'pushusr06');
+    const ts = Date.now();
+    const signed = { endpoint: FCM, keys: { p256dh: 'VICTIM', auth: 'VS' } };
+    const sig = await acct.sign('pushusr06', ts, signed);
+    // Relay rewrites the endpoint to its own (still a trusted-domain URL) + its own keys.
+    const swapped = { endpoint: 'https://fcm.googleapis.com/fcm/send/ATTACKER', keys: { p256dh: 'ATTACKER', auth: 'AS' } };
+    const res = await handlePushSubscribe({ userId: 'pushusr06', subscription: swapped, ts, sig }, env, req);
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+    expect(await env.KV.get('push:pushusr06')).toBeNull(); // nothing registered
+    // The genuinely-signed subscription still registers.
+    const ok = await handlePushSubscribe({ userId: 'pushusr06', subscription: signed, ts, sig }, env, req);
+    expect(ok.status).toBe(200);
+  });
+
+  it('rejects a subscribe whose decryption key (p256dh) was swapped after signing', async () => {
+    const env = makeEnv({ PUSH_REQUIRE_AUTH: 'true' });
+    const acct = await account(env, 'pushusr07');
+    const ts = Date.now();
+    const signed = { endpoint: FCM, keys: { p256dh: 'VICTIM', auth: 'VS' } };
+    const sig = await acct.sign('pushusr07', ts, signed);
+    // Same endpoint, but relay swaps p256dh so IT can decrypt the metadata.
+    const swapped = { endpoint: FCM, keys: { p256dh: 'ATTACKER', auth: 'VS' } };
+    const res = await handlePushSubscribe({ userId: 'pushusr07', subscription: swapped, ts, sig }, env, req);
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+    // The genuinely-signed key still registers (binding is exact, not blanket).
+    const ok = await handlePushSubscribe({ userId: 'pushusr07', subscription: signed, ts, sig }, env, req);
+    expect(ok.status).toBe(200);
   });
 
   it('rejects a tampered signature (SIG_INVALID)', async () => {

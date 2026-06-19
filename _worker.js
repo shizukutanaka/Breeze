@@ -1605,7 +1605,12 @@ async function handlePushSubscribe(body, env, request) {
       const bundle = pkRaw ? safeJsonParse(pkRaw) : null;
       if (!bundle || typeof bundle.edIdentityKey !== 'string' || !bundle.edIdentityKey)
         return json({ error: 'No registered identity key', code: 'NO_IDENTITY_KEY' }, 403, request);
-      const ok = await verifyEd25519(bundle.edIdentityKey, btoa(`breeze-push-subscribe:${userId}:${ts}`), sig);
+      // Bind the SUBSCRIPTION (endpoint + keys), not just userId+ts: otherwise a captured
+      // push-subscribe signature could be replayed with the attacker's own endpoint/p256dh
+      // swapped in — exactly the "register their own device" attack this auth exists to stop.
+      // The client signs the same raw fields it sends (pre-sanitization).
+      const subBind = `${subscription.endpoint || ''}:${subscription.keys?.p256dh || ''}:${subscription.keys?.auth || ''}`;
+      const ok = await verifyEd25519(bundle.edIdentityKey, btoa(`breeze-push-subscribe:${userId}:${ts}:${subBind}`), sig);
       if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
     } else if (env.PUSH_REQUIRE_AUTH === 'true') {
       return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);

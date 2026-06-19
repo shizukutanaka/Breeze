@@ -1,5 +1,28 @@
 # Changelog
 
+## push-subscribe signature now binds the subscription — item 77 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+710 tests (2 new); `_worker.js` + `tests/worker.test.js` only. `validate.sh` PASSED.
+
+Socratic lens (applying item 76's question to the other signed ops): *"Does each signed operation bind
+all its security-relevant parameters? push-subscribe signs `breeze-push-subscribe:${userId}:${ts}` — but
+the thing being registered is the `subscription` (endpoint + keys). Is that bound?"* No. The optional
+Ed25519 ownership auth (item 62) exists specifically to stop an attacker registering *their own* device
+under the victim's `userId` (the Web Push payload is encrypted to the subscriber-supplied p256dh, so the
+attacker would decrypt the notification metadata — sender, type, contactId, timing). But because the
+signature omitted the subscription, a captured/observed push-subscribe signature could be replayed with
+the attacker's own endpoint + p256dh swapped in, defeating the very protection the auth was added for.
+
+- Audited the other signed challenges while here: alias-set binds the alias, alias-delete the alias,
+  portal/account-delete/backup have only `userId` as a parameter, and the backup body is E2E-AEAD
+  (binding redundant — restore fails closed on tampering). push-subscribe was the one gap.
+- **Fix**: the signed challenge is now `breeze-push-subscribe:${userId}:${ts}:${endpoint}:${p256dh}:${auth}`
+  over the raw subscription fields the client sends. Same latent/opt-in status as item 76 (clients don't
+  sign yet), so the canonical format is fixed before signing goes live.
+- **Tests (2, mutation-verified)**: a subscribe whose endpoint — or whose p256dh decryption key — was
+  swapped after signing is rejected `SIG_INVALID` with nothing registered, while the genuinely-signed
+  subscription still registers. Reverting the bind fails them.
+
 ## group-auth signature now binds the operation's target — item 76 (branch claude/nice-ride-T6yb0, 2026-06-16)
 
 708 tests (4 new); `_worker.js` + `tests/worker.test.js` only. `validate.sh` PASSED.
