@@ -1,5 +1,33 @@
 # Changelog
 
+## group-auth signature now binds the operation's target — item 76 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+708 tests (4 new); `_worker.js` + `tests/worker.test.js` only. `validate.sh` PASSED.
+
+Socratic lens: *"The group-op signature covers `breeze-group-${action}:${token}:${actorId}:${ts}` — who
+acts, which group, when. But not WHAT: the target. Since the relay is untrusted and sees the request, can
+it swap the target while the signature still verifies?"* Yes — within the 5-min freshness window:
+- **kick**: `kickId` was unsigned → relay swaps which member is removed.
+- **admin**: neither `targetId` nor the sub-action (`promote`/`demote`/`unban`) was signed → relay turns a
+  signed "demote X" into "promote Y" (**privilege escalation**) or "unban Z" (**ban bypass**).
+- **transfer**: `newCreatorId` was unsigned → relay redirects ownership to an attacker-chosen member
+  (**ownership hijack**).
+
+The signature authenticated the actor but not the operation's parameters — a parameter-tampering gap.
+
+- **Latent, fixed before it goes live**: the verify path only runs when a client supplies `{ts,sig}`, and
+  clients don't sign yet ("flip on once clients sign"), so signing currently grants *false* security. No
+  deployed client signs, so the canonical signed format can be fixed now without breaking anyone.
+- **Fix**: `checkGroupAuth` takes a `bind` arg appended to the signed message
+  (`…:${ts}:${bind}`). Callers bind their security-relevant params: kick→`kickId`,
+  admin→`${subAction}:${targetId}`, transfer→`newCreatorId`, rename→sanitized `name`. delete/leave have
+  no extra target (bind=''; the distinct `action` token already separates them). The signature now
+  authenticates what is done, not just who/which-group/when.
+- **Tests (4, mutation-verified)**: a kick with a relay-swapped `kickId`, an admin op with a swapped
+  sub-action (promote↔demote) or `targetId`, and a transfer with a redirected `newCreatorId` are all
+  rejected `SIG_INVALID` with state unchanged — while the correctly-signed target still succeeds.
+  Reverting the bind in the verifier fails all four.
+
 ## sw.js contains relay-controlled notification URLs to our origin — item 75 (branch claude/nice-ride-T6yb0, 2026-06-16)
 
 704 tests (6 new, first `tests/sw.test.js`); `sw.js` + `tests/sw.test.js` only. `validate.sh` PASSED.

@@ -1378,8 +1378,10 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
     await handleGroupJoin({ token, memberId: 'member01', memberPub: 'mpub' }, env, req({}));
     return { token, ed };
   }
-  const signGroup = async (ed, action, token, actorId, ts) =>
-    toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, new TextEncoder().encode(`breeze-group-${action}:${token}:${actorId}:${ts}`))));
+  // bind carries the operation's target(s), matching checkGroupAuth's signed format
+  // `breeze-group-${action}:${token}:${actorId}:${ts}:${bind}` (item 76).
+  const signGroup = async (ed, action, token, actorId, ts, bind = '') =>
+    toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, new TextEncoder().encode(`breeze-group-${action}:${token}:${actorId}:${ts}:${bind}`))));
 
   it('legacy unauthenticated kick still works when GROUP_REQUIRE_AUTH is unset (backward compat)', async () => {
     const env = makeEnv();
@@ -1406,13 +1408,81 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
     const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
     const { token, ed } = await setup(env);
     const ts = Date.now();
-    const ok = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1', ts, sig: await signGroup(ed, 'kick', token, 'creator1', ts) }, env, req({}));
+    const ok = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1', ts, sig: await signGroup(ed, 'kick', token, 'creator1', ts, 'member01') }, env, req({}));
     expect(ok.status).toBe(200);
     // Tampered: signature over a different action than the one being called.
     const { token: t2 } = await setup(env);
-    const bad = await handleGroupKick({ token: t2, kickId: 'member01', adminId: 'creator1', ts, sig: await signGroup(ed, 'delete', t2, 'creator1', ts) }, env, req({}));
+    const bad = await handleGroupKick({ token: t2, kickId: 'member01', adminId: 'creator1', ts, sig: await signGroup(ed, 'delete', t2, 'creator1', ts, 'member01') }, env, req({}));
     expect(bad.status).toBe(403);
     expect((await bad.json()).code).toBe('SIG_INVALID');
+  });
+
+  // Item 76: the signed payload binds the operation's TARGET, so the untrusted relay cannot
+  // swap it while keeping a valid signature. These pin the parameter-tampering protection.
+  it('rejects a kick whose kickId was swapped by the relay (target not the one signed)', async () => {
+    const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
+    const { token, ed } = await setup(env);
+    await handleGroupJoin({ token, memberId: 'member02', memberPub: 'mpub2' }, env, req({}));
+    const ts = Date.now();
+    // Creator signs to kick member01, relay rewrites kickId → member02.
+    const sig = await signGroup(ed, 'kick', token, 'creator1', ts, 'member01');
+    const res = await handleGroupKick({ token, kickId: 'member02', adminId: 'creator1', ts, sig }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+    const grp = JSON.parse(await env.KV.get(`grp:${token}`));
+    expect(grp.members.some(m => m.id === 'member02')).toBe(true); // not removed
+    // The genuine target, correctly signed, still works.
+    const ok = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1', ts, sig }, env, req({}));
+    expect(ok.status).toBe(200);
+  });
+
+  it('rejects an admin op whose sub-action was swapped promote→demote, but honors the signed one', async () => {
+    const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
+    const { token, ed } = await setup(env);
+    const ts = Date.now();
+    // Creator signs to PROMOTE member01; relay rewrites action → demote.
+    const sig = await signGroup(ed, 'admin', token, 'creator1', ts, `promote:member01`);
+    const swapped = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'member01', action: 'demote', ts, sig }, env, req({}));
+    expect(swapped.status).toBe(403);
+    expect((await swapped.json()).code).toBe('SIG_INVALID');
+    // The signed sub-action (promote) is accepted, proving the binding is exact, not blanket.
+    const ok = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'member01', action: 'promote', ts, sig }, env, req({}));
+    expect(ok.status).toBe(200);
+    expect(JSON.parse(await env.KV.get(`grp:${token}`)).admins).toContain('member01');
+  });
+
+  it('rejects an admin op whose targetId was swapped by the relay, but honors the signed target', async () => {
+    const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
+    const { token, ed } = await setup(env);
+    await handleGroupJoin({ token, memberId: 'member02', memberPub: 'mpub2' }, env, req({}));
+    const ts = Date.now();
+    // Creator signs to promote member01; relay rewrites targetId → member02.
+    const sig = await signGroup(ed, 'admin', token, 'creator1', ts, `promote:member01`);
+    const swapped = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'member02', action: 'promote', ts, sig }, env, req({}));
+    expect(swapped.status).toBe(403);
+    expect((await swapped.json()).code).toBe('SIG_INVALID');
+    expect(JSON.parse(await env.KV.get(`grp:${token}`)).admins || []).not.toContain('member02');
+    // The signed target is accepted.
+    const ok = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'member01', action: 'promote', ts, sig }, env, req({}));
+    expect(ok.status).toBe(200);
+  });
+
+  it('rejects a transfer whose newCreatorId was redirected by the relay (ownership hijack)', async () => {
+    const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
+    const { token, ed } = await setup(env);
+    await handleGroupJoin({ token, memberId: 'member02', memberPub: 'mpub2' }, env, req({}));
+    const ts = Date.now();
+    // Creator signs to hand ownership to member01; relay rewrites newCreatorId → member02.
+    const sig = await signGroup(ed, 'transfer', token, 'creator1', ts, 'member01');
+    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'member02', ts, sig }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+    const grp = JSON.parse(await env.KV.get(`grp:${token}`));
+    expect(grp.creatorId).toBe('creator1'); // ownership unchanged
+    // The intended target, correctly signed, still works.
+    const ok = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'member01', ts, sig }, env, req({}));
+    expect(ok.status).toBe(200);
+    expect((await ok.json()).creatorId).toBe('member01');
   });
 
   it('rejects partial auth (sig without ts) on a group op', async () => {

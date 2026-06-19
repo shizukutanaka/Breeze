@@ -1188,9 +1188,18 @@ async function handleGroupInfo(body, env, request) {
 // Verified whenever {ts,sig} are supplied (forgeries rejected); required outright when
 // GROUP_REQUIRE_AUTH is set — flip that on once clients sign. Default (no sig + flag unset)
 // preserves the legacy flow so current clients keep working until updated. sig is Ed25519
-// over `breeze-group-${action}:${token}:${actorId}:${ts}`, verified against the actor's
-// registered edIdentityKey. Returns a Response on failure, or null to proceed.
-async function checkGroupAuth(env, request, action, token, actorId, ts, sig) {
+// over `breeze-group-${action}:${token}:${actorId}:${ts}:${bind}`, verified against the
+// actor's registered edIdentityKey.
+//
+// `bind` carries the operation's security-relevant target(s) — kickId / newCreatorId /
+// sub-action+targetId / new name — so the signature also authenticates WHAT is being done,
+// not just who/which-group/when. Without it the signed payload omitted the target: the
+// untrusted relay, which sees the request, could swap kickId, redirect a transfer to an
+// attacker-chosen member, or turn a signed "demote X" into "promote Y" / "unban Z" while
+// the signature still verified (within the 5-min window). Since no client signs yet, the
+// canonical signed format is fixed here before signing goes live. Returns a Response on
+// failure, or null to proceed.
+async function checkGroupAuth(env, request, action, token, actorId, ts, sig, bind = '') {
   const hasSig = ts !== undefined || sig !== undefined;
   if (hasSig) {
     if (ts === undefined || sig === undefined) return json({ error: 'ts and sig must both be provided', code: 'PARTIAL_AUTH' }, 400, request);
@@ -1199,7 +1208,7 @@ async function checkGroupAuth(env, request, action, token, actorId, ts, sig) {
     const pkRaw = await kvGet(env, `prekey:${actorId}`);
     const bundle = pkRaw ? safeJsonParse(pkRaw) : null;
     if (!bundle || typeof bundle.edIdentityKey !== 'string' || !bundle.edIdentityKey) return json({ error: 'No registered identity key', code: 'NO_IDENTITY_KEY' }, 403, request);
-    const ok = await verifyEd25519(bundle.edIdentityKey, btoa(`breeze-group-${action}:${token}:${actorId}:${ts}`), sig);
+    const ok = await verifyEd25519(bundle.edIdentityKey, btoa(`breeze-group-${action}:${token}:${actorId}:${ts}:${bind}`), sig);
     if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
     return null;
   }
@@ -1213,7 +1222,7 @@ async function handleGroupKick(body, env, request) {
   if (!token || !kickId || !adminId) return json({ error: 'token, kickId, adminId required', code: 'MISSING_FIELDS' }, 400, request);
   if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(kickId) || !validateUserId(adminId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
-  const kAuth = await checkGroupAuth(env, request, 'kick', token, adminId, body.ts, body.sig);
+  const kAuth = await checkGroupAuth(env, request, 'kick', token, adminId, body.ts, body.sig, kickId);
   if (kAuth) return kAuth;
 
   const data = await kvGet(env, `grp:${token}`);
@@ -1275,7 +1284,9 @@ async function handleGroupAdmin(body, env, request) {
   if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(adminId) || !validateUserId(targetId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   if (action !== 'promote' && action !== 'demote' && action !== 'unban') return json({ error: "action must be 'promote', 'demote' or 'unban'", code: 'INVALID_ACTION' }, 400, request);
-  const aAuth = await checkGroupAuth(env, request, 'admin', token, adminId, body.ts, body.sig);
+  // Bind BOTH the sub-action and the target: otherwise the relay could turn a signed
+  // "demote X" into "promote Y" (escalation) or "unban Z" (ban bypass).
+  const aAuth = await checkGroupAuth(env, request, 'admin', token, adminId, body.ts, body.sig, `${action}:${targetId}`);
   if (aAuth) return aAuth;
 
   const data = await kvGet(env, `grp:${token}`);
@@ -1332,7 +1343,7 @@ async function handleGroupTransfer(body, env, request) {
   if (!token || !adminId || !newCreatorId) return json({ error: 'token, adminId, newCreatorId required', code: 'MISSING_FIELDS' }, 400, request);
   if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(adminId) || !validateUserId(newCreatorId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
-  const tAuth = await checkGroupAuth(env, request, 'transfer', token, adminId, body.ts, body.sig);
+  const tAuth = await checkGroupAuth(env, request, 'transfer', token, adminId, body.ts, body.sig, newCreatorId);
   if (tAuth) return tAuth;
 
   const data = await kvGet(env, `grp:${token}`);
@@ -1377,7 +1388,9 @@ async function handleGroupRename(body, env, request) {
   if (!validateUserId(adminId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   const name = sanitizeString(rawName, 50);
   if (!name) return json({ error: 'name required (1-50 chars)', code: 'INVALID_NAME' }, 400, request);
-  const rAuth = await checkGroupAuth(env, request, 'rename', token, adminId, body.ts, body.sig);
+  // Bind the (sanitized) new name so the relay can't swap it for another value. The
+  // signing client must sign the post-sanitization name to match.
+  const rAuth = await checkGroupAuth(env, request, 'rename', token, adminId, body.ts, body.sig, name);
   if (rAuth) return rAuth;
 
   const data = await kvGet(env, `grp:${token}`);
