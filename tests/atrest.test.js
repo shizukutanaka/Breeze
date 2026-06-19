@@ -60,6 +60,30 @@ describe('wrap / unwrap', () => {
     expect(a.salt).not.toBe(b.salt);
     expect(a.ct).not.toBe(b.ct);
   });
+
+  // Item 78: the AES-GCM AAD binds a record to its context. A record wrapped with one
+  // context must NOT unwrap under a different one (relocation protection), while the same
+  // context round-trips. The no-context path uses a constant domain tag and still works.
+  it('binds the record to its context: cross-context unwrap fails, same-context succeeds', async () => {
+    const rec = await A.wrapJWK(sampleJWK, 'pw', 'account:alice');
+    expect(await A.unwrapJWK(rec, 'pw', 'account:alice')).toEqual(sampleJWK); // right context
+    expect(await A.unwrapJWK(rec, 'pw', 'account:bob')).toBe(null);            // relocated → fail
+    expect(await A.unwrapJWK(rec, 'pw')).toBe(null);                           // context dropped → fail
+    expect(await A.unwrapJWK(rec, 'pw', '')).toBe(null);
+  });
+
+  it('a no-context record does not unwrap when a context is later supplied (and vice-versa)', async () => {
+    const rec = await A.wrapJWK(sampleJWK, 'pw'); // constant domain tag only
+    expect(await A.unwrapJWK(rec, 'pw')).toEqual(sampleJWK);
+    expect(await A.unwrapJWK(rec, 'pw', 'account:alice')).toBe(null);
+  });
+
+  it('migrate + loadKey thread the context end-to-end', async () => {
+    const migrated = await A.migrate({ priv: sampleJWK, pubB64: 'P' }, 'pw', 'rec-42');
+    expect(await A.loadKey(migrated, 'pw', 'rec-42')).toEqual(sampleJWK); // matching context
+    expect(await A.loadKey(migrated, 'pw', 'rec-99')).toBe(null);         // wrong context
+    expect(await A.loadKey(migrated, 'pw')).toBe(null);                   // missing context
+  });
 });
 
 describe('migration of legacy plaintext records', () => {

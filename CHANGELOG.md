@@ -1,5 +1,30 @@
 # Changelog
 
+## atrest wrap binds AAD: domain separation + record-context — item 78 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+713 tests (3 new); `src/crypto/atrest.js` + `tests/atrest.test.js` only. `validate.sh` PASSED.
+
+Socratic lens (the items 76/77 binding theme applied to at-rest crypto): *"`atrest` AES-256-GCM
+authenticates the ciphertext, but its encrypt/decrypt pass no `additionalData`. With no AAD, what
+distinguishes an at-rest ciphertext from any other AES-GCM ciphertext, and what stops a wrapped record
+being relocated between keystore slots?"* Nothing did.
+
+- **Gap**: no domain-separation tag (cross-protocol confusion surface) and no context binding — an
+  XSS attacker with IDB write access but *without* the passphrase could swap a wrapped record into a
+  different slot, and the user would silently load the wrong identity on unlock.
+- **Why now**: the module is a pre-wiring reference ("to be migrated onto it"), so there are no persisted
+  records — the canonical wrap format can be fixed before it goes live, with no migration (same reasoning
+  as items 76/77).
+- **Fix**: every wrap/unwrap now sets `additionalData`. A constant `breeze-atrest-v1` domain tag is always
+  applied (backward-compatible: both sides use it, so existing no-context round-trips are unchanged), and
+  an optional caller `context` (e.g. account/record id) extends it. AAD is recomputed from the constant +
+  caller context on unwrap — never read from the attacker-controlled record — so the binding is meaningful.
+  `wrapJWK`/`unwrapJWK`/`migrate`/`loadKey` all thread the optional context.
+- **Tests (3, mutation-verified)**: a record wrapped with one context fails to unwrap under a different
+  context or with the context dropped, while the matching context round-trips; a no-context record won't
+  unwrap once a context is supplied; `migrate`→`loadKey` thread the context end-to-end. Stripping the AAD
+  makes cross-context unwrap wrongly succeed.
+
 ## push-subscribe signature now binds the subscription — item 77 (branch claude/nice-ride-T6yb0, 2026-06-16)
 
 710 tests (2 new); `_worker.js` + `tests/worker.test.js` only. `validate.sh` PASSED.
