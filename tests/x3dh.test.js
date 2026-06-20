@@ -268,6 +268,49 @@ describe('one-call handshake orchestration (initiatorHandshake / responderHandsh
     });
     expect(r).toBe(null);
   });
+
+  // Relay-supplied data inside the prekey envelope must not throw — bad `msg` can be
+  // injected without breaking the E2E ciphertext (msg is the inner field). Without the
+  // try/catch fix, these three cases throw SyntaxError / 'not a v3/v4 ratchet message' /
+  // DOMException (importKey) respectively instead of returning null.
+  it('responderHandshake returns null (no throw) when msg is non-JSON', async () => {
+    const alice = await party(); const bob = await party();
+    const sig = await R.signSPK(bob.ed.privateKey, bob.spk.pub);
+    const { wire } = await R.initiatorHandshake({
+      myIdentity: { ikPriv: alice.ik.privateKey, ikPub: alice.ik.pub },
+      bundle: { ikPub: bob.ik.pub, edIkPub: bob.ed.pub, spkPub: bob.spk.pub, spkSig: sig },
+      firstMessage: 'test',
+    });
+    const w = JSON.parse(wire);
+    // Inject a non-JSON msg field (mutation: without try/catch, this throws SyntaxError).
+    const r = await R.responderHandshake({
+      myKeys: { ikPriv: bob.ik.privateKey, spkPriv: bob.spk.privateKey },
+      wire: JSON.stringify({ ...w, msg: 'NOT_JSON_AT_ALL' }),
+    });
+    expect(r).toBe(null); // mutation: old code throws; fix returns null
+    // Genuine success: the unmodified wire still round-trips.
+    const ok = await R.responderHandshake({
+      myKeys: { ikPriv: bob.ik.privateKey, spkPriv: bob.spk.privateKey },
+      wire,
+    });
+    expect(ok?.plaintext).toBe('test');
+  });
+
+  it('responderHandshake returns null (no throw) when msg is valid JSON but not a ratchet message', async () => {
+    const alice = await party(); const bob = await party();
+    const sig = await R.signSPK(bob.ed.privateKey, bob.spk.pub);
+    const { wire } = await R.initiatorHandshake({
+      myIdentity: { ikPriv: alice.ik.privateKey, ikPub: alice.ik.pub },
+      bundle: { ikPub: bob.ik.pub, edIkPub: bob.ed.pub, spkPub: bob.spk.pub, spkSig: sig },
+      firstMessage: 'test',
+    });
+    // '{}' is valid JSON but not a v3/v4 ratchet message → ratchetDecrypt throws.
+    const r = await R.responderHandshake({
+      myKeys: { ikPriv: bob.ik.privateKey, spkPriv: bob.spk.privateKey },
+      wire: JSON.stringify({ ...JSON.parse(wire), msg: '{}' }),
+    });
+    expect(r).toBe(null); // mutation: old code throws 'not a v3/v4 ratchet message'
+  });
 });
 
 describe('bundleFromRelay (worker JSON → handshake bundle mapping)', () => {

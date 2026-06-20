@@ -449,20 +449,25 @@ export function createRatchet(opts = {}) {
   // one-time pre-key PRIVATE key (or null/undefined if consumed/unknown — X3DH still
   // completes via SPK). Returns { session, plaintext, opkId } or null when `wire` is
   // not a v5 prekey message (so the caller can treat it as a plain ratchet message).
+  // Also returns null if any crypto op throws on relay-supplied data (e.g., a bad `msg`
+  // field that fails JSON.parse in ratchetDecrypt, malformed ik/ek key bytes that fail
+  // importKey in ecdhBits, or ratchetDecrypt's version-check throw on a non-ratchet msg).
   async function responderHandshake({ myKeys, wire, opkResolver, info = 'breeze-x3dh-v5' }) {
     const hs = parsePreKeyMessage(wire);
     if (!hs) return null;
-    let opkPriv = null;
-    if (hs.opkId != null && typeof opkResolver === 'function') {
-      opkPriv = await opkResolver(hs.opkId);
-    }
-    const sk = await x3dhResponder({
-      ikPriv: myKeys.ikPriv, spkPriv: myKeys.spkPriv, opkPriv,
-      ikPubPeer: hs.ikPub, ekPubPeer: hs.ekPub, info,
-    });
-    const session = responderSession(sk, myKeys.spkPriv);
-    const plaintext = await ratchetDecrypt(session, hs.ratchetMessage);
-    return { session, plaintext, opkId: hs.opkId };
+    try {
+      let opkPriv = null;
+      if (hs.opkId != null && typeof opkResolver === 'function') {
+        opkPriv = await opkResolver(hs.opkId);
+      }
+      const sk = await x3dhResponder({
+        ikPriv: myKeys.ikPriv, spkPriv: myKeys.spkPriv, opkPriv,
+        ikPubPeer: hs.ikPub, ekPubPeer: hs.ekPub, info,
+      });
+      const session = responderSession(sk, myKeys.spkPriv);
+      const plaintext = await ratchetDecrypt(session, hs.ratchetMessage);
+      return { session, plaintext, opkId: hs.opkId };
+    } catch { return null; }
   }
 
   // Map a relay prekey-fetch JSON to the initiatorHandshake `bundle` shape. The relay

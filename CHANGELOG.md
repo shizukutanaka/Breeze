@@ -1,5 +1,26 @@
 # Changelog
 
+## responderHandshake fails closed on relay-injected bad msg field — item 80 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+716 tests (2 new); `src/crypto/ratchet.js` + `tests/x3dh.test.js` only. `validate.sh` PASSED.
+
+Socratic lens: *"`parsePreKeyMessage` validates that `msg` is a `string` but not that it is valid
+JSON. `ratchetDecrypt` opens with a bare `JSON.parse(payload)` and also throws `'not a v3/v4
+ratchet message'` for non-ratchet content. Neither exception is caught in `responderHandshake`.
+What happens when a relay injects `msg: 'NOT_JSON'` into a legitimate prekey envelope?"*
+
+- **Gap**: `responderHandshake` throws `SyntaxError` (or `'not a v3/v4 ratchet message'`)
+  instead of returning null. A relay can crash the app's prekey-message handler with a single
+  malformed `msg` field — no private key required, no E2E break required. Same for malformed
+  `ik`/`ek` byte arrays that pass `parsePreKeyMessage`'s Array.isArray check but fail
+  `importKey` inside `ecdhBits`.
+- **Fix**: wrap the body of `responderHandshake` (after the `parsePreKeyMessage` null-exit) in
+  try/catch → return null. No change to `ratchetDecrypt`'s existing intentional-throw semantics
+  (used by callers that need to distinguish "not a ratchet message" from "decrypted but replay").
+- **Tests (2, mutation-verified)**: non-JSON `msg` returns null (without fix: SyntaxError);
+  valid-JSON non-ratchet `msg` returns null (without fix: throws 'not a v3/v4'). Each test
+  also verifies the unmodified wire still round-trips to confirm genuine-success isolation.
+
 ## PoW pub-binding uses prefix match, not substring — item 79 (branch claude/nice-ride-T6yb0, 2026-06-20)
 
 724 tests (1 new); `src/crypto/pow.js` + `tests/pow.test.js` only. `validate.sh` PASSED.
