@@ -1539,7 +1539,8 @@ const _I = {
     retryDLQSuccess: (n) => `${n} message(s) requeued for delivery.`,
     scheduledMessages: 'Scheduled Messages',
     scheduleEmpty: 'No scheduled messages.',
-    scheduleCancelled: 'Cancelled scheduled messages',
+    scheduleCancelled: (n) => `Cancelled ${n} scheduled message${n === 1 ? '' : 's'}`,
+    updateAvailable: (v) => `Update available: v${v}`,
     sendFailed: 'Send failed. Tap to retry.',
     markRead: 'Mark read',
     deleteContactConfirm: (name) => `Delete ${name}? This cannot be undone.`,
@@ -1966,7 +1967,8 @@ const _I = {
     retryDLQSuccess: (n) => `${n}件のメッセージを再キューしました。`,
     scheduledMessages: '予約メッセージ',
     scheduleEmpty: '予約メッセージはありません。',
-    scheduleCancelled: '予約メッセージをキャンセルしました',
+    scheduleCancelled: (n) => `予約メッセージを${n}件キャンセルしました`,
+    updateAvailable: (v) => `アップデートが利用可能: v${v}`,
     sendFailed: '送信失敗。タップで再送。',
     markRead: '既読にする',
     deleteContactConfirm: (name) => `${name} を削除しますか？この操作は取り消せません。`,
@@ -3898,7 +3900,7 @@ async function initMessenger(dbName) {
           // v3.6: Worker version mismatch warning
           if (health.version && health.version !== CONFIG.VERSION) {
             _dbg(null, `Version mismatch: client=${CONFIG.VERSION} worker=${health.version}`);
-            showToast(`Update available: v${health.version}`, 'info', 8000);
+            showToast(t('updateAvailable', health.version), 'info', 8000);
           }
           // v3.6: Store server features for UI gating
           if (health.features) {
@@ -10910,7 +10912,7 @@ async function initMessenger(dbName) {
           const scheds = allIdentity.filter(i => i.id?.startsWith('sched:'));
           let count = 0;
           for (const s of scheds) { await dbDel('identity', s.id); count++; }
-          showToast((t('scheduleCancelled') || 'Cancelled') + ': ' + count, 'info');
+          showToast(t('scheduleCancelled', count), 'info');
         } catch(e) { _dbg(e, 'schedule-cancel'); }
         return;
       }
