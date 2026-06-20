@@ -8569,6 +8569,21 @@ async function initMessenger(dbName) {
         } else if (contact.sigPub !== msg.sigPub) {
           meta.tampered = true;
           _dbg(null, 'Signing key changed for ' + contactId + ' — possible MITM');
+          // Show the same prominent warning as the encryption key-change banner (line ~4752).
+          // A signing key substitution is a stronger MITM indicator than a decryption failure;
+          // the subtle ⚠sig badge alone is insufficient for this severity.
+          const _skName = contact.name || contactId;
+          const _skBox = _DOM.get('msg-messages');
+          if (_skBox && activeContact?.id === contactId) {
+            const _skWarn = document.createElement('div');
+            _skWarn.className = 'msg sys';
+            _skWarn.innerHTML = `<span class="color-y">⚠️ ${esc(t('keyChanged', _skName))}</span>`;
+            _skBox.appendChild(_skWarn);
+            _skBox.scrollTop = _skBox.scrollHeight;
+          }
+          showToast(t('keyChanged', _skName), 'error', 8000);
+          announceToSR(t('keyChanged', _skName));
+          auditLog('security', `Signing key change: ${_skName} (${contactId}) — possible MITM.`);
         }
         if (!meta.tampered) {
           const verified = await verifySignature(text, msg.sig, msg.sigPub);
