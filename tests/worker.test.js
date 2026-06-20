@@ -3599,6 +3599,38 @@ describe('translate handler input validation', () => {
     expect(hugeStr.slice(0, 8000).length).toBe(8000);   // guard: cap applies
     expect(hugeStr.length).toBe(20_000);                 // without guard: full length
   });
+
+  // ── Detected-language sanitization (item 89) ───────────────────────────────
+  // `detectedFrom` is echoed from the external provider's response (MyMemory's
+  // responseData.match.source) into result.from, which the client interpolates into an
+  // innerHTML sink unescaped. A compromised/misbehaving provider could smuggle an
+  // onerror= payload that executes under the 'unsafe-inline' CSP. The worker must strip
+  // it to a short BCP-47-ish tag before returning.
+  it('sanitizes the detected source language echoed from the provider response', async () => {
+    const e = makeEnv();
+    const origFetch = globalThis.fetch;
+    const injection = 'en"><img src=x onerror=alert(1)>';
+    globalThis.fetch = async () => new Response(
+      JSON.stringify({
+        responseData: { translatedText: 'こんにちは', match: { source: injection } },
+        responseStatus: 200,
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+    try {
+      const r = await handleTranslate({ text: 'hello', from: 'auto', to: 'ja' }, e, req());
+      const j = await r.json();
+      expect(r.status).toBe(200);
+      // No markup-bearing characters survive, and the value is bounded.
+      expect(j.from).not.toMatch(/[<>"']/);
+      expect(/^[a-zA-Z0-9-]*$/.test(j.from)).toBe(true);
+      expect(j.from.length).toBeLessThanOrEqual(16);
+      // Mutation guard: without the strip, j.from === the raw injection string.
+      expect(j.from).not.toBe(injection);
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

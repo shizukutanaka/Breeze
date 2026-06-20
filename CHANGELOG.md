@@ -1,5 +1,33 @@
 # Changelog
 
+## escape provider-controlled fields in translate/AI/info innerHTML sinks — item 89 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+719 tests (1 new, mutation-verified); `index.html` + `_worker.js` + `tests/worker.test.js`. `validate.sh` PASSED.
+
+Socratic lens: *"The translation indicator builds innerHTML as
+`…${esc(data.translated)}…${data.from} → ${data.to} · ${data.provider}…`. `data.translated` is
+escaped, but the adjacent meta fields are not. Where does `data.from` come from — is any of it
+attacker- or external-service-controlled?"*
+
+`data.from` is the **detected source language echoed straight from the external translation
+provider's response** (`d.detectedLanguage?.language` / `detectedSourceLanguage` /
+`responseData.match.source`) and the worker returned it **unsanitized** (`from: detectedFrom`).
+A malicious or compromised translation provider could return
+`from: 'en"><img src=x onerror=…>'`; interpolated unescaped into innerHTML it executes under the
+`script-src 'unsafe-inline'` CSP. `data.provider` is a worker-side literal (no live vector) but
+sat unescaped in four innerHTML sinks; `c.labels.join(', ')` in `/info` was unescaped while the
+adjacent `c.name`/`c.alias`/`c.notes` in the same array were escaped.
+
+- **Fix (defense in depth, both ends)**:
+  - Worker: strip `detectedFrom` to a short alnum/`-` BCP-47-ish tag (`[^a-zA-Z0-9-]` → '', ≤16)
+    before returning — a misbehaving provider can't smuggle markup to the client.
+  - Client: `esc()` the meta fields at every sink — translate indicator (`data.from`/`data.to`/
+    `data.provider`), AI-context translate (`data.provider`), `/info` labels (`c.labels`), AI
+    summary + AI chat (`data.provider`).
+- **Test (1, mutation-verified)**: mock the provider to return an injection in
+  `responseData.match.source`; assert `j.from` carries no `<>"'`, matches `^[a-zA-Z0-9-]*$`, is
+  ≤16 chars, and `!== injection`. Removing the worker strip flips it red.
+
 ## remove unauthenticated plaintext edit/delete/reaction/poll_vote handlers (sealed-envelope tampering) — item 87 (branch claude/nice-ride-T6yb0, 2026-06-20)
 
 718 tests (no new — `handleIncoming` lives in `index.html`, outside the harness); `index.html` only. `validate.sh` PASSED.

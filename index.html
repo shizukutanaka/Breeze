@@ -6621,7 +6621,11 @@ async function initMessenger(dbName) {
         const data = await resp.json();
         if (data.translated) {
           indicator.classList.remove('loading');
-          indicator.innerHTML = `<span class="tr-text">${esc(data.translated)}</span><span class="tr-meta">${data.from || 'auto'} → ${data.to} · ${data.provider}${data.cached ? ' · cached' : ''}</span>`;
+          // esc() the meta fields: data.from is the detected source language echoed
+          // straight from the (external, untrusted) translation provider's response and
+          // is returned unsanitized by the worker; under 'unsafe-inline' CSP an injected
+          // onerror= payload would execute. data.to/data.provider esc'd for consistency.
+          indicator.innerHTML = `<span class="tr-text">${esc(data.translated)}</span><span class="tr-meta">${esc(data.from || 'auto')} → ${esc(data.to || '')} · ${esc(data.provider || '')}${data.cached ? ' · cached' : ''}</span>`;
           success = true;
         }
       }
@@ -6634,7 +6638,7 @@ async function initMessenger(dbName) {
           const data = await resp.json();
           if (data.result) {
             indicator.classList.remove('loading');
-            indicator.innerHTML = `<span class="tr-text">${esc(data.result)}</span><span class="tr-meta">→ ${toLang} · ${data.provider || 'AI'}${data.cached ? ' · cached' : ''}</span>`;
+            indicator.innerHTML = `<span class="tr-text">${esc(data.result)}</span><span class="tr-meta">→ ${esc(toLang)} · ${esc(data.provider || 'AI')}${data.cached ? ' · cached' : ''}</span>`;
             success = true;
           }
         }
@@ -11121,7 +11125,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
           if (resp?.ok) {
             const data = await resp.json();
             if (data.result) {
-              d.innerHTML = '<b class="i-g">' + t('aiSummary') + '</b> <span class="i-t3-10">(' + (data.provider || 'AI') + ')</span><br>' + esc(data.result).replace(/\n/g, '<br>');
+              d.innerHTML = '<b class="i-g">' + t('aiSummary') + '</b> <span class="i-t3-10">(' + esc(data.provider || 'AI') + ')</span><br>' + esc(data.result).replace(/\n/g, '<br>');
               box.scrollTop = box.scrollHeight;
               return;
             }
@@ -11948,7 +11952,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         if (resp?.ok) {
           const data = await resp.json();
           if (data.result) {
-            d.innerHTML = '<b class="i-g">' + t('aiChat') + '</b> <span class="i-t3-10">(' + (data.provider || '?') + (data.cached ? ' · cached' : '') + ')</span><br><br>' + esc(data.result).replace(/\n/g, '<br>');
+            d.innerHTML = '<b class="i-g">' + t('aiChat') + '</b> <span class="i-t3-10">(' + esc(data.provider || '?') + (data.cached ? ' · cached' : '') + ')</span><br><br>' + esc(data.result).replace(/\n/g, '<br>');
           } else {
             d.innerHTML = '<b class="i-g">' + t('aiChat') + '</b><br>' + t('aiError');
           }
@@ -12362,7 +12366,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         '<b>' + t('infoStatus') + '</b>',
         (c.blocked ? '🚫 ' + t('infoBlocked') : c.muted ? '🔇 ' + t('infoMuted') : c.archived ? '📦 ' + t('infoArchived') : '✓ ' + t('infoActive')),
         c.pinned ? '📌 ' + t('infoPinned') : '',
-        (c.labels || []).length > 0 ? t('infoLabels') + ': ' + c.labels.join(', ') : '',
+        (c.labels || []).length > 0 ? t('infoLabels') + ': ' + esc(c.labels.join(', ')) : '',
         '',
         '<b>' + t('infoConnection') + '</b>',
         (peer?.connected ? '<span class="i-g">' + t('infoP2P') + '</span>' + (peer._lastRtt ? ' · ' + peer._lastRtt + 'ms' : '') + (peer._bytesSent ? ' · ↑' + fmtSize(peer._bytesSent) + ' ↓' + fmtSize(peer._bytesRecv || 0) : '') : t('infoRelay')),

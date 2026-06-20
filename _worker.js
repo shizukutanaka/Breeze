@@ -2891,7 +2891,11 @@ async function handleTranslate(body, env, request) {
   // (~4× input); anything beyond is anomalous and should not be cached to avoid KV bloat.
   // The full response is still returned to the caller — only the cache write is guarded.
   const safeTranslated = translated.slice(0, 8000);
-  const result = { text, translated: safeTranslated, from: detectedFrom, to: tgt, provider };
+  // `detectedFrom` is the source-language code echoed from the external translation
+  // provider's response — untrusted. Strip to a short alnum/`-` language tag (e.g. "en",
+  // "zh-CN") so a misbehaving provider can't smuggle markup to the client's innerHTML sink.
+  const safeFrom = typeof detectedFrom === 'string' ? detectedFrom.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 16) : detectedFrom;
+  const result = { text, translated: safeTranslated, from: safeFrom, to: tgt, provider };
   const serialized = JSON.stringify(result);
   // Final serialized-size guard: skip cache rather than write an unexpectedly large entry.
   if (serialized.length <= 64 * 1024) await kvPut(env, cacheKey, serialized, { expirationTtl: 604800 });
