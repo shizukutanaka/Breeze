@@ -61,7 +61,10 @@ export async function verify(subtle, pow, pub, { maxAge, futureSkew = 5 * 60 * 1
   if (pow.challenge.length > 512) {
     return { ok: false, code: 'POW_CHALLENGE_TOO_LONG' };
   }
-  if (!pow.challenge.includes(pub)) {
+  // Exact prefix match: makeChallengeString always produces "${pub}:…".  A
+  // substring check (includes) would let an attacker whose longer pub contains the
+  // target pub as a suffix use their validly-solved challenge for a different identity.
+  if (!pow.challenge.startsWith(pub + ':')) {
     return { ok: false, code: 'POW_PUB_MISMATCH' };
   }
   // Freshness check: the challenge string encodes a timestamp as its last

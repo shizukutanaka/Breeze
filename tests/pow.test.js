@@ -132,6 +132,24 @@ describe('verify', () => {
     expect(r.code).toBe('POW_PUB_MISMATCH');
   }, 60000);
 
+  it('pub-binding uses prefix match, not substring (identity-swap hardening)', async () => {
+    // Scenario: the token was solved for PUB = 'testpubkey123456789'. A user whose pub
+    // is a suffix of PUB — say 'pubkey123456789' — must NOT be able to use this token,
+    // even though PUB's challenge 'testpubkey123456789:ts' does .includes('pubkey123456789').
+    // With the old includes() check the token would pass the pub check AND the hash check
+    // (because the nonce was validly solved for that exact challenge string) → { ok: true }.
+    // With the fixed startsWith(pub+':') check it fails immediately → POW_PUB_MISMATCH.
+    const token     = await getToken(); // challenge = 'testpubkey123456789:...'
+    const SUFFIX_PUB = PUB.slice(4);   // 'pubkey123456789' — a substring of PUB
+    expect(token.challenge.includes(SUFFIX_PUB)).toBe(true); // confirms includes() would pass
+    const r = await verify(subtle, token, SUFFIX_PUB);
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe('POW_PUB_MISMATCH'); // mutation: old code returns { ok: true }
+    // Genuine-success: the original PUB still round-trips.
+    const ok = await verify(subtle, token, PUB);
+    expect(ok.ok).toBe(true);
+  }, 60000);
+
   it('rejects a tampered nonce (POW_INVALID)', async () => {
     const token = await getToken();
     const bad   = { ...token, nonce: token.nonce + 1 };

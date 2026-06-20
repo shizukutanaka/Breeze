@@ -1,5 +1,30 @@
 # Changelog
 
+## PoW pub-binding uses prefix match, not substring — item 79 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+724 tests (1 new); `src/crypto/pow.js` + `tests/pow.test.js` only. `validate.sh` PASSED.
+
+Socratic lens: *"The `verify` function checks `pow.challenge.includes(pub)` to ensure the challenge
+embeds the identity whose endpoint is being accessed. `makeChallengeString` always produces `${pub}:…`.
+If an attacker's longer pub key contains the victim's shorter pub as a suffix, their validly-solved
+challenge `LONG_PUB:ts` satisfies `.includes(SHORT_PUB)`. Does the attacker's token then also pass
+the SHA-256 hash check and return `{ ok: true }` for the victim's endpoint?"*
+
+- **Gap**: yes — `includes` is a substring match. An attacker with pub key `XY` solves PoW for
+  challenge `XY:ts`. A victim with pub key `Y` (a suffix of `XY`) has their endpoint accept the
+  attacker's token because `'XY:ts'.includes('Y')` is true AND the hash was legitimately solved
+  for `XY:ts`. The PoW rate-limit for the victim's endpoint is bypassed.
+- **Severity**: defense-in-depth (endpoints also verify the identity signature), but the explicit
+  purpose of the pub embedding is to prevent cross-identity replay — that contract was broken.
+- **Fix**: change to `pow.challenge.startsWith(pub + ':')`. This matches how `makeChallengeString`
+  formats challenges and ensures the challenge was issued *for that exact identity*, not merely a
+  superstring. Empty-pub is also tightened (`startsWith(':')` = false for any normal challenge).
+- **Test (1, mutation-verified)**: solved token for `'testpubkey123456789'` is used against
+  a suffix pub `'pubkey123456789'` — the challenge `.includes()` that suffix (demoed in the test),
+  but `.startsWith(suffix + ':')` is false. With the old `includes` check the test returns
+  `{ ok: true }`; the fix makes it `POW_PUB_MISMATCH`. Genuine round-trip for the original pub
+  still passes.
+
 ## atrest wrap binds AAD: domain separation + record-context — item 78 (branch claude/nice-ride-T6yb0, 2026-06-16)
 
 713 tests (3 new); `src/crypto/atrest.js` + `tests/atrest.test.js` only. `validate.sh` PASSED.
