@@ -1,5 +1,45 @@
 # Changelog
 
+## i18n: two hardcoded-English Toast strings fixed — item 83 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+718 tests (no new); `index.html` only. `validate.sh` PASSED (137/143, 95%).
+
+Socratic lens: *"`validate.sh` reported 'Toast i18n: 94% (<95%)'. Two showToast calls in
+`index.html` embed English strings directly instead of routing through `t()`. Does `t()` support
+function-valued keys with interpolated arguments?"*
+
+Yes — `t(key, ...args)` already calls `v(...args)` when the key maps to a function. Two gaps:
+
+1. `showToast(\`Update available: v${health.version}\`, ...)` (line ~3901) — hardcoded English
+   with template literal. Added `updateAvailable: (v) => \`...\`` to EN+JA; call site uses
+   `t('updateAvailable', health.version)`.
+
+2. `showToast((t('scheduleCancelled') || 'Cancelled') + ': ' + count, ...)` (line ~10913) —
+   count concatenated outside i18n, with an unnecessary `|| 'Cancelled'` fallback. Changed
+   `scheduleCancelled` to `(n) => \`...\`` in EN+JA; call site simplified to
+   `t('scheduleCancelled', count)`.
+
+Score: 93% → 95%; remaining 2 warnings (`.style.X` count, total lines) are within range.
+
+## ratchetDecrypt fails closed on unpadAndDecompress errors — item 82 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+718 tests (1 new); `src/crypto/ratchet.js` + `tests/ratchet.test.js` only. `validate.sh` PASSED.
+
+Socratic lens: *"`ratchetDecrypt` commits session state (counter, chain key ratchet step) before
+calling `unpadAndDecompress`. `DecompressionStream` can throw on corrupted-but-authenticated
+compressed data. If that exception propagates, the caller sees an exception after state has already
+advanced — breaking all subsequent decryptions. Is either `unpadAndDecompress` call-site in a
+try/catch?"*
+
+No. Both call-sites (skipped-key path and main path) were unguarded.
+
+- **Fix**: wrap both `return await unpadAndDecompress(padded)` calls in `try { ... } catch { return
+  null; }` — matches the fail-closed contract: null = parse failure, never a throw after committed
+  state.
+- **Test (1, mutation-verified)**: mock `DecompressionStream.getReader()` to throw synchronously
+  (avoids the secondary Node.js `InflateRaw` error-event that real invalid deflate bytes emit as an
+  unhandled rejection in Vitest). Genuine-success branch: uncompressed flag=0 path decodes 'hello'.
+
 ## worker inline PoW pub-binding: startsWith fix + mutation test — item 81 (branch claude/nice-ride-T6yb0, 2026-06-20)
 
 717 tests (1 new); `_worker.js` + `tests/worker.test.js` only. `validate.sh` PASSED.
