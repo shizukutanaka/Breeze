@@ -1245,6 +1245,15 @@ const CONFIG = {
   // byte-identical to the v3 path. Enable after all group members have updated.
   GROUP_RATCHET_V5: false,
   GROUP_MAX_SKIP: 50, // max tolerated out-of-order gap in the group v5 hash ratchet
+  // v3.6 SECURITY (default OFF — opt-in via /keywrap; run /keywrap again to disable):
+  // Wrap identity ECDH private key and Ed25519 signing key with AES-256-GCM under a
+  // PBKDF2-derived key (600k iterations, random salt) before storing in IndexedDB.
+  // Protects against XSS cookie-theft, device forensics, and malicious extensions that
+  // can read IDB. When ON, app prompts for the passphrase at startup to unwrap. The
+  // existing lock-screen (/lock) continues to work independently. Default OFF so
+  // existing users are not broken; enable per-device via /keywrap.
+  AT_REST_KEY_WRAP: false,
+  PBKDF2_AT_REST_ITERATIONS: 600000, // 6× the lock-screen value; separate constant
   VOICE_MAX_MS: 120000,               // Max voice note duration: 2 minutes
   // Limits
   FILE_MAX: 50 * 1024 * 1024, // All users: 50MB
@@ -1499,6 +1508,16 @@ const _I = {
     lockPassSet: 'Lock password set',
     lockPassRemoved: 'Lock password removed',
     lockUnlocked: 'Lock screen unlocked',
+    keyWrapPassPrompt: 'Set a key-wrap passphrase (min 8 chars):',
+    keyWrapPassConfirm: 'Confirm passphrase:',
+    keyWrapUnlockPrompt: 'Enter key-wrap passphrase to unlock:',
+    keyWrapEnabled: 'At-rest key wrapping enabled (PBKDF2 ×600k)',
+    keyWrapDisabled: 'At-rest key wrapping disabled',
+    keyWrapAlreadyOff: 'Key wrapping is not currently enabled',
+    keyWrapWrongPass: 'Wrong passphrase — keys not loaded',
+    keyWrapMin: 'Passphrase must be at least 8 characters',
+    keyWrapMismatch: 'Passphrases do not match',
+    keyWrapDisableConfirm: 'Disable at-rest key wrapping?',
     avatarEmojiPrompt: 'Avatar emoji:',
     bioPrompt: 'Bio:',
     deleteAllConfirm: 'Delete All',
@@ -1927,6 +1946,16 @@ const _I = {
     lockPassSet: 'ロックパスワードを設定しました',
     lockPassRemoved: 'ロックパスワードを削除しました',
     lockUnlocked: '画面ロックを解除しました',
+    keyWrapPassPrompt: 'キーラップパスフレーズを設定 (8文字以上):',
+    keyWrapPassConfirm: 'パスフレーズを確認:',
+    keyWrapUnlockPrompt: 'キーラップパスフレーズを入力してください:',
+    keyWrapEnabled: 'キーの暗号化保護が有効になりました (PBKDF2 ×600k)',
+    keyWrapDisabled: 'キーの暗号化保護が無効になりました',
+    keyWrapAlreadyOff: 'キーの暗号化保護は現在有効ではありません',
+    keyWrapWrongPass: 'パスフレーズが違います — キーを読み込めませんでした',
+    keyWrapMin: 'パスフレーズは8文字以上必要です',
+    keyWrapMismatch: 'パスフレーズが一致しません',
+    keyWrapDisableConfirm: 'キーの暗号化保護を無効にしますか？',
     avatarEmojiPrompt: 'アバター絵文字:',
     bioPrompt: '自己紹介:',
     deleteAllConfirm: '全て削除',
@@ -2978,13 +3007,36 @@ async function encrypt(passphrase, plaintext) {
   }
 
 async function decrypt(passphrase, payload) {
-    try {  
+    try {
     const key = await deriveKey(passphrase, u8(payload.s), 'decrypt');
     const pt = await crypto.subtle.decrypt({name:'AES-GCM',iv:u8(payload.i)}, key, u8(payload.d));
     return new TextDecoder().decode(pt);
-  
+
     } catch(_e) { _dbg(_e, 'decrypt'); }
   }
+
+// v3.6 Phase 2c: at-rest key wrapping (PBKDF2 × 600k + AES-256-GCM)
+async function wrapKeyAtRest(jwk, passphrase) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(CONFIG.IV_BYTES));
+  const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: CONFIG.PBKDF2_AT_REST_ITERATIONS, hash: 'SHA-256' },
+    km, { name: 'AES-GCM', length: CONFIG.AES_KEY_BITS }, false, ['encrypt'],
+  );
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(jwk)));
+  return { wrapped: arr(new Uint8Array(ct)), salt: arr(salt), iv: arr(iv), kdf: 'pbkdf2-v1' };
+}
+
+async function unwrapKeyAtRest(record, passphrase) {
+  const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: u8(record.salt), iterations: CONFIG.PBKDF2_AT_REST_ITERATIONS, hash: 'SHA-256' },
+    km, { name: 'AES-GCM', length: CONFIG.AES_KEY_BITS }, false, ['decrypt'],
+  );
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u8(record.iv) }, key, u8(record.wrapped));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
 
 function arr(u8a) { return Array.from(u8a); }
 function u8(a) { return new Uint8Array(a); }
@@ -3851,20 +3903,36 @@ async function initMessenger(dbName) {
   // v3.3: Ed25519 message signing (authenticity verification)
   let _signingKey = null;
   let _signingPubB64 = '';
+  // v3.6: ephemeral passphrase cache (set in loadIdentity, consumed+cleared in initSigning)
+  let _atRestPassphrase = null;
   async function initSigning() {
     if (!_hasEd25519) return;
     const stored = await dbGet('identity', 'signing');
     if (stored) {
+      let privJwk;
+      if (stored.kdf === 'pbkdf2-v1') {
+        // Signing key is wrapped; passphrase was cached by loadIdentity
+        const passphrase = _atRestPassphrase;
+        _atRestPassphrase = null; // clear after use regardless of outcome
+        if (!passphrase) { _dbg(null, 'signing-unwrap: no passphrase cached'); return; }
+        try { privJwk = await unwrapKeyAtRest(stored, passphrase); }
+        catch(e) { _dbg(e, 'signing-unwrap'); return; }
+      } else {
+        _atRestPassphrase = null; // clear if somehow set but signing key is plaintext
+        privJwk = stored.priv;
+      }
       try {
         _signingKey = {
-          privateKey: await crypto.subtle.importKey('jwk', stored.priv, { name: 'Ed25519' }, false, ['sign']),
+          privateKey: await crypto.subtle.importKey('jwk', privJwk, { name: 'Ed25519' }, false, ['sign']),
           publicKey: await crypto.subtle.importKey('jwk', stored.pub, { name: 'Ed25519' }, true, ['verify']),
         };
         _signingPubB64 = stored.pubB64;
         return;
       } catch(e) { _dbg(e, 'signing-restore'); }
     }
+    // Generate a new signing key (plaintext; user can run /keywrap to encrypt at rest)
     try {
+      _atRestPassphrase = null;
       _signingKey = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
       const pubRaw = await crypto.subtle.exportKey('raw', _signingKey.publicKey);
       _signingPubB64 = btoa(String.fromCharCode(...new Uint8Array(pubRaw)));
@@ -4425,8 +4493,23 @@ async function initMessenger(dbName) {
   async function loadIdentity() {
     const stored = await dbGet('identity', 'keys');
     if (stored) {
+      let jwk;
+      if (stored.kdf === 'pbkdf2-v1') {
+        // At-rest key wrapping enabled: prompt for passphrase and unwrap
+        const passphrase = await showPrompt(t('keyWrapUnlockPrompt'), '', { type: 'password' });
+        if (!passphrase) return false;
+        try {
+          jwk = await unwrapKeyAtRest(stored, passphrase);
+          _atRestPassphrase = passphrase; // passed to initSigning, cleared after use
+        } catch(e) {
+          _dbg(e, 'keywrap-unlock');
+          showToast(t('keyWrapWrongPass'), 'error');
+          return false;
+        }
+      } else {
+        jwk = stored.priv;
+      }
       // v3.1: Auto-detect curve from stored JWK (X25519 or P-256)
-      const jwk = stored.priv;
       const isX25519 = jwk?.crv === 'X25519';
       const pubAlgo = isX25519 ? { name: 'X25519' } : { name: 'ECDH', namedCurve: 'P-256' };
       const privAlgo = isX25519 ? { name: 'X25519' } : { name: 'ECDH', namedCurve: 'P-256' };
@@ -10831,7 +10914,7 @@ async function initMessenger(dbName) {
         '/whoami · /debug · /online · /uptime · /changelog',
         '',
         '<b>' + t('helpSecurity') + '</b>',
-        '/security · /verify · /audit · /retention · /backup',
+        '/security · /verify · /audit · /retention · /backup · /keywrap',
         '/sessions · /wipe · /gdpr · /panic (Ctrl+Shift+Backspace)',
         '',
         '<b>' + t('helpDiag') + '</b>',
@@ -12550,6 +12633,62 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const current = localStorage.getItem('brz-autolock') === '1';
       localStorage.setItem('brz-autolock', current ? '0' : '1');
       showToast(t('toastAutoLock', current ? 'OFF' : 'ON'), 'info');
+    }
+
+    // v3.6: /keywrap — Enable or disable at-rest identity key wrapping
+    if (val === '/keywrap' || val === '/keywrap enable' || val === '/keywrap disable') {
+      e.preventDefault();
+      clearInput();
+      if (!myKeys) { showToast(t('noIdentity'), 'error'); return; }
+      const storedIdent = await dbGet('identity', 'keys');
+      if (!storedIdent) { showToast(t('noIdentity'), 'error'); return; }
+      const isWrapped = storedIdent.kdf === 'pbkdf2-v1';
+
+      if (isWrapped || val === '/keywrap disable') {
+        // Disable wrapping (decrypt and store plaintext)
+        if (!isWrapped) { showToast(t('keyWrapAlreadyOff'), 'info'); return; }
+        if (!await showConfirm(t('keyWrapDisableConfirm'), { okText: t('uiRemoved') })) return;
+        const pass = await showPrompt(t('keyWrapUnlockPrompt'), '', { type: 'password' });
+        if (!pass) return;
+        let identPrivJwk;
+        try { identPrivJwk = await unwrapKeyAtRest(storedIdent, pass); }
+        catch(e) { showToast(t('keyWrapWrongPass'), 'error'); return; }
+        // Restore plaintext ECDH identity key record
+        const { wrapped: _w1, salt: _s1, iv: _i1, kdf: _k1, ...restIdent } = storedIdent;
+        await dbPut('identity', { ...restIdent, priv: identPrivJwk }, 'keys');
+        // Restore plaintext signing key record (if also wrapped)
+        const storedSig = await dbGet('identity', 'signing');
+        if (storedSig?.kdf === 'pbkdf2-v1') {
+          try {
+            const sigPrivJwk = await unwrapKeyAtRest(storedSig, pass);
+            const { wrapped: _w2, salt: _s2, iv: _i2, kdf: _k2, ...restSig } = storedSig;
+            await dbPut('identity', { ...restSig, priv: sigPrivJwk }, 'signing');
+          } catch(e) { _dbg(e, 'signing-unwrap-disable'); }
+        }
+        auditLog('security', 'At-rest key wrapping disabled');
+        showToast(t('keyWrapDisabled'), 'success');
+        return;
+      }
+
+      // Enable wrapping (prompt passphrase, wrap both keys atomically)
+      const pass = await showPrompt(t('keyWrapPassPrompt'), '', { type: 'password', okText: t('set') });
+      if (!pass || pass.length < 8) { showToast(t('keyWrapMin'), 'error'); return; }
+      const pass2 = await showPrompt(t('keyWrapPassConfirm'), '', { type: 'password', okText: t('set') });
+      if (pass !== pass2) { showToast(t('keyWrapMismatch'), 'error'); return; }
+      // Wrap ECDH identity key
+      const wrappedIdent = await wrapKeyAtRest(storedIdent.priv, pass);
+      const { priv: _pIdent, ...restIdent2 } = storedIdent;
+      await dbPut('identity', { ...restIdent2, ...wrappedIdent }, 'keys');
+      // Wrap Ed25519 signing key (if not already wrapped)
+      const storedSig2 = await dbGet('identity', 'signing');
+      if (storedSig2 && !storedSig2.kdf) {
+        const wrappedSig = await wrapKeyAtRest(storedSig2.priv, pass);
+        const { priv: _pSig, ...restSig2 } = storedSig2;
+        await dbPut('identity', { ...restSig2, ...wrappedSig }, 'signing');
+      }
+      auditLog('security', 'At-rest key wrapping enabled (PBKDF2 x' + CONFIG.PBKDF2_AT_REST_ITERATIONS / 1000 + 'k)');
+      showToast(t('keyWrapEnabled'), 'success');
+      return;
     }
 
     // v3.3: /reply — Reply to last received message

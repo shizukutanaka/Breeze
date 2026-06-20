@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createRatchet } from '../src/crypto/ratchet.js';
+import { createRatchet, wrapKeyAtRest, unwrapKeyAtRest } from '../src/crypto/ratchet.js';
 
 const R = createRatchet(); // Node WebCrypto, P-256 default
 const randomChain = () => crypto.getRandomValues(new Uint8Array(32));
@@ -577,5 +577,67 @@ describe('group sender-key v5 hash ratchet', () => {
     peerSk = r7.nextPeerSk;
     expect(Object.keys(peerSk.skipped).length).toBeLessThanOrEqual(3);
     expect(peerSk.skipped[0]).toBeUndefined(); // oldest evicted
+  });
+});
+
+// ── Phase 2c: at-rest key wrapping ────────────────────────────────────────────
+// Use a low PBKDF2 iteration count so tests run fast without compromising the
+// correctness check (the crypto path is identical; only the work factor differs).
+const subtle = globalThis.crypto.subtle;
+const fastOpts = { PBKDF2_AT_REST_ITERATIONS: 1000 };
+
+describe('at-rest key wrapping (Phase 2c)', () => {
+  it('wrapKeyAtRest produces a record with the expected shape', async () => {
+    const jwk = { kty: 'oct', k: 'test-key-material', alg: 'A256GCM', ext: true };
+    const rec = await wrapKeyAtRest(subtle, jwk, 'passphrase', fastOpts);
+    expect(rec.kdf).toBe('pbkdf2-v1');
+    expect(Array.isArray(rec.wrapped)).toBe(true);
+    expect(Array.isArray(rec.salt)).toBe(true);
+    expect(Array.isArray(rec.iv)).toBe(true);
+    expect(rec.salt.length).toBe(16);
+    expect(rec.iv.length).toBe(12);
+    expect(rec.wrapped.length).toBeGreaterThan(0);
+  });
+
+  it('wrap → unwrap round-trips a JWK object', async () => {
+    const jwk = { kty: 'EC', crv: 'P-256', x: 'x-val', y: 'y-val', d: 'd-val', use: 'sig', ext: true };
+    const rec = await wrapKeyAtRest(subtle, jwk, 'correct-pass', fastOpts);
+    const recovered = await unwrapKeyAtRest(subtle, rec, 'correct-pass', fastOpts);
+    expect(recovered).toEqual(jwk);
+  });
+
+  it('wrap → unwrap preserves a realistic ECDH JWK', async () => {
+    // Generate a real P-256 key pair and round-trip the private JWK
+    const kp = await subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey', 'deriveBits']);
+    const privJwk = await subtle.exportKey('jwk', kp.privateKey);
+    const rec = await wrapKeyAtRest(subtle, privJwk, 'secret', fastOpts);
+    const recovered = await unwrapKeyAtRest(subtle, rec, 'secret', fastOpts);
+    // Recovered JWK should reimport without error
+    await expect(
+      subtle.importKey('jwk', recovered, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey', 'deriveBits']),
+    ).resolves.toBeDefined();
+  });
+
+  it('unwrapKeyAtRest throws on wrong passphrase', async () => {
+    const jwk = { kty: 'oct', k: 'secret-key-bytes' };
+    const rec = await wrapKeyAtRest(subtle, jwk, 'correct', fastOpts);
+    await expect(unwrapKeyAtRest(subtle, rec, 'wrong', fastOpts)).rejects.toThrow();
+  });
+
+  it('two wraps of the same JWK produce different ciphertexts (random salt/iv)', async () => {
+    const jwk = { kty: 'oct', k: 'key' };
+    const rec1 = await wrapKeyAtRest(subtle, jwk, 'pass', fastOpts);
+    const rec2 = await wrapKeyAtRest(subtle, jwk, 'pass', fastOpts);
+    // Salt must differ (random)
+    expect(rec1.salt).not.toEqual(rec2.salt);
+    // Ciphertext must differ (different salt → different AES-GCM key)
+    expect(rec1.wrapped).not.toEqual(rec2.wrapped);
+  });
+
+  it('mutation guard: flipping a ciphertext byte causes unwrap to throw', async () => {
+    const jwk = { kty: 'oct', k: 'integrity-test' };
+    const rec = await wrapKeyAtRest(subtle, jwk, 'pass', fastOpts);
+    const tampered = { ...rec, wrapped: rec.wrapped.map((b, i) => (i === 0 ? b ^ 0xff : b)) };
+    await expect(unwrapKeyAtRest(subtle, tampered, 'pass', fastOpts)).rejects.toThrow();
   });
 });

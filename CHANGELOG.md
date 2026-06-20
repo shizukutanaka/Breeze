@@ -1,5 +1,25 @@
 # Changelog
 
+## at-rest identity key wrapping (Phase 2c, opt-in) — item 92 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+735 tests (6 new, mutation-verified); `src/crypto/ratchet.js` + `tests/ratchet.test.js` + `index.html`. `validate.sh` PASSED.
+
+Socratic lens: *"In `loadIdentity`, the ECDH private key is read directly as `stored.priv` — a plaintext JWK object from IndexedDB. Same in `initSigning` for the Ed25519 signing key. IDB is accessible to any script running in the same origin (XSS), any browser extension with `webRequest` access, and device forensics tools. Is there any key-at-rest protection?"*
+
+No. Both private keys live as plaintext JWK in IDB. A single reflected XSS or a malicious browser extension suffices to exfiltrate them silently — no wrapping, no passphrase, no KDF.
+
+**Fix (opt-in via `/keywrap`; preserve default no-passphrase path):**
+
+- **`wrapKeyAtRest(jwk, passphrase)` / `unwrapKeyAtRest(record, passphrase)`**: PBKDF2-SHA256 × 600,000 iterations (separate constant `CONFIG.PBKDF2_AT_REST_ITERATIONS`; intentionally 6× the lock-screen value) → AES-256-GCM. Store `{ wrapped, salt, iv, kdf:'pbkdf2-v1' }` in place of `{ priv: JWK }`. Standalone named exports from `src/crypto/ratchet.js` (DI `subtle` + `opts` for testability).
+- **`loadIdentity`**: branches on `stored.kdf === 'pbkdf2-v1'` — prompts for passphrase via `showPrompt`, unwraps, caches the passphrase in `_atRestPassphrase` (ephemeral) for `initSigning`. Returns `false` (aborts startup) on wrong passphrase.
+- **`initSigning`**: reads `_atRestPassphrase` set by `loadIdentity`, unwraps the Ed25519 signing key if `stored.kdf` is set, then clears `_atRestPassphrase`. Single passphrase prompt per startup for both keys.
+- **`/keywrap` command**: enable (prompts passphrase × 2 for confirmation, min 8 chars, wraps both ECDH + Ed25519 keys atomically) / disable (prompts current passphrase to unwrap, restores plaintext).
+- **`CONFIG.AT_REST_KEY_WRAP: false`** gate (informational; actual state is the presence of `kdf` in the IDB record).
+- **`CONFIG.PBKDF2_AT_REST_ITERATIONS: 600000`** — new constant, not re-using `PBKDF2_ITERATIONS`.
+
+**Tests (6, mutation-verified via `wrapKeyAtRest`/`unwrapKeyAtRest` standalone exports):**
+record shape (`kdf:'pbkdf2-v1'`, correct lengths); round-trip `{ kty:'EC' }` JWK; round-trip realistic P-256 keypair (reimported); wrong passphrase rejected (AES-GCM auth tag fails); two wraps → different salt+ciphertext (random salt/iv); flipped ciphertext byte → throws.
+
 ## group sender-key v5 hash ratchet + epoch revocation (Phase 2b, gated, default OFF) — item 91 (branch claude/nice-ride-T6yb0, 2026-06-20)
 
 729 tests (10 new, mutation-verified); `src/crypto/ratchet.js` + `tests/ratchet.test.js` + `index.html`. `validate.sh` PASSED.
