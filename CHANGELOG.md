@@ -1,5 +1,23 @@
 # Changelog
 
+## worker inline PoW pub-binding: startsWith fix + mutation test — item 81 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+717 tests (1 new); `_worker.js` + `tests/worker.test.js` only. `validate.sh` PASSED.
+
+Socratic lens: *"Item 79 fixed `pow.js`'s `verify()` to use `startsWith(pub + ':')`. The worker
+has its own inline PoW check at line 671 that was NOT updated. Does it still use `.includes(pub)`?"*
+
+Yes. The same substring-pub attack applies to the alias-registration endpoint in the worker:
+an attacker with identity key `XPUBKEY` solves PoW for `XPUBKEY:ts`, then submits it claiming
+to be `PUBKEY`. The hash is valid (it was genuinely solved) and the old `includes` check passes
+(PUBKEY is a suffix of XPUBKEY). The attacker bypasses the per-identity rate-limit at the alias
+endpoint.
+
+- **Fix**: `pow.challenge.includes(pub)` → `pow.challenge.startsWith(pub + ':')` (line 671).
+- **Test (1, mutation-verified)**: solve PoW for `'testPUBKEY:breeze-test'`, submit claiming
+  `pub='PUBKEY'` → `POW_INVALID` (fixed) vs passes the pub check (old). Genuine-success branch
+  verifies the token is still valid for `pub='testPUBKEY'`.
+
 ## responderHandshake fails closed on relay-injected bad msg field — item 80 (branch claude/nice-ride-T6yb0, 2026-06-20)
 
 716 tests (2 new); `src/crypto/ratchet.js` + `tests/x3dh.test.js` only. `validate.sh` PASSED.

@@ -2508,6 +2508,30 @@ describe('alias set / get (PoW anti-spam)', () => {
     expect((await res.json()).code).toBe('POW_INVALID');
   });
 
+  // Item 79 (worker inline): pub-binding must use startsWith(pub+':'), not includes(pub).
+  // An attacker whose identity key is 'testPUBKEY' (a superstring) solves PoW for their
+  // own challenge 'testPUBKEY:breeze-test', then submits it claiming pub='PUBKEY' (whose
+  // pub is a suffix of theirs). With the old includes() check the hash validates (it was
+  // genuinely solved) AND the pub check passes (includes returns true) → proceeds past PoW.
+  // With the fixed startsWith(pub+':') check: 'testPUBKEY:breeze-test'.startsWith('PUBKEY:')
+  // = false → POW_INVALID immediately. Mutation: old code returns a non-POW_INVALID error
+  // (alias name too-long or 400, NOT POW_INVALID) because the PoW is legitimate for
+  // 'testPUBKEY:breeze-test' and the hash check passes.
+  it('rejects a PoW solved for a superstring identity (substring relay-identity swap)', async () => {
+    const SHORT_PUB = 'PUBKEY';
+    const LONG_PUB = 'test' + SHORT_PUB; // SHORT_PUB is a suffix of LONG_PUB
+    // Solve PoW for the longer pub's challenge (this is the "attacker's" real PoW).
+    const pow = await solvePoW(LONG_PUB, 16, `${LONG_PUB}:breeze-test`);
+    expect(pow.challenge.includes(SHORT_PUB)).toBe(true); // demonstrates includes() would pass
+    // Submit claiming to be SHORT_PUB — the challenge embeds LONG_PUB, not SHORT_PUB.
+    const res = await handleAliasSet({ alias: 'relaytest', pub: SHORT_PUB, pow }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('POW_INVALID'); // mutation: old code passes PoW check
+    // Genuine success: the correct pub still passes (challenge starts with LONG_PUB:).
+    const ok = await handleAliasSet({ alias: 'relaytest', pub: LONG_PUB, pow }, makeEnv(), req({}));
+    expect((await ok.json()).code).not.toBe('POW_INVALID'); // hash is valid for LONG_PUB
+  }, 60000);
+
   // Item 50 (test-integrity perspective): the difficulty-16 anti-spam FLOOR had no negative
   // test — only the !includes(pub) branch was exercised. A validly-solved but too-easy
   // puzzle must still be rejected, or a regression weakening the floor (cheap alias spam)
