@@ -1,5 +1,40 @@
 # Changelog
 
+## signing key change: prominent banner + toast (parity with enc key change) — item 85 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+718 tests (no new); `index.html` only. `validate.sh` PASSED.
+
+Socratic lens: *"The encryption-key-change path at ~4752 shows a yellow system-message
+banner AND a showToast. The signing-key TOFU violation (contact.sigPub !== msg.sigPub at ~8569)
+sets meta.tampered=true and logs a debug line, but shows no user-visible warning beyond the
+subtle ⚠sig badge on the individual message. A signing key substitution is a stronger MITM
+indicator — why the asymmetry?"*
+
+No justification found. A substituted signing key lets an attacker forge signatures going
+forward; it deserves the same alerting as a decryption failure.
+
+- **Fix**: On `contact.sigPub !== msg.sigPub`, create a `div.msg.sys` in the chat box with the
+  existing `keyChanged` i18n text and call `showToast(t('keyChanged', …), 'error', 8000)` and
+  `announceToSR(…)` — exactly matching the encryption key-change pattern.
+
+## emoji/title injection in renderReactions (XSS via P2P reaction) — item 84 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+718 tests (no new); `index.html` only. `validate.sh` PASSED.
+
+Socratic lens: *"`renderReactions` builds HTML via template literals. The `emoji` key and the
+`users.join(', ')` title are both peer-supplied values that arrive over the P2P DataChannel.
+Does `renderReactions` escape them before insertion?"*
+
+No. `emoji` went into both `data-emoji="${emoji}"` (attribute injection) and
+`<span class="rc">${emoji}</span>` (HTML injection). Since `script-src 'unsafe-inline'` is in
+the CSP, inline event handlers like `onerror` on an injected `<img>` execute. A malicious peer
+sends `emoji = '<img src=x onerror=evil()>'`; it is stored in IDB and rendered on every
+message-list load.
+
+- **Fix**: `esc(emoji)` for both sinks; `esc(users.join(', '))` for the title; `safeMsgId()`
+  on the reaction span's `data-msgid`. `dataset.emoji` auto-decodes HTML entities so the click
+  handler still receives the original value for IDB lookup.
+
 ## i18n: two hardcoded-English Toast strings fixed — item 83 (branch claude/nice-ride-T6yb0, 2026-06-20)
 
 718 tests (no new); `index.html` only. `validate.sh` PASSED (137/143, 95%).
