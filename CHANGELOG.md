@@ -1,24 +1,34 @@
 # Changelog
 
+## state review + reconcile at-rest onto canonical atrest.js + N1 ratchet fix — item 93 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+729 tests (removed the 6 redundant ratchet.test.js cases; `atrest.test.js`'s 20 are canonical); `src/crypto/ratchet.js` + `tests/ratchet.test.js` + `index.html` + `docs/REVIEW-2026-06.md`. `validate.sh` PASSED.
+
+Spec: `docs/REVIEW-2026-06.md` — strengths/weaknesses/improvements (長所短所改善点) of the post-Phase-2 state, prioritized. Two HIGH items implemented this pass; W4/W5 (live message-path changes needing a two-device test) tracked for a later pass.
+
+**W2 — Phase 2c at-rest regression (self-inflicted in item 92), fixed.** Item 92 added weaker *duplicate* `wrapKeyAtRest`/`unwrapKeyAtRest` to `ratchet.js` and a divergent inline record format (`{wrapped,salt,iv,kdf:'pbkdf2-v1'}`) — **no AAD binding, no PBKDF2 DoS guard** — instead of mirroring the canonical `src/crypto/atrest.js` (item 78), violating INTEGRATION.md's "modules are the source of truth" principle.
+
+- Reverted the `ratchet.js` additions and the 6 redundant `ratchet.test.js` tests.
+- Rewrote the index.html inline at-rest helpers to **mirror `atrest.js` exactly**: record `{ v:1, kdf:'pbkdf2', hash, iter, salt, iv, ct }`; AES-GCM **AAD = `breeze-atrest-v1:<slot>`** (slot = `keys` / `signing`) so a record relocated to another slot fails to decrypt; **`iter` DoS guard** (reject non-finite / ≤0 / > 10,000,000 before deriving); `_atRestIsWrapped` / `_atRestLoadKey` / `_atRestMigrate` matching the module's `isWrapped`/`loadKey`/`migrate`.
+- `loadIdentity` / `initSigning` now route through `_atRestIsWrapped` + `_atRestLoadKey(record, pass, slot)` (returns null on failure, no throw on wrong pass). `/keywrap` enable uses `_atRestMigrate` (nested `wrapped`, plaintext `priv` removed); disable unwraps with the slot context and restores plaintext.
+- Canonical coverage stays in `atrest.test.js` (20 tests: round-trip, wrong-pass null, tamper null, DoS-guard fast-reject, AAD cross-context fail, migrate+loadKey context threading).
+
+**W3 — N1 `dhRatchetStep` Nr bug (live), fixed.** The inline `dhRatchetStep` reset `sendCounter` but not `recvCounter`; a DH step starts a new receiving chain, so the first inbound message (counter 1) was misread as a replay → silent drop on the 3rd ratchet direction-flip. Added `sess.recvCounter = 0`, matching the tested `src/crypto/ratchet.js` (proof: `tests/x3dh.test.js` "full session establishment").
+
 ## at-rest identity key wrapping (Phase 2c, opt-in) — item 92 (branch claude/nice-ride-T6yb0, 2026-06-20)
 
-735 tests (6 new, mutation-verified); `src/crypto/ratchet.js` + `tests/ratchet.test.js` + `index.html`. `validate.sh` PASSED.
+`index.html` integration of at-rest wrapping (crypto core: `src/crypto/atrest.js`, item 78). `validate.sh` PASSED. *(Superseded by item 93 — see above for the reconciliation onto the canonical module; the original commit had introduced a divergent inline format since corrected.)*
 
 Socratic lens: *"In `loadIdentity`, the ECDH private key is read directly as `stored.priv` — a plaintext JWK object from IndexedDB. Same in `initSigning` for the Ed25519 signing key. IDB is accessible to any script running in the same origin (XSS), any browser extension with `webRequest` access, and device forensics tools. Is there any key-at-rest protection?"*
 
 No. Both private keys live as plaintext JWK in IDB. A single reflected XSS or a malicious browser extension suffices to exfiltrate them silently — no wrapping, no passphrase, no KDF.
 
-**Fix (opt-in via `/keywrap`; preserve default no-passphrase path):**
+**Integration (opt-in via `/keywrap`; preserve default no-passphrase path):**
 
-- **`wrapKeyAtRest(jwk, passphrase)` / `unwrapKeyAtRest(record, passphrase)`**: PBKDF2-SHA256 × 600,000 iterations (separate constant `CONFIG.PBKDF2_AT_REST_ITERATIONS`; intentionally 6× the lock-screen value) → AES-256-GCM. Store `{ wrapped, salt, iv, kdf:'pbkdf2-v1' }` in place of `{ priv: JWK }`. Standalone named exports from `src/crypto/ratchet.js` (DI `subtle` + `opts` for testability).
-- **`loadIdentity`**: branches on `stored.kdf === 'pbkdf2-v1'` — prompts for passphrase via `showPrompt`, unwraps, caches the passphrase in `_atRestPassphrase` (ephemeral) for `initSigning`. Returns `false` (aborts startup) on wrong passphrase.
-- **`initSigning`**: reads `_atRestPassphrase` set by `loadIdentity`, unwraps the Ed25519 signing key if `stored.kdf` is set, then clears `_atRestPassphrase`. Single passphrase prompt per startup for both keys.
-- **`/keywrap` command**: enable (prompts passphrase × 2 for confirmation, min 8 chars, wraps both ECDH + Ed25519 keys atomically) / disable (prompts current passphrase to unwrap, restores plaintext).
-- **`CONFIG.AT_REST_KEY_WRAP: false`** gate (informational; actual state is the presence of `kdf` in the IDB record).
+- **`loadIdentity`** branches on a wrapped-record marker — prompts for passphrase via `showPrompt`, unwraps, caches the passphrase in `_atRestPassphrase` (ephemeral) for `initSigning`. Returns `false` (aborts startup) on wrong passphrase.
+- **`initSigning`** reads `_atRestPassphrase` set by `loadIdentity`, unwraps the Ed25519 signing key if wrapped, then clears `_atRestPassphrase`. Single passphrase prompt per startup for both keys.
+- **`/keywrap` command**: enable (prompts passphrase × 2 for confirmation, min 8 chars, wraps both ECDH + Ed25519 keys) / disable (prompts current passphrase to unwrap, restores plaintext).
 - **`CONFIG.PBKDF2_AT_REST_ITERATIONS: 600000`** — new constant, not re-using `PBKDF2_ITERATIONS`.
-
-**Tests (6, mutation-verified via `wrapKeyAtRest`/`unwrapKeyAtRest` standalone exports):**
-record shape (`kdf:'pbkdf2-v1'`, correct lengths); round-trip `{ kty:'EC' }` JWK; round-trip realistic P-256 keypair (reimported); wrong passphrase rejected (AES-GCM auth tag fails); two wraps → different salt+ciphertext (random salt/iv); flipped ciphertext byte → throws.
 
 ## group sender-key v5 hash ratchet + epoch revocation (Phase 2b, gated, default OFF) — item 91 (branch claude/nice-ride-T6yb0, 2026-06-20)
 

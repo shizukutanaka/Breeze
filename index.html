@@ -3015,27 +3015,68 @@ async function decrypt(passphrase, payload) {
     } catch(_e) { _dbg(_e, 'decrypt'); }
   }
 
-// v3.6 Phase 2c: at-rest key wrapping (PBKDF2 × 600k + AES-256-GCM)
-async function wrapKeyAtRest(jwk, passphrase) {
+// v3.6 Phase 2c: at-rest key protection — inline mirror of src/crypto/atrest.js
+// (that module is the canonical source of truth + test target; keep in sync).
+// PBKDF2 (600k) + AES-256-GCM. The AES-GCM AAD binds a domain tag plus a caller
+// context (the keystore slot id), so a wrapped record relocated to a different
+// slot fails to decrypt (relocation protection). The unwrap path guards the
+// attacker-controllable `iter` field to avoid a main-thread PBKDF2 DoS.
+const _AT_REST_AAD_DOMAIN = 'breeze-atrest-v1';
+const _AT_REST_MAX_ITER = 10000000; // ≈16× the 600k default; reject above (DoS guard)
+function _atRestB64(bytes) { return btoa(String.fromCharCode(...bytes)); }
+function _atRestUnb64(s) { return Uint8Array.from(atob(s), c => c.charCodeAt(0)); }
+function _atRestAad(context) {
+  return new TextEncoder().encode(context ? _AT_REST_AAD_DOMAIN + ':' + context : _AT_REST_AAD_DOMAIN);
+}
+async function _atRestDeriveKey(passphrase, salt, iterations) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: u8(salt), iterations, hash: 'SHA-256' },
+    base, { name: 'AES-GCM', length: CONFIG.AES_KEY_BITS }, false, ['encrypt', 'decrypt'],
+  );
+}
+// Wrap a JWK under a passphrase. `context` is bound into the AAD (pass the slot id).
+async function _atRestWrap(jwk, passphrase, context = '') {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(CONFIG.IV_BYTES));
-  const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
-  const key = await crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt, iterations: CONFIG.PBKDF2_AT_REST_ITERATIONS, hash: 'SHA-256' },
-    km, { name: 'AES-GCM', length: CONFIG.AES_KEY_BITS }, false, ['encrypt'],
-  );
-  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(jwk)));
-  return { wrapped: arr(new Uint8Array(ct)), salt: arr(salt), iv: arr(iv), kdf: 'pbkdf2-v1' };
+  const key = await _atRestDeriveKey(passphrase, salt, CONFIG.PBKDF2_AT_REST_ITERATIONS);
+  const pt = new TextEncoder().encode(JSON.stringify(jwk));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: _atRestAad(context) }, key, pt));
+  return { v: 1, kdf: 'pbkdf2', hash: 'SHA-256', iter: CONFIG.PBKDF2_AT_REST_ITERATIONS, salt: _atRestB64(salt), iv: _atRestB64(iv), ct: _atRestB64(ct) };
 }
-
-async function unwrapKeyAtRest(record, passphrase) {
-  const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
-  const key = await crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt: u8(record.salt), iterations: CONFIG.PBKDF2_AT_REST_ITERATIONS, hash: 'SHA-256' },
-    km, { name: 'AES-GCM', length: CONFIG.AES_KEY_BITS }, false, ['decrypt'],
-  );
-  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u8(record.iv) }, key, u8(record.wrapped));
-  return JSON.parse(new TextDecoder().decode(pt));
+// Unwrap a record from _atRestWrap. Returns the JWK, or null on wrong passphrase /
+// tamper / AAD mismatch / out-of-range iteration count (never throws on bad input).
+async function _atRestUnwrap(record, passphrase, context = '') {
+  try {
+    const iter = record.iter;
+    if (!Number.isFinite(iter) || iter <= 0 || iter > _AT_REST_MAX_ITER) return null;
+    const key = await _atRestDeriveKey(passphrase, _atRestUnb64(record.salt), iter);
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: _atRestUnb64(record.iv), additionalData: _atRestAad(context) }, key, _atRestUnb64(record.ct));
+    return JSON.parse(new TextDecoder().decode(new Uint8Array(pt)));
+  } catch (_e) { return null; }
+}
+function _atRestIsWrapped(record) {
+  return !!(record && (record.wrapped || record.kdf === 'pbkdf2'));
+}
+// Load the private JWK from a keystore record regardless of form. Returns the JWK,
+// or null on wrong passphrase / tamper. THROWS when the record is wrapped but no
+// passphrase was supplied (caller's signal to prompt).
+async function _atRestLoadKey(record, passphrase, context = '') {
+  if (!record) return null;
+  if (_atRestIsWrapped(record)) {
+    if (passphrase == null) throw new Error('atrest: passphrase required for a wrapped record');
+    return _atRestUnwrap(record.wrapped || record, passphrase, context);
+  }
+  return record.priv ?? null;
+}
+// Migrate a legacy { priv } record to { ..., wrapped } with the plaintext priv
+// removed. Idempotent — an already-wrapped record is returned unchanged.
+async function _atRestMigrate(record, passphrase, context = '') {
+  if (_atRestIsWrapped(record)) return record;
+  const wrapped = await _atRestWrap(record.priv, passphrase, context);
+  const rest = { ...record };
+  delete rest.priv;
+  return { ...rest, wrapped };
 }
 
 function arr(u8a) { return Array.from(u8a); }
@@ -3910,13 +3951,13 @@ async function initMessenger(dbName) {
     const stored = await dbGet('identity', 'signing');
     if (stored) {
       let privJwk;
-      if (stored.kdf === 'pbkdf2-v1') {
-        // Signing key is wrapped; passphrase was cached by loadIdentity
+      if (_atRestIsWrapped(stored)) {
+        // Signing key is wrapped; passphrase was cached by loadIdentity (slot-bound AAD)
         const passphrase = _atRestPassphrase;
         _atRestPassphrase = null; // clear after use regardless of outcome
         if (!passphrase) { _dbg(null, 'signing-unwrap: no passphrase cached'); return; }
-        try { privJwk = await unwrapKeyAtRest(stored, passphrase); }
-        catch(e) { _dbg(e, 'signing-unwrap'); return; }
+        privJwk = await _atRestLoadKey(stored, passphrase, 'signing');
+        if (!privJwk) { _dbg(null, 'signing-unwrap failed'); return; }
       } else {
         _atRestPassphrase = null; // clear if somehow set but signing key is plaintext
         privJwk = stored.priv;
@@ -4494,18 +4535,13 @@ async function initMessenger(dbName) {
     const stored = await dbGet('identity', 'keys');
     if (stored) {
       let jwk;
-      if (stored.kdf === 'pbkdf2-v1') {
-        // At-rest key wrapping enabled: prompt for passphrase and unwrap
+      if (_atRestIsWrapped(stored)) {
+        // At-rest key wrapping enabled: prompt for passphrase and unwrap (slot-bound AAD)
         const passphrase = await showPrompt(t('keyWrapUnlockPrompt'), '', { type: 'password' });
         if (!passphrase) return false;
-        try {
-          jwk = await unwrapKeyAtRest(stored, passphrase);
-          _atRestPassphrase = passphrase; // passed to initSigning, cleared after use
-        } catch(e) {
-          _dbg(e, 'keywrap-unlock');
-          showToast(t('keyWrapWrongPass'), 'error');
-          return false;
-        }
+        jwk = await _atRestLoadKey(stored, passphrase, 'keys');
+        if (!jwk) { showToast(t('keyWrapWrongPass'), 'error'); return false; }
+        _atRestPassphrase = passphrase; // passed to initSigning, cleared after use
       } else {
         jwk = stored.priv;
       }
@@ -4665,7 +4701,10 @@ async function initMessenger(dbName) {
       sess.ratchetPub = Array.from(new Uint8Array(newRK.pub));
       sess.ratchetPriv = newRK.privateKey; // CryptoKey (non-extractable in production)
       sess.sendCounter = 0;
-    
+      sess.recvCounter = 0; // N1: a DH step starts a NEW receiving chain — reset Nr so the
+                            // first inbound message (counter 1) is not misread as a replay
+                            // (CRYPTO-SPEC §9 N1; mirrors src/crypto/ratchet.js dhRatchetStep)
+
     } catch(_e) { _dbg(_e, 'dhRatchetStep'); }
   }
 
@@ -12642,49 +12681,44 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       if (!myKeys) { showToast(t('noIdentity'), 'error'); return; }
       const storedIdent = await dbGet('identity', 'keys');
       if (!storedIdent) { showToast(t('noIdentity'), 'error'); return; }
-      const isWrapped = storedIdent.kdf === 'pbkdf2-v1';
+      const isWrapped = _atRestIsWrapped(storedIdent);
 
       if (isWrapped || val === '/keywrap disable') {
-        // Disable wrapping (decrypt and store plaintext)
+        // Disable wrapping (decrypt with slot-bound AAD and store plaintext)
         if (!isWrapped) { showToast(t('keyWrapAlreadyOff'), 'info'); return; }
         if (!await showConfirm(t('keyWrapDisableConfirm'), { okText: t('uiRemoved') })) return;
         const pass = await showPrompt(t('keyWrapUnlockPrompt'), '', { type: 'password' });
         if (!pass) return;
-        let identPrivJwk;
-        try { identPrivJwk = await unwrapKeyAtRest(storedIdent, pass); }
-        catch(e) { showToast(t('keyWrapWrongPass'), 'error'); return; }
+        const identPrivJwk = await _atRestLoadKey(storedIdent, pass, 'keys');
+        if (!identPrivJwk) { showToast(t('keyWrapWrongPass'), 'error'); return; }
         // Restore plaintext ECDH identity key record
-        const { wrapped: _w1, salt: _s1, iv: _i1, kdf: _k1, ...restIdent } = storedIdent;
+        const { wrapped: _w1, ...restIdent } = storedIdent;
         await dbPut('identity', { ...restIdent, priv: identPrivJwk }, 'keys');
         // Restore plaintext signing key record (if also wrapped)
         const storedSig = await dbGet('identity', 'signing');
-        if (storedSig?.kdf === 'pbkdf2-v1') {
-          try {
-            const sigPrivJwk = await unwrapKeyAtRest(storedSig, pass);
-            const { wrapped: _w2, salt: _s2, iv: _i2, kdf: _k2, ...restSig } = storedSig;
+        if (_atRestIsWrapped(storedSig)) {
+          const sigPrivJwk = await _atRestLoadKey(storedSig, pass, 'signing');
+          if (sigPrivJwk) {
+            const { wrapped: _w2, ...restSig } = storedSig;
             await dbPut('identity', { ...restSig, priv: sigPrivJwk }, 'signing');
-          } catch(e) { _dbg(e, 'signing-unwrap-disable'); }
+          } else { _dbg(null, 'signing-unwrap-disable failed'); }
         }
         auditLog('security', 'At-rest key wrapping disabled');
         showToast(t('keyWrapDisabled'), 'success');
         return;
       }
 
-      // Enable wrapping (prompt passphrase, wrap both keys atomically)
+      // Enable wrapping (prompt passphrase ×2, migrate both keystore records)
       const pass = await showPrompt(t('keyWrapPassPrompt'), '', { type: 'password', okText: t('set') });
       if (!pass || pass.length < 8) { showToast(t('keyWrapMin'), 'error'); return; }
       const pass2 = await showPrompt(t('keyWrapPassConfirm'), '', { type: 'password', okText: t('set') });
       if (pass !== pass2) { showToast(t('keyWrapMismatch'), 'error'); return; }
-      // Wrap ECDH identity key
-      const wrappedIdent = await wrapKeyAtRest(storedIdent.priv, pass);
-      const { priv: _pIdent, ...restIdent2 } = storedIdent;
-      await dbPut('identity', { ...restIdent2, ...wrappedIdent }, 'keys');
-      // Wrap Ed25519 signing key (if not already wrapped)
+      // Migrate ECDH identity key (AAD bound to the 'keys' slot)
+      await dbPut('identity', await _atRestMigrate(storedIdent, pass, 'keys'), 'keys');
+      // Migrate Ed25519 signing key (AAD bound to the 'signing' slot; if not already wrapped)
       const storedSig2 = await dbGet('identity', 'signing');
-      if (storedSig2 && !storedSig2.kdf) {
-        const wrappedSig = await wrapKeyAtRest(storedSig2.priv, pass);
-        const { priv: _pSig, ...restSig2 } = storedSig2;
-        await dbPut('identity', { ...restSig2, ...wrappedSig }, 'signing');
+      if (storedSig2 && !_atRestIsWrapped(storedSig2)) {
+        await dbPut('identity', await _atRestMigrate(storedSig2, pass, 'signing'), 'signing');
       }
       auditLog('security', 'At-rest key wrapping enabled (PBKDF2 x' + CONFIG.PBKDF2_AT_REST_ITERATIONS / 1000 + 'k)');
       showToast(t('keyWrapEnabled'), 'success');

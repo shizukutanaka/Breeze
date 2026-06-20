@@ -613,37 +613,4 @@ export function createRatchet(opts = {}) {
   };
 }
 
-// ── Phase 2c: at-rest key wrapping (standalone, no ratchet state needed) ──────
-// Dependency-injected so tests can pass Node's crypto.subtle and low iteration
-// counts. Production callers (index.html) pass globalThis.crypto.subtle and
-// CONFIG.PBKDF2_AT_REST_ITERATIONS (600k).
-
-export async function wrapKeyAtRest(subtle, jwk, passphrase, opts = {}) {
-  const AES_KEY_BITS = opts.AES_KEY_BITS || 256;
-  const IV_BYTES = opts.IV_BYTES || 12;
-  const iterations = opts.PBKDF2_AT_REST_ITERATIONS || 600000;
-  const grv = opts.getRandomValues || ((a) => globalThis.crypto.getRandomValues(a));
-  const salt = grv(new Uint8Array(16));
-  const iv = grv(new Uint8Array(IV_BYTES));
-  const km = await subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
-  const key = await subtle.deriveKey(
-    { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
-    km, { name: 'AES-GCM', length: AES_KEY_BITS }, false, ['encrypt'],
-  );
-  const ct = await subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(jwk)));
-  return { wrapped: Array.from(new Uint8Array(ct)), salt: Array.from(salt), iv: Array.from(iv), kdf: 'pbkdf2-v1' };
-}
-
-export async function unwrapKeyAtRest(subtle, record, passphrase, opts = {}) {
-  const AES_KEY_BITS = opts.AES_KEY_BITS || 256;
-  const iterations = opts.PBKDF2_AT_REST_ITERATIONS || 600000;
-  const km = await subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
-  const key = await subtle.deriveKey(
-    { name: 'PBKDF2', salt: new Uint8Array(record.salt), iterations, hash: 'SHA-256' },
-    km, { name: 'AES-GCM', length: AES_KEY_BITS }, false, ['decrypt'],
-  );
-  const pt = await subtle.decrypt({ name: 'AES-GCM', iv: new Uint8Array(record.iv) }, key, new Uint8Array(record.wrapped));
-  return JSON.parse(new TextDecoder().decode(pt));
-}
-
 export default createRatchet;
