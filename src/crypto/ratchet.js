@@ -219,7 +219,8 @@ export function createRatchet(opts = {}) {
         catch { dbg(null, 'AEAD auth failure (skipped key)'); return null; }
         // Advance dedup state only after successful decrypt (prevents desync on injected messages).
         delete sess.skippedKeys[skKey];
-        return unpadAndDecompress(padded);
+        try { return await unpadAndDecompress(padded); }
+        catch { dbg(null, 'decompress/unpad failure (skipped key)'); return null; }
       }
       dbg(null, 'replay rejected');
       return null;
@@ -276,7 +277,11 @@ export function createRatchet(opts = {}) {
     if (!sess.seenMsgIds) sess.seenMsgIds = [];
     sess.seenMsgIds.push(msgId);
     if (sess.seenMsgIds.length > cfg.REPLAY_CACHE_SIZE) sess.seenMsgIds = sess.seenMsgIds.slice(-cfg.REPLAY_CACHE_SIZE);
-    return unpadAndDecompress(padded);
+    // State committed; now decode. If DecompressionStream rejects corrupted-but-authenticated
+    // deflate data (only possible when sender encrypted malformed compressed bytes), return null
+    // rather than propagating an uncaught exception — chain position is already correct.
+    try { return await unpadAndDecompress(padded); }
+    catch { dbg(null, 'decompress/unpad failure'); return null; }
   }
 
   // Test/utility: build a pair of sessions that share an initial symmetric chain,

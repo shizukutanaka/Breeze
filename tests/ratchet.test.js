@@ -329,6 +329,38 @@ describe('ratchetDecrypt error handling', () => {
     await expect(R.ratchetDecrypt(receiver, JSON.stringify({ v: 2, i: [1], d: [2], rk: [3] }))).rejects.toThrow('not a v3/v4 ratchet message');
     await expect(R.ratchetDecrypt(receiver, JSON.stringify({ v: 4, d: [2], c: 1 }))).rejects.toThrow('not a v3/v4 ratchet message'); // missing rk
   });
+
+  // Item 82: ratchetDecrypt's unpadAndDecompress call must be in try/catch.
+  // DecompressionStream rejects on bad deflate bytes; without the guard the exception
+  // propagates AFTER session state (counter, chain key) has already been committed.
+  // We verify the contract via a mock that makes getReader() throw synchronously — this
+  // causes unpadAndDecompress (async fn) to reject cleanly without touching Node's zlib
+  // internals, which fire a secondary InflateRaw error event that Vitest counts as an
+  // unhandled rejection even when the primary rejection is correctly asserted.
+  it('unpadAndDecompress rejects on decompressor failure (try/catch in ratchetDecrypt is load-bearing)', async () => {
+    const OrigDS = globalThis.DecompressionStream;
+    globalThis.DecompressionStream = class {
+      constructor() {
+        this.writable = { getWriter: () => ({ write: () => {}, close: () => {} }) };
+        this.readable = { getReader: () => { throw new Error('mock: decompression error'); } };
+      }
+    };
+    const compressedFlag = new Uint8Array(256);
+    compressedFlag[0] = 0x01; // compressed flag — routes through DecompressionStream
+    new DataView(compressedFlag.buffer).setUint16(1, 5);
+    compressedFlag.set([0x00, 0x01, 0x02, 0x03, 0x04], 3);
+    try {
+      await expect(R.unpadAndDecompress(compressedFlag)).rejects.toBeDefined();
+    } finally {
+      globalThis.DecompressionStream = OrigDS;
+    }
+    // Genuine: uncompressed path (flag=0) never touches DecompressionStream.
+    const okPadded = new Uint8Array(256);
+    okPadded[0] = 0x00; // no compression
+    new DataView(okPadded.buffer).setUint16(1, 5);
+    okPadded.set([0x68, 0x65, 0x6c, 0x6c, 0x6f], 3); // 'hello'
+    expect(await R.unpadAndDecompress(okPadded)).toBe('hello');
+  });
 });
 
 describe('skipped-key cache pruning (MAX_SKIP * 2 eviction)', () => {
