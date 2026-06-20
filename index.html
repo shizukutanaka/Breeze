@@ -6235,10 +6235,16 @@ async function initMessenger(dbName) {
   function renderReactions(reactions, msgId) {
     if (!reactions || Object.keys(reactions).length === 0) return '';
     // reactions: { emoji: [userId1, userId2, ...] }
+    // Escape emoji and title: both are peer-supplied values that reach innerHTML/outerHTML.
+    // esc() converts < > " & to entities; dataset.emoji auto-decodes them back so the click
+    // handler still receives the original string for IDB lookup.
+    const sMid = safeMsgId(msgId);
     let html = '<div class="msg-reactions">';
     for (const [emoji, users] of Object.entries(reactions)) {
       const isMine = users.includes(myId);
-      html += `<span class="msg-react${isMine ? ' mine' : ''}" data-action="react" data-msgid="${msgId}" data-emoji="${emoji}" title="${users.join(', ')}"><span class="rc">${emoji}</span><span class="rn">${users.length}</span></span>`;
+      const safeE = esc(emoji);
+      const safeT = esc(users.join(', '));
+      html += `<span class="msg-react${isMine ? ' mine' : ''}" data-action="react" data-msgid="${sMid}" data-emoji="${safeE}" title="${safeT}"><span class="rc">${safeE}</span><span class="rn">${users.length}</span></span>`;
     }
     html += '</div>';
     return html;
