@@ -8454,51 +8454,18 @@ async function initMessenger(dbName) {
     }
     if (!contact) return;
 
-    // Edit/delete signals (DEPRECATED: plaintext — kept for backward compat with pre-v3.6 clients)
-    // New clients send these via encrypted isSignal path (handled above)
-    if (msg.type === 'edit') {
-      const stored = await dbGet('messages', msg.msgId);
-      if (stored) { stored.text = msg.text; stored.edited = true; await dbPut('messages', stored); }
-      const el = document.querySelector(`[data-msgid="${msg.msgId}"]`);
-      if (el) { const tm = new Date(msg.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); el.innerHTML = renderLinks(renderMarkdown(esc(msg.text))) + ' <span class="i-edited">' + t('edited') + '</span><span class="ts">'+tm+'</span>'; }
-      return;
-    }
-    if (msg.type === 'delete') {
-      const stored = await dbGet('messages', msg.msgId);
-      if (stored) { stored.deleted = true; stored.text = ''; await dbPut('messages', stored); }
-      const el = document.querySelector(`[data-msgid="${msg.msgId}"]`);
-      if (el) el.innerHTML = '<span class="i-dim-it">' + t('deleted') + '</span>';
-      return;
-    }
-    // v3.1: Relay-path reaction handling
-    if (msg.type === 'reaction') {
-      const stored = await dbGet('messages', msg.msgId);
-      if (stored) {
-        if (!stored.reactions) stored.reactions = {};
-        if (!stored.reactions[msg.emoji]) stored.reactions[msg.emoji] = [];
-        if (msg.add) { if (!stored.reactions[msg.emoji].includes(msg.userId)) stored.reactions[msg.emoji].push(msg.userId); }
-        else { stored.reactions[msg.emoji] = stored.reactions[msg.emoji].filter(u => u !== msg.userId); if (stored.reactions[msg.emoji].length === 0) delete stored.reactions[msg.emoji]; }
-        await dbPut('messages', stored);
-        const el = document.querySelector(`[data-msgid="${msg.msgId}"]`);
-        if (el) { const r = el.querySelector('.msg-reactions'); if (r) r.outerHTML = renderReactions(stored.reactions, msg.msgId); else el.insertAdjacentHTML('beforeend', renderReactions(stored.reactions, msg.msgId)); }
-      }
-      return;
-    }
-    // v3.1: Relay-path poll vote
-    if (msg.type === 'poll_vote') {
-      const allMsgs = await dbGetAll('messages');
-      const pollMsg = allMsgs.find(m => m.isPoll && JSON.parse(m.text).pollId === msg.pollId);
-      if (pollMsg) {
-        const poll = JSON.parse(pollMsg.text);
-        for (const opt of poll.options) opt.votes = opt.votes.filter(v => v !== msg.userId);
-        if (poll.options[msg.optionIndex]) poll.options[msg.optionIndex].votes.push(msg.userId);
-        pollMsg.text = JSON.stringify(poll);
-        await dbPut('messages', pollMsg);
-        const el = document.querySelector(`[data-msgid="${pollMsg.msgId}"]`);
-        if (el) el.innerHTML = renderPollHtml(poll, pollMsg.msgId);
-      }
-      return;
-    }
+    // SECURITY (removed): the deprecated PLAINTEXT signal handlers (type 'edit' /
+    // 'delete' / 'reaction' / 'poll_vote') were processed here with NO decryption and
+    // NO sender authentication. A sealed envelope is opaque attacker-controlled JSON
+    // (handleSealedSend stores `envelope` verbatim; /sealed/poll → handleIncoming(JSON.parse(envelope))),
+    // so any sender could POST {type:'edit', msgId, text} for any recipient and silently
+    // rewrite/delete a stored message in the victim's DB — message-integrity tampering
+    // with zero compensating control. The standard /msg relay strips these fields and the
+    // P2P DataChannel routes them inline, so these handlers had no legitimate relay sender:
+    // current clients send edit/delete/reaction via the ENCRYPTED isSignal path (handled
+    // above, gated by a successful decryptFrom that proves session-key possession) and
+    // poll_vote over the authenticated P2P DataChannel only. Removed outright — the
+    // encrypted path is the sole authority for mutating an existing message.
 
     // New message (text or file)
     const msgId = contactId + ':' + msg.ts;

@@ -1,5 +1,59 @@
 # Changelog
 
+## remove unauthenticated plaintext edit/delete/reaction/poll_vote handlers (sealed-envelope tampering) — item 87 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+718 tests (no new — `handleIncoming` lives in `index.html`, outside the harness); `index.html` only. `validate.sh` PASSED.
+
+Socratic lens: *"The sealed-poll path does `handleIncoming(JSON.parse(sealed.envelope))`, and
+`handleSealedSend` stores the `envelope` string verbatim with no schema check — so the envelope is
+opaque, attacker-controlled JSON. `handleIncoming` then dispatches on `msg.type`. The deprecated
+plaintext `type:'edit'` / `'delete'` handlers mutate the stored message DB *without any
+decryption*. Can an arbitrary sender rewrite or delete a message in a victim's DB by posting a
+crafted sealed envelope?"*
+
+Yes. `POST /sealed/send {to:<victim>, envelope:'{"type":"edit","msgId":"<id>","text":"<forged>"}'}`
+reaches the victim's `handleIncoming` and runs `dbPut('messages', {...stored, text: forged})` — full
+message-integrity tampering (silently rewrite "see you at 5" → a scam), or `type:'delete'` to wipe
+a message — with **zero sender authentication and zero decryption**. `msgId` for 1:1 is the
+predictable `senderId:ts`, so an attacker trivially targets their own already-delivered messages
+(retroactive deniability) and can attempt others'. `reaction`/`poll_vote` allowed the same
+unauthenticated state tampering (cosmetic/informal, lower impact).
+
+Why these handlers had **no legitimate relay sender** in v3.6, making removal safe:
+- **edit/delete/reaction** — current clients send these via the **encrypted `isSignal` path**
+  (handled earlier in `handleIncoming`, gated by a successful `decryptFrom` that proves the sender
+  holds the ratchet session key).
+- **poll_vote** — `votePoll` sends only over the **authenticated P2P DataChannel** (`peer.dc.send`),
+  never the relay.
+- The standard `/msg/send` relay **strips** `type`/`text`/`msgId`/`emoji`/`pollId` (the worker only
+  persists whitelisted fields), so a pre-v3.6 plaintext signal can't survive that path either.
+- The P2P DataChannel `onmessage` handler routes edit/delete inline (or drops them) — never to
+  `handleIncoming`.
+
+- **Fix**: remove all four deprecated plaintext handlers outright. The encrypted `isSignal` path is
+  the sole authority for mutating an existing message; an undecryptable mutation is no longer
+  honored. (Also eliminates two raw `el.innerHTML =` sinks, aiding the Phase 2d Trusted-Types goal.)
+
+## handleBinaryChunk: total/seq/buffer bounds + 10-transfer cap — item 86 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+718 tests (no new); `index.html` only. `validate.sh` PASSED.
+
+Socratic lens: *"In `handleBinaryChunk`, the peer controls the `total` and `seq` fields that
+determine `new Array(total)` allocation and array index writes, plus `nameLen`/`mimeLen` that
+control `TextDecoder` slices into the buffer. A malicious peer sends `total = 2^32 - 1` (parsed
+from a `getUint32` at offset 20). Is there an upper-bound check before `new Array(total)`?"*
+
+No. `total` came from `view.getUint32(20)` with no cap — a peer could claim `total = 4294967295`
+and allocate a ~34 GB sparse array per transfer. Similarly `seq >= total` was not checked
+(allowing out-of-bounds writes into the array), and `28 + nameLen + mimeLen > buffer.byteLength`
+was not validated (negative-length slice exposes adjacent memory as the data chunk). The
+`_fileChunks` map was also unbounded, allowing 1000s of half-open transfers to pile up.
+
+- **Fix**: `MAX_CHUNKS = Math.ceil(CONFIG.FILE_MAX / CONFIG.CHUNK_SIZE) + 1 = 3201`.
+  Reject if `total === 0 || total > MAX_CHUNKS || seq >= total`. Reject if
+  `28 + nameLen + mimeLen > buffer.byteLength`. Cap concurrent half-open transfers at
+  `Object.keys(_fileChunks).length >= 10`.
+
 ## signing key change: prominent banner + toast (parity with enc key change) — item 85 (branch claude/nice-ride-T6yb0, 2026-06-20)
 
 718 tests (no new); `index.html` only. `validate.sh` PASSED.
