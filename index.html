@@ -1226,6 +1226,15 @@ const CONFIG = {
   TYPING_THROTTLE_MS: 3000,
   TYPING_TIMEOUT_MS: 3000,
   CALL_TIMEOUT_MS: 60000,
+  // v3.6 SECURITY (default OFF — requires two-device verification before enabling):
+  // authenticate + encrypt WebRTC call signaling (offer/answer/ICE) end-to-end via the
+  // established 1:1 ratchet. The /signal relay is unauthenticated and the SDP is otherwise
+  // plaintext, so an attacker who knows both user IDs can inject a call-answer carrying their
+  // own DTLS fingerprint → full call MITM. When ON, each signal payload is encryptFor()'d to
+  // the peer and decryptFrom()'d on receipt; a signal that fails to decrypt (forged / not from
+  // the pinned peer) is dropped. When OFF, behavior is byte-identical to the legacy plaintext
+  // path. NOTE: both peers must run with the flag ON — it is a breaking wire change.
+  CALL_E2E_SIGNAL: false,
   VOICE_MAX_MS: 120000,               // Max voice note duration: 2 minutes
   // Limits
   FILE_MAX: 50 * 1024 * 1024, // All users: 50MB
@@ -5227,6 +5236,29 @@ async function initMessenger(dbName) {
   // DRY: DM room key
   function _dmRoom(peerId) { return 'dm:' + [myId, peerId].sort().join(':'); }
 
+  // v3.6 SECURITY: call-signaling authentication (gated by CONFIG.CALL_E2E_SIGNAL).
+  // Wrap: when the flag is ON, encrypt the signal object to the pinned peer via the 1:1
+  // ratchet (the resulting ciphertext is opaque to the unauthenticated /signal relay and
+  // can only be produced by the holder of the peer's session); when OFF, emit the legacy
+  // plaintext JSON so behavior is unchanged. Returns null only if encryption fails (ON path).
+  async function _wrapCallSignal(peerPub, obj) {
+    if (!CONFIG.CALL_E2E_SIGNAL) return JSON.stringify(obj);
+    if (!peerPub) return null;
+    return await encryptFor(JSON.stringify(obj), peerPub);
+  }
+  // Unwrap: when ON, decrypt+authenticate — a forged signal (not from the pinned peer, or a
+  // relay-injected substitute) fails to decrypt and yields null, so the caller drops it,
+  // closing the call-MITM. When OFF, parse the legacy plaintext. Returns null on any failure.
+  async function _unwrapCallSignal(peerPub, data) {
+    try {
+      if (!CONFIG.CALL_E2E_SIGNAL) return JSON.parse(data);
+      if (!peerPub) return null;
+      const pt = await decryptFrom(data, peerPub);
+      if (!pt) return null;
+      return JSON.parse(pt);
+    } catch(_e) { _dbg(_e, 'unwrapCallSignal'); return null; }
+  }
+
   async function addContact(pubB64, name) {
     try {  
       const id = pubB64.slice(0, 12);
@@ -7734,7 +7766,7 @@ async function initMessenger(dbName) {
           if (e.candidate.type === 'host' && e.candidate.address && !e.candidate.address.includes('.local')) return;
           if (_settings.relayOnly && (e.candidate.type === 'srflx' || e.candidate.type === 'prflx')) return;
           const room = 'call:' + [myId, contact.id].sort().join(':');
-          _signal(room, 'call-ice', JSON.stringify(e.candidate));
+          _wrapCallSignal(contact.pubB64, e.candidate).then(d => { if (d != null) _signal(room, 'call-ice', d); });
         }
       };
 
@@ -7754,11 +7786,13 @@ async function initMessenger(dbName) {
       await _callPC.setLocalDescription(offer);
 
       const room = 'call:' + [myId, contact.id].sort().join(':');
-      await _signal(room, 'call-offer', JSON.stringify({ sdp: offer, video: withVideo }));
+      const offerSignal = await _wrapCallSignal(contact.pubB64, { sdp: offer, video: withVideo });
+      if (offerSignal == null) { _dbg(null, 'call-offer encrypt failed'); endCall(); return; }
+      await _signal(room, 'call-offer', offerSignal);
 
       // Also notify via msg relay (so recipient's poll detects the call)
-      const callNotif = JSON.stringify({ sdp: offer, video: withVideo });
-      await relaySend(contact.id, { to: contact.id, from: myId, fromPub: myPubB64, fromName: myName,
+      const callNotif = await _wrapCallSignal(contact.pubB64, { sdp: offer, video: withVideo });
+      if (callNotif != null) await relaySend(contact.id, { to: contact.id, from: myId, fromPub: myPubB64, fromName: myName,
         payload: callNotif, ts: Date.now(), isCall: true, isVideoCall: withVideo });
 
       // Poll for answer
@@ -7772,11 +7806,14 @@ async function initMessenger(dbName) {
   }
 
   async function handleCallOffer(contact, offerData) {
-    try {  
+    try {
       if (_callState !== 'idle') return; // busy
+      // Authenticate the offer before showing any ringing UI: when CALL_E2E_SIGNAL is ON a
+      // forged/relay-injected offer fails to decrypt → null → silently ignored (no fake ring).
+      const parsed = await _unwrapCallSignal(contact.pubB64, offerData);
+      if (!parsed) return;
       _callContact = contact;
       _callState = 'ringing';
-      const parsed = JSON.parse(offerData);
       showCallUI('ringing', contact.name, parsed.video);
   
       // Store offer for when user accepts
@@ -7812,7 +7849,7 @@ async function initMessenger(dbName) {
           if (e.candidate.type === 'host' && e.candidate.address && !e.candidate.address.includes('.local')) return;
           if (_settings.relayOnly && (e.candidate.type === 'srflx' || e.candidate.type === 'prflx')) return;
           const room = 'call:' + [myId, pending.contact.id].sort().join(':');
-          _signal(room, 'call-ice', JSON.stringify(e.candidate));
+          _wrapCallSignal(pending.contact.pubB64, e.candidate).then(d => { if (d != null) _signal(room, 'call-ice', d); });
         }
       };
 
@@ -7831,7 +7868,9 @@ async function initMessenger(dbName) {
       await _callPC.setLocalDescription(answer);
 
       const room = 'call:' + [myId, pending.contact.id].sort().join(':');
-      await _signal(room, 'call-answer', JSON.stringify(answer));
+      const answerSignal = await _wrapCallSignal(pending.contact.pubB64, answer);
+      if (answerSignal == null) { _dbg(null, 'call-answer encrypt failed'); endCall(); return; }
+      await _signal(room, 'call-answer', answerSignal);
 
       pollCallSignals(pending.contact, room);
     } catch(e) {
@@ -7868,10 +7907,15 @@ async function initMessenger(dbName) {
         for (const s of (data.messages || [])) {
           if (s.sender === myId) continue;
           if (s.type === 'call-answer' && _callPC && _callPC.signalingState === 'have-local-offer') {
-            await _callPC.setRemoteDescription(new RTCSessionDescription(JSON.parse(s.data)));
+            // Authenticate before setRemoteDescription: a forged answer (relay-injected,
+            // carrying the attacker's DTLS fingerprint) fails to decrypt → null → dropped,
+            // so the DTLS handshake can only complete with the pinned peer (closes call MITM).
+            const ans = await _unwrapCallSignal(contact.pubB64, s.data);
+            if (ans) await _callPC.setRemoteDescription(new RTCSessionDescription(ans));
           }
           if (s.type === 'call-ice' && _callPC) {
-            await _callPC.addIceCandidate(JSON.parse(s.data)).catch(e => _dbg(e, 'call-ICE'));
+            const cand = await _unwrapCallSignal(contact.pubB64, s.data);
+            if (cand) await _callPC.addIceCandidate(cand).catch(e => _dbg(e, 'call-ICE'));
           }
           if (s.type === 'call-end') { endCall(); clearInterval(poll); return; }
           if (s.type === 'call-offer' && _callState === 'idle') { handleCallOffer(contact, s.data); }

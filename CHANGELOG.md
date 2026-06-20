@@ -1,5 +1,36 @@
 # Changelog
 
+## authenticated call signaling — close WebRTC SDP MITM (gated, default OFF) — item 90 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+719 tests (no new — call/WebRTC flow isn't harness-testable); `index.html` only. `validate.sh` PASSED.
+
+Socratic lens: *"`handleSignal` has no authentication: `sender` is a self-declared string, the
+`call:[sorted ids]` room is derivable by anyone who knows two public IDs, and `data` is opaque
+(explicitly not validated). The call SDP offer/answer/ICE travel plaintext through it, and
+receivers `JSON.parse(s.data) → setRemoteDescription/addIceCandidate` with no binding of the DTLS
+fingerprint to the peer's pinned identity. Can an attacker inject a call-answer and MITM the
+media?"*
+
+Yes — the classic "WebRTC over untrusted signaling without fingerprint verification" break. An
+attacker who knows both user IDs posts a `call-answer` carrying their own SDP + DTLS fingerprint
+into the room; the caller's `setRemoteDescription` accepts it, the DTLS-SRTP handshake completes
+with the attacker, and audio/video flows through them. This defeats the E2E guarantee for calls
+(the media keys live in the SDP/DTLS fingerprint, which was never authenticated).
+
+- **Fix (gated by `CONFIG.CALL_E2E_SIGNAL`, default OFF — breaking wire change, needs two-device
+  verification before enabling)**: wrap every call signal (offer/answer/ICE, both the `/signal`
+  room path and the `isCall` msg-relay notify) with `encryptFor()` to the **pinned peer**, and
+  `decryptFrom()` on receipt via new `_wrapCallSignal`/`_unwrapCallSignal` helpers. A forged or
+  relay-injected signal isn't encrypted under the peer's session → `decryptFrom` returns null →
+  the signal is dropped (no `setRemoteDescription`, no fake ring). Decryption *is* the
+  authentication: only the holder of the pinned peer's ratchet session can produce a valid
+  signal, so the DTLS handshake can only complete with the real peer.
+- **Default OFF** = behavior byte-identical to the legacy plaintext path (instant rollback; zero
+  production risk until the operator enables it after a two-device pass). Both peers must run with
+  the flag ON. (Also incidentally fixes a stuck-`ringing` state on a malformed offer.)
+- **Residual (documented)**: `call-end` carries no payload and stays unauthenticated — injecting
+  it only *terminates* a call (minor DoS), it cannot compromise media.
+
 ## escape provider-controlled fields in translate/AI/info innerHTML sinks — item 89 (branch claude/nice-ride-T6yb0, 2026-06-20)
 
 719 tests (1 new, mutation-verified); `index.html` + `_worker.js` + `tests/worker.test.js`. `validate.sh` PASSED.
