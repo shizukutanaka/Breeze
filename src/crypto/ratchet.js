@@ -29,6 +29,7 @@ const DEFAULTS = {
   REPLAY_CACHE_SIZE: 2000,
   MAX_SKIP: 100,
   MAX_GAP: 2000,
+  GROUP_MAX_SKIP: 50, // max out-of-order gap tolerated in the group hash ratchet
   skippedKeyTTL: 7 * 24 * 60 * 60 * 1000, // I7: expire retained skipped keys after 7 days (forward secrecy)
   compressMin: Infinity, // disable compression by default for deterministic tests
 };
@@ -496,6 +497,109 @@ export function createRatchet(opts = {}) {
     };
   }
 
+  // ── Group Sender Key — v5 hash ratchet (Phase 2b) ────────────────────────────
+  //
+  // State: { chainKey: number[], counter: number, epoch: number, v: 5,
+  //          skipped: { [counter]: number[] } }
+  //
+  // Forward secrecy: the chain key is advanced (HKDF one-way) after each message;
+  // the old chain key is replaced and is not retained — knowing the current state
+  // cannot reconstruct past message keys.
+  //
+  // Epoch provides revocation: a kicked member's state is valid only for the old
+  // epoch. The admin generates a fresh random chain key for the new epoch and
+  // distributes it to remaining members only; messages carry `ep` and a mismatch
+  // is rejected without falling back.
+  //
+  // Both functions are pure (no IDB). The caller reads the stored state, passes it
+  // in, and writes back `nextSk` / `nextPeerSk` after success.
+  //
+  // v3 fallback (decryptGroupMsgV3) handles the old static-raw-key messages so
+  // both v3 and v5 messages can be decoded during the rollout epoch.
+
+  async function groupSenderEncrypt(sk, plaintext) {
+    const chainKey = new Uint8Array(sk.chainKey);
+    const msgKeyBits = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-msg-v5', 32);
+    const nextChainRaw = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-chain-v5', 32);
+    // Pad plaintext to a fixed boundary (hides message length)
+    const boundary = cfg.MSG_PAD_BOUNDARY || 256;
+    const raw = new TextEncoder().encode(plaintext);
+    const padded = new Uint8Array(Math.ceil((raw.length + 2) / boundary) * boundary);
+    new DataView(padded.buffer).setUint16(0, raw.length);
+    padded.set(raw, 2);
+    const iv = getRandomValues(new Uint8Array(cfg.IV_BYTES || 12));
+    const importedKey = await subtle.importKey('raw', msgKeyBits, { name: 'AES-GCM' }, false, ['encrypt']);
+    const ct = new Uint8Array(await subtle.encrypt({ name: 'AES-GCM', iv }, importedKey, padded));
+    const ciphertext = JSON.stringify({ v: 5, g: true, i: arr(iv), d: arr(ct), c: sk.counter, ep: sk.epoch });
+    const nextSk = { ...sk, chainKey: Array.from(nextChainRaw), counter: sk.counter + 1 };
+    return { ciphertext, nextSk };
+  }
+
+  async function groupSenderDecrypt(peerSk, ciphertext) {
+    const p = JSON.parse(ciphertext);
+    if (!p.g || p.v !== 5) return null; // wrong version — caller falls back to v3
+    if ((peerSk.epoch | 0) !== (p.ep | 0)) return null; // epoch mismatch; wait for new key
+    const maxSkip = cfg.GROUP_MAX_SKIP || 50;
+    const targetC = p.c | 0;
+    const skipped = { ...(peerSk.skipped || {}) };
+    let msgKeyBits;
+    let chainKey = new Uint8Array(peerSk.chainKey);
+    let counter = peerSk.counter | 0;
+
+    if (targetC < counter) {
+      // Out-of-order (arrived late): look up the cached key derived when we skipped ahead.
+      const cached = skipped[targetC];
+      if (!cached) return null; // key already evicted or never computed
+      msgKeyBits = new Uint8Array(cached);
+      delete skipped[targetC];
+      // chainKey / counter unchanged — only the skip cache entry is consumed.
+      const nextPeerSk = { ...peerSk, skipped };
+      const importedKey = await subtle.importKey('raw', msgKeyBits, { name: 'AES-GCM' }, false, ['decrypt']);
+      const padded = new Uint8Array(await subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, importedKey, u8(p.d)));
+      const textLen = new DataView(padded.buffer).getUint16(0);
+      return { plaintext: new TextDecoder().decode(padded.slice(2, 2 + textLen)), nextPeerSk };
+    }
+
+    // Ratchet forward from `counter` to `targetC`, caching skipped keys.
+    if (targetC - counter > maxSkip) return null; // gap too large — reject
+    while (counter < targetC) {
+      const skMsgKey = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-msg-v5', 32);
+      chainKey = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-chain-v5', 32);
+      skipped[counter] = Array.from(skMsgKey);
+      counter++;
+      // Evict oldest entries when cache exceeds maxSkip
+      const keys = Object.keys(skipped).map(Number).sort((a, b) => a - b);
+      if (keys.length > maxSkip) delete skipped[keys[0]];
+    }
+    // Derive the target message key and advance past it.
+    msgKeyBits = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-msg-v5', 32);
+    chainKey = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-chain-v5', 32);
+    counter++;
+
+    const nextPeerSk = { ...peerSk, chainKey: Array.from(chainKey), counter, skipped };
+    const importedKey = await subtle.importKey('raw', msgKeyBits, { name: 'AES-GCM' }, false, ['decrypt']);
+    const padded = new Uint8Array(await subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, importedKey, u8(p.d)));
+    const textLen = new DataView(padded.buffer).getUint16(0);
+    return { plaintext: new TextDecoder().decode(padded.slice(2, 2 + textLen)), nextPeerSk };
+  }
+
+  // Legacy v3 group decrypt (HKDF with static raw key + counter as salt).
+  // Kept as a named export so tests can verify both code paths still work during rollout.
+  async function groupDecryptV3(peerSk, ciphertext) {
+    const p = JSON.parse(ciphertext);
+    if (!p.g || p.v !== 3) return null;
+    if (!peerSk.raw) return null;
+    const msgKeyBits = await hkdf(
+      new Uint8Array(peerSk.raw),
+      new Uint8Array(new Uint32Array([p.c]).buffer),
+      'group-msg', 32,
+    );
+    const importedKey = await subtle.importKey('raw', msgKeyBits, { name: 'AES-GCM' }, false, ['decrypt']);
+    const padded = new Uint8Array(await subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, importedKey, u8(p.d)));
+    const textLen = new DataView(padded.buffer).getUint16(0);
+    return new TextDecoder().decode(padded.slice(2, 2 + textLen));
+  }
+
   return {
     hkdf, kdfChain, genRatchetKey, ecdhBits, dhRatchetStep,
     frameEncrypt, frameDecrypt, unpadAndDecompress, ratchetEncrypt, ratchetDecrypt,
@@ -503,7 +607,9 @@ export function createRatchet(opts = {}) {
     genSigningKey, signSPK, verifySPK, x3dhInitiator, x3dhResponder,
     initiatorSession, responderSession,
     buildPreKeyMessage, parsePreKeyMessage,
-    initiatorHandshake, responderHandshake, bundleFromRelay, _cfg: cfg,
+    initiatorHandshake, responderHandshake, bundleFromRelay,
+    groupSenderEncrypt, groupSenderDecrypt, groupDecryptV3,
+    _cfg: cfg,
   };
 }
 

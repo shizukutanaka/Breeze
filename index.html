@@ -1235,6 +1235,16 @@ const CONFIG = {
   // the pinned peer) is dropped. When OFF, behavior is byte-identical to the legacy plaintext
   // path. NOTE: both peers must run with the flag ON — it is a breaking wire change.
   CALL_E2E_SIGNAL: false,
+  // v3.6 SECURITY (default OFF — requires coordinated rollout; breaking wire change for groups):
+  // Replace the static group sender-key HKDF (same raw key for all messages, counter as salt)
+  // with a hash ratchet that advances the chain key after each message and evicts old keys —
+  // providing forward secrecy for group messages. Also adds epoch revocation: on kick/leave the
+  // admin generates a fresh random chain key for the bumped epoch and re-distributes only to
+  // remaining members; messages carry `ep` and a mismatch is rejected without fallback, so a
+  // kicked member's stale key cannot decrypt new-epoch messages. When OFF, behavior is
+  // byte-identical to the v3 path. Enable after all group members have updated.
+  GROUP_RATCHET_V5: false,
+  GROUP_MAX_SKIP: 50, // max tolerated out-of-order gap in the group v5 hash ratchet
   VOICE_MAX_MS: 120000,               // Max voice note duration: 2 minutes
   // Limits
   FILE_MAX: 50 * 1024 * 1024, // All users: 50MB
@@ -4979,37 +4989,55 @@ async function initMessenger(dbName) {
   });
 
   // ================================================================
-  // SENDER KEY — Group Encryption (v3)
+  // SENDER KEY — Group Encryption
   //
-  // Each member generates a group-specific sender key.
-  // Messages are encrypted once with sender key (O(1) vs O(n)).
-  // Sender keys are distributed via 1:1 encrypted channels.
+  // v3 (GROUP_RATCHET_V5=false, default):
+  //   Static raw key; message key = HKDF(raw, counter_bytes, 'group-msg').
+  //   No forward secrecy — knowing the raw key decrypts all messages.
   //
-  // Epoch: incremented on member join/leave → all sender keys rotated.
+  // v5 (GROUP_RATCHET_V5=true, opt-in after coordinated rollout):
+  //   Hash ratchet — each message advances the chain key (one-way HKDF),
+  //   old chain keys are evicted, providing forward secrecy. Epoch revocation:
+  //   on kick/leave admin generates a fresh random chainKey for the bumped
+  //   epoch and re-distributes to remaining members only; a kicked member's
+  //   stale key is invalid for the new epoch.
+  //
+  // Wire format: { v:3|5, g:true, i:[iv], d:[ct], c:counter, ep:epoch }
+  //   v3 receivers HKDF with p.c as the salt.
+  //   v5 receivers ratchet forward to p.c, caching skipped keys.
   // ================================================================
 
   async function getGroupSenderKey(groupId) {
-    try {  
+    try {
       const stored = await dbGet('identity', 'gsk:' + groupId);
       if (stored) return stored;
-      // Generate new sender key
-      const raw = crypto.getRandomValues(new Uint8Array(32));
-      const key = { raw: Array.from(raw), counter: 0, epoch: 0 };
+      const rawBytes = crypto.getRandomValues(new Uint8Array(32));
+      const key = CONFIG.GROUP_RATCHET_V5
+        ? { chainKey: Array.from(rawBytes), counter: 0, epoch: 0, v: 5, skipped: {} }
+        : { raw: Array.from(rawBytes), counter: 0, epoch: 0 };
       await dbPut('identity', key, 'gsk:' + groupId);
       return key;
-    
     } catch(_e) { _dbg(_e, 'getGroupSenderKey'); }
   }
 
   async function encryptGroupMsg(groupId, text) {
-    try {  
+    try {
       const sk = await getGroupSenderKey(groupId);
-      // Derive message key from sender key chain
-      const chainInput = new Uint8Array(sk.raw);
-      const msgKeyBits = await hkdf(chainInput, new Uint8Array(new Uint32Array([sk.counter]).buffer), 'group-msg', 32);
+      let msgKeyBits, version;
+      if (CONFIG.GROUP_RATCHET_V5 && sk.v === 5) {
+        // v5: hash ratchet — derive msg key from current chainKey, then advance
+        const ck = new Uint8Array(sk.chainKey);
+        msgKeyBits = await hkdf(ck, new Uint8Array(32), 'breeze-group-msg-v5', 32);
+        const nextChain = await hkdf(ck, new Uint8Array(32), 'breeze-group-chain-v5', 32);
+        sk.chainKey = Array.from(nextChain); // old chain key evicted (forward secrecy)
+        version = 5;
+      } else {
+        // v3: static raw key, counter used as HKDF salt
+        msgKeyBits = await hkdf(new Uint8Array(sk.raw), new Uint8Array(new Uint32Array([sk.counter]).buffer), 'group-msg', 32);
+        version = 3;
+      }
       sk.counter++;
       await dbPut('identity', sk, 'gsk:' + groupId);
-      // Pad + encrypt
       const raw = new TextEncoder().encode(text);
       const padded = new Uint8Array(Math.ceil((raw.length + 2) / CONFIG.MSG_PAD_BOUNDARY) * CONFIG.MSG_PAD_BOUNDARY);
       new DataView(padded.buffer).setUint16(0, raw.length);
@@ -5017,21 +5045,61 @@ async function initMessenger(dbName) {
       const iv = crypto.getRandomValues(new Uint8Array(CONFIG.IV_BYTES));
       const importedKey = await crypto.subtle.importKey('raw', msgKeyBits, { name: 'AES-GCM' }, false, ['encrypt']);
       const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, importedKey, padded);
-      return JSON.stringify({ v: 3, g: true, i: arr(iv), d: arr(new Uint8Array(ct)), c: sk.counter - 1, ep: sk.epoch });
-    
+      return JSON.stringify({ v: version, g: true, i: arr(iv), d: arr(new Uint8Array(ct)), c: sk.counter - 1, ep: sk.epoch });
     } catch(_e) { _dbg(_e, 'encryptGroupMsg'); }
   }
 
   async function decryptGroupMsg(groupId, senderId, payload) {
     try {
       const p = JSON.parse(payload);
-      if (!p.g) return null; // Not a group v3 message
-      // Get sender's key (distributed via 1:1 channel)
+      if (!p.g) return null;
       const skKey = 'gsk-peer:' + groupId + ':' + senderId;
       const peerSK = await dbGet('identity', skKey);
-      if (!peerSK) return null; // Don't have sender's key yet
-      const chainInput = new Uint8Array(peerSK.raw);
-      const msgKeyBits = await hkdf(chainInput, new Uint8Array(new Uint32Array([p.c]).buffer), 'group-msg', 32);
+      if (!peerSK) return null;
+
+      let msgKeyBits;
+      if (p.v === 5 && peerSK.v === 5) {
+        // v5 hash ratchet
+        if ((peerSK.epoch | 0) !== (p.ep | 0)) return null; // epoch mismatch — wait for new key
+        const targetC = p.c | 0;
+        const skipped = { ...(peerSK.skipped || {}) };
+        let counter = peerSK.counter | 0;
+        let chainKey = new Uint8Array(peerSK.chainKey);
+
+        if (targetC < counter) {
+          // Out-of-order: use cached key from a previous ratchet-forward pass
+          const cached = skipped[targetC];
+          if (!cached) return null;
+          msgKeyBits = new Uint8Array(cached);
+          delete skipped[targetC];
+          peerSK.skipped = skipped;
+          await dbPut('identity', peerSK, skKey);
+        } else {
+          // Ratchet forward from `counter` to `targetC`, caching intermediate keys
+          if (targetC - counter > CONFIG.GROUP_MAX_SKIP) return null;
+          while (counter < targetC) {
+            const skMsgKey = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-msg-v5', 32);
+            chainKey = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-chain-v5', 32);
+            skipped[counter] = Array.from(skMsgKey);
+            counter++;
+            // Evict oldest when skip cache exceeds GROUP_MAX_SKIP
+            const keys = Object.keys(skipped).map(Number).sort((a, b) => a - b);
+            if (keys.length > CONFIG.GROUP_MAX_SKIP) delete skipped[keys[0]];
+          }
+          msgKeyBits = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-msg-v5', 32);
+          chainKey = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-chain-v5', 32);
+          counter++;
+          peerSK.chainKey = Array.from(chainKey);
+          peerSK.counter = counter;
+          peerSK.skipped = skipped;
+          await dbPut('identity', peerSK, skKey);
+        }
+      } else {
+        // v3 fallback: static raw key, counter (from payload) as HKDF salt
+        if (!peerSK.raw) return null;
+        msgKeyBits = await hkdf(new Uint8Array(peerSK.raw), new Uint8Array(new Uint32Array([p.c]).buffer), 'group-msg', 32);
+      }
+
       const importedKey = await crypto.subtle.importKey('raw', msgKeyBits, { name: 'AES-GCM' }, false, ['decrypt']);
       const padded = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, importedKey, u8(p.d)));
       const textLen = new DataView(padded.buffer).getUint16(0);
@@ -5039,15 +5107,18 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'group-decrypt'); return null; }
   }
 
-  // Distribute sender key to a specific group member (via 1:1 encrypted channel)
+  // Distribute sender key to a specific group member (via 1:1 encrypted channel).
+  // v5 sends { chainKey, epoch, v:5 } so the receiver can initialize their hash ratchet.
   async function distributeSenderKey(groupId, memberPubB64) {
-    try {  
+    try {
       const sk = await getGroupSenderKey(groupId);
-      const encrypted = await encryptFor(JSON.stringify({ type: 'sender_key', groupId, key: sk.raw, epoch: sk.epoch }), memberPubB64);
+      const skPayload = (CONFIG.GROUP_RATCHET_V5 && sk.v === 5)
+        ? { type: 'sender_key', groupId, chainKey: sk.chainKey, epoch: sk.epoch, v: 5 }
+        : { type: 'sender_key', groupId, key: sk.raw, epoch: sk.epoch };
+      const encrypted = await encryptFor(JSON.stringify(skPayload), memberPubB64);
       if (!encrypted) { _dbg(null, 'encrypt failed'); return; }
       const memberId = memberPubB64.slice(0, 12);
       await relaySend(memberId, { to: memberId, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: Date.now(), isSenderKey: true });
-    
     } catch(_e) { _dbg(_e, 'distributeSenderKey'); }
   }
 
@@ -8373,7 +8444,10 @@ async function initMessenger(dbName) {
         if (!decrypted) return;
         const skMsg = JSON.parse(decrypted);
         if (skMsg.type === 'sender_key' && skMsg.groupId && skMsg.key) {
-          await dbPut('identity', { raw: skMsg.key, counter: 0, epoch: skMsg.epoch || 0 }, 'gsk-peer:' + skMsg.groupId + ':' + (msg.from || '').slice(0, 12));
+          const skEntry = (skMsg.v === 5 && skMsg.chainKey)
+            ? { chainKey: skMsg.chainKey, counter: 0, epoch: skMsg.epoch || 0, v: 5, skipped: {} }
+            : { raw: skMsg.key, counter: 0, epoch: skMsg.epoch || 0 };
+          await dbPut('identity', skEntry, 'gsk-peer:' + skMsg.groupId + ':' + (msg.from || '').slice(0, 12));
           _dbg(null, 'Received sender key for group ' + skMsg.groupId);
         }
       } catch(e) { _dbg(e, 'sender-key'); }
@@ -10678,14 +10752,29 @@ async function initMessenger(dbName) {
           const member = activeContact.members.find(m => m.name?.toLowerCase() === target.toLowerCase());
           if (member) {
             // v3.3: Server-side kick (if group has server token)
+            let newEpoch = null;
             if (API && activeContact.groupToken) {
               try {
-                await postAPIRaw('/group/kick', { token: activeContact.groupToken, kickId: member.id, adminId: myId });
+                const kickResp = await postAPIRaw('/group/kick', { token: activeContact.groupToken, kickId: member.id, adminId: myId });
+                if (kickResp.ok) {
+                  const kickData = await kickResp.json().catch(() => ({}));
+                  newEpoch = (typeof kickData.epoch === 'number') ? kickData.epoch : null;
+                }
               } catch(e) { _dbg(e, 'server-kick'); }
             }
             activeContact.members = activeContact.members.filter(m => m.id !== member.id);
             if (activeContact.admins) activeContact.admins = activeContact.admins.filter(id => id !== member.id);
             await dbPut('contacts', activeContact);
+            // v5 epoch rotation: generate a fresh chain key and re-distribute to remaining
+            // members only. The kicked member's stale key is valid for the old epoch only.
+            if (CONFIG.GROUP_RATCHET_V5 && newEpoch !== null) {
+              const freshChain = Array.from(crypto.getRandomValues(new Uint8Array(32)));
+              await dbPut('identity', { chainKey: freshChain, counter: 0, epoch: newEpoch, v: 5, skipped: {} }, 'gsk:' + activeContact.id);
+              for (const m of (activeContact.members || []).filter(m => m.id !== myId && m.pubB64)) {
+                distributeSenderKey(activeContact.id, m.pubB64).catch(e => _dbg(e, 'post-kick-sk-dist'));
+              }
+              auditLog('group', `Epoch rotated to ${newEpoch} after kicking ${member.name}`);
+            }
             auditLog('group', 'Kicked ' + member.name + ' from ' + activeContact.name);
             d.textContent = t('uiRemoved') + ' ' + member.name;
             renderContacts();

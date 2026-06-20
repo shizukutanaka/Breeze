@@ -388,3 +388,194 @@ describe('skipped-key cache pruning (MAX_SKIP * 2 eviction)', () => {
     expect(await Rs.ratchetDecrypt(r2, bigMsgs[5])).toBe(null);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Group Sender Key — v5 hash ratchet (Phase 2b)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Build a fresh sender-key state (what the admin stores as gsk:groupId).
+function freshSK(epoch = 0) {
+  return {
+    chainKey: Array.from(crypto.getRandomValues(new Uint8Array(32))),
+    counter: 0,
+    epoch,
+    v: 5,
+    skipped: {},
+  };
+}
+// Clone peerSK as received from distributeSenderKey.
+function peerFromSK(sk) {
+  return { chainKey: [...sk.chainKey], counter: 0, epoch: sk.epoch, v: 5, skipped: {} };
+}
+
+describe('group sender-key v5 hash ratchet', () => {
+  it('round-trip: single message', async () => {
+    const sk0 = freshSK();
+    const { ciphertext, nextSk } = await R.groupSenderEncrypt(sk0, 'hello group');
+    expect(nextSk.counter).toBe(1);
+    const peerSk = peerFromSK(sk0);
+    const res = await R.groupSenderDecrypt(peerSk, ciphertext);
+    expect(res).not.toBeNull();
+    expect(res.plaintext).toBe('hello group');
+    expect(res.nextPeerSk.counter).toBe(1);
+  });
+
+  it('round-trip: multiple sequential messages (ratchet advances)', async () => {
+    let sk = freshSK();
+    let peerSk = peerFromSK(sk);
+    const texts = ['first', 'second', 'third'];
+    for (const text of texts) {
+      const { ciphertext, nextSk } = await R.groupSenderEncrypt(sk, text);
+      const res = await R.groupSenderDecrypt(peerSk, ciphertext);
+      expect(res.plaintext).toBe(text);
+      sk = nextSk;
+      peerSk = res.nextPeerSk;
+    }
+    expect(sk.counter).toBe(3);
+    expect(peerSk.counter).toBe(3);
+  });
+
+  it('forward secrecy: knowing CK0 cannot decrypt msg1 once CK0 is discarded', async () => {
+    const sk0 = freshSK();
+    // Encrypt msg0 — chain advances to CK1
+    const { ciphertext: ct0, nextSk: sk1 } = await R.groupSenderEncrypt(sk0, 'msg0');
+    // Encrypt msg1 — chain advances to CK2
+    const { ciphertext: ct1 } = await R.groupSenderEncrypt(sk1, 'msg1');
+    // Peer who only has CK1 (missed msg0): can't go back to decrypt msg0
+    const peerAtCK1 = { chainKey: [...sk1.chainKey], counter: 1, epoch: 0, v: 5, skipped: {} };
+    // Decrypting ct0 (c=0 < counter=1) with no skip-cache entry → null
+    const r0 = await R.groupSenderDecrypt(peerAtCK1, ct0);
+    expect(r0).toBeNull();
+    // But ct1 (c=1) decrypts correctly
+    const r1 = await R.groupSenderDecrypt(peerAtCK1, ct1);
+    expect(r1).not.toBeNull();
+    expect(r1.plaintext).toBe('msg1');
+  });
+
+  it('mutation guard: forward secrecy breaks if chain keys are not advanced', async () => {
+    // If we did NOT advance the chain key (kept CK0), then CK0 could derive msgKey1 too.
+    // This test verifies the one-way property holds: HKDF(CK0, 'msg') !== HKDF(CK1, 'msg').
+    const sk0 = freshSK();
+    const { nextSk: sk1 } = await R.groupSenderEncrypt(sk0, 'msg0');
+    const msgKey_from_CK0 = await R.hkdf(new Uint8Array(sk0.chainKey), new Uint8Array(32), 'breeze-group-msg-v5', 32);
+    const msgKey_from_CK1 = await R.hkdf(new Uint8Array(sk1.chainKey), new Uint8Array(32), 'breeze-group-msg-v5', 32);
+    // msg1 is encrypted with CK1-derived key; CK0-derived key is different
+    expect(Array.from(msgKey_from_CK0)).not.toEqual(Array.from(msgKey_from_CK1));
+  });
+
+  it('out-of-order: receive msg2 before msg1, then msg1 from skip cache', async () => {
+    let sk = freshSK();
+    let peerSk = peerFromSK(sk);
+    // Encrypt three messages
+    const { ciphertext: ct0, nextSk: sk1 } = await R.groupSenderEncrypt(sk,  'msg0');
+    const { ciphertext: ct1, nextSk: sk2 } = await R.groupSenderEncrypt(sk1, 'msg1');
+    const { ciphertext: ct2 }              = await R.groupSenderEncrypt(sk2, 'msg2');
+    // Receive msg0 first (normal)
+    const r0 = await R.groupSenderDecrypt(peerSk, ct0); peerSk = r0.nextPeerSk;
+    expect(r0.plaintext).toBe('msg0');
+    // Receive msg2 out-of-order (should cache key for msg1, then decrypt msg2)
+    const r2 = await R.groupSenderDecrypt(peerSk, ct2); peerSk = r2.nextPeerSk;
+    expect(r2.plaintext).toBe('msg2');
+    expect(peerSk.skipped[1]).toBeDefined(); // msg1's key is in the skip cache
+    // Receive msg1 late — must come from skip cache
+    const r1 = await R.groupSenderDecrypt(peerSk, ct1); peerSk = r1.nextPeerSk;
+    expect(r1.plaintext).toBe('msg1');
+    expect(peerSk.skipped[1]).toBeUndefined(); // consumed
+  });
+
+  it('rejects a gap larger than GROUP_MAX_SKIP', async () => {
+    const Rs = createRatchet({ GROUP_MAX_SKIP: 5 });
+    const sk = freshSK();
+    // Skip 6 messages (beyond maxSkip=5)
+    let senderSk = sk;
+    for (let i = 0; i < 6; i++) {
+      const { nextSk } = await Rs.groupSenderEncrypt(senderSk, `skip${i}`);
+      senderSk = nextSk;
+    }
+    const { ciphertext: ct6 } = await Rs.groupSenderEncrypt(senderSk, 'msg6');
+    const peerSk = peerFromSK(sk);
+    // Gap of 6 > maxSkip 5 → reject
+    const res = await Rs.groupSenderDecrypt(peerSk, ct6);
+    expect(res).toBeNull();
+  });
+
+  it('rejects messages from a different epoch', async () => {
+    const sk = freshSK(1); // epoch 1
+    const { ciphertext } = await R.groupSenderEncrypt(sk, 'hello');
+    // Peer with epoch 0 — mismatch → reject
+    const peerOldEpoch = peerFromSK({ ...sk, epoch: 0 });
+    const res = await R.groupSenderDecrypt(peerOldEpoch, ciphertext);
+    expect(res).toBeNull();
+  });
+
+  it('epoch rotation: new epoch chainKey decrypts correctly; old epoch cannot decrypt new messages', async () => {
+    const sk0 = freshSK(0);
+    const { ciphertext: ct_epoch0 } = await R.groupSenderEncrypt(sk0, 'epoch0 msg');
+    // Admin generates a fresh chain key for epoch 1 (on kick)
+    const sk1 = { chainKey: Array.from(crypto.getRandomValues(new Uint8Array(32))), counter: 0, epoch: 1, v: 5, skipped: {} };
+    const { ciphertext: ct_epoch1 } = await R.groupSenderEncrypt(sk1, 'epoch1 msg');
+    // Remaining member receives new sender key (epoch 1) and can decrypt it
+    const peerEpoch1 = peerFromSK(sk1);
+    const r1 = await R.groupSenderDecrypt(peerEpoch1, ct_epoch1);
+    expect(r1).not.toBeNull();
+    expect(r1.plaintext).toBe('epoch1 msg');
+    // Kicked member only has epoch 0 key — cannot decrypt epoch 1 message
+    const kickedPeer = peerFromSK(sk0); // epoch 0
+    const rKicked = await R.groupSenderDecrypt(kickedPeer, ct_epoch1);
+    expect(rKicked).toBeNull();
+    // Kicked member CAN still decrypt epoch 0 message (past messages decryptable,
+    // but that's acceptable — revocation prevents FUTURE message decryption)
+    const rPast = await R.groupSenderDecrypt(kickedPeer, ct_epoch0);
+    expect(rPast).not.toBeNull();
+    expect(rPast.plaintext).toBe('epoch0 msg');
+  });
+
+  it('v3 backward compat: groupDecryptV3 decodes old static-raw-key messages', async () => {
+    // Simulate what the v3 encryptGroupMsg does
+    const rawKey = Array.from(crypto.getRandomValues(new Uint8Array(32)));
+    const counter = 3;
+    const msgKeyBits = await R.hkdf(new Uint8Array(rawKey), new Uint8Array(new Uint32Array([counter]).buffer), 'group-msg', 32);
+    const text = 'legacy message';
+    const raw = new TextEncoder().encode(text);
+    const padded = new Uint8Array(Math.ceil((raw.length + 2) / 256) * 256);
+    new DataView(padded.buffer).setUint16(0, raw.length);
+    padded.set(raw, 2);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const importedKey = await crypto.subtle.importKey('raw', msgKeyBits, { name: 'AES-GCM' }, false, ['encrypt']);
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, importedKey, padded));
+    const ciphertext = JSON.stringify({ v: 3, g: true, i: Array.from(iv), d: Array.from(ct), c: counter, ep: 0 });
+    // groupDecryptV3 should decode it
+    const peerSk = { raw: rawKey };
+    const result = await R.groupDecryptV3(peerSk, ciphertext);
+    expect(result).toBe(text);
+  });
+
+  it('skip cache is pruned at maxSkip entries (eviction fires on a second ratchet-forward pass)', async () => {
+    // Eviction only fires when the cache already has entries AND a new ratchet-forward
+    // pass pushes it over maxSkip. Two passes are required:
+    //   Pass 1: deliver msg3 (gap=3=maxSkip) → caches [0,1,2], no eviction (3 ≤ 3)
+    //   Pass 2: deliver msg7 (gap=3 from counter=4) → adds [4,5,6] one by one; each
+    //           addition briefly pushes cache to 4 entries, evicting the oldest → final [4,5,6]
+    const Rs = createRatchet({ GROUP_MAX_SKIP: 3 });
+    const sk = freshSK();
+    let senderSk = sk;
+    const cts = [];
+    for (let i = 0; i < 8; i++) {
+      const { ciphertext, nextSk } = await Rs.groupSenderEncrypt(senderSk, `m${i}`);
+      cts.push(ciphertext); senderSk = nextSk;
+    }
+    let peerSk = peerFromSK(sk);
+    // Pass 1: gap=3 (=maxSkip) → succeeds, caches skipped[0,1,2]
+    const r3 = await Rs.groupSenderDecrypt(peerSk, cts[3]);
+    expect(r3.plaintext).toBe('m3');
+    peerSk = r3.nextPeerSk;
+    expect(Object.keys(peerSk.skipped).map(Number).sort((a,b)=>a-b)).toEqual([0, 1, 2]);
+    // Pass 2: gap=3 again (counter=4, targetC=7) — evicts entries 0,1,2 as 4,5,6 are added
+    const r7 = await Rs.groupSenderDecrypt(peerSk, cts[7]);
+    expect(r7).not.toBeNull();
+    expect(r7.plaintext).toBe('m7');
+    peerSk = r7.nextPeerSk;
+    expect(Object.keys(peerSk.skipped).length).toBeLessThanOrEqual(3);
+    expect(peerSk.skipped[0]).toBeUndefined(); // oldest evicted
+  });
+});

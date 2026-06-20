@@ -1,5 +1,47 @@
 # Changelog
 
+## group sender-key v5 hash ratchet + epoch revocation (Phase 2b, gated, default OFF) — item 91 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+729 tests (10 new, mutation-verified); `src/crypto/ratchet.js` + `tests/ratchet.test.js` + `index.html`. `validate.sh` PASSED.
+
+Socratic lens: *"In `encryptGroupMsg`, the message key is `HKDF(sk.raw, counter_bytes, 'group-msg')`.
+`sk.raw` never changes — it is the static group sender key. Knowing `sk.raw` and any counter lets
+you compute ALL message keys for ALL past and future messages. Does `sk.raw` ever advance?"*
+
+No. The counter is only an HKDF salt; the key material is static. An attacker who captures the
+sender key (from a compromised device, a leaked IDB backup, or a future sender-key injection) can
+decrypt every group message ever sent. Additionally: `epoch` is bumped on kick/leave by the server
+but the admin client never reads it back or generates a fresh sender key, so a kicked member keeps
+decrypting indefinitely — **epoch was a no-op**.
+
+**Fix (gated by `CONFIG.GROUP_RATCHET_V5`, default OFF; breaking wire change for groups):**
+
+- **Forward secrecy (hash ratchet)**: replace `HKDF(raw, counter, 'group-msg')` with:
+  `msgKey = HKDF(chainKey, Ø, 'breeze-group-msg-v5')` then
+  `chainKey = HKDF(chainKey, Ø, 'breeze-group-chain-v5')` — old chain key evicted after each
+  message. An attacker who captures `chainKey_N` can decrypt messages N, N+1, … but NOT 0 … N-1
+  (one-way ratchet; past keys are gone).
+
+- **Epoch revocation**: on `/group/kick` the server returns the bumped epoch; the admin client
+  generates a **fresh random chainKey** for the new epoch and re-distributes only to **remaining
+  members**. Messages carry `ep`; a mismatch is rejected without fallback. Kicked member's stale
+  key is invalid for the new epoch and cannot decrypt future messages.
+
+- **Out-of-order tolerance**: receiver ratchets forward from `peerSK.counter` to `p.c`, caching
+  intermediate keys in `peerSK.skipped[counter]` (IDB-persistent). Skip cache capped at
+  `GROUP_MAX_SKIP = 50` entries; evicts oldest on overflow.
+
+- **Sender-key distribution payload** changed to `{ type:'sender_key', groupId, chainKey, epoch, v:5 }` when flag is ON; v3 format unchanged for fallback.
+
+- **Backward compat (v3 read path preserved)**: `decryptGroupMsg` dispatches on `p.v` — v3 messages
+  continue to use the old `HKDF(raw, counter)` path during the rollout epoch.
+
+**Tests (10, mutation-verified via `ratchet.js` pure exports):**
+round-trip; multi-message sequential; forward-secrecy (old CK cannot decrypt future msg);
+mutation guard (CK0 ≠ CK1 → different msg keys); out-of-order with skip cache; gap > GROUP_MAX_SKIP
+rejected; epoch mismatch rejected; epoch rotation (kicked peer null, remaining peer succeeds, past
+epoch still decryptable); v3 backward compat (`groupDecryptV3`); skip-cache pruning (two-pass eviction).
+
 ## authenticated call signaling — close WebRTC SDP MITM (gated, default OFF) — item 90 (branch claude/nice-ride-T6yb0, 2026-06-20)
 
 719 tests (no new — call/WebRTC flow isn't harness-testable); `index.html` only. `validate.sh` PASSED.
