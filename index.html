@@ -9757,14 +9757,25 @@ async function initMessenger(dbName) {
   const _fileChunks = {}; // { fileId: { total, received: Set, chunks: [], name, mime } }
 
   function handleBinaryChunk(contact, buffer) {
+    // Minimum valid header is 28 bytes (16 fileId + 4 seq + 4 total + 2 nameLen + 2 mimeLen).
+    if (buffer.byteLength < 28) return;
     const view = new DataView(buffer);
     const fileId = Array.from(new Uint8Array(buffer, 0, 16)).map(b => b.toString(16).padStart(2,'0')).join('');
     const seq = view.getUint32(16);
     const total = view.getUint32(20);
+    // Reject peer-supplied total/seq values outside the range implied by FILE_MAX.
+    // Without this, a malicious peer could pass total = 2^32 causing new Array(4B) and
+    // seq values beyond total, growing _fileChunks without bound (DoS via memory).
+    const MAX_CHUNKS = Math.ceil(CONFIG.FILE_MAX / CONFIG.CHUNK_SIZE) + 1;
+    if (total === 0 || total > MAX_CHUNKS || seq >= total) return;
     const nameLen = view.getUint16(24);
     const mimeLen = view.getUint16(26);
+    // Validate that header fields don't extend past the end of the buffer.
+    if (28 + nameLen + mimeLen > buffer.byteLength) return;
     const data = new Uint8Array(buffer, 28 + nameLen + mimeLen);
     if (!_fileChunks[fileId]) {
+      // Cap concurrent in-progress transfers to prevent accumulation of stale entries.
+      if (Object.keys(_fileChunks).length >= 10) return;
       const name = new TextDecoder().decode(new Uint8Array(buffer, 28, nameLen));
       const mime = new TextDecoder().decode(new Uint8Array(buffer, 28 + nameLen, mimeLen));
       _fileChunks[fileId] = { total, received: new Set(), chunks: new Array(total), name, mime, startTs: performance.now() };
