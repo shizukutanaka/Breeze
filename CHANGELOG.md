@@ -1,5 +1,32 @@
 # Changelog
 
+## localize all title tooltips (new data-i18n-title) + aria-label on icon-only controls — Qiita/Zenn-informed — item 104 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+734 tests; `index.html` only. `validate.sh` PASSED (i18n EN/JA parity).
+
+Research lens. Qiita/Zenn `title`-attribute a11y (`ymrl/fa44f9c7…` "don't solve
+everything with aria-label"; `gilly/2d3401eb…` accessible tooltips; WCAG 2.2):
+**`title` is unreliable as an accessible name** — not all assistive tech exposes
+it, it's keyboard-inaccessible, and HTML-LS discourages it for tooltips. An
+icon-only control that names itself only via `title` is effectively unnamed for
+many AT users. Pair with a real `aria-label`.
+
+Socratic lens: *"Breeze has 8 hardcoded English `title=` tooltips and no
+`data-i18n-title` handler — so JA users get English tooltips. Worse, the 📎-attach
+`<label>` and the 😀-emoji `<button>` are **icon-only**, naming themselves only via
+`title` — unreliable. Do they have a real accessible name?"*
+
+- **New `data-i18n-title` apply handler** (mirrors `data-i18n-ph` / `data-i18n-aria`)
+  + 8 tooltip keys (EN+JA), including a function key `ttDisappearsIn(label)`.
+- **Static tooltips localized:** profile-name `Edit profile`, short-id `Click to
+  copy`, attach `Attach`, emoji `Emoji` → `data-i18n-title`.
+- **Icon-only controls given reliable names:** the 📎-attach file input gets
+  `data-i18n-aria="ttAttach"`; the 😀-emoji button's hardcoded `aria-label="Emoji"`
+  → `data-i18n-aria="ttEmoji"` (was English even for the accessible name).
+- **Dynamic tooltips localized via inline `t()`:** reply-quote `Click to jump`,
+  disappearing-timer `Disappears in <label>`, signature `Ed25519 verified` /
+  `Signature failed!` (all `esc()`'d into the attribute).
+
 ## localize input aria-labels (new data-i18n-aria) + revive dead fwd-filter placeholder — Qiita/Zenn-informed — item 103 (branch claude/nice-ride-T6yb0, 2026-06-20)
 
 734 tests; `index.html` only. `validate.sh` PASSED (i18n EN/JA parity).

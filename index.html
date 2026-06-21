@@ -1142,12 +1142,12 @@ del.md-del { opacity: .6 }
       <!-- Sidebar -->
       <div id="msg-sidebar" class="sidebar">
         <div class="sidebar-head">
-          <span id="msg-my-name" class="name clickable" title="Edit profile"></span>
+          <span id="msg-my-name" class="name clickable" data-i18n-title="ttEditProfile"></span>
           <span id="peer-count" class="sidebar-meta"></span>
           <button class="btn btn-o btn-sm" id="b-msg-theme" aria-label="Theme">☀</button>
           <button class="btn btn-g btn-sm" id="b-msg-add" aria-label="Add contact">+</button>
         </div>
-        <div id="msg-short-id" class="sidebar-id" title="Click to copy"></div>
+        <div id="msg-short-id" class="sidebar-id" data-i18n-title="ttClickToCopy"></div>
         <div class="folder-tabs" id="folder-tabs" role="tablist">
           <button class="folder-tab active" data-folder="all" role="tab" aria-selected="true" aria-label="All contacts">All <span class="badge" id="badge-all"></span></button>
           <button class="folder-tab" data-folder="unread" role="tab" aria-label="Unread contacts">Unread <span class="badge" id="badge-unread"></span></button>
@@ -1192,12 +1192,12 @@ del.md-del { opacity: .6 }
         <div id="typing-indicator" class="typing-ind" aria-live="polite"></div>
         <div id="msg-input-bar" class="input-bar hidden">
           <div id="smart-reply-bar" class="smart-reply-bar hidden" role="toolbar" aria-label="Quick replies"></div>
-          <label class="tool" title="Attach">📎<input type="file" id="msg-file" class="hidden"></label>
+          <label class="tool" data-i18n-title="ttAttach">📎<input type="file" id="msg-file" class="hidden" data-i18n-aria="ttAttach"></label>
           <button id="b-msg-voice" class="tool" aria-label="Voice">🎤</button>
           <button id="b-msg-stt" class="tool hidden" aria-label="Dictate">🗣</button>
           <textarea id="msg-input" data-i18n-ph="msgPlaceholder" data-i18n-aria="ariaMessage" maxlength="4096" rows="1"></textarea>
           <span id="msg-char-count" class="char-count hidden"></span>
-          <button id="b-msg-emoji" class="tool" aria-label="Emoji" title="Emoji">😀</button>
+          <button id="b-msg-emoji" class="tool" data-i18n-aria="ttEmoji" data-i18n-title="ttEmoji">😀</button>
           <button class="send" id="b-msg-send" aria-label="Send">↑</button>
         </div>
       </div>
@@ -1504,6 +1504,14 @@ const _I = {
     ariaFilterContacts: 'Filter contacts',
     ariaSearchChat: 'Search messages',
     ariaMessage: 'Message',
+    ttEditProfile: 'Edit profile',
+    ttClickToCopy: 'Click to copy',
+    ttAttach: 'Attach',
+    ttEmoji: 'Emoji',
+    ttClickToJump: 'Click to jump',
+    ttDisappearsIn: (label) => 'Disappears in ' + label,
+    ttVerified: 'Ed25519 verified',
+    ttSigFailed: 'Signature failed!',
     chooseAvatar: 'Choose avatar emoji',
     avatarPlaceholder: 'Emoji or letter',
     newNamePrompt: 'New name:',
@@ -1953,6 +1961,14 @@ const _I = {
     ariaFilterContacts: '連絡先を絞り込み',
     ariaSearchChat: 'メッセージを検索',
     ariaMessage: 'メッセージ',
+    ttEditProfile: 'プロフィールを編集',
+    ttClickToCopy: 'クリックでコピー',
+    ttAttach: '添付',
+    ttEmoji: '絵文字',
+    ttClickToJump: 'クリックでジャンプ',
+    ttDisappearsIn: (label) => label + '後に消えます',
+    ttVerified: 'Ed25519 検証済み',
+    ttSigFailed: '署名検証に失敗しました！',
     chooseAvatar: 'アバター絵文字を選択',
     avatarPlaceholder: '絵文字または文字',
     newNamePrompt: '新しい名前:',
@@ -2270,6 +2286,7 @@ document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.d
 document.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = t(el.dataset.i18nHtml); });
 document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
 document.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
+document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
 document.documentElement.lang = LANG; // Dynamic lang attribute
 // Register Service Worker (PWA) + v3.6: Improved update notification (research: workbox-window pattern)
 if ('serviceWorker' in navigator) {
@@ -6260,7 +6277,7 @@ async function initMessenger(dbName) {
     // Reply/quote
     if (meta.replyTo) {
       const replyMsgId = safeMsgId(meta.replyTo.msgId || '');
-      content += `<div class="msg-quote" data-reply="${replyMsgId}" title="Click to jump">${esc(meta.replyTo.text?.slice(0, 80) || '')}</div>`;
+      content += `<div class="msg-quote" data-reply="${replyMsgId}" title="${esc(t('ttClickToJump'))}">${esc(meta.replyTo.text?.slice(0, 80) || '')}</div>`;
     }
 
     // Edited indicator
@@ -6273,7 +6290,7 @@ async function initMessenger(dbName) {
         const mins = Math.ceil(remaining / 60000);
         const label = mins >= 60 ? Math.floor(mins / 60) + 'h' : mins + 'm';
         const timerId = 'ttl-' + Math.random().toString(36).slice(2, 8);
-        timerBadge = ` <span class="msg-timer-badge" id="${timerId}" title="Disappears in ${label}">⏱${label}</span>`;
+        timerBadge = ` <span class="msg-timer-badge" id="${timerId}" title="${esc(t('ttDisappearsIn', label))}">⏱${label}</span>`;
         // v3.6: Live countdown + auto-fade DOM removal
         const disappearAt = meta.disappearAt;
         const updateCountdown = () => {
@@ -6294,8 +6311,8 @@ async function initMessenger(dbName) {
       }
     }
     // v3.3: Signature verification badge
-    const sigMark = meta.verified ? ' <span class="msg-sig ok" title="Ed25519 verified">✓sig</span>'
-      : meta.tampered ? ' <span class="msg-sig bad" title="Signature failed!">⚠sig</span>'
+    const sigMark = meta.verified ? ' <span class="msg-sig ok" title="' + esc(t('ttVerified')) + '">✓sig</span>'
+      : meta.tampered ? ' <span class="msg-sig bad" title="' + esc(t('ttSigFailed')) + '">⚠sig</span>'
       : '';
 
     // Voice message
