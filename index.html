@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: stun: turn:; img-src 'self' blob: data: https:; media-src 'self' blob:; worker-src 'self' blob:; trusted-types breeze-sanitizer; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: stun: turn:; img-src 'self' blob: data: https:; media-src 'self' blob:; worker-src 'self' blob:; trusted-types breeze-sanitizer default; require-trusted-types-for 'script'; upgrade-insecure-requests">
 <title>Breeze</title>
 <meta name="description" content="P2P encrypted messenger. No phone number. No registration.">
 <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
@@ -3135,8 +3135,17 @@ function downloadBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 30000); // Cleanup after 30s
 }
 
-// v3.6: Trusted Types policy (research: Google eliminated DOM XSS across 130+ services)
-// Creates a named policy that sanitizes HTML through our rendering pipeline.
+// v3.6: Trusted Types policy (research: Google eliminated DOM XSS across 130+ services;
+// Zenn team's phased CSP rollout demonstrated the default-policy safety net pattern).
+// Two policies are registered:
+//   - 'breeze-sanitizer': named policy, called explicitly via safeSetHTML
+//   - 'default'         : safety net invoked by the browser for any raw innerHTML /
+//                         insertAdjacentHTML / outerHTML assignment of a plain string,
+//                         when CSP `require-trusted-types-for 'script'` is enforced.
+//                         The 98 untargeted HTML sinks across the app become sanitized
+//                         transparently. The audit found zero script-creating sinks
+//                         (no eval / new Function / setTimeout(string) / dynamic script),
+//                         so `createHTML` covers the whole attack surface.
 // Cross-browser fallback: policy functions work identically without TT enforcement.
 const _ttPolicy = (() => {
   // Sanitizer: strip dangerous tags/attrs while keeping safe markdown output
@@ -3145,7 +3154,8 @@ const _ttPolicy = (() => {
   const DANGEROUS_TAGS = /^(script|iframe|object|embed|form|input|textarea|select|button|link|meta|base|svg|math)$/i;
 
   function sanitize(html) {
-    // Fast path: plain text with no HTML
+    // Fast path: plain text with no HTML — returned as-is so the per-call cost on
+    // already-escaped strings (the common case under esc()) is just one regex test.
     if (!/</.test(html)) return html;
     const doc = new DOMParser().parseFromString(html, 'text/html');
     // Remove dangerous elements
@@ -3165,6 +3175,15 @@ const _ttPolicy = (() => {
   }
 
   if (typeof trustedTypes !== 'undefined' && trustedTypes.createPolicy) {
+    // Default policy: catches every raw HTML sink under TT enforcement so
+    // unmigrated `el.innerHTML = stringValue` sites are sanitized rather than
+    // rejected with a SecurityError. Registered BEFORE the named policy because a
+    // missing default would break enforcement for any code path we haven't ported.
+    try {
+      trustedTypes.createPolicy('default', {
+        createHTML: (input) => sanitize(input),
+      });
+    } catch { /* already registered (HMR/double-init) — ignore */ }
     try {
       return trustedTypes.createPolicy('breeze-sanitizer', {
         createHTML: (input) => sanitize(input),

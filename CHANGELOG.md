@@ -1,5 +1,46 @@
 # Changelog
 
+## Trusted Types enforcement (Phase 2d) — Qiita/Zenn-informed — item 95 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+729 tests; `index.html` + `_headers` + `docs/REVIEW-2026-06.md`. `validate.sh` PASSED.
+
+Research lens. Qiita/Zenn search surfaced Zenn's own production CSP rollout
+(`team_zenn/introduced-csp-to-zenn`) plus multiple Qiita/MDN guides on
+`require-trusted-types-for 'script'`. The pattern they validate — register a
+`default` policy as the safety net for raw HTML sinks, then turn on enforcement —
+is exactly the missing piece for Phase 2d.
+
+Socratic lens: *"`_headers` and the `<meta>` CSP both declare `trusted-types
+breeze-sanitizer`, but neither emits `require-trusted-types-for 'script'`. So
+Trusted Types is **not actually enforced** — the policy is registered for show, and
+the 98 raw `el.innerHTML = …` / `insertAdjacentHTML` / `outerHTML` sites bypass it
+entirely. A single DOM XSS in any of those sites still wins."*
+
+Confirmed by audit: 88 + 6 + 4 = 98 HTML sinks; ZERO script-creating sinks (no
+`eval`, no `new Function`, no `setTimeout(string)`, no dynamic `<script>`, no
+`srcdoc`, no `document.write`) — so a single `createHTML` policy covers the whole
+attack surface.
+
+**Fix:**
+
+- **Register a `default` Trusted Types policy** alongside the named
+  `breeze-sanitizer`. Both call the same `sanitize()` (DOMParser + tag/attr
+  allowlist + `javascript:` href strip). The default is the browser's safety
+  net for any raw `el.innerHTML = stringValue` site — under enforcement, those 98
+  unmigrated sinks become sanitized transparently rather than throwing
+  SecurityError.
+- **Add `require-trusted-types-for 'script'`** to the CSP in both `_headers` and
+  the inline `<meta http-equiv="Content-Security-Policy">`. Add `default` to the
+  `trusted-types` allowlist so the new policy is permitted.
+- **Cross-browser safety.** Browsers without TT support (Firefox, Safari) silently
+  ignore the directive; behavior is unchanged for them. Chromium-based browsers
+  (Chrome, Edge) now enforce — and the default policy ensures no app code breaks.
+- **Hot-path cost.** The sanitizer's fast path (`if (!/</.test(html)) return html`)
+  returns in one regex test for plain text (the common case after `esc()`). Only
+  HTML containing `<` triggers the DOMParser walk.
+
+This closes the last item from the Phase 2 roadmap (`docs/REVIEW-2026-06.md`).
+
 ## state review + reconcile at-rest onto canonical atrest.js + N1 ratchet fix — item 93 (branch claude/nice-ride-T6yb0, 2026-06-20)
 
 729 tests (removed the 6 redundant ratchet.test.js cases; `atrest.test.js`'s 20 are canonical); `src/crypto/ratchet.js` + `tests/ratchet.test.js` + `index.html` + `docs/REVIEW-2026-06.md`. `validate.sh` PASSED.
