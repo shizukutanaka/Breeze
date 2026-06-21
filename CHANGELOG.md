@@ -1,5 +1,35 @@
 # Changelog
 
+## modal a11y accessible names + button i18n — Qiita/Zenn-informed — item 97 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+734 tests; `index.html` only. `validate.sh` PASSED (incl. i18n EN/JA parity).
+
+Research lens. A Qiita/Zenn accessibility sweep (`CRUD5th/a7a578d6…` ARIA/focus
+strategy; ARIA APG dialog pattern; `24motz` live regions) reiterates: a modal
+dialog needs an **accessible name**, and you should not hand-roll what native
+elements give you. Breeze already uses native `<dialog>` + `showModal()` (free
+role=dialog, aria-modal, focus trap, ESC, focus-restore) and a `role=menu`
+context menu with arrow-key nav — but two gaps remained.
+
+Socratic lens: *"`showPrompt`/`showConfirm` build a `<dialog>` whose only naming
+comes from a plain `<div class="modal-title">`. The dialog has **no
+`aria-labelledby`**, so a screen reader announces a nameless dialog; the prompt
+`<input>` has only a placeholder, **no label**. And the Cancel/OK buttons are
+**hardcoded English** ("Cancel", aria-label="Cancel", "OK") — violating the
+project rule that ALL UI text go through `t()`."*
+
+**Fix (33 call sites, both generic modals):**
+
+- **Accessible name.** Each dialog gets a unique `titleId` on the title div and
+  `dlg.setAttribute('aria-labelledby', titleId)`; the prompt input is
+  `aria-labelledby="<titleId>"` so it inherits the prompt text as its label
+  (APG dialog pattern). No redundant ARIA elsewhere — the native `<dialog>`
+  already supplies role/modal/focus semantics.
+- **i18n.** New `cancel` / `ok` keys (EN `Cancel`/`OK`, JA `キャンセル`/`OK`).
+  Cancel button text → `t('cancel')`; OK default → `opts.okText || t('ok')`.
+  Removed the now-redundant hardcoded `aria-label="Cancel"` (the translated
+  button text is the accessible name).
+
 ## Service Worker cache hardening — Qiita/Zenn-informed — item 96 (branch claude/nice-ride-T6yb0, 2026-06-20)
 
 734 tests (5 new in `tests/sw.test.js`); `sw.js` + `tests/sw.test.js`. `validate.sh` PASSED.
