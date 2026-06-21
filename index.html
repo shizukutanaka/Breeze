@@ -4743,22 +4743,14 @@ async function initMessenger(dbName) {
       const { msgKey, nextChain } = await kdfChain(sess.sendChainKey);
       sess.sendChainKey = nextChain;
       sess.sendCounter++;
-      // v3.6: Compress before encrypting (CompressionStream when available)
-      let raw = new TextEncoder().encode(text);
-      let compressed = false;
-      if (raw.length >= _adaptiveConfig.compressMin && typeof CompressionStream !== 'undefined') {
-        try {
-          const cs = new CompressionStream('deflate-raw');
-          const w = cs.writable.getWriter();
-          const r = cs.readable.getReader();
-          w.write(raw); w.close();
-          const chunks = []; let done = false;
-          while (!done) { const { value, done: d } = await r.read(); if (value) chunks.push(value); done = d; }
-          const deflated = new Uint8Array(chunks.reduce((s, c) => s + c.length, 0));
-          let off = 0; for (const c of chunks) { deflated.set(c, off); off += c.length; }
-          if (deflated.length < raw.length * 0.9) { raw = deflated; compressed = true; }
-        } catch(e) { _dbg(e, 'compress'); }
-      }
+      // I15: do NOT compress before encrypting. Compressing plaintext before AES-GCM
+      // leaks information about its contents via ciphertext length (CRIME/BREACH class),
+      // which is especially damaging for a messenger where an on-path observer sees every
+      // length. New messages are always sent uncompressed (flags bit0 = 0); the receive
+      // path keeps decompressing legacy (flag-set) messages for backward compatibility.
+      // This matches src/crypto/ratchet.js (frameEncrypt defaults compressMin: Infinity).
+      const raw = new TextEncoder().encode(text);
+      const compressed = false;
       // Pad plaintext to 256-byte boundary (traffic analysis protection)
       const padded = new Uint8Array(Math.ceil((raw.length + 3) / CONFIG.MSG_PAD_BOUNDARY) * CONFIG.MSG_PAD_BOUNDARY);
       // Header: [flags:1][length:2][data...]
@@ -12127,8 +12119,8 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         'Forward Secrecy: ' + (sess ? '✓ Each message uses unique key' : '—'),
         'Replay Protection: ' + _replayCache.size() + '/' + CONFIG.REPLAY_CACHE_SIZE + ' in LRU cache',
         'Skipped Keys: ✓ Out-of-order message recovery (max 100 keys/session)',
-        'Compression: ' + (typeof CompressionStream !== 'undefined' ? '✓ deflate-raw (>' + _adaptiveConfig.compressMin + 'B)' : '✗ unavailable'),
-        'Protocol: v4 (compress+pad) / v3 (pad-only) / v2 (legacy)',
+        'Compression: ✗ off by design (I15 — avoids CRIME/BREACH length side-channel)',
+        'Protocol: v4 (pad-only; legacy compressed msgs still read) / v3 (pad-only) / v2 (legacy)',
         'Message Padding: ' + CONFIG.MSG_PAD_BOUNDARY + '-byte boundary',
         '',
         '<b>Browser Capabilities</b>',
