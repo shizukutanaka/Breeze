@@ -1,5 +1,35 @@
 # Changelog
 
+## content-visibility on message rows (render skip for off-screen) — Qiita/Zenn-informed — item 101 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+734 tests (CSS-only — suite imports src/crypto/_worker/sw, never index.html); `index.html`. `validate.sh` PASSED.
+
+Research lens. Qiita's `content-visibility` guides (`nolanlover0527/25dcdc97…`,
+`frosted_bird/004e530c…` CSS Containment): `content-visibility: auto` skips
+rendering (layout + paint) of off-screen elements until they enter the viewport
+— the biggest win on long, scrollable lists; pair with `contain-intrinsic-size`
+to reserve height and avoid scrollbar/layout shift.
+
+Socratic lens: *"The contact list row `.contact` already has
+`content-visibility: auto; contain-intrinsic-size: auto 60px`. The message list
+`.msg` is the LONGER, more-scrolled list (up to MSG_DOM_LIMIT = 200 nodes) — yet
+it only has `contain: content`, not `content-visibility`. Why is the bigger list
+unoptimized?"*
+
+No reason — oversight. The browser was laying out + painting all ~200 message
+rows even when only a handful are on screen.
+
+**Fix:**
+- `.msg`: add `content-visibility: auto; contain-intrinsic-size: auto 44px`
+  (≈ single-row height; the `auto` keyword then remembers each row's real size
+  after first render, so scrollback that's been seen stays jump-free). Mirrors the
+  existing `.contact` rule.
+- **Print guard:** `@media print .msg { content-visibility: visible !important }`.
+  `content-visibility: auto` skips off-screen content during printing, which would
+  have dropped messages from the `/print` chat export — forced visible for print.
+- Find-in-page is unaffected (`content-visibility: auto` keeps content findable by
+  the browser's Ctrl+F by design).
+
 ## crash-overlay i18n + fix ghost `uiError` key — Qiita/Zenn-informed — item 100 (branch claude/nice-ride-T6yb0, 2026-06-20)
 
 734 tests; `index.html` only. `validate.sh` PASSED (i18n EN/JA parity).
