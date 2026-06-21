@@ -51,7 +51,7 @@ self.addEventListener('fetch', (e) => {
         try {
           const preload = await e.preloadResponse?.catch(() => null);
           const resp = preload || await fetch(e.request);
-          if (resp.ok) { const c = resp.clone(); caches.open(CACHE).then(ca => ca.put(e.request, c)); }
+          cachePut(e.request, resp);
           return resp;
         } catch { return caches.match('/index.html'); }
       })()
@@ -62,13 +62,27 @@ self.addEventListener('fetch', (e) => {
   e.respondWith(
     caches.match(e.request).then(cached => {
       const fetchPromise = fetch(e.request).then(resp => {
-        if (resp.ok) { const c = resp.clone(); caches.open(CACHE).then(ca => ca.put(e.request, c)); }
+        cachePut(e.request, resp);
         return resp;
       }).catch(() => cached);
       return cached || fetchPromise;
     })
   );
 });
+
+// Cache a response only when it is a full, same-origin, OK response. Guards the two
+// documented Cache.put() pitfalls that would otherwise surface as unhandled rejections:
+//   - 206 Partial Content (range requests) — note response.ok is TRUE for 206, so the
+//     old `if (resp.ok)` check let it through and Cache.put() throws on a partial response.
+//   - QuotaExceededError when storage is full — the .catch() swallows it (the SWR/network
+//     response is still returned to the page; only the cache write is skipped).
+// Opaque (cross-origin no-cors, status 0) and CORS responses are skipped: we only persist
+// our own app shell, never third-party bytes.
+function cachePut(request, response) {
+  if (!response || response.status !== 200 || response.type !== 'basic') return;
+  const copy = response.clone();
+  caches.open(CACHE).then(c => c.put(request, copy)).catch(() => {});
+}
 
 // Web Push
 self.addEventListener('push', (e) => {

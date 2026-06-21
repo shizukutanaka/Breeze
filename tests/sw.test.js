@@ -33,10 +33,45 @@ function loadSW() {
     matchAll: () => Promise.resolve([]),
     claim: () => {},
   };
-  const caches = { open: () => Promise.resolve({ addAll: () => {}, put: () => {}, keys: () => Promise.resolve([]), delete: () => {} }), keys: () => Promise.resolve([]), match: () => Promise.resolve(undefined) };
+  const putCalls = [];
+  const state = { putRejects: false };
+  const caches = {
+    open: () => Promise.resolve({
+      addAll: () => {},
+      put: (req, resp) => {
+        putCalls.push({ req, resp });
+        return state.putRejects ? Promise.reject(new Error('QuotaExceededError')) : Promise.resolve();
+      },
+      keys: () => Promise.resolve([]),
+      delete: () => {},
+    }),
+    keys: () => Promise.resolve([]),
+    match: () => Promise.resolve(undefined),
+  };
   // eslint-disable-next-line no-new-func
   new Function('self', 'clients', 'caches', swSource)(self, clients, caches);
-  return { handlers, self, clients, openWindowCalls, postMessageCalls };
+  return { handlers, self, clients, openWindowCalls, postMessageCalls, putCalls, state };
+}
+
+// A minimal Response stand-in. Note ok===true for 206 (the exact trap the guard closes).
+function fakeResp({ status = 200, type = 'basic' } = {}) {
+  return { status, type, ok: status >= 200 && status < 300, clone() { return this; } };
+}
+
+// Fire the fetch handler for a navigation and return the resolved respondWith promise.
+// Supplying preloadResponse avoids needing a global fetch mock (the handler awaits the
+// preload first and uses it when present).
+async function fireNavigate(ctx, { url = `${ORIGIN}/`, preloadResponse } = {}) {
+  let responded;
+  const e = {
+    request: { url, mode: 'navigate' },
+    preloadResponse: preloadResponse !== undefined ? Promise.resolve(preloadResponse) : undefined,
+    respondWith: (p) => { responded = p; },
+  };
+  ctx.handlers.fetch(e);
+  const out = await responded;
+  await new Promise((r) => setTimeout(r, 0)); // flush the fire-and-forget cachePut() microtasks
+  return out;
 }
 
 // Fire notificationclick and wait for the handler's waitUntil promise to settle.
@@ -99,5 +134,45 @@ describe('sw.js notificationclick — relay-controlled URL is contained to our o
     };
     await fireNotificationClick(ctx, { action: 'reply', reply: 'secret reply', data: { contactId: 'x' }, windows: [foreign] });
     expect(posted).toBe(false);
+  });
+});
+
+describe('sw.js cachePut — guards the Cache.put() pitfalls', () => {
+  let ctx;
+  beforeEach(() => { ctx = loadSW(); });
+
+  it('caches a full same-origin 200 basic response', async () => {
+    const resp = fakeResp({ status: 200, type: 'basic' });
+    const out = await fireNavigate(ctx, { preloadResponse: resp });
+    expect(out).toBe(resp);             // response still returned to the page
+    expect(ctx.putCalls.length).toBe(1); // and written to cache
+  });
+
+  it('does NOT cache a 206 Partial Content response (range request — response.ok is true)', async () => {
+    const resp = fakeResp({ status: 206, type: 'basic' });
+    const out = await fireNavigate(ctx, { preloadResponse: resp });
+    expect(out).toBe(resp);              // still served
+    expect(ctx.putCalls.length).toBe(0); // but never put() — Cache.put() would have thrown
+  });
+
+  it('does NOT cache an opaque (cross-origin no-cors) response', async () => {
+    const resp = fakeResp({ status: 0, type: 'opaque' });
+    await fireNavigate(ctx, { preloadResponse: resp });
+    expect(ctx.putCalls.length).toBe(0);
+  });
+
+  it('does NOT cache a CORS (third-party) response', async () => {
+    const resp = fakeResp({ status: 200, type: 'cors' });
+    await fireNavigate(ctx, { preloadResponse: resp });
+    expect(ctx.putCalls.length).toBe(0);
+  });
+
+  it('swallows a QuotaExceededError from put() without rejecting respondWith', async () => {
+    ctx.state.putRejects = true;
+    const resp = fakeResp({ status: 200, type: 'basic' });
+    // Must resolve (not reject) — the page still gets its response; only the write is lost.
+    const out = await fireNavigate(ctx, { preloadResponse: resp });
+    expect(out).toBe(resp);
+    expect(ctx.putCalls.length).toBe(1); // put was attempted, rejection caught internally
   });
 });

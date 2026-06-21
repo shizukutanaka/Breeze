@@ -1,5 +1,34 @@
 # Changelog
 
+## Service Worker cache hardening — Qiita/Zenn-informed — item 96 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+734 tests (5 new in `tests/sw.test.js`); `sw.js` + `tests/sw.test.js`. `validate.sh` PASSED.
+
+Research lens. A Qiita/Zenn sweep on Cloudflare KV cost, WebRTC reconnection,
+IndexedDB perf, and Service Worker/PWA caching. Most surfaces were already mature
+(worker presence cache + 5-min KV write batching; lossless +1ms poll cursor;
+shell-preserving SW trim; complete PWA manifest). The one concrete gap was a
+documented `Cache.put()` pitfall in the SW fetch handler.
+
+Socratic lens: *"Both `cache.put()` sites guard with `if (resp.ok)`. But `resp.ok`
+is TRUE for a 206 Partial Content response, and `Cache.put()` THROWS on a partial
+response. The put is also unawaited and uncaught, so a 206 (range request) or a
+`QuotaExceededError` (storage full) becomes an unhandled promise rejection."*
+
+**Fix (DRY):**
+
+- New `cachePut(request, response)` helper replaces both inline
+  `if (resp.ok) { … caches.open().then(put) }` blocks. It caches **only**
+  `status === 200 && type === 'basic'` responses — so 206 partials, opaque
+  (cross-origin no-cors, status 0), and CORS (third-party) responses are skipped
+  (we only persist our own shell), and the write is wrapped in `.catch(() => {})`
+  so a `QuotaExceededError` never escapes. The page still receives every response;
+  only the cache write is conditionally skipped.
+- 5 new SW tests via the existing mocked-global harness: 200/basic cached;
+  206 not cached (the trap — asserts `resp.ok` would have passed); opaque not
+  cached; CORS not cached; `QuotaExceededError` swallowed without rejecting
+  `respondWith`.
+
 ## Trusted Types enforcement (Phase 2d) — Qiita/Zenn-informed — item 95 (branch claude/nice-ride-T6yb0, 2026-06-20)
 
 729 tests; `index.html` + `_headers` + `docs/REVIEW-2026-06.md`. `validate.sh` PASSED.
