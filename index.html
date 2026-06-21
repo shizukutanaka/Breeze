@@ -1372,7 +1372,7 @@ const _I = {
     // Status
     relay: 'Relay', online: 'online',
     // Actions
-    send: 'Send', clear: 'Clear', copy: 'Copy', close: 'Close', later: 'Later',
+    send: 'Send', clear: 'Clear', copy: 'Copy', close: 'Close', later: 'Later', forward: 'Forward', open: 'Open',
     reply: 'Reply', edit: 'Edit', delete: 'Delete', forward: 'Forward', pin: 'Pin',
     // Upgrade
     upgTitle: 'Upgrade Plan', upgCta: 'Get more accounts — plans from $0.99/mo',
@@ -1832,7 +1832,7 @@ const _I = {
     p2pIntro: 'P2P暗号化メッセンジャー。<br>登録不要。サーバーにメッセージは保存されません。<br>連絡先を追加して開始。',
     addContact: '連絡先を追加:\n\nBreezeリンク、@alias、公開鍵、または招待メッセージを貼り付け。\n"group:名前" でグループ作成。',
     relay: 'リレー', online: 'オンライン',
-    send: '送信', clear: 'クリア', copy: 'コピー', close: '閉じる', later: '後で',
+    send: '送信', clear: 'クリア', copy: 'コピー', close: '閉じる', later: '後で', forward: '転送', open: '開く',
     reply: '返信', edit: '編集', delete: '削除', forward: '転送', pin: 'ピン',
     upgTitle: 'プランアップグレード', upgCta: 'アカウント追加 — $0.99/月から',
     upgFile: (mb) => `このファイルは ${mb}MB です (最大50MB)。`,
@@ -6828,10 +6828,10 @@ async function initMessenger(dbName) {
       `<label class="contact i-ctx-item" data-cid="${c.id}"><input type="checkbox" class="i-accent-g"><div class="cname">${c.pinned ? '📌 ' : ''}${esc(c.name)}</div></label>`
     ).join('');
     overlay.innerHTML = `<div class="modal i-max-popup">
-      <div class="i-heading-b">Forward to:</div>
+      <div class="i-heading-b">${esc(t('forwardTo'))}</div>
       <input id="fwd-filter" class="i-filter-input" placeholder="${esc(t('searchPh'))}" aria-label="${esc(t('ariaFilterContacts'))}" autocomplete="off">
       <div id="fwd-list">${list}</div>
-      <button class="btn btn-g btn-sm i-w100-mt8" id="fwd-send">Forward</button>
+      <button class="btn btn-g btn-sm i-w100-mt8" id="fwd-send">${t('forward')}</button>
     </div>`;
     document.body.appendChild(overlay);
     overlay.onclick = (ev) => { if (ev.target === overlay) overlay.remove(); };
@@ -7854,8 +7854,8 @@ async function initMessenger(dbName) {
           <img src="${url}" class="i-img-preview" decoding="async">
           <div class="i-small-muted">${fmtSize(file.size)}</div>
           <div class="i-flex-c">
-            <button class="btn btn-g btn-sm" id="paste-send">Send</button>
-            <button class="btn btn-o btn-sm" data-close="overlay">Cancel</button>
+            <button class="btn btn-g btn-sm" id="paste-send">${t('send')}</button>
+            <button class="btn btn-o btn-sm" data-close="overlay">${t('cancel')}</button>
           </div>
         </div>`;
         document.body.appendChild(overlay);
@@ -9479,8 +9479,8 @@ async function initMessenger(dbName) {
           <img src="${url}" class="i-img-preview" decoding="async">
           <div class="i-desc12">${esc(file.name)} (${fmtSize(file.size)})</div>
           <div class="i-flex-c">
-            <button class="btn btn-g btn-sm" id="dd-send">Send</button>
-            <button class="btn btn-o btn-sm" data-close="overlay">Cancel</button>
+            <button class="btn btn-g btn-sm" id="dd-send">${t('send')}</button>
+            <button class="btn btn-o btn-sm" data-close="overlay">${t('cancel')}</button>
           </div>
         </div>`;
         document.body.appendChild(overlay);
@@ -10367,8 +10367,8 @@ async function initMessenger(dbName) {
         <div class="i-sub14">Open external link?</div>
         <div class="i-green-word">${esc(url.slice(0, 200))}</div>
         <div class="i-flex-c">
-          <button class="btn btn-g btn-sm" id="link-open">Open</button>
-          <button class="btn btn-o btn-sm" data-close="overlay">Cancel</button>
+          <button class="btn btn-g btn-sm" id="link-open">${t('open')}</button>
+          <button class="btn btn-o btn-sm" data-close="overlay">${t('cancel')}</button>
         </div>
       </div>`;
       document.body.appendChild(confirmEl);

@@ -1,5 +1,30 @@
 # Changelog
 
+## localize dynamic dialog buttons + audit confirms focus-visible is sound — Qiita/Zenn-informed — item 105 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+734 tests; `index.html` only. `validate.sh` PASSED (i18n EN/JA parity).
+
+Research lens. Round began on `:focus-visible` / `outline:none` a11y
+(`kskwtnk/2f7ef9e5…`, `tak_dcxi/f958e968…`). **Audit found Breeze already sound**:
+a global `:focus-visible { outline: 2px solid var(--g); outline-offset: 2px }`
+covers buttons, and every input with `outline:none` is compensated by an
+`input:focus`/`textarea:focus` box-shadow ring — so keyboard focus is never lost.
+No change needed there (recorded as a verified non-issue, not a forced edit).
+
+Instead, applied the round's i18n/a11y theme to a confirmed gap: **hardcoded
+English buttons in dynamically-built dialogs** (these bypass the static
+`data-i18n` pass and were never localized).
+
+Socratic lens: *"The static buttons use `data-i18n`. But the dialogs built at
+runtime via `innerHTML` template literals — forward, paste-image, dead-drop,
+link-open — hardcode `Forward` / `Send` / `Cancel` / `Open`. A JA user sees
+English action buttons."*
+
+- Added `forward` / `open` keys (EN+JA); `send` / `cancel` already existed.
+- Localized 7 dialog buttons via inline `t()`: forward dialog `Forward` +
+  `Forward to:` heading (`forwardTo`); paste-image `Send`/`Cancel`; dead-drop
+  `Send`/`Cancel`; link-open `Open`/`Cancel`.
+
 ## localize all title tooltips (new data-i18n-title) + aria-label on icon-only controls — Qiita/Zenn-informed — item 104 (branch claude/nice-ride-T6yb0, 2026-06-20)
 
 734 tests; `index.html` only. `validate.sh` PASSED (i18n EN/JA parity).
