@@ -1498,6 +1498,7 @@ const _I = {
     helpFormat: 'Format',
     helpKeys: 'Keys',
     voiceMsg: 'Voice message',
+    fullSizeImage: 'Full size image',
     chooseAvatar: 'Choose avatar emoji',
     avatarPlaceholder: 'Emoji or letter',
     newNamePrompt: 'New name:',
@@ -1941,6 +1942,7 @@ const _I = {
     helpFormat: '書式',
     helpKeys: 'キー',
     voiceMsg: '音声メッセージ',
+    fullSizeImage: 'フルサイズ画像',
     chooseAvatar: 'アバター絵文字を選択',
     avatarPlaceholder: '絵文字または文字',
     newNamePrompt: '新しい名前:',
@@ -6128,8 +6130,8 @@ async function initMessenger(dbName) {
     let siteName = '';
     try { siteName = ogp.siteName || new URL(ogp.url || '').hostname.replace('www.', ''); } catch {}
     const faviconUrl = ogp.url ? `https://www.google.com/s2/favicons?sz=16&domain=${new URL(ogp.url).hostname}` : '';
-    const siteInfo = siteName ? `<div class="ogp-site">${faviconUrl ? `<img src="${esc(faviconUrl)}" width="12" height="12" loading="lazy" onerror="this.remove()"> ` : ''}${esc(siteName)}</div>` : '';
-    return `<div class="ogp-card">${imgSafe ? `<img src="${esc(ogp.image)}" class="i-cover-img" loading="lazy" referrerpolicy="no-referrer" crossorigin="anonymous" onerror="this.remove()">` : ''}<div class="i-pad68">${siteInfo}<div class="i-info-line">${esc(ogp.title || '')}</div>${ogp.description ? `<div class="i-small-meta">${esc(ogp.description.slice(0, 120))}</div>` : ''}</div></div>`;
+    const siteInfo = siteName ? `<div class="ogp-site">${faviconUrl ? `<img src="${esc(faviconUrl)}" width="12" height="12" loading="lazy" decoding="async" onerror="this.remove()"> ` : ''}${esc(siteName)}</div>` : '';
+    return `<div class="ogp-card">${imgSafe ? `<img src="${esc(ogp.image)}" class="i-cover-img" loading="lazy" decoding="async" referrerpolicy="no-referrer" crossorigin="anonymous" onerror="this.remove()">` : ''}<div class="i-pad68">${siteInfo}<div class="i-info-line">${esc(ogp.title || '')}</div>${ogp.description ? `<div class="i-small-meta">${esc(ogp.description.slice(0, 120))}</div>` : ''}</div></div>`;
   }
 
   // v3.2: OGP cache (avoid re-fetching same URL)
@@ -6161,7 +6163,7 @@ async function initMessenger(dbName) {
     el.className = 'ogp-card';
     el.onclick = () => window.open(url, '_blank', 'noopener,noreferrer');
     const imgSafe = data.image && isSafeMediaUrl(data.image);
-    el.innerHTML = (imgSafe ? `<img src="${esc(data.image)}" class="i-thumb-60" loading="lazy" referrerpolicy="no-referrer" crossorigin="anonymous" onerror="this.remove()">` : '') +
+    el.innerHTML = (imgSafe ? `<img src="${esc(data.image)}" class="i-thumb-60" loading="lazy" decoding="async" referrerpolicy="no-referrer" crossorigin="anonymous" onerror="this.remove()">` : '') +
       `<div class="i-overflow-h"><div class="i-ellip-name">${esc(data.title || '')}</div>` +
       `<div class="i-clamp2">${esc(data.description || '')}</div>` +
       `<div class="i-tiny-sub">${esc(new URL(url).hostname)}</div></div>`;
@@ -6328,7 +6330,7 @@ async function initMessenger(dbName) {
         }
         if (href) {
           if (f.mime && f.mime.startsWith('image/')) {
-            content += `<img src="${href}" class="msg-img" data-lightbox="${href}" alt="${esc(f.name)}" loading="lazy"><a href="${href}" download="${esc(f.name)}" class="msg-file-name">${esc(f.name)}</a>`;
+            content += `<img src="${href}" class="msg-img" data-lightbox="${href}" alt="${esc(f.name)}" loading="lazy" decoding="async"><a href="${href}" download="${esc(f.name)}" class="msg-file-name">${esc(f.name)}</a>`;
           } else {
             content += `<a href="${href}" download="${esc(f.name)}" class="msg-file">📎 ${esc(f.name)}</a>`;
           }
@@ -7245,6 +7247,7 @@ async function initMessenger(dbName) {
     preview.className = 'file-preview';
     if (file.type.startsWith('image/')) {
       const img = document.createElement('img');
+      img.decoding = 'async';
       img.src = URL.createObjectURL(file);
       img.onload = () => URL.revokeObjectURL(img.src);
       preview.appendChild(img);
@@ -7820,7 +7823,7 @@ async function initMessenger(dbName) {
         const name = 'paste-' + Date.now() + '.' + (file.type.split('/')[1] || 'png');
         overlay.innerHTML = `<div class="modal i-center">
           <div class="i-sub12">${esc(t('sendImage') || t('sendImageConfirm'))}</div>
-          <img src="${url}" class="i-img-preview">
+          <img src="${url}" class="i-img-preview" decoding="async">
           <div class="i-small-muted">${fmtSize(file.size)}</div>
           <div class="i-flex-c">
             <button class="btn btn-g btn-sm" id="paste-send">Send</button>
@@ -9445,7 +9448,7 @@ async function initMessenger(dbName) {
         const overlay = document.createElement('div');
         overlay.className = 'overlay';
         overlay.innerHTML = `<div class="modal i-center">
-          <img src="${url}" class="i-img-preview">
+          <img src="${url}" class="i-img-preview" decoding="async">
           <div class="i-desc12">${esc(file.name)} (${fmtSize(file.size)})</div>
           <div class="i-flex-c">
             <button class="btn btn-g btn-sm" id="dd-send">Send</button>
@@ -10207,8 +10210,9 @@ async function initMessenger(dbName) {
     const lb = document.createElement('div');
     lb.className = 'lightbox';
     const img = document.createElement('img');
+    img.decoding = 'async';
     img.src = src;
-    img.alt = 'Full size image';
+    img.alt = t('fullSizeImage');
     img.onerror = () => lb.remove();
     lb.appendChild(img);
     lb.onclick = (e) => { if (e.target === lb) lb.remove(); };

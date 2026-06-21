@@ -1,5 +1,31 @@
 # Changelog
 
+## decoding="async" on all display images + fix hardcoded alt — Qiita/Zenn-informed — item 102 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+734 tests; `index.html` only. `validate.sh` PASSED (i18n EN/JA parity).
+
+Research lens. Zenn `decoding="async"` deep-dives (`ixkaito/deep-dive-into-decoding`,
+`sugamaan/9adab715…`): `loading` controls *when to fetch*, `decoding` controls
+*when to decode*; `decoding="async"` keeps image decode off the main thread (sync
+decode blocks the browser), and it pairs naturally with `loading="lazy"` for
+below-fold images.
+
+Socratic lens: *"Every below-fold `<img>` already has `loading="lazy"`. But does
+any have `decoding="async"`? If not, the browser still decodes each image
+synchronously on the main thread as it scrolls into view — janking the very
+scroll `loading=lazy` was meant to smooth."*
+
+None did. Added `decoding="async"` to every display image:
+
+- Message image (`.msg-img`), OGP card cover + favicon + thumbnail (all already
+  `loading="lazy"`).
+- Compose image preview and the `?...` image previews (first-view → no `lazy`, but
+  `decoding="async"` still avoids a sync-decode hitch).
+- Lightbox full-size image (`createElement` → `img.decoding = 'async'`).
+
+Also fixed a hardcoded English `img.alt = 'Full size image'` on the lightbox image
+(CLAUDE.md `t()` violation) → `t('fullSizeImage')` with new EN/JA keys.
+
 ## content-visibility on message rows (render skip for off-screen) — Qiita/Zenn-informed — item 101 (branch claude/nice-ride-T6yb0, 2026-06-20)
 
 734 tests (CSS-only — suite imports src/crypto/_worker/sw, never index.html); `index.html`. `validate.sh` PASSED.
