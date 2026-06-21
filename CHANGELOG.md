@@ -1,5 +1,31 @@
 # Changelog
 
+## crash-overlay i18n + fix ghost `uiError` key — Qiita/Zenn-informed — item 100 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+734 tests; `index.html` only. `validate.sh` PASSED (i18n EN/JA parity).
+
+Research lens. Qiita/Zenn global-error-handling guides (`CRUD5th/7121432a…`
+exception/notification design; `window.onerror` + `unhandledrejection` as the
+"last line of defense"). Breeze already has both global handlers (flood limit,
+fatal-error crash overlay, audit log, network-error toast suppression) — mature.
+Auditing the failure-path UI itself surfaced three issues.
+
+Socratic lens: *"The crash overlays are the LAST thing a user sees when the app
+breaks. Are they even translated? And does every `t()` key they use exist?"*
+
+- **Ghost key bug.** The init-failure overlay used `esc(t('uiError') || 'Something
+  went wrong')`. There is no `uiError` key, and `t()` falls back to the **key
+  string**, so `t('uiError')` returned the literal `"uiError"` — truthy — so the
+  `|| 'Something went wrong'` fallback never ran. A crashing app showed the user a
+  title that literally read **"uiError"**. Now uses `t('crashTitle')`.
+- **Hardcoded English.** Both crash overlays had hardcoded `Something went wrong`
+  / `Breeze encountered an error…` / `Clear cache` / `Reload` / `Clearing...` —
+  CLAUDE.md violations a JA user would hit at the worst moment. Added `crashTitle`
+  / `crashBody` / `crashClearCache` keys (EN+JA); reused existing `uiReload` and
+  `clearing`. Both overlays now fully localized.
+- **Duplicate avoided.** Initial fix added a `crashClearing` key; `clearing`
+  already existed (EN+JA) → reused it, dropped the dup.
+
 ## passive listeners on every observer-only touch/scroll — Qiita/Zenn-informed — item 99 (branch claude/nice-ride-T6yb0, 2026-06-20)
 
 734 tests; `index.html` only. `validate.sh` PASSED.

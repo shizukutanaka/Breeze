@@ -1749,6 +1749,9 @@ const _I = {
     uiClose: 'Close',
     uiInstall: 'Install',
     uiReload: 'Reload',
+    crashTitle: 'Something went wrong',
+    crashBody: 'Breeze encountered an error. Your messages are safe in local storage.',
+    crashClearCache: 'Clear cache',
     uiUnlock: 'Unlock',
     uiRemoved: 'Removed',
     uiCopied: 'Copied!',
@@ -2188,6 +2191,9 @@ const _I = {
     uiClose: '閉じる',
     uiInstall: 'インストール',
     uiReload: '再読込',
+    crashTitle: '問題が発生しました',
+    crashBody: 'Breezeでエラーが発生しました。メッセージはローカルストレージに安全に保存されています。',
+    crashClearCache: 'キャッシュを消去',
     uiUnlock: '解除',
     uiRemoved: '削除済',
     uiCopied: 'コピーしました',
@@ -2432,10 +2438,10 @@ window.addEventListener('error', (event) => {
   // Crash recovery overlay after 3 fatal errors
   if (_fatalErrors >= 3 && !document.querySelector('.crash-overlay')) {
     const d = document.createElement('div'); d.className = 'crash-overlay';
-    d.innerHTML = '<div class="i-icon48">⚠️</div><h2>Something went wrong</h2><p>Breeze encountered an error. Your messages are safe in local storage.</p><button class="btn btn-g">Reload</button><button class="btn btn-o">Clear cache</button>';
+    d.innerHTML = '<div class="i-icon48">⚠️</div><h2>' + t('crashTitle') + '</h2><p>' + t('crashBody') + '</p><button class="btn btn-g">' + t('uiReload') + '</button><button class="btn btn-o">' + t('crashClearCache') + '</button>';
     d.querySelectorAll('button')[0].onclick = () => location.reload();
     d.querySelectorAll('button')[1].onclick = async () => {
-      d.querySelectorAll('button')[1].textContent = 'Clearing...';
+      d.querySelectorAll('button')[1].textContent = t('clearing');
       try { const keys = await caches.keys(); await Promise.all(keys.map(k => caches.delete(k))); } catch(e) { /* */ }
       location.reload();
     };
@@ -2896,7 +2902,7 @@ if (P.has('terms') || P.has('privacy') || P.has('legal') || P.has('commercial') 
     _dbg(e, 'initMessenger-fatal');
     const d = document.createElement('div');
     d.className = 'crash-overlay';
-    d.innerHTML = '<div class="i-icon48">⚠️</div><h2>' + esc(t('uiError') || 'Something went wrong') + '</h2><p>' + esc(e?.message || '') + '</p><button class="btn btn-g" id="crash-reload">Reload</button>';
+    d.innerHTML = '<div class="i-icon48">⚠️</div><h2>' + esc(t('crashTitle')) + '</h2><p>' + esc(e?.message || '') + '</p><button class="btn btn-g" id="crash-reload">' + esc(t('uiReload')) + '</button>';
     document.body.appendChild(d);
     document.getElementById('crash-reload')?.addEventListener('click', () => location.reload());
   });
