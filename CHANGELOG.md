@@ -1,5 +1,30 @@
 # Changelog
 
+## fix peer-heartbeat interval leak on account switch — Qiita/Zenn-informed — item 98 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+734 tests; `index.html` only (inline WebRTC teardown — not harness-testable, like item 90). `validate.sh` PASSED.
+
+Research lens. A Qiita/Zenn memory-leak sweep (`CRUD5th/b37ca6dc…` event/ref
+release; `tkdn` 4 common leaks) reiterates the #1 SPA leak: a `setInterval`
+whose `clearInterval` never runs on teardown keeps its callback closure — and
+everything it captures — alive forever.
+
+Socratic lens: *"`_messengerCleanup` (the account-switch teardown) clears each
+peer's `_healthTimer` and calls `pc.close()`. But `_heartbeat` (a sibling
+`setInterval` on the same peer) is cleared only by the connectionstatechange
+handler — and `pc.close()` does NOT fire connectionstatechange (per spec). So
+after an account switch, does every peer's heartbeat keep firing?"*
+
+Yes. The heartbeat interval kept running against a now-closed DataChannel,
+pinning the old `peerState` (and its `pc`, channels, closures) so GC could never
+reclaim them. Each account switch with N live peers leaked N intervals — they
+accumulate across switches, wasting a timer + CPU per old peer indefinitely.
+
+**Fix:** clear `p._heartbeat` alongside `p._healthTimer` in the teardown loop
+(one line + comment), making the two per-peer timers symmetric. Verified by
+inspection (the inline WebRTC peer path has no unit harness, consistent with the
+call-signaling work in item 90).
+
 ## modal a11y accessible names + button i18n — Qiita/Zenn-informed — item 97 (branch claude/nice-ride-T6yb0, 2026-06-20)
 
 734 tests; `index.html` only. `validate.sh` PASSED (incl. i18n EN/JA parity).

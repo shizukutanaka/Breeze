@@ -5377,6 +5377,11 @@ async function initMessenger(dbName) {
       _intervals.forEach(i => clearInterval(i));
       Object.values(peers).forEach(p => {
         if (p._healthTimer) clearInterval(p._healthTimer);
+        // Leak fix: pc.close() does NOT fire connectionstatechange (per spec), so the
+        // state-change handler that normally clears _heartbeat never runs on teardown.
+        // Clear it here too — otherwise every peer's heartbeat interval keeps firing
+        // against a closed channel after an account switch, pinning the old peer object.
+        if (p._heartbeat) clearInterval(p._heartbeat);
         try { p.pc?.close(); } catch(e) { _dbg(e); }
       });
       // Save unread count for cross-account badge
