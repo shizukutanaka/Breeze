@@ -1120,8 +1120,8 @@ del.md-del { opacity: .6 }
   <div id="msg-setup" class="hidden setup-page">
     <h1 id="msg-setup-title" data-i18n-html="heroTitle"></h1>
     <p id="msg-setup-desc" class="setup-desc" data-i18n="heroDesc"></p>
-    <input type="text" id="msg-name" class="setup-input" data-i18n-ph="yourName" aria-label="Display name" maxlength="64" autocomplete="off">
-    <input type="text" id="msg-alias" class="setup-input-alt" data-i18n-ph="breezeId" aria-label="Breeze ID" maxlength="20" pattern="[a-z0-9_]+" autocomplete="off">
+    <input type="text" id="msg-name" class="setup-input" data-i18n-ph="yourName" data-i18n-aria="ariaDisplayName" maxlength="64" autocomplete="off">
+    <input type="text" id="msg-alias" class="setup-input-alt" data-i18n-ph="breezeId" data-i18n-aria="ariaBreezeId" maxlength="20" pattern="[a-z0-9_]+" autocomplete="off">
     <button class="btn btn-g setup-cta" id="b-msg-setup" data-i18n="createFree"></button>
     <div class="setup-footer">
       <span data-i18n="noCreditCard"></span><br>
@@ -1156,7 +1156,7 @@ del.md-del { opacity: .6 }
         </div>
         <div id="label-filter" class="label-filter hidden"></div>
         <div class="contact-filter-wrap">
-          <input id="contact-filter" type="text" placeholder="Search..." data-i18n-ph="searchPh" aria-label="Filter contacts" class="contact-filter" autocomplete="off">
+          <input id="contact-filter" type="text" placeholder="Search..." data-i18n-ph="searchPh" data-i18n-aria="ariaFilterContacts" class="contact-filter" autocomplete="off">
         </div>
         <div id="msg-contacts" role="list" aria-label="Contacts" class="contact-list">
           <div class="skeleton skeleton-contact"></div>
@@ -1177,7 +1177,7 @@ del.md-del { opacity: .6 }
         <div class="offline-bar" id="offline-bar" role="alert"></div>
         <div class="outbox-badge" id="outbox-badge" role="status"><span class="dot"></span><span id="outbox-text"></span></div>
         <div class="search-bar" id="search-bar">
-          <input id="search-chat-input" placeholder="Search..." data-i18n-ph="searchPh" aria-label="Search" autocomplete="off">
+          <input id="search-chat-input" placeholder="Search..." data-i18n-ph="searchPh" data-i18n-aria="ariaSearchChat" autocomplete="off">
           <span class="match-count" id="search-match-count"></span>
           <button class="btn btn-o btn-sm" id="search-chat-prev" aria-label="Prev">↑</button>
           <button class="btn btn-o btn-sm" id="search-chat-next" aria-label="Next">↓</button>
@@ -1195,7 +1195,7 @@ del.md-del { opacity: .6 }
           <label class="tool" title="Attach">📎<input type="file" id="msg-file" class="hidden"></label>
           <button id="b-msg-voice" class="tool" aria-label="Voice">🎤</button>
           <button id="b-msg-stt" class="tool hidden" aria-label="Dictate">🗣</button>
-          <textarea id="msg-input" data-i18n-ph="msgPlaceholder" aria-label="Message" maxlength="4096" rows="1"></textarea>
+          <textarea id="msg-input" data-i18n-ph="msgPlaceholder" data-i18n-aria="ariaMessage" maxlength="4096" rows="1"></textarea>
           <span id="msg-char-count" class="char-count hidden"></span>
           <button id="b-msg-emoji" class="tool" aria-label="Emoji" title="Emoji">😀</button>
           <button class="send" id="b-msg-send" aria-label="Send">↑</button>
@@ -1499,6 +1499,11 @@ const _I = {
     helpKeys: 'Keys',
     voiceMsg: 'Voice message',
     fullSizeImage: 'Full size image',
+    ariaDisplayName: 'Display name',
+    ariaBreezeId: 'Breeze ID',
+    ariaFilterContacts: 'Filter contacts',
+    ariaSearchChat: 'Search messages',
+    ariaMessage: 'Message',
     chooseAvatar: 'Choose avatar emoji',
     avatarPlaceholder: 'Emoji or letter',
     newNamePrompt: 'New name:',
@@ -1943,6 +1948,11 @@ const _I = {
     helpKeys: 'キー',
     voiceMsg: '音声メッセージ',
     fullSizeImage: 'フルサイズ画像',
+    ariaDisplayName: '表示名',
+    ariaBreezeId: 'Breeze ID',
+    ariaFilterContacts: '連絡先を絞り込み',
+    ariaSearchChat: 'メッセージを検索',
+    ariaMessage: 'メッセージ',
     chooseAvatar: 'アバター絵文字を選択',
     avatarPlaceholder: '絵文字または文字',
     newNamePrompt: '新しい名前:',
@@ -2259,6 +2269,7 @@ function t(key, ...args) {
 document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
 document.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = t(el.dataset.i18nHtml); });
 document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
+document.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
 document.documentElement.lang = LANG; // Dynamic lang attribute
 // Register Service Worker (PWA) + v3.6: Improved update notification (research: workbox-window pattern)
 if ('serviceWorker' in navigator) {
@@ -6801,7 +6812,7 @@ async function initMessenger(dbName) {
     ).join('');
     overlay.innerHTML = `<div class="modal i-max-popup">
       <div class="i-heading-b">Forward to:</div>
-      <input id="fwd-filter" class="i-filter-input" data-i18n-ph="searchPh" autocomplete="off">
+      <input id="fwd-filter" class="i-filter-input" placeholder="${esc(t('searchPh'))}" aria-label="${esc(t('ariaFilterContacts'))}" autocomplete="off">
       <div id="fwd-list">${list}</div>
       <button class="btn btn-g btn-sm i-w100-mt8" id="fwd-send">Forward</button>
     </div>`;

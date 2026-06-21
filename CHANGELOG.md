@@ -1,5 +1,32 @@
 # Changelog
 
+## localize input aria-labels (new data-i18n-aria) + revive dead fwd-filter placeholder — Qiita/Zenn-informed — item 103 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+734 tests; `index.html` only. `validate.sh` PASSED (i18n EN/JA parity).
+
+Research lens. Qiita/Zenn form-a11y guides (`wtod/bb37c180…` label benefits;
+`marl0401/008ae90d…` form-accessibility; WCAG 2.2): a control needs a programmatic
+accessible name, and a `placeholder` is **not** one (it disappears and isn't reliably
+exposed). Use `<label>`, else `aria-label`/`aria-labelledby`.
+
+Socratic lens: *"The inputs all have an `aria-label` — good. But they're hardcoded
+English (`Display name`, `Breeze ID`, `Filter contacts`, `Search`, `Message`).
+There's a `data-i18n-ph` mechanism for placeholders but no equivalent for aria. So a
+Japanese screen-reader user hears the field names in English. And the dynamically-built
+forward-dialog filter has `data-i18n-ph` — but does the one-time load handler even reach
+a node created later?"*
+
+- **Localized aria-labels.** Added a `data-i18n-aria` apply handler (mirrors the
+  existing `data-i18n-ph` line) and 5 concise aria keys (EN+JA). Converted the 5 static
+  inputs (`msg-name`, `msg-alias`, `contact-filter`, `search-chat-input`, `msg-input`)
+  from hardcoded `aria-label` → `data-i18n-aria`. Used concise dedicated keys (the
+  placeholder keys like `breezeId: 'Breeze ID (e.g. alice — optional)'` are too verbose
+  for a screen-reader name).
+- **Dead placeholder revived.** The forward-dialog filter (`#fwd-filter`) is built via
+  innerHTML *after* the one-time `data-i18n-ph` pass, so its `data-i18n-ph="searchPh"`
+  never applied — the field had **no placeholder and no accessible name**. Set both
+  inline via `t()` (`placeholder` + `aria-label`, esc'd).
+
 ## decoding="async" on all display images + fix hardcoded alt — Qiita/Zenn-informed — item 102 (branch claude/nice-ride-T6yb0, 2026-06-20)
 
 734 tests; `index.html` only. `validate.sh` PASSED (i18n EN/JA parity).
