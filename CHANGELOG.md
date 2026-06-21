@@ -1,5 +1,34 @@
 # Changelog
 
+## passive listeners on every observer-only touch/scroll — Qiita/Zenn-informed — item 99 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+734 tests; `index.html` only. `validate.sh` PASSED.
+
+Research lens. Qiita's "猫でもわかるスクロールイベントパフォーマンス改善" and
+`kyntk/5c16846a…` ("touch/wheel に passive: true を明示する必要があるか") plus
+`nuko-suke` performance-tuning 85選: a touch/scroll listener without
+`{ passive: true }` forces the browser to **block scroll** until the main thread
+returns from the callback (in case it calls `preventDefault()`), causing visible
+scroll jank on mobile. Chrome DevTools logs this as
+"Added non-passive event listener to a scroll-blocking event."
+
+Socratic lens: *"How many of Breeze's touch/scroll listeners are explicitly
+`{ passive: true }`? And of the rest, which actually call `preventDefault()`?"*
+
+Audit: 13 touch/scroll listeners total. 9 already declared `passive` (most
+`true`, two `false` where they legitimately call `preventDefault` — pinch-zoom
+on the image lightbox and the message double-tap reaction picker). **4 sites
+omitted the option entirely** — all pure observers that never call
+`preventDefault`:
+
+- `visualViewport scroll` → `_adjustViewport` (viewport CSS update).
+- Image lightbox `touchend` (swipe-down-to-dismiss + zoom reset).
+- Image lightbox `touchend` (double-tap to zoom).
+- Message-list `scroll` → toggle scroll-to-bottom FAB.
+
+**Fix:** added `{ passive: true }` to all four. No code logic change. Now every
+touch/scroll listener in the app explicitly declares its intent.
+
 ## fix peer-heartbeat interval leak on account switch — Qiita/Zenn-informed — item 98 (branch claude/nice-ride-T6yb0, 2026-06-20)
 
 734 tests; `index.html` only (inline WebRTC teardown — not harness-testable, like item 90). `validate.sh` PASSED.

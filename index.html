@@ -2683,7 +2683,7 @@ if (window.visualViewport) {
     document.documentElement.style.setProperty('--kb-offset', diff + 'px');
   };
   window.visualViewport.addEventListener('resize', _adjustViewport);
-  window.visualViewport.addEventListener('scroll', _adjustViewport);
+  window.visualViewport.addEventListener('scroll', _adjustViewport, { passive: true });
 }
 // v3: NETWORK STATUS (offline/online indicator)
 let _isOffline = !navigator.onLine;
@@ -10251,7 +10251,7 @@ async function initMessenger(dbName) {
         if (scale < 0.8) { scale = 1; lastScale = 1; posX = 0; posY = 0; img.style.transform = ''; }
         // Swipe down to dismiss (when not zoomed)
         if (scale <= 1 && posY > 80) lb.remove();
-      });
+      }, { passive: true });
 
       // Double-tap to zoom
       let lastTap = 0;
@@ -10263,7 +10263,7 @@ async function initMessenger(dbName) {
           else { scale = 2.5; lastScale = 2.5; img.style.transform = `scale(${scale})`; }
         }
         lastTap = now;
-      });
+      }, { passive: true });
     }
   };
   // v3.4: Event delegation for lightbox (no inline onclick)
@@ -13315,7 +13315,7 @@ if (PLATFORM === 'electron' && window.breeze) {
       } else {
         _scrollFab.classList.remove('hidden');
       }
-    });
+    }, { passive: true });
     _scrollFab.addEventListener('click', () => {
       _msgBox.scrollTop = _msgBox.scrollHeight;
       _newMsgsWhileScrolled = 0;
