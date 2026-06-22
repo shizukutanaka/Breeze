@@ -1528,6 +1528,9 @@ const _I = {
     pinsCount: (n) => `${n} pins`,
     folderAll: 'All', folderUnread: 'Unread', folderGroups: 'Groups', folderLabels: 'Labels',
     dropDecrypting: 'Decrypting…', dropRevealed: '✅ Secret revealed — this link is now destroyed.', dropReadExpired: '🚫 This secret has already been read or has expired.', dropReadFailed: '❌ Failed to decrypt. The link may be invalid or corrupted.', dropOpenApp: 'Open Breeze Messenger →',
+    errUnknown: 'Unknown error', consentTitle: 'Data consent',
+    labelNoneHint: 'No labels yet. Right-click a contact or use /label', labelFilterEmpty: (l) => `No contacts with label "${l}"`, labelNoneContacts: 'No labels yet. Right-click a contact to add one.', labelNoneCmd: 'No labels. Use /label Work, Family to add.',
+    enableNotif: 'Enable push notifications',
     ttEditProfile: 'Edit profile',
     ttClickToCopy: 'Click to copy',
     ttAttach: 'Attach',
@@ -2073,6 +2076,9 @@ const _I = {
     dropFailed: 'Dead Dropの作成に失敗しました',
     folderAll: 'すべて', folderUnread: '未読', folderGroups: 'グループ', folderLabels: 'ラベル',
     dropDecrypting: '復号中…', dropRevealed: '✅ 秘密が公開されました — このリンクは無効になりました。', dropReadExpired: '🚫 この秘密はすでに閲覧済みか期限切れです。', dropReadFailed: '❌ 復号に失敗しました。リンクが無効または破損している可能性があります。', dropOpenApp: 'Breeze Messengerを開く →',
+    errUnknown: '不明なエラー', consentTitle: 'データ同意',
+    labelNoneHint: 'ラベルがありません。連絡先を右クリックするか /label を使用してください', labelFilterEmpty: (l) => `"${l}" のラベルを持つ連絡先がありません`, labelNoneContacts: 'ラベルがありません。連絡先を右クリックして追加してください。', labelNoneCmd: 'ラベルがありません。/label 仕事,家族 のように使用してください。',
+    enableNotif: 'プッシュ通知を有効にする',
     outboxPending: '件のメッセージが送信待ち',
     speedNeedConvo: '会話を開いてください',
     speedNeedP2P: 'P2P接続がありません — まず接続してください',
@@ -2543,7 +2549,7 @@ window.addEventListener('error', (event) => {
   if (typeof _dbg === 'function') _dbg(event.error || event.message, 'UNCAUGHT');
   if (typeof auditLog === 'function') auditLog('error', 'JS Error: ' + (event.message || '').slice(0, 200), 'error');
   if (_errorCount <= _ERROR_FLOOD_LIMIT && typeof showToast === 'function') {
-    showToast((event.message || 'Unknown error').slice(0, 80), 'error');
+    showToast((event.message || t('errUnknown')).slice(0, 80), 'error');
   }
   // Crash recovery overlay after 3 fatal errors
   if (_fatalErrors >= 3 && !document.querySelector('.crash-overlay')) {
@@ -2590,11 +2596,11 @@ function _dbg(e, ctx) { if (_DBG) console.warn('[Breeze]', ctx || '', e?.message
   const banner = document.createElement('div');
   banner.className = 'consent-banner';
   banner.setAttribute('role', 'dialog');
-  banner.setAttribute('aria-label', 'Data consent');
+  banner.setAttribute('aria-label', t('consentTitle'));
   banner.innerHTML = '<div class="text">Breeze stores encrypted messages and settings locally on your device. No data is sent to third parties. <a href="?privacy">Privacy Policy</a></div>';
   const acceptBtn = document.createElement('button');
   acceptBtn.className = 'btn btn-g btn-sm';
-  acceptBtn.textContent = t('uiAccept'); acceptBtn.setAttribute('aria-label', 'Accept');
+  acceptBtn.textContent = t('uiAccept');
   acceptBtn.onclick = () => { localStorage.setItem('brz-consent', Date.now()); banner.remove(); };
   banner.appendChild(acceptBtn);
   document.body.appendChild(banner);
@@ -5641,7 +5647,7 @@ async function initMessenger(dbName) {
       if (!bar) return;
       const labels = await getAllLabels();
       if (labels.length === 0) {
-        bar.innerHTML = '<div class="i-small-pad">No labels yet. Right-click a contact or use /label</div>';
+        safeSetHTML(bar, '<div class="i-small-pad">' + esc(t('labelNoneHint')) + '</div>');
         return;
       }
       bar.replaceChildren();
@@ -5895,7 +5901,7 @@ async function initMessenger(dbName) {
           auditLog('contact', 'Deleted contact: ' + c.name + ' (' + msgs.length + ' messages removed)', 'warn');
           if (activeContact?.id === c.id) {
             activeContact = null;
-            _DOM.get('msg-messages').innerHTML = '<div class="cmd-center">Contact deleted.</div>';
+            safeSetHTML(_DOM.get('msg-messages'), '<div class="cmd-center">' + esc(t('contactDeleted')) + '</div>');
             document.getElementById('msg-conv-name').textContent = t('uiSelectContact');
             _DOM.get('msg-input-bar').classList.add('hidden');
           }
@@ -5948,7 +5954,7 @@ async function initMessenger(dbName) {
       if (_contactFilter) empty.textContent = t('uiNoMatches', '"' + _contactFilter + '"');
       else if (folder === 'unread') empty.textContent = t('uiAllCaughtUp');
       else if (folder === 'groups') empty.textContent = t('uiNoGroups');
-      else if (folder === 'labels') empty.textContent = _activeLabel ? 'No contacts with label "' + _activeLabel + '"' : 'No labels yet. Right-click a contact to add one.';
+      else if (folder === 'labels') empty.textContent = _activeLabel ? t('labelFilterEmpty', _activeLabel) : t('labelNoneContacts');
       else empty.textContent = t('uiAddFirst');
       frag.appendChild(empty);
     }
@@ -6069,7 +6075,7 @@ async function initMessenger(dbName) {
         if (i === unreadSepIdx && unreadSepIdx > 0) {
           const sep = document.createElement('div');
           sep.className = 'unread-sep';
-          sep.innerHTML = `<span>${t('newMessages') || 'New Messages'}</span>`;
+          sep.innerHTML = `<span>${t('newMessages')}</span>`;
           box.appendChild(sep);
         }
         const m = msgs[i];
@@ -12747,7 +12753,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         const box = _DOM.get('msg-messages');
         const d = document.createElement('div');
         d.className = 'chat-empty';
-        d.textContent = labels.length > 0 ? 'Labels: ' + labels.join(', ') : 'No labels. Use /label Work, Family to add.';
+        d.textContent = labels.length > 0 ? t('infoLabels') + ': ' + labels.join(', ') : t('labelNoneCmd');
         box.appendChild(d); box.scrollTop = box.scrollHeight;
       } else if (arg === 'clear') {
         c.labels = [];
@@ -13140,7 +13146,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         <label class="i-cur"><input type="checkbox" data-setting="notif-sound" ${_notifSoundEnabled ? 'checked' : ''}> ${t('notifSound')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="send-sound" ${_sendSoundEnabled ? 'checked' : ''}> ${t('sendSound')}</label><br>
         <br><b class="i-g">${t('settingsNotif') || 'Notifications'}</b><br>
-        <label class="i-cur"><input type="checkbox" data-setting="notif-perm" ${Notification?.permission === 'granted' ? 'checked' : ''}> ${t('enableNotif') || 'Enable push notifications'}</label><br>
+        <label class="i-cur"><input type="checkbox" data-setting="notif-perm" ${Notification?.permission === 'granted' ? 'checked' : ''}> ${t('enableNotif')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="auto-lock" ${localStorage.getItem('brz-autolock') === '1' ? 'checked' : ''}> ${t('autoLock') || 'Auto-lock on tab switch'}</label><br>
         <br><span class="i-t3-10">${t('settingsImmediate')}</span>`;
       // v3.6: Event delegation for settings toggles (no inline onchange)
