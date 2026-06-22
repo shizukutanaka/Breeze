@@ -1538,6 +1538,10 @@ const _I = {
     wipeTitle: 'Wipe All Data', wipeDesc: 'Permanently delete all messages, contacts, keys, and settings.',
     confirmDeleteN: (n) => `Delete ${n} messages?`,
     settingsNotif: 'Notifications',
+    autoLockLabel: 'Auto-lock on tab switch',
+    newContact: 'New Contact',
+    aiCached: 'cached',
+    msgSenderThem: 'Them',
     labelNoneHint: 'No labels yet. Right-click a contact or use /label', labelFilterEmpty: (l) => `No contacts with label "${l}"`, labelNoneContacts: 'No labels yet. Right-click a contact to add one.', labelNoneCmd: 'No labels. Use /label Work, Family to add.',
     enableNotif: 'Enable push notifications',
     ttEditProfile: 'Edit profile',
@@ -2094,6 +2098,10 @@ const _I = {
     wipeTitle: '全データ消去', wipeDesc: 'すべてのメッセージ、連絡先、鍵、設定を完全に削除します。',
     confirmDeleteN: (n) => `${n}件のメッセージを削除しますか？`,
     settingsNotif: '通知',
+    autoLockLabel: 'タブ切替時に自動ロック',
+    newContact: '新しい連絡先',
+    aiCached: 'キャッシュ',
+    msgSenderThem: '相手',
     labelNoneHint: 'ラベルがありません。連絡先を右クリックするか /label を使用してください', labelFilterEmpty: (l) => `"${l}" のラベルを持つ連絡先がありません`, labelNoneContacts: 'ラベルがありません。連絡先を右クリックして追加してください。', labelNoneCmd: 'ラベルがありません。/label 仕事,家族 のように使用してください。',
     enableNotif: 'プッシュ通知を有効にする',
     outboxPending: '件のメッセージが送信待ち',
@@ -5540,7 +5548,7 @@ async function initMessenger(dbName) {
       if (addKey.startsWith('@')) {
         await resolveAndAdd(addKey);
       } else {
-        await addContact(addKey, P.get('name') || 'New Contact');
+        await addContact(addKey, P.get('name') || t('newContact'));
       }
     }
     // Auto-join group from URL (?join=token)
@@ -7027,7 +7035,7 @@ async function initMessenger(dbName) {
           // straight from the (external, untrusted) translation provider's response and
           // is returned unsanitized by the worker; under 'unsafe-inline' CSP an injected
           // onerror= payload would execute. data.to/data.provider esc'd for consistency.
-          indicator.innerHTML = `<span class="tr-text">${esc(data.translated)}</span><span class="tr-meta">${esc(data.from || 'auto')} → ${esc(data.to || '')} · ${esc(data.provider || '')}${data.cached ? ' · cached' : ''}</span>`;
+          indicator.innerHTML = `<span class="tr-text">${esc(data.translated)}</span><span class="tr-meta">${esc(data.from || 'auto')} → ${esc(data.to || '')} · ${esc(data.provider || '')}${data.cached ? ' · ' + t('aiCached') : ''}</span>`;
           success = true;
         }
       }
@@ -7040,7 +7048,7 @@ async function initMessenger(dbName) {
           const data = await resp.json();
           if (data.result) {
             indicator.classList.remove('loading');
-            indicator.innerHTML = `<span class="tr-text">${esc(data.result)}</span><span class="tr-meta">→ ${esc(toLang)} · ${esc(data.provider || 'AI')}${data.cached ? ' · cached' : ''}</span>`;
+            indicator.innerHTML = `<span class="tr-text">${esc(data.result)}</span><span class="tr-meta">→ ${esc(toLang)} · ${esc(data.provider || 'AI')}${data.cached ? ' · ' + t('aiCached') : ''}</span>`;
             success = true;
           }
         }
@@ -11572,7 +11580,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       if (API) {
         try {
           const aiMsgs = recent.filter(m => m.text && !m.deleted).map(m => ({
-            sender: m.mine ? myName : (activeContact.name || 'Them'), text: m.text.slice(0, 200)
+            sender: m.mine ? myName : (activeContact.name || t('msgSenderThem')), text: m.text.slice(0, 200)
           }));
           const resp = await postAPIRaw('/ai', { action: 'summarize', messages: aiMsgs });
           if (resp?.ok) {
@@ -12405,7 +12413,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         if (resp?.ok) {
           const data = await resp.json();
           if (data.result) {
-            d.innerHTML = '<b class="i-g">' + t('aiChat') + '</b> <span class="i-t3-10">(' + esc(data.provider || '?') + (data.cached ? ' · cached' : '') + ')</span><br><br>' + esc(data.result).replace(/\n/g, '<br>');
+            d.innerHTML = '<b class="i-g">' + t('aiChat') + '</b> <span class="i-t3-10">(' + esc(data.provider || '?') + (data.cached ? ' · ' + t('aiCached') : '') + ')</span><br><br>' + esc(data.result).replace(/\n/g, '<br>');
           } else {
             d.innerHTML = '<b class="i-g">' + t('aiChat') + '</b><br>' + t('aiError');
           }
@@ -13164,7 +13172,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         <label class="i-cur"><input type="checkbox" data-setting="send-sound" ${_sendSoundEnabled ? 'checked' : ''}> ${t('sendSound')}</label><br>
         <br><b class="i-g">${t('settingsNotif')}</b><br>
         <label class="i-cur"><input type="checkbox" data-setting="notif-perm" ${Notification?.permission === 'granted' ? 'checked' : ''}> ${t('enableNotif')}</label><br>
-        <label class="i-cur"><input type="checkbox" data-setting="auto-lock" ${localStorage.getItem('brz-autolock') === '1' ? 'checked' : ''}> ${t('autoLock') || 'Auto-lock on tab switch'}</label><br>
+        <label class="i-cur"><input type="checkbox" data-setting="auto-lock" ${localStorage.getItem('brz-autolock') === '1' ? 'checked' : ''}> ${t('autoLockLabel')}</label><br>
         <br><span class="i-t3-10">${t('settingsImmediate')}</span>`;
       // v3.6: Event delegation for settings toggles (no inline onchange)
       d.addEventListener('change', (ev) => {
