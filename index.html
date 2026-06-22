@@ -1146,21 +1146,21 @@ del.md-del { opacity: .6 }
         <div class="sidebar-head">
           <span id="msg-my-name" class="name clickable" data-i18n-title="ttEditProfile"></span>
           <span id="peer-count" class="sidebar-meta"></span>
-          <button class="btn btn-o btn-sm" id="b-msg-theme" aria-label="Theme">☀</button>
-          <button class="btn btn-g btn-sm" id="b-msg-add" aria-label="Add contact">+</button>
+          <button class="btn btn-o btn-sm" id="b-msg-theme" data-i18n-aria="ariaTheme">☀</button>
+          <button class="btn btn-g btn-sm" id="b-msg-add" data-i18n-aria="ariaAddContact">+</button>
         </div>
         <div id="msg-short-id" class="sidebar-id" data-i18n-title="ttClickToCopy"></div>
         <div class="folder-tabs" id="folder-tabs" role="tablist">
-          <button class="folder-tab active" data-folder="all" role="tab" aria-selected="true" aria-label="All contacts">All <span class="badge" id="badge-all"></span></button>
-          <button class="folder-tab" data-folder="unread" role="tab" aria-label="Unread contacts">Unread <span class="badge" id="badge-unread"></span></button>
-          <button class="folder-tab" data-folder="groups" role="tab" aria-label="Group chats">Groups <span class="badge" id="badge-groups"></span></button>
-          <button class="folder-tab" data-folder="labels" role="tab" id="folder-labels" aria-label="Labeled contacts">Labels</button>
+          <button class="folder-tab active" data-folder="all" role="tab" aria-selected="true" data-i18n-aria="ariaFolderAll">All <span class="badge" id="badge-all"></span></button>
+          <button class="folder-tab" data-folder="unread" role="tab" data-i18n-aria="ariaFolderUnread">Unread <span class="badge" id="badge-unread"></span></button>
+          <button class="folder-tab" data-folder="groups" role="tab" data-i18n-aria="ariaFolderGroups">Groups <span class="badge" id="badge-groups"></span></button>
+          <button class="folder-tab" data-folder="labels" role="tab" id="folder-labels" data-i18n-aria="ariaFolderLabels">Labels</button>
         </div>
         <div id="label-filter" class="label-filter hidden"></div>
         <div class="contact-filter-wrap">
           <input id="contact-filter" type="text" placeholder="Search..." data-i18n-ph="searchPh" data-i18n-aria="ariaFilterContacts" class="contact-filter" autocomplete="off" enterkeyhint="search">
         </div>
-        <div id="msg-contacts" role="list" aria-label="Contacts" class="contact-list">
+        <div id="msg-contacts" role="list" data-i18n-aria="ariaContacts" class="contact-list">
           <div class="skeleton skeleton-contact"></div>
           <div class="skeleton skeleton-contact"></div>
           <div class="skeleton skeleton-contact"></div>
@@ -1170,30 +1170,30 @@ del.md-del { opacity: .6 }
       <!-- Chat -->
       <div class="chat-area">
         <div id="msg-conv-header" class="conv-header">
-          <button class="btn btn-o btn-sm hidden" id="b-msg-back" aria-label="Back">←</button>
+          <button class="btn btn-o btn-sm hidden" id="b-msg-back" data-i18n-aria="ariaBack">←</button>
           <span id="msg-conv-name" class="name" data-i18n="selectContact"></span>
           <span id="msg-conv-status" class="conv-status" role="status" aria-live="polite"></span>
-          <button class="btn btn-o btn-sm hidden" id="b-msg-call" aria-label="Call">📞</button>
-          <button class="btn btn-o btn-sm hidden" id="b-msg-video" aria-label="Video">📹</button>
+          <button class="btn btn-o btn-sm hidden" id="b-msg-call" data-i18n-aria="ariaCall">📞</button>
+          <button class="btn btn-o btn-sm hidden" id="b-msg-video" data-i18n-aria="ariaVideoCall">📹</button>
         </div>
         <div class="offline-bar" id="offline-bar" role="alert"></div>
         <div class="outbox-badge" id="outbox-badge" role="status"><span class="dot"></span><span id="outbox-text"></span></div>
         <div class="search-bar" id="search-bar">
           <input id="search-chat-input" placeholder="Search..." data-i18n-ph="searchPh" data-i18n-aria="ariaSearchChat" autocomplete="off" enterkeyhint="search">
           <span class="match-count" id="search-match-count"></span>
-          <button class="btn btn-o btn-sm" id="search-chat-prev" aria-label="Prev">↑</button>
-          <button class="btn btn-o btn-sm" id="search-chat-next" aria-label="Next">↓</button>
-          <button class="btn btn-o btn-sm" id="search-chat-close" aria-label="Close">✕</button>
+          <button class="btn btn-o btn-sm" id="search-chat-prev" data-i18n-aria="ariaPrev">↑</button>
+          <button class="btn btn-o btn-sm" id="search-chat-next" data-i18n-aria="ariaNext">↓</button>
+          <button class="btn btn-o btn-sm" id="search-chat-close" data-i18n-aria="close">✕</button>
         </div>
         <div id="pin-banner" class="pin-banner hidden" role="status"></div>
-        <div id="msg-messages" role="log" aria-label="Messages" aria-live="polite" aria-relevant="additions" class="msg-area">
+        <div id="msg-messages" role="log" data-i18n-aria="ariaMessages" aria-live="polite" aria-relevant="additions" class="msg-area">
           <div id="drop-overlay" class="drop-overlay"><span class="drop-overlay-text">Drop to send file</span></div>
           <div class="msg-empty" data-i18n-html="emptyContacts">Press <b class="i-g">+</b> to add a contact.</div>
         </div>
-        <button class="scroll-fab hidden" id="scroll-fab" aria-label="Scroll to bottom">↓</button>
+        <button class="scroll-fab hidden" id="scroll-fab" data-i18n-aria="ariaScrollBottom">↓</button>
         <div id="typing-indicator" class="typing-ind" aria-live="polite"></div>
         <div id="msg-input-bar" class="input-bar hidden">
-          <div id="smart-reply-bar" class="smart-reply-bar hidden" role="toolbar" aria-label="Quick replies"></div>
+          <div id="smart-reply-bar" class="smart-reply-bar hidden" role="toolbar" data-i18n-aria="ariaQuickReplies"></div>
           <label class="tool" data-i18n-title="ttAttach">📎<input type="file" id="msg-file" class="hidden" data-i18n-aria="ttAttach"></label>
           <button id="b-msg-voice" class="tool" data-i18n-aria="ariaVoice" aria-pressed="false">🎤</button>
           <button id="b-msg-stt" class="tool hidden" data-i18n-aria="ariaDict" aria-pressed="false">🗣</button>
@@ -1508,6 +1508,22 @@ const _I = {
     ariaMessage: 'Message',
     ariaVoice: 'Record voice message',
     ariaDict: 'Dictate message',
+    ariaTheme: 'Toggle theme',
+    ariaAddContact: 'Add contact',
+    ariaFolderAll: 'All contacts',
+    ariaFolderUnread: 'Unread contacts',
+    ariaFolderGroups: 'Group chats',
+    ariaFolderLabels: 'Labeled contacts',
+    ariaContacts: 'Contacts',
+    ariaBack: 'Back',
+    ariaCall: 'Start voice call',
+    ariaVideoCall: 'Start video call',
+    ariaPrev: 'Previous result',
+    ariaNext: 'Next result',
+    ariaMessages: 'Messages',
+    ariaScrollBottom: 'Scroll to bottom',
+    ariaQuickReplies: 'Quick replies',
+    ariaExitSelect: 'Exit select mode',
     pinsCount: (n) => `${n} pins`,
     ttEditProfile: 'Edit profile',
     ttClickToCopy: 'Click to copy',
@@ -1976,6 +1992,22 @@ const _I = {
     ariaMessage: 'メッセージ',
     ariaVoice: 'ボイスメッセージを録音',
     ariaDict: 'メッセージを音声入力',
+    ariaTheme: 'テーマ切替',
+    ariaAddContact: '連絡先を追加',
+    ariaFolderAll: 'すべての連絡先',
+    ariaFolderUnread: '未読の連絡先',
+    ariaFolderGroups: 'グループチャット',
+    ariaFolderLabels: 'ラベル付き連絡先',
+    ariaContacts: '連絡先',
+    ariaBack: '戻る',
+    ariaCall: '音声通話を開始',
+    ariaVideoCall: 'ビデオ通話を開始',
+    ariaPrev: '前の結果',
+    ariaNext: '次の結果',
+    ariaMessages: 'メッセージ一覧',
+    ariaScrollBottom: '最下部へスクロール',
+    ariaQuickReplies: 'クイック返信',
+    ariaExitSelect: '選択モードを終了',
     pinsCount: (n) => `${n}件のピン`,
     ttEditProfile: 'プロフィールを編集',
     ttClickToCopy: 'クリックでコピー',
@@ -2422,7 +2454,7 @@ function showInstallBanner() {
       <div class="icon">B</div>
       <div class="text"><b>Install Breeze</b>Add to your ${platform} — works offline</div>
       <button class="btn btn-g btn-sm" id="install-btn">Install</button>
-      <button class="dismiss" aria-label="Dismiss">&times;</button>
+      <button class="dismiss" data-i18n-aria="dismiss">&times;</button>
     `;
     banner.querySelector('#install-btn').onclick = async () => {
       banner.remove();
@@ -2435,7 +2467,7 @@ function showInstallBanner() {
     banner.innerHTML = `
       <div class="icon">B</div>
       <div class="text"><b>Install Breeze</b>Tap <b class="i-g">Share</b> then <b class="i-g">Add to Home Screen</b></div>
-      <button class="dismiss" aria-label="Dismiss">&times;</button>
+      <button class="dismiss" data-i18n-aria="dismiss">&times;</button>
     `;
   } else if (isMac || isWin || isLinux) {
     // Desktop browsers without beforeinstallprompt (Safari, Firefox)
@@ -2446,7 +2478,7 @@ function showInstallBanner() {
       <div class="icon">B</div>
       <div class="text"><b>Get Breeze for ${os}</b>Native app with system tray + notifications</div>
       <button class="btn btn-g btn-sm" id="install-dl-btn">Download</button>
-      <button class="dismiss" aria-label="Dismiss">&times;</button>
+      <button class="dismiss" data-i18n-aria="dismiss">&times;</button>
     `;
     banner.querySelector('#install-dl-btn').onclick = () => {
       // Link to latest GitHub release
@@ -6762,7 +6794,7 @@ async function initMessenger(dbName) {
       fab.innerHTML = `<span id="select-count">0</span>
         <button class="btn btn-o btn-sm" id="select-fwd">${t('forward') || 'Forward'}</button>
         <button class="btn btn-r btn-sm" id="select-del">${t('delete') || 'Delete'}</button>
-        <button class="btn btn-o btn-sm" id="select-cancel" aria-label="Exit select mode">✕</button>`;
+        <button class="btn btn-o btn-sm" id="select-cancel" aria-label="${esc(t('ariaExitSelect'))}">✕</button>`;
       document.body.appendChild(fab);
       fab.querySelector('#select-cancel').onclick = exitSelectMode;
       fab.querySelector('#select-del').onclick = async () => {
