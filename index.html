@@ -27,7 +27,7 @@
 <script type="application/ld+json">
 {"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "Breeze Messenger", "description": "End-to-end encrypted P2P messenger. No phone number. No registration.", "applicationCategory": "CommunicationApplication", "operatingSystem": "Web, Windows, macOS, Linux, Android, iOS", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}}</script>
 <meta name="author" content="Breeze Project">
-<meta name="color-scheme" content="dark">
+<meta name="color-scheme" content="dark light">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png">
@@ -55,6 +55,7 @@
   --shadow-md: 0 4px 16px rgba(0,0,0,.25);
   --shadow-float: 0 8px 32px rgba(0,0,0,.35);
   --bounce: cubic-bezier(.34,1.56,.64,1);
+  color-scheme: dark;
 }
 html.theme-transitioning, html.theme-transitioning *, html.theme-transitioning *::before, html.theme-transitioning *::after { transition: background-color .3s ease, color .2s ease, border-color .3s ease, box-shadow .3s ease !important }
 .light {
@@ -66,6 +67,7 @@ html.theme-transitioning, html.theme-transitioning *, html.theme-transitioning *
   --shadow-sm: 0 1px 3px rgba(0,0,0,.08);
   --shadow-md: 0 4px 16px rgba(0,0,0,.06);
   --shadow-float: 0 8px 32px rgba(0,0,0,.1);
+  color-scheme: light;
 }
 }
 .light .msg.me { background: var(--gd); color: #fff }
@@ -1121,7 +1123,7 @@ del.md-del { opacity: .6 }
     <h1 id="msg-setup-title" data-i18n-html="heroTitle"></h1>
     <p id="msg-setup-desc" class="setup-desc" data-i18n="heroDesc"></p>
     <input type="text" id="msg-name" class="setup-input" data-i18n-ph="yourName" data-i18n-aria="ariaDisplayName" maxlength="64" autocomplete="off" enterkeyhint="next">
-    <input type="text" id="msg-alias" class="setup-input-alt" data-i18n-ph="breezeId" data-i18n-aria="ariaBreezeId" maxlength="20" pattern="[a-z0-9_]+" autocomplete="off" enterkeyhint="done">
+    <input type="text" id="msg-alias" class="setup-input-alt" data-i18n-ph="breezeId" data-i18n-aria="ariaBreezeId" maxlength="20" pattern="[a-z0-9_]+" autocomplete="off" enterkeyhint="done" spellcheck="false">
     <button class="btn btn-g setup-cta" id="b-msg-setup" data-i18n="createFree"></button>
     <div class="setup-footer">
       <span data-i18n="noCreditCard"></span><br>
