@@ -1654,6 +1654,15 @@ const _I = {
     speedNeedConvo: 'Open a conversation first',
     speedNeedP2P: 'No P2P connection — connect first',
     speedRunning: 'Running speed test...',
+    speedTestTitle: 'P2P Speed Test',
+    speedTestSent: (kb, n, pkt) => `Sent: ${kb} KB (${n} × ${pkt}KB)`,
+    speedTestTime: (sec) => `Time: ${sec}s`,
+    speedTestThroughput: (mbps) => `Throughput: ${mbps} Mbps`,
+    speedTestRTT: (rtt) => `RTT: ${rtt}ms`,
+    speedTestChannel: (ord) => `Channel: SCTP (${ord})`,
+    speedTestOrdered: 'ordered',
+    speedTestUnordered: 'unordered',
+    speedTestFailed: 'Speed test failed',
     keyChanged: (name) => `⚠️ Security key changed for ${name}. Verify their identity with /verify.`,
     p2pOnlyMode: 'P2P-only mode: server unreachable. Direct connections still work.',
     storageWarning: (pct) => `Storage ${pct}% full. Old messages may be auto-deleted.`,
@@ -1702,6 +1711,10 @@ const _I = {
     aiSummarizing: 'Summarizing with AI...',
     aiSummary: 'AI Summary',
     aiSummaryLocal: 'Summary (local)',
+    aiSummarizeEmpty: 'No messages to summarize.',
+    aiSummarizeNoText: 'No text messages to summarize.',
+    aiSummarizeMsgCount: (n) => `${n} messages`,
+    aiSummarizeTopics: 'Topics',
     aiChat: 'AI',
     aiThinking: 'Thinking...',
     aiError: 'AI unavailable. Check /about for provider status.',
@@ -1729,6 +1742,21 @@ const _I = {
     statsStorage: 'Storage',
     statsVersion: 'Version',
     statsCrypto: 'Crypto',
+    statsIndexedDB: 'IndexedDB',
+    statsP2PConnections: 'P2P Connections',
+    statsP2PActive: (a, total) => `Active: ${a} / ${total}`,
+    statsOutboxQueue: (n) => `Outbox queue: ${n} pending`,
+    statsDataChannels: (c, s) => `DataChannels: ${c} chat + ${s} state`,
+    statsPerformance: 'Performance',
+    statsDOMMessages: (n, limit) => `DOM messages: ${n} / ${limit} limit`,
+    statsContactsRendered: (n) => `Contacts rendered: ${n}`,
+    statsNetwork: (type, net) => `Network: ${type} (${net})`,
+    statsCryptoWorker: (active) => `Crypto worker: ${active ? '✓ Active' : '✗ Main thread'}`,
+    statsUptime: (min) => `Uptime: ${min} min`,
+    statsHeartbeats: (n) => `Heartbeats: ${n} active`,
+    statsOutboxPersistent: (n) => `Outbox (persistent): ${n} peer queues`,
+    statsSealedPoll: (ok) => `Sealed poll: ${ok ? '✓ Relay active' : '⚠ P2P-only mode'}`,
+    statsAdaptive: (compress, poll, img) => `Adaptive: compress>${compress}B, poll=${poll}s, img=${img}%`,
     sharedFiles: (n) => `Shared Files (${n})`,
     you: 'You',
     unknown: 'Unknown',
@@ -1814,7 +1842,13 @@ const _I = {
     toastBillingNotConfig: 'Billing not configured',
     toastNoImportMsgs: 'No messages found',
     toastRetentionOff: 'Retention policy: disabled (keep forever)',
+    toastRetentionSet: (n) => `Retention: messages older than ${n} days will be auto-deleted`,
     toastRetentionInvalid: 'Invalid: use 1-3650 days or "off"',
+    toastExportedContacts: (n) => `Exported ${n} contacts`,
+    toastExportedMessages: (n, chats) => `Exported ${n} messages from ${chats} chats`,
+    toastExportedMessagesCSV: (n) => `Exported ${n} messages as CSV`,
+    toastExportedMessagesHTML: (n) => `Exported ${n} messages as HTML`,
+    toastExportedMessagesJSON: (n) => `Exported ${n} messages as JSON`,
     toastGroupOnly: 'This command works in group chats only',
     toastAdminRequired: 'Admin permission required',
     toastCancelled: 'Cancelled',
@@ -1900,6 +1934,7 @@ const _I = {
     uiStorageUnavail: 'Storage API not available',
     uiAuditUnavail: 'Audit store not available.',
     uiFetchOnlineFail: 'Could not fetch online count',
+    uiOnlineStatus: (online, peers) => `Online: ~${online} users on server · ${peers} P2P connections`,
     uiShareId: 'Share your Breeze ID',
     uiInviteCopied: 'Invite message copied to clipboard.',
     uiNameLength: 'Name must be 1-50 characters',
@@ -1927,6 +1962,7 @@ const _I = {
     cmdAdminHelpLine: '/admin help — Show this help',
     cmdSessionTitle: 'Session Info',
     cmdLblDevice: 'Device', cmdLblUptime: 'Uptime', cmdLblIdentity: 'Identity',
+    cmdDeviceMobile: 'Mobile', cmdDeviceDesktop: 'Desktop',
     cmdLblSigning: 'Signing', cmdLblP2PConn: 'P2P Connections',
     cmdLblContacts: 'Total Contacts', cmdLblGroups: 'Active Groups', cmdLblBlocked: 'Blocked',
     cmdLblStorage: 'Storage',
@@ -2240,6 +2276,15 @@ const _I = {
     speedNeedConvo: '会話を開いてください',
     speedNeedP2P: 'P2P接続がありません — まず接続してください',
     speedRunning: 'スピードテスト実行中...',
+    speedTestTitle: 'P2Pスピードテスト',
+    speedTestSent: (kb, n, pkt) => `送信: ${kb} KB (${n} × ${pkt}KB)`,
+    speedTestTime: (sec) => `時間: ${sec}s`,
+    speedTestThroughput: (mbps) => `スループット: ${mbps} Mbps`,
+    speedTestRTT: (rtt) => `RTT: ${rtt}ms`,
+    speedTestChannel: (ord) => `チャンネル: SCTP (${ord})`,
+    speedTestOrdered: '順序付き',
+    speedTestUnordered: '順序なし',
+    speedTestFailed: 'スピードテスト失敗',
     keyChanged: (name) => `⚠️ ${name} のセキュリティキーが変更されました。/verify で本人確認してください。`,
     p2pOnlyMode: 'P2Pオンリーモード: サーバーに接続できません。直接接続は動作します。',
     storageWarning: (pct) => `ストレージ ${pct}% 使用中。古いメッセージが自動削除される場合があります。`,
@@ -2288,6 +2333,10 @@ const _I = {
     aiSummarizing: 'AIで要約中...',
     aiSummary: 'AI要約',
     aiSummaryLocal: '要約 (ローカル)',
+    aiSummarizeEmpty: 'まとめるメッセージがありません',
+    aiSummarizeNoText: 'テキストメッセージがありません',
+    aiSummarizeMsgCount: (n) => `${n}件のメッセージ`,
+    aiSummarizeTopics: 'トピック',
     aiChat: 'AI',
     aiThinking: '考え中...',
     aiError: 'AI利用不可。/about でプロバイダ状態を確認してください。',
@@ -2315,6 +2364,21 @@ const _I = {
     statsStorage: 'ストレージ',
     statsVersion: 'バージョン',
     statsCrypto: '暗号',
+    statsIndexedDB: 'IndexedDB',
+    statsP2PConnections: 'P2P接続',
+    statsP2PActive: (a, total) => `アクティブ: ${a} / ${total}`,
+    statsOutboxQueue: (n) => `送信キュー: ${n} 件待機中`,
+    statsDataChannels: (c, s) => `データチャンネル: ${c} チャット + ${s} 状態`,
+    statsPerformance: 'パフォーマンス',
+    statsDOMMessages: (n, limit) => `DOMメッセージ: ${n} / ${limit} 上限`,
+    statsContactsRendered: (n) => `表示中の連絡先: ${n}`,
+    statsNetwork: (type, net) => `ネットワーク: ${type} (${net})`,
+    statsCryptoWorker: (active) => `暗号ワーカー: ${active ? '✓ 有効' : '✗ メインスレッド'}`,
+    statsUptime: (min) => `稼働時間: ${min} 分`,
+    statsHeartbeats: (n) => `ハートビート: ${n} 件有効`,
+    statsOutboxPersistent: (n) => `送信箱 (永続): ${n} キュー`,
+    statsSealedPoll: (ok) => `シールドポーリング: ${ok ? '✓ リレー有効' : '⚠ P2Pのみ'}`,
+    statsAdaptive: (compress, poll, img) => `アダプティブ: 圧縮>${compress}B, ポーリング=${poll}s, 画像=${img}%`,
     sharedFiles: (n) => `共有ファイル (${n})`,
     you: 'あなた',
     unknown: '不明',
@@ -2399,7 +2463,13 @@ const _I = {
     toastBillingNotConfig: '課金が設定されていません',
     toastNoImportMsgs: 'メッセージが見つかりません',
     toastRetentionOff: '保持ポリシー: 無効 (永久保存)',
+    toastRetentionSet: (n) => `保持期間: ${n}日より古いメッセージは自動削除されます`,
     toastRetentionInvalid: '無効: 1-3650日または"off"を使用',
+    toastExportedContacts: (n) => `${n}件の連絡先をエクスポートしました`,
+    toastExportedMessages: (n, chats) => `${chats}チャットから${n}件のメッセージをエクスポートしました`,
+    toastExportedMessagesCSV: (n) => `${n}件のメッセージをCSVでエクスポートしました`,
+    toastExportedMessagesHTML: (n) => `${n}件のメッセージをHTMLでエクスポートしました`,
+    toastExportedMessagesJSON: (n) => `${n}件のメッセージをJSONでエクスポートしました`,
     toastGroupOnly: 'このコマンドはグループチャットのみ',
     toastAdminRequired: '管理者権限が必要です',
     toastCancelled: 'キャンセルしました',
@@ -2485,6 +2555,7 @@ const _I = {
     uiStorageUnavail: 'ストレージAPI利用不可',
     uiAuditUnavail: '監査ストアが利用できません',
     uiFetchOnlineFail: 'オンライン数の取得に失敗',
+    uiOnlineStatus: (online, peers) => `オンライン：サーバー上 ~${online} ユーザー · P2P接続 ${peers}`,
     uiShareId: 'Breeze IDを共有',
     uiInviteCopied: '招待メッセージをクリップボードにコピーしました',
     uiNameLength: '名前は1〜50文字で入力してください',
@@ -2512,6 +2583,7 @@ const _I = {
     cmdAdminHelpLine: '/admin help — このヘルプを表示',
     cmdSessionTitle: 'セッション情報',
     cmdLblDevice: 'デバイス', cmdLblUptime: '稼働時間', cmdLblIdentity: 'ID',
+    cmdDeviceMobile: 'モバイル', cmdDeviceDesktop: 'デスクトップ',
     cmdLblSigning: '署名', cmdLblP2PConn: 'P2P接続数',
     cmdLblContacts: '連絡先数', cmdLblGroups: 'アクティブグループ', cmdLblBlocked: 'ブロック',
     cmdLblStorage: 'ストレージ',
@@ -3588,6 +3660,16 @@ const _ttPolicy = (() => {
 function safeSetHTML(el, html) {
   if (el) el.innerHTML = _ttPolicy.createHTML(html);
 }
+function _safeReplace(el, html) {
+  const tmp = document.createElement('div');
+  safeSetHTML(tmp, html);
+  el.replaceWith(...tmp.childNodes);
+}
+function _safeAppend(parent, html) {
+  const tmp = document.createElement('div');
+  safeSetHTML(tmp, html);
+  parent.append(...tmp.childNodes);
+}
 // Apply data-i18n-html translations (deferred until TT policy is ready)
 document.querySelectorAll('[data-i18n-html]').forEach(el => safeSetHTML(el, t(el.dataset.i18nHtml)));
 
@@ -4312,26 +4394,26 @@ async function initMessenger(dbName) {
 
   // Local message summarization (extractive, no LLM)
   function summarizeMessages(messages, maxSentences = 3) {
-    if (!messages || messages.length === 0) return 'No messages to summarize.';
+    if (!messages || messages.length === 0) return t('aiSummarizeEmpty');
     // Filter to text messages only
     const texts = messages.filter(m => m.text && !m.deleted && m.text.length > 5).map(m => ({
       text: m.text, mine: m.mine, ts: m.ts, sender: m.senderName || (m.mine ? t('you') : activeContact?.name || '?'),
     }));
-    if (texts.length === 0) return 'No text messages to summarize.';
+    if (texts.length === 0) return t('aiSummarizeNoText');
     // Simple extractive summary: first, middle, last important messages
     const total = texts.length;
     const summary = [];
-    summary.push(`${total} messages`);
+    summary.push(t('aiSummarizeMsgCount', total));
     // Topics: extract unique nouns/phrases > 4 chars
     const words = {};
-    for (const t of texts) {
-      t.text.split(/\s+/).forEach(w => {
+    for (const msg of texts) {
+      msg.text.split(/\s+/).forEach(w => {
         const clean = w.replace(/[^a-zA-Z\u3000-\u9fff\uff00-\uffef]/g, '');
         if (clean.length > 4) words[clean.toLowerCase()] = (words[clean.toLowerCase()] || 0) + 1;
       });
     }
     const topWords = Object.entries(words).sort((a, b) => b[1] - a[1]).slice(0, 5).map(w => w[0]);
-    if (topWords.length > 0) summary.push('Topics: ' + topWords.join(', '));
+    if (topWords.length > 0) summary.push(t('aiSummarizeTopics') + ': ' + topWords.join(', '));
     // Key messages
     const key = texts.filter(t => t.text.endsWith('?') || t.text.endsWith('!') || t.text.length > 50);
     const shown = key.slice(-maxSentences);
@@ -6008,7 +6090,7 @@ async function initMessenger(dbName) {
       const cnt = counts[f] || 0;
       const existing = tab.querySelector('.ftcount');
       if (cnt > 0 && f !== 'all') {
-        if (existing) existing.textContent = cnt; else tab.insertAdjacentHTML('beforeend', `<span class="ftcount">${cnt}</span>`);
+        if (existing) existing.textContent = cnt; else { const s = document.createElement('span'); s.className = 'ftcount'; s.textContent = cnt; tab.appendChild(s); }
       } else if (existing) existing.remove();
     });
     // v3.4: Section headers (Gmail-style time grouping) for "All" tab
@@ -6937,8 +7019,8 @@ async function initMessenger(dbName) {
     const el = document.querySelector(`[data-msgid="${msgId}"]`);
     if (el) {
       const existing = el.querySelector('.msg-reactions');
-      if (existing) existing.outerHTML = renderReactions(stored.reactions, msgId);
-      else el.insertAdjacentHTML('beforeend', renderReactions(stored.reactions, msgId));
+      if (existing) _safeReplace(existing, renderReactions(stored.reactions, msgId));
+      else _safeAppend(el, renderReactions(stored.reactions, msgId));
     }
     // Notify peer(s) via sendSignal (handles 1:1 + group fan-out)
     if (activeContact) {
@@ -7485,7 +7567,7 @@ async function initMessenger(dbName) {
         });
         // Update rendered message with OGP card
         const el = document.querySelector(`[data-msgid="${msgId}"]`);
-        if (el && !el.querySelector('.ogp-card')) { el.insertAdjacentHTML('beforeend', renderOGPInline(ogp)); _attachImgErrorHandlers(el); }
+        if (el && !el.querySelector('.ogp-card')) { _safeAppend(el, renderOGPInline(ogp)); _attachImgErrorHandlers(el); }
       }
     }).catch(e => _dbg(e, 'ogp-send'));
 
@@ -9055,7 +9137,7 @@ async function initMessenger(dbName) {
               else { stored.reactions[signal.emoji] = stored.reactions[signal.emoji].filter(u => u !== signal.userId); if (stored.reactions[signal.emoji].length === 0) delete stored.reactions[signal.emoji]; }
               await dbPut('messages', stored);
               const el = document.querySelector(`[data-msgid="${targetMsgId}"]`);
-              if (el) { const existing = el.querySelector('.msg-reactions'); if (existing) existing.outerHTML = renderReactions(stored.reactions, targetMsgId); else el.insertAdjacentHTML('beforeend', renderReactions(stored.reactions, targetMsgId)); }
+              if (el) { const existing = el.querySelector('.msg-reactions'); if (existing) _safeReplace(existing, renderReactions(stored.reactions, targetMsgId)); else _safeAppend(el, renderReactions(stored.reactions, targetMsgId)); }
             }
           }
         } catch(e) { _dbg(e, 'group-decrypt-signal'); }
@@ -9178,8 +9260,8 @@ async function initMessenger(dbName) {
             const el = document.querySelector(`[data-msgid="${signal.msgId}"]`);
             if (el) {
               const existing = el.querySelector('.msg-reactions');
-              if (existing) existing.outerHTML = renderReactions(stored.reactions, signal.msgId);
-              else el.insertAdjacentHTML('beforeend', renderReactions(stored.reactions, signal.msgId));
+              if (existing) _safeReplace(existing, renderReactions(stored.reactions, signal.msgId));
+              else _safeAppend(el, renderReactions(stored.reactions, signal.msgId));
             }
           }
         }
@@ -9424,7 +9506,7 @@ async function initMessenger(dbName) {
               else { stored.reactions[msg.emoji] = stored.reactions[msg.emoji].filter(u => u !== msg.userId); if (stored.reactions[msg.emoji].length === 0) delete stored.reactions[msg.emoji]; }
               await dbPut('messages', stored);
               const el = document.querySelector(`[data-msgid="${msg.msgId}"]`);
-              if (el) { const r = el.querySelector('.msg-reactions'); if (r) r.outerHTML = renderReactions(stored.reactions, msg.msgId); else el.insertAdjacentHTML('beforeend', renderReactions(stored.reactions, msg.msgId)); }
+              if (el) { const r = el.querySelector('.msg-reactions'); if (r) _safeReplace(r, renderReactions(stored.reactions, msg.msgId)); else _safeAppend(el, renderReactions(stored.reactions, msg.msgId)); }
             }
             return;
           }
@@ -11269,7 +11351,7 @@ async function initMessenger(dbName) {
           _settings.retentionDays = days;
           await saveSettings();
           auditLog('settings', 'Retention policy set to ' + days + ' days');
-          showToast(t('toastRetentionOff') + ' ' + days + ' days will be auto-deleted', 'info');
+          showToast(t('toastRetentionSet', days), 'info');
           enforceRetentionPolicy(); // Run immediately
         } else {
           showToast(t('toastRetentionInvalid'), 'error');
@@ -11464,7 +11546,7 @@ async function initMessenger(dbName) {
       }));
       const blob = new Blob([JSON.stringify({ version: CONFIG.VERSION, type: 'contacts', exportedAt: new Date().toISOString(), contacts: exportData }, null, 2)], { type: 'application/json' });
       downloadBlob(blob, 'breeze-contacts-' + new Date().toISOString().slice(0, 10) + '.json');
-      showToast(t('toastExported') + ' ' + contacts.length + ' contacts', 'success');
+      showToast(t('toastExportedContacts', contacts.length), 'success');
       auditLog('settings', 'Contact export: ' + contacts.length);
       return;
     }
@@ -11789,7 +11871,7 @@ async function initMessenger(dbName) {
         }
         const blob = new Blob([JSON.stringify({ version: CONFIG.VERSION, exportedAt: new Date().toISOString(), chats }, null, 2)], { type: 'application/json' });
         downloadBlob(blob, 'breeze-all-' + new Date().toISOString().slice(0,10) + '.json');
-        showToast(t('toastExported') + ' ' + allMsgs.length + ' messages from ' + Object.keys(chats).length + ' chats', 'success');
+        showToast(t('toastExportedMessages', allMsgs.length, Object.keys(chats).length), 'success');
       } else if (sub === 'csv') {
         if (!activeContact) { showToast(t('toastOpenChat'), 'error'); return; }
         const msgs = (await dbGetByIndex('messages', 'contact', activeContact.id)).sort((a, b) => a.ts - b.ts);
@@ -11797,7 +11879,7 @@ async function initMessenger(dbName) {
         for (const m of msgs) { if (!m.deleted) rows.push('"' + new Date(m.ts).toISOString() + '","' + (m.mine ? myName : activeContact.name).replace(/"/g, '""') + '","' + (m.text||'').replace(/"/g,'""').replace(/\n/g,' ') + '"'); }
         const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
         downloadBlob(blob, 'breeze-' + activeContact.name.replace(/\s+/g,'-') + '-' + new Date().toISOString().slice(0,10) + '.csv');
-        showToast(t('toastExported') + ' ' + msgs.length + ' messages as CSV', 'success');
+        showToast(t('toastExportedMessagesCSV', msgs.length), 'success');
       } else if (sub === 'html') {
         // v3.6: Human-readable HTML chat export (printable, self-contained)
         if (!activeContact) { showToast(t('toastOpenChat'), 'error'); return; }
@@ -11815,13 +11897,13 @@ async function initMessenger(dbName) {
 b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 <body><h1>🌊 ${esc(activeContact.name)}</h1><p>${msgs.length} messages · exported ${new Date().toLocaleDateString()}</p>${rows}</body></html>`;
         downloadBlob(new Blob([html], { type: 'text/html' }), 'breeze-' + activeContact.name.replace(/\s+/g, '-') + '-' + new Date().toISOString().slice(0, 10) + '.html');
-        showToast(t('toastExported') + ' ' + msgs.length + ' messages as HTML', 'success');
+        showToast(t('toastExportedMessagesHTML', msgs.length), 'success');
       } else {
         if (!activeContact) { showToast(t('toastOpenChat'), 'error'); return; }
         const msgs = (await dbGetByIndex('messages', 'contact', activeContact.id)).sort((a, b) => a.ts - b.ts).map(m => ({ ts: m.ts, text: m.text, mine: m.mine, sender: m.senderName || (m.mine ? myName : activeContact.name) }));
         const blob = new Blob([JSON.stringify({ version: CONFIG.VERSION, contact: activeContact.name, messages: msgs }, null, 2)], { type: 'application/json' });
         downloadBlob(blob, 'breeze-' + activeContact.name.replace(/\s+/g,'-') + '-' + new Date().toISOString().slice(0,10) + '.json');
-        showToast(t('toastExported') + ' ' + msgs.length + ' messages as JSON', 'success');
+        showToast(t('toastExportedMessagesJSON', msgs.length), 'success');
       }
       auditLog('settings', 'Export: ' + sub);
     }
@@ -11931,7 +12013,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       safeSetHTML(d, [
         '<b class="i-g">' + t('cmdSessionTitle') + '</b>',
         '',
-        t('cmdLblDevice') + ': ' + (navigator.userAgent.includes('Mobile') ? 'Mobile' : 'Desktop') + ' / ' + navigator.platform,
+        t('cmdLblDevice') + ': ' + (navigator.userAgent.includes('Mobile') ? t('cmdDeviceMobile') : t('cmdDeviceDesktop')) + ' / ' + navigator.platform,
         t('cmdLblUptime') + ': ' + h + 'h ' + m + 'm',
         t('cmdLblIdentity') + ': ' + (myShortId || myId),
         t('cmdLblSigning') + ': ' + (_signingPubB64 ? 'Ed25519 ✓' : 'N/A'),
@@ -12158,20 +12240,17 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const arg = val.slice(7).trim().toLowerCase();
       if (arg === 'auto') {
         localStorage.setItem('brz-theme', 'auto');
+        document.documentElement.classList.remove('light');
         document.documentElement.classList.add('auto-theme');
         showToast(t('toastThemeAuto'), 'info');
       } else if (arg === 'dark') {
         localStorage.setItem('brz-theme', 'dark');
-        document.documentElement.classList.remove('auto-theme');
+        document.documentElement.classList.remove('auto-theme', 'light');
         showToast(t('toastThemeDark'), 'info');
       } else if (arg === 'light') {
         localStorage.setItem('brz-theme', 'light');
         document.documentElement.classList.remove('auto-theme');
-        // Apply light overrides
-        document.documentElement.style.setProperty('--bg', '#fafafa');
-        document.documentElement.style.setProperty('--s1', '#fff');
-        document.documentElement.style.setProperty('--t1', '#111');
-        document.documentElement.style.setProperty('--t2', '#555');
+        document.documentElement.classList.add('light');
         showToast(t('toastThemeLight'), 'info');
       } else {
         toggleTheme();
@@ -12335,7 +12414,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       e.preventDefault(); clearInput();
       const accs = getAccounts();
       const slots = getAccountSlots();
-      const planName = slots <= 1 ? t('planFree') : slots <= 2 ? 'Lite ($0.99/mo)' : slots <= 4 ? 'Plus ($5.99/mo)' : 'Pro ($19.99/mo)';
+      const planName = slots <= 1 ? t('planFree') : slots <= 2 ? t('planLite') : slots <= 4 ? t('planPlus') : t('planPro');
       const lines = [
         `=== ${t('billingTitle')} ===`,
         '',
@@ -12451,15 +12530,15 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         const mbps = ((sent * 8) / sec / 1e6).toFixed(2);
         const rtt = peer._lastRtt || '?';
         cmdOutput('cmd-panel-mono', [
-          '<b class="i-g">P2P Speed Test</b>', '',
-          `Sent: ${(sent/1024).toFixed(0)} KB (${N} × ${PKT/1024}KB)`,
-          `Time: ${sec.toFixed(2)}s`,
-          `Throughput: <b class="i-g">${mbps} Mbps</b>`,
-          `RTT: ${rtt}ms`,
-          `Channel: SCTP (${dc.ordered ? 'ordered' : 'unordered'})`,
+          '<b class="i-g">' + t('speedTestTitle') + '</b>', '',
+          t('speedTestSent', (sent/1024).toFixed(0), N, PKT/1024),
+          t('speedTestTime', sec.toFixed(2)),
+          '<b class="i-g">' + t('speedTestThroughput', mbps) + '</b>',
+          t('speedTestRTT', rtt),
+          t('speedTestChannel', dc.ordered ? t('speedTestOrdered') : t('speedTestUnordered')),
         ].join('<br>'));
         haptic.success();
-      } catch(err) { cmdOutput('cmd-panel-mono', '<b class="i-r">Speed test failed</b>: ' + esc(err.message)); }
+      } catch(err) { cmdOutput('cmd-panel-mono', '<b class="i-r">' + t('speedTestFailed') + '</b>: ' + esc(err.message)); }
       return;
     }
 
@@ -12754,7 +12833,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
           if (resp.ok) {
             const data = await resp.json();
             const peerCount = Object.values(peers).filter(p => p.connected).length;
-            d.textContent = `Online: ~${data.online} users on server · ${peerCount} P2P connections`;
+            d.textContent = t('uiOnlineStatus', data.online, peerCount);
           } else { d.textContent = t('uiFetchOnlineFail'); }
         } catch(e) { d.textContent = t('uiServerUnavail'); _dbg(e); }
       } else { d.textContent = t('uiNoServer'); }
@@ -13331,7 +13410,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       await dbPut('contacts', activeContact);
       const box = _DOM.get('msg-messages');
       const d = document.createElement('div'); d.className = 'chat-empty';
-      d.textContent = activeContact.archived ? '📦 Archived' : '📦 Unarchived';
+      d.textContent = '📦 ' + (activeContact.archived ? t('toastArchived') : t('toastUnarchived'));
       box.appendChild(d); box.scrollTop = box.scrollHeight;
       renderContacts();
     }
@@ -13374,25 +13453,25 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         t('statsMuted') + ': ' + muted,
         '',
         '<b>' + t('statsStorage') + '</b>',
-        'IndexedDB: ' + storageStr,
+        t('statsIndexedDB') + ': ' + storageStr,
         t('statsVersion') + ': ' + CONFIG.VERSION,
         t('statsCrypto') + ': ' + (_hasX25519 ? 'X25519' : 'P-256'),
         '',
-        '<b>P2P Connections</b>',
-        'Active: ' + Object.values(peers).filter(p => p.connected).length + ' / ' + Object.keys(peers).length,
-        'Outbox queue: ' + _retryQueue.length + ' pending',
-        'DataChannels: ' + Object.values(peers).filter(p => p.dc?.readyState === 'open').length + ' chat + ' + Object.values(peers).filter(p => p.stateDC?.readyState === 'open').length + ' state',
+        '<b>' + t('statsP2PConnections') + '</b>',
+        t('statsP2PActive', Object.values(peers).filter(p => p.connected).length, Object.keys(peers).length),
+        t('statsOutboxQueue', _retryQueue.length),
+        t('statsDataChannels', Object.values(peers).filter(p => p.dc?.readyState === 'open').length, Object.values(peers).filter(p => p.stateDC?.readyState === 'open').length),
         '',
-        '<b>Performance</b>',
-        'DOM messages: ' + document.querySelectorAll('.msg').length + ' / ' + CONFIG.MSG_DOM_LIMIT + ' limit',
-        'Contacts rendered: ' + document.querySelectorAll('.contact').length,
-        'Network: ' + _effectiveType + ' (' + _networkType + ')',
-        'Crypto worker: ' + (_cryptoWorker ? '✓ Active' : '✗ Main thread'),
-        'Uptime: ' + Math.floor((Date.now() - _startTime) / MS.MIN) + ' min',
-        'Heartbeats: ' + Object.values(peers).filter(p => p._heartbeat).length + ' active',
-        'Outbox (persistent): ' + _outbox.size + ' peer queues',
-        'Sealed poll: ' + (_serverOk ? '✓ Relay active' : '⚠ P2P-only mode'),
-        'Adaptive: compress>' + _adaptiveConfig.compressMin + 'B, poll=' + (_adaptiveConfig.pollInterval/1000) + 's, img=' + Math.round(_adaptiveConfig.imageQuality*100) + '%',
+        '<b>' + t('statsPerformance') + '</b>',
+        t('statsDOMMessages', document.querySelectorAll('.msg').length, CONFIG.MSG_DOM_LIMIT),
+        t('statsContactsRendered', document.querySelectorAll('.contact').length),
+        t('statsNetwork', _effectiveType, _networkType),
+        t('statsCryptoWorker', !!_cryptoWorker),
+        t('statsUptime', Math.floor((Date.now() - _startTime) / MS.MIN)),
+        t('statsHeartbeats', Object.values(peers).filter(p => p._heartbeat).length),
+        t('statsOutboxPersistent', _outbox.size),
+        t('statsSealedPoll', _serverOk),
+        t('statsAdaptive', _adaptiveConfig.compressMin, _adaptiveConfig.pollInterval/1000, Math.round(_adaptiveConfig.imageQuality*100)),
       ].join('<br>'));
       box.appendChild(d); box.scrollTop = box.scrollHeight;
     }
