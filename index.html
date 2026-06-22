@@ -1577,6 +1577,7 @@ const _I = {
     select: 'Select',
     copy: 'Copy',
     toastCopied: 'Copied to clipboard',
+    toastCopyFail: 'Could not copy to clipboard',
     toastInvalidFile: 'Invalid file format',
     toastContactsImported: (added, skipped) => `${added} contacts imported, ${skipped} skipped`,
     toastImportFail: 'Import failed',
@@ -2042,6 +2043,7 @@ const _I = {
     select: '選択',
     copy: 'コピー',
     toastCopied: 'クリップボードにコピーしました',
+    toastCopyFail: 'クリップボードへのコピーに失敗しました',
     toastInvalidFile: '無効なファイル形式です',
     toastContactsImported: (added, skipped) => `${added}件インポート、${skipped}件スキップ`,
     toastImportFail: 'インポートに失敗しました',
@@ -6157,7 +6159,7 @@ async function initMessenger(dbName) {
       .replace(/(https?:\/\/[^\s<]+)/g, (url) => {
         const id = 'ogp-' + Math.random().toString(36).slice(2, 8);
         if (API) fetchOGP(url, id);
-        return `<a href="${url}" target="_blank" rel="noopener" class="md-link">${url}</a><div id="${id}" class="md-ogp-slot"></div>`;
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="md-link">${url}</a><div id="${id}" class="md-ogp-slot"></div>`;
       })
       // v3.1: Auto-link email addresses
       .replace(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, '<a href="mailto:$1" class="md-link">$1</a>')
@@ -6698,7 +6700,7 @@ async function initMessenger(dbName) {
     const items = [
       [t('react'), () => { menu.remove(); showReactPicker(el, msg.msgId); }],
       [t('reply'), () => startReply(msg)],
-      msg.text ? [t('copy'), () => { navigator.clipboard?.writeText(msg.text); showToast(t('toastCopied'), 'success'); }] : null,
+      msg.text ? [t('copy'), async () => { try { await navigator.clipboard.writeText(msg.text); showToast(t('toastCopied'), 'success'); } catch { showToast(t('toastCopyFail'), 'error'); } }] : null,
       msg.text ? [t('translate'), () => translateMsg(el, msg)] : null,
       msg.isMine ? [t('edit'), () => startEdit(msg)] : null,
       msg.isMine ? [t('delete'), () => deleteMsg(msg), true] : null,
@@ -11692,7 +11694,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         box.appendChild(d);
         const _copyUrl = dropUrl;
         d.querySelector('#drop-url-copy')?.addEventListener('click', () => {
-          navigator.clipboard.writeText(_copyUrl).then(() => showToast(t('copiedClipboard'), 'success'));
+          navigator.clipboard.writeText(_copyUrl).then(() => showToast(t('copiedClipboard'), 'success')).catch(() => showToast(t('toastCopyFail'), 'error'));
         });
         box.scrollTop = box.scrollHeight;
         haptic.success();
