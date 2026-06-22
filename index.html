@@ -1122,8 +1122,8 @@ del.md-del { opacity: .6 }
   <div id="msg-setup" class="hidden setup-page">
     <h1 id="msg-setup-title" data-i18n-html="heroTitle"></h1>
     <p id="msg-setup-desc" class="setup-desc" data-i18n="heroDesc"></p>
-    <input type="text" id="msg-name" class="setup-input" data-i18n-ph="yourName" data-i18n-aria="ariaDisplayName" maxlength="64" autocomplete="off" enterkeyhint="next">
-    <input type="text" id="msg-alias" class="setup-input-alt" data-i18n-ph="breezeId" data-i18n-aria="ariaBreezeId" maxlength="20" pattern="[a-z0-9_]+" autocomplete="off" enterkeyhint="done" spellcheck="false">
+    <input type="text" id="msg-name" class="setup-input" data-i18n-ph="yourName" data-i18n-aria="ariaDisplayName" maxlength="64" autocomplete="off" autocapitalize="words" enterkeyhint="next">
+    <input type="text" id="msg-alias" class="setup-input-alt" data-i18n-ph="breezeId" data-i18n-aria="ariaBreezeId" maxlength="20" pattern="[a-z0-9_]+" autocomplete="off" autocapitalize="none" enterkeyhint="done" spellcheck="false">
     <button class="btn btn-g setup-cta" id="b-msg-setup" data-i18n="createFree"></button>
     <div class="setup-footer">
       <span data-i18n="noCreditCard"></span><br>
@@ -2840,7 +2840,7 @@ window.addEventListener('online', () => {
   _DOM.get('offline-bar')?.classList.remove('active');
   const banner = _DOM.get('msg-server-banner');
   if (banner) {
-    banner.textContent = t('reconnected') || 'Reconnected';
+    banner.textContent = t('reconnected');
     banner.classList.remove('bg-t3'); banner.classList.add('bg-g');
     banner.classList.remove('hidden');
     setTimeout(() => banner.classList.add('hidden'), CONFIG.BANNER_HIDE_MS);
@@ -5509,6 +5509,14 @@ async function initMessenger(dbName) {
     }
     // Auto-join group
     if (joinToken) await processJoinToken(joinToken);
+  });
+  // Enter on name field → move focus to alias (matches enterkeyhint="next")
+  document.getElementById('msg-name')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('msg-alias')?.focus(); }
+  });
+  // Enter on alias field → submit (matches enterkeyhint="done")
+  document.getElementById('msg-alias')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('b-msg-setup')?.click(); }
   });
 
   // ===== Contacts =====
