@@ -1,5 +1,35 @@
 # Changelog
 
+## NEW FEATURE: idle auto-lock (`/lock idle <min>`) — Socratic-derived — item 107 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+734 tests; `index.html` only. `validate.sh` PASSED (i18n EN/JA parity).
+
+Socratic derivation: *"Breeze's core promise is privacy. The most common
+real-world attack isn't the crypto — it's someone reading an unlocked,
+unattended screen. Breeze has manual `/lock` and `/lock auto`… but `/lock auto`
+only fires on `visibilitychange` (tab hide). If I stay on the Breeze tab and
+walk away from my desk, am I protected? No. What standard control closes exactly
+that gap? An idle timeout lock."*
+
+**Feature — idle auto-lock:**
+
+- **`/lock idle <minutes>`** (1–120) arms an inactivity timer; **`/lock idle off`**
+  (or `0`) disables it. Persisted in `localStorage['brz-idle-lock']`; requires a
+  lock password (guides the user to `/lock` first otherwise).
+- **Detection:** `pointerdown` / `keydown` / `touchstart` / `wheel` / `mousemove`
+  (all `{ passive: true }`, bound to the account-scoped `AbortController` so they
+  clean up on account switch) reset a `_idleLockLast` timestamp; a 15 s interval
+  (tracked in `_intervals`) calls the existing `showLockScreen()` once
+  `now - last ≥ minutes`. No-ops while already locked or when no password is set.
+- Complements `/lock auto` (tab-hide): together they cover both "switched away"
+  and "walked away" exposure.
+- `/lock reset` now also clears the idle setting. Status shown in `/security`
+  ("Idle lock: ✓ 5 min" / "✗ Off"). New i18n keys `toastIdleLockSet/Off/Usage`
+  (EN+JA).
+
+Reuses the hardened lock path (PBKDF2 hash, brute-force backoff, focus trap), so
+the feature is purely the trigger — no new crypto or attack surface.
+
 ## localized relative time via Intl.RelativeTimeFormat ("last seen") — Qiita/Zenn-informed — item 106 (branch claude/nice-ride-T6yb0, 2026-06-20)
 
 734 tests; `index.html` only. `validate.sh` PASSED (i18n EN/JA parity).

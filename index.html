@@ -1743,6 +1743,9 @@ const _I = {
     toastLabelsInfo: (l) => `Labels: ${l}`,
     toastLockFirst: 'Set a lock password first with /lock',
     toastAutoLock: (s) => `Auto-lock on tab switch: ${s}`,
+    toastIdleLockSet: (m) => `Idle auto-lock: after ${m} min`,
+    toastIdleLockOff: 'Idle auto-lock disabled',
+    toastIdleLockUsage: 'Usage: /lock idle <minutes 1–120> | off',
     toastNoReply: 'No message to reply to',
     toastServerError: 'Server error',
     toastNoUnread: 'No unread messages',
@@ -2201,6 +2204,9 @@ const _I = {
     toastLabelsInfo: (l) => `ラベル: ${l}`,
     toastLockFirst: 'まず/lockでパスワードを設定してください',
     toastAutoLock: (s) => `タブ切替時の自動ロック: ${s}`,
+    toastIdleLockSet: (m) => `アイドル自動ロック: ${m}分後`,
+    toastIdleLockOff: 'アイドル自動ロックを無効化しました',
+    toastIdleLockUsage: '使い方: /lock idle <分 1〜120> | off',
     toastNoReply: '返信するメッセージがありません',
     toastServerError: 'サーバーエラー',
     toastNoUnread: '未読メッセージはありません',
@@ -9411,6 +9417,21 @@ async function initMessenger(dbName) {
     }
   });
 
+  // v3.6: Idle auto-lock — lock after N minutes of NO interaction (opt-in: /lock idle <min>).
+  // Complements /lock auto, which only fires on tab hide; this covers a device left
+  // unattended while the Breeze tab stays in the foreground (the most common real-world
+  // "walk away from the desk" exposure). Activity on any of these events resets the timer.
+  let _idleLockLast = Date.now();
+  const _idleBump = () => { _idleLockLast = Date.now(); };
+  ['pointerdown', 'keydown', 'touchstart', 'wheel', 'mousemove'].forEach(ev =>
+    window.addEventListener(ev, _idleBump, { passive: true, signal: _ac.signal }));
+  _intervals.push(setInterval(() => {
+    const mins = parseInt(localStorage.getItem('brz-idle-lock') || '0', 10);
+    if (!(mins > 0) || !localStorage.getItem('brz-lock-hash')) return;
+    if (document.getElementById('lock-screen')) return; // already locked
+    if (Date.now() - _idleLockLast >= mins * MS.MIN) showLockScreen();
+  }, 15000));
+
   // ===== v3.3: Disappearing message auto-cleanup (every 30s) =====
   _intervals.push(setInterval(async () => {
     try {
@@ -12236,6 +12257,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         '<b>Lock Screen</b>',
         'Password: ' + (localStorage.getItem('brz-lock-hash') ? '✓ Set (PBKDF2 + salt)' : '✗ Not set'),
         'Auto-lock: ' + (localStorage.getItem('brz-autolock') === '1' ? '✓ On tab switch' : '✗ Off'),
+        'Idle lock: ' + (parseInt(localStorage.getItem('brz-idle-lock') || '0', 10) > 0 ? '✓ ' + localStorage.getItem('brz-idle-lock') + ' min' : '✗ Off'),
         'Brute force: Exponential backoff after 5 attempts',
         'Timing-safe compare: ✓ Double HMAC (WebCrypto)',
         '',
@@ -12738,6 +12760,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       clearInput();
       localStorage.removeItem('brz-lock-hash');
       localStorage.removeItem('brz-autolock');
+      localStorage.removeItem('brz-idle-lock');
       auditLog('security', 'Lock password removed');
       showToast(t('toastLockRemoved'), 'success');
     }
@@ -12753,6 +12776,26 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const current = localStorage.getItem('brz-autolock') === '1';
       localStorage.setItem('brz-autolock', current ? '0' : '1');
       showToast(t('toastAutoLock', current ? 'OFF' : 'ON'), 'info');
+    }
+
+    // v3.6: /lock idle <minutes> — auto-lock after N minutes of inactivity (off/0 disables)
+    if (val.startsWith('/lock idle')) {
+      e.preventDefault();
+      clearInput();
+      if (!localStorage.getItem('brz-lock-hash')) { showToast(t('toastLockFirst'), 'error'); return; }
+      const arg = val.slice('/lock idle'.length).trim().toLowerCase();
+      if (arg === 'off' || arg === '0') {
+        localStorage.removeItem('brz-idle-lock');
+        auditLog('security', 'Idle auto-lock disabled');
+        showToast(t('toastIdleLockOff'), 'info');
+        return;
+      }
+      const mins = parseInt(arg, 10);
+      if (!arg || !Number.isFinite(mins) || mins < 1 || mins > 120) { showToast(t('toastIdleLockUsage'), 'error'); return; }
+      localStorage.setItem('brz-idle-lock', String(mins));
+      auditLog('security', 'Idle auto-lock set: ' + mins + ' min');
+      showToast(t('toastIdleLockSet', mins), 'success');
+      return;
     }
 
     // v3.6: /keywrap — Enable or disable at-rest identity key wrapping
