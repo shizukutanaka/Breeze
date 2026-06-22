@@ -10313,7 +10313,7 @@ async function initMessenger(dbName) {
   });
 
   async function executePanic() {
-    document.body.innerHTML = '<div class="i-fullscreen"></div>';
+    safeSetHTML(document.body, '<div class="i-fullscreen"></div>');
     try {
       if (indexedDB.databases) { for (const d of await indexedDB.databases()) { if (d.name) indexedDB.deleteDatabase(d.name); } }
       else { indexedDB.deleteDatabase('breeze-messenger'); }
@@ -10441,7 +10441,7 @@ async function initMessenger(dbName) {
         const el = document.createElement('div');
         el.className = 'msg them';
         el.id = 'recv-' + fileId;
-        el.innerHTML = `<div class="text-xs">📥 ${esc(name)} (${total} chunks)</div><div class="transfer-progress"><div class="bar" style="width:0%"></div></div><div class="transfer-info">0%</div>`;
+        safeSetHTML(el, `<div class="text-xs">📥 ${esc(name)} (${total} chunks)</div><div class="transfer-progress"><div class="bar" style="width:0%"></div></div><div class="transfer-info">0%</div>`);
         _DOM.get('msg-messages')?.appendChild(el);
         const box = _DOM.get('msg-messages');
         if (box) box.scrollTop = box.scrollHeight;
@@ -10492,7 +10492,7 @@ async function initMessenger(dbName) {
       // v3.6: Progress indicator in message area
       const progressEl = document.createElement('div');
       progressEl.className = 'msg me';
-      progressEl.innerHTML = `<div class="text-xs">📤 ${esc(file.name)} (${fmtSize(file.size)})</div><div class="transfer-progress"><div class="bar" style="width:0%"></div></div><div class="transfer-info">0%</div>`;
+      safeSetHTML(progressEl, `<div class="text-xs">📤 ${esc(file.name)} (${fmtSize(file.size)})</div><div class="transfer-progress"><div class="bar" style="width:0%"></div></div><div class="transfer-info">0%</div>`);
       _DOM.get('msg-messages')?.appendChild(progressEl);
       const box = _DOM.get('msg-messages');
       if (box) box.scrollTop = box.scrollHeight;
