@@ -1956,6 +1956,9 @@ const _I = {
     cmdKeyReact: 'Double-tap — Quick react 👍',
     cmdKeySearchAll: '%s+Shift+F — Search all chats',
     cmdKeyHelpLine: 'Type /help for all slash commands',
+    cmdChangelogTitle: 'Breeze Changelog',
+    cmdChangelogCurrent: 'Current',
+    cmdInfoFilesBookmarks: (f, b) => '📎 Files: ' + f + ' | 🔖 Bookmarks: ' + b,
   },
   ja: {
     heroTitle: 'プライベートメッセージング、<br>面倒なしで',
@@ -2530,6 +2533,9 @@ const _I = {
     cmdKeyReact: 'ダブルタップ — クイックリアクション 👍',
     cmdKeySearchAll: '%s+Shift+F — 全チャット検索',
     cmdKeyHelpLine: '/help で全スラッシュコマンドを表示',
+    cmdChangelogTitle: 'Breeze 更新履歴',
+    cmdChangelogCurrent: '最新',
+    cmdInfoFilesBookmarks: (f, b) => '📎 ファイル: ' + f + ' | 🔖 ブックマーク: ' + b,
   }
 };
 const LANG = (() => {
@@ -12856,9 +12862,9 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const d = document.createElement('div');
       d.className = 'cmd-panel';
       safeSetHTML(d, [
-        '<b class="i-g13">Breeze Changelog</b>',
+        '<b class="i-g13">' + t('cmdChangelogTitle') + '</b>',
         '',
-        '<b>v3.6.0 (Current)</b>',
+        '<b>v3.6.0 (' + t('cmdChangelogCurrent') + ')</b>',
         'Dead Drop one-time secret sharing (/drop)',
         'Inline Crypto Web Worker (AES-GCM offload)',
         'Native &lt;dialog&gt; modals + Trusted Types',
@@ -13019,7 +13025,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         t('statsTotal') + ': ' + msgs.length + ' (' + myMsgs + ' ' + t('infoSent') + ', ' + theirMsgs + ' ' + t('infoReceived') + ')',
         t('infoFirstMsg') + ': ' + firstMsg,
         // v3.6: Shared media count
-        '📎 Files: ' + msgs.filter(m => m.fileData).length + ' | 🔖 Bookmarks: ' + msgs.filter(m => m.bookmarked).length,
+        t('cmdInfoFilesBookmarks', msgs.filter(m => m.fileData).length, msgs.filter(m => m.bookmarked).length),
         '',
         '<b>' + t('infoStatus') + '</b>',
         (c.blocked ? '🚫 ' + t('infoBlocked') : c.muted ? '🔇 ' + t('infoMuted') : c.archived ? '📦 ' + t('infoArchived') : '✓ ' + t('infoActive')),
