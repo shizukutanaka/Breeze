@@ -1195,7 +1195,7 @@ del.md-del { opacity: .6 }
         </div>
         <div id="pin-banner" class="pin-banner hidden" role="status"></div>
         <div id="msg-messages" role="log" data-i18n-aria="ariaMessages" aria-live="polite" aria-relevant="additions" class="msg-area">
-          <div id="drop-overlay" class="drop-overlay"><span class="drop-overlay-text">Drop to send file</span></div>
+          <div id="drop-overlay" class="drop-overlay"><span class="drop-overlay-text" data-i18n="dropToSend">Drop to send file</span></div>
           <div class="msg-empty" data-i18n-html="emptyContacts">Press <b class="i-g">+</b> to add a contact.</div>
         </div>
         <button class="scroll-fab hidden" id="scroll-fab" data-i18n-aria="ariaScrollBottom">↓</button>
@@ -1218,7 +1218,7 @@ del.md-del { opacity: .6 }
 
 </div></main>
 
-<footer><div class="wrap">Breeze v3.5.0 — P2P encrypted messenger. <a href="?pricing">Pricing</a> · <a href="?terms">Terms</a> · <a href="?privacy">Privacy</a> · <a href="?commercial">特定商取引法</a></div></footer>
+<footer><div class="wrap">Breeze v3.6.0 — P2P encrypted messenger. <a href="?pricing">Pricing</a> · <a href="?terms">Terms</a> · <a href="?privacy">Privacy</a> · <a href="?commercial">特定商取引法</a></div></footer>
 
 <script src="lang.js" async integrity="sha384-Z86EvTYAMKtHSwoqtUfrsG6938uHML7p7qNNAVpvCdxLI2pUd5kJyh4pVf5x7LnQ" crossorigin="anonymous"></script>
 <script>
@@ -1540,6 +1540,7 @@ const _I = {
     ariaExitSelect: 'Exit select mode',
     pinsCount: (n) => `${n} pins`,
     folderAll: 'All', folderUnread: 'Unread', folderGroups: 'Groups', folderLabels: 'Labels',
+    dropToSend: 'Drop to send file',
     dropDecrypting: 'Decrypting…', dropRevealed: '✅ Secret revealed — this link is now destroyed.', dropReadExpired: '🚫 This secret has already been read or has expired.', dropReadFailed: '❌ Failed to decrypt. The link may be invalid or corrupted.', dropOpenApp: 'Open Breeze Messenger →',
     errUnknown: 'Unknown error', consentTitle: 'Data consent',
     ariaAccounts: 'Accounts', ariaReactPicker: 'React with emoji', ariaReactWith: (name) => `React with ${name}`,
@@ -1601,6 +1602,15 @@ const _I = {
     connRelayDesc: 'Server relay — messages encrypted end-to-end',
     connOffline: 'Peer appears offline. Messages will be delivered via relay when they come back.',
     dismiss: 'Dismiss',
+    installBannerTitle: 'Install Breeze',
+    installBannerPlatform: (p) => `Add to your ${p} — works offline`,
+    installBannerInstallBtn: 'Install',
+    installBannerIOSTip: 'Tap Share then Add to Home Screen',
+    installBannerDesktopTitle: (os) => `Get Breeze for ${os}`,
+    installBannerDesktopSub: 'Native app with system tray + notifications',
+    installBannerDownload: 'Download',
+    installPlatformPhone: 'phone',
+    installPlatformDevice: 'device',
     read: 'Read',
     recent: 'Recent',
     typing: 'typing...',
@@ -2090,6 +2100,15 @@ const _I = {
     connRelayDesc: 'サーバー中継 — メッセージはE2E暗号化済み',
     connOffline: '相手がオフラインのようです。オンライン時にリレーで配信されます。',
     dismiss: '閉じる',
+    installBannerTitle: 'Breezeをインストール',
+    installBannerPlatform: (p) => `${p}に追加 — オフラインでも使えます`,
+    installBannerInstallBtn: 'インストール',
+    installBannerIOSTip: '「共有」から「ホーム画面に追加」をタップ',
+    installBannerDesktopTitle: (os) => `${os}版Breezeを入手`,
+    installBannerDesktopSub: 'システムトレイ＋通知付きのネイティブアプリ',
+    installBannerDownload: 'ダウンロード',
+    installPlatformPhone: 'スマートフォン',
+    installPlatformDevice: 'デバイス',
     read: '既読',
     recent: '最近',
     typing: '入力中...',
@@ -2103,6 +2122,7 @@ const _I = {
     dropExpires: '未読の場合、24時間で失効します。',
     dropFailed: 'Dead Dropの作成に失敗しました',
     folderAll: 'すべて', folderUnread: '未読', folderGroups: 'グループ', folderLabels: 'ラベル',
+    dropToSend: 'ファイルをドロップして送信',
     dropDecrypting: '復号中…', dropRevealed: '✅ 秘密が公開されました — このリンクは無効になりました。', dropReadExpired: '🚫 この秘密はすでに閲覧済みか期限切れです。', dropReadFailed: '❌ 復号に失敗しました。リンクが無効または破損している可能性があります。', dropOpenApp: 'Breeze Messengerを開く →',
     errUnknown: '不明なエラー', consentTitle: 'データ同意',
     ariaAccounts: 'アカウント', ariaReactPicker: '絵文字でリアクション', ariaReactWith: (name) => `${name} でリアクション`,
@@ -2504,13 +2524,14 @@ function showInstallBanner() {
 
   if (_installPrompt) {
     // Chrome/Edge on Android, Windows, Mac, Linux — one-click install
-    const platform = isAndroid ? 'phone' : isMac ? 'Mac' : isWin ? 'PC' : 'device';
-    banner.innerHTML = `
+    const platform = isAndroid ? t('installPlatformPhone') : isMac ? 'Mac' : isWin ? 'PC' : t('installPlatformDevice');
+    safeSetHTML(banner, `
       <div class="icon">B</div>
-      <div class="text"><b>Install Breeze</b>Add to your ${platform} — works offline</div>
-      <button class="btn btn-g btn-sm" id="install-btn">Install</button>
-      <button class="dismiss" data-i18n-aria="dismiss">&times;</button>
-    `;
+      <div class="text"><b>${esc(t('installBannerTitle'))}</b>${esc(t('installBannerPlatform', platform))}</div>
+      <button class="btn btn-g btn-sm" id="install-btn">${esc(t('installBannerInstallBtn'))}</button>
+      <button class="dismiss">&times;</button>
+    `);
+    banner.querySelector('.dismiss').setAttribute('aria-label', t('dismiss'));
     banner.querySelector('#install-btn').onclick = async () => {
       banner.remove();
       _installPrompt.prompt();
@@ -2519,22 +2540,24 @@ function showInstallBanner() {
       if (result.outcome === 'accepted') showToast(t('toastInstalling'), 'success');
     };
   } else if (isIOS) {
-    banner.innerHTML = `
+    safeSetHTML(banner, `
       <div class="icon">B</div>
-      <div class="text"><b>Install Breeze</b>Tap <b class="i-g">Share</b> then <b class="i-g">Add to Home Screen</b></div>
-      <button class="dismiss" data-i18n-aria="dismiss">&times;</button>
-    `;
+      <div class="text"><b>${esc(t('installBannerTitle'))}</b>${esc(t('installBannerIOSTip'))}</div>
+      <button class="dismiss">&times;</button>
+    `);
+    banner.querySelector('.dismiss').setAttribute('aria-label', t('dismiss'));
   } else if (isMac || isWin || isLinux) {
     // Desktop browsers without beforeinstallprompt (Safari, Firefox)
     // Show download option for native app
     const os = isMac ? 'macOS' : isWin ? 'Windows' : 'Linux';
     const ext = isMac ? '.dmg' : isWin ? '.exe' : '.AppImage';
-    banner.innerHTML = `
+    safeSetHTML(banner, `
       <div class="icon">B</div>
-      <div class="text"><b>Get Breeze for ${os}</b>Native app with system tray + notifications</div>
-      <button class="btn btn-g btn-sm" id="install-dl-btn">Download</button>
-      <button class="dismiss" data-i18n-aria="dismiss">&times;</button>
-    `;
+      <div class="text"><b>${esc(t('installBannerDesktopTitle', os))}</b>${esc(t('installBannerDesktopSub'))}</div>
+      <button class="btn btn-g btn-sm" id="install-dl-btn">${esc(t('installBannerDownload'))}</button>
+      <button class="dismiss">&times;</button>
+    `);
+    banner.querySelector('.dismiss').setAttribute('aria-label', t('dismiss'));
     banner.querySelector('#install-dl-btn').onclick = () => {
       // Link to latest GitHub release
       const base = 'https://github.com/shizukutanaka/Breeze/releases/latest/download/';
