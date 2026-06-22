@@ -1151,10 +1151,10 @@ del.md-del { opacity: .6 }
         </div>
         <div id="msg-short-id" class="sidebar-id" data-i18n-title="ttClickToCopy"></div>
         <div class="folder-tabs" id="folder-tabs" role="tablist">
-          <button class="folder-tab active" data-folder="all" role="tab" aria-selected="true" data-i18n-aria="ariaFolderAll">All <span class="badge" id="badge-all"></span></button>
-          <button class="folder-tab" data-folder="unread" role="tab" data-i18n-aria="ariaFolderUnread">Unread <span class="badge" id="badge-unread"></span></button>
-          <button class="folder-tab" data-folder="groups" role="tab" data-i18n-aria="ariaFolderGroups">Groups <span class="badge" id="badge-groups"></span></button>
-          <button class="folder-tab" data-folder="labels" role="tab" id="folder-labels" data-i18n-aria="ariaFolderLabels">Labels</button>
+          <button class="folder-tab active" data-folder="all" role="tab" aria-selected="true" data-i18n-aria="ariaFolderAll"><span data-i18n="folderAll">All</span> <span class="badge" id="badge-all"></span></button>
+          <button class="folder-tab" data-folder="unread" role="tab" data-i18n-aria="ariaFolderUnread"><span data-i18n="folderUnread">Unread</span> <span class="badge" id="badge-unread"></span></button>
+          <button class="folder-tab" data-folder="groups" role="tab" data-i18n-aria="ariaFolderGroups"><span data-i18n="folderGroups">Groups</span> <span class="badge" id="badge-groups"></span></button>
+          <button class="folder-tab" data-folder="labels" role="tab" id="folder-labels" data-i18n-aria="ariaFolderLabels"><span data-i18n="folderLabels">Labels</span></button>
         </div>
         <div id="label-filter" class="label-filter hidden"></div>
         <div class="contact-filter-wrap">
@@ -1525,6 +1525,8 @@ const _I = {
     ariaQuickReplies: 'Quick replies',
     ariaExitSelect: 'Exit select mode',
     pinsCount: (n) => `${n} pins`,
+    folderAll: 'All', folderUnread: 'Unread', folderGroups: 'Groups', folderLabels: 'Labels',
+    dropDecrypting: 'Decrypting…', dropRevealed: '✅ Secret revealed — this link is now destroyed.', dropReadExpired: '🚫 This secret has already been read or has expired.', dropReadFailed: '❌ Failed to decrypt. The link may be invalid or corrupted.', dropOpenApp: 'Open Breeze Messenger →',
     ttEditProfile: 'Edit profile',
     ttClickToCopy: 'Click to copy',
     ttAttach: 'Attach',
@@ -2068,6 +2070,8 @@ const _I = {
     dropDesc: 'ワンタイムリンク。閲覧後に自動削除。鍵はURLフラグメントに格納 (サーバーに送信されません)。',
     dropExpires: '未読の場合、24時間で失効します。',
     dropFailed: 'Dead Dropの作成に失敗しました',
+    folderAll: 'すべて', folderUnread: '未読', folderGroups: 'グループ', folderLabels: 'ラベル',
+    dropDecrypting: '復号中…', dropRevealed: '✅ 秘密が公開されました — このリンクは無効になりました。', dropReadExpired: '🚫 この秘密はすでに閲覧済みか期限切れです。', dropReadFailed: '❌ 復号に失敗しました。リンクが無効または破損している可能性があります。', dropOpenApp: 'Breeze Messengerを開く →',
     outboxPending: '件のメッセージが送信待ち',
     speedNeedConvo: '会話を開いてください',
     speedNeedP2P: 'P2P接続がありません — まず接続してください',
@@ -2968,12 +2972,12 @@ const joinToken = P.get('join');
 if (P.has('drop')) {
   const dropId = P.get('drop');
   const keyB64 = location.hash.slice(1); // Fragment never sent to server
-  document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:16px;padding:24px;text-align:center;font-family:system-ui,sans-serif;background:#050505;color:#f2f2f7"><div style="font-size:48px">🔐</div><div id="drop-status" style="font-size:15px">Decrypting...</div><div id="drop-content" style="display:none;max-width:600px;width:100%;padding:20px;border-radius:16px;background:rgba(28,28,30,.85);backdrop-filter:blur(20px);text-align:left;white-space:pre-wrap;word-break:break-word;line-height:1.6;font-size:15px"></div><div id="drop-actions" style="display:none;margin-top:8px"><button id="drop-copy" style="padding:10px 24px;border-radius:999px;background:#34d399;color:#000;border:none;font-weight:600;cursor:pointer;font-size:14px">Copy</button></div><a href="/" style="margin-top:16px;color:#34d399;font-size:13px;text-decoration:none">Open Breeze Messenger →</a></div>';
+  document.body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:16px;padding:24px;text-align:center;font-family:system-ui,sans-serif;background:#050505;color:#f2f2f7"><div style="font-size:48px">🔐</div><div id="drop-status" style="font-size:15px">${esc(t('dropDecrypting'))}</div><div id="drop-content" style="display:none;max-width:600px;width:100%;padding:20px;border-radius:16px;background:rgba(28,28,30,.85);backdrop-filter:blur(20px);text-align:left;white-space:pre-wrap;word-break:break-word;line-height:1.6;font-size:15px"></div><div id="drop-actions" style="display:none;margin-top:8px"><button id="drop-copy" style="padding:10px 24px;border-radius:999px;background:#34d399;color:#000;border:none;font-weight:600;cursor:pointer;font-size:14px">${esc(t('copy'))}</button></div><a href="/" style="margin-top:16px;color:#34d399;font-size:13px;text-decoration:none">${esc(t('dropOpenApp'))}</a></div>`;
   (async () => {
     try {
       if (!dropId || !keyB64) throw new Error('Invalid link');
-      const resp = await fetch('/api/drop/read', { method: 'POST', headers: _H, body: JSON.stringify({ id: dropId }) });
-      if (resp.status === 404) { document.getElementById('drop-status').textContent = '🚫 This secret has already been read or has expired.'; return; }
+      const resp = await postAPIRaw('/drop/read', { id: dropId });
+      if (!resp || resp.status === 404) { _DOM.get('drop-status').textContent = t('dropReadExpired'); return; }
       if (!resp.ok) throw new Error('Server error');
       const data = await resp.json();
       // Decrypt
@@ -2984,15 +2988,15 @@ if (P.has('drop')) {
       const aesKey = await crypto.subtle.importKey('raw', keyBytes, 'AES-GCM', false, ['decrypt']);
       const ptBuf = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, aesKey, ct);
       const plaintext = new TextDecoder().decode(ptBuf);
-      document.getElementById('drop-status').innerHTML = '✅ <b>Secret revealed</b> — this link is now destroyed.';
-      const content = document.getElementById('drop-content');
+      _DOM.get('drop-status').textContent = t('dropRevealed');
+      const content = _DOM.get('drop-content');
       content.textContent = plaintext;
       content.style.display = 'block';
-      document.getElementById('drop-actions').style.display = 'block';
-      document.getElementById('drop-copy').onclick = () => {
-        navigator.clipboard.writeText(plaintext).then(() => { document.getElementById('drop-copy').textContent = 'Copied!'; }).catch(() => {});
+      _DOM.get('drop-actions').style.display = 'block';
+      _DOM.get('drop-copy').onclick = () => {
+        navigator.clipboard.writeText(plaintext).then(() => { _DOM.get('drop-copy').textContent = t('toastCopied'); }).catch(() => {});
       };
-    } catch(e) { document.getElementById('drop-status').textContent = '❌ Failed to decrypt. The link may be invalid or corrupted.'; }
+    } catch(e) { _DOM.get('drop-status').textContent = t('dropReadFailed'); }
   })();
 } else
 if (P.has('terms') || P.has('privacy') || P.has('legal') || P.has('commercial') || P.has('pricing')) {
@@ -5642,7 +5646,7 @@ async function initMessenger(dbName) {
       bar.replaceChildren();
       const allChip = document.createElement('button');
       allChip.className = 'label-chip' + (!_activeLabel ? ' active' : '');
-      allChip.textContent = 'All';
+      allChip.textContent = t('folderAll');
       allChip.onclick = () => { _activeLabel = null; renderLabelFilter(); renderContacts(); };
       bar.appendChild(allChip);
       labels.forEach((label, i) => {
