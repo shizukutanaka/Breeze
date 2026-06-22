@@ -444,6 +444,8 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .i-m4 { margin: 4px 0 }
 .i-rel { position: relative }
 .i-abs { position: absolute }
+.i-abs-tl { position: absolute; top: 0; left: 0 }
+.i-abs-tr { position: absolute; top: 0; right: 0 }
 .i-pad8 { padding: 8px }
 .i-w100 { width: 100% }
 .i-flex-col { display: flex; flex-direction: column; gap: 16px }
@@ -456,6 +458,8 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .i-border-err { border-color: var(--r) }
 .i-border-reset { border-color: var(--b1) }
 .i-min-touch { min-width: 24px; min-height: 24px }
+.i-fatal { padding: 40px; text-align: center; font-family: system-ui }
+.i-no-touch { touch-action: none; cursor: grab; transition: none }
 .i-search-hl { outline: 2px solid var(--g) }
 .i-search-hl-current { outline: 3px solid var(--g); background: rgba(52,211,153,.15); border-radius: 4px }
 /* R95: State utility classes (replace .style.X) */
@@ -521,6 +525,7 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 
 /* ─── Account tabs ─── */
 .acc-tabs { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--b1); overflow-x: auto; flex-shrink: 0 }
+.acc-tabs--cap { padding: 8px 12px; gap: 8px; -webkit-overflow-scrolling: touch }
 .acc-tab { position: relative; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; cursor: pointer; flex-shrink: 0; border: 2px solid transparent; background: var(--s2); transition: transform .15s var(--bounce), border-color .15s ease, box-shadow .15s ease; width: 34px; height: 34px; user-select: none; box-shadow: var(--shadow-sm) }
 .acc-tab.active { border-color: var(--g); background: var(--s2); box-shadow: 0 0 0 3px rgba(52,211,153,.2) }
 .acc-tab:hover:not(.active) { background: var(--s2); transform: scale(1.12) }
@@ -550,6 +555,7 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .call-name { font-size: 26px; font-weight: 800; margin-bottom: 4px; letter-spacing: -.02em }
 .call-timer { font-size: 13px; color: #888; margin-bottom: 24px; font-family: var(--mono) }
 .call-video { max-width: 80%; max-height: 40vh; border-radius: var(--rad-lg); margin-bottom: 16px; box-shadow: var(--shadow-float) }
+.scan-video { width: 100%; border-radius: 12px; margin: 8px 0 }
 .call-actions { display: flex; gap: 20px }
 .call-actions-secondary { display: flex; gap: 14px; margin-top: 16px }
 .call-btn-accept { width: 68px; height: 68px; border-radius: 50%; background: var(--g); border: none; font-size: 28px; cursor: pointer; box-shadow: 0 4px 20px rgba(52,211,153,.4); transition: transform .15s var(--bounce) }
@@ -1156,7 +1162,7 @@ del.md-del { opacity: .6 }
           <span id="msg-my-name" class="name clickable" data-i18n-title="ttEditProfile"></span>
           <span id="peer-count" class="sidebar-meta"></span>
           <button class="btn btn-o btn-sm" id="b-msg-theme" data-i18n-aria="ariaTheme">☀</button>
-          <button class="btn btn-o btn-sm" id="b-msg-share" data-i18n-aria="ariaShare" data-i18n-title="ariaShare">ID</button>
+          <button class="btn btn-o btn-sm" id="b-msg-share" data-i18n="btnShareId" data-i18n-aria="ariaShare" data-i18n-title="ariaShare">ID</button>
           <button class="btn btn-g btn-sm" id="b-msg-add" data-i18n-aria="ariaAddContact">+</button>
         </div>
         <div id="msg-short-id" class="sidebar-id" data-i18n-title="ttClickToCopy"></div>
@@ -1346,7 +1352,7 @@ const _capabilities = {
 };
 if (!_capabilities.crypto) {
   const _fe = document.createElement('div');
-  _fe.style.cssText = 'padding:40px;text-align:center;font-family:system-ui';
+  _fe.className = 'i-fatal';
   const _fh = document.createElement('h2'); _fh.textContent = 'Breeze requires a secure context'; _fe.appendChild(_fh);
   const _fp = document.createElement('p'); _fp.textContent = 'WebCrypto API is not available. Please access via HTTPS.'; _fe.appendChild(_fp);
   document.body.replaceChildren(_fe);
@@ -1354,7 +1360,7 @@ if (!_capabilities.crypto) {
 }
 if (!_capabilities.idb) {
   const _fe = document.createElement('div');
-  _fe.style.cssText = 'padding:40px;text-align:center;font-family:system-ui';
+  _fe.className = 'i-fatal';
   const _fh = document.createElement('h2'); _fh.textContent = 'Storage unavailable'; _fe.appendChild(_fh);
   const _fp = document.createElement('p'); _fp.textContent = 'IndexedDB is required. Please disable private/incognito mode or enable storage.'; _fe.appendChild(_fp);
   document.body.replaceChildren(_fe);
@@ -1548,6 +1554,7 @@ const _I = {
     ariaTimer: 'Toggle disappearing messages',
     ariaClearChat: 'Clear conversation',
     ariaShare: 'Share invite link',
+    btnShareId: 'ID',
     ariaPrev: 'Previous result',
     ariaNext: 'Next result',
     ariaMessages: 'Messages',
@@ -1901,8 +1908,13 @@ const _I = {
     uiUseInGroup: 'Use in a group chat',
     uiOlderMsgs: (n) => '↑ ' + n + ' older messages',
     uiAnnounceOnly: 'Announce-only:',
+    uiAnnounceOn: 'ON (only admins can send)',
+    uiAnnounceOff: 'OFF (everyone can send)',
     uiCurrentSort: (s) => 'Current sort: ' + s,
     uiRetention: (d) => 'Retention: ' + d,
+    uiRetentionForever: 'Forever',
+    uiRetentionDays: (n) => n + ' days',
+    uiUsageRetention: 'Usage: /retention 30 (days) or /retention off',
     uiUnknownAdmin: 'Unknown admin command. Type /admin help',
     uiUsageAlias: 'Usage: /alias myname (3-20 chars, a-z 0-9 _)',
     uiUsagePoll: 'Usage: /poll Question? | Option 1 | Option 2 | Option 3',
@@ -1918,6 +1930,8 @@ const _I = {
     cmdLblSigning: 'Signing', cmdLblP2PConn: 'P2P Connections',
     cmdLblContacts: 'Total Contacts', cmdLblGroups: 'Active Groups', cmdLblBlocked: 'Blocked',
     cmdLblStorage: 'Storage',
+    cmdMembersLabel: 'members',
+    cmdMemberYou: '(you)',
     cmdStatusTitle: (v) => 'Breeze v' + v + ' Status',
     cmdLblProtocol: 'Protocol', cmdLblPlatform: 'Platform', cmdLblCrypto: 'Crypto',
     cmdLblUserId: 'User ID', cmdLblAlias: 'Alias',
@@ -2126,6 +2140,7 @@ const _I = {
     ariaTimer: '自動削除タイマーを切替',
     ariaClearChat: '会話を削除',
     ariaShare: '招待リンクを共有',
+    btnShareId: 'ID',
     ariaPrev: '前の結果',
     ariaNext: '次の結果',
     ariaMessages: 'メッセージ一覧',
@@ -2478,8 +2493,13 @@ const _I = {
     uiUseInGroup: 'グループチャットで使用してください',
     uiOlderMsgs: (n) => '↑ ' + n + ' 件の古いメッセージ',
     uiAnnounceOnly: 'アナウンス専用:',
+    uiAnnounceOn: 'ON (管理者のみ送信可)',
+    uiAnnounceOff: 'OFF (全員送信可)',
     uiCurrentSort: (s) => '現在の並び順: ' + s,
     uiRetention: (d) => '保持期間: ' + d,
+    uiRetentionForever: '無期限',
+    uiRetentionDays: (n) => n + '日',
+    uiUsageRetention: '使用法: /retention 30 (日) または /retention off',
     uiUnknownAdmin: '不明な管理コマンド。/admin help と入力',
     uiUsageAlias: '使用法: /alias myname (3-20文字, a-z 0-9 _)',
     uiUsagePoll: '使用法: /poll 質問？ | 選択1 | 選択2 | 選択3',
@@ -2495,6 +2515,8 @@ const _I = {
     cmdLblSigning: '署名', cmdLblP2PConn: 'P2P接続数',
     cmdLblContacts: '連絡先数', cmdLblGroups: 'アクティブグループ', cmdLblBlocked: 'ブロック',
     cmdLblStorage: 'ストレージ',
+    cmdMembersLabel: 'メンバー',
+    cmdMemberYou: '(あなた)',
     cmdStatusTitle: (v) => 'Breeze v' + v + ' ステータス',
     cmdLblProtocol: 'プロトコル', cmdLblPlatform: 'プラットフォーム', cmdLblCrypto: '暗号',
     cmdLblUserId: 'ユーザーID', cmdLblAlias: 'エイリアス',
@@ -4086,7 +4108,7 @@ async function addAccount() {
 
   // Quick avatar selection from presets
   const presetAvatars = ['💼', '🏠', '🎮', '🔒', '🌙', '⭐', '🦊', '🎵', '🚀', '💎', '🌿', '🔥'];
-  const avatar = await showPrompt(t('chooseAvatar'), presetAvatars[accs.length % presetAvatars.length], { placeholder: 'Emoji' });
+  const avatar = await showPrompt(t('chooseAvatar'), presetAvatars[accs.length % presetAvatars.length], { placeholder: t('avatarPlaceholder') });
 
   const newId = Date.now().toString(36);
   const newAcc = { id: newId, name, avatar: (avatar || '👤').slice(0, 2), dbName: 'breeze-acc-' + newId, createdAt: Date.now() };
@@ -5894,7 +5916,7 @@ async function initMessenger(dbName) {
       labels.forEach((label, i) => {
         const chip = document.createElement('button');
         chip.className = 'label-chip' + (_activeLabel === label ? ' active' : '');
-        chip.innerHTML = esc(label);
+        chip.textContent = label;
         chip.onclick = () => { _activeLabel = (_activeLabel === label) ? null : label; renderLabelFilter(); renderContacts(); };
         bar.appendChild(chip);
       });
@@ -6014,7 +6036,7 @@ async function initMessenger(dbName) {
       div.setAttribute('aria-label', c.name + (c.unread ? ', ' + t('ariaUnread', c.unread) : '') + (isOnline ? ', ' + t('statusOnline') : ''));
       // v3.5: Presence dot (online/away/offline)
       // v3.6: Enhanced presence dot — shows P2P quality when connected
-      const initial = c.isGroup ? '👥' : (c.name || '?')[0].toUpperCase();
+      const initial = c.isGroup ? '👥' : esc((c.name || '?')[0].toUpperCase());
       const avatarBg = c.isGroup ? 'var(--gd)' : `hsl(${(c.name||'').charCodeAt(0) * 37 % 360}, 40%, 30%)`;
       let presenceClass = '';
       let presenceTitle = '';
@@ -6031,7 +6053,7 @@ async function initMessenger(dbName) {
         }
       }
       const presenceDot = presenceClass ? `<span class="presence-dot ${presenceClass}" title="${presenceTitle}"></span>` : '';
-      const pinLabel = c.pinned ? 'Unpin' : 'Pin';
+      const pinLabel = c.pinned ? t('unpin') : t('pin');
       const prefix = (c.blocked ? '🚫 ' : '') + (c.pinned ? '📌 ' : '') + (c.muted ? '🔇 ' : '');
       // v3.4: Label chips for contact
       const labelHtml = (c.labels || []).map((l, i) => `<span class="contact-label" data-color="${LABEL_COLORS[i % LABEL_COLORS.length]}">${esc(l)}</span>`).join('');
@@ -6052,7 +6074,7 @@ async function initMessenger(dbName) {
       else if (draftText) previewText = `<span class="color-r">${t('draftLabel')}:</span> ${esc(draftText.slice(0, 30))}`;
       else if (c.isGroup && c.lastMsgSender && c.lastMsg) previewText = `<span class="color-t2">${esc(c.lastMsgSender)}:</span> ${esc(c.lastMsg)}`;
       else previewText = esc(c.lastMsg || '');
-      div.innerHTML = `<div class="avatar" style="background:${avatarBg}">${initial}${presenceDot}</div><div class="info"><div class="name">${prefix}${esc(c.name)}${labelHtml}</div><div class="preview">${previewText}</div></div><div class="meta">${lastTime ? `<div class="time">${lastTime}</div>` : ''}${c.unread > 0 ? `<span class="cbadge">${c.unread}</span>` : ''}</div>`;
+      safeSetHTML(div, `<div class="avatar" style="background:${avatarBg}">${initial}${presenceDot}</div><div class="info"><div class="name">${prefix}${esc(c.name)}${labelHtml}</div><div class="preview">${previewText}</div></div><div class="meta">${lastTime ? `<div class="time">${lastTime}</div>` : ''}${c.unread > 0 ? `<span class="cbadge">${c.unread}</span>` : ''}</div>`);
       div.onclick = () => openConversation(c);
       // v3.6: Swipe-left-to-archive on contact (iOS Mail/WhatsApp pattern)
       if (IS_TOUCH) {
@@ -6486,7 +6508,8 @@ async function initMessenger(dbName) {
     // v3.6: Show favicon + site name for richer link previews
     let siteName = '';
     try { siteName = ogp.siteName || new URL(ogp.url || '').hostname.replace('www.', ''); } catch {}
-    const faviconUrl = ogp.url ? `https://www.google.com/s2/favicons?sz=16&domain=${new URL(ogp.url).hostname}` : '';
+    let faviconUrl = '';
+    try { faviconUrl = ogp.url ? `https://www.google.com/s2/favicons?sz=16&domain=${new URL(ogp.url).hostname}` : ''; } catch {}
     const siteInfo = siteName ? `<div class="ogp-site">${faviconUrl ? `<img src="${esc(faviconUrl)}" width="12" height="12" loading="lazy" decoding="async" onerror="this.remove()"> ` : ''}${esc(siteName)}</div>` : '';
     return `<div class="ogp-card">${imgSafe ? `<img src="${esc(ogp.image)}" class="i-cover-img" loading="lazy" decoding="async" referrerpolicy="no-referrer" crossorigin="anonymous" onerror="this.remove()">` : ''}<div class="i-pad68">${siteInfo}<div class="i-info-line">${esc(ogp.title || '')}</div>${ogp.description ? `<div class="i-small-meta">${esc(ogp.description.slice(0, 120))}</div>` : ''}</div></div>`;
   }
@@ -6990,9 +7013,7 @@ async function initMessenger(dbName) {
     document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
     const menu = document.createElement('div');
     menu.className = 'ctx-menu';
-    menu.classList.add('i-abs');
-    menu.style.top = '0';
-    menu.style[msg.isMine ? 'right' : 'left'] = '0';
+    menu.classList.add(msg.isMine ? 'i-abs-tr' : 'i-abs-tl');
 
     const items = [
       [t('react'), () => { menu.remove(); showReactPicker(el, msg.msgId); }],
@@ -7124,7 +7145,7 @@ async function initMessenger(dbName) {
       const el = document.querySelector(`[data-msgid="${msg.msgId}"]`);
       if (el) {
         const time = new Date(msg.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        el.innerHTML = renderLinks(renderMarkdown(esc(newText))) + ' <span class="i-edited">' + t('edited') + '</span><span class="ts">' + time + '</span>';
+        safeSetHTML(el, renderLinks(renderMarkdown(esc(newText))) + ' <span class="i-edited">' + t('edited') + '</span><span class="ts">' + time + '</span>');
       }
       // Notify peer
       sendSignal({ type: 'edit', msgId: msg.msgId, text: newText, ts: msg.ts });
@@ -9792,7 +9813,7 @@ async function initMessenger(dbName) {
     } else {
       navigator.clipboard?.writeText(url);
       const btn = _DOM.get('b-msg-share'); if (!btn) return;
-      btn.textContent = '✓'; setTimeout(() => { btn.textContent = 'ID'; }, 2000);
+      btn.textContent = '✓'; setTimeout(() => { btn.textContent = t('btnShareId'); }, 2000);
     }
   });
 
@@ -10547,7 +10568,7 @@ async function initMessenger(dbName) {
       if (typers.length === 0) return;
       const names = typers.length <= 2 ? typers.join(' & ') : typers[0] + ' + ' + (typers.length - 1);
       if (typingEl) {
-        typingEl.innerHTML = esc(names) + ' <span class="typing-dots"><span></span><span></span><span></span></span>';
+        safeSetHTML(typingEl, esc(names) + ' <span class="typing-dots"><span></span><span></span><span></span></span>');
         typingEl.classList.add('active');
       }
       if (el) { el.textContent = names + ' ' + t('typing'); el.classList.remove('color-t3','color-r'); el.classList.add('color-g'); }
@@ -10555,7 +10576,7 @@ async function initMessenger(dbName) {
       // 1:1: simple indicator
       const name = activeContact?.name || '';
       if (typingEl) {
-        typingEl.innerHTML = (name ? esc(name) + ' ' : '') + '<span class="typing-dots"><span></span><span></span><span></span></span>';
+        safeSetHTML(typingEl, (name ? esc(name) + ' ' : '') + '<span class="typing-dots"><span></span><span></span><span></span></span>');
         typingEl.classList.add('active');
       }
       if (el) { el.textContent = t('typing'); el.classList.remove('color-t3','color-r'); el.classList.add('color-g'); }
@@ -10601,9 +10622,7 @@ async function initMessenger(dbName) {
       let scale = 1, lastScale = 1, posX = 0, posY = 0, lastDist = 0;
       let startX = 0, startY = 0, isDragging = false;
 
-      img.style.touchAction = 'none';
-      img.style.transition = 'none';
-      img.style.cursor = 'grab';
+      img.classList.add('i-no-touch');
 
       const getDistance = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
 
@@ -11133,7 +11152,7 @@ async function initMessenger(dbName) {
           const video = document.createElement('video');
           video.srcObject = stream;
           video.autoplay = true; video.playsInline = true;
-          video.style.cssText = 'width:100%;border-radius:12px;margin:8px 0';
+          video.className = 'scan-video';
           card.insertBefore(video, closeBtn);
           scanBtn.textContent = '⏳ ' + (t('scanning'));
           scanBtn.disabled = true;
@@ -11226,8 +11245,8 @@ async function initMessenger(dbName) {
         const box = _DOM.get('msg-messages');
         const d = document.createElement('div');
         d.className = 'chat-empty';
-        d.textContent = t('uiRetention', (_settings.retentionDays > 0 ? _settings.retentionDays + ' days' : 'Forever')) +
-          '. Usage: /retention 30 (days) or /retention off';
+        d.textContent = t('uiRetention', (_settings.retentionDays > 0 ? t('uiRetentionDays', _settings.retentionDays) : t('uiRetentionForever'))) +
+          '. ' + t('uiUsageRetention');
         box.appendChild(d); box.scrollTop = box.scrollHeight;
       } else if (arg === 'off' || arg === '0') {
         _settings.retentionDays = 0;
@@ -11273,7 +11292,7 @@ async function initMessenger(dbName) {
         activeContact.announceOnly = mode;
         await dbPut('contacts', activeContact);
         auditLog('group', (mode ? 'Enabled' : 'Disabled') + ' announce-only for ' + activeContact.name);
-        d.textContent = t('uiAnnounceOnly') + ' ' + (mode ? 'ON (only admins can send)' : 'OFF (everyone can send)');
+        d.textContent = t('uiAnnounceOnly') + ' ' + (mode ? t('uiAnnounceOn') : t('uiAnnounceOff'));
       } else if (sub.startsWith('rename ')) {
         const newName = sub.slice(7).trim();
         if (newName && newName.length <= 50) {
@@ -12130,12 +12149,10 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       if (arg === 'auto') {
         localStorage.setItem('brz-theme', 'auto');
         document.documentElement.classList.add('auto-theme');
-        document.body.style.background = '';
         showToast(t('toastThemeAuto'), 'info');
       } else if (arg === 'dark') {
         localStorage.setItem('brz-theme', 'dark');
         document.documentElement.classList.remove('auto-theme');
-        document.body.style.background = '';
         showToast(t('toastThemeDark'), 'info');
       } else if (arg === 'light') {
         localStorage.setItem('brz-theme', 'light');
@@ -13287,10 +13304,10 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const d = document.createElement('div');
       d.className = 'cmd-panel-mono';
       const members = activeContact.members || [];
-      safeSetHTML(d, '<b class="i-g">' + esc(activeContact.name) + ' — ' + members.length + ' members</b><br>' +
+      safeSetHTML(d, '<b class="i-g">' + esc(activeContact.name) + ' — ' + members.length + ' ' + t('cmdMembersLabel') + '</b><br>' +
         members.map(m => {
           const isOn = peers[m.pubB64]?.connected || _presenceCache[m.id];
-          return (isOn ? '🟢' : '⚫') + ' ' + esc(m.name || m.id) + (m.id === myId ? ' (you)' : '');
+          return (isOn ? '🟢' : '⚫') + ' ' + esc(m.name || m.id) + (m.id === myId ? ' ' + t('cmdMemberYou') : '');
         }).join('<br>'));
       box.appendChild(d); box.scrollTop = box.scrollHeight;
     }
@@ -13872,10 +13889,7 @@ if (PLATFORM === 'electron' && window.breeze) {
   if (PLATFORM === 'capacitor') {
     const tabs = _DOM.get('acc-tabs');
     if (tabs) {
-      tabs.style.cssText += ';padding:8px 12px;gap:8px;-webkit-overflow-scrolling:touch';
-      tabs.querySelectorAll('div').forEach(d => {
-        if (d.style.width === '32px') d.style.cssText = d.style.cssText.replace('32px', '40px').replace('32px', '40px');
-      });
+      tabs.classList.add('acc-tabs--cap');
     }
   }
 }
