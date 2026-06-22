@@ -1531,6 +1531,9 @@ const _I = {
     errUnknown: 'Unknown error', consentTitle: 'Data consent',
     ariaAccounts: 'Accounts', ariaReactPicker: 'React with emoji', ariaReactWith: (name) => `React with ${name}`,
     connReconnecting: (s) => `🔄 Reconnecting… ${s}s`,
+    sent: 'Sent',
+    confirmDeleteContact: (name) => `Delete ${name}?`, confirmDeleteMsg: 'Delete this message?', confirmClearChat: (name) => `Delete all messages with ${name}?`,
+    pollVotes: (n) => `${n} vote${n !== 1 ? 's' : ''}`,
     labelNoneHint: 'No labels yet. Right-click a contact or use /label', labelFilterEmpty: (l) => `No contacts with label "${l}"`, labelNoneContacts: 'No labels yet. Right-click a contact to add one.', labelNoneCmd: 'No labels. Use /label Work, Family to add.',
     enableNotif: 'Enable push notifications',
     ttEditProfile: 'Edit profile',
@@ -2081,6 +2084,9 @@ const _I = {
     errUnknown: '不明なエラー', consentTitle: 'データ同意',
     ariaAccounts: 'アカウント', ariaReactPicker: '絵文字でリアクション', ariaReactWith: (name) => `${name} でリアクション`,
     connReconnecting: (s) => `🔄 再接続中… ${s}秒`,
+    sent: '送信済み',
+    confirmDeleteContact: (name) => `${name} を削除しますか？`, confirmDeleteMsg: 'このメッセージを削除しますか？', confirmClearChat: (name) => `${name} とのすべてのメッセージを削除しますか？`,
+    pollVotes: (n) => `${n}票`,
     labelNoneHint: 'ラベルがありません。連絡先を右クリックするか /label を使用してください', labelFilterEmpty: (l) => `"${l}" のラベルを持つ連絡先がありません`, labelNoneContacts: 'ラベルがありません。連絡先を右クリックして追加してください。', labelNoneCmd: 'ラベルがありません。/label 仕事,家族 のように使用してください。',
     enableNotif: 'プッシュ通知を有効にする',
     outboxPending: '件のメッセージが送信待ち',
@@ -2658,7 +2664,7 @@ function showPrompt(title, defaultVal = '', opts = {}) {
     // ESC, and focus restore on close.
     const titleId = 'mdl-' + uid();
     dlg.setAttribute('aria-labelledby', titleId);
-    dlg.innerHTML = `<div class="modal-title" id="${titleId}">${title}</div>
+    dlg.innerHTML = `<div class="modal-title" id="${titleId}">${esc(title)}</div>
       <input class="modal-input" type="${opts.type || 'text'}" value="${esc(defaultVal)}" placeholder="${esc(opts.placeholder || '')}" autocomplete="${esc(opts.autocomplete || 'off')}" aria-labelledby="${titleId}">
       <div class="modal-actions">
         <button class="btn btn-o btn-sm" value="cancel">${t('cancel')}</button>
@@ -2686,7 +2692,7 @@ function showConfirm(title, opts = {}) {
     // a11y: accessible name from the title (see showPrompt). showModal() handles the rest.
     const titleId = 'mdl-' + uid();
     dlg.setAttribute('aria-labelledby', titleId);
-    dlg.innerHTML = `<div class="modal-title" id="${titleId}">${title}</div>
+    dlg.innerHTML = `<div class="modal-title" id="${titleId}">${esc(title)}</div>
       <div class="modal-actions">
         <button class="btn btn-o btn-sm" value="cancel">${t('cancel')}</button>
         <button class="btn ${opts.danger ? 'btn-r' : 'btn-g'} btn-sm" value="ok">${opts.okText || t('ok')}</button>
@@ -3917,7 +3923,7 @@ function renderAccountTabs() {
       e.preventDefault();
       const avatars = ['🌊', '🔥', '🌙', '⭐', '🌿', '🎯', '💎', '🦊', '🐱', '🎵', '🚀', '💼', '🏠', '🎮', '🔒'];
       const action = await showContextMenu(e.clientX, e.clientY, [
-        { label: t('rename') || 'Rename', action: 'rename' },
+        { label: t('rename'), action: 'rename' },
         { label: t('chooseAvatar'), action: 'avatar' },
         '---',
         accs.length > 1 ? { label: t('deleteAccount') || 'Delete', action: 'delete', danger: true } : null,
@@ -5896,7 +5902,7 @@ async function initMessenger(dbName) {
             if (activeContact?.id === c.id) document.getElementById('msg-conv-name').textContent = c.name;
           }
         } else if (action === 'delete') {
-          if (!await showConfirm((t('confirmDeleteContact') || 'Delete') + ` ${c.name}?`, { danger: true, okText: t('delete') })) return;
+          if (!await showConfirm(t('confirmDeleteContact', c.name), { danger: true, okText: t('delete') })) return;
           const msgs = await dbGetByIndex('messages', 'contact', c.id);
           const tx = db.transaction('messages', 'readwrite');
           for (const m of msgs) tx.objectStore('messages').delete(m.msgId);
@@ -6485,7 +6491,7 @@ async function initMessenger(dbName) {
     if (isMine && meta.failed) statusTitle = t('sendFailed') || 'Send failed. Tap to retry.';
     else if (isMine && meta.readAt) statusTitle = t('read') + ': ' + new Date(meta.readAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
     else if (isMine && meta.ack) statusTitle = t('delivered');
-    else if (isMine) statusTitle = t('sent') || 'Sent';
+    else if (isMine) statusTitle = t('sent');
     const statusHtml = isMine ? `<span class="msg-status ${statusClass}" title="${statusTitle}"${meta.failed ? ' data-action="retry-msg"' : ''}>${statusIcon}</span>` : '';
     // v3.3: Reply count (how many messages quote this one)
     const replyCountHtml = meta.replyCount > 0 ? `<span class="reply-count" data-action="reply-scroll" title="${meta.replyCount} replies">${meta.replyCount} 💬</span>` : '';
@@ -6746,7 +6752,7 @@ async function initMessenger(dbName) {
         <span class="poll-pct">${opt.votes.length}</span>
       </div>`;
     });
-    html += `<div class="i-tiny-meta">${totalVotes} vote${totalVotes !== 1 ? 's' : ''}</div></div>`;
+    html += `<div class="i-tiny-meta">${esc(t('pollVotes', totalVotes))}</div></div>`;
     return html;
   }
 
@@ -6811,8 +6817,8 @@ async function initMessenger(dbName) {
       fab.id = 'select-fab';
       fab.className = 'select-fab';
       fab.innerHTML = `<span id="select-count">0</span>
-        <button class="btn btn-o btn-sm" id="select-fwd">${t('forward') || 'Forward'}</button>
-        <button class="btn btn-r btn-sm" id="select-del">${t('delete') || 'Delete'}</button>
+        <button class="btn btn-o btn-sm" id="select-fwd">${t('forward')}</button>
+        <button class="btn btn-r btn-sm" id="select-del">${t('delete')}</button>
         <button class="btn btn-o btn-sm" id="select-cancel" aria-label="${esc(t('ariaExitSelect'))}">✕</button>`;
       document.body.appendChild(fab);
       fab.querySelector('#select-cancel').onclick = exitSelectMode;
@@ -6834,7 +6840,7 @@ async function initMessenger(dbName) {
         }
         exitSelectMode();
         const contacts = await dbGetAll('contacts');
-        const target = await showPrompt(t('forwardTo') || 'Forward to (name):', '');
+        const target = await showPrompt(t('forwardTo'), '');
         if (!target) return;
         const c = contacts.find(ct => ct.name.toLowerCase().includes(target.toLowerCase()));
         if (c) { await openConversation(c); _DOM.get('msg-input').value = texts.join('\n'); }
@@ -6903,7 +6909,7 @@ async function initMessenger(dbName) {
   // --- Delete ---
   async function deleteMsg(msg) {
     try {  
-      if (!await showConfirm(t('confirmDeleteMsg') || 'Delete this message?', { danger: true, okText: t('delete') })) return;
+      if (!await showConfirm(t('confirmDeleteMsg'), { danger: true, okText: t('delete') })) return;
       const stored = await dbGet('messages', msg.msgId);
       if (stored) { stored.deleted = true; stored.text = ''; await dbPut('messages', stored); }
       auditLog('message', 'Deleted message ' + msg.msgId.slice(0, 12));
@@ -7991,7 +7997,7 @@ async function initMessenger(dbName) {
   // Clear conversation
   document.getElementById('b-msg-clear')?.addEventListener('click', async () => {
     if (!activeContact) return;
-    if (!await showConfirm((t('confirmClearChat') || 'Delete all messages with') + ' ' + activeContact.name + '?', { danger: true, okText: t('deleteAllConfirm') })) return;
+    if (!await showConfirm(t('confirmClearChat', activeContact.name), { danger: true, okText: t('deleteAllConfirm') })) return;
     const msgs = await dbGetByIndex('messages', 'contact', activeContact.id);
     const tx = db.transaction('messages', 'readwrite');
     for (const m of msgs) tx.objectStore('messages').delete(m.msgId);
@@ -10563,7 +10569,7 @@ async function initMessenger(dbName) {
               if (encrypted) {
                 await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: stored.ts });
                 const statusEl = msgEl.querySelector('.msg-status');
-                if (statusEl) { statusEl.className = 'msg-status sent'; statusEl.textContent = '✓'; statusEl.title = t('sent') || 'Sent'; statusEl.removeAttribute('data-action'); }
+                if (statusEl) { statusEl.className = 'msg-status sent'; statusEl.textContent = '✓'; statusEl.title = t('sent'); statusEl.removeAttribute('data-action'); }
               }
             }
           } catch(err) { _dbg(err, 'retry-msg'); }
