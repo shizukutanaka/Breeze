@@ -1529,6 +1529,7 @@ const _I = {
     folderAll: 'All', folderUnread: 'Unread', folderGroups: 'Groups', folderLabels: 'Labels',
     dropDecrypting: 'Decrypting…', dropRevealed: '✅ Secret revealed — this link is now destroyed.', dropReadExpired: '🚫 This secret has already been read or has expired.', dropReadFailed: '❌ Failed to decrypt. The link may be invalid or corrupted.', dropOpenApp: 'Open Breeze Messenger →',
     errUnknown: 'Unknown error', consentTitle: 'Data consent',
+    ariaAccounts: 'Accounts', ariaReactPicker: 'React with emoji', ariaReactWith: (name) => `React with ${name}`,
     labelNoneHint: 'No labels yet. Right-click a contact or use /label', labelFilterEmpty: (l) => `No contacts with label "${l}"`, labelNoneContacts: 'No labels yet. Right-click a contact to add one.', labelNoneCmd: 'No labels. Use /label Work, Family to add.',
     enableNotif: 'Enable push notifications',
     ttEditProfile: 'Edit profile',
@@ -2077,6 +2078,7 @@ const _I = {
     folderAll: 'すべて', folderUnread: '未読', folderGroups: 'グループ', folderLabels: 'ラベル',
     dropDecrypting: '復号中…', dropRevealed: '✅ 秘密が公開されました — このリンクは無効になりました。', dropReadExpired: '🚫 この秘密はすでに閲覧済みか期限切れです。', dropReadFailed: '❌ 復号に失敗しました。リンクが無効または破損している可能性があります。', dropOpenApp: 'Breeze Messengerを開く →',
     errUnknown: '不明なエラー', consentTitle: 'データ同意',
+    ariaAccounts: 'アカウント', ariaReactPicker: '絵文字でリアクション', ariaReactWith: (name) => `${name} でリアクション`,
     labelNoneHint: 'ラベルがありません。連絡先を右クリックするか /label を使用してください', labelFilterEmpty: (l) => `"${l}" のラベルを持つ連絡先がありません`, labelNoneContacts: 'ラベルがありません。連絡先を右クリックして追加してください。', labelNoneCmd: 'ラベルがありません。/label 仕事,家族 のように使用してください。',
     enableNotif: 'プッシュ通知を有効にする',
     outboxPending: '件のメッセージが送信待ち',
@@ -3455,9 +3457,9 @@ async function postAPI(path, body) {
     return await resp.json();
   } catch(e) { _dbg(e, 'API:' + path); return null; }
 }
-// postAPIRaw — returns Response (for cases needing status/headers)
-function postAPIRaw(path, body) {
-  return fetchT(API + path, { method: 'POST', headers: _H, body: JSON.stringify(body) }).catch(() => null);
+// postAPIRaw — returns Response (for cases needing status/headers); opts forwarded for signal etc.
+function postAPIRaw(path, body, opts = {}) {
+  return fetchT(API + path, { method: 'POST', headers: _H, body: JSON.stringify(body), ...opts }).catch(() => null);
 }
 
 // ═══ Title helper — Account name + unread count ═══
@@ -3870,7 +3872,7 @@ function renderAccountTabs() {
     tabs = document.createElement('div');
     tabs.id = 'acc-tabs'; tabs.className = 'acc-tabs';
     tabs.setAttribute('role', 'tablist');
-    tabs.setAttribute('aria-label', 'Accounts');
+    tabs.setAttribute('aria-label', t('ariaAccounts'));
     const sidebar = _DOM.get('msg-sidebar');
     if (sidebar) sidebar.insertBefore(tabs, sidebar.firstChild);
   }
@@ -6265,10 +6267,10 @@ async function initMessenger(dbName) {
       if (_ogpCache[url]) { renderOGPCard(url, _ogpCache[url], elementId); return; }
       // v3.6: Timeout protection — OGP is non-critical, don't block UI
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 5000);
-      const resp = await fetch(API + '/ogp', { method: 'POST', headers: _H, body: JSON.stringify({ url }), signal: controller.signal });
+      const timer = setTimeout(() => controller.abort(), MS.SEC * 5);
+      const resp = await postAPIRaw('/ogp', { url }, { signal: controller.signal });
       clearTimeout(timer);
-      if (!resp.ok) return;
+      if (!resp || !resp.ok) return;
       const data = await resp.json();
       if (!data.title && !data.description && !data.image) return;
       _ogpCache[url] = data;
@@ -6639,11 +6641,11 @@ async function initMessenger(dbName) {
     const picker = document.createElement('div');
     picker.className = 'react-picker';
     picker.setAttribute('role', 'toolbar');
-    picker.setAttribute('aria-label', 'React with emoji');
+    picker.setAttribute('aria-label', t('ariaReactPicker'));
     for (const emoji of CONFIG.QUICK_REACTIONS) {
       const btn = document.createElement('button');
       btn.textContent = emoji;
-      btn.setAttribute('aria-label', 'React with ' + (CONFIG.EMOJI_NAMES[emoji] || emoji));
+      btn.setAttribute('aria-label', t('ariaReactWith', CONFIG.EMOJI_NAMES[emoji] || emoji));
       btn.classList.add('i-min-touch'); // WCAG 2.5.8
       btn.onclick = (e) => { e.stopPropagation(); picker.remove(); toggleReaction(msgId, emoji); };
       picker.appendChild(btn);
@@ -10890,7 +10892,7 @@ async function initMessenger(dbName) {
       scanBtn.className = 'btn btn-o';
       scanBtn.classList.add('i-w100', 'i-mb8');
       scanBtn.textContent = '📷 ' + (t('scanQR'));
-      scanBtn.setAttribute('aria-label', 'Scan QR code with camera');
+      scanBtn.setAttribute('aria-label', t('scanQR'));
       scanBtn.onclick = async () => {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
