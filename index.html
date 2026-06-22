@@ -5296,7 +5296,7 @@ async function initMessenger(dbName) {
         if (box && activeContact?.pubB64 === peerPubB64) {
           const warn = document.createElement('div');
           warn.className = 'msg sys';
-          warn.innerHTML = `<span class="color-y">⚠️ ${esc(t('keyChanged', name))}</span>`;
+          safeSetHTML(warn, `<span class="color-y">⚠️ ${esc(t('keyChanged', name))}</span>`);
           box.appendChild(warn); box.scrollTop = box.scrollHeight;
         }
         showToast(t('keyChanged', name), 'error', 8000);
@@ -6279,7 +6279,7 @@ async function initMessenger(dbName) {
     const nameEl = _DOM.get('msg-conv-name');
     // v3.6: Show member count for groups in header
     const memberBadge = contact.isGroup && contact.members ? ` <span class="enc-badge">${contact.members.length}人</span>` : '';
-    nameEl.innerHTML = (contact.blocked ? '🚫 ' : '') + (contact.muted ? '🔇 ' : '') + esc(contact.name) + (contact.isGroup ? memberBadge : ' <span class="enc-badge">E2E</span>');
+    safeSetHTML(nameEl, (contact.blocked ? '🚫 ' : '') + (contact.muted ? '🔇 ' : '') + esc(contact.name) + (contact.isGroup ? memberBadge : ' <span class="enc-badge">E2E</span>'));
     updateConvStatus(contact); // v3.3: Show connection quality + relative time
     contact.blocked ? _DOM.get('msg-input-bar').classList.add('hidden') : _DOM.get('msg-input-bar').classList.remove('hidden');
     _DOM.get('b-msg-clear')?.classList.remove('hidden');
@@ -6333,7 +6333,7 @@ async function initMessenger(dbName) {
         if (i === unreadSepIdx && unreadSepIdx > 0) {
           const sep = document.createElement('div');
           sep.className = 'unread-sep';
-          sep.innerHTML = `<span>${t('newMessages')}</span>`;
+          safeSetHTML(sep, `<span>${t('newMessages')}</span>`);
           box.appendChild(sep);
         }
         const m = msgs[i];
@@ -6416,7 +6416,7 @@ async function initMessenger(dbName) {
       const pinned = allMsgs.filter(m => m.pinned);
       if (pinned.length > 0) {
         const latest = pinned.sort((a, b) => b.ts - a.ts)[0];
-        pinBanner.innerHTML = `<span class="pin-icon">📌</span><span class="pin-text">${esc(latest.text?.slice(0, 60) || '')}</span><span class="pin-count">${pinned.length > 1 ? t('pinsCount', pinned.length) : ''}</span>`;
+        safeSetHTML(pinBanner, `<span class="pin-icon">📌</span><span class="pin-text">${esc(latest.text?.slice(0, 60) || '')}</span><span class="pin-count">${pinned.length > 1 ? t('pinsCount', pinned.length) : ''}</span>`);
         pinBanner.classList.remove('hidden');
         pinBanner.onclick = () => {
           const target = document.querySelector(`[data-msgid="${latest.msgId}"]`);
@@ -6501,6 +6501,10 @@ async function initMessenger(dbName) {
     return null;
   }
 
+  function _attachImgErrorHandlers(container) {
+    container?.querySelectorAll('.ogp-card img').forEach(img => { img.onerror = () => img.remove(); });
+  }
+
   // Render embedded OGP preview (sender-side or receiver fallback)
   function renderOGPInline(ogp) {
     if (!ogp || (!ogp.title && !ogp.description)) return '';
@@ -6510,8 +6514,8 @@ async function initMessenger(dbName) {
     try { siteName = ogp.siteName || new URL(ogp.url || '').hostname.replace('www.', ''); } catch {}
     let faviconUrl = '';
     try { faviconUrl = ogp.url ? `https://www.google.com/s2/favicons?sz=16&domain=${new URL(ogp.url).hostname}` : ''; } catch {}
-    const siteInfo = siteName ? `<div class="ogp-site">${faviconUrl ? `<img src="${esc(faviconUrl)}" width="12" height="12" loading="lazy" decoding="async" onerror="this.remove()"> ` : ''}${esc(siteName)}</div>` : '';
-    return `<div class="ogp-card">${imgSafe ? `<img src="${esc(ogp.image)}" class="i-cover-img" loading="lazy" decoding="async" referrerpolicy="no-referrer" crossorigin="anonymous" onerror="this.remove()">` : ''}<div class="i-pad68">${siteInfo}<div class="i-info-line">${esc(ogp.title || '')}</div>${ogp.description ? `<div class="i-small-meta">${esc(ogp.description.slice(0, 120))}</div>` : ''}</div></div>`;
+    const siteInfo = siteName ? `<div class="ogp-site">${faviconUrl ? `<img src="${esc(faviconUrl)}" width="12" height="12" loading="lazy" decoding="async"> ` : ''}${esc(siteName)}</div>` : '';
+    return `<div class="ogp-card">${imgSafe ? `<img src="${esc(ogp.image)}" class="i-cover-img" loading="lazy" decoding="async" referrerpolicy="no-referrer" crossorigin="anonymous">` : ''}<div class="i-pad68">${siteInfo}<div class="i-info-line">${esc(ogp.title || '')}</div>${ogp.description ? `<div class="i-small-meta">${esc(ogp.description.slice(0, 120))}</div>` : ''}</div></div>`;
   }
 
   // v3.2: OGP cache (avoid re-fetching same URL)
@@ -6543,10 +6547,13 @@ async function initMessenger(dbName) {
     el.className = 'ogp-card';
     el.onclick = () => window.open(url, '_blank', 'noopener,noreferrer');
     const imgSafe = data.image && isSafeMediaUrl(data.image);
-    el.innerHTML = (imgSafe ? `<img src="${esc(data.image)}" class="i-thumb-60" loading="lazy" decoding="async" referrerpolicy="no-referrer" crossorigin="anonymous" onerror="this.remove()">` : '') +
+    let hostname = '';
+    try { hostname = new URL(url).hostname; } catch {}
+    safeSetHTML(el, (imgSafe ? `<img src="${esc(data.image)}" class="i-thumb-60" loading="lazy" decoding="async" referrerpolicy="no-referrer" crossorigin="anonymous">` : '') +
       `<div class="i-overflow-h"><div class="i-ellip-name">${esc(data.title || '')}</div>` +
       `<div class="i-clamp2">${esc(data.description || '')}</div>` +
-      `<div class="i-tiny-sub">${esc(new URL(url).hostname)}</div></div>`;
+      `<div class="i-tiny-sub">${esc(hostname)}</div></div>`);
+    if (imgSafe) { const img = el.querySelector('img'); if (img) img.onerror = () => img.remove(); }
   }
 
   // v3.2: File size formatter
@@ -6745,6 +6752,7 @@ async function initMessenger(dbName) {
     // v3.3: Reply count (how many messages quote this one)
     const replyCountHtml = meta.replyCount > 0 ? `<span class="reply-count" data-action="reply-scroll" title="${meta.replyCount} replies">${meta.replyCount} 💬</span>` : '';
     safeSetHTML(d, content + editMark + sigMark + timerBadge + statusHtml + replyCountHtml + `<span class="ts" title="${fullDate}">${time}</span>` + reactionsHtml);
+    _attachImgErrorHandlers(d);
     // v3.2: Copy text button (hover to show)
     if (text && !meta.deleted) {
       const cpBtn = document.createElement('button');
@@ -6817,7 +6825,7 @@ async function initMessenger(dbName) {
           if (existing) existing.remove();
           const preview = document.createElement('div');
           preview.className = 'reply-preview';
-          preview.innerHTML = `<span class="i-ellip">${esc((text||'').slice(0, 60))}</span><span data-action="close-reply" class="i-cur-dim">✕</span>`;
+          safeSetHTML(preview, `<span class="i-ellip">${esc((text||'').slice(0, 60))}</span><span data-action="close-reply" class="i-cur-dim">✕</span>`);
           bar.insertBefore(preview, bar.firstChild);
         }
         _DOM.get('msg-input')?.focus();
@@ -6979,7 +6987,7 @@ async function initMessenger(dbName) {
     await dbPut('messages', stored);
     // Re-render poll
     const el = document.querySelector(`[data-msgid="${msgId}"]`);
-    if (el) el.innerHTML = renderPollHtml(poll, msgId);
+    if (el) safeSetHTML(el, renderPollHtml(poll, msgId));
     // Notify peer
     if (activeContact) {
       const voteMsg = { type: 'poll_vote', pollId: poll.pollId, optionIndex, userId: myId };
@@ -7063,10 +7071,10 @@ async function initMessenger(dbName) {
       fab = document.createElement('div');
       fab.id = 'select-fab';
       fab.className = 'select-fab';
-      fab.innerHTML = `<span id="select-count">0</span>
+      safeSetHTML(fab, `<span id="select-count">0</span>
         <button class="btn btn-o btn-sm" id="select-fwd">${t('forward')}</button>
         <button class="btn btn-r btn-sm" id="select-del">${t('delete')}</button>
-        <button class="btn btn-o btn-sm" id="select-cancel" aria-label="${esc(t('ariaExitSelect'))}">✕</button>`;
+        <button class="btn btn-o btn-sm" id="select-cancel" aria-label="${esc(t('ariaExitSelect'))}">✕</button>`);
       document.body.appendChild(fab);
       fab.querySelector('#select-cancel').onclick = exitSelectMode;
       fab.querySelector('#select-del').onclick = async () => {
@@ -7124,7 +7132,7 @@ async function initMessenger(dbName) {
       preview.className = 'reply-preview';
       bar.insertBefore(preview, bar.firstChild);
     }
-    preview.innerHTML = `<span class="i-ellip">${esc(msg.text?.slice(0, 60) || '')}</span><span class="i-cur-dim" data-action="close-reply">✕</span>`;
+    safeSetHTML(preview, `<span class="i-ellip">${esc(msg.text?.slice(0, 60) || '')}</span><span class="i-cur-dim" data-action="close-reply">✕</span>`);
     window._breezeReplyTo = _replyTo;
     _DOM.get('msg-input').focus();
   }
@@ -7161,7 +7169,7 @@ async function initMessenger(dbName) {
       if (stored) { stored.deleted = true; stored.text = ''; await dbPut('messages', stored); }
       auditLog('message', 'Deleted message ' + msg.msgId.slice(0, 12));
       const el = document.querySelector(`[data-msgid="${msg.msgId}"]`);
-      if (el) el.innerHTML = '<span class="i-dim-it">' + t('deleted') + '</span>';
+      if (el) safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>');
       sendSignal({ type: 'delete', msgId: msg.msgId });
     
     } catch(_e) { _dbg(_e, 'deleteMsg'); }
@@ -7266,7 +7274,7 @@ async function initMessenger(dbName) {
           // straight from the (external, untrusted) translation provider's response and
           // is returned unsanitized by the worker; under 'unsafe-inline' CSP an injected
           // onerror= payload would execute. data.to/data.provider esc'd for consistency.
-          indicator.innerHTML = `<span class="tr-text">${esc(data.translated)}</span><span class="tr-meta">${esc(data.from || 'auto')} → ${esc(data.to || '')} · ${esc(data.provider || '')}${data.cached ? ' · ' + t('aiCached') : ''}</span>`;
+          safeSetHTML(indicator, `<span class="tr-text">${esc(data.translated)}</span><span class="tr-meta">${esc(data.from || 'auto')} → ${esc(data.to || '')} · ${esc(data.provider || '')}${data.cached ? ' · ' + t('aiCached') : ''}</span>`);
           success = true;
         }
       }
@@ -7279,7 +7287,7 @@ async function initMessenger(dbName) {
           const data = await resp.json();
           if (data.result) {
             indicator.classList.remove('loading');
-            indicator.innerHTML = `<span class="tr-text">${esc(data.result)}</span><span class="tr-meta">→ ${esc(toLang)} · ${esc(data.provider || 'AI')}${data.cached ? ' · ' + t('aiCached') : ''}</span>`;
+            safeSetHTML(indicator, `<span class="tr-text">${esc(data.result)}</span><span class="tr-meta">→ ${esc(toLang)} · ${esc(data.provider || 'AI')}${data.cached ? ' · ' + t('aiCached') : ''}</span>`);
             success = true;
           }
         }
@@ -7477,7 +7485,7 @@ async function initMessenger(dbName) {
         });
         // Update rendered message with OGP card
         const el = document.querySelector(`[data-msgid="${msgId}"]`);
-        if (el && !el.querySelector('.ogp-card')) el.insertAdjacentHTML('beforeend', renderOGPInline(ogp));
+        if (el && !el.querySelector('.ogp-card')) { el.insertAdjacentHTML('beforeend', renderOGPInline(ogp)); _attachImgErrorHandlers(el); }
       }
     }).catch(e => _dbg(e, 'ogp-send'));
 
@@ -7920,7 +7928,9 @@ async function initMessenger(dbName) {
       if (node.parentElement?.closest('.search-match, script, style, .ts')) return;
       if (!regex.test(node.textContent)) return;
       const span = document.createElement('span');
-      span.innerHTML = node.textContent.replace(regex, '<mark class="search-match">$1</mark>');
+      safeSetHTML(span, esc(node.textContent).replace(
+        new RegExp(`(${esc(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
+        '<mark class="search-match">$1</mark>'));
       node.replaceWith(span);
     });
   }
@@ -8173,9 +8183,9 @@ async function initMessenger(dbName) {
       input.parentElement.classList.add('i-rel');
       input.parentElement.appendChild(pk);
     }
-    pk.innerHTML = members.slice(0, 5).map(m =>
+    safeSetHTML(pk, members.slice(0, 5).map(m =>
       `<div class="mention-item i-ctx-row" data-name="${esc(m.name)}">${esc(m.name)}</div>`
-    ).join('');
+    ).join(''));
     pk.querySelectorAll('.mention-item').forEach(item => {
       item.onmouseenter = () => { pk.querySelectorAll('.mention-item').forEach(i => i.classList.remove('i-bg-s2')); item.classList.add('i-bg-s2'); };
       item.onclick = () => {
@@ -9209,7 +9219,7 @@ async function initMessenger(dbName) {
           if (_skBox && activeContact?.id === contactId) {
             const _skWarn = document.createElement('div');
             _skWarn.className = 'msg sys';
-            _skWarn.innerHTML = `<span class="color-y">⚠️ ${esc(t('keyChanged', _skName))}</span>`;
+            safeSetHTML(_skWarn, `<span class="color-y">⚠️ ${esc(t('keyChanged', _skName))}</span>`);
             _skBox.appendChild(_skWarn);
             _skBox.scrollTop = _skBox.scrollHeight;
           }
@@ -9429,7 +9439,7 @@ async function initMessenger(dbName) {
               pollMsg.text = JSON.stringify(poll);
               await dbPut('messages', pollMsg);
               const el = document.querySelector(`[data-msgid="${pollMsg.msgId}"]`);
-              if (el) el.innerHTML = renderPollHtml(poll, pollMsg.msgId);
+              if (el) safeSetHTML(el, renderPollHtml(poll, pollMsg.msgId));
             }
             return;
           }
@@ -10775,7 +10785,7 @@ async function initMessenger(dbName) {
           if (existing) existing.remove();
           const preview = document.createElement('div');
           preview.className = 'reply-preview';
-          preview.innerHTML = `<span class="i-ellip">${esc(text.slice(0, 60))}</span><span data-action="close-reply" class="i-cur-dim">✕</span>`;
+          safeSetHTML(preview, `<span class="i-ellip">${esc(text.slice(0, 60))}</span><span data-action="close-reply" class="i-cur-dim">✕</span>`);
           bar.insertBefore(preview, bar.firstChild);
         }
         _DOM.get('msg-input')?.focus();
