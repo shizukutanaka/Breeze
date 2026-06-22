@@ -3511,26 +3511,32 @@ function downloadBlob(blob, filename) {
 // Cross-browser fallback: policy functions work identically without TT enforcement.
 const _ttPolicy = (() => {
   // Sanitizer: strip dangerous tags/attrs while keeping safe markdown output
-  const SAFE_TAGS = /^(p|br|strong|em|b|i|a|code|pre|blockquote|ul|ol|li|span|div|img|del|s|sub|sup|h[1-6]|table|thead|tbody|tr|td|th)$/i;
+  const SAFE_TAGS = /^(p|br|strong|em|b|i|a|code|pre|blockquote|ul|ol|li|span|div|img|del|s|sub|sup|h[1-6]|table|thead|tbody|tr|td|th|mark)$/i;
   const SAFE_ATTRS = /^(href|target|rel|class|title|data-[a-z-]+|loading|alt|src|id|aria-[a-z]+|role|style|type|checked|placeholder|maxlength|rows|cols|for|name|value|min|max|step|disabled|readonly|autocomplete|enterkeyhint|spellcheck|wrap|tabindex)$/i;
-  const DANGEROUS_TAGS = /^(script|iframe|object|embed|form|input|textarea|select|button|link|meta|base|svg|math)$/i;
 
   function sanitize(html) {
     // Fast path: plain text with no HTML — returned as-is so the per-call cost on
     // already-escaped strings (the common case under esc()) is just one regex test.
     if (!/</.test(html)) return html;
     const doc = new DOMParser().parseFromString(html, 'text/html');
-    // Remove dangerous elements
-    doc.querySelectorAll('script,iframe,object,embed,form,link,meta,base').forEach(el => el.remove());
-    // Strip event handlers from all elements
+    // Remove all elements not in SAFE_TAGS (allowlist approach: safer than denylist).
+    // svg/math are excluded because they can reference external resources (xlink:href,
+    // <use href>, <image href>) and contain style/script elements. input/button/form
+    // elements are excluded to prevent UI confusion and phishing overlays.
     doc.body.querySelectorAll('*').forEach(el => {
+      if (!SAFE_TAGS.test(el.tagName)) { el.replaceWith(...el.childNodes); return; }
       for (const attr of [...el.attributes]) {
         if (attr.name.startsWith('on') || !SAFE_ATTRS.test(attr.name)) el.removeAttribute(attr.name);
       }
-      // Sanitize href (block javascript:)
+      // Sanitize href: allow only safe-origin relative paths, #anchors, https:, mailto:
       if (el.hasAttribute('href')) {
         const href = el.getAttribute('href');
         if (!/^(https?:|mailto:|#|\/)/i.test(href)) el.removeAttribute('href');
+      }
+      // Sanitize src: allow only blob:, data:image/, https:
+      if (el.hasAttribute('src')) {
+        const src = el.getAttribute('src');
+        if (!/^(blob:|data:image\/|https?:)/i.test(src)) el.removeAttribute('src');
       }
     });
     return doc.body.innerHTML;
@@ -9358,7 +9364,7 @@ async function initMessenger(dbName) {
             const msg = JSON.parse(e.data);
             if (msg.type === 'typing') { showTyping(contact.id, msg.senderName || contact.name); return; }
             if (msg.type === 'read') { showReadReceipt(contact.id, msg.ts); return; }
-            if (msg.type === 'presence') { _presenceCache[contact.id] = Date.now(); _renderContactsThrottled(); return; }
+            if (msg.type === 'presence') { _presenceCache[contact.id] = true; _lastSeenCache[contact.id] = Date.now(); _renderContactsThrottled(); return; }
           } catch {}
         };
         peerState.stateDC.onopen = () => { _dbg(null, 'State channel open for ' + contact.id.slice(0,8)); };
