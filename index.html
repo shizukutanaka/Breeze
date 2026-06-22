@@ -1337,11 +1337,19 @@ const _capabilities = {
   locks: !!(navigator.locks),
 };
 if (!_capabilities.crypto) {
-  document.body.innerHTML = '<div style="padding:40px;text-align:center;font-family:system-ui"><h2>Breeze requires a secure context</h2><p>WebCrypto API is not available. Please access via HTTPS.</p></div>';
+  const _fe = document.createElement('div');
+  _fe.style.cssText = 'padding:40px;text-align:center;font-family:system-ui';
+  const _fh = document.createElement('h2'); _fh.textContent = 'Breeze requires a secure context'; _fe.appendChild(_fh);
+  const _fp = document.createElement('p'); _fp.textContent = 'WebCrypto API is not available. Please access via HTTPS.'; _fe.appendChild(_fp);
+  document.body.replaceChildren(_fe);
   throw new Error('FATAL: WebCrypto unavailable');
 }
 if (!_capabilities.idb) {
-  document.body.innerHTML = '<div style="padding:40px;text-align:center;font-family:system-ui"><h2>Storage unavailable</h2><p>IndexedDB is required. Please disable private/incognito mode or enable storage.</p></div>';
+  const _fe = document.createElement('div');
+  _fe.style.cssText = 'padding:40px;text-align:center;font-family:system-ui';
+  const _fh = document.createElement('h2'); _fh.textContent = 'Storage unavailable'; _fe.appendChild(_fh);
+  const _fp = document.createElement('p'); _fp.textContent = 'IndexedDB is required. Please disable private/incognito mode or enable storage.'; _fe.appendChild(_fp);
+  document.body.replaceChildren(_fe);
   throw new Error('FATAL: IndexedDB unavailable');
 }
 // ═══ DOM Cache (must be before SW registration which uses it) ═══
@@ -1543,6 +1551,10 @@ const _I = {
     dropToSend: 'Drop to send file',
     dropDecrypting: 'Decrypting…', dropRevealed: '✅ Secret revealed — this link is now destroyed.', dropReadExpired: '🚫 This secret has already been read or has expired.', dropReadFailed: '❌ Failed to decrypt. The link may be invalid or corrupted.', dropOpenApp: 'Open Breeze Messenger →',
     errUnknown: 'Unknown error', consentTitle: 'Data consent',
+    consentText: 'Breeze stores encrypted messages and settings locally on your device. No data is sent to third parties.',
+    privacyPolicy: 'Privacy Policy',
+    noIDBTitle: 'Storage Unavailable', noIDBDesc: 'IndexedDB is not available. This can happen in private/incognito browsing mode. Breeze requires storage to save your keys and messages securely.', noIDBHint: 'Please use a normal browser window.',
+    noCryptoTitle: 'Encryption Unavailable', noCryptoDesc: 'WebCrypto API is not available. Breeze requires HTTPS and a modern browser for end-to-end encryption.', noCryptoHint: 'Please access Breeze over HTTPS (not HTTP).',
     ariaAccounts: 'Accounts', ariaReactPicker: 'React with emoji', ariaReactWith: (name) => `React with ${name}`,
     connReconnecting: (s) => `🔄 Reconnecting… ${s}s`,
     sent: 'Sent',
@@ -2125,6 +2137,10 @@ const _I = {
     dropToSend: 'ファイルをドロップして送信',
     dropDecrypting: '復号中…', dropRevealed: '✅ 秘密が公開されました — このリンクは無効になりました。', dropReadExpired: '🚫 この秘密はすでに閲覧済みか期限切れです。', dropReadFailed: '❌ 復号に失敗しました。リンクが無効または破損している可能性があります。', dropOpenApp: 'Breeze Messengerを開く →',
     errUnknown: '不明なエラー', consentTitle: 'データ同意',
+    consentText: 'Breezeはメッセージと設定を暗号化してデバイス上にローカル保存します。第三者にデータは送信されません。',
+    privacyPolicy: 'プライバシーポリシー',
+    noIDBTitle: 'ストレージ利用不可', noIDBDesc: 'IndexedDBが利用できません。プライベート/シークレットブラウジングモードで発生する場合があります。Breezeはキーとメッセージを安全に保存するためにストレージが必要です。', noIDBHint: '通常のブラウザウィンドウをご利用ください。',
+    noCryptoTitle: '暗号化利用不可', noCryptoDesc: 'WebCrypto APIが利用できません。BreezeはエンドツーエンドA暗号化のためHTTPSと対応ブラウザが必要です。', noCryptoHint: 'HTTPSでBreezeにアクセスしてください（HTTPは不可）。',
     ariaAccounts: 'アカウント', ariaReactPicker: '絵文字でリアクション', ariaReactWith: (name) => `${name} でリアクション`,
     connReconnecting: (s) => `🔄 再接続中… ${s}秒`,
     sent: '送信済み',
@@ -2660,7 +2676,13 @@ function _dbg(e, ctx) { if (_DBG) console.warn('[Breeze]', ctx || '', e?.message
   banner.className = 'consent-banner';
   banner.setAttribute('role', 'dialog');
   banner.setAttribute('aria-label', t('consentTitle'));
-  banner.innerHTML = '<div class="text">Breeze stores encrypted messages and settings locally on your device. No data is sent to third parties. <a href="?privacy">Privacy Policy</a></div>';
+  const _consentText = document.createElement('div');
+  _consentText.className = 'text';
+  _consentText.textContent = t('consentText') + ' ';
+  const _consentLink = document.createElement('a');
+  _consentLink.href = '?privacy'; _consentLink.textContent = t('privacyPolicy');
+  _consentText.appendChild(_consentLink);
+  banner.appendChild(_consentText);
   const acceptBtn = document.createElement('button');
   acceptBtn.className = 'btn btn-g btn-sm';
   acceptBtn.textContent = t('uiAccept');
@@ -2850,14 +2872,20 @@ const IS_TOUCH = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 if (!window.indexedDB) {
   const _noIDB = document.createElement('div');
   _noIDB.className = 'crash-overlay';
-  _noIDB.innerHTML = '<div class="i-icon48">🔒</div><h2>Storage Unavailable</h2><p>IndexedDB is not available. This can happen in private/incognito browsing mode. Breeze requires storage to save your keys and messages securely.</p><p>Please use a normal browser window.</p>';
+  const _idbIcon = document.createElement('div'); _idbIcon.className = 'i-icon48'; _idbIcon.textContent = '🔒'; _noIDB.appendChild(_idbIcon);
+  const _idbH2 = document.createElement('h2'); _idbH2.textContent = t('noIDBTitle'); _noIDB.appendChild(_idbH2);
+  const _idbP1 = document.createElement('p'); _idbP1.textContent = t('noIDBDesc'); _noIDB.appendChild(_idbP1);
+  const _idbP2 = document.createElement('p'); _idbP2.textContent = t('noIDBHint'); _noIDB.appendChild(_idbP2);
   document.body.appendChild(_noIDB);
 }
 // WebCrypto check (required for E2E encryption)
 if (!window.crypto?.subtle) {
   const _noCrypto = document.createElement('div');
   _noCrypto.className = 'crash-overlay';
-  _noCrypto.innerHTML = '<div class="i-icon48">🔐</div><h2>Encryption Unavailable</h2><p>WebCrypto API is not available. Breeze requires HTTPS and a modern browser for end-to-end encryption.</p><p>Please access Breeze over HTTPS (not HTTP).</p>';
+  const _cryptoIcon = document.createElement('div'); _cryptoIcon.className = 'i-icon48'; _cryptoIcon.textContent = '🔐'; _noCrypto.appendChild(_cryptoIcon);
+  const _cryptoH2 = document.createElement('h2'); _cryptoH2.textContent = t('noCryptoTitle'); _noCrypto.appendChild(_cryptoH2);
+  const _cryptoP1 = document.createElement('p'); _cryptoP1.textContent = t('noCryptoDesc'); _noCrypto.appendChild(_cryptoP1);
+  const _cryptoP2 = document.createElement('p'); _cryptoP2.textContent = t('noCryptoHint'); _noCrypto.appendChild(_cryptoP2);
   document.body.appendChild(_noCrypto);
 }
 const IS_MOBILE = IS_IOS || IS_ANDROID || PLATFORM === 'capacitor';
