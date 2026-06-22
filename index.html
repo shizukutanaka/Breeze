@@ -2461,7 +2461,7 @@ let _installBannerDismissed = false;
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   _installPrompt = e;
-  const setupBtn = document.getElementById('setup-install-btn');
+  const setupBtn = _DOM.get('setup-install-btn');
   if (setupBtn) { setupBtn.classList.remove('hidden'); setupBtn.onclick = async () => { _installPrompt.prompt(); const r = await _installPrompt.userChoice; _installPrompt = null; if (r.outcome === 'accepted') showToast(t('toastInstalling'), 'success'); setupBtn.classList.add('hidden'); }; }
   // v3.6: Engagement-gated install prompt (research: 5-6× conversion vs first-visit)
   // Show only after user has sent 3+ messages or visited 2+ times
@@ -2973,7 +2973,7 @@ document.addEventListener('visibilitychange', () => {
     if (localStorage.getItem('brz-theme')) return; // User has manual preference
     if (e.matches) document.documentElement.classList.add('light');
     else document.documentElement.classList.remove('light');
-    const btn = document.getElementById('b-msg-theme');
+    const btn = _DOM.get('b-msg-theme');
     if (btn) btn.textContent = e.matches ? '🌙' : '☀';
     if (meta) meta.content = e.matches ? '#fafafa' : '#0a0a0a';
   });
@@ -2983,7 +2983,7 @@ function toggleTheme() {
   const isLight = document.documentElement.classList.toggle('light');
   try { localStorage.setItem('brz-theme', isLight ? 'light' : 'dark'); } catch(e) { _dbg(e); }
   setTimeout(() => document.documentElement.classList.remove('theme-transitioning'), CONFIG.THEME_TRANSITION_MS);
-  const btn = document.getElementById('b-msg-theme');
+  const btn = _DOM.get('b-msg-theme');
   if (btn) btn.textContent = isLight ? '🌙' : '☀';
   // Update meta theme-color for browser chrome
   const meta = document.querySelector('meta[name="theme-color"]');
@@ -3036,10 +3036,10 @@ if (P.has('drop')) {
 } else
 if (P.has('terms') || P.has('privacy') || P.has('legal') || P.has('commercial') || P.has('pricing')) {
   show('v-legal');
-  if (P.has('terms')) document.getElementById('legal-terms').classList.remove('hidden');
-  else if (P.has('privacy')) document.getElementById('legal-privacy').classList.remove('hidden');
-  else if (P.has('legal') || P.has('commercial')) document.getElementById('legal-commercial').classList.remove('hidden');
-  else if (P.has('pricing')) document.getElementById('legal-pricing').classList.remove('hidden');
+  if (P.has('terms')) _DOM.get('legal-terms').classList.remove('hidden');
+  else if (P.has('privacy')) _DOM.get('legal-privacy').classList.remove('hidden');
+  else if (P.has('legal') || P.has('commercial')) _DOM.get('legal-commercial').classList.remove('hidden');
+  else if (P.has('pricing')) _DOM.get('legal-pricing').classList.remove('hidden');
 } else {
   show('v-msg');
   initMessenger().catch(e => {
@@ -3048,13 +3048,13 @@ if (P.has('terms') || P.has('privacy') || P.has('legal') || P.has('commercial') 
     d.className = 'crash-overlay';
     d.innerHTML = '<div class="i-icon48">⚠️</div><h2>' + esc(t('crashTitle')) + '</h2><p>' + esc(e?.message || '') + '</p><button class="btn btn-g" id="crash-reload">' + esc(t('uiReload')) + '</button>';
     document.body.appendChild(d);
-    document.getElementById('crash-reload')?.addEventListener('click', () => location.reload());
+    _DOM.get('crash-reload')?.addEventListener('click', () => location.reload());
   });
 }
 
 function show(id) {
   for (const v of ['v-msg', 'v-legal']) {
-    const el = document.getElementById(v);
+    const el = _DOM.get(v);
     if (el) { v === id ? el.classList.remove('hidden') : el.classList.add('hidden'); }
   }
 }
@@ -3078,9 +3078,9 @@ if (joinToken && API) {
     .then(r => r.ok ? r.json() : null)
     .then(data => {
       if (!data) return;
-      const title = document.getElementById('msg-setup-title');
-      const desc = document.getElementById('msg-setup-desc');
-      const btn = document.getElementById('b-msg-setup');
+      const title = _DOM.get('msg-setup-title');
+      const desc = _DOM.get('msg-setup-desc');
+      const btn = _DOM.get('b-msg-setup');
       if (title) title.textContent = t('joinGroup', data.name);
       if (desc) desc.textContent = t('invitedBy', data.creatorName, data.members.length);
       if (btn) btn.textContent = t('joinBtn');
@@ -3125,7 +3125,7 @@ if (P.get('text') || P.get('url') || P.get('title')) {
     history.replaceState(null, '', '/');
     // If already in a conversation, paste immediately
     setTimeout(() => {
-      const input = document.getElementById('msg-input');
+      const input = _DOM.get('msg-input');
       if (input && activeContact) { input.value = sharedText; input.focus(); }
     }, 1000);
   }
@@ -3891,9 +3891,9 @@ async function addAccount() {
 
 function renderAccountTabs() {
   const accs = getAccounts();
-  if (accs.length <= 1 && !document.getElementById('acc-tabs')) return; // Don't show tabs for single account
+  if (accs.length <= 1 && !_DOM.get('acc-tabs')) return; // Don't show tabs for single account
 
-  let tabs = document.getElementById('acc-tabs');
+  let tabs = _DOM.get('acc-tabs');
   if (!tabs) {
     tabs = document.createElement('div');
     tabs.id = 'acc-tabs'; tabs.className = 'acc-tabs';
@@ -5232,8 +5232,8 @@ async function initMessenger(dbName) {
 
   // v3.6: Outbox badge — show pending message count
   function _updateOutboxBadge() {
-    const badge = document.getElementById('outbox-badge');
-    const text = document.getElementById('outbox-text');
+    const badge = _DOM.get('outbox-badge');
+    const text = _DOM.get('outbox-text');
     if (!badge || !text) return;
     // v3.6: Count both retry queue (Worker relay) and persistent outbox (P2P)
     const retryN = _retryQueue.length;
@@ -5426,7 +5426,7 @@ async function initMessenger(dbName) {
     _DOM.get('msg-input-bar').classList.remove('hidden');
     _DOM.get('msg-my-name').textContent = myName;
     // v3.3: Show human-readable short ID
-    const shortIdEl = document.getElementById('msg-short-id');
+    const shortIdEl = _DOM.get('msg-short-id');
     if (shortIdEl) {
       shortIdEl.textContent = myAlias ? '@' + myAlias : myShortId;
       shortIdEl.onclick = () => { navigator.clipboard?.writeText(myAlias ? '@' + myAlias : myShortId); showToast(t('toastIdCopied'), 'info'); };
@@ -5560,9 +5560,9 @@ async function initMessenger(dbName) {
     _DOM.get('msg-main').classList.add('hidden');
   }
 
-  document.getElementById('b-msg-setup')?.addEventListener('click', async () => {
-    const name = document.getElementById('msg-name').value.trim().slice(0, 64) || 'Anonymous';
-    const alias = (document.getElementById('msg-alias').value.trim() || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
+  _DOM.get('b-msg-setup')?.addEventListener('click', async () => {
+    const name = _DOM.get('msg-name').value.trim().slice(0, 64) || 'Anonymous';
+    const alias = (_DOM.get('msg-alias').value.trim() || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
     await createIdentity(name, alias);
     _DOM.get('msg-setup').classList.add('hidden');
     _DOM.get('msg-main').classList.remove('hidden');
@@ -5588,12 +5588,12 @@ async function initMessenger(dbName) {
     if (joinToken) await processJoinToken(joinToken);
   });
   // Enter on name field → move focus to alias (matches enterkeyhint="next")
-  document.getElementById('msg-name')?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('msg-alias')?.focus(); }
+  _DOM.get('msg-name')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); _DOM.get('msg-alias')?.focus(); }
   });
   // Enter on alias field → submit (matches enterkeyhint="done")
-  document.getElementById('msg-alias')?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('b-msg-setup')?.click(); }
+  _DOM.get('msg-alias')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); _DOM.get('b-msg-setup')?.click(); }
   });
 
   // ===== Contacts =====
@@ -5671,7 +5671,7 @@ async function initMessenger(dbName) {
   // v3.4: Render label filter chips
   async function renderLabelFilter() {
     try {  
-      const bar = document.getElementById('label-filter');
+      const bar = _DOM.get('label-filter');
       if (!bar) return;
       const labels = await getAllLabels();
       if (labels.length === 0) {
@@ -5711,7 +5711,7 @@ async function initMessenger(dbName) {
       tab.classList.add('active'); tab.setAttribute('aria-selected', 'true');
       _activeFolder = tab.dataset.folder;
       // v3.4: Show/hide label filter bar
-      const labelBar = document.getElementById('label-filter');
+      const labelBar = _DOM.get('label-filter');
       if (labelBar) {
         if (_activeFolder === 'labels') { labelBar.classList.remove('hidden'); renderLabelFilter(); }
         else { labelBar.classList.add('hidden'); _activeLabel = null; }
@@ -5720,7 +5720,7 @@ async function initMessenger(dbName) {
     };
   });
   // v3.3: WCAG — Arrow key navigation for folder tablist
-  document.getElementById('folder-tabs')?.addEventListener('keydown', (e) => {
+  _DOM.get('folder-tabs')?.addEventListener('keydown', (e) => {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
     e.preventDefault();
     const tabs = [...document.querySelectorAll('.folder-tab')];
@@ -5732,18 +5732,18 @@ async function initMessenger(dbName) {
     else if (e.key === 'End') next = tabs.length - 1;
     if (next !== undefined) { tabs[next].click(); tabs[next].focus(); }
   });
-  document.getElementById('contact-sort')?.addEventListener('change', (e) => { _contactSort = e.target.value; renderContacts(); });
+  _DOM.get('contact-sort')?.addEventListener('change', (e) => { _contactSort = e.target.value; renderContacts(); });
   // v3.2: Contact search filter
   let _contactFilter = '';
-  document.getElementById('contact-filter')?.addEventListener('input', debounce((e) => { _contactFilter = e.target.value.trim().toLowerCase(); renderContacts(); }, 150));
+  _DOM.get('contact-filter')?.addEventListener('input', debounce((e) => { _contactFilter = e.target.value.trim().toLowerCase(); renderContacts(); }, 150));
   // v3.2: Escape clears filter + blurs
-  document.getElementById('contact-filter')?.addEventListener('keydown', (e) => {
+  _DOM.get('contact-filter')?.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { e.target.value = ''; _contactFilter = ''; renderContacts(); e.target.blur(); }
   });
 
   async function renderContacts() {
     const contacts = await dbGetAll('contacts');
-    const el = document.getElementById('msg-contacts');
+    const el = _DOM.get('msg-contacts');
     // v3.3: PERFORMANCE — Use DocumentFragment for batch DOM insertion
     const frag = document.createDocumentFragment();
     // v3.1: Sort by selected mode
@@ -5917,7 +5917,7 @@ async function initMessenger(dbName) {
             c.name = newName.trim();
             await dbPut('contacts', c);
             renderContacts();
-            if (activeContact?.id === c.id) document.getElementById('msg-conv-name').textContent = c.name;
+            if (activeContact?.id === c.id) _DOM.get('msg-conv-name').textContent = c.name;
           }
         } else if (action === 'delete') {
           if (!await showConfirm(t('confirmDeleteContact', c.name), { danger: true, okText: t('delete') })) return;
@@ -5930,7 +5930,7 @@ async function initMessenger(dbName) {
           if (activeContact?.id === c.id) {
             activeContact = null;
             safeSetHTML(_DOM.get('msg-messages'), '<div class="cmd-center">' + esc(t('contactDeleted')) + '</div>');
-            document.getElementById('msg-conv-name').textContent = t('uiSelectContact');
+            _DOM.get('msg-conv-name').textContent = t('uiSelectContact');
             _DOM.get('msg-input-bar').classList.add('hidden');
           }
           if (peers[c.pubB64]) { if (peers[c.pubB64]._healthTimer) clearInterval(peers[c.pubB64]._healthTimer); peers[c.pubB64].pc?.close(); delete peers[c.pubB64]; }
@@ -5992,9 +5992,9 @@ async function initMessenger(dbName) {
     const totalUnread = contacts.reduce((s, c) => s + (c.unread || 0), 0);
     const unreadContacts = contacts.filter(c => c.unread > 0).length;
     const groupUnread = contacts.filter(c => c.isGroup && c.unread > 0).length;
-    const b1 = document.getElementById('badge-all');
-    const b2 = document.getElementById('badge-unread');
-    const b3 = document.getElementById('badge-groups');
+    const b1 = _DOM.get('badge-all');
+    const b2 = _DOM.get('badge-unread');
+    const b3 = _DOM.get('badge-groups');
     if (b1) b1.textContent = totalUnread > 0 ? totalUnread : '';
     if (b2) b2.textContent = unreadContacts > 0 ? unreadContacts : '';
     if (b3) b3.textContent = groupUnread > 0 ? groupUnread : '';
@@ -6003,7 +6003,7 @@ async function initMessenger(dbName) {
     updateFaviconBadge(totalUnread);
     // v3.1: Update P2P connection count
     const peerCount = Object.values(peers).filter(p => p.connected).length;
-    const pcEl = document.getElementById('peer-count');
+    const pcEl = _DOM.get('peer-count');
     if (pcEl) pcEl.textContent = peerCount > 0 ? '🟢' + peerCount : '';
     // v3.2: Update app badge (PWA)
     if (navigator.setAppBadge) {
@@ -6047,21 +6047,21 @@ async function initMessenger(dbName) {
     activeContact = contact;
     contact.unread = 0;
     await dbPut('contacts', contact);
-    const nameEl = document.getElementById('msg-conv-name');
+    const nameEl = _DOM.get('msg-conv-name');
     // v3.6: Show member count for groups in header
     const memberBadge = contact.isGroup && contact.members ? ` <span class="enc-badge">${contact.members.length}人</span>` : '';
     nameEl.innerHTML = (contact.blocked ? '🚫 ' : '') + (contact.muted ? '🔇 ' : '') + esc(contact.name) + (contact.isGroup ? memberBadge : ' <span class="enc-badge">E2E</span>');
     updateConvStatus(contact); // v3.3: Show connection quality + relative time
     contact.blocked ? _DOM.get('msg-input-bar').classList.add('hidden') : _DOM.get('msg-input-bar').classList.remove('hidden');
-    document.getElementById('b-msg-clear')?.classList.remove('hidden');
+    _DOM.get('b-msg-clear')?.classList.remove('hidden');
     // Call buttons (1:1 only, not groups)
-    contact.isGroup ? document.getElementById('b-msg-call').classList.add('hidden') : document.getElementById('b-msg-call').classList.remove('hidden');
-    contact.isGroup ? document.getElementById('b-msg-video').classList.add('hidden') : document.getElementById('b-msg-video').classList.remove('hidden');
+    contact.isGroup ? _DOM.get('b-msg-call').classList.add('hidden') : _DOM.get('b-msg-call').classList.remove('hidden');
+    contact.isGroup ? _DOM.get('b-msg-video').classList.add('hidden') : _DOM.get('b-msg-video').classList.remove('hidden');
 
     // Mobile: hide sidebar, show back button
     if (window.innerWidth <= 640) {
       _DOM.get('msg-sidebar').classList.add('hidden');
-      document.getElementById('b-msg-back').classList.remove('hidden');
+      _DOM.get('b-msg-back').classList.remove('hidden');
       // v3.6: Push history state so browser back button closes conversation
       if (!history.state?.conversation) {
         history.pushState({ conversation: contact.id }, '', '');
@@ -6161,7 +6161,7 @@ async function initMessenger(dbName) {
         _loadedCount += newBatch.length;
         msgs.unshift(...newBatch);
         box.scrollTop = box.scrollHeight - prevHeight;
-        if (_loadedCount >= totalMsgCount) document.getElementById('load-more-hint')?.remove();
+        if (_loadedCount >= totalMsgCount) _DOM.get('load-more-hint')?.remove();
       }
     };
     await renderContacts();
@@ -6180,7 +6180,7 @@ async function initMessenger(dbName) {
     updateConvStatus();
     measureNetworkQuality();
     // v3.6: Show pinned message banner at top of chat
-    const pinBanner = document.getElementById('pin-banner');
+    const pinBanner = _DOM.get('pin-banner');
     if (pinBanner) {
       const allMsgs = await dbGetByIndex('messages', 'contact', contact.id);
       const pinned = allMsgs.filter(m => m.pinned);
@@ -6307,7 +6307,7 @@ async function initMessenger(dbName) {
   }
 
   function renderOGPCard(url, data, elementId) {
-    const el = document.getElementById(elementId);
+    const el = _DOM.get(elementId);
     if (!el) return;
     el.className = 'ogp-card';
     el.onclick = () => window.open(url, '_blank', 'noopener,noreferrer');
@@ -6415,7 +6415,7 @@ async function initMessenger(dbName) {
         // v3.6: Live countdown + auto-fade DOM removal
         const disappearAt = meta.disappearAt;
         const updateCountdown = () => {
-          const el = document.getElementById(timerId);
+          const el = _DOM.get(timerId);
           if (!el) return;
           const left = disappearAt - Date.now();
           if (left <= 0) {
@@ -6448,8 +6448,8 @@ async function initMessenger(dbName) {
         content += `<div class="msg-voice"><audio id="${audioId}" controls src="${href}"></audio><span class="voice-dur" id="dur-${audioId}"></span></div>`;
         // Deferred: load duration after render
         requestAnimationFrame(() => {
-          const audio = document.getElementById(audioId);
-          const durEl = document.getElementById('dur-' + audioId);
+          const audio = _DOM.get(audioId);
+          const durEl = _DOM.get('dur-' + audioId);
           if (audio && durEl) {
             audio.addEventListener('loadedmetadata', () => {
               const dur = audio.duration;
@@ -6829,7 +6829,7 @@ async function initMessenger(dbName) {
       el.onclick = (e) => { if (_selectMode) { e.stopPropagation(); toggleSelect(el); } };
     });
     // Show floating action bar
-    let fab = document.getElementById('select-fab');
+    let fab = _DOM.get('select-fab');
     if (!fab) {
       fab = document.createElement('div');
       fab.id = 'select-fab';
@@ -6875,7 +6875,7 @@ async function initMessenger(dbName) {
   }
 
   function _updateSelectCount() {
-    const el = document.getElementById('select-count');
+    const el = _DOM.get('select-count');
     if (el) el.textContent = _selectedMsgs.size + ' selected';
   }
 
@@ -6883,7 +6883,7 @@ async function initMessenger(dbName) {
     _selectMode = false;
     _selectedMsgs.clear();
     document.querySelectorAll('.msg.selectable').forEach(el => { el.classList.remove('selectable', 'selected'); });
-    document.getElementById('select-fab')?.remove();
+    _DOM.get('select-fab')?.remove();
   }
 
   function startReply(msg) {
@@ -7118,7 +7118,7 @@ async function initMessenger(dbName) {
 
   let _prevConnState = ''; // v3.6: Track for SR announcements
   function updateConvStatus() {
-    const el = document.getElementById('msg-conv-status');
+    const el = _DOM.get('msg-conv-status');
     if (!activeContact) return;
     if (activeContact.isGroup) {
       const online = (activeContact.members || []).filter(m => m.id !== myId && (peers[m.pubB64]?.connected || _presenceCache[m.id])).length;
@@ -7218,7 +7218,7 @@ async function initMessenger(dbName) {
     const text = input.value.trim();
     if (!text) return;
     _isSending = true;
-    const sendBtn = document.getElementById('b-msg-send');
+    const sendBtn = _DOM.get('b-msg-send');
     if (sendBtn) { sendBtn.disabled = true; sendBtn.classList.add('op-half'); sendBtn.classList.add('pulse'); }
     input.value = '';
     // v3.6: Clear persistent draft on send
@@ -7365,7 +7365,7 @@ async function initMessenger(dbName) {
   }
 
   // File send (v3: binary chunks for P2P, sealed relay fallback)
-  document.getElementById('msg-file')?.addEventListener('change', async (e) => {
+  _DOM.get('msg-file')?.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file || !activeContact) return;
     const maxSize = CONFIG.FILE_MAX;
@@ -7492,12 +7492,12 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, '_sendFile'); }
   }
 
-  document.getElementById('b-msg-send')?.addEventListener('click', sendMessage);
+  _DOM.get('b-msg-send')?.addEventListener('click', sendMessage);
 
   // v3.5: Drag-and-drop file upload
   (() => {
     const chatArea = _DOM.get('msg-messages');
-    const dropOverlay = document.getElementById('drop-overlay');
+    const dropOverlay = _DOM.get('drop-overlay');
     if (!chatArea || !dropOverlay) return;
     let dragCounter = 0;
     chatArea.addEventListener('dragenter', (e) => {
@@ -7525,7 +7525,7 @@ async function initMessenger(dbName) {
 
   // v3.5: Emoji picker
   (() => {
-    const emojiBtn = document.getElementById('b-msg-emoji');
+    const emojiBtn = _DOM.get('b-msg-emoji');
     const input = _DOM.get('msg-input');
     if (!emojiBtn || !input) return;
 
@@ -7701,7 +7701,7 @@ async function initMessenger(dbName) {
   let _audioChunks = [];
   let _recTimer = null;
   let _recStartTs = 0;
-  const voiceBtn = document.getElementById('b-msg-voice');
+  const voiceBtn = _DOM.get('b-msg-voice');
   if (voiceBtn) {
     voiceBtn.addEventListener('click', async () => {
       if (!activeContact) return;
@@ -7712,7 +7712,7 @@ async function initMessenger(dbName) {
         voiceBtn.textContent = '🎤';
         voiceBtn.classList.remove('voice-recording');
         voiceBtn.setAttribute('aria-pressed', 'false');
-        document.getElementById('voice-rec-indicator')?.remove();
+        _DOM.get('voice-rec-indicator')?.remove();
         clearInterval(_recTimer); _recTimer = null;
         return;
       }
@@ -7806,7 +7806,7 @@ async function initMessenger(dbName) {
   // v3.3: AI — Speech-to-Text (Web Speech API)
   // ================================================================
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const sttBtn = document.getElementById('b-msg-stt');
+  const sttBtn = _DOM.get('b-msg-stt');
   let _sttActive = false;
   if (SpeechRecognition && sttBtn) {
     sttBtn.classList.remove('hidden');
@@ -7840,7 +7840,7 @@ async function initMessenger(dbName) {
   // v3.3: AI — Smart Reply (show suggestions after receiving a message)
   // ================================================================
   function showSmartReplies(lastMsgText) {
-    const bar = document.getElementById('smart-reply-bar');
+    const bar = _DOM.get('smart-reply-bar');
     if (!bar) return;
     // Show local replies immediately (no latency)
     const localReplies = generateSmartReplies(lastMsgText);
@@ -7911,14 +7911,14 @@ async function initMessenger(dbName) {
     const ta = e.target;
     requestAnimationFrame(() => _autoHeight(ta));
     // v3.3: Tab to accept @mention suggestion
-    if (e.key === 'Tab' && document.getElementById('mention-picker')) {
+    if (e.key === 'Tab' && _DOM.get('mention-picker')) {
       e.preventDefault();
       const first = document.querySelector('#mention-picker .mention-item');
       if (first) first.click();
     }
     // v3.3: Escape to close mention picker
     if (e.key === 'Escape') {
-      document.getElementById('mention-picker')?.remove();
+      _DOM.get('mention-picker')?.remove();
     }
   });
 
@@ -7927,7 +7927,7 @@ async function initMessenger(dbName) {
     const input = e.target;
     const val = input.value;
     const atMatch = val.match(/@(\w*)$/);
-    const picker = document.getElementById('mention-picker');
+    const picker = _DOM.get('mention-picker');
     if (!atMatch || !activeContact?.isGroup || !activeContact.members?.length) {
       if (picker) picker.remove();
       return;
@@ -7997,23 +7997,23 @@ async function initMessenger(dbName) {
   });
 
   // Mobile: back button
-  document.getElementById('b-msg-back')?.addEventListener('click', () => {
+  _DOM.get('b-msg-back')?.addEventListener('click', () => {
     // v3.6: Use history.back() to trigger popstate (consistent with browser back button)
     if (history.state?.conversation) { history.back(); return; }
     _DOM.get('msg-sidebar').classList.remove('hidden');
-    document.getElementById('b-msg-back').classList.add('hidden');
+    _DOM.get('b-msg-back').classList.add('hidden');
   });
 
   // v3.6: Browser back button → close conversation, show sidebar (critical for mobile PWA)
   window.addEventListener('popstate', (e) => {
     if (!e.state?.conversation && window.innerWidth <= 640) {
       _DOM.get('msg-sidebar')?.classList.remove('hidden');
-      document.getElementById('b-msg-back')?.classList.add('hidden');
+      _DOM.get('b-msg-back')?.classList.add('hidden');
     }
   });
 
   // Clear conversation
-  document.getElementById('b-msg-clear')?.addEventListener('click', async () => {
+  _DOM.get('b-msg-clear')?.addEventListener('click', async () => {
     if (!activeContact) return;
     if (!await showConfirm(t('confirmClearChat', activeContact.name), { danger: true, okText: t('deleteAllConfirm') })) return;
     const msgs = await dbGetByIndex('messages', 'contact', activeContact.id);
@@ -8139,8 +8139,8 @@ async function initMessenger(dbName) {
       _callRemoteStream = new MediaStream();
       _callPC.ontrack = (e) => {
         e.streams[0].getTracks().forEach(t => _callRemoteStream.addTrack(t));
-        const remoteAudio = document.getElementById('call-remote-audio');
-        const remoteVideo = document.getElementById('call-remote-video');
+        const remoteAudio = _DOM.get('call-remote-audio');
+        const remoteVideo = _DOM.get('call-remote-video');
         if (remoteVideo && withVideo) { remoteVideo.srcObject = _callRemoteStream; remoteVideo.classList.remove('hidden'); }
         else if (remoteAudio) remoteAudio.srcObject = _callRemoteStream;
       };
@@ -8222,8 +8222,8 @@ async function initMessenger(dbName) {
       _callRemoteStream = new MediaStream();
       _callPC.ontrack = (e) => {
         e.streams[0].getTracks().forEach(t => _callRemoteStream.addTrack(t));
-        const remoteAudio = document.getElementById('call-remote-audio');
-        const remoteVideo = document.getElementById('call-remote-video');
+        const remoteAudio = _DOM.get('call-remote-audio');
+        const remoteVideo = _DOM.get('call-remote-video');
         if (remoteVideo && pending.video) { remoteVideo.srcObject = _callRemoteStream; remoteVideo.classList.remove('hidden'); }
         else if (remoteAudio) remoteAudio.srcObject = _callRemoteStream;
       };
@@ -8367,7 +8367,7 @@ async function initMessenger(dbName) {
   }
 
   function updateCallUI(state) {
-    const el = document.getElementById('call-state');
+    const el = _DOM.get('call-state');
     if (el) {
       if (state === 'connected') el.textContent = t('uiConnected');
       else if (state === 'connecting') el.textContent = t('uiConnecting');
@@ -8375,13 +8375,13 @@ async function initMessenger(dbName) {
   }
 
   function updateCallTimer() {
-    const el = document.getElementById('call-timer');
+    const el = _DOM.get('call-timer');
     if (!el || !_callStartTime) return;
     const s = Math.floor((Date.now() - _callStartTime) / 1000);
     el.textContent = String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
   }
 
-  function hideCallUI() { document.getElementById('call-overlay')?.remove(); }
+  function hideCallUI() { _DOM.get('call-overlay')?.remove(); }
 
   // Make global for onclick handlers
   window.acceptCall = acceptCall;
@@ -8391,7 +8391,7 @@ async function initMessenger(dbName) {
     if (!_callStream) return;
     const track = _callStream.getAudioTracks()[0];
     if (track) { track.enabled = !track.enabled; }
-    const btn = document.getElementById('call-mute-btn');
+    const btn = _DOM.get('call-mute-btn');
     if (btn) btn.textContent = track?.enabled ? t('mute') : t('unmute');
   };
 
@@ -8399,13 +8399,13 @@ async function initMessenger(dbName) {
     if (!_callStream) return;
     const track = _callStream.getVideoTracks()[0];
     if (track) { track.enabled = !track.enabled; }
-    const btn = document.getElementById('call-cam-btn');
+    const btn = _DOM.get('call-cam-btn');
     if (btn) btn.textContent = track?.enabled ? t('camOff') : t('camOn');
   };
 
   // Call button handlers
-  document.getElementById('b-msg-call')?.addEventListener('click', () => { if (activeContact) startCall(activeContact, false); });
-  document.getElementById('b-msg-video')?.addEventListener('click', () => { if (activeContact) startCall(activeContact, true); });
+  _DOM.get('b-msg-call')?.addEventListener('click', () => { if (activeContact) startCall(activeContact, false); });
+  _DOM.get('b-msg-video')?.addEventListener('click', () => { if (activeContact) startCall(activeContact, true); });
 
   // Listen for incoming calls via signal poll (piggyback on existing messenger signal poll)
   // Incoming calls are detected in the signal poll's message handling
@@ -8414,13 +8414,13 @@ async function initMessenger(dbName) {
   // ================================================================
   // DISAPPEARING MESSAGES TIMER
   // ================================================================
-  document.getElementById('b-msg-timer')?.addEventListener('click', () => {
+  _DOM.get('b-msg-timer')?.addEventListener('click', () => {
     const options = [0, 30, 300, 3600, 86400];
     const labels = ['Off', '30s', '5min', '1h', '24h'];
     const current = options.indexOf(_disappearTimer);
     const next = (current + 1) % options.length;
     _disappearTimer = options[next];
-    const btn = document.getElementById('b-msg-timer'); if (!btn) return;
+    const btn = _DOM.get('b-msg-timer'); if (!btn) return;
     btn.textContent = _disappearTimer === 0 ? '⏱' : labels[next];
     btn.classList.toggle('i-color-r', _disappearTimer !== 0); btn.classList.toggle('i-color-t3', _disappearTimer === 0);
   });
@@ -8453,7 +8453,7 @@ async function initMessenger(dbName) {
   // Group: stored in IDB 'contacts' with isGroup:true, members:[{id, pubB64, name}]
   // Messages use contactId = groupId. Each message encrypted per-member.
 
-  document.getElementById('b-msg-add')?.addEventListener('click', async () => {
+  _DOM.get('b-msg-add')?.addEventListener('click', async () => {
     const input = await showPrompt(t('addContact'), '', { placeholder: t('addContactPh') });
     if (!input) return;
     if (input.startsWith('group:')) {
@@ -9123,7 +9123,7 @@ async function initMessenger(dbName) {
           peerState.transition('CLOSED'); try { pc.close(); } catch(e) { _dbg(e); }
           delete peers[contact.pubB64];
           if (activeContact?.id === contact.id) {
-            const el = document.getElementById('msg-conv-status');
+            const el = _DOM.get('msg-conv-status');
             if (el) { el.textContent = t('uiOfflineRelay'); el.classList.add('color-r'); }
           }
         }
@@ -9429,7 +9429,7 @@ async function initMessenger(dbName) {
 
   // v3.3: Shared lock screen function (used by /lock and auto-lock)
   function showLockScreen() {
-    if (document.getElementById('lock-screen')) return;
+    if (_DOM.get('lock-screen')) return;
     const raw = localStorage.getItem('brz-lock-hash');
     if (!raw) return;
     const overlay = document.createElement('div');
@@ -9534,7 +9534,7 @@ async function initMessenger(dbName) {
   _intervals.push(setInterval(() => {
     const mins = parseInt(localStorage.getItem('brz-idle-lock') || '0', 10);
     if (!(mins > 0) || !localStorage.getItem('brz-lock-hash')) return;
-    if (document.getElementById('lock-screen')) return; // already locked
+    if (_DOM.get('lock-screen')) return; // already locked
     if (Date.now() - _idleLockLast >= mins * MS.MIN) showLockScreen();
   }, 15000));
 
@@ -9564,7 +9564,7 @@ async function initMessenger(dbName) {
       const t0 = performance.now();
       const r = await fetchT(API + '/health');
       _lastRtt = Math.round(performance.now() - t0);
-      const statusEl = document.getElementById('msg-conv-status');
+      const statusEl = _DOM.get('msg-conv-status');
       if (statusEl && activeContact) {
         const peer = peers[activeContact.pubB64];
         const mode = peer?.connected ? 'P2P' : 'Relay';
@@ -9577,13 +9577,13 @@ async function initMessenger(dbName) {
   _intervals.push(setInterval(measureNetworkQuality, MS.MIN));
 
   // ===== Share ID (with QR option) =====
-  document.getElementById('b-msg-share')?.addEventListener('click', (e) => {
+  _DOM.get('b-msg-share')?.addEventListener('click', (e) => {
     const { url } = generateInviteMessage();
     if (e.shiftKey || IS_MOBILE) {
       showQRModal(url);
     } else {
       navigator.clipboard?.writeText(url);
-      const btn = document.getElementById('b-msg-share'); if (!btn) return;
+      const btn = _DOM.get('b-msg-share'); if (!btn) return;
       btn.textContent = '✓'; setTimeout(() => { btn.textContent = 'ID'; }, 2000);
     }
   });
@@ -9630,7 +9630,7 @@ async function initMessenger(dbName) {
           // Trigger file input programmatically
           const dt = new DataTransfer();
           dt.items.add(file);
-          const fi = document.getElementById('msg-file');
+          const fi = _DOM.get('msg-file');
           fi.files = dt.files;
           fi.dispatchEvent(new Event('change'));
         };
@@ -9639,7 +9639,7 @@ async function initMessenger(dbName) {
         // Non-image: send directly
         const dt = new DataTransfer();
         dt.items.add(file);
-        const fi = document.getElementById('msg-file');
+        const fi = _DOM.get('msg-file');
         fi.files = dt.files;
         fi.dispatchEvent(new Event('change'));
       }
@@ -9647,7 +9647,7 @@ async function initMessenger(dbName) {
   }
 
   // ===== Backup & Restore =====
-  document.getElementById('b-msg-backup')?.addEventListener('click', async () => {
+  _DOM.get('b-msg-backup')?.addEventListener('click', async () => {
     const identity = await dbGet('identity', 'keys');
     const contacts = await dbGetAll('contacts');
     if (!identity) { showToast(t('toastNoIdentityBackup'), 'error'); return; }
@@ -9662,11 +9662,11 @@ async function initMessenger(dbName) {
   });
 
   // Panic button (no confirmation — this is intentional)
-  document.getElementById('b-msg-panic')?.addEventListener('click', () => executePanic());
+  _DOM.get('b-msg-panic')?.addEventListener('click', () => executePanic());
 
   // Theme toggle
-  document.getElementById('b-msg-theme')?.addEventListener('click', toggleTheme);
-  (() => { const btn = document.getElementById('b-msg-theme');
+  _DOM.get('b-msg-theme')?.addEventListener('click', toggleTheme);
+  (() => { const btn = _DOM.get('b-msg-theme');
     if (btn) btn.textContent = document.documentElement.classList.contains('light') ? '🌙' : '☀'; })();
 
   // Restore: drag-drop or file input (hidden)
@@ -9836,9 +9836,9 @@ async function initMessenger(dbName) {
       const data = await resp.json();
       if (data.slots) { _accountSlots = data.slots; localStorage.setItem('brz-acc-slots', String(data.slots)); if (data.plan) localStorage.setItem('brz-plan', data.plan); }
 
-      const el = document.getElementById('msg-billing');
-      const badge = document.getElementById('msg-plan-badge');
-      const btn = document.getElementById('b-msg-billing');
+      const el = _DOM.get('msg-billing');
+      const badge = _DOM.get('msg-plan-badge');
+      const btn = _DOM.get('b-msg-billing');
       if (!el || !badge || !btn) return;
 
       el.classList.remove('hidden');
@@ -10123,7 +10123,7 @@ async function initMessenger(dbName) {
   // F8 FIX: Throttled typing indicator (max 1 per 3 seconds)
   let _lastTypingSent = 0;
   // v3.3: Character counter on input
-  const _charCounter = document.getElementById('msg-char-count');
+  const _charCounter = _DOM.get('msg-char-count');
   _DOM.get('msg-input')?.addEventListener('input', () => {
     if (!activeContact) return;
     const len = _DOM.get('msg-input').value.length;
@@ -10213,7 +10213,7 @@ async function initMessenger(dbName) {
     fc.received.add(seq);
     // v3.6: Update receive progress
     const pct = Math.round((fc.received.size / fc.total) * 100);
-    const progEl = document.getElementById('recv-' + fileId);
+    const progEl = _DOM.get('recv-' + fileId);
     if (progEl) {
       const bar = progEl.querySelector('.bar');
       const info = progEl.querySelector('.transfer-info');
@@ -10323,8 +10323,8 @@ async function initMessenger(dbName) {
     _typingContacts[contactId] = Date.now();
     _renderContactsThrottled();
     if (activeContact?.id !== contactId) return;
-    const typingEl = document.getElementById('typing-indicator');
-    const el = document.getElementById('msg-conv-status');
+    const typingEl = _DOM.get('typing-indicator');
+    const el = _DOM.get('msg-conv-status');
 
     if (activeContact?.isGroup && senderName) {
       // Group: track multiple typers
@@ -11071,7 +11071,7 @@ async function initMessenger(dbName) {
         if (newName && newName.length <= 50) {
           activeContact.name = newName;
           await dbPut('contacts', activeContact);
-          document.getElementById('msg-conv-name').textContent = newName;
+          _DOM.get('msg-conv-name').textContent = newName;
           auditLog('group', 'Renamed group to ' + newName);
           d.textContent = t('uiGroupRenamed', newName);
           renderContacts();
@@ -11342,7 +11342,7 @@ async function initMessenger(dbName) {
 
     if (val === '/timer') {
       e.preventDefault(); clearInput();
-      document.getElementById('b-msg-timer')?.click();
+      _DOM.get('b-msg-timer')?.click();
       return;
     }
 
@@ -12468,7 +12468,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       activeContact.blocked = false;
       await dbPut('contacts', activeContact);
       auditLog('contact', 'Unblocked ' + activeContact.name);
-      document.getElementById('msg-conv-name').textContent = activeContact.name;
+      _DOM.get('msg-conv-name').textContent = activeContact.name;
       _DOM.get('msg-input-bar').classList.remove('hidden');
       showToast(t('toastUnblockedName', activeContact.name), 'success');
       renderContacts();
@@ -13303,7 +13303,7 @@ if (PLATFORM === 'capacitor') {
         const { App: CapApp } = await import('@capacitor/app');
         CapApp.addListener('backButton', ({ canGoBack }) => {
           // If sidebar is hidden (viewing chat), show sidebar
-          const sidebar = document.getElementById('msg-sidebar');
+          const sidebar = _DOM.get('msg-sidebar');
           if (sidebar?.classList.contains('hidden')) {
             sidebar.classList.remove('hidden');
           } else if (canGoBack) {
@@ -13341,7 +13341,7 @@ if (IS_IOS) {
 if (!IS_MOBILE) {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !e.ctrlKey && !e.metaKey) {
-      const sidebar = document.getElementById('msg-sidebar');
+      const sidebar = _DOM.get('msg-sidebar');
       const ctxMenu = document.querySelector('.ctx-menu');
       const dlg = document.querySelector('dialog[open]');
       // v3.6: Priority chain: context menu → dialog → select mode → conversation
@@ -13351,7 +13351,7 @@ if (!IS_MOBILE) {
       // Close conversation → show sidebar (mobile + desktop)
       if (sidebar?.classList.contains('hidden')) {
         if (history.state?.conversation) { history.back(); } // triggers popstate
-        else { sidebar.classList.remove('hidden'); document.getElementById('b-msg-back')?.classList.add('hidden'); }
+        else { sidebar.classList.remove('hidden'); _DOM.get('b-msg-back')?.classList.add('hidden'); }
         return;
       }
     }
@@ -13364,7 +13364,7 @@ if (!IS_MOBILE) {
     // v3.6: Ctrl+K → Focus contact filter (Spotlight-style)
     if ((e.ctrlKey || e.metaKey) && e.key === 'k' && !e.shiftKey) {
       e.preventDefault();
-      document.getElementById('contact-filter')?.focus();
+      _DOM.get('contact-filter')?.focus();
     }
   });
 }
@@ -13467,7 +13467,7 @@ if (PLATFORM === 'electron' && window.breeze) {
     // Cmd/Ctrl+K: command palette (focus search with slash prompt)
     if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
       e.preventDefault();
-      const cf = document.getElementById('contact-filter');
+      const cf = _DOM.get('contact-filter');
       if (cf) { cf.focus(); cf.select(); cf.placeholder = t('searchContactsHint'); }
     }
     // Cmd/Ctrl+Shift+F: cross-chat search
@@ -13488,21 +13488,21 @@ if (PLATFORM === 'electron' && window.breeze) {
     // v3.2: Ctrl+Shift+N: focus add contact
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'N') {
       e.preventDefault();
-      document.getElementById('b-msg-add')?.click();
+      _DOM.get('b-msg-add')?.click();
     }
     // v3.3: Ctrl+F: search in chat (if conv open) or focus contact filter
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'f') {
       e.preventDefault();
       if (activeContact) { openSearchBar(); }
       else {
-        const cf = document.getElementById('contact-filter');
+        const cf = _DOM.get('contact-filter');
         if (cf) { cf.focus(); cf.select(); }
       }
     }
   });
 
   // v3.2: Scroll-to-bottom FAB
-  const _scrollFab = document.getElementById('scroll-fab');
+  const _scrollFab = _DOM.get('scroll-fab');
   const _msgBox = _DOM.get('msg-messages');
   let _newMsgsWhileScrolled = 0;
   if (_msgBox && _scrollFab) {
@@ -13557,9 +13557,9 @@ if (PLATFORM === 'electron' && window.breeze) {
   }, 30000)); // Update every 30s
 
   // v3.3: Search in chat (Ctrl+Shift+F)
-  const _searchBar = document.getElementById('search-bar');
-  const _searchInput = document.getElementById('search-chat-input');
-  const _searchCount = document.getElementById('search-match-count');
+  const _searchBar = _DOM.get('search-bar');
+  const _searchInput = _DOM.get('search-chat-input');
+  const _searchCount = _DOM.get('search-match-count');
   let _searchMatches = [];
   let _searchIdx = 0;
 
@@ -13628,9 +13628,9 @@ if (PLATFORM === 'electron' && window.breeze) {
     if (e.key === 'Enter') { e.preventDefault(); searchNext(e.shiftKey ? -1 : 1); }
     if (e.key === 'Escape') closeSearchBar();
   });
-  document.getElementById('search-chat-next')?.addEventListener('click', () => searchNext(1));
-  document.getElementById('search-chat-prev')?.addEventListener('click', () => searchNext(-1));
-  document.getElementById('search-chat-close')?.addEventListener('click', closeSearchBar);
+  _DOM.get('search-chat-next')?.addEventListener('click', () => searchNext(1));
+  _DOM.get('search-chat-prev')?.addEventListener('click', () => searchNext(-1));
+  _DOM.get('search-chat-close')?.addEventListener('click', closeSearchBar);
 
   // Mobile: dismiss keyboard on scroll
   if (IS_MOBILE) {
@@ -13641,7 +13641,7 @@ if (PLATFORM === 'electron' && window.breeze) {
 
   // Capacitor (mobile): account tabs as horizontal scroll with larger touch targets
   if (PLATFORM === 'capacitor') {
-    const tabs = document.getElementById('acc-tabs');
+    const tabs = _DOM.get('acc-tabs');
     if (tabs) {
       tabs.style.cssText += ';padding:8px 12px;gap:8px;-webkit-overflow-scrolling:touch';
       tabs.querySelectorAll('div').forEach(d => {
