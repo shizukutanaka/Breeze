@@ -11280,6 +11280,15 @@ async function initMessenger(dbName) {
           activeContact.name = newName;
           await dbPut('contacts', activeContact);
           _DOM.get('msg-conv-name').textContent = newName;
+          if (API && activeContact.groupToken) {
+            try {
+              const renTs = Date.now();
+              const renSig = await signMessage(`breeze-group-rename:${activeContact.groupToken}:${myId}:${renTs}:${newName}`);
+              const renBody = { token: activeContact.groupToken, adminId: myId, name: newName, ts: renTs };
+              if (renSig) renBody.sig = renSig;
+              await postAPIRaw('/group/rename', renBody);
+            } catch(e) { _dbg(e, 'server-rename'); }
+          }
           auditLog('group', 'Renamed group to ' + newName);
           d.textContent = t('uiGroupRenamed', newName);
           renderContacts();
@@ -11293,7 +11302,11 @@ async function initMessenger(dbName) {
             let newEpoch = null;
             if (API && activeContact.groupToken) {
               try {
-                const kickResp = await postAPIRaw('/group/kick', { token: activeContact.groupToken, kickId: member.id, adminId: myId });
+                const kickTs = Date.now();
+                const kickSig = await signMessage(`breeze-group-kick:${activeContact.groupToken}:${myId}:${kickTs}:${member.id}`);
+                const kickBody = { token: activeContact.groupToken, kickId: member.id, adminId: myId, ts: kickTs };
+                if (kickSig) kickBody.sig = kickSig;
+                const kickResp = await postAPIRaw('/group/kick', kickBody);
                 if (kickResp.ok) {
                   const kickData = await kickResp.json().catch(() => ({}));
                   newEpoch = (typeof kickData.epoch === 'number') ? kickData.epoch : null;
@@ -11326,6 +11339,15 @@ async function initMessenger(dbName) {
             if (!activeContact.admins) activeContact.admins = [];
             if (!activeContact.admins.includes(member.id)) activeContact.admins.push(member.id);
             await dbPut('contacts', activeContact);
+            if (API && activeContact.groupToken) {
+              try {
+                const proTs = Date.now();
+                const proSig = await signMessage(`breeze-group-admin:${activeContact.groupToken}:${myId}:${proTs}:promote:${member.id}`);
+                const proBody = { token: activeContact.groupToken, adminId: myId, targetId: member.id, action: 'promote', ts: proTs };
+                if (proSig) proBody.sig = proSig;
+                await postAPIRaw('/group/admin', proBody);
+              } catch(e) { _dbg(e, 'server-promote'); }
+            }
             auditLog('group', 'Promoted ' + member.name + ' to admin in ' + activeContact.name);
             d.textContent = t('promotedAdmin', member.name);
           } else { d.textContent = t('uiMemberNotFound', target); }
