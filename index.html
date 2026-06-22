@@ -2633,10 +2633,14 @@ window.addEventListener('error', (event) => {
   // Crash recovery overlay after 3 fatal errors
   if (_fatalErrors >= 3 && !document.querySelector('.crash-overlay')) {
     const d = document.createElement('div'); d.className = 'crash-overlay';
-    d.innerHTML = '<div class="i-icon48">⚠️</div><h2>' + t('crashTitle') + '</h2><p>' + t('crashBody') + '</p><button class="btn btn-g">' + t('uiReload') + '</button><button class="btn btn-o">' + t('crashClearCache') + '</button>';
-    d.querySelectorAll('button')[0].onclick = () => location.reload();
-    d.querySelectorAll('button')[1].onclick = async () => {
-      d.querySelectorAll('button')[1].textContent = t('clearing');
+    const _ci = document.createElement('div'); _ci.className = 'i-icon48'; _ci.textContent = '⚠️'; d.appendChild(_ci);
+    const _ch = document.createElement('h2'); _ch.textContent = t('crashTitle'); d.appendChild(_ch);
+    const _cp = document.createElement('p'); _cp.textContent = t('crashBody'); d.appendChild(_cp);
+    const _cb1 = document.createElement('button'); _cb1.className = 'btn btn-g'; _cb1.textContent = t('uiReload'); d.appendChild(_cb1);
+    const _cb2 = document.createElement('button'); _cb2.className = 'btn btn-o'; _cb2.textContent = t('crashClearCache'); d.appendChild(_cb2);
+    _cb1.onclick = () => location.reload();
+    _cb2.onclick = async () => {
+      _cb2.textContent = t('clearing');
       try { const keys = await caches.keys(); await Promise.all(keys.map(k => caches.delete(k))); } catch(e) { /* */ }
       location.reload();
     };
@@ -3110,7 +3114,7 @@ if (P.has('terms') || P.has('privacy') || P.has('legal') || P.has('commercial') 
     _dbg(e, 'initMessenger-fatal');
     const d = document.createElement('div');
     d.className = 'crash-overlay';
-    d.innerHTML = '<div class="i-icon48">⚠️</div><h2>' + esc(t('crashTitle')) + '</h2><p>' + esc(e?.message || '') + '</p><button class="btn btn-g" id="crash-reload">' + esc(t('uiReload')) + '</button>';
+    safeSetHTML(d, '<div class="i-icon48">⚠️</div><h2>' + esc(t('crashTitle')) + '</h2><p>' + esc(e?.message || '') + '</p><button class="btn btn-g" id="crash-reload">' + esc(t('uiReload')) + '</button>');
     document.body.appendChild(d);
     _DOM.get('crash-reload')?.addEventListener('click', () => location.reload());
   });
@@ -3377,7 +3381,7 @@ function downloadBlob(blob, filename) {
 const _ttPolicy = (() => {
   // Sanitizer: strip dangerous tags/attrs while keeping safe markdown output
   const SAFE_TAGS = /^(p|br|strong|em|b|i|a|code|pre|blockquote|ul|ol|li|span|div|img|del|s|sub|sup|h[1-6]|table|thead|tbody|tr|td|th)$/i;
-  const SAFE_ATTRS = /^(href|target|rel|class|title|data-[a-z-]+|loading|alt|src|id|aria-[a-z]+|role|style)$/i;
+  const SAFE_ATTRS = /^(href|target|rel|class|title|data-[a-z-]+|loading|alt|src|id|aria-[a-z]+|role|style|type|checked|placeholder|maxlength|rows|cols|for|name|value|min|max|step|disabled|readonly|autocomplete|enterkeyhint|spellcheck|wrap|tabindex)$/i;
   const DANGEROUS_TAGS = /^(script|iframe|object|embed|form|input|textarea|select|button|link|meta|base|svg|math)$/i;
 
   function sanitize(html) {
@@ -6218,7 +6222,7 @@ async function initMessenger(dbName) {
         for (const m of newBatch) {
           const d = document.createElement('div');
           d.className = 'msg ' + (m.mine ? 'me' : 'them');
-          d.innerHTML = `${esc(m.text || '')}<span class="ts">${new Date(m.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>`;
+          safeSetHTML(d, `${esc(m.text || '')}<span class="ts">${new Date(m.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>`);
           if (m.msgId) d.setAttribute('data-msgid', m.msgId);
           frag.appendChild(d);
         }
@@ -6443,7 +6447,7 @@ async function initMessenger(dbName) {
     if (meta._animate) { d.classList.add('new'); d.addEventListener('animationend', () => d.classList.remove('new'), { once: true }); }
     d.dataset.msgid = meta.msgId || (ts + '-' + (isMine ? '1' : '0'));
     d.dataset.ts = ts;
-    if (meta.deleted) { d.innerHTML = '<span class="msg-deleted">' + t('deleted') + '</span>'; box.appendChild(d); return; }
+    if (meta.deleted) { safeSetHTML(d, '<span class="msg-deleted">' + t('deleted') + '</span>'); box.appendChild(d); return; }
     if (meta.pinned) d.classList.add('msg-pinned');
     if (meta.bookmarked) d.classList.add('msg-bookmarked');
 
@@ -6578,7 +6582,7 @@ async function initMessenger(dbName) {
     const statusHtml = isMine ? `<span class="msg-status ${statusClass}" title="${statusTitle}"${meta.failed ? ' data-action="retry-msg"' : ''}>${statusIcon}</span>` : '';
     // v3.3: Reply count (how many messages quote this one)
     const replyCountHtml = meta.replyCount > 0 ? `<span class="reply-count" data-action="reply-scroll" title="${meta.replyCount} replies">${meta.replyCount} 💬</span>` : '';
-    d.innerHTML = content + editMark + sigMark + timerBadge + statusHtml + replyCountHtml + `<span class="ts" title="${fullDate}">${time}</span>` + reactionsHtml;
+    safeSetHTML(d, content + editMark + sigMark + timerBadge + statusHtml + replyCountHtml + `<span class="ts" title="${fullDate}">${time}</span>` + reactionsHtml);
     // v3.2: Copy text button (hover to show)
     if (text && !meta.deleted) {
       const cpBtn = document.createElement('button');
@@ -7840,7 +7844,7 @@ async function initMessenger(dbName) {
           const ind = document.createElement('div');
           ind.id = 'voice-rec-indicator';
           ind.className = 'voice-rec-ind';
-          ind.innerHTML = '<span class="rec-dot"></span><span class="rec-timer">0:00</span><span class="rec-wave"><span></span><span></span><span></span><span></span><span></span></span>';
+          safeSetHTML(ind, '<span class="rec-dot"></span><span class="rec-timer">0:00</span><span class="rec-wave"><span></span><span></span><span></span><span></span><span></span></span>');
           bar.insertBefore(ind, bar.firstChild);
           _recTimer = setInterval(() => {
             const s = Math.floor((Date.now() - _recStartTs) / 1000);
@@ -8597,10 +8601,10 @@ async function initMessenger(dbName) {
       const box = _DOM.get('msg-messages');
       const d = document.createElement('div');
       d.className = 'import-result';
-      d.innerHTML = `<div class="i-title-g">${t('groupCreated', esc(name))}</div>
+      safeSetHTML(d, `<div class="i-title-g">${t('groupCreated', esc(name))}</div>
          <div class="i-mb12">${t('shareInvite')}</div>
          <div class="i-mono-box">${esc(joinUrl)}</div>
-         <div class="i-g12">${t('clipboardCopied')}</div>`;
+         <div class="i-g12">${t('clipboardCopied')}</div>`);
       box.replaceChildren();
       box.appendChild(d);
 
@@ -11063,12 +11067,12 @@ async function initMessenger(dbName) {
         const recent = all.sort((a, b) => b.ts - a.ts).slice(0, 50);
         if (recent.length === 0) { d.textContent = t('uiNoAudit'); }
         else {
-          d.innerHTML = '<b class="i-g12">Audit Log (last 50)</b><br><br>' +
+          safeSetHTML(d, '<b class="i-g12">Audit Log (last 50)</b><br><br>' +
             recent.map(e => {
               const ts = new Date(e.ts).toLocaleString();
               const sev = e.severity === 'error' ? '🔴' : e.severity === 'warn' ? '🟡' : '🟢';
               return `${sev} <span class="i-muted">${ts}</span> [${e.type}] ${esc(e.detail)}`;
-            }).join('<br>');
+            }).join('<br>'));
         }
       } catch(err) { d.textContent = t('uiAuditUnavail'); }
       box.appendChild(d); box.scrollTop = box.scrollHeight;
@@ -11117,14 +11121,14 @@ async function initMessenger(dbName) {
       d.className = 'chat-empty';
 
       if (sub === 'help') {
-        d.innerHTML = [
+        safeSetHTML(d, [
           '<b class="i-g">Group Admin Commands</b>',
           '/admin announce on|off — Toggle announce-only mode',
           '/admin kick @name — Remove member',
           '/admin promote @name — Make admin',
           '/admin rename New Name — Rename group',
           '/admin help — Show this help',
-        ].join('<br>');
+        ].join('<br>'));
       } else if (sub.startsWith('announce ')) {
         const mode = sub.slice(9).trim() === 'on';
         activeContact.announceOnly = mode;
@@ -11207,7 +11211,7 @@ async function initMessenger(dbName) {
       const box = _DOM.get('msg-messages');
       const d = document.createElement('div');
       d.className = 'cmd-panel';
-      d.innerHTML = [
+      safeSetHTML(d, [
         '<b class="i-g13">' + t('helpTitle') + '</b>',
         '',
         '<b>' + t('helpChat') + '</b>',
@@ -11244,7 +11248,7 @@ async function initMessenger(dbName) {
         '',
         '<b>' + t('helpKeys') + '</b>',
         'Ctrl+F search · Ctrl+K contacts · Ctrl+1..9 accounts · ? shortcuts',
-      ].join('<br>');
+      ].join('<br>'));
       box.appendChild(d); box.scrollTop = box.scrollHeight;
       return;
     }
@@ -11341,7 +11345,7 @@ async function initMessenger(dbName) {
       const box = _DOM.get('msg-messages');
       const d = document.createElement('div');
       d.className = 'cmd-section';
-      d.innerHTML = ja ? [
+      safeSetHTML(d, ja ? [
         '<div class="i-title">LINE / WhatsApp / Telegram からの移行</div>',
         '<div class="i-heading">Step 1: 友達を招待 (個人)</div>',
         '<code>/invite</code> で招待メッセージをコピー → LINE等で送信',
@@ -11376,7 +11380,7 @@ async function initMessenger(dbName) {
         '<div class="i-heading">Step 3: Set up notifications</div>',
         'Allow browser notifications to get alerts for new messages',
         'Add to Home Screen for an app-like experience',
-      ].join('<br>');
+      ].join('<br>'));
       box.appendChild(d); box.scrollTop = box.scrollHeight;
       return;
     }
@@ -11564,7 +11568,7 @@ async function initMessenger(dbName) {
             d.className = 'msg ' + (m.mine ? 'me' : 'them');
             d.className = 'help-body';
             const time = new Date(m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            d.innerHTML = esc(m.text.slice(0, 120)).replace(new RegExp('(' + esc(query) + ')', 'gi'), '<mark class="i-highlight">$1</mark>') + '<span class="ts">' + time + '</span>';
+            safeSetHTML(d, esc(m.text.slice(0, 120)).replace(new RegExp('(' + esc(query) + ')', 'gi'), '<mark class="i-highlight">$1</mark>') + '<span class="ts">' + time + '</span>');
             box.appendChild(d);
           }
           if (cmsgs.length > 5) { const more = document.createElement('div'); more.className = 'text-xs color-t3 i-pad-more'; more.textContent = '... +' + (cmsgs.length - 5) + ' more'; box.appendChild(more); }
@@ -11641,7 +11645,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const box = _DOM.get('msg-messages');
       const d = document.createElement('div');
       d.className = 'cmd-panel';
-      d.innerHTML = '<b class="i-g">' + t('aiSummarizing') + '</b>';
+      safeSetHTML(d, '<b class="i-g">' + t('aiSummarizing') + '</b>');
       box.appendChild(d); box.scrollTop = box.scrollHeight;
       // Try AI summarize first
       if (API) {
@@ -11653,7 +11657,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
           if (resp?.ok) {
             const data = await resp.json();
             if (data.result) {
-              d.innerHTML = '<b class="i-g">' + t('aiSummary') + '</b> <span class="i-t3-10">(' + esc(data.provider || 'AI') + ')</span><br>' + esc(data.result).replace(/\n/g, '<br>');
+              safeSetHTML(d, '<b class="i-g">' + t('aiSummary') + '</b> <span class="i-t3-10">(' + esc(data.provider || 'AI') + ')</span><br>' + esc(data.result).replace(/\n/g, '<br>'));
               box.scrollTop = box.scrollHeight;
               return;
             }
@@ -11662,7 +11666,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       }
       // Fallback: local summarize
       const summary = summarizeMessages(recent);
-      d.innerHTML = '<b class="i-g">' + t('aiSummaryLocal') + '</b><br>' + esc(summary);
+      safeSetHTML(d, '<b class="i-g">' + t('aiSummaryLocal') + '</b><br>' + esc(summary));
       box.scrollTop = box.scrollHeight;
       return;
     }
@@ -11680,12 +11684,12 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       } else {
         const contactMap = {};
         for (const c of await dbGetAll('contacts')) contactMap[c.id] = c.name;
-        d.innerHTML = '<b class="i-g">' + t('sharedFiles', files.length) + '</b><br>' +
+        safeSetHTML(d, '<b class="i-g">' + t('sharedFiles', files.length) + '</b><br>' +
           files.slice(0, 30).map(f => {
             const date = new Date(f.ts).toLocaleDateString();
             const who = f.mine ? t('you') : (contactMap[f.contactId] || t('unknown'));
-            return `${f.name} · ${fmtSize(f.size)} · ${who} · ${date}`;
-          }).join('<br>') + (files.length > 30 ? '<br>...' + (files.length - 30) + ' more' : '');
+            return `${esc(f.name)} · ${fmtSize(f.size)} · ${esc(who)} · ${date}`;
+          }).join('<br>') + (files.length > 30 ? '<br>...' + (files.length - 30) + ' more' : ''));
       }
       box.appendChild(d); box.scrollTop = box.scrollHeight;
     }
@@ -11734,7 +11738,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const m = Math.floor((upMs % MS.HOUR) / MS.MIN);
       const contacts = await dbGetAll('contacts');
       const activePeers = Object.values(peers).filter(p => p.connected).length;
-      d.innerHTML = [
+      safeSetHTML(d, [
         '<b class="i-g">Session Info</b>',
         '',
         'Device: ' + (navigator.userAgent.includes('Mobile') ? 'Mobile' : 'Desktop') + ' / ' + navigator.platform,
@@ -11748,7 +11752,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         'Blocked: ' + contacts.filter(c => c.blocked).length,
         '',
         'Storage: ' + (navigator.storage?.estimate ? '' : 'N/A'),
-      ].join('<br>');
+      ].join('<br>'));
       if (navigator.storage?.estimate) {
         const est = await navigator.storage.estimate();
         d.insertAdjacentText('beforeend', (est.usage / 1048576).toFixed(1) + ' MB / ' + (est.quota / 1048576).toFixed(0) + ' MB (' + Math.round(est.usage / est.quota * 100) + '%)');
@@ -11773,7 +11777,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       if (activeContact) { try { const msgs = await dbGetByIndex('messages', 'contact', activeContact.id); msgCount = msgs.length; } catch(e) {} }
       // v3.1: Last seen
       const lastSeen = activeContact?.lastMsgAt ? new Date(activeContact.lastMsgAt).toLocaleString() : 'never';
-      d.innerHTML = [
+      safeSetHTML(d, [
         '<b class="i-g">Breeze v' + CONFIG.VERSION + ' Status</b>',
         'Protocol: v' + CONFIG.PROTOCOL_VERSION,
         'Platform: ' + PLATFORM,
@@ -11806,7 +11810,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         '',
         'Server: ' + (API || 'none'),
         
-      ].join('<br>');
+      ].join('<br>'));
       box.appendChild(d);
       box.scrollTop = box.scrollHeight;
     }
@@ -11847,10 +11851,10 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         const box = _DOM.get('msg-messages');
         const d = document.createElement('div');
         d.className = 'chat-empty';
-        d.innerHTML = `<div class="i-icon48">🔐</div><b>${t('dropCreated')}</b><br>
+        safeSetHTML(d, `<div class="i-icon48">🔐</div><b>${t('dropCreated')}</b><br>
           <span class="text-xs color-t3">${t('dropDesc')}</span><br>
           <code class="text-xs i-mono-box" style="word-break:break-all;cursor:pointer" id="drop-url-copy">${esc(dropUrl)}</code><br>
-          <span class="text-xs color-t3">${t('dropExpires')}</span>`;
+          <span class="text-xs color-t3">${t('dropExpires')}</span>`);
         box.appendChild(d);
         const _copyUrl = dropUrl;
         d.querySelector('#drop-url-copy')?.addEventListener('click', () => {
@@ -11878,10 +11882,10 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const d = document.createElement('div');
       d.className = 'chat-empty';
       d.className = 'cmd-panel-mono';
-      d.innerHTML = `<b class="i-g">Cloud Backup</b><br>
+      safeSetHTML(d, `<b class="i-g">Cloud Backup</b><br>
         <button data-action="backup" class="btn btn-g btn-sm i-m4">${t('backupBtn')}</button>
         <button data-action="restore" class="btn btn-o btn-sm i-m4">${t('restoreBtn')}</button><br>
-        <span class="text-xs color-t3">${t('backupNote')}</span>`;
+        <span class="text-xs color-t3">${t('backupNote')}</span>`);
       box.appendChild(d);
       box.scrollTop = box.scrollHeight;
     }
@@ -11915,7 +11919,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       d.className = 'cmd-panel-mono';
       const addUrl = location.origin + '/?add=' + myPubB64 + '&name=' + encodeURIComponent(myName);
       const aliasUrl = myAlias ? location.origin + '/?add=' + myAlias : '';
-      d.innerHTML = [
+      safeSetHTML(d, [
         '<b class="i-g">My Identity</b>',
         'Name: <b>' + esc(myName) + '</b>',
         'ID: <code class="i-fs10">' + esc(myId) + '</code>',
@@ -11926,7 +11930,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         '<b>Share links</b>',
         '<code class="i-id-small">' + esc(addUrl) + '</code>',
         aliasUrl ? '<code class="i-id-small">' + esc(aliasUrl) + '</code>' : '',
-      ].filter(Boolean).join('<br>');
+      ].filter(Boolean).join('<br>'));
       // Copy button
       const copyBtn = document.createElement('button');
       copyBtn.className = 'btn btn-o btn-sm mt-2';
@@ -11945,7 +11949,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const d = document.createElement('div');
       d.className = 'cmd-panel-mono';
       const shareLink = location.origin + '/?add=' + (myAlias ? '@' + myAlias : myPubB64);
-      d.innerHTML = [
+      safeSetHTML(d, [
         '<b class="i-green14">' + esc(myName) + '</b>',
         '<div class="i-body13">' + (myShortId || myId) + '</div>',
         myAlias ? '@' + esc(myAlias) : '<span class="i-t3">No username (/alias to set)</span>',
@@ -11954,7 +11958,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         _cryptoStack.keyExchange + ' · ' + _cryptoStack.signing + ' · ' + (_hasPQ ? 'PQ ✓' : 'PQ Ready'),
         '',
         '<span class="i-break-sm">' + shareLink + '</span>',
-      ].join('<br>');
+      ].join('<br>'));
       box.appendChild(d); box.scrollTop = box.scrollHeight;
     }
 
@@ -12014,7 +12018,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         // Connection stats
         const peerCount = Object.values(peers).filter(p => p.connected).length;
         const totalPeers = Object.keys(peers).length;
-        d.innerHTML = [
+        safeSetHTML(d, [
           '<b class="i-g">Storage & System Status</b>',
           '',
           `Storage: ${usedMB} MB / ${quotaMB} MB (${pct}%)`,
@@ -12031,7 +12035,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
           `  Platform: ${typeof PLATFORM !== 'undefined' ? PLATFORM : 'web'}`,
           '',
           persisted ? '' : '<span class="i-g i-cur" data-action="persist-storage">Request persistent storage</span>',
-        ].filter(Boolean).join('<br>');
+        ].filter(Boolean).join('<br>'));
         d.addEventListener('click', async (ev) => {
           if (ev.target.dataset.action === 'persist-storage') {
             const ok = await navigator.storage?.persist();
@@ -12376,7 +12380,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       d.className = 'cmd-panel-mono';
       const cs = _cryptoStack;
       const sess = activeContact ? await getSession(activeContact.pubB64?.slice(0, 12)) : null;
-      d.innerHTML = [
+      safeSetHTML(d, [
         '<b class="i-g13">Breeze Security Profile</b>',
         '',
         '<b>Cryptographic Stack</b>',
@@ -12438,7 +12442,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         'Memory zeroing: ✓ Best-effort TypedArray.fill(0) after crypto ops',
         'Key storage: non-extractable CryptoKey objects (IDB)',
         'Anti-replay (Worker): ±5min timestamp validation',
-      ].join('<br>');
+      ].join('<br>'));
       box.appendChild(d); box.scrollTop = box.scrollHeight;
     }
 
@@ -12473,23 +12477,23 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const box = _DOM.get('msg-messages');
       const d = document.createElement('div');
       d.className = 'cmd-panel';
-      d.innerHTML = '<b class="i-g">' + t('aiChat') + '</b> <span class="i-t3-10">' + t('aiThinking') + '</span>';
+      safeSetHTML(d, '<b class="i-g">' + t('aiChat') + '</b> <span class="i-t3-10">' + t('aiThinking') + '</span>');
       box.appendChild(d); box.scrollTop = box.scrollHeight;
       try {
         const resp = await postAPIRaw('/ai', { action: 'chat', text: question });
         if (resp?.ok) {
           const data = await resp.json();
           if (data.result) {
-            d.innerHTML = '<b class="i-g">' + t('aiChat') + '</b> <span class="i-t3-10">(' + esc(data.provider || '?') + (data.cached ? ' · ' + t('aiCached') : '') + ')</span><br><br>' + esc(data.result).replace(/\n/g, '<br>');
+            safeSetHTML(d, '<b class="i-g">' + t('aiChat') + '</b> <span class="i-t3-10">(' + esc(data.provider || '?') + (data.cached ? ' · ' + t('aiCached') : '') + ')</span><br><br>' + esc(data.result).replace(/\n/g, '<br>'));
           } else {
-            d.innerHTML = '<b class="i-g">' + t('aiChat') + '</b><br>' + t('aiError');
+            safeSetHTML(d, '<b class="i-g">' + t('aiChat') + '</b><br>' + t('aiError'));
           }
         } else {
-          d.innerHTML = '<b class="i-g">' + t('aiChat') + '</b><br>' + t('aiError');
+          safeSetHTML(d, '<b class="i-g">' + t('aiChat') + '</b><br>' + t('aiError'));
         }
       } catch(e) {
         _dbg(e, 'ai-chat');
-        d.innerHTML = '<b class="i-g">' + t('aiChat') + '</b><br>' + t('aiError');
+        safeSetHTML(d, '<b class="i-g">' + t('aiChat') + '</b><br>' + t('aiError'));
       }
       box.scrollTop = box.scrollHeight;
       return;
@@ -12597,7 +12601,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         const box = _DOM.get('msg-messages');
         const d = document.createElement('div');
         d.className = 'chat-empty';
-        d.innerHTML = '<b class="i-g">Wallpaper Presets</b><br><span class="text-xs color-t3">ocean · sunset · forest · midnight · aurora · reset<br>Or: /wallpaper #1a2b3c</span>';
+        safeSetHTML(d, '<b class="i-g">Wallpaper Presets</b><br><span class="text-xs color-t3">ocean · sunset · forest · midnight · aurora · reset<br>Or: /wallpaper #1a2b3c</span>');
         box.appendChild(d); box.scrollTop = box.scrollHeight;
       } else {
         showToast(t('toastWallpaperUsage') + ' | Presets: ocean, sunset, forest, midnight, aurora', 'error');
@@ -12614,7 +12618,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       d.className = 'cmd-panel';
       const isMac = navigator.platform?.includes('Mac');
       const mod = isMac ? '⌘' : 'Ctrl';
-      d.innerHTML = [
+      safeSetHTML(d, [
         '<b class="i-g13">Keyboard Shortcuts</b>',
         '',
         '<b>Navigation</b>',
@@ -12637,7 +12641,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         mod + '+Shift+F — Search all chats',
         '',
         '<b>Type /help for all slash commands</b>',
-      ].join('<br>');
+      ].join('<br>'));
       box.appendChild(d); box.scrollTop = box.scrollHeight;
     }
 
@@ -12725,7 +12729,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const box = _DOM.get('msg-messages');
       const d = document.createElement('div');
       d.className = 'cmd-panel';
-      d.innerHTML = [
+      safeSetHTML(d, [
         '<b class="i-g13">Breeze Changelog</b>',
         '',
         '<b>v3.6.0 (Current)</b>',
@@ -12778,7 +12782,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         'P2P WebRTC + relay messaging',
         'Voice/video calls',
         'Multi-account support',
-      ].join('<br>');
+      ].join('<br>'));
       box.appendChild(d); box.scrollTop = box.scrollHeight;
     }
 
@@ -12877,7 +12881,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const d = document.createElement('div');
       d.className = 'cmd-panel-mono';
       const contactShortId = c.pubB64 ? await generateShortId(c.pubB64) : c.id.slice(0, 12);
-      d.innerHTML = [
+      safeSetHTML(d, [
         '<b class="i-g13">' + esc(c.name) + '</b>',
         '<div class="i-muted12">' + contactShortId + '</div>',
         '',
@@ -12898,7 +12902,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         '',
         '<b>' + t('infoConnection') + '</b>',
         (peer?.connected ? '<span class="i-g">' + t('infoP2P') + '</span>' + (peer._lastRtt ? ' · ' + peer._lastRtt + 'ms' : '') + (peer._bytesSent ? ' · ↑' + fmtSize(peer._bytesSent) + ' ↓' + fmtSize(peer._bytesRecv || 0) : '') : t('infoRelay')),
-      ].filter(Boolean).join('<br>');
+      ].filter(Boolean).join('<br>'));
       box.appendChild(d); box.scrollTop = box.scrollHeight;
     }
 
@@ -13060,9 +13064,9 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       if (sorted.length === 0) {
         d.textContent = t('uiNoReactions');
       } else {
-        d.innerHTML = '<b class="i-g">Reaction Stats</b><br>' +
+        safeSetHTML(d, '<b class="i-g">Reaction Stats</b><br>' +
           sorted.map(([emoji, count]) => `${emoji} × ${count}`).join('<br>') +
-          '<br><br><span class="i-t3-10">Total: ' + sorted.reduce((s, [, c]) => s + c, 0) + ' reactions</span>';
+          '<br><br><span class="i-t3-10">Total: ' + sorted.reduce((s, [, c]) => s + c, 0) + ' reactions</span>');
       }
       box.appendChild(d); box.scrollTop = box.scrollHeight;
     }
@@ -13123,11 +13127,11 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const d = document.createElement('div');
       d.className = 'cmd-panel-mono';
       const members = activeContact.members || [];
-      d.innerHTML = '<b class="i-g">' + esc(activeContact.name) + ' — ' + members.length + ' members</b><br>' +
+      safeSetHTML(d, '<b class="i-g">' + esc(activeContact.name) + ' — ' + members.length + ' members</b><br>' +
         members.map(m => {
           const isOn = peers[m.pubB64]?.connected || _presenceCache[m.id];
           return (isOn ? '🟢' : '⚫') + ' ' + esc(m.name || m.id) + (m.id === myId ? ' (you)' : '');
-        }).join('<br>');
+        }).join('<br>'));
       box.appendChild(d); box.scrollTop = box.scrollHeight;
     }
 
@@ -13166,7 +13170,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const box = _DOM.get('msg-messages');
       const d = document.createElement('div');
       d.className = 'cmd-panel-mono';
-      d.innerHTML = [
+      safeSetHTML(d, [
         '<b class="i-g">' + t('statsTitle') + '</b>',
         '',
         '<b>' + t('statsMessages') + '</b>',
@@ -13202,7 +13206,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         'Outbox (persistent): ' + _outbox.size + ' peer queues',
         'Sealed poll: ' + (_serverOk ? '✓ Relay active' : '⚠ P2P-only mode'),
         'Adaptive: compress>' + _adaptiveConfig.compressMin + 'B, poll=' + (_adaptiveConfig.pollInterval/1000) + 's, img=' + Math.round(_adaptiveConfig.imageQuality*100) + '%',
-      ].join('<br>');
+      ].join('<br>'));
       box.appendChild(d); box.scrollTop = box.scrollHeight;
     }
 
@@ -13230,7 +13234,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       d.className = 'cmd-panel-mono';
       const _sendSoundEnabled = localStorage.getItem('brz-send-sound') !== '0';
       const _notifSoundEnabled = localStorage.getItem('brz-notif-sound') !== '0';
-      d.innerHTML = `<b class="i-g">${t('settingsPrivacy')}</b><br>
+      safeSetHTML(d, `<b class="i-g">${t('settingsPrivacy')}</b><br>
         <label class="i-cur"><input type="checkbox" data-setting="hide-rr" ${_privacyHideReadReceipts ? 'checked' : ''}> ${t('hideReadReceipts')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="hide-typing" ${_privacyHideTyping ? 'checked' : ''}> ${t('hideTyping')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="relay-only" ${_settings.relayOnly ? 'checked' : ''}> ${t('relayOnly')}</label><br>
@@ -13240,7 +13244,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         <br><b class="i-g">${t('settingsNotif')}</b><br>
         <label class="i-cur"><input type="checkbox" data-setting="notif-perm" ${Notification?.permission === 'granted' ? 'checked' : ''}> ${t('enableNotif')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="auto-lock" ${localStorage.getItem('brz-autolock') === '1' ? 'checked' : ''}> ${t('autoLockLabel')}</label><br>
-        <br><span class="i-t3-10">${t('settingsImmediate')}</span>`;
+        <br><span class="i-t3-10">${t('settingsImmediate')}</span>`);
       // v3.6: Event delegation for settings toggles (no inline onchange)
       d.addEventListener('change', (ev) => {
         const cb = ev.target;
@@ -13320,10 +13324,10 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const box = _DOM.get('msg-messages');
       const d = document.createElement('div');
       d.className = 'chat-empty';
-      d.innerHTML = `<b class="i-g">${esc(name)}</b><br>
+      safeSetHTML(d, `<b class="i-g">${esc(name)}</b><br>
         <span class="text-xs color-t3">${ttl === 0 ? (t('permanentRoom')) : (t('roomExpires', ttl / 3600))}</span><br>
         <code class="text-xs i-green-break">${esc(roomUrl)}</code><br>
-        <span class="text-xs color-t3">${t('copiedClipboard')}</span>`;
+        <span class="text-xs color-t3">${t('copiedClipboard')}</span>`);
       box.appendChild(d);
       box.scrollTop = box.scrollHeight;
     }
