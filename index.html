@@ -1148,6 +1148,7 @@ del.md-del { opacity: .6 }
           <span id="msg-my-name" class="name clickable" data-i18n-title="ttEditProfile"></span>
           <span id="peer-count" class="sidebar-meta"></span>
           <button class="btn btn-o btn-sm" id="b-msg-theme" data-i18n-aria="ariaTheme">☀</button>
+          <button class="btn btn-o btn-sm" id="b-msg-share" data-i18n-aria="ariaShare" data-i18n-title="ariaShare">ID</button>
           <button class="btn btn-g btn-sm" id="b-msg-add" data-i18n-aria="ariaAddContact">+</button>
         </div>
         <div id="msg-short-id" class="sidebar-id" data-i18n-title="ttClickToCopy"></div>
@@ -1166,6 +1167,10 @@ del.md-del { opacity: .6 }
           <div class="skeleton skeleton-contact"></div>
           <div class="skeleton skeleton-contact"></div>
         </div>
+        <div id="msg-billing" class="billing-panel hidden">
+          <span id="msg-plan-badge" class="plan-badge"></span>
+          <button id="b-msg-billing" class="btn btn-o btn-sm"></button>
+        </div>
       </div>
 
       <!-- Chat -->
@@ -1176,6 +1181,8 @@ del.md-del { opacity: .6 }
           <span id="msg-conv-status" class="conv-status" role="status" aria-live="polite"></span>
           <button class="btn btn-o btn-sm hidden" id="b-msg-call" data-i18n-aria="ariaCall">📞</button>
           <button class="btn btn-o btn-sm hidden" id="b-msg-video" data-i18n-aria="ariaVideoCall">📹</button>
+          <button class="btn btn-o btn-sm hidden" id="b-msg-timer" data-i18n-aria="ariaTimer" data-i18n-title="ariaTimer">⏱</button>
+          <button class="btn btn-o btn-sm hidden" id="b-msg-clear" data-i18n-aria="ariaClearChat" data-i18n-title="ariaClearChat">🗑</button>
         </div>
         <div class="offline-bar" id="offline-bar" role="alert"></div>
         <div class="outbox-badge" id="outbox-badge" role="status"><span class="dot"></span><span id="outbox-text"></span></div>
@@ -1522,6 +1529,9 @@ const _I = {
     ariaBack: 'Back',
     ariaCall: 'Start voice call',
     ariaVideoCall: 'Start video call',
+    ariaTimer: 'Toggle disappearing messages',
+    ariaClearChat: 'Clear conversation',
+    ariaShare: 'Share invite link',
     ariaPrev: 'Previous result',
     ariaNext: 'Next result',
     ariaMessages: 'Messages',
@@ -2025,6 +2035,9 @@ const _I = {
     ariaBack: '戻る',
     ariaCall: '音声通話を開始',
     ariaVideoCall: 'ビデオ通話を開始',
+    ariaTimer: '自動削除タイマーを切替',
+    ariaClearChat: '会話を削除',
+    ariaShare: '招待リンクを共有',
     ariaPrev: '前の結果',
     ariaNext: '次の結果',
     ariaMessages: 'メッセージ一覧',
@@ -6054,6 +6067,7 @@ async function initMessenger(dbName) {
     updateConvStatus(contact); // v3.3: Show connection quality + relative time
     contact.blocked ? _DOM.get('msg-input-bar').classList.add('hidden') : _DOM.get('msg-input-bar').classList.remove('hidden');
     _DOM.get('b-msg-clear')?.classList.remove('hidden');
+    _DOM.get('b-msg-timer')?.classList.remove('hidden');
     // Call buttons (1:1 only, not groups)
     contact.isGroup ? _DOM.get('b-msg-call').classList.add('hidden') : _DOM.get('b-msg-call').classList.remove('hidden');
     contact.isGroup ? _DOM.get('b-msg-video').classList.add('hidden') : _DOM.get('b-msg-video').classList.remove('hidden');
