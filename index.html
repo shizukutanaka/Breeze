@@ -1879,6 +1879,41 @@ const _I = {
     uptimeImageLossless: '↕ Resize only',
     uptimeImageAuto: '⚡ Auto WebP',
     uptimeCrypto: (worker, tt) => `Crypto: ${worker ? 'Worker ✓' : 'Main thread'} | TT: ${tt ? '✓' : '✗'}`,
+    netTitle: 'Network Health Dashboard',
+    netConnections: (p2p, reconn, off) => `Connections: ${p2p} P2P / ${reconn} reconnecting / ${off} offline`,
+    netActivePeer: (name) => `Active peer: ${name}`,
+    netActivePeerOff: (name) => `Active peer: ${name} — not connected`,
+    netStateMachine: (state, ago) => `  State machine: ${state} (${ago})`,
+    netICEState: (s) => `  ICE state: ${s}`,
+    netConnState: (s) => `  Connection: ${s}`,
+    netDataChannel: (s) => `  DataChannel: ${s}`,
+    netRTT: (ms) => `  RTT: ${ms}ms`,
+    netBytesSent: (kb) => `  Bytes sent: ${kb} KB`,
+    netBytesReceived: (kb) => `  Bytes received: ${kb} KB`,
+    netBandwidth: (kbps) => `  Bandwidth: ${kbps} kbps`,
+    netLocal: (type, proto, addr, port) => `  Local: ${type} (${proto}) ${addr}:${port}`,
+    netRemote: (type, proto) => `  Remote: ${type} (${proto})`,
+    netStatsUnavail: '  Stats: unavailable',
+    netSessionMsgs: (n, max) => `  Session msgs: ${n} / ${max}`,
+    netSessionAge: (n, max) => `  Session age: ${n}m / ${max}m`,
+    netConfig: 'Config:',
+    netICEPool: (n) => `  ICE pool: ${n}`,
+    netPoWDiff: (n) => `  PoW difficulty: ${n} bits`,
+    netRekey: (msgs, min) => `  Rekey threshold: ${msgs} msgs / ${min}m`,
+    netReconnect: (base, max) => `  Reconnect: ${base}ms base, ${max} max attempts`,
+    netCompression: (n) => `  Compression: > ${n} bytes`,
+    netProtocol: (v) => `  Protocol: v${v}`,
+    netTURN: '  TURN: configured',
+    netBrowser: 'Browser:',
+    netOnline: (ok) => `  Online: ${ok ? 'yes' : 'NO'}`,
+    netConnectionInfo: (type, eff) => `  Connection: ${type} (effective: ${eff})`,
+    netDownlink: (mbps) => `  Downlink: ${mbps} Mbps`,
+    netRTTEstimate: (ms) => `  RTT estimate: ${ms} ms`,
+    netSaveData: '  Save-Data: ON',
+    netCompressionStream: (ok) => `  CompressionStream: ${ok ? 'yes' : 'no'}`,
+    netWebRTC: (ok) => `  WebRTC: ${ok ? 'yes' : 'no'}`,
+    netReplayCache: (n, max) => `  Replay cache: ${n}/${max}`,
+    netStorage: (used, total) => `  Storage: ${used} MB / ${total} MB`,
     toastNotifSound: (s) => `Notification sound: ${s}`,
     toastNoteSavedFor: (n) => `Note saved for ${n}`,
     toastLabelsInfo: (l) => `Labels: ${l}`,
@@ -2515,6 +2550,41 @@ const _I = {
     uptimeImageLossless: '↕ リサイズのみ',
     uptimeImageAuto: '⚡ 自動WebP',
     uptimeCrypto: (worker, tt) => `暗号: ${worker ? 'ワーカー ✓' : 'メインスレッド'} | TT: ${tt ? '✓' : '✗'}`,
+    netTitle: 'ネットワーク健全性ダッシュボード',
+    netConnections: (p2p, reconn, off) => `接続: ${p2p} P2P / ${reconn} 再接続中 / ${off} オフライン`,
+    netActivePeer: (name) => `アクティブピア: ${name}`,
+    netActivePeerOff: (name) => `アクティブピア: ${name} — 未接続`,
+    netStateMachine: (state, ago) => `  状態: ${state} (${ago})`,
+    netICEState: (s) => `  ICE状態: ${s}`,
+    netConnState: (s) => `  接続: ${s}`,
+    netDataChannel: (s) => `  データチャンネル: ${s}`,
+    netRTT: (ms) => `  RTT: ${ms}ms`,
+    netBytesSent: (kb) => `  送信: ${kb} KB`,
+    netBytesReceived: (kb) => `  受信: ${kb} KB`,
+    netBandwidth: (kbps) => `  帯域幅: ${kbps} kbps`,
+    netLocal: (type, proto, addr, port) => `  ローカル: ${type} (${proto}) ${addr}:${port}`,
+    netRemote: (type, proto) => `  リモート: ${type} (${proto})`,
+    netStatsUnavail: '  統計: 利用不可',
+    netSessionMsgs: (n, max) => `  セッションメッセージ: ${n} / ${max}`,
+    netSessionAge: (n, max) => `  セッション経過時間: ${n}分 / ${max}分`,
+    netConfig: '設定:',
+    netICEPool: (n) => `  ICEプール: ${n}`,
+    netPoWDiff: (n) => `  PoW難易度: ${n} ビット`,
+    netRekey: (msgs, min) => `  再鍵更新: ${msgs}件 / ${min}分`,
+    netReconnect: (base, max) => `  再接続: ${base}ms ベース, ${max}回最大`,
+    netCompression: (n) => `  圧縮: > ${n} バイト`,
+    netProtocol: (v) => `  プロトコル: v${v}`,
+    netTURN: '  TURN: 設定済み',
+    netBrowser: 'ブラウザ:',
+    netOnline: (ok) => `  オンライン: ${ok ? 'はい' : 'NO'}`,
+    netConnectionInfo: (type, eff) => `  接続: ${type} (実効: ${eff})`,
+    netDownlink: (mbps) => `  ダウンリンク: ${mbps} Mbps`,
+    netRTTEstimate: (ms) => `  RTT推定: ${ms} ms`,
+    netSaveData: '  データ節約: ON',
+    netCompressionStream: (ok) => `  CompressionStream: ${ok ? 'はい' : 'いいえ'}`,
+    netWebRTC: (ok) => `  WebRTC: ${ok ? 'はい' : 'いいえ'}`,
+    netReplayCache: (n, max) => `  リプレイキャッシュ: ${n}/${max}`,
+    netStorage: (used, total) => `  ストレージ: ${used} MB / ${total} MB`,
     toastNotifSound: (s) => `通知音: ${s}`,
     toastNoteSavedFor: (n) => `${n}のノートを保存しました`,
     toastLabelsInfo: (l) => `ラベル: ${l}`,
@@ -12576,7 +12646,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     if (val === '/network') {
       e.preventDefault(); clearInput();
       const lines = [];
-      lines.push('=== Network Health Dashboard ===');
+      lines.push('=== ' + t('netTitle') + ' ===');
       lines.push('');
 
       // Connection summary
@@ -12585,7 +12655,6 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       for (const c of contactsList) {
         const peer = peers[c.pubB64];
         if (peer?.connected) {
-          const iceType = peer.pc?.getStats ? 'checking...' : 'unknown';
           p2pCount++;
         } else if (peer?.connState === 'RECONNECTING') {
           reconnCount++;
@@ -12593,75 +12662,75 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
           offlineCount++;
         }
       }
-      lines.push(`Connections: ${p2pCount} P2P / ${reconnCount} reconnecting / ${offlineCount} offline`);
+      lines.push(t('netConnections', p2pCount, reconnCount, offlineCount));
       lines.push('');
 
       // Active peer stats
       if (activeContact) {
         const peer = peers[activeContact.pubB64];
         if (peer?.pc) {
-          lines.push(`Active peer: ${activeContact.name}`);
-          lines.push(`  State machine: ${peer.connState || 'N/A'} (${peer.stateTs ? Math.round((Date.now() - peer.stateTs)/1000) + 's ago' : ''})`);
-          lines.push(`  ICE state: ${peer.pc.iceConnectionState}`);
-          lines.push(`  Connection: ${peer.pc.connectionState}`);
-          lines.push(`  DataChannel: ${peer.dc?.readyState || 'none'}`);
+          lines.push(t('netActivePeer', esc(activeContact.name)));
+          lines.push(t('netStateMachine', peer.connState || 'N/A', peer.stateTs ? Math.round((Date.now() - peer.stateTs)/1000) + 's' : ''));
+          lines.push(t('netICEState', peer.pc.iceConnectionState));
+          lines.push(t('netConnState', peer.pc.connectionState));
+          lines.push(t('netDataChannel', peer.dc?.readyState || 'none'));
           try {
             const stats = await peer.pc.getStats();
             stats.forEach(s => {
               if (s.type === 'candidate-pair' && s.state === 'succeeded') {
-                lines.push(`  RTT: ${(s.currentRoundTripTime * 1000).toFixed(0)}ms`);
-                lines.push(`  Bytes sent: ${(s.bytesSent / 1024).toFixed(1)} KB`);
-                lines.push(`  Bytes received: ${(s.bytesReceived / 1024).toFixed(1)} KB`);
-                if (s.availableOutgoingBitrate) lines.push(`  Bandwidth: ${(s.availableOutgoingBitrate / 1024).toFixed(0)} kbps`);
+                lines.push(t('netRTT', (s.currentRoundTripTime * 1000).toFixed(0)));
+                lines.push(t('netBytesSent', (s.bytesSent / 1024).toFixed(1)));
+                lines.push(t('netBytesReceived', (s.bytesReceived / 1024).toFixed(1)));
+                if (s.availableOutgoingBitrate) lines.push(t('netBandwidth', (s.availableOutgoingBitrate / 1024).toFixed(0)));
               }
               if (s.type === 'local-candidate') {
-                lines.push(`  Local: ${s.candidateType} (${s.protocol}) ${s.address || ''}:${s.port || ''}`);
+                lines.push(t('netLocal', s.candidateType, s.protocol, s.address || '', s.port || ''));
               }
               if (s.type === 'remote-candidate') {
-                lines.push(`  Remote: ${s.candidateType} (${s.protocol})`);
+                lines.push(t('netRemote', s.candidateType, s.protocol));
               }
             });
-          } catch(e) { lines.push('  Stats: unavailable'); }
+          } catch(e) { lines.push(t('netStatsUnavail')); }
           // Rekey counter
           const rc = _sessionMsgCounters[activeContact.pubB64];
           if (rc) {
-            lines.push(`  Session msgs: ${rc.count} / ${CONFIG.REKEY_MSG_THRESHOLD}`);
-            lines.push(`  Session age: ${Math.round((Date.now() - rc.startTime) / MS.MIN)}m / ${Math.round(CONFIG.REKEY_TIME_MS / MS.MIN)}m`);
+            lines.push(t('netSessionMsgs', rc.count, CONFIG.REKEY_MSG_THRESHOLD));
+            lines.push(t('netSessionAge', Math.round((Date.now() - rc.startTime) / MS.MIN), Math.round(CONFIG.REKEY_TIME_MS / MS.MIN)));
           }
         } else {
-          lines.push(`Active peer: ${activeContact.name} — not connected`);
+          lines.push(t('netActivePeerOff', esc(activeContact.name)));
         }
       }
       lines.push('');
 
       // Config
-      lines.push('Config:');
-      lines.push(`  ICE pool: ${CONFIG.ICE_CANDIDATE_POOL_SIZE}`);
-      lines.push(`  PoW difficulty: ${CONFIG.POW_DIFFICULTY} bits`);
-      lines.push(`  Rekey threshold: ${CONFIG.REKEY_MSG_THRESHOLD} msgs / ${CONFIG.REKEY_TIME_MS / MS.MIN}m`);
-      lines.push(`  Reconnect: ${CONFIG.RECONNECT_BASE_MS}ms base, ${CONFIG.RECONNECT_MAX_ATTEMPTS} max attempts`);
-      lines.push(`  Compression: > ${CONFIG.COMPRESS_MIN_BYTES} bytes`);
-      lines.push(`  Protocol: v${CONFIG.PROTOCOL_VERSION}`);
+      lines.push(t('netConfig'));
+      lines.push(t('netICEPool', CONFIG.ICE_CANDIDATE_POOL_SIZE));
+      lines.push(t('netPoWDiff', CONFIG.POW_DIFFICULTY));
+      lines.push(t('netRekey', CONFIG.REKEY_MSG_THRESHOLD, CONFIG.REKEY_TIME_MS / MS.MIN));
+      lines.push(t('netReconnect', CONFIG.RECONNECT_BASE_MS, CONFIG.RECONNECT_MAX_ATTEMPTS));
+      lines.push(t('netCompression', CONFIG.COMPRESS_MIN_BYTES));
+      lines.push(t('netProtocol', CONFIG.PROTOCOL_VERSION));
       
-      if (_turnCredential) lines.push('  TURN: configured');
+      if (_turnCredential) lines.push(t('netTURN'));
 
       // Browser
       lines.push('');
-      lines.push('Browser:');
-      lines.push(`  Online: ${navigator.onLine ? 'yes' : 'NO'}`);
+      lines.push(t('netBrowser'));
+      lines.push(t('netOnline', navigator.onLine));
       // NetworkInformation API (Spec v6 §12)
       const conn = navigator.connection || navigator.mozConnection;
       if (conn) {
-        lines.push(`  Connection: ${conn.type || '?'} (effective: ${conn.effectiveType || '?'})`);
-        if (conn.downlink) lines.push(`  Downlink: ${conn.downlink} Mbps`);
-        if (conn.rtt) lines.push(`  RTT estimate: ${conn.rtt} ms`);
-        if (conn.saveData) lines.push(`  Save-Data: ON`);
+        lines.push(t('netConnectionInfo', conn.type || '?', conn.effectiveType || '?'));
+        if (conn.downlink) lines.push(t('netDownlink', conn.downlink));
+        if (conn.rtt) lines.push(t('netRTTEstimate', conn.rtt));
+        if (conn.saveData) lines.push(t('netSaveData'));
       }
-      lines.push(`  CompressionStream: ${typeof CompressionStream !== 'undefined' ? 'yes' : 'no'}`);
-      lines.push(`  WebRTC: ${typeof RTCPeerConnection !== 'undefined' ? 'yes' : 'no'}`);
-      lines.push(`  Replay cache: ${_replayCache.size()}/${CONFIG.REPLAY_CACHE_SIZE}`);
+      lines.push(t('netCompressionStream', typeof CompressionStream !== 'undefined'));
+      lines.push(t('netWebRTC', typeof RTCPeerConnection !== 'undefined'));
+      lines.push(t('netReplayCache', _replayCache.size(), CONFIG.REPLAY_CACHE_SIZE));
       if (navigator.storage?.estimate) {
-        try { const est = await navigator.storage.estimate(); lines.push(`  Storage: ${(est.usage / 1024 / 1024).toFixed(1)} MB / ${(est.quota / 1024 / 1024).toFixed(0)} MB`); } catch(e) {}
+        try { const est = await navigator.storage.estimate(); lines.push(t('netStorage', (est.usage / 1024 / 1024).toFixed(1), (est.quota / 1024 / 1024).toFixed(0))); } catch(e) {}
       }
 
       cmdOutput('cmd-panel', '<pre>' + lines.map(l => esc(l)).join('\n') + '</pre>');
