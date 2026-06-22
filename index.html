@@ -1291,6 +1291,7 @@ const CONFIG = {
   DC_BUFFER_LOW: 65536,             // 64 KiB low-water mark for resume
   HEALTH_CHECK_MS: 15000,           // Connection health monitor interval
   REPLAY_CACHE_SIZE: 2000,          // In-memory LRU for message dedup (Spec v7 §9)
+  OGP_CACHE_MAX: 100,               // Max Open Graph preview entries
   MSG_DOM_LIMIT: 200,               // Max DOM messages before pruning (Spec v6 §10)
   MSG_PAD_BOUNDARY: 256,
   PREKEY_OTP_COUNT: 20,
@@ -1340,6 +1341,12 @@ Object.freeze(CONFIG.POW_REQUIRED_ACTIONS);
 Object.freeze(CONFIG.EMOJI_NAMES);
 // Time constants (avoid magic numbers in relative time calculations)
 const MS = Object.freeze({ SEC: 1000, MIN: 60000, HOUR: 3600000, DAY: 86400000, WEEK: 604800000 });
+// Safe base64 decode with validation
+function safeAtob(b64) {
+  if (typeof b64 !== 'string') throw new Error('atob: input must be string');
+  if (!/^[A-Za-z0-9+\/]*={0,2}$/.test(b64)) throw new Error('atob: invalid base64');
+  try { return atob(b64); } catch(e) { throw new Error(`atob failed: ${e.message}`); }
+}
 // ═══ Capability Detection (business-grade: fail-fast with clear message) ═══
 const _capabilities = {
   crypto: !!(window.crypto?.subtle),
@@ -5512,7 +5519,8 @@ async function initMessenger(dbName) {
       const peerId = peerPubB64.slice(0, 12);
       let sess = await getSession(peerId);
       if (!sess) { sess = await initSession(peerPubB64); }
-      const p = JSON.parse(payload);
+      let p;
+      try { p = JSON.parse(payload); } catch(parseErr) { _dbg(parseErr, 'malformed-encrypted-msg'); throw new Error('Invalid payload format'); }
       // v3/v4 ratchet message
       if ((p.v === 3 || p.v === 4) && p.rk) {
         const peerRK = new Uint8Array(p.rk);
@@ -6081,6 +6089,8 @@ async function initMessenger(dbName) {
         if (p._heartbeat) clearInterval(p._heartbeat);
         try { p.pc?.close(); } catch(e) { _dbg(e); }
       });
+      // Clear group typing state to prevent memory leak on account switch
+      for (const groupId in _groupTypingState) { delete _groupTypingState[groupId]; }
       // Save unread count for cross-account badge
       try {
         const activeId = getActiveAccountId();
@@ -6839,7 +6849,6 @@ async function initMessenger(dbName) {
   // v3.2: OGP cache (avoid re-fetching same URL)
   const _ogpCache = {}; // URL → {title, description, image}
   let _ogpCacheSize = 0;
-  const OGP_CACHE_MAX = 100;
 
   async function fetchOGP(url, elementId) {
     try {
@@ -6854,7 +6863,7 @@ async function initMessenger(dbName) {
       if (!data.title && !data.description && !data.image) return;
       _ogpCache[url] = data;
       _ogpCacheSize++;
-      if (_ogpCacheSize > OGP_CACHE_MAX) { const k = Object.keys(_ogpCache)[0]; delete _ogpCache[k]; _ogpCacheSize--; }
+      if (_ogpCacheSize > CONFIG.OGP_CACHE_MAX) { const k = Object.keys(_ogpCache)[0]; delete _ogpCache[k]; _ogpCacheSize--; }
       renderOGPCard(url, data, elementId);
     } catch(e) { if (e.name !== 'AbortError') _dbg(e, 'ogp'); }
   }
