@@ -1914,6 +1914,69 @@ const _I = {
     netWebRTC: (ok) => `  WebRTC: ${ok ? 'yes' : 'no'}`,
     netReplayCache: (n, max) => `  Replay cache: ${n}/${max}`,
     netStorage: (used, total) => `  Storage: ${used} MB / ${total} MB`,
+    peerSummary: (conn, total, queues) => `Connected: ${conn}/${total} | Outbox: ${queues} queues`,
+    peerState: (state, age, ice) => `  State: ${state} (${age}) | ICE: ${ice}`,
+    peerDC: (dc, sc) => `  Chat DC: ${dc} | State DC: ${sc}`,
+    peerRetries: (n) => ` | Retries: ${n}`,
+    peerRTT: (q, rtt, sent, recv) => `  RTT: ${q} ${rtt}ms | ↑${sent} ↓${recv}`,
+    peerHeartbeat: (active) => `  Heartbeat: ${active ? '✓ active' : '✗ none'}`,
+    peerLocal: (type, proto) => `  Local: ${type} (${proto})`,
+    peerRemote: (type) => `  Remote: ${type}`,
+    perfTitle: 'Performance Dashboard',
+    perfTiming: 'Timing:',
+    perfMemory: 'Memory:',
+    perfMemUsed: (mb) => `  Used: ${mb} MB`,
+    perfMemTotal: (mb) => `  Total: ${mb} MB`,
+    perfMemLimit: (mb) => `  Limit: ${mb} MB`,
+    perfDOM: 'DOM:',
+    perfDOMElements: (n) => `  Elements: ${n}`,
+    perfDOMMessages: (n, max) => `  Messages visible: ${n} / ${max} limit`,
+    perfDOMCache: (n) => `  DOM cache entries: ${n}`,
+    perfCaches: 'Caches:',
+    perfReplayCache: (n, max) => `  Replay cache: ${n} / ${max}`,
+    perfCrossUnread: (json) => `  Cross-account unread: ${json}`,
+    perfErrorCount: (n) => `  Error count: ${n}`,
+    perfNetwork: 'Network:',
+    perfNetType: (type, eff) => `  Type: ${type} (${eff})`,
+    perfNetDownlink: (mbps) => `  Downlink: ${mbps} Mbps`,
+    perfNetRTT: (ms) => `  RTT: ${ms}ms`,
+    perfStorageSection: 'Storage:',
+    perfStorageUsed: (mb) => `  Used: ${mb} MB`,
+    perfStorageQuota: (mb) => `  Quota: ${mb} MB`,
+    perfStorageUsage: (pct) => `  Usage: ${pct}%`,
+    cmdStoragePersistedLbl: (status) => `Persisted: ${status}`,
+    cmdStorageContacts: (n) => `  contacts: ${n}`,
+    cmdStorageGroups: (n) => `  groups: ${n}`,
+    cmdStorageMessages: (n) => `  messages: ${n}`,
+    cmdStorageScheduled: (n) => `  scheduled: ${n}`,
+    cmdStorageAvgMsg: (kb) => `  avg/msg: ${kb}`,
+    cmdStorageSW: (active) => `  Service Worker: ${active ? '✓ Active' : '✗ None'}`,
+    aboutTagline: 'P2P Encrypted Messenger',
+    aboutPlan: (plan, used, total) => `Plan: ${plan} (${used}/${total} accounts)`,
+    aboutArch: 'Architecture: Single HTML + Cloudflare Worker',
+    aboutProtocol: 'Protocol: X3DH + Double Ratchet + Sender Key',
+    aboutEncryption: 'Encryption: X25519 + Ed25519 + AES-256-GCM + HKDF',
+    aboutPadding: (n) => `Padding: ${n}-byte boundary`,
+    aboutLanguages: 'Languages: EN/JA full',
+    aboutPlatforms: 'Platforms: Web, PWA, Electron, Tauri, Android, iOS',
+    aboutLicense: 'License: MIT',
+    aboutHighlights: 'v3.6 Highlights:',
+    aboutHl1: '  Dead Drop (one-time secret sharing)',
+    aboutHl2: '  Inline Crypto Web Worker',
+    aboutHl3: '  Native <dialog> modals + Trusted Types',
+    aboutHl4: '  Markdown tables + OGP favicon',
+    aboutHl5: '  Group typing (multi-person)',
+    aboutHl6: '  P2P speed test + getAllRecords',
+    aboutSecurity: 'Security:',
+    aboutSec1: '  Forward secrecy (Double Ratchet)',
+    aboutSec2: '  Double HMAC timing-safe comparison',
+    aboutSec3: '  Magic bytes file validation',
+    aboutSec4: '  CSP + COOP + Permissions-Policy',
+    aboutSec5: '  Sealed sender (server blind)',
+    aboutSec6: (k) => `  PBKDF2 lock (${k}K iterations)`,
+    aboutPrivacy: 'Privacy: No analytics. No tracking. No ads.',
+    aboutAI: 'AI: Anthropic → OpenAI → Groq (optional)',
+    aboutTranslation: 'Translation: DeepL → Google → Libre → MyMemory',
     toastNotifSound: (s) => `Notification sound: ${s}`,
     toastNoteSavedFor: (n) => `Note saved for ${n}`,
     toastLabelsInfo: (l) => `Labels: ${l}`,
@@ -2585,6 +2648,69 @@ const _I = {
     netWebRTC: (ok) => `  WebRTC: ${ok ? 'はい' : 'いいえ'}`,
     netReplayCache: (n, max) => `  リプレイキャッシュ: ${n}/${max}`,
     netStorage: (used, total) => `  ストレージ: ${used} MB / ${total} MB`,
+    peerSummary: (conn, total, queues) => `接続中: ${conn}/${total} | 送信箱: ${queues} キュー`,
+    peerState: (state, age, ice) => `  状態: ${state} (${age}) | ICE: ${ice}`,
+    peerDC: (dc, sc) => `  チャットDC: ${dc} | 状態DC: ${sc}`,
+    peerRetries: (n) => ` | 再試行: ${n}`,
+    peerRTT: (q, rtt, sent, recv) => `  RTT: ${q} ${rtt}ms | ↑${sent} ↓${recv}`,
+    peerHeartbeat: (active) => `  ハートビート: ${active ? '✓ 有効' : '✗ なし'}`,
+    peerLocal: (type, proto) => `  ローカル: ${type} (${proto})`,
+    peerRemote: (type) => `  リモート: ${type}`,
+    perfTitle: 'パフォーマンスダッシュボード',
+    perfTiming: 'タイミング:',
+    perfMemory: 'メモリ:',
+    perfMemUsed: (mb) => `  使用中: ${mb} MB`,
+    perfMemTotal: (mb) => `  合計: ${mb} MB`,
+    perfMemLimit: (mb) => `  上限: ${mb} MB`,
+    perfDOM: 'DOM:',
+    perfDOMElements: (n) => `  要素数: ${n}`,
+    perfDOMMessages: (n, max) => `  表示中メッセージ: ${n} / ${max} 上限`,
+    perfDOMCache: (n) => `  DOMキャッシュ数: ${n}`,
+    perfCaches: 'キャッシュ:',
+    perfReplayCache: (n, max) => `  リプレイキャッシュ: ${n} / ${max}`,
+    perfCrossUnread: (json) => `  アカウント間未読: ${json}`,
+    perfErrorCount: (n) => `  エラー数: ${n}`,
+    perfNetwork: 'ネットワーク:',
+    perfNetType: (type, eff) => `  種類: ${type} (${eff})`,
+    perfNetDownlink: (mbps) => `  ダウンリンク: ${mbps} Mbps`,
+    perfNetRTT: (ms) => `  RTT: ${ms}ms`,
+    perfStorageSection: 'ストレージ:',
+    perfStorageUsed: (mb) => `  使用中: ${mb} MB`,
+    perfStorageQuota: (mb) => `  クォータ: ${mb} MB`,
+    perfStorageUsage: (pct) => `  使用率: ${pct}%`,
+    cmdStoragePersistedLbl: (status) => `永続化: ${status}`,
+    cmdStorageContacts: (n) => `  連絡先: ${n}`,
+    cmdStorageGroups: (n) => `  グループ: ${n}`,
+    cmdStorageMessages: (n) => `  メッセージ: ${n}`,
+    cmdStorageScheduled: (n) => `  予約: ${n}`,
+    cmdStorageAvgMsg: (kb) => `  平均/メッセージ: ${kb}`,
+    cmdStorageSW: (active) => `  Service Worker: ${active ? '✓ 有効' : '✗ なし'}`,
+    aboutTagline: 'P2P暗号化メッセンジャー',
+    aboutPlan: (plan, used, total) => `プラン: ${plan} (${used}/${total} アカウント)`,
+    aboutArch: 'アーキテクチャ: 単一HTML + Cloudflare Worker',
+    aboutProtocol: 'プロトコル: X3DH + Double Ratchet + Sender Key',
+    aboutEncryption: '暗号化: X25519 + Ed25519 + AES-256-GCM + HKDF',
+    aboutPadding: (n) => `パディング: ${n}バイト境界`,
+    aboutLanguages: '言語: EN/JA 完全対応',
+    aboutPlatforms: 'プラットフォーム: Web, PWA, Electron, Tauri, Android, iOS',
+    aboutLicense: 'ライセンス: MIT',
+    aboutHighlights: 'v3.6 ハイライト:',
+    aboutHl1: '  Dead Drop（ワンタイム秘密共有）',
+    aboutHl2: '  インライン暗号Web Worker',
+    aboutHl3: '  ネイティブ<dialog>モーダル + Trusted Types',
+    aboutHl4: '  Markdownテーブル + OGPファビコン',
+    aboutHl5: '  グループ入力中表示（複数人）',
+    aboutHl6: '  P2P速度テスト + getAllRecords',
+    aboutSecurity: 'セキュリティ:',
+    aboutSec1: '  前方秘匿性（Double Ratchet）',
+    aboutSec2: '  二重HMACタイミングセーフ比較',
+    aboutSec3: '  マジックバイトファイル検証',
+    aboutSec4: '  CSP + COOP + Permissions-Policy',
+    aboutSec5: '  Sealed sender（サーバーは内容不可視）',
+    aboutSec6: (k) => `  PBKDF2ロック（${k}K 反復）`,
+    aboutPrivacy: 'プライバシー: 分析なし。トラッキングなし。広告なし。',
+    aboutAI: 'AI: Anthropic → OpenAI → Groq（任意）',
+    aboutTranslation: '翻訳: DeepL → Google → Libre → MyMemory',
     toastNotifSound: (s) => `通知音: ${s}`,
     toastNoteSavedFor: (n) => `${n}のノートを保存しました`,
     toastLabelsInfo: (l) => `ラベル: ${l}`,
@@ -12376,10 +12502,10 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         const persisted = await navigator.storage?.persisted();
         // Per-store estimates
         const storeStats = [
-          `  contacts: ${contacts.length}`,
-          `  groups: ${groups.length}`,
-          `  messages: ${msgCount.length}`,
-          `  scheduled: ${scheduled.length}`,
+          t('cmdStorageContacts', contacts.length),
+          t('cmdStorageGroups', groups.length),
+          t('cmdStorageMessages', msgCount.length),
+          t('cmdStorageScheduled', scheduled.length),
         ];
         // Connection stats
         const peerCount = Object.values(peers).filter(p => p.connected).length;
@@ -12388,15 +12514,15 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
           '<b class="i-g">' + t('cmdStorageTitle') + '</b>',
           '',
           `${t('cmdLblStorage')}: ${usedMB} MB / ${quotaMB} MB (${pct}%)`,
-          `Persisted: ${persisted ? t('cmdStoragePersisted') : t('cmdStorageEvict')}`,
+          t('cmdStoragePersistedLbl', persisted ? t('cmdStoragePersisted') : t('cmdStorageEvict')),
           '',
           '<b>' + t('cmdSectionDatabase') + '</b>',
           ...storeStats,
-          `  avg/msg: ${msgCount.length > 0 ? ((est?.usage || 0) / msgCount.length / 1024).toFixed(1) + ' KB' : 'N/A'}`,
+          t('cmdStorageAvgMsg', msgCount.length > 0 ? ((est?.usage || 0) / msgCount.length / 1024).toFixed(1) + ' KB' : 'N/A'),
           '',
           '<b>' + t('cmdSectionRuntime') + '</b>',
           `  ${t('cmdLblP2PConn')}: ${peerCount}/${totalPeers}`,
-          `  Service Worker: ${navigator.serviceWorker?.controller ? '✓ Active' : '✗ None'}`,
+          t('cmdStorageSW', navigator.serviceWorker?.controller),
           `  ${t('cmdLblProtocol')}: v${CONFIG.PROTOCOL_VERSION}`,
           `  ${t('cmdLblPlatform')}: ${typeof PLATFORM !== 'undefined' ? PLATFORM : 'web'}`,
           '',
@@ -12430,15 +12556,15 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
           const ice = peer.pc?.iceConnectionState || '?';
           const reconn = peer._reconnAttempts || 0;
           lines.push(`${peer.connected ? '🟢' : '⚫'} ${c.name}`);
-          lines.push(`  State: ${state} (${age}) | ICE: ${ice}`);
-          lines.push(`  Chat DC: ${dc} | State DC: ${sc}${reconn ? ' | Retries: ' + reconn : ''}`);
+          lines.push(t('peerState', state, age, ice));
+          lines.push(t('peerDC', dc, sc) + (reconn ? t('peerRetries', reconn) : ''));
           if (peer._lastRtt != null) {
             const rtt = peer._lastRtt;
             const q = rtt < 100 ? '🟢' : rtt < 300 ? '🟡' : '🔴';
-            lines.push(`  RTT: ${q} ${rtt}ms | ↑${fmtSize(peer._bytesSent || 0)} ↓${fmtSize(peer._bytesRecv || 0)}`);
+            lines.push(t('peerRTT', q, rtt, fmtSize(peer._bytesSent || 0), fmtSize(peer._bytesRecv || 0)));
           }
           // v3.6: Show heartbeat status
-          lines.push(`  Heartbeat: ${peer._heartbeat ? '✓ active' : '✗ none'}`);
+          lines.push(t('peerHeartbeat', peer._heartbeat));
           // v3.6: Show candidate type (host/srflx/relay)
           if (peer.pc?.getStats) {
             try {
@@ -12447,8 +12573,8 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
                 if (s.type === 'candidate-pair' && s.state === 'succeeded') {
                   const local = [...stats.values()].find(x => x.id === s.localCandidateId);
                   const remote = [...stats.values()].find(x => x.id === s.remoteCandidateId);
-                  if (local) lines.push(`  Local: ${local.candidateType || '?'} (${local.protocol || '?'})`);
-                  if (remote) lines.push(`  Remote: ${remote.candidateType || '?'}`);
+                  if (local) lines.push(t('peerLocal', local.candidateType || '?', local.protocol || '?'));
+                  if (remote) lines.push(t('peerRemote', remote.candidateType || '?'));
                 }
               });
             } catch {}
@@ -12459,7 +12585,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         }
         lines.push('');
       }
-      lines.splice(2, 0, `Connected: ${connected}/${total} | Outbox: ${_outbox.size} queues`);
+      lines.splice(2, 0, t('peerSummary', connected, total, _outbox.size));
       cmdOutput('cmd-panel', '<pre>' + lines.map(l => esc(l)).join('\n') + '</pre>');
       return;
     }
@@ -12472,36 +12598,36 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const planLabel = slots <= 1 ? t('planFree') : slots <= 2 ? t('planLite') : slots <= 4 ? t('planPlus') : t('planPro');
       const lines = [
         'Breeze Messenger v' + CONFIG.VERSION,
-        'P2P Encrypted Messenger',
+        t('aboutTagline'),
         '',
-        `Plan: ${planLabel} (${getAccounts().length}/${slots === 999 ? '∞' : slots} accounts)`,
-        'Architecture: Single HTML + Cloudflare Worker',
-        'Protocol: X3DH + Double Ratchet + Sender Key',
-        'Encryption: X25519 + Ed25519 + AES-256-GCM + HKDF',
-        'Padding: ' + CONFIG.MSG_PAD_BOUNDARY + '-byte boundary',
-        'Languages: 924 (EN/JA full + 922 core)',
-        'Platforms: Web, PWA, Electron, Tauri, Android, iOS',
-        'License: MIT',
+        t('aboutPlan', planLabel, getAccounts().length, slots === 999 ? '∞' : slots),
+        t('aboutArch'),
+        t('aboutProtocol'),
+        t('aboutEncryption'),
+        t('aboutPadding', CONFIG.MSG_PAD_BOUNDARY),
+        t('aboutLanguages'),
+        t('aboutPlatforms'),
+        t('aboutLicense'),
         '',
-        'v3.6 Highlights:',
-        '  Dead Drop (one-time secret sharing)',
-        '  Inline Crypto Web Worker',
-        '  Native <dialog> modals + Trusted Types',
-        '  Markdown tables + OGP favicon',
-        '  Group typing (multi-person)',
-        '  P2P speed test + getAllRecords',
+        t('aboutHighlights'),
+        t('aboutHl1'),
+        t('aboutHl2'),
+        t('aboutHl3'),
+        t('aboutHl4'),
+        t('aboutHl5'),
+        t('aboutHl6'),
         '',
-        'Security:',
-        '  Forward secrecy (Double Ratchet)',
-        '  Double HMAC timing-safe comparison',
-        '  Magic bytes file validation',
-        '  CSP + COOP + Permissions-Policy',
-        '  Sealed sender (server blind)',
-        '  PBKDF2 lock (' + (CONFIG.PBKDF2_ITERATIONS / 1000) + 'K iterations)',
+        t('aboutSecurity'),
+        t('aboutSec1'),
+        t('aboutSec2'),
+        t('aboutSec3'),
+        t('aboutSec4'),
+        t('aboutSec5'),
+        t('aboutSec6', CONFIG.PBKDF2_ITERATIONS / 1000),
         '',
-        'Privacy: No analytics. No tracking. No ads.',
-        'AI: Anthropic → OpenAI → Groq (optional)',
-        'Translation: DeepL → Google → Libre → MyMemory',
+        t('aboutPrivacy'),
+        t('aboutAI'),
+        t('aboutTranslation'),
         '',
         'https://github.com/shizukutanaka/Breeze',
       ];
@@ -12541,12 +12667,12 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     // v3.5: /perf — Performance diagnostics (Skill Guide Pattern 3: Quality Gates)
     if (val === '/perf') {
       e.preventDefault(); clearInput();
-      const lines = ['=== Performance Dashboard ===', ''];
-      
+      const lines = ['=== ' + t('perfTitle') + ' ===', ''];
+
       // Performance API entries
       const entries = performance.getEntriesByType('measure').filter(e => e.name.startsWith('brz:'));
       if (entries.length > 0) {
-        lines.push('Timing:');
+        lines.push(t('perfTiming'));
         entries.slice(-10).forEach(e => {
           lines.push(`  ${e.name.replace('brz:', '')}: ${Math.round(e.duration)}ms`);
         });
@@ -12556,34 +12682,34 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       // Memory (Chrome only)
       if (performance.memory) {
         const mem = performance.memory;
-        lines.push('Memory:');
-        lines.push(`  Used: ${(mem.usedJSHeapSize / 1024 / 1024).toFixed(1)} MB`);
-        lines.push(`  Total: ${(mem.totalJSHeapSize / 1024 / 1024).toFixed(1)} MB`);
-        lines.push(`  Limit: ${(mem.jsHeapSizeLimit / 1024 / 1024).toFixed(0)} MB`);
+        lines.push(t('perfMemory'));
+        lines.push(t('perfMemUsed', (mem.usedJSHeapSize / 1024 / 1024).toFixed(1)));
+        lines.push(t('perfMemTotal', (mem.totalJSHeapSize / 1024 / 1024).toFixed(1)));
+        lines.push(t('perfMemLimit', (mem.jsHeapSizeLimit / 1024 / 1024).toFixed(0)));
         lines.push('');
       }
 
       // DOM stats
-      lines.push('DOM:');
-      lines.push(`  Elements: ${document.querySelectorAll('*').length}`);
-      lines.push(`  Messages visible: ${document.querySelectorAll('.msg').length} / ${CONFIG.MSG_DOM_LIMIT} limit`);
-      lines.push(`  DOM cache entries: ${Object.keys(_DOM._cache).length}`);
+      lines.push(t('perfDOM'));
+      lines.push(t('perfDOMElements', document.querySelectorAll('*').length));
+      lines.push(t('perfDOMMessages', document.querySelectorAll('.msg').length, CONFIG.MSG_DOM_LIMIT));
+      lines.push(t('perfDOMCache', Object.keys(_DOM._cache).length));
       lines.push('');
 
       // Cache stats
-      lines.push('Caches:');
-      lines.push(`  Replay cache: ${_replayCache.size()} / ${CONFIG.REPLAY_CACHE_SIZE}`);
-      lines.push(`  Cross-account unread: ${JSON.stringify(_crossAccountUnread)}`);
-      lines.push(`  Error count: ${_errorCount}`);
+      lines.push(t('perfCaches'));
+      lines.push(t('perfReplayCache', _replayCache.size(), CONFIG.REPLAY_CACHE_SIZE));
+      lines.push(t('perfCrossUnread', JSON.stringify(_crossAccountUnread)));
+      lines.push(t('perfErrorCount', _errorCount));
       lines.push('');
 
       // Network
       const conn = navigator.connection || navigator.mozConnection;
       if (conn) {
-        lines.push('Network:');
-        lines.push(`  Type: ${conn.type || '?'} (${conn.effectiveType || '?'})`);
-        if (conn.downlink) lines.push(`  Downlink: ${conn.downlink} Mbps`);
-        if (conn.rtt) lines.push(`  RTT: ${conn.rtt}ms`);
+        lines.push(t('perfNetwork'));
+        lines.push(t('perfNetType', conn.type || '?', conn.effectiveType || '?'));
+        if (conn.downlink) lines.push(t('perfNetDownlink', conn.downlink));
+        if (conn.rtt) lines.push(t('perfNetRTT', conn.rtt));
         lines.push('');
       }
 
@@ -12591,10 +12717,10 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       if (navigator.storage?.estimate) {
         try {
           const est = await navigator.storage.estimate();
-          lines.push('Storage:');
-          lines.push(`  Used: ${(est.usage / 1024 / 1024).toFixed(1)} MB`);
-          lines.push(`  Quota: ${(est.quota / 1024 / 1024).toFixed(0)} MB`);
-          lines.push(`  Usage: ${((est.usage / est.quota) * 100).toFixed(1)}%`);
+          lines.push(t('perfStorageSection'));
+          lines.push(t('perfStorageUsed', (est.usage / 1024 / 1024).toFixed(1)));
+          lines.push(t('perfStorageQuota', (est.quota / 1024 / 1024).toFixed(0)));
+          lines.push(t('perfStorageUsage', ((est.usage / est.quota) * 100).toFixed(1)));
         } catch(e) {}
       }
 
