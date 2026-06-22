@@ -5580,7 +5580,7 @@ async function initMessenger(dbName) {
     const addKey = P.get('add');
     if (addKey && addKey !== myPubB64) {
       if (addKey.startsWith('@')) { await resolveAndAdd(addKey); }
-      else { await addContact(addKey, P.get('name') || 'New Contact'); }
+      else { await addContact(addKey, P.get('name') || t('newContact')); }
     }
     // Auto-join group
     if (joinToken) await processJoinToken(joinToken);
