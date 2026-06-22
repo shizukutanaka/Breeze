@@ -1,5 +1,27 @@
 # Changelog
 
+## localized relative time via Intl.RelativeTimeFormat ("last seen") — Qiita/Zenn-informed — item 106 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+734 tests; `index.html` only. `validate.sh` PASSED (i18n EN/JA parity).
+
+Research lens. Qiita/Zenn `Intl.RelativeTimeFormat` guides (`k8o/bdbf6367…`;
+`CRUD5th/2b366977…` Intl i18n strategy): the standard, locale-complete way to
+render "5 minutes ago" / "5 分前" / "yesterday" / "昨日" — handles plurals and
+natural-language forms per locale, no hand-rolled strings.
+
+Socratic lens: *"The offline chat header builds last-seen as `'5m ago'` / `'3h
+ago'` / `'2d ago'` and the status word `'Offline'` — all hardcoded English. A
+Japanese user sees `⚫ Offline · 5m ago` instead of `⚫ オフライン · 5 分前`."*
+
+- New `relTime(diffMs)` helper using `Intl.RelativeTimeFormat(LANG, { numeric:
+  'auto' })` (cached) — picks minute/hour/day and returns a locale-correct string
+  (`numeric:'auto'` yields "yesterday"/"昨日" for 1-day). Sub-minute → `t('justNow')`.
+- Wired into the conv-header last-seen line; `'⚫ Offline'` → `'⚫ ' +
+  t('statusOffline')`. Added `statusOffline` / `justNow` keys (EN+JA).
+- Left the ultra-compact contact-list stamps (`5m`/`3h`/`2d`, lines ~5715) as-is:
+  they're width-sensitive list glyphs, not sentence text — a separate pass if
+  desired.
+
 ## localize dynamic dialog buttons + audit confirms focus-visible is sound — Qiita/Zenn-informed — item 105 (branch claude/nice-ride-T6yb0, 2026-06-20)
 
 734 tests; `index.html` only. `validate.sh` PASSED (i18n EN/JA parity).

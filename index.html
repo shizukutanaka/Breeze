@@ -1790,6 +1790,8 @@ const _I = {
     uiConnecting: 'Connecting...',
     uiCameraOff: 'Camera Off',
     uiOfflineRelay: 'Offline — using relay',
+    statusOffline: 'Offline',
+    justNow: 'just now',
     uiServerUnavail: 'Server unavailable',
     uiNoServer: 'No server configured',
     uiStorageUnavail: 'Storage API not available',
@@ -2246,6 +2248,8 @@ const _I = {
     uiConnecting: '接続中...',
     uiCameraOff: 'カメラオフ',
     uiOfflineRelay: 'オフライン — リレー使用',
+    statusOffline: 'オフライン',
+    justNow: 'たった今',
     uiServerUnavail: 'サーバー利用不可',
     uiNoServer: 'サーバー未設定',
     uiStorageUnavail: 'ストレージAPI利用不可',
@@ -2287,6 +2291,18 @@ document.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = t(e
 document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
 document.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
 document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
+// Localized relative time ("5 minutes ago" / "5 分前" / "yesterday" / "昨日") via
+// Intl.RelativeTimeFormat keyed to the app locale — replaces hardcoded English "Xm ago".
+let _rtf = null;
+function relTime(diffMs) {
+  try {
+    if (diffMs < MS.MIN) return t('justNow');
+    if (!_rtf) _rtf = new Intl.RelativeTimeFormat(LANG, { numeric: 'auto' });
+    if (diffMs < MS.HOUR) return _rtf.format(-Math.floor(diffMs / MS.MIN), 'minute');
+    if (diffMs < MS.DAY) return _rtf.format(-Math.floor(diffMs / MS.HOUR), 'hour');
+    return _rtf.format(-Math.floor(diffMs / MS.DAY), 'day');
+  } catch { return ''; }
+}
 document.documentElement.lang = LANG; // Dynamic lang attribute
 // Register Service Worker (PWA) + v3.6: Improved update notification (research: workbox-window pattern)
 if ('serviceWorker' in navigator) {
@@ -7063,13 +7079,10 @@ async function initMessenger(dbName) {
       let lastSeenStr = '';
       const lastSeenTs = _lastSeenCache[activeContact.id] || activeContact.lastMsgAt;
       if (lastSeenTs) {
-        const diff = Date.now() - lastSeenTs;
-        if (diff < 60000) lastSeenStr = ' · <1m ago';
-        else if (diff < MS.HOUR) lastSeenStr = ' · ' + Math.floor(diff / MS.MIN) + 'm ago';
-        else if (diff < MS.DAY) lastSeenStr = ' · ' + Math.floor(diff / MS.HOUR) + 'h ago';
-        else lastSeenStr = ' · ' + Math.floor(diff / MS.DAY) + 'd ago';
+        const rel = relTime(Date.now() - lastSeenTs);
+        if (rel) lastSeenStr = ' · ' + rel;
       }
-      el.textContent = '⚫ Offline' + lastSeenStr;
+      el.textContent = '⚫ ' + t('statusOffline') + lastSeenStr;
       el.classList.remove('color-g','color-r'); el.classList.add('color-t3');
       // cursor handled by CSS
       el.title = t('connOffline');
