@@ -7357,7 +7357,7 @@ async function initMessenger(dbName) {
     }
     const info = document.createElement('div');
     info.className = 'info';
-    info.textContent = file.name + ' (' + (file.size < 1024 ? file.size + ' B' : (file.size / 1024).toFixed(1) + ' KB') + ')';
+    info.textContent = file.name + ' (' + fmtSize(file.size) + ')';
     preview.appendChild(info);
     const sendBtn = document.createElement('button');
     sendBtn.className = 'btn btn-g btn-sm';
