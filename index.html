@@ -1528,6 +1528,8 @@ const _I = {
     lockPassSet: 'Lock password set',
     lockPassRemoved: 'Lock password removed',
     lockUnlocked: 'Lock screen unlocked',
+    lockTitle: 'Breeze Locked',
+    lockWait: (s) => `Wait ${s}s…`,
     keyWrapPassPrompt: 'Set a key-wrap passphrase (min 8 chars):',
     keyWrapPassConfirm: 'Confirm passphrase:',
     keyWrapUnlockPrompt: 'Enter key-wrap passphrase to unlock:',
@@ -1994,6 +1996,8 @@ const _I = {
     lockPassSet: 'ロックパスワードを設定しました',
     lockPassRemoved: 'ロックパスワードを削除しました',
     lockUnlocked: '画面ロックを解除しました',
+    lockTitle: 'Breeze ロック中',
+    lockWait: (s) => `${s}秒待ってください…`,
     keyWrapPassPrompt: 'キーラップパスフレーズを設定 (8文字以上):',
     keyWrapPassConfirm: 'パスフレーズを確認:',
     keyWrapUnlockPrompt: 'キーラップパスフレーズを入力してください:',
@@ -9343,8 +9347,8 @@ async function initMessenger(dbName) {
     inp.type = 'password'; inp.placeholder = t('enterPassword'); inp.autocomplete = 'off';
     inp.className = 'lock-input';
     const btn = document.createElement('button');
-    btn.className = 'btn btn-g i-pad-unlock'; btn.textContent = t('uiUnlock'); btn.setAttribute('aria-label', 'Unlock');
-    overlay.innerHTML = '<div class="i-icon48">🔒</div><div class="i-title16">Breeze Locked</div>';
+    btn.className = 'btn btn-g i-pad-unlock'; btn.textContent = t('uiUnlock');
+    overlay.innerHTML = `<div class="i-icon48">🔒</div><div class="i-title16">${esc(t('lockTitle'))}</div>`;
     overlay.appendChild(inp); overlay.appendChild(btn);
     document.body.appendChild(overlay);
     let _attempts = 0;
@@ -9353,7 +9357,7 @@ async function initMessenger(dbName) {
       if (_attempts >= 5) {
         const wait = Math.min(Math.pow(2, _attempts - 4), 60);
         inp.disabled = true; btn.disabled = true;
-        inp.placeholder = `Wait ${wait}s...`;
+        inp.placeholder = t('lockWait', wait);
         setTimeout(() => { inp.disabled = false; btn.disabled = false; inp.placeholder = t('enterPassword'); inp.focus(); }, wait * 1000);
         return;
       }
