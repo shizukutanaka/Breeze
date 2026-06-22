@@ -1199,7 +1199,7 @@ del.md-del { opacity: .6 }
           <button id="b-msg-stt" class="tool hidden" data-i18n-aria="ariaDict">🗣</button>
           <textarea id="msg-input" data-i18n-ph="msgPlaceholder" data-i18n-aria="ariaMessage" maxlength="4096" rows="1" enterkeyhint="send"></textarea>
           <span id="msg-char-count" class="char-count hidden"></span>
-          <button id="b-msg-emoji" class="tool" data-i18n-aria="ttEmoji" data-i18n-title="ttEmoji">😀</button>
+          <button id="b-msg-emoji" class="tool" data-i18n-aria="ttEmoji" data-i18n-title="ttEmoji" aria-expanded="false" aria-haspopup="dialog">😀</button>
           <button class="send" id="b-msg-send" data-i18n-aria="send">↑</button>
         </div>
       </div>
@@ -7469,9 +7469,11 @@ async function initMessenger(dbName) {
 
     let pickerEl = null;
     function togglePicker() {
-      if (pickerEl) { pickerEl.remove(); pickerEl = null; return; }
+      if (pickerEl) { pickerEl.remove(); pickerEl = null; emojiBtn.setAttribute('aria-expanded', 'false'); return; }
       pickerEl = document.createElement('div');
       pickerEl.className = 'emoji-picker';
+      pickerEl.setAttribute('role', 'dialog');
+      pickerEl.setAttribute('aria-label', t('ttEmoji'));
       let activeCategory = '😀';
 
       // Search
@@ -7479,7 +7481,7 @@ async function initMessenger(dbName) {
       searchDiv.className = 'emoji-picker-search';
       const searchInput = document.createElement('input');
       searchInput.placeholder = t('searchEmojiPh');
-      searchInput.setAttribute('aria-label', 'Search emoji');
+      searchInput.setAttribute('aria-label', t('searchEmojiPh'));
       searchDiv.appendChild(searchInput);
 
       // Tabs
@@ -7556,6 +7558,7 @@ async function initMessenger(dbName) {
       const bar = _DOM.get('msg-input-bar');
       bar.classList.add('i-rel');
       bar.appendChild(pickerEl);
+      emojiBtn.setAttribute('aria-expanded', 'true');
       searchInput.focus();
 
       // Close on Escape or outside click
@@ -7564,6 +7567,7 @@ async function initMessenger(dbName) {
         if (e.type === 'click' && pickerEl?.contains(e.target)) return;
         if (e.type === 'click' && e.target === emojiBtn) return;
         pickerEl?.remove(); pickerEl = null;
+        emojiBtn.setAttribute('aria-expanded', 'false');
         document.removeEventListener('click', close);
         document.removeEventListener('keydown', close);
       };
