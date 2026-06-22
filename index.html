@@ -569,6 +569,7 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 dialog { border: none; border-radius: var(--rad-lg); background: var(--s1); color: var(--t1); padding: 24px; max-width: 360px; width: 90vw; box-shadow: var(--shadow-float); backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass) }
 dialog::backdrop { background: rgba(0,0,0,.45); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px) }
 dialog .modal-title { font-weight: 700; font-size: 15px; color: var(--t1); margin-bottom: 12px; line-height: 1.5; text-align: center }
+dialog .modal-desc { font-size: 13px; color: var(--t2); margin-bottom: 12px; line-height: 1.5; text-align: center }
 dialog .modal-actions { display: flex; gap: 8px; justify-content: center; margin-top: 16px }
 dialog .modal-actions .btn { flex: 1 }
 dialog .modal-input { width: 100%; padding: 10px 14px; border: 1px solid var(--b1); border-radius: var(--rad); background: var(--s2); color: var(--t1); font-size: 14px; margin-bottom: 4px; outline: none; transition: border-color .2s ease; box-sizing: border-box }
@@ -1534,6 +1535,9 @@ const _I = {
     sent: 'Sent',
     confirmDeleteContact: (name) => `Delete ${name}?`, confirmDeleteMsg: 'Delete this message?', confirmClearChat: (name) => `Delete all messages with ${name}?`,
     pollVotes: (n) => `${n} vote${n !== 1 ? 's' : ''}`,
+    wipeTitle: 'Wipe All Data', wipeDesc: 'Permanently delete all messages, contacts, keys, and settings.',
+    confirmDeleteN: (n) => `Delete ${n} messages?`,
+    settingsNotif: 'Notifications',
     labelNoneHint: 'No labels yet. Right-click a contact or use /label', labelFilterEmpty: (l) => `No contacts with label "${l}"`, labelNoneContacts: 'No labels yet. Right-click a contact to add one.', labelNoneCmd: 'No labels. Use /label Work, Family to add.',
     enableNotif: 'Enable push notifications',
     ttEditProfile: 'Edit profile',
@@ -2087,6 +2091,9 @@ const _I = {
     sent: '送信済み',
     confirmDeleteContact: (name) => `${name} を削除しますか？`, confirmDeleteMsg: 'このメッセージを削除しますか？', confirmClearChat: (name) => `${name} とのすべてのメッセージを削除しますか？`,
     pollVotes: (n) => `${n}票`,
+    wipeTitle: '全データ消去', wipeDesc: 'すべてのメッセージ、連絡先、鍵、設定を完全に削除します。',
+    confirmDeleteN: (n) => `${n}件のメッセージを削除しますか？`,
+    settingsNotif: '通知',
     labelNoneHint: 'ラベルがありません。連絡先を右クリックするか /label を使用してください', labelFilterEmpty: (l) => `"${l}" のラベルを持つ連絡先がありません`, labelNoneContacts: 'ラベルがありません。連絡先を右クリックして追加してください。', labelNoneCmd: 'ラベルがありません。/label 仕事,家族 のように使用してください。',
     enableNotif: 'プッシュ通知を有効にする',
     outboxPending: '件のメッセージが送信待ち',
@@ -2693,6 +2700,7 @@ function showConfirm(title, opts = {}) {
     const titleId = 'mdl-' + uid();
     dlg.setAttribute('aria-labelledby', titleId);
     dlg.innerHTML = `<div class="modal-title" id="${titleId}">${esc(title)}</div>
+      ${opts.desc ? `<div class="modal-desc">${esc(opts.desc)}</div>` : ''}
       <div class="modal-actions">
         <button class="btn btn-o btn-sm" value="cancel">${t('cancel')}</button>
         <button class="btn ${opts.danger ? 'btn-r' : 'btn-g'} btn-sm" value="ok">${opts.okText || t('ok')}</button>
@@ -6488,7 +6496,7 @@ async function initMessenger(dbName) {
     const statusIcon = isMine ? (meta.failed ? '✗' : meta.readAt || meta.ack ? '✓✓' : '✓') : '';
     // v3.6: Status tooltip with delivery/read timestamp
     let statusTitle = '';
-    if (isMine && meta.failed) statusTitle = t('sendFailed') || 'Send failed. Tap to retry.';
+    if (isMine && meta.failed) statusTitle = t('sendFailed');
     else if (isMine && meta.readAt) statusTitle = t('read') + ': ' + new Date(meta.readAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
     else if (isMine && meta.ack) statusTitle = t('delivered');
     else if (isMine) statusTitle = t('sent');
@@ -6824,7 +6832,7 @@ async function initMessenger(dbName) {
       fab.querySelector('#select-cancel').onclick = exitSelectMode;
       fab.querySelector('#select-del').onclick = async () => {
         if (_selectedMsgs.size === 0) return;
-        if (!await showConfirm(t('delete') + ' ' + _selectedMsgs.size + ' messages?', { danger: true })) return;
+        if (!await showConfirm(t('confirmDeleteN', _selectedMsgs.size), { danger: true })) return;
         const tx = db.transaction('messages', 'readwrite');
         for (const msgId of _selectedMsgs) { tx.objectStore('messages').delete(msgId); document.querySelector(`[data-msgid="${msgId}"]`)?.remove(); }
         const count = _selectedMsgs.size;
@@ -11339,7 +11347,7 @@ async function initMessenger(dbName) {
         try {
           const allIdentity = await dbGetAll('identity');
           const scheds = allIdentity.filter(i => i.id?.startsWith('sched:') && i.sendAt);
-          if (scheds.length === 0) { showToast(t('scheduleEmpty') || 'No scheduled messages.', 'info'); return; }
+          if (scheds.length === 0) { showToast(t('scheduleEmpty'), 'info'); return; }
           const lines = ['<b class="i-g">' + t('scheduledMessages') + '</b>', ''];
           for (const s of scheds.sort((a, b) => a.sendAt - b.sendAt)) {
             const contact = await dbGet('contacts', s.contactId);
@@ -11622,8 +11630,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     if (val === '/wipe') {
       e.preventDefault();
       clearInput();
-      const wipeMsg = (t('wipeTitle') || 'Wipe All Data') + '<br><span class="i-small-muted">' + (t('wipeDesc') || 'Permanently delete all messages, contacts, keys, and settings.') + '</span>';
-      const choice = await showConfirm(wipeMsg, { okText: t('wipeBtn'), danger: true });
+      const choice = await showConfirm(t('wipeTitle'), { okText: t('wipeBtn'), danger: true, desc: t('wipeDesc') });
       if (!choice) { showToast(t('toastCancelled'), 'info'); return; }
       // Send remote wipe signal
       if (API && myId) {
@@ -13155,7 +13162,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         <br><b class="i-g">${t('settingsSound')}</b><br>
         <label class="i-cur"><input type="checkbox" data-setting="notif-sound" ${_notifSoundEnabled ? 'checked' : ''}> ${t('notifSound')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="send-sound" ${_sendSoundEnabled ? 'checked' : ''}> ${t('sendSound')}</label><br>
-        <br><b class="i-g">${t('settingsNotif') || 'Notifications'}</b><br>
+        <br><b class="i-g">${t('settingsNotif')}</b><br>
         <label class="i-cur"><input type="checkbox" data-setting="notif-perm" ${Notification?.permission === 'granted' ? 'checked' : ''}> ${t('enableNotif')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="auto-lock" ${localStorage.getItem('brz-autolock') === '1' ? 'checked' : ''}> ${t('autoLock') || 'Auto-lock on tab switch'}</label><br>
         <br><span class="i-t3-10">${t('settingsImmediate')}</span>`;
