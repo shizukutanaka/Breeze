@@ -1195,8 +1195,8 @@ del.md-del { opacity: .6 }
         <div id="msg-input-bar" class="input-bar hidden">
           <div id="smart-reply-bar" class="smart-reply-bar hidden" role="toolbar" aria-label="Quick replies"></div>
           <label class="tool" data-i18n-title="ttAttach">📎<input type="file" id="msg-file" class="hidden" data-i18n-aria="ttAttach"></label>
-          <button id="b-msg-voice" class="tool" data-i18n-aria="ariaVoice">🎤</button>
-          <button id="b-msg-stt" class="tool hidden" data-i18n-aria="ariaDict">🗣</button>
+          <button id="b-msg-voice" class="tool" data-i18n-aria="ariaVoice" aria-pressed="false">🎤</button>
+          <button id="b-msg-stt" class="tool hidden" data-i18n-aria="ariaDict" aria-pressed="false">🗣</button>
           <textarea id="msg-input" data-i18n-ph="msgPlaceholder" data-i18n-aria="ariaMessage" maxlength="4096" rows="1" enterkeyhint="send"></textarea>
           <span id="msg-char-count" class="char-count hidden"></span>
           <button id="b-msg-emoji" class="tool" data-i18n-aria="ttEmoji" data-i18n-title="ttEmoji" aria-expanded="false" aria-haspopup="dialog">😀</button>
@@ -7636,6 +7636,7 @@ async function initMessenger(dbName) {
         _mediaRecorder.stop();
         voiceBtn.textContent = '🎤';
         voiceBtn.classList.remove('voice-recording');
+        voiceBtn.setAttribute('aria-pressed', 'false');
         document.getElementById('voice-rec-indicator')?.remove();
         clearInterval(_recTimer); _recTimer = null;
         return;
@@ -7691,6 +7692,7 @@ async function initMessenger(dbName) {
         _recStartTs = Date.now();
         voiceBtn.textContent = '⏹';
         voiceBtn.classList.add('voice-recording');
+        voiceBtn.setAttribute('aria-pressed', 'true');
         haptic.send();
         // v3.6: Recording indicator with timer + waveform
         const bar = _DOM.get('msg-input-bar');
@@ -7747,13 +7749,14 @@ async function initMessenger(dbName) {
       input.value = final || interim;
       _autoHeight(input);
     };
-    recognition.onend = () => { _sttActive = false; sttBtn.classList.remove('color-g','color-r'); sttBtn.classList.add('color-t3'); sttBtn.textContent = '🗣'; };
+    recognition.onend = () => { _sttActive = false; sttBtn.classList.remove('color-g','color-r'); sttBtn.classList.add('color-t3'); sttBtn.textContent = '🗣'; sttBtn.setAttribute('aria-pressed', 'false'); };
     recognition.onerror = (e) => { _sttActive = false; sttBtn.classList.remove('color-g','color-r'); sttBtn.classList.add('color-t3'); if (e.error !== 'no-speech') showToast(t('toastServerError') + ': ' + e.error, 'error'); };
     sttBtn.addEventListener('click', () => {
       if (_sttActive) { recognition.stop(); _sttActive = false; return; }
       _sttActive = true;
       sttBtn.classList.remove('color-g','color-t3'); sttBtn.classList.add('color-r');
       sttBtn.textContent = '🔴';
+      sttBtn.setAttribute('aria-pressed', 'true');
       recognition.start();
     });
   }
