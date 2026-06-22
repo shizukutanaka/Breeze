@@ -1530,6 +1530,7 @@ const _I = {
     dropDecrypting: 'Decrypting…', dropRevealed: '✅ Secret revealed — this link is now destroyed.', dropReadExpired: '🚫 This secret has already been read or has expired.', dropReadFailed: '❌ Failed to decrypt. The link may be invalid or corrupted.', dropOpenApp: 'Open Breeze Messenger →',
     errUnknown: 'Unknown error', consentTitle: 'Data consent',
     ariaAccounts: 'Accounts', ariaReactPicker: 'React with emoji', ariaReactWith: (name) => `React with ${name}`,
+    connReconnecting: (s) => `🔄 Reconnecting… ${s}s`,
     labelNoneHint: 'No labels yet. Right-click a contact or use /label', labelFilterEmpty: (l) => `No contacts with label "${l}"`, labelNoneContacts: 'No labels yet. Right-click a contact to add one.', labelNoneCmd: 'No labels. Use /label Work, Family to add.',
     enableNotif: 'Enable push notifications',
     ttEditProfile: 'Edit profile',
@@ -2079,6 +2080,7 @@ const _I = {
     dropDecrypting: '復号中…', dropRevealed: '✅ 秘密が公開されました — このリンクは無効になりました。', dropReadExpired: '🚫 この秘密はすでに閲覧済みか期限切れです。', dropReadFailed: '❌ 復号に失敗しました。リンクが無効または破損している可能性があります。', dropOpenApp: 'Breeze Messengerを開く →',
     errUnknown: '不明なエラー', consentTitle: 'データ同意',
     ariaAccounts: 'アカウント', ariaReactPicker: '絵文字でリアクション', ariaReactWith: (name) => `${name} でリアクション`,
+    connReconnecting: (s) => `🔄 再接続中… ${s}秒`,
     labelNoneHint: 'ラベルがありません。連絡先を右クリックするか /label を使用してください', labelFilterEmpty: (l) => `"${l}" のラベルを持つ連絡先がありません`, labelNoneContacts: 'ラベルがありません。連絡先を右クリックして追加してください。', labelNoneCmd: 'ラベルがありません。/label 仕事,家族 のように使用してください。',
     enableNotif: 'プッシュ通知を有効にする',
     outboxPending: '件のメッセージが送信待ち',
@@ -7133,7 +7135,7 @@ async function initMessenger(dbName) {
     } else if (peer?.connState === 'RECONNECTING') {
       // v3.6: Show reconnecting state with elapsed time
       const elapsed = Math.round((Date.now() - (peer.stateTs || Date.now())) / 1000);
-      el.textContent = '🔄 Reconnecting... ' + elapsed + 's';
+      el.textContent = t('connReconnecting', elapsed);
       el.classList.remove('color-g','color-r'); el.classList.add('color-t3');
       el.title = t('connConnecting');
       el.onclick = null;
@@ -7144,7 +7146,7 @@ async function initMessenger(dbName) {
       el.title = t('connConnecting');
       el.onclick = null;
     } else if (isOnline) {
-      el.textContent = '🔵 Relay';
+      el.textContent = '🔵 ' + t('infoRelay');
       el.classList.remove('i-color-g', 'i-color-r', 'i-color-t3');
       el.title = t('connRelayDesc');
       el.classList.add('i-cur');
@@ -9817,20 +9819,20 @@ async function initMessenger(dbName) {
 
       el.classList.remove('hidden');
       const accs = getAccounts();
-      const planName = _accountSlots <= 1 ? 'Free' : _accountSlots <= 2 ? 'Lite' : _accountSlots <= 4 ? 'Plus' : 'Pro';
+      const planName = _accountSlots <= 1 ? t('planFree') : _accountSlots <= 2 ? t('planLite') : _accountSlots <= 4 ? t('planPlus') : t('planPro');
 
       if (_accountSlots > 1) {
         badge.textContent = planName;
         badge.className = 'plan-badge badge-active';
-        btn.textContent = t('manageSubscription') || 'Manage subscription';
+        btn.textContent = t('manageSubscription');
         btn.onclick = async () => {
           const r = await postAPIRaw('/portal', { userId: _userId });
           if (r?.ok) { const d = await r.json(); if (d.url) safeOpen(d.url); }
         };
       } else {
-        badge.textContent = 'Free';
+        badge.textContent = t('planFree');
         badge.className = 'plan-badge badge-free';
-        btn.textContent = t('addAccountBtn') || 'Upgrade';
+        btn.textContent = t('addAccountBtn');
         btn.onclick = () => { window.location.href = '?pricing'; };
       }
     } catch(e) { _dbg(e); }
