@@ -1870,6 +1870,12 @@ const _I = {
     uiNoFiles: 'No files shared yet.',
     uiNoReactions: 'No reactions in this chat yet.',
     uiNoAudit: 'No audit entries.',
+    cmdAuditTitle: 'Audit Log (last 50)',
+    cmdBackupTitle: 'Cloud Backup',
+    cmdWallpaperTitle: 'Wallpaper Presets',
+    cmdWallpaperHelp: 'ocean · sunset · forest · midnight · aurora · reset<br>Or: /wallpaper #1a2b3c',
+    cmdReactionTitle: 'Reaction Stats',
+    cmdReactionTotal: 'Total: %d reactions',
     uiNewVersion: 'New version available.',
     uiUpdateReady: 'Update ready.',
     uiRestartUpdate: 'Restart to update',
@@ -2389,6 +2395,12 @@ const _I = {
     uiNoFiles: '共有ファイルなし',
     uiNoReactions: 'リアクションなし',
     uiNoAudit: '監査ログなし',
+    cmdAuditTitle: '監査ログ（最新50件）',
+    cmdBackupTitle: 'クラウドバックアップ',
+    cmdWallpaperTitle: '壁紙プリセット',
+    cmdWallpaperHelp: 'ocean · sunset · forest · midnight · aurora · reset<br>または: /wallpaper #1a2b3c',
+    cmdReactionTitle: 'リアクション統計',
+    cmdReactionTotal: '合計: %d 件',
     uiNewVersion: '新バージョンが利用可能です',
     uiUpdateReady: 'アップデート準備完了',
     uiRestartUpdate: '再起動して更新',
@@ -2599,7 +2611,7 @@ function showInstallBanner() {
   };
 
   // v3.6: Check cooldown (7 days) instead of session-only
-  try { const dismissed = parseInt(localStorage.getItem('brz-install-dismissed') || '0'); if (dismissed && Date.now() - dismissed < 7 * 86400000) return; } catch(e) {}
+  try { const dismissed = parseInt(localStorage.getItem('brz-install-dismissed') || '0'); if (dismissed && Date.now() - dismissed < 7 * MS.DAY) return; } catch(e) {}
   document.body.appendChild(banner);
 }
 
@@ -5590,7 +5602,7 @@ async function initMessenger(dbName) {
                 await dbDel('identity', item.id);
               } catch(e) { _dbg(e, 'schedule-recover'); }
             }, delay);
-            _dbg(null, 'Recovered scheduled message: ' + item.text?.slice(0, 30) + ' in ' + Math.round(delay/60000) + 'm');
+            _dbg(null, 'Recovered scheduled message: ' + item.text?.slice(0, 30) + ' in ' + Math.round(delay / MS.MIN) + 'm');
           }
         }
       }
@@ -6494,7 +6506,7 @@ async function initMessenger(dbName) {
     if (meta.disappearAt) {
       const remaining = meta.disappearAt - Date.now();
       if (remaining > 0) {
-        const mins = Math.ceil(remaining / 60000);
+        const mins = Math.ceil(remaining / MS.MIN);
         const label = mins >= 60 ? Math.floor(mins / 60) + 'h' : mins + 'm';
         const timerId = 'ttl-' + Math.random().toString(36).slice(2, 8);
         timerBadge = ` <span class="msg-timer-badge" id="${timerId}" title="${esc(t('ttDisappearsIn', label))}">⏱${label}</span>`;
@@ -8709,7 +8721,7 @@ async function initMessenger(dbName) {
     }, 5000);
     _intervals.push(poll);
     // Stop after 30 minutes
-    setTimeout(() => clearInterval(poll), 1800000);
+    setTimeout(() => clearInterval(poll), 30 * MS.MIN);
   }
 
   // Auto-start member polling for groups with joinToken
@@ -11084,7 +11096,7 @@ async function initMessenger(dbName) {
         const recent = all.sort((a, b) => b.ts - a.ts).slice(0, 50);
         if (recent.length === 0) { d.textContent = t('uiNoAudit'); }
         else {
-          safeSetHTML(d, '<b class="i-g12">Audit Log (last 50)</b><br><br>' +
+          safeSetHTML(d, '<b class="i-g12">' + t('cmdAuditTitle') + '</b><br><br>' +
             recent.map(e => {
               const ts = new Date(e.ts).toLocaleString();
               const sev = e.severity === 'error' ? '🔴' : e.severity === 'warn' ? '🟡' : '🟢';
@@ -11448,7 +11460,7 @@ async function initMessenger(dbName) {
           for (const s of scheds.sort((a, b) => a.sendAt - b.sendAt)) {
             const contact = await dbGet('contacts', s.contactId);
             const when = new Date(s.sendAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-            const remaining = Math.max(0, Math.round((s.sendAt - Date.now()) / 60000));
+            const remaining = Math.max(0, Math.round((s.sendAt - Date.now()) / MS.MIN));
             lines.push(`⏰ <b>${when}</b> (${remaining}m) → ${esc(contact?.name || '?')}: "${esc(s.text?.slice(0, 40))}"`);
           }
           lines.push('', '<span class="i-t3-10">/schedule cancel — cancel all</span>');
@@ -11899,7 +11911,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const d = document.createElement('div');
       d.className = 'chat-empty';
       d.className = 'cmd-panel-mono';
-      safeSetHTML(d, `<b class="i-g">Cloud Backup</b><br>
+      safeSetHTML(d, `<b class="i-g">${t('cmdBackupTitle')}</b><br>
         <button data-action="backup" class="btn btn-g btn-sm i-m4">${t('backupBtn')}</button>
         <button data-action="restore" class="btn btn-o btn-sm i-m4">${t('restoreBtn')}</button><br>
         <span class="text-xs color-t3">${t('backupNote')}</span>`);
@@ -12347,7 +12359,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
           const rc = _sessionMsgCounters[activeContact.pubB64];
           if (rc) {
             lines.push(`  Session msgs: ${rc.count} / ${CONFIG.REKEY_MSG_THRESHOLD}`);
-            lines.push(`  Session age: ${Math.round((Date.now() - rc.startTime) / 60000)}m / ${Math.round(CONFIG.REKEY_TIME_MS / 60000)}m`);
+            lines.push(`  Session age: ${Math.round((Date.now() - rc.startTime) / MS.MIN)}m / ${Math.round(CONFIG.REKEY_TIME_MS / MS.MIN)}m`);
           }
         } else {
           lines.push(`Active peer: ${activeContact.name} — not connected`);
@@ -12359,7 +12371,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       lines.push('Config:');
       lines.push(`  ICE pool: ${CONFIG.ICE_CANDIDATE_POOL_SIZE}`);
       lines.push(`  PoW difficulty: ${CONFIG.POW_DIFFICULTY} bits`);
-      lines.push(`  Rekey threshold: ${CONFIG.REKEY_MSG_THRESHOLD} msgs / ${CONFIG.REKEY_TIME_MS / 60000}m`);
+      lines.push(`  Rekey threshold: ${CONFIG.REKEY_MSG_THRESHOLD} msgs / ${CONFIG.REKEY_TIME_MS / MS.MIN}m`);
       lines.push(`  Reconnect: ${CONFIG.RECONNECT_BASE_MS}ms base, ${CONFIG.RECONNECT_MAX_ATTEMPTS} max attempts`);
       lines.push(`  Compression: > ${CONFIG.COMPRESS_MIN_BYTES} bytes`);
       lines.push(`  Protocol: v${CONFIG.PROTOCOL_VERSION}`);
@@ -12618,7 +12630,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         const box = _DOM.get('msg-messages');
         const d = document.createElement('div');
         d.className = 'chat-empty';
-        safeSetHTML(d, '<b class="i-g">Wallpaper Presets</b><br><span class="text-xs color-t3">ocean · sunset · forest · midnight · aurora · reset<br>Or: /wallpaper #1a2b3c</span>');
+        safeSetHTML(d, '<b class="i-g">' + t('cmdWallpaperTitle') + '</b><br><span class="text-xs color-t3">' + t('cmdWallpaperHelp') + '</span>');
         box.appendChild(d); box.scrollTop = box.scrollHeight;
       } else {
         showToast(t('toastWallpaperUsage') + ' | Presets: ocean, sunset, forest, midnight, aurora', 'error');
@@ -12668,7 +12680,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const upMs = Date.now() - _appStartTime;
       const h = Math.floor(upMs / MS.HOUR);
       const m = Math.floor((upMs % MS.HOUR) / MS.MIN);
-      const s = Math.floor((upMs % 60000) / 1000);
+      const s = Math.floor((upMs % MS.MIN) / MS.SEC);
       const p2p = Object.values(peers).filter(p => p.connected).length;
       const totalPeers = Object.keys(peers).length;
       const outbox = _retryQueue.length;
@@ -13081,9 +13093,9 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       if (sorted.length === 0) {
         d.textContent = t('uiNoReactions');
       } else {
-        safeSetHTML(d, '<b class="i-g">Reaction Stats</b><br>' +
+        safeSetHTML(d, '<b class="i-g">' + t('cmdReactionTitle') + '</b><br>' +
           sorted.map(([emoji, count]) => `${emoji} × ${count}`).join('<br>') +
-          '<br><br><span class="i-t3-10">Total: ' + sorted.reduce((s, [, c]) => s + c, 0) + ' reactions</span>');
+          '<br><br><span class="i-t3-10">' + t('cmdReactionTotal').replace('%d', sorted.reduce((s, [, c]) => s + c, 0)) + '</span>');
       }
       box.appendChild(d); box.scrollTop = box.scrollHeight;
     }
@@ -13218,7 +13230,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         'Contacts rendered: ' + document.querySelectorAll('.contact').length,
         'Network: ' + _effectiveType + ' (' + _networkType + ')',
         'Crypto worker: ' + (_cryptoWorker ? '✓ Active' : '✗ Main thread'),
-        'Uptime: ' + Math.floor((Date.now() - _startTime) / 60000) + ' min',
+        'Uptime: ' + Math.floor((Date.now() - _startTime) / MS.MIN) + ' min',
         'Heartbeats: ' + Object.values(peers).filter(p => p._heartbeat).length + ' active',
         'Outbox (persistent): ' + _outbox.size + ' peer queues',
         'Sealed poll: ' + (_serverOk ? '✓ Relay active' : '⚠ P2P-only mode'),
@@ -13628,7 +13640,7 @@ if (PLATFORM === 'electron' && window.breeze) {
       if (!disappearAt) {
         // Parse from title "Disappears in Xm"
         const match = badge.title?.match(/(\d+)/);
-        if (match) badge.dataset.disappearAt = Date.now() + parseInt(match[1]) * 60000;
+        if (match) badge.dataset.disappearAt = Date.now() + parseInt(match[1]) * MS.MIN;
         continue;
       }
       const remaining = disappearAt - Date.now();
@@ -13636,7 +13648,7 @@ if (PLATFORM === 'electron' && window.breeze) {
         msg.classList.add('fade-out');
         setTimeout(() => msg.remove(), CONFIG.FADE_OUT_MS);
       } else {
-        const mins = Math.ceil(remaining / 60000);
+        const mins = Math.ceil(remaining / MS.MIN);
         badge.textContent = '⏱' + (mins >= 60 ? Math.floor(mins / 60) + 'h' : mins + 'm');
       }
     }
