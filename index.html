@@ -2644,7 +2644,7 @@ function showPrompt(title, defaultVal = '', opts = {}) {
     const titleId = 'mdl-' + uid();
     dlg.setAttribute('aria-labelledby', titleId);
     dlg.innerHTML = `<div class="modal-title" id="${titleId}">${title}</div>
-      <input class="modal-input" type="${opts.type || 'text'}" value="${esc(defaultVal)}" placeholder="${esc(opts.placeholder || '')}" autocomplete="off" aria-labelledby="${titleId}">
+      <input class="modal-input" type="${opts.type || 'text'}" value="${esc(defaultVal)}" placeholder="${esc(opts.placeholder || '')}" autocomplete="${esc(opts.autocomplete || 'off')}" aria-labelledby="${titleId}">
       <div class="modal-actions">
         <button class="btn btn-o btn-sm" value="cancel">${t('cancel')}</button>
         <button class="btn btn-g btn-sm" value="ok">${opts.okText || t('ok')}</button>
@@ -4680,7 +4680,7 @@ async function initMessenger(dbName) {
       let jwk;
       if (_atRestIsWrapped(stored)) {
         // At-rest key wrapping enabled: prompt for passphrase and unwrap (slot-bound AAD)
-        const passphrase = await showPrompt(t('keyWrapUnlockPrompt'), '', { type: 'password' });
+        const passphrase = await showPrompt(t('keyWrapUnlockPrompt'), '', { type: 'password', autocomplete: 'current-password' });
         if (!passphrase) return false;
         jwk = await _atRestLoadKey(stored, passphrase, 'keys');
         if (!jwk) { showToast(t('keyWrapWrongPass'), 'error'); return false; }
@@ -9613,7 +9613,7 @@ async function initMessenger(dbName) {
     const contacts = await dbGetAll('contacts');
     if (!identity) { showToast(t('toastNoIdentityBackup'), 'error'); return; }
 
-    const pass = await showPrompt(t('backupPassSet'), '', { type: 'password', okText: t('encrypt') });
+    const pass = await showPrompt(t('backupPassSet'), '', { type: 'password', okText: t('encrypt'), autocomplete: 'new-password' });
     if (!pass || pass.length < 4) { showToast(t('toastMin4Chars'), 'error'); return; }
 
     const data = JSON.stringify({ identity, contacts, exportedAt: new Date().toISOString() });
@@ -9640,7 +9640,7 @@ async function initMessenger(dbName) {
   });
 
   async function restoreBackup(file) {
-    const pass = await showPrompt(t('backupPassEnter'), '', { type: 'password', okText: t('decrypt') });
+    const pass = await showPrompt(t('backupPassEnter'), '', { type: 'password', okText: t('decrypt'), autocomplete: 'current-password' });
     if (!pass) return;
     try {
       const text = await file.text();
@@ -9951,7 +9951,7 @@ async function initMessenger(dbName) {
   // ================================================================
   async function createCloudBackup() {
     // Cloud backup: available to all users
-    const passphrase = await showPrompt(t('backupPassPrompt'), '', { type: 'password' });
+    const passphrase = await showPrompt(t('backupPassPrompt'), '', { type: 'password', autocomplete: 'current-password' });
     if (!passphrase || passphrase.length < 6) { showToast(t('backupPassMin'), 'error'); return; }
     try {
       const identity = await dbGet('identity', 'keys');
@@ -9975,7 +9975,7 @@ async function initMessenger(dbName) {
   }
 
   async function restoreCloudBackup() {
-    const passphrase = await showPrompt(t('backupPassPrompt'), '', { type: 'password' });
+    const passphrase = await showPrompt(t('backupPassPrompt'), '', { type: 'password', autocomplete: 'current-password' });
     if (!passphrase) return;
     try {
       const resp = await postAPIRaw('/backup/download', { userId: myId });
@@ -12878,7 +12878,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         // Disable wrapping (decrypt with slot-bound AAD and store plaintext)
         if (!isWrapped) { showToast(t('keyWrapAlreadyOff'), 'info'); return; }
         if (!await showConfirm(t('keyWrapDisableConfirm'), { okText: t('uiRemoved') })) return;
-        const pass = await showPrompt(t('keyWrapUnlockPrompt'), '', { type: 'password' });
+        const pass = await showPrompt(t('keyWrapUnlockPrompt'), '', { type: 'password', autocomplete: 'current-password' });
         if (!pass) return;
         const identPrivJwk = await _atRestLoadKey(storedIdent, pass, 'keys');
         if (!identPrivJwk) { showToast(t('keyWrapWrongPass'), 'error'); return; }
@@ -12900,7 +12900,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       }
 
       // Enable wrapping (prompt passphrase ×2, migrate both keystore records)
-      const pass = await showPrompt(t('keyWrapPassPrompt'), '', { type: 'password', okText: t('set') });
+      const pass = await showPrompt(t('keyWrapPassPrompt'), '', { type: 'password', okText: t('set'), autocomplete: 'new-password' });
       if (!pass || pass.length < 8) { showToast(t('keyWrapMin'), 'error'); return; }
       const pass2 = await showPrompt(t('keyWrapPassConfirm'), '', { type: 'password', okText: t('set') });
       if (pass !== pass2) { showToast(t('keyWrapMismatch'), 'error'); return; }
