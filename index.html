@@ -1295,6 +1295,8 @@ const CONFIG = {
   SMART_REPLY_HIDE_MS: 30000,
   CLEANUP_INTERVAL_MS: 3600000,    // 1 hour
   SWIPE_BACK_MS: 250,              // swipe-back animation duration
+  THEME_TRANSITION_MS: 400,        // theme-transitioning CSS class removal
+  DC_BUFFER_TIMEOUT_MS: 10000,     // DataChannel backpressure timeout
   // v3.5: Spec — Proof-of-Work anti-spam (hashcash)
   POW_DIFFICULTY: 16,               // leading zero bits for PoW token
   POW_REQUIRED_ACTIONS: ['alias/set', 'group/create', 'group/join'], // actions requiring PoW
@@ -2923,7 +2925,7 @@ window.addEventListener('online', () => {
   if (typeof updateConvStatus === 'function') updateConvStatus();
   // v3.5: Aggressive P2P reconnection on network restore (Spec v6 §15)
   if (typeof _reconnectAllPeers === 'function') {
-    setTimeout(() => _reconnectAllPeers(), 500);
+    setTimeout(() => _reconnectAllPeers(), MS.SEC / 2);
   }
 });
 window.addEventListener('offline', () => {
@@ -2980,7 +2982,7 @@ function toggleTheme() {
   document.documentElement.classList.add('theme-transitioning');
   const isLight = document.documentElement.classList.toggle('light');
   try { localStorage.setItem('brz-theme', isLight ? 'light' : 'dark'); } catch(e) { _dbg(e); }
-  setTimeout(() => document.documentElement.classList.remove('theme-transitioning'), 400);
+  setTimeout(() => document.documentElement.classList.remove('theme-transitioning'), CONFIG.THEME_TRANSITION_MS);
   const btn = document.getElementById('b-msg-theme');
   if (btn) btn.textContent = isLight ? '🌙' : '☀';
   // Update meta theme-color for browser chrome
@@ -3725,7 +3727,7 @@ async function waitForBuffer(dc, maxBytes) {
   return new Promise((resolve, reject) => {
     const onLow = () => { dc.removeEventListener('bufferedamountlow', onLow); clearTimeout(tid); resolve(); };
     dc.addEventListener('bufferedamountlow', onLow);
-    const tid = setTimeout(() => { dc.removeEventListener('bufferedamountlow', onLow); reject(new Error('DataChannel buffer timeout')); }, 10000);
+    const tid = setTimeout(() => { dc.removeEventListener('bufferedamountlow', onLow); reject(new Error('DataChannel buffer timeout')); }, CONFIG.DC_BUFFER_TIMEOUT_MS);
   });
 }
 // ======================== NOTIFICATION SOUND (Web Audio API) ========================
@@ -6518,7 +6520,7 @@ async function initMessenger(dbName) {
       cpBtn.className = 'msg-copy';
       cpBtn.textContent = '📋';
       cpBtn.title = t('copy');
-      cpBtn.onclick = (ev) => { ev.stopPropagation(); navigator.clipboard?.writeText(text).then(() => { cpBtn.textContent = '✓'; setTimeout(() => { cpBtn.textContent = '📋'; }, 1000); }).catch(() => {}); };
+      cpBtn.onclick = (ev) => { ev.stopPropagation(); navigator.clipboard?.writeText(text).then(() => { cpBtn.textContent = '✓'; setTimeout(() => { cpBtn.textContent = '📋'; }, MS.SEC); }).catch(() => {}); };
       d.appendChild(cpBtn);
     }
     box.appendChild(d);
@@ -9810,7 +9812,7 @@ async function initMessenger(dbName) {
   function showReadReceipt(contactId, ts) {
     _lastReadTs[contactId] = ts;
     clearTimeout(showReadReceipt._saveTimer);
-    showReadReceipt._saveTimer = setTimeout(() => dbPut('identity', _lastReadTs, 'readTs'), 1000);
+    showReadReceipt._saveTimer = setTimeout(() => dbPut('identity', _lastReadTs, 'readTs'), MS.SEC);
     if (activeContact?.id !== contactId) return;
     // v3.5: Update msg-status spans to 'read' (blue ✓✓)
     const box = _DOM.get('msg-messages');
@@ -12184,11 +12186,11 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       try {
         for (let i = 0; i < N; i++) {
           if (dc.bufferedAmount > CONFIG.DC_BUFFER_MAX) {
-            await new Promise(r => { const h = () => { dc.removeEventListener('bufferedamountlow', h); r(); }; dc.addEventListener('bufferedamountlow', h); setTimeout(r, 3000); });
+            await new Promise(r => { const h = () => { dc.removeEventListener('bufferedamountlow', h); r(); }; dc.addEventListener('bufferedamountlow', h); setTimeout(r, MS.SEC * 3); });
           }
           dc.send(buf); sent += PKT;
         }
-        if (dc.bufferedAmount > 0) await new Promise(r => { const h = () => { dc.removeEventListener('bufferedamountlow', h); r(); }; dc.addEventListener('bufferedamountlow', h); setTimeout(r, 5000); });
+        if (dc.bufferedAmount > 0) await new Promise(r => { const h = () => { dc.removeEventListener('bufferedamountlow', h); r(); }; dc.addEventListener('bufferedamountlow', h); setTimeout(r, MS.SEC * 5); });
         const sec = (performance.now() - t0) / 1000;
         const mbps = ((sent * 8) / sec / 1e6).toFixed(2);
         const rtt = peer._lastRtt || '?';
@@ -13419,7 +13421,7 @@ if (PLATFORM === 'electron' && window.breeze) {
   });
 
   // Check for updates on startup
-  setTimeout(() => window.breeze.checkForUpdates(), 5000);
+  setTimeout(() => window.breeze.checkForUpdates(), MS.SEC * 5);
   // Electron: keyboard shortcuts for account switching
   if (PLATFORM === 'electron') {
     document.addEventListener('keydown', (e) => {
