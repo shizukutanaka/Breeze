@@ -1293,6 +1293,7 @@ const CONFIG = {
   DISAPPEAR_CHECK_MS: 10000,
   SMART_REPLY_HIDE_MS: 30000,
   CLEANUP_INTERVAL_MS: 3600000,    // 1 hour
+  SWIPE_BACK_MS: 250,              // swipe-back animation duration
   // v3.5: Spec — Proof-of-Work anti-spam (hashcash)
   POW_DIFFICULTY: 16,               // leading zero bits for PoW token
   POW_REQUIRED_ACTIONS: ['alias/set', 'group/create', 'group/join'], // actions requiring PoW
@@ -3260,7 +3261,7 @@ function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = filename; a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 30000); // Cleanup after 30s
+  setTimeout(() => URL.revokeObjectURL(url), MS.SEC * 30);
 }
 
 // v3.6: Trusted Types policy (research: Google eliminated DOM XSS across 130+ services;
@@ -4287,7 +4288,7 @@ async function initMessenger(dbName) {
         banner.classList.remove('hidden');
       }
       // Attempt to reopen after a short delay
-      setTimeout(() => { location.reload(); }, 2000);
+      setTimeout(() => { location.reload(); }, CONFIG.TOAST_DURATION_MS);
     };
     db.onversionchange = () => {
       db.close();
@@ -4638,7 +4639,7 @@ async function initMessenger(dbName) {
           localStorage.clear();
           sessionStorage.clear();
           showToast(t('toastWiped'), 'error');
-          setTimeout(() => location.reload(), 2000);
+          setTimeout(() => location.reload(), CONFIG.TOAST_DURATION_MS);
           return;
         }
       }
@@ -5834,7 +5835,7 @@ async function initMessenger(dbName) {
           }
           div.classList.remove('swiping');
           div.classList.add('swipe-back');
-          setTimeout(() => div.classList.remove('swipe-back'), 250);
+          setTimeout(() => div.classList.remove('swipe-back'), CONFIG.SWIPE_BACK_MS);
           _cswiping = false;
         }, { passive: true });
       }
@@ -6155,7 +6156,7 @@ async function initMessenger(dbName) {
         pinBanner.classList.remove('hidden');
         pinBanner.onclick = () => {
           const target = document.querySelector(`[data-msgid="${latest.msgId}"]`);
-          if (target) { target.scrollIntoView({ block: 'center', behavior: 'smooth' }); target.classList.add('msg-highlight'); setTimeout(() => target.classList.remove('msg-highlight'), 2000); }
+          if (target) { target.scrollIntoView({ block: 'center', behavior: 'smooth' }); target.classList.add('msg-highlight'); setTimeout(() => target.classList.remove('msg-highlight'), CONFIG.TOAST_DURATION_MS); }
         };
       } else {
         pinBanner.classList.add('hidden');
@@ -6385,15 +6386,15 @@ async function initMessenger(dbName) {
           const left = disappearAt - Date.now();
           if (left <= 0) {
             const msgEl = el.closest('.msg');
-            if (msgEl) { msgEl.classList.add('fade-out'); setTimeout(() => msgEl.remove(), 300); }
+            if (msgEl) { msgEl.classList.add('fade-out'); setTimeout(() => msgEl.remove(), CONFIG.FADE_OUT_MS); }
             return;
           }
           const s = Math.ceil(left / 1000);
           el.textContent = s >= 3600 ? '⏱' + Math.floor(s / 3600) + 'h' : s >= 60 ? '⏱' + Math.ceil(s / 60) + 'm' : '⏱' + s + 's';
           if (s <= 30) el.classList.add('color-r');
-          setTimeout(updateCountdown, s > 60 ? 30000 : 1000);
+          setTimeout(updateCountdown, s > 60 ? MS.SEC * 30 : MS.SEC);
         };
-        requestAnimationFrame(() => setTimeout(updateCountdown, 1000));
+        requestAnimationFrame(() => setTimeout(updateCountdown, MS.SEC));
       }
     }
     // v3.3: Signature verification badge
@@ -6532,7 +6533,7 @@ async function initMessenger(dbName) {
       }
       d.classList.remove('swiping');
       d.classList.add('swipe-back');
-      setTimeout(() => d.classList.remove('swipe-back'), 250);
+      setTimeout(() => d.classList.remove('swipe-back'), CONFIG.SWIPE_BACK_MS);
       d._swipeTriggered = false;
       _swiping = false;
     }, { passive: true });
@@ -7023,7 +7024,7 @@ async function initMessenger(dbName) {
     }
     if (!success) {
       indicator.textContent = t('translateFailed');
-      setTimeout(() => indicator.remove(), 2000);
+      setTimeout(() => indicator.remove(), CONFIG.TOAST_DURATION_MS);
     }
   }
 
@@ -7636,7 +7637,7 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'tab-title'); }
   }
   // Update every 5 seconds
-  _intervals.push(setInterval(updateTabTitle, 5000));
+  _intervals.push(setInterval(updateTabTitle, CONFIG.POLL_UNREAD_MS));
 
   // v3.5: Search highlighting within messages
   function highlightSearch(query) {
@@ -8125,7 +8126,7 @@ async function initMessenger(dbName) {
           _callState = 'connected';
           _callStartTime = Date.now();
           updateCallUI('connected');
-          _callTimerInterval = setInterval(updateCallTimer, 1000);
+          _callTimerInterval = setInterval(updateCallTimer, MS.SEC);
         }
         if (_callPC.connectionState === 'disconnected' || _callPC.connectionState === 'failed') {
           endCall();
@@ -8208,7 +8209,7 @@ async function initMessenger(dbName) {
           _callState = 'connected';
           _callStartTime = Date.now();
           updateCallUI('connected');
-          _callTimerInterval = setInterval(updateCallTimer, 1000);
+          _callTimerInterval = setInterval(updateCallTimer, MS.SEC);
         }
         if (_callPC.connectionState === 'disconnected' || _callPC.connectionState === 'failed') endCall();
       };
@@ -9513,7 +9514,7 @@ async function initMessenger(dbName) {
         if (m.disappearAt && m.disappearAt < now) {
           await dbDel('messages', m.msgId);
           const el = document.querySelector(`[data-msgid="${m.msgId}"]`);
-          if (el) { el.classList.add('i-op0'); setTimeout(() => el.remove(), 300); }
+          if (el) { el.classList.add('i-op0'); setTimeout(() => el.remove(), CONFIG.FADE_OUT_MS); }
           cleaned++;
         }
       }
@@ -9539,7 +9540,7 @@ async function initMessenger(dbName) {
     } catch(e) { _lastRtt = -1; }
   }
   // Measure on conversation open + periodically
-  _intervals.push(setInterval(measureNetworkQuality, 60000));
+  _intervals.push(setInterval(measureNetworkQuality, MS.MIN));
 
   // ===== Share ID (with QR option) =====
   document.getElementById('b-msg-share')?.addEventListener('click', (e) => {
@@ -10420,7 +10421,7 @@ async function initMessenger(dbName) {
       if (target) {
         target.scrollIntoView({ block: 'center', behavior: 'smooth' });
         target.classList.add('msg-highlight');
-        setTimeout(() => target.classList.remove('msg-highlight'), 2000);
+        setTimeout(() => target.classList.remove('msg-highlight'), CONFIG.TOAST_DURATION_MS);
         haptic.tap();
       }
       return;
@@ -11652,7 +11653,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       ].join('<br>');
       if (navigator.storage?.estimate) {
         const est = await navigator.storage.estimate();
-        d.innerHTML += (est.usage / 1048576).toFixed(1) + ' MB / ' + (est.quota / 1048576).toFixed(0) + ' MB (' + Math.round(est.usage / est.quota * 100) + '%)';
+        d.insertAdjacentText('beforeend', (est.usage / 1048576).toFixed(1) + ' MB / ' + (est.quota / 1048576).toFixed(0) + ' MB (' + Math.round(est.usage / est.quota * 100) + '%)');
       }
       box.appendChild(d); box.scrollTop = box.scrollHeight;
     }
@@ -13514,7 +13515,7 @@ if (PLATFORM === 'electron' && window.breeze) {
       const remaining = disappearAt - Date.now();
       if (remaining <= 0) {
         msg.classList.add('fade-out');
-        setTimeout(() => msg.remove(), 300);
+        setTimeout(() => msg.remove(), CONFIG.FADE_OUT_MS);
       } else {
         const mins = Math.ceil(remaining / 60000);
         badge.textContent = '⏱' + (mins >= 60 ? Math.floor(mins / 60) + 'h' : mins + 'm');
