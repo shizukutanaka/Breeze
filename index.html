@@ -774,6 +774,14 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 .drop-overlay { position: absolute; inset: 0; background: rgba(16,185,129,.08); border: 2px dashed var(--g); border-radius: var(--rad); z-index: 50; display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0; transition: opacity .15s }
 .drop-overlay.active { opacity: 1 }
 .drop-overlay-text { background: var(--g); color: #fff; padding: 12px 24px; border-radius: var(--rad-full); font-size: 14px; font-weight: 600 }
+.drop-page { display:flex; align-items:center; justify-content:center; min-height:100vh; flex-direction:column; gap:16px; padding:24px; text-align:center; font-family:system-ui,sans-serif; background:#050505; color:#f2f2f7 }
+.drop-page-icon { font-size:48px }
+.drop-page-status { font-size:15px }
+.drop-page-content { display:none; max-width:600px; width:100%; padding:20px; border-radius:16px; background:rgba(28,28,30,.85); backdrop-filter:blur(20px); text-align:left; white-space:pre-wrap; word-break:break-word; line-height:1.6; font-size:15px }
+.drop-page-content.visible { display:block }
+.drop-page-actions { display:none; margin-top:8px }
+.drop-page-actions.visible { display:block }
+.drop-page-copy { padding:10px 24px; border-radius:999px; background:#34d399; color:#000; border:none; font-weight:600; cursor:pointer; font-size:14px }
 
 /* ─── Search highlight ─── */
 .search-match { background: rgba(16,185,129,.3); border-radius: 2px; padding: 0 1px }
@@ -2430,7 +2438,6 @@ function t(key, ...args) {
 }
 // Apply translations to DOM
 document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
-document.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = t(el.dataset.i18nHtml); });
 document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
 document.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
 document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
@@ -2743,12 +2750,12 @@ function showPrompt(title, defaultVal = '', opts = {}) {
     // ESC, and focus restore on close.
     const titleId = 'mdl-' + uid();
     dlg.setAttribute('aria-labelledby', titleId);
-    dlg.innerHTML = `<div class="modal-title" id="${titleId}">${esc(title)}</div>
+    safeSetHTML(dlg, `<div class="modal-title" id="${titleId}">${esc(title)}</div>
       <input class="modal-input" type="${opts.type || 'text'}" value="${esc(defaultVal)}" placeholder="${esc(opts.placeholder || '')}" autocomplete="${esc(opts.autocomplete || 'off')}" aria-labelledby="${titleId}">
       <div class="modal-actions">
         <button class="btn btn-o btn-sm" value="cancel">${t('cancel')}</button>
         <button class="btn btn-g btn-sm" value="ok">${opts.okText || t('ok')}</button>
-      </div>`;
+      </div>`);
     document.body.appendChild(dlg);
     dlg.showModal(); // Auto: inert bg, focus trap, top-layer, ESC to close
     const input = dlg.querySelector('.modal-input');
@@ -2771,12 +2778,12 @@ function showConfirm(title, opts = {}) {
     // a11y: accessible name from the title (see showPrompt). showModal() handles the rest.
     const titleId = 'mdl-' + uid();
     dlg.setAttribute('aria-labelledby', titleId);
-    dlg.innerHTML = `<div class="modal-title" id="${titleId}">${esc(title)}</div>
+    safeSetHTML(dlg, `<div class="modal-title" id="${titleId}">${esc(title)}</div>
       ${opts.desc ? `<div class="modal-desc">${esc(opts.desc)}</div>` : ''}
       <div class="modal-actions">
         <button class="btn btn-o btn-sm" value="cancel">${t('cancel')}</button>
         <button class="btn ${opts.danger ? 'btn-r' : 'btn-g'} btn-sm" value="ok">${opts.okText || t('ok')}</button>
-      </div>`;
+      </div>`);
     document.body.appendChild(dlg);
     dlg.showModal();
     dlg.querySelector('[value="ok"]').focus();
@@ -3075,7 +3082,15 @@ const joinToken = P.get('join');
 if (P.has('drop')) {
   const dropId = P.get('drop');
   const keyB64 = location.hash.slice(1); // Fragment never sent to server
-  document.body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:16px;padding:24px;text-align:center;font-family:system-ui,sans-serif;background:#050505;color:#f2f2f7"><div style="font-size:48px">🔐</div><div id="drop-status" style="font-size:15px">${esc(t('dropDecrypting'))}</div><div id="drop-content" style="display:none;max-width:600px;width:100%;padding:20px;border-radius:16px;background:rgba(28,28,30,.85);backdrop-filter:blur(20px);text-align:left;white-space:pre-wrap;word-break:break-word;line-height:1.6;font-size:15px"></div><div id="drop-actions" style="display:none;margin-top:8px"><button id="drop-copy" style="padding:10px 24px;border-radius:999px;background:#34d399;color:#000;border:none;font-weight:600;cursor:pointer;font-size:14px">${esc(t('copy'))}</button></div><a href="/" style="margin-top:16px;color:#34d399;font-size:13px;text-decoration:none">${esc(t('dropOpenApp'))}</a></div>`;
+  // Build drop page via DOM API (runs before TT policy is registered)
+  const _dw = document.createElement('div'); _dw.className = 'drop-page';
+  const _di = document.createElement('div'); _di.className = 'drop-page-icon'; _di.textContent = '🔐'; _dw.appendChild(_di);
+  const _ds = document.createElement('div'); _ds.id = 'drop-status'; _ds.className = 'drop-page-status'; _ds.textContent = t('dropDecrypting'); _dw.appendChild(_ds);
+  const _dc = document.createElement('div'); _dc.id = 'drop-content'; _dc.className = 'drop-page-content'; _dw.appendChild(_dc);
+  const _da = document.createElement('div'); _da.id = 'drop-actions'; _da.className = 'drop-page-actions';
+  const _db = document.createElement('button'); _db.id = 'drop-copy'; _db.className = 'drop-page-copy'; _db.textContent = t('copy'); _da.appendChild(_db); _dw.appendChild(_da);
+  const _dl = document.createElement('a'); _dl.href = '/'; Object.assign(_dl.style, { marginTop:'16px', color:'#34d399', fontSize:'13px', textDecoration:'none' }); _dl.textContent = t('dropOpenApp'); _dw.appendChild(_dl);
+  document.body.replaceChildren(_dw);
   (async () => {
     try {
       if (!dropId || !keyB64) throw new Error('Invalid link');
@@ -3094,8 +3109,8 @@ if (P.has('drop')) {
       _DOM.get('drop-status').textContent = t('dropRevealed');
       const content = _DOM.get('drop-content');
       content.textContent = plaintext;
-      content.style.display = 'block';
-      _DOM.get('drop-actions').style.display = 'block';
+      content.classList.add('visible');
+      _DOM.get('drop-actions').classList.add('visible');
       _DOM.get('drop-copy').onclick = () => {
         navigator.clipboard.writeText(plaintext).then(() => { _DOM.get('drop-copy').textContent = t('toastCopied'); }).catch(() => {});
       };
@@ -3429,6 +3444,8 @@ const _ttPolicy = (() => {
 function safeSetHTML(el, html) {
   if (el) el.innerHTML = _ttPolicy.createHTML(html);
 }
+// Apply data-i18n-html translations (deferred until TT policy is ready)
+document.querySelectorAll('[data-i18n-html]').forEach(el => safeSetHTML(el, t(el.dataset.i18nHtml)));
 
 // v3.6: Crypto memory best-effort zeroing (research: JS cannot guarantee erasure)
 // Zero TypedArrays after use; prefer non-extractable CryptoKey objects
@@ -3893,7 +3910,7 @@ async function switchAccount(accountId) {
     if (!overlay) {
       overlay = document.createElement('div');
       overlay.className = 'acc-switch-overlay';
-      overlay.innerHTML = '<div class="acc-switch-spinner"></div>';
+      safeSetHTML(overlay, '<div class="acc-switch-spinner"></div>');
       document.body.appendChild(overlay);
     }
 
