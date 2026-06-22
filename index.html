@@ -2314,6 +2314,8 @@ document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.d
 // Localized relative time ("5 minutes ago" / "5 分前" / "yesterday" / "昨日") via
 // Intl.RelativeTimeFormat keyed to the app locale — replaces hardcoded English "Xm ago".
 let _rtf = null;
+// Intl.Collator for contact-name sort — explicit locale prevents system-locale drift.
+const _collator = new Intl.Collator(LANG, { sensitivity: 'base', usage: 'sort' });
 function relTime(diffMs) {
   try {
     if (diffMs < MS.MIN) return t('justNow');
@@ -5670,7 +5672,7 @@ async function initMessenger(dbName) {
     // v3.3: PERFORMANCE — Use DocumentFragment for batch DOM insertion
     const frag = document.createDocumentFragment();
     // v3.1: Sort by selected mode
-    if (_contactSort === 'name') contacts.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    if (_contactSort === 'name') contacts.sort((a, b) => _collator.compare(a.name || '', b.name || ''));
     else if (_contactSort === 'unread') contacts.sort((a, b) => (b.unread || 0) - (a.unread || 0) || (b.lastMsgAt || 0) - (a.lastMsgAt || 0));
     else contacts.sort((a, b) => (b.lastMsgAt || b.addedAt) - (a.lastMsgAt || a.addedAt));
     // Pinned contacts always on top
