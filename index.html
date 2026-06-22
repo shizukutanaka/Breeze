@@ -1120,12 +1120,12 @@ del.md-del { opacity: .6 }
   <div id="msg-setup" class="hidden setup-page">
     <h1 id="msg-setup-title" data-i18n-html="heroTitle"></h1>
     <p id="msg-setup-desc" class="setup-desc" data-i18n="heroDesc"></p>
-    <input type="text" id="msg-name" class="setup-input" data-i18n-ph="yourName" data-i18n-aria="ariaDisplayName" maxlength="64" autocomplete="off">
-    <input type="text" id="msg-alias" class="setup-input-alt" data-i18n-ph="breezeId" data-i18n-aria="ariaBreezeId" maxlength="20" pattern="[a-z0-9_]+" autocomplete="off">
+    <input type="text" id="msg-name" class="setup-input" data-i18n-ph="yourName" data-i18n-aria="ariaDisplayName" maxlength="64" autocomplete="off" enterkeyhint="next">
+    <input type="text" id="msg-alias" class="setup-input-alt" data-i18n-ph="breezeId" data-i18n-aria="ariaBreezeId" maxlength="20" pattern="[a-z0-9_]+" autocomplete="off" enterkeyhint="done">
     <button class="btn btn-g setup-cta" id="b-msg-setup" data-i18n="createFree"></button>
     <div class="setup-footer">
       <span data-i18n="noCreditCard"></span><br>
-      <button class="btn btn-o btn-sm hidden mt-8" id="setup-install-btn" aria-label="Install app">Install App</button>
+      <button class="btn btn-o btn-sm hidden mt-8" id="setup-install-btn" data-i18n="uiInstall">Install App</button>
     </div>
     <div class="setup-features">
       <div class="setup-feat"><span>🔐</span><b data-i18n="featEncrypt"></b><small data-i18n="featEncryptSub"></small></div>
@@ -1156,7 +1156,7 @@ del.md-del { opacity: .6 }
         </div>
         <div id="label-filter" class="label-filter hidden"></div>
         <div class="contact-filter-wrap">
-          <input id="contact-filter" type="text" placeholder="Search..." data-i18n-ph="searchPh" data-i18n-aria="ariaFilterContacts" class="contact-filter" autocomplete="off">
+          <input id="contact-filter" type="text" placeholder="Search..." data-i18n-ph="searchPh" data-i18n-aria="ariaFilterContacts" class="contact-filter" autocomplete="off" enterkeyhint="search">
         </div>
         <div id="msg-contacts" role="list" aria-label="Contacts" class="contact-list">
           <div class="skeleton skeleton-contact"></div>
@@ -1177,7 +1177,7 @@ del.md-del { opacity: .6 }
         <div class="offline-bar" id="offline-bar" role="alert"></div>
         <div class="outbox-badge" id="outbox-badge" role="status"><span class="dot"></span><span id="outbox-text"></span></div>
         <div class="search-bar" id="search-bar">
-          <input id="search-chat-input" placeholder="Search..." data-i18n-ph="searchPh" data-i18n-aria="ariaSearchChat" autocomplete="off">
+          <input id="search-chat-input" placeholder="Search..." data-i18n-ph="searchPh" data-i18n-aria="ariaSearchChat" autocomplete="off" enterkeyhint="search">
           <span class="match-count" id="search-match-count"></span>
           <button class="btn btn-o btn-sm" id="search-chat-prev" aria-label="Prev">↑</button>
           <button class="btn btn-o btn-sm" id="search-chat-next" aria-label="Next">↓</button>
@@ -1193,12 +1193,12 @@ del.md-del { opacity: .6 }
         <div id="msg-input-bar" class="input-bar hidden">
           <div id="smart-reply-bar" class="smart-reply-bar hidden" role="toolbar" aria-label="Quick replies"></div>
           <label class="tool" data-i18n-title="ttAttach">📎<input type="file" id="msg-file" class="hidden" data-i18n-aria="ttAttach"></label>
-          <button id="b-msg-voice" class="tool" aria-label="Voice">🎤</button>
-          <button id="b-msg-stt" class="tool hidden" aria-label="Dictate">🗣</button>
-          <textarea id="msg-input" data-i18n-ph="msgPlaceholder" data-i18n-aria="ariaMessage" maxlength="4096" rows="1"></textarea>
+          <button id="b-msg-voice" class="tool" data-i18n-aria="ariaVoice">🎤</button>
+          <button id="b-msg-stt" class="tool hidden" data-i18n-aria="ariaDict">🗣</button>
+          <textarea id="msg-input" data-i18n-ph="msgPlaceholder" data-i18n-aria="ariaMessage" maxlength="4096" rows="1" enterkeyhint="send"></textarea>
           <span id="msg-char-count" class="char-count hidden"></span>
           <button id="b-msg-emoji" class="tool" data-i18n-aria="ttEmoji" data-i18n-title="ttEmoji">😀</button>
-          <button class="send" id="b-msg-send" aria-label="Send">↑</button>
+          <button class="send" id="b-msg-send" data-i18n-aria="send">↑</button>
         </div>
       </div>
     </div>
@@ -1504,6 +1504,9 @@ const _I = {
     ariaFilterContacts: 'Filter contacts',
     ariaSearchChat: 'Search messages',
     ariaMessage: 'Message',
+    ariaVoice: 'Record voice message',
+    ariaDict: 'Dictate message',
+    pinsCount: (n) => `${n} pins`,
     ttEditProfile: 'Edit profile',
     ttClickToCopy: 'Click to copy',
     ttAttach: 'Attach',
@@ -1966,6 +1969,9 @@ const _I = {
     ariaFilterContacts: '連絡先を絞り込み',
     ariaSearchChat: 'メッセージを検索',
     ariaMessage: 'メッセージ',
+    ariaVoice: 'ボイスメッセージを録音',
+    ariaDict: 'メッセージを音声入力',
+    pinsCount: (n) => `${n}件のピン`,
     ttEditProfile: 'プロフィールを編集',
     ttClickToCopy: 'クリックでコピー',
     ttAttach: '添付',
@@ -6087,7 +6093,7 @@ async function initMessenger(dbName) {
       const pinned = allMsgs.filter(m => m.pinned);
       if (pinned.length > 0) {
         const latest = pinned.sort((a, b) => b.ts - a.ts)[0];
-        pinBanner.innerHTML = `<span class="pin-icon">📌</span><span class="pin-text">${esc(latest.text?.slice(0, 60) || '')}</span><span class="pin-count">${pinned.length > 1 ? pinned.length + ' pins' : ''}</span>`;
+        pinBanner.innerHTML = `<span class="pin-icon">📌</span><span class="pin-text">${esc(latest.text?.slice(0, 60) || '')}</span><span class="pin-count">${pinned.length > 1 ? t('pinsCount', pinned.length) : ''}</span>`;
         pinBanner.classList.remove('hidden');
         pinBanner.onclick = () => {
           const target = document.querySelector(`[data-msgid="${latest.msgId}"]`);
