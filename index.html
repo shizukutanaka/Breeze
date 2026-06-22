@@ -1863,7 +1863,22 @@ const _I = {
     toastUnblockedName: (n) => `Unblocked ${n}`,
     toastWallpaperReset: 'Wallpaper reset',
     toastWallpaperSet: (c) => `Wallpaper set to ${c}`,
-    toastWallpaperUsage: 'Use: /wallpaper #1a2b3c or /wallpaper reset',
+    shareDialogTitle: 'Chat with me on Breeze',
+    shareDialogText: (name) => `${name} on Breeze`,
+    toastWallpaperUsage: 'Use: /wallpaper #1a2b3c, /wallpaper reset, or /wallpaper ocean|sunset|forest|midnight|aurora',
+    uptimeUptime: (h, m, s) => `Uptime: ${h}h ${m}m ${s}s`,
+    uptimeP2P: (a, t) => `P2P: ${a}/${t} connected`,
+    uptimeServer: (ok) => `Server: ${ok ? '✓ Online' : '✗ Offline (P2P-only)'}`,
+    uptimeLeader: (is) => `Leader tab: ${is ? '✓ This tab' : '✗ Another tab'}`,
+    uptimeOutbox: (relay, p2p) => `Outbox: ${relay} relay + ${p2p} P2P pending`,
+    uptimeNetwork: (ok, type) => `Network: ${ok ? '✓ Online' : '✗ Offline'} (${type || '?'})`,
+    uptimeHeartbeats: (n) => `Heartbeats: ${n} active`,
+    uptimeAdaptive: (img, poll) => `Adaptive: img=${img}% poll=${poll}s`,
+    uptimeImage: (mode) => `Image: ${mode}`,
+    uptimeImageOff: '✓ Original (no loss)',
+    uptimeImageLossless: '↕ Resize only',
+    uptimeImageAuto: '⚡ Auto WebP',
+    uptimeCrypto: (worker, tt) => `Crypto: ${worker ? 'Worker ✓' : 'Main thread'} | TT: ${tt ? '✓' : '✗'}`,
     toastNotifSound: (s) => `Notification sound: ${s}`,
     toastNoteSavedFor: (n) => `Note saved for ${n}`,
     toastLabelsInfo: (l) => `Labels: ${l}`,
@@ -2484,7 +2499,22 @@ const _I = {
     toastUnblockedName: (n) => `${n}のブロックを解除しました`,
     toastWallpaperReset: '壁紙をリセットしました',
     toastWallpaperSet: (c) => `壁紙を${c}に設定しました`,
-    toastWallpaperUsage: '使い方: /wallpaper #1a2b3c or /wallpaper reset',
+    shareDialogTitle: 'Breezeでチャットしよう',
+    shareDialogText: (name) => `${name} - Breeze`,
+    toastWallpaperUsage: '使い方: /wallpaper #1a2b3c、/wallpaper reset、または /wallpaper ocean|sunset|forest|midnight|aurora',
+    uptimeUptime: (h, m, s) => `稼働時間: ${h}時間${m}分${s}秒`,
+    uptimeP2P: (a, total) => `P2P: ${a}/${total} 接続中`,
+    uptimeServer: (ok) => `サーバー: ${ok ? '✓ オンライン' : '✗ オフライン (P2Pのみ)'}`,
+    uptimeLeader: (is) => `リーダータブ: ${is ? '✓ このタブ' : '✗ 別のタブ'}`,
+    uptimeOutbox: (relay, p2p) => `送信箱: ${relay} リレー + ${p2p} P2P待機中`,
+    uptimeNetwork: (ok, type) => `ネットワーク: ${ok ? '✓ オンライン' : '✗ オフライン'} (${type || '?'})`,
+    uptimeHeartbeats: (n) => `ハートビート: ${n} 件有効`,
+    uptimeAdaptive: (img, poll) => `アダプティブ: 画像=${img}% ポーリング=${poll}s`,
+    uptimeImage: (mode) => `画像: ${mode}`,
+    uptimeImageOff: '✓ オリジナル (無劣化)',
+    uptimeImageLossless: '↕ リサイズのみ',
+    uptimeImageAuto: '⚡ 自動WebP',
+    uptimeCrypto: (worker, tt) => `暗号: ${worker ? 'ワーカー ✓' : 'メインスレッド'} | TT: ${tt ? '✓' : '✗'}`,
     toastNotifSound: (s) => `通知音: ${s}`,
     toastNoteSavedFor: (n) => `${n}のノートを保存しました`,
     toastLabelsInfo: (l) => `ラベル: ${l}`,
@@ -12783,7 +12813,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       e.preventDefault();
       clearInput();
       const link = location.origin + '/?add=' + (myAlias ? '@' + myAlias : myPubB64);
-      const shareData = { title: 'Chat with me on Breeze', text: myName + ' on Breeze', url: link };
+      const shareData = { title: t('shareDialogTitle'), text: t('shareDialogText', myName), url: link };
       if (navigator.share) {
         try { await navigator.share(shareData); } catch(e) { if (e.name !== 'AbortError') _dbg(e); }
       } else {
@@ -12870,7 +12900,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         safeSetHTML(d, '<b class="i-g">' + t('cmdWallpaperTitle') + '</b><br><span class="text-xs color-t3">' + t('cmdWallpaperHelp') + '</span>');
         box.appendChild(d); box.scrollTop = box.scrollHeight;
       } else {
-        showToast(t('toastWallpaperUsage') + ' | Presets: ocean, sunset, forest, midnight, aurora', 'error');
+        showToast(t('toastWallpaperUsage'), 'error');
       }
     }
 
@@ -12923,16 +12953,16 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const outbox = _retryQueue.length;
       let persistQ = 0; for (const [, q] of _outbox) persistQ += q.length;
       const lines = [
-        `Uptime: ${h}h ${m}m ${s}s`,
-        `P2P: ${p2p}/${totalPeers} connected`,
-        `Server: ${_serverOk ? '✓ Online' : '✗ Offline (P2P-only)'}`,
-        `Leader tab: ${_isLeaderTab ? '✓ This tab' : '✗ Another tab'}`,
-        `Outbox: ${outbox} relay + ${persistQ} P2P pending`,
-        `Network: ${navigator.onLine ? '✓ Online' : '✗ Offline'} (${_effectiveType || '?'})`,
-        `Heartbeats: ${Object.values(peers).filter(p => p._heartbeat).length} active`,
-        `Adaptive: img=${Math.round(_adaptiveConfig.imageQuality * 100)}% poll=${(_adaptiveConfig.pollInterval/1000).toFixed(0)}s`,
-        `Image: ${_imgCompress === 'off' ? '✓ Original (no loss)' : _imgCompress === 'lossless' ? '↕ Resize only' : '⚡ Auto WebP'}`,
-        `Crypto: ${_cryptoWorker ? 'Worker ✓' : 'Main thread'} | TT: ${typeof trustedTypes !== 'undefined' ? '✓' : '✗'}`,
+        t('uptimeUptime', h, m, s),
+        t('uptimeP2P', p2p, totalPeers),
+        t('uptimeServer', _serverOk),
+        t('uptimeLeader', _isLeaderTab),
+        t('uptimeOutbox', outbox, persistQ),
+        t('uptimeNetwork', navigator.onLine, _effectiveType),
+        t('uptimeHeartbeats', Object.values(peers).filter(p => p._heartbeat).length),
+        t('uptimeAdaptive', Math.round(_adaptiveConfig.imageQuality * 100), (_adaptiveConfig.pollInterval/1000).toFixed(0)),
+        t('uptimeImage', _imgCompress === 'off' ? t('uptimeImageOff') : _imgCompress === 'lossless' ? t('uptimeImageLossless') : t('uptimeImageAuto')),
+        t('uptimeCrypto', !!_cryptoWorker, typeof trustedTypes !== 'undefined'),
       ];
       cmdOutput('cmd-panel-mono', lines.join('<br>'));
     }
