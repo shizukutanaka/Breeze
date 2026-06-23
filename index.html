@@ -1357,21 +1357,28 @@ const _capabilities = {
   broadcast: !!(window.BroadcastChannel),
   locks: !!(navigator.locks),
 };
-if (!_capabilities.crypto) {
+// Minimal bilingual lookup for fatal capability errors — these run before the full
+// i18n table / t() is defined, so pick EN/JA by browser language inline.
+const _fatalJa = (navigator.language || '').toLowerCase().startsWith('ja');
+function _fatalScreen(enTitle, enBody, jaTitle, jaBody, errMsg) {
   const _fe = document.createElement('div');
   _fe.className = 'i-fatal';
-  const _fh = document.createElement('h2'); _fh.textContent = 'Breeze requires a secure context'; _fe.appendChild(_fh);
-  const _fp = document.createElement('p'); _fp.textContent = 'WebCrypto API is not available. Please access via HTTPS.'; _fe.appendChild(_fp);
+  const _fh = document.createElement('h2'); _fh.textContent = _fatalJa ? jaTitle : enTitle; _fe.appendChild(_fh);
+  const _fp = document.createElement('p'); _fp.textContent = _fatalJa ? jaBody : enBody; _fe.appendChild(_fp);
   document.body.replaceChildren(_fe);
-  throw new Error('FATAL: WebCrypto unavailable');
+  throw new Error(errMsg);
+}
+if (!_capabilities.crypto) {
+  _fatalScreen(
+    'Breeze requires a secure context', 'WebCrypto API is not available. Please access via HTTPS.',
+    'Breeze は安全な接続が必要です', 'WebCrypto API が利用できません。HTTPS でアクセスしてください。',
+    'FATAL: WebCrypto unavailable');
 }
 if (!_capabilities.idb) {
-  const _fe = document.createElement('div');
-  _fe.className = 'i-fatal';
-  const _fh = document.createElement('h2'); _fh.textContent = 'Storage unavailable'; _fe.appendChild(_fh);
-  const _fp = document.createElement('p'); _fp.textContent = 'IndexedDB is required. Please disable private/incognito mode or enable storage.'; _fe.appendChild(_fp);
-  document.body.replaceChildren(_fe);
-  throw new Error('FATAL: IndexedDB unavailable');
+  _fatalScreen(
+    'Storage unavailable', 'IndexedDB is required. Please disable private/incognito mode or enable storage.',
+    'ストレージが利用できません', 'IndexedDB が必要です。プライベート/シークレットモードを無効にするか、ストレージを有効にしてください。',
+    'FATAL: IndexedDB unavailable');
 }
 // ═══ DOM Cache (must be before SW registration which uses it) ═══
 const _DOM = {
@@ -3052,7 +3059,7 @@ function showInstallBanner() {
   };
 
   // v3.6: Check cooldown (7 days) instead of session-only
-  try { const dismissed = parseInt(localStorage.getItem('brz-install-dismissed') || '0'); if (dismissed && Date.now() - dismissed < 7 * MS.DAY) return; } catch(e) {}
+  try { const dismissed = parseInt(localStorage.getItem('brz-install-dismissed') || '0'); if (dismissed && Date.now() - dismissed < MS.WEEK) return; } catch(e) {}
   document.body.appendChild(banner);
 }
 
@@ -3081,7 +3088,9 @@ const _ERROR_FLOOD_LIMIT = 10;
 const _FATAL_WINDOW_MS = 60000; // only a burst of errors within this window counts as a crash loop
 
 window.addEventListener('error', (event) => {
-  if (Date.now() - _lastErrorAt > _FATAL_WINDOW_MS) _fatalErrors = 0;
+  // Reset both counters when outside the window — otherwise _errorCount only ever
+  // grows and the flood limit silences all error toasts permanently after 10 errors.
+  if (Date.now() - _lastErrorAt > _FATAL_WINDOW_MS) { _fatalErrors = 0; _errorCount = 0; }
   _lastErrorAt = Date.now();
   _fatalErrors++;
   _errorCount++;
@@ -3109,7 +3118,7 @@ window.addEventListener('error', (event) => {
 });
 
 window.addEventListener('unhandledrejection', (event) => {
-  if (Date.now() - _lastErrorAt > _FATAL_WINDOW_MS) _fatalErrors = 0;
+  if (Date.now() - _lastErrorAt > _FATAL_WINDOW_MS) { _fatalErrors = 0; _errorCount = 0; }
   _lastErrorAt = Date.now();
   _fatalErrors++;
   _errorCount++;
@@ -10318,6 +10327,12 @@ async function initMessenger(dbName) {
         }
       } catch(e) { _dbg(e); }
       renderContacts();
+      // Prune stale cache entries for contacts that no longer exist (memory leak fix:
+      // deleted contacts otherwise leave orphaned _presenceCache/_lastSeenCache entries
+      // that grow unbounded over the app's lifetime).
+      const liveIds = new Set(contacts.map(c => c.id));
+      for (const id in _presenceCache) { if (!liveIds.has(id)) delete _presenceCache[id]; }
+      for (const id in _lastSeenCache) { if (!liveIds.has(id)) delete _lastSeenCache[id]; }
       // v3: Auto-reconnect disconnected peers that are now online
       for (const c of contacts) {
         if (!c.isGroup && _presenceCache[c.id] && !peers[c.pubB64]?.connected) {
