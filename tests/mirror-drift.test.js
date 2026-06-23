@@ -461,3 +461,55 @@ describe('Group sender-key mirror — inline (index.html) vs reference (src/cryp
     expect(await inline.decryptGroupMsg('G', 'S', ciphertext)).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// REFERENCE-DRIFT tracking — the inverse of the mirror-drift guard.
+//
+// Mirror-drift (above) asserts "inline MUST stay equal to its reference". But
+// several src/crypto modules are the opposite problem: fully written + tested
+// references that were NEVER wired into the deployed index.html/_worker.js
+// (each says "to be migrated … in a browser-validated pass"). Green tests +
+// polished docs make the codebase LOOK more secure than the shipped artifact —
+// e.g. the deployed safety number is still a single SHA-256 over 12 bytes while
+// fingerprint.js implements Signal's iterated 5200×SHA-512 (un-deployed).
+//
+// This guard pins that "reference-only" status. Each marker below is a string
+// that WILL necessarily appear in the deployed file once its module is migrated
+// (an HKDF info string or an exported function name). The moment one starts
+// matching, this test fails — the cue to (a) update CLAUDE.md's deployed-vs-
+// reference-only list and (b) add a real mirror-drift guard above for the newly
+// shipped code, so it never goes to production unguarded. See CLAUDE.md.
+// ---------------------------------------------------------------------------
+const worker = readFileSync(join(HERE, '..', '_worker.js'), 'utf8');
+const deployed = html + '\n' + worker;
+
+describe('reference-drift tracking — modules that are tested references, NOT yet deployed', () => {
+  const REFERENCE_ONLY = [
+    { module: 'fingerprint.js (Signal iterated 5200×SHA-512 safety number)', marker: 'fingerprintBytes' },
+    { module: 'franking.js (abuse-report message franking)', marker: 'createFranking' },
+    { module: 'franking.js verifyReport path', marker: 'verifyReport' },
+    { module: 'ktlog.js (key-transparency append-only log)', marker: 'appendChainEntry' },
+    { module: 'ktlog.js audit path', marker: 'auditBundle' },
+    { module: 'ratchet.js authenticated X3DH (v5 prekey handshake)', marker: 'breeze-x3dh-v5' },
+  ];
+  for (const { module, marker } of REFERENCE_ONLY) {
+    it(`${module} is still reference-only (marker "${marker}" absent from deployed index.html/_worker.js)`, () => {
+      expect(deployed.includes(marker)).toBe(false);
+    });
+  }
+
+  // Behavioural pin on the un-migrated safety number. This deliberately locks the
+  // CURRENT (weaker) inline algorithm: a single SHA-256 over the sorted pubkeys,
+  // displayed as 6 space-separated 5-digit groups (~30 digits). It is NOT an
+  // endorsement — it's a tripwire: migrating onto fingerprint.js (60 digits,
+  // iterated SHA-512) changes this output and fails the test, forcing a deliberate,
+  // documented swap rather than a silent drift in a security-display string.
+  it('inline safetyNumber still uses the legacy single-SHA-256 format (6×5 digits)', () => {
+    const sn = html.indexOf('async function safetyNumber(peerPubB64)');
+    const body = html.slice(sn, html.indexOf('\n  }', sn));
+    expect(body).toContain("digest('SHA-256'");      // single hash, not iterated SHA-512
+    expect(body).not.toContain('SHA-512');
+    expect(body).toContain("for (let i = 0; i < 6; i++)"); // 6 displayed groups
+    expect(body).not.toContain('fingerprintBytes');  // reference fn not inlined
+  });
+});

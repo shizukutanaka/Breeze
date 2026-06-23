@@ -10,11 +10,29 @@ Worker), sw.js.
 implementations** of the crypto, exercised by `tests/` (vitest) + CI; `build.sh`
 packages `breeze.zip`; `package.json` carries dev-only deps (vitest).
 
-⚠ **MIRROR-DRIFT HAZARD**: index.html and _worker.js carry **hand-maintained inline
-copies** of `src/crypto/*` (grep `inline mirror of src/crypto`). The 700+ tests verify
+⚠ **MIRROR-DRIFT HAZARD**: some `src/crypto/*` modules have **hand-maintained inline
+copies** in index.html/_worker.js (grep `inline mirror of src/crypto`). The tests verify
 the *references*, NOT the inline copies — so a drift leaves tests GREEN while production
-E2E silently breaks. When you touch ratchet/atrest/group/pow/franking/fingerprint/
-negotiate logic, edit BOTH the inline copy AND `src/crypto/*`, then run `npm test`.
+E2E silently breaks. When you touch a **deployed** module's logic, edit BOTH the inline
+copy AND `src/crypto/*`, then run `npm test`. `tests/mirror-drift.test.js` cross-tests the
+inline copies against the references and will catch a drift.
+
+**Deployed vs reference-only** — NOT every `src/crypto/*` module ships. Confusing the two
+makes the codebase look more secure than the artifact is (e.g. the deployed safety number
+is a single SHA-256 over 12 bytes; `fingerprint.js`'s iterated 5200×SHA-512 is un-deployed):
+
+| Module | Status | Mirror-drift guarded |
+|---|---|---|
+| `atrest.js`, `pow.js`, `ratchet.js` (KDF + group v5) | **deployed** (inline mirror) | ✅ yes |
+| `fingerprint.js` (Signal iterated safety number) | reference-only (roadmap) | tripwire only |
+| `franking.js`, `ktlog.js` | reference-only (roadmap) | tripwire only |
+| `ratchet.js` authenticated X3DH (v5 handshake) | reference-only (roadmap, gated) | tripwire only |
+| `negotiate.js` | partially inline (`_capabilities`) | — |
+
+"Reference-only" = tested + ready but never wired in; deploying any is a **breaking** wire/
+display change needing coordinated rollout. `tests/mirror-drift.test.js`'s reference-drift
+block pins this status: when a roadmap module gets deployed its marker starts matching,
+the tripwire test fails, and you must update this table + add a real mirror-drift guard.
 
 ## Must Use
 - `t('key')` for ALL UI text (never hardcode English)

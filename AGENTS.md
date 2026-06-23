@@ -6,10 +6,14 @@ Carmack (performance-first), Martin (clean code, SOLID), Pike (simplicity, no fr
 zero runtime deps, vanilla JS. **Dev/test tree** = `src/crypto/*.js` ESM reference
 implementations + `tests/` (vitest) + `build.sh` + CI; these are NOT shipped to the browser.
 
-⚠ MIRROR-DRIFT HAZARD: index.html and _worker.js inline **hand-maintained copies** of
-`src/crypto/*` (grep `inline mirror of src/crypto`). Tests verify the references, not the
-inline copies — a drift = green tests + broken production E2E. Touch crypto → edit BOTH
-the inline copy and `src/crypto/*`, then run `npm test`.
+⚠ MIRROR-DRIFT HAZARD: index.html and _worker.js inline **hand-maintained copies** of the
+*deployed* `src/crypto/*` modules (grep `inline mirror of src/crypto`). Tests verify the
+references, not the inline copies — a drift = green tests + broken production E2E. Touch a
+deployed module → edit BOTH the inline copy and `src/crypto/*`, then run `npm test`.
+`tests/mirror-drift.test.js` cross-tests the inline copies vs references and catches drift.
+NOTE: not every module ships — `fingerprint.js`, `franking.js`, `ktlog.js`, and the
+authenticated X3DH in `ratchet.js` are **reference-only** (tested but un-deployed roadmap;
+deploying any is a breaking change). See the deployed-vs-reference table in CLAUDE.md.
 
 ## Do
 - use `t('key')` for ALL user-facing text (EN+JA i18n keys required)
