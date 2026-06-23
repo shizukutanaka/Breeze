@@ -2,7 +2,14 @@
 
 ## Philosophy
 Carmack (performance-first), Martin (clean code, SOLID), Pike (simplicity, no frameworks).
-Single HTML file + Cloudflare Worker. No build step. No framework. No external dependencies.
+**Deployed runtime** = single HTML file + Cloudflare Worker + sw.js: no build, no framework,
+zero runtime deps, vanilla JS. **Dev/test tree** = `src/crypto/*.js` ESM reference
+implementations + `tests/` (vitest) + `build.sh` + CI; these are NOT shipped to the browser.
+
+⚠ MIRROR-DRIFT HAZARD: index.html and _worker.js inline **hand-maintained copies** of
+`src/crypto/*` (grep `inline mirror of src/crypto`). Tests verify the references, not the
+inline copies — a drift = green tests + broken production E2E. Touch crypto → edit BOTH
+the inline copy and `src/crypto/*`, then run `npm test`.
 
 ## Do
 - use `t('key')` for ALL user-facing text (EN+JA i18n keys required)
@@ -28,16 +35,21 @@ Single HTML file + Cloudflare Worker. No build step. No framework. No external d
 - don't use `fetchT(API + ...)` directly — use `postAPIRaw()` or `_signal()`
 - don't use `eval()`, `Function()`, or `setTimeout` with strings
 - don't use `.style.xxx =` for static styles — create CSS class
-- don't add external npm dependencies (zero-dependency project)
-- don't create separate .css or .js files — everything is in index.html
+- don't add external *runtime* npm dependencies (deployed app is zero-dependency; dev-only
+  deps like vitest are fine in package.json)
+- don't create separate .css/.js files *in the deployed artifact* — index.html is
+  self-contained (exception: `src/crypto/*.js` ESM references, which are dev/test-only)
 - don't store secrets in code — use Worker environment variables
 - don't use `localStorage` for sensitive data — use IndexedDB (encrypted)
 
 ## Commands
 
 ```bash
-# Validate (ALWAYS run after changes)
+# Validate (ALWAYS run after changes) — style/convention gate only, NOT correctness
 ./validate.sh
+
+# Correctness gate for any crypto/worker change — runs the real encrypt/decrypt suite
+npm test
 
 # Syntax check single files
 node -c _worker.js

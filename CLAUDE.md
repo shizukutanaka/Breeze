@@ -3,9 +3,18 @@
 Strictly follow ./AGENTS.md for full rules. Key points below.
 
 ## Architecture
-Single-file app: index.html (CSS+HTML+JS), _worker.js (Cloudflare Worker), sw.js.
-No build step. No framework. No npm dependencies. Vanilla JS only.
-v3.6.0: 13,116 client + ~2,340 worker + 145 SW lines. 43 API endpoints. 420 i18n keys (EN+JA).
+**Deployed runtime** (ships to the browser as-is — keep single-file, framework-free,
+zero runtime deps, vanilla JS): index.html (CSS+HTML+JS), _worker.js (Cloudflare
+Worker), sw.js.
+**Dev/test tree** (NOT shipped as modules): `src/crypto/*.js` are ESM **reference
+implementations** of the crypto, exercised by `tests/` (vitest) + CI; `build.sh`
+packages `breeze.zip`; `package.json` carries dev-only deps (vitest).
+
+⚠ **MIRROR-DRIFT HAZARD**: index.html and _worker.js carry **hand-maintained inline
+copies** of `src/crypto/*` (grep `inline mirror of src/crypto`). The 700+ tests verify
+the *references*, NOT the inline copies — so a drift leaves tests GREEN while production
+E2E silently breaks. When you touch ratchet/atrest/group/pow/franking/fingerprint/
+negotiate logic, edit BOTH the inline copy AND `src/crypto/*`, then run `npm test`.
 
 ## Must Use
 - `t('key')` for ALL UI text (never hardcode English)
@@ -21,14 +30,17 @@ v3.6.0: 13,116 client + ~2,340 worker + 145 SW lines. 43 API endpoints. 420 i18n
 
 ## Never
 - No hardcoded colors, English strings, or magic numbers
-- No eval(), no new dependencies, no separate .css/.js files
+- No eval(); no new *runtime* deps; no separate .css/.js in the deployed artifact
+  (the `src/crypto/*.js` ESM references are dev/test-only — not loaded by the browser)
 - No .style.xxx for static styles — use CSS class
 - No secrets in code — Worker env vars only
 - No `a.href = URL.createObjectURL` — use `downloadBlob()`
 
 ## Validate
-Always run after changes: `./validate.sh` (must pass 35/35)
+Always run after changes: `./validate.sh` (style/convention gate, currently 35/36 — 1 size warning)
 Syntax check: `node -c _worker.js && node -c sw.js`
+Crypto/worker changes: `npm test` (vitest) is the real correctness gate — validate.sh
+only greps conventions, it never runs an encrypt/decrypt round-trip.
 
 ## P2P Architecture
 - Dual-path: P2P DataChannel (instant) + Sealed Sender relay (reliable)
@@ -38,7 +50,7 @@ Syntax check: `node -c _worker.js && node -c sw.js`
 - Connection display: Direct/STUN/TURN + RTT + protocol
 
 ## Compaction
-When compacting, preserve: current file paths, test/validation results, billing plan structure (Lite/Plus/Pro), crypto protocol decisions, i18n key count (406).
+When compacting, preserve: current file paths, test/validation results, billing plan structure (Lite/Plus/Pro), crypto protocol decisions, i18n EN+JA parity (verify parity, not a fixed number — the count drifts every session).
 
 ## Key Files
 - AGENTS.md — Full rules + examples (210 lines)
