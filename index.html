@@ -1997,6 +1997,10 @@ const _I = {
     helpKeysHint: 'Ctrl+F search · Ctrl+K contacts · Ctrl+1..9 accounts · ? shortcuts',
     uiPinnedCount: (n) => `${n} pinned message${n > 1 ? 's' : ''}`,
     uiMoreCount: (n) => `+${n} more`,
+    secActiveProtections: 'Active Protections (this device)',
+    secAtRestWrap: (on) => 'At-rest key encryption: ' + (on ? '✓ ON (PBKDF2-wrapped identity keys)' : '✗ OFF (identity keys as plaintext JWK — enable via /keywrap)'),
+    secGroupFS: (on) => 'Group forward secrecy: ' + (on ? '✓ ON (hash ratchet + epoch revocation)' : '✗ OFF (static sender key; 1:1 chats keep full FS)'),
+    secCallSignal: (on) => 'Call signaling E2E: ' + (on ? '✓ ON (encrypted offer/answer/ICE)' : '✗ OFF (SDP relayed in plaintext)'),
     toastNotifSound: (s) => `Notification sound: ${s}`,
     toastNoteSavedFor: (n) => `Note saved for ${n}`,
     toastLabelsInfo: (l) => `Labels: ${l}`,
@@ -2736,6 +2740,10 @@ const _I = {
     helpKeysHint: 'Ctrl+F 検索 · Ctrl+K 連絡先 · Ctrl+1..9 アカウント · ? ショートカット',
     uiPinnedCount: (n) => `${n}件のピン留めメッセージ`,
     uiMoreCount: (n) => `他${n}件`,
+    secActiveProtections: '有効な保護（この端末）',
+    secAtRestWrap: (on) => '保存時の鍵暗号化: ' + (on ? '✓ 有効（PBKDF2でIDキーを暗号化）' : '✗ 無効（IDキーは平文JWKで保存 — /keywrap で有効化）'),
+    secGroupFS: (on) => 'グループ前方秘匿性: ' + (on ? '✓ 有効（ハッシュラチェット＋エポック失効）' : '✗ 無効（静的センダーキー、1:1は完全FS維持）'),
+    secCallSignal: (on) => '通話シグナリングE2E: ' + (on ? '✓ 有効（offer/answer/ICEを暗号化）' : '✗ 無効（SDPは平文で中継）'),
     toastNotifSound: (s) => `通知音: ${s}`,
     toastNoteSavedFor: (n) => `${n}のノートを保存しました`,
     toastLabelsInfo: (l) => `ラベル: ${l}`,
@@ -12906,8 +12914,17 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       d.className = 'cmd-panel-mono';
       const cs = _cryptoStack;
       const sess = activeContact ? await getSession(activeContact.pubB64?.slice(0, 12)) : null;
+      // Honest runtime state of opt-in/flag-gated protections — list what is ACTUALLY
+      // protecting the user on this device, not just compiled-in capabilities.
+      const _identRec = await dbGet('identity', 'keys').catch(() => null);
+      const _atRestOn = _atRestIsWrapped(_identRec);
       safeSetHTML(d, [
         '<b class="i-g13">' + t('cmdCryptoTitle') + '</b>',
+        '',
+        '<b>' + t('secActiveProtections') + '</b>',
+        t('secAtRestWrap', _atRestOn),
+        t('secGroupFS', CONFIG.GROUP_RATCHET_V5),
+        t('secCallSignal', CONFIG.CALL_E2E_SIGNAL),
         '',
         '<b>' + t('cmdSectionCryptoStack') + '</b>',
         t('cmdLblKeyExchange') + ': <span class="i-g">' + cs.keyExchange + '</span>' + (_hasX25519 ? ' (browser-native)' : ' (WebCrypto fallback)'),
