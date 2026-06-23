@@ -25,6 +25,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { createAtRest } from '../src/crypto/atrest.js';
+import { makeChallengeString, solve as powSolve, verify as powVerify } from '../src/crypto/pow.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(join(HERE, '..', 'index.html'), 'utf8');
@@ -149,4 +150,66 @@ describe('at-rest mirror — inline (index.html) vs reference (src/crypto/atrest
     expect(migratedRef.priv).toBeUndefined();
     expect(await inline._atRestUnwrap(migratedRef.wrapped, PASS)).toEqual(JWK);
   });
+});
+
+// ---------------------------------------------------------------------------
+// PoW mirror — a 3-way CROSS-COMPONENT contract: the client solves (inline
+// generatePoW in index.html), the worker verifies (inline in _worker.js), and
+// src/crypto/pow.js is the tested reference. The worker's verify is covered by
+// worker.test.js, but the CLIENT's inline solve is tested nowhere — so a drift in
+// the hash input ("challenge:nonce"), the big-endian getUint32(0,false) byte order,
+// or the target math would let the client produce tokens the worker rejects (legit
+// users locked out of alias/group actions) with every existing test still green.
+// ---------------------------------------------------------------------------
+const POW_START = 'async function generatePoW(challenge, difficulty) {';
+const POW_END = '\n// v3.5: Business-grade file type validation';
+const ps = html.indexOf(POW_START);
+const pe = html.indexOf(POW_END, ps);
+if (ps < 0 || pe < 0) {
+  throw new Error(
+    'mirror-drift guard: could not locate inline generatePoW in index.html ' +
+    '(markers "async function generatePoW" .. "// v3.5: Business-grade file type validation"). ' +
+    'If it moved, update tests/mirror-drift.test.js.',
+  );
+}
+const powBlock = html.slice(ps, pe);
+const inlineGeneratePoW = new Function(
+  'crypto', 'CONFIG', '_dbg',
+  powBlock + '\nreturn generatePoW;',
+)(globalThis.crypto, { POW_DIFFICULTY: 16 }, () => {});
+
+const subtle = globalThis.crypto.subtle;
+
+describe('PoW mirror — inline generatePoW (index.html) vs reference (src/crypto/pow.js)', () => {
+  // Difficulty-16 solving averages ~65k SHA-256 hashes; under parallel suite load this
+  // can exceed vitest's 5s default, so these solve-bound tests get a generous timeout.
+  // (The reference solver clamps difficulty to a 16-bit floor, so the work can't be reduced.)
+  const SOLVE_TIMEOUT = 30000;
+
+  it('finds the IDENTICAL minimal nonce as the reference solver (byte-order + hash-input parity)', async () => {
+    // Both scan nonce upward from 0, so for a fixed challenge+difficulty the first
+    // satisfying nonce MUST match — unless the hash input string, the text encoding,
+    // or the big-endian getUint32 byte order has drifted between the two.
+    const challenge = makeChallengeString('PUBKEY_aaaa', 'alias-bob');
+    const inlineTok = await inlineGeneratePoW(challenge, 16);
+    const refTok = await powSolve(subtle, challenge, 16);
+    expect(inlineTok.nonce).toBe(refTok.nonce);
+    expect(inlineTok.difficulty).toBe(refTok.difficulty);
+  }, SOLVE_TIMEOUT);
+
+  it("a client-solved token is ACCEPTED by the reference verify (what the worker runs)", async () => {
+    const pub = 'PUBKEY_bbbb';
+    const challenge = makeChallengeString(pub, 'group-create');
+    const tok = await inlineGeneratePoW(challenge, 16);
+    const res = await powVerify(subtle, tok, pub, { maxAge: 10 * 60 * 1000 });
+    expect(res.ok).toBe(true);
+  }, SOLVE_TIMEOUT);
+
+  it("the client token still binds the identity (verify rejects it for a different pub)", async () => {
+    const challenge = makeChallengeString('PUBKEY_cccc');
+    const tok = await inlineGeneratePoW(challenge, 16);
+    const res = await powVerify(subtle, tok, 'PUBKEY_dddd');
+    expect(res.ok).toBe(false);
+    expect(res.code).toBe('POW_PUB_MISMATCH');
+  }, SOLVE_TIMEOUT);
 });
