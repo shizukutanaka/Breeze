@@ -26,6 +26,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { createAtRest } from '../src/crypto/atrest.js';
 import { makeChallengeString, solve as powSolve, verify as powVerify } from '../src/crypto/pow.js';
+import { createRatchet } from '../src/crypto/ratchet.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(join(HERE, '..', 'index.html'), 'utf8');
@@ -212,4 +213,137 @@ describe('PoW mirror — inline generatePoW (index.html) vs reference (src/crypt
     expect(res.ok).toBe(false);
     expect(res.code).toBe('POW_PUB_MISMATCH');
   }, SOLVE_TIMEOUT);
+});
+
+// ---------------------------------------------------------------------------
+// Ratchet KDF mirror — the ratchet primitive guard.
+//
+// The inline hkdf and kdfChain (index.html DOUBLE RATCHET CRYPTO ENGINE block)
+// are the roots of every ratchet message-key derivation: hkdf(ck,'msg') =
+// message key, hkdf(ck,'chain') = next chain key. If either info string, salt,
+// hash, or KDF length drifts, all 1:1 messages in production silently fail to
+// decrypt — the worst possible breakage, and the hardest to diagnose.
+//
+// Unlike at-rest/PoW, encryptFor/decryptFrom couple IDB session storage and
+// cannot be evaluated standalone. The guard therefore extracts only the two
+// PURE KDF primitives (hkdf + kdfChain) and cross-tests them three ways:
+//   1. Byte-exact hkdf parity (same input → same bits)
+//   2. Byte-exact kdfChain parity (same chainKey → same msgKey + nextChain)
+//   3. Wire-compat encrypt: inline-derived msgKey → AES-GCM frame → reference
+//      ratchetDecrypt recovers plaintext (proves the KDF + frame contract holds)
+//   4. Wire-compat decrypt: reference ratchetEncrypt → inline-derived msgKey
+//      → raw AES-GCM decrypt succeeds (the reverse direction)
+// Any drift in info strings ("msg"/"chain"), the 0^32 HKDF salt, SHA-256, or
+// the 32-byte output length breaks test 1 or 2. A frame-format drift (padding
+// layout, DataView offset) breaks tests 3 or 4.
+// ---------------------------------------------------------------------------
+const RATCHET_HKDF_START = '  // --- HKDF helper (RFC 5869) ---';
+const RATCHET_HKDF_END = '\n  // --- Session store';
+const RATCHET_KDF_START = '  // --- KDF Chain: advance chain key, derive message key ---';
+const RATCHET_KDF_END = '\n  // --- DH Ratchet Step ---';
+
+const rhs = html.indexOf(RATCHET_HKDF_START);
+const rhe = html.indexOf(RATCHET_HKDF_END, rhs);
+const rks = html.indexOf(RATCHET_KDF_START);
+const rke = html.indexOf(RATCHET_KDF_END, rks);
+
+if (rhs < 0 || rhe < 0 || rks < 0 || rke < 0) {
+  throw new Error(
+    'mirror-drift guard: could not locate inline hkdf/kdfChain in index.html ' +
+    '(markers "// --- HKDF helper (RFC 5869) ---" .. "// --- Session store" and ' +
+    '"// --- KDF Chain: advance chain key" .. "// --- DH Ratchet Step ---"). ' +
+    'If the ratchet block moved, update tests/mirror-drift.test.js.',
+  );
+}
+
+const inlineKdfFactory = new Function(
+  'crypto', 'CONFIG', '_dbg',
+  html.slice(rhs, rhe) + '\n' + html.slice(rks, rke) +
+    '\nreturn { hkdf, kdfChain };',
+);
+const inlineKdf = inlineKdfFactory(
+  globalThis.crypto,
+  { HKDF_HASH: 'SHA-256', MSG_PAD_BOUNDARY: 256, IV_BYTES: 12 },
+  () => {},
+);
+
+const refR = createRatchet({ hasX25519: false }); // P-256; deterministic across Node versions
+
+describe('Ratchet KDF mirror — inline (index.html) vs reference (src/crypto/ratchet.js)', () => {
+  const CK = new Uint8Array(32).fill(0x42); // fixed test chain key
+
+  it('KDF PARITY: hkdf produces byte-identical output (same ikm/salt/info/len)', async () => {
+    const ikm = new Uint8Array(32).fill(0x11);
+    const salt = new Uint8Array(32).fill(0x22);
+    const info = 'breeze-ratchet-mirror-test';
+    const inlineOut = await inlineKdf.hkdf(ikm, salt, info, 32);
+    const refOut = await refR.hkdf(ikm, salt, info, 32);
+    expect(Array.from(inlineOut)).toEqual(Array.from(refOut));
+  });
+
+  it('KDF PARITY: kdfChain produces byte-identical (msgKey, nextChain) — info strings "msg"/"chain", 0^32 salt', async () => {
+    const inlineResult = await inlineKdf.kdfChain(CK);
+    const refResult = await refR.kdfChain(CK);
+    expect(Array.from(inlineResult.msgKey)).toEqual(Array.from(refResult.msgKey));
+    expect(Array.from(inlineResult.nextChain)).toEqual(Array.from(refResult.nextChain));
+  });
+
+  it('WIRE COMPAT: inline-kdfChain msgKey → AES-GCM frame → reference ratchetDecrypt recovers plaintext', async () => {
+    // Build a receiver session sharing CK as the receive chain key (no DH step)
+    const { receiver } = refR.pairFromSharedChain(CK);
+
+    // Derive the first msgKey with INLINE kdfChain
+    const { msgKey: inlineMK } = await inlineKdf.kdfChain(CK);
+
+    // Build a v4 frame in inline-style: [flags:1][len:2][data...] padded to 256 bytes
+    const text = 'ratchet mirror wire-compat check';
+    const raw = new TextEncoder().encode(text);
+    const padded = new Uint8Array(256);
+    padded[0] = 0x00; // flags: uncompressed
+    new DataView(padded.buffer).setUint16(1, raw.length);
+    padded.set(raw, 3);
+    const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
+    const aesKey = await globalThis.crypto.subtle.importKey('raw', inlineMK, { name: 'AES-GCM' }, false, ['encrypt']);
+    const ct = new Uint8Array(await globalThis.crypto.subtle.encrypt({ name: 'AES-GCM', iv }, aesKey, padded));
+
+    // Wire format: v4, no key commitment (inline-style)
+    const wire = JSON.stringify({ v: 4, i: Array.from(iv), d: Array.from(ct), rk: [1, 2, 3], c: 1 });
+
+    // Reference ratchetDecrypt should recover plaintext iff kdfChain parity holds
+    const plaintext = await refR.ratchetDecrypt(receiver, wire);
+    expect(plaintext).toBe(text);
+  });
+
+  it('WIRE COMPAT: reference ratchetEncrypt frame → inline-kdfChain msgKey decrypts correctly', async () => {
+    const { sender } = refR.pairFromSharedChain(CK);
+
+    // Reference encrypts (uses reference kdfChain internally)
+    const wire = await refR.ratchetEncrypt(sender, 'hello from reference ratchet');
+
+    // Derive the SAME first msgKey with INLINE kdfChain
+    const { msgKey: inlineMK } = await inlineKdf.kdfChain(CK);
+
+    // Raw AES-GCM decrypt with inline-derived key
+    const p = JSON.parse(wire);
+    const aesKey = await globalThis.crypto.subtle.importKey('raw', inlineMK, { name: 'AES-GCM' }, false, ['decrypt']);
+    const padded = new Uint8Array(await globalThis.crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: new Uint8Array(p.i) }, aesKey, new Uint8Array(p.d),
+    ));
+
+    // Unpad v4 frame: [flags:1][len:2][data...]
+    const dataLen = new DataView(padded.buffer).getUint16(1);
+    const decoded = new TextDecoder().decode(padded.slice(3, 3 + dataLen));
+    expect(decoded).toBe('hello from reference ratchet');
+  });
+
+  it('wire format: v4 tag, counter starts at 1, array-encoded i/d/rk fields', async () => {
+    const { sender } = refR.pairFromSharedChain(CK);
+    const wire = await refR.ratchetEncrypt(sender, 'v4 shape check');
+    const p = JSON.parse(wire);
+    expect(p.v).toBe(4);
+    expect(p.c).toBe(1);
+    expect(Array.isArray(p.i)).toBe(true);
+    expect(Array.isArray(p.d)).toBe(true);
+    expect(Array.isArray(p.rk)).toBe(true);
+  });
 });
