@@ -347,3 +347,117 @@ describe('Ratchet KDF mirror — inline (index.html) vs reference (src/crypto/ra
     expect(Array.isArray(p.rk)).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Group sender-key mirror — the multicast guard.
+//
+// Inline encryptGroupMsg/decryptGroupMsg/getGroupSenderKey (index.html) and the
+// reference groupSenderEncrypt/groupSenderDecrypt/groupDecryptV3 (ratchet.js)
+// must agree on the hash-ratchet KDF ('breeze-group-msg-v5' / 'breeze-group-chain-v5'),
+// the v3 legacy KDF ('group-msg' with the counter as a Uint32 salt), the wire
+// shape ({ v, g, i, d, c, ep }), and the [len:2][data] padding. A drift here is
+// even worse than 1:1: ONE divergent member silently fails to decrypt EVERY group
+// message while the rest of the group is fine — looks like a flaky peer, not a bug.
+//
+// The inline functions are IDB-coupled, so the guard injects an in-memory
+// dbGet/dbPut and the already-extracted inline hkdf, then cross-tests both ways
+// for v5, plus the v3 legacy path. Pre-seeding the keystore makes getGroupSenderKey
+// return the shared chain key instead of generating a random one.
+// ---------------------------------------------------------------------------
+const GROUP_START = '  async function getGroupSenderKey(groupId) {';
+const GROUP_END = '\n  // Distribute sender key to a specific group member';
+const gs = html.indexOf(GROUP_START);
+const ge = html.indexOf(GROUP_END, gs);
+if (gs < 0 || ge < 0) {
+  throw new Error(
+    'mirror-drift guard: could not locate inline group sender-key functions in index.html ' +
+    '(markers "async function getGroupSenderKey" .. "// Distribute sender key to a specific member"). ' +
+    'If the group block moved, update tests/mirror-drift.test.js.',
+  );
+}
+
+// In-memory IDB stub: the inline functions only touch the 'identity' store via
+// dbGet/dbPut, so a Map keyed by `key` faithfully stands in for IndexedDB here.
+function makeGroupInline(config) {
+  const store = new Map();
+  const dbGet = async (_s, key) => (store.has(key) ? store.get(key) : null);
+  const dbPut = async (_s, val, key) => { store.set(key, val); };
+  const factory = new Function(
+    'crypto', 'CONFIG', 'dbGet', 'dbPut', 'hkdf', 'arr', 'u8', '_dbg', 'TextEncoder', 'TextDecoder',
+    html.slice(gs, ge) +
+      '\nreturn { getGroupSenderKey, encryptGroupMsg, decryptGroupMsg };',
+  );
+  const api = factory(
+    globalThis.crypto, config, dbGet, dbPut, inlineKdf.hkdf,
+    (a) => Array.from(a), (a) => new Uint8Array(a), () => {}, TextEncoder, TextDecoder,
+  );
+  return { ...api, store };
+}
+
+describe('Group sender-key mirror — inline (index.html) vs reference (src/crypto/ratchet.js)', () => {
+  const CK = Array.from(new Uint8Array(32).fill(0x55)); // shared v5 chain key
+  const RAW = Array.from(new Uint8Array(32).fill(0x77)); // shared v3 raw key
+  const freshV5 = () => ({ chainKey: [...CK], counter: 0, epoch: 0, v: 5, skipped: {} });
+
+  it('WIRE PARITY (v5): reference groupSenderEncrypt → inline decryptGroupMsg recovers plaintext', async () => {
+    const text = 'group hash-ratchet wire-compat';
+    const { ciphertext } = await refR.groupSenderEncrypt(freshV5(), text);
+
+    const inline = makeGroupInline({ GROUP_RATCHET_V5: true, GROUP_MAX_SKIP: 50, MSG_PAD_BOUNDARY: 256, IV_BYTES: 12 });
+    inline.store.set('gsk-peer:G:S', freshV5());
+    expect(await inline.decryptGroupMsg('G', 'S', ciphertext)).toBe(text);
+  });
+
+  it('WIRE PARITY (v5): inline encryptGroupMsg → reference groupSenderDecrypt recovers plaintext', async () => {
+    const text = 'inline group → reference decrypt';
+    const inline = makeGroupInline({ GROUP_RATCHET_V5: true, GROUP_MAX_SKIP: 50, MSG_PAD_BOUNDARY: 256, IV_BYTES: 12 });
+    inline.store.set('gsk:G', freshV5());
+    const ciphertext = await inline.encryptGroupMsg('G', text);
+
+    const res = await refR.groupSenderDecrypt(freshV5(), ciphertext);
+    expect(res?.plaintext).toBe(text);
+  });
+
+  it('v5 wire shape: { v:5, g:true, ep:0, array i/d, c:0 for first message }', async () => {
+    const inline = makeGroupInline({ GROUP_RATCHET_V5: true, GROUP_MAX_SKIP: 50, MSG_PAD_BOUNDARY: 256, IV_BYTES: 12 });
+    inline.store.set('gsk:G', freshV5());
+    const p = JSON.parse(await inline.encryptGroupMsg('G', 'shape'));
+    expect(p.v).toBe(5);
+    expect(p.g).toBe(true);
+    expect(p.ep).toBe(0);
+    expect(p.c).toBe(0); // counter is post-incremented then sent as counter-1
+    expect(Array.isArray(p.i)).toBe(true);
+    expect(Array.isArray(p.d)).toBe(true);
+  });
+
+  it('FORWARD SECRECY parity: second inline message ratchets the chain (c increments, both decrypt)', async () => {
+    const inline = makeGroupInline({ GROUP_RATCHET_V5: true, GROUP_MAX_SKIP: 50, MSG_PAD_BOUNDARY: 256, IV_BYTES: 12 });
+    inline.store.set('gsk:G', freshV5());
+    const c1 = await inline.encryptGroupMsg('G', 'first');
+    const c2 = await inline.encryptGroupMsg('G', 'second');
+    expect(JSON.parse(c1).c).toBe(0);
+    expect(JSON.parse(c2).c).toBe(1);
+    // Reference receiver ratchets forward in order and decrypts both
+    let peer = freshV5();
+    const r1 = await refR.groupSenderDecrypt(peer, c1);
+    expect(r1?.plaintext).toBe('first');
+    const r2 = await refR.groupSenderDecrypt(r1.nextPeerSk, c2);
+    expect(r2?.plaintext).toBe('second');
+  });
+
+  it('WIRE PARITY (v3 legacy): inline v3 encrypt → reference groupDecryptV3 recovers plaintext', async () => {
+    const text = 'legacy static-key group message';
+    const inline = makeGroupInline({ GROUP_RATCHET_V5: false, GROUP_MAX_SKIP: 50, MSG_PAD_BOUNDARY: 256, IV_BYTES: 12 });
+    inline.store.set('gsk:G', { raw: [...RAW], counter: 0, epoch: 0 });
+    const ciphertext = await inline.encryptGroupMsg('G', text);
+    expect(JSON.parse(ciphertext).v).toBe(3);
+    expect(await refR.groupDecryptV3({ raw: [...RAW] }, ciphertext)).toBe(text);
+  });
+
+  it('EPOCH binding parity: a message from a different epoch is rejected by inline decrypt', async () => {
+    const { ciphertext } = await refR.groupSenderEncrypt({ ...freshV5(), epoch: 1 }, 'epoch-1 msg');
+    const inline = makeGroupInline({ GROUP_RATCHET_V5: true, GROUP_MAX_SKIP: 50, MSG_PAD_BOUNDARY: 256, IV_BYTES: 12 });
+    inline.store.set('gsk-peer:G:S', freshV5()); // peer still on epoch 0
+    expect(await inline.decryptGroupMsg('G', 'S', ciphertext)).toBeNull();
+  });
+});
