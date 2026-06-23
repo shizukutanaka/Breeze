@@ -788,6 +788,7 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 .drop-page-actions { display:none; margin-top:8px }
 .drop-page-actions.visible { display:block }
 .drop-page-copy { padding:10px 24px; border-radius:999px; background:#34d399; color:#000; border:none; font-weight:600; cursor:pointer; font-size:14px }
+.drop-page-link { margin-top:16px; color:var(--g); font-size:13px; text-decoration:none }
 
 /* ─── Search highlight ─── */
 .search-match { background: rgba(16,185,129,.3); border-radius: 2px; padding: 0 1px }
@@ -3551,7 +3552,7 @@ if (P.has('drop')) {
   const _dc = document.createElement('div'); _dc.id = 'drop-content'; _dc.className = 'drop-page-content'; _dw.appendChild(_dc);
   const _da = document.createElement('div'); _da.id = 'drop-actions'; _da.className = 'drop-page-actions';
   const _db = document.createElement('button'); _db.id = 'drop-copy'; _db.className = 'drop-page-copy'; _db.textContent = t('copy'); _da.appendChild(_db); _dw.appendChild(_da);
-  const _dl = document.createElement('a'); _dl.href = '/'; Object.assign(_dl.style, { marginTop:'16px', color:'#34d399', fontSize:'13px', textDecoration:'none' }); _dl.textContent = t('dropOpenApp'); _dw.appendChild(_dl);
+  const _dl = document.createElement('a'); _dl.href = '/'; _dl.className = 'drop-page-link'; _dl.textContent = t('dropOpenApp'); _dw.appendChild(_dl);
   document.body.replaceChildren(_dw);
   (async () => {
     try {
@@ -3939,7 +3940,7 @@ function announceToSR(text, priority = 'polite') {
     _srAnnouncer.setAttribute('aria-live', 'polite');
     _srAnnouncer.setAttribute('aria-atomic', 'true');
     _srAnnouncer.setAttribute('role', 'status');
-    Object.assign(_srAnnouncer.style, { position: 'absolute', width: '1px', height: '1px', padding: '0', margin: '-1px', overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap', border: '0' });
+    _srAnnouncer.className = 'sr-only';
     document.body.appendChild(_srAnnouncer);
   }
   _srAnnouncer.setAttribute('aria-live', priority);
