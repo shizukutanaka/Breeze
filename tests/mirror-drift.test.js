@@ -513,3 +513,74 @@ describe('reference-drift tracking — modules that are tested references, NOT y
     expect(body).not.toContain('fingerprintBytes');  // reference fn not inlined
   });
 });
+
+// ---------------------------------------------------------------------------
+// Unpad/decompress mirror + v3-legacy coverage.
+//
+// The deployed inline _unpadAndDecompress(padded, version) decodes BOTH the v4
+// frame ([flags:1][len:2 BE][data], reference-mirrored) AND a v3 LEGACY frame
+// ([len:1][data] short, or [0xff][len:2 LE][data] for >254-byte messages) that
+// the reference unpadAndDecompress does NOT implement at all. So the v3 decode
+// path — what renders old-format history and messages from not-yet-upgraded
+// peers — is exercised by no test anywhere: a regression there silently blanks
+// those messages while every green test stays green. This block mirrors the v4
+// path against the reference and pins the two v3 legacy layouts behaviourally.
+// ---------------------------------------------------------------------------
+const UNPAD_START = '  async function _unpadAndDecompress(padded, version) {';
+const UNPAD_END = '\n  // --- Safety Number';
+const us = html.indexOf(UNPAD_START);
+const ue = html.indexOf(UNPAD_END, us);
+if (us < 0 || ue < 0) {
+  throw new Error(
+    'mirror-drift guard: could not locate inline _unpadAndDecompress in index.html ' +
+    '(markers "async function _unpadAndDecompress" .. "// --- Safety Number"). ' +
+    'If it moved, update tests/mirror-drift.test.js.',
+  );
+}
+const inlineUnpad = new Function(
+  'TextDecoder', 'DecompressionStream', '_dbg',
+  html.slice(us, ue) + '\nreturn _unpadAndDecompress;',
+)(TextDecoder, globalThis.DecompressionStream, () => {});
+
+describe('Unpad mirror — inline _unpadAndDecompress (index.html) vs reference + v3 legacy', () => {
+  it('v4 PARITY: inline(padded, 4) === reference unpadAndDecompress(padded) for an uncompressed frame', async () => {
+    const text = 'unpad v4 parity check';
+    const raw = new TextEncoder().encode(text);
+    const padded = new Uint8Array(256);
+    padded[0] = 0x00; // uncompressed
+    new DataView(padded.buffer).setUint16(1, raw.length); // big-endian, matches both impls
+    padded.set(raw, 3);
+    expect(await inlineUnpad(padded, 4)).toBe(text);
+    expect(await refR.unpadAndDecompress(padded)).toBe(text);
+  });
+
+  it('v3 LEGACY (short [len:1][data]): inline decodes a sub-255-byte message', async () => {
+    const text = 'legacy v3 short-form message';
+    const raw = new TextEncoder().encode(text);
+    const padded = new Uint8Array(256);
+    padded[0] = raw.length; // single-byte length prefix
+    padded.set(raw, 1);
+    expect(await inlineUnpad(padded, 3)).toBe(text);
+  });
+
+  it('v3 LEGACY (long [0xff][len:2 LE][data]): inline decodes a >254-byte message', async () => {
+    const text = 'x'.repeat(300); // forces the 0xff extended-length path
+    const raw = new TextEncoder().encode(text);
+    const padded = new Uint8Array(Math.ceil((raw.length + 3) / 256) * 256);
+    padded[0] = 0xff;
+    // inline reads the length via new Uint16Array(slice.buffer)[0] → host (little-endian) order
+    padded[1] = raw.length & 0xff;
+    padded[2] = (raw.length >> 8) & 0xff;
+    padded.set(raw, 3);
+    expect(await inlineUnpad(padded, 3)).toBe(text);
+  });
+
+  it('v4 round-trips a frame produced by the reference frameEncrypt (full encode→decode)', async () => {
+    const text = 'frameEncrypt → inline unpad';
+    const msgKey = new Uint8Array(32).fill(0x09);
+    const { iv, ct } = await refR.frameEncrypt(msgKey, text);
+    const aesKey = await globalThis.crypto.subtle.importKey('raw', msgKey, { name: 'AES-GCM' }, false, ['decrypt']);
+    const padded = new Uint8Array(await globalThis.crypto.subtle.decrypt({ name: 'AES-GCM', iv }, aesKey, ct));
+    expect(await inlineUnpad(padded, 4)).toBe(text);
+  });
+});
