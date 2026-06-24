@@ -64,7 +64,7 @@ function fakeResp({ status = 200, type = 'basic' } = {}) {
 async function fireNavigate(ctx, { url = `${ORIGIN}/`, preloadResponse } = {}) {
   let responded;
   const e = {
-    request: { url, mode: 'navigate' },
+    request: { url, mode: 'navigate', method: 'GET' },
     preloadResponse: preloadResponse !== undefined ? Promise.resolve(preloadResponse) : undefined,
     respondWith: (p) => { responded = p; },
   };
@@ -72,6 +72,17 @@ async function fireNavigate(ctx, { url = `${ORIGIN}/`, preloadResponse } = {}) {
   const out = await responded;
   await new Promise((r) => setTimeout(r, 0)); // flush the fire-and-forget cachePut() microtasks
   return out;
+}
+
+// Fire a plain (non-navigation) fetch and report whether the SW handled it via
+// respondWith(). Used to assert the method guard lets non-GET requests pass through.
+function fireFetch(ctx, { url = `${ORIGIN}/x.js`, method = 'GET', mode = 'no-cors' } = {}) {
+  let responded = false;
+  ctx.handlers.fetch({
+    request: { url, mode, method },
+    respondWith: () => { responded = true; },
+  });
+  return responded;
 }
 
 // Fire notificationclick and wait for the handler's waitUntil promise to settle.
@@ -175,4 +186,21 @@ describe('sw.js cachePut — guards the Cache.put() pitfalls', () => {
     expect(out).toBe(resp);
     expect(ctx.putCalls.length).toBe(1); // put was attempted, rejection caught internally
   });
+});
+
+describe('sw.js fetch — method guard (only GET is intercepted/cached)', () => {
+  let ctx;
+  beforeEach(() => { ctx = loadSW(); });
+
+  it('handles a GET asset request via respondWith (stale-while-revalidate)', () => {
+    expect(fireFetch(ctx, { method: 'GET' })).toBe(true);
+  });
+
+  for (const method of ['POST', 'PUT', 'DELETE', 'PATCH']) {
+    it(`does NOT intercept a ${method} request (passes through to the network)`, () => {
+      // Cache.put() throws on non-GET and a cached 200 must never satisfy a mutating
+      // request, so the SW must leave these to the browser's default handling.
+      expect(fireFetch(ctx, { method })).toBe(false);
+    });
+  }
 });

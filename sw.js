@@ -41,6 +41,11 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
+  // Only GET is cacheable. Let POST/PUT/DELETE/etc. go straight to the network:
+  // Cache.put() throws a TypeError on a non-GET request, and a cached 200 must never
+  // be allowed to satisfy a mutating request. Returning without respondWith() yields
+  // the browser's default network handling.
+  if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
   // Skip API calls (never cache)
   if (url.pathname.startsWith('/api/')) return;
