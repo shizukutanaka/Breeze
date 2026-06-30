@@ -54,8 +54,10 @@ function loadSW() {
 }
 
 // A minimal Response stand-in. Note ok===true for 206 (the exact trap the guard closes).
-function fakeResp({ status = 200, type = 'basic' } = {}) {
-  return { status, type, ok: status >= 200 && status < 300, clone() { return this; } };
+// cacheControl simulates a Cache-Control response header value (null = not present).
+function fakeResp({ status = 200, type = 'basic', cacheControl = null } = {}) {
+  const headers = { get: (name) => name.toLowerCase() === 'cache-control' ? cacheControl : null };
+  return { status, type, ok: status >= 200 && status < 300, headers, clone() { return this; } };
 }
 
 // Fire the fetch handler for a navigation and return the resolved respondWith promise.
@@ -185,6 +187,22 @@ describe('sw.js cachePut — guards the Cache.put() pitfalls', () => {
     const out = await fireNavigate(ctx, { preloadResponse: resp });
     expect(out).toBe(resp);
     expect(ctx.putCalls.length).toBe(1); // put was attempted, rejection caught internally
+  });
+
+  it('does NOT cache a response with Cache-Control: no-store (server forbids caching)', async () => {
+    // A server may legitimately return a 200 basic response but mark it private/uncacheable.
+    // Storing it would serve stale sensitive content to subsequent visitors from cache.
+    const resp = fakeResp({ status: 200, type: 'basic', cacheControl: 'no-store' });
+    const out = await fireNavigate(ctx, { preloadResponse: resp });
+    expect(out).toBe(resp);              // still served to the page
+    expect(ctx.putCalls.length).toBe(0); // never written to cache
+  });
+
+  it('still caches a response with other Cache-Control directives (no-cache is not no-store)', async () => {
+    const resp = fakeResp({ status: 200, type: 'basic', cacheControl: 'no-cache, must-revalidate' });
+    const out = await fireNavigate(ctx, { preloadResponse: resp });
+    expect(out).toBe(resp);
+    expect(ctx.putCalls.length).toBe(1); // no-cache does not prohibit storage
   });
 });
 

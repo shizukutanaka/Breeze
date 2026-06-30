@@ -75,16 +75,20 @@ self.addEventListener('fetch', (e) => {
   );
 });
 
-// Cache a response only when it is a full, same-origin, OK response. Guards the two
-// documented Cache.put() pitfalls that would otherwise surface as unhandled rejections:
+// Cache a response only when it is a full, same-origin, OK response. Guards the pitfalls
+// that would otherwise surface as unhandled rejections or mis-cached private content:
 //   - 206 Partial Content (range requests) — note response.ok is TRUE for 206, so the
 //     old `if (resp.ok)` check let it through and Cache.put() throws on a partial response.
+//   - Cache-Control: no-store — server explicitly forbids caching (e.g. auth'd API response
+//     that briefly passes through; caching it would serve stale private data to later visitors).
 //   - QuotaExceededError when storage is full — the .catch() swallows it (the SWR/network
 //     response is still returned to the page; only the cache write is skipped).
 // Opaque (cross-origin no-cors, status 0) and CORS responses are skipped: we only persist
 // our own app shell, never third-party bytes.
 function cachePut(request, response) {
   if (!response || response.status !== 200 || response.type !== 'basic') return;
+  const cc = response.headers?.get('cache-control') || '';
+  if (cc.includes('no-store')) return;
   const copy = response.clone();
   caches.open(CACHE).then(c => c.put(request, copy)).catch(() => {});
 }

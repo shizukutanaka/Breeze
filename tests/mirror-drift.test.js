@@ -185,15 +185,19 @@ describe('PoW mirror — inline generatePoW (index.html) vs reference (src/crypt
   // Difficulty-16 solving averages ~65k SHA-256 hashes; under parallel suite load this
   // can exceed vitest's 5s default, so these solve-bound tests get a generous timeout.
   // (The reference solver clamps difficulty to a 16-bit floor, so the work can't be reduced.)
-  const SOLVE_TIMEOUT = 30000;
+  // Two-solver tests run the inline and reference in parallel (Promise.all) to halve
+  // wall-clock time: both scan from nonce=0 independently, so parallel is always safe.
+  const SOLVE_TIMEOUT = 60000;
 
   it('finds the IDENTICAL minimal nonce as the reference solver (byte-order + hash-input parity)', async () => {
     // Both scan nonce upward from 0, so for a fixed challenge+difficulty the first
     // satisfying nonce MUST match — unless the hash input string, the text encoding,
     // or the big-endian getUint32 byte order has drifted between the two.
     const challenge = makeChallengeString('PUBKEY_aaaa', 'alias-bob');
-    const inlineTok = await inlineGeneratePoW(challenge, 16);
-    const refTok = await powSolve(subtle, challenge, 16);
+    const [inlineTok, refTok] = await Promise.all([
+      inlineGeneratePoW(challenge, 16),
+      powSolve(subtle, challenge, 16),
+    ]);
     expect(inlineTok.nonce).toBe(refTok.nonce);
     expect(inlineTok.difficulty).toBe(refTok.difficulty);
   }, SOLVE_TIMEOUT);
