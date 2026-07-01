@@ -6240,8 +6240,11 @@ async function initMessenger(dbName) {
               activeContact = savedActive;
             }
           } else if (delay < 7 * MS.DAY) {
-            // Set timer for future delivery
-            setTimeout(async () => {
+            // Set timer for future delivery; add to _intervals so _messengerCleanup cancels
+            // it on account switch — otherwise the callback fires under the new account's
+            // globals (myKeys, activeContact) and sends as the wrong identity.
+            // clearInterval() on a setTimeout ID is valid in browsers (shared timer pool).
+            _intervals.push(setTimeout(async () => {
               try {
                 const sched = await dbGet('identity', item.id);
                 if (!sched) return;
@@ -6256,7 +6259,7 @@ async function initMessenger(dbName) {
                   activeContact = savedActive;
                 }
               } catch(e) { _dbg(e, 'schedule-recover'); }
-            }, delay);
+            }, delay));
             _dbg(null, 'Recovered scheduled message: ' + item.text?.slice(0, 30) + ' in ' + Math.round(delay / MS.MIN) + 'm');
           }
         }
@@ -9729,7 +9732,7 @@ async function initMessenger(dbName) {
               }
               // Use the verified sender identity from decryption, not the self-reported signal.userId
               const reactorId = (senderPub || '').slice(0, 12);
-              if (signal.add) { if (!stored.reactions[signal.emoji].includes(reactorId)) stored.reactions[signal.emoji].push(reactorId); }
+              if (signal.add) { if (!stored.reactions[signal.emoji]?.includes(reactorId) && (stored.reactions[signal.emoji]?.length ?? 100) < 100) stored.reactions[signal.emoji].push(reactorId); }
               else { stored.reactions[signal.emoji] = stored.reactions[signal.emoji].filter(u => u !== reactorId); if (stored.reactions[signal.emoji].length === 0) delete stored.reactions[signal.emoji]; }
               await dbPut('messages', stored);
               const el = document.querySelector(`[data-msgid="${targetMsgId}"]`);
@@ -10130,10 +10133,13 @@ async function initMessenger(dbName) {
             const stored = await dbGet('messages', _rmId);
             if (stored) {
               if (!stored.reactions) stored.reactions = {};
-              if (!stored.reactions[msg.emoji]) stored.reactions[msg.emoji] = [];
+              // Cap unique emoji per message at 20 (matches group path); cap users per emoji at 100
+              if (!stored.reactions[msg.emoji]) {
+                if (Object.keys(stored.reactions).length < 20) stored.reactions[msg.emoji] = [];
+              }
               // Use contact.id (authenticated sender) — not msg.userId (peer-claimed, unverified)
               const reactorId = contact.id;
-              if (msg.add) { if (!stored.reactions[msg.emoji].includes(reactorId)) stored.reactions[msg.emoji].push(reactorId); }
+              if (msg.add) { if (!stored.reactions[msg.emoji]?.includes(reactorId) && (stored.reactions[msg.emoji]?.length ?? 100) < 100) stored.reactions[msg.emoji].push(reactorId); }
               else { stored.reactions[msg.emoji] = stored.reactions[msg.emoji].filter(u => u !== reactorId); if (stored.reactions[msg.emoji].length === 0) delete stored.reactions[msg.emoji]; }
               await dbPut('messages', stored);
               const el = document.querySelector(`[data-msgid="${_rmId}"]`);

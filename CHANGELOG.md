@@ -1,5 +1,29 @@
 # Changelog
 
+## Security hardening session 5 — account-switch leaks, reaction/poll caps (branch claude/nice-ride-T6yb0, 2026-07-01)
+
+777 tests; `index.html` only. `validate.sh` PASSED (35/36, 1 size warning).
+
+**Scheduled-message timer cross-account injection (HIGH):**
+- `setTimeout` handles for future scheduled messages were not tracked in `_intervals` and therefore not cancelled by `_messengerCleanup` on account switch. If an account switch occurred before a scheduled message fired, the callback ran under the new account's globals (`myKeys`, `activeContact`), sending the old account's scheduled message as the new identity. Fix: push the `setTimeout` return value into `_intervals`; `clearInterval` on a `setTimeout` ID is valid in browsers (shared timer pool).
+
+**Interval leak on fast account switch (stale `_defer` timers):**
+- Two `setInterval` registrations for `enforceRetentionPolicy` and `pruneAuditLog` were wrapped in `_defer()` (requestIdleCallback, up to 2 s delay). If `_messengerCleanup` ran before the idle callback fired, the intervals were registered into `_intervals` after it was already cleared — leaking timers that ran indefinitely with no cleanup path. Fix: register directly (no `_defer` wrapper); `setInterval(fn, 3 600 000)` has zero cost at registration time, first tick is 1 hour away.
+
+**Stale peer map blocks reconnection after account switch:**
+- `RTCPeerConnection` objects were closed in `_messengerCleanup` but their entries were not removed from the `peers` map. `connectPeer` guards on `peers[pubB64]?.pc` to skip duplicate connections — the closed (but non-null) `pc` object caused the guard to fire, preventing new connections from being established for any contact shared between the two accounts. Fix: `for (const key in peers) delete peers[key]` after closing connections.
+
+**Reaction emoji uniqueness cap in 1:1 path:**
+- The group reaction path capped unique emojis per message at 20; the 1:1 DataChannel path was missing the same check. A single peer could therefore accumulate unlimited emoji keys in a message's `reactions` object. Fix: same `Object.keys(stored.reactions).length < 20` guard added to the 1:1 path.
+
+**Defense-in-depth per-emoji user array cap:**
+- Added a 100-user cap per emoji slot in both the group and 1:1 reaction paths. The group path is already bounded by the 100-member server-side limit; the cap provides defense in depth against legacy data or future relaxed limits.
+
+**CSP `upgrade-insecure-requests` sync:**
+- `_headers` Content-Security-Policy was missing `upgrade-insecure-requests` that was already present in the `<meta http-equiv>` fallback. Both now match.
+
+---
+
 ## Security hardening session 4 — dedup race, DataChannel caps, network quality (branch claude/nice-ride-T6yb0, 2026-07-01)
 
 777 tests; `index.html` only. `validate.sh` PASSED (35/36, 1 size warning).
