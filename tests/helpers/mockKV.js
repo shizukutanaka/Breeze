@@ -28,7 +28,7 @@ export function makeKV(initial = {}) {
 
 // Build an `env` with a fresh KV plus any extra bindings (Stripe secrets, etc.).
 export function makeEnv(extra = {}) {
-  return { KV: makeKV(), ...extra };
+  return { KV: makeKV(), MIN_POW_DIFFICULTY: '16', ...extra };
 }
 
 // Helper to build a POST Request to an /api/* path with a JSON body.

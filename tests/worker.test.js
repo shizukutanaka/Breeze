@@ -2532,11 +2532,11 @@ describe('alias set / get (PoW anti-spam)', () => {
     expect((await ok.json()).code).not.toBe('POW_INVALID'); // hash is valid for LONG_PUB
   }, 60000);
 
-  // Item 50 (test-integrity perspective): the difficulty-16 anti-spam FLOOR had no negative
-  // test — only the !includes(pub) branch was exercised. A validly-solved but too-easy
-  // puzzle must still be rejected, or a regression weakening the floor (cheap alias spam)
-  // would pass the whole suite.
-  it('rejects a PoW below the difficulty-16 floor even when validly solved (anti-spam)', async () => {
+  // Item 50 (test-integrity perspective): the anti-spam difficulty FLOOR (default 20 bits in
+  // production, overridden to 16 via MIN_POW_DIFFICULTY in tests) had no negative test.
+  // A validly-solved but too-easy puzzle must still be rejected, or a regression weakening
+  // the floor (cheap alias spam) would pass the whole suite.
+  it('rejects a PoW below the difficulty floor even when validly solved (anti-spam)', async () => {
     const pub = 'LOWDIFF01';
     const challenge = `${pub}:${Date.now()}`;            // includes pub, fresh, short
     const pow = await solvePoW(pub, 8, challenge);        // a real difficulty-8 solution

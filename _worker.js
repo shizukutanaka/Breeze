@@ -687,7 +687,8 @@ async function handleAliasSet(body, env, request) {
   }
   {
     const difficulty = Math.min(Math.max(parseInt(pow.difficulty) || 0, 0), 32);
-    if (difficulty < 16 || pow.challenge.length > 512 || !pow.challenge.startsWith(pub + ':')) {
+    const minDifficulty = parseInt(env.MIN_POW_DIFFICULTY) || 20;
+    if (difficulty < minDifficulty || pow.challenge.length > 512 || !pow.challenge.startsWith(pub + ':')) {
       return json({ error: 'Invalid proof-of-work', code: 'POW_INVALID' }, 400, request);
     }
     // Freshness check: makeChallengeString embeds a Unix-ms timestamp as the last
