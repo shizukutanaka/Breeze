@@ -4196,6 +4196,7 @@ const _replayCache = {
     }
     this._map.set(msgId, 1);
   },
+  delete(msgId) { this._map.delete(msgId); },
   size() { return this._map.size; },
 };
 
@@ -9122,11 +9123,11 @@ async function initMessenger(dbName) {
             // carrying the attacker's DTLS fingerprint) fails to decrypt → null → dropped,
             // so the DTLS handshake can only complete with the pinned peer (closes call MITM).
             const ans = await _unwrapCallSignal(contact.pubB64, s.data);
-            if (ans) await _callPC.setRemoteDescription(new RTCSessionDescription(ans));
+            if (ans && typeof ans === 'object' && !Array.isArray(ans)) await _callPC.setRemoteDescription(new RTCSessionDescription(ans));
           }
           if (s.type === 'call-ice' && _callPC) {
             const cand = await _unwrapCallSignal(contact.pubB64, s.data);
-            if (cand) await _callPC.addIceCandidate(cand).catch(e => _dbg(e, 'call-ICE'));
+            if (cand && typeof cand === 'object' && !Array.isArray(cand)) await _callPC.addIceCandidate(cand).catch(e => _dbg(e, 'call-ICE'));
           }
           if (s.type === 'call-end') { endCall(); clearInterval(poll); return; }
           if (s.type === 'call-offer' && _callState === 'idle') { handleCallOffer(contact, s.data); }
@@ -14205,7 +14206,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       if (!await showConfirm(`${t('clear')} ${activeContact.name}?`, { danger: true, okText: t('clear') })) return;
       const msgs = await dbGetByIndex('messages', 'contact', activeContact.id);
       const tx = db.transaction('messages', 'readwrite');
-      for (const m of msgs) tx.objectStore('messages').delete(m.msgId);
+      for (const m of msgs) { tx.objectStore('messages').delete(m.msgId); _replayCache.delete(m.msgId); }
       activeContact.lastMsg = '';
       await dbPut('contacts', activeContact);
       _DOM.get('msg-messages').replaceChildren();
