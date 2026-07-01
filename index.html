@@ -10775,9 +10775,9 @@ async function initMessenger(dbName) {
       const salt = crypto.getRandomValues(new Uint8Array(16));
       const iv = crypto.getRandomValues(new Uint8Array(CONFIG.IV_BYTES));
       const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
-      const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: CONFIG.PBKDF2_ITERATIONS, hash: 'SHA-256' }, km, { name: 'AES-GCM', length: CONFIG.AES_KEY_BITS }, false, ['encrypt']);
+      const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: CONFIG.PBKDF2_AT_REST_ITERATIONS, hash: 'SHA-256' }, km, { name: 'AES-GCM', length: CONFIG.AES_KEY_BITS }, false, ['encrypt']);
       const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(data));
-      const backup = { s: arr(salt), i: arr(iv), d: arr(new Uint8Array(ct)), v: CONFIG.PROTOCOL_VERSION };
+      const backup = { s: arr(salt), i: arr(iv), d: arr(new Uint8Array(ct)), v: CONFIG.PROTOCOL_VERSION, iter: CONFIG.PBKDF2_AT_REST_ITERATIONS };
       // Upload
       if (API) {
         const resp = await postAPIRaw('/backup/upload', { userId: myId, backup: JSON.stringify(backup) });
@@ -10796,8 +10796,10 @@ async function initMessenger(dbName) {
       const { backup } = await resp.json();
       const b = JSON.parse(backup);
       const salt = u8(b.s); const iv = u8(b.i); const ct = u8(b.d);
+      // Read iteration count from the backup (new backups store it; old backups fall back to 100k)
+      const bIter = (typeof b.iter === 'number' && b.iter > 0 && b.iter <= 10000000) ? b.iter : CONFIG.PBKDF2_ITERATIONS;
       const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
-      const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: CONFIG.PBKDF2_ITERATIONS, hash: 'SHA-256' }, km, { name: 'AES-GCM', length: CONFIG.AES_KEY_BITS }, false, ['decrypt']);
+      const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: bIter, hash: 'SHA-256' }, km, { name: 'AES-GCM', length: CONFIG.AES_KEY_BITS }, false, ['decrypt']);
       const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
       const data = JSON.parse(new TextDecoder().decode(pt));
       // Restore
@@ -12254,7 +12256,7 @@ async function initMessenger(dbName) {
             const d = document.createElement('div');
             d.className = 'help-body';
             const time = new Date(m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            safeSetHTML(d, esc(m.text.slice(0, 120)).replace(new RegExp('(' + esc(query) + ')', 'gi'), '<mark class="i-highlight">$1</mark>') + '<span class="ts">' + time + '</span>');
+            safeSetHTML(d, esc(m.text.slice(0, 120)).replace(new RegExp('(' + esc(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi'), '<mark class="i-highlight">$1</mark>') + '<span class="ts">' + time + '</span>');
             box.appendChild(d);
           }
           if (cmsgs.length > 5) { const more = document.createElement('div'); more.className = 'text-xs color-t3 i-pad-more'; more.textContent = '... ' + t('uiMoreCount', cmsgs.length - 5); box.appendChild(more); }
