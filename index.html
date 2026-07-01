@@ -1861,6 +1861,7 @@ const _I = {
     toastMicDenied: 'Microphone access denied',
     toastServerRequired: 'Server not configured for this feature',
     toastGroupFail: 'Failed to create group',
+    groupInviteShareTitle: (name) => `Join ${name} on Breeze`,
     toastGroupInviteFail: 'Failed to create group invite',
     toastJoinFail: 'Failed to join group',
     toastNoIdentityBackup: 'No identity to backup',
@@ -2162,7 +2163,7 @@ const _I = {
     cmdLblUserId: 'User ID', cmdLblAlias: 'Alias',
     cmdSectionConn: 'Connection', cmdLblPeer: 'Peer', cmdNoContact: 'No active contact',
     cmdLblMessages: 'Messages', cmdLblLastActivity: 'Last activity',
-    cmdNever: 'never',
+    cmdNever: 'never', cmdNone: 'none',
     cmdLblIce: 'ICE', cmdLblDC: 'DataChannel', cmdLblRtt: 'RTT',
     cmdSectionCrypto: (v) => `Crypto (v${v})`,
     cmdLblSession: 'Session', cmdLblSendCtr: 'Send counter', cmdLblRecvCtr: 'Recv counter',
@@ -2666,6 +2667,7 @@ const _I = {
     toastMicDenied: 'マイクへのアクセスが拒否されました',
     toastServerRequired: 'この機能にはサーバーが必要です',
     toastGroupFail: 'グループ作成に失敗しました',
+    groupInviteShareTitle: (name) => `${name}のBreezeに参加`,
     toastGroupInviteFail: 'グループ招待の作成に失敗しました',
     toastJoinFail: 'グループ参加に失敗しました',
     toastNoIdentityBackup: 'バックアップするIDがありません',
@@ -2967,7 +2969,7 @@ const _I = {
     cmdLblUserId: 'ユーザーID', cmdLblAlias: 'エイリアス',
     cmdSectionConn: '接続', cmdLblPeer: '相手', cmdNoContact: 'アクティブな連絡先なし',
     cmdLblMessages: 'メッセージ数', cmdLblLastActivity: '最終活動',
-    cmdNever: 'なし',
+    cmdNever: 'なし', cmdNone: 'なし',
     cmdLblIce: 'ICE', cmdLblDC: 'データチャネル', cmdLblRtt: 'RTT',
     cmdSectionCrypto: (v) => `暗号化 (v${v})`,
     cmdLblSession: 'セッション', cmdLblSendCtr: '送信カウンター', cmdLblRecvCtr: '受信カウンター',
@@ -9274,7 +9276,7 @@ async function initMessenger(dbName) {
       box.appendChild(d);
 
       if (navigator.share) {
-        try { await navigator.share({ title: 'Join ' + name + ' on Breeze', url: joinUrl }); } catch(e) { _dbg(e); }
+        try { await navigator.share({ title: t('groupInviteShareTitle', name), url: joinUrl }); } catch(e) { _dbg(e); }
       }
     } catch(e) { _dbg(e,'grp'); showToast(t('toastGroupInviteFail'), 'error'); }
   }
@@ -9479,7 +9481,7 @@ async function initMessenger(dbName) {
       pollCallSignals(contact, room);
       playNotif();
       if (Notification?.permission === 'granted') {
-        new Notification(contact.name, { body: msg.isVideoCall ? 'Video call' : 'Voice call', tag: 'breeze-call' });
+        new Notification(contact.name, { body: msg.isVideoCall ? t('videoCall') : t('voiceCall'), tag: 'breeze-call' });
       }
       return;
     }
@@ -9619,7 +9621,7 @@ async function initMessenger(dbName) {
     const contactId = msg.from;
     let contact = await dbGet('contacts', contactId);
     if (!contact && msg.fromPub) {
-      await addContact(msg.fromPub, msg.fromName || 'Unknown');
+      await addContact(msg.fromPub, msg.fromName || t('unknown'));
       contact = await dbGet('contacts', contactId);
     }
     if (!contact) return;
@@ -11397,7 +11399,7 @@ async function initMessenger(dbName) {
       const msgs = (data.messages || [])
         .filter(m => m.type === 'message' && m.text)
         .map(m => ({
-          sender: m.from || m.from_id || 'Unknown',
+          sender: m.from || m.from_id || t('unknown'),
           text: typeof m.text === 'string' ? m.text : m.text.map?.(t => typeof t === 'string' ? t : t.text || '').join('') || '',
           ts: new Date(m.date).getTime(),
         }))
@@ -12471,8 +12473,8 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         t('cmdLblProtocol') + ': v' + CONFIG.PROTOCOL_VERSION,
         t('cmdLblPlatform') + ': ' + PLATFORM,
         t('cmdLblCrypto') + ': ' + (_hasX25519 ? 'X25519' : 'P-256 (ECDH)'),
-        t('cmdLblUserId') + ': ' + (myId || 'none'),
-        t('cmdLblAlias') + ': ' + (myAlias || 'none'),
+        t('cmdLblUserId') + ': ' + (myId || t('cmdNone')),
+        t('cmdLblAlias') + ': ' + (myAlias || t('cmdNone')),
         '',
         '<b>' + t('cmdSectionConn') + '</b>',
         activeContact ? t('cmdLblPeer') + ': ' + activeContact.name + (activeContact.muted ? ' 🔇' : '') + (activeContact.blocked ? ' 🚫' : '') : t('cmdNoContact'),
@@ -12497,7 +12499,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         t('cmdLblReadReceipts') + ': ' + (_privacyHideReadReceipts ? '✗ ' + t('statusHidden') : '✓ ' + t('statusSending')),
         t('cmdLblTypingIndicator') + ': ' + (_privacyHideTyping ? '✗ ' + t('statusHidden') : '✓ ' + t('statusSending')),
         '',
-        t('cmdLblServer') + ': ' + (API || 'none'),
+        t('cmdLblServer') + ': ' + (API || t('cmdNone')),
 
       ].join('<br>'));
       box.appendChild(d);
