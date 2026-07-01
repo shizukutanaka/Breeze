@@ -1835,7 +1835,7 @@ const _I = {
     toastExported: 'Exported',
     toastPinned: 'Message pinned',
     toastUnpinned: 'Message unpinned',
-    toastFwdTo: (name) => `Forwarded to ${name}`,
+    toastFwdTo: (n) => n === 1 ? 'Forwarded to 1 contact' : `Forwarded to ${n} contacts`,
     toastFwdFail: 'Forward failed',
     toastSendFail: 'Send failed — will retry',
     toastVoiceLong: 'Voice too long',
@@ -2641,7 +2641,7 @@ const _I = {
     toastExported: 'エクスポートしました',
     toastPinned: 'ピン留めしました',
     toastUnpinned: 'ピン留めを解除しました',
-    toastFwdTo: (name) => `${name}に転送しました`,
+    toastFwdTo: (n) => `${n}件のコンタクトに転送しました`,
     toastFwdFail: '転送に失敗しました',
     toastSendFail: '送信失敗 — 再試行します',
     toastVoiceLong: '音声が長すぎます',
@@ -7709,7 +7709,7 @@ async function initMessenger(dbName) {
           sent++;
         } catch(e) { _dbg(e, 'forward'); }
       }
-      if (sent > 0) showToast(t('toastFwdTo', sent + ' contact' + (sent > 1 ? 's' : '')), 'success');
+      if (sent > 0) showToast(t('toastFwdTo', sent), 'success');
       else showToast(t('toastFwdFail'), 'error');
       renderContacts();
     };
