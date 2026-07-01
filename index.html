@@ -1511,6 +1511,7 @@ const _I = {
     settingsSound: 'Sound',
     notifSound: 'Notification sound',
     sendSound: 'Send sound',
+    aiSuggestLabel: 'AI smart reply suggestions (sends recent messages to AI server)',
     react: 'React',
     bookmark: 'Bookmark',
     translate: 'Translate',
@@ -2489,6 +2490,7 @@ const _I = {
     confirmDeleteN: (n) => `${n}件のメッセージを削除しますか？`,
     settingsNotif: '通知',
     autoLockLabel: 'タブ切替時に自動ロック',
+    aiSuggestLabel: 'AIスマート返信（最近のメッセージをAIサーバーに送信）',
     newContact: '新しい連絡先',
     aiCached: 'キャッシュ',
     msgSenderThem: '相手',
@@ -6714,6 +6716,9 @@ async function initMessenger(dbName) {
           for (const m of msgs) tx.objectStore('messages').delete(m.msgId);
           const tx2 = db.transaction('contacts', 'readwrite');
           tx2.objectStore('contacts').delete(c.id);
+          // Clean up the ratchet session key material stored in the identity store — the
+          // session is no longer needed and leaving it orphaned wastes IDB space.
+          dbDel('identity', 'sess:' + c.id).catch(() => {});
           auditLog('contact', 'Deleted contact: ' + c.name + ' (' + msgs.length + ' messages removed)', 'warn');
           if (activeContact?.id === c.id) {
             activeContact = null;
@@ -8668,7 +8673,8 @@ async function initMessenger(dbName) {
       bar.appendChild(btn);
     }
     // v3.6: Async AI upgrade — replace local with AI suggestions if available
-    if (API && activeContact) {
+    // Gate on explicit opt-in: never send message context to AI without consent
+    if (API && activeContact && localStorage.getItem('brz-ai-suggest') === '1') {
       const recentMsgs = [];
       const msgEls = _DOM.get('msg-messages')?.querySelectorAll('.msg');
       if (msgEls) {
@@ -12169,9 +12175,16 @@ async function initMessenger(dbName) {
           if (!data.contacts || !Array.isArray(data.contacts)) { showToast(t('toastInvalidFile'), 'error'); return; }
           let added = 0, skipped = 0;
           for (const c of data.contacts) {
-            if (!c.pubB64 && !c.isGroup) { skipped++; continue; }
+            // Validate required fields: pubB64 must be a valid base64 string for non-groups
+            if (!c?.isGroup) {
+              if (typeof c?.pubB64 !== 'string' || !c.pubB64 || c.pubB64.length > 128 ||
+                  !/^[A-Za-z0-9+/=]+$/.test(c.pubB64)) { skipped++; continue; }
+            }
+            // id must be a non-empty string of safe length
+            const rawId = c.id || c.pubB64 || c.name;
+            if (typeof rawId !== 'string' || !rawId || rawId.length > 128) { skipped++; continue; }
             // Use exported id when present (preserves group IDs); fall back to pubB64 for older exports
-            const contactId = c.id || c.pubB64 || c.name;
+            const contactId = rawId;
             const existing = await dbGet('contacts', contactId);
             if (existing) { skipped++; continue; }
             await dbPut('contacts', { id: contactId, pubB64: c.pubB64, name: c.name,
@@ -14093,6 +14106,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         <br><b class="i-g">${t('settingsNotif')}</b><br>
         <label class="i-cur"><input type="checkbox" data-setting="notif-perm" ${Notification?.permission === 'granted' ? 'checked' : ''}> ${t('enableNotif')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="auto-lock" ${localStorage.getItem('brz-autolock') === '1' ? 'checked' : ''}> ${t('autoLockLabel')}</label><br>
+        <label class="i-cur"><input type="checkbox" data-setting="ai-suggest" ${localStorage.getItem('brz-ai-suggest') === '1' ? 'checked' : ''}> ${t('aiSuggestLabel')}</label><br>
         <br><span class="i-t3-10">${t('settingsImmediate')}</span>`);
       // v3.6: Event delegation for settings toggles (no inline onchange)
       d.addEventListener('change', (ev) => {
@@ -14107,6 +14121,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         else if (s === 'send-sound') { localStorage.setItem('brz-send-sound', cb.checked ? '1' : '0'); }
         else if (s === 'notif-perm') { if (cb.checked) Notification?.requestPermission().then(p => { if (p !== 'granted') cb.checked = false; }).catch(() => { cb.checked = false; }); }
         else if (s === 'auto-lock') { localStorage.setItem('brz-autolock', cb.checked ? '1' : '0'); }
+        else if (s === 'ai-suggest') { localStorage.setItem('brz-ai-suggest', cb.checked ? '1' : '0'); }
       });
       box.appendChild(d); box.scrollTop = box.scrollHeight;
     }
