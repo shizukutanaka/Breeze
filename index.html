@@ -6730,7 +6730,7 @@ async function initMessenger(dbName) {
     if (olderCount > 0) {
       const hint = document.createElement('div');
       hint.className = 'load-older';
-      hint.textContent = `↑ ${olderCount} older messages`;
+      hint.textContent = t('uiOlderMsgs', olderCount);
       hint.id = 'load-more-hint';
       hint.onclick = () => { box.scrollTop = 0; }; // trigger scroll-load
       box.appendChild(hint);
@@ -9276,7 +9276,7 @@ async function initMessenger(dbName) {
   // v3: PreKey auto-replenish (check every 5 minutes)
   let _lastPreKeyCheck = 0;
   async function checkAndReplenishPreKeys() {
-    if (!API || Date.now() - _lastPreKeyCheck < 300000) return;
+    if (!API || Date.now() - _lastPreKeyCheck < MS.MIN * 5) return;
     _lastPreKeyCheck = Date.now();
     try {
       // Check if we have enough OTP keys on server

@@ -88,7 +88,7 @@ export default {
           for (const key of list.keys) {
             if (key.expiration && key.expiration * 1000 < now) await kvDel(env, key.name);
           }
-        } catch {}
+        } catch(e) { console.error('[cleanup]', e?.message ?? e); }
       }
       return json({
         ok: kvOk,
