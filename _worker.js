@@ -81,7 +81,7 @@ async function fetchWithTimeout(url, opts, timeoutMs = 10000) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    const path = url.pathname;
+    const path = url.pathname.replace(/\/+$/, '') || '/';
     const reqId = crypto.randomUUID?.() || Math.random().toString(36).slice(2);
     const _startMs = Date.now();
 

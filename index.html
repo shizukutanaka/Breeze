@@ -9163,7 +9163,7 @@ async function initMessenger(dbName) {
     stateEl.textContent = state === 'ringing' ? t('incoming') : t('calling');
 
     const nameEl = document.createElement('div');
-    nameEl.className = 'call-name'; nameEl.textContent = name;
+    nameEl.className = 'call-name'; nameEl.textContent = (name || '').slice(0, 64);
 
     const timerEl = document.createElement('div');
     timerEl.className = 'call-timer'; timerEl.id = 'call-timer'; timerEl.textContent = '00:00';
