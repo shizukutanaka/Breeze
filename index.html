@@ -2041,6 +2041,7 @@ const _I = {
     uiSelectContact: 'Select a contact',
     uiNoMatches: (q) => 'No matches for ' + q,
     uiNoResults: (q) => 'No results for ' + q,
+    searchResults: (n, q) => `${n} result${n === 1 ? '' : 's'} for "${q}"`,
     searchAllResults: (n, c) => `${n} result${n === 1 ? '' : 's'} across ${c} chat${c === 1 ? '' : 's'}`,
     uiAllCaughtUp: 'All caught up',
     uiNoGroups: 'No groups yet',
@@ -2785,6 +2786,7 @@ const _I = {
     uiSelectContact: '連絡先を選択してください',
     uiNoMatches: (q) => q + ' に一致なし',
     uiNoResults: (q) => q + ' の結果なし',
+    searchResults: (n, q) => `"${q}" の${n}件`,
     searchAllResults: (n, c) => `${c}チャットで${n}件`,
     uiAllCaughtUp: '未読なし',
     uiNoGroups: 'グループなし',
@@ -12089,7 +12091,7 @@ async function initMessenger(dbName) {
         const d = document.createElement('div');
         d.className = 'text-xs color-g text-c';
         d.classList.add('i-pad8');
-        d.textContent = matches.length + ' result' + (matches.length > 1 ? 's' : '') + ' for "' + query + '"';
+        d.textContent = t('searchResults', matches.length, query);
         box.appendChild(d); box.scrollTop = box.scrollHeight;
       }
     }
