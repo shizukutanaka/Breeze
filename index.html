@@ -10219,13 +10219,18 @@ async function initMessenger(dbName) {
     overlay.appendChild(inp); overlay.appendChild(btn);
     document.body.appendChild(overlay);
     let _attempts = 0;
+    let _backoffUntil = 0; // timestamp: block unlock() until this passes (0 = no block)
     const unlock = async () => {
       // v3.5: Brute force protection — exponential backoff
-      if (_attempts >= 5) {
-        const wait = Math.min(Math.pow(2, _attempts - 4), 60);
+      // Use a timestamp (not just a counter) so the correct password can still
+      // be tried once the backoff window expires. The old _attempts-only guard
+      // returned early unconditionally after 5 failures, making the correct
+      // password permanently un-checkable until page reload.
+      if (_attempts >= 5 && Date.now() < _backoffUntil) {
+        const remaining = Math.ceil((_backoffUntil - Date.now()) / 1000);
         inp.disabled = true; btn.disabled = true;
-        inp.placeholder = t('lockWait', wait);
-        setTimeout(() => { inp.disabled = false; btn.disabled = false; inp.placeholder = t('enterPassword'); inp.focus(); }, wait * MS.SEC);
+        inp.placeholder = t('lockWait', remaining);
+        setTimeout(() => { inp.disabled = false; btn.disabled = false; inp.placeholder = t('enterPassword'); inp.focus(); }, remaining * MS.SEC);
         return;
       }
       // v3.5: PBKDF2 + salt verification (backward compatible with old SHA-256)
@@ -10245,7 +10250,7 @@ async function initMessenger(dbName) {
       // v3.5: Constant-time comparison (prevent timing attack)
       if (hashB64.length === stored.hash.length && await timingSafeEqual(hashB64, stored.hash)) {
         overlay.remove();
-        _attempts = 0;
+        _attempts = 0; _backoffUntil = 0;
         auditLog('security', 'Lock screen unlocked');
         // Migrate legacy hash to PBKDF2
         if (isLegacy) {
@@ -10260,6 +10265,10 @@ async function initMessenger(dbName) {
         auditLog('security', 'Lock screen: failed attempt ' + _attempts, 'warn');
         inp.classList.add('i-border-err'); inp.value = '';
         setTimeout(() => { inp.classList.remove('i-border-err'); inp.classList.add('i-border-reset'); }, MS.SEC);
+        if (_attempts >= 5) {
+          const wait = Math.min(Math.pow(2, _attempts - 4), 60);
+          _backoffUntil = Date.now() + wait * MS.SEC;
+        }
       }
     };
     btn.onclick = unlock;
