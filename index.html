@@ -6433,11 +6433,14 @@ async function initMessenger(dbName) {
   }
 
   async function addContact(pubB64, name) {
-    try {  
-      const id = pubB64.slice(0, 12);
+    try {
+      const safePub = typeof pubB64 === 'string' ? pubB64.slice(0, 200) : '';
+      if (!safePub) return;
+      const id = safePub.slice(0, 12);
       const existing = await dbGet('contacts', id);
       if (existing) return;
-      await dbPut('contacts', { id, pubB64, name, addedAt: Date.now(), unread: 0 });
+      const safeName = typeof name === 'string' ? name.slice(0, 64) : 'Contact';
+      await dbPut('contacts', { id, pubB64: safePub, name: safeName, addedAt: Date.now(), unread: 0 });
       auditLog('contact', 'Added: ' + name + ' (' + id + ')');
       await renderContacts();
     
@@ -9367,6 +9370,17 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e,'grp'); showToast(t('toastGroupInviteFail'), 'error'); }
   }
 
+  // Sanitize a server-returned member list to known-safe field sizes
+  function safeMemberList(raw) {
+    return (Array.isArray(raw) ? raw : []).slice(0, CONFIG.GROUP_MAX)
+      .filter(m => typeof m.id === 'string' && m.id && m.id.length <= 128)
+      .map(m => ({
+        id: m.id,
+        pubB64: typeof m.pub === 'string' ? m.pub.slice(0, 200) : (typeof m.pubB64 === 'string' ? m.pubB64.slice(0, 200) : ''),
+        name: typeof m.name === 'string' ? m.name.slice(0, 64) : 'Member',
+      }));
+  }
+
   // Process ?join=token — join an existing group
   async function processJoinToken(token) {
     if (!API) return;
@@ -9385,22 +9399,22 @@ async function initMessenger(dbName) {
       const existing = await dbGet('contacts', groupId);
       if (existing) {
         // Update members list
-        existing.members = data.members.map(m => ({ id: m.id, pubB64: m.pub, name: m.name }));
+        existing.members = safeMemberList(data.members);
         await dbPut('contacts', existing);
       } else {
         await dbPut('contacts', {
-          id: groupId, name: data.name, isGroup: true, joinToken: token,
-          members: data.members.map(m => ({ id: m.id, pubB64: m.pub, name: m.name })),
+          id: groupId, name: typeof data.name === 'string' ? data.name.slice(0, 64) : 'Group',
+          isGroup: true, joinToken: token,
+          members: safeMemberList(data.members),
           addedAt: Date.now(), unread: 0, pubB64: ''
         });
       }
 
       // Also add individual contacts for each member
-      for (const m of data.members) {
+      for (const m of safeMemberList(data.members)) {
         if (m.id === myId) continue;
-        const cId = m.id;
-        if (!(await dbGet('contacts', cId))) {
-          await addContact(m.pub, m.name);
+        if (!(await dbGet('contacts', m.id))) {
+          await addContact(m.pubB64, m.name);
         }
       }
 
@@ -9430,7 +9444,7 @@ async function initMessenger(dbName) {
         if (!group) { clearInterval(poll); return; }
 
         const oldCount = group.members?.length || 0;
-        const newMembers = (data.members || []).slice(0, CONFIG.GROUP_MAX).map(m => ({ id: m.id, pubB64: m.pub, name: m.name }));
+        const newMembers = safeMemberList(data.members);
         if (newMembers.length > oldCount) {
           group.members = newMembers;
           await dbPut('contacts', group);
