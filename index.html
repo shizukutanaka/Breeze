@@ -3961,7 +3961,7 @@ async function fetchRetry(url, opts = {}, { maxRetries = 3, baseDelay = 1000, ti
       const resp = await fetchT(url, { ...opts }, timeoutMs);
       if (resp.status === 429) {
         // Rate limited — wait and retry
-        const retryAfter = parseInt(resp.headers.get('Retry-After') || '5');
+        const retryAfter = parseInt(resp.headers.get('Retry-After') || '5') || 5;
         if (attempt < maxRetries) { await new Promise(r => setTimeout(r, retryAfter * MS.SEC)); continue; }
       }
       return resp;
@@ -5903,8 +5903,8 @@ async function initMessenger(dbName) {
         return;
       }
       if (resp.status === 429) {
-        const retryAfter = parseInt(resp.headers.get('Retry-After') || '5') * 1000;
-        showToast(t('toastRateLimit') + ' ' + Math.ceil(retryAfter/1000) + 's', 'info');
+        const retryAfter = (parseInt(resp.headers.get('Retry-After') || '5') || 5) * MS.SEC;
+        showToast(t('toastRateLimit') + ' ' + Math.ceil(retryAfter/MS.SEC) + 's', 'info');
         setTimeout(() => { _retryQueue.unshift({ to, payload, attempts: 0 }); _saveRetryQueue(); scheduleRetry(); }, retryAfter);
         return;
       }
@@ -10200,7 +10200,7 @@ async function initMessenger(dbName) {
         const wait = Math.min(Math.pow(2, _attempts - 4), 60);
         inp.disabled = true; btn.disabled = true;
         inp.placeholder = t('lockWait', wait);
-        setTimeout(() => { inp.disabled = false; btn.disabled = false; inp.placeholder = t('enterPassword'); inp.focus(); }, wait * 1000);
+        setTimeout(() => { inp.disabled = false; btn.disabled = false; inp.placeholder = t('enterPassword'); inp.focus(); }, wait * MS.SEC);
         return;
       }
       // v3.5: PBKDF2 + salt verification (backward compatible with old SHA-256)
