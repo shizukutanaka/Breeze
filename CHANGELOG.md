@@ -1,5 +1,37 @@
 # Changelog
 
+## Security hardening session 3 — poll race, SDP guard, field caps, edit cap (branch claude/nice-ride-T6yb0, 2026-07-01)
+
+777 tests; `index.html` only. `validate.sh` PASSED (35/36, 1 size warning).
+
+**Poll cursor race fix:**
+- `_lastPollTs` now advances AFTER `handleIncoming()` completes (previously it advanced before, permanently losing messages on a crash mid-batch). Per-message `try/catch` added so a poison envelope can't halt the entire poll batch.
+
+**WebRTC robustness:**
+- SDP `JSON.parse()` result validated as a non-array object before `setRemoteDescription()`. Previously a non-object parse (array, null, string) yielded `undefined.type` silently.
+- `_unwrapCallSignal()` return value validated as a non-array object. A truthy non-object (e.g. `[]`) passed the old `!parsed` guard, leaving `pending.sdp` as `undefined` at `setRemoteDescription`.
+
+**Input caps:**
+- Message edit (`startEdit`) text capped at `CONFIG.MAX_MSG_LENGTH` (4096). The same cap already existed on the send path; edit signals to peers now carry the truncated text.
+
+**Auth:**
+- `/wipe` now sends Ed25519 ownership proof (`ts` + `sig` over `breeze-account-delete:${userId}:${ts}`); previously the unauthenticated request was rejected with 400 MISSING_FIELDS and the server-side prekey bundle was never deleted.
+
+**Protocol-relative URL fix (Trusted Types href sanitizer):**
+- Regex tightened from `\/` to `\/[^\/]` — previously `//evil.com` matched because `//` starts with `/`; browsers resolve protocol-relative URLs against the page protocol.
+
+**Contact import hardening:**
+- `name` capped 64, `alias` 32, `notes` 1024, `labels` 20×32, `members` capped at `GROUP_MAX`, `addedAt` validated finite number
+- `addContact()` validates and caps `pubB64` (≤200) and `name` (≤64) before IDB write
+- `safeMemberList()` helper centralizes member-array sanitization (capped at `GROUP_MAX`, id ≤128, pub ≤200, name ≤64); applied at `processJoinToken`, `startGroupMemberPoll`, and invite-add loop
+
+**DoS caps:**
+- Scheduled message count capped at 20 per account; new `toastScheduleMax` i18n key (EN+JA)
+- Reaction emoji type count capped at 20 per message (previously unbounded emoji-key map)
+- Import message `text` capped at `MAX_MSG_LENGTH`, `senderName` capped at 64 chars
+
+---
+
 ## Security hardening session 2 — handleIncoming guards, AI opt-in, storage caps (branch claude/nice-ride-T6yb0, 2026-07-01)
 
 777 tests; `index.html` only. `validate.sh` PASSED (35/36, 1 size warning).
