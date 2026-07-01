@@ -6214,8 +6214,11 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'session-prune'); }
     enforceRetentionPolicy(); // Run on boot
     pruneAuditLog();
-    _defer(() => { _intervals.push(setInterval(enforceRetentionPolicy, CONFIG.CLEANUP_INTERVAL_MS)); }); // Deferred: non-critical
-    _defer(() => { _intervals.push(setInterval(pruneAuditLog, MS.DAY)); }); // Deferred: non-critical
+    // Register long-running maintenance intervals directly (not deferred): setInterval(fn, 1h/24h)
+    // is free at registration time (first tick is far in the future), and deferring via
+    // requestIdleCallback creates an orphaned interval if _messengerCleanup runs first.
+    _intervals.push(setInterval(enforceRetentionPolicy, CONFIG.CLEANUP_INTERVAL_MS));
+    _intervals.push(setInterval(pruneAuditLog, MS.DAY));
     auditLog('auth', 'Session started: ' + myShortId);
     // v3.5: Recover scheduled messages from IDB
     try {
@@ -6296,6 +6299,10 @@ async function initMessenger(dbName) {
         if (p._heartbeat) clearInterval(p._heartbeat);
         try { p.pc?.close(); } catch(e) { _dbg(e); }
       });
+      // Clear stale peer entries: connectPeer guards on peers[pubB64]?.pc to avoid
+      // duplicate connections — keeping closed RTCPeerConnection objects would block
+      // new connections from being established after account switch.
+      for (const key in peers) delete peers[key];
       // Clear group typing state to prevent memory leak on account switch
       for (const groupId in _groupTypingState) { delete _groupTypingState[groupId]; }
       // Stop any in-progress voice recording to release the microphone on account switch.
