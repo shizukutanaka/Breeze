@@ -6352,6 +6352,12 @@ async function initMessenger(dbName) {
         _crossAccountUnread[activeId] = totalUnread;
         localStorage.setItem('brz-cross-unread', JSON.stringify(_crossAccountUnread));
       } catch(e) { _dbg(e); }
+      // Null out cryptographic key material so pending callbacks from this account
+      // cannot sign or decrypt under the old identity after the switch.
+      _signingKey = null; myKeys = null;
+      // Clear incomplete binary file transfers — their chunk buffers belong to this
+      // account's peer sessions and must not survive into the next account's context.
+      for (const id in _fileChunks) delete _fileChunks[id];
     };
     // Auto-add contact from URL (?add=@alias or ?add=pubkey&name=X)
     const addKey = P.get('add');
@@ -11249,6 +11255,12 @@ async function initMessenger(dbName) {
     if (nameLen > 255 || mimeLen > 128) return;
     const data = new Uint8Array(buffer, 28 + nameLen + mimeLen);
     if (!_fileChunks[fileId]) {
+      // Prune transfers idle for > 60 s before checking the slot limit — prevents an
+      // attacker from starting 10 incomplete transfers and permanently blocking new ones.
+      const _now = performance.now();
+      for (const id in _fileChunks) {
+        if (_now - _fileChunks[id].startTs > 60000) { const _e = document.getElementById('recv-' + id); if (_e) _e.remove(); delete _fileChunks[id]; }
+      }
       // Cap concurrent in-progress transfers to prevent accumulation of stale entries.
       if (Object.keys(_fileChunks).length >= 10) return;
       const name = new TextDecoder().decode(new Uint8Array(buffer, 28, nameLen));
