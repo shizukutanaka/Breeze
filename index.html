@@ -4210,6 +4210,10 @@ const _rateLimiter = {
 // Persisted to IDB so messages survive page reload.
 // ═════════════════════════════════════════════════════
 const _outbox = new Map(); // peerId → [{text, ts, attempts}]
+// Track which account the outbox belongs to. _persistOutbox / _restoreOutbox
+// use an account-scoped key ('brz-outbox-<myId>') so that switching accounts
+// does not deliver account A's pending messages under account B's identity.
+let _outboxKey = 'brz-outbox'; // updated to per-account key in initMessenger
 
 function queueOutbox(peerId, text, meta) {
   if (!_outbox.has(peerId)) _outbox.set(peerId, []);
@@ -4253,12 +4257,12 @@ function _persistOutbox() {
     for (const [k, v] of _outbox) {
       if (v.length > 0) obj[k] = v.slice(-50);
     }
-    localStorage.setItem('brz-outbox', JSON.stringify(obj));
+    localStorage.setItem(_outboxKey, JSON.stringify(obj));
   } catch(e) { /* quota */ }
 }
 function _restoreOutbox() {
   try {
-    const raw = localStorage.getItem('brz-outbox');
+    const raw = localStorage.getItem(_outboxKey);
     if (!raw) return;
     const obj = JSON.parse(raw);
     for (const [k, v] of Object.entries(obj)) {
@@ -4267,7 +4271,9 @@ function _restoreOutbox() {
     if (_outbox.size > 0) _dbg(null, `Outbox: restored ${_outbox.size} peer queues`);
   } catch(e) { /* ignore */ }
 }
-_restoreOutbox();
+// Note: _restoreOutbox() is NOT called here at module init. It is called inside
+// initMessenger after myId is known, using the per-account key. This prevents the
+// module-init call from loading any prior account's outbox before identity is set.
 
 // v3.5: Message ID generator — collision-safe (counter prevents same-ms duplicates)
 let _msgSeq = 0;
@@ -5994,6 +6000,12 @@ async function initMessenger(dbName) {
   // ===== Setup or Load =====
   const hasId = await loadIdentity();
   if (hasId) {
+    // Scope the outbox to this account before any peer activity. Without this,
+    // pending messages from account A remain in _outbox when switching to account B
+    // and could be delivered under B's identity to a shared contact.
+    _outboxKey = 'brz-outbox-' + myId;
+    _outbox.clear();
+    _restoreOutbox();
     _DOM.get('msg-setup').classList.add('hidden');
     _DOM.get('msg-main').classList.remove('hidden');
     _DOM.get('msg-input-bar').classList.remove('hidden');
@@ -6098,6 +6110,11 @@ async function initMessenger(dbName) {
     _messengerCleanup = () => {
       _ac.abort(); // Remove all event listeners registered with signal
       _intervals.forEach(i => clearInterval(i));
+      // Discard this account's in-memory outbox. The Map is module-level and persists
+      // across initMessenger calls; without clearing it here, pending P2P messages from
+      // the old account would be sent under the new account's identity if both accounts
+      // share a contact by public key. Messages were already persisted to _outboxKey.
+      _outbox.clear();
       Object.values(peers).forEach(p => {
         if (p._healthTimer) clearInterval(p._healthTimer);
         // Leak fix: pc.close() does NOT fire connectionstatechange (per spec), so the
@@ -6139,6 +6156,8 @@ async function initMessenger(dbName) {
     const name = _DOM.get('msg-name').value.trim().slice(0, 64) || 'Anonymous';
     const alias = (_DOM.get('msg-alias').value.trim() || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
     await createIdentity(name, alias);
+    _outboxKey = 'brz-outbox-' + myId;
+    _outbox.clear();
     _DOM.get('msg-setup').classList.add('hidden');
     _DOM.get('msg-main').classList.remove('hidden');
     _DOM.get('msg-input-bar').classList.remove('hidden');
