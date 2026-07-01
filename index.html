@@ -8094,10 +8094,18 @@ async function initMessenger(dbName) {
     appendMsg(text, true, ts, null, null, meta);
     if (localStorage.getItem('brz-send-sound') !== '0') playSendSound();
     haptic.send();
-    await dbPut('messages', { msgId, contactId: activeContact.id, text, mine: true, ts, ...meta });
-    activeContact.lastMsg = text.slice(0, 40);
-    activeContact.lastMsgAt = ts;
-    await dbPut('contacts', activeContact);
+    // Snapshot activeContact before any await: a contact switch mid-async-chain would
+    // otherwise mutate the NEW contact's lastMsg with the old message text.
+    const contact = activeContact;
+    const msgRecord = { msgId, contactId: contact.id, text, mine: true, ts, ...meta };
+    // Retry once after quota cleanup (dbPut triggers cleanupOldMessages on QuotaExceededError
+    // and resolves false; by the time we see false the cleanup is done and space is freed).
+    let saved = await dbPut('messages', msgRecord);
+    if (!saved) saved = await dbPut('messages', msgRecord);
+    if (!saved) _dbg(null, 'msg persistence failed (storage full)');
+    contact.lastMsg = text.slice(0, 40);
+    contact.lastMsgAt = ts;
+    await dbPut('contacts', contact);
 
     if (activeContact.isGroup) {
       // v3.1: Sender Key: encrypt ONCE with group key, send same ciphertext to all members
