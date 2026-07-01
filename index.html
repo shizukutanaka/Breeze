@@ -6704,7 +6704,7 @@ async function initMessenger(dbName) {
         if (action === 'rename') {
           const newName = await showPrompt(t('newNamePrompt'), c.name);
           if (newName && newName.trim()) {
-            c.name = newName.trim();
+            c.name = newName.trim().slice(0, 64);
             await dbPut('contacts', c);
             renderContacts();
             if (activeContact?.id === c.id) _DOM.get('msg-conv-name').textContent = c.name;
@@ -13331,7 +13331,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     // v3.6: /ai <question> — Ask AI assistant
     if (val.startsWith('/ai ')) {
       e.preventDefault(); clearInput();
-      const question = val.slice(4).trim();
+      const question = val.slice(4).trim().slice(0, 2000);
       if (!question) return;
       if (!API) { showToast(t('aiError'), 'error'); return; }
       // v3.6: Check if AI providers are configured on server
@@ -13655,7 +13655,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       if (!activeContact) return;
       const noteText = val.slice(6).trim();
       if (!noteText) return;
-      activeContact.notes = noteText;
+      activeContact.notes = noteText.slice(0, 1024);
       await dbPut('contacts', activeContact);
       showToast(t('toastNoteSavedFor', activeContact.name), 'success');
     }
@@ -13668,7 +13668,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const arg = val.slice(6).trim();
       if (arg) {
         // Set note
-        activeContact.notes = arg === 'clear' ? '' : arg;
+        activeContact.notes = arg === 'clear' ? '' : arg.slice(0, 1024);
         await dbPut('contacts', activeContact);
         showToast(t('toastNoteAction')(arg === 'clear'), 'success');
       } else {
@@ -13719,7 +13719,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         showToast(t('toastLabelsClear'), 'info');
         renderContacts();
       } else {
-        c.labels = arg.split(',').map(s => s.trim()).filter(Boolean);
+        c.labels = arg.split(',').map(s => s.trim().slice(0, 32)).filter(Boolean).slice(0, 20);
         await dbPut('contacts', c);
         showToast(t('toastLabelsInfo', c.labels.join(', ')), 'success');
         auditLog('contact', 'Labels: ' + c.name + ' → ' + c.labels.join(', '));
