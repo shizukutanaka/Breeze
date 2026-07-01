@@ -2085,6 +2085,10 @@ const _I = {
     statusOnline: 'Online',
     ariaUnread: (n) => `${n} unread`,
     justNow: 'just now',
+    timeCompactMin: (n) => n + 'm',
+    timeCompactHour: (n) => n + 'h',
+    timeCompactDay: (n) => n + 'd',
+    timeCompactLt1m: '<1m',
     uiServerUnavail: 'Server unavailable',
     uiNoServer: 'No server configured',
     uiStorageUnavail: 'Storage API not available',
@@ -2857,6 +2861,10 @@ const _I = {
     statusOnline: 'オンライン',
     ariaUnread: (n) => `未読${n}件`,
     justNow: 'たった今',
+    timeCompactMin: (n) => n + '分',
+    timeCompactHour: (n) => n + '時間',
+    timeCompactDay: (n) => n + '日',
+    timeCompactLt1m: '<1分',
     uiServerUnavail: 'サーバー利用不可',
     uiNoServer: 'サーバー未設定',
     uiStorageUnavail: 'ストレージAPI利用不可',
@@ -6485,10 +6493,10 @@ async function initMessenger(dbName) {
       let lastTime = '';
       if (c.lastMsgAt) {
         const diff = Date.now() - c.lastMsgAt;
-        if (diff < MS.MIN) lastTime = '<1m';
-        else if (diff < MS.HOUR) lastTime = Math.floor(diff / MS.MIN) + 'm';
-        else if (diff < MS.DAY) lastTime = Math.floor(diff / MS.HOUR) + 'h';
-        else lastTime = Math.floor(diff / MS.DAY) + 'd';
+        if (diff < MS.MIN) lastTime = t('timeCompactLt1m');
+        else if (diff < MS.HOUR) lastTime = t('timeCompactMin', Math.floor(diff / MS.MIN));
+        else if (diff < MS.DAY) lastTime = t('timeCompactHour', Math.floor(diff / MS.HOUR));
+        else lastTime = t('timeCompactDay', Math.floor(diff / MS.DAY));
       }
       const draftText = _drafts[c.id];
       let previewText;
