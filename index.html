@@ -9115,8 +9115,16 @@ async function initMessenger(dbName) {
   }
 
   function endCall() {
+    if (_callState === 'idle') return; // guard double-call
     if (_callStream) { _callStream.getTracks().forEach(t => t.stop()); _callStream = null; }
     if (_callPC) { try { _callPC.close(); } catch(e) { _dbg(e); } _callPC = null; }
+    // Null srcObject before removing elements — without this, the browser keeps a
+    // live MediaStream reference on the detached DOM nodes, leaving the camera/mic
+    // indicator LED on even after getTracks().forEach(t => t.stop()).
+    const remAudio = _DOM.get('call-remote-audio');
+    const remVideo = _DOM.get('call-remote-video');
+    if (remAudio) remAudio.srcObject = null;
+    if (remVideo) remVideo.srcObject = null;
     _callRemoteStream = null;
     clearInterval(_callTimerInterval);
     releaseWakeLock();
