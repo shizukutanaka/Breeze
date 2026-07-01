@@ -2372,7 +2372,9 @@ async function hmacVerifyFrank(commitmentB64, openingB64, message) {
 async function handleAbuseRecord(body, env, request) {
   const { frankId, commitment } = body;
   if (!frankId || !commitment) return json({ error: 'frankId and commitment required', code: 'MISSING_FIELDS' }, 400, request);
-  if (typeof frankId !== 'string' || frankId.length > 128 || !/^[A-Za-z0-9+/=_-]+$/.test(frankId)) return json({ error: 'invalid frankId', code: 'INVALID_FIELD' }, 400, request);
+  // Minimum 8 chars (6 bytes ≈ 2^48 combinations) prevents commitment-squatting via
+  // exhaustive pre-registration of short frankId slots.
+  if (typeof frankId !== 'string' || frankId.length < 8 || frankId.length > 128 || !/^[A-Za-z0-9+/=_-]+$/.test(frankId)) return json({ error: 'invalid frankId', code: 'INVALID_FIELD' }, 400, request);
   if (typeof commitment !== 'string' || commitment.length > 128 || !/^[A-Za-z0-9+/=]+$/.test(commitment)) return json({ error: 'invalid commitment', code: 'INVALID_FIELD' }, 400, request);
   // Do not overwrite an existing commitment (a frankId binds one message).
   if (await kvGet(env, `frank:${frankId}`)) return json({ ok: true, existing: true }, 200, request);
@@ -2388,7 +2390,7 @@ async function handleAbuseRecord(body, env, request) {
 async function handleAbuseReport(body, env, request) {
   const { frankId, message, opening } = body;
   if (!frankId || typeof message !== 'string' || !opening) return json({ error: 'frankId, message, opening required', code: 'MISSING_FIELDS' }, 400, request);
-  if (typeof frankId !== 'string' || frankId.length > 128 || !/^[A-Za-z0-9+/=_-]+$/.test(frankId)) return json({ error: 'invalid frankId', code: 'INVALID_FIELD' }, 400, request);
+  if (typeof frankId !== 'string' || frankId.length < 8 || frankId.length > 128 || !/^[A-Za-z0-9+/=_-]+$/.test(frankId)) return json({ error: 'invalid frankId', code: 'INVALID_FIELD' }, 400, request);
   if (message.length > 256 * 1024) return json({ error: 'message too large', code: 'MSG_TOO_LARGE' }, 400, request);
   // HMAC opening key is 32 bytes (base64 = 44 chars); 128 chars is generous.
   // Do NOT add a base64 regex here — malformed base64 must reach hmacVerifyFrank (try/catch → false → FRANK_MISMATCH).
@@ -2872,6 +2874,14 @@ async function handleTranslate(body, env, request) {
     try { return json({ ...JSON.parse(cached), cached: true }, 200, request); } catch(e) { console.error('[translate-cache]', e?.message ?? e); }
   }
 
+  // When AI_REQUIRE_AUTH=true, only registered users (who completed PoW + prekey upload)
+  // may trigger a live provider call. Cached results are still served to everyone.
+  if (env.AI_REQUIRE_AUTH) {
+    const { userId } = body;
+    if (!userId || !validateUserId(userId)) return json({ error: 'userId required', code: 'AUTH_REQUIRED' }, 401, request);
+    if (!(await kvGet(env, `prekey:${userId}`))) return json({ error: 'User not registered', code: 'UNREGISTERED' }, 401, request);
+  }
+
   let translated = null;
   let provider = null;
   let detectedFrom = src;
@@ -3034,6 +3044,14 @@ async function handleAI(body, env, request) {
   const cached = await kvGet(env, cacheKey);
   if (cached) {
     try { return json({ ...JSON.parse(cached), cached: true }, 200, request); } catch(e) { console.error('[ai-cache]', e?.message ?? e); }
+  }
+
+  // When AI_REQUIRE_AUTH=true, only registered users (who completed PoW + prekey upload)
+  // may trigger a live provider call. Cached results are still served to everyone.
+  if (env.AI_REQUIRE_AUTH) {
+    const { userId } = body;
+    if (!userId || !validateUserId(userId)) return json({ error: 'userId required', code: 'AUTH_REQUIRED' }, 401, request);
+    if (!(await kvGet(env, `prekey:${userId}`))) return json({ error: 'User not registered', code: 'UNREGISTERED' }, 401, request);
   }
 
   let result = null;

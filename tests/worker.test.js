@@ -1778,12 +1778,12 @@ describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => 
     const env = makeEnv();
     const message = 'abusive content';
     const { commitment, opening } = await F.commit(message); // client-side franking
-    const rec = await handleAbuseRecord({ frankId: 'm-001', commitment: b64(commitment) }, env, req({}));
+    const rec = await handleAbuseRecord({ frankId: 'm-001xxx', commitment: b64(commitment) }, env, req({}));
     expect(rec.status).toBe(200);
-    const rep = await handleAbuseReport({ frankId: 'm-001', message, opening: b64(opening) }, env, req({}));
+    const rep = await handleAbuseReport({ frankId: 'm-001xxx', message, opening: b64(opening) }, env, req({}));
     expect(rep.status).toBe(200);
     expect((await rep.json()).verified).toBe(true);
-    expect(await env.KV.get('report:m-001')).toBeTruthy(); // recorded for moderation
+    expect(await env.KV.get('report:m-001xxx')).toBeTruthy(); // recorded for moderation
   });
 
   // Item 46: a silently-dropped commitment makes the message unreportable later, so the
@@ -1793,7 +1793,7 @@ describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => 
     const { commitment } = await F.commit('x');
     const real = env.KV.put.bind(env.KV);
     env.KV.put = async (key, ...rest) => { if (key.startsWith('frank:')) throw new Error('KV down'); return real(key, ...rest); };
-    const rec = await handleAbuseRecord({ frankId: 'm-sf', commitment: b64(commitment) }, env, req({}));
+    const rec = await handleAbuseRecord({ frankId: 'm-sf-xxx', commitment: b64(commitment) }, env, req({}));
     expect(rec.status).toBe(500);
     expect((await rec.json()).code).toBe('STORE_FAILED');
   });
@@ -1801,27 +1801,27 @@ describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => 
   it('rejects a report claiming a different message (binding)', async () => {
     const env = makeEnv();
     const { commitment, opening } = await F.commit('what was sent');
-    await handleAbuseRecord({ frankId: 'm-002', commitment: b64(commitment) }, env, req({}));
-    const rep = await handleAbuseReport({ frankId: 'm-002', message: 'a lie', opening: b64(opening) }, env, req({}));
+    await handleAbuseRecord({ frankId: 'm-002xxx', commitment: b64(commitment) }, env, req({}));
+    const rep = await handleAbuseReport({ frankId: 'm-002xxx', message: 'a lie', opening: b64(opening) }, env, req({}));
     expect(rep.status).toBe(400);
     expect((await rep.json()).code).toBe('FRANK_MISMATCH');
   });
 
   it('404s a report for an unknown frankId', async () => {
     const env = makeEnv();
-    const rep = await handleAbuseReport({ frankId: 'nope', message: 'x', opening: b64([1, 2, 3]) }, env, req({}));
+    const rep = await handleAbuseReport({ frankId: 'nope1234', message: 'x', opening: b64([1, 2, 3]) }, env, req({}));
     expect(rep.status).toBe(404);
   });
 
   it('does not overwrite an existing commitment for a frankId', async () => {
     const env = makeEnv();
     const a = await F.commit('first');
-    await handleAbuseRecord({ frankId: 'm-003', commitment: b64(a.commitment) }, env, req({}));
+    await handleAbuseRecord({ frankId: 'm-003xxx', commitment: b64(a.commitment) }, env, req({}));
     const b = await F.commit('second');
-    const rec2 = await handleAbuseRecord({ frankId: 'm-003', commitment: b64(b.commitment) }, env, req({}));
+    const rec2 = await handleAbuseRecord({ frankId: 'm-003xxx', commitment: b64(b.commitment) }, env, req({}));
     expect((await rec2.json()).existing).toBe(true);
     // The original commitment still stands.
-    const rep = await handleAbuseReport({ frankId: 'm-003', message: 'first', opening: b64(a.opening) }, env, req({}));
+    const rep = await handleAbuseReport({ frankId: 'm-003xxx', message: 'first', opening: b64(a.opening) }, env, req({}));
     expect((await rep.json()).verified).toBe(true);
   });
 
@@ -1832,11 +1832,26 @@ describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => 
     expect(res.status).toBe(400);
   });
 
+  it('rejects a frankId shorter than 8 chars on record (entropy floor)', async () => {
+    const env = makeEnv();
+    const { commitment } = await F.commit('x');
+    const res = await handleAbuseRecord({ frankId: 'abc123', commitment: b64(commitment) }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_FIELD');
+  });
+
+  it('rejects a frankId shorter than 8 chars on report (entropy floor)', async () => {
+    const env = makeEnv();
+    const res = await handleAbuseReport({ frankId: 'abc123', message: 'x', opening: b64([0]) }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_FIELD');
+  });
+
   it('rejects an oversized report message (DoS guard)', async () => {
     const env = makeEnv();
     const { commitment } = await F.commit('x');
-    await handleAbuseRecord({ frankId: 'm-dos', commitment: b64(commitment) }, env, req({}));
-    const res = await handleAbuseReport({ frankId: 'm-dos', message: 'x'.repeat(256 * 1024 + 1), opening: b64([0]) }, env, req({}));
+    await handleAbuseRecord({ frankId: 'm-dos-xx', commitment: b64(commitment) }, env, req({}));
+    const res = await handleAbuseReport({ frankId: 'm-dos-xx', message: 'x'.repeat(256 * 1024 + 1), opening: b64([0]) }, env, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('MSG_TOO_LARGE');
   });
@@ -1844,8 +1859,8 @@ describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => 
   it('rejects an oversized opening field (DoS guard)', async () => {
     const env = makeEnv();
     const { commitment } = await F.commit('any message');
-    await handleAbuseRecord({ frankId: 'm-ovr', commitment: b64(commitment) }, env, req({}));
-    const res = await handleAbuseReport({ frankId: 'm-ovr', message: 'any message', opening: 'x'.repeat(129) }, env, req({}));
+    await handleAbuseRecord({ frankId: 'm-ovr-xx', commitment: b64(commitment) }, env, req({}));
+    const res = await handleAbuseReport({ frankId: 'm-ovr-xx', message: 'any message', opening: 'x'.repeat(129) }, env, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_OPENING');
   });
@@ -1854,8 +1869,8 @@ describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => 
     // atob('!!!notb64') throws; hmacVerifyFrank's try/catch catches it → returns false.
     const env = makeEnv();
     const { commitment } = await F.commit('some message');
-    await handleAbuseRecord({ frankId: 'm-b64', commitment: b64(commitment) }, env, req({}));
-    const res = await handleAbuseReport({ frankId: 'm-b64', message: 'some message', opening: '!!!notb64' }, env, req({}));
+    await handleAbuseRecord({ frankId: 'm-b64-xx', commitment: b64(commitment) }, env, req({}));
+    const res = await handleAbuseReport({ frankId: 'm-b64-xx', message: 'some message', opening: '!!!notb64' }, env, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('FRANK_MISMATCH');
   });
@@ -1866,8 +1881,8 @@ describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => 
     const shortCommitment = b64(Array.from({ length: 16 }, (_, i) => i)); // 16 bytes → wrong length
     const { opening } = await F.commit('x');
     const env = makeEnv();
-    await handleAbuseRecord({ frankId: 'm-len', commitment: shortCommitment }, env, req({}));
-    const res = await handleAbuseReport({ frankId: 'm-len', message: 'x', opening: b64(opening) }, env, req({}));
+    await handleAbuseRecord({ frankId: 'm-len-xx', commitment: shortCommitment }, env, req({}));
+    const res = await handleAbuseReport({ frankId: 'm-len-xx', message: 'x', opening: b64(opening) }, env, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('FRANK_MISMATCH');
   });
@@ -1910,20 +1925,20 @@ describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => 
       const env = makeEnv({ ABUSE_WEBHOOK_URL: 'https://hooks.example.com/abuse' });
       const message = 'repeat-report message';
       const { commitment, opening } = await F.commit(message);
-      await handleAbuseRecord({ frankId: 'dup-001', commitment: b64(commitment) }, env, req({}));
+      await handleAbuseRecord({ frankId: 'dup-001x', commitment: b64(commitment) }, env, req({}));
 
       // First report → verified, not a duplicate, webhook fires.
-      const rep1 = await handleAbuseReport({ frankId: 'dup-001', message, opening: b64(opening) }, env, req({}));
+      const rep1 = await handleAbuseReport({ frankId: 'dup-001x', message, opening: b64(opening) }, env, req({}));
       const j1 = await rep1.json();
       expect(j1.verified).toBe(true);
       expect(j1.duplicate).toBe(false);
 
       // Second + third identical reports → still verified, flagged duplicate, NO new webhook.
-      const rep2 = await handleAbuseReport({ frankId: 'dup-001', message, opening: b64(opening) }, env, req({}));
+      const rep2 = await handleAbuseReport({ frankId: 'dup-001x', message, opening: b64(opening) }, env, req({}));
       const j2 = await rep2.json();
       expect(j2.verified).toBe(true);
       expect(j2.duplicate).toBe(true);
-      await handleAbuseReport({ frankId: 'dup-001', message, opening: b64(opening) }, env, req({}));
+      await handleAbuseReport({ frankId: 'dup-001x', message, opening: b64(opening) }, env, req({}));
 
       await new Promise(r => setTimeout(r, 10));
       const hookCalls = calls.filter(c => c.url === 'https://hooks.example.com/abuse');
@@ -1937,13 +1952,13 @@ describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => 
     const env = makeEnv();
     const message = 'store-fail message';
     const { commitment, opening } = await F.commit(message);
-    await handleAbuseRecord({ frankId: 'sf-001', commitment: b64(commitment) }, env, req({}));
+    await handleAbuseRecord({ frankId: 'sf-001xx', commitment: b64(commitment) }, env, req({}));
     const real = env.KV.put.bind(env.KV);
     env.KV.put = async (key, ...rest) => {
       if (key.startsWith('report:')) throw new Error('KV unavailable');
       return real(key, ...rest);
     };
-    const res = await handleAbuseReport({ frankId: 'sf-001', message, opening: b64(opening) }, env, req({}));
+    const res = await handleAbuseReport({ frankId: 'sf-001xx', message, opening: b64(opening) }, env, req({}));
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe('STORE_FAILED');
   });
@@ -3456,6 +3471,20 @@ describe('AI handler input validation', () => {
     // Must not be a 500 from an unhandled TypeError.
     expect(res.status).not.toBe(500);
   });
+
+  it('AI_REQUIRE_AUTH: rejects cache-miss call without userId when flag is set', async () => {
+    const e = makeEnv({ ANTHROPIC_API_KEY: 'test-key', AI_REQUIRE_AUTH: 'true' });
+    const res = await handleAI({ action: 'chat', text: 'hello' }, e, apiRequest('/api/ai', {}));
+    expect(res.status).toBe(401);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
+  });
+
+  it('AI_REQUIRE_AUTH: rejects call for unregistered userId (no prekey)', async () => {
+    const e = makeEnv({ ANTHROPIC_API_KEY: 'test-key', AI_REQUIRE_AUTH: 'true' });
+    const res = await handleAI({ action: 'chat', text: 'hello', userId: 'unreguser12345' }, e, apiRequest('/api/ai', {}));
+    expect(res.status).toBe(401);
+    expect((await res.json()).code).toBe('UNREGISTERED');
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3631,6 +3660,20 @@ describe('translate handler input validation', () => {
     } finally {
       globalThis.fetch = origFetch;
     }
+  });
+
+  it('AI_REQUIRE_AUTH: rejects translate call without userId when flag is set', async () => {
+    const e = makeEnv({ AI_REQUIRE_AUTH: 'true' });
+    const res = await handleTranslate({ text: 'hello', to: 'ja' }, e, apiRequest('/api/translate', {}));
+    expect(res.status).toBe(401);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
+  });
+
+  it('AI_REQUIRE_AUTH: rejects translate for unregistered userId (no prekey)', async () => {
+    const e = makeEnv({ AI_REQUIRE_AUTH: 'true' });
+    const res = await handleTranslate({ text: 'hello', to: 'ja', userId: 'unreguser12345' }, e, apiRequest('/api/translate', {}));
+    expect(res.status).toBe(401);
+    expect((await res.json()).code).toBe('UNREGISTERED');
   });
 });
 
