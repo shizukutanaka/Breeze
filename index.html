@@ -6077,7 +6077,8 @@ async function initMessenger(dbName) {
         sk.chainKey = Array.from(nextChain); // old chain key evicted (forward secrecy)
         version = 5;
       } else {
-        // v3: static raw key, counter used as HKDF salt
+        // v3: static raw key, counter used as HKDF salt (Uint32 truncates at 2^32 — guard required)
+        if (sk.counter >= 0xFFFFFFFF) throw new Error('group sender key counter overflow — rotate group');
         msgKeyBits = await hkdf(new Uint8Array(sk.raw), new Uint8Array(new Uint32Array([sk.counter]).buffer), 'group-msg', 32);
         version = 3;
       }

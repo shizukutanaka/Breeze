@@ -618,16 +618,17 @@ describe('prekey key-history audit log (I11 precursor)', () => {
     expect((await res.json()).keyHistory.length).toBe(1);
   });
 
-  it('caps the log at 10 entries', async () => {
+  it('caps the log at 100 entries (raised from 10 to prevent eviction-based hiding of key rollover)', async () => {
     const env = makeEnv();
-    for (let i = 0; i < 15; i++) {
+    // Upload 105 distinct keys; only the last 100 should survive.
+    for (let i = 0; i < 105; i++) {
       await handlePreKeyUpload(
         { userId: 'hist0004', identityKey: `hist0004IK-${i}`, signedPreKey: 'SPK' },
         env, apiRequest('/api/prekey/upload', {}),
       );
     }
     const res = await handlePreKeyFetch({ userId: 'hist0004' }, env, apiRequest('/api/prekey/fetch', {}));
-    expect((await res.json()).keyHistory.length).toBe(10);
+    expect((await res.json()).keyHistory.length).toBe(100);
   });
 
   it('N5: each key-history entry carries a chain hash (c field)', async () => {

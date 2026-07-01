@@ -2153,8 +2153,9 @@ async function handlePreKeyUpload(body, env, request) {
       // Same IK: just refresh the timestamp of the last entry.
       latest.ts = Date.now();
     }
-    // Cap at 10 entries (enough to show a suspicious rollover history).
-    const trimmed = log.slice(-10);
+    // Cap at 100 entries — 10 was too few; an attacker could deliberately rotate
+    // 11 times to evict the oldest entry and hide the initial key compromise.
+    const trimmed = log.slice(-100);
     await kvPut(env, logKey, JSON.stringify(trimmed), { expirationTtl: TTL.QUARTER });
   } catch (e) { /* log failure is non-fatal */ }
 
