@@ -1802,6 +1802,7 @@ const _I = {
     noBookmarks: 'No bookmarked messages',
     permanent: 'Permanent',
     permanentRoom: 'Permanent room',
+    roomDefault: 'Room', roomTTLPrompt: 'Room TTL: 1=1h, 2=24h, 3=7d, 4=Permanent',
     copiedClipboard: 'Copied to clipboard',
     nudgeAccount: (used, total) => `Account limit reached (${used}/${total}). Upgrade your plan at ?pricing`,
     roomExpires: (h) => `Expires in ${h}h`,
@@ -1878,6 +1879,9 @@ const _I = {
     toastExportedMessagesCSV: (n) => `Exported ${n} messages as CSV`,
     toastExportedMessagesHTML: (n) => `Exported ${n} messages as HTML`,
     toastExportedMessagesJSON: (n) => `Exported ${n} messages as JSON`,
+    csvHeader: 'Timestamp,Sender,Message',
+    htmlExportFileLabel: '📎 file',
+    htmlExportMeta: (n, d) => `${n} messages · exported ${d}`,
     toastGroupOnly: 'This command works in group chats only',
     toastAdminRequired: 'Admin permission required',
     toastCancelled: 'Cancelled',
@@ -2604,6 +2608,7 @@ const _I = {
     noBookmarks: 'ブックマークはありません',
     permanent: '永続',
     permanentRoom: '永続ルーム',
+    roomDefault: 'ルーム', roomTTLPrompt: '部屋の有効期限: 1=1時間, 2=24時間, 3=7日, 4=永久',
     copiedClipboard: 'クリップボードにコピー済み',
     nudgeAccount: (used, total) => `アカウント上限 (${used}/${total})。?pricingでプランをアップグレード`,
     roomExpires: (h) => `${h}時間後に消滅`,
@@ -2679,6 +2684,9 @@ const _I = {
     toastExportedMessagesCSV: (n) => `${n}件のメッセージをCSVでエクスポートしました`,
     toastExportedMessagesHTML: (n) => `${n}件のメッセージをHTMLでエクスポートしました`,
     toastExportedMessagesJSON: (n) => `${n}件のメッセージをJSONでエクスポートしました`,
+    csvHeader: 'タイムスタンプ,送信者,メッセージ',
+    htmlExportFileLabel: '📎 ファイル',
+    htmlExportMeta: (n, d) => `${n}件のメッセージ · エクスポート日: ${d}`,
     toastGroupOnly: 'このコマンドはグループチャットのみ',
     toastAdminRequired: '管理者権限が必要です',
     toastCancelled: 'キャンセルしました',
@@ -12284,7 +12292,7 @@ async function initMessenger(dbName) {
       } else if (sub === 'csv') {
         if (!activeContact) { showToast(t('toastOpenChat'), 'error'); return; }
         const msgs = (await dbGetByIndex('messages', 'contact', activeContact.id)).sort((a, b) => a.ts - b.ts);
-        const rows = ['Timestamp,Sender,Message'];
+        const rows = [t('csvHeader')];
         for (const m of msgs) { if (!m.deleted) rows.push('"' + new Date(m.ts).toISOString() + '","' + (m.mine ? myName : activeContact.name).replace(/"/g, '""') + '","' + (m.text||'').replace(/"/g,'""').replace(/\n/g,' ') + '"'); }
         const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
         downloadBlob(blob, 'breeze-' + activeContact.name.replace(/\s+/g,'-') + '-' + new Date().toISOString().slice(0,10) + '.csv');
@@ -12297,14 +12305,14 @@ async function initMessenger(dbName) {
           const sender = m.mine ? myName : (m.senderName || activeContact.name);
           const time = new Date(m.ts).toLocaleString();
           const cls = m.mine ? 'me' : 'them';
-          return `<div class="${cls}"><b>${esc(sender)}</b> <span class="ts">${esc(time)}</span><br>${esc(m.text || '📎 file')}</div>`;
+          return `<div class="${cls}"><b>${esc(sender)}</b> <span class="ts">${esc(time)}</span><br>${esc(m.text || t('htmlExportFileLabel'))}</div>`;
         }).join('\n');
-        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Chat: ${esc(activeContact.name)}</title>
+        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(activeContact.name)}</title>
 <style>body{font-family:system-ui;max-width:700px;margin:0 auto;padding:20px;background:#f5f5f5}
 .me,.them{padding:8px 14px;border-radius:12px;margin:4px 0;max-width:80%}
 .me{background:#d1fae5;margin-left:auto;text-align:right}.them{background:#fff}
 b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
-<body><h1>🌊 ${esc(activeContact.name)}</h1><p>${msgs.length} messages · exported ${new Date().toLocaleDateString()}</p>${rows}</body></html>`;
+<body><h1>🌊 ${esc(activeContact.name)}</h1><p>${t('htmlExportMeta', msgs.length, new Date().toLocaleDateString())}</p>${rows}</body></html>`;
         downloadBlob(new Blob([html], { type: 'text/html' }), 'breeze-' + activeContact.name.replace(/\s+/g, '-') + '-' + new Date().toISOString().slice(0, 10) + '.html');
         showToast(t('toastExportedMessagesHTML', msgs.length), 'success');
       } else {
@@ -12545,7 +12553,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         haptic.success();
         showToast(t('copiedClipboard'), 'success');
         if (navigator.share) {
-          try { await navigator.share({ title: 'Breeze Dead Drop', url: dropUrl }); } catch {}
+          try { await navigator.share({ title: t('dropCreated'), url: dropUrl }); } catch {}
         }
       } catch(err) { _dbg(err, 'drop-create'); showToast(t('dropFailed'), 'error'); }
       return;
@@ -13998,11 +14006,11 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     if (val.startsWith('/room')) {
       e.preventDefault();
       clearInput();
-      const name = val.slice(6).trim() || 'Room';
+      const name = val.slice(6).trim() || t('roomDefault');
       const ttlOptions = [3600, 86400, 604800, 0];
       const ttlLabels = ['1h', '24h', '7d', t('permanent')];
       const ttlChoice = parseInt(await showPrompt(
-        'Room TTL: 1=1h, 2=24h, 3=7d, 4=Permanent', '1', { placeholder: '1-4' }) || '1') - 1;
+        t('roomTTLPrompt'), '1', { placeholder: '1-4' }) || '1') - 1;
       const { roomUrl, ttl } = await createEphemeralRoom(name, ttlOptions[Math.min(ttlChoice, ttlOptions.length - 1)]);
       const box = _DOM.get('msg-messages');
       const d = document.createElement('div');
