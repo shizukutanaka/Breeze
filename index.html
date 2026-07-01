@@ -4033,10 +4033,11 @@ const _ttPolicy = (() => {
       for (const attr of [...el.attributes]) {
         if (attr.name.startsWith('on') || !SAFE_ATTRS.test(attr.name)) el.removeAttribute(attr.name);
       }
-      // Sanitize href: allow only safe-origin relative paths, #anchors, https:, mailto:
+      // Sanitize href: allow https:, mailto:, #anchors, and absolute paths (/foo).
+      // Exclude protocol-relative (//evil.com) which browsers open as https://evil.com.
       if (el.hasAttribute('href')) {
         const href = el.getAttribute('href');
-        if (!/^(https?:|mailto:|#|\/)/i.test(href)) el.removeAttribute('href');
+        if (!/^(https?:|mailto:|#|\/[^\/])/i.test(href)) el.removeAttribute('href');
       }
       // Sanitize src: allow only blob:, data:image/, https:
       if (el.hasAttribute('src')) {
