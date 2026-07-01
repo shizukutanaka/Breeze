@@ -213,6 +213,7 @@ export default {
         '/api/online': 20,
         '/api/translate': 15,
         '/api/ai': 10,
+        '/api/ogp': 10, // fetches external URLs — cap below the 30 rpm default
       };
       // Cap 'unknown' IP (no CF-Connecting-IP) at 5 rpm regardless of path —
       // prevents a shared bucket from being monopolized in non-CF deployments.
