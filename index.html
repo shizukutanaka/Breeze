@@ -5046,7 +5046,7 @@ async function initMessenger(dbName) {
   if (navigator.storage?.persist) {
     navigator.storage.persist().then(granted => {
       _dbg(null, 'Storage persistence: ' + (granted ? 'granted' : 'denied'));
-    });
+    }).catch(() => {});
   }
 
   // ================================================================
@@ -5154,7 +5154,7 @@ async function initMessenger(dbName) {
         dbGetByIndex('messages', 'contact', contactId).then(msgs => {
           msgs.sort((a, b) => a.ts - b.ts);
           r(msgs.slice(-limit));
-        });
+        }).catch(err => { _dbg(err, 'db-recent-msgs-fallback'); r([]); });
       }
     });
   }
@@ -7978,7 +7978,7 @@ async function initMessenger(dbName) {
       if (ogp) {
         dbGet('messages', msgId).then(stored => {
           if (stored) { stored.ogp = ogp; dbPut('messages', stored); }
-        });
+        }).catch(e => _dbg(e, 'ogp-idb'));
         // Update rendered message with OGP card
         const el = document.querySelector(`[data-msgid="${msgId}"]`);
         if (el && !el.querySelector('.ogp-card')) { _safeAppend(el, renderOGPInline(ogp)); _attachImgErrorHandlers(el); }
@@ -8974,7 +8974,7 @@ async function initMessenger(dbName) {
           if (e.candidate.type === 'host' && e.candidate.address && !e.candidate.address.includes('.local')) return;
           if (_settings.relayOnly && (e.candidate.type === 'srflx' || e.candidate.type === 'prflx')) return;
           const room = 'call:' + [myId, pending.contact.id].sort().join(':');
-          _wrapCallSignal(pending.contact.pubB64, e.candidate).then(d => { if (d != null) _signal(room, 'call-ice', d); });
+          _wrapCallSignal(pending.contact.pubB64, e.candidate).then(d => { if (d != null) _signal(room, 'call-ice', d); }).catch(err => _dbg(null, 'ICE signal wrap failed (incoming):', err?.message));
         }
       };
 
@@ -11305,7 +11305,7 @@ async function initMessenger(dbName) {
         _DOM.get('msg-input').value = '/reply ' + text.slice(0, 100);
         _DOM.get('msg-input').focus();
       }
-    });
+    }).catch(err => _dbg(err, 'ctx-action'));
   });
 
   // v3.5: Global delegation — overlay close buttons (data-close="overlay")
@@ -13915,7 +13915,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         else if (s === 'relay-only') { localStorage.setItem('brz-relay-only', cb.checked ? '1' : '0'); _settings.relayOnly = cb.checked; }
         else if (s === 'notif-sound') { localStorage.setItem('brz-notif-sound', cb.checked ? '1' : '0'); }
         else if (s === 'send-sound') { localStorage.setItem('brz-send-sound', cb.checked ? '1' : '0'); }
-        else if (s === 'notif-perm') { if (cb.checked) Notification?.requestPermission().then(p => { if (p !== 'granted') cb.checked = false; }); }
+        else if (s === 'notif-perm') { if (cb.checked) Notification?.requestPermission().then(p => { if (p !== 'granted') cb.checked = false; }).catch(() => { cb.checked = false; }); }
         else if (s === 'auto-lock') { localStorage.setItem('brz-autolock', cb.checked ? '1' : '0'); }
       });
       box.appendChild(d); box.scrollTop = box.scrollHeight;
@@ -14211,7 +14211,7 @@ if (PLATFORM === 'electron' && window.breeze) {
         const unread = contacts.filter(c => c.unread > 0 && !c.archived).sort((a, b) => (b.lastMsgAt || 0) - (a.lastMsgAt || 0));
         if (unread.length > 0) openConversation(unread[0]);
         else showToast(t('toastNoUnread'), 'info');
-      });
+      }).catch(e => _dbg(e, 'ctrl-n'));
     }
     // v3.2: Ctrl+Shift+N: focus add contact
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'N') {
