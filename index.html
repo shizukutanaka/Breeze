@@ -5321,7 +5321,7 @@ async function initMessenger(dbName) {
         try {
           const tx = db.transaction('messages', 'readwrite');
           const os = tx.objectStore('messages');
-          for (const m of toDelete) os.delete(m.msgId);
+          for (const m of toDelete) { os.delete(m.msgId); _replayCache.delete(m.msgId); }
           tx.oncomplete = () => resolve(true);
           tx.onerror = () => resolve(false);
         } catch(e) { _dbg(e, 'retention-batch'); resolve(false); }
@@ -5376,7 +5376,7 @@ async function initMessenger(dbName) {
         identity: identity ? { name: identity.name, alias: identity.alias, pubB64: identity.pubB64, createdAt: identity.createdAt } : null,
         contacts: contacts.map(c => ({ id: c.id, name: c.name, alias: c.alias, isGroup: c.isGroup, createdAt: c.createdAt, pinned: c.pinned, muted: c.muted, blocked: c.blocked, archived: c.archived, notes: c.notes, labels: c.labels || [] })),
         messages: messages.map(m => ({ msgId: m.msgId, contactId: m.contactId, text: m.text?.slice(0, 200), mine: m.mine, ts: m.ts, hasFile: !!m.fileData, hasVoice: !!m.voice })),
-        auditLog: audit.slice(-500),
+        auditLog: audit.slice(-1000),
         settings,
         totalMessages: messages.length,
         totalContacts: contacts.length,
@@ -6225,6 +6225,8 @@ async function initMessenger(dbName) {
         if (item.id?.startsWith('sched:') && item.sendAt) {
           const delay = item.sendAt - now;
           if (delay <= 0) {
+            // Delete BEFORE sending (at-most-once): duplicate sends on crash are worse than losing one
+            await dbDel('identity', item.id);
             // Already past due — send immediately
             const c = await dbGet('contacts', item.contactId);
             if (c) {
@@ -6234,13 +6236,14 @@ async function initMessenger(dbName) {
               await sendMessage({ preventDefault: () => {} });
               activeContact = savedActive;
             }
-            await dbDel('identity', item.id);
           } else if (delay < 7 * MS.DAY) {
             // Set timer for future delivery
             setTimeout(async () => {
               try {
                 const sched = await dbGet('identity', item.id);
                 if (!sched) return;
+                // Delete BEFORE sending (at-most-once): duplicate sends on crash are worse than losing one
+                await dbDel('identity', item.id);
                 const c = await dbGet('contacts', sched.contactId);
                 if (c) {
                   const savedActive = activeContact;
@@ -6249,7 +6252,6 @@ async function initMessenger(dbName) {
                   await sendMessage({ preventDefault: () => {} });
                   activeContact = savedActive;
                 }
-                await dbDel('identity', item.id);
               } catch(e) { _dbg(e, 'schedule-recover'); }
             }, delay);
             _dbg(null, 'Recovered scheduled message: ' + item.text?.slice(0, 30) + ' in ' + Math.round(delay / MS.MIN) + 'm');
@@ -7655,7 +7657,7 @@ async function initMessenger(dbName) {
         if (_selectedMsgs.size === 0) return;
         if (!await showConfirm(t('confirmDeleteN', _selectedMsgs.size), { danger: true })) return;
         const tx = db.transaction('messages', 'readwrite');
-        for (const msgId of _selectedMsgs) { tx.objectStore('messages').delete(msgId); document.querySelector(`[data-msgid="${msgId}"]`)?.remove(); }
+        for (const msgId of _selectedMsgs) { tx.objectStore('messages').delete(msgId); _replayCache.delete(msgId); document.querySelector(`[data-msgid="${msgId}"]`)?.remove(); }
         const count = _selectedMsgs.size;
         exitSelectMode();
         showToast(t('toastDeleted', count), 'success');
