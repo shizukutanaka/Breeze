@@ -2069,6 +2069,7 @@ const _I = {
     toastPoW: 'Computing proof-of-work...',
     toastScheduleUsage: 'Usage: /schedule 5m message or /schedule 14:30 message',
     toastScheduleRange: 'Schedule range: 1s to 7 days',
+    toastScheduleMax: 'Limit: 20 scheduled messages per account',
     toastScheduled: (t, m) => `Scheduled in ${t}: "${m}"`,
     toastGdprExport: (m, c, f) => `GDPR export: ${m} messages, ${c} contacts, ${f} files`,
     toastImported: (n, s) => `Imported ${n} messages from ${s}`,
@@ -2880,6 +2881,7 @@ const _I = {
     toastPoW: 'PoW計算中...',
     toastScheduleUsage: '使い方: /schedule 5m メッセージ or /schedule 14:30 メッセージ',
     toastScheduleRange: '範囲: 1秒〜7日',
+    toastScheduleMax: '予約メッセージの上限（20件）に達しました',
     toastScheduled: (t, m) => `${t}後に予約: "${m}"`,
     toastGdprExport: (m, c, f) => `GDPRエクスポート: ${m}件, ${c}連絡先, ${f}ファイル`,
     toastImported: (n, s) => `${s}から${n}件インポート`,
@@ -12369,6 +12371,9 @@ async function initMessenger(dbName) {
       const contact = activeContact;
       // Store in IDB for persistence across reloads
       const schedId = 'sched:' + uid();
+      // Cap total scheduled messages to prevent IDB quota exhaustion
+      const schedCount = (await dbGetAll('identity')).filter(x => x.id?.startsWith('sched:')).length;
+      if (schedCount >= 20) { showToast(t('toastScheduleMax'), 'error'); return; }
       // Cap stored text to 64 KB — sendMessage() enforces this at send time, but the IDB
       // write happens earlier and an unbound value bloats the identity store on startup load.
       await dbPut('identity', { id: schedId, contactId: contact.id, text: text.slice(0, 65536), sendAt });
@@ -12602,9 +12607,14 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       // Send remote wipe signal to own inbox (wakes other devices)
       if (API && myId) {
         try { await postAPIRaw('/msg/send', { to: myId, from: myId, payload: '', ts: Date.now(), type: 'remote_wipe' }); } catch(e) { _dbg(e); }
-        // Delete server-side account data: prekeys, inbox, presence, push subscriptions
-        // This is best-effort; local wipe proceeds regardless of server response.
-        try { await postAPIRaw('/account/delete', { userId: myId }); } catch(e) { _dbg(e); }
+        // Delete server-side account data: prekeys, inbox, presence, push subscriptions.
+        // Requires Ed25519 ownership proof matching the stored edIdentityKey.
+        // Best-effort: local wipe proceeds regardless of server response.
+        try {
+          const delTs = Date.now();
+          const delSig = await signMessage(`breeze-account-delete:${myId}:${delTs}`);
+          if (delSig) await postAPIRaw('/account/delete', { userId: myId, ts: delTs, sig: delSig });
+        } catch(e) { _dbg(e); }
       }
       // Local wipe
       try {
