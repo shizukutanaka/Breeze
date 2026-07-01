@@ -6392,6 +6392,18 @@ async function initMessenger(dbName) {
   // DRY: DM room key
   function _dmRoom(peerId) { return 'dm:' + [myId, peerId].sort().join(':'); }
 
+  // Sign and send a WebRTC SDP offer or answer. The /signal relay is unauthenticated
+  // (anyone who knows two user IDs can post), so a malicious third party could inject a
+  // crafted SDP and MITM the DTLS layer. Wrapping the SDP in an Ed25519 signature bound
+  // to our signing identity lets the peer verify provenance before calling setRemoteDescription.
+  // Backward-compat: if signing is unavailable (old browser, key not loaded), emits plain JSON.
+  async function _sendSignedSDP(room, type, sdpObj) {
+    const sdpJson = JSON.stringify(sdpObj);
+    const sig = await signMessage(sdpJson);
+    const data = sig ? JSON.stringify({ sdp: sdpJson, sig, sigPub: _signingPubB64 }) : sdpJson;
+    return _signal(room, type, data);
+  }
+
   // v3.6 SECURITY: call-signaling authentication (gated by CONFIG.CALL_E2E_SIGNAL).
   // Wrap: when the flag is ON, encrypt the signal object to the pinned peer via the 1:1
   // ratchet (the resulting ciphertext is opaque to the unauthenticated /signal relay and
@@ -10213,7 +10225,7 @@ async function initMessenger(dbName) {
       try {
         makingOffer = true;
         await pc.setLocalDescription(); // auto-generates offer
-        await _signal(sigRoom, 'offer', JSON.stringify(pc.localDescription));
+        await _sendSignedSDP(sigRoom, 'offer', pc.localDescription);
       } catch(e) { _dbg(e, 'negotiationneeded'); }
       finally { makingOffer = false; }
     };
@@ -10225,7 +10237,7 @@ async function initMessenger(dbName) {
         try {
           makingOffer = true;
           await pc.setLocalDescription(); // auto-offer
-          await _signal(sigRoom, 'offer', JSON.stringify(pc.localDescription));
+          await _sendSignedSDP(sigRoom, 'offer', pc.localDescription);
         } catch(e) { _dbg(e, 'initial-offer'); }
         finally { makingOffer = false; }
       }
@@ -10245,7 +10257,28 @@ async function initMessenger(dbName) {
 
             try {
               if (s.type === 'offer' || s.type === 'answer') {
-                const description = JSON.parse(s.data);
+                // Verify Ed25519 signature before trusting the SDP.
+                // An unauthenticated relay lets anyone inject a crafted SDP and MITM DTLS.
+                // Signed SDPs carry { sdp, sig, sigPub }; unsigned (legacy) are accepted for compat.
+                let sdpJson = s.data;
+                try {
+                  const wrapper = JSON.parse(s.data);
+                  if (wrapper && typeof wrapper.sdp === 'string' && wrapper.sig && wrapper.sigPub) {
+                    if (contact.sigPub && contact.sigPub !== wrapper.sigPub) {
+                      _dbg(null, 'P2P: SDP signing key mismatch — rejecting (possible MITM)');
+                      continue;
+                    }
+                    const valid = await verifyMessage(wrapper.sdp, wrapper.sig, wrapper.sigPub);
+                    if (valid === false) { _dbg(null, 'P2P: SDP signature invalid — rejecting'); continue; }
+                    // TOFU: pin the peer's signing key on first signed SDP
+                    if (!contact.sigPub && wrapper.sigPub && _hasEd25519) {
+                      contact.sigPub = wrapper.sigPub;
+                      dbPut('contacts', contact).catch(() => {});
+                    }
+                    sdpJson = wrapper.sdp;
+                  }
+                } catch(_e) { _dbg(_e, 'sdp-auth'); }
+                const description = JSON.parse(sdpJson);
                 // v3.6: Perfect Negotiation collision handling
                 const offerCollision = description.type === 'offer' && (makingOffer || pc.signalingState !== 'stable');
                 ignoreOffer = !polite && offerCollision;
@@ -10253,7 +10286,7 @@ async function initMessenger(dbName) {
                 await pc.setRemoteDescription(description);
                 if (description.type === 'offer') {
                   await pc.setLocalDescription(); // auto-answer
-                  await _signal(sigRoom, 'answer', JSON.stringify(pc.localDescription));
+                  await _sendSignedSDP(sigRoom, 'answer', pc.localDescription);
                 }
               } else if (s.type === 'ice') {
                 try {
@@ -12295,7 +12328,9 @@ async function initMessenger(dbName) {
       const contact = activeContact;
       // Store in IDB for persistence across reloads
       const schedId = 'sched:' + uid();
-      await dbPut('identity', { id: schedId, contactId: contact.id, text, sendAt });
+      // Cap stored text to 64 KB — sendMessage() enforces this at send time, but the IDB
+      // write happens earlier and an unbound value bloats the identity store on startup load.
+      await dbPut('identity', { id: schedId, contactId: contact.id, text: text.slice(0, 65536), sendAt });
       const timeStr = delayMs < MS.MIN ? Math.round(delayMs/MS.SEC) + 's' : delayMs < MS.HOUR ? Math.round(delayMs/MS.MIN) + 'm' : Math.round(delayMs/MS.HOUR) + 'h';
       showToast(t('toastScheduled')(timeStr, text.slice(0, 30)), 'success');
       // Set timer
