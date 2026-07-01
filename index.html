@@ -1721,6 +1721,7 @@ const _I = {
     retryDLQSuccess: (n) => `${n} message(s) requeued for delivery.`,
     scheduledMessages: 'Scheduled Messages',
     scheduleEmpty: 'No scheduled messages.',
+    scheduleCancelHint: '/schedule cancel — cancel all',
     scheduleCancelled: (n) => `Cancelled ${n} scheduled message${n === 1 ? '' : 's'}`,
     updateAvailable: (v) => `Update available: v${v}`,
     sendFailed: 'Send failed. Tap to retry.',
@@ -2129,6 +2130,7 @@ const _I = {
     uiAnnounceOn: 'ON (only admins can send)',
     uiAnnounceOff: 'OFF (everyone can send)',
     uiCurrentSort: (s) => 'Current sort: ' + s,
+    uiSortOptions: 'Options: /sort recent, /sort name, /sort unread',
     uiRetention: (d) => 'Retention: ' + d,
     uiRetentionForever: 'Forever',
     uiRetentionDays: (n) => n + ' days',
@@ -2521,6 +2523,7 @@ const _I = {
     retryDLQSuccess: (n) => `${n}件のメッセージを再キューしました。`,
     scheduledMessages: '予約メッセージ',
     scheduleEmpty: '予約メッセージはありません。',
+    scheduleCancelHint: '/schedule cancel — すべてキャンセル',
     scheduleCancelled: (n) => `予約メッセージを${n}件キャンセルしました`,
     updateAvailable: (v) => `アップデートが利用可能: v${v}`,
     sendFailed: '送信失敗。タップで再送。',
@@ -2928,6 +2931,7 @@ const _I = {
     uiAnnounceOn: 'ON (管理者のみ送信可)',
     uiAnnounceOff: 'OFF (全員送信可)',
     uiCurrentSort: (s) => '現在の並び順: ' + s,
+    uiSortOptions: 'オプション: /sort recent, /sort name, /sort unread',
     uiRetention: (d) => '保持期間: ' + d,
     uiRetentionForever: '無期限',
     uiRetentionDays: (n) => n + '日',
@@ -12111,9 +12115,9 @@ async function initMessenger(dbName) {
             const contact = await dbGet('contacts', s.contactId);
             const when = new Date(s.sendAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
             const remaining = Math.max(0, Math.round((s.sendAt - Date.now()) / MS.MIN));
-            lines.push(`⏰ <b>${when}</b> (${remaining}m) → ${esc(contact?.name || '?')}: "${esc(s.text?.slice(0, 40))}"`);
+            lines.push(`⏰ <b>${when}</b> (${t('timeCompactMin', remaining)}) → ${esc(contact?.name || '?')}: "${esc(s.text?.slice(0, 40))}"`);
           }
-          lines.push('', '<span class="i-t3-10">/schedule cancel — cancel all</span>');
+          lines.push('', '<span class="i-t3-10">' + t('scheduleCancelHint') + '</span>');
           cmdOutput('cmd-panel', lines.join('<br>'));
         } catch(e) { _dbg(e, 'schedule-list'); }
         return;
@@ -13510,7 +13514,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         const box = _DOM.get('msg-messages');
         const d = document.createElement('div');
         d.className = 'chat-empty';
-        d.textContent = t('uiCurrentSort', _contactSort) + '. Options: /sort recent, /sort name, /sort unread';
+        d.textContent = t('uiCurrentSort', _contactSort) + '. ' + t('uiSortOptions');
         box.appendChild(d); box.scrollTop = box.scrollHeight;
       }
     }
