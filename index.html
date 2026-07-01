@@ -1533,6 +1533,10 @@ const _I = {
     infoArchived: 'Archived',
     infoActive: 'Active',
     infoPinned: 'Pinned',
+    sectionToday: 'Today',
+    sectionThisWeek: 'This Week',
+    sectionThisMonth: 'This Month',
+    sectionOlder: 'Older',
     infoLabels: 'Labels',
     infoConnection: 'Connection',
     infoP2P: 'P2P Active',
@@ -2279,6 +2283,10 @@ const _I = {
     infoArchived: 'アーカイブ済み',
     infoActive: '有効',
     infoPinned: 'ピン留め',
+    sectionToday: '今日',
+    sectionThisWeek: '今週',
+    sectionThisMonth: '今月',
+    sectionOlder: 'それ以前',
     infoLabels: 'ラベル',
     infoConnection: '接続',
     infoP2P: 'P2P接続中',
@@ -6295,12 +6303,12 @@ async function initMessenger(dbName) {
 
   // v3.4: Smart time-based section key
   function getTimeSection(ts) {
-    if (!ts) return 'Older';
+    if (!ts) return t('sectionOlder');
     const diff = Date.now() - ts;
-    if (diff < MS.DAY) return 'Today';
-    if (diff < 604800000) return 'This Week';
-    if (diff < 2592000000) return 'This Month';
-    return 'Older';
+    if (diff < MS.DAY) return t('sectionToday');
+    if (diff < MS.DAY * 7) return t('sectionThisWeek');
+    if (diff < MS.DAY * 30) return t('sectionThisMonth');
+    return t('sectionOlder');
   }
 
   document.querySelectorAll('.folder-tab').forEach(tab => {
@@ -6387,7 +6395,7 @@ async function initMessenger(dbName) {
       const c = filtered[ci];
       // Section header — only in All/Labels view, when sorted by recent
       if ((_activeFolder === 'all' || _activeFolder === 'labels') && _contactSort === 'recent' && !_contactFilter) {
-        const section = c.pinned ? 'Pinned' : getTimeSection(c.lastMsgAt || c.addedAt);
+        const section = c.pinned ? t('infoPinned') : getTimeSection(c.lastMsgAt || c.addedAt);
         if (section !== _lastSection) {
           _lastSection = section;
           const hdr = document.createElement('div');
