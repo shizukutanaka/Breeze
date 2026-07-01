@@ -7,14 +7,21 @@
 **Privacy:**
 - AI smart reply (`showSmartReplies`) now gated on explicit user opt-in (`brz-ai-suggest` localStorage flag); previously recent message snippets were sent to the configured AI provider on every received message with no disclosure or consent
 - New toggle in `/settings` panel with EN+JA i18n labels
+- `/wipe` now calls `/api/account/delete` before local wipe to delete server-side prekeys/inbox; previously only local IDB/localStorage was cleared, leaving the prekey bundle on the server
 
 **handleIncoming field validation (P2P path):**
 - `msg.fromName` capped to 64 chars — relay path was already bounded by `sanitizeString(name, 64)`, but P2P group path bypassed it
 - `msg.replyTo.msgId` capped to 64 chars and `msg.replyTo.text` to 80 chars before IDB write (display was already capping at render time)
 - `msg.disappearAt` rejected if non-finite or ≤ 0 (Infinity/NaN would prevent message expiry)
+- Group message text capped at 64 KB (relay enforces 256 KB but P2P group path has no server check)
+- Incoming file name capped to 255 chars before IDB storage
 
 **Peer relay payload guard:**
 - `req.payload` in `handlePeerRelayRequest` rejected if not a string or > 64 KB (a legitimate encrypted 1:1 message is at most ~32 KB)
+
+**Binary file chunk handler:**
+- `nameLen > 255` or `mimeLen > 128` rejected (prevents DoS via oversized metadata field)
+- Voice message `v.data` rejected if > 350 KB (relay effective max is 256 KB)
 
 **Contact import validation:**
 - `/contacts import` validates `pubB64` (string type, non-empty, ≤ 128 chars, base64 charset) and derived `id` (string type, non-empty, ≤ 128 chars) before `dbPut`
