@@ -6782,6 +6782,7 @@ async function initMessenger(dbName) {
           await dbPut('contacts', c);
           auditLog('contact', (c.blocked ? 'Blocked' : 'Unblocked') + ' ' + c.name, c.blocked ? 'warn' : 'info');
           if (c.blocked && peers[c.pubB64]) { if (peers[c.pubB64]._healthTimer) clearInterval(peers[c.pubB64]._healthTimer); peers[c.pubB64].pc?.close(); delete peers[c.pubB64]; }
+          if (c.blocked && c.pubB64) { _outbox.delete(c.pubB64); _persistOutbox(); }
           renderContacts();
         } else if (action === 'mute') {
           c.muted = !c.muted;
@@ -10243,7 +10244,10 @@ async function initMessenger(dbName) {
       renderContacts();
       deliverPeerRelayQueue(contact.id);
       if (contact.pubB64) {
-        setTimeout(() => flushOutbox(contact.pubB64), MS.SEC / 2);
+        setTimeout(async () => {
+          const ct = await dbGet('contacts', contact.id).catch(() => null);
+          if (!ct?.blocked) flushOutbox(contact.pubB64);
+        }, MS.SEC / 2);
       }
       // v3.6: DC heartbeat — ping/pong via state channel for liveness detection
       // Critical for serverless P2P: detect dead connections in 30s (not 5min TCP timeout)
