@@ -4342,7 +4342,7 @@ const _rateLimiter = {
   lastRefill: Date.now(),
   consume(n = 1) {
     const now = Date.now();
-    const elapsed = (now - this.lastRefill) / 1000;
+    const elapsed = Math.max(0, (now - this.lastRefill) / 1000); // guard NTP backward jump
     this.tokens = Math.min(this.maxTokens, this.tokens + elapsed * this.refillRate);
     this.lastRefill = now;
     if (this.tokens >= n) { this.tokens -= n; return true; }
