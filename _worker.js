@@ -186,7 +186,6 @@ export default {
         '/api/drop/read': 20,
         '/api/abuse/record': 30,
         '/api/abuse/report': 10,
-        '/api/ogp': 20,
         '/api/account/purchase': 3,
         '/api/alias/set': 10,
         '/api/alias/get': 30,
@@ -1800,6 +1799,13 @@ async function handleTurn(body, env, request) {
   const { userId } = body;
   if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
+  // When TURN_REQUIRE_AUTH=true, only registered users (completed PoW + prekey upload) receive
+  // TURN credentials. Prevents unauthenticated bots from draining paid TURN quota
+  // (Cloudflare Calls TURN: $0.05/GB). Rate-limit alone (10 rpm) does not eliminate
+  // the risk when TURN_KEY_ID is configured.
+  if (env.TURN_REQUIRE_AUTH === 'true') {
+    if (!(await kvGet(env, `prekey:${userId}`))) return json({ error: 'User not registered', code: 'UNREGISTERED' }, 401, request);
+  }
 
   // ═══════════════════════════════════════════════════════
   // v3.6: Cost-optimized TURN credential chain

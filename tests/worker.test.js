@@ -4768,6 +4768,21 @@ describe('TURN credentials', () => {
     expect(turnServer.username).toBe('staticuser');
     expect(turnServer.credential).toBe('staticpass');
   });
+
+  it('TURN_REQUIRE_AUTH: rejects unregistered userId (no prekey)', async () => {
+    const e = makeEnv({ TURN_REQUIRE_AUTH: 'true' });
+    const res = await handleTurn({ userId: 'unreg00001' }, e, req({}));
+    expect(res.status).toBe(401);
+    expect((await res.json()).code).toBe('UNREGISTERED');
+  });
+
+  it('TURN_REQUIRE_AUTH: allows registered userId (prekey in KV)', async () => {
+    const e = makeEnv({ TURN_REQUIRE_AUTH: 'true' });
+    await e.KV.put('prekey:reguser0001', JSON.stringify({ spkPub: 'x' }));
+    const res = await handleTurn({ userId: 'reguser0001' }, e, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).provider).toBe('openrelay');
+  });
 });
 
 describe('account slots', () => {
