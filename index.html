@@ -5833,9 +5833,17 @@ async function initMessenger(dbName) {
           const w = ds.writable.getWriter();
           const r = ds.readable.getReader();
           w.write(raw); w.close();
-          const chunks = []; let done = false;
-          while (!done) { const { value, done: d } = await r.read(); if (value) chunks.push(value); done = d; }
-          const inflated = new Uint8Array(chunks.reduce((s, c) => s + c.length, 0));
+          const chunks = []; let done = false; let totalLen = 0;
+          // Cap decompressed output to 128 KB — the relay limit (256 KB ciphertext) minus
+          // framing and base64 overhead. Without this, a crafted deflate stream can expand
+          // a small compressed payload to gigabytes (decompression bomb / zip-bomb analog).
+          const DECOMP_MAX = 131072;
+          while (!done) {
+            const { value, done: d } = await r.read();
+            if (value) { totalLen += value.length; if (totalLen > DECOMP_MAX) { await r.cancel().catch(() => {}); throw new Error('decomp-limit'); } chunks.push(value); }
+            done = d;
+          }
+          const inflated = new Uint8Array(totalLen);
           let off = 0; for (const c of chunks) { inflated.set(c, off); off += c.length; }
           raw = inflated;
         } catch(e) { _dbg(e, 'decompress'); }
@@ -9906,6 +9914,10 @@ async function initMessenger(dbName) {
         const fileMsg = await decryptFrom(msg.payload, contact.pubB64);
         if (!fileMsg) return;
         const _fp = JSON.parse(fileMsg);
+        // Cap file data: reject oversized base64 payloads before IDB write and atob() decode.
+        // Voice messages use the same 350 000-char cap (line above); relay caps at 256 KB but
+        // the P2P DataChannel path has no server-side limit.
+        if (typeof _fp.data === 'string' && _fp.data.length > 350000) return;
         // Cap the displayed file name to prevent memory/render DoS from an oversized peer-supplied name.
         text = `📎 ${typeof _fp.name === 'string' ? _fp.name.slice(0, 255) : 'file'}`;
         storedFileData = fileMsg;
