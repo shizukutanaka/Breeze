@@ -1511,6 +1511,7 @@ const _I = {
     bookmark: 'Bookmark',
     translate: 'Translate',
     translating: 'Translating...',
+    loading: 'Loading...',
     translateFailed: 'Translation unavailable',
     forwarded: '↗ Forwarded',
     debugOn: 'Debug mode ON (reload to apply)',
@@ -2320,6 +2321,7 @@ const _I = {
     bookmark: 'ブックマーク',
     translate: '翻訳',
     translating: '翻訳中...',
+    loading: '読込中...',
     translateFailed: '翻訳できませんでした',
     forwarded: '↗ 転送済み',
     debugOn: 'デバッグモード ON (リロードで反映)',
@@ -3974,6 +3976,13 @@ async function fetchRetry(url, opts = {}, { maxRetries = 3, baseDelay = 1000, ti
 }
 
 function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+// Grapheme-aware avatar truncator: takes up to `max` grapheme clusters so compound
+// emoji (ZWJ sequences, skin-tone modifiers) aren't split into half-surrogates.
+function avatarSlice(s, max = 2) {
+  if (!s) return '';
+  try { return [...new Intl.Segmenter().segment(s)].slice(0, max).map(x => x.segment).join(''); }
+  catch { return [...s].slice(0, max).join(''); }
+}
 
 // v3.6: DRY download helper (13 blob URL + download patterns → 1)
 function downloadBlob(blob, filename) {
@@ -4591,7 +4600,7 @@ async function addAccount() {
   const avatar = await showPrompt(t('chooseAvatar'), presetAvatars[accs.length % presetAvatars.length], { placeholder: t('avatarPlaceholder') });
 
   const newId = Date.now().toString(36);
-  const newAcc = { id: newId, name, avatar: (avatar || '👤').slice(0, 2), dbName: 'breeze-acc-' + newId, createdAt: Date.now() };
+  const newAcc = { id: newId, name, avatar: avatarSlice(avatar || '👤'), dbName: 'breeze-acc-' + newId, createdAt: Date.now() };
   accs.push(newAcc);
   saveAccounts(accs);
 
@@ -8139,6 +8148,7 @@ async function initMessenger(dbName) {
     sendBtn.className = 'btn btn-g btn-sm';
     sendBtn.textContent = t('send'); sendBtn.setAttribute('aria-label', t('send'));
     sendBtn.onclick = async () => {
+      sendBtn.disabled = true;
       preview.remove();
       await _sendFile(file);
       e.target.value = '';
@@ -9384,7 +9394,7 @@ async function initMessenger(dbName) {
     if (!stored) return;
     const avatar = await showPrompt(t('avatarEmojiPrompt'), stored.avatar || '🌊') || stored.avatar || '🌊';
     const bio = await showPrompt(t('bioPrompt'), stored.bio || '') || stored.bio || '';
-    stored.avatar = avatar.slice(0, 2);
+    stored.avatar = avatarSlice(avatar);
     stored.bio = bio.slice(0, 100);
     await dbPut('identity', stored, 'keys');
     _DOM.get('msg-my-name').textContent = stored.avatar + ' ' + myName;
@@ -9808,7 +9818,7 @@ async function initMessenger(dbName) {
         _dbg(null, 'P2P timeout for ' + contact.id);
         // P2P timeout — TURN relay handles NAT traversal automatically
       }
-    }, 30000);
+    }, 30 * MS.SEC);
 
     pc.onicecandidate = (e) => {
       if (peerState.connState === 'SIGNALING') peerState.transition('ICE');
@@ -9988,7 +9998,7 @@ async function initMessenger(dbName) {
       renderContacts();
       deliverPeerRelayQueue(contact.id);
       if (contact.pubB64) {
-        setTimeout(() => flushOutbox(contact.pubB64), 500);
+        setTimeout(() => flushOutbox(contact.pubB64), MS.SEC / 2);
       }
       // v3.6: DC heartbeat — ping/pong via state channel for liveness detection
       // Critical for serverless P2P: detect dead connections in 30s (not 5min TCP timeout)
@@ -10224,7 +10234,7 @@ async function initMessenger(dbName) {
         _attempts++;
         auditLog('security', 'Lock screen: failed attempt ' + _attempts, 'warn');
         inp.classList.add('i-border-err'); inp.value = '';
-        setTimeout(() => { inp.classList.remove('i-border-err'); inp.classList.add('i-border-reset'); }, 1000);
+        setTimeout(() => { inp.classList.remove('i-border-err'); inp.classList.add('i-border-reset'); }, MS.SEC);
       }
     };
     btn.onclick = unlock;
@@ -10324,7 +10334,7 @@ async function initMessenger(dbName) {
     } else {
       navigator.clipboard?.writeText(url);
       const btn = _DOM.get('b-msg-share'); if (!btn) return;
-      btn.textContent = '✓'; setTimeout(() => { btn.textContent = t('btnShareId'); }, 2000);
+      btn.textContent = '✓'; setTimeout(() => { btn.textContent = t('btnShareId'); }, CONFIG.TOAST_DURATION_MS);
     }
   });
 
@@ -10431,7 +10441,7 @@ async function initMessenger(dbName) {
       await dbPut('identity', data.identity, 'keys');
       for (const c of (data.contacts || [])) await dbPut('contacts', c);
 
-      showToast(t('toastRestoredReload'), 'success'); setTimeout(() => location.reload(), 1500);
+      showToast(t('toastRestoredReload'), 'success'); setTimeout(() => location.reload(), 1.5 * MS.SEC);
       location.reload();
     } catch(e) { _dbg(e,'restore'); showToast(t('toastWrongPassphrase'), 'error'); }
   }
@@ -10596,8 +10606,13 @@ async function initMessenger(dbName) {
         badge.className = 'plan-badge badge-active';
         btn.textContent = t('manageSubscription');
         btn.onclick = async () => {
+          btn.disabled = true;
+          const prevText = btn.textContent;
+          btn.textContent = t('loading');
+          try {
           const r = await postAPIRaw('/portal', { userId: _userId });
           if (r?.ok) { const d = await r.json(); if (d.url) safeOpen(d.url); }
+          } finally { btn.disabled = false; btn.textContent = prevText; }
         };
       } else {
         badge.textContent = t('planFree');
@@ -11646,7 +11661,7 @@ async function initMessenger(dbName) {
     copyBtn.onclick = () => {
       navigator.clipboard?.writeText(url);
       copyBtn.textContent = t('uiCopied');
-      setTimeout(() => { copyBtn.textContent = t('uiCopyLink'); }, 2000);
+      setTimeout(() => { copyBtn.textContent = t('uiCopyLink'); }, CONFIG.TOAST_DURATION_MS);
     };
 
     const closeBtn = document.createElement('button');
@@ -12591,7 +12606,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const copyBtn = document.createElement('button');
       copyBtn.className = 'btn btn-o btn-sm mt-2';
       copyBtn.textContent = t('uiCopyAddLink');
-      copyBtn.onclick = () => { navigator.clipboard?.writeText(addUrl); copyBtn.textContent = t('uiCopied'); setTimeout(() => copyBtn.textContent = t('uiCopyAddLink'), 2000); };
+      copyBtn.onclick = () => { navigator.clipboard?.writeText(addUrl); copyBtn.textContent = t('uiCopied'); setTimeout(() => copyBtn.textContent = t('uiCopyAddLink'), CONFIG.TOAST_DURATION_MS); };
       d.appendChild(document.createElement('br'));
       d.appendChild(copyBtn);
       box.appendChild(d); box.scrollTop = box.scrollHeight;
