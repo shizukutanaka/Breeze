@@ -9562,12 +9562,14 @@ async function initMessenger(dbName) {
           const targetMsgId = signal.msgId;
           if (signal.type === 'edit') {
             const stored = await dbGet('messages', targetMsgId);
-            if (stored) { stored.text = signal.text; stored.edited = true; await dbPut('messages', stored); }
+            // Only allow editing messages not authored by us — peers cannot remote-edit our outgoing messages
+            if (stored && !stored.mine) { stored.text = signal.text; stored.edited = true; await dbPut('messages', stored); }
             const el = document.querySelector(`[data-msgid="${targetMsgId}"]`);
             if (el) { const tm = new Date(signal.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); safeSetHTML(el, renderLinks(renderMarkdown(esc(signal.text))) + ' <span class="i-edited">' + t('edited') + '</span><span class="ts">'+tm+'</span>'); }
           } else if (signal.type === 'delete') {
             const stored = await dbGet('messages', targetMsgId);
-            if (stored) { stored.deleted = true; stored.text = ''; await dbPut('messages', stored); }
+            // Only allow deleting messages not authored by us — peers cannot remote-delete our outgoing messages
+            if (stored && !stored.mine) { stored.deleted = true; stored.text = ''; await dbPut('messages', stored); }
             const el = document.querySelector(`[data-msgid="${targetMsgId}"]`);
             if (el) safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>');
           } else if (signal.type === 'reaction') {
@@ -9575,8 +9577,10 @@ async function initMessenger(dbName) {
             if (stored) {
               if (!stored.reactions) stored.reactions = {};
               if (!stored.reactions[signal.emoji]) stored.reactions[signal.emoji] = [];
-              if (signal.add) { if (!stored.reactions[signal.emoji].includes(signal.userId)) stored.reactions[signal.emoji].push(signal.userId); }
-              else { stored.reactions[signal.emoji] = stored.reactions[signal.emoji].filter(u => u !== signal.userId); if (stored.reactions[signal.emoji].length === 0) delete stored.reactions[signal.emoji]; }
+              // Use the verified sender identity from decryption, not the self-reported signal.userId
+              const reactorId = (senderPub || '').slice(0, 12);
+              if (signal.add) { if (!stored.reactions[signal.emoji].includes(reactorId)) stored.reactions[signal.emoji].push(reactorId); }
+              else { stored.reactions[signal.emoji] = stored.reactions[signal.emoji].filter(u => u !== reactorId); if (stored.reactions[signal.emoji].length === 0) delete stored.reactions[signal.emoji]; }
               await dbPut('messages', stored);
               const el = document.querySelector(`[data-msgid="${targetMsgId}"]`);
               if (el) { const existing = el.querySelector('.msg-reactions'); if (existing) _safeReplace(existing, renderReactions(stored.reactions, targetMsgId)); else _safeAppend(el, renderReactions(stored.reactions, targetMsgId)); }
@@ -9682,12 +9686,14 @@ async function initMessenger(dbName) {
         const signal = JSON.parse(signalJson);
         if (signal.type === 'edit') {
           const stored = await dbGet('messages', signal.msgId);
-          if (stored) { stored.text = signal.text; stored.edited = true; await dbPut('messages', stored); }
+          // Only allow editing messages not authored by us — contact cannot remote-edit our outgoing messages
+          if (stored && !stored.mine) { stored.text = signal.text; stored.edited = true; await dbPut('messages', stored); }
           const el = document.querySelector(`[data-msgid="${signal.msgId}"]`);
           if (el) { const tm = new Date(signal.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); safeSetHTML(el, renderLinks(renderMarkdown(esc(signal.text))) + ' <span class="i-edited">' + t('edited') + '</span><span class="ts">'+tm+'</span>'); }
         } else if (signal.type === 'delete') {
           const stored = await dbGet('messages', signal.msgId);
-          if (stored) { stored.deleted = true; stored.text = ''; await dbPut('messages', stored); }
+          // Only allow deleting messages not authored by us — contact cannot remote-delete our outgoing messages
+          if (stored && !stored.mine) { stored.deleted = true; stored.text = ''; await dbPut('messages', stored); }
           const el = document.querySelector(`[data-msgid="${signal.msgId}"]`);
           if (el) safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>');
         } else if (signal.type === 'reaction') {
@@ -9696,8 +9702,10 @@ async function initMessenger(dbName) {
           if (stored) {
             if (!stored.reactions) stored.reactions = {};
             if (!stored.reactions[signal.emoji]) stored.reactions[signal.emoji] = [];
-            if (signal.add) { if (!stored.reactions[signal.emoji].includes(signal.userId)) stored.reactions[signal.emoji].push(signal.userId); }
-            else { stored.reactions[signal.emoji] = stored.reactions[signal.emoji].filter(u => u !== signal.userId); if (stored.reactions[signal.emoji].length === 0) delete stored.reactions[signal.emoji]; }
+            // Use the verified sender identity from decryption, not the self-reported signal.userId
+            const reactorId = contact.id;
+            if (signal.add) { if (!stored.reactions[signal.emoji].includes(reactorId)) stored.reactions[signal.emoji].push(reactorId); }
+            else { stored.reactions[signal.emoji] = stored.reactions[signal.emoji].filter(u => u !== reactorId); if (stored.reactions[signal.emoji].length === 0) delete stored.reactions[signal.emoji]; }
             await dbPut('messages', stored);
             const el = document.querySelector(`[data-msgid="${signal.msgId}"]`);
             if (el) {
@@ -9944,8 +9952,10 @@ async function initMessenger(dbName) {
             if (stored) {
               if (!stored.reactions) stored.reactions = {};
               if (!stored.reactions[msg.emoji]) stored.reactions[msg.emoji] = [];
-              if (msg.add) { if (!stored.reactions[msg.emoji].includes(msg.userId)) stored.reactions[msg.emoji].push(msg.userId); }
-              else { stored.reactions[msg.emoji] = stored.reactions[msg.emoji].filter(u => u !== msg.userId); if (stored.reactions[msg.emoji].length === 0) delete stored.reactions[msg.emoji]; }
+              // Use contact.id (authenticated sender) — not msg.userId (peer-claimed, unverified)
+              const reactorId = contact.id;
+              if (msg.add) { if (!stored.reactions[msg.emoji].includes(reactorId)) stored.reactions[msg.emoji].push(reactorId); }
+              else { stored.reactions[msg.emoji] = stored.reactions[msg.emoji].filter(u => u !== reactorId); if (stored.reactions[msg.emoji].length === 0) delete stored.reactions[msg.emoji]; }
               await dbPut('messages', stored);
               const el = document.querySelector(`[data-msgid="${msg.msgId}"]`);
               if (el) { const r = el.querySelector('.msg-reactions'); if (r) _safeReplace(r, renderReactions(stored.reactions, msg.msgId)); else _safeAppend(el, renderReactions(stored.reactions, msg.msgId)); }
@@ -9958,8 +9968,10 @@ async function initMessenger(dbName) {
             const pollMsg = allMsgs.find(m => m.isPoll && JSON.parse(m.text).pollId === msg.pollId);
             if (pollMsg) {
               const poll = JSON.parse(pollMsg.text);
-              for (const opt of poll.options) opt.votes = opt.votes.filter(v => v !== msg.userId);
-              if (poll.options[msg.optionIndex]) poll.options[msg.optionIndex].votes.push(msg.userId);
+              // Use contact.id (authenticated sender) — not msg.userId (peer-claimed, unverified)
+              const voterId = contact.id;
+              for (const opt of poll.options) opt.votes = opt.votes.filter(v => v !== voterId);
+              if (poll.options[msg.optionIndex]) poll.options[msg.optionIndex].votes.push(voterId);
               pollMsg.text = JSON.stringify(poll);
               await dbPut('messages', pollMsg);
               const el = document.querySelector(`[data-msgid="${pollMsg.msgId}"]`);
