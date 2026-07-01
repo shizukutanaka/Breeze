@@ -25,6 +25,10 @@ const TTL = { // KV expirationTtl values (seconds)
   QUARTER: 86400 * 90,
   YEAR:    86400 * 365,
 };
+const TIMEOUT_MS = { // fetchWithTimeout values (milliseconds)
+  PUSH: 5000,  // Web Push endpoint — tight: a slow push service is already failing
+  TURN: 5000,  // TURN credential API — fail fast so WebRTC can fall back
+};
 
 function sanitizeString(val, maxLen = MAX_STRING_LEN) {
   if (typeof val !== 'string') return '';
@@ -1711,7 +1715,7 @@ async function sendPushToUser(userId, payload, env) {
           'TTL': String(TTL.DAY),
         },
         body: encrypted,
-      }, 5000);
+      }, TIMEOUT_MS.PUSH);
       // 410 Gone (and 404 Not Found) mean the subscription is dead — mark for removal.
       if (resp.status === 410 || resp.status === 404) stale.add(sub.endpoint);
     } catch(e) { console.error('[push]', e?.message ?? e); }
@@ -1767,7 +1771,7 @@ async function handleTurn(body, env, request) {
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + env.TURN_KEY_API_TOKEN, 'Content-Type': 'application/json' },
         body: JSON.stringify({ ttl }),
-      }, 5000);
+      }, TIMEOUT_MS.TURN);
       if (resp.ok) {
         const data = await resp.json();
         if (data.iceServers) {

@@ -1319,6 +1319,9 @@ const CONFIG = {
   CLEANUP_INTERVAL_MS: 3600000,    // 1 hour
   SWIPE_BACK_MS: 250,              // swipe-back animation duration
   THEME_TRANSITION_MS: 400,        // theme-transitioning CSS class removal
+  LONG_PRESS_MS: 400,              // long-press → context menu threshold
+  DOM_SETTLE_MS: 10,               // yield before registering outside-click listeners
+  FOCUS_DELAY_MS: 100,             // brief yield before focus (browser settle)
   DC_BUFFER_TIMEOUT_MS: 10000,     // DataChannel backpressure timeout
   // v3.5: Spec — Proof-of-Work anti-spam (hashcash)
   POW_DIFFICULTY: 16,               // leading zero bits for PoW token
@@ -4163,7 +4166,7 @@ function workerCrypto(op, keyRaw, iv, data) {
 // Uses requestIdleCallback for non-critical tasks; falls back to setTimeout.
 const _defer = typeof requestIdleCallback === 'function'
   ? (fn) => requestIdleCallback(fn, { timeout: 2 * MS.SEC })
-  : (fn) => setTimeout(fn, 100);
+  : (fn) => setTimeout(fn, CONFIG.FOCUS_DELAY_MS);
 
 // ═══ Performance Markers (optional — no-op if Performance API unavailable) ═══
 const _perf = {
@@ -5113,7 +5116,7 @@ async function initMessenger(dbName) {
       // v3.1: Handle QuotaExceededError — auto-cleanup old messages
       if (e.target?.error?.name === 'QuotaExceededError') {
         _dbg(null, 'IDB quota exceeded — cleaning old messages');
-        cleanupOldMessages().then(() => r(false));
+        cleanupOldMessages().then(() => r(false)).catch(() => r(false));
       } else { _dbg(e.target?.error, 'db-put'); r(false); }
     }; } catch(e) { _dbg(e, 'db-put'); r(false); } });
   }
@@ -5998,7 +6001,7 @@ async function initMessenger(dbName) {
     // v3.6: Handle notification mark-read action
     if (e.data?.type === 'mark-read' && e.data.contactId) {
       dbGet('contacts', e.data.contactId).then(c => {
-        if (c) { c.unread = 0; dbPut('contacts', c).then(() => renderContacts()); }
+        if (c) { c.unread = 0; dbPut('contacts', c).then(() => renderContacts()).catch(err => _dbg(err, 'mark-read-put')); }
       }).catch(err => _dbg(err, 'mark-read'));
     }
   });
@@ -6598,7 +6601,7 @@ async function initMessenger(dbName) {
           if (_cswiping && _cdx < -60) {
             haptic.tap();
             c.archived = !c.archived;
-            dbPut('contacts', c).then(() => renderContacts());
+            dbPut('contacts', c).then(() => renderContacts()).catch(err => _dbg(err, 'archive-swipe'));
             showToast(c.archived ? (t('archived')) : (t('unarchived')), 'info');
           }
           div.classList.remove('swiping');
@@ -7287,7 +7290,7 @@ async function initMessenger(dbName) {
     let _swipeStartX = 0, _swipeDx = 0, _swiping = false;
     d.addEventListener('touchstart', (e) => {
       _swipeStartX = e.touches[0].clientX; _swipeDx = 0; _swiping = false;
-      _lpt = setTimeout(() => { _lpt = null; haptic.tap(); showMsgMenu(d, { msgId: d.dataset.msgid, text, isMine, ts, contactId: activeContact?.id }); }, 400);
+      _lpt = setTimeout(() => { _lpt = null; haptic.tap(); showMsgMenu(d, { msgId: d.dataset.msgid, text, isMine, ts, contactId: activeContact?.id }); }, CONFIG.LONG_PRESS_MS);
     }, { passive: true });
     d.addEventListener('touchmove', (e) => {
       if (_lpt) { clearTimeout(_lpt); _lpt = null; }
@@ -7381,7 +7384,7 @@ async function initMessenger(dbName) {
       // Also update in IDB
       if (activeContact && typeof dbGetByIndex === 'function') {
         dbGetByIndex('messages', 'contact', activeContact.id).then(msgs => {
-          const m = msgs.find(x => x.mine && Math.abs((x.ts || 0) - ts) < 5000);
+          const m = msgs.find(x => x.mine && Math.abs((x.ts || 0) - ts) < 5 * MS.SEC);
           if (m) { m.ack = true; dbPut('messages', m); }
         }).catch(e => _dbg(e, 'status-update'));
       }
@@ -7423,7 +7426,7 @@ async function initMessenger(dbName) {
     msgEl.classList.add('i-rel');
     msgEl.appendChild(picker);
     // Auto-remove on outside click
-    setTimeout(() => document.addEventListener('click', function rm() { picker.remove(); document.removeEventListener('click', rm); }, { once: true }), 10);
+    setTimeout(() => document.addEventListener('click', function rm() { picker.remove(); document.removeEventListener('click', rm); }, { once: true }), CONFIG.DOM_SETTLE_MS);
   }
 
   // Toggle reaction on a message (add/remove)
@@ -7551,7 +7554,7 @@ async function initMessenger(dbName) {
     }
 
     el.appendChild(menu);
-    setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 10);
+    setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), CONFIG.DOM_SETTLE_MS);
     const escHandler = (e) => { if (e.key === 'Escape') { menu.remove(); document.removeEventListener('keydown', escHandler); } };
     document.addEventListener('keydown', escHandler, { signal: _ac.signal });
   }
@@ -10239,7 +10242,7 @@ async function initMessenger(dbName) {
     };
     btn.onclick = unlock;
     inp.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') unlock(); });
-    setTimeout(() => inp.focus(), 100);
+    setTimeout(() => inp.focus(), CONFIG.FOCUS_DELAY_MS);
   }
 
   // v3.5: Constant-time string comparison (prevents timing side-channel)
