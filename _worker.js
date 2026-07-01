@@ -28,10 +28,12 @@ const TTL = { // KV expirationTtl values (seconds)
 const TIMEOUT_MS = { // fetchWithTimeout values (milliseconds)
   PUSH:    5000,   // Web Push endpoint — tight: a slow push service is already failing
   TURN:    5000,   // TURN credential API — fail fast so WebRTC can fall back
-  WEBHOOK: 5000,   // Abuse report webhook — fire-and-forget; don't wait on slow receivers
-  REQ_TS:  300000, // 5-min request timestamp validation window (anti-replay)
-  POW_AGE: 600000, // 10-min PoW freshness window
-  POW_FUT: 300000, // 5-min PoW future clock-skew tolerance
+  WEBHOOK:        5000,   // Abuse report webhook — fire-and-forget; don't wait on slow receivers
+  REQ_TS:         300000, // 5-min request timestamp validation window (anti-replay)
+  POW_AGE:        600000, // 10-min PoW freshness window
+  POW_FUT:        300000, // 5-min PoW future clock-skew tolerance
+  MULTITAB_GRACE:   10000,  // multi-tab delivery grace period in handleMsgPoll keep filter
+  PRESENCE_WRITE:  300000,  // minimum interval between KV presence writes (throttle)
 };
 
 function sanitizeString(val, maxLen = MAX_STRING_LEN) {
@@ -433,13 +435,13 @@ async function handleMsgSend(body, ip, env, request) {
 
   // v3.5: Replay protection — reject messages with timestamps outside ±5 min window.
   // A non-numeric ts (string/object) makes Math.abs(now - ts) === NaN, which is never
-  // > 300000 — silently bypassing this guard AND poisoning the stored msg.ts below,
+  // > TIMEOUT_MS.REQ_TS — silently bypassing this guard AND poisoning the stored msg.ts below,
   // which breaks the numeric poll-cursor comparison in handleMsgPoll. Reject a
   // non-numeric ts outright; an absent ts defaults to now.
   const now = Date.now();
   if (ts !== undefined && (typeof ts !== 'number' || !Number.isFinite(ts))) return json({ error: 'Invalid timestamp', code: 'INVALID_TIMESTAMP' }, 400, request);
   const msgTs = ts || now;
-  if (Math.abs(now - msgTs) > 300000) return json({ error: 'Timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
+  if (Math.abs(now - msgTs) > TIMEOUT_MS.REQ_TS) return json({ error: 'Timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
 
   // v3.6: In-memory dedup (saves 1 KV write per message — critical for free tier)
   // Trade-off: duplicate detection is per-isolate (~5min window), not global.
@@ -548,7 +550,7 @@ async function handleMsgPoll(body, env, request) {
   // with ts:Infinity would pass every cutoff check and never be cleaned up.
   const newMsgs = all.filter(m => !isExpired(m) && (Number.isFinite(m.ts) ? m.ts : 0) > cutoff);
   // Remove delivered messages older than 10 seconds (grace period for multi-tab)
-  const keep = all.filter(m => { if (isExpired(m)) return false; const t = Number.isFinite(m.ts) ? m.ts : 0; return t > cutoff || (Date.now() - t) < 10000; });
+  const keep = all.filter(m => { if (isExpired(m)) return false; const t = Number.isFinite(m.ts) ? m.ts : 0; return t > cutoff || (nowPoll - t) < TIMEOUT_MS.MULTITAB_GRACE; });
   if (keep.length < all.length) {
     if (keep.length === 0) await kvDel(env, key);
     else await kvPut(env, key, JSON.stringify(keep), { expirationTtl: TTL.WEEK });
@@ -629,7 +631,7 @@ async function handlePresence(body, env, request) {
   const safePub = typeof pub === 'string' ? pub.slice(0, 200) : undefined;
   const presData = { pub: safePub, name: sanitizeString(name, 64), at: Date.now() };
   if (safeCaps) presData.caps = safeCaps;
-  if (Date.now() - lastWrite > 300000) { // Only write to KV every 5 min
+  if (Date.now() - lastWrite > TIMEOUT_MS.PRESENCE_WRITE) { // throttle KV writes
     await kvPut(env, presKey, JSON.stringify(presData), { expirationTtl: TTL.MIN * 6 }); // 6min TTL (covers 5min interval + slack)
     globalThis._presenceCache.set(presKey, Date.now());
   }
@@ -734,7 +736,7 @@ async function handleAliasSet(body, env, request) {
       return json({ error: 'ts and sig must both be provided', code: 'PARTIAL_AUTH' }, 400, request);
     if (typeof aliasSig !== 'string' || aliasSig.length > 500)
       return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
-    if (typeof aliasTs !== 'number' || !Number.isFinite(aliasTs) || Math.abs(Date.now() - aliasTs) > 300000)
+    if (typeof aliasTs !== 'number' || !Number.isFinite(aliasTs) || Math.abs(Date.now() - aliasTs) > TIMEOUT_MS.REQ_TS)
       return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
     if (!aliasUserId || !validateUserId(aliasUserId))
       return json({ error: 'valid userId required for signed alias registration', code: 'INVALID_USER_ID' }, 400, request);
@@ -785,7 +787,7 @@ async function handleAliasDelete(body, env, request) {
     return json({ error: 'invalid field types', code: 'INVALID_FIELD' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   if (sig.length > 500) return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
-  if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > 300000)
+  if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS)
     return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
 
   const clean = alias.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
@@ -973,7 +975,7 @@ async function handlePortal(body, env, request) {
   if (hasSig) {
     if (ts === undefined || sig === undefined) return json({ error: 'ts and sig must both be provided', code: 'PARTIAL_AUTH' }, 400, request);
     if (typeof sig !== 'string' || sig.length > 500) return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
-    if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > 300000) return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
+    if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS) return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
     const pkRaw = await kvGet(env, `prekey:${userId}`);
     const bundle = pkRaw ? safeJsonParse(pkRaw) : null;
     if (!bundle || typeof bundle.edIdentityKey !== 'string' || !bundle.edIdentityKey) return json({ error: 'No registered identity key', code: 'NO_IDENTITY_KEY' }, 403, request);
@@ -1221,7 +1223,7 @@ async function checkGroupAuth(env, request, action, token, actorId, ts, sig, bin
   if (hasSig) {
     if (ts === undefined || sig === undefined) return json({ error: 'ts and sig must both be provided', code: 'PARTIAL_AUTH' }, 400, request);
     if (typeof sig !== 'string' || sig.length > 500) return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
-    if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > 300000) return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
+    if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS) return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
     const pkRaw = await kvGet(env, `prekey:${actorId}`);
     const bundle = pkRaw ? safeJsonParse(pkRaw) : null;
     if (!bundle || typeof bundle.edIdentityKey !== 'string' || !bundle.edIdentityKey) return json({ error: 'No registered identity key', code: 'NO_IDENTITY_KEY' }, 403, request);
@@ -1616,7 +1618,7 @@ async function handlePushSubscribe(body, env, request) {
         return json({ error: 'ts and sig must both be provided', code: 'PARTIAL_AUTH' }, 400, request);
       if (typeof sig !== 'string' || sig.length > 500)
         return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
-      if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > 300000)
+      if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS)
         return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
       const pkRaw = await kvGet(env, `prekey:${userId}`);
       const bundle = pkRaw ? safeJsonParse(pkRaw) : null;
@@ -1907,7 +1909,7 @@ async function handleAccountDelete(body, env, request) {
   // ±5 min freshness window bounds replay of a captured request. Replay inside
   // the window is harmless: deletion is idempotent and the prekey bundle (the
   // verification key source) is gone after the first call anyway.
-  if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > 300000) {
+  if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS) {
     return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
   }
 
@@ -2528,7 +2530,7 @@ async function handleBackupUpload(body, env, request) {
       return json({ error: 'ts and sig must both be provided together', code: 'PARTIAL_AUTH' }, 400, request);
     if (typeof sig !== 'string' || sig.length > 500)
       return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
-    if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > 300000)
+    if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS)
       return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
     const data = await kvGet(env, `prekey:${userId}`);
     const bundle = data ? safeJsonParse(data) : null;
@@ -2565,7 +2567,7 @@ async function handleBackupDownload(body, env, request) {
       return json({ error: 'ts and sig must both be provided together', code: 'PARTIAL_AUTH' }, 400, request);
     if (typeof sig !== 'string' || sig.length > 500)
       return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
-    if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > 300000)
+    if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS)
       return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
     const data = await kvGet(env, `prekey:${userId}`);
     const bundle = data ? safeJsonParse(data) : null;
