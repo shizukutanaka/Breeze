@@ -2041,6 +2041,7 @@ const _I = {
     uiSelectContact: 'Select a contact',
     uiNoMatches: (q) => 'No matches for ' + q,
     uiNoResults: (q) => 'No results for ' + q,
+    searchAllResults: (n, c) => `${n} result${n === 1 ? '' : 's'} across ${c} chat${c === 1 ? '' : 's'}`,
     uiAllCaughtUp: 'All caught up',
     uiNoGroups: 'No groups yet',
     uiAddFirst: 'Add your first contact with +',
@@ -2784,6 +2785,7 @@ const _I = {
     uiSelectContact: '連絡先を選択してください',
     uiNoMatches: (q) => q + ' に一致なし',
     uiNoResults: (q) => q + ' の結果なし',
+    searchAllResults: (n, c) => `${c}チャットで${n}件`,
     uiAllCaughtUp: '未読なし',
     uiNoGroups: 'グループなし',
     uiAddFirst: '+ で最初の連絡先を追加',
@@ -12118,14 +12120,12 @@ async function initMessenger(dbName) {
         }
         for (const [cid, cmsgs] of Object.entries(grouped)) {
           const header = document.createElement('div');
-          header.className = 'text-xs fw-700 color-g';
           header.className = 'help-header';
           header.textContent = contactMap[cid] || cid;
           header.onclick = async () => { const c = await dbGet('contacts', cid); if (c) openConversation(c); };
           box.appendChild(header);
           for (const m of cmsgs.slice(0, 5)) {
             const d = document.createElement('div');
-            d.className = 'msg ' + (m.mine ? 'me' : 'them');
             d.className = 'help-body';
             const time = new Date(m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             safeSetHTML(d, esc(m.text.slice(0, 120)).replace(new RegExp('(' + esc(query) + ')', 'gi'), '<mark class="i-highlight">$1</mark>') + '<span class="ts">' + time + '</span>');
@@ -12136,7 +12136,7 @@ async function initMessenger(dbName) {
         const total = document.createElement('div');
         total.className = 'text-xs color-g text-c';
         total.classList.add('i-pad8');
-        total.textContent = matches.length + ' results across ' + Object.keys(grouped).length + ' chats';
+        total.textContent = t('searchAllResults', matches.length, Object.keys(grouped).length);
         box.appendChild(total);
       }
       box.scrollTop = box.scrollHeight;
