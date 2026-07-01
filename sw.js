@@ -107,7 +107,10 @@ self.addEventListener('push', (e) => {
       data: { url: data.url || '/', contactId: data.contactId },
       renotify: true,
       // v3.6: Notification action buttons (Chrome 48+, Firefox 44+)
-      actions: [
+      actions: (navigator.language || '').startsWith('ja') ? [
+        { action: 'reply', title: '返信', type: 'text' },
+        { action: 'mark-read', title: '既読にする' },
+      ] : [
         { action: 'reply', title: 'Reply', type: 'text' },
         { action: 'mark-read', title: 'Mark Read' },
       ],
