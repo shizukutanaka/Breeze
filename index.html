@@ -9617,8 +9617,12 @@ async function initMessenger(dbName) {
         text = await decryptGroupMsg(msg.groupId, (msg.from || '').slice(0, 12), msg.payload);
       }
       if (!text) {
-        // Fallback: legacy per-member encryption
-        text = await decryptFrom(msg.payload, member?.pubB64 || msg.fromPub);
+        // Fallback: legacy per-member encryption — only for known group members.
+        // A non-member who is a contact could otherwise inject messages: their shared
+        // ECDH session key lets them produce a ciphertext that decryptFrom accepts,
+        // and msg.fromPub (attacker-supplied) would be used without the member guard.
+        if (!member) return;
+        text = await decryptFrom(msg.payload, member.pubB64);
       }
       if (!text) return;
       const msgId = msg.from + ':' + msg.ts;
@@ -10838,8 +10842,10 @@ async function initMessenger(dbName) {
       const { backup } = await resp.json();
       const b = JSON.parse(backup);
       const salt = u8(b.s); const iv = u8(b.i); const ct = u8(b.d);
-      // Read iteration count from the backup (new backups store it; old backups fall back to 100k)
-      const bIter = (typeof b.iter === 'number' && b.iter > 0 && b.iter <= 10000000) ? b.iter : CONFIG.PBKDF2_ITERATIONS;
+      // Read iteration count from the backup. New backups store 600k; old backups have no
+      // field and fall back to 100k. Enforce a floor of PBKDF2_ITERATIONS so a compromised
+      // server cannot inject iter:1 and make offline brute-force nearly free.
+      const bIter = (typeof b.iter === 'number' && b.iter >= CONFIG.PBKDF2_ITERATIONS && b.iter <= 10000000) ? b.iter : CONFIG.PBKDF2_ITERATIONS;
       const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
       const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: bIter, hash: 'SHA-256' }, km, { name: 'AES-GCM', length: CONFIG.AES_KEY_BITS }, false, ['decrypt']);
       const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
