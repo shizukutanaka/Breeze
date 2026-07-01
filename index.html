@@ -9707,6 +9707,8 @@ async function initMessenger(dbName) {
         text = await decryptFrom(msg.payload, member.pubB64);
       }
       if (!text) return;
+      // Cap group message text — relay enforces 256 KB but the P2P group path has no server check.
+      if (text.length > 65536) return;
       const msgId = msg.from + ':' + msg.ts;
       if (_replayCache.has(msgId)) return; // Fast in-memory dedup
       if (await dbGet('messages', msgId)) { _replayCache.add(msgId); return; }
@@ -9834,7 +9836,9 @@ async function initMessenger(dbName) {
       try {
         const fileMsg = await decryptFrom(msg.payload, contact.pubB64);
         if (!fileMsg) return;
-        text = `📎 ${JSON.parse(fileMsg).name}`;
+        const _fp = JSON.parse(fileMsg);
+        // Cap the displayed file name to prevent memory/render DoS from an oversized peer-supplied name.
+        text = `📎 ${typeof _fp.name === 'string' ? _fp.name.slice(0, 255) : 'file'}`;
         storedFileData = fileMsg;
         await dbPut('messages', { msgId, contactId, text, mine: false, ts: msg.ts, fileData: fileMsg, ...meta });
         _replayCache.add(msgId);
