@@ -9517,10 +9517,11 @@ async function initMessenger(dbName) {
         }
         const spk = await genIdentityKey(); // v3.1: X25519 when available
         const spkPub = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.exportKey('raw', spk.publicKey))));
-        await postAPIRaw('/prekey/upload', { userId: myId, identityKey: myPubB64, signedPreKey: spkPub, oneTimePreKeys: otpKeys });
+        const upResp = await postAPIRaw('/prekey/upload', { userId: myId, identityKey: myPubB64, signedPreKey: spkPub, oneTimePreKeys: otpKeys });
+        if (!upResp?.ok) { _lastPreKeyCheck = Date.now() - MS.MIN * 4; return; } // retry in ~1 min
         _dbg(null, 'PreKeys replenished: ' + otpKeys.length + ' OTPs');
       }
-    } catch(e) { _dbg(e, 'prekey-replenish'); }
+    } catch(e) { _lastPreKeyCheck = Date.now() - MS.MIN * 4; _dbg(e, 'prekey-replenish'); } // retry in ~1 min on network error
   }
 
   // v3.3: Adaptive polling — fast when active, slow when background
@@ -9546,7 +9547,12 @@ async function initMessenger(dbName) {
             const sData = await sResp.json();
             let sealedProcessed = 0;
             for (const sealed of (sData.messages || [])) {
-              try { await handleIncoming(JSON.parse(sealed.envelope)); sealedProcessed++; } catch(e) { _dbg(e, 'sealed-parse'); }
+              try {
+                const env = JSON.parse(sealed.envelope);
+                if (!env || typeof env !== 'object') { sealedProcessed++; continue; } // malformed: ACK+skip to avoid infinite retry
+                await handleIncoming(env);
+                sealedProcessed++;
+              } catch(e) { _dbg(e, 'sealed-parse'); }
             }
             // v3.6: ACK after successful processing (crash-safe: server keeps 5min grace)
             if (sealedProcessed > 0) postAPIRaw('/sealed/ack', { id: myId }).catch(e => _dbg(e, 'sealed-ack'));
@@ -9969,6 +9975,10 @@ async function initMessenger(dbName) {
           if (this._healthTimer) { clearInterval(this._healthTimer); this._healthTimer = null; }
           if (this._heartbeat) { clearInterval(this._heartbeat); this._heartbeat = null; }
           if (this._sigPoll) { clearInterval(this._sigPoll); this._sigPoll = null; }
+          // Release handler closures immediately so GC can collect the RTCPeerConnection
+          // and the contact/peerState it captures; without this they survive until the
+          // next GC cycle even after pc.close() is called.
+          if (this.pc) { this.pc.onicecandidate = null; this.pc.onconnectionstatechange = null; this.pc.ondatachannel = null; this.pc.onicecandidateerror = null; this.pc.ontrack = null; }
         }
       }
     };
