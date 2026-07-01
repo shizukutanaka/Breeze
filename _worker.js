@@ -38,7 +38,7 @@ const TIMEOUT_MS = { // fetchWithTimeout values (milliseconds)
 
 function sanitizeString(val, maxLen = MAX_STRING_LEN) {
   if (typeof val !== 'string') return '';
-  return val.slice(0, maxLen).replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '');
+  return val.slice(0, maxLen).replace(/[\x00-\x08\x0a-\x0c\x0d\x0e-\x1f]/g, '');
 }
 
 function validateUserId(id) {

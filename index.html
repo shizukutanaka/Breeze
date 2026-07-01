@@ -9595,7 +9595,7 @@ async function initMessenger(dbName) {
             const data = await resp.json();
             for (const msg of (data.messages || [])) {
               try { await handleIncoming(msg); } catch(e) { _dbg(e, 'msg-process'); }
-              if (msg.ts > _lastPollTs) _lastPollTs = msg.ts;
+              if (typeof msg.ts === 'number' && Number.isFinite(msg.ts) && msg.ts > _lastPollTs && msg.ts <= Date.now() + MS.DAY) _lastPollTs = msg.ts;
             }
           }
           const sResp = await postAPIRaw('/sealed/poll', { id: myId });
