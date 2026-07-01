@@ -2126,6 +2126,7 @@ const _I = {
     uiOnlineStatus: (online, peers) => `Online: ~${online} users on server · ${peers} P2P connections`,
     uiShareId: 'Share your Breeze ID',
     uiInviteCopied: 'Invite message copied to clipboard.',
+    inviteMsg: (name, url) => `${name} invited you to Breeze.\n\nAn encrypted messenger with no registration required.\nJust open this link to start chatting:\n\n${url}\n\nNo phone number. No email. Works in any browser.`,
     uiNameLength: 'Name must be 1-50 characters',
     uiMemberNotFound: (m) => 'Member not found: ' + m,
     uiGroupRenamed: (n) => 'Group renamed to ' + n,
@@ -2932,6 +2933,7 @@ const _I = {
     uiOnlineStatus: (online, peers) => `オンライン：サーバー上 ~${online} ユーザー · P2P接続 ${peers}`,
     uiShareId: 'Breeze IDを共有',
     uiInviteCopied: '招待メッセージをクリップボードにコピーしました',
+    inviteMsg: (name, url) => `${name}がBreezeに招待しています。\n\n登録不要の暗号化メッセンジャーです。\n以下のリンクを開くだけで会話できます:\n\n${url}\n\n電話番号もメールも不要。ブラウザだけで使えます。`,
     uiNameLength: '名前は1〜50文字で入力してください',
     uiMemberNotFound: (m) => 'メンバーが見つかりません: ' + m,
     uiGroupRenamed: (n) => 'グループ名を変更: ' + n,
@@ -11713,10 +11715,7 @@ async function initMessenger(dbName) {
       ? location.origin + location.pathname + '?add=@' + myAlias
       : location.origin + location.pathname + '?add=' + encodeURIComponent(myPubB64) + '&name=' + encodeURIComponent(myName);
 
-    const ja = LANG === 'ja';
-    const msg = ja
-      ? `${myName}がBreezeに招待しています。\n\n登録不要の暗号化メッセンジャーです。\n以下のリンクを開くだけで会話できます:\n\n${url}\n\n電話番号もメールも不要。ブラウザだけで使えます。`
-      : `${myName} invited you to Breeze.\n\nAn encrypted messenger with no registration required.\nJust open this link to start chatting:\n\n${url}\n\nNo phone number. No email. Works in any browser.`;
+    const msg = t('inviteMsg', myName, url);
     return { url, msg };
   }
 
