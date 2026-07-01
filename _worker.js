@@ -26,8 +26,12 @@ const TTL = { // KV expirationTtl values (seconds)
   YEAR:    86400 * 365,
 };
 const TIMEOUT_MS = { // fetchWithTimeout values (milliseconds)
-  PUSH: 5000,  // Web Push endpoint — tight: a slow push service is already failing
-  TURN: 5000,  // TURN credential API — fail fast so WebRTC can fall back
+  PUSH:    5000,   // Web Push endpoint — tight: a slow push service is already failing
+  TURN:    5000,   // TURN credential API — fail fast so WebRTC can fall back
+  WEBHOOK: 5000,   // Abuse report webhook — fire-and-forget; don't wait on slow receivers
+  REQ_TS:  300000, // 5-min request timestamp validation window (anti-replay)
+  POW_AGE: 600000, // 10-min PoW freshness window
+  POW_FUT: 300000, // 5-min PoW future clock-skew tolerance
 };
 
 function sanitizeString(val, maxLen = MAX_STRING_LEN) {
@@ -272,7 +276,7 @@ export default {
     // v3.6: Request timestamp validation (anti-replay, 5-minute window)
     if (body.ts && typeof body.ts === 'number') {
       const drift = Math.abs(Date.now() - body.ts);
-      if (drift > 300000) { // 5 minutes
+      if (drift > TIMEOUT_MS.REQ_TS) {
         return json({ error: 'Request expired', code: 'TIMESTAMP_EXPIRED' }, 400, request);
       }
     }
@@ -694,8 +698,8 @@ async function handleAliasSet(body, env, request) {
     // check forever — letting ONE solved token be replayed indefinitely to register
     // unlimited aliases (the challenge binds pub, not the alias). MAX_POW_FUTURE_MS
     // is the clock-skew tolerance; beyond it the token's replay window stays bounded.
-    const MAX_POW_AGE_MS = 10 * 60 * 1000;
-    const MAX_POW_FUTURE_MS = 5 * 60 * 1000;
+    const MAX_POW_AGE_MS = TIMEOUT_MS.POW_AGE;
+    const MAX_POW_FUTURE_MS = TIMEOUT_MS.POW_FUT;
     const parts = pow.challenge.split(':');
     const challengeTs = parseInt(parts[parts.length - 1], 10);
     if (Number.isFinite(challengeTs) &&
@@ -2393,7 +2397,7 @@ async function handleAbuseReport(body, env, request) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'abuse_report', frankId, messageLen: message.length, at: Date.now() }),
-    }, 5000).catch(() => {});
+    }, TIMEOUT_MS.WEBHOOK).catch(() => {});
   }
   return json({ verified: true, duplicate: !fireWebhook }, 200, request);
 }

@@ -1249,6 +1249,7 @@ const CONFIG = {
   POLL_FAST_MS: 3000,
   POLL_SLOW_MS: 15000,
   PRESENCE_INTERVAL_MS: 30000,
+  PRESENCE_BG_INTERVAL_MS: 120000,  // slower presence heartbeat when tab is hidden
   TYPING_THROTTLE_MS: 3000,
   TYPING_TIMEOUT_MS: 3000,
   CALL_TIMEOUT_MS: 60000,
@@ -10173,7 +10174,7 @@ async function initMessenger(dbName) {
     beat();
     function schedulePresence() {
       if (_presenceTimer) clearTimeout(_presenceTimer);
-      const interval = document.hidden ? 120000 : CONFIG.PRESENCE_INTERVAL_MS; // 2min bg, 30s active
+      const interval = document.hidden ? CONFIG.PRESENCE_BG_INTERVAL_MS : CONFIG.PRESENCE_INTERVAL_MS;
       _presenceTimer = setTimeout(() => { beat(); if (activeContact) updateConvStatus(activeContact); schedulePresence(); }, interval);
     }
     schedulePresence();
