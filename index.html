@@ -9522,6 +9522,13 @@ async function initMessenger(dbName) {
   }
 
   async function handleIncoming(msg) {
+    // Normalize msg.ts to a safe integer. P2P DataChannel messages carry a peer-supplied
+    // ts field that is never validated by the relay; a non-numeric value would be
+    // concatenated into msgId (contactId + ':' + msg.ts) and later break querySelector
+    // selectors that use msgId in attribute values (SyntaxError from CSS metacharacters).
+    // Relay-path messages are validated by the worker (numeric, finite, ±5min), so
+    // this guard mainly protects the P2P path.
+    if (typeof msg.ts !== 'number' || !Number.isFinite(msg.ts)) msg = { ...msg, ts: Date.now() };
     // v3.1: Block check — silently drop messages from blocked contacts
     if (msg.from) {
       const sender = await dbGet('contacts', msg.from);
