@@ -1,5 +1,21 @@
 # Changelog
 
+## Security hardening session 4 — dedup race, DataChannel caps, network quality (branch claude/nice-ride-T6yb0, 2026-07-01)
+
+777 tests; `index.html` only. `validate.sh` PASSED (35/36, 1 size warning).
+
+**Dual-path dedup race fix:**
+- `_replayCache.add(msgId)` moved to before the first `await` in all three `handleIncoming` message paths (group, voice, 1:1 text/file). Previously the mark happened after `dbPut`, leaving a window where relay and P2P DataChannel could both deliver the same message and both pass the `has()` check — causing the same message to be stored and displayed twice. The speculative pre-await mark closes the race with no behaviour change for the common non-duplicate path.
+
+**DataChannel size caps (DoS hardening):**
+- State DataChannel (`onmessage`) rejects non-string or > 4 KB messages; prevents presence/ICE flood from malformed peer.
+- Main DataChannel (`onmessage`) rejects non-string or > 512 KB messages; caps P2P file transfers that bypass the server-side relay limit.
+
+**Network quality abort controller:**
+- `measureNetworkQuality()` now cancels a prior RTT probe before starting a new one via `AbortController`. Previously overlapping probes (triggered by rapid conversation switches) could leave stale `AbortSignal` contexts and cause spurious `fetchT` errors in the console.
+
+---
+
 ## Security hardening session 3 — poll race, SDP guard, field caps, edit cap (branch claude/nice-ride-T6yb0, 2026-07-01)
 
 777 tests; `index.html` only. `validate.sh` PASSED (35/36, 1 size warning).
