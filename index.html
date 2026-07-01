@@ -7542,16 +7542,19 @@ async function initMessenger(dbName) {
   };
 
   function renderPollHtml(poll, msgId) {
-    const totalVotes = poll.options.reduce((s, o) => s + o.votes.length, 0);
-    let html = `<div class="poll-card"><div class="poll-q">📊 ${esc(poll.question)}</div>`;
-    poll.options.forEach((opt, i) => {
-      const pct = totalVotes > 0 ? Math.round(opt.votes.length / totalVotes * 100) : 0;
-      const voted = opt.votes.includes(myId);
+    // Cap to 20 options (prevent DOM bloat from a crafted poll with thousands of options)
+    const safeOptions = (Array.isArray(poll.options) ? poll.options : []).slice(0, 20);
+    const totalVotes = safeOptions.reduce((s, o) => s + (Array.isArray(o.votes) ? o.votes.length : 0), 0);
+    let html = `<div class="poll-card"><div class="poll-q">📊 ${esc(String(poll.question || '').slice(0, 200))}</div>`;
+    safeOptions.forEach((opt, i) => {
+      const safeVotes = Array.isArray(opt.votes) ? opt.votes : [];
+      const pct = totalVotes > 0 ? Math.round(safeVotes.length / totalVotes * 100) : 0;
+      const voted = safeVotes.includes(myId);
       html += `<div class="poll-opt${voted ? ' voted' : ''}" data-action="vote" data-msgid="${msgId}" data-idx="${i}">
-        <span class="i-flex1">${esc(opt.text)}</span>
+        <span class="i-flex1">${esc(String(opt.text || '').slice(0, 200))}</span>
         <div class="i-flex2"><div class="poll-bar" style="width:${pct}%"></div></div>
         <span class="poll-pct">${pct}%</span>
-        <span class="poll-pct">${opt.votes.length}</span>
+        <span class="poll-pct">${safeVotes.length}</span>
       </div>`;
     });
     html += `<div class="i-tiny-meta">${esc(t('pollVotes', totalVotes))}</div></div>`;
@@ -9585,8 +9588,12 @@ async function initMessenger(dbName) {
         const decrypted = await decryptFrom(msg.payload, c.pubB64);
         if (!decrypted) return;
         const invite = JSON.parse(decrypted);
-        if (invite.type === 'group_invite' && !(await dbGet('contacts', invite.groupId))) {
-          await dbPut('contacts', { id: invite.groupId, name: invite.name, isGroup: true, members: invite.members, addedAt: Date.now(), unread: 0, pubB64: '' });
+        // Validate and cap invite fields to prevent storage DoS from a malicious contact
+        const inviteGroupId = typeof invite.groupId === 'string' ? invite.groupId.slice(0, 64) : null;
+        const inviteName = typeof invite.name === 'string' ? invite.name.slice(0, 64) : 'Group';
+        const inviteMembers = (Array.isArray(invite.members) ? invite.members : []).slice(0, CONFIG.GROUP_MAX);
+        if (invite.type === 'group_invite' && inviteGroupId && !(await dbGet('contacts', inviteGroupId))) {
+          await dbPut('contacts', { id: inviteGroupId, name: inviteName, isGroup: true, members: inviteMembers, addedAt: Date.now(), unread: 0, pubB64: '' });
           playNotif(); _renderContactsThrottled();
         }
       } catch(e) { _dbg(e); }
@@ -9615,8 +9622,9 @@ async function initMessenger(dbName) {
           const targetMsgId = safeMsgId(signal.msgId || '');
           if (signal.type === 'edit') {
             const stored = await dbGet('messages', targetMsgId);
-            // Only allow editing messages not authored by us — peers cannot remote-edit our outgoing messages
-            if (stored && !stored.mine) { stored.text = signal.text; stored.edited = true; await dbPut('messages', stored); }
+            // Only allow editing messages not authored by us — peers cannot remote-edit our outgoing messages.
+            // Cap edit text to 64 KB to prevent storage DoS via the P2P signal path (no server-side check).
+            if (stored && !stored.mine && typeof signal.text === 'string') { stored.text = signal.text.slice(0, 65536); stored.edited = true; await dbPut('messages', stored); }
             const el = document.querySelector(`[data-msgid="${targetMsgId}"]`);
             if (el) { const tm = new Date(signal.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); safeSetHTML(el, renderLinks(renderMarkdown(esc(signal.text))) + ' <span class="i-edited">' + t('edited') + '</span><span class="ts">'+tm+'</span>'); }
           } else if (signal.type === 'delete') {
@@ -9746,8 +9754,9 @@ async function initMessenger(dbName) {
         const _smId = safeMsgId(signal.msgId || '');
         if (signal.type === 'edit') {
           const stored = await dbGet('messages', _smId);
-          // Only allow editing messages not authored by us — contact cannot remote-edit our outgoing messages
-          if (stored && !stored.mine) { stored.text = signal.text; stored.edited = true; await dbPut('messages', stored); }
+          // Only allow editing messages not authored by us — contact cannot remote-edit our outgoing messages.
+          // Cap edit text to 64 KB to prevent storage DoS via the P2P signal path (no server-side check).
+          if (stored && !stored.mine && typeof signal.text === 'string') { stored.text = signal.text.slice(0, 65536); stored.edited = true; await dbPut('messages', stored); }
           const el = document.querySelector(`[data-msgid="${_smId}"]`);
           if (el) { const tm = new Date(signal.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); safeSetHTML(el, renderLinks(renderMarkdown(esc(signal.text))) + ' <span class="i-edited">' + t('edited') + '</span><span class="ts">'+tm+'</span>'); }
         } else if (signal.type === 'delete') {
@@ -9792,6 +9801,9 @@ async function initMessenger(dbName) {
     } else {
       text = await decryptFrom(msg.payload, contact.pubB64);
       if (!text) return;
+      // Reject oversized text: the relay caps payloads at 256 KB but the P2P DataChannel has no server check.
+      // 64 KB is generous for chat text while preventing memory/render DoS from a malicious peer.
+      if (text.length > 65536) return;
       // v3.3: Verify Ed25519 signature if present.
       // TOFU: a contact's signing key must stay stable. Verifying a signature
       // against the sigPub carried in the same message proves only that the
@@ -10036,7 +10048,8 @@ async function initMessenger(dbName) {
               // Use contact.id (authenticated sender) — not msg.userId (peer-claimed, unverified)
               const voterId = contact.id;
               for (const opt of poll.options) opt.votes = opt.votes.filter(v => v !== voterId);
-              if (poll.options[msg.optionIndex]) poll.options[msg.optionIndex].votes.push(voterId);
+              // Validate optionIndex: must be a non-negative integer (guards non-integer/symbol keys that could access array properties)
+              if (Number.isInteger(msg.optionIndex) && msg.optionIndex >= 0 && poll.options[msg.optionIndex]) poll.options[msg.optionIndex].votes.push(voterId);
               pollMsg.text = JSON.stringify(poll);
               await dbPut('messages', pollMsg);
               const el = document.querySelector(`[data-msgid="${pollMsg.msgId}"]`);
@@ -10822,7 +10835,9 @@ async function initMessenger(dbName) {
       const req = JSON.parse(data);
       if (req.type !== 'peer_relay_request') return;
       const targetId = req.targetId;
-      if (!_peerRelayQueue[targetId]) _peerRelayQueue[targetId] = [];
+      // Guard against prototype-polluting keys and non-string values
+      if (typeof targetId !== 'string' || !targetId || targetId.length > 64) return;
+      if (!Object.prototype.hasOwnProperty.call(_peerRelayQueue, targetId)) _peerRelayQueue[targetId] = [];
       _peerRelayQueue[targetId].push({ payload: req.payload, ts: Date.now(), from: contact.id });
       // Limit: 20 messages per target, 1 hour TTL
       _peerRelayQueue[targetId] = _peerRelayQueue[targetId]
@@ -11205,7 +11220,9 @@ async function initMessenger(dbName) {
     if (activeContact?.isGroup && senderName) {
       // Group: track multiple typers
       if (!_groupTypingState[contactId]) _groupTypingState[contactId] = {};
-      _groupTypingState[contactId][senderName] = Date.now();
+      // Truncate peer-supplied senderName: used as a dict key; unbounded values cause memory bloat
+      const _safeSenderName = String(senderName).slice(0, 64);
+      _groupTypingState[contactId][_safeSenderName] = Date.now();
       // Clean stale (>5s)
       const now = Date.now();
       for (const [k, v] of Object.entries(_groupTypingState[contactId])) {
