@@ -1705,7 +1705,7 @@ async function sendPushToUser(userId, payload, env) {
       }, 5000);
       // 410 Gone (and 404 Not Found) mean the subscription is dead — mark for removal.
       if (resp.status === 410 || resp.status === 404) stale.add(sub.endpoint);
-    } catch {}
+    } catch(e) { console.error('[push]', e?.message ?? e); }
   }
   if (stale.size > 0) {
     const remaining = subs.filter(s => !stale.has(s.endpoint));
