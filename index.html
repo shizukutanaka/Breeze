@@ -9751,10 +9751,10 @@ async function initMessenger(dbName) {
       if (text.length > 65536) return;
       const msgId = msg.from + ':' + msg.ts;
       if (_replayCache.has(msgId)) return; // Fast in-memory dedup
-      if (await dbGet('messages', msgId)) { _replayCache.add(msgId); return; }
+      _replayCache.add(msgId); // Speculative mark before first await — blocks concurrent-path duplicates
+      if (await dbGet('messages', msgId)) return; // Already persisted
       const meta = { msgId, senderName: msg.fromName, replyTo: msg.replyTo, disappearAt: msg.disappearAt };
       await dbPut('messages', { msgId, contactId: msg.groupId, text, mine: false, ts: msg.ts, ...meta });
-      _replayCache.add(msgId);
       group.lastMsg = text.slice(0, 30);
       group.lastMsgSender = msg.fromName;
       group.lastMsgAt = msg.ts;
@@ -9786,10 +9786,10 @@ async function initMessenger(dbName) {
         if (typeof v.data !== 'string' || v.data.length > 350000) return;
         const msgId = msg.from + ':' + msg.ts;
         if (_replayCache.has(msgId)) return; // Fast in-memory dedup
-      if (await dbGet('messages', msgId)) { _replayCache.add(msgId); return; }
+        _replayCache.add(msgId); // Speculative mark before first await — blocks concurrent-path duplicates
+        if (await dbGet('messages', msgId)) return; // Already persisted
         const meta = { msgId, voice: v.data };
         await dbPut('messages', { msgId, contactId: msg.from, text: t('voiceMsg'), mine: false, ts: msg.ts, voice: v.data });
-        _replayCache.add(msgId);
         contact.lastMsg = t('voiceMsg'); contact.lastMsgAt = msg.ts;
         if (activeContact?.id !== msg.from) { contact.unread = (contact.unread || 0) + 1; playNotif(); }
         await dbPut('contacts', contact);
@@ -9824,7 +9824,8 @@ async function initMessenger(dbName) {
     // New message (text or file)
     const msgId = contactId + ':' + msg.ts;
     if (_replayCache.has(msgId)) return; // Fast in-memory dedup
-      if (await dbGet('messages', msgId)) { _replayCache.add(msgId); return; }
+    _replayCache.add(msgId); // Speculative mark before first await — blocks concurrent-path duplicates
+    if (await dbGet('messages', msgId)) return; // Already persisted
 
     let text, storedFileData = null;
     const meta = { msgId, replyTo: msg.replyTo, disappearAt: msg.disappearAt, senderName: msg.fromName };
@@ -9883,7 +9884,6 @@ async function initMessenger(dbName) {
         text = `📎 ${typeof _fp.name === 'string' ? _fp.name.slice(0, 255) : 'file'}`;
         storedFileData = fileMsg;
         await dbPut('messages', { msgId, contactId, text, mine: false, ts: msg.ts, fileData: fileMsg, ...meta });
-        _replayCache.add(msgId);
       } catch { return; }
     } else {
       text = await decryptFrom(msg.payload, contact.pubB64);
@@ -9927,7 +9927,6 @@ async function initMessenger(dbName) {
         }
       }
       await dbPut('messages', { msgId, contactId, text, mine: false, ts: msg.ts, ...meta });
-      _replayCache.add(msgId);
     }
 
     contact.lastMsg = text.slice(0, 40);
