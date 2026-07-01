@@ -2127,6 +2127,7 @@ const _I = {
     uiShareId: 'Share your Breeze ID',
     uiInviteCopied: 'Invite message copied to clipboard.',
     inviteMsg: (name, url) => `${name} invited you to Breeze.\n\nAn encrypted messenger with no registration required.\nJust open this link to start chatting:\n\n${url}\n\nNo phone number. No email. Works in any browser.`,
+    migrateHtml: '<div class="i-title">Migrate from LINE / WhatsApp / Telegram</div><div class="i-heading">Step 1: Invite contacts (1-on-1)</div>Type <code>/invite</code> to copy an invite message → paste in LINE/WhatsApp<br>Type <code>/qr</code> to show a QR code → let them scan it<div class="i-heading">Step 1b: Move a whole group</div>Type <code>/newgroup Your Group Name</code> → generates an invite link<br>→ Paste the link in your LINE/WhatsApp group<br>→ Members just open the link to join automatically<div class="i-heading">Step 2: Import chat history</div><b>LINE:</b> Chat → Settings → Send chat history → save .txt file<br><b>WhatsApp:</b> Chat → More → Export chat → .txt<br><b>Telegram:</b> Settings → Advanced → Export data → JSON<br>Type <code>/import</code> and select the file, or drag-drop onto the chat area<div class="i-heading">Step 3: Set up notifications</div>Allow browser notifications to get alerts for new messages<br>Add to Home Screen for an app-like experience',
     uiNameLength: 'Name must be 1-50 characters',
     uiMemberNotFound: (m) => 'Member not found: ' + m,
     uiGroupRenamed: (n) => 'Group renamed to ' + n,
@@ -2934,6 +2935,7 @@ const _I = {
     uiShareId: 'Breeze IDを共有',
     uiInviteCopied: '招待メッセージをクリップボードにコピーしました',
     inviteMsg: (name, url) => `${name}がBreezeに招待しています。\n\n登録不要の暗号化メッセンジャーです。\n以下のリンクを開くだけで会話できます:\n\n${url}\n\n電話番号もメールも不要。ブラウザだけで使えます。`,
+    migrateHtml: '<div class="i-title">LINE / WhatsApp / Telegram からの移行</div><div class="i-heading">Step 1: 友達を招待 (個人)</div><code>/invite</code> で招待メッセージをコピー → LINE等で送信<br><code>/qr</code> でQRコードを表示 → 相手にスキャンしてもらう<div class="i-heading">Step 1b: グループごと移行</div><code>/newgroup LINEグループ名</code> → 招待リンク生成<br>→ 生成されたリンクをLINEグループに貼る<br>→ メンバーがリンクを開くだけで自動参加<div class="i-heading">Step 2: チャット履歴を移行</div><b>LINE:</b> トーク → 設定 → トーク履歴を送信 → .txtを保存<br><b>WhatsApp:</b> チャット → その他 → チャットをエクスポート → .txt<br><b>Telegram:</b> Settings → Advanced → Export data → JSON<br>保存したファイルを <code>/import</code> でインポート<br>または会話画面にファイルをドラッグ&amp;ドロップ<div class="i-heading">Step 3: 通知設定</div>ブラウザの通知を許可（メッセージが来たら気づけるように）<br>ホーム画面に追加するとアプリのように使えます',
     uiNameLength: '名前は1〜50文字で入力してください',
     uiMemberNotFound: (m) => 'メンバーが見つかりません: ' + m,
     uiGroupRenamed: (n) => 'グループ名を変更: ' + n,
@@ -12033,46 +12035,10 @@ async function initMessenger(dbName) {
 
     if (val === '/migrate') {
       e.preventDefault(); clearInput();
-      const ja = LANG === 'ja';
       const box = _DOM.get('msg-messages');
       const d = document.createElement('div');
       d.className = 'cmd-section';
-      safeSetHTML(d, ja ? [
-        '<div class="i-title">LINE / WhatsApp / Telegram からの移行</div>',
-        '<div class="i-heading">Step 1: 友達を招待 (個人)</div>',
-        '<code>/invite</code> で招待メッセージをコピー → LINE等で送信',
-        '<code>/qr</code> でQRコードを表示 → 相手にスキャンしてもらう',
-        '<div class="i-heading">Step 1b: グループごと移行</div>',
-        '<code>/newgroup LINEグループ名</code> → 招待リンク生成',
-        '→ 生成されたリンクをLINEグループに貼る',
-        '→ メンバーがリンクを開くだけで自動参加',
-        '<div class="i-heading">Step 2: チャット履歴を移行</div>',
-        '<b>LINE:</b> トーク → 設定 → トーク履歴を送信 → .txtを保存',
-        '<b>WhatsApp:</b> チャット → その他 → チャットをエクスポート → .txt',
-        '<b>Telegram:</b> Settings → Advanced → Export data → JSON',
-        '保存したファイルを <code>/import</code> でインポート',
-        'または会話画面にファイルをドラッグ&ドロップ',
-        '<div class="i-heading">Step 3: 通知設定</div>',
-        'ブラウザの通知を許可（メッセージが来たら気づけるように）',
-        'ホーム画面に追加するとアプリのように使えます',
-      ].join('<br>') : [
-        '<div class="i-title">Migrate from LINE / WhatsApp / Telegram</div>',
-        '<div class="i-heading">Step 1: Invite contacts (1-on-1)</div>',
-        'Type <code>/invite</code> to copy an invite message → paste in LINE/WhatsApp',
-        'Type <code>/qr</code> to show a QR code → let them scan it',
-        '<div class="i-heading">Step 1b: Move a whole group</div>',
-        'Type <code>/newgroup Your Group Name</code> → generates an invite link',
-        '→ Paste the link in your LINE/WhatsApp group',
-        '→ Members just open the link to join automatically',
-        '<div class="i-heading">Step 2: Import chat history</div>',
-        '<b>LINE:</b> Chat → Settings → Send chat history → save .txt file',
-        '<b>WhatsApp:</b> Chat → More → Export chat → .txt',
-        '<b>Telegram:</b> Settings → Advanced → Export data → JSON',
-        'Type <code>/import</code> and select the file, or drag-drop onto the chat area',
-        '<div class="i-heading">Step 3: Set up notifications</div>',
-        'Allow browser notifications to get alerts for new messages',
-        'Add to Home Screen for an app-like experience',
-      ].join('<br>'));
+      safeSetHTML(d, t('migrateHtml'));
       box.appendChild(d); box.scrollTop = box.scrollHeight;
       return;
     }
