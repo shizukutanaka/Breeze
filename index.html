@@ -5913,7 +5913,7 @@ async function initMessenger(dbName) {
 
   async function relaySend(to, payload) {
     if (!API) return;
-    if (_isOffline) { _retryQueue.push({ to, payload, attempts: 0 }); _saveRetryQueue(); scheduleRetry(); registerBackgroundSync(); return; }
+    if (_isOffline) { if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, attempts: 0 }); _saveRetryQueue(); scheduleRetry(); } registerBackgroundSync(); return; }
     const msgTs = payload.ts;
     // Sealed Sender (preferred — Worker doesn't see sender)
     try {
@@ -5935,13 +5935,13 @@ async function initMessenger(dbName) {
       if (resp.status === 429) {
         const retryAfter = (parseInt(resp.headers.get('Retry-After') || '5') || 5) * MS.SEC;
         showToast(t('toastRateLimit') + ' ' + Math.ceil(retryAfter/MS.SEC) + 's', 'info');
-        setTimeout(() => { _retryQueue.unshift({ to, payload, attempts: 0 }); _saveRetryQueue(); scheduleRetry(); }, retryAfter);
+        setTimeout(() => { if (_retryQueue.length < 50) { _retryQueue.unshift({ to, payload, attempts: 0 }); _saveRetryQueue(); scheduleRetry(); } }, retryAfter);
         return;
       }
       throw new Error('relay-' + resp.status);
     } catch(e) {
       _dbg(e, 'relay-fail');
-      _retryQueue.push({ to, payload, attempts: 0 }); _saveRetryQueue();
+      if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, attempts: 0 }); _saveRetryQueue(); }
       scheduleRetry();
     }
   }
@@ -6276,7 +6276,9 @@ async function initMessenger(dbName) {
     checkRemoteWipe(); // v3.3: Check for remote wipe signal on startup
     // v3.3: Restore wallpaper from settings
     const savedWallpaper = localStorage.getItem('brz-wallpaper');
-    if (savedWallpaper) _DOM.get('msg-messages').style.background = savedWallpaper;
+    if (savedWallpaper && (/^#[0-9a-fA-F]{3,6}$/.test(savedWallpaper) || /^(?:linear|radial)-gradient\([^"'<>]*\)$/.test(savedWallpaper))) {
+      _DOM.get('msg-messages').style.background = savedWallpaper;
+    }
     renderAccountTabs();
     // Update account name in accounts list
     const accs = getAccounts();
