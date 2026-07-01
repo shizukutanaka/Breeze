@@ -6282,6 +6282,10 @@ async function initMessenger(dbName) {
         try { _mediaRecorder.stop(); } catch(e) { _dbg(e); }
       }
       if (_recTimer) { clearInterval(_recTimer); _recTimer = null; }
+      // End any active voice/video call to release camera/mic and close the peer connection
+      if (_callState && _callState !== 'idle') {
+        try { endCall(); } catch(e) { _dbg(e); }
+      }
       // Save unread count for cross-account badge
       try {
         const activeId = getActiveAccountId();
