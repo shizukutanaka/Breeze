@@ -8891,7 +8891,7 @@ async function initMessenger(dbName) {
           if (e.candidate.type === 'host' && e.candidate.address && !e.candidate.address.includes('.local')) return;
           if (_settings.relayOnly && (e.candidate.type === 'srflx' || e.candidate.type === 'prflx')) return;
           const room = 'call:' + [myId, contact.id].sort().join(':');
-          _wrapCallSignal(contact.pubB64, e.candidate).then(d => { if (d != null) _signal(room, 'call-ice', d); });
+          _wrapCallSignal(contact.pubB64, e.candidate).then(d => { if (d != null) _signal(room, 'call-ice', d); }).catch(err => _dbg(null, 'ICE signal wrap failed:', err?.message));
         }
       };
 
