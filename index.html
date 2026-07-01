@@ -12599,9 +12599,12 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       clearInput();
       const choice = await showConfirm(t('wipeTitle'), { okText: t('wipeBtn'), danger: true, desc: t('wipeDesc') });
       if (!choice) { showToast(t('toastCancelled'), 'info'); return; }
-      // Send remote wipe signal
+      // Send remote wipe signal to own inbox (wakes other devices)
       if (API && myId) {
         try { await postAPIRaw('/msg/send', { to: myId, from: myId, payload: '', ts: Date.now(), type: 'remote_wipe' }); } catch(e) { _dbg(e); }
+        // Delete server-side account data: prekeys, inbox, presence, push subscriptions
+        // This is best-effort; local wipe proceeds regardless of server response.
+        try { await postAPIRaw('/account/delete', { userId: myId }); } catch(e) { _dbg(e); }
       }
       // Local wipe
       try {
