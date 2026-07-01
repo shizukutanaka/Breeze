@@ -2756,7 +2756,10 @@ async function handleOGP(body, env, request) {
     await kvPut(env, cacheKey, JSON.stringify(result), { expirationTtl: 86400 });
 
     return json(result, 200, request);
-  } catch {
+  } catch(e) {
+    // Log for operator visibility (SSRF bypass attempts, network failures) without leaking
+    // the full URL or response body to the client — the response is always empty {}.
+    console.error('[OGP]', e?.message ?? e);
     return json({}, 200, request);
   }
 }
