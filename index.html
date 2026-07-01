@@ -9421,7 +9421,7 @@ async function initMessenger(dbName) {
         if (!group) { clearInterval(poll); return; }
 
         const oldCount = group.members?.length || 0;
-        const newMembers = data.members.map(m => ({ id: m.id, pubB64: m.pub, name: m.name }));
+        const newMembers = (data.members || []).slice(0, CONFIG.GROUP_MAX).map(m => ({ id: m.id, pubB64: m.pub, name: m.name }));
         if (newMembers.length > oldCount) {
           group.members = newMembers;
           await dbPut('contacts', group);
