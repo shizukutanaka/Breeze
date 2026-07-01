@@ -1871,6 +1871,7 @@ const _I = {
     toastJoinFail: 'Failed to join group',
     toastNoIdentityBackup: 'No identity to backup',
     toastInvalidBackup: 'Invalid backup file',
+    toastMsgTooLong: 'Message too long (max 64 KB)',
     toastRestoredReload: 'Restored! Reloading...',
     toastWrongPassphrase: 'Wrong passphrase or corrupted file',
     toastAliasNotFound: 'Alias not found',
@@ -2680,6 +2681,7 @@ const _I = {
     toastJoinFail: 'グループ参加に失敗しました',
     toastNoIdentityBackup: 'バックアップするIDがありません',
     toastInvalidBackup: '無効なバックアップファイル',
+    toastMsgTooLong: 'メッセージが長すぎます（最大64 KB）',
     toastRestoredReload: '復元完了！リロードします...',
     toastWrongPassphrase: 'パスフレーズが間違っているか、ファイルが破損しています',
     toastAliasNotFound: 'エイリアスが見つかりません',
@@ -8002,6 +8004,10 @@ async function initMessenger(dbName) {
     const input = _DOM.get('msg-input');
     const text = input.value.trim();
     if (!text) return;
+    // Hard cap: relay rejects payloads >256 KB and receiver drops text >64 KB.
+    // Enforcing here prevents a programmatic caller (quick-reply, speech-to-text, scheduled draft)
+    // from sending an oversized message that the peer would silently drop.
+    if (text.length > 65536) { showToast(t('toastMsgTooLong'), 'error'); _isSending = false; return; }
     _isSending = true;
     const sendBtn = _DOM.get('b-msg-send');
     if (sendBtn) { sendBtn.disabled = true; sendBtn.classList.add('op-half'); sendBtn.classList.add('pulse'); }
