@@ -9696,7 +9696,10 @@ async function initMessenger(dbName) {
             // Reject oversized emoji strings (DoS/storage guard — legitimate emoji ≤ ~30 UTF-16 chars)
             if (stored && typeof signal.emoji === 'string' && signal.emoji.length <= 64) {
               if (!stored.reactions) stored.reactions = {};
-              if (!stored.reactions[signal.emoji]) stored.reactions[signal.emoji] = [];
+              // Initialize reaction list for new emoji; cap unique emoji per message at 20
+              if (!stored.reactions[signal.emoji]) {
+                if (Object.keys(stored.reactions).length < 20) stored.reactions[signal.emoji] = [];
+              }
               // Use the verified sender identity from decryption, not the self-reported signal.userId
               const reactorId = (senderPub || '').slice(0, 12);
               if (signal.add) { if (!stored.reactions[signal.emoji].includes(reactorId)) stored.reactions[signal.emoji].push(reactorId); }
