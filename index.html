@@ -1607,6 +1607,14 @@ const _I = {
     ttClickToCopy: 'Click to copy',
     ttAttach: 'Attach',
     ttEmoji: 'Emoji',
+    emojiCatRecent: 'Recently used',
+    emojiCatSmileys: 'Smileys & Emotion',
+    emojiCatPeople: 'People & Gestures',
+    emojiCatAnimals: 'Animals & Nature',
+    emojiCatFood: 'Food & Drink',
+    emojiCatActivities: 'Activities',
+    emojiCatTravel: 'Travel & Places',
+    emojiCatSymbols: 'Symbols',
     ttClickToJump: 'Click to jump',
     ttDisappearsIn: (label) => 'Disappears in ' + label,
     ttVerified: 'Ed25519 verified',
@@ -2339,6 +2347,14 @@ const _I = {
     ttClickToCopy: 'クリックでコピー',
     ttAttach: '添付',
     ttEmoji: '絵文字',
+    emojiCatRecent: '最近使用',
+    emojiCatSmileys: '顔・感情',
+    emojiCatPeople: '人・ジェスチャー',
+    emojiCatAnimals: '動物・自然',
+    emojiCatFood: '食べ物・飲み物',
+    emojiCatActivities: 'アクティビティ',
+    emojiCatTravel: '旅行・場所',
+    emojiCatSymbols: 'シンボル',
     ttClickToJump: 'クリックでジャンプ',
     ttDisappearsIn: (label) => label + '後に消えます',
     ttVerified: 'Ed25519 検証済み',
@@ -3178,6 +3194,7 @@ function _dbg(e, ctx) { if (_DBG) console.warn('[Breeze]', ctx || '', e?.message
   banner.className = 'consent-banner';
   banner.setAttribute('role', 'dialog');
   banner.setAttribute('aria-label', t('consentTitle'));
+  banner.setAttribute('aria-modal', 'true');
   const _consentText = document.createElement('div');
   _consentText.className = 'text';
   _consentText.textContent = t('consentText') + ' ';
@@ -7143,6 +7160,7 @@ async function initMessenger(dbName) {
       cpBtn.className = 'msg-copy';
       cpBtn.textContent = '📋';
       cpBtn.title = t('copy');
+      cpBtn.setAttribute('aria-label', t('copy'));
       cpBtn.onclick = (ev) => { ev.stopPropagation(); navigator.clipboard?.writeText(text).then(() => { cpBtn.textContent = '✓'; setTimeout(() => { cpBtn.textContent = '📋'; }, MS.SEC); }).catch(() => {}); };
       d.appendChild(cpBtn);
     }
@@ -8160,6 +8178,7 @@ async function initMessenger(dbName) {
       '❤': ['❤','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❤‍🔥','❤‍🩹','❣','💕','💞','💓','💗','💖','💘','💝','💟','☮','✝','☪','🕉','☸','✡','🔯','🕎','☯','☦','🛐','⛎','♈','♉','♊','♋','♌','♍','♎','♏','♐','♑','♒','♓','🆔','⚛','🉑','☢','☣','📴','📳','🈶','🈚','🈸','🈺','🈷','✴','🆚','💮','🉐','㊙','㊗','🈴','🈵','🈹','🈲','🅰','🅱','🆎','🅾','🆑','🆘','❌','⭕','🛑','⛔','📛','🚫','💯','💢','♨','🚷','🚯','🚳','🚱','🔞','📵','🚭','❗','❕','❓','❔','‼','⁉','🔅','🔆','〽','⚠','🚸','🔱','⚜','🔰','♻','✅','🈯','💹','❇','✳','❎','🌐','💠','Ⓜ','🌀','💤','🏧','🚾','♿','🅿','🛗','🈳','🈂','🛂','🛃','🛄','🛅'],
     };
     const CAT_LABELS = ['😀','👋','🐶','🍎','⚽','🚗','❤'];
+    const CAT_ARIA = ['emojiCatSmileys','emojiCatPeople','emojiCatAnimals','emojiCatFood','emojiCatActivities','emojiCatTravel','emojiCatSymbols'];
     let recentEmojis = [];
     try { recentEmojis = JSON.parse(localStorage.getItem('brz-recent-emoji') || '[]'); } catch {}
 
@@ -8170,6 +8189,7 @@ async function initMessenger(dbName) {
       pickerEl.className = 'emoji-picker';
       pickerEl.setAttribute('role', 'dialog');
       pickerEl.setAttribute('aria-label', t('ttEmoji'));
+      pickerEl.setAttribute('aria-modal', 'true');
       let activeCategory = '😀';
 
       // Search
@@ -8185,13 +8205,16 @@ async function initMessenger(dbName) {
       tabs.className = 'emoji-picker-tabs';
       if (recentEmojis.length > 0) {
         const rb = document.createElement('button');
-        rb.textContent = '🕐'; rb.title = t('recent');
+        rb.textContent = '🕐'; rb.title = t('emojiCatRecent');
+        rb.setAttribute('aria-label', t('emojiCatRecent'));
         rb.onclick = () => renderGrid(recentEmojis, rb);
         tabs.appendChild(rb);
       }
-      CAT_LABELS.forEach(cat => {
+      CAT_LABELS.forEach((cat, i) => {
         const b = document.createElement('button');
         b.textContent = cat;
+        b.title = t(CAT_ARIA[i]);
+        b.setAttribute('aria-label', t(CAT_ARIA[i]));
         if (cat === activeCategory) b.classList.add('active');
         b.onclick = () => renderGrid(CATEGORIES[cat], b);
         tabs.appendChild(b);
