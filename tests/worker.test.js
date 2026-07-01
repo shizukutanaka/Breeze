@@ -4387,6 +4387,31 @@ describe('presence heartbeat and check', () => {
     const j = await r.json();
     expect(j.online['staleuser1']).toBe(false);
   });
+
+  it('PRESENCE_REQUIRE_AUTH: rejects heartbeat from unregistered userId', async () => {
+    globalThis._presenceVerified = new Map(); // fresh cache
+    const e = makeEnv({ PRESENCE_REQUIRE_AUTH: 'true' });
+    const res = await handlePresence({ id: 'unreg00001', pub: 'p', name: 'X' }, e, req({}));
+    expect(res.status).toBe(401);
+    expect((await res.json()).code).toBe('UNREGISTERED');
+  });
+
+  it('PRESENCE_REQUIRE_AUTH: allows heartbeat from registered userId (prekey in KV)', async () => {
+    globalThis._presenceVerified = new Map();
+    const e = makeEnv({ PRESENCE_REQUIRE_AUTH: 'true' });
+    await e.KV.put('prekey:reguser0001', JSON.stringify({ spkPub: 'x' }));
+    const res = await handlePresence({ id: 'reguser0001', pub: 'p', name: 'Reg' }, e, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).ok).toBe(true);
+  });
+
+  it('PRESENCE_REQUIRE_AUTH: check (read) path bypasses auth requirement', async () => {
+    const e = makeEnv({ PRESENCE_REQUIRE_AUTH: 'true' });
+    // Check should work even for an unregistered user (read-only path)
+    const res = await handlePresence({ id: 'unreg00002', check: true }, e, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).online).toBe(false);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

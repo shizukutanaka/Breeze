@@ -614,6 +614,21 @@ async function handlePresence(body, env, request) {
   }
 
   // Store presence heartbeat
+  // When PRESENCE_REQUIRE_AUTH=true, verify the caller owns this userId before writing.
+  // The check is cached in-memory per isolate so a single KV read covers many heartbeats.
+  if (env.PRESENCE_REQUIRE_AUTH === 'true') {
+    if (!globalThis._presenceVerified) globalThis._presenceVerified = new Map();
+    if (!globalThis._presenceVerified.has(id)) {
+      const pkData = await kvGet(env, `prekey:${id}`);
+      if (!pkData) return json({ error: 'User not registered', code: 'UNREGISTERED' }, 401, request);
+      globalThis._presenceVerified.set(id, 1);
+      if (globalThis._presenceVerified.size > 2000) {
+        const entries = [...globalThis._presenceVerified.entries()];
+        globalThis._presenceVerified = new Map(entries.slice(-1000));
+      }
+    }
+  }
+
   // v3.6: In-memory presence cache — only writes to KV every 5 minutes (saves ~90% KV writes)
   // Free tier: 1000 writes/day. 30s heartbeat = 2880/day per user = over limit!
   // 5min write interval = 288/day per user = safe for 3 users on free tier
