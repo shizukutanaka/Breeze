@@ -1424,6 +1424,7 @@ const _I = {
     // Actions
     send: 'Send', clear: 'Clear', copy: 'Copy', close: 'Close', later: 'Later', forward: 'Forward', open: 'Open',
     reply: 'Reply', edit: 'Edit', delete: 'Delete', forward: 'Forward', pin: 'Pin',
+    replyCountLabel: (n) => n + (n === 1 ? ' reply' : ' replies'),
     // Upgrade
     upgTitle: 'Upgrade Plan', upgCta: 'Get more accounts — plans from $0.99/mo',
     upgFile: (mb) => `This file is ${mb}MB (max 50MB).`,
@@ -2199,6 +2200,7 @@ const _I = {
     relay: 'リレー', online: 'オンライン',
     send: '送信', clear: 'クリア', copy: 'コピー', close: '閉じる', later: '後で', forward: '転送', open: '開く',
     reply: '返信', edit: '編集', delete: '削除', forward: '転送', pin: 'ピン',
+    replyCountLabel: (n) => n + '件の返信',
     upgTitle: 'プランアップグレード', upgCta: 'アカウント追加 — $0.99/月から',
     upgFile: (mb) => `このファイルは ${mb}MB です (最大50MB)。`,
     upgTurn: 'P2P直接接続に失敗しました。TURNリレーにフォールバックします。',
@@ -7171,7 +7173,7 @@ async function initMessenger(dbName) {
     else if (isMine) statusTitle = t('sent');
     const statusHtml = isMine ? `<span class="msg-status ${statusClass}" title="${statusTitle}"${meta.failed ? ' data-action="retry-msg"' : ''}>${statusIcon}</span>` : '';
     // v3.3: Reply count (how many messages quote this one)
-    const replyCountHtml = meta.replyCount > 0 ? `<span class="reply-count" data-action="reply-scroll" title="${meta.replyCount} replies">${meta.replyCount} 💬</span>` : '';
+    const replyCountHtml = meta.replyCount > 0 ? `<span class="reply-count" data-action="reply-scroll" title="${t('replyCountLabel', meta.replyCount)}">${meta.replyCount} 💬</span>` : '';
     safeSetHTML(d, content + editMark + sigMark + timerBadge + statusHtml + replyCountHtml + `<span class="ts" title="${fullDate}">${time}</span>` + reactionsHtml);
     _attachImgErrorHandlers(d);
     // v3.2: Copy text button (hover to show)
