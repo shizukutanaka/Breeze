@@ -9022,7 +9022,7 @@ async function initMessenger(dbName) {
       // Authenticate the offer before showing any ringing UI: when CALL_E2E_SIGNAL is ON a
       // forged/relay-injected offer fails to decrypt → null → silently ignored (no fake ring).
       const parsed = await _unwrapCallSignal(contact.pubB64, offerData);
-      if (!parsed) return;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
       _callContact = contact;
       _callState = 'ringing';
       showCallUI('ringing', contact.name, parsed.video);
@@ -9534,8 +9534,8 @@ async function initMessenger(dbName) {
           if (resp.ok) {
             const data = await resp.json();
             for (const msg of (data.messages || [])) {
+              try { await handleIncoming(msg); } catch(e) { _dbg(e, 'msg-process'); }
               if (msg.ts > _lastPollTs) _lastPollTs = msg.ts;
-              await handleIncoming(msg);
             }
           }
           const sResp = await postAPIRaw('/sealed/poll', { id: myId });
@@ -10329,6 +10329,7 @@ async function initMessenger(dbName) {
                   }
                 } catch(_e) { _dbg(_e, 'sdp-auth'); }
                 const description = JSON.parse(sdpJson);
+                if (!description || typeof description !== 'object' || Array.isArray(description)) continue;
                 // v3.6: Perfect Negotiation collision handling
                 const offerCollision = description.type === 'offer' && (makingOffer || pc.signalingState !== 'stable');
                 ignoreOffer = !polite && offerCollision;
