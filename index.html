@@ -11677,8 +11677,10 @@ async function initMessenger(dbName) {
         const existing = await dbGet('messages', msgId);
         if (existing) continue;
         await dbPut('messages', {
-          msgId, contactId: activeContact.id, text: m.text,
-          mine: isMine, ts: m.ts, senderName: isMine ? myName : m.sender,
+          msgId, contactId: activeContact.id,
+          text: typeof m.text === 'string' ? m.text.slice(0, CONFIG.MAX_MSG_LENGTH) : '',
+          mine: isMine, ts: m.ts,
+          senderName: isMine ? myName : (typeof m.sender === 'string' ? m.sender.slice(0, 64) : ''),
           imported: true
         });
         imported++;
