@@ -4135,7 +4135,9 @@ function getCryptoWorker() {
   if (!_cryptoWorker) {
     try {
       const blob = new Blob([_cryptoWorkerCode], { type: 'application/javascript' });
-      _cryptoWorker = new Worker(URL.createObjectURL(blob));
+      const _cwUrl = URL.createObjectURL(blob);
+      _cryptoWorker = new Worker(_cwUrl);
+      URL.revokeObjectURL(_cwUrl); // Worker has started loading; safe to release the blob URL
       _cryptoWorker.onmessage = (e) => {
         const { id, result, error } = e.data;
         const p = _cwPending[id];
@@ -8141,7 +8143,9 @@ async function initMessenger(dbName) {
       const img = document.createElement('img');
       img.decoding = 'async';
       img.src = URL.createObjectURL(file);
-      img.onload = () => URL.revokeObjectURL(img.src);
+      const _revoke = () => URL.revokeObjectURL(img.src);
+      img.onload = _revoke;
+      img.onerror = _revoke;
       preview.appendChild(img);
     }
     const info = document.createElement('div');
@@ -8764,7 +8768,7 @@ async function initMessenger(dbName) {
       _DOM.get('msg-sidebar')?.classList.remove('hidden');
       _DOM.get('b-msg-back')?.classList.add('hidden');
     }
-  });
+  }, { signal: _ac.signal });
 
   // Clear conversation
   _DOM.get('b-msg-clear')?.addEventListener('click', async () => {
@@ -8855,7 +8859,7 @@ async function initMessenger(dbName) {
   // Re-acquire wake lock when tab becomes visible again (auto-released on hide)
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && _callState !== 'idle') acquireWakeLock();
-  });
+  }, { signal: _ac.signal });
 
   async function startCall(contact, withVideo) {
     if (_callState !== 'idle' || !contact || contact.isGroup) return;
@@ -10275,7 +10279,7 @@ async function initMessenger(dbName) {
     if (document.hidden && localStorage.getItem('brz-lock-hash') && localStorage.getItem('brz-autolock') === '1') {
       showLockScreen();
     }
-  });
+  }, { signal: _ac.signal });
 
   // v3.6: Idle auto-lock — lock after N minutes of NO interaction (opt-in: /lock idle <min>).
   // Complements /lock auto, which only fires on tab hide; this covers a device left
@@ -10833,10 +10837,10 @@ async function initMessenger(dbName) {
     if (_panicTaps >= 5) { executePanic(); return; }
     clearTimeout(_panicTimer);
     _panicTimer = setTimeout(() => { _panicTaps = 0; }, CONFIG.DEBOUNCE_MS);
-  }, { passive: true });
+  }, { passive: true, signal: _ac.signal });
   document.addEventListener('keydown', (e) => {
     if (e.ctrlKey && e.shiftKey && e.key === 'Backspace') { e.preventDefault(); executePanic(); }
-  });
+  }, { signal: _ac.signal });
 
   async function executePanic() {
     safeSetHTML(document.body, '<div class="i-fullscreen"></div>');
@@ -10878,7 +10882,7 @@ async function initMessenger(dbName) {
       document.body.appendChild(overlay);
       document.addEventListener('keydown', function h(ev) { if (ev.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', h); } }, { once: true });
     }
-  });
+  }, { signal: _ac.signal });
   // ================================================================
   // v1 INTEGRATION: Typing Indicator + Read Receipts
   // ================================================================
@@ -11367,7 +11371,7 @@ async function initMessenger(dbName) {
     // Backup/Restore
     if (e.target.closest('[data-action="backup"]')) { createCloudBackup(); return; }
     if (e.target.closest('[data-action="restore"]')) { restoreCloudBackup(); return; }
-  });
+  }, { signal: _ac.signal });
   window.toggleCompact = function() {
     document.body.classList.toggle('compact');
     try { localStorage.setItem('brz-compact', document.body.classList.contains('compact') ? '1' : '0'); } catch(e) { _dbg(e, 'compact-save'); }
