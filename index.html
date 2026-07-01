@@ -1923,6 +1923,10 @@ const _I = {
     netCompression: (n) => `  Compression: > ${n} bytes`,
     netProtocol: (v) => `  Protocol: v${v}`,
     netTURN: '  TURN: configured',
+    connDirect: 'Direct',
+    connSTUN: 'STUN',
+    connTURN: 'TURN',
+    connTURNRelay: 'TURN (relay-only)',
     netBrowser: 'Browser:',
     netOnline: (ok) => `  Online: ${ok ? 'yes' : 'NO'}`,
     netConnectionInfo: (type, eff) => `  Connection: ${type} (effective: ${eff})`,
@@ -2672,6 +2676,10 @@ const _I = {
     netCompression: (n) => `  圧縮: > ${n} バイト`,
     netProtocol: (v) => `  プロトコル: v${v}`,
     netTURN: '  TURN: 設定済み',
+    connDirect: '直接',
+    connSTUN: 'STUN',
+    connTURN: 'TURN',
+    connTURNRelay: 'TURN (リレー専用)',
     netBrowser: 'ブラウザ:',
     netOnline: (ok) => `  オンライン: ${ok ? 'はい' : 'NO'}`,
     netConnectionInfo: (type, eff) => `  接続: ${type} (実効: ${eff})`,
@@ -7763,7 +7771,7 @@ async function initMessenger(dbName) {
         const isTurn = localType === 'relay';
         const isRelayOnly = _settings.relayOnly;
         const icon = isTurn ? '🟡' : '🟢';
-        const label = isRelayOnly ? 'TURN (relay-only)' : isTurn ? 'TURN' : (localType === 'srflx' ? 'STUN' : 'Direct');
+        const label = isRelayOnly ? t('connTURNRelay') : isTurn ? t('connTURN') : (localType === 'srflx' ? t('connSTUN') : t('connDirect'));
         const rttQ = rtt > 300 ? '🔴' : rtt > 100 ? '🟡' : '';
         el.textContent = `${icon} P2P ${label}${rtt ? ' · ' + rttQ + rtt + 'ms' : ''}`;
         el.title = `${label} (${proto}) RTT: ${rtt}ms`;
