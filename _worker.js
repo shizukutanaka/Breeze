@@ -1128,6 +1128,11 @@ async function handleGroupJoin(body, env, request) {
   if (!token || !memberId || !memberPub) return json({ error: 'token, memberId, memberPub required', code: 'MISSING_FIELDS' }, 400, request);
   if (typeof token !== 'string' || token.length > 128 || !/^[a-z0-9]+$/.test(token) || !/^[a-z0-9]+$/.test(token)) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(memberId)) return json({ error: 'invalid memberId', code: 'INVALID_USER_ID' }, 400, request);
+  // Ownership proof: memberId = memberPub.slice(0,12), so pub must start with the claimed id.
+  // Without this, any invite holder could join/update under a different user's memberId, hijacking
+  // that member's pub key slot and capturing messages encrypted to them.
+  if (!memberPub.startsWith(memberId))
+    return json({ error: 'memberPub does not match memberId', code: 'KEY_MISMATCH' }, 400, request);
 
   const data = await kvGet(env, `grp:${token}`);
   if (!data) return json({ error: 'Invite link expired or invalid', code: 'EXPIRED' }, 404, request);
@@ -2078,6 +2083,10 @@ async function handlePreKeyUpload(body, env, request) {
   // which breaks every client that tries to use it as a string (e.g. base64 decode).
   if (typeof identityKey !== 'string' || typeof signedPreKey !== 'string')
     return json({ error: 'identityKey/signedPreKey must be strings', code: 'INVALID_TYPE' }, 400, request);
+  // Ownership proof: userId = pubB64.slice(0,12), so identityKey must start with userId.
+  // Prevents any invite/token holder from registering keys under another user's identifier.
+  if (!identityKey.startsWith(userId))
+    return json({ error: 'identityKey does not match userId', code: 'KEY_MISMATCH' }, 400, request);
   if (edIdentityKey !== undefined && typeof edIdentityKey !== 'string')
     return json({ error: 'edIdentityKey must be a string', code: 'INVALID_TYPE' }, 400, request);
   if (signedPreKeySig !== undefined && typeof signedPreKeySig !== 'string')
@@ -2357,8 +2366,8 @@ async function hmacVerifyFrank(commitmentB64, openingB64, message) {
 async function handleAbuseRecord(body, env, request) {
   const { frankId, commitment } = body;
   if (!frankId || !commitment) return json({ error: 'frankId and commitment required', code: 'MISSING_FIELDS' }, 400, request);
-  if (typeof frankId !== 'string' || frankId.length > 128) return json({ error: 'invalid frankId', code: 'INVALID_FIELD' }, 400, request);
-  if (typeof commitment !== 'string' || commitment.length > 128) return json({ error: 'invalid commitment', code: 'INVALID_FIELD' }, 400, request);
+  if (typeof frankId !== 'string' || frankId.length > 128 || !/^[A-Za-z0-9+/=_-]+$/.test(frankId)) return json({ error: 'invalid frankId', code: 'INVALID_FIELD' }, 400, request);
+  if (typeof commitment !== 'string' || commitment.length > 128 || !/^[A-Za-z0-9+/=]+$/.test(commitment)) return json({ error: 'invalid commitment', code: 'INVALID_FIELD' }, 400, request);
   // Do not overwrite an existing commitment (a frankId binds one message).
   if (await kvGet(env, `frank:${frankId}`)) return json({ ok: true, existing: true }, 200, request);
   // Propagate a write failure: a silently-dropped commitment makes the message
@@ -2373,9 +2382,10 @@ async function handleAbuseRecord(body, env, request) {
 async function handleAbuseReport(body, env, request) {
   const { frankId, message, opening } = body;
   if (!frankId || typeof message !== 'string' || !opening) return json({ error: 'frankId, message, opening required', code: 'MISSING_FIELDS' }, 400, request);
-  if (typeof frankId !== 'string' || frankId.length > 128) return json({ error: 'invalid frankId', code: 'INVALID_FIELD' }, 400, request);
+  if (typeof frankId !== 'string' || frankId.length > 128 || !/^[A-Za-z0-9+/=_-]+$/.test(frankId)) return json({ error: 'invalid frankId', code: 'INVALID_FIELD' }, 400, request);
   if (message.length > 256 * 1024) return json({ error: 'message too large', code: 'MSG_TOO_LARGE' }, 400, request);
   // HMAC opening key is 32 bytes (base64 = 44 chars); 128 chars is generous.
+  // Do NOT add a base64 regex here — malformed base64 must reach hmacVerifyFrank (try/catch → false → FRANK_MISMATCH).
   if (typeof opening !== 'string' || opening.length > 128) return json({ error: 'invalid opening', code: 'INVALID_OPENING' }, 400, request);
   const commitment = await kvGet(env, `frank:${frankId}`);
   if (!commitment) return json({ error: 'No such franking record', code: 'NOT_FOUND' }, 404, request);

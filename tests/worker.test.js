@@ -238,7 +238,7 @@ describe('prekey upload + fetch (OTP consumption)', () => {
   it('consumes exactly one one-time prekey per fetch and decrements the count', async () => {
     const env = makeEnv();
     const up = await handlePreKeyUpload(
-      { userId: 'alice0001', identityKey: 'IK', signedPreKey: 'SPK', signedPreKeySig: 'SIG', oneTimePreKeys: ['o0', 'o1', 'o2'] },
+      { userId: 'alice0001', identityKey: 'alice0001IK', signedPreKey: 'SPK', signedPreKeySig: 'SIG', oneTimePreKeys: ['o0', 'o1', 'o2'] },
       env, apiRequest('/api/prekey/upload', {}),
     );
     expect(up.status).toBe(200);
@@ -246,7 +246,7 @@ describe('prekey upload + fetch (OTP consumption)', () => {
 
     const res1 = await handlePreKeyFetch({ userId: 'alice0001' }, env, apiRequest('/api/prekey/fetch', {}));
     const b1 = await res1.json();
-    expect(b1.identityKey).toBe('IK');
+    expect(b1.identityKey).toBe('alice0001IK');
     expect(b1.oneTimePreKey).toBeDefined();
     // The consumed index must be returned so the X3DH v5 initiator can echo it (opkId)
     // and the responder can select the matching OTP private key.
@@ -258,7 +258,7 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     // The bundle is still returned (200) but without an OTP.
     const res2Same = await handlePreKeyFetch({ userId: 'alice0001' }, env, apiRequest('/api/prekey/fetch', {}));
     const b2Same = await res2Same.json();
-    expect(b2Same.identityKey).toBe('IK'); // bundle still returned
+    expect(b2Same.identityKey).toBe('alice0001IK'); // bundle still returned
     expect(b2Same.oneTimePreKey).toBeUndefined(); // no OTP consumed (same IP)
     expect(await env.KV.get('prekey:otp:alice0001:count')).toBe('2'); // unchanged
 
@@ -279,7 +279,7 @@ describe('prekey upload + fetch (OTP consumption)', () => {
   it('sets replenishOTP when OTP count drops to 5 or below', async () => {
     const env = makeEnv();
     await handlePreKeyUpload(
-      { userId: 'low00001', identityKey: 'IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0', 'o1', 'o2', 'o3', 'o4', 'o5'] },
+      { userId: 'low00001', identityKey: 'low00001IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0', 'o1', 'o2', 'o3', 'o4', 'o5'] },
       env, apiRequest('/api/prekey/upload', {}),
     );
     // Consume down to count=5 (should set replenishOTP flag on the 6th fetch).
@@ -292,7 +292,7 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     // knows to generate and upload one-time prekeys on its next connection.
     const env = makeEnv();
     await handlePreKeyUpload(
-      { userId: 'noOTP001', identityKey: 'IK', signedPreKey: 'SPK' }, // no oneTimePreKeys
+      { userId: 'noOTP001', identityKey: 'noOTP001IK', signedPreKey: 'SPK' }, // no oneTimePreKeys
       env, apiRequest('/api/prekey/upload', {}),
     );
     const res = await handlePreKeyFetch({ userId: 'noOTP001' }, env, apiRequest('/api/prekey/fetch', {}));
@@ -328,7 +328,7 @@ describe('prekey upload + fetch (OTP consumption)', () => {
   it('does not set replenishSPK for a recently uploaded bundle', async () => {
     const env = makeEnv();
     await handlePreKeyUpload(
-      { userId: 'freshusr1', identityKey: 'IK', signedPreKey: 'SPK' },
+      { userId: 'freshusr1', identityKey: 'freshusr1IK', signedPreKey: 'SPK' },
       env, apiRequest('/api/prekey/upload', {}),
     );
     const res = await handlePreKeyFetch({ userId: 'freshusr1' }, env, apiRequest('/api/prekey/fetch', {}));
@@ -353,7 +353,7 @@ describe('prekey upload + fetch (OTP consumption)', () => {
 
   it('rejects oversized identityKey (KV inflation guard)', async () => {
     const res = await handlePreKeyUpload(
-      { userId: 'sizetest1', identityKey: 'x'.repeat(5001), signedPreKey: 'SPK' },
+      { userId: 'sizetest1', identityKey: 'sizetest1' + 'x'.repeat(4992), signedPreKey: 'SPK' },
       makeEnv(), apiRequest('/api/prekey/upload', {})
     );
     expect(res.status).toBe(400);
@@ -362,7 +362,7 @@ describe('prekey upload + fetch (OTP consumption)', () => {
 
   it('rejects oversized signedPreKey (KV inflation guard)', async () => {
     const res = await handlePreKeyUpload(
-      { userId: 'sizetest2', identityKey: 'IK', signedPreKey: 'x'.repeat(5001) },
+      { userId: 'sizetest2', identityKey: 'sizetest2IK', signedPreKey: 'x'.repeat(5001) },
       makeEnv(), apiRequest('/api/prekey/upload', {})
     );
     expect(res.status).toBe(400);
@@ -371,7 +371,7 @@ describe('prekey upload + fetch (OTP consumption)', () => {
 
   it('rejects oversized edIdentityKey (KV inflation guard)', async () => {
     const res = await handlePreKeyUpload(
-      { userId: 'sizetest3', identityKey: 'IK', signedPreKey: 'SPK', edIdentityKey: 'x'.repeat(501) },
+      { userId: 'sizetest3', identityKey: 'sizetest3IK', signedPreKey: 'SPK', edIdentityKey: 'x'.repeat(501) },
       makeEnv(), apiRequest('/api/prekey/upload', {})
     );
     expect(res.status).toBe(400);
@@ -380,7 +380,7 @@ describe('prekey upload + fetch (OTP consumption)', () => {
 
   it('rejects oversized signedPreKeySig (KV inflation guard)', async () => {
     const res = await handlePreKeyUpload(
-      { userId: 'sizetest4', identityKey: 'IK', signedPreKey: 'SPK', signedPreKeySig: 'x'.repeat(501) },
+      { userId: 'sizetest4', identityKey: 'sizetest4IK', signedPreKey: 'SPK', signedPreKeySig: 'x'.repeat(501) },
       makeEnv(), apiRequest('/api/prekey/upload', {})
     );
     expect(res.status).toBe(400);
@@ -399,7 +399,7 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     expect((await r1.json()).code).toBe('INVALID_TYPE');
 
     const r2 = await handlePreKeyUpload(
-      { userId: 'typgrd002', identityKey: 'IK', signedPreKey: ['S', 'P', 'K'] },
+      { userId: 'typgrd002', identityKey: 'typgrd002IK', signedPreKey: ['S', 'P', 'K'] },
       e, apiRequest('/api/prekey/upload', {}),
     );
     expect(r2.status).toBe(400);
@@ -409,14 +409,14 @@ describe('prekey upload + fetch (OTP consumption)', () => {
   it('rejects non-string edIdentityKey or signedPreKeySig when present (type guard)', async () => {
     const e = makeEnv();
     const r1 = await handlePreKeyUpload(
-      { userId: 'typgrd003', identityKey: 'IK', signedPreKey: 'SPK', edIdentityKey: 42 },
+      { userId: 'typgrd003', identityKey: 'typgrd003IK', signedPreKey: 'SPK', edIdentityKey: 42 },
       e, apiRequest('/api/prekey/upload', {}),
     );
     expect(r1.status).toBe(400);
     expect((await r1.json()).code).toBe('INVALID_TYPE');
 
     const r2 = await handlePreKeyUpload(
-      { userId: 'typgrd004', identityKey: 'IK', signedPreKey: 'SPK', signedPreKeySig: { sig: 'x' } },
+      { userId: 'typgrd004', identityKey: 'typgrd004IK', signedPreKey: 'SPK', signedPreKeySig: { sig: 'x' } },
       e, apiRequest('/api/prekey/upload', {}),
     );
     expect(r2.status).toBe(400);
@@ -427,14 +427,14 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     const env = makeEnv();
     const uid = 'corruptotp1'; // ≥8 chars, passes validateUserId
     // Upload a valid bundle without OTPs.
-    await handlePreKeyUpload({ userId: uid, identityKey: 'IK', signedPreKey: 'SPK' }, env, apiRequest('/api/prekey/upload', {}));
+    await handlePreKeyUpload({ userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK' }, env, apiRequest('/api/prekey/upload', {}));
     // Manually plant one corrupt OTP entry (simulates a KV corruption event).
     await env.KV.put(`prekey:otp:${uid}:0`, '{corrupt json');
     await env.KV.put(`prekey:otp:${uid}:count`, '1');
     const res = await handlePreKeyFetch({ userId: uid }, env, apiRequest('/api/prekey/fetch', {}));
     expect(res.status).toBe(200);
     const bundle = await res.json();
-    expect(bundle.identityKey).toBe('IK');
+    expect(bundle.identityKey).toBe(uid + 'IK');
     // Corrupt OTP was consumed (deleted) but must not be attached to the bundle.
     expect(bundle.oneTimePreKey).toBeUndefined();
   });
@@ -446,7 +446,7 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     const uid = 'otptypgrd1';
     // Upload array with non-string entries interspersed with valid keys.
     await handlePreKeyUpload(
-      { userId: uid, identityKey: 'IK', signedPreKey: 'SPK',
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK',
         oneTimePreKeys: ['key0', null, 'key2', 42, 'key4'] },
       env, apiRequest('/api/prekey/upload', {})
     );
@@ -468,7 +468,7 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     const env = makeEnv();
     const uid = 'otptypgrd2';
     await handlePreKeyUpload(
-      { userId: uid, identityKey: 'IK', signedPreKey: 'SPK',
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK',
         oneTimePreKeys: [null, 42, { a: 1 }] },
       env, apiRequest('/api/prekey/upload', {})
     );
@@ -488,7 +488,7 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     const env = makeEnv();
     const uid = 'otpdelfail';
     await handlePreKeyUpload(
-      { userId: uid, identityKey: 'IK', signedPreKey: 'SPK', oneTimePreKeys: ['otp-secret'] },
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK', oneTimePreKeys: ['otp-secret'] },
       env, apiRequest('/api/prekey/upload', {})
     );
     // Inject a failing delete (simulates transient KV error)
@@ -514,7 +514,7 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     it('same source IP cannot consume a second OTP for the same target within 24 h', async () => {
       const env = makeEnv();
       await handlePreKeyUpload(
-        { userId: 'drainusr1', identityKey: 'IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0', 'o1'] },
+        { userId: 'drainusr1', identityKey: 'drainusr1IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0', 'o1'] },
         env, apiRequest('/api/prekey/upload', {}),
       );
       // First fetch from IP A: should consume an OTP.
@@ -533,7 +533,7 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     it('different source IPs each consume one OTP independently (legitimate multi-user contact)', async () => {
       const env = makeEnv();
       await handlePreKeyUpload(
-        { userId: 'drainusr2', identityKey: 'IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0', 'o1'] },
+        { userId: 'drainusr2', identityKey: 'drainusr2IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0', 'o1'] },
         env, apiRequest('/api/prekey/upload', {}),
       );
       const rA = await handlePreKeyFetch(
@@ -555,7 +555,7 @@ describe('prekey upload + fetch (OTP consumption)', () => {
       // We simulate "no lock" by directly deleting the lock key after the first fetch.
       const env = makeEnv();
       await handlePreKeyUpload(
-        { userId: 'drainusr3', identityKey: 'IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0', 'o1'] },
+        { userId: 'drainusr3', identityKey: 'drainusr3IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0', 'o1'] },
         env, apiRequest('/api/prekey/upload', {}),
       );
       const r1 = await handlePreKeyFetch({ userId: 'drainusr3' }, env, apiRequest('/api/prekey/fetch', {}));
@@ -580,7 +580,7 @@ describe('prekey key-history audit log (I11 precursor)', () => {
   it('records an IK hash on first upload and returns it on fetch', async () => {
     const env = makeEnv();
     await handlePreKeyUpload(
-      { userId: 'hist0001', identityKey: 'IK-A', signedPreKey: 'SPK' },
+      { userId: 'hist0001', identityKey: 'hist0001IK-A', signedPreKey: 'SPK' },
       env, apiRequest('/api/prekey/upload', {}),
     );
     const res = await handlePreKeyFetch({ userId: 'hist0001' }, env, apiRequest('/api/prekey/fetch', {}));
@@ -596,8 +596,8 @@ describe('prekey key-history audit log (I11 precursor)', () => {
       { userId: 'hist0002', identityKey: ik, signedPreKey: 'SPK' },
       env, apiRequest('/api/prekey/upload', {}),
     );
-    await upload('IK-original');
-    await upload('IK-changed'); // key rollover
+    await upload('hist0002IK-original');
+    await upload('hist0002IK-changed'); // key rollover
     const res = await handlePreKeyFetch({ userId: 'hist0002' }, env, apiRequest('/api/prekey/fetch', {}));
     const bundle = await res.json();
     expect(bundle.keyHistory.length).toBe(2);
@@ -608,7 +608,7 @@ describe('prekey key-history audit log (I11 precursor)', () => {
   it('does not duplicate an entry when uploading the same IK again', async () => {
     const env = makeEnv();
     const upload = () => handlePreKeyUpload(
-      { userId: 'hist0003', identityKey: 'IK-stable', signedPreKey: 'SPK' },
+      { userId: 'hist0003', identityKey: 'hist0003IK-stable', signedPreKey: 'SPK' },
       env, apiRequest('/api/prekey/upload', {}),
     );
     await upload();
@@ -622,7 +622,7 @@ describe('prekey key-history audit log (I11 precursor)', () => {
     const env = makeEnv();
     for (let i = 0; i < 15; i++) {
       await handlePreKeyUpload(
-        { userId: 'hist0004', identityKey: `IK-${i}`, signedPreKey: 'SPK' },
+        { userId: 'hist0004', identityKey: `hist0004IK-${i}`, signedPreKey: 'SPK' },
         env, apiRequest('/api/prekey/upload', {}),
       );
     }
@@ -634,7 +634,7 @@ describe('prekey key-history audit log (I11 precursor)', () => {
     // The worker computes c = SHA-256(prevC ‖ h) and stores it on each entry.
     const env = makeEnv();
     await handlePreKeyUpload(
-      { userId: 'chain001', identityKey: 'IK-1', signedPreKey: 'SPK' },
+      { userId: 'chain001', identityKey: 'chain001IK-1', signedPreKey: 'SPK' },
       env, apiRequest('/api/prekey/upload', {}),
     );
     const b1 = await (await handlePreKeyFetch({ userId: 'chain001' }, env, apiRequest('/api/prekey/fetch', {}))).json();
@@ -648,11 +648,11 @@ describe('prekey key-history audit log (I11 precursor)', () => {
     const { verifyChain } = await import('../src/crypto/ktlog.js');
     const env = makeEnv();
     await handlePreKeyUpload(
-      { userId: 'chain002', identityKey: 'IK-A', signedPreKey: 'SPK' },
+      { userId: 'chain002', identityKey: 'chain002IK-A', signedPreKey: 'SPK' },
       env, apiRequest('/api/prekey/upload', {}),
     );
     await handlePreKeyUpload(
-      { userId: 'chain002', identityKey: 'IK-B', signedPreKey: 'SPK' },
+      { userId: 'chain002', identityKey: 'chain002IK-B', signedPreKey: 'SPK' },
       env, apiRequest('/api/prekey/upload', {}),
     );
     const bundle = await (await handlePreKeyFetch({ userId: 'chain002' }, env, apiRequest('/api/prekey/fetch', {}))).json();
@@ -665,11 +665,11 @@ describe('prekey key-history audit log (I11 precursor)', () => {
     const { verifyChain } = await import('../src/crypto/ktlog.js');
     const env = makeEnv();
     await handlePreKeyUpload(
-      { userId: 'chain003', identityKey: 'IK-X', signedPreKey: 'SPK' },
+      { userId: 'chain003', identityKey: 'chain003IK-X', signedPreKey: 'SPK' },
       env, apiRequest('/api/prekey/upload', {}),
     );
     await handlePreKeyUpload(
-      { userId: 'chain003', identityKey: 'IK-Y', signedPreKey: 'SPK' },
+      { userId: 'chain003', identityKey: 'chain003IK-Y', signedPreKey: 'SPK' },
       env, apiRequest('/api/prekey/upload', {}),
     );
     const bundle = await (await handlePreKeyFetch({ userId: 'chain003' }, env, apiRequest('/api/prekey/fetch', {}))).json();
@@ -689,7 +689,7 @@ describe('prekey signed-prekey signature verification (I1/G2)', () => {
     const spk = crypto.getRandomValues(new Uint8Array(32)); // raw SPK public bytes
     const sig = new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, spk));
     return {
-      userId, identityKey: 'IKx25519',
+      userId, identityKey: userId + 'IKx25519',
       edIdentityKey: toB64(edPub), signedPreKey: toB64(spk), signedPreKeySig: toB64(sig),
       ed, spk,
     };
@@ -719,7 +719,7 @@ describe('prekey signed-prekey signature verification (I1/G2)', () => {
   it('still accepts a legacy unsigned bundle (v4 transition)', async () => {
     const env = makeEnv();
     const up = await handlePreKeyUpload(
-      { userId: 'legacy001', identityKey: 'IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0'] },
+      { userId: 'legacy001', identityKey: 'legacy001IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0'] },
       env, apiRequest('/api/prekey/upload', {}),
     );
     expect(up.status).toBe(200);
@@ -731,7 +731,7 @@ describe('prekey signed-prekey signature verification (I1/G2)', () => {
     const env = makeEnv();
     const caps = ['x3dh-v5', 'group-v5', 'franking'];
     await handlePreKeyUpload(
-      { userId: 'v5user01', identityKey: 'IK', signedPreKey: 'SPK', caps },
+      { userId: 'v5user01', identityKey: 'v5user01IK', signedPreKey: 'SPK', caps },
       env, apiRequest('/api/prekey/upload', {}),
     );
     const res = await handlePreKeyFetch({ userId: 'v5user01' }, env, apiRequest('/api/prekey/fetch', {}));
@@ -744,7 +744,7 @@ describe('prekey signed-prekey signature verification (I1/G2)', () => {
     const longCap = 'x'.repeat(100); // exceeds 32-char cap
     const manyCaps = Array.from({ length: 25 }, (_, i) => `cap-${i}`); // exceeds 20-entry cap
     await handlePreKeyUpload(
-      { userId: 'v5user02', identityKey: 'IK', signedPreKey: 'SPK', caps: [longCap, ...manyCaps] },
+      { userId: 'v5user02', identityKey: 'v5user02IK', signedPreKey: 'SPK', caps: [longCap, ...manyCaps] },
       env, apiRequest('/api/prekey/upload', {}),
     );
     const bundle = await (await handlePreKeyFetch({ userId: 'v5user02' }, env, apiRequest('/api/prekey/fetch', {}))).json();
@@ -758,7 +758,7 @@ describe('prekey signed-prekey signature verification (I1/G2)', () => {
     // understand x3dh but not caps.
     const env = makeEnv();
     await handlePreKeyUpload(
-      { userId: 'v5user03', identityKey: 'IK', signedPreKey: 'SPK', caps: ['x3dh-v5'], x3dh: 'v5' },
+      { userId: 'v5user03', identityKey: 'v5user03IK', signedPreKey: 'SPK', caps: ['x3dh-v5'], x3dh: 'v5' },
       env, apiRequest('/api/prekey/upload', {}),
     );
     const bundle = await (await handlePreKeyFetch({ userId: 'v5user03' }, env, apiRequest('/api/prekey/fetch', {}))).json();
@@ -769,7 +769,7 @@ describe('prekey signed-prekey signature verification (I1/G2)', () => {
   it('x3dh field is capped at 4 chars to prevent oversized storage', async () => {
     const env = makeEnv();
     await handlePreKeyUpload(
-      { userId: 'v5user04', identityKey: 'IK', signedPreKey: 'SPK', x3dh: 'malicious-extra-long-value' },
+      { userId: 'v5user04', identityKey: 'v5user04IK', signedPreKey: 'SPK', x3dh: 'malicious-extra-long-value' },
       env, apiRequest('/api/prekey/upload', {}),
     );
     const bundle = await (await handlePreKeyFetch({ userId: 'v5user04' }, env, apiRequest('/api/prekey/fetch', {}))).json();
@@ -782,13 +782,13 @@ describe('batch prekey fetch (/api/prekey/fetch/batch)', () => {
 
   it('resolves multiple bundles in one call; unknown users map to null', async () => {
     const env = makeEnv();
-    await handlePreKeyUpload({ userId: 'batchpk01', identityKey: 'IK1', signedPreKey: 'SPK1' }, env, req);
-    await handlePreKeyUpload({ userId: 'batchpk02', identityKey: 'IK2', signedPreKey: 'SPK2' }, env, req);
+    await handlePreKeyUpload({ userId: 'batchpk01', identityKey: 'batchpk01IK1', signedPreKey: 'SPK1' }, env, req);
+    await handlePreKeyUpload({ userId: 'batchpk02', identityKey: 'batchpk02IK2', signedPreKey: 'SPK2' }, env, req);
     const res = await handlePreKeyFetchBatch({ userIds: ['batchpk01', 'batchpk02', 'nobody001'] }, env, req);
     expect(res.status).toBe(200);
     const j = await res.json();
-    expect(j.results['batchpk01'].identityKey).toBe('IK1');
-    expect(j.results['batchpk02'].identityKey).toBe('IK2');
+    expect(j.results['batchpk01'].identityKey).toBe('batchpk01IK1');
+    expect(j.results['batchpk02'].identityKey).toBe('batchpk02IK2');
     expect(j.results['nobody001']).toBeNull();
   });
 
@@ -797,7 +797,7 @@ describe('batch prekey fetch (/api/prekey/fetch/batch)', () => {
     // Register 12 distinct users
     for (let i = 1; i <= 12; i++) {
       const id = `batchi${String(i).padStart(3, '0')}`;
-      await handlePreKeyUpload({ userId: id, identityKey: `IK${i}`, signedPreKey: `SPK${i}` }, env, req);
+      await handlePreKeyUpload({ userId: id, identityKey: `${id}IK${i}`, signedPreKey: `SPK${i}` }, env, req);
     }
     const ids = Array.from({ length: 12 }, (_, i) => `batchi${String(i + 1).padStart(3, '0')}`);
     // Also include a duplicate
@@ -823,7 +823,7 @@ describe('prekey status — non-destructive OTP/SPK health check (/api/prekey/st
   it('returns otpCount, uploadedAt, and replenish flags without consuming an OTP', async () => {
     const env = makeEnv();
     await handlePreKeyUpload(
-      { userId: 'pkstat01', identityKey: 'IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0', 'o1', 'o2', 'o3', 'o4', 'o5', 'o6', 'o7'] },
+      { userId: 'pkstat01', identityKey: 'pkstat01IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0', 'o1', 'o2', 'o3', 'o4', 'o5', 'o6', 'o7'] },
       env, req,
     );
     const res = await handlePreKeyStatus({ userId: 'pkstat01' }, env, req);
@@ -841,7 +841,7 @@ describe('prekey status — non-destructive OTP/SPK health check (/api/prekey/st
   it('sets replenishOTP: true when OTP count is ≤ 5', async () => {
     const env = makeEnv();
     await handlePreKeyUpload(
-      { userId: 'pkstat02', identityKey: 'IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0', 'o1', 'o2'] },
+      { userId: 'pkstat02', identityKey: 'pkstat02IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0', 'o1', 'o2'] },
       env, req,
     );
     const j = await (await handlePreKeyStatus({ userId: 'pkstat02' }, env, req)).json();
@@ -897,7 +897,7 @@ describe('key-transparency log — standalone get endpoint (/api/ktlog/get)', ()
   it('returns the key history log after a prekey upload', async () => {
     const env = makeEnv();
     await handlePreKeyUpload(
-      { userId: 'ktuser01', identityKey: 'IK', signedPreKey: 'SPK' },
+      { userId: 'ktuser01', identityKey: 'ktuser01IK', signedPreKey: 'SPK' },
       env, apiRequest('/api/prekey/upload', {}),
     );
     const res = await handleKtLogGet({ userId: 'ktuser01' }, env, apiRequest('/api/ktlog/get', {}));
@@ -911,7 +911,7 @@ describe('key-transparency log — standalone get endpoint (/api/ktlog/get)', ()
   it('does not consume an OTP (log is readable independently of bundle fetch)', async () => {
     const env = makeEnv();
     await handlePreKeyUpload(
-      { userId: 'ktuser02', identityKey: 'IK', signedPreKey: 'SPK', oneTimePreKeys: ['otp0'] },
+      { userId: 'ktuser02', identityKey: 'ktuser02IK', signedPreKey: 'SPK', oneTimePreKeys: ['otp0'] },
       env, apiRequest('/api/prekey/upload', {}),
     );
     // Fetch log twice — OTP count should stay at 1 (not consumed).
@@ -936,8 +936,8 @@ describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {
     const create = await handleGroupCreate(
       { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
     const { token } = await create.json();
-    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bpub', memberName: 'B' }, env, req({}));
-    await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'cpub2', memberName: 'Ca' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', memberName: 'B' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
     return token;
   }
 
@@ -992,7 +992,7 @@ describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {
     const token = await setupGroup(env);
     await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
     // Dave joins the group after the kick — should see epoch 1, not 0.
-    const res = await handleGroupJoin({ token, memberId: 'dave0001', memberPub: 'dpub', memberName: 'D' }, env, req({}));
+    const res = await handleGroupJoin({ token, memberId: 'dave0001', memberPub: 'dave0001dpub', memberName: 'D' }, env, req({}));
     expect(res.status).toBe(200);
     expect((await res.json()).epoch).toBe(1);
   });
@@ -1007,7 +1007,7 @@ describe('group durable kick + unban (item 64)', () => {
     const create = await handleGroupCreate(
       { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
     const { token } = await create.json();
-    await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'cpub2', memberName: 'Ca' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
     return token;
   }
 
@@ -1015,7 +1015,7 @@ describe('group durable kick + unban (item 64)', () => {
     const env = makeEnv();
     const token = await setupGroup(env);
     await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
-    const rejoin = await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'cpub2', memberName: 'Ca' }, env, req({}));
+    const rejoin = await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
     expect(rejoin.status).toBe(403);
     expect((await rejoin.json()).code).toBe('BANNED');
     // and they are not silently re-added
@@ -1027,7 +1027,7 @@ describe('group durable kick + unban (item 64)', () => {
     const env = makeEnv();
     const token = await setupGroup(env);
     await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
-    const res = await handleGroupJoin({ token, memberId: 'dave0001', memberPub: 'dpub', memberName: 'D' }, env, req({}));
+    const res = await handleGroupJoin({ token, memberId: 'dave0001', memberPub: 'dave0001dpub', memberName: 'D' }, env, req({}));
     expect(res.status).toBe(200);
   });
 
@@ -1038,7 +1038,7 @@ describe('group durable kick + unban (item 64)', () => {
     const unban = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'carol001', action: 'unban' }, env, req({}));
     expect(unban.status).toBe(200);
     expect((await unban.json()).banned).not.toContain('carol001');
-    const rejoin = await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'cpub2', memberName: 'Ca' }, env, req({}));
+    const rejoin = await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
     expect(rejoin.status).toBe(200);
   });
 
@@ -1065,8 +1065,8 @@ describe('group multi-admin management (completes the half-built admins array)',
     const create = await handleGroupCreate(
       { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
     const { token } = await create.json();
-    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bpub', memberName: 'B' }, env, req({}));
-    await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'cpub2', memberName: 'Ca' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', memberName: 'B' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
     return token;
   }
 
@@ -1171,8 +1171,8 @@ describe('group ownership transfer (companion to multi-admin)', () => {
     const create = await handleGroupCreate(
       { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
     const { token } = await create.json();
-    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bpub', memberName: 'Bob' }, env, req({}));
-    await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'cpub2', memberName: 'Ca' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', memberName: 'Bob' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
     return token;
   }
 
@@ -1246,7 +1246,7 @@ describe('group rename (lifecycle CRUD — name was frozen at create)', () => {
     const create = await handleGroupCreate(
       { name: 'Old Name', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
     const { token } = await create.json();
-    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bpub', memberName: 'B' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', memberName: 'B' }, env, req({}));
     return token;
   }
 
@@ -1299,8 +1299,8 @@ describe('group leave / delete (lifecycle completion)', () => {
     const create = await handleGroupCreate(
       { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
     const { token } = await create.json();
-    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bpub', memberName: 'B' }, env, req({}));
-    await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'cpub2', memberName: 'Ca' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', memberName: 'B' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
     return token;
   }
 
@@ -1375,7 +1375,7 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
     const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
     await env.KV.put('prekey:creator1', JSON.stringify({ identityKey: 'IK', edIdentityKey: toB64(edPub), uploadedAt: Date.now() }));
     const { token } = await (await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
-    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'mpub' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
     return { token, ed };
   }
   // bind carries the operation's target(s), matching checkGroupAuth's signed format
@@ -1422,7 +1422,7 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
   it('rejects a kick whose kickId was swapped by the relay (target not the one signed)', async () => {
     const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
     const { token, ed } = await setup(env);
-    await handleGroupJoin({ token, memberId: 'member02', memberPub: 'mpub2' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'member02', memberPub: 'member02mpub2' }, env, req({}));
     const ts = Date.now();
     // Creator signs to kick member01, relay rewrites kickId → member02.
     const sig = await signGroup(ed, 'kick', token, 'creator1', ts, 'member01');
@@ -1454,7 +1454,7 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
   it('rejects an admin op whose targetId was swapped by the relay, but honors the signed target', async () => {
     const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
     const { token, ed } = await setup(env);
-    await handleGroupJoin({ token, memberId: 'member02', memberPub: 'mpub2' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'member02', memberPub: 'member02mpub2' }, env, req({}));
     const ts = Date.now();
     // Creator signs to promote member01; relay rewrites targetId → member02.
     const sig = await signGroup(ed, 'admin', token, 'creator1', ts, `promote:member01`);
@@ -1470,7 +1470,7 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
   it('rejects a transfer whose newCreatorId was redirected by the relay (ownership hijack)', async () => {
     const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
     const { token, ed } = await setup(env);
-    await handleGroupJoin({ token, memberId: 'member02', memberPub: 'mpub2' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'member02', memberPub: 'member02mpub2' }, env, req({}));
     const ts = Date.now();
     // Creator signs to hand ownership to member01; relay rewrites newCreatorId → member02.
     const sig = await signGroup(ed, 'transfer', token, 'creator1', ts, 'member01');
@@ -1558,7 +1558,7 @@ describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
     const spk = crypto.getRandomValues(new Uint8Array(32));
     const spkSig = new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, spk));
     await handlePreKeyUpload({
-      userId, identityKey: 'IK-' + userId,
+      userId, identityKey: userId + '-IK',
       edIdentityKey: toB64(edPub), signedPreKey: toB64(spk), signedPreKeySig: toB64(spkSig),
       oneTimePreKeys: ['otp0', 'otp1'],
     }, env, apiRequest('/api/prekey/upload', {}));
@@ -1650,7 +1650,7 @@ describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
     const env = makeEnv();
     // Legacy v4 upload: no edIdentityKey.
     await handlePreKeyUpload(
-      { userId: 'legacydel1', identityKey: 'IK', signedPreKey: 'SPK' },
+      { userId: 'legacydel1', identityKey: 'legacydel1IK', signedPreKey: 'SPK' },
       env, apiRequest('/api/prekey/upload', {}),
     );
     const res = await handleAccountDelete(
@@ -1676,7 +1676,7 @@ describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
     const userId = 'deluser04';
     const { ed } = await registeredAccount(env, userId);
     // Alias owned by this account (pub === bundle.identityKey).
-    await env.KV.put('alias:mine', JSON.stringify({ pub: 'IK-' + userId, name: 'Me', setAt: Date.now() }));
+    await env.KV.put('alias:mine', JSON.stringify({ pub: userId + '-IK', name: 'Me', setAt: Date.now() }));
     // Alias owned by someone else — must NOT be deletable via this request.
     await env.KV.put('alias:other', JSON.stringify({ pub: 'IK-victim', name: 'V', setAt: Date.now() }));
 
@@ -1720,13 +1720,13 @@ describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
     const created = await handleGroupCreate(
       { name: 'theirs', creatorId: 'owner001', creatorPub: 'opub', creatorName: 'O' }, env, gReq({}));
     const memberToken = (await created.json()).token;
-    await handleGroupJoin({ token: memberToken, memberId: userId, memberPub: 'mpub', memberName: 'Me' }, env, gReq({}));
+    await handleGroupJoin({ token: memberToken, memberId: userId, memberPub: userId + 'mpub', memberName: 'Me' }, env, gReq({}));
 
     // A group the user created.
     const ownCreate = await handleGroupCreate(
       { name: 'mine', creatorId: userId, creatorPub: 'mpub', creatorName: 'Me' }, env, gReq({}));
     const ownToken = (await ownCreate.json()).token;
-    await handleGroupJoin({ token: ownToken, memberId: 'friend01', memberPub: 'fpub', memberName: 'F' }, env, gReq({}));
+    await handleGroupJoin({ token: ownToken, memberId: 'friend01', memberPub: 'friend01fpub', memberName: 'F' }, env, gReq({}));
 
     const ts = Date.now();
     const res = await handleAccountDelete(
@@ -2778,11 +2778,11 @@ describe('alias delete — standalone alias release without account deletion', (
     const spk = crypto.getRandomValues(new Uint8Array(32));
     const spkSig = new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, spk));
     await handlePreKeyUpload({
-      userId, identityKey: 'IK-' + userId,
+      userId, identityKey: userId + '-IK',
       edIdentityKey: toB64(edPub), signedPreKey: toB64(spk), signedPreKeySig: toB64(spkSig),
       oneTimePreKeys: [],
     }, env, apiRequest('/api/prekey/upload', {}));
-    await env.KV.put(`alias:${aliasName}`, JSON.stringify({ pub: 'IK-' + userId, name: 'Me', setAt: Date.now() }));
+    await env.KV.put(`alias:${aliasName}`, JSON.stringify({ pub: userId + '-IK', name: 'Me', setAt: Date.now() }));
     return { ed };
   }
 
@@ -3838,7 +3838,7 @@ describe('rate limiting — group create / join explicit limits (item 55)', () =
     let last;
     for (let i = 0; i < 11; i++) {
       last = await worker.fetch(apiRequest('/api/group/join', {
-        token: 'tok', memberId: 'member01', memberPub: 'pub',
+        token: 'tok', memberId: 'member01', memberPub: 'member01pub',
       }), env);
     }
     expect(last.status).toBe(429);
@@ -3918,7 +3918,7 @@ describe('backup upload / download', () => {
     const spk = crypto.getRandomValues(new Uint8Array(32));
     const spkSig = new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, spk));
     await handlePreKeyUpload({
-      userId, identityKey: 'IK-' + userId,
+      userId, identityKey: userId + '-IK',
       edIdentityKey: toB64(edPub), signedPreKey: toB64(spk), signedPreKeySig: toB64(spkSig),
     }, env, apiRequest('/api/prekey/upload', {}));
     return ed;
@@ -4955,7 +4955,7 @@ describe('group member capability negotiation (N3 — unblocks negotiate.js nego
         caps: ['x3dh-v5', 'group-v5', 'franking'] }, env, req({}));
     const { token } = await create.json();
     await handleGroupJoin(
-      { token, memberId: 'bob00001', memberPub: 'bpub', memberName: 'B',
+      { token, memberId: 'bob00001', memberPub: 'bob00001bpub', memberName: 'B',
         caps: ['x3dh-v5', 'group-v5'] }, env, req({}));
 
     const info = await (await handleGroupInfo({ token }, env, req({}))).json();
@@ -4973,7 +4973,7 @@ describe('group member capability negotiation (N3 — unblocks negotiate.js nego
     const { token } = await create.json();
     // One member supports group-v5 but NOT franking.
     await handleGroupJoin(
-      { token, memberId: 'bob00001', memberPub: 'bpub', caps: ['group-v5'] }, env, req({}));
+      { token, memberId: 'bob00001', memberPub: 'bob00001bpub', caps: ['group-v5'] }, env, req({}));
 
     const info = await (await handleGroupInfo({ token }, env, req({}))).json();
     // A client computes the floor across every member's caps from the single info call.
@@ -4990,7 +4990,7 @@ describe('group member capability negotiation (N3 — unblocks negotiate.js nego
         caps: ['ok', 42, { x: 1 }, 'y'.repeat(50)] }, env, req({}));
     const { token } = await create.json();
     // Legacy member: no caps field at all.
-    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bpub' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub' }, env, req({}));
 
     const info = await (await handleGroupInfo({ token }, env, req({}))).json();
     const creator = info.members.find((m) => m.id === 'creator1');
@@ -5005,13 +5005,13 @@ describe('group member capability negotiation (N3 — unblocks negotiate.js nego
       { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', caps: ['group-v5'] }, env, req({}));
     const { token } = await create.json();
     // Bob first joins as a legacy client (no group-v5).
-    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bpub', caps: [] }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', caps: [] }, env, req({}));
     let info = await (await handleGroupInfo({ token }, env, req({}))).json();
     let floor = negotiateGroup([CAPS.GROUP_V5], info.members.map((m) => m.caps || []));
     expect(floor.useGroupV5).toBe(false); // bob can't yet
 
     // Bob upgrades and reconnects (re-calls join) advertising group-v5.
-    const rejoin = await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bpub', caps: ['group-v5'] }, env, req({}));
+    const rejoin = await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', caps: ['group-v5'] }, env, req({}));
     const rj = await rejoin.json();
     expect(rj.alreadyMember).toBe(true);
     expect(rj.refreshed).toBe(true);
@@ -5024,9 +5024,9 @@ describe('group member capability negotiation (N3 — unblocks negotiate.js nego
     const env = makeEnv();
     const create = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}));
     const { token } = await create.json();
-    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bpub', caps: ['group-v5', 'franking'] }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', caps: ['group-v5', 'franking'] }, env, req({}));
     // Reconnect without advertising caps (e.g. an older code path) must not wipe them.
-    const rejoin = await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bpub' }, env, req({}));
+    const rejoin = await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub' }, env, req({}));
     expect((await rejoin.json()).refreshed).toBe(false);
     const info = await (await handleGroupInfo({ token }, env, req({}))).json();
     expect(info.members.find((m) => m.id === 'bob00001').caps).toEqual(['group-v5', 'franking']);
@@ -5092,7 +5092,7 @@ describe('group create / join / info validation', () => {
   it('join 404s on an unknown/expired token', async () => {
     const env = makeEnv();
     const res = await handleGroupJoin(
-      { token: 'nosuchtoken', memberId: 'bob00001', memberPub: 'bpub' }, env, req({}));
+      { token: 'nosuchtoken', memberId: 'bob00001', memberPub: 'bob00001bpub' }, env, req({}));
     expect(res.status).toBe(404);
     expect((await res.json()).code).toBe('EXPIRED');
   });
@@ -5103,7 +5103,7 @@ describe('group create / join / info validation', () => {
       { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
     // creator1 joins again
     const res = await handleGroupJoin(
-      { token, memberId: 'creator1', memberPub: 'cpub' }, env, req({}));
+      { token, memberId: 'creator1', memberPub: 'creator1cpub' }, env, req({}));
     expect(res.status).toBe(200);
     const j = await res.json();
     expect(j.alreadyMember).toBe(true);
@@ -5141,11 +5141,11 @@ describe('group create / join / info validation', () => {
     // Fill to 100 members (creator is already 1, add 99 more).
     for (let i = 0; i < 99; i++) {
       await handleGroupJoin(
-        { token, memberId: `member${String(i).padStart(3,'0')}`, memberPub: `pub${i}` }, env, req({}));
+        { token, memberId: `member${String(i).padStart(3,'0')}`, memberPub: `member${String(i).padStart(3,'0')}pub` }, env, req({}));
     }
     // 101st join must fail.
     const res = await handleGroupJoin(
-      { token, memberId: 'overflow1', memberPub: 'opub' }, env, req({}));
+      { token, memberId: 'overflow1', memberPub: 'overflow1opub' }, env, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('GROUP_FULL');
   });
@@ -5215,7 +5215,7 @@ describe('group create / join / info validation', () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
       { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
-    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'mpub' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
     const res = await handleGroupKick({ token, kickId: 'member01', adminId: 'member01' }, env, req({}));
     expect(res.status).toBe(403);
     expect((await res.json()).code).toBe('FORBIDDEN');
@@ -5225,7 +5225,7 @@ describe('group create / join / info validation', () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
       { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
-    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'mpub' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
     const res = await handleGroupKick({ token, kickId: 'creator1', adminId: 'creator1' }, env, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('FORBIDDEN');
@@ -5244,7 +5244,7 @@ describe('group create / join / info validation', () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
       { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
-    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'mpub' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
     const r1 = await handleGroupKick({ token, kickId: 'bad id!', adminId: 'creator1' }, env, req({}));
     expect(r1.status).toBe(400);
     expect((await r1.json()).code).toBe('INVALID_USER_ID');
@@ -5261,7 +5261,7 @@ describe('group create / join / info validation', () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
       { name: 'ratchet-group', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
-    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'mpub' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
     const kick = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' }, env, req({}));
     expect(kick.status).toBe(200);
     const kj = await kick.json();
@@ -5285,7 +5285,7 @@ describe('group create / join / info validation', () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
       { name: 'ep-test', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
-    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'mpub' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
     // Corrupt the epoch: write '5' (a string) into the stored group record.
     const raw = await env.KV.get(`grp:${token}`);
     const g = JSON.parse(raw);
@@ -5317,7 +5317,7 @@ describe('corrupted KV data resilience (safeJsonParse guard)', () => {
   it('groupJoin returns 404 (not 500) when group KV value is corrupt JSON', async () => {
     const env = makeEnv();
     env.KV = makeKV({ 'grp:badtoken': '!!!notjson' });
-    const res = await handleGroupJoin({ token: 'badtoken', memberId: 'member01', memberPub: 'mpub' }, env, req({}));
+    const res = await handleGroupJoin({ token: 'badtoken', memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
     expect(res.status).toBe(404);
   });
 
@@ -5371,7 +5371,7 @@ describe('group mutation KV failure propagation (item 33)', () => {
   async function makeGroup(env) {
     const r = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}));
     const { token } = await r.json();
-    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'mpub' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
     return token;
   }
 
@@ -5395,7 +5395,7 @@ describe('group mutation KV failure propagation (item 33)', () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
     failOnGroupPut(env);
-    const res = await handleGroupJoin({ token, memberId: 'member01', memberPub: 'mpub' }, env, req({}));
+    const res = await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe('STORE_FAILED');
   });
@@ -5515,7 +5515,7 @@ describe('prekey upload + backup STORE_FAILED propagation (item 33)', () => {
       return real(key, ...rest);
     };
     const res = await handlePreKeyUpload(
-      { userId: 'user00020', identityKey: 'IK', signedPreKey: 'SPK' },
+      { userId: 'user00020', identityKey: 'user00020IK', signedPreKey: 'SPK' },
       env, req({}),
     );
     expect(res.status).toBe(500);
@@ -5593,10 +5593,10 @@ describe('kvDel failure propagation (item 34)', () => {
     const spk = crypto.getRandomValues(new Uint8Array(32));
     const spkSig = new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, spk));
     await handlePreKeyUpload({
-      userId: 'alsdel99', identityKey: 'IK-alsdel99',
+      userId: 'alsdel99', identityKey: 'alsdel99-IK',
       edIdentityKey: edPub, signedPreKey: toB64(spk), signedPreKeySig: toB64(spkSig),
     }, env, apiRequest('/api/prekey/upload', {}));
-    await env.KV.put('alias:deltest99', JSON.stringify({ pub: 'IK-alsdel99', name: 'Me', setAt: Date.now() }));
+    await env.KV.put('alias:deltest99', JSON.stringify({ pub: 'alsdel99-IK', name: 'Me', setAt: Date.now() }));
 
     const ts = Date.now();
     const msg = new TextEncoder().encode(`breeze-alias-delete:deltest99:${ts}`);
