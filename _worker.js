@@ -1676,6 +1676,30 @@ async function handlePushUnsubscribe(body, env, request) {
   if (!userId || !endpoint) return json({ error: 'userId and endpoint required', code: 'MISSING_FIELDS' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   if (typeof endpoint !== 'string' || endpoint.length > 512) return json({ error: 'invalid endpoint', code: 'INVALID_FIELD' }, 400, request);
+  // Optional Ed25519 ownership auth — mirrors handlePushSubscribe. Without it any caller who
+  // knows a userId + endpoint can silently delete that user's push subscription (denial of
+  // notification). Verified-when-present; required when PUSH_REQUIRE_AUTH=true.
+  {
+    const { ts, sig } = body;
+    const hasSig = ts !== undefined || sig !== undefined;
+    if (hasSig) {
+      if (ts === undefined || sig === undefined)
+        return json({ error: 'ts and sig must both be provided', code: 'PARTIAL_AUTH' }, 400, request);
+      if (typeof sig !== 'string' || sig.length > 500)
+        return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
+      if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS)
+        return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
+      const pkRaw = await kvGet(env, `prekey:${userId}`);
+      const bundle = pkRaw ? safeJsonParse(pkRaw) : null;
+      if (!bundle || typeof bundle.edIdentityKey !== 'string' || !bundle.edIdentityKey)
+        return json({ error: 'No registered identity key', code: 'NO_IDENTITY_KEY' }, 403, request);
+      // Bind the specific endpoint being removed so a subscribe signature cannot be replayed here.
+      const ok = await verifyEd25519(bundle.edIdentityKey, btoa(`breeze-push-unsubscribe:${userId}:${ts}:${endpoint}`), sig);
+      if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
+    } else if (env.PUSH_REQUIRE_AUTH === 'true') {
+      return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+    }
+  }
   const key = `push:${userId}`;
   const data = await kvGet(env, key);
   if (!data) return json({ ok: true, removed: 0 }, 200, request);
