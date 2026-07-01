@@ -6316,6 +6316,15 @@ async function initMessenger(dbName) {
       if (_callState && _callState !== 'idle') {
         try { endCall(); } catch(e) { _dbg(e); }
       }
+      // Unsubscribe push notifications for this account so the next account on this
+      // device does not receive push payloads (which may contain message snippets) for
+      // the previous account's userId. Best-effort: not awaited.
+      if (API && myId) {
+        navigator.serviceWorker?.ready
+          .then(r => r.pushManager?.getSubscription())
+          .then(sub => { if (sub) postAPIRaw('/push/unsubscribe', { userId: myId, endpoint: sub.endpoint }).catch(() => {}); })
+          .catch(() => {});
+      }
       // Save unread count for cross-account badge
       try {
         const activeId = getActiveAccountId();
@@ -6736,6 +6745,7 @@ async function initMessenger(dbName) {
             _DOM.get('msg-input-bar').classList.add('hidden');
           }
           if (peers[c.pubB64]) { if (peers[c.pubB64]._healthTimer) clearInterval(peers[c.pubB64]._healthTimer); peers[c.pubB64].pc?.close(); delete peers[c.pubB64]; }
+          delete _peerRelayQueue[c.id]; // Remove orphaned relay queue entries for deleted contact
           renderContacts();
         } else if (action === 'safety') {
           showSafetyNumber(c);
