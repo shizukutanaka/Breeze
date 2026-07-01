@@ -6264,6 +6264,14 @@ async function initMessenger(dbName) {
     _messengerCleanup = () => {
       _ac.abort(); // Remove all event listeners registered with signal
       _intervals.forEach(i => clearInterval(i));
+      // These are setTimeout (not setInterval) calls so _intervals doesn't catch them.
+      // Without clearing them, each fires after account switch and spawns a ghost timer
+      // chain in the old context: double-polling the relay, double-writing presence, and
+      // (for _retryTimer) retrying old messages under the new account's identity.
+      if (_presenceTimer) { clearTimeout(_presenceTimer); _presenceTimer = null; }
+      if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null; }
+      if (_retryTimer) { clearTimeout(_retryTimer); _retryTimer = null; }
+      if (_typingTimeout) { clearTimeout(_typingTimeout); _typingTimeout = null; }
       // Discard this account's in-memory outbox. The Map is module-level and persists
       // across initMessenger calls; without clearing it here, pending P2P messages from
       // the old account would be sent under the new account's identity if both accounts
