@@ -4922,7 +4922,10 @@ async function initMessenger(dbName) {
           const health = await r.json();
           if (health.serverTime) {
             const rawDrift = health.serverTime - Date.now();
-            _clockOffset = rawDrift; // Store signed offset for outgoing timestamps
+            // Cap to ±1 hour: beyond that the server value is implausible (broken clock or
+            // compromise). An uncapped offset could make correctedNow() return a timestamp
+            // far in the past/future, confusing the ±5 min anti-replay window.
+            _clockOffset = Math.max(-3600000, Math.min(3600000, rawDrift));
             const absDrift = Math.abs(rawDrift);
             if (absDrift > 120000) {
               _dbg(null, `Clock drift: ${Math.round(rawDrift/1000)}s — applying correction to outgoing timestamps`);
