@@ -9576,7 +9576,10 @@ async function initMessenger(dbName) {
       // v3.6: Encrypted signal for group (edit/delete/reaction)
       if (msg.isSignal && msg.payload) {
         try {
-          const senderPub = member?.pubB64 || msg.fromPub;
+          // Reject signals from non-members — same injection vector as group messages:
+          // a contact with a 1:1 session key can forge a signal that decryptFrom accepts.
+          if (!member) return;
+          const senderPub = member.pubB64;
           const signalJson = await decryptFrom(msg.payload, senderPub);
           if (!signalJson) return;
           const signal = JSON.parse(signalJson);
