@@ -9556,6 +9556,23 @@ async function initMessenger(dbName) {
     // Relay-path messages are validated by the worker (numeric, finite, ±5min), so
     // this guard mainly protects the P2P path.
     if (typeof msg.ts !== 'number' || !Number.isFinite(msg.ts)) msg = { ...msg, ts: Date.now() };
+    // Cap peer-supplied display name at the relay limit (64 chars). The relay path already
+    // enforces this via sanitizeString(name, 64); the P2P group path (msg.name || contact.name
+    // at line 10109) does not go through the relay, so guard here to keep IDB clean.
+    if (typeof msg.fromName === 'string' && msg.fromName.length > 64) msg = { ...msg, fromName: msg.fromName.slice(0, 64) };
+    // Cap peer-supplied replyTo fields before IDB storage (display already caps at render time
+    // but unbounded writes bloat the messages store; no server-side check on the P2P path).
+    if (msg.replyTo && typeof msg.replyTo === 'object') {
+      const rt = msg.replyTo;
+      const cappedRt = { msgId: typeof rt.msgId === 'string' ? rt.msgId.slice(0, 64) : '',
+                         text: typeof rt.text === 'string' ? rt.text.slice(0, 80) : '' };
+      msg = { ...msg, replyTo: cappedRt };
+    }
+    // Reject non-finite disappearAt to prevent Infinity/NaN from entering IDB
+    // (would never expire, silently preventing message cleanup).
+    if (msg.disappearAt !== undefined && (typeof msg.disappearAt !== 'number' || !Number.isFinite(msg.disappearAt) || msg.disappearAt <= 0)) {
+      msg = { ...msg, disappearAt: undefined };
+    }
     // v3.1: Block check — silently drop messages from blocked contacts
     if (msg.from) {
       const sender = await dbGet('contacts', msg.from);
