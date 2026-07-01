@@ -9627,7 +9627,8 @@ async function initMessenger(dbName) {
             if (el) safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>');
           } else if (signal.type === 'reaction') {
             const stored = await dbGet('messages', targetMsgId);
-            if (stored) {
+            // Reject oversized emoji strings (DoS/storage guard — legitimate emoji ≤ ~30 UTF-16 chars)
+            if (stored && typeof signal.emoji === 'string' && signal.emoji.length <= 64) {
               if (!stored.reactions) stored.reactions = {};
               if (!stored.reactions[signal.emoji]) stored.reactions[signal.emoji] = [];
               // Use the verified sender identity from decryption, not the self-reported signal.userId
@@ -9758,7 +9759,8 @@ async function initMessenger(dbName) {
         } else if (signal.type === 'reaction') {
           // v3.6: Encrypted reaction from relay
           const stored = await dbGet('messages', _smId);
-          if (stored) {
+          // Reject oversized emoji strings (DoS/storage guard — legitimate emoji ≤ ~30 UTF-16 chars)
+          if (stored && typeof signal.emoji === 'string' && signal.emoji.length <= 64) {
             if (!stored.reactions) stored.reactions = {};
             if (!stored.reactions[signal.emoji]) stored.reactions[signal.emoji] = [];
             // Use the verified sender identity from decryption, not the self-reported signal.userId
@@ -10009,6 +10011,8 @@ async function initMessenger(dbName) {
           if (msg.type === 'reaction') {
             // Sanitize peer-supplied msgId before querySelector (CSS selector injection guard).
             const _rmId = safeMsgId(msg.msgId || '');
+            // Reject oversized emoji strings (DoS/storage guard — legitimate emoji ≤ ~30 UTF-16 chars)
+            if (typeof msg.emoji !== 'string' || msg.emoji.length > 64) return;
             const stored = await dbGet('messages', _rmId);
             if (stored) {
               if (!stored.reactions) stored.reactions = {};
@@ -10534,7 +10538,13 @@ async function initMessenger(dbName) {
       if (!data.identity?.pubB64) { showToast(t('toastInvalidBackup'), 'error'); return; }
 
       await dbPut('identity', data.identity, 'keys');
-      for (const c of (data.contacts || [])) await dbPut('contacts', c);
+      for (const c of (data.contacts || [])) {
+        // Validate required fields before storing — a malformed backup entry could corrupt the DB
+        if (typeof c?.id !== 'string' || !c.id || c.id.length > 64 ||
+            typeof c?.pubB64 !== 'string' || !c.pubB64 || c.pubB64.length > 128 ||
+            !/^[A-Za-z0-9+/=]+$/.test(c.pubB64)) continue;
+        await dbPut('contacts', c);
+      }
 
       showToast(t('toastRestoredReload'), 'success'); setTimeout(() => location.reload(), 1.5 * MS.SEC);
       location.reload();
@@ -10888,7 +10898,13 @@ async function initMessenger(dbName) {
       const data = JSON.parse(new TextDecoder().decode(pt));
       // Restore
       if (data.identity) await dbPut('identity', data.identity, 'keys');
-      if (data.contacts) for (const c of data.contacts) await dbPut('contacts', c);
+      if (data.contacts) for (const c of data.contacts) {
+        // Validate required fields before storing — a malformed backup entry could corrupt the DB
+        if (typeof c?.id !== 'string' || !c.id || c.id.length > 64 ||
+            typeof c?.pubB64 !== 'string' || !c.pubB64 || c.pubB64.length > 128 ||
+            !/^[A-Za-z0-9+/=]+$/.test(c.pubB64)) continue;
+        await dbPut('contacts', c);
+      }
       if (data.messages) for (const m of data.messages) await dbPut('messages', m);
       showToast(t('backupRestored'), 'success');
       location.reload();
