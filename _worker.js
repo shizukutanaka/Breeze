@@ -16,6 +16,15 @@
 
 const MAX_BODY_BYTES = 524288; // 512KB max request body
 const MAX_STRING_LEN = 10000; // Max string field length
+const TTL = { // KV expirationTtl values (seconds)
+  MIN:     60,
+  HOUR:    3600,
+  DAY:     86400,
+  WEEK:    604800,
+  MONTH:   86400 * 30,
+  QUARTER: 86400 * 90,
+  YEAR:    86400 * 365,
+};
 
 function sanitizeString(val, maxLen = MAX_STRING_LEN) {
   if (typeof val !== 'string') return '';
@@ -366,7 +375,7 @@ async function handleSignal(body, ip, env, request) {
     const now = Date.now();
     const remaining = signals.filter(s => s.sender === sender || (typeof s.ts === 'number' && Number.isFinite(s.ts) && now - s.ts < 30000));
     if (remaining.length < signals.length) {
-      if (remaining.length > 0) await kvPut(env, `sig:${room}`, JSON.stringify(remaining), { expirationTtl: 300 });
+      if (remaining.length > 0) await kvPut(env, `sig:${room}`, JSON.stringify(remaining), { expirationTtl: TTL.MIN * 5 });
       else await kvDel(env, `sig:${room}`);
     }
     return json({ messages: filtered }, 200, request);
@@ -379,7 +388,7 @@ async function handleSignal(body, ip, env, request) {
   signals.push({ sender, type, data, ts: Date.now() });
   // Keep last 50 signals, expire in 5 min (allow slow NAT traversal)
   const trimmed = signals.slice(-50);
-  await kvPut(env, `sig:${room}`, JSON.stringify(trimmed), { expirationTtl: 300 });
+  await kvPut(env, `sig:${room}`, JSON.stringify(trimmed), { expirationTtl: TTL.MIN * 5 });
 
   return json({ ok: true }, 200, request);
 }
@@ -481,7 +490,7 @@ async function handleMsgSend(body, ip, env, request) {
   }
   inbox.push(msg);
   const trimmed = capQueueBytes(inbox.slice(-100), m => (typeof m.payload === 'string' ? m.payload.length : 0) + 1024);
-  const stored = await kvPut(env, key, JSON.stringify(trimmed), { expirationTtl: 604800 });
+  const stored = await kvPut(env, key, JSON.stringify(trimmed), { expirationTtl: TTL.WEEK });
   if (!stored) {
     // Un-mark the dedup key on a failed store: it was set BEFORE this write, so leaving it
     // would make the client's retry of the identical ciphertext hit the dedup short-circuit
@@ -534,7 +543,7 @@ async function handleMsgPoll(body, env, request) {
   const keep = all.filter(m => { if (isExpired(m)) return false; const t = Number.isFinite(m.ts) ? m.ts : 0; return t > cutoff || (Date.now() - t) < 10000; });
   if (keep.length < all.length) {
     if (keep.length === 0) await kvDel(env, key);
-    else await kvPut(env, key, JSON.stringify(keep), { expirationTtl: 604800 });
+    else await kvPut(env, key, JSON.stringify(keep), { expirationTtl: TTL.WEEK });
   }
 
   return json({ messages: newMsgs }, 200, request);
@@ -613,7 +622,7 @@ async function handlePresence(body, env, request) {
   const presData = { pub: safePub, name: sanitizeString(name, 64), at: Date.now() };
   if (safeCaps) presData.caps = safeCaps;
   if (Date.now() - lastWrite > 300000) { // Only write to KV every 5 min
-    await kvPut(env, presKey, JSON.stringify(presData), { expirationTtl: 360 }); // 6min TTL (covers 5min interval + slack)
+    await kvPut(env, presKey, JSON.stringify(presData), { expirationTtl: TTL.MIN * 6 }); // 6min TTL (covers 5min interval + slack)
     globalThis._presenceCache.set(presKey, Date.now());
   }
   // Always update in-memory for fast reads within same isolate
@@ -933,7 +942,7 @@ async function handleWebhook(request, env) {
   }
 
   // Mark processed only after handlers above have run (24h dedup window).
-  await kvPut(env, eventKey, '1', { expirationTtl: 86400 });
+  await kvPut(env, eventKey, '1', { expirationTtl: TTL.DAY });
   return new Response('ok', { status: 200 });
 }
 
@@ -1095,7 +1104,7 @@ async function handleGroupCreate(body, env, request) {
   };
 
   // Store with 30-day TTL (invite link expires)
-  const created = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+  const created = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
   if (!created) return json({ error: 'Failed to create group', code: 'STORE_FAILED' }, 500, request);
 
   return json({ token, name: group.name, memberCount: 1 }, 201, request);
@@ -1139,7 +1148,7 @@ async function handleGroupJoin(body, env, request) {
     // with no caps must not erase a previously-recorded capability set).
     if (newCaps && JSON.stringify(existing.caps) !== JSON.stringify(newCaps)) { existing.caps = newCaps; changed = true; }
     if (changed) {
-      const saved = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+      const saved = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
       if (!saved) return json({ error: 'Failed to update group', code: 'STORE_FAILED' }, 500, request);
     }
     return json({ ok: true, name: group.name, members: group.members, epoch: group.epoch | 0, alreadyMember: true, refreshed: changed }, 200, request);
@@ -1153,7 +1162,7 @@ async function handleGroupJoin(body, env, request) {
   const memberCaps = sanitizeCaps(caps);
   if (memberCaps) memberRecord.caps = memberCaps;
   group.members.push(memberRecord);
-  const joined = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+  const joined = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
   if (!joined) return json({ error: 'Failed to join group', code: 'STORE_FAILED' }, 500, request);
 
   return json({ ok: true, name: group.name, members: group.members, epoch: group.epoch | 0 }, 200, request);
@@ -1267,7 +1276,7 @@ async function handleGroupKick(body, env, request) {
   // would make '5' + 1 = '51' (concatenation), which the epoch gate '===' never
   // matches against a numeric p.ep, permanently breaking the group.
   group.epoch = (group.epoch | 0) + 1;
-  const kicked = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+  const kicked = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
   if (!kicked) return json({ error: 'Failed to save group state', code: 'STORE_FAILED' }, 500, request);
 
   return json({ ok: true, remaining: group.members.length, epoch: group.epoch }, 200, request);
@@ -1307,7 +1316,7 @@ async function handleGroupAdmin(body, env, request) {
     if (bi < 0) return json({ ok: true, banned, notBanned: true }, 200, request);
     banned.splice(bi, 1);
     group.banned = banned;
-    const unbanSaved = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+    const unbanSaved = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
     if (!unbanSaved) return json({ error: 'Failed to save unban', code: 'STORE_FAILED' }, 500, request);
     return json({ ok: true, banned }, 200, request);
   }
@@ -1327,7 +1336,7 @@ async function handleGroupAdmin(body, env, request) {
     admins.splice(i, 1);
   }
   group.admins = admins;
-  const adminSaved = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+  const adminSaved = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
   if (!adminSaved) return json({ error: 'Failed to save admin changes', code: 'STORE_FAILED' }, 500, request);
   return json({ ok: true, admins }, 200, request);
 }
@@ -1370,7 +1379,7 @@ async function handleGroupTransfer(body, env, request) {
   if (!admins.includes(oldCreatorId)) admins.push(oldCreatorId);
   group.admins = admins;
 
-  const transferred = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+  const transferred = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
   if (!transferred) return json({ error: 'Failed to save ownership transfer', code: 'STORE_FAILED' }, 500, request);
   return json({ ok: true, creatorId: newCreatorId, admins }, 200, request);
 }
@@ -1405,7 +1414,7 @@ async function handleGroupRename(body, env, request) {
   }
 
   group.name = name.slice(0, 50);
-  const renamed = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+  const renamed = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
   if (!renamed) return json({ error: 'Failed to save group name', code: 'STORE_FAILED' }, 500, request);
   return json({ ok: true, name: group.name }, 200, request);
 }
@@ -1437,7 +1446,7 @@ async function handleGroupLeave(body, env, request) {
   if (group.admins) group.admins = group.admins.filter(id => id !== memberId);
   // Same PCS epoch bump + integer coercion as handleGroupKick (see comment there).
   group.epoch = (group.epoch | 0) + 1;
-  const left = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+  const left = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
   if (!left) return json({ error: 'Failed to save group state', code: 'STORE_FAILED' }, 500, request);
 
   return json({ ok: true, remaining: group.members.length, epoch: group.epoch }, 200, request);
@@ -1647,7 +1656,7 @@ async function handlePushSubscribe(body, env, request) {
   subs.push(safeSub);
   // Keep last 5 devices
   if (subs.length > 5) subs = subs.slice(-5);
-  const stored = await kvPut(env, key, JSON.stringify(subs), { expirationTtl: 86400 * 30 });
+  const stored = await kvPut(env, key, JSON.stringify(subs), { expirationTtl: TTL.MONTH });
   if (!stored) return json({ error: 'Failed to store subscription', code: 'STORE_FAILED' }, 500, request);
   return json({ ok: true, devices: subs.length }, 200, request);
 }
@@ -1666,7 +1675,7 @@ async function handlePushUnsubscribe(body, env, request) {
   const removed = subs.length - filtered.length;
   if (removed > 0) {
     if (filtered.length === 0) await kvDel(env, key);
-    else await kvPut(env, key, JSON.stringify(filtered), { expirationTtl: 86400 * 30 });
+    else await kvPut(env, key, JSON.stringify(filtered), { expirationTtl: TTL.MONTH });
   }
   return json({ ok: true, removed }, 200, request);
 }
@@ -1699,7 +1708,7 @@ async function sendPushToUser(userId, payload, env) {
           'Content-Type': 'application/octet-stream',
           'Content-Encoding': 'aes128gcm',
           'Authorization': `vapid t=${jwt},k=${env.VAPID_PUBLIC_KEY}`,
-          'TTL': '86400',
+          'TTL': String(TTL.DAY),
         },
         body: encrypted,
       }, 5000);
@@ -1710,7 +1719,7 @@ async function sendPushToUser(userId, payload, env) {
   if (stale.size > 0) {
     const remaining = subs.filter(s => !stale.has(s.endpoint));
     if (remaining.length === 0) await kvDel(env, key);
-    else await kvPut(env, key, JSON.stringify(remaining), { expirationTtl: 86400 * 30 });
+    else await kvPut(env, key, JSON.stringify(remaining), { expirationTtl: TTL.MONTH });
   }
 }
 
@@ -1753,7 +1762,7 @@ async function handleTurn(body, env, request) {
   // Option A: Cloudflare Calls TURN (recommended — $0.05/GB, global anycast)
   if (env.TURN_KEY_ID && env.TURN_KEY_API_TOKEN) {
     try {
-      const ttl = 86400;
+      const ttl = TTL.DAY;
       const resp = await fetchWithTimeout('https://rtc.live.cloudflare.com/v1/turn/keys/' + env.TURN_KEY_ID + '/credentials/generate', {
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + env.TURN_KEY_API_TOKEN, 'Content-Type': 'application/json' },
@@ -1770,7 +1779,7 @@ async function handleTurn(body, env, request) {
 
   // Option B: Custom TURN (HMAC-based — Coturn, etc.)
   if (env.TURN_SECRET && env.TURN_URL) {
-    const ttl = 86400;
+    const ttl = TTL.DAY;
     const expiry = Math.floor(Date.now() / 1000) + ttl;
     const username = expiry + ':' + userId;
     const enc = new TextEncoder();
@@ -1784,7 +1793,7 @@ async function handleTurn(body, env, request) {
   // Option C: Static credentials (metered.ca, twilio, etc.)
   if (env.TURN_URL && env.TURN_USERNAME && env.TURN_CREDENTIAL) {
     iceServers.push({ urls: env.TURN_URL, username: env.TURN_USERNAME, credential: env.TURN_CREDENTIAL });
-    return json({ iceServers, ttl: 86400, provider: 'static' }, 200, request);
+    return json({ iceServers, ttl: TTL.DAY, provider: 'static' }, 200, request);
   }
 
   // Option D: Free Open Relay (metered.ca — 20GB/month free, no config needed)
@@ -1793,7 +1802,7 @@ async function handleTurn(body, env, request) {
     { urls: 'turn:a.relay.metered.ca:80?transport=tcp', username: 'e8dd65b92f60fae75f5aefab', credential: 'uWdWNmkhvyqTEswO' },
     { urls: 'turns:a.relay.metered.ca:443', username: 'e8dd65b92f60fae75f5aefab', credential: 'uWdWNmkhvyqTEswO' },
   );
-  return json({ iceServers, ttl: 86400, provider: 'openrelay' }, 200, request);
+  return json({ iceServers, ttl: TTL.DAY, provider: 'openrelay' }, 200, request);
 }
 
 // ============================================================
@@ -1990,7 +1999,7 @@ async function handleAccountDelete(body, env, request) {
         group.members = group.members.filter(m => m.id !== userId);
         if (Array.isArray(group.admins)) group.admins = group.admins.filter(id => id !== userId);
         group.epoch = (group.epoch | 0) + 1;
-        await kvPut(env, `grp:${tok}`, JSON.stringify(group), { expirationTtl: 86400 * 30 });
+        await kvPut(env, `grp:${tok}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
         groupsLeft.push(tok);
       }
     }
@@ -2070,7 +2079,7 @@ async function handlePreKeyUpload(body, env, request) {
   // fallback path (bundle.x3dh === 'v5') works for transition-period clients that
   // don't yet understand the `caps` array. Only 'v4'/'v5' are meaningful; cap to 4.
   if (typeof x3dh === 'string') bundle.x3dh = x3dh.slice(0, 4);
-  const prekeySaved = await kvPut(env, `prekey:${userId}`, JSON.stringify(bundle), { expirationTtl: 86400 * 30 });
+  const prekeySaved = await kvPut(env, `prekey:${userId}`, JSON.stringify(bundle), { expirationTtl: TTL.MONTH });
   if (!prekeySaved) return json({ error: 'Failed to store prekeys', code: 'STORE_FAILED' }, 500, request);
 
   // I11/N5: append a SHA-256 digest of the identity key to a hash-chained audit log.
@@ -2102,7 +2111,7 @@ async function handlePreKeyUpload(body, env, request) {
     }
     // Cap at 10 entries (enough to show a suspicious rollover history).
     const trimmed = log.slice(-10);
-    await kvPut(env, logKey, JSON.stringify(trimmed), { expirationTtl: 86400 * 90 });
+    await kvPut(env, logKey, JSON.stringify(trimmed), { expirationTtl: TTL.QUARTER });
   } catch (e) { /* log failure is non-fatal */ }
 
   // Store one-time prekeys individually; cap each entry to prevent KV inflation.
@@ -2118,13 +2127,13 @@ async function handlePreKeyUpload(body, env, request) {
       if (typeof oneTimePreKeys[i] !== 'string') continue; // skip non-string entries
       const otpStr = JSON.stringify(oneTimePreKeys[i]);
       if (otpStr.length > 5000) continue; // silently skip oversized entries
-      await kvPut(env, `prekey:otp:${userId}:${i}`, otpStr, { expirationTtl: 86400 * 30 });
+      await kvPut(env, `prekey:otp:${userId}:${i}`, otpStr, { expirationTtl: TTL.MONTH });
       maxStoredIdx = i;
     }
     // Store count only when at least one key was stored (highest index + 1).
     // Avoids writing a zero count that would make replenishOTP fire unnecessarily.
     if (maxStoredIdx >= 0) {
-      await kvPut(env, `prekey:otp:${userId}:count`, String(maxStoredIdx + 1), { expirationTtl: 86400 * 30 });
+      await kvPut(env, `prekey:otp:${userId}:count`, String(maxStoredIdx + 1), { expirationTtl: TTL.MONTH });
     }
   }
   return json({ ok: true }, 200, request);
@@ -2172,11 +2181,11 @@ async function handlePreKeyFetch(body, env, request) {
         // in the prekey message (opkId) so the responder can select the matching OTP
         // PRIVATE key (opkResolver). Without it the responder can't complete DH4.
         if (parsed !== null) { bundle.oneTimePreKey = parsed; bundle.oneTimePreKeyId = i; }
-        await kvPut(env, `prekey:otp:${userId}:count`, String(i), { expirationTtl: 86400 * 30 });
+        await kvPut(env, `prekey:otp:${userId}:count`, String(i), { expirationTtl: TTL.MONTH });
         remainingOTP = i;
         consumed = true;
         // Record the consumption lock so this IP cannot drain further OTPs for this user today.
-        if (otpLockKey) await kvPut(env, otpLockKey, '1', { expirationTtl: 86400 });
+        if (otpLockKey) await kvPut(env, otpLockKey, '1', { expirationTtl: TTL.DAY });
         break;
       }
     }
@@ -2193,13 +2202,13 @@ async function handlePreKeyFetch(body, env, request) {
     remainingOTP = 0;
     // Heal the stale count only when the entries are genuinely gone (found none). Don't touch
     // it on transient delete failures (foundAny) — those OTPs still exist and stay fetchable.
-    if (!foundAny) await kvPut(env, `prekey:otp:${userId}:count`, '0', { expirationTtl: 86400 * 30 });
+    if (!foundAny) await kvPut(env, `prekey:otp:${userId}:count`, '0', { expirationTtl: TTL.MONTH });
   }
   // Signal the owner to replenish one-time prekeys before they are exhausted.
   if (remainingOTP <= 5) bundle.replenishOTP = true;
   // Signal the owner to re-upload their signed pre-key before it expires.
   // KV TTL is 30 days; warn at 25 days so there's a 5-day window to replenish.
-  if (bundle.uploadedAt && (Date.now() - bundle.uploadedAt) > 25 * 86400 * 1000) bundle.replenishSPK = true;
+  if (bundle.uploadedAt && (Date.now() - bundle.uploadedAt) > 25 * TTL.DAY * 1000) bundle.replenishSPK = true;
   // I11: include key-history log so the initiator can detect unexpected IK rollovers.
   const ktLog = await kvGet(env, `ktlog:${userId}`);
   if (ktLog) {
@@ -2264,14 +2273,14 @@ async function handlePreKeyStatus(body, env, request) {
     const top = await kvGet(env, `prekey:otp:${userId}:${otpCount - 1}`);
     if (!top) {
       otpCount = 0;
-      await kvPut(env, `prekey:otp:${userId}:count`, '0', { expirationTtl: 86400 * 30 });
+      await kvPut(env, `prekey:otp:${userId}:count`, '0', { expirationTtl: TTL.MONTH });
     }
   }
   const result = {
     uploadedAt: bundle.uploadedAt,
     otpCount,
     replenishOTP: otpCount <= 5,
-    replenishSPK: !!(bundle.uploadedAt && (Date.now() - bundle.uploadedAt) > 25 * 86400 * 1000),
+    replenishSPK: !!(bundle.uploadedAt && (Date.now() - bundle.uploadedAt) > 25 * TTL.DAY * 1000),
   };
   return json(result, 200, request);
 }
@@ -2321,7 +2330,7 @@ async function handleAbuseRecord(body, env, request) {
   // Propagate a write failure: a silently-dropped commitment makes the message
   // unreportable later (handleAbuseReport would 404 with no record), so the sender must
   // know franking wasn't recorded rather than believe it was.
-  const stored = await kvPut(env, `frank:${frankId}`, commitment, { expirationTtl: 86400 * 30 });
+  const stored = await kvPut(env, `frank:${frankId}`, commitment, { expirationTtl: TTL.MONTH });
   if (!stored) return json({ error: 'Failed to record franking commitment', code: 'STORE_FAILED' }, 500, request);
   return json({ ok: true }, 200, request);
 }
@@ -2358,7 +2367,7 @@ async function handleAbuseReport(body, env, request) {
   // Object (out of scope). This comment states what the code actually guarantees.
   const alreadyReported = await kvGet(env, `report:${frankId}`);
   // Record the verified report for moderation (idempotent on frankId — same key).
-  const stored = await kvPut(env, `report:${frankId}`, JSON.stringify({ at: Date.now(), len: message.length }), { expirationTtl: 86400 * 90 });
+  const stored = await kvPut(env, `report:${frankId}`, JSON.stringify({ at: Date.now(), len: message.length }), { expirationTtl: TTL.QUARTER });
   if (!stored) return json({ error: 'Failed to record report', code: 'STORE_FAILED' }, 500, request);
   // Decide whether THIS request fires the webhook: not already in KV, and not already
   // fired by this isolate. The has()/set() pair is synchronous — do not insert an await.
@@ -2422,7 +2431,7 @@ async function handleSealedSend(body, env, request) {
     : Date.now();
   queue.push({ envelope, ts: newTs });
   const trimmed = capQueueBytes(queue.slice(-100), m => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
-  const stored = await kvPut(env, key, JSON.stringify(trimmed), { expirationTtl: 604800 });
+  const stored = await kvPut(env, key, JSON.stringify(trimmed), { expirationTtl: TTL.WEEK });
   if (!stored) {
     // Un-mark the dedup key on a failed store (set before this write): otherwise the
     // client's retry of the identical envelope is swallowed as a duplicate and lost on
@@ -2446,7 +2455,7 @@ async function handleSealedPoll(body, env, request) {
   // v3.6: Grace period — set short TTL instead of immediate delete
   // If client crashes after poll but before processing, messages survive 5 min
   // Client-side _replayCache + IDB dedup prevents re-rendering on re-poll
-  await kvPut(env, key, data, { expirationTtl: 300 }); // 5 min grace
+  await kvPut(env, key, data, { expirationTtl: TTL.MIN * 5 }); // 5 min grace
   // Record a high-water mark (max ts returned) so the later ACK clears ONLY what was
   // actually polled. handleSealedAck previously blind-deleted the whole queue, so any
   // envelope appended by handleSealedSend in the poll→ack window was destroyed
@@ -2454,7 +2463,7 @@ async function handleSealedPoll(body, env, request) {
   // are messages, so idle polls (the common case) still do zero extra KV writes.
   let maxTs = 0;
   for (const m of messages) { if (Number.isFinite(m?.ts) && m.ts > maxTs) maxTs = m.ts; }
-  if (maxTs > 0) await kvPut(env, `${key}:hwm`, String(maxTs), { expirationTtl: 300 });
+  if (maxTs > 0) await kvPut(env, `${key}:hwm`, String(maxTs), { expirationTtl: TTL.MIN * 5 });
   return json({ messages }, 200, request);
 }
 
@@ -2477,7 +2486,7 @@ async function handleSealedAck(body, env, request) {
     const remaining = Array.isArray(queue) ? queue.filter(m => Number.isFinite(m?.ts) && m.ts > hwm) : [];
     let ok;
     if (remaining.length === 0) ok = await kvDel(env, `sealed:${id}`);
-    else ok = await kvPut(env, `sealed:${id}`, JSON.stringify(remaining), { expirationTtl: 604800 });
+    else ok = await kvPut(env, `sealed:${id}`, JSON.stringify(remaining), { expirationTtl: TTL.WEEK });
     if (!ok) return json({ error: 'Failed to confirm delivery', code: 'ACK_FAILED' }, 500, request);
     await kvDel(env, hwmKey); // best-effort marker cleanup (also expires via its own TTL)
     return json({ ok: true, kept: remaining.length }, 200, request);
@@ -2526,7 +2535,7 @@ async function handleBackupUpload(body, env, request) {
 
   // Store (max 5MB per backup)
   if (backup.length > 5 * 1024 * 1024) return json({ error: 'Backup too large', code: 'PAYLOAD_TOO_LARGE' }, 413, request);
-  const backupSaved = await kvPut(env, `backup:${userId}`, backup, { expirationTtl: 86400 * 90 }); // 90 day retention
+  const backupSaved = await kvPut(env, `backup:${userId}`, backup, { expirationTtl: TTL.QUARTER }); // 90 day retention
   if (!backupSaved) return json({ error: 'Failed to store backup', code: 'STORE_FAILED' }, 500, request);
   return json({ ok: true, size: backup.length, authenticated: hasSig }, 200, request);
 }
@@ -2585,7 +2594,7 @@ async function handleDropCreate(body, env, request) {
   }
   if (!ct) return json({ error: 'ct required', code: 'MISSING_FIELDS' }, 400, request);
   if (typeof ct !== 'string' || ct.length > 100000) return json({ error: 'ct too large (max 100KB)', code: 'PAYLOAD_TOO_LARGE' }, 400, request);
-  const ttlSec = Math.min(Math.max(parseInt(ttl) || 86400, 300), 604800); // 5min - 7days, default 24h
+  const ttlSec = Math.min(Math.max(parseInt(ttl) || TTL.DAY, TTL.MIN * 5), TTL.WEEK); // 5min - 7days, default 24h
   const key = `drop:${id}`;
   const existing = await kvGet(env, key);
   if (existing) return json({ error: 'id collision', code: 'COLLISION' }, 409, request);
@@ -2753,7 +2762,7 @@ async function handleOGP(body, env, request) {
     const result = { title: title.slice(0, 200), description: description.slice(0, 300), image: image.slice(0, 500), siteName: siteName.slice(0, 100), url };
 
     // Cache for 24h
-    await kvPut(env, cacheKey, JSON.stringify(result), { expirationTtl: 86400 });
+    await kvPut(env, cacheKey, JSON.stringify(result), { expirationTtl: TTL.DAY });
 
     return json(result, 200, request);
   } catch(e) {
@@ -2901,7 +2910,7 @@ async function handleTranslate(body, env, request) {
   const result = { text, translated: safeTranslated, from: safeFrom, to: tgt, provider };
   const serialized = JSON.stringify(result);
   // Final serialized-size guard: skip cache rather than write an unexpectedly large entry.
-  if (serialized.length <= 64 * 1024) await kvPut(env, cacheKey, serialized, { expirationTtl: 604800 });
+  if (serialized.length <= 64 * 1024) await kvPut(env, cacheKey, serialized, { expirationTtl: TTL.WEEK });
   return json({ ...result, cached: false }, 200, request);
 }
 
@@ -2966,7 +2975,7 @@ async function handleAI(body, env, request) {
   }
 
   // KV cache (1h for chat, 24h for summarize/translate)
-  const cacheTTL = action === 'chat' ? 3600 : 86400;
+  const cacheTTL = action === 'chat' ? TTL.HOUR : TTL.DAY;
   const hash = await sha256Short(action + userContent + systemPrompt);
   const cacheKey = `ai:${hash}`;
   const cached = await kvGet(env, cacheKey);
@@ -3074,7 +3083,7 @@ function corsHeaders(request) {
   const hdrs = {
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Max-Age': '86400',
+    'Access-Control-Max-Age': String(TTL.DAY),
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'no-referrer',

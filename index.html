@@ -3125,7 +3125,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
   const msgsSent = parseInt(localStorage.getItem('brz-msgs-sent') || '0');
   const engaged = visits >= 2 || msgsSent >= 3;
   if (!window.matchMedia('(display-mode: standalone)').matches && !_installBannerDismissed && engaged) {
-    setTimeout(() => showInstallBanner(), 5000); // 5s delay (not 2s)
+    setTimeout(() => showInstallBanner(), 5 * MS.SEC); // 5s delay (not 2s)
   }
 });
 
@@ -3779,7 +3779,7 @@ if ((P.get('billing') === 'success' || P.get('billing') === 'account-success') &
     const uid = localStorage.getItem('brz-uid');
     if (!uid) return;
     for (let attempt = 0; attempt < 10; attempt++) {
-      await new Promise(r => setTimeout(r, 1500));
+      await new Promise(r => setTimeout(r, 1.5 * MS.SEC));
       try {
         const resp = await postAPIRaw('/account/slots', { userId: uid });
         if (resp.ok) {
@@ -3960,13 +3960,13 @@ async function fetchRetry(url, opts = {}, { maxRetries = 3, baseDelay = 1000, ti
       if (resp.status === 429) {
         // Rate limited — wait and retry
         const retryAfter = parseInt(resp.headers.get('Retry-After') || '5');
-        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, retryAfter * 1000)); continue; }
+        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, retryAfter * MS.SEC)); continue; }
       }
       return resp;
     } catch(e) {
       if (attempt === maxRetries) throw e;
       if (e.name === 'AbortError') throw e; // Don't retry user-cancelled
-      const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 500;
+      const delay = baseDelay * Math.pow(2, attempt) + Math.random() * (MS.SEC / 2);
       _dbg(null, `fetchRetry attempt ${attempt + 1}/${maxRetries}, delay ${Math.round(delay)}ms`);
       await new Promise(r => setTimeout(r, delay));
     }
@@ -4153,7 +4153,7 @@ function workerCrypto(op, keyRaw, iv, data) {
 // ═══ Deferred Execution (Carmack: prioritize critical path) ═══
 // Uses requestIdleCallback for non-critical tasks; falls back to setTimeout.
 const _defer = typeof requestIdleCallback === 'function'
-  ? (fn) => requestIdleCallback(fn, { timeout: 2000 })
+  ? (fn) => requestIdleCallback(fn, { timeout: 2 * MS.SEC })
   : (fn) => setTimeout(fn, 100);
 
 // ═══ Performance Markers (optional — no-op if Performance API unavailable) ═══
@@ -7089,7 +7089,7 @@ async function initMessenger(dbName) {
     }
 
     // v3.1: Date separator
-    const msgDate = new Date(ts).toLocaleDateString(LANG === 'ja' ? 'ja-JP' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    const msgDate = new Date(ts).toLocaleDateString(navigator.language || LANG, { year: 'numeric', month: 'short', day: 'numeric' });
     if (msgDate !== _lastMsgDate) {
       _lastMsgDate = msgDate;
       const sep = document.createElement('div');
@@ -11023,7 +11023,7 @@ async function initMessenger(dbName) {
           await new Promise(resolve => {
             const onLow = () => { dc.removeEventListener('bufferedamountlow', onLow); resolve(); };
             dc.addEventListener('bufferedamountlow', onLow);
-            setTimeout(resolve, 5000);
+            setTimeout(resolve, 5 * MS.SEC);
           });
         }
         dc.send(packet);
