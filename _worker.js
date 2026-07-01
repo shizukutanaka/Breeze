@@ -1126,7 +1126,7 @@ async function handleGroupJoin(body, env, request) {
   if (typeof rawMemberPub !== 'string') return json({ error: 'memberPub must be a string', code: 'INVALID_TYPE' }, 400, request);
   const memberPub = rawMemberPub.slice(0, 200);
   if (!token || !memberId || !memberPub) return json({ error: 'token, memberId, memberPub required', code: 'MISSING_FIELDS' }, 400, request);
-  if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
+  if (typeof token !== 'string' || token.length > 128 || !/^[a-z0-9]+$/.test(token) || !/^[a-z0-9]+$/.test(token)) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(memberId)) return json({ error: 'invalid memberId', code: 'INVALID_USER_ID' }, 400, request);
 
   const data = await kvGet(env, `grp:${token}`);
@@ -1181,7 +1181,7 @@ async function handleGroupJoin(body, env, request) {
 async function handleGroupInfo(body, env, request) {
   const { token } = body;
   if (!token) return json({ error: 'token required', code: 'MISSING_TOKEN' }, 400, request);
-  if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
+  if (typeof token !== 'string' || token.length > 128 || !/^[a-z0-9]+$/.test(token)) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
 
   const data = await kvGet(env, `grp:${token}`);
   if (!data) return json({ error: 'Not found', code: 'NOT_FOUND' }, 404, request);
@@ -1239,7 +1239,7 @@ async function checkGroupAuth(env, request, action, token, actorId, ts, sig, bin
 async function handleGroupKick(body, env, request) {
   const { token, kickId, adminId } = body;
   if (!token || !kickId || !adminId) return json({ error: 'token, kickId, adminId required', code: 'MISSING_FIELDS' }, 400, request);
-  if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
+  if (typeof token !== 'string' || token.length > 128 || !/^[a-z0-9]+$/.test(token)) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(kickId) || !validateUserId(adminId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   const kAuth = await checkGroupAuth(env, request, 'kick', token, adminId, body.ts, body.sig, kickId);
   if (kAuth) return kAuth;
@@ -1300,7 +1300,7 @@ async function handleGroupKick(body, env, request) {
 async function handleGroupAdmin(body, env, request) {
   const { token, adminId, targetId, action } = body;
   if (!token || !adminId || !targetId || !action) return json({ error: 'token, adminId, targetId, action required', code: 'MISSING_FIELDS' }, 400, request);
-  if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
+  if (typeof token !== 'string' || token.length > 128 || !/^[a-z0-9]+$/.test(token)) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(adminId) || !validateUserId(targetId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   if (action !== 'promote' && action !== 'demote' && action !== 'unban') return json({ error: "action must be 'promote', 'demote' or 'unban'", code: 'INVALID_ACTION' }, 400, request);
   // Bind BOTH the sub-action and the target: otherwise the relay could turn a signed
@@ -1360,7 +1360,7 @@ async function handleGroupAdmin(body, env, request) {
 async function handleGroupTransfer(body, env, request) {
   const { token, adminId, newCreatorId } = body;
   if (!token || !adminId || !newCreatorId) return json({ error: 'token, adminId, newCreatorId required', code: 'MISSING_FIELDS' }, 400, request);
-  if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
+  if (typeof token !== 'string' || token.length > 128 || !/^[a-z0-9]+$/.test(token)) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(adminId) || !validateUserId(newCreatorId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   const tAuth = await checkGroupAuth(env, request, 'transfer', token, adminId, body.ts, body.sig, newCreatorId);
   if (tAuth) return tAuth;
@@ -1403,7 +1403,7 @@ async function handleGroupTransfer(body, env, request) {
 async function handleGroupRename(body, env, request) {
   const { token, adminId, name: rawName } = body;
   if (!token || !adminId) return json({ error: 'token, adminId required', code: 'MISSING_FIELDS' }, 400, request);
-  if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
+  if (typeof token !== 'string' || token.length > 128 || !/^[a-z0-9]+$/.test(token)) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(adminId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   const name = sanitizeString(rawName, 50);
   if (!name) return json({ error: 'name required (1-50 chars)', code: 'INVALID_NAME' }, 400, request);
@@ -1437,7 +1437,7 @@ async function handleGroupRename(body, env, request) {
 async function handleGroupLeave(body, env, request) {
   const { token, memberId } = body;
   if (!token || !memberId) return json({ error: 'token, memberId required', code: 'MISSING_FIELDS' }, 400, request);
-  if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
+  if (typeof token !== 'string' || token.length > 128 || !/^[a-z0-9]+$/.test(token)) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(memberId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   const lAuth = await checkGroupAuth(env, request, 'leave', token, memberId, body.ts, body.sig);
   if (lAuth) return lAuth;
@@ -1469,7 +1469,7 @@ async function handleGroupLeave(body, env, request) {
 async function handleGroupDelete(body, env, request) {
   const { token, adminId } = body;
   if (!token || !adminId) return json({ error: 'token, adminId required', code: 'MISSING_FIELDS' }, 400, request);
-  if (typeof token !== 'string' || token.length > 128) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
+  if (typeof token !== 'string' || token.length > 128 || !/^[a-z0-9]+$/.test(token)) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(adminId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   const dAuth = await checkGroupAuth(env, request, 'delete', token, adminId, body.ts, body.sig);
   if (dAuth) return dAuth;
