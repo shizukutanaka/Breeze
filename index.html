@@ -5411,9 +5411,14 @@ async function initMessenger(dbName) {
       allMsgs.sort((a, b) => a.ts - b.ts);
       const deleteCount = Math.floor(allMsgs.length * 0.2);
       const toDelete = allMsgs.slice(0, deleteCount).filter(m => !m.pinned && !m.bookmarked);
-      const tx = db.transaction('messages', 'readwrite');
-      const store = tx.objectStore('messages');
-      for (const m of toDelete) store.delete(m.msgId);
+      // Await the transaction so callers can retry saves after space is freed
+      await new Promise((resolve) => {
+        const tx = db.transaction('messages', 'readwrite');
+        const store = tx.objectStore('messages');
+        for (const m of toDelete) store.delete(m.msgId);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      });
       _dbg(null, 'Cleaned ' + toDelete.length + ' old messages (quota recovery)');
     } catch(e) { _dbg(e, 'cleanup'); }
   }
@@ -6979,8 +6984,7 @@ async function initMessenger(dbName) {
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.+?)\*/g, '<em>$1</em>')
       .replace(/~~(.+?)~~/g, '<del class="md-del">$1</del>')
-      .replace(/\|\|(.+?)\|\|/g, '<span class="spoiler">$1</span>')
-      .replace(/@(\w+)/g, '<span class="md-mention">@$1</span>');
+      .replace(/\|\|(.+?)\|\|/g, '<span class="spoiler">$1</span>');
   }
 
   function renderLinks(text) {
@@ -6988,15 +6992,16 @@ async function initMessenger(dbName) {
       // URLs
       .replace(/(https?:\/\/[^\s<]+)/g, (url) => {
         const id = 'ogp-' + Math.random().toString(36).slice(2, 8);
-        if (API) fetchOGP(url, id);
+        // url is from esc()'d text — decode &amp; so the server fetches the real URL
+        if (API) fetchOGP(url.replace(/&amp;/g, '&'), id);
         return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="md-link">${url}</a><div id="${id}" class="md-ogp-slot"></div>`;
       })
       // v3.1: Auto-link email addresses
       .replace(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, '<a href="mailto:$1" class="md-link">$1</a>')
       // v3.1: Auto-link phone numbers (intl format)
       .replace(/(\+\d{1,3}[\s-]?\d{2,4}[\s-]?\d{3,4}[\s-]?\d{3,4})/g, '<a href="tel:$1" class="md-link">$1</a>')
-      // v3.3: @mention highlight
-      .replace(/@(\w{2,20})/g, '<span class="md-mention">@$1</span>');
+      // v3.3: @mention highlight — (?<![/\w]) skips @ in email addresses (user@domain) and URL paths (/user/@handle)
+      .replace(/(?<![/\w])@(\w{2,20})/g, '<span class="md-mention">@$1</span>');
   }
 
   // v3.1: Sender-side OGP extraction — called before sending a message
@@ -11984,7 +11989,7 @@ async function initMessenger(dbName) {
       e.preventDefault(); clearInput();
       const contacts = await dbGetAll('contacts');
       const exportData = contacts.map(c => ({
-        name: c.name, alias: c.alias || null, pubB64: c.pubB64,
+        id: c.id, name: c.name, alias: c.alias || null, pubB64: c.pubB64,
         isGroup: c.isGroup || false, members: c.members || [],
         labels: c.labels || [], notes: c.notes || null,
         addedAt: c.addedAt, pinned: c.pinned || false,
@@ -12007,9 +12012,11 @@ async function initMessenger(dbName) {
           let added = 0, skipped = 0;
           for (const c of data.contacts) {
             if (!c.pubB64 && !c.isGroup) { skipped++; continue; }
-            const existing = await dbGet('contacts', c.pubB64 || c.name);
+            // Use exported id when present (preserves group IDs); fall back to pubB64 for older exports
+            const contactId = c.id || c.pubB64 || c.name;
+            const existing = await dbGet('contacts', contactId);
             if (existing) { skipped++; continue; }
-            await dbPut('contacts', { id: c.pubB64 || c.name, pubB64: c.pubB64, name: c.name,
+            await dbPut('contacts', { id: contactId, pubB64: c.pubB64, name: c.name,
               alias: c.alias, isGroup: c.isGroup, members: c.members,
               labels: c.labels || [], notes: c.notes, addedAt: c.addedAt || Date.now(),
               pinned: c.pinned || false, unread: 0 });
@@ -12162,7 +12169,7 @@ async function initMessenger(dbName) {
       const sendAt = Date.now() + delayMs;
       const contact = activeContact;
       // Store in IDB for persistence across reloads
-      const schedId = 'sched:' + Date.now();
+      const schedId = 'sched:' + uid();
       await dbPut('identity', { id: schedId, contactId: contact.id, text, sendAt });
       const timeStr = delayMs < MS.MIN ? Math.round(delayMs/MS.SEC) + 's' : delayMs < MS.HOUR ? Math.round(delayMs/MS.MIN) + 'm' : Math.round(delayMs/MS.HOUR) + 'h';
       showToast(t('toastScheduled')(timeStr, text.slice(0, 30)), 'success');
