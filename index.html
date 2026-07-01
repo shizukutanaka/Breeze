@@ -12668,6 +12668,13 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
           const delSig = await signMessage(`breeze-account-delete:${myId}:${delTs}`);
           if (delSig) await postAPIRaw('/account/delete', { userId: myId, ts: delTs, sig: delSig });
         } catch(e) { _dbg(e); }
+        // Belt-and-suspenders: unsubscribe push explicitly so notifications can't
+        // arrive on this device for a wiped account even if /account/delete failed.
+        try {
+          const reg = await navigator.serviceWorker?.ready.catch(() => null);
+          const sub = await reg?.pushManager?.getSubscription().catch(() => null);
+          if (sub) { postAPIRaw('/push/unsubscribe', { userId: myId, endpoint: sub.endpoint }).catch(() => {}); await sub.unsubscribe().catch(() => {}); }
+        } catch(e) { _dbg(e); }
       }
       // Local wipe
       try {
