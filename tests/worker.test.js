@@ -3643,7 +3643,7 @@ describe('dead drop (create + read)', () => {
 
   it('creates a drop and returns ok + ttl', async () => {
     const e = makeEnv();
-    const res = await handleDropCreate({ id: 'abc123', ct: 'ciphertext' }, e, req({}));
+    const res = await handleDropCreate({ id: 'abc123abc123abc1', ct: 'ciphertext' }, e, req({}));
     expect(res.status).toBe(200);
     const j = await res.json();
     expect(j.ok).toBe(true);
@@ -3653,11 +3653,18 @@ describe('dead drop (create + read)', () => {
 
   it('rejects id collision on second create with same id', async () => {
     const e = makeEnv();
-    await handleDropCreate({ id: 'dup1', ct: 'ct1' }, e, req({}));
-    const res2 = await handleDropCreate({ id: 'dup1', ct: 'ct2' }, e, req({}));
+    await handleDropCreate({ id: 'dup1dup1dup1dup1', ct: 'ct1' }, e, req({}));
+    const res2 = await handleDropCreate({ id: 'dup1dup1dup1dup1', ct: 'ct2' }, e, req({}));
     expect(res2.status).toBe(409);
     const j = await res2.json();
     expect(j.code).toBe('COLLISION');
+  });
+
+  it('rejects id < 16 chars (entropy floor)', async () => {
+    const e = makeEnv();
+    const res = await handleDropCreate({ id: 'short123', ct: 'ct' }, e, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_ID');
   });
 
   it('rejects id > 64 chars', async () => {
@@ -3668,44 +3675,44 @@ describe('dead drop (create + read)', () => {
 
   it('rejects ct > 100KB', async () => {
     const e = makeEnv();
-    const res = await handleDropCreate({ id: 'big', ct: 'x'.repeat(100001) }, e, req({}));
+    const res = await handleDropCreate({ id: 'bigbigbigbigbig1', ct: 'x'.repeat(100001) }, e, req({}));
     expect(res.status).toBe(400);
   });
 
   it('clamps ttl to [300, 604800]', async () => {
     const e = makeEnv();
-    const r1 = await (await handleDropCreate({ id: 'ttl1', ct: 'x', ttl: 1 }, e, req({}))).json();
+    const r1 = await (await handleDropCreate({ id: 'ttl1ttl1ttl1ttl1', ct: 'x', ttl: 1 }, e, req({}))).json();
     expect(r1.ttl).toBe(300);
-    const r2 = await (await handleDropCreate({ id: 'ttl2', ct: 'x', ttl: 9999999 }, e, req({}))).json();
+    const r2 = await (await handleDropCreate({ id: 'ttl2ttl2ttl2ttl2', ct: 'x', ttl: 9999999 }, e, req({}))).json();
     expect(r2.ttl).toBe(604800);
   });
 
   it('read returns the ciphertext and deletes the drop (one-time)', async () => {
     const e = makeEnv();
-    await handleDropCreate({ id: 'onetimeX', ct: 'sekret' }, e, req({}));
-    const r1 = await handleDropRead({ id: 'onetimeX' }, e, readReq({}));
+    await handleDropCreate({ id: 'onetimeXonetimeX', ct: 'sekret' }, e, req({}));
+    const r1 = await handleDropRead({ id: 'onetimeXonetimeX' }, e, readReq({}));
     expect(r1.status).toBe(200);
     const j1 = await r1.json();
     expect(j1.ct).toBe('sekret');
     // Second read must 404
-    const r2 = await handleDropRead({ id: 'onetimeX' }, e, readReq({}));
+    const r2 = await handleDropRead({ id: 'onetimeXonetimeX' }, e, readReq({}));
     expect(r2.status).toBe(404);
     expect((await r2.json()).code).toBe('NOT_FOUND');
   });
 
   it('read of non-existent id returns 404', async () => {
     const e = makeEnv();
-    const res = await handleDropRead({ id: 'no-such-drop' }, e, readReq({}));
+    const res = await handleDropRead({ id: 'no-such-drop-id1' }, e, readReq({}));
     expect(res.status).toBe(404);
   });
 
   it('rejects id with characters outside A-Za-z0-9_-. (KV key injection guard)', async () => {
     const e = makeEnv();
-    const r1 = await handleDropCreate({ id: 'bad id!', ct: 'x' }, e, req({}));
+    const r1 = await handleDropCreate({ id: 'bad id! bad id!!', ct: 'x' }, e, req({}));
     expect(r1.status).toBe(400);
-    const r2 = await handleDropCreate({ id: '../secret', ct: 'x' }, e, req({}));
+    const r2 = await handleDropCreate({ id: '../secret/secret', ct: 'x' }, e, req({}));
     expect(r2.status).toBe(400);
-    const r3 = await handleDropRead({ id: 'bad id!' }, e, readReq({}));
+    const r3 = await handleDropRead({ id: 'bad id! bad id!!', ct: 'x' }, e, readReq({}));
     expect(r3.status).toBe(400);
   });
 });
@@ -3735,10 +3742,10 @@ describe('dead drop — server-side ID generation (item 31)', () => {
     expect((await res.json()).id).toBe('client-chosen-id');
   });
 
-  it('response always includes id even for legacy client-provided ids', async () => {
+  it('response always includes id even for client-provided ids', async () => {
     const e = makeEnv();
-    const j = await (await handleDropCreate({ id: 'abc123', ct: 'x' }, e, req({}))).json();
-    expect(j.id).toBe('abc123');
+    const j = await (await handleDropCreate({ id: 'abc123abc123abc1', ct: 'x' }, e, req({}))).json();
+    expect(j.id).toBe('abc123abc123abc1');
     expect(j.ok).toBe(true);
   });
 

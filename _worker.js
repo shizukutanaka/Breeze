@@ -2637,8 +2637,10 @@ async function handleDropCreate(body, env, request) {
   // Server-generated IDs eliminate the check-then-set collision race entirely.
   // Client-provided IDs are accepted for backward compatibility (e.g. existing clients).
   if (id !== undefined) {
-    if (typeof id !== 'string' || id.length < 1 || id.length > 64 || !/^[A-Za-z0-9_\-.]+$/.test(id))
-      return json({ error: 'invalid id (1-64 alphanumeric/_/./- chars)', code: 'INVALID_ID' }, 400, request);
+    // Minimum 16 chars prevents predictable/enumerable custom IDs (e.g. "drop-1").
+    // The client always sends 24-char random IDs; existing integrations are unaffected.
+    if (typeof id !== 'string' || id.length < 16 || id.length > 64 || !/^[A-Za-z0-9_\-.]+$/.test(id))
+      return json({ error: 'invalid id (16-64 alphanumeric/_/./- chars)', code: 'INVALID_ID' }, 400, request);
   } else {
     id = crypto.randomUUID().replace(/-/g, '');
   }
@@ -2655,7 +2657,7 @@ async function handleDropCreate(body, env, request) {
 
 async function handleDropRead(body, env, request) {
   const { id } = body;
-  if (!id || typeof id !== 'string' || id.length > 64 || !/^[A-Za-z0-9_\-.]+$/.test(id)) return json({ error: 'invalid id', code: 'INVALID_ID' }, 400, request);
+  if (!id || typeof id !== 'string' || id.length < 16 || id.length > 64 || !/^[A-Za-z0-9_\-.]+$/.test(id)) return json({ error: 'invalid id', code: 'INVALID_ID' }, 400, request);
   const key = `drop:${id}`;
   const raw = await kvGet(env, key);
   if (!raw) return json({ error: 'Not found or already read', code: 'NOT_FOUND' }, 404, request);
