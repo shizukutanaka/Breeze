@@ -6643,7 +6643,7 @@ async function initMessenger(dbName) {
     await dbPut('contacts', contact);
     const nameEl = _DOM.get('msg-conv-name');
     // v3.6: Show member count for groups in header
-    const memberBadge = contact.isGroup && contact.members ? ` <span class="enc-badge">${contact.members.length}人</span>` : '';
+    const memberBadge = contact.isGroup && contact.members ? ` <span class="enc-badge">${contact.members.length} ${esc(t('cmdMembersLabel'))}</span>` : '';
     safeSetHTML(nameEl, (contact.blocked ? '🚫 ' : '') + (contact.muted ? '🔇 ' : '') + esc(contact.name) + (contact.isGroup ? memberBadge : ' <span class="enc-badge">E2E</span>'));
     updateConvStatus(contact); // v3.3: Show connection quality + relative time
     contact.blocked ? _DOM.get('msg-input-bar').classList.add('hidden') : _DOM.get('msg-input-bar').classList.remove('hidden');
@@ -7724,7 +7724,7 @@ async function initMessenger(dbName) {
     if (activeContact.isGroup) {
       const online = (activeContact.members || []).filter(m => m.id !== myId && (peers[m.pubB64]?.connected || _presenceCache[m.id])).length;
       const total = (activeContact.members?.length || 1) - 1;
-      el.textContent = `${online}/${total} online`;
+      el.textContent = `${online}/${total} ${t('online')}`;
       el.classList.toggle('i-color-g', online > 0);
       // cursor handled by CSS
       el.title = '';
