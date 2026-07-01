@@ -6277,6 +6277,11 @@ async function initMessenger(dbName) {
       });
       // Clear group typing state to prevent memory leak on account switch
       for (const groupId in _groupTypingState) { delete _groupTypingState[groupId]; }
+      // Stop any in-progress voice recording to release the microphone on account switch
+      if (_mediaRecorder && _mediaRecorder.state === 'recording') {
+        try { _mediaRecorder.stop(); } catch(e) { _dbg(e); }
+      }
+      if (_recTimer) { clearInterval(_recTimer); _recTimer = null; }
       // Save unread count for cross-account badge
       try {
         const activeId = getActiveAccountId();
