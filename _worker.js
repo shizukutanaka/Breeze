@@ -2836,7 +2836,7 @@ async function handleTranslate(body, env, request) {
           provider = 'deepl';
         }
       }
-    } catch(e) { console.error('DeepL error:', e); }
+    } catch(e) { console.error('[translate] DeepL:', e?.message ?? e); }
   }
 
   // Provider 2: LibreTranslate (if TRANSLATE_URL configured, e.g. self-hosted)
@@ -2851,7 +2851,7 @@ async function handleTranslate(body, env, request) {
         const d = await resp.json();
         if (d.translatedText) { translated = d.translatedText; detectedFrom = d.detectedLanguage?.language || src; provider = 'libre'; }
       }
-    } catch(e) { console.error('LibreTranslate error:', e); }
+    } catch(e) { console.error('[translate] LibreTranslate:', e?.message ?? e); }
   }
 
   // Provider 3: Google Cloud Translation (if GOOGLE_TRANSLATE_KEY configured)
@@ -2868,7 +2868,7 @@ async function handleTranslate(body, env, request) {
           provider = 'google';
         }
       }
-    } catch(e) { console.error('Google Translate error:', e); }
+    } catch(e) { console.error('[translate] Google:', e?.message ?? e); }
   }
 
   // Provider 4: MyMemory (free, no API key, 5000 chars/day)
@@ -2884,7 +2884,7 @@ async function handleTranslate(body, env, request) {
           provider = 'mymemory';
         }
       }
-    } catch(e) { console.error('MyMemory error:', e); }
+    } catch(e) { console.error('[translate] MyMemory:', e?.message ?? e); }
   }
 
   if (!translated) return json({ error: 'Translation failed', code: 'TRANSLATE_FAILED' }, 502, request);
@@ -2999,7 +2999,7 @@ async function handleAI(body, env, request) {
         const text = d.content?.find(b => b.type === 'text')?.text;
         if (text) { result = text; provider = 'anthropic'; }
       }
-    } catch(e) { console.error('Anthropic error:', e); }
+    } catch(e) { console.error('[ai] Anthropic:', e?.message ?? e); }
   }
 
   // Provider 2: OpenAI
@@ -3023,7 +3023,7 @@ async function handleAI(body, env, request) {
         const text = d.choices?.[0]?.message?.content;
         if (text) { result = text; provider = 'openai'; }
       }
-    } catch(e) { console.error('OpenAI error:', e); }
+    } catch(e) { console.error('[ai] OpenAI:', e?.message ?? e); }
   }
 
   // Provider 3: Groq (fast, generous free tier)
@@ -3046,7 +3046,7 @@ async function handleAI(body, env, request) {
         const text = d.choices?.[0]?.message?.content;
         if (text) { result = text; provider = 'groq'; }
       }
-    } catch(e) { console.error('Groq error:', e); }
+    } catch(e) { console.error('[ai] Groq:', e?.message ?? e); }
   }
 
   if (!result) return json({ error: 'AI generation failed', code: 'AI_FAILED' }, 502, request);
@@ -3092,13 +3092,13 @@ function corsHeaders(request) {
 
 // v3.5: KV safety helpers (FIXED: was calling itself recursively!)
 async function kvGet(env, key) {
-  try { return await env.KV.get(key); } catch(e) { console.error('KV GET failed:', key, e); return null; }
+  try { return await env.KV.get(key); } catch(e) { console.error('[kv] GET failed:', e?.message ?? e); return null; }
 }
 async function kvPut(env, key, value, opts) {
-  try { await env.KV.put(key, value, opts); return true; } catch(e) { console.error('KV PUT failed:', key, e); return false; }
+  try { await env.KV.put(key, value, opts); return true; } catch(e) { console.error('[kv] PUT failed:', e?.message ?? e); return false; }
 }
 async function kvDel(env, key) {
-  try { await env.KV.delete(key); return true; } catch(e) { console.error('KV DEL failed:', key, e); return false; }
+  try { await env.KV.delete(key); return true; } catch(e) { console.error('[kv] DEL failed:', e?.message ?? e); return false; }
 }
 
 // ================================================================
