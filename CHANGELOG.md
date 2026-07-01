@@ -14,6 +14,12 @@
 **Network quality abort controller:**
 - `measureNetworkQuality()` now cancels a prior RTT probe before starting a new one via `AbortController`. Previously overlapping probes (triggered by rapid conversation switches) could leave stale `AbortSignal` contexts and cause spurious `fetchT` errors in the console.
 
+**Trailing-slash rate-limit bypass (worker):**
+- `url.pathname` now strips trailing slashes before rate-limit lookup and handler routing. A path like `/api/backup/upload/` previously missed the path-specific 2 rpm limit, falling back to the 30 rpm default.
+
+**Call UI name truncation:**
+- `showCallUI()` now slices the contact name to 64 chars at display time, matching the `addContact()` write-time cap. Prevents layout overflow for pre-cap contacts or P2P-supplied names.
+
 ---
 
 ## Security hardening session 3 — poll race, SDP guard, field caps, edit cap (branch claude/nice-ride-T6yb0, 2026-07-01)
