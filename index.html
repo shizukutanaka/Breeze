@@ -12545,7 +12545,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       safeSetHTML(d, [
         '<b class="i-g">' + t('cmdMyIdentity') + '</b>',
         t('cmdLblName') + ': <b>' + esc(myName) + '</b>',
-        'ID: <code class="i-fs10">' + esc(myId) + '</code>',
+        t('cmdLblUserId') + ': <code class="i-fs10">' + esc(myId) + '</code>',
         myAlias ? t('cmdLblAlias') + ': <b class="i-g">' + esc(myAlias) + '</b>' : t('cmdLblAlias') + ': ' + t('cmdNoAlias'),
         t('cmdLblCrypto') + ': ' + (_hasX25519 ? 'X25519' : 'P-256'),
         '',
