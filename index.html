@@ -9742,6 +9742,8 @@ async function initMessenger(dbName) {
         if (!decrypted) return;
         const v = JSON.parse(decrypted);
         if (v.type !== 'voice') return;
+        // Cap voice data to the relay's effective max (256 KB base64 ≈ 192 KB audio)
+        if (typeof v.data !== 'string' || v.data.length > 350000) return;
         const msgId = msg.from + ':' + msg.ts;
         if (_replayCache.has(msgId)) return; // Fast in-memory dedup
       if (await dbGet('messages', msgId)) { _replayCache.add(msgId); return; }
@@ -11150,6 +11152,8 @@ async function initMessenger(dbName) {
     const mimeLen = view.getUint16(26);
     // Validate that header fields don't extend past the end of the buffer.
     if (28 + nameLen + mimeLen > buffer.byteLength) return;
+    // Reject unreasonably large metadata (255 bytes is plenty for a filename/MIME type).
+    if (nameLen > 255 || mimeLen > 128) return;
     const data = new Uint8Array(buffer, 28 + nameLen + mimeLen);
     if (!_fileChunks[fileId]) {
       // Cap concurrent in-progress transfers to prevent accumulation of stale entries.
