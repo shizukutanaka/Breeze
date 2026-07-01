@@ -1,5 +1,37 @@
 # Changelog
 
+## Security hardening — input validation & P2P authentication (branch claude/nice-ride-T6yb0, 2026-07-01)
+
+777 tests; `index.html` + `_worker.js`. `validate.sh` PASSED (35/36, 1 size warning).
+
+**Group trust boundary:**
+- Require known contacts for group invite and sender key distribution — unknown sender's `msg.fromPub` can no longer inject a fake group or poison sender keys
+- Strict group token character validation: only `[a-z0-9]` allowed (matches server-generated token format)
+- Cap group invite `members` array to `CONFIG.GROUP_MAX` (100) and `invite.name`/`groupId` to 64 chars on receipt
+- Cap server-returned `data.members` to `GROUP_MAX` in the group-info poll update path
+
+**Injection / selector attacks:**
+- Sanitize peer-supplied `msgId` via `safeMsgId()` before all `querySelector` calls (group relay, 1:1 relay, P2P DataChannel, reaction handlers)
+- Validate `msg.ts` in `handleIncoming`: non-numeric values now reset to `Date.now()` instead of poisoning `msgId` and breaking attribute selectors
+
+**DoS / storage guards:**
+- Incoming message text capped at 64 KB (relay enforces 256 KB; P2P DataChannel had no server check)
+- Edit signal `signal.text` capped at 64 KB before DB write
+- `sendMessage()` enforces 64 KB cap programmatically (bypasses `maxlength="4096"` on quick-reply, speech-to-text, scheduled-message paths); new i18n keys `toastMsgTooLong` (EN+JA)
+- Reaction `emoji` field capped at 64 chars in all three reaction handlers (group relay, 1:1 relay, P2P DataChannel)
+- `poll.options` array capped at 20 in `renderPollHtml`; `poll.question` and `opt.text` capped at 200 chars; `opt.votes` coerced to array
+- `msg.senderName` in group typing indicator truncated to 64 chars before use as dict key (`_groupTypingState`)
+- Scheduled message `text` capped at 64 KB before IDB write
+
+**Data integrity:**
+- Backup restore validates required contact fields (`id`, `pubB64` type, length, base64 charset) at both restore paths before `dbPut`
+- `pollOptionIndex` must be `Number.isInteger && >= 0` before use as array index
+- `_peerRelayQueue` key validated as non-empty string ≤ 64 chars; `hasOwnProperty` guard prevents `__proto__` prototype pollution
+
+**P2P WebRTC authentication:**
+- `_sendSignedSDP()` helper signs SDP offer/answer with Ed25519 before posting to the unauthenticated `/signal` relay
+- SDP receive path verifies Ed25519 signature; TOFU-pins peer signing key; key mismatch or invalid signature drops the SDP with a debug log; unsigned SDPs accepted for backward compatibility
+
 ## NEW FEATURE: idle auto-lock (`/lock idle <min>`) — Socratic-derived — item 107 (branch claude/nice-ride-T6yb0, 2026-06-20)
 
 734 tests; `index.html` only. `validate.sh` PASSED (i18n EN/JA parity).
