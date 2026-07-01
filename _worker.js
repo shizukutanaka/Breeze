@@ -901,7 +901,10 @@ async function handleWebhook(request, env) {
       // the `parsed.slots || 1` read path.  Our code always sends a numeric string, but
       // a Stripe metadata edit or replay of a tampered event would reach this path.
       const planSlots = parseInt(session.metadata.slots) || 2;
-      const slotsOk = await kvPut(env, `slots:${userId}`, JSON.stringify({ slots: planSlots, plan: session.metadata.plan || 'lite', customerId, updatedAt: Date.now() }));
+      // Only store known plan identifiers; reject arbitrary strings from tampered Stripe metadata.
+      const VALID_PLANS = new Set(['lite', 'plus', 'pro']);
+      const plan = VALID_PLANS.has(session.metadata.plan) ? session.metadata.plan : 'lite';
+      const slotsOk = await kvPut(env, `slots:${userId}`, JSON.stringify({ slots: planSlots, plan, customerId, updatedAt: Date.now() }));
       if (!slotsOk) return new Response('KV write failed', { status: 500 });
       if (customerId) {
         const custOk = await kvPut(env, `cust:${customerId}`, userId);
@@ -945,7 +948,7 @@ async function handleWebhook(request, env) {
       // parse failure so a bad metadata value doesn't store NaN in KV.
       const newSlots = parseInt(sub.metadata.slots) || 1;
       const slotsOk = await kvPut(env, `slots:${userId}`, JSON.stringify({
-        slots: newSlots, plan: sub.metadata.plan || 'lite',
+        slots: newSlots, plan: ['lite', 'plus', 'pro'].includes(sub.metadata.plan) ? sub.metadata.plan : 'lite',
         customerId: sub.customer, updatedAt: Date.now()
       }));
       if (!slotsOk) return new Response('KV write failed', { status: 500 });
@@ -1744,6 +1747,7 @@ async function sendPushToUser(userId, payload, env) {
       if (!encrypted) continue; // subscription missing keys
       const resp = await fetchWithTimeout(sub.endpoint, {
         method: 'POST',
+        redirect: 'manual', // never follow redirects — prevents SSRF relay via compromised push services
         headers: {
           'Content-Type': 'application/octet-stream',
           'Content-Encoding': 'aes128gcm',
