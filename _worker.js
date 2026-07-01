@@ -2807,7 +2807,7 @@ async function handleTranslate(body, env, request) {
   const cacheKey = `tr:${hash}`;
   const cached = await kvGet(env, cacheKey);
   if (cached) {
-    try { return json({ ...JSON.parse(cached), cached: true }, 200, request); } catch {}
+    try { return json({ ...JSON.parse(cached), cached: true }, 200, request); } catch(e) { console.error('[translate-cache]', e?.message ?? e); }
   }
 
   let translated = null;
@@ -2971,7 +2971,7 @@ async function handleAI(body, env, request) {
   const cacheKey = `ai:${hash}`;
   const cached = await kvGet(env, cacheKey);
   if (cached) {
-    try { return json({ ...JSON.parse(cached), cached: true }, 200, request); } catch {}
+    try { return json({ ...JSON.parse(cached), cached: true }, 200, request); } catch(e) { console.error('[ai-cache]', e?.message ?? e); }
   }
 
   let result = null;
