@@ -10899,6 +10899,9 @@ async function initMessenger(dbName) {
       const targetId = req.targetId;
       // Guard against prototype-polluting keys and non-string values
       if (typeof targetId !== 'string' || !targetId || targetId.length > 64) return;
+      // Cap payload size — an encrypted 1:1 message is ≤32 KB including overhead; anything
+      // larger is malformed and would waste memory in the relay queue.
+      if (typeof req.payload !== 'string' || req.payload.length > 65536) return;
       if (!Object.prototype.hasOwnProperty.call(_peerRelayQueue, targetId)) _peerRelayQueue[targetId] = [];
       _peerRelayQueue[targetId].push({ payload: req.payload, ts: Date.now(), from: contact.id });
       // Limit: 20 messages per target, 1 hour TTL

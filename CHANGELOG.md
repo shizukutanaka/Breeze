@@ -1,5 +1,32 @@
 # Changelog
 
+## Security hardening session 2 — handleIncoming guards, AI opt-in, storage caps (branch claude/nice-ride-T6yb0, 2026-07-01)
+
+777 tests; `index.html` only. `validate.sh` PASSED (35/36, 1 size warning).
+
+**Privacy:**
+- AI smart reply (`showSmartReplies`) now gated on explicit user opt-in (`brz-ai-suggest` localStorage flag); previously recent message snippets were sent to the configured AI provider on every received message with no disclosure or consent
+- New toggle in `/settings` panel with EN+JA i18n labels
+
+**handleIncoming field validation (P2P path):**
+- `msg.fromName` capped to 64 chars — relay path was already bounded by `sanitizeString(name, 64)`, but P2P group path bypassed it
+- `msg.replyTo.msgId` capped to 64 chars and `msg.replyTo.text` to 80 chars before IDB write (display was already capping at render time)
+- `msg.disappearAt` rejected if non-finite or ≤ 0 (Infinity/NaN would prevent message expiry)
+
+**Peer relay payload guard:**
+- `req.payload` in `handlePeerRelayRequest` rejected if not a string or > 64 KB (a legitimate encrypted 1:1 message is at most ~32 KB)
+
+**Contact import validation:**
+- `/contacts import` validates `pubB64` (string type, non-empty, ≤ 128 chars, base64 charset) and derived `id` (string type, non-empty, ≤ 128 chars) before `dbPut`
+
+**Storage DoS caps:**
+- `/label` entries capped to 20 labels × 32 chars each (previously unbounded)
+- `/note` text capped to 1024 chars (both `/note` and `/notes` paths)
+- Contact rename (context menu) capped to 64 chars
+- `/ai` question capped to 2000 chars before API call
+
+---
+
 ## Security hardening — input validation & P2P authentication (branch claude/nice-ride-T6yb0, 2026-07-01)
 
 777 tests; `index.html` + `_worker.js`. `validate.sh` PASSED (35/36, 1 size warning).
