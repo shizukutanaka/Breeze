@@ -12218,10 +12218,18 @@ async function initMessenger(dbName) {
             const contactId = rawId;
             const existing = await dbGet('contacts', contactId);
             if (existing) { skipped++; continue; }
-            await dbPut('contacts', { id: contactId, pubB64: c.pubB64, name: c.name,
-              alias: c.alias, isGroup: c.isGroup, members: c.members,
-              labels: c.labels || [], notes: c.notes, addedAt: c.addedAt || Date.now(),
-              pinned: c.pinned || false, unread: 0 });
+            // Cap every field to the same limits enforced at normal add/edit time
+            const safeName = typeof c.name === 'string' ? c.name.slice(0, 64) : 'Contact';
+            const safeAlias = typeof c.alias === 'string' ? c.alias.slice(0, 32) : null;
+            const safeNotes = typeof c.notes === 'string' ? c.notes.slice(0, 1024) : null;
+            const safeLabels = Array.isArray(c.labels)
+              ? c.labels.filter(l => typeof l === 'string').map(l => l.slice(0, 32)).slice(0, 20) : [];
+            const safeMembers = Array.isArray(c.members) ? c.members.slice(0, CONFIG.GROUP_MAX) : [];
+            const safeAddedAt = (typeof c.addedAt === 'number' && Number.isFinite(c.addedAt)) ? c.addedAt : Date.now();
+            await dbPut('contacts', { id: contactId, pubB64: c.pubB64, name: safeName,
+              alias: safeAlias, isGroup: !!c.isGroup, members: safeMembers,
+              labels: safeLabels, notes: safeNotes, addedAt: safeAddedAt,
+              pinned: !!c.pinned, unread: 0 });
             added++;
           }
           await renderContacts();
