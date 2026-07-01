@@ -10088,6 +10088,8 @@ async function initMessenger(dbName) {
       if (peerState.stateDC) {
         peerState.stateDC.onmessage = (e) => {
           try {
+            // State channel carries only tiny control frames (typing/read/ping/pong); cap at 4KB
+            if (typeof e.data !== 'string' || e.data.length > 4 * 1024) return;
             const msg = JSON.parse(e.data);
             if (msg.type === 'typing') { showTyping(contact.id, msg.senderName || contact.name); return; }
             if (msg.type === 'read') { showReadReceipt(contact.id, msg.ts); return; }
@@ -10104,6 +10106,9 @@ async function initMessenger(dbName) {
             handleBinaryChunk(contact, e.data);
             return;
           }
+          // Cap at 512KB — relay enforces 256KB but P2P DataChannel has no server check;
+          // an oversized JSON blob from a malicious peer would otherwise hang JSON.parse.
+          if (typeof e.data !== 'string' || e.data.length > 512 * 1024) return;
           const msg = JSON.parse(e.data);
           // v3.6: Typing/read may still arrive on main DC (backward compat)
           if (msg.type === 'typing') { showTyping(contact.id, msg.senderName || contact.name); return; }
@@ -10533,11 +10538,14 @@ async function initMessenger(dbName) {
 
   // ===== v3.3: Network quality tracking =====
   let _lastRtt = 0;
+  let _netQualityAC = null; // AbortController to cancel overlapping RTT probes
   async function measureNetworkQuality() {
     if (!API || _isOffline) return;
+    if (_netQualityAC) { try { _netQualityAC.abort(); } catch {} }
+    _netQualityAC = new AbortController();
     try {
       const t0 = performance.now();
-      const r = await fetchT(API + '/health');
+      const r = await fetchT(API + '/health', { signal: _netQualityAC.signal });
       _lastRtt = Math.round(performance.now() - t0);
       const statusEl = _DOM.get('msg-conv-status');
       if (statusEl && activeContact) {
