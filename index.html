@@ -12355,6 +12355,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       e.preventDefault();
       clearInput();
       const data = await gdprExport();
+      if (!data) { showToast(t('toastServerError'), 'error'); return; }
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       downloadBlob(blob, `breeze-gdpr-export-${new Date().toISOString().slice(0,10)}.json`);
       auditLog('settings', 'GDPR data export performed');
