@@ -2793,7 +2793,8 @@ async function handleOGP(body, env, request) {
     const image = og('image');
     const siteName = og('site_name') || '';
 
-    const result = { title: title.slice(0, 200), description: description.slice(0, 300), image: image.slice(0, 500), siteName: siteName.slice(0, 100), url };
+    const safeImage = (() => { try { return new URL(image).protocol === 'https:' ? image.slice(0, 500) : ''; } catch { return ''; } })();
+    const result = { title: title.slice(0, 200), description: description.slice(0, 300), image: safeImage, siteName: siteName.slice(0, 100), url };
 
     // Cache for 24h
     await kvPut(env, cacheKey, JSON.stringify(result), { expirationTtl: TTL.DAY });

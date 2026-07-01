@@ -6357,6 +6357,9 @@ async function initMessenger(dbName) {
       // Null out cryptographic key material so pending callbacks from this account
       // cannot sign or decrypt under the old identity after the switch.
       _signingKey = null; myKeys = null;
+      // Clear the in-memory replay cache: msgId entries from this account's sessions
+      // should not be used to deduplicate incoming messages for the next account.
+      _replayCache._map.clear();
       // Clear incomplete binary file transfers — their chunk buffers belong to this
       // account's peer sessions and must not survive into the next account's context.
       for (const id in _fileChunks) delete _fileChunks[id];
