@@ -7715,10 +7715,11 @@ async function initMessenger(dbName) {
     try {  
       const newText = await showPrompt(t('editMsgPrompt'), msg.text);
       if (!newText || newText === msg.text) return;
+      const editText = newText.slice(0, CONFIG.MAX_MSG_LENGTH);
       // Update IDB
       const stored = await dbGet('messages', msg.msgId);
       if (stored) {
-        stored.text = newText;
+        stored.text = editText;
         stored.edited = true;
         await dbPut('messages', stored);
       }
@@ -7726,10 +7727,10 @@ async function initMessenger(dbName) {
       const el = document.querySelector(`[data-msgid="${msg.msgId}"]`);
       if (el) {
         const time = new Date(msg.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        safeSetHTML(el, renderLinks(renderMarkdown(esc(newText))) + ' <span class="i-edited">' + t('edited') + '</span><span class="ts">' + time + '</span>');
+        safeSetHTML(el, renderLinks(renderMarkdown(esc(editText))) + ' <span class="i-edited">' + t('edited') + '</span><span class="ts">' + time + '</span>');
       }
       // Notify peer
-      sendSignal({ type: 'edit', msgId: msg.msgId, text: newText, ts: msg.ts });
+      sendSignal({ type: 'edit', msgId: msg.msgId, text: editText, ts: msg.ts });
     
     } catch(_e) { _dbg(_e, 'startEdit'); }
   }
