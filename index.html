@@ -9546,7 +9546,12 @@ async function initMessenger(dbName) {
     if (msg.isSenderKey) {
       try {
         const c = await dbGet('contacts', (msg.from || '').slice?.(0, 12) || msg.from);
-        const decrypted = await decryptFrom(msg.payload, c?.pubB64 || msg.fromPub);
+        // Only accept sender keys from known contacts. An unknown sender who is not in
+        // the contacts DB would otherwise use msg.fromPub (attacker-controlled) as the
+        // decryption peer key, letting them inject arbitrary sender keys into identity
+        // store (DB pollution; defense-in-depth since group messages also require membership).
+        if (!c) return;
+        const decrypted = await decryptFrom(msg.payload, c.pubB64);
         if (!decrypted) return;
         const skMsg = JSON.parse(decrypted);
         if (skMsg.type === 'sender_key' && skMsg.groupId && skMsg.key) {
@@ -9564,7 +9569,13 @@ async function initMessenger(dbName) {
     if (msg.isGroupInvite) {
       try {
         const c = await dbGet('contacts', (msg.from || '').slice?.(0, 12) || msg.from);
-        const decrypted = await decryptFrom(msg.payload, c?.pubB64 || msg.fromPub);
+        // Only accept group invites from known contacts. Without this guard, an unknown
+        // attacker can send a forged group invite (msg.fromPub is attacker-controlled),
+        // causing decryptFrom to succeed and injecting a fake group with attacker-chosen
+        // member pubkeys — all group messages from the victim would then be readable by
+        // the attacker using those poisoned keys.
+        if (!c) return;
+        const decrypted = await decryptFrom(msg.payload, c.pubB64);
         if (!decrypted) return;
         const invite = JSON.parse(decrypted);
         if (invite.type === 'group_invite' && !(await dbGet('contacts', invite.groupId))) {
