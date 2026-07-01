@@ -11404,7 +11404,7 @@ async function initMessenger(dbName) {
         .filter(m => m.type === 'message' && m.text)
         .map(m => ({
           sender: m.from || m.from_id || t('unknown'),
-          text: typeof m.text === 'string' ? m.text : m.text.map?.(t => typeof t === 'string' ? t : t.text || '').join('') || '',
+          text: typeof m.text === 'string' ? m.text : m.text.map?.(seg => typeof seg === 'string' ? seg : seg.text || '').join('') || '',
           ts: new Date(m.date).getTime(),
         }))
         .filter(m => !isNaN(m.ts) && m.text);
