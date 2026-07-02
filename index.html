@@ -6168,6 +6168,48 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'distributeSenderKey'); }
   }
 
+  // v5 kick completeness: the kicker already rotates and redistributes ITS OWN sender
+  // key on kick (see the `kick` command handler), but every other remaining member also
+  // handed their key to the kicked member at some point — if they never rotate too, the
+  // kicked member keeps decrypting everyone else's messages. Tell each remaining member
+  // to rotate their own key as well.
+  async function notifyGroupKick(groupId, kickedId, epoch) {
+    if (!CONFIG.GROUP_RATCHET_V5) return;
+    try {
+      const group = await dbGet('contacts', groupId);
+      const targets = (group?.members || []).filter(m => m.id !== myId && m.id !== kickedId && m.pubB64);
+      for (const m of targets) {
+        const encrypted = await encryptFor(JSON.stringify({ type: 'group_kick', groupId, kickedId, epoch }), m.pubB64);
+        if (!encrypted) continue;
+        await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: Date.now(), isGroupKick: true });
+      }
+    } catch(_e) { _dbg(_e, 'notifyGroupKick'); }
+  }
+
+  // Handle a group_kick notice from another member: drop the kicked member locally,
+  // then rotate our own sender key to the announced epoch and re-share it with whoever
+  // is left (excluding the kicked member). Guarded on epoch so a duplicate/replayed
+  // notice for an epoch we already rotated to is a no-op.
+  async function rotateGroupKeyOnKickNotice(groupId, kickedId, epoch) {
+    if (!CONFIG.GROUP_RATCHET_V5 || typeof epoch !== 'number') return;
+    try {
+      const current = await dbGet('identity', 'gsk:' + groupId);
+      if (current && (current.epoch || 0) >= epoch) return;
+      const group = await dbGet('contacts', groupId);
+      if (group) {
+        group.members = (group.members || []).filter(m => m.id !== kickedId);
+        await dbPut('contacts', group);
+      }
+      const freshChain = Array.from(crypto.getRandomValues(new Uint8Array(32)));
+      await dbPut('identity', { chainKey: freshChain, counter: 0, epoch, v: 5, skipped: {} }, 'gsk:' + groupId);
+      const targets = (group?.members || []).filter(m => m.id !== myId && m.id !== kickedId && m.pubB64);
+      for (const m of targets) {
+        distributeSenderKey(groupId, m.pubB64).catch(e => _dbg(e, 'kick-notice-sk-redist'));
+      }
+      if (activeContact?.id === groupId) renderContacts();
+    } catch(_e) { _dbg(_e, 'rotateGroupKeyOnKickNotice'); }
+  }
+
   // ===== Setup or Load =====
   const hasId = await loadIdentity();
   if (hasId) {
@@ -9689,14 +9731,39 @@ async function initMessenger(dbName) {
         const decrypted = await decryptFrom(msg.payload, c.pubB64);
         if (!decrypted) return;
         const skMsg = JSON.parse(decrypted);
-        if (skMsg.type === 'sender_key' && skMsg.groupId && skMsg.key) {
+        // v5 payloads carry `chainKey` instead of `key` (see distributeSenderKey) —
+        // requiring skMsg.key here would silently drop every v5 sender-key message.
+        if (skMsg.type === 'sender_key' && skMsg.groupId && (skMsg.key || skMsg.chainKey)) {
+          const peerKey = 'gsk-peer:' + skMsg.groupId + ':' + (msg.from || '').slice(0, 12);
+          const existingPeerSK = await dbGet('identity', peerKey);
+          // Monotonic epoch guard: never let a replayed/stale sender_key message roll
+          // a peer's key back to an earlier epoch (would undo a kick rotation).
+          if (existingPeerSK && (existingPeerSK.epoch || 0) > (skMsg.epoch || 0)) return;
           const skEntry = (skMsg.v === 5 && skMsg.chainKey)
             ? { chainKey: skMsg.chainKey, counter: 0, epoch: skMsg.epoch || 0, v: 5, skipped: {} }
             : { raw: skMsg.key, counter: 0, epoch: skMsg.epoch || 0 };
-          await dbPut('identity', skEntry, 'gsk-peer:' + skMsg.groupId + ':' + (msg.from || '').slice(0, 12));
+          await dbPut('identity', skEntry, peerKey);
           _dbg(null, 'Received sender key for group ' + skMsg.groupId);
         }
       } catch(e) { _dbg(e, 'sender-key'); }
+      return;
+    }
+
+    // === Group kick notice (v5 key rotation completeness) ===
+    // Sent by the kicker to every OTHER remaining member so they also rotate their own
+    // sender key — the kicker's inline rotation only replaces its own key, but the
+    // kicked member holds every other member's key too until they rotate as well.
+    if (msg.isGroupKick) {
+      try {
+        const c = await dbGet('contacts', (msg.from || '').slice?.(0, 12) || msg.from);
+        if (!c) return;
+        const decrypted = await decryptFrom(msg.payload, c.pubB64);
+        if (!decrypted) return;
+        const kickMsg = JSON.parse(decrypted);
+        if (kickMsg.type === 'group_kick' && kickMsg.groupId) {
+          await rotateGroupKeyOnKickNotice(kickMsg.groupId, kickMsg.kickedId, kickMsg.epoch);
+        }
+      } catch(e) { _dbg(e, 'group-kick-notice'); }
       return;
     }
 
@@ -12194,6 +12261,10 @@ async function initMessenger(dbName) {
               for (const m of (activeContact.members || []).filter(m => m.id !== myId && m.pubB64)) {
                 distributeSenderKey(activeContact.id, m.pubB64).catch(e => _dbg(e, 'post-kick-sk-dist'));
               }
+              // Tell every other remaining member to rotate their own key too — this
+              // loop only just replaced *our* key; without the notice, the kicked
+              // member keeps decrypting messages from everyone else in the group.
+              notifyGroupKick(activeContact.id, member.id, newEpoch).catch(e => _dbg(e, 'notify-kick'));
               auditLog('group', `Epoch rotated to ${newEpoch} after kicking ${member.name}`);
             }
             auditLog('group', 'Kicked ' + member.name + ' from ' + activeContact.name);

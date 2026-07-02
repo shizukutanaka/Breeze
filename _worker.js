@@ -425,7 +425,7 @@ function capQueueBytes(items, sizeOf, maxBytes = 16 * 1024 * 1024) {
 }
 
 async function handleMsgSend(body, ip, env, request) {
-  const { to, from, fromPub, fromName, payload, ts, isFile, isGroupInvite, isVoice, isCall, isVideoCall, isSenderKey, isGroupSK, groupId, groupName, replyTo, disappearAt, sig, sigPub } = body;
+  const { to, from, fromPub, fromName, payload, ts, isFile, isGroupInvite, isVoice, isCall, isVideoCall, isSenderKey, isGroupSK, isGroupKick, groupId, groupName, replyTo, disappearAt, sig, sigPub } = body;
   if (!to || !from || !payload) return json({ error: 'to, from, payload required', code: 'MISSING_FIELDS' }, 400, request);
   // v3.3: Input type validation
   if (typeof to !== 'string' || typeof from !== 'string' || typeof payload !== 'string') return json({ error: 'Invalid types', code: 'INVALID_TYPE' }, 400, request);
@@ -481,6 +481,7 @@ async function handleMsgSend(body, ip, env, request) {
   if (isVideoCall) msg.isVideoCall = true;
   if (isSenderKey) msg.isSenderKey = true;
   if (isGroupSK) msg.isGroupSK = true;
+  if (isGroupKick) msg.isGroupKick = true;
   if (typeof groupId === 'string' && groupId) { msg.groupId = groupId.slice(0, 64); msg.groupName = typeof groupName === 'string' ? groupName.slice(0, 50) : undefined; }
   if (typeof replyTo === 'string' && replyTo) msg.replyTo = replyTo.slice(0, 128);
   if (disappearAt) msg.disappearAt = (typeof disappearAt === 'number' && Number.isFinite(disappearAt)) ? disappearAt : undefined;
