@@ -1272,6 +1272,12 @@ const CONFIG = {
   // byte-identical to the v3 path. Enable after all group members have updated.
   GROUP_RATCHET_V5: false,
   GROUP_MAX_SKIP: 50, // max tolerated out-of-order gap in the group v5 hash ratchet
+  // Authenticated X3DH (I1/G1): default initSession() is a bare unverified DH(IK_A, IK_B)
+  // — a relay swapping in its own identity key at first contact goes undetected. When ON,
+  // first contact verifies the peer's signed pre-key against their Ed25519 key, but only
+  // when BOTH sides advertise it (negotiated from the fetched bundle); else falls back
+  // byte-identically. Opt-in after manual two-device validation (docs/INTEGRATION.md §3).
+  X3DH_V5_ENABLED: false,
   // v3.6 SECURITY (default OFF — opt-in via /keywrap; run /keywrap again to disable):
   // Wrap identity ECDH private key and Ed25519 signing key with AES-256-GCM under a
   // PBKDF2-derived key (600k iterations, random salt) before storing in IndexedDB.
@@ -5490,6 +5496,34 @@ async function initMessenger(dbName) {
     return false;
   }
 
+  // Generate a signed pre-key + batch of one-time pre-keys, persisting the PRIVATE
+  // halves locally (previously discarded after upload) so this device can act as the
+  // RESPONDER in someone else's X3DH handshake later. Signs the SPK with our Ed25519
+  // key so an initiator can authenticate it (see the X3DH v5 block above initSession).
+  async function generatePreKeyBundle() {
+    const spk = await genRatchetKey();
+    const spkPub = btoa(String.fromCharCode(...new Uint8Array(spk.pub)));
+    await dbPut('identity', { priv: spk.priv }, 'spk-priv');
+
+    const otpKeys = [];
+    const otpPrivs = [];
+    for (let i = 0; i < CONFIG.PREKEY_OTP_COUNT; i++) {
+      const otp = await genRatchetKey();
+      otpKeys.push(btoa(String.fromCharCode(...new Uint8Array(otp.pub))));
+      otpPrivs.push(otp.priv);
+    }
+    // Indexed 0..N-1 to match the Worker's index-based oneTimePreKeyId echo.
+    await dbPut('identity', { keys: otpPrivs }, 'otp-priv');
+
+    const body = { signedPreKey: spkPub, oneTimePreKeys: otpKeys };
+    if (_signingKey?.privateKey) {
+      body.edIdentityKey = _signingPubB64;
+      body.signedPreKeySig = await signMessage(spkPub);
+    }
+    if (CONFIG.X3DH_V5_ENABLED) body.caps = [CAPS_X3DH_V5];
+    return body;
+  }
+
   async function createIdentity(name, alias) {
     const keys = await genIdentityKey(); // v3.1: use X25519 when available
     const pubRaw = await crypto.subtle.exportKey('raw', keys.publicKey);
@@ -5515,16 +5549,9 @@ async function initMessenger(dbName) {
     // v3: Generate and upload PreKeys for X3DH
     if (API) {
       try {
-        const signedPreKey = await genIdentityKey(); // v3.1: X25519 when available
-        const spkPub = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.exportKey('raw', signedPreKey.publicKey))));
-        // Generate OneTimePreKeys (batch of 20)
-        const otpKeys = [];
-        for (let i = 0; i < CONFIG.PREKEY_OTP_COUNT; i++) {
-          const otp = await genIdentityKey(); // v3.1: X25519 when available
-          otpKeys.push(btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.exportKey('raw', otp.publicKey)))));
-        }
-        await postAPIRaw('/prekey/upload', { userId: myId, identityKey: pubB64, signedPreKey: spkPub, oneTimePreKeys: otpKeys });
-        _dbg(null, 'PreKeys uploaded: 1 SPK + ' + otpKeys.length + ' OTP');
+        const bundle = await generatePreKeyBundle();
+        await postAPIRaw('/prekey/upload', { userId: myId, identityKey: pubB64, ...bundle });
+        _dbg(null, 'PreKeys uploaded: 1 SPK + ' + bundle.oneTimePreKeys.length + ' OTP');
       } catch(e) { _dbg(e, 'prekey-upload'); }
     }
   }
@@ -5632,6 +5659,131 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'dhRatchetStep'); }
   }
 
+  // ================================================================
+  // X3DH v5 — authenticated pre-key agreement (I1/G1, gated by CONFIG.X3DH_V5_ENABLED).
+  // initSession() below is a bare unauthenticated DH(IK_A, IK_B); here the responder's
+  // signed pre-key is verified against their Ed25519 key first. Both sides bootstrap
+  // into the SAME session shape initSession() returns, so encryptFor/decryptFrom/
+  // dhRatchetStep need no changes: the initiator starts send-only, and the first
+  // reply's dhRatchetStep bootstraps the receive chain — the same mechanism the
+  // responder uses below, reusing its SPK private key as its first "ratchet" key.
+  // Negotiation (N3) mirrors src/crypto/negotiate.js's AND rule inline (not ESM-
+  // imported — CLAUDE.md keeps the deployed artifact single-file/zero-runtime-deps).
+  // Signing convention: ratchet.js signs RAW SPK bytes, but the deployed Worker
+  // (handlePreKeyUpload → verifyEd25519) verifies the base64 STRING like every other
+  // signed action here — so this signs/verifies the string via signMessage/verifySignature.
+  // ================================================================
+  const CAPS_X3DH_V5 = 'x3dh-v5';
+
+  function _parsePeerCaps(bundle) {
+    if (!bundle) return [];
+    if (Array.isArray(bundle.caps)) return bundle.caps.filter(c => typeof c === 'string');
+    if (bundle.x3dh === 'v5') return [CAPS_X3DH_V5]; // legacy advertise() fallback field
+    return [];
+  }
+  function _peerSupportsX3dhV5(bundle) {
+    return CONFIG.X3DH_V5_ENABLED && _parsePeerCaps(bundle).includes(CAPS_X3DH_V5);
+  }
+  function _concatBytes(parts) {
+    const total = parts.reduce((n, p) => n + p.length, 0);
+    const out = new Uint8Array(total);
+    let off = 0;
+    for (const p of parts) { out.set(p, off); off += p.length; }
+    return out;
+  }
+  async function _importEcdhPriv(jwk) {
+    const algo = jwk.crv === 'X25519' ? { name: 'X25519' } : { name: 'ECDH', namedCurve: jwk.crv || 'P-256' };
+    return crypto.subtle.importKey('jwk', jwk, algo, false, ['deriveBits']);
+  }
+  async function _loadSpkPriv() {
+    try {
+      const stored = await dbGet('identity', 'spk-priv');
+      return stored?.priv ? await _importEcdhPriv(stored.priv) : null;
+    } catch(_e) { _dbg(_e, 'load-spk-priv'); return null; }
+  }
+  async function _resolveOtpPriv(otpId) {
+    if (typeof otpId !== 'number') return null;
+    try {
+      const store = await dbGet('identity', 'otp-priv');
+      const jwk = store?.keys?.[otpId];
+      return jwk ? await _importEcdhPriv(jwk) : null;
+    } catch(_e) { _dbg(_e, 'resolve-otp-priv'); return null; }
+  }
+  // Alice (initiator): IK_A×SPK_B, EK_A×IK_B, EK_A×SPK_B, [EK_A×OPK_B] → root key.
+  async function _x3dhInitiator({ ikPriv, ekPriv, ikPubPeer, spkPubPeer, opkPubPeer }) {
+    const parts = [
+      await ecdhBits(ikPriv, spkPubPeer),
+      await ecdhBits(ekPriv, ikPubPeer),
+      await ecdhBits(ekPriv, spkPubPeer),
+    ];
+    if (opkPubPeer) parts.push(await ecdhBits(ekPriv, opkPubPeer));
+    return hkdf(_concatBytes(parts), new Uint8Array(32), 'breeze-x3dh-v5', 32);
+  }
+  // Bob (responder): the mirror DHs from his SPK/IK/OPK private keys.
+  async function _x3dhResponder({ ikPriv, spkPriv, opkPriv, ikPubPeer, ekPubPeer }) {
+    const parts = [
+      await ecdhBits(spkPriv, ikPubPeer),
+      await ecdhBits(ikPriv, ekPubPeer),
+      await ecdhBits(spkPriv, ekPubPeer),
+    ];
+    if (opkPriv) parts.push(await ecdhBits(opkPriv, ekPubPeer));
+    return hkdf(_concatBytes(parts), new Uint8Array(32), 'breeze-x3dh-v5', 32);
+  }
+  // Fetch+verify the peer's bundle and seed a session shaped like initSession()'s
+  // return value. Returns null (caller falls back to initSession()) when X3DH is off,
+  // there's no server, the peer hasn't advertised v5, or the signature fails.
+  async function initSessionV5Initiator(peerPubB64) {
+    if (!CONFIG.X3DH_V5_ENABLED || !API) return null;
+    try {
+      const resp = await postAPIRaw('/prekey/fetch', { userId: peerPubB64.slice(0, 12) });
+      if (!resp.ok) return null;
+      const bundle = await resp.json();
+      if (!_peerSupportsX3dhV5(bundle)) return null;
+      if (!bundle.identityKey || !bundle.edIdentityKey || !bundle.signedPreKey || !bundle.signedPreKeySig) return null;
+      // MUST verify before deriving — a relay/MITM that swaps in its own SPK is caught
+      // here (signature fails) rather than silently accepted.
+      const sigOk = await verifySignature(bundle.signedPreKey, bundle.signedPreKeySig, bundle.edIdentityKey);
+      if (!sigOk) { _dbg(null, 'X3DH: signed pre-key signature INVALID — aborting, falling back'); return null; }
+      const ikPubPeer = Uint8Array.from(atob(bundle.identityKey), c => c.charCodeAt(0));
+      const spkPubPeer = Uint8Array.from(atob(bundle.signedPreKey), c => c.charCodeAt(0));
+      const opkPubPeer = bundle.oneTimePreKey ? Uint8Array.from(atob(bundle.oneTimePreKey), c => c.charCodeAt(0)) : null;
+      const ek = await genRatchetKey();
+      const sk = await _x3dhInitiator({ ikPriv: myKeys.privateKey, ekPriv: ek.privateKey, ikPubPeer, spkPubPeer, opkPubPeer });
+      const rk = await genRatchetKey();
+      const dh = await ecdhBits(rk.privateKey, spkPubPeer);
+      const derived = await hkdf(dh, sk, 'ratchet', 64);
+      return {
+        rootKey: derived.slice(0, 32),
+        sendChainKey: derived.slice(32, 64),
+        ratchetPub: Array.from(new Uint8Array(rk.pub)),
+        ratchetPriv: rk.privateKey,
+        peerRatchetPub: Array.from(spkPubPeer),
+        sendCounter: 0, recvCounter: 0, seenMsgIds: [],
+        // Consumed once by encryptFor to wrap the first message in a pkm envelope.
+        _pkm: {
+          ik: Array.from(Uint8Array.from(atob(myPubB64), c => c.charCodeAt(0))),
+          ek: Array.from(new Uint8Array(ek.pub)),
+          opkId: (typeof bundle.oneTimePreKeyId === 'number') ? bundle.oneTimePreKeyId : null,
+        },
+      };
+    } catch(_e) { _dbg(_e, 'initSessionV5Initiator'); return null; }
+  }
+
+  // Derive the X3DH root key from a parsed pkm envelope; seed peerRatchetPub null so
+  // decryptFrom's existing ratchet-key-changed branch bootstraps the receive chain.
+  async function _bootstrapResponderSessionV5(p) {
+    try {
+      const spkPriv = await _loadSpkPriv();
+      if (!spkPriv) return null;
+      const opkPriv = await _resolveOtpPriv(p.opkId);
+      const sk = await _x3dhResponder({
+        ikPriv: myKeys.privateKey, spkPriv, opkPriv,
+        ikPubPeer: u8(p.ik), ekPubPeer: u8(p.ek),
+      });
+      return { rootKey: sk, ratchetPriv: spkPriv, ratchetPub: null, peerRatchetPub: null, sendCounter: 0, recvCounter: 0, seenMsgIds: [] };
+    } catch(_e) { _dbg(_e, 'bootstrapResponderSessionV5'); return null; }
+  }
+
   // --- Init session (first contact) ---
   async function initSession(peerPubB64) {
     try {  
@@ -5662,7 +5814,7 @@ async function initMessenger(dbName) {
     try {  
       const peerId = peerPubB64.slice(0, 12);
       let sess = await getSession(peerId);
-      if (!sess) { sess = await initSession(peerPubB64); }
+      if (!sess) { sess = (await initSessionV5Initiator(peerPubB64)) || (await initSession(peerPubB64)); }
       // Derive message key from send chain
       const { msgKey, nextChain } = await kdfChain(sess.sendChainKey);
       sess.sendChainKey = nextChain;
@@ -5692,9 +5844,16 @@ async function initMessenger(dbName) {
         ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, importedKey, padded);
       }
       zeroBuffer(msgKey); // Best-effort key erasure
+      const innerMsg = JSON.stringify({ v: 4, i: arr(iv), d: arr(new Uint8Array(ct)), rk: sess.ratchetPub, c: sess.sendCounter });
+      // X3DH v5 first message only: wrap for the responder's bootstrap, drop the marker.
+      let outMsg = innerMsg;
+      if (sess._pkm) {
+        outMsg = JSON.stringify({ v: 5, t: 'pkm', ik: sess._pkm.ik, ek: sess._pkm.ek, opkId: sess._pkm.opkId, msg: innerMsg });
+        delete sess._pkm;
+      }
       await saveSession(peerId, sess);
-      return JSON.stringify({ v: 4, i: arr(iv), d: arr(new Uint8Array(ct)), rk: sess.ratchetPub, c: sess.sendCounter });
-    
+      return outMsg;
+
     } catch(_e) { _dbg(_e, 'encryptFor'); }
   }
 
@@ -5706,9 +5865,16 @@ async function initMessenger(dbName) {
     try {
       const peerId = peerPubB64.slice(0, 12);
       let sess = await getSession(peerId);
-      if (!sess) { sess = await initSession(peerPubB64); }
       let p;
       try { p = JSON.parse(payload); } catch(parseErr) { _dbg(parseErr, 'malformed-encrypted-msg'); throw new Error('Invalid payload format'); }
+      // X3DH v5 first-message envelope. Only when we lack a session — a duplicate
+      // delivery must reuse the session already bootstrapped (the OTP may be gone now).
+      if (!sess && p.v === 5 && p.t === 'pkm' && Array.isArray(p.ik) && Array.isArray(p.ek) && typeof p.msg === 'string') {
+        sess = await _bootstrapResponderSessionV5(p);
+        if (!sess) return null; // no SPK private key on this device — nothing to fall back to
+        try { p = JSON.parse(p.msg); } catch(parseErr) { _dbg(parseErr, 'malformed-pkm-inner'); return null; }
+      }
+      if (!sess) { sess = await initSession(peerPubB64); }
       // v3/v4 ratchet message
       if ((p.v === 3 || p.v === 4) && p.rk) {
         const peerRK = new Uint8Array(p.rk);
@@ -9618,16 +9784,10 @@ async function initMessenger(dbName) {
       const bundle = await resp.json();
       // If no oneTimePreKey returned, server is out — upload more
       if (!bundle.oneTimePreKey) {
-        const otpKeys = [];
-        for (let i = 0; i < CONFIG.PREKEY_OTP_COUNT; i++) {
-          const otp = await genIdentityKey(); // v3.1: X25519 when available
-          otpKeys.push(btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.exportKey('raw', otp.publicKey)))));
-        }
-        const spk = await genIdentityKey(); // v3.1: X25519 when available
-        const spkPub = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.exportKey('raw', spk.publicKey))));
-        const upResp = await postAPIRaw('/prekey/upload', { userId: myId, identityKey: myPubB64, signedPreKey: spkPub, oneTimePreKeys: otpKeys });
+        const freshBundle = await generatePreKeyBundle();
+        const upResp = await postAPIRaw('/prekey/upload', { userId: myId, identityKey: myPubB64, ...freshBundle });
         if (!upResp?.ok) { _lastPreKeyCheck = Date.now() - MS.MIN * 4; return; } // retry in ~1 min
-        _dbg(null, 'PreKeys replenished: ' + otpKeys.length + ' OTPs');
+        _dbg(null, 'PreKeys replenished: ' + freshBundle.oneTimePreKeys.length + ' OTPs');
       }
     } catch(e) { _lastPreKeyCheck = Date.now() - MS.MIN * 4; _dbg(e, 'prekey-replenish'); } // retry in ~1 min on network error
   }

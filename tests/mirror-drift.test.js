@@ -467,6 +467,116 @@ describe('Group sender-key mirror — inline (index.html) vs reference (src/cryp
 });
 
 // ---------------------------------------------------------------------------
+// X3DH v5 mirror — the authenticated-first-contact guard.
+//
+// Inline _x3dhInitiator/_x3dhResponder (index.html, gated behind CONFIG.X3DH_V5_ENABLED)
+// must agree with reference x3dhInitiator/x3dhResponder (ratchet.js) on the DH
+// combination order (IK×SPK, EK×IK, EK×SPK, [EK×OPK]) and the HKDF info string
+// ('breeze-x3dh-v5'). A drift here means an initiator on one code path and a
+// responder on the other derive different root keys — first contact silently
+// never completes, indistinguishable from a network problem.
+//
+// Deliberate, DOCUMENTED non-mirror: the inline SPK signing convention signs the
+// base64 STRING via the existing signMessage/verifySignature (to match what the
+// already-deployed Worker's verifyEd25519 enforces at upload time), while
+// ratchet.js's signSPK/verifySPK sign the RAW bytes. This is intentional — see the
+// comment above the inline X3DH block in index.html — so it is NOT cross-tested
+// against refR.signSPK/verifySPK below; only the DH/HKDF math is.
+// ---------------------------------------------------------------------------
+const X3DH_START = '  async function genRatchetKey() {';
+const X3DH_END = '\n  // --- Init session (first contact) ---';
+const x3s = html.indexOf(X3DH_START);
+const x3e = html.indexOf(X3DH_END, x3s);
+if (x3s < 0 || x3e < 0) {
+  throw new Error(
+    'mirror-drift guard: could not locate the inline X3DH block in index.html ' +
+    '(markers "async function genRatchetKey() {" .. "// --- Init session (first contact) ---"). ' +
+    'If the block moved, update tests/mirror-drift.test.js.',
+  );
+}
+
+function makeX3dhInline(myKeys, config) {
+  const idb = new Map();
+  const dbGet = async (_s, key) => (idb.has(key) ? idb.get(key) : null);
+  const dbPut = async (_s, val, key) => { idb.set(key, val); };
+  const factory = new Function(
+    'crypto', 'CONFIG', '_hasX25519', 'dbGet', 'dbPut', '_dbg', 'hkdf', 'arr', 'u8', 'myKeys',
+    html.slice(x3s, x3e) +
+      '\nreturn { genRatchetKey, ecdhBits, _x3dhInitiator, _x3dhResponder, _parsePeerCaps, _peerSupportsX3dhV5, _importEcdhPriv, _loadSpkPriv, _resolveOtpPriv, _bootstrapResponderSessionV5 };',
+  );
+  const api = factory(
+    globalThis.crypto, config || {}, false /* P-256, matches refR below for determinism */,
+    dbGet, dbPut, () => {}, inlineKdf.hkdf, (a) => Array.from(a), (a) => new Uint8Array(a),
+    myKeys || {},
+  );
+  return { ...api, idb };
+}
+
+describe('X3DH v5 mirror — inline (index.html) vs reference (src/crypto/ratchet.js)', () => {
+  it('KEY AGREEMENT PARITY: reference x3dhInitiator and inline _x3dhResponder derive the same root key (with OPK)', async () => {
+    const inline = makeX3dhInline();
+    const alice = { ik: await refR.genRatchetKey() };
+    const bob = { ik: await refR.genRatchetKey(), spk: await refR.genRatchetKey(), opk: await refR.genRatchetKey() };
+    const ek = await refR.genRatchetKey();
+    const skRef = await refR.x3dhInitiator({
+      ikPriv: alice.ik.privateKey, ekPriv: ek.privateKey,
+      ikPubPeer: bob.ik.pub, spkPubPeer: bob.spk.pub, opkPubPeer: bob.opk.pub,
+    });
+    const skInline = await inline._x3dhResponder({
+      ikPriv: bob.ik.privateKey, spkPriv: bob.spk.privateKey, opkPriv: bob.opk.privateKey,
+      ikPubPeer: alice.ik.pub, ekPubPeer: ek.pub,
+    });
+    expect(Buffer.from(skInline).toString('hex')).toBe(Buffer.from(skRef).toString('hex'));
+  });
+
+  it('KEY AGREEMENT PARITY: inline _x3dhInitiator and reference x3dhResponder derive the same root key (no OPK)', async () => {
+    const inline = makeX3dhInline();
+    const alice = { ik: await inline.genRatchetKey() };
+    const bob = { ik: await refR.genRatchetKey(), spk: await refR.genRatchetKey() };
+    const ek = await inline.genRatchetKey();
+    const skInline = await inline._x3dhInitiator({
+      ikPriv: alice.ik.privateKey, ekPriv: ek.privateKey,
+      ikPubPeer: bob.ik.pub, spkPubPeer: bob.spk.pub,
+    });
+    const skRef = await refR.x3dhResponder({
+      ikPriv: bob.ik.privateKey, spkPriv: bob.spk.privateKey,
+      ikPubPeer: alice.ik.pub, ekPubPeer: ek.pub,
+    });
+    expect(Buffer.from(skInline).toString('hex')).toBe(Buffer.from(skRef).toString('hex'));
+  });
+
+  it('capability negotiation: requires BOTH the local flag on and the peer advertising x3dh-v5', () => {
+    const on = makeX3dhInline(null, { X3DH_V5_ENABLED: true });
+    expect(on._peerSupportsX3dhV5({ identityKey: 'x', signedPreKey: 'y' })).toBe(false); // peer silent on caps
+    expect(on._peerSupportsX3dhV5({ identityKey: 'x', signedPreKey: 'y', caps: ['x3dh-v5'] })).toBe(true);
+    const off = makeX3dhInline(null, { X3DH_V5_ENABLED: false });
+    expect(off._peerSupportsX3dhV5({ identityKey: 'x', signedPreKey: 'y', caps: ['x3dh-v5'] })).toBeFalsy(); // local flag off
+  });
+
+  it('RESPONDER BOOTSTRAP: _bootstrapResponderSessionV5 derives the same root key as reference x3dhResponder', async () => {
+    const bobIk = await refR.genRatchetKey();
+    // _bootstrapResponderSessionV5 closes over myKeys from index.html's outer scope;
+    // the factory binds it via the myKeys parameter injected in makeX3dhInline.
+    const inline = makeX3dhInline({ privateKey: bobIk.privateKey });
+    // refR.genRatchetKey() doesn't export a JWK priv (only inline's does), and
+    // _loadSpkPriv needs to re-import from a stored JWK — so generate the SPK via
+    // the inline instance itself, whose live privateKey is still usable with refR below.
+    const bobSpk = await inline.genRatchetKey();
+    inline.idb.set('spk-priv', { priv: bobSpk.priv }); // dbGet/dbPut shim ignores the store name, keys on `key` alone
+    const alice = { ik: await refR.genRatchetKey() };
+    const ek = await refR.genRatchetKey();
+    const pkm = { ik: Array.from(new Uint8Array(alice.ik.pub)), ek: Array.from(new Uint8Array(ek.pub)), opkId: null };
+    const bootstrapped = await inline._bootstrapResponderSessionV5(pkm);
+    const skRef = await refR.x3dhResponder({
+      ikPriv: bobIk.privateKey, spkPriv: bobSpk.privateKey,
+      ikPubPeer: alice.ik.pub, ekPubPeer: ek.pub,
+    });
+    expect(bootstrapped).not.toBeNull();
+    expect(Buffer.from(bootstrapped.rootKey).toString('hex')).toBe(Buffer.from(skRef).toString('hex'));
+  });
+});
+
+// ---------------------------------------------------------------------------
 // REFERENCE-DRIFT tracking — the inverse of the mirror-drift guard.
 //
 // Mirror-drift (above) asserts "inline MUST stay equal to its reference". But
@@ -494,7 +604,8 @@ describe('reference-drift tracking — modules that are tested references, NOT y
     { module: 'franking.js verifyReport path', marker: 'verifyReport' },
     { module: 'ktlog.js (key-transparency append-only log)', marker: 'appendChainEntry' },
     { module: 'ktlog.js audit path', marker: 'auditBundle' },
-    { module: 'ratchet.js authenticated X3DH (v5 prekey handshake)', marker: 'breeze-x3dh-v5' },
+    // ratchet.js authenticated X3DH (v5 prekey handshake) graduated to deployed —
+    // see the "X3DH v5 mirror" describe block above and CLAUDE.md's status table.
   ];
   for (const { module, marker } of REFERENCE_ONLY) {
     it(`${module} is still reference-only (marker "${marker}" absent from deployed index.html/_worker.js)`, () => {

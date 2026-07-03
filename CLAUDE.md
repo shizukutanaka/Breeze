@@ -24,10 +24,10 @@ is a single SHA-256 over 12 bytes; `fingerprint.js`'s iterated 5200×SHA-512 is 
 | Module | Status | Mirror-drift guarded |
 |---|---|---|
 | `atrest.js`, `pow.js`, `ratchet.js` (KDF + group v5) | **deployed** (inline mirror) | ✅ yes |
+| `ratchet.js` authenticated X3DH (v5 handshake, `CONFIG.X3DH_V5_ENABLED`, default **off**) | **deployed** (inline mirror; SPK signing convention deliberately diverges — signs the base64 string via signMessage/verifySignature to match the already-deployed Worker's verifyEd25519, not raw bytes like the reference) | ✅ yes |
 | `fingerprint.js` (Signal iterated safety number) | reference-only (roadmap) | tripwire only |
 | `franking.js`, `ktlog.js` | reference-only (roadmap) | tripwire only |
-| `ratchet.js` authenticated X3DH (v5 handshake) | reference-only (roadmap, gated) | tripwire only |
-| `negotiate.js` | partially inline (`_capabilities`) | — |
+| `negotiate.js` | partially inline (capability negotiation hand-ported next to the X3DH block; `_capabilities` separately for crypto/idb presence checks) | — |
 
 "Reference-only" = tested + ready but never wired in; deploying any is a **breaking** wire/
 display change needing coordinated rollout. `tests/mirror-drift.test.js`'s reference-drift
