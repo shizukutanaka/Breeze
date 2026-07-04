@@ -27,6 +27,7 @@ import { dirname, join } from 'node:path';
 import { createAtRest } from '../src/crypto/atrest.js';
 import { makeChallengeString, solve as powSolve, verify as powVerify } from '../src/crypto/pow.js';
 import { createRatchet } from '../src/crypto/ratchet.js';
+import { checkRollover } from '../src/crypto/ktlog.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(join(HERE, '..', 'index.html'), 'utf8');
@@ -780,5 +781,70 @@ describe('Bare-IK session bootstrap — inline encryptFor/decryptFrom convergenc
       expect(await B.decryptFrom(await A.encryptFor('A-' + i, bob.pubB64), alice.pubB64)).toBe('A-' + i);
       expect(await A.decryptFrom(await B.encryptFor('B-' + i, alice.pubB64), bob.pubB64)).toBe('B-' + i);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// KTLog rollover-audit mirror — partial graduation of ktlog.js (I11).
+//
+// Only rollover DETECTION was ported inline (_auditKeyHistory, wired into
+// initSessionV5Initiator) — not the full auditBundle hash-chain tamper check, kept
+// minimal since it has exactly one caller. This cross-tests the inline function
+// against the reference checkRollover for parity on all three verdicts.
+// ---------------------------------------------------------------------------
+const KTLOG_START = '  async function _auditKeyHistory(storedIkB64, keyHistory) {';
+const KTLOG_END = '\n  async function _importEcdhPriv(jwk) {';
+const kts = html.indexOf(KTLOG_START);
+const kte = html.indexOf(KTLOG_END, kts);
+if (kts < 0 || kte < 0) {
+  throw new Error(
+    'mirror-drift guard: could not locate the inline _auditKeyHistory function in index.html ' +
+    '(markers "async function _auditKeyHistory(storedIkB64, keyHistory) {" .. "async function _importEcdhPriv(jwk) {"). ' +
+    'If it moved, update tests/mirror-drift.test.js.',
+  );
+}
+const inlineAuditKeyHistory = new Function('crypto', html.slice(kts, kte) + '\nreturn _auditKeyHistory;')(globalThis.crypto);
+
+describe('KTLog rollover-audit mirror — inline _auditKeyHistory (index.html) vs reference checkRollover (src/crypto/ktlog.js)', () => {
+  const sha256b64 = async (bytes) => Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', bytes)).toString('base64');
+
+  it('PARITY: first contact (no stored key) -> new, for both implementations', async () => {
+    const h = await sha256b64(new TextEncoder().encode('ik-v1'));
+    const log = [{ ts: 1000, h }];
+    const ref = await checkRollover(globalThis.crypto.subtle, null, log);
+    const inline = await inlineAuditKeyHistory(null, log);
+    expect(inline.verdict).toBe(ref.status);
+    expect(ref.status).toBe('new');
+  });
+
+  it('PARITY: stored key matches the latest log entry -> ok, for both implementations', async () => {
+    const h = await sha256b64(new TextEncoder().encode('ik-v1'));
+    const log = [{ ts: 1000, h }];
+    const ref = await checkRollover(globalThis.crypto.subtle, 'ik-v1', log);
+    const inline = await inlineAuditKeyHistory('ik-v1', log);
+    expect(inline.verdict).toBe(ref.status);
+    expect(ref.status).toBe('ok');
+  });
+
+  it('PARITY: rollover to a newer key -> rolled + storedSeenInHistory, for both implementations', async () => {
+    const h1 = await sha256b64(new TextEncoder().encode('ik-v1'));
+    const h2 = await sha256b64(new TextEncoder().encode('ik-v2'));
+    const log = [{ ts: 1000, h: h1 }, { ts: 2000, h: h2 }];
+    const ref = await checkRollover(globalThis.crypto.subtle, 'ik-v1', log);
+    const inline = await inlineAuditKeyHistory('ik-v1', log);
+    expect(inline.verdict).toBe('rolled');
+    expect(ref.status).toBe('rolled');
+    expect(inline.storedSeenInHistory).toBe(ref.storedSeenInHistory);
+    expect(ref.storedSeenInHistory).toBe(true);
+  });
+
+  it('PARITY: rollover to/from a key never seen in the log -> rolled, storedSeenInHistory false', async () => {
+    const h = await sha256b64(new TextEncoder().encode('ik-v1'));
+    const log = [{ ts: 1000, h }];
+    const ref = await checkRollover(globalThis.crypto.subtle, 'some-unrelated-key', log);
+    const inline = await inlineAuditKeyHistory('some-unrelated-key', log);
+    expect(inline.verdict).toBe('rolled');
+    expect(inline.storedSeenInHistory).toBe(false);
+    expect(ref.storedSeenInHistory).toBe(false);
   });
 });

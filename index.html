@@ -1273,9 +1273,8 @@ const CONFIG = {
   GROUP_RATCHET_V5: false,
   GROUP_MAX_SKIP: 50, // max tolerated out-of-order gap in the group v5 hash ratchet
   // Authenticated X3DH (I1/G1): default initSession() is a bare unverified DH(IK_A, IK_B)
-  // — an undetected MITM risk. When ON, first contact verifies the peer's signed pre-key
-  // against their Ed25519 key, but only when BOTH sides negotiate it; else falls back
-  // byte-identically. Opt-in after manual two-device validation (docs/INTEGRATION.md §3).
+  // — an undetected MITM risk. When ON, verifies the peer's signed pre-key against
+  // their Ed25519 key when BOTH sides negotiate it, else falls back byte-identically.
   X3DH_V5_ENABLED: false,
   // v3.6 SECURITY (default OFF — opt-in via /keywrap; run /keywrap again to disable):
   // Wrap identity ECDH private key and Ed25519 signing key with AES-256-GCM under a
@@ -5658,14 +5657,12 @@ async function initMessenger(dbName) {
   // ================================================================
   // X3DH v5 — authenticated pre-key agreement (I1/G1, gated by CONFIG.X3DH_V5_ENABLED).
   // initSession() below is a bare unauthenticated DH(IK_A, IK_B); here the responder's
-  // signed pre-key is verified against their Ed25519 key first. Both sides bootstrap
-  // the SAME session shape initSession() returns (send-only for the initiator; the
-  // first reply's dhRatchetStep bootstraps the receive chain, reusing SPK priv as the
-  // first "ratchet" key — same mechanism initSessionResponder below uses). Negotiation
-  // (N3) mirrors negotiate.js's AND rule inline (not ESM-imported — CLAUDE.md keeps the
-  // deployed artifact single-file). Signing: ratchet.js signs RAW SPK bytes, but the
-  // deployed Worker (verifyEd25519) verifies the base64 STRING like every other signed
-  // action here, so this uses signMessage/verifySignature on the string instead.
+  // signed pre-key is verified against their Ed25519 key first. Both sides bootstrap the
+  // SAME session shape initSession() returns — send-only for the initiator; the first
+  // reply's dhRatchetStep bootstraps the receive chain, reusing SPK priv as the first
+  // ratchet key, like initSessionResponder. Negotiation (N3) mirrors negotiate.js's AND
+  // rule inline (not ESM-imported — single-file per CLAUDE.md). Signing: ratchet.js signs
+  // RAW SPK bytes, but the Worker's verifyEd25519 verifies the base64 STRING, so this uses signMessage/verifySignature.
   // ================================================================
   const CAPS_X3DH_V5 = 'x3dh-v5';
 
@@ -5684,6 +5681,17 @@ async function initMessenger(dbName) {
     let off = 0;
     for (const p of parts) { out.set(p, off); off += p.length; }
     return out;
+  }
+  // Condensed inline mirror of ktlog.js's checkRollover (I11) — rollover detection only; the reference module's fuller hash-chain tamper check is not ported here.
+  async function _auditKeyHistory(storedIkB64, keyHistory) {
+    const sha256b64 = async (bytes) => btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))));
+    const log = (Array.isArray(keyHistory) ? keyHistory.slice(-256) : []).filter(e => e && Number.isFinite(e.ts) && typeof e.h === 'string' && e.h).sort((a, b) => a.ts - b.ts);
+    if (!log.length) return { verdict: storedIkB64 ? 'ok' : 'new' };
+    const currentHash = log[log.length - 1].h;
+    if (!storedIkB64) return { verdict: 'new', currentHash };
+    const storedHash = await sha256b64(new TextEncoder().encode(storedIkB64));
+    if (storedHash === currentHash) return { verdict: 'ok', currentHash };
+    return { verdict: 'rolled', storedHash, currentHash, storedSeenInHistory: log.some(e => e.h === storedHash) };
   }
   async function _importEcdhPriv(jwk) {
     const algo = jwk.crv === 'X25519' ? { name: 'X25519' } : { name: 'ECDH', namedCurve: jwk.crv || 'P-256' };
@@ -5705,21 +5713,13 @@ async function initMessenger(dbName) {
   }
   // Alice (initiator): IK_A×SPK_B, EK_A×IK_B, EK_A×SPK_B, [EK_A×OPK_B] → root key.
   async function _x3dhInitiator({ ikPriv, ekPriv, ikPubPeer, spkPubPeer, opkPubPeer }) {
-    const parts = [
-      await ecdhBits(ikPriv, spkPubPeer),
-      await ecdhBits(ekPriv, ikPubPeer),
-      await ecdhBits(ekPriv, spkPubPeer),
-    ];
+    const parts = [await ecdhBits(ikPriv, spkPubPeer), await ecdhBits(ekPriv, ikPubPeer), await ecdhBits(ekPriv, spkPubPeer)];
     if (opkPubPeer) parts.push(await ecdhBits(ekPriv, opkPubPeer));
     return hkdf(_concatBytes(parts), new Uint8Array(32), 'breeze-x3dh-v5', 32);
   }
   // Bob (responder): the mirror DHs from his SPK/IK/OPK private keys.
   async function _x3dhResponder({ ikPriv, spkPriv, opkPriv, ikPubPeer, ekPubPeer }) {
-    const parts = [
-      await ecdhBits(spkPriv, ikPubPeer),
-      await ecdhBits(ikPriv, ekPubPeer),
-      await ecdhBits(spkPriv, ekPubPeer),
-    ];
+    const parts = [await ecdhBits(spkPriv, ikPubPeer), await ecdhBits(ikPriv, ekPubPeer), await ecdhBits(spkPriv, ekPubPeer)];
     if (opkPriv) parts.push(await ecdhBits(opkPriv, ekPubPeer));
     return hkdf(_concatBytes(parts), new Uint8Array(32), 'breeze-x3dh-v5', 32);
   }
@@ -5736,6 +5736,11 @@ async function initMessenger(dbName) {
       // here (signature fails) rather than silently accepted.
       const sigOk = await verifySignature(bundle.signedPreKey, bundle.signedPreKeySig, bundle.edIdentityKey);
       if (!sigOk) { _dbg(null, 'X3DH: signed pre-key signature INVALID — aborting, falling back'); return null; }
+      // I11: independent MITM signal — warns, doesn't block (no hard-abort flow yet).
+      const ktPeerId = peerPubB64.slice(0, 12);
+      const audit = await _auditKeyHistory(await dbGet('identity', 'ktIk:' + ktPeerId), bundle.keyHistory);
+      if (audit.verdict === 'rolled') showKeyChangeWarning(ktPeerId, peerPubB64, 'X3DH key-history rollover.').catch(e => _dbg(e, 'kt-warn'));
+      await dbPut('identity', bundle.identityKey, 'ktIk:' + ktPeerId);
       const ikPubPeer = Uint8Array.from(atob(bundle.identityKey), c => c.charCodeAt(0));
       const spkPubPeer = Uint8Array.from(atob(bundle.signedPreKey), c => c.charCodeAt(0));
       const opkPubPeer = bundle.oneTimePreKey ? Uint8Array.from(atob(bundle.oneTimePreKey), c => c.charCodeAt(0)) : null;
@@ -5775,6 +5780,20 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'bootstrapResponderSessionV5'); return null; }
   }
 
+  // Shared MITM/key-change warning UI — used by the decrypt-failure reset below and the X3DH ktlog check.
+  async function showKeyChangeWarning(peerId, peerPubB64, reason) {
+    const name = (await dbGetAll('contacts')).find(c => c.pubB64 === peerPubB64)?.name || peerId;
+    const box = _DOM.get('msg-messages');
+    if (box && activeContact?.pubB64 === peerPubB64) {
+      const warn = document.createElement('div');
+      warn.className = 'msg sys';
+      safeSetHTML(warn, `<span class="color-y">⚠️ ${esc(t('keyChanged', name))}</span>`);
+      box.appendChild(warn); box.scrollTop = box.scrollHeight;
+    }
+    showToast(t('keyChanged', name), 'error', 8000); announceToSR(t('keyChanged', name));
+    auditLog('security', `Key change detected: ${name} (${peerId}). ${reason}`);
+  }
+
   // --- Init session (first contact) ---
   async function initSession(peerPubB64) {
     try {  
@@ -5800,17 +5819,10 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'initSession'); }
   }
 
-  // Responder-side bootstrap for a brand-new session. initSession() above treats a
-  // fresh LOCAL ephemeral as "our ratchet key" — correct for whoever sends first
-  // (sendChainKey = DH(their ephemeral, peer's IDENTITY key)) — but if the RECEIVER
-  // also bootstrapped via initSession(), its own DIFFERENT ephemeral makes
-  // dhRatchetStep DH the wrong keypair against the sender's, silently breaking every
-  // first message between brand-new contacts. Fixed like X3DH's responder reuses
-  // spkPriv: reuse OUR identity key as ratchetPriv, so dhRatchetStep's
-  // DH(ourIdentity.priv, sender's ephemeral.pub) reproduces the sender's DH by ECDH
-  // symmetry. Residual gap (not fixed here): if BOTH sides send before receiving
-  // anything, each uses its own ephemeral and this reconciliation doesn't apply —
-  // a rare simultaneous-first-contact race, not the common one-sided-initiation case.
+  // Responder-side bootstrap for a brand-new session — reuses OUR identity key as ratchetPriv
+  // (like X3DH's responder reuses spkPriv) so dhRatchetStep's DH against the sender's
+  // ephemeral reproduces their DH by ECDH symmetry (a random ephemeral here never would).
+  // Gap: if both sides send before receiving anything, this reconciliation doesn't apply.
   async function initSessionResponder(peerPubB64) {
     try {
       const peerPubRaw = Uint8Array.from(atob(peerPubB64), c => c.charCodeAt(0));
@@ -5987,20 +5999,7 @@ async function initMessenger(dbName) {
         const newSess = await initSessionResponder(peerPubB64);
         await saveSession(peerId, newSess);
         _decryptFailures[peerId] = 0;
-        // v3.6: KEY CHANGE WARNING — critical for MITM detection
-        // Signal shows yellow banner; we show system message + audit log
-        const contact = (await dbGetAll('contacts')).find(c => c.pubB64 === peerPubB64);
-        const name = contact?.name || peerId;
-        const box = _DOM.get('msg-messages');
-        if (box && activeContact?.pubB64 === peerPubB64) {
-          const warn = document.createElement('div');
-          warn.className = 'msg sys';
-          safeSetHTML(warn, `<span class="color-y">⚠️ ${esc(t('keyChanged', name))}</span>`);
-          box.appendChild(warn); box.scrollTop = box.scrollHeight;
-        }
-        showToast(t('keyChanged', name), 'error', 8000);
-        announceToSR(t('keyChanged', name));
-        auditLog('security', `Key change detected: ${name} (${peerId}). Session reset.`);
+        await showKeyChangeWarning(peerId, peerPubB64, 'Session reset.');
       }
       return null;
     }
