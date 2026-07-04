@@ -699,3 +699,86 @@ describe('Unpad mirror — inline _unpadAndDecompress (index.html) vs reference 
     expect(await inlineUnpad(padded, 4)).toBe(text);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Bare-IK session bootstrap — first-contact convergence guard.
+//
+// initSession() treats a fresh LOCAL ephemeral ratchet key as "our current ratchet
+// key", which is correct for whoever sends first (their sendChainKey is DH(their
+// ephemeral, peer's IDENTITY key)). Before initSessionResponder existed, the
+// RECEIVING side of a brand-new contact also bootstrapped via initSession() — its
+// own, DIFFERENT ephemeral — so dhRatchetStep DH'd the wrong keypair against the
+// sender's ephemeral and NEVER decrypted the first message (or any message after
+// it, since the mismatch never self-corrects). This is a correctness/availability
+// bug, not a mirror-drift one — there's no reference module for the bare-IK path —
+// so it's guarded here by exercising the real encryptFor/decryptFrom/initSession/
+// initSessionResponder end to end for a from-scratch pair of identities.
+// ---------------------------------------------------------------------------
+const BOOTSTRAP_START = 'async function hkdf(ikm, salt, info, length)';
+const BOOTSTRAP_END = '\n  // --- Safety Number (v3) ---';
+const bs = html.indexOf(BOOTSTRAP_START);
+const be = html.indexOf(BOOTSTRAP_END, bs);
+if (bs < 0 || be < 0) {
+  throw new Error(
+    'mirror-drift guard: could not locate the inline session-bootstrap block in index.html ' +
+    '(markers "async function hkdf(ikm, salt, info, length)" .. "// --- Safety Number (v3) ---"). ' +
+    'If the block moved, update tests/mirror-drift.test.js.',
+  );
+}
+
+function makeSessionDevice(myKeys, myPubB64) {
+  const idb = new Map();
+  const dbGet = async (store, key) => idb.get(store + ':' + key) ?? null;
+  const dbPut = async (store, val, key) => { idb.set(store + ':' + key, val); return true; };
+  const CONFIG = { PREFERRED_CURVE: 'X25519', X3DH_V5_ENABLED: false, IV_BYTES: 12, MSG_PAD_BOUNDARY: 256, REPLAY_CACHE_SIZE: 200, SESSION_RESET_THRESHOLD: 3, HKDF_HASH: 'SHA-256' };
+  const factory = new Function(
+    'CONFIG', '_hasX25519', 'dbGet', 'dbPut', 'zeroBuffer', 'workerCrypto', 'postAPIRaw', 'API',
+    '_signingKey', '_signingPubB64', 'signMessage', 'verifySignature', 'myKeys', 'myPubB64', '_dbg', 'arr', 'u8',
+    html.slice(bs, be) + '\nreturn { encryptFor, decryptFrom };',
+  );
+  const R = factory(
+    CONFIG, true, dbGet, dbPut, () => {}, async () => null, async () => { throw new Error('not used'); }, null,
+    null, '', async () => null, async () => true, myKeys, myPubB64, () => {},
+    (a) => Array.from(a), (a) => new Uint8Array(a),
+  );
+  return R;
+}
+
+async function genSessionIdentity() {
+  const kp = await globalThis.crypto.subtle.generateKey({ name: 'X25519' }, true, ['deriveBits']);
+  const pubRaw = new Uint8Array(await globalThis.crypto.subtle.exportKey('raw', kp.publicKey));
+  return { keys: kp, pubB64: Buffer.from(pubRaw).toString('base64') };
+}
+
+describe('Bare-IK session bootstrap — inline encryptFor/decryptFrom convergence for brand-new contacts', () => {
+  it('a brand-new contact\'s first message decrypts correctly', async () => {
+    const alice = await genSessionIdentity();
+    const bob = await genSessionIdentity();
+    const A = makeSessionDevice(alice.keys, alice.pubB64);
+    const B = makeSessionDevice(bob.keys, bob.pubB64);
+    const wire = await A.encryptFor('hello bob, fresh contact', bob.pubB64);
+    expect(await B.decryptFrom(wire, alice.pubB64)).toBe('hello bob, fresh contact');
+  });
+
+  it('converges regardless of which side speaks first', async () => {
+    const carol = await genSessionIdentity();
+    const dave = await genSessionIdentity();
+    const C = makeSessionDevice(carol.keys, carol.pubB64);
+    const D = makeSessionDevice(dave.keys, dave.pubB64);
+    const wire = await D.encryptFor('dave speaks first', carol.pubB64);
+    expect(await C.decryptFrom(wire, dave.pubB64)).toBe('dave speaks first');
+  });
+
+  it('survives several back-and-forth turns after first contact (ratchet keeps converging)', async () => {
+    const alice = await genSessionIdentity();
+    const bob = await genSessionIdentity();
+    const A = makeSessionDevice(alice.keys, alice.pubB64);
+    const B = makeSessionDevice(bob.keys, bob.pubB64);
+    expect(await B.decryptFrom(await A.encryptFor('msg 1', bob.pubB64), alice.pubB64)).toBe('msg 1');
+    expect(await A.decryptFrom(await B.encryptFor('reply 1', alice.pubB64), bob.pubB64)).toBe('reply 1');
+    for (let i = 0; i < 3; i++) {
+      expect(await B.decryptFrom(await A.encryptFor('A-' + i, bob.pubB64), alice.pubB64)).toBe('A-' + i);
+      expect(await A.decryptFrom(await B.encryptFor('B-' + i, alice.pubB64), bob.pubB64)).toBe('B-' + i);
+    }
+  });
+});

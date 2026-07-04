@@ -1273,9 +1273,8 @@ const CONFIG = {
   GROUP_RATCHET_V5: false,
   GROUP_MAX_SKIP: 50, // max tolerated out-of-order gap in the group v5 hash ratchet
   // Authenticated X3DH (I1/G1): default initSession() is a bare unverified DH(IK_A, IK_B)
-  // — a relay swapping in its own identity key at first contact goes undetected. When ON,
-  // first contact verifies the peer's signed pre-key against their Ed25519 key, but only
-  // when BOTH sides advertise it (negotiated from the fetched bundle); else falls back
+  // — an undetected MITM risk. When ON, first contact verifies the peer's signed pre-key
+  // against their Ed25519 key, but only when BOTH sides negotiate it; else falls back
   // byte-identically. Opt-in after manual two-device validation (docs/INTEGRATION.md §3).
   X3DH_V5_ENABLED: false,
   // v3.6 SECURITY (default OFF — opt-in via /keywrap; run /keywrap again to disable):
@@ -5496,10 +5495,7 @@ async function initMessenger(dbName) {
     return false;
   }
 
-  // Generate a signed pre-key + batch of one-time pre-keys, persisting the PRIVATE
-  // halves locally (previously discarded after upload) so this device can act as the
-  // RESPONDER in someone else's X3DH handshake later. Signs the SPK with our Ed25519
-  // key so an initiator can authenticate it (see the X3DH v5 block above initSession).
+  // Generate signed + one-time pre-keys, persisting the PRIVATE halves (previously discarded) so this device can act as X3DH responder; signs the SPK with our Ed25519 key.
   async function generatePreKeyBundle() {
     const spk = await genRatchetKey();
     const spkPub = btoa(String.fromCharCode(...new Uint8Array(spk.pub)));
@@ -5663,15 +5659,13 @@ async function initMessenger(dbName) {
   // X3DH v5 — authenticated pre-key agreement (I1/G1, gated by CONFIG.X3DH_V5_ENABLED).
   // initSession() below is a bare unauthenticated DH(IK_A, IK_B); here the responder's
   // signed pre-key is verified against their Ed25519 key first. Both sides bootstrap
-  // into the SAME session shape initSession() returns, so encryptFor/decryptFrom/
-  // dhRatchetStep need no changes: the initiator starts send-only, and the first
-  // reply's dhRatchetStep bootstraps the receive chain — the same mechanism the
-  // responder uses below, reusing its SPK private key as its first "ratchet" key.
-  // Negotiation (N3) mirrors src/crypto/negotiate.js's AND rule inline (not ESM-
-  // imported — CLAUDE.md keeps the deployed artifact single-file/zero-runtime-deps).
-  // Signing convention: ratchet.js signs RAW SPK bytes, but the deployed Worker
-  // (handlePreKeyUpload → verifyEd25519) verifies the base64 STRING like every other
-  // signed action here — so this signs/verifies the string via signMessage/verifySignature.
+  // the SAME session shape initSession() returns (send-only for the initiator; the
+  // first reply's dhRatchetStep bootstraps the receive chain, reusing SPK priv as the
+  // first "ratchet" key — same mechanism initSessionResponder below uses). Negotiation
+  // (N3) mirrors negotiate.js's AND rule inline (not ESM-imported — CLAUDE.md keeps the
+  // deployed artifact single-file). Signing: ratchet.js signs RAW SPK bytes, but the
+  // deployed Worker (verifyEd25519) verifies the base64 STRING like every other signed
+  // action here, so this uses signMessage/verifySignature on the string instead.
   // ================================================================
   const CAPS_X3DH_V5 = 'x3dh-v5';
 
@@ -5729,9 +5723,7 @@ async function initMessenger(dbName) {
     if (opkPriv) parts.push(await ecdhBits(opkPriv, ekPubPeer));
     return hkdf(_concatBytes(parts), new Uint8Array(32), 'breeze-x3dh-v5', 32);
   }
-  // Fetch+verify the peer's bundle and seed a session shaped like initSession()'s
-  // return value. Returns null (caller falls back to initSession()) when X3DH is off,
-  // there's no server, the peer hasn't advertised v5, or the signature fails.
+  // Fetch+verify the peer's bundle; null (falls back to initSession()) if X3DH is off, there's no server, the peer hasn't advertised v5, or the signature fails.
   async function initSessionV5Initiator(peerPubB64) {
     if (!CONFIG.X3DH_V5_ENABLED || !API) return null;
     try {
@@ -5769,8 +5761,7 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'initSessionV5Initiator'); return null; }
   }
 
-  // Derive the X3DH root key from a parsed pkm envelope; seed peerRatchetPub null so
-  // decryptFrom's existing ratchet-key-changed branch bootstraps the receive chain.
+  // Derive the X3DH root key from a pkm envelope; peerRatchetPub null triggers decryptFrom's ratchet-key-changed branch to bootstrap the receive chain.
   async function _bootstrapResponderSessionV5(p) {
     try {
       const spkPriv = await _loadSpkPriv();
@@ -5807,6 +5798,33 @@ async function initMessenger(dbName) {
       };
     
     } catch(_e) { _dbg(_e, 'initSession'); }
+  }
+
+  // Responder-side bootstrap for a brand-new session. initSession() above treats a
+  // fresh LOCAL ephemeral as "our ratchet key" — correct for whoever sends first
+  // (sendChainKey = DH(their ephemeral, peer's IDENTITY key)) — but if the RECEIVER
+  // also bootstrapped via initSession(), its own DIFFERENT ephemeral makes
+  // dhRatchetStep DH the wrong keypair against the sender's, silently breaking every
+  // first message between brand-new contacts. Fixed like X3DH's responder reuses
+  // spkPriv: reuse OUR identity key as ratchetPriv, so dhRatchetStep's
+  // DH(ourIdentity.priv, sender's ephemeral.pub) reproduces the sender's DH by ECDH
+  // symmetry. Residual gap (not fixed here): if BOTH sides send before receiving
+  // anything, each uses its own ephemeral and this reconciliation doesn't apply —
+  // a rare simultaneous-first-contact race, not the common one-sided-initiation case.
+  async function initSessionResponder(peerPubB64) {
+    try {
+      const peerPubRaw = Uint8Array.from(atob(peerPubB64), c => c.charCodeAt(0));
+      const dh = await ecdhBits(myKeys.privateKey, peerPubRaw);
+      const rootKey = await hkdf(dh, new Uint8Array(32), 'breeze-init', 32);
+      return {
+        rootKey,
+        ratchetPriv: myKeys.privateKey,
+        ratchetPub: null,
+        peerRatchetPub: null,
+        sendCounter: 0, recvCounter: 0,
+        seenMsgIds: [],
+      };
+    } catch(_e) { _dbg(_e, 'initSessionResponder'); }
   }
 
   // --- Encrypt with Double Ratchet ---
@@ -5874,7 +5892,7 @@ async function initMessenger(dbName) {
         if (!sess) return null; // no SPK private key on this device — nothing to fall back to
         try { p = JSON.parse(p.msg); } catch(parseErr) { _dbg(parseErr, 'malformed-pkm-inner'); return null; }
       }
-      if (!sess) { sess = await initSession(peerPubB64); }
+      if (!sess) { sess = await initSessionResponder(peerPubB64); }
       // v3/v4 ratchet message
       if ((p.v === 3 || p.v === 4) && p.rk) {
         const peerRK = new Uint8Array(p.rk);
@@ -5965,7 +5983,8 @@ async function initMessenger(dbName) {
       }
       if (_decryptFailures[peerId] >= CONFIG.SESSION_RESET_THRESHOLD) {
         _dbg(null, 'Session reset for ' + peerId + ' after 3 decrypt failures');
-        const newSess = await initSession(peerPubB64);
+        // Responder bootstrap — a plain initSession() reset would recreate the same mismatch.
+        const newSess = await initSessionResponder(peerPubB64);
         await saveSession(peerId, newSess);
         _decryptFailures[peerId] = 0;
         // v3.6: KEY CHANGE WARNING — critical for MITM detection
@@ -6336,11 +6355,7 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'distributeSenderKey'); }
   }
 
-  // v5 kick completeness: the kicker already rotates and redistributes ITS OWN sender
-  // key on kick (see the `kick` command handler), but every other remaining member also
-  // handed their key to the kicked member at some point — if they never rotate too, the
-  // kicked member keeps decrypting everyone else's messages. Tell each remaining member
-  // to rotate their own key as well.
+  // v5 kick completeness: the kicker rotates ITS OWN key, but every other member also handed theirs to the kicked member — without rotating too, the kick isn't complete.
   async function notifyGroupKick(groupId, kickedId, epoch) {
     if (!CONFIG.GROUP_RATCHET_V5) return;
     try {
@@ -6354,10 +6369,7 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'notifyGroupKick'); }
   }
 
-  // Handle a group_kick notice from another member: drop the kicked member locally,
-  // then rotate our own sender key to the announced epoch and re-share it with whoever
-  // is left (excluding the kicked member). Guarded on epoch so a duplicate/replayed
-  // notice for an epoch we already rotated to is a no-op.
+  // On a group_kick notice: drop the kicked member, rotate our key to the announced epoch, and re-share it. Epoch-guarded so a duplicate/replayed notice is a no-op.
   async function rotateGroupKeyOnKickNotice(groupId, kickedId, epoch) {
     if (!CONFIG.GROUP_RATCHET_V5 || typeof epoch !== 'number') return;
     try {
@@ -6605,10 +6617,8 @@ async function initMessenger(dbName) {
     startPolling();
     initBilling();
     initPushNotifications();
-    // At-rest key wrapping (see /keywrap) is opt-in and off by default, so a fresh
-    // identity's private key sits unencrypted in IndexedDB until the user discovers
-    // the command themselves. Surface it once, right after setup, instead of relying
-    // on that discovery.
+    // /keywrap is opt-in and off by default — surface it once, right after setup,
+    // instead of relying on the user to discover the command themselves.
     if (!_atRestIsWrapped(await dbGet('identity', 'keys'))) {
       showToast(t('keywrapSuggestion'), 'info', 10000);
     }
@@ -9900,13 +9910,11 @@ async function initMessenger(dbName) {
         const decrypted = await decryptFrom(msg.payload, c.pubB64);
         if (!decrypted) return;
         const skMsg = JSON.parse(decrypted);
-        // v5 payloads carry `chainKey` instead of `key` (see distributeSenderKey) —
-        // requiring skMsg.key here would silently drop every v5 sender-key message.
+        // v5 payloads carry `chainKey` not `key` — requiring skMsg.key would drop them all.
         if (skMsg.type === 'sender_key' && skMsg.groupId && (skMsg.key || skMsg.chainKey)) {
           const peerKey = 'gsk-peer:' + skMsg.groupId + ':' + (msg.from || '').slice(0, 12);
           const existingPeerSK = await dbGet('identity', peerKey);
-          // Monotonic epoch guard: never let a replayed/stale sender_key message roll
-          // a peer's key back to an earlier epoch (would undo a kick rotation).
+          // Monotonic epoch guard: don't let a replayed/stale message undo a kick rotation.
           if (existingPeerSK && (existingPeerSK.epoch || 0) > (skMsg.epoch || 0)) return;
           const skEntry = (skMsg.v === 5 && skMsg.chainKey)
             ? { chainKey: skMsg.chainKey, counter: 0, epoch: skMsg.epoch || 0, v: 5, skipped: {} }
@@ -9918,10 +9926,7 @@ async function initMessenger(dbName) {
       return;
     }
 
-    // === Group kick notice (v5 key rotation completeness) ===
-    // Sent by the kicker to every OTHER remaining member so they also rotate their own
-    // sender key — the kicker's inline rotation only replaces its own key, but the
-    // kicked member holds every other member's key too until they rotate as well.
+    // === Group kick notice (v5 key rotation completeness) — see notifyGroupKick ===
     if (msg.isGroupKick) {
       try {
         const c = await dbGet('contacts', (msg.from || '').slice?.(0, 12) || msg.from);
@@ -12430,9 +12435,6 @@ async function initMessenger(dbName) {
               for (const m of (activeContact.members || []).filter(m => m.id !== myId && m.pubB64)) {
                 distributeSenderKey(activeContact.id, m.pubB64).catch(e => _dbg(e, 'post-kick-sk-dist'));
               }
-              // Tell every other remaining member to rotate their own key too — this
-              // loop only just replaced *our* key; without the notice, the kicked
-              // member keeps decrypting messages from everyone else in the group.
               notifyGroupKick(activeContact.id, member.id, newEpoch).catch(e => _dbg(e, 'notify-kick'));
               auditLog('group', `Epoch rotated to ${newEpoch} after kicking ${member.name}`);
             }
