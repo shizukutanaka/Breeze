@@ -5780,9 +5780,10 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'bootstrapResponderSessionV5'); return null; }
   }
 
-  // Shared MITM/key-change warning UI — used by the decrypt-failure reset below and the X3DH ktlog check.
+  // Shared MITM/key-change warning UI — used by the decrypt-failure reset, the X3DH ktlog
+  // check, and the signing-key TOFU mismatch. peerId is the contacts key (pub.slice(0,12)).
   async function showKeyChangeWarning(peerId, peerPubB64, reason) {
-    const name = (await dbGetAll('contacts')).find(c => c.pubB64 === peerPubB64)?.name || peerId;
+    const name = (await dbGet('contacts', peerId))?.name || peerId;
     const box = _DOM.get('msg-messages');
     if (box && activeContact?.pubB64 === peerPubB64) {
       const warn = document.createElement('div');
@@ -10194,21 +10195,9 @@ async function initMessenger(dbName) {
         } else if (contact.sigPub !== msg.sigPub) {
           meta.tampered = true;
           _dbg(null, 'Signing key changed for ' + contactId + ' — possible MITM');
-          // Show the same prominent warning as the encryption key-change banner (line ~4752).
-          // A signing key substitution is a stronger MITM indicator than a decryption failure;
-          // the subtle ⚠sig badge alone is insufficient for this severity.
-          const _skName = contact.name || contactId;
-          const _skBox = _DOM.get('msg-messages');
-          if (_skBox && activeContact?.id === contactId) {
-            const _skWarn = document.createElement('div');
-            _skWarn.className = 'msg sys';
-            safeSetHTML(_skWarn, `<span class="color-y">⚠️ ${esc(t('keyChanged', _skName))}</span>`);
-            _skBox.appendChild(_skWarn);
-            _skBox.scrollTop = _skBox.scrollHeight;
-          }
-          showToast(t('keyChanged', _skName), 'error', 8000);
-          announceToSR(t('keyChanged', _skName));
-          auditLog('security', `Signing key change: ${_skName} (${contactId}) — possible MITM.`);
+          // A signing-key substitution is a stronger MITM signal than a decrypt failure, so
+          // reuse the same prominent banner (not just the subtle ⚠sig badge).
+          await showKeyChangeWarning(contactId, contact.pubB64, 'Signing key change — possible MITM.');
         }
         if (!meta.tampered) {
           const verified = await verifySignature(text, msg.sig, msg.sigPub);
