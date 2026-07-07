@@ -1350,12 +1350,6 @@ Object.freeze(CONFIG.POW_REQUIRED_ACTIONS);
 Object.freeze(CONFIG.EMOJI_NAMES);
 // Time constants (avoid magic numbers in relative time calculations)
 const MS = Object.freeze({ SEC: 1000, MIN: 60000, HOUR: 3600000, DAY: 86400000, WEEK: 604800000 });
-// Safe base64 decode with validation
-function safeAtob(b64) {
-  if (typeof b64 !== 'string') throw new Error('atob: input must be string');
-  if (!/^[A-Za-z0-9+\/]*={0,2}$/.test(b64)) throw new Error('atob: invalid base64');
-  try { return atob(b64); } catch(e) { throw new Error(`atob failed: ${e.message}`); }
-}
 // ═══ Capability Detection (business-grade: fail-fast with clear message) ═══
 const _capabilities = {
   crypto: !!(window.crypto?.subtle),
