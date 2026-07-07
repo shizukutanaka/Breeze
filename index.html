@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: stun: turn:; img-src 'self' blob: data: https:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; trusted-types breeze-sanitizer default; require-trusted-types-for 'script'; upgrade-insecure-requests">
+<!-- frame-ancestors omitted here: <meta> CSP can't enforce it (browsers warn + ignore);
+     real enforcement is the Content-Security-Policy HTTP header in _headers. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: stun: turn:; img-src 'self' blob: data: https:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; trusted-types breeze-sanitizer default; require-trusted-types-for 'script'; upgrade-insecure-requests">
 <title>Breeze</title>
 <meta name="description" content="P2P encrypted messenger. No phone number. No registration.">
 <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
@@ -3067,58 +3069,8 @@ function relTime(diffMs) {
   } catch { return ''; }
 }
 document.documentElement.lang = LANG; // Dynamic lang attribute
-// Register Service Worker (PWA) + v3.6: Improved update notification (research: workbox-window pattern)
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').then(reg => {
-    // Check for updates periodically
-    setInterval(() => reg.update(), MS.HOUR);
-
-    // v3.6: Detect waiting SW (installed but not yet active)
-    const showUpdatePrompt = (waitingSW) => {
-      const banner = _DOM.get('msg-server-banner');
-      if (!banner || banner.dataset.updating) return;
-      banner.dataset.updating = '1';
-      banner.classList.remove('hidden', 'bg-t3'); banner.classList.add('bg-g');
-      banner.replaceChildren();
-      banner.textContent = t('uiNewVersion') + ' ';
-      const btn = document.createElement('button');
-      btn.className = 'update-btn';
-      btn.textContent = t('uiReload');
-      btn.onclick = () => {
-        // Save drafts before reload
-        try { localStorage.setItem('brz-drafts', JSON.stringify(_drafts || {})); } catch {}
-        waitingSW.postMessage({ type: 'SKIP_WAITING' });
-      };
-      banner.appendChild(btn);
-      announceToSR(t('uiNewVersion'));
-    };
-
-    // Check if there's already a waiting SW
-    if (reg.waiting) showUpdatePrompt(reg.waiting);
-
-    reg.addEventListener('updatefound', () => {
-      const newSW = reg.installing;
-      newSW?.addEventListener('statechange', () => {
-        // 'installed' = downloaded and ready, waiting for activation
-        if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
-          showUpdatePrompt(newSW);
-        }
-      });
-    });
-
-    // v3.6: When a NEW SW replaces the one already controlling this page, reload
-    // cleanly. Guard against the first-ever install: with skipWaiting()+claim(),
-    // the initial SW claims the previously-uncontrolled page and fires
-    // controllerchange — reloading then would needlessly reload on first visit.
-    const hadController = !!navigator.serviceWorker.controller;
-    let refreshing = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (refreshing || !hadController) return;
-      refreshing = true;
-      location.reload();
-    });
-  }).catch(e => _dbg(e));
-}
+// Service Worker registration moved below _ttPolicy (see there for why) — it calls
+// navigator.serviceWorker.register('sw.js'), a TrustedScriptURL-guarded sink.
 
 // v3.5: ONE-CLICK INSTALL (PWA Install Prompt)
 // Captures beforeinstallprompt for Android/Chrome, detects iOS Safari
@@ -3692,11 +3644,152 @@ const API = location.hostname === 'localhost' || location.hostname === '127.0.0.
 const P = new URLSearchParams(location.search);
 const joinToken = P.get('join');
 
+// ═══ Performance Markers (optional — no-op if Performance API unavailable) ═══
+// Moved up from ~line 4215: initMessenger() (hoisted call below) reads _perf on its first line; declared later, that `const` stays TDZ-locked — crashed boot for every real user until found via E2E.
+const _perf = {
+  mark: (name) => { try { performance?.mark?.('brz:' + name); } catch {} },
+  measure: (name, start) => { try { return performance?.measure?.('brz:' + name, 'brz:' + start); } catch { return null; } },
+};
+
+// v3.6: Trusted Types policy. Two policies: 'breeze-sanitizer' (named, called explicitly
+// via safeSetHTML) and 'default' (safety net for any raw innerHTML/insertAdjacentHTML/
+// outerHTML assignment under `require-trusted-types-for 'script'`, so unmigrated sinks
+// are sanitized rather than rejected). Cross-browser fallback: same API, no TT enforcement.
+// Moved up from ~line 4023 alongside _perf: register('sw.js') below is a
+// TrustedScriptURL-guarded sink; registered too late, it had no policy to coerce it.
+const _ttPolicy = (() => {
+  // Sanitizer: strip dangerous tags/attrs while keeping safe markdown output
+  const SAFE_TAGS = /^(p|br|strong|em|b|i|a|code|pre|blockquote|ul|ol|li|span|div|img|del|s|sub|sup|h[1-6]|table|thead|tbody|tr|td|th|mark|button|input)$/i;
+  const SAFE_ATTRS = /^(href|target|rel|class|title|data-[a-z-]+|loading|alt|src|id|aria-[a-z]+|role|style|type|checked|placeholder|maxlength|rows|cols|for|name|value|min|max|step|disabled|readonly|autocomplete|enterkeyhint|spellcheck|wrap|tabindex)$/i;
+
+  // DOMParser.parseFromString(str,'text/html') is ITSELF TT-guarded: the browser auto-
+  // invokes 'default's createHTML (= this function) on the string first, which calls
+  // parseFromString again — infinite recursion. Guard makes the re-entrant call a
+  // pass-through; safe since it only feeds the scratch doc, pruned to SAFE_TAGS/SAFE_ATTRS right after.
+  let _sanitizeReentrant = false;
+  function sanitize(html) {
+    // Fast path: plain text with no HTML — returned as-is so the per-call cost on
+    // already-escaped strings (the common case under esc()) is just one regex test.
+    if (!/</.test(html)) return html;
+    if (_sanitizeReentrant) return html;
+    _sanitizeReentrant = true;
+    try {
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      // Remove all elements not in SAFE_TAGS (allowlist: safer than denylist). svg/math
+      // excluded (external refs, style/script); form excluded (unused). button/input
+      // ARE allowed: their templates (showPrompt, banners, dialogs) are app-authored,
+      // and message rendering esc()'s raw text BEFORE renderMarkdown/renderLinks run,
+      // so a user's literal "<button>" can never survive as a real tag here.
+      doc.body.querySelectorAll('*').forEach(el => {
+        if (!SAFE_TAGS.test(el.tagName)) { el.replaceWith(...el.childNodes); return; }
+        for (const attr of [...el.attributes]) {
+          if (attr.name.startsWith('on') || !SAFE_ATTRS.test(attr.name)) el.removeAttribute(attr.name);
+        }
+        // Sanitize href: allow https:, mailto:, #anchors, and absolute paths (/foo).
+        // Exclude protocol-relative (//evil.com) which browsers open as https://evil.com.
+        if (el.hasAttribute('href')) {
+          const href = el.getAttribute('href');
+          if (!/^(https?:|mailto:|#|\/[^\/])/i.test(href)) el.removeAttribute('href');
+        }
+        // Sanitize src: allow only blob:, data:image/, https:
+        if (el.hasAttribute('src')) {
+          const src = el.getAttribute('src');
+          if (!/^(blob:|data:image\/|https?:)/i.test(src)) el.removeAttribute('src');
+        }
+      });
+      return doc.body.innerHTML;
+    } finally {
+      _sanitizeReentrant = false;
+    }
+  }
+
+  if (typeof trustedTypes !== 'undefined' && trustedTypes.createPolicy) {
+    // Registered BEFORE the named policy — a missing default breaks enforcement for any unported innerHTML site.
+    try {
+      trustedTypes.createPolicy('default', {
+        createHTML: (input) => sanitize(input),
+        // Without this, register('sw.js') below throws, aborting the rest of app boot.
+        createScriptURL: (input) => {
+          if (input === 'sw.js' || input === '/sw.js') return input;
+          throw new Error('blocked untrusted script URL: ' + input);
+        },
+      });
+    } catch { /* already registered (HMR/double-init) — ignore */ }
+    try {
+      return trustedTypes.createPolicy('breeze-sanitizer', {
+        createHTML: (input) => sanitize(input),
+      });
+    } catch { /* Policy already created or TT not enforced */ }
+  }
+  // Fallback: same API surface, no TT enforcement
+  return { createHTML: (input) => sanitize(input) };
+})();
+
+// Safe innerHTML assignment — uses Trusted Types when available
+function safeSetHTML(el, html) {
+  if (el) el.innerHTML = _ttPolicy.createHTML(html);
+}
+
+// Register Service Worker (PWA) + v3.6: Improved update notification (research: workbox-window pattern)
+// try/catch: an uncaught synchronous throw here would abort the rest of this script.
+// Positioned after _ttPolicy so its createScriptURL hook can coerce register('sw.js').
+if ('serviceWorker' in navigator) { try {
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    // Check for updates periodically
+    setInterval(() => reg.update(), MS.HOUR);
+
+    // v3.6: Detect waiting SW (installed but not yet active)
+    const showUpdatePrompt = (waitingSW) => {
+      const banner = _DOM.get('msg-server-banner');
+      if (!banner || banner.dataset.updating) return;
+      banner.dataset.updating = '1';
+      banner.classList.remove('hidden', 'bg-t3'); banner.classList.add('bg-g');
+      banner.replaceChildren();
+      banner.textContent = t('uiNewVersion') + ' ';
+      const btn = document.createElement('button');
+      btn.className = 'update-btn';
+      btn.textContent = t('uiReload');
+      btn.onclick = () => {
+        // Save drafts before reload
+        try { localStorage.setItem('brz-drafts', JSON.stringify(_drafts || {})); } catch {}
+        waitingSW.postMessage({ type: 'SKIP_WAITING' });
+      };
+      banner.appendChild(btn);
+      announceToSR(t('uiNewVersion'));
+    };
+
+    // Check if there's already a waiting SW
+    if (reg.waiting) showUpdatePrompt(reg.waiting);
+
+    reg.addEventListener('updatefound', () => {
+      const newSW = reg.installing;
+      newSW?.addEventListener('statechange', () => {
+        // 'installed' = downloaded and ready, waiting for activation
+        if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+          showUpdatePrompt(newSW);
+        }
+      });
+    });
+
+    // v3.6: When a NEW SW replaces the one already controlling this page, reload
+    // cleanly. Guard against the first-ever install: with skipWaiting()+claim(),
+    // the initial SW claims the previously-uncontrolled page and fires
+    // controllerchange — reloading then would needlessly reload on first visit.
+    const hadController = !!navigator.serviceWorker.controller;
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (refreshing || !hadController) return;
+      refreshing = true;
+      location.reload();
+    });
+  }).catch(e => _dbg(e));
+} catch(e) { _dbg(e, 'sw-register-sync-throw'); } }
+
 // v3.6: Dead Drop read handler — ?drop=<id>#<key>
 if (P.has('drop')) {
   const dropId = P.get('drop');
   const keyB64 = location.hash.slice(1); // Fragment never sent to server
-  // Build drop page via DOM API (runs before TT policy is registered)
+  // Build drop page via DOM API (avoids safeSetHTML; no functional need to change)
   const _dw = document.createElement('div'); _dw.className = 'drop-page';
   const _di = document.createElement('div'); _di.className = 'drop-page-icon'; _di.textContent = '🔐'; _dw.appendChild(_di);
   const _ds = document.createElement('div'); _ds.id = 'drop-status'; _ds.className = 'drop-page-status'; _ds.textContent = t('dropDecrypting'); _dw.appendChild(_ds);
@@ -4002,76 +4095,8 @@ function downloadBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), MS.SEC * 30);
 }
 
-// v3.6: Trusted Types policy (research: Google eliminated DOM XSS across 130+ services;
-// Zenn team's phased CSP rollout demonstrated the default-policy safety net pattern).
-// Two policies are registered:
-//   - 'breeze-sanitizer': named policy, called explicitly via safeSetHTML
-//   - 'default'         : safety net invoked by the browser for any raw innerHTML /
-//                         insertAdjacentHTML / outerHTML assignment of a plain string,
-//                         when CSP `require-trusted-types-for 'script'` is enforced.
-//                         The 98 untargeted HTML sinks across the app become sanitized
-//                         transparently. The audit found zero script-creating sinks
-//                         (no eval / new Function / setTimeout(string) / dynamic script),
-//                         so `createHTML` covers the whole attack surface.
-// Cross-browser fallback: policy functions work identically without TT enforcement.
-const _ttPolicy = (() => {
-  // Sanitizer: strip dangerous tags/attrs while keeping safe markdown output
-  const SAFE_TAGS = /^(p|br|strong|em|b|i|a|code|pre|blockquote|ul|ol|li|span|div|img|del|s|sub|sup|h[1-6]|table|thead|tbody|tr|td|th|mark)$/i;
-  const SAFE_ATTRS = /^(href|target|rel|class|title|data-[a-z-]+|loading|alt|src|id|aria-[a-z]+|role|style|type|checked|placeholder|maxlength|rows|cols|for|name|value|min|max|step|disabled|readonly|autocomplete|enterkeyhint|spellcheck|wrap|tabindex)$/i;
-
-  function sanitize(html) {
-    // Fast path: plain text with no HTML — returned as-is so the per-call cost on
-    // already-escaped strings (the common case under esc()) is just one regex test.
-    if (!/</.test(html)) return html;
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-    // Remove all elements not in SAFE_TAGS (allowlist approach: safer than denylist).
-    // svg/math are excluded because they can reference external resources (xlink:href,
-    // <use href>, <image href>) and contain style/script elements. input/button/form
-    // elements are excluded to prevent UI confusion and phishing overlays.
-    doc.body.querySelectorAll('*').forEach(el => {
-      if (!SAFE_TAGS.test(el.tagName)) { el.replaceWith(...el.childNodes); return; }
-      for (const attr of [...el.attributes]) {
-        if (attr.name.startsWith('on') || !SAFE_ATTRS.test(attr.name)) el.removeAttribute(attr.name);
-      }
-      // Sanitize href: allow https:, mailto:, #anchors, and absolute paths (/foo).
-      // Exclude protocol-relative (//evil.com) which browsers open as https://evil.com.
-      if (el.hasAttribute('href')) {
-        const href = el.getAttribute('href');
-        if (!/^(https?:|mailto:|#|\/[^\/])/i.test(href)) el.removeAttribute('href');
-      }
-      // Sanitize src: allow only blob:, data:image/, https:
-      if (el.hasAttribute('src')) {
-        const src = el.getAttribute('src');
-        if (!/^(blob:|data:image\/|https?:)/i.test(src)) el.removeAttribute('src');
-      }
-    });
-    return doc.body.innerHTML;
-  }
-
-  if (typeof trustedTypes !== 'undefined' && trustedTypes.createPolicy) {
-    // Default policy: catches every raw HTML sink under TT enforcement so
-    // unmigrated `el.innerHTML = stringValue` sites are sanitized rather than
-    // rejected with a SecurityError. Registered BEFORE the named policy because a
-    // missing default would break enforcement for any code path we haven't ported.
-    try {
-      trustedTypes.createPolicy('default', {
-        createHTML: (input) => sanitize(input),
-      });
-    } catch { /* already registered (HMR/double-init) — ignore */ }
-    try {
-      return trustedTypes.createPolicy('breeze-sanitizer', {
-        createHTML: (input) => sanitize(input),
-      });
-    } catch { /* Policy already created or TT not enforced */ }
-  }
-  // Fallback: same API surface, no TT enforcement
-  return { createHTML: (input) => sanitize(input) };
-})();
-
-// Safe innerHTML assignment — uses Trusted Types when available
-function safeSetHTML(el, html) {
-  if (el) el.innerHTML = _ttPolicy.createHTML(html);
-}
+// _ttPolicy + safeSetHTML are now declared earlier (near _perf, before the dead-drop
+// handler) — see comment there for why. _safeReplace/_safeAppend stay here.
 function _safeReplace(el, html) {
   const tmp = document.createElement('div');
   safeSetHTML(tmp, html);
@@ -4177,12 +4202,6 @@ function workerCrypto(op, keyRaw, iv, data) {
 const _defer = typeof requestIdleCallback === 'function'
   ? (fn) => requestIdleCallback(fn, { timeout: 2 * MS.SEC })
   : (fn) => setTimeout(fn, CONFIG.FOCUS_DELAY_MS);
-
-// ═══ Performance Markers (optional — no-op if Performance API unavailable) ═══
-const _perf = {
-  mark: (name) => { try { performance?.mark?.('brz:' + name); } catch {} },
-  measure: (name, start) => { try { return performance?.measure?.('brz:' + name, 'brz:' + start); } catch { return null; } },
-};
 
 const _replayCache = {
   _map: new Map(),
@@ -5653,10 +5672,10 @@ async function initMessenger(dbName) {
   // initSession() below is a bare unauthenticated DH(IK_A, IK_B); here the responder's
   // signed pre-key is verified against their Ed25519 key first. Both sides bootstrap the
   // SAME session shape initSession() returns — send-only for the initiator; the first
-  // reply's dhRatchetStep bootstraps the receive chain, reusing SPK priv as the first
-  // ratchet key, like initSessionResponder. Negotiation (N3) mirrors negotiate.js's AND
-  // rule inline (not ESM-imported — single-file per CLAUDE.md). Signing: ratchet.js signs
-  // RAW SPK bytes, but the Worker's verifyEd25519 verifies the base64 STRING, so this uses signMessage/verifySignature.
+  // reply's dhRatchetStep bootstraps the receive chain, like initSessionResponder does.
+  // Negotiation (N3) mirrors negotiate.js's AND rule inline (not ESM-imported — single-
+  // file per CLAUDE.md). Signing: ratchet.js signs RAW SPK bytes, but the Worker's
+  // verifyEd25519 verifies the base64 STRING, so this uses signMessage/verifySignature.
   // ================================================================
   const CAPS_X3DH_V5 = 'x3dh-v5';
 
@@ -5774,8 +5793,7 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'bootstrapResponderSessionV5'); return null; }
   }
 
-  // Shared MITM/key-change warning UI — used by the decrypt-failure reset, the X3DH ktlog
-  // check, and the signing-key TOFU mismatch. peerId is the contacts key (pub.slice(0,12)).
+  // Shared MITM/key-change warning UI (decrypt-failure reset, X3DH ktlog, signing TOFU). peerId is the contacts key (pub.slice(0,12)).
   async function showKeyChangeWarning(peerId, peerPubB64, reason) {
     const name = (await dbGet('contacts', peerId))?.name || peerId;
     const box = _DOM.get('msg-messages');
@@ -5814,10 +5832,9 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'initSession'); }
   }
 
-  // Responder-side bootstrap for a brand-new session — reuses OUR identity key as ratchetPriv
-  // (like X3DH's responder reuses spkPriv) so dhRatchetStep's DH against the sender's
-  // ephemeral reproduces their DH by ECDH symmetry (a random ephemeral here never would).
-  // Gap: if both sides send before receiving anything, this reconciliation doesn't apply.
+  // Responder-side bootstrap for a brand-new session — reuses OUR identity key as
+  // ratchetPriv (like X3DH reuses spkPriv) so dhRatchetStep's DH against the sender's
+  // ephemeral reproduces their DH by ECDH symmetry. Gap: if both sides send first, this doesn't apply.
   async function initSessionResponder(peerPubB64) {
     try {
       const peerPubRaw = Uint8Array.from(atob(peerPubB64), c => c.charCodeAt(0));

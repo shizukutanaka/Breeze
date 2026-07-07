@@ -16,6 +16,8 @@ node_modules/
 # Build artifacts
 breeze.zip
 coverage/
+test-results/
+playwright-report/
 *.apk
 *.dmg
 *.exe
