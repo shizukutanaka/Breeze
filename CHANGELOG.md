@@ -1,5 +1,24 @@
 # Changelog
 
+## E2E harness + critical scope bugs (branch claude/nice-ride-T6yb0, 2026-07-08)
+
+799 vitest tests + 4 Playwright E2E specs; `index.html` + new `tests/e2e/messaging.spec.js`. `validate.sh` PASSED (35/36, 1 size warning).
+
+First real-browser E2E harness for the shipped `index.html` (Playwright driving the actual document + `_worker.js` behind an in-memory KV, not a re-implementation). It immediately found bugs that 799 unit tests never could, because those tests only exercise `src/crypto/*` reference modules and extracted fragments — never the inline, deployed code actually executing in a browser.
+
+**Message sending was completely broken (CRITICAL):**
+- `genMsgId()` was declared at the script's true top level but referenced `myId`, a variable that only exists inside `initMessenger()`'s closure. Every call — i.e. every single message send (text, file, forward, group) — threw `ReferenceError: myId is not defined`, caught silently by `sendMessage`'s try/catch (visible only with `localStorage['brz-debug']='1'`). No message ever actually sent; the sender didn't even see their own message echoed locally. Fix: moved `genMsgId`/`_msgSeq` inside `initMessenger`, next to `myId`.
+
+**Outbox flush-on-reconnect was completely broken:**
+- Same root cause: top-level `flushOutbox()` referenced `peers`/`encryptFor`/`myPubB64`/`myName`, all closure-local to `initMessenger`. Every flush attempt (queued messages for an offline contact, sent once they reconnect) threw and was silently dropped. Fix: moved `flushOutbox` inside `initMessenger`, next to the `peers` map it reads.
+
+**"Add account" silently did nothing at the plan's account-slot limit:**
+- `addAccount()` (top-level) called `showUpgradeNudge()`, which had been declared inside `initMessenger`'s closure though it has no dependency on any identity/session state (DOM + `t()`/`esc()`/`safeSetHTML()` only). Hitting the slot limit threw instead of showing the upgrade modal — a broken upsell path. Fix: moved `showUpgradeNudge` to the top level alongside its only caller.
+
+All three were found by a static sweep for top-level functions referencing `initMessenger`-closure-local identifiers, seeded by the first bug the new E2E test surfaced at runtime. New `tests/e2e/` (Playwright): `smoke.spec.js` (boot, identity creation, IndexedDB persistence) and `messaging.spec.js` (two real browser contexts exchange a 1:1 message over the sealed-sender relay, driven entirely through the real UI — add-contact dialog, contact click, compose, send).
+
+---
+
 ## Security hardening session 5 — account-switch leaks, reaction/poll caps (branch claude/nice-ride-T6yb0, 2026-07-01)
 
 777 tests; `index.html` only. `validate.sh` PASSED (35/36, 1 size warning).

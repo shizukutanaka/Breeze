@@ -3414,6 +3414,32 @@ function showContextMenu(x, y, items) {
     });
   });
 }
+
+// UPGRADE NUDGE — beautiful modal instead of alert(). Top-level like its only caller
+// (addAccount); used to live inside initMessenger's closure and threw on every call.
+function showUpgradeNudge(reason) {
+  document.querySelectorAll('.overlay.upgrade-modal').forEach(m => m.remove());
+  const modal = document.createElement('div');
+  modal.className = 'overlay overlay-dark upgrade-modal';
+  safeSetHTML(modal, `<div class="modal upgrade-modal">
+    <div class="nudge-icon">👤</div>
+    <div class="nudge-title">${t('upgTitle')}</div>
+    <div class="nudge-desc">${esc(reason)}</div>
+    <div class="nudge-features">
+      ✓ Separate identity &amp; contacts<br>
+      ✓ Work / personal separation<br>
+      ✓ All features included per account<br>
+      ✓ Cancel anytime
+    </div>
+    <div class="nudge-actions">
+      <button data-action="go-pricing" class="btn btn-g nudge-btn-main">${t('upgCta')}</button>
+      <button data-close="overlay" class="btn btn-o nudge-btn-later">${t('later')}</button>
+    </div>
+  </div>`);
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+  document.body.appendChild(modal);
+}
+
 const PLATFORM = (() => {
   if (typeof window !== 'undefined' && window.process?.versions?.electron) return 'electron';
   if (typeof window !== 'undefined' && window.Capacitor) return 'capacitor';
@@ -4397,33 +4423,6 @@ function queueOutbox(peerId, text, meta) {
   _dbg(null, `Outbox: queued for ${peerId.slice(0, 8)} (${queue.length} pending)`);
 }
 
-async function flushOutbox(peerId) {
-  const queue = _outbox.get(peerId);
-  if (!queue || queue.length === 0) return;
-  const peer = peers[peerId];
-  if (!peer?.connected || peer.dc?.readyState !== 'open') return;
-  const toSend = [...queue];
-  _outbox.set(peerId, []);
-  _persistOutbox();
-  let sent = 0;
-  for (const item of toSend) {
-    if (Date.now() - item.ts > 7 * MS.DAY) continue; // Skip messages older than 7 days
-    try {
-      // Re-encrypt and send
-      const encrypted = await encryptFor(item.text, peerId);
-      if (encrypted && peer.dc?.readyState === 'open') {
-        const envelope = { v: CONFIG.PROTOCOL_VERSION, type: 'msg', payload: encrypted, ts: item.ts, sender: myPubB64, name: myName };
-        peer.dc.send(JSON.stringify(envelope));
-        sent++;
-      }
-    } catch(e) { _dbg(e, 'outbox-flush'); }
-  }
-  if (sent > 0) {
-    _dbg(null, `Outbox: flushed ${sent} messages to ${peerId.slice(0, 8)}`);
-    if (typeof auditLog === 'function') auditLog('msg', `Outbox flushed: ${sent} msgs`);
-  }
-}
-
 function _persistOutbox() {
   try {
     const obj = {};
@@ -4447,10 +4446,6 @@ function _restoreOutbox() {
 // Note: _restoreOutbox() is NOT called here at module init. It is called inside
 // initMessenger after myId is known, using the per-account key. This prevents the
 // module-init call from loading any prior account's outbox before identity is set.
-
-// v3.5: Message ID generator — collision-safe (counter prevents same-ms duplicates)
-let _msgSeq = 0;
-function genMsgId() { return myId + ':' + Date.now() + ':' + (++_msgSeq); }
 
 // v3.6: Safe DC send — catches race condition where DC closes between readyState check and send()
 // Returns true if sent, false if failed (caller should queue to outbox)
@@ -5460,6 +5455,10 @@ async function initMessenger(dbName) {
   let myId = ''; // short hash of pubkey
   let myAlias = ''; // Breeze ID (e.g. @alice)
   let myShortId = ''; // v3.3: Human-readable ID (e.g. breeze-a3f1-9c2e)
+
+  // v3.5: Message ID generator (needs closure-local myId — a top-level version threw E2E-found).
+  let _msgSeq = 0;
+  function genMsgId() { return myId + ':' + Date.now() + ':' + (++_msgSeq); }
 
   // v3.3: Generate human-readable short ID from public key
   async function generateShortId(pubB64) {
@@ -6660,6 +6659,34 @@ async function initMessenger(dbName) {
   // ===== Contacts =====
   let activeContact = null;
   const peers = {}; // pubB64 → { pc, dc, connected }
+
+  // v3.6: Flush queued outbox on reconnect (needs closure-local peers/encryptFor/myPubB64/myName).
+  async function flushOutbox(peerId) {
+    const queue = _outbox.get(peerId);
+    if (!queue || queue.length === 0) return;
+    const peer = peers[peerId];
+    if (!peer?.connected || peer.dc?.readyState !== 'open') return;
+    const toSend = [...queue];
+    _outbox.set(peerId, []);
+    _persistOutbox();
+    let sent = 0;
+    for (const item of toSend) {
+      if (Date.now() - item.ts > 7 * MS.DAY) continue; // Skip messages older than 7 days
+      try {
+        // Re-encrypt and send
+        const encrypted = await encryptFor(item.text, peerId);
+        if (encrypted && peer.dc?.readyState === 'open') {
+          const envelope = { v: CONFIG.PROTOCOL_VERSION, type: 'msg', payload: encrypted, ts: item.ts, sender: myPubB64, name: myName };
+          peer.dc.send(JSON.stringify(envelope));
+          sent++;
+        }
+      } catch(e) { _dbg(e, 'outbox-flush'); }
+    }
+    if (sent > 0) {
+      _dbg(null, `Outbox: flushed ${sent} messages to ${peerId.slice(0, 8)}`);
+      auditLog('msg', `Outbox flushed: ${sent} msgs`);
+    }
+  }
 
   // ═══ DRY: Signal helper (13 calls → 1 helper) ═══
   // _signal(room, type, data) — fire-and-forget POST to /signal
@@ -11196,32 +11223,6 @@ async function initMessenger(dbName) {
   // ================================================================
   // TURN CREDENTIALS — available to all users
   // ================================================================
-  // ================================================================
-  // UPGRADE NUDGE — beautiful modal instead of alert()
-  // ================================================================
-  function showUpgradeNudge(reason) {
-    document.querySelectorAll('.overlay.upgrade-modal').forEach(m => m.remove());
-    const modal = document.createElement('div');
-    modal.className = 'overlay overlay-dark upgrade-modal';
-    safeSetHTML(modal, `<div class="modal upgrade-modal">
-      <div class="nudge-icon">👤</div>
-      <div class="nudge-title">${t('upgTitle')}</div>
-      <div class="nudge-desc">${esc(reason)}</div>
-      <div class="nudge-features">
-        ✓ Separate identity &amp; contacts<br>
-        ✓ Work / personal separation<br>
-        ✓ All features included per account<br>
-        ✓ Cancel anytime
-      </div>
-      <div class="nudge-actions">
-        <button data-action="go-pricing" class="btn btn-g nudge-btn-main">${t('upgCta')}</button>
-        <button data-close="overlay" class="btn btn-o nudge-btn-later">${t('later')}</button>
-      </div>
-    </div>`);
-    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
-    document.body.appendChild(modal);
-  }
-
   // ================================================================
   // TURN CREDENTIAL — available to all users for NAT traversal
   // ================================================================
