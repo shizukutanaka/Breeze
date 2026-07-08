@@ -1,5 +1,23 @@
 # Changelog
 
+## Group invite-link E2E + 4 more bugs it found (branch claude/nice-ride-T6yb0, 2026-07-08)
+
+799 vitest tests + 5 Playwright E2E specs; `index.html` + new `tests/e2e/group.spec.js`. `validate.sh` PASSED (35/36, 1 size warning).
+
+New E2E test drives a full group-invite-link flow through the real UI across two browsers (create group → extract invite link → second browser joins → both exchange a Sender-Key group message). Building it surfaced four more real bugs:
+
+**Group creator never saw new joiners without a reload:** `createGroupInviteLink()` never called `startGroupMemberPoll()` (its only other caller, `processJoinToken`, does) — the creator's tab learned of new members only on its next app boot, not during the session they created the group in. Fixed by starting the poll right after the invite link is created.
+
+**A currently-open group silently excluded new joiners from sends:** `startGroupMemberPoll`'s tick updated the group's IndexedDB record but never the live `activeContact` object `sendMessage` actually reads — so a group left open across a join kept sending to a stale, smaller member list (in the minimal case, an empty one) until the conversation was closed and reopened. Fixed by syncing `activeContact.members` too when it's the group being polled.
+
+**First group message after a join could be silently dropped (protocol reliability):** sender-key distribution (`distributeSenderKey`) was fire-and-forget, so the actual message ciphertext could reach the relay before its own key. A receiver polling both then found no Sender Key on `decryptGroupMsg`, fell back to the legacy per-member `decryptFrom` path, which throws on a Sender-Key payload (`DataError`) and drops the message with no retry. Fixed by awaiting distribution before sending content, so key and message reach the relay (and therefore the receiver's poll) in the correct order.
+
+**Full-width messenger layout was crushing the compose box (responsive/UX):** the single page-level `.wrap` (max-width 600px) applies to every view including the messenger's sidebar+chat layout, not just legal/pricing/setup text pages. With a fixed 280px sidebar and every input-bar tool button visible (real Chromium shows a dictate button via the Web Speech API that this max-width was never budgeted for), the compose `<textarea>` (`flex:1 1 0%`) collapsed to a literal 0px width — un-typable, not just cramped. Fixed with `.wrap:has(> #v-msg) { max-width: 1400px }`, leaving legal/pricing/setup at their existing narrower width.
+
+**Bonus fix (found via the same top-level-scope sweep as last session's bugs):** the install-nudge banner's engagement gate (2+ visits or 3+ messages sent, "5-6x conversion vs first-visit") only applied on the `beforeinstallprompt` path; the fallback for browsers that never fire that event (Safari, Firefox) showed the banner to every first-time visitor after 3s regardless of engagement, undermining the reason that gate exists.
+
+---
+
 ## E2E harness + critical scope bugs (branch claude/nice-ride-T6yb0, 2026-07-08)
 
 799 vitest tests + 4 Playwright E2E specs; `index.html` + new `tests/e2e/messaging.spec.js`. `validate.sh` PASSED (35/36, 1 size warning).

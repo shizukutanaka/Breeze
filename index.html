@@ -103,6 +103,7 @@ a:hover { opacity: .8 }
 
 /* ─── Page layout ─── */
 .wrap { max-width: 600px; margin: 0 auto; padding: 0 20px; width: 100% }
+.wrap:has(> #v-msg) { max-width: 1400px } /* 600px starves the messenger: sidebar+tools can leave compose at 0px (E2E-found) */
 .flex-c { display: flex; align-items: center }
 header { padding: 12px 0; border-bottom: 1px solid var(--b1) }
 .logo { font-weight: 700; font-size: 15px; letter-spacing: -.02em }
@@ -3077,18 +3078,16 @@ document.documentElement.lang = LANG; // Dynamic lang attribute
 let _installPrompt = null;
 let _installBannerDismissed = false;
 
+// v3.6: Engagement gate (3+ msgs or 2+ visits), computed once so this + the fallback below don't double-count a visit.
+const _visits = parseInt(localStorage.getItem('brz-visit-count') || '0') + 1;
+localStorage.setItem('brz-visit-count', String(_visits));
+const _isEngagedVisitor = _visits >= 2 || parseInt(localStorage.getItem('brz-msgs-sent') || '0') >= 3;
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   _installPrompt = e;
   const setupBtn = _DOM.get('setup-install-btn');
   if (setupBtn) { setupBtn.classList.remove('hidden'); setupBtn.onclick = async () => { _installPrompt.prompt(); const r = await _installPrompt.userChoice; _installPrompt = null; if (r.outcome === 'accepted') showToast(t('toastInstalling'), 'success'); setupBtn.classList.add('hidden'); }; }
-  // v3.6: Engagement-gated install prompt (research: 5-6× conversion vs first-visit)
-  // Show only after user has sent 3+ messages or visited 2+ times
-  const visits = parseInt(localStorage.getItem('brz-visit-count') || '0') + 1;
-  localStorage.setItem('brz-visit-count', String(visits));
-  const msgsSent = parseInt(localStorage.getItem('brz-msgs-sent') || '0');
-  const engaged = visits >= 2 || msgsSent >= 3;
-  if (!window.matchMedia('(display-mode: standalone)').matches && !_installBannerDismissed && engaged) {
+  if (!window.matchMedia('(display-mode: standalone)').matches && !_installBannerDismissed && _isEngagedVisitor) {
     setTimeout(() => showInstallBanner(), 5 * MS.SEC); // 5s delay (not 2s)
   }
 });
@@ -3166,8 +3165,8 @@ function showInstallBanner() {
   document.body.appendChild(banner);
 }
 
-// Fallback: show banner for platforms without beforeinstallprompt (iOS, Safari, Firefox)
-if (!window.matchMedia('(display-mode: standalone)').matches && !window.navigator.standalone) {
+// Fallback for iOS/Safari/Firefox (no beforeinstallprompt); also gated on _isEngagedVisitor.
+if (!window.matchMedia('(display-mode: standalone)').matches && !window.navigator.standalone && _isEngagedVisitor) {
   setTimeout(() => {
     if (!_installBannerDismissed && !_installPrompt) showInstallBanner();
   }, 3000);
@@ -3415,8 +3414,7 @@ function showContextMenu(x, y, items) {
   });
 }
 
-// UPGRADE NUDGE — beautiful modal instead of alert(). Top-level like its only caller
-// (addAccount); used to live inside initMessenger's closure and threw on every call.
+// UPGRADE NUDGE modal (top-level like caller addAccount; used to live in initMessenger's closure and threw every call).
 function showUpgradeNudge(reason) {
   document.querySelectorAll('.overlay.upgrade-modal').forEach(m => m.remove());
   const modal = document.createElement('div');
@@ -5455,7 +5453,6 @@ async function initMessenger(dbName) {
   let myId = ''; // short hash of pubkey
   let myAlias = ''; // Breeze ID (e.g. @alice)
   let myShortId = ''; // v3.3: Human-readable ID (e.g. breeze-a3f1-9c2e)
-
   // v3.5: Message ID generator (needs closure-local myId — a top-level version threw E2E-found).
   let _msgSeq = 0;
   function genMsgId() { return myId + ':' + Date.now() + ':' + (++_msgSeq); }
@@ -6659,7 +6656,6 @@ async function initMessenger(dbName) {
   // ===== Contacts =====
   let activeContact = null;
   const peers = {}; // pubB64 → { pc, dc, connected }
-
   // v3.6: Flush queued outbox on reconnect (needs closure-local peers/encryptFor/myPubB64/myName).
   async function flushOutbox(peerId) {
     const queue = _outbox.get(peerId);
@@ -8397,9 +8393,10 @@ async function initMessenger(dbName) {
       // v3.1: Sender Key: encrypt ONCE with group key, send same ciphertext to all members
       const groupId = activeContact.id;
       const members = (activeContact.members || []).filter(m => m.id !== myId);
-      // Distribute sender keys to members who may not have them
+      // Awaited: fire-and-forget let the content send below reach the relay first, so the
+      // receiver's decryptGroupMsg (no key yet) fell back to decryptFrom and dropped it (E2E-found).
       for (const m of members) {
-        distributeSenderKey(groupId, m.pubB64).catch(e => _dbg(e, 'sk-dist'));
+        await distributeSenderKey(groupId, m.pubB64).catch(e => _dbg(e, 'sk-dist'));
       }
       // Encrypt once with Sender Key (O(1))
       const groupCiphertext = await encryptGroupMsg(groupId, text);
@@ -9693,6 +9690,7 @@ async function initMessenger(dbName) {
       if (navigator.share) {
         try { await navigator.share({ title: t('groupInviteShareTitle', name), url: joinUrl }); } catch(e) { _dbg(e); }
       }
+      startGroupMemberPoll(data.token, groupId); // creator otherwise only learns of joiners on next boot
     } catch(e) { _dbg(e,'grp'); showToast(t('toastGroupInviteFail'), 'error'); }
   }
 
@@ -9774,6 +9772,8 @@ async function initMessenger(dbName) {
         if (newMembers.length > oldCount) {
           group.members = newMembers;
           await dbPut('contacts', group);
+          // sendMessage reads activeContact.members (separate object) — without this an open group silently excludes new joiners until reopened.
+          if (activeContact?.id === groupId) activeContact.members = newMembers;
           // Add new individual contacts
           for (const m of newMembers) {
             if (m.id === myId) continue;
