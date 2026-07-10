@@ -53,6 +53,20 @@ id = ""  # ← REQUIRED: paste your KV namespace ID here
 # wrangler pages secret put GROQ_MODEL                 # e.g. llama-3.3-70b-versatile
 # wrangler pages secret put OPENAI_BASE_URL            # e.g. https://api.openai.com
 #
+# --- Auth hardening (recommended — off by default for zero-config self-hosting) ---
+# Every registered client already signs the actions below with its Ed25519 identity key;
+# these flags just tell the Worker to REJECT a request that omits/fails that signature
+# instead of silently accepting it. Safe to enable once you're not also serving pre-upgrade
+# clients that predate this signing (check CHANGELOG.md for when each call started signing).
+# wrangler pages secret put PRESENCE_REQUIRE_AUTH      # true — reject unsigned presence writes
+# wrangler pages secret put ALIAS_REQUIRE_AUTH         # true — reject unsigned @alias registration
+# wrangler pages secret put PORTAL_REQUIRE_AUTH        # true — reject unsigned billing-portal requests
+# wrangler pages secret put GROUP_REQUIRE_AUTH         # true — reject unsigned group kick/rename/admin/leave/delete/transfer
+# wrangler pages secret put PUSH_REQUIRE_AUTH          # true — reject unsigned push subscribe/unsubscribe
+# wrangler pages secret put TURN_REQUIRE_AUTH          # true — reject unsigned TURN credential requests
+# wrangler pages secret put BACKUP_REQUIRE_AUTH        # true — without this, knowing a userId is enough to download that user's encrypted backup blob
+# wrangler pages secret put AI_REQUIRE_AUTH            # true — reject /api/ai and /api/translate from unregistered callers
+#
 # === STRIPE SETUP ===
 #
 # Products (1):

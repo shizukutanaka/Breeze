@@ -3999,12 +3999,10 @@ async function decrypt(passphrase, payload) {
     } catch(_e) { _dbg(_e, 'decrypt'); }
   }
 
-// v3.6 Phase 2c: at-rest key protection — inline mirror of src/crypto/atrest.js
-// (that module is the canonical source of truth + test target; keep in sync).
-// PBKDF2 (600k) + AES-256-GCM. The AES-GCM AAD binds a domain tag plus a caller
-// context (the keystore slot id), so a wrapped record relocated to a different
-// slot fails to decrypt (relocation protection). The unwrap path guards the
-// attacker-controllable `iter` field to avoid a main-thread PBKDF2 DoS.
+// v3.6 Phase 2c: at-rest key protection — inline mirror of src/crypto/atrest.js (canonical
+// source + test target; keep in sync). PBKDF2 (600k) + AES-256-GCM; the AAD binds a domain
+// tag plus the keystore slot id, so a wrapped record relocated to another slot fails to
+// decrypt. Unwrap guards the attacker-controllable `iter` field against a main-thread DoS.
 const _AT_REST_AAD_DOMAIN = 'breeze-atrest-v1';
 const _AT_REST_MAX_ITER = 10000000; // ≈16× the 600k default; reject above (DoS guard)
 function _atRestB64(bytes) { return btoa(String.fromCharCode(...bytes)); }
@@ -4243,8 +4241,7 @@ const _replayCache = {
   size() { return this._map.size; },
 };
 
-// ═══ API helper — DRY for 48+ POST calls (Pike: simplicity) ═══
-// Returns Response (not auto-parsed) so callers can check .ok/.status; opts forwarded for signal etc.
+// API helper (DRY for 48+ POST calls): returns Response, not auto-parsed, so callers can check .ok/.status; opts forwarded for signal etc.
 function postAPIRaw(path, body, opts = {}) {
   return fetchT(API + path, { method: 'POST', headers: _H, body: JSON.stringify(body), ...opts }).catch(() => null);
 }
@@ -4329,8 +4326,7 @@ function isBlockedFile(filename) {
   return CONFIG.BLOCKED_EXTENSIONS.some(ext => lower.endsWith(ext));
 }
 
-// v3.6: Magic bytes file validation (research: file extension spoofing prevention)
-// Checks first 8 bytes against known dangerous file signatures
+// v3.6: Magic bytes file validation — checks the first 8 bytes against known dangerous file signatures (defeats extension spoofing).
 const DANGEROUS_SIGNATURES = [
   [0x4D, 0x5A],                   // MZ — PE executable (.exe, .dll, .scr)
   [0x7F, 0x45, 0x4C, 0x46],       // ELF — Linux executable
@@ -4430,8 +4426,7 @@ function timingDelay() {
   return new Promise(r => setTimeout(r, Math.random() * 150));
 }
 
-// ═════════════════════════════════════════════════════
-// v3.6: DataChannel backpressure — event-based (bufferedAmountLowThreshold)
+// v3.6: DataChannel backpressure — event-based (bufferedAmountLowThreshold).
 async function waitForBuffer(dc, maxBytes) {
   maxBytes = maxBytes || CONFIG.DC_BUFFER_MAX;
   if (dc.bufferedAmount <= maxBytes) return;
@@ -4473,8 +4468,7 @@ function playSendSound() {
   } catch(e) { _dbg(e); }
 }
 
-// v3.6: Haptic feedback — Nintendo Joy-Con style tactile response
-// Uses Vibration API (mobile browsers). Silent no-op on desktop.
+// v3.6: Haptic feedback via the Vibration API (mobile browsers); silent no-op on desktop.
 const haptic = {
   tap:     () => { try { navigator.vibrate?.(8); } catch {} },           // Light tap (button press)
   send:    () => { try { navigator.vibrate?.([6, 30, 6]); } catch {} },   // Double-tap (message sent)
@@ -11284,9 +11278,13 @@ async function initMessenger(dbName) {
       const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: CONFIG.PBKDF2_AT_REST_ITERATIONS, hash: 'SHA-256' }, km, { name: 'AES-GCM', length: CONFIG.AES_KEY_BITS }, false, ['encrypt']);
       const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(data));
       const backup = { s: arr(salt), i: arr(iv), d: arr(new Uint8Array(ct)), v: CONFIG.PROTOCOL_VERSION, iter: CONFIG.PBKDF2_AT_REST_ITERATIONS };
-      // Upload
+      // Upload. Signs ownership (ts+sig), same convention as group actions — lets an operator enable BACKUP_REQUIRE_AUTH (see wrangler.toml).
       if (API) {
-        const resp = await postAPIRaw('/backup/upload', { userId: myId, backup: JSON.stringify(backup) });
+        const upTs = Date.now();
+        const upBody = { userId: myId, backup: JSON.stringify(backup), ts: upTs };
+        const upSig = await signMessage(`breeze-backup-upload:${myId}:${upTs}`);
+        if (upSig) upBody.sig = upSig;
+        const resp = await postAPIRaw('/backup/upload', upBody);
         if (resp.ok) showToast(t('backupCreated'), 'success');
         else showToast(t('backupFailed'), 'error');
       }
@@ -11297,7 +11295,11 @@ async function initMessenger(dbName) {
     const passphrase = await showPrompt(t('backupPassPrompt'), '', { type: 'password', autocomplete: 'current-password' });
     if (!passphrase) return;
     try {
-      const resp = await postAPIRaw('/backup/download', { userId: myId });
+      const dlTs = Date.now();
+      const dlBody = { userId: myId, ts: dlTs };
+      const dlSig = await signMessage(`breeze-backup-download:${myId}:${dlTs}`);
+      if (dlSig) dlBody.sig = dlSig;
+      const resp = await postAPIRaw('/backup/download', dlBody);
       if (!resp.ok) { showToast(t('backupFailed'), 'error'); return; }
       const { backup } = await resp.json();
       const b = JSON.parse(backup);

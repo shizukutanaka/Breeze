@@ -1,5 +1,20 @@
 # Changelog
 
+## Sign backup upload/download; document the *_REQUIRE_AUTH hardening flags (branch claude/nice-ride-T6yb0, 2026-07-10)
+
+799 vitest tests + 7 Playwright E2E specs; `index.html` + `wrangler.toml`. `validate.sh` PASSED (35/36, 1 size warning).
+
+Continues the audit from the previous entry: `_worker.js` has always supported an optional Ed25519 ownership signature on `/api/backup/upload` and `/api/backup/download` (`BACKUP_REQUIRE_AUTH=true` rejects requests without one), but the client never sent one — every backup call went out as `{userId, backup}` / `{userId}` with no `ts`/`sig`, so the flag could never actually be turned on without breaking every client. As the code's own comment put it: "without it, knowing a userId is enough to download the encrypted blob and brute-force the passphrase offline."
+
+- Both calls now sign `breeze-backup-upload:${userId}:${ts}` / `breeze-backup-download:${userId}:${ts}` the same way group actions do, verified against the existing (previously unreachable from the client) `worker.test.js` coverage for this exact message format.
+- Added a `wrangler.toml` section documenting all eight `*_REQUIRE_AUTH` flags (`PRESENCE`, `ALIAS`, `PORTAL`, `GROUP`, `PUSH`, `TURN`, `BACKUP`, `AI`) with what each does and why it's safe to enable — none of the eight were documented anywhere in the repo before this.
+
+Turning any of these on is still an operator decision (`wrangler pages secret put ..._REQUIRE_AUTH true`), not a code default — this only makes doing so possible without breaking clients that were never sending the signature in the first place.
+
+Remaining from the audit, not yet addressed: the other 7 `*_REQUIRE_AUTH` flags' client call sites haven't been audited the same way `BACKUP` was here; `/api/group/transfer` and `/admin unban` have no client UI; `/api/ktlog/get` is never called despite being advertised in README; the franking/abuse-report system has no client UI.
+
+---
+
 ## Wire up group leave/delete/demote; dedup postAPI/postAPIRaw (branch claude/nice-ride-T6yb0, 2026-07-10)
 
 799 vitest tests + 7 Playwright E2E specs; `index.html` only. `validate.sh` PASSED (35/36, 1 size warning).
