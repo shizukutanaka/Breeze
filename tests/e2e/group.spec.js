@@ -130,3 +130,30 @@ test('group invite link: creator kicks a member via /admin, server-side too', as
   await aliceCtx.close();
   await bobCtx.close();
 });
+
+test('deleting a server-backed group as its creator removes it server-side too', async ({ browser }) => {
+  const aliceCtx = await browser.newContext(ctxOpts('203.0.113.15'));
+  const alice = await aliceCtx.newPage();
+
+  await alice.goto('/');
+  await createIdentity(alice, 'Alice');
+  await createGroupWithInviteLink(alice, 'Delete Group');
+  const group = await readGroupFromIdb(alice);
+
+  const aliceGroup = alice.locator('#msg-contacts .contact');
+  await expect(aliceGroup).toBeVisible();
+  await aliceGroup.click({ button: 'right' });
+  await alice.locator('.ctx-menu .ctx-item', { hasText: 'Delete' }).click();
+  await alice.locator('dialog[aria-labelledby] [value="ok"]').click();
+
+  // Client-side: the group is gone from the local contact list.
+  await expect(alice.locator('#msg-contacts .contact')).toHaveCount(0);
+
+  // Server-side truth: createGroupInviteLink's delete-context-menu wiring previously never
+  // called /api/group/delete at all, leaving every member's id/pub/name in the Worker's KV
+  // for the full 30-day TTL to anyone still holding the invite token (E2E-found).
+  const infoResp = await alice.request.post('/api/group/info', { data: { token: group.joinToken } });
+  expect(infoResp.status()).toBe(404);
+
+  await aliceCtx.close();
+});

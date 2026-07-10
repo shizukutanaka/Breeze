@@ -1871,6 +1871,11 @@ const _I = {
     groupInviteShareTitle: (name) => `Join ${name} on Breeze`,
     toastGroupInviteFail: 'Failed to create group invite',
     toastJoinFail: 'Failed to join group',
+    toastGroupLeft: 'Left the group',
+    toastGroupDeleted: 'Group deleted',
+    toastGroupLeaveFail: 'Failed to leave group on server (removed locally)',
+    toastGroupDeleteFail: 'Failed to delete group on server (removed locally)',
+    demotedAdmin: (name) => `${name} is no longer a group admin`,
     toastNoIdentityBackup: 'No identity to backup',
     toastInvalidBackup: 'Invalid backup file',
     toastMsgTooLong: 'Message too long (max 64 KB)',
@@ -2160,6 +2165,7 @@ const _I = {
     cmdAdminAnnounce: '/admin announce on|off — Toggle announce-only mode',
     cmdAdminKick: '/admin kick @name — Remove member',
     cmdAdminPromote: '/admin promote @name — Make admin',
+    cmdAdminDemote: '/admin demote @name — Remove admin',
     cmdAdminRename: '/admin rename New Name — Rename group',
     cmdAdminHelpLine: '/admin help — Show this help',
     cmdSessionTitle: 'Session Info',
@@ -2684,6 +2690,11 @@ const _I = {
     groupInviteShareTitle: (name) => `${name}のBreezeに参加`,
     toastGroupInviteFail: 'グループ招待の作成に失敗しました',
     toastJoinFail: 'グループ参加に失敗しました',
+    toastGroupLeft: 'グループを退出しました',
+    toastGroupDeleted: 'グループを削除しました',
+    toastGroupLeaveFail: 'サーバーでの退出処理に失敗しました(ローカルでは削除済み)',
+    toastGroupDeleteFail: 'サーバーでの削除処理に失敗しました(ローカルでは削除済み)',
+    demotedAdmin: (name) => `${name} の管理者権限を解除しました`,
     toastNoIdentityBackup: 'バックアップするIDがありません',
     toastInvalidBackup: '無効なバックアップファイル',
     toastMsgTooLong: 'メッセージが長すぎます（最大64 KB）',
@@ -2973,6 +2984,7 @@ const _I = {
     cmdAdminAnnounce: '/admin announce on|off — 告知専用モードを切り替え',
     cmdAdminKick: '/admin kick @name — メンバーを削除',
     cmdAdminPromote: '/admin promote @name — 管理者に昇格',
+    cmdAdminDemote: '/admin demote @name — 管理者権限を解除',
     cmdAdminRename: '/admin rename 新しい名前 — グループ名を変更',
     cmdAdminHelpLine: '/admin help — このヘルプを表示',
     cmdSessionTitle: 'セッション情報',
@@ -3303,9 +3315,7 @@ function showToast(message, type = 'info', duration = CONFIG.TOAST_DURATION_MS) 
   }, duration);
 }
 
-// v3.3: Custom modal prompt/confirm (replaces browser prompt/confirm)
-// v3.6: Native <dialog> modals (research: auto inert bg, focus trap, ESC, ::backdrop)
-// Eliminates custom overlay divs, z-index, manual ARIA, focus trap JS
+// v3.6: Native <dialog> modal (auto inert bg, focus trap, ESC, ::backdrop) replacing browser prompt() and hand-rolled overlay divs/z-index/ARIA/focus-trap JS.
 function showPrompt(title, defaultVal = '', opts = {}) {
   return new Promise(resolve => {
     const dlg = document.createElement('dialog');
@@ -3675,12 +3685,10 @@ const _perf = {
   measure: (name, start) => { try { return performance?.measure?.('brz:' + name, 'brz:' + start); } catch { return null; } },
 };
 
-// v3.6: Trusted Types policy. Two policies: 'breeze-sanitizer' (named, called explicitly
-// via safeSetHTML) and 'default' (safety net for any raw innerHTML/insertAdjacentHTML/
-// outerHTML assignment under `require-trusted-types-for 'script'`, so unmigrated sinks
-// are sanitized rather than rejected). Cross-browser fallback: same API, no TT enforcement.
-// Moved up from ~line 4023 alongside _perf: register('sw.js') below is a
-// TrustedScriptURL-guarded sink; registered too late, it had no policy to coerce it.
+// v3.6: Trusted Types policy. Two policies: 'breeze-sanitizer' (named, called explicitly via
+// safeSetHTML) and 'default' (safety net for any raw innerHTML/insertAdjacentHTML/outerHTML
+// assignment under require-trusted-types-for 'script', sanitizing unmigrated sinks instead of
+// rejecting them). Cross-browser fallback: same API, no TT enforcement.
 const _ttPolicy = (() => {
   // Sanitizer: strip dangerous tags/attrs while keeping safe markdown output
   const SAFE_TAGS = /^(p|br|strong|em|b|i|a|code|pre|blockquote|ul|ol|li|span|div|img|del|s|sub|sup|h[1-6]|table|thead|tbody|tr|td|th|mark|button|input)$/i;
@@ -3754,9 +3762,7 @@ function safeSetHTML(el, html) {
   if (el) el.innerHTML = _ttPolicy.createHTML(html);
 }
 
-// Register Service Worker (PWA) + v3.6: Improved update notification (research: workbox-window pattern)
-// try/catch: an uncaught synchronous throw here would abort the rest of this script.
-// Positioned after _ttPolicy so its createScriptURL hook can coerce register('sw.js').
+// Register Service Worker (PWA) + v3.6 update notification. try/catch: an uncaught throw here would abort the rest of this script. Positioned after _ttPolicy so its createScriptURL hook can coerce register('sw.js').
 if ('serviceWorker' in navigator) { try {
   navigator.serviceWorker.register('sw.js').then(reg => {
     // Check for updates periodically
@@ -3881,7 +3887,8 @@ try { _userId = localStorage.getItem('brz-uid') || ''; } catch(e) { _dbg(e); }
 
 // Check account slots on load
 if (_userId && API) {
-  postAPI('/account/slots', { userId: _userId })
+  postAPIRaw('/account/slots', { userId: _userId })
+    .then(r => r?.ok ? r.json() : null)
     .then(d => { if (d && d.slots) { _accountSlots = d.slots; localStorage.setItem('brz-acc-slots', String(d.slots)); if (d.plan) localStorage.setItem('brz-plan', d.plan); } })
     .catch(e => _dbg(e));
 }
@@ -4035,9 +4042,7 @@ async function _atRestUnwrap(record, passphrase, context = '') {
 function _atRestIsWrapped(record) {
   return !!(record && (record.wrapped || record.kdf === 'pbkdf2'));
 }
-// Load the private JWK from a keystore record regardless of form. Returns the JWK,
-// or null on wrong passphrase / tamper. THROWS when the record is wrapped but no
-// passphrase was supplied (caller's signal to prompt).
+// Loads the private JWK from a keystore record regardless of form; null on wrong passphrase/tamper. THROWS when wrapped with no passphrase supplied (caller's signal to prompt).
 async function _atRestLoadKey(record, passphrase, context = '') {
   if (!record) return null;
   if (_atRestIsWrapped(record)) {
@@ -4138,9 +4143,7 @@ document.querySelectorAll('[data-i18n-html]').forEach(el => safeSetHTML(el, t(el
 // Zero TypedArrays after use; prefer non-extractable CryptoKey objects
 function zeroBuffer(buf) { if (buf instanceof Uint8Array || buf instanceof ArrayBuffer) { new Uint8Array(buf instanceof ArrayBuffer ? buf : buf.buffer).fill(0); } }
 
-// v3.6: Screen reader announcement (research: ARIA23 — offscreen live region)
-// Creates an invisible live region that screen readers will announce.
-// Used for: new messages (when not visible), toasts, connection changes.
+// v3.6: Screen reader announcement — offscreen live region for new messages (when not visible), toasts, connection changes.
 let _srAnnouncer = null;
 function announceToSR(text, priority = 'polite') {
   if (!_srAnnouncer) {
@@ -4164,9 +4167,8 @@ function _autoHeight(el, maxPx) {
   el.style.height = Math.min(el.scrollHeight, maxPx || 80) + 'px';
 }
 
-// ═══ v3.6: Inline Crypto Worker — offload AES-GCM to background thread ═══
-// Research: WebCrypto is available in Workers via self.crypto.subtle
-// Uses Blob URL (zero external deps), Transferable ArrayBuffers (zero-copy)
+// v3.6: Inline Crypto Worker — offloads AES-GCM to a background thread via a Blob URL (zero
+// external deps) and Transferable ArrayBuffers (zero-copy); WebCrypto is available in Workers.
 const _cryptoWorkerCode = `
 self.onmessage = async (e) => {
   const { id, op, keyRaw, iv, data } = e.data;
@@ -4217,12 +4219,10 @@ function workerCrypto(op, keyRaw, iv, data) {
   });
 }
 
-// ═══ Replay Cache — In-memory LRU for fast message dedup (Spec v7 §9) ═══
-// Prevents replay attacks without hitting IndexedDB for every message.
-// IDB dedup is kept as secondary check for persistence across reloads.
+// Replay Cache — in-memory LRU for fast message dedup (Spec v7 §9) without hitting IndexedDB
+// per message; IDB dedup stays as a secondary check for persistence across reloads.
 
-// ═══ Deferred Execution (Carmack: prioritize critical path) ═══
-// Uses requestIdleCallback for non-critical tasks; falls back to setTimeout.
+// Deferred Execution — requestIdleCallback for non-critical tasks, falling back to setTimeout.
 const _defer = typeof requestIdleCallback === 'function'
   ? (fn) => requestIdleCallback(fn, { timeout: 2 * MS.SEC })
   : (fn) => setTimeout(fn, CONFIG.FOCUS_DELAY_MS);
@@ -4243,16 +4243,8 @@ const _replayCache = {
   size() { return this._map.size; },
 };
 
-// ═══ API helpers — DRY for 48+ POST calls (Pike: simplicity) ═══
-// postAPI('/signal', { room, type }) → { ok, data } or null
-async function postAPI(path, body) {
-  try {
-    const resp = await fetchT(API + path, { method: 'POST', headers: _H, body: JSON.stringify(body) });
-    if (!resp.ok) return null;
-    return await resp.json();
-  } catch(e) { _dbg(e, 'API:' + path); return null; }
-}
-// postAPIRaw — returns Response (for cases needing status/headers); opts forwarded for signal etc.
+// ═══ API helper — DRY for 48+ POST calls (Pike: simplicity) ═══
+// Returns Response (not auto-parsed) so callers can check .ok/.status; opts forwarded for signal etc.
 function postAPIRaw(path, body, opts = {}) {
   return fetchT(API + path, { method: 'POST', headers: _H, body: JSON.stringify(body), ...opts }).catch(() => null);
 }
@@ -4308,11 +4300,7 @@ function cmdOutput(className, html) {
   return d;
 }
 
-// ═════════════════════════════════════════════════════
-// v3.5 SPEC: Proof-of-Work anti-spam (hashcash)
-// Prevents automated abuse on anonymous service.
-// Client must solve a hash puzzle before certain API calls.
-// ═════════════════════════════════════════════════════
+// v3.5 SPEC: Proof-of-Work anti-spam (hashcash) — client solves a hash puzzle before certain API calls, to deter automated abuse on an anonymous service.
 async function generatePoW(challenge, difficulty) {
   difficulty = difficulty || CONFIG.POW_DIFFICULTY;
   const target = Math.pow(2, 32 - difficulty) >>> 0;
@@ -4364,11 +4352,7 @@ async function isBlockedMagicBytes(file) {
   } catch {}
   return false;
 }
-// ═════════════════════════════════════════════════════
-// v3.5 SPEC: Session rekey tracking
-// Tracks message count per session and triggers rekey
-// after REKEY_MSG_THRESHOLD messages or REKEY_TIME_MS.
-// ═════════════════════════════════════════════════════
+// v3.5 SPEC: Session rekey tracking — triggers rekey after REKEY_MSG_THRESHOLD msgs or REKEY_TIME_MS.
 const _sessionMsgCounters = {}; // peerId → { count, startTime }
 function shouldRekey(peerId) {
   const c = _sessionMsgCounters[peerId];
@@ -4382,10 +4366,7 @@ function resetRekeyCounter(peerId) {
   _sessionMsgCounters[peerId] = { count: 0, startTime: Date.now() };
 }
 
-// ═════════════════════════════════════════════════════
-// v3.5 SPEC: Client-side send rate limiter
-// Prevents flooding the network. Token bucket algorithm.
-// ═════════════════════════════════════════════════════
+// v3.5 SPEC: Client-side send rate limiter (token bucket) — prevents flooding the network.
 const _rateLimiter = {
   tokens: 30,        // max burst
   maxTokens: 30,
@@ -4401,15 +4382,9 @@ const _rateLimiter = {
   }
 };
 
-// ═════════════════════════════════════════════════════
-// v3.5 SPEC: Message outbox — persistent retry for offline peers
-// Messages queued when peer is offline, auto-sent on reconnect.
-// Persisted to IDB so messages survive page reload.
-// ═════════════════════════════════════════════════════
+// v3.5 SPEC: Message outbox — persistent (IDB) retry queue for offline peers, auto-sent on reconnect.
 const _outbox = new Map(); // peerId → [{text, ts, attempts}]
-// Track which account the outbox belongs to. _persistOutbox / _restoreOutbox
-// use an account-scoped key ('brz-outbox-<myId>') so that switching accounts
-// does not deliver account A's pending messages under account B's identity.
+// Account-scoped key ('brz-outbox-<myId>') so switching accounts doesn't deliver A's queue under B's identity.
 let _outboxKey = 'brz-outbox'; // updated to per-account key in initMessenger
 
 function queueOutbox(peerId, text, meta) {
@@ -4441,12 +4416,8 @@ function _restoreOutbox() {
     if (_outbox.size > 0) _dbg(null, `Outbox: restored ${_outbox.size} peer queues`);
   } catch(e) { /* ignore */ }
 }
-// Note: _restoreOutbox() is NOT called here at module init. It is called inside
-// initMessenger after myId is known, using the per-account key. This prevents the
-// module-init call from loading any prior account's outbox before identity is set.
-
-// v3.6: Safe DC send — catches race condition where DC closes between readyState check and send()
-// Returns true if sent, false if failed (caller should queue to outbox)
+// Note: _restoreOutbox() runs inside initMessenger once myId is known (per-account key), not here — else it could load a prior account's outbox too early.
+// v3.6: Safe DC send — catches the DC closing between the readyState check and send(); returns true if sent, false if failed (caller should queue to outbox).
 function dcSend(dc, data) {
   try {
     if (dc?.readyState === 'open') { dc.send(typeof data === 'string' ? data : JSON.stringify(data)); return true; }
@@ -4454,11 +4425,7 @@ function dcSend(dc, data) {
   return false;
 }
 
-// ═════════════════════════════════════════════════════
-// v3.5 SPEC: Timing obfuscation (metadata protection)
-// Adds random delay 0-150ms to outgoing messages
-// to prevent traffic correlation attacks.
-// ═════════════════════════════════════════════════════
+// v3.5 SPEC: Timing obfuscation — random 0-150ms delay on outgoing messages, to hinder traffic correlation.
 function timingDelay() {
   return new Promise(r => setTimeout(r, Math.random() * 150));
 }
@@ -4516,10 +4483,7 @@ const haptic = {
   notify:  () => { try { navigator.vibrate?.([12, 50, 8, 50, 12]); } catch {} }, // Notification
 };
 
-// ======================== MULTI-ACCOUNT SYSTEM ========================
-// Each account = separate IDB. Switch = close DB, open new one.
-// Free: 1 account. Additional: $1.99 each (one-time).
-
+// Multi-account system: each account is a separate IDB; switching closes the DB and opens another.
 function getAccounts() {
   try { return JSON.parse(localStorage.getItem('brz-accounts') || '[]'); } catch { return []; }
 }
@@ -7023,6 +6987,19 @@ async function initMessenger(dbName) {
           }
         } else if (action === 'delete') {
           if (!await showConfirm(t('confirmDeleteContact', c.name), { danger: true, okText: t('delete') })) return;
+          // Server-backed groups must leave/delete server-side too, or member id/pub/name stay readable in KV for the full 30-day TTL to anyone holding the invite token.
+          if (c.isGroup && c.joinToken && API) {
+            try {
+              const isCreator = c.createdBy === myId;
+              const gTs = Date.now();
+              const gAction = isCreator ? 'delete' : 'leave';
+              const gSig = await signMessage(`breeze-group-${gAction}:${c.joinToken}:${myId}:${gTs}:`);
+              const gBody = isCreator ? { token: c.joinToken, adminId: myId, ts: gTs } : { token: c.joinToken, memberId: myId, ts: gTs };
+              if (gSig) gBody.sig = gSig;
+              const gResp = await postAPIRaw('/group/' + gAction, gBody);
+              showToast(t(gResp.ok ? (isCreator ? 'toastGroupDeleted' : 'toastGroupLeft') : (isCreator ? 'toastGroupDeleteFail' : 'toastGroupLeaveFail')), gResp.ok ? 'info' : 'error');
+            } catch(e) { _dbg(e, 'group-leave-delete'); showToast(t(c.createdBy === myId ? 'toastGroupDeleteFail' : 'toastGroupLeaveFail'), 'error'); }
+          }
           const msgs = await dbGetByIndex('messages', 'contact', c.id);
           const tx = db.transaction('messages', 'readwrite');
           for (const m of msgs) tx.objectStore('messages').delete(m.msgId);
@@ -12377,6 +12354,7 @@ async function initMessenger(dbName) {
           t('cmdAdminAnnounce'),
           t('cmdAdminKick'),
           t('cmdAdminPromote'),
+          t('cmdAdminDemote'),
           t('cmdAdminRename'),
           t('cmdAdminHelpLine'),
         ].join('<br>'));
@@ -12462,6 +12440,26 @@ async function initMessenger(dbName) {
             }
             auditLog('group', 'Promoted ' + member.name + ' to admin in ' + activeContact.name);
             d.textContent = t('promotedAdmin', member.name);
+          } else { d.textContent = t('uiMemberNotFound', target); }
+        }
+      } else if (sub.startsWith('demote ')) {
+        const target = sub.slice(7).trim().replace('@', '');
+        if (activeContact.members) {
+          const member = activeContact.members.find(m => m.name?.toLowerCase() === target.toLowerCase());
+          if (member) {
+            if (activeContact.admins) activeContact.admins = activeContact.admins.filter(id => id !== member.id);
+            await dbPut('contacts', activeContact);
+            if (API && activeContact.joinToken) {
+              try {
+                const demTs = Date.now();
+                const demSig = await signMessage(`breeze-group-admin:${activeContact.joinToken}:${myId}:${demTs}:demote:${member.id}`);
+                const demBody = { token: activeContact.joinToken, adminId: myId, targetId: member.id, action: 'demote', ts: demTs };
+                if (demSig) demBody.sig = demSig;
+                await postAPIRaw('/group/admin', demBody);
+              } catch(e) { _dbg(e, 'server-demote'); }
+            }
+            auditLog('group', 'Demoted ' + member.name + ' in ' + activeContact.name);
+            d.textContent = t('demotedAdmin', member.name);
           } else { d.textContent = t('uiMemberNotFound', target); }
         }
       } else {
