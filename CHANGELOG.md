@@ -1,5 +1,25 @@
 # Changelog
 
+## Group kick E2E test uncovers a 5-bug chain, incl. a prekey-signing protocol bug (branch claude/nice-ride-T6yb0, 2026-07-10)
+
+799 vitest tests + 6 Playwright E2E specs; `index.html` + `_worker.js` unchanged (a fix attempted there was reverted — see below). `validate.sh` PASSED (35/36, 1 size warning).
+
+Extended `tests/e2e/group.spec.js` with a second test: the group creator kicks a member via `/admin kick`, verified both client-side (member removed locally) and server-side (a direct `/api/group/info` call confirms the Worker's roster actually changed). Getting this test green surfaced a chain of five real bugs, each masking the next:
+
+**Slash commands were entirely dead:** a generic `keydown` listener on `#msg-input` always ran on Enter and called `sendMessage()` unconditionally; the dedicated slash-command listener (`/admin`, `/help`, `/audit`, `/retention`, ~40 other commands per the in-app `/help` text) is registered later and never got a chance — every command was sent as a literal broadcast message instead of being run (e.g. `/admin kick Bob` posted to the whole group). Fixed by skipping the generic send when the input starts with `/`.
+
+**Group creator never saw new joiners without a reload, and an open group silently excluded them from sends:** same two bugs fixed in the previous entry's E2E work, needed again here since the kick test also creates+joins a group.
+
+**`/admin kick|rename|promote` referenced the wrong field (`groupToken`, never set anywhere — groups only ever store `joinToken`):** every server-side moderation call silently no-op'd before this session; already partially covered in the previous entry, now exercised end-to-end.
+
+**The group creator could never pass their own `/admin` permission check:** `createGroupInviteLink()` never set `createdBy`, which `isGroupAdmin()` requires. Fixed by setting it alongside the other fixes above.
+
+**A brand-new identity's entire first session ran with no Ed25519 signing key (protocol-level):** `initSigning()` was only called on the returning-user boot path; a fresh identity's setup handler never called it. Every signed action in that first session — message-authenticity `sig`, and now `/admin kick|rename|promote` — silently ran unsigned, and the very first prekey upload never included `edIdentityKey`/`signedPreKeySig` at all. Fixed by calling `initSigning()` before the first prekey bundle is built in `createIdentity()`.
+
+**Fixing the above then uncovered a real, previously-invisible protocol bug:** `generatePreKeyBundle()` signs the signed-prekey via the generic `signMessage()` helper, which UTF-8-encodes its input as literal text — but the Worker's own `verifyEd25519` (in `handlePreKeyUpload`, checked against every signed upload since I1/G2) base64-decodes its message argument first. A signature over the UTF-8 bytes of the base64 *string* can never satisfy a check expecting the base64-*decoded* raw bytes, so **every authenticated prekey upload was rejected by the server's own validation** — invisible until now because no brand-new identity ever got far enough (previous bug) to attempt one. `tests/worker.test.js`'s existing signature tests use raw-byte signing and were the tell: they document the *intended* (and reference-`ratchet.js`-matching) convention. Fixed the client to sign raw SPK bytes directly (matching the reference and the Worker's check), and fixed the client-side X3DH v5 peer-bundle verifier (`initSessionV5Initiator`, `CONFIG.X3DH_V5_ENABLED` still default off) to verify the same way instead of via `verifySignature()`'s incompatible string convention. (A same-shape fix was first attempted in `_worker.js`'s `verifyEd25519` call instead — reverted after the existing worker tests showed the *client*, not the Worker, was on the wrong side of the convention.)
+
+---
+
 ## Group invite-link E2E + 4 more bugs it found (branch claude/nice-ride-T6yb0, 2026-07-08)
 
 799 vitest tests + 5 Playwright E2E specs; `index.html` + new `tests/e2e/group.spec.js`. `validate.sh` PASSED (35/36, 1 size warning).

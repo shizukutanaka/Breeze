@@ -17,6 +17,51 @@ async function createIdentity(page, name) {
   await expect(page.locator('#msg-main')).toBeVisible();
 }
 
+// Creates a server-backed group via the add-contact prompt's "group:<name>" syntax, leaving
+// the members prompt empty to route to the invite-link path (createGroupInviteLink), and
+// returns the extracted invite URL.
+async function createGroupWithInviteLink(page, name) {
+  await page.locator('#b-msg-add').click();
+  const groupDialog = page.locator('dialog[aria-labelledby]');
+  await groupDialog.locator('.modal-input').fill('group:' + name);
+  await groupDialog.locator('[value="ok"]').click();
+
+  const membersDialog = page.locator('dialog[aria-labelledby]');
+  await expect(membersDialog).toBeVisible();
+  await membersDialog.locator('[value="ok"]').click(); // empty members list -> invite link
+
+  const inviteBox = page.locator('.i-mono-box');
+  await expect(inviteBox).toBeVisible();
+  const joinUrl = await inviteBox.textContent();
+  expect(joinUrl).toMatch(/\?join=/);
+  return joinUrl;
+}
+
+// processJoinToken opens the group conversation automatically — no click needed afterward.
+async function joinGroup(page, name, joinUrl, groupName) {
+  await page.goto(joinUrl);
+  await createIdentity(page, name);
+  await expect(page.locator('#msg-conv-name')).toContainText(groupName);
+}
+
+async function readGroupFromIdb(page) {
+  return page.evaluate(() => new Promise((resolve, reject) => {
+    const req = indexedDB.open('breeze-messenger', 5);
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const tx = req.result.transaction('contacts', 'readonly');
+      tx.objectStore('contacts').getAll().onsuccess = (e) => resolve(e.target.result.find(c => c.isGroup));
+    };
+  }));
+}
+
+async function waitForMemberCount(page, n) {
+  await expect(async () => {
+    const group = await readGroupFromIdb(page);
+    expect(group?.members?.length || 0).toBeGreaterThanOrEqual(n);
+  }).toPass({ timeout: 20_000, intervals: [1000] });
+}
+
 test('group invite link: creator and joiner exchange a Sender-Key message', async ({ browser }) => {
   const aliceCtx = await browser.newContext(ctxOpts('203.0.113.11'));
   const bobCtx = await browser.newContext(ctxOpts('203.0.113.12'));
@@ -25,31 +70,8 @@ test('group invite link: creator and joiner exchange a Sender-Key message', asyn
 
   await alice.goto('/');
   await createIdentity(alice, 'Alice');
-
-  // Create a group with no existing contacts to add — "group:<name>" through the same
-  // add-contact prompt used for 1:1 adds, then an empty answer to the members prompt
-  // routes to the server-backed invite-link path (createGroupInviteLink).
-  await alice.locator('#b-msg-add').click();
-  const groupDialog = alice.locator('dialog[aria-labelledby]');
-  await groupDialog.locator('.modal-input').fill('group:E2E Group');
-  await groupDialog.locator('[value="ok"]').click();
-
-  const membersDialog = alice.locator('dialog[aria-labelledby]');
-  await expect(membersDialog).toBeVisible();
-  await membersDialog.locator('[value="ok"]').click(); // empty members list -> invite link
-
-  const inviteBox = alice.locator('.i-mono-box');
-  await expect(inviteBox).toBeVisible();
-  const joinUrl = await inviteBox.textContent();
-  expect(joinUrl).toMatch(/\?join=/);
-
-  // Bob joins via the invite link — a brand-new identity, so he lands on the setup screen
-  // (now labeled for the join) and processJoinToken runs right after createIdentity.
-  await bob.goto(joinUrl);
-  await createIdentity(bob, 'Bob');
-
-  // processJoinToken opens the group conversation automatically — no click needed.
-  await expect(bob.locator('#msg-conv-name')).toContainText('E2E Group');
+  const joinUrl = await createGroupWithInviteLink(alice, 'E2E Group');
+  await joinGroup(bob, 'Bob', joinUrl, 'E2E Group');
 
   // Alice's own tab only learns of the new joiner via startGroupMemberPoll (5s interval) —
   // open her group conversation so the poll's renderContacts() update is visible, then wait
@@ -58,28 +80,52 @@ test('group invite link: creator and joiner exchange a Sender-Key message', asyn
   const aliceGroup = alice.locator('#msg-contacts .contact');
   await expect(aliceGroup).toBeVisible();
   await aliceGroup.click();
-
-  await expect(async () => {
-    const memberCount = await alice.evaluate(() => new Promise((resolve, reject) => {
-      const req = indexedDB.open('breeze-messenger', 5);
-      req.onerror = () => reject(req.error);
-      req.onsuccess = () => {
-        const db = req.result;
-        const tx = db.transaction('contacts', 'readonly');
-        tx.objectStore('contacts').getAll().onsuccess = (e) => {
-          const group = e.target.result.find(c => c.isGroup);
-          resolve(group?.members?.length || 0);
-        };
-      };
-    }));
-    expect(memberCount).toBeGreaterThanOrEqual(2);
-  }).toPass({ timeout: 20_000, intervals: [1000] });
+  await waitForMemberCount(alice, 2);
 
   const text = 'hello group from Alice — ' + Date.now();
   await alice.locator('#msg-input').fill(text);
   await alice.locator('#b-msg-send').click();
 
   await expect(bob.locator('#msg-messages')).toContainText(text, { timeout: 15_000 });
+
+  await aliceCtx.close();
+  await bobCtx.close();
+});
+
+test('group invite link: creator kicks a member via /admin, server-side too', async ({ browser }) => {
+  const aliceCtx = await browser.newContext(ctxOpts('203.0.113.13'));
+  const bobCtx = await browser.newContext(ctxOpts('203.0.113.14'));
+  const alice = await aliceCtx.newPage();
+  const bob = await bobCtx.newPage();
+
+  await alice.goto('/');
+  await createIdentity(alice, 'Alice');
+  const joinUrl = await createGroupWithInviteLink(alice, 'Kick Group');
+  await joinGroup(bob, 'Bob', joinUrl, 'Kick Group');
+
+  const aliceGroup = alice.locator('#msg-contacts .contact');
+  await expect(aliceGroup).toBeVisible();
+  await aliceGroup.click();
+  await waitForMemberCount(alice, 2);
+
+  // /admin requires isGroupAdmin(activeContact) — true for the creator via `createdBy`,
+  // which createGroupInviteLink previously never set (E2E-found, fixed alongside this test).
+  await alice.locator('#msg-input').fill('/admin kick Bob');
+  await alice.locator('#msg-input').press('Enter');
+
+  // Client-side: Bob is gone from Alice's local member list.
+  await expect(async () => {
+    const group = await readGroupFromIdb(alice);
+    expect(group.members.some(m => m.name === 'Bob')).toBe(false);
+  }).toPass({ timeout: 10_000, intervals: [500] });
+
+  // Server-side truth: /admin kick previously used a field (`groupToken`) that groups never
+  // set, so the /group/kick call silently never fired — confirm it actually reached the
+  // server this time by asking it directly for the group's current roster.
+  const group = await readGroupFromIdb(alice);
+  const infoResp = await alice.request.post('/api/group/info', { data: { token: group.joinToken } });
+  const info = await infoResp.json();
+  expect(info.members.some(m => m.name === 'Bob')).toBe(false);
 
   await aliceCtx.close();
   await bobCtx.close();

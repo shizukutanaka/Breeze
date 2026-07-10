@@ -24,7 +24,7 @@ is a single SHA-256 over 12 bytes; `fingerprint.js`'s iterated 5200×SHA-512 is 
 | Module | Status | Mirror-drift guarded |
 |---|---|---|
 | `atrest.js`, `pow.js`, `ratchet.js` (KDF + group v5) | **deployed** (inline mirror) | ✅ yes |
-| `ratchet.js` authenticated X3DH (v5 handshake, `CONFIG.X3DH_V5_ENABLED`, default **off**) | **deployed** (inline mirror; SPK signing convention deliberately diverges — signs the base64 string via signMessage/verifySignature to match the already-deployed Worker's verifyEd25519, not raw bytes like the reference) | ✅ yes |
+| `ratchet.js` authenticated X3DH (v5 handshake, `CONFIG.X3DH_V5_ENABLED`, default **off**) | **deployed** (inline mirror; SPK signing now matches the reference — signs raw SPK bytes, not the base64 string via signMessage/verifySignature. That divergence was a real bug, not deliberate: the Worker's own verifyEd25519 in handlePreKeyUpload base64-decodes before checking, so a UTF-8-string signature always failed it — E2E-found) | ✅ yes |
 | `ktlog.js` rollover detection only (`_auditKeyHistory`, wired into `initSessionV5Initiator` — warns, doesn't block) | **partially deployed** (inline mirror of `checkRollover` only; `appendChainEntry`/full `auditBundle` chain-tamper check NOT ported — client never verifies chain integrity, only the Worker does) | ✅ yes (rollover parity) |
 | `fingerprint.js` (Signal iterated safety number) | reference-only (roadmap) | tripwire only |
 | `franking.js` | reference-only (roadmap) | tripwire only |
