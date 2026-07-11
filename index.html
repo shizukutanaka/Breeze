@@ -1256,36 +1256,28 @@ const CONFIG = {
   TYPING_THROTTLE_MS: 3000,
   TYPING_TIMEOUT_MS: 3000,
   CALL_TIMEOUT_MS: 60000,
-  // v3.6 SECURITY (default OFF — requires two-device verification before enabling):
-  // authenticate + encrypt WebRTC call signaling (offer/answer/ICE) end-to-end via the
-  // established 1:1 ratchet. The /signal relay is unauthenticated and the SDP is otherwise
-  // plaintext, so an attacker who knows both user IDs can inject a call-answer carrying their
-  // own DTLS fingerprint → full call MITM. When ON, each signal payload is encryptFor()'d to
-  // the peer and decryptFrom()'d on receipt; a signal that fails to decrypt (forged / not from
-  // the pinned peer) is dropped. When OFF, behavior is byte-identical to the legacy plaintext
-  // path. NOTE: both peers must run with the flag ON — it is a breaking wire change.
+  // v3.6 SECURITY (default OFF — breaking wire change, both peers must run ON): authenticate+
+  // encrypt WebRTC call signaling (offer/answer/ICE) via the 1:1 ratchet. The /signal relay is
+  // unauthenticated + SDP is plaintext, so someone who knows both user IDs can inject a
+  // call-answer with their own DTLS fingerprint → call MITM. ON: each signal is encryptFor()'d,
+  // a signal that fails decryptFrom() (forged/not from the pinned peer) is dropped. OFF: byte-identical to legacy.
   CALL_E2E_SIGNAL: false,
-  // v3.6 SECURITY (default OFF — requires coordinated rollout; breaking wire change for groups):
-  // Replace the static group sender-key HKDF (same raw key for all messages, counter as salt)
-  // with a hash ratchet that advances the chain key after each message and evicts old keys —
-  // providing forward secrecy for group messages. Also adds epoch revocation: on kick/leave the
-  // admin generates a fresh random chain key for the bumped epoch and re-distributes only to
-  // remaining members; messages carry `ep` and a mismatch is rejected without fallback, so a
-  // kicked member's stale key cannot decrypt new-epoch messages. When OFF, behavior is
-  // byte-identical to the v3 path. Enable after all group members have updated.
+  // v3.6 SECURITY (default OFF — coordinated rollout, breaking for groups): replace the static
+  // group sender-key HKDF (same key all messages, counter as salt) with a hash ratchet that
+  // advances the chain key per message and evicts old keys → group forward secrecy. Adds epoch
+  // revocation: on kick/leave the admin makes a fresh chain key for the bumped epoch, re-distributes
+  // to remaining members only; messages carry `ep` and a mismatch is rejected without fallback,
+  // so a kicked member's stale key can't decrypt new-epoch messages. OFF: byte-identical to v3.
   GROUP_RATCHET_V5: false,
   GROUP_MAX_SKIP: 50, // max tolerated out-of-order gap in the group v5 hash ratchet
-  // Authenticated X3DH (I1/G1): default initSession() is a bare unverified DH(IK_A, IK_B)
-  // — an undetected MITM risk. When ON, verifies the peer's signed pre-key against
-  // their Ed25519 key when BOTH sides negotiate it, else falls back byte-identically.
+  // Authenticated X3DH (I1/G1): default initSession() is a bare unverified DH(IK_A, IK_B) — an
+  // undetected MITM risk. ON: verifies the peer's signed pre-key against their Ed25519 key when
+  // BOTH sides negotiate it (else falls back byte-identically). Also runs the KT chain+rollover audit.
   X3DH_V5_ENABLED: false,
-  // v3.6 SECURITY (default OFF — opt-in via /keywrap; run /keywrap again to disable):
-  // Wrap identity ECDH private key and Ed25519 signing key with AES-256-GCM under a
-  // PBKDF2-derived key (600k iterations, random salt) before storing in IndexedDB.
-  // Protects against XSS cookie-theft, device forensics, and malicious extensions that
-  // can read IDB. When ON, app prompts for the passphrase at startup to unwrap. The
-  // existing lock-screen (/lock) continues to work independently. Default OFF so
-  // existing users are not broken; enable per-device via /keywrap.
+  // v3.6 SECURITY (default OFF — opt-in via /keywrap, run again to disable): wrap the identity
+  // ECDH + Ed25519 signing private keys with AES-256-GCM under a PBKDF2 key (600k iter, random
+  // salt) before IndexedDB storage. Guards against XSS cookie-theft, device forensics, IDB-reading
+  // extensions. ON: prompts for the passphrase at startup. /lock works independently. OFF by default so existing users aren't broken.
   AT_REST_KEY_WRAP: false,
   PBKDF2_AT_REST_ITERATIONS: 600000, // 6× the lock-screen value; separate constant
   VOICE_MAX_MS: 120000,               // Max voice note duration: 2 minutes
@@ -3191,10 +3183,7 @@ window.addEventListener('appinstalled', () => {
   showToast(t('toastInstalled'), 'success');
 });
 
-// Platform detection
-// Debug mode: localStorage.setItem('brz-debug','1') to enable
-// GLOBAL ERROR BOUNDARY — single unified handler
-// Crash recovery (3+ fatal → overlay) + flood-limited toasts + audit log
+// GLOBAL ERROR BOUNDARY — single unified handler: crash recovery (3+ fatal → overlay) + flood-limited toasts + audit log. Debug mode: localStorage 'brz-debug'='1'.
 let _fatalErrors = 0;
 let _errorCount = 0;
 let _lastErrorAt = 0;
@@ -3685,10 +3674,8 @@ const _perf = {
   measure: (name, start) => { try { return performance?.measure?.('brz:' + name, 'brz:' + start); } catch { return null; } },
 };
 
-// v3.6: Trusted Types policy. Two policies: 'breeze-sanitizer' (named, called explicitly via
-// safeSetHTML) and 'default' (safety net for any raw innerHTML/insertAdjacentHTML/outerHTML
-// assignment under require-trusted-types-for 'script', sanitizing unmigrated sinks instead of
-// rejecting them). Cross-browser fallback: same API, no TT enforcement.
+// v3.6: Trusted Types — 'breeze-sanitizer' (named, via safeSetHTML) + 'default' (safety net that
+// sanitizes any raw innerHTML/outerHTML under require-trusted-types-for 'script'). Fallback: same API, no TT.
 const _ttPolicy = (() => {
   // Sanitizer: strip dangerous tags/attrs while keeping safe markdown output
   const SAFE_TAGS = /^(p|br|strong|em|b|i|a|code|pre|blockquote|ul|ol|li|span|div|img|del|s|sub|sup|h[1-6]|table|thead|tbody|tr|td|th|mark|button|input)$/i;
@@ -3999,10 +3986,8 @@ async function decrypt(passphrase, payload) {
     } catch(_e) { _dbg(_e, 'decrypt'); }
   }
 
-// v3.6 Phase 2c: at-rest key protection — inline mirror of src/crypto/atrest.js (canonical
-// source + test target; keep in sync). PBKDF2 (600k) + AES-256-GCM; the AAD binds a domain
-// tag plus the keystore slot id, so a wrapped record relocated to another slot fails to
-// decrypt. Unwrap guards the attacker-controllable `iter` field against a main-thread DoS.
+// v3.6 Phase 2c: at-rest key protection — inline mirror of src/crypto/atrest.js (keep in sync).
+// PBKDF2 (600k) + AES-256-GCM; AAD binds a domain tag + keystore slot id (relocated record fails to decrypt); unwrap guards attacker-controllable `iter` vs DoS.
 const _AT_REST_AAD_DOMAIN = 'breeze-atrest-v1';
 const _AT_REST_MAX_ITER = 10000000; // ≈16× the 600k default; reject above (DoS guard)
 function _atRestB64(bytes) { return btoa(String.fromCharCode(...bytes)); }
@@ -5648,10 +5633,24 @@ async function initMessenger(dbName) {
     for (const p of parts) { out.set(p, off); off += p.length; }
     return out;
   }
-  // Condensed inline mirror of ktlog.js's checkRollover (I11) — rollover detection only; the reference module's fuller hash-chain tamper check is not ported here.
+  // Full inline mirror of ktlog.js's auditBundle (I11): hash-chain tamper check (verifyChain, entries carry c = SHA-256(prevC ‖ h) — a break means a hostile relay rewrote the append-only log) + rollover detection (checkRollover). Verdict precedence: tampered > rolled > new > ok.
   async function _auditKeyHistory(storedIkB64, keyHistory) {
     const sha256b64 = async (bytes) => btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))));
+    const b64d = (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
     const log = (Array.isArray(keyHistory) ? keyHistory.slice(-256) : []).filter(e => e && Number.isFinite(e.ts) && typeof e.h === 'string' && e.h).sort((a, b) => a.ts - b.ts);
+    // Non-empty raw input that parsed to nothing (all entries malformed) is itself a tampering signal — fail closed, don't treat as a legitimately-empty log.
+    let chainOk = !(Array.isArray(keyHistory) && keyHistory.length > 0 && log.length === 0);
+    let prevC = null;
+    for (const e of log) {
+      if (e.c === undefined || e.c === null) continue; // legacy pre-chain entry — skip
+      if (typeof e.c !== 'string') { chainOk = false; break; } // present-but-malformed c is tampering, not legacy
+      let expected;
+      try { const p = prevC ? b64d(prevC) : new Uint8Array(32), h = b64d(e.h), buf = new Uint8Array(p.length + h.length); buf.set(p, 0); buf.set(h, p.length); expected = await sha256b64(buf); }
+      catch { chainOk = false; break; } // malformed base64 injected by a relay → broken chain, not a crash
+      if (expected !== e.c) { chainOk = false; break; }
+      prevC = e.c;
+    }
+    if (!chainOk) return { verdict: 'tampered' }; // chain integrity beats everything (see reference auditBundle)
     if (!log.length) return { verdict: storedIkB64 ? 'ok' : 'new' };
     const currentHash = log[log.length - 1].h;
     if (!storedIkB64) return { verdict: 'new', currentHash };
@@ -5706,11 +5705,12 @@ async function initMessenger(dbName) {
         if (edPub) sigOk = await crypto.subtle.verify({ name: 'Ed25519' }, edPub, Uint8Array.from(atob(bundle.signedPreKeySig), c => c.charCodeAt(0)), spkPubPeer);
       } catch(e) { _dbg(e, 'verify-spk'); }
       if (!sigOk) { _dbg(null, 'X3DH: signed pre-key signature INVALID — aborting, falling back'); return null; }
-      // I11: independent MITM signal — warns, doesn't block (no hard-abort flow yet).
+      // I11 KT audit: independent MITM signal — warns, doesn't block (no hard-abort flow yet).
       const ktPeerId = peerPubB64.slice(0, 12);
       const audit = await _auditKeyHistory(await dbGet('identity', 'ktIk:' + ktPeerId), bundle.keyHistory);
-      if (audit.verdict === 'rolled') showKeyChangeWarning(ktPeerId, peerPubB64, 'X3DH key-history rollover.').catch(e => _dbg(e, 'kt-warn'));
-      await dbPut('identity', bundle.identityKey, 'ktIk:' + ktPeerId);
+      if (audit.verdict === 'tampered') showKeyChangeWarning(ktPeerId, peerPubB64, 'X3DH key-transparency chain tampered — possible hostile relay.').catch(e => _dbg(e, 'kt-warn'));
+      else if (audit.verdict === 'rolled') showKeyChangeWarning(ktPeerId, peerPubB64, 'X3DH key-history rollover.').catch(e => _dbg(e, 'kt-warn'));
+      if (audit.verdict !== 'tampered') await dbPut('identity', bundle.identityKey, 'ktIk:' + ktPeerId); // don't pin a key vouched for by a broken chain (no silent TOFU baseline from a tampered log)
       const ikPubPeer = Uint8Array.from(atob(bundle.identityKey), c => c.charCodeAt(0));
       const opkPubPeer = bundle.oneTimePreKey ? Uint8Array.from(atob(bundle.oneTimePreKey), c => c.charCodeAt(0)) : null;
       const ek = await genRatchetKey();

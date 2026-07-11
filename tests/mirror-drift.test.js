@@ -27,7 +27,7 @@ import { dirname, join } from 'node:path';
 import { createAtRest } from '../src/crypto/atrest.js';
 import { makeChallengeString, solve as powSolve, verify as powVerify } from '../src/crypto/pow.js';
 import { createRatchet } from '../src/crypto/ratchet.js';
-import { checkRollover } from '../src/crypto/ktlog.js';
+import { checkRollover, auditBundle, appendChainEntry } from '../src/crypto/ktlog.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(join(HERE, '..', 'index.html'), 'utf8');
@@ -603,8 +603,11 @@ describe('reference-drift tracking — modules that are tested references, NOT y
     { module: 'fingerprint.js (Signal iterated 5200×SHA-512 safety number)', marker: 'fingerprintBytes' },
     { module: 'franking.js (abuse-report message franking)', marker: 'createFranking' },
     { module: 'franking.js verifyReport path', marker: 'verifyReport' },
-    { module: 'ktlog.js (key-transparency append-only log)', marker: 'appendChainEntry' },
-    { module: 'ktlog.js audit path', marker: 'auditBundle' },
+    // ktlog.js's audit path (verifyChain + checkRollover) GRADUATED to deployed — the inline
+    // _auditKeyHistory now ports the full auditBundle; see the "KTLog audit mirror" block above
+    // for its real parity guard. Only the log-APPEND path stays reference-only: the client just
+    // verifies the chain, the worker is what appends entries (appendChainEntry).
+    { module: 'ktlog.js (key-transparency log-append path)', marker: 'appendChainEntry' },
     // ratchet.js authenticated X3DH (v5 prekey handshake) graduated to deployed —
     // see the "X3DH v5 mirror" describe block above and CLAUDE.md's status table.
   ];
@@ -785,12 +788,12 @@ describe('Bare-IK session bootstrap — inline encryptFor/decryptFrom convergenc
 });
 
 // ---------------------------------------------------------------------------
-// KTLog rollover-audit mirror — partial graduation of ktlog.js (I11).
+// KTLog audit mirror — full graduation of ktlog.js's auditBundle (I11).
 //
-// Only rollover DETECTION was ported inline (_auditKeyHistory, wired into
-// initSessionV5Initiator) — not the full auditBundle hash-chain tamper check, kept
-// minimal since it has exactly one caller. This cross-tests the inline function
-// against the reference checkRollover for parity on all three verdicts.
+// The inline _auditKeyHistory (wired into initSessionV5Initiator) now ports BOTH the
+// hash-chain tamper check (verifyChain) AND rollover detection (checkRollover), matching
+// the reference auditBundle. This cross-tests the inline function against auditBundle for
+// parity on all four verdicts: ok / new / rolled / tampered.
 // ---------------------------------------------------------------------------
 const KTLOG_START = '  async function _auditKeyHistory(storedIkB64, keyHistory) {';
 const KTLOG_END = '\n  async function _importEcdhPriv(jwk) {';
@@ -805,46 +808,79 @@ if (kts < 0 || kte < 0) {
 }
 const inlineAuditKeyHistory = new Function('crypto', html.slice(kts, kte) + '\nreturn _auditKeyHistory;')(globalThis.crypto);
 
-describe('KTLog rollover-audit mirror — inline _auditKeyHistory (index.html) vs reference checkRollover (src/crypto/ktlog.js)', () => {
-  const sha256b64 = async (bytes) => Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', bytes)).toString('base64');
+describe('KTLog audit mirror — inline _auditKeyHistory (index.html) vs reference auditBundle (src/crypto/ktlog.js)', () => {
+  const subtle = globalThis.crypto.subtle;
+  const sha256b64 = async (bytes) => Buffer.from(await subtle.digest('SHA-256', bytes)).toString('base64');
+  // Build a valid hash-chained log the same way the worker does (appendChainEntry).
+  async function chainedLog(ikStrings, baseTs = 1000) {
+    const out = [];
+    for (let i = 0; i < ikStrings.length; i++) {
+      const h = await sha256b64(new TextEncoder().encode(ikStrings[i]));
+      out.push(await appendChainEntry(subtle, out, h, baseTs + i * 1000));
+    }
+    return out;
+  }
 
-  it('PARITY: first contact (no stored key) -> new, for both implementations', async () => {
-    const h = await sha256b64(new TextEncoder().encode('ik-v1'));
-    const log = [{ ts: 1000, h }];
-    const ref = await checkRollover(globalThis.crypto.subtle, null, log);
+  it('PARITY: first contact (no stored key) -> new', async () => {
+    const log = await chainedLog(['ik-v1']);
+    const ref = await auditBundle(subtle, null, log);
     const inline = await inlineAuditKeyHistory(null, log);
-    expect(inline.verdict).toBe(ref.status);
-    expect(ref.status).toBe('new');
+    expect(ref.verdict).toBe('new');
+    expect(inline.verdict).toBe(ref.verdict);
   });
 
-  it('PARITY: stored key matches the latest log entry -> ok, for both implementations', async () => {
-    const h = await sha256b64(new TextEncoder().encode('ik-v1'));
-    const log = [{ ts: 1000, h }];
-    const ref = await checkRollover(globalThis.crypto.subtle, 'ik-v1', log);
+  it('PARITY: stored key matches the latest chained entry -> ok', async () => {
+    const log = await chainedLog(['ik-v1']);
+    const ref = await auditBundle(subtle, 'ik-v1', log);
     const inline = await inlineAuditKeyHistory('ik-v1', log);
-    expect(inline.verdict).toBe(ref.status);
-    expect(ref.status).toBe('ok');
+    expect(ref.verdict).toBe('ok');
+    expect(inline.verdict).toBe(ref.verdict);
   });
 
-  it('PARITY: rollover to a newer key -> rolled + storedSeenInHistory, for both implementations', async () => {
-    const h1 = await sha256b64(new TextEncoder().encode('ik-v1'));
-    const h2 = await sha256b64(new TextEncoder().encode('ik-v2'));
-    const log = [{ ts: 1000, h: h1 }, { ts: 2000, h: h2 }];
-    const ref = await checkRollover(globalThis.crypto.subtle, 'ik-v1', log);
+  it('PARITY: rollover to a newer chained key -> rolled + storedSeenInHistory', async () => {
+    const log = await chainedLog(['ik-v1', 'ik-v2']);
+    const ref = await auditBundle(subtle, 'ik-v1', log);
     const inline = await inlineAuditKeyHistory('ik-v1', log);
+    expect(ref.verdict).toBe('rolled');
     expect(inline.verdict).toBe('rolled');
-    expect(ref.status).toBe('rolled');
-    expect(inline.storedSeenInHistory).toBe(ref.storedSeenInHistory);
-    expect(ref.storedSeenInHistory).toBe(true);
+    expect(inline.storedSeenInHistory).toBe(ref.rollover.storedSeenInHistory);
+    expect(inline.storedSeenInHistory).toBe(true);
   });
 
-  it('PARITY: rollover to/from a key never seen in the log -> rolled, storedSeenInHistory false', async () => {
-    const h = await sha256b64(new TextEncoder().encode('ik-v1'));
-    const log = [{ ts: 1000, h }];
-    const ref = await checkRollover(globalThis.crypto.subtle, 'some-unrelated-key', log);
+  it('PARITY: rollover from a key never seen in the log -> rolled, storedSeenInHistory false', async () => {
+    const log = await chainedLog(['ik-v1']);
+    const ref = await auditBundle(subtle, 'some-unrelated-key', log);
     const inline = await inlineAuditKeyHistory('some-unrelated-key', log);
+    expect(ref.verdict).toBe('rolled');
     expect(inline.verdict).toBe('rolled');
     expect(inline.storedSeenInHistory).toBe(false);
-    expect(ref.storedSeenInHistory).toBe(false);
+    expect(ref.rollover.storedSeenInHistory).toBe(false);
+  });
+
+  it('PARITY: a tampered chain link -> tampered (the key point of the full port)', async () => {
+    const log = await chainedLog(['ik-v1', 'ik-v2']);
+    log[1].c = await sha256b64(new TextEncoder().encode('forged-chain-value')); // relay rewrote the append-only log
+    const ref = await auditBundle(subtle, 'ik-v1', log);
+    const inline = await inlineAuditKeyHistory('ik-v1', log);
+    expect(ref.verdict).toBe('tampered');
+    expect(inline.verdict).toBe('tampered');
+  });
+
+  it('PARITY: non-empty raw log that parses to nothing -> tampered (fail closed)', async () => {
+    const log = [{ ts: 'not-a-number', h: 123 }]; // all entries malformed
+    const ref = await auditBundle(subtle, 'ik-v1', log);
+    const inline = await inlineAuditKeyHistory('ik-v1', log);
+    expect(ref.verdict).toBe('tampered');
+    expect(inline.verdict).toBe('tampered');
+  });
+
+  it('PARITY: legacy pre-chain entries (no c) still audit for rollover', async () => {
+    const h1 = await sha256b64(new TextEncoder().encode('ik-v1'));
+    const h2 = await sha256b64(new TextEncoder().encode('ik-v2'));
+    const log = [{ ts: 1000, h: h1 }, { ts: 2000, h: h2 }]; // no c fields = legacy
+    const ref = await auditBundle(subtle, 'ik-v1', log);
+    const inline = await inlineAuditKeyHistory('ik-v1', log);
+    expect(ref.verdict).toBe('rolled');
+    expect(inline.verdict).toBe('rolled');
   });
 });

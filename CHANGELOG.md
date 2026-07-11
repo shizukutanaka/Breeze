@@ -1,5 +1,21 @@
 # Changelog
 
+## Key-transparency audit: port the full hash-chain tamper check inline (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+801 vitest tests (+2 KT parity cases) + 7 Playwright E2E specs; `index.html` + `tests/mirror-drift.test.js` + `CLAUDE.md`. `validate.sh` PASSED (35/36, 1 size warning).
+
+Motivated by a survey of 2024–2026 E2EE research and deployments (WhatsApp's Auditable Key Directory now third-party-audited by Cloudflare, Messenger key transparency shipped 2025-11, Signal auto-verification): the whole industry has moved from manual safety-number comparison to **automatic key-transparency verification**. Breeze already had the server side (`/api/ktlog/get`, `ktlog:<userId>` append-only log) and a full reference audit (`src/crypto/ktlog.js`'s `auditBundle` = `verifyChain` + `checkRollover`), but the deployed inline mirror (`_auditKeyHistory`, in the X3DH-v5 handshake) only ported *rollover detection* — the hash-chain **tamper** check was missing.
+
+That gap meant an incomplete audit that gives false assurance: a hostile relay could serve a forged append-only log presenting its own injected key as if it had always been there, and rollover detection alone would wave it through. Only the chain verification (each entry's `c = SHA-256(prevC ‖ h)`) catches a rewritten log.
+
+- Ported the full `auditBundle` semantics into inline `_auditKeyHistory`: it now runs `verifyChain` (hash-chain integrity, fail-closed on a malformed log) alongside the existing rollover check, returning a 4-way verdict `tampered > rolled > new > ok`.
+- The X3DH-v5 initiator now shows a distinct key-change warning on a `tampered` chain, and — critically — does **not** pin a key vouched for by a broken chain (a tampered log must never silently establish a new trust-on-first-use baseline).
+- Upgraded the mirror-drift test from `checkRollover`-only parity to full `auditBundle` parity across all four verdicts, including a tampered-chain case and a fail-closed (non-empty log that parses to nothing) case; the `appendChainEntry` log-append path stays reference-only (the client verifies, the Worker appends). Updated CLAUDE.md's module status table accordingly.
+
+Note this audit runs inside `initSessionV5Initiator`, still gated behind `CONFIG.X3DH_V5_ENABLED` (default off) — so this hardens the audit *quality* for when v5 is enabled, rather than changing default-user behavior. Remaining KT work from the research survey (deferred): a user-triggered "audit this contact against the server KT log" action wiring `/api/ktlog/get` into `/verify`, and PQ-hybrid (Signal SPQR / ML-KEM) tracking — recorded in the plan file.
+
+---
+
 ## Sign backup upload/download; document the *_REQUIRE_AUTH hardening flags (branch claude/nice-ride-T6yb0, 2026-07-10)
 
 799 vitest tests + 7 Playwright E2E specs; `index.html` + `wrangler.toml`. `validate.sh` PASSED (35/36, 1 size warning).
