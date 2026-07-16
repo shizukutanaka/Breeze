@@ -1,5 +1,18 @@
 # Changelog
 
+## Wire /api/ktlog/get into /verify: user-triggered KT audit (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+801 vitest tests + 7 Playwright E2E specs; `index.html` only. `validate.sh` PASSED (35/36, 1 size warning).
+
+Closes the other half of the previous entry's KT gap: `/api/ktlog/get` existed server-side and README already advertised key transparency as a feature, but no client code path ever called it. The full-chain `_auditKeyHistory` audit only ran inside the X3DH-v5 handshake (`CONFIG.X3DH_V5_ENABLED`, default off) — so for the vast majority of users on the default config, key transparency was entirely inert.
+
+- Added `_auditKeyTransparency(contact)`: fetches the peer's server-side append-only key log and runs the same `_auditKeyHistory` audit, independent of `X3DH_V5_ENABLED`. Only pins `contact.pubB64` as the new trust baseline on an `ok`/`new` verdict — never on `rolled`, since pinning there would launder an unconfirmed key change into a trusted baseline.
+- `/verify` (`showSafetyNumber`) now shows a live-updating status line below the safety number: a "checking…" placeholder that resolves to one of four outcomes (automatically verified / key changed since last check / server log looks tampered / check unavailable), matching the industry direction (WhatsApp/Messenger/Signal auto-verification) instead of relying solely on manual safety-number comparison.
+- Verified end-to-end against the real Worker (in-memory KV harness): a fresh contact correctly resolves to the "verified" state with no console errors.
+- Also condensed roughly 40 lines of pure-ASCII-art section-divider comments (`// ====...====` pairs bracketing a title line, collapsed to just the title) and merged several 2-line WHY-comments to one line — no content lost, needed to fit the new code under `validate.sh`'s 15,000-line gate.
+
+---
+
 ## Key-transparency audit: port the full hash-chain tamper check inline (branch claude/nice-ride-T6yb0, 2026-07-11)
 
 801 vitest tests (+2 KT parity cases) + 7 Playwright E2E specs; `index.html` + `tests/mirror-drift.test.js` + `CLAUDE.md`. `validate.sh` PASSED (35/36, 1 size warning).
