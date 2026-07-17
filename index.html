@@ -5020,10 +5020,8 @@ async function initMessenger(dbName) {
     }).catch(() => {});
   }
 
-  // ================================================================
   // v3.4: WEB LOCKS + BROADCAST CHANNEL — Multi-tab coordination
   // Only one tab runs the poll loop (leader). Others receive via broadcast.
-  // ================================================================
   let _isLeaderTab = false;
   const _tabChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('breeze-sync') : null;
   function broadcastToTabs(type, data) {
@@ -5176,11 +5174,9 @@ async function initMessenger(dbName) {
   // v3.3: Throttled renderContacts — prevents 38 calls/cycle from causing jank
   const _renderContactsThrottled = throttle(() => renderContacts(), 200);
 
-  // ================================================================
   // v3.3: ENTERPRISE — AUDIT LOG
   // Records security events for compliance. IDB 'audit' store.
   // Types: auth, key, contact, message, group, security, settings
-  // ================================================================
   async function auditLog(type, detail, severity = 'info') {
     try {
       if (!db.objectStoreNames.contains('audit')) return;
@@ -5203,10 +5199,8 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'audit-prune'); }
   }
 
-  // ================================================================
   // v3.3: ENTERPRISE — SETTINGS CONSOLIDATION
   // Single settings object replaces scattered localStorage
-  // ================================================================
   const _defaultSettings = {
     theme: 'dark',           // dark | light
     compact: false,          // compact message display
@@ -5250,10 +5244,8 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'save-settings'); }
   }
 
-  // ================================================================
   // v3.3: ENTERPRISE — MESSAGE RETENTION POLICY
   // Auto-delete messages older than N days (compliance)
-  // ================================================================
   async function enforceRetentionPolicy() {
     if (!_settings.retentionDays || _settings.retentionDays <= 0) return;
     try {
@@ -5275,19 +5267,15 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'retention'); }
   }
 
-  // ================================================================
   // v3.3: ENTERPRISE — GROUP ADMIN ROLES
   // Group creator = admin. Admin can: rename, kick, set announce-only.
-  // ================================================================
   function isGroupAdmin(group) {
     if (!group?.isGroup) return false;
     return group.createdBy === myId || group.admins?.includes(myId);
   }
 
-  // ================================================================
   // v3.3: ENTERPRISE — FILE MANAGER
   // List all sent/received files across all conversations
-  // ================================================================
   async function getFileList() {
     const allMsgs = await dbGetAll('messages');
     return allMsgs.filter(m => m.fileData || m.voice).map(m => {
@@ -5303,10 +5291,8 @@ async function initMessenger(dbName) {
     }).sort((a, b) => b.ts - a.ts);
   }
 
-  // ================================================================
   // v3.3: ENTERPRISE — GDPR DATA EXPORT
   // Export all personal data as structured JSON (GDPR Art. 20)
-  // ================================================================
   async function gdprExport() {
     try {  
       const identity = await dbGet('identity', 'keys');
@@ -5331,10 +5317,8 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'gdprExport'); }
   }
 
-  // ================================================================
   // v3.3: ENTERPRISE — REMOTE WIPE
   // Check server for wipe signal; if found, destroy all local data
-  // ================================================================
   async function checkRemoteWipe() {
     if (!API || !myId) return;
     try {
@@ -5457,7 +5441,10 @@ async function initMessenger(dbName) {
       const spkSig = await crypto.subtle.sign({ name: 'Ed25519' }, _signingKey.privateKey, spk.pub);
       body.signedPreKeySig = btoa(String.fromCharCode(...new Uint8Array(spkSig)));
     }
-    if (CONFIG.X3DH_V5_ENABLED) body.caps = [CAPS_X3DH_V5];
+    const caps = [];
+    if (CONFIG.X3DH_V5_ENABLED) caps.push(CAPS_X3DH_V5);
+    if (CONFIG.GROUP_RATCHET_V5) caps.push(CAPS_GROUP_V5);
+    if (caps.length) body.caps = caps;
     return body;
   }
 
@@ -5492,13 +5479,11 @@ async function initMessenger(dbName) {
     }
   }
 
-  // ================================================================
   // DOUBLE RATCHET CRYPTO ENGINE (v3)
   //
   // Forward Secrecy: message keys are derived per-message and destroyed
   // Post-Compromise Security: DH ratchet step on each exchange
   // Replay Protection: counter + msg_id seen cache
-  // ================================================================
 
   // --- HKDF helper (RFC 5869) ---
   async function hkdf(ikm, salt, info, length) {
@@ -5595,7 +5580,6 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'dhRatchetStep'); }
   }
 
-  // ================================================================
   // X3DH v5 — authenticated pre-key agreement (I1/G1, gated by CONFIG.X3DH_V5_ENABLED).
   // initSession() below is a bare unauthenticated DH(IK_A, IK_B); here the responder's
   // signed pre-key is verified against their Ed25519 key first. Both sides bootstrap the
@@ -5604,7 +5588,6 @@ async function initMessenger(dbName) {
   // Negotiation (N3) mirrors negotiate.js's AND rule inline (not ESM-imported — single-
   // file per CLAUDE.md). Signing: ratchet.js signs RAW SPK bytes, but the Worker's
   // verifyEd25519 verifies the base64 STRING, so this uses signMessage/verifySignature.
-  // ================================================================
   const CAPS_X3DH_V5 = 'x3dh-v5';
 
   function _parsePeerCaps(bundle) {
@@ -5615,6 +5598,21 @@ async function initMessenger(dbName) {
   }
   function _peerSupportsX3dhV5(bundle) {
     return CONFIG.X3DH_V5_ENABLED && _parsePeerCaps(bundle).includes(CAPS_X3DH_V5);
+  }
+  const CAPS_GROUP_V5 = 'group-v5';
+  // Pure N-party AND rule, exact mirror of negotiate.js's negotiateGroup() — side-effect-free so it cross-tests cleanly.
+  function _negotiateGroupCaps(localCaps, memberCapsList) {
+    const norm = (c) => (Array.isArray(c) ? c.filter(x => typeof x === 'string') : []);
+    const sets = [new Set(norm(localCaps)), ...(Array.isArray(memberCapsList) ? memberCapsList : []).map(c => new Set(norm(c)))];
+    return { useGroupV5: sets.every(s => s.has(CAPS_GROUP_V5)) };
+  }
+  // Computes (doesn't persist) the group decision: local flag AND every OTHER member's caps
+  // (reuses _parsePeerCaps — member records and prekey bundles share {caps:[...]}). Fails CLOSED:
+  // a member missing `caps` (legacy client or failed fetch) contributes [] and blocks v5 group-wide.
+  function _computeGroupV5(group) {
+    const localCaps = CONFIG.GROUP_RATCHET_V5 ? [CAPS_GROUP_V5] : [];
+    const memberCapsList = (group?.members || []).filter(m => m.id !== myId).map(m => _parsePeerCaps(m));
+    return _negotiateGroupCaps(localCaps, memberCapsList).useGroupV5;
   }
   function _concatBytes(parts) {
     const total = parts.reduce((n, p) => n + p.length, 0);
@@ -6025,10 +6023,8 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'deriveKeyWith'); }
   }
 
-  // ================================================================
   // UNIFIED RELAY SEND (v3)
   // Sends via Sealed Sender first, falls back to standard relay
-  // ================================================================
   // v3.1: Message retry queue — auto-retry failed sends
   const _retryQueue = [];
   let _retryTimer = null;
@@ -6177,7 +6173,6 @@ async function initMessenger(dbName) {
     }
   });
 
-  // ================================================================
   // SENDER KEY — Group Encryption
   //
   // v3 (GROUP_RATCHET_V5=false, default):
@@ -6194,14 +6189,19 @@ async function initMessenger(dbName) {
   // Wire format: { v:3|5, g:true, i:[iv], d:[ct], c:counter, ep:epoch }
   //   v3 receivers HKDF with p.c as the salt.
   //   v5 receivers ratchet forward to p.c, caching skipped keys.
-  // ================================================================
 
+  // Negotiates lazily, once, when a group's sender key doesn't exist yet (the existing
+  // "first-send freezes the format" moment), using the freshest local membership snapshot.
+  // Caches the decision onto the group record for kick/UI to read.
   async function getGroupSenderKey(groupId) {
     try {
       const stored = await dbGet('identity', 'gsk:' + groupId);
       if (stored) return stored;
+      const group = await dbGet('contacts', groupId);
+      const useV5 = _computeGroupV5(group || {});
+      if (group && group.groupV5 !== useV5) { group.groupV5 = useV5; await dbPut('contacts', group); }
       const rawBytes = crypto.getRandomValues(new Uint8Array(32));
-      const key = CONFIG.GROUP_RATCHET_V5
+      const key = useV5
         ? { chainKey: Array.from(rawBytes), counter: 0, epoch: 0, v: 5, skipped: {} }
         : { raw: Array.from(rawBytes), counter: 0, epoch: 0 };
       await dbPut('identity', key, 'gsk:' + groupId);
@@ -9118,8 +9118,6 @@ async function initMessenger(dbName) {
     renderContacts();
   });
 
-  // ================================================================
-  // ================================================================
   // VOICE / VIDEO CALLING (WebRTC MediaStream)
   //
   // Architecture:
@@ -9127,7 +9125,6 @@ async function initMessenger(dbName) {
   //   - Signal via existing /api/signal with type: call-offer, call-answer, call-end
   //   - ICE config reuses messenger config (STUN + TURN)
   //   - UI: fullscreen overlay with timer + controls
-  // ================================================================
 
   let _callState = 'idle'; // idle | calling | ringing | connected
   let _callPC = null;
@@ -9562,6 +9559,23 @@ async function initMessenger(dbName) {
     }
   });
 
+  // Local-members groups have no server registry to snapshot caps from (invite-link groups
+  // get them free via /group/info) — fetch once via the batch prekey endpoint, chunked at
+  // 10 ids/call (server cap); a failed chunk fails CLOSED (no caps = no v5).
+  async function _fetchMemberCapsBatch(memberIds) {
+    if (!API || !memberIds.length) return {};
+    const out = {};
+    for (let i = 0; i < memberIds.length; i += 10) {
+      const chunk = memberIds.slice(i, i + 10);
+      try {
+        const resp = await postAPIRaw('/prekey/fetch/batch', { userIds: chunk });
+        if (resp.ok) { const { results } = await resp.json(); for (const id of chunk) out[id] = _parsePeerCaps(results?.[id]); }
+      } catch(_e) { _dbg(_e, 'fetch-member-caps-batch'); }
+    }
+    for (const id of memberIds) if (!(id in out)) out[id] = [];
+    return out;
+  }
+
   async function createGroup(name) {
     try {  
       const contacts = await dbGetAll('contacts');
@@ -9577,6 +9591,10 @@ async function initMessenger(dbName) {
       const indices = sel.split(',').map(s => parseInt(s.trim()) - 1).filter(i => !isNaN(i));
       const members = indices.map(i => contacts[i]).filter(Boolean).map(c => ({ id: c.id, pubB64: c.pubB64, name: c.name }));
       if (members.length === 0) { await createGroupInviteLink(name); return; }
+      if (CONFIG.GROUP_RATCHET_V5) {
+        const capsById = await _fetchMemberCapsBatch(members.map(m => m.id));
+        for (const m of members) m.caps = capsById[m.id] || [];
+      }
       members.push({ id: myId, pubB64: myPubB64, name: myName });
   
       // A3: Group member limit
@@ -9608,7 +9626,7 @@ async function initMessenger(dbName) {
   async function createGroupInviteLink(name) {
     if (!API) { showToast(t('toastServerRequired'), 'error'); return; }
     try {
-      const resp = await postAPIRaw('/group/create', { name, creatorId: myId, creatorPub: myPubB64, creatorName: myName });
+      const resp = await postAPIRaw('/group/create', { name, creatorId: myId, creatorPub: myPubB64, creatorName: myName, caps: CONFIG.GROUP_RATCHET_V5 ? [CAPS_GROUP_V5] : undefined });
       if (!resp.ok) { showToast(t('toastGroupFail'), 'error'); return; }
       const data = await resp.json();
       const groupId = 'g_' + data.token;
@@ -9648,6 +9666,7 @@ async function initMessenger(dbName) {
         id: m.id,
         pubB64: typeof m.pub === 'string' ? m.pub.slice(0, 200) : (typeof m.pubB64 === 'string' ? m.pubB64.slice(0, 200) : ''),
         name: typeof m.name === 'string' ? m.name.slice(0, 64) : 'Member',
+        caps: Array.isArray(m.caps) ? m.caps.filter(c => typeof c === 'string').slice(0, 20).map(c => String(c).slice(0, 32)) : undefined,
       }));
   }
 
@@ -9656,7 +9675,7 @@ async function initMessenger(dbName) {
     if (!API) return;
     try {
       // Join the group on server
-      const resp = await postAPIRaw('/group/join', { token, memberId: myId, memberPub: myPubB64, memberName: myName });
+      const resp = await postAPIRaw('/group/join', { token, memberId: myId, memberPub: myPubB64, memberName: myName, caps: CONFIG.GROUP_RATCHET_V5 ? [CAPS_GROUP_V5] : undefined });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
         showToast(err.error || t('toastJoinFail'), 'error');
@@ -9741,9 +9760,7 @@ async function initMessenger(dbName) {
       if (c.isGroup && c.joinToken) startGroupMemberPoll(c.joinToken, c.id);
     }
   })();
-  // ================================================================
   // PROFILE (avatar emoji + bio)
-  // ================================================================
   // Stored in identity: { ...existing, avatar: '🌊', bio: 'text' }
   // Sent with presence heartbeat
 
@@ -10978,9 +10995,7 @@ async function initMessenger(dbName) {
     if (!pubB64 || pubB64 === myPubB64) return;
     await addContact(pubB64, name);
   }
-  // ================================================================
   // PRESENCE POLLING — single batch check (P2 FIX: no rate limit issue)
-  // ================================================================
   const _presenceCache = {};
   const _lastSeenCache = {}; // v3.2: Track when contacts were last seen online
 
@@ -11063,9 +11078,7 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'reconnectAll'); }
   };
 
-  // ================================================================
   // READ RECEIPT DISPLAY
-  // ================================================================
   let _lastReadTs = {};
   // Load persisted read timestamps
   (async () => {
@@ -11086,10 +11099,8 @@ async function initMessenger(dbName) {
     });
   }
 
-  // ================================================================
   // BILLING: Multi-account plans (Lite $0.99, Plus $5.99, Pro $19.99)
   // Free=1 account, Lite=2, Plus=4, Pro=unlimited
-  // ================================================================
 
   async function initBilling() {
     if (!API || !_userId) return;
@@ -11131,9 +11142,7 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e); }
   }
 
-  // ================================================================
   // WEB PUSH NOTIFICATIONS — subscribe for background notifications
-  // ================================================================
   async function initPushNotifications() {
     if (!API || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
     try {
@@ -11166,12 +11175,8 @@ async function initMessenger(dbName) {
     return Uint8Array.from(raw, c => c.charCodeAt(0));
   }
 
-  // ================================================================
   // TURN CREDENTIALS — available to all users
-  // ================================================================
-  // ================================================================
   // TURN CREDENTIAL — available to all users for NAT traversal
-  // ================================================================
 
   async function fetchTurnCredentials() {
     if (!API) return;
@@ -11184,13 +11189,11 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'turn'); }
   }
 
-  // ================================================================
   // v3: PEER RELAY — All users relay for each other
   //
   // When a user receives a message for an offline contact,
   // they hold it and deliver when the contact comes online.
   // No central server needed. Network gets stronger with more users.
-  // ================================================================
   const _peerRelayQueue = {}; // { recipientId: [{ payload, ts }] }
 
   function handlePeerRelayRequest(contact, data) {
@@ -11229,13 +11232,11 @@ async function initMessenger(dbName) {
     _dbg(null, 'Peer relay: delivered ' + queue.length + ' msgs to ' + targetId);
   }
 
-  // ================================================================
   // v3 PRO: ENCRYPTED CLOUD BACKUP
   //
   // Identity + contacts + message history → PBKDF2/AES-256-GCM encrypt
   // → upload to /api/backup → Cloudflare R2
   // Server stores ciphertext only. Only the user's passphrase can decrypt.
-  // ================================================================
   async function createCloudBackup() {
     // Cloud backup: available to all users
     const passphrase = await showPrompt(t('backupPassPrompt'), '', { type: 'password', autocomplete: 'current-password' });
@@ -11301,12 +11302,10 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'restore'); showToast(t('backupWrongPass'), 'error'); }
   }
 
-  // ================================================================
   // v3 PRO: EPHEMERAL ROOMS — URL = chat
   //
   // Free: 1 hour TTL
   // 24h / 7d / permanent
-  // ================================================================
   async function createEphemeralRoom(name, ttl) {
     const roomId = 'room:' + btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(12)))).replace(/[+/=]/g, '');
     const maxTtl = ttl;
@@ -11322,9 +11321,7 @@ async function initMessenger(dbName) {
     return { roomId, roomUrl, ttl: maxTtl };
   }
 
-  // ================================================================
   // v1 INTEGRATION: Safety Features (Panic Wipe Mode)
-  // ================================================================
 
   // --- PANIC WIPE: 5 rapid taps OR Ctrl+Shift+Backspace ---
   let _panicTaps = 0, _panicTimer = null;
@@ -11380,9 +11377,7 @@ async function initMessenger(dbName) {
       document.addEventListener('keydown', function h(ev) { if (ev.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', h); } }, { once: true });
     }
   }, { signal: _ac.signal });
-  // ================================================================
   // v1 INTEGRATION: Typing Indicator + Read Receipts
-  // ================================================================
 
   // Typing: send via P2P DataChannel, show "typing..." in header
   let _typingTimeout = null;
@@ -11414,9 +11409,7 @@ async function initMessenger(dbName) {
   });
 
   // Show typing indicator when received
-  // ================================================================
   // v3: DELIVERY STATE (ACK)
-  // ================================================================
   function updateDeliveryState(msgId, state) {
     // state: 0=delivered, 1=read, 2=deleted
     const el = document.querySelector(`[data-msgid="${msgId}"] .ts`);
@@ -11435,9 +11428,7 @@ async function initMessenger(dbName) {
     }).catch(e => _dbg(e, 'ack-persist'));
   }
 
-  // ================================================================
   // v3: BINARY FILE CHUNK (ArrayBuffer, no base64)
-  // ================================================================
   const _fileChunks = {}; // { fileId: { total, received: Set, chunks: [], name, mime } }
 
   function handleBinaryChunk(contact, buffer) {
@@ -11568,9 +11559,7 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'sendBinaryFile'); }
   }
 
-  // ================================================================
   // v3: SAFETY NUMBER (fingerprint verification)
-  // ================================================================
   // I11: user-triggered KT audit (independent of X3DH_V5_ENABLED) — fetches the server's
   // append-only key log and runs the same _auditKeyHistory the v5 handshake uses. Only pins
   // contact.pubB64 as the new baseline on ok/new: pinning on 'rolled' would launder an unconfirmed key change into a trusted baseline.
@@ -11909,13 +11898,9 @@ async function initMessenger(dbName) {
   // Restore compact mode
   if (localStorage.getItem('brz-compact') === '1') document.body.classList.add('compact');
 
-  // ================================================================
   // v1 INTEGRATION: Message Search
-  // ================================================================
 
-  // ================================================================
   // MIGRATION: Import from LINE / WhatsApp / Telegram
-  // ================================================================
 
   function parseLINE(text) {
     const msgs = [];
@@ -12013,10 +11998,8 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'importChat'); }
   }
 
-  // ================================================================
   // QR CODE: Real ISO 18004 encoder (0 dependencies, byte mode, EC level L)
   // Supports URLs up to ~270 chars (Version 1-10). Fully scannable.
-  // ================================================================
   function generateQR(text) {
     const data = new TextEncoder().encode(text);
     // Version selection (byte mode, EC level L)
@@ -12263,9 +12246,7 @@ async function initMessenger(dbName) {
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') modal.remove(); }, { once: true });
   }
 
-  // ================================================================
   // BULK INVITE: Send one link to invite multiple people
-  // ================================================================
 
   function generateInviteMessage() {
     const url = myAlias
@@ -12403,10 +12384,11 @@ async function initMessenger(dbName) {
             }
             activeContact.members = activeContact.members.filter(m => m.id !== member.id);
             if (activeContact.admins) activeContact.admins = activeContact.admins.filter(id => id !== member.id);
+            activeContact.groupV5 = _computeGroupV5(activeContact); // re-negotiate: kick can only relax the AND rule (fewer members), may newly enable v5
             await dbPut('contacts', activeContact);
             // v5 epoch rotation: generate a fresh chain key and re-distribute to remaining
             // members only. The kicked member's stale key is valid for the old epoch only.
-            if (CONFIG.GROUP_RATCHET_V5 && newEpoch !== null) {
+            if (CONFIG.GROUP_RATCHET_V5 && activeContact.groupV5 && newEpoch !== null) {
               const freshChain = Array.from(crypto.getRandomValues(new Uint8Array(32)));
               await dbPut('identity', { chainKey: freshChain, counter: 0, epoch: newEpoch, v: 5, skipped: {} }, 'gsk:' + activeContact.id);
               for (const m of (activeContact.members || []).filter(m => m.id !== myId && m.pubB64)) {

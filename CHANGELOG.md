@@ -1,5 +1,22 @@
 # Changelog
 
+## Group-v5 sender-key: real N-party capability negotiation (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+809 vitest tests (+8 negotiation-mirror cases) + 9 Playwright E2E specs (+2 mixed-version cases); `index.html` + `tests/mirror-drift.test.js` + `tests/e2e/group.spec.js` + `CLAUDE.md`. `validate.sh` PASSED (35/36, 1 size warning).
+
+Removes the one technical blocker to ever defaulting `GROUP_RATCHET_V5` on: until now that flag was purely a LOCAL per-client toggle. `getGroupSenderKey` froze a group's wire format (v3 static key vs v5 hash-ratchet) from the raw flag at first send, with no check of what the OTHER members support — so flipping the default would have silently broken group-message delivery for any group containing a not-yet-upgraded member (their client cannot decrypt a v5 `ep`-tagged ratchet ciphertext at all). The 2-party X3DH-v5 feature already solved this shape of problem with an "AND rule" capability negotiation; group needed the N-party generalization (`negotiate.js`'s `negotiateGroup`, previously never inlined).
+
+Pure client-side wiring — the Worker already had every piece (`sanitizeCaps`, group create/join snapshotting a `caps` field per member, `/group/info` returning it, `/prekey/fetch/batch`), so `_worker.js` is untouched.
+
+- Inlined `_negotiateGroupCaps` (exact mirror of `negotiateGroup`) and `_computeGroupV5` (local flag AND every other member's advertised caps), both fail-CLOSED: a member missing `caps` (legacy client or a failed fetch) blocks v5 for the whole group.
+- Clients now advertise `group-v5` in their prekey-upload / group-create / group-join caps; `safeMemberList` stops stripping the `caps` field the server returns.
+- `getGroupSenderKey` negotiates lazily exactly once (at the existing first-send format-freeze moment) from the freshest local membership snapshot, caching the decision on the group record. The kick handler re-negotiates (removing a member can only relax the AND rule, possibly newly enabling v5) and gates its epoch-rotation on the negotiated result rather than the raw flag. Local-members `createGroup` fetches member caps up front via the batch prekey endpoint.
+- Verification: mirror-drift parity against the reference for all-v5 / one-legacy-member / empty / fail-closed / local-off cases, plus `getGroupSenderKey`-freeze tests. Two new E2E tests drive a genuinely mixed-version group (one browser context text-patched to `GROUP_RATCHET_V5: true`, the other left at the pristine default) and assert (a) the legacy peer actually receives the plaintext — the strongest black-box proof the v3 fallback was used, since a real v5 emission would leave it unable to decrypt — and (b) both-supporting contexts upgrade to `v:5`/`chainKey`.
+
+The `GROUP_RATCHET_V5` **default stays off** — this pass proves the negotiation machinery correct; flipping the default is a separate, deliberate follow-up. Also swept ~65 leftover decorative `// ====` divider comment lines (pure ASCII art, no content) to keep the new code under the 15,000-line gate.
+
+---
+
 ## Wire /api/ktlog/get into /verify: user-triggered KT audit (branch claude/nice-ride-T6yb0, 2026-07-11)
 
 801 vitest tests + 7 Playwright E2E specs; `index.html` only. `validate.sh` PASSED (35/36, 1 size warning).

@@ -28,6 +28,7 @@ import { createAtRest } from '../src/crypto/atrest.js';
 import { makeChallengeString, solve as powSolve, verify as powVerify } from '../src/crypto/pow.js';
 import { createRatchet } from '../src/crypto/ratchet.js';
 import { checkRollover, auditBundle, appendChainEntry } from '../src/crypto/ktlog.js';
+import { negotiateGroup } from '../src/crypto/negotiate.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(join(HERE, '..', 'index.html'), 'utf8');
@@ -387,14 +388,18 @@ function makeGroupInline(config) {
   const store = new Map();
   const dbGet = async (_s, key) => (store.has(key) ? store.get(key) : null);
   const dbPut = async (_s, val, key) => { store.set(key, val); };
+  // getGroupSenderKey calls _computeGroupV5 as a free variable — inject the already-bound
+  // version from an X3DH-inline instance sharing the same config, rather than duplicating
+  // the negotiation code's extraction here (both live in the same source window anyway).
+  const { _computeGroupV5 } = makeX3dhInline(null, config, 'me');
   const factory = new Function(
-    'crypto', 'CONFIG', 'dbGet', 'dbPut', 'hkdf', 'arr', 'u8', '_dbg', 'TextEncoder', 'TextDecoder',
+    'crypto', 'CONFIG', 'dbGet', 'dbPut', 'hkdf', 'arr', 'u8', '_dbg', 'TextEncoder', 'TextDecoder', '_computeGroupV5',
     html.slice(gs, ge) +
       '\nreturn { getGroupSenderKey, encryptGroupMsg, decryptGroupMsg };',
   );
   const api = factory(
     globalThis.crypto, config, dbGet, dbPut, inlineKdf.hkdf,
-    (a) => Array.from(a), (a) => new Uint8Array(a), () => {}, TextEncoder, TextDecoder,
+    (a) => Array.from(a), (a) => new Uint8Array(a), () => {}, TextEncoder, TextDecoder, _computeGroupV5,
   );
   return { ...api, store };
 }
@@ -496,19 +501,19 @@ if (x3s < 0 || x3e < 0) {
   );
 }
 
-function makeX3dhInline(myKeys, config) {
+function makeX3dhInline(myKeys, config, myId) {
   const idb = new Map();
   const dbGet = async (_s, key) => (idb.has(key) ? idb.get(key) : null);
   const dbPut = async (_s, val, key) => { idb.set(key, val); };
   const factory = new Function(
-    'crypto', 'CONFIG', '_hasX25519', 'dbGet', 'dbPut', '_dbg', 'hkdf', 'arr', 'u8', 'myKeys',
+    'crypto', 'CONFIG', '_hasX25519', 'dbGet', 'dbPut', '_dbg', 'hkdf', 'arr', 'u8', 'myKeys', 'myId',
     html.slice(x3s, x3e) +
-      '\nreturn { genRatchetKey, ecdhBits, _x3dhInitiator, _x3dhResponder, _parsePeerCaps, _peerSupportsX3dhV5, _importEcdhPriv, _loadSpkPriv, _resolveOtpPriv, _bootstrapResponderSessionV5 };',
+      '\nreturn { genRatchetKey, ecdhBits, _x3dhInitiator, _x3dhResponder, _parsePeerCaps, _peerSupportsX3dhV5, _negotiateGroupCaps, _computeGroupV5, _importEcdhPriv, _loadSpkPriv, _resolveOtpPriv, _bootstrapResponderSessionV5 };',
   );
   const api = factory(
     globalThis.crypto, config || {}, false /* P-256, matches refR below for determinism */,
     dbGet, dbPut, () => {}, inlineKdf.hkdf, (a) => Array.from(a), (a) => new Uint8Array(a),
-    myKeys || {},
+    myKeys || {}, myId || 'me',
   );
   return { ...api, idb };
 }
@@ -574,6 +579,73 @@ describe('X3DH v5 mirror — inline (index.html) vs reference (src/crypto/ratche
     });
     expect(bootstrapped).not.toBeNull();
     expect(Buffer.from(bootstrapped.rootKey).toString('hex')).toBe(Buffer.from(skRef).toString('hex'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Group-v5 negotiation mirror — the N-party generalization of the X3DH AND rule.
+//
+// Inline _negotiateGroupCaps/_computeGroupV5 (index.html, lands in the same source
+// window as the X3DH block above) must agree with reference negotiateGroup()
+// (negotiate.js): a group uses the v5 hash-ratchet sender key only when the LOCAL
+// flag is on AND every OTHER member's record advertises 'group-v5'. A drift here
+// is the group-message analog of the X3DH drift above: one legacy member silently
+// can never decrypt anything the moment the group freezes into v5 format.
+// ---------------------------------------------------------------------------
+describe('Group-v5 negotiation mirror — inline (index.html) vs reference (src/crypto/negotiate.js)', () => {
+  it('PARITY — ALL-V5: local + every member advertise group-v5', () => {
+    const inline = makeX3dhInline(null, { GROUP_RATCHET_V5: true }, 'me');
+    const local = ['group-v5'], members = [['group-v5'], ['group-v5']];
+    expect(inline._negotiateGroupCaps(local, members).useGroupV5).toBe(true);
+    expect(negotiateGroup(local, members).useGroupV5).toBe(true);
+  });
+
+  it('PARITY — ONE-LEGACY-MEMBER: a single member with no caps blocks the whole group', () => {
+    const inline = makeX3dhInline(null, { GROUP_RATCHET_V5: true }, 'me');
+    const local = ['group-v5'], members = [['group-v5'], []];
+    expect(inline._negotiateGroupCaps(local, members).useGroupV5).toBe(false);
+    expect(negotiateGroup(local, members).useGroupV5).toBe(false);
+  });
+
+  it('PARITY — EMPTY-MEMBER-LIST ("just us"): the local flag alone decides', () => {
+    const inline = makeX3dhInline(null, { GROUP_RATCHET_V5: true }, 'me');
+    expect(inline._negotiateGroupCaps(['group-v5'], []).useGroupV5).toBe(true);
+    expect(negotiateGroup(['group-v5'], []).useGroupV5).toBe(true);
+  });
+
+  it('_computeGroupV5 fails CLOSED on a legacy member record (no caps field)', () => {
+    const inline = makeX3dhInline(null, { GROUP_RATCHET_V5: true }, 'me');
+    expect(inline._computeGroupV5({ members: [{ id: 'me' }, { id: 'legacy' }] })).toBe(false);
+  });
+
+  it('_computeGroupV5: local flag off is always false regardless of member caps', () => {
+    const inline = makeX3dhInline(null, { GROUP_RATCHET_V5: false }, 'me');
+    expect(inline._computeGroupV5({ members: [{ id: 'me' }, { id: 'p', caps: ['group-v5'] }] })).toBe(false);
+  });
+
+  it('_computeGroupV5: all members (incl. self, excluded from the check) advertising -> true', () => {
+    const inline = makeX3dhInline(null, { GROUP_RATCHET_V5: true }, 'me');
+    expect(inline._computeGroupV5({ members: [{ id: 'me' }, { id: 'p1', caps: ['group-v5'] }, { id: 'p2', caps: ['group-v5'] }] })).toBe(true);
+  });
+});
+
+describe('getGroupSenderKey freezes format from the negotiated decision, not the raw CONFIG flag', () => {
+  it('all-v5 group: fresh key comes back v5 (chainKey) and group.groupV5 is cached true', async () => {
+    const inline = makeGroupInline({ GROUP_RATCHET_V5: true, GROUP_MAX_SKIP: 50, MSG_PAD_BOUNDARY: 256, IV_BYTES: 12 });
+    inline.store.set('g1', { id: 'g1', members: [{ id: 'me' }, { id: 'p1', caps: ['group-v5'] }] });
+    const key = await inline.getGroupSenderKey('g1');
+    expect(key.v).toBe(5);
+    expect(Array.isArray(key.chainKey)).toBe(true);
+    expect(inline.store.get('g1').groupV5).toBe(true);
+  });
+
+  it('one legacy member: fresh key falls back to v3 (.raw) despite the local flag being on', async () => {
+    const inline = makeGroupInline({ GROUP_RATCHET_V5: true, GROUP_MAX_SKIP: 50, MSG_PAD_BOUNDARY: 256, IV_BYTES: 12 });
+    inline.store.set('g2', { id: 'g2', members: [{ id: 'me' }, { id: 'legacy' }] }); // no caps = legacy
+    const key = await inline.getGroupSenderKey('g2');
+    expect(key.v).toBeUndefined();
+    expect(Array.isArray(key.raw)).toBe(true);
+    expect(inline.store.get('g2').groupV5).toBe(false);
   });
 });
 

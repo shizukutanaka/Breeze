@@ -28,7 +28,7 @@ is a single SHA-256 over 12 bytes; `fingerprint.js`'s iterated 5200×SHA-512 is 
 | `ktlog.js` audit path (`_auditKeyHistory`, wired into `initSessionV5Initiator` — warns, doesn't block) | **deployed** (inline mirror of the full `auditBundle`: `verifyChain` hash-chain tamper check + `checkRollover`; verdict `tampered`>`rolled`>`new`>`ok`, and a tampered chain is NOT pinned. Only the log-APPEND path `appendChainEntry` stays reference-only — the client verifies, the Worker appends) | ✅ yes (full auditBundle parity, incl. tampered-chain) |
 | `fingerprint.js` (Signal iterated safety number) | reference-only (roadmap) | tripwire only |
 | `franking.js` | reference-only (roadmap) | tripwire only |
-| `negotiate.js` | partially inline (capability negotiation hand-ported next to the X3DH block; `_capabilities` separately for crypto/idb presence checks) | — |
+| `negotiate.js` | **fully inline**: both `negotiate()` (2-party, `_peerSupportsX3dhV5`) and `negotiateGroup()` (N-party AND rule, `_negotiateGroupCaps`/`_computeGroupV5`, wired into `getGroupSenderKey`'s lazy format-freeze + the kick re-negotiation trigger) hand-ported next to the X3DH block. `_capabilities` stays separate (local crypto/idb presence checks, unrelated concept despite the similar name) | ✅ yes (both) |
 
 "Reference-only" = tested + ready but never wired in; deploying any is a **breaking** wire/
 display change needing coordinated rollout. `tests/mirror-drift.test.js`'s reference-drift

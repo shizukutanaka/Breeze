@@ -157,3 +157,98 @@ test('deleting a server-backed group as its creator removes it server-side too',
 
   await aliceCtx.close();
 });
+
+// Patches the served index.html so this context's client behaves as if GROUP_RATCHET_V5
+// were true, without touching the committed file — simulates a real client-version skew
+// (an upgraded client talking to a not-yet-upgraded one) rather than two copies of the
+// same build. CONFIG is a plain top-level const, not exposed on window/runtime-toggleable,
+// so a serve-time text patch is the only way to flip it for one browser context only.
+async function withGroupV5Patched(context) {
+  await context.route('**/*', async (route) => {
+    if (route.request().resourceType() !== 'document') return route.continue();
+    const resp = await route.fetch();
+    const body = (await resp.text()).replace('GROUP_RATCHET_V5: false,', 'GROUP_RATCHET_V5: true,');
+    if (!body.includes('GROUP_RATCHET_V5: true,')) throw new Error('withGroupV5Patched: marker not found — CONFIG moved, update this test');
+    await route.fulfill({ response: resp, body });
+  });
+}
+
+async function readGroupSenderKey(page, groupId) {
+  return page.evaluate((gid) => new Promise((resolve, reject) => {
+    const req = indexedDB.open('breeze-messenger', 5);
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      req.result.transaction('identity', 'readonly').objectStore('identity').get('gsk:' + gid).onsuccess = (e) => resolve(e.target.result);
+    };
+  }), groupId);
+}
+
+test('group-v5 negotiation: one legacy member keeps the whole group on the v3 fallback', async ({ browser }) => {
+  const aliceCtx = await browser.newContext(ctxOpts('203.0.113.16'));
+  const bobCtx = await browser.newContext(ctxOpts('203.0.113.17'));
+  await withGroupV5Patched(aliceCtx); // Alice's client supports group-v5...
+  // ...Bob's stays the pristine default (GROUP_RATCHET_V5: false) — a legacy peer.
+  const alice = await aliceCtx.newPage();
+  const bob = await bobCtx.newPage();
+
+  await alice.goto('/');
+  await createIdentity(alice, 'Alice');
+  const joinUrl = await createGroupWithInviteLink(alice, 'Mixed Group');
+  await joinGroup(bob, 'Bob', joinUrl, 'Mixed Group');
+
+  const aliceGroup = alice.locator('#msg-contacts .contact');
+  await expect(aliceGroup).toBeVisible();
+  await aliceGroup.click();
+  await waitForMemberCount(alice, 2);
+
+  const text = 'hello mixed group — ' + Date.now();
+  await alice.locator('#msg-input').fill(text);
+  await alice.locator('#b-msg-send').click();
+
+  // Strongest black-box proof: a real v5 emission would leave Bob unable to decrypt at all
+  // (indistinguishable from a dropped message) — so the plaintext actually arriving proves
+  // the v3 wire format was used despite Alice's local flag being on.
+  await expect(bob.locator('#msg-messages')).toContainText(text, { timeout: 15_000 });
+
+  const group = await readGroupFromIdb(alice);
+  expect(group.groupV5).toBe(false);
+  const sk = await readGroupSenderKey(alice, group.id);
+  expect(sk.v).toBeUndefined();
+  expect(Array.isArray(sk.raw)).toBe(true);
+
+  await aliceCtx.close();
+  await bobCtx.close();
+});
+
+test('group-v5 negotiation: both members supporting it upgrades the group to the v5 ratchet', async ({ browser }) => {
+  const aliceCtx = await browser.newContext(ctxOpts('203.0.113.18'));
+  const bobCtx = await browser.newContext(ctxOpts('203.0.113.19'));
+  await withGroupV5Patched(aliceCtx);
+  await withGroupV5Patched(bobCtx);
+  const alice = await aliceCtx.newPage();
+  const bob = await bobCtx.newPage();
+
+  await alice.goto('/');
+  await createIdentity(alice, 'Alice');
+  const joinUrl = await createGroupWithInviteLink(alice, 'V5 Group');
+  await joinGroup(bob, 'Bob', joinUrl, 'V5 Group');
+
+  const aliceGroup = alice.locator('#msg-contacts .contact');
+  await expect(aliceGroup).toBeVisible();
+  await aliceGroup.click();
+  await waitForMemberCount(alice, 2);
+
+  const text = 'hello v5 group — ' + Date.now();
+  await alice.locator('#msg-input').fill(text);
+  await alice.locator('#b-msg-send').click();
+  await expect(bob.locator('#msg-messages')).toContainText(text, { timeout: 15_000 });
+
+  const group = await readGroupFromIdb(alice);
+  expect(group.groupV5).toBe(true);
+  const sk = await readGroupSenderKey(alice, group.id);
+  expect(sk.v).toBe(5);
+  expect(Array.isArray(sk.chainKey)).toBe(true);
+
+  await aliceCtx.close();
+  await bobCtx.close();
+});
