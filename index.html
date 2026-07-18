@@ -4701,11 +4701,18 @@ async function initMessenger(dbName) {
     _dbg(null, 'Ed25519: supported');
   } catch { _hasEd25519 = false; _dbg(null, 'Ed25519: not available'); }
 
-  // v3.3: Post-Quantum readiness detection (ML-KEM in WebCrypto — draft WICG spec)
+  // Post-Quantum readiness detection (ML-KEM in WebCrypto). The WICG "Modern Algorithms in
+  // the Web Cryptography API" draft (2026) added SubtleCrypto.supports() as the spec'd
+  // feature-detection entry point and shifted the KEM primitive naming (encapsulateKey →
+  // encapsulateBits) across revisions — check all three so detection tracks whichever a
+  // browser ships first. ML-KEM is expected in browsers ~2027; industry is moving to
+  // X25519+ML-KEM-768 hybrids (Signal SPQR) for harvest-now-decrypt-later resistance.
   let _hasPQ = false;
   try {
-    // ML-KEM is not yet in browsers (expected 2027+), but detect early
-    if (crypto.subtle.encapsulateKey) { _hasPQ = true; _dbg(null, 'ML-KEM: native support detected'); }
+    const s = crypto.subtle;
+    _hasPQ = (typeof s.supports === 'function' && (s.supports('encapsulateBits', 'ML-KEM-768') || s.supports('importKey', 'ML-KEM-768')))
+      || typeof s.encapsulateBits === 'function' || typeof s.encapsulateKey === 'function';
+    if (_hasPQ) _dbg(null, 'ML-KEM: native support detected');
   } catch { _hasPQ = false; }
 
   // v3.3: Crypto capability summary

@@ -1,5 +1,17 @@
 # Changelog
 
+## Modernize post-quantum detection; document the web-delivery threat model (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+809 vitest + 9 Playwright E2E specs; `index.html` + `SECURITY.md`. `validate.sh` PASSED (35/36, 1 size warning).
+
+Two research-driven improvements (survey of 2024–2026 E2EE deployments), both low-risk:
+
+- **PQ readiness detection** now tracks the WICG "Modern Algorithms in the Web Cryptography API" draft: it checks `SubtleCrypto.supports('encapsulateBits'|'importKey', 'ML-KEM-768')` (the spec'd feature-detection entry point) in addition to the `encapsulateBits`/`encapsulateKey` function names, since the KEM primitive naming shifted across draft revisions. Previously only the older `encapsulateKey` name was checked, so a browser shipping the newer API would have been misreported as "no PQ." Verified it still reports `false` on browsers without ML-KEM (no false positive) and doesn't throw at boot (smoke test: zero console errors). This is detection/reporting only — the industry direction (Signal SPQR's X25519+ML-KEM-768 hybrid) is recorded as roadmap, not deployed.
+
+- **SECURITY.md now has an honest Threat Model & Limitations section.** The headline addition is the structural limit the research literature (WEBCAT / "Trust on Reload") repeatedly flags for *any* browser-delivered E2EE app: the encryption runs in code the server ships on every load, so a compromised/compelled server could serve a targeted key-exfiltrating page with no OS signature check to catch it — a property of web-delivered secure messengers generally, not a Breeze bug. Documents the mitigation ladder (native builds as the high-assurance path, reproducible `breeze.zip` + published SHA-256, SRI, and web-code-transparency/WEBCAT as roadmap) plus the other known limitations already true of the design (metadata exposure under Sealed Sender, symmetric-franking's lack of sender-binding, the opt-in/default-off hardening flags, classical-only key exchange today).
+
+---
+
 ## Group-v5 sender-key: real N-party capability negotiation (branch claude/nice-ride-T6yb0, 2026-07-11)
 
 809 vitest tests (+8 negotiation-mirror cases) + 9 Playwright E2E specs (+2 mixed-version cases); `index.html` + `tests/mirror-drift.test.js` + `tests/e2e/group.spec.js` + `CLAUDE.md`. `validate.sh` PASSED (35/36, 1 size warning).
