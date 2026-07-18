@@ -1,5 +1,13 @@
 # Changelog
 
+## E2E regression test for the KT /verify audit flow (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+809 vitest + 10 Playwright E2E specs (+1); test-only, no product-code change. `validate.sh` PASSED (35/36, 1 size warning).
+
+The `/verify` key-transparency wiring shipped earlier this session was only ever confirmed by a throwaway manual debug script — a real coverage gap for a security-facing feature. Adds `tests/e2e/verify.spec.js`: two isolated browser contexts sharing one in-memory Worker KV, Bob's identity created first (his prekey upload populates the `ktlog:<id>` log Alice's audit fetches), then Alice runs `/verify` and the test asserts the safety-number modal's live KT status line resolves to the green "verified" outcome — exercising the full `_auditKeyTransparency` -> `/api/ktlog/get` -> `_auditKeyHistory` (verifyChain + rollover) -> UI path — with a page-error guard proving no uncaught exceptions along the way.
+
+---
+
 ## Modernize post-quantum detection; document the web-delivery threat model (branch claude/nice-ride-T6yb0, 2026-07-11)
 
 809 vitest + 9 Playwright E2E specs; `index.html` + `SECURITY.md`. `validate.sh` PASSED (35/36, 1 size warning).
