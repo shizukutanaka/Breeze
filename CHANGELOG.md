@@ -1,5 +1,14 @@
 # Changelog
 
+## E2E coverage: group member-leave path + harden the /verify test (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+809 vitest + 11 Playwright E2E specs (+1); test-only, no product-code change. `validate.sh` PASSED (35/36, 1 size warning).
+
+- New `group.spec.js` test for the **non-creator member-leave** path (previously only the creator-*delete* path was covered). A non-creator deleting a group from their contact list routes to `/api/group/leave` (not `/delete`); the test asserts the server-side truth that distinguishes the two: the group still EXISTS afterward (the creator didn't delete it) but the leaver is gone from its roster — exercising the PCS-relevant leave endpoint end to end. Targets the group by name since `processJoinToken` also adds the creator as an individual contact.
+- Hardened `verify.spec.js` against a parallel-run flake: it now waits for the compose bar (`#msg-input-bar`, toggled visible by `openConversation`) before issuing `/verify`, since that command only opens the safety-number modal when a 1:1 conversation is actually active — under 2-worker load the contact-open click could otherwise still be in flight, leaving `activeContact` null. Confirmed stable across consecutive full-suite runs.
+
+---
+
 ## E2E regression test for the KT /verify audit flow (branch claude/nice-ride-T6yb0, 2026-07-11)
 
 809 vitest + 10 Playwright E2E specs (+1); test-only, no product-code change. `validate.sh` PASSED (35/36, 1 size warning).

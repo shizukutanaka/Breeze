@@ -158,6 +158,42 @@ test('deleting a server-backed group as its creator removes it server-side too',
   await aliceCtx.close();
 });
 
+test('a non-creator leaving a group removes only them server-side (group survives)', async ({ browser }) => {
+  const aliceCtx = await browser.newContext(ctxOpts('203.0.113.20'));
+  const bobCtx = await browser.newContext(ctxOpts('203.0.113.24'));
+  const alice = await aliceCtx.newPage();
+  const bob = await bobCtx.newPage();
+
+  await alice.goto('/');
+  await createIdentity(alice, 'Alice');
+  const joinUrl = await createGroupWithInviteLink(alice, 'Leave Group');
+  await joinGroup(bob, 'Bob', joinUrl, 'Leave Group');
+  const token = (await readGroupFromIdb(alice)).joinToken;
+
+  // Precondition: the server sees both members.
+  const before = await (await alice.request.post('/api/group/info', { data: { token } })).json();
+  expect(before.members.map(m => m.name).sort()).toEqual(['Alice', 'Bob']);
+
+  // Bob is NOT the creator (his local record has no matching createdBy), so deleting the
+  // group from his contact list routes to /api/group/leave, not /api/group/delete.
+  // processJoinToken also adds Alice as an individual contact, so target the group by name.
+  const bobGroup = bob.locator('#msg-contacts .contact', { hasText: 'Leave Group' });
+  await expect(bobGroup).toBeVisible();
+  await bobGroup.click({ button: 'right' });
+  await bob.locator('.ctx-menu .ctx-item', { hasText: 'Delete' }).click();
+  await bob.locator('dialog[aria-labelledby] [value="ok"]').click();
+  await expect(bob.locator('#msg-contacts .contact', { hasText: 'Leave Group' })).toHaveCount(0);
+
+  // Server-side truth: the group still EXISTS (Alice the creator didn't delete it) but Bob is
+  // gone from its roster — the leave path, distinct from the creator-delete 404 above.
+  const after = await (await alice.request.post('/api/group/info', { data: { token } })).json();
+  expect(after.members.map(m => m.name)).toEqual(['Alice']);
+  expect(after.members.some(m => m.name === 'Bob')).toBe(false);
+
+  await aliceCtx.close();
+  await bobCtx.close();
+});
+
 // Patches the served index.html so this context's client behaves as if GROUP_RATCHET_V5
 // were true, without touching the committed file — simulates a real client-version skew
 // (an upgraded client talking to a not-yet-upgraded one) rather than two copies of the

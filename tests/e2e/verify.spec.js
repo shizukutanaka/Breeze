@@ -55,13 +55,17 @@ test('/verify auto-verifies a fresh contact against the server key-transparency 
   const bobPub = await createIdentity(bob, 'Bob');
   await createIdentity(alice, 'Alice');
   await addAndOpen(alice, bobPub);
+  // /verify only opens the modal when a 1:1 conversation is actually active — wait for the
+  // compose bar (toggled visible by openConversation) so the click has fully taken effect
+  // before issuing the command (otherwise, under parallel load, activeContact can still be null).
+  await expect(alice.locator('#msg-input-bar')).toBeVisible();
 
   // /verify opens the safety-number modal with a live KT status line.
   await alice.locator('#msg-input').fill('/verify');
   await alice.locator('#msg-input').press('Enter');
 
   const modal = alice.locator('.overlay.overlay-dark');
-  await expect(modal).toBeVisible();
+  await expect(modal).toBeVisible({ timeout: 10_000 });
   const status = alice.locator('#kt-audit-status');
   await expect(status).toBeVisible();
 
