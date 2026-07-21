@@ -1,5 +1,13 @@
 # Changelog
 
+## E2E coverage: /admin demote reflected server-side (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+809 vitest + 12 Playwright E2E specs (+1); test-only, no product-code change. `validate.sh` PASSED (35/36, 1 size warning).
+
+Adds a `group.spec.js` test for the `/admin demote` command wired earlier this session (only `/admin kick` had coverage). The creator promotes Bob, asserts his id appears in the server's `admins` array via `/group/info`, then demotes him and asserts it's gone — while confirming Bob remains a *member* throughout (demote revokes only the admin role, distinct from kick). `handleGroupAdmin` stores the target's id in `group.admins`, so the test resolves Bob's id from the group's member list and checks membership/absence against the server's echoed array with `toPass` polling.
+
+---
+
 ## E2E coverage: group member-leave path + harden the /verify test (branch claude/nice-ride-T6yb0, 2026-07-11)
 
 809 vitest + 11 Playwright E2E specs (+1); test-only, no product-code change. `validate.sh` PASSED (35/36, 1 size warning).

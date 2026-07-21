@@ -131,6 +131,47 @@ test('group invite link: creator kicks a member via /admin, server-side too', as
   await bobCtx.close();
 });
 
+test('creator promotes then demotes a member via /admin, reflected server-side', async ({ browser }) => {
+  const aliceCtx = await browser.newContext(ctxOpts('203.0.113.25'));
+  const bobCtx = await browser.newContext(ctxOpts('203.0.113.26'));
+  const alice = await aliceCtx.newPage();
+  const bob = await bobCtx.newPage();
+
+  await alice.goto('/');
+  await createIdentity(alice, 'Alice');
+  const joinUrl = await createGroupWithInviteLink(alice, 'Admin Group');
+  await joinGroup(bob, 'Bob', joinUrl, 'Admin Group');
+
+  const aliceGroup = alice.locator('#msg-contacts .contact', { hasText: 'Admin Group' });
+  await expect(aliceGroup).toBeVisible();
+  await aliceGroup.click();
+  await waitForMemberCount(alice, 2);
+
+  const token = (await readGroupFromIdb(alice)).joinToken;
+  const bobId = (await readGroupFromIdb(alice)).members.find(m => m.name === 'Bob').id;
+  const adminsOnServer = async () => (await (await alice.request.post('/api/group/info', { data: { token } })).json()).admins;
+
+  // handleGroupAdmin stores the target's *id* in group.admins; /group/info echoes it back.
+  expect(await adminsOnServer()).not.toContain(bobId); // baseline: nobody promoted yet
+
+  await alice.locator('#msg-input').fill('/admin promote Bob');
+  await alice.locator('#msg-input').press('Enter');
+  await expect(async () => expect(await adminsOnServer()).toContain(bobId)).toPass({ timeout: 10_000, intervals: [500] });
+
+  // Demote (added this session alongside the existing promote) must reach the server and
+  // remove Bob from the admins array — distinct from kick (he stays a member, loses admin).
+  await alice.locator('#msg-input').fill('/admin demote Bob');
+  await alice.locator('#msg-input').press('Enter');
+  await expect(async () => expect(await adminsOnServer()).not.toContain(bobId)).toPass({ timeout: 10_000, intervals: [500] });
+
+  // Bob is still a member the whole time — demote only revokes the admin role.
+  const info = await (await alice.request.post('/api/group/info', { data: { token } })).json();
+  expect(info.members.some(m => m.name === 'Bob')).toBe(true);
+
+  await aliceCtx.close();
+  await bobCtx.close();
+});
+
 test('deleting a server-backed group as its creator removes it server-side too', async ({ browser }) => {
   const aliceCtx = await browser.newContext(ctxOpts('203.0.113.15'));
   const alice = await aliceCtx.newPage();
