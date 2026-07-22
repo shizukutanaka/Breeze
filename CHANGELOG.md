@@ -1,5 +1,13 @@
 # Changelog
 
+## Worker: expose caps from prekey/status (no-OTP capability read) (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+811 vitest tests (+2) + 12 Playwright E2E specs; `_worker.js` + `tests/worker.test.js`. `validate.sh` PASSED (35/36, 1 size warning); `index.html` untouched (gate-free).
+
+`handlePreKeyStatus` now returns the bundle's advertised `caps` array (and the legacy `x3dh` field) in the same shape `parsePeerCaps` consumes. The handler already reads the full prekey bundle and touches no OTP entry, so this is a purely additive, non-destructive read. It gives clients a path to read a peer's capabilities — e.g. the group-v5 negotiation floor — WITHOUT the one-time-prekey consumption that `/prekey/fetch(/batch)` incurs; the group-v5 `_fetchMemberCapsBatch` client path can migrate to it later to stop burning an OTP per member on a caps-only check. Two worker tests: caps/x3dh exposed and non-destructive (OTP count unchanged across repeated reads), and omitted for a legacy bundle that advertised neither.
+
+---
+
 ## E2E coverage: /admin demote reflected server-side (branch claude/nice-ride-T6yb0, 2026-07-11)
 
 809 vitest + 12 Playwright E2E specs (+1); test-only, no product-code change. `validate.sh` PASSED (35/36, 1 size warning).

@@ -2354,6 +2354,11 @@ async function handlePreKeyStatus(body, env, request) {
     replenishOTP: otpCount <= 5,
     replenishSPK: !!(bundle.uploadedAt && (Date.now() - bundle.uploadedAt) > 25 * TTL.DAY * 1000),
   };
+  // Expose the advertised capability set (same field shape parsePeerCaps consumes) so a client
+  // can read a peer's caps — e.g. the group-v5 negotiation floor — WITHOUT consuming an OTP the
+  // way prekey/fetch does. This handler already reads the full bundle and touches no OTP entry.
+  if (Array.isArray(bundle.caps)) result.caps = bundle.caps;
+  if (typeof bundle.x3dh === 'string') result.x3dh = bundle.x3dh;
   return json(result, 200, request);
 }
 

@@ -885,6 +885,33 @@ describe('prekey status — non-destructive OTP/SPK health check (/api/prekey/st
     const r2 = await handlePreKeyStatus({ userId: 'bad id!' }, makeEnv(), req);
     expect(r2.status).toBe(400);
   });
+
+  // Caps exposure: a client can read a peer's advertised capabilities (e.g. the group-v5
+  // negotiation floor) from status WITHOUT consuming an OTP the way prekey/fetch does.
+  it('exposes the uploaded caps array (and legacy x3dh field) without consuming an OTP', async () => {
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'pkcaps01', identityKey: 'pkcaps01IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0', 'o1'], caps: ['group-v5', 'x3dh-v5'], x3dh: 'v5' },
+      env, req,
+    );
+    const j = await (await handlePreKeyStatus({ userId: 'pkcaps01' }, env, req)).json();
+    expect(j.caps).toEqual(['group-v5', 'x3dh-v5']);
+    expect(j.x3dh).toBe('v5');
+    // Non-destructive: the OTP count is unchanged by the caps read.
+    expect(j.otpCount).toBe(2);
+    expect((await (await handlePreKeyStatus({ userId: 'pkcaps01' }, env, req)).json()).otpCount).toBe(2);
+  });
+
+  it('omits caps/x3dh for a legacy bundle that advertised neither', async () => {
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'pkcaps02', identityKey: 'pkcaps02IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0'] },
+      env, req,
+    );
+    const j = await (await handlePreKeyStatus({ userId: 'pkcaps02' }, env, req)).json();
+    expect(j.caps).toBeUndefined();
+    expect(j.x3dh).toBeUndefined();
+  });
 });
 
 describe('key-transparency log — standalone get endpoint (/api/ktlog/get)', () => {
