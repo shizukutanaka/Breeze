@@ -1,5 +1,17 @@
 # Changelog
 
+## Fix: receiving a message collapsed the compose box to 0px (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+811 vitest + 13 Playwright E2E specs (+2); `index.html` (CSS only) + `tests/e2e/messaging.spec.js`. `validate.sh` PASSED (35/36).
+
+**A real, default-path UX break — no flag, no opt-in, the most common interaction in a messenger.** `.smart-reply-bar` is `width:100%` but sits *inside* the `display:flex` `.input-bar` row, which had no `flex-wrap`. The moment a user received a message that triggers smart replies, the bar became a same-row flex sibling and consumed the whole width, squeezing `#msg-input` from **660px to 0px** — the recipient could no longer type a reply. Measured directly in a real browser before/after (660 -> 0, then 660 with the bar visible after the fix). Fix: `flex-wrap: wrap` on `.input-bar` plus `flex: 0 0 100%` on `.smart-reply-bar`, so the suggestions take a row of their own and the textarea keeps its own.
+
+This was found by first-principles analysis, not a bug report: an X3DH-interop E2E test kept failing on its *reverse* direction and looked like a parallel-run flake. It wasn't — the receiver genuinely could not type. Two E2E tests added:
+- **Smart-reply regression**: asserts the bar is visible AND the textarea keeps real width (>100px) AND — the strongest proof — that the recipient can actually type and send a reply that arrives.
+- **X3DH v5 interop** (the test that surfaced it): a `withConfigFlagPatched` helper text-patches `X3DH_V5_ENABLED: false` -> `true` for one browser context only, so a v5-enabled client talks to a pristine legacy client and messages must still flow **both** directions via capability fallback. This is the safety property that has to hold before `X3DH_V5_ENABLED` could ever default on.
+
+---
+
 ## Worker: expose caps from prekey/status (no-OTP capability read) (branch claude/nice-ride-T6yb0, 2026-07-11)
 
 811 vitest tests (+2) + 12 Playwright E2E specs; `_worker.js` + `tests/worker.test.js`. `validate.sh` PASSED (35/36, 1 size warning); `index.html` untouched (gate-free).

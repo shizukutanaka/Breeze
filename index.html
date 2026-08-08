@@ -337,7 +337,7 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 
 /* ─── Input bar ─── */
 .input-bar { padding-bottom: calc(4px + var(--kb-offset));
-  display: flex; align-items: flex-end;
+  display: flex; align-items: flex-end; flex-wrap: wrap;
   padding: 10px 12px; gap: 8px;
   border-top: 1px solid var(--b1); background: var(--s1);
   backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass)
@@ -367,7 +367,11 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .input-bar .send:active { transform: scale(.88); box-shadow: 0 1px 4px rgba(52,211,153,.2) }
 .smart-reply { font-size: 11px; padding: 6px 12px; border-radius: var(--rad-full); white-space: nowrap; transition: transform .1s var(--bounce) }
 .smart-reply:active { transform: scale(.92) }
-.smart-reply-bar { width: 100%; padding: 0 0 6px 0; gap: 6px; flex-wrap: wrap; display: flex }
+/* Own row inside the (now wrapping) .input-bar: as a plain width:100% flex sibling it consumed
+   the whole non-wrapping row and squeezed #msg-input to 0px — so receiving a message that
+   triggers smart replies made the compose box untypable (E2E-found, measured 660px -> 0px).
+   flex-basis:100% forces the line break so the textarea keeps a row of its own. */
+.smart-reply-bar { flex: 0 0 100%; width: 100%; padding: 0 0 6px 0; gap: 6px; flex-wrap: wrap; display: flex }
 .typing-ind { display: none; padding: 8px 16px; font-size: 12px; color: var(--t3) }
 .typing-ind.active { display: flex; align-items: center; gap: 8px; animation: typingAppear .25s var(--bounce) }
 @keyframes typingAppear { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
