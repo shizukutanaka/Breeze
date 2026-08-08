@@ -1,5 +1,19 @@
 # Changelog
 
+## Fix fingerprint.js to be byte-exact with libsignal; add its published test vectors (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+842 vitest (+5); `src/crypto/fingerprint.js` + `tests/fingerprint.test.js`. `validate.sh` PASSED. **`index.html` untouched** — gate-free.
+
+`fingerprint.js` (the strong Signal-style safety number, reference-only, slated to replace the deployed weak single-SHA-256/30-digit number) claimed to "follow Signal's NumericFingerprintGenerator" but **deviated from it**. libsignal seeds its iteration loop with the *bare* concatenation `version(2, big-endian) ‖ key ‖ identifier` and then runs exactly `iterations` rounds of `SHA-512(hash ‖ key)`. This module hashed the seed first — one extra round, and, far more importantly, an output that diverged from Signal's for identical inputs.
+
+Impact is **conformance, not weakness**: an extra hash round is not cryptographically weaker. But the divergence meant the module could never be checked against Signal's published vectors, so a real error in the iteration, the version prefix, the identifier binding, the 30-byte truncation, the 5-byte→5-digit chunking, or the sorted concatenation would have gone undetected until it shipped as users' displayed safety number.
+
+Fixed to seed from the bare concatenation, and the module is now **verified byte-exact against libsignal's own `NumericFingerprintGeneratorTest` vectors** (Alice/Bob 33-byte identity keys, `+14152222222`/`+14153333333`, 5200 iterations → `300354477692869396892869876765458257569162576843440918079131`). Five new tests pin: the exact vector, symmetry from Bob's perspective, stable-identifier binding, identity-key binding (one flipped bit changes the number — the MITM property the number exists for), and an independent re-implementation of libsignal's loop that must agree byte for byte.
+
+Still reference-only: the deployed `safetyNumber()` remains the legacy weak one, and its tripwire is unchanged. Migrating the client is a coordinated display change that needs `index.html` room (currently 14,999/15,000).
+
+---
+
 ## Add PQXDH hybrid key-agreement reference module (R1) (branch claude/nice-ride-T6yb0, 2026-07-11)
 
 837 vitest (+19: 17 new `tests/pq.test.js` + 2 tripwires) + 14 E2E; new `src/crypto/pq.js`, `tests/pq.test.js`, `tests/mirror-drift.test.js`, `CLAUDE.md`. `validate.sh` PASSED. **`index.html` untouched** — gate-free (it sits at 14,999/15,000).

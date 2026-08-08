@@ -6,7 +6,8 @@
 // a malicious relay performing MITM only needs to find a substituted identity
 // key whose 12-byte truncated single-hash collides — feasible to grind offline.
 //
-// This module follows Signal's NumericFingerprintGenerator:
+// This module is byte-exact with Signal's NumericFingerprintGenerator — verified against
+// libsignal's own published test vectors (see tests/fingerprint.test.js):
 //   - ITERATED hash (default 5200 rounds of SHA-512 over `hash ‖ key`), which
 //     makes precomputing a colliding key ~5200x more expensive per candidate.
 //   - Per-party fingerprint binds (version ‖ identityKey ‖ stableIdentifier).
@@ -78,12 +79,17 @@ export function createFingerprint(opts = {}) {
     throw new Error('key must be Uint8Array or base64 string');
   }
 
-  // Iterated hash: H_0 = SHA-512(version ‖ key ‖ identifier);
-  //                H_n = SHA-512(H_{n-1} ‖ key). First 30 bytes are the fingerprint.
+  // Iterated hash, byte-exact with libsignal's NumericFingerprintGenerator#getFingerprint:
+  //   hash = version(2, big-endian) ‖ key ‖ identifier   <- BARE concatenation, NOT hashed
+  //   repeat `iterations` times: hash = SHA-512(hash ‖ key)
+  // First 30 bytes are the fingerprint. The seed is deliberately un-hashed: an earlier
+  // revision here hashed it first, which cost an extra round and — far worse — made the
+  // output diverge from Signal's, so the published test vectors could not validate it.
+  // Those vectors now run in tests/fingerprint.test.js and pin this construction.
   async function fingerprintBytes(key, identifier = '') {
     const keyBytes = toBytes(key);
     const idBytes = typeof identifier === 'string' ? enc.encode(identifier) : toBytes(identifier);
-    let hash = new Uint8Array(await subtle.digest('SHA-512', concat(versionBytes, keyBytes, idBytes)));
+    let hash = concat(versionBytes, keyBytes, idBytes);
     for (let i = 0; i < iterations; i++) {
       hash = new Uint8Array(await subtle.digest('SHA-512', concat(hash, keyBytes)));
     }
