@@ -1,5 +1,23 @@
 # Changelog
 
+## Add PQXDH hybrid key-agreement reference module (R1) (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+837 vitest (+19: 17 new `tests/pq.test.js` + 2 tripwires) + 14 E2E; new `src/crypto/pq.js`, `tests/pq.test.js`, `tests/mirror-drift.test.js`, `CLAUDE.md`. `validate.sh` PASSED. **`index.html` untouched** — gate-free (it sits at 14,999/15,000).
+
+X25519 falls to a CRQC, and a relay holding sealed envelopes today can decrypt them later once one exists ("harvest now, decrypt later"). The industry answer is hybrid key agreement — mix a classical ECDH secret and a post-quantum KEM secret into one KDF so the result survives if *either* primitive does. Signal shipped this as PQXDH (2023) and extended it into the ratchet as SPQR (2025); TLS/IKEv2 use the same concatenate-then-KDF shape.
+
+`pq.js` implements PQXDH as a **minimal extension of the X3DH already in `ratchet.js`**: PQXDH derives `SK = KDF(DH1‖DH2‖DH3‖DH4‖SS)`, and DH1..DH4 are *exactly* the four DHs `x3dhInitiator` already computes. So the PQ upgrade is "append SS, change nothing else" — a test pins that the classical half stays byte-identical.
+
+Two deliberate design decisions:
+- **The KEM is injected, never hand-rolled.** Hand-writing a lattice KEM is a well-known way to ship a broken one, and the repo forbids new runtime deps. A `webCryptoKem()` adapter uses `crypto.subtle`'s ML-KEM once browsers ship it (WICG modern-algos draft; probes both `encapsulateBits` and the older `encapsulateKey` naming via the spec'd `SubtleCrypto.supports()`), and any `{encapsulate, decapsulate}` object works.
+- **Fail-closed: no "PQ if available, classical otherwise" path.** A silent downgrade is indistinguishable from an attacker forcing one, so classical-only stays an explicit caller decision. Tests assert it throws rather than ever returning a classical-only key.
+
+Also adds **transcript binding**: the formal analyses of PQXDH (Bhargavan–Jacomme–Kiefer–Schmidt, USENIX Sec '24; Cryspen's review) stress that the KEM public key and ciphertext must be bound, or peers can disagree about which encapsulation they completed. The combiner folds `SHA-256(pqpk‖ct)` into the HKDF info, and tests confirm a swapped ciphertext or PQ public key changes the SK instead of silently agreeing.
+
+Reference-only, per the repo's established pattern (like `fingerprint.js`/`franking.js`): two tripwires now pin that status, so the day it is deployed the guard fails and forces a real mirror-drift test plus a CLAUDE.md update. The deployed client today only *detects* ML-KEM; it never key-agrees with it.
+
+---
+
 ## Deploy key commitment (I16): close the invisible-salamanders gap (branch claude/nice-ride-T6yb0, 2026-07-11)
 
 818 vitest (+7) + 14 Playwright E2E; `index.html` + `tests/mirror-drift.test.js` + `CLAUDE.md`. `validate.sh` PASSED (35/36, 14,999 lines).

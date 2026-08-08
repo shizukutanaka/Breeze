@@ -745,6 +745,10 @@ describe('reference-drift tracking — modules that are tested references, NOT y
   const REFERENCE_ONLY = [
     { module: 'fingerprint.js (Signal iterated 5200×SHA-512 safety number)', marker: 'fingerprintBytes' },
     { module: 'franking.js (abuse-report message franking)', marker: 'createFranking' },
+    // pq.js (PQXDH hybrid). Reference-only until browsers ship ML-KEM (WICG modern-algos,
+    // ~2027) — the client currently only DETECTS ML-KEM support, it never key-agrees with it.
+    { module: 'pq.js (PQXDH hybrid X25519+ML-KEM key agreement)', marker: 'createPQXDH' },
+    { module: 'pq.js transcript-bound combiner', marker: 'breeze-pqxdh-v1' },
     { module: 'franking.js verifyReport path', marker: 'verifyReport' },
     // ktlog.js's audit path (verifyChain + checkRollover) GRADUATED to deployed — the inline
     // _auditKeyHistory now ports the full auditBundle; see the "KTLog audit mirror" block above
