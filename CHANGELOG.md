@@ -1,5 +1,19 @@
 # Changelog
 
+## Deploy key commitment (I16): close the invisible-salamanders gap (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+818 vitest (+7) + 14 Playwright E2E; `index.html` + `tests/mirror-drift.test.js` + `CLAUDE.md`. `validate.sh` PASSED (35/36, 14,999 lines).
+
+**The defense existed in `src/crypto/ratchet.js` but had never been mirrored into the deployed client** — so unlike every other hardening in this codebase, this gap was *not* flag-gated: shipped AES-GCM was non-committing on the default and only path, for every user. AES-GCM is not key-committing, so a single ciphertext can be crafted to open validly under two different keys ("invisible salamanders" / AEAD partitioning, Dodis et al.; cf. Chan–Rogaway CTX and Bellare–Hoang committing-AEAD transforms). Key commitment is also the building block the franking design (I17) needs.
+
+Deployed inline `_keyCommit` = `HKDF(msgKey, 0³², 'breeze-commit', 32)`, byte-identical to the reference, shipped as `cm` on every 1:1 and group frame and verified before the AEAD result is trusted, at all three receive sites (in-order 1:1, skipped-key 1:1, group). **Backward compatible and unflagged**: verification is *verify-if-present*, so frames from un-upgraded senders (no `cm`) still decrypt, and the commitment is derived before `zeroBuffer` wipes the message key.
+
+**Mirror-drift earned its keep here.** A first inline draft shipped `cm` as base64 while the reference ships `cm: arr(cm)` (a byte array) — a silent wire drift that would have made upgraded and un-upgraded clients reject each other's messages in production. The guard failed immediately and the inline was corrected to the reference shape. New tests pin: byte-parity with `ratchet.js keyCommitment`, the `arr()` wire shape, binding/determinism, all three verify sites plus the verify-if-present branch, the derive-before-zeroBuffer ordering, and behaviourally — a tampered `cm` is rejected while a frame with no `cm` still decrypts (together proving the rejection comes from the commitment check, not the AEAD).
+
+Known limit (documented, not closed here): verify-if-present cannot stop a malicious sender from simply omitting `cm`. Full binding needs a `commit` capability negotiation of the same shape as X3DH/group v5 — a deliberate follow-up.
+
+---
+
 ## Fix: receiving a message collapsed the compose box to 0px (branch claude/nice-ride-T6yb0, 2026-07-11)
 
 811 vitest + 13 Playwright E2E specs (+2); `index.html` (CSS only) + `tests/e2e/messaging.spec.js`. `validate.sh` PASSED (35/36).

@@ -5505,6 +5505,12 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'hkdf'); }
   }
 
+  // I16 key commitment (inline mirror of ratchet.js keyCommitment + its cm checks): AES-GCM is not
+  // key-committing — one ciphertext can be crafted to open under two keys (invisible salamanders).
+  // Wire MUST stay arr() to match the reference. _cmOk = verify-if-present, constant-time.
+  async function _keyCommit(mk) { return arr(await hkdf(u8(mk), new Uint8Array(32), 'breeze-commit', 32)); }
+  async function _cmOk(p, mk) { return !p.cm || await timingSafeEqual(u8(p.cm).join(','), (await _keyCommit(mk)).join(',')); }
+
   // --- Session store (IDB) with CryptoKey serialization ---
   async function getSession(peerId) {
     const sess = await dbGet('identity', 'sess:' + peerId);
@@ -5840,8 +5846,9 @@ async function initMessenger(dbName) {
         const importedKey = await crypto.subtle.importKey('raw', msgKey, { name: 'AES-GCM' }, false, ['encrypt']);
         ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, importedKey, padded);
       }
+      const cm = await _keyCommit(msgKey); // must precede zeroBuffer — it wipes msgKey
       zeroBuffer(msgKey); // Best-effort key erasure
-      const innerMsg = JSON.stringify({ v: 4, i: arr(iv), d: arr(new Uint8Array(ct)), rk: sess.ratchetPub, c: sess.sendCounter });
+      const innerMsg = JSON.stringify({ v: 4, i: arr(iv), d: arr(new Uint8Array(ct)), rk: sess.ratchetPub, c: sess.sendCounter, cm });
       // X3DH v5 first message only: wrap for the responder's bootstrap, drop the marker.
       let outMsg = innerMsg;
       if (sess._pkm) {
@@ -5890,6 +5897,7 @@ async function initMessenger(dbName) {
           if (sess.skippedKeys?.[skKey]) {
             const mkData = sess.skippedKeys[skKey];
             delete sess.skippedKeys[skKey];
+            if (!(await _cmOk(p, u8(mkData)))) { _dbg(null, 'key commitment mismatch (skipped key)'); return null; }
             const importedKey = await crypto.subtle.importKey('raw', u8(mkData), { name: 'AES-GCM' }, false, ['decrypt']);
             const padded = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, importedKey, u8(p.d)));
             const text = _unpadAndDecompress(padded, p.v);
@@ -5933,6 +5941,7 @@ async function initMessenger(dbName) {
         if (!sess.seenMsgIds) sess.seenMsgIds = [];
         sess.seenMsgIds.push(msgId);
         if (sess.seenMsgIds.length > CONFIG.REPLAY_CACHE_SIZE) sess.seenMsgIds = sess.seenMsgIds.slice(-CONFIG.REPLAY_CACHE_SIZE);
+        if (!(await _cmOk(p, msgKey))) { _dbg(null, 'key commitment mismatch'); return null; }
         const importedKey = await crypto.subtle.importKey('raw', msgKey, { name: 'AES-GCM' }, false, ['decrypt']);
         let padded;
         const wResult = await workerCrypto('decrypt', msgKey, u8(p.i), u8(p.d).buffer.slice(u8(p.d).byteOffset, u8(p.d).byteOffset + u8(p.d).byteLength));
@@ -6246,7 +6255,7 @@ async function initMessenger(dbName) {
       const iv = crypto.getRandomValues(new Uint8Array(CONFIG.IV_BYTES));
       const importedKey = await crypto.subtle.importKey('raw', msgKeyBits, { name: 'AES-GCM' }, false, ['encrypt']);
       const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, importedKey, padded);
-      return JSON.stringify({ v: version, g: true, i: arr(iv), d: arr(new Uint8Array(ct)), c: sk.counter - 1, ep: sk.epoch });
+      return JSON.stringify({ v: version, g: true, i: arr(iv), d: arr(new Uint8Array(ct)), c: sk.counter - 1, ep: sk.epoch, cm: await _keyCommit(msgKeyBits) });
     } catch(_e) { _dbg(_e, 'encryptGroupMsg'); }
   }
 
@@ -6301,6 +6310,7 @@ async function initMessenger(dbName) {
         msgKeyBits = await hkdf(new Uint8Array(peerSK.raw), new Uint8Array(new Uint32Array([p.c]).buffer), 'group-msg', 32);
       }
 
+      if (!(await _cmOk(p, msgKeyBits))) { _dbg(null, 'group key commitment mismatch'); return null; }
       const importedKey = await crypto.subtle.importKey('raw', msgKeyBits, { name: 'AES-GCM' }, false, ['decrypt']);
       const padded = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, importedKey, u8(p.d)));
       const textLen = new DataView(padded.buffer).getUint16(0);

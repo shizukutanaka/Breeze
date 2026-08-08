@@ -31,6 +31,14 @@ import { checkRollover, auditBundle, appendChainEntry } from '../src/crypto/ktlo
 import { negotiateGroup } from '../src/crypto/negotiate.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+
+// index.html's encrypt/decrypt now call _keyCommit/_cmOk as free variables (I16 key commitment).
+// Inject REFERENCE-derived implementations into every inline harness below, so the wire tests
+// exercise the reference's own commitment bytes — a drift in the inline formula then fails the
+// dedicated byte-parity block ("key commitment mirror") rather than silently passing here.
+const _refRatchet = createRatchet();
+const _injKeyCommit = async (mk) => Array.from(await _refRatchet.keyCommitment(new Uint8Array(mk)));
+const _injCmOk = async (p, mk) => !p.cm || Array.from(new Uint8Array(p.cm)).join(',') === (await _injKeyCommit(mk)).join(',');
 const html = readFileSync(join(HERE, '..', 'index.html'), 'utf8');
 
 // Extract the inline at-rest block from index.html. If the markers move, fail loudly
@@ -394,12 +402,14 @@ function makeGroupInline(config) {
   const { _computeGroupV5 } = makeX3dhInline(null, config, 'me');
   const factory = new Function(
     'crypto', 'CONFIG', 'dbGet', 'dbPut', 'hkdf', 'arr', 'u8', '_dbg', 'TextEncoder', 'TextDecoder', '_computeGroupV5',
+    '_keyCommit', '_cmOk',
     html.slice(gs, ge) +
       '\nreturn { getGroupSenderKey, encryptGroupMsg, decryptGroupMsg };',
   );
   const api = factory(
     globalThis.crypto, config, dbGet, dbPut, inlineKdf.hkdf,
     (a) => Array.from(a), (a) => new Uint8Array(a), () => {}, TextEncoder, TextDecoder, _computeGroupV5,
+    _injKeyCommit, _injCmOk,
   );
   return { ...api, store };
 }
@@ -670,6 +680,67 @@ describe('getGroupSenderKey freezes format from the negotiated decision, not the
 const worker = readFileSync(join(HERE, '..', '_worker.js'), 'utf8');
 const deployed = html + '\n' + worker;
 
+// ---------------------------------------------------------------------------
+// I16 KEY-COMMITMENT MIRROR — graduated from reference-only.
+// AES-GCM is not key-committing: one ciphertext can be crafted to open validly
+// under two different keys (invisible salamanders / AEAD partitioning). The
+// deployed client now ships cm = HKDF(msgKey, 0^32, 'breeze-commit', 32) on every
+// 1:1 and group frame and verifies it before trusting the AEAD.
+//
+// The WIRE SHAPE matters as much as the formula: ratchet.js ships `cm: arr(cm)`
+// (a byte array). An inline copy that shipped, say, base64 would make new and old
+// clients silently reject each other's messages — this block pins both.
+// ---------------------------------------------------------------------------
+describe('key commitment mirror (I16) — inline _keyCommit vs ratchet.js keyCommitment', () => {
+  const R = createRatchet();
+  // Rebuild the inline _keyCommit exactly as index.html defines it (same free vars).
+  const kcLine = html.slice(html.indexOf('async function _keyCommit(mk)')).split('\n')[0];
+  const inlineKeyCommit = new Function(
+    'crypto', 'hkdf', 'arr', 'u8',
+    kcLine + '\nreturn _keyCommit;',
+  )(
+    globalThis.crypto,
+    async (ikm, salt, info, length) => new Uint8Array(await globalThis.crypto.subtle.deriveBits(
+      { name: 'HKDF', hash: 'SHA-256', salt, info: new TextEncoder().encode(info) },
+      await globalThis.crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']), length * 8,
+    )),
+    (a) => Array.from(a), (a) => new Uint8Array(a),
+  );
+
+  it('produces byte-identical commitments to the reference for the same message key', async () => {
+    for (const seed of [0, 7, 255]) {
+      const mk = new Uint8Array(32).fill(seed);
+      expect(await inlineKeyCommit(mk)).toEqual(Array.from(await R.keyCommitment(mk)));
+    }
+  });
+
+  it('ships the reference WIRE SHAPE: a 32-entry byte array, not base64', async () => {
+    const cm = await inlineKeyCommit(new Uint8Array(32).fill(1));
+    expect(Array.isArray(cm)).toBe(true);
+    expect(cm.length).toBe(32);
+  });
+
+  it('is binding (different keys differ) and deterministic (same key repeats)', async () => {
+    const a = await inlineKeyCommit(new Uint8Array(32).fill(1));
+    const b = await inlineKeyCommit(new Uint8Array(32).fill(2));
+    expect(a).not.toEqual(b);
+    expect(await inlineKeyCommit(new Uint8Array(32).fill(1))).toEqual(a);
+  });
+
+  it('verifies cm on BOTH 1:1 receive paths and the group path (verify-if-present)', () => {
+    expect(html.split('await _cmOk(p, ').length - 1).toBe(3);
+    // _cmOk must be permissive when cm is absent, so legacy senders still decrypt.
+    expect(html).toContain('return !p.cm ||');
+  });
+
+  it('derives the commitment BEFORE zeroBuffer wipes the message key', () => {
+    const enc = html.indexOf('const cm = await _keyCommit(msgKey);');
+    const zero = html.indexOf('zeroBuffer(msgKey); // Best-effort key erasure');
+    expect(enc).toBeGreaterThan(0);
+    expect(enc).toBeLessThan(zero);
+  });
+});
+
 describe('reference-drift tracking — modules that are tested references, NOT yet deployed', () => {
   const REFERENCE_ONLY = [
     { module: 'fingerprint.js (Signal iterated 5200×SHA-512 safety number)', marker: 'fingerprintBytes' },
@@ -810,12 +881,14 @@ function makeSessionDevice(myKeys, myPubB64) {
   const factory = new Function(
     'CONFIG', '_hasX25519', 'dbGet', 'dbPut', 'zeroBuffer', 'workerCrypto', 'postAPIRaw', 'API',
     '_signingKey', '_signingPubB64', 'signMessage', 'verifySignature', 'myKeys', 'myPubB64', '_dbg', 'arr', 'u8',
+    'timingSafeEqual',
     html.slice(bs, be) + '\nreturn { encryptFor, decryptFrom };',
   );
   const R = factory(
     CONFIG, true, dbGet, dbPut, () => {}, async () => null, async () => { throw new Error('not used'); }, null,
     null, '', async () => null, async () => true, myKeys, myPubB64, () => {},
     (a) => Array.from(a), (a) => new Uint8Array(a),
+    async (x, y) => x === y,
   );
   return R;
 }
@@ -834,6 +907,30 @@ describe('Bare-IK session bootstrap — inline encryptFor/decryptFrom convergenc
     const B = makeSessionDevice(bob.keys, bob.pubB64);
     const wire = await A.encryptFor('hello bob, fresh contact', bob.pubB64);
     expect(await B.decryptFrom(wire, alice.pubB64)).toBe('hello bob, fresh contact');
+  });
+
+  // I16 behavioural proof: the commitment is actually ENFORCED on the deployed path, and is
+  // verify-if-present so a legacy sender (no cm) still decrypts. These use the real inline
+  // _keyCommit/_cmOk (both live inside this extracted window).
+  it('rejects a message whose key commitment was tampered with', async () => {
+    const alice = await genSessionIdentity();
+    const bob = await genSessionIdentity();
+    const A = makeSessionDevice(alice.keys, alice.pubB64);
+    const B = makeSessionDevice(bob.keys, bob.pubB64);
+    const wire = JSON.parse(await A.encryptFor('attack at dawn', bob.pubB64));
+    expect(Array.isArray(wire.cm)).toBe(true); // cm is on the wire at all
+    wire.cm[0] = (wire.cm[0] + 1) & 0xff;      // flip one byte of the commitment
+    expect(await B.decryptFrom(JSON.stringify(wire), alice.pubB64)).toBeNull();
+  });
+
+  it('still decrypts a legacy frame that carries no cm at all (verify-if-present)', async () => {
+    const alice = await genSessionIdentity();
+    const bob = await genSessionIdentity();
+    const A = makeSessionDevice(alice.keys, alice.pubB64);
+    const B = makeSessionDevice(bob.keys, bob.pubB64);
+    const wire = JSON.parse(await A.encryptFor('legacy sender speaking', bob.pubB64));
+    delete wire.cm;                             // exactly what an un-upgraded client sends
+    expect(await B.decryptFrom(JSON.stringify(wire), alice.pubB64)).toBe('legacy sender speaking');
   });
 
   it('converges regardless of which side speaks first', async () => {
