@@ -5775,3 +5775,75 @@ describe('validateUserId upper-bound (item 65)', () => {
     expect([400, 413]).toContain(res.status);
   });
 });
+
+// ---------------------------------------------------------------------------
+// UTF-8 SIGNING CONTRACT (E2E-found). The client's signMessage() signs
+// `new TextEncoder().encode(text)` — UTF-8 bytes. The worker used btoa() to rebuild the
+// signed string, and btoa() encodes LATIN-1, so the two disagree above U+007F:
+//   - U+0100+ (Japanese, emoji): btoa() THREW InvalidCharacterError -> uncaught 500.
+//   - U+0080..U+00FF ("café"): btoa() succeeded but produced the WRONG bytes -> a valid
+//     signature was rejected 403.
+// Group names are free-form user text and Breeze ships EN+JA, so a signed rename to a
+// Japanese name — an entirely ordinary action — was broken. utf8ToB64() fixes it and is
+// byte-identical to btoa() for ASCII, so previously-working signed ops are unaffected.
+// ---------------------------------------------------------------------------
+describe('signed group rename — UTF-8 signing contract', () => {
+  const rq = () => apiRequest('/api/group/rename', {});
+  const tb64 = (b) => Buffer.from(b).toString('base64');
+
+  async function registerSigner(env, id) {
+    const kp = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const raw = new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey));
+    await env.KV.put(`prekey:${id}`, JSON.stringify({ edIdentityKey: tb64(raw) }));
+    // Mirrors the client's signMessage(): sign the UTF-8 bytes of the string.
+    return async (text) => tb64(new Uint8Array(
+      await crypto.subtle.sign({ name: 'Ed25519' }, kp.privateKey, new TextEncoder().encode(text)),
+    ));
+  }
+
+  async function signedRename(name) {
+    const env = makeEnv();
+    const created = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, rq());
+    const { token } = await created.json();
+    const sign = await registerSigner(env, 'creator1');
+    const ts = Date.now();
+    const sig = await sign(`breeze-group-rename:${token}:creator1:${ts}:${name}`);
+    const res = await handleGroupRename({ token, adminId: 'creator1', name, ts, sig }, env, rq());
+    const info = await (await handleGroupInfo({ token }, env, rq())).json();
+    return { status: res.status, name: info.name };
+  }
+
+  it('accepts an ASCII name (regression control — must stay byte-identical to btoa)', async () => {
+    const r = await signedRename('My Group');
+    expect(r.status).toBe(200);
+    expect(r.name).toBe('My Group');
+  });
+
+  it('accepts a Japanese name instead of throwing an uncaught 500', async () => {
+    const r = await signedRename('日本語グループ');
+    expect(r.status).toBe(200);
+    expect(r.name).toBe('日本語グループ');
+  });
+
+  it('accepts an emoji name', async () => {
+    expect((await signedRename('team 🎉')).status).toBe(200);
+  });
+
+  it('accepts a Latin-1 accented name (btoa silently signed the wrong bytes before)', async () => {
+    const r = await signedRename('café crew');
+    expect(r.status).toBe(200);
+    expect(r.name).toBe('café crew');
+  });
+
+  it('still rejects a forged signature on a non-ASCII name', async () => {
+    const env = makeEnv();
+    const created = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, rq());
+    const { token } = await created.json();
+    await registerSigner(env, 'creator1');
+    const res = await handleGroupRename(
+      { token, adminId: 'creator1', name: '日本語', ts: Date.now(), sig: tb64(new Uint8Array(64)) }, env, rq());
+    expect(res.status).toBe(403);
+  });
+});

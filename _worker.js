@@ -1252,7 +1252,7 @@ async function checkGroupAuth(env, request, action, token, actorId, ts, sig, bin
     const pkRaw = await kvGet(env, `prekey:${actorId}`);
     const bundle = pkRaw ? safeJsonParse(pkRaw) : null;
     if (!bundle || typeof bundle.edIdentityKey !== 'string' || !bundle.edIdentityKey) return json({ error: 'No registered identity key', code: 'NO_IDENTITY_KEY' }, 403, request);
-    const ok = await verifyEd25519(bundle.edIdentityKey, btoa(`breeze-group-${action}:${token}:${actorId}:${ts}:${bind}`), sig);
+    const ok = await verifyEd25519(bundle.edIdentityKey, utf8ToB64(`breeze-group-${action}:${token}:${actorId}:${ts}:${bind}`), sig);
     if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
     return null;
   }
@@ -1654,7 +1654,7 @@ async function handlePushSubscribe(body, env, request) {
       // swapped in — exactly the "register their own device" attack this auth exists to stop.
       // The client signs the same raw fields it sends (pre-sanitization).
       const subBind = `${subscription.endpoint || ''}:${subscription.keys?.p256dh || ''}:${subscription.keys?.auth || ''}`;
-      const ok = await verifyEd25519(bundle.edIdentityKey, btoa(`breeze-push-subscribe:${userId}:${ts}:${subBind}`), sig);
+      const ok = await verifyEd25519(bundle.edIdentityKey, utf8ToB64(`breeze-push-subscribe:${userId}:${ts}:${subBind}`), sig);
       if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
     } else if (env.PUSH_REQUIRE_AUTH === 'true') {
       return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
@@ -1719,7 +1719,7 @@ async function handlePushUnsubscribe(body, env, request) {
       if (!bundle || typeof bundle.edIdentityKey !== 'string' || !bundle.edIdentityKey)
         return json({ error: 'No registered identity key', code: 'NO_IDENTITY_KEY' }, 403, request);
       // Bind the specific endpoint being removed so a subscribe signature cannot be replayed here.
-      const ok = await verifyEd25519(bundle.edIdentityKey, btoa(`breeze-push-unsubscribe:${userId}:${ts}:${endpoint}`), sig);
+      const ok = await verifyEd25519(bundle.edIdentityKey, utf8ToB64(`breeze-push-unsubscribe:${userId}:${ts}:${endpoint}`), sig);
       if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
     } else if (env.PUSH_REQUIRE_AUTH === 'true') {
       return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
@@ -2092,6 +2092,21 @@ async function handleAccountDelete(body, env, request) {
 
 // I1/G2: decode base64 to bytes + verify an Ed25519 signature. Used to
 // authenticate uploaded signed pre-keys so a malicious relay can't inject its own.
+// Base64 of a string's UTF-8 bytes — the encoding clients actually sign.
+// signMessage() signs `new TextEncoder().encode(text)` (UTF-8), but btoa() encodes LATIN-1, so
+// for any character above U+007F the two disagree. Two real failure modes, both reachable via a
+// signed group rename (group names are free-form user text, and Breeze ships EN+JA):
+//   - U+0100 and above (Japanese, emoji): btoa() THROWS InvalidCharacterError -> uncaught 500.
+//   - U+0080..U+00FF ("cafe" with an accent): btoa() succeeds but yields the WRONG bytes, so a
+//     legitimate signature is rejected with 403 SIG_INVALID.
+// For pure-ASCII input this is byte-identical to btoa(), so already-working signed operations
+// (kick/promote/demote/leave/delete) are unaffected.
+function utf8ToB64(str) {
+  let s = '';
+  for (const b of new TextEncoder().encode(str)) s += String.fromCharCode(b);
+  return btoa(s);
+}
+
 function b64ToBytes(s) {
   return Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 }

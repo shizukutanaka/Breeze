@@ -1,5 +1,22 @@
 # Changelog
 
+## Fix: signed group rename broke on non-ASCII names (btoa is Latin-1, clients sign UTF-8) (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+847 vitest (+5) + 14 E2E; `_worker.js` + `tests/worker.test.js`. `validate.sh` PASSED. **`index.html` untouched** — gate-free.
+
+**A real bug on an ordinary action in a product that ships EN+JA.** The client's `signMessage()` signs `new TextEncoder().encode(text)` — UTF-8 bytes. The Worker rebuilt that same string for verification with `btoa(...)`, and **`btoa()` encodes Latin-1**, so the two disagree for anything above U+007F. Group names are free-form user text, and `sanitizeString()` only strips control characters, so a non-ASCII name reaches the signing string intact. Two distinct failure modes:
+
+- **U+0100 and above (Japanese, emoji)** — `btoa()` throws `InvalidCharacterError`, uncaught, at `_worker.js:1255`. A signing client renaming a group to 日本語グループ got a **500**.
+- **U+0080–U+00FF (e.g. `café`)** — `btoa()` succeeds but encodes the *wrong bytes*, so a perfectly valid signature was rejected with **403 SIG_INVALID**.
+
+Found by auditing the Worker's signature-verification sites for encoding assumptions, then reproduced against the real handler (the first repro returned 403 `NO_IDENTITY_KEY` and hid the fault — the `btoa` line is only reached once an Ed25519 identity is registered, which is what a real signing client has).
+
+Fixed with `utf8ToB64()` (base64 of the UTF-8 bytes), applied at the three verification sites whose signed string embeds input that is *not* regex-validated: group auth (`bind` carries the rename name) and push subscribe/unsubscribe (`endpoint` is an externally-supplied URL). The remaining `btoa` challenge sites are provably ASCII (`validateUserId`, the `[a-z0-9_]` alias filter) and were left alone. **`utf8ToB64` is byte-identical to `btoa` for ASCII**, so already-working signed operations (kick/promote/demote/leave/delete) are unaffected — pinned by a regression control test.
+
+Five tests: ASCII control, Japanese, emoji, Latin-1 accented, and — importantly — that a **forged signature on a non-ASCII name is still rejected 403**, so the fix widened the accepted encoding without weakening authentication.
+
+---
+
 ## Fix fingerprint.js to be byte-exact with libsignal; add its published test vectors (branch claude/nice-ride-T6yb0, 2026-07-11)
 
 842 vitest (+5); `src/crypto/fingerprint.js` + `tests/fingerprint.test.js`. `validate.sh` PASSED. **`index.html` untouched** — gate-free.
