@@ -1,0 +1,16 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/
+# dependencies
+node_modules/
+venv/
+__pycache__/
+*.pyc
+# env / secrets
+.env
+.env.local
+*.secret
