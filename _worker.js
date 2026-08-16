@@ -1572,14 +1572,20 @@ async function encryptPushPayload(subtle, subscription, plaintext) {
   // RFC 8188 §2: random salt → CEK (128-bit) + nonce (96-bit)
   const salt2   = crypto.getRandomValues(new Uint8Array(16));
   const ikm2Key = await subtle.importKey('raw', new Uint8Array(ikmBits), 'HKDF', false, ['deriveBits']);
+  // RFC 8188 §2.2 defines CEK = HMAC(PRK, "Content-Encoding: aes128gcm" || 0x00 || 0x01)[0..15].
+  // That trailing 0x01 is HKDF-Expand's block counter (RFC 5869 §2.3), which WebCrypto appends
+  // ITSELF — so `info` must stop at the 0x00. Passing the counter explicitly made WebCrypto add a
+  // second one, yielding the wrong CEK/nonce and payloads no browser could decrypt (the round-trip
+  // test hid it by hard-coding the same two strings). Matches the WebPush-info step above, which
+  // already, correctly, omits the counter.
   const cekBits   = await subtle.deriveBits(
     { name: 'HKDF', hash: 'SHA-256', salt: salt2,
-      info: new TextEncoder().encode('Content-Encoding: aes128gcm\x00\x01') },
+      info: new TextEncoder().encode('Content-Encoding: aes128gcm\x00') },
     ikm2Key, 128
   );
   const nonceBits = await subtle.deriveBits(
     { name: 'HKDF', hash: 'SHA-256', salt: salt2,
-      info: new TextEncoder().encode('Content-Encoding: nonce\x00\x01') },
+      info: new TextEncoder().encode('Content-Encoding: nonce\x00') },
     ikm2Key, 96
   );
 

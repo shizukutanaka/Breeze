@@ -1,5 +1,21 @@
 # Changelog
 
+## Fix: Web Push payloads were undecryptable by every browser (RFC 8188 deviation) (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+850 vitest (+3) + 14 E2E; `_worker.js` + `tests/push.test.js`. `validate.sh` PASSED. **`index.html` untouched** — gate-free.
+
+**Every encrypted push notification Breeze sent was undecryptable by any browser.** RFC 8188 §2.2 defines `CEK = HMAC(PRK, "Content-Encoding: aes128gcm" || 0x00 || 0x01)[0..15]`, where the trailing `0x01` is HKDF-Expand's block counter (RFC 5869 §2.3) — which WebCrypto's `deriveBits({name:'HKDF'})` appends *itself*. `encryptPushPayload` passed that counter explicitly in the `info` string, so the real computation became `… || 0x00 || 0x01 || 0x01`: one byte too many, and a CEK and nonce no user agent agrees with. The same function gets the RFC 8291 `WebPush: info` step right (no trailing counter), which is what marks the two CEK/nonce lines as an oversight rather than intent.
+
+**Why it survived:** `tests/push.test.js`'s `decryptPushPayload` helper hard-coded the *same* two wrong info strings, so the round-trip test validated the implementation against a copy of its own defect and passed while production was broken — the "tests green, production broken" failure mode this repo's mirror-drift discipline exists to prevent, reproduced in a hand-written test.
+
+Proven both directions before and after: running the real `encryptPushPayload` and decrypting as a browser does (RFC-conformant derivation) **failed with `OperationError`** pre-fix and **succeeds** post-fix; an independent raw-HMAC computation of RFC 8188's formula matches the corrected `\x00` form and not the shipped `\x00\x01` form.
+
+The test helper was rewritten to derive CEK/nonce from the RFC formula via **raw HMAC** (`PRK = HMAC(salt, IKM)`, `OKM = HMAC(PRK, info || 0x00 || 0x01)`) instead of re-stating the implementation's info strings, so it now models a browser and structurally cannot re-mirror an info-string drift. Confirmed it has teeth: reverting the two worker strings makes the round-trip tests **fail**. Three conformance tests added pinning the CEK rule, the nonce rule, and that the deployed worker contains the conformant strings.
+
+Everything else in the function was already correct and is unchanged: the RFC 8291 IKM step, the `0x02` last-record padding delimiter, and the RFC 8188 header layout `salt(16) ‖ rs(4,BE) ‖ idlen(1) ‖ as_public(65) ‖ ciphertext`. `buildVapidJwt` (RFC 8292) was not audited — a candidate for the same treatment.
+
+---
+
 ## Fix: signed group rename broke on non-ASCII names (btoa is Latin-1, clients sign UTF-8) (branch claude/nice-ride-T6yb0, 2026-07-11)
 
 847 vitest (+5) + 14 E2E; `_worker.js` + `tests/worker.test.js`. `validate.sh` PASSED. **`index.html` untouched** — gate-free.

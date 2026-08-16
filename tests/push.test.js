@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import {
   encryptPushPayload,
@@ -22,6 +23,21 @@ async function makeBrowserSub(endpoint = 'https://fcm.googleapis.com/fcm/send/te
     sub: { endpoint, keys: { p256dh: bytesToB64url(pub), auth: bytesToB64url(auth) } },
     kp, pub, auth,
   };
+}
+
+// RFC 5869 HKDF + RFC 8188 §2.2, implemented from raw HMAC so the tests are pinned to the
+// SPEC rather than to the implementation:
+//   PRK = HMAC-SHA-256(salt, IKM)
+//   OKM = HMAC-SHA-256(PRK, info || 0x00 || 0x01)[0..L-1]
+// The 0x01 is HKDF-Expand's block counter; a single block covers every length used here (<=32B).
+async function rfc8188Derive(salt, ikm, infoStr, lengthBytes) {
+  const hmac = async (keyBytes, data) => {
+    const k = await subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    return new Uint8Array(await subtle.sign('HMAC', k, data));
+  };
+  const prk = await hmac(salt, ikm);
+  const info = concatBytes(new TextEncoder().encode(infoStr), new Uint8Array([0x00, 0x01]));
+  return (await hmac(prk, info)).slice(0, lengthBytes);
 }
 
 // Reverse of encryptPushPayload: decrypt a browser-side push record.
@@ -49,18 +65,14 @@ async function decryptPushPayload(subtle, browserKP, clientPubRaw, authSecret, e
     ikmKey, 256
   );
 
-  // RFC 8188: derive CEK + nonce
-  const ikm2Key   = await subtle.importKey('raw', new Uint8Array(ikmBits), 'HKDF', false, ['deriveBits']);
-  const cekBits   = await subtle.deriveBits(
-    { name: 'HKDF', hash: 'SHA-256', salt: salt2,
-      info: new TextEncoder().encode('Content-Encoding: aes128gcm\x00\x01') },
-    ikm2Key, 128
-  );
-  const nonceBits = await subtle.deriveBits(
-    { name: 'HKDF', hash: 'SHA-256', salt: salt2,
-      info: new TextEncoder().encode('Content-Encoding: nonce\x00\x01') },
-    ikm2Key, 96
-  );
+  // RFC 8188 §2.2: derive CEK + nonce.
+  // Computed from the RFC's own formula via RAW HMAC — deliberately NOT by calling deriveBits with
+  // a hand-written info string. An earlier version of this helper mirrored the worker's info
+  // strings verbatim, so it round-tripped the implementation against a copy of its own bug and
+  // passed while no real browser could decrypt anything. Deriving from the spec instead means this
+  // helper models a browser, and a future info-string drift fails here.
+  const cekBits   = await rfc8188Derive(salt2, new Uint8Array(ikmBits), 'Content-Encoding: aes128gcm', 16);
+  const nonceBits = await rfc8188Derive(salt2, new Uint8Array(ikmBits), 'Content-Encoding: nonce', 12);
 
   // Decrypt
   const aesKey = await subtle.importKey('raw', new Uint8Array(cekBits), 'AES-GCM', false, ['decrypt']);
@@ -75,6 +87,47 @@ async function decryptPushPayload(subtle, browserKP, clientPubRaw, authSecret, e
 // ---------------------------------------------------------------------------
 // encryptPushPayload
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// RFC 8188 §2.2 CONFORMANCE GUARD.
+// The shipped worker derived CEK/nonce with info='Content-Encoding: aes128gcm\x00\x01'. That
+// trailing 0x01 is HKDF-Expand's block counter (RFC 5869 §2.3), which WebCrypto appends itself —
+// so passing it explicitly produced ...||0x00||0x01||0x01 and a CEK/nonce that NO browser agrees
+// with. Every push payload was undecryptable in production while the round-trip test passed,
+// because that test hard-coded the same two wrong strings.
+// These assertions compare deriveBits against the RFC's raw-HMAC definition, so the correct info
+// string is pinned independently of what the implementation happens to do.
+// ---------------------------------------------------------------------------
+describe('RFC 8188 key derivation conformance', () => {
+  const PRK_IKM = new Uint8Array(32).fill(7);
+  const SALT = new Uint8Array(16).fill(9);
+  const viaDeriveBits = async (info, bits) => {
+    const k = await subtle.importKey('raw', PRK_IKM, 'HKDF', false, ['deriveBits']);
+    return new Uint8Array(await subtle.deriveBits(
+      { name: 'HKDF', hash: 'SHA-256', salt: SALT, info: new TextEncoder().encode(info) }, k, bits));
+  };
+
+  it('CEK: info must terminate at 0x00 — WebCrypto supplies the 0x01 counter', async () => {
+    const spec = await rfc8188Derive(SALT, PRK_IKM, 'Content-Encoding: aes128gcm', 16);
+    expect(Array.from(await viaDeriveBits('Content-Encoding: aes128gcm\x00', 128))).toEqual(Array.from(spec));
+    // The shipped-then-fixed form must NOT match the spec (this is the bug, pinned).
+    expect(Array.from(await viaDeriveBits('Content-Encoding: aes128gcm\x00\x01', 128))).not.toEqual(Array.from(spec));
+  });
+
+  it('nonce: same rule', async () => {
+    const spec = await rfc8188Derive(SALT, PRK_IKM, 'Content-Encoding: nonce', 12);
+    expect(Array.from(await viaDeriveBits('Content-Encoding: nonce\x00', 96))).toEqual(Array.from(spec));
+    expect(Array.from(await viaDeriveBits('Content-Encoding: nonce\x00\x01', 96))).not.toEqual(Array.from(spec));
+  });
+
+  it('the deployed worker uses the RFC-conformant info strings', async () => {
+    const src = readFileSync(new URL('../_worker.js', import.meta.url), 'utf8');
+    expect(src).toContain("'Content-Encoding: aes128gcm\\x00'");
+    expect(src).toContain("'Content-Encoding: nonce\\x00'");
+    expect(src).not.toContain("'Content-Encoding: aes128gcm\\x00\\x01'");
+    expect(src).not.toContain("'Content-Encoding: nonce\\x00\\x01'");
+  });
+});
 
 describe('encryptPushPayload', () => {
   it('returns null when subscription has no keys', async () => {
