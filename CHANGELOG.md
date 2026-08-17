@@ -1,5 +1,19 @@
 # Changelog
 
+## Audit the PoW work factor; pin it independently of the implementation's arithmetic (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+853 vitest (+2); `tests/pow.test.js` only — no production change. `validate.sh` PASSED.
+
+Audited the hashcash verifier in `handleAliasSet` (`_worker.js`) and `src/crypto/pow.js` against hashcash/anti-DoS first principles. **The bit test is exactly correct** — proved empirically by generating digests with precisely 8, 9 and 10 leading zero bits and confirming the verifier accepts at difficulty D and rejects at D+1 in every case. Boundaries are sound too: D=32 requires all top 32 bits zero, and D=0 makes `(2**32) >>> 0` wrap to 0 so the comparison rejects everything (fail-closed, and unreachable anyway since `MIN_POW_DIFFICULTY` defaults to 20).
+
+The gap was in the **test**, not the code: `tests/pow.test.js`'s "top difficulty bits are zero" case restated the implementation's own target arithmetic, `(2 ** (32 - difficulty)) >>> 0`. An off-by-one in that formula — which would silently halve the work factor per bit — would have been mirrored by the test and passed.
+
+This is now the **third** instance of the same systemic pattern in this repo: a test that re-states a production formula instead of deriving it independently. The first instance was not theoretical — it let the RFC 8188 push CEK bug ship, making every push payload undecryptable while the suite stayed green. Two tests added that count the digest's leading zero bits **directly**, pinning the work factor without reference to the target arithmetic, in both directions: the digest must carry at least `difficulty` leading zero bits, and `verify` must reject the same token when the claimed difficulty is raised past the digest's real zero count (so difficulty can't be silently weaker than advertised).
+
+Also confirmed while auditing, and left as-is because it is bounded and already documented in-code: within the 10-minute freshness window one solved token can register several aliases, since the challenge binds the identity key rather than the alias. The far-future-timestamp variant of that replay was already fixed via `MAX_POW_FUTURE_MS`, and the per-IP rate limiter bounds the rest. Tightening it further would mean binding the alias into the challenge, which needs a client change — blocked by the 15,000-line `index.html` gate (currently 14,999).
+
+---
+
 ## Spec-conformance audit of the deployed crypto surface; pin the RFC 8291 IKM step (branch claude/nice-ride-T6yb0, 2026-07-11)
 
 851 vitest (+1); `tests/push.test.js` only — no production change. `validate.sh` PASSED.

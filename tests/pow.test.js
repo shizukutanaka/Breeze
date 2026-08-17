@@ -65,6 +65,42 @@ describe('solve', () => {
     expect(first32).toBeLessThan(target);
   }, 60000);
 
+  // The test above restates the implementation's own target arithmetic
+  // ((2 ** (32 - difficulty)) >>> 0), so an off-by-one in that formula would be mirrored here
+  // and pass. That exact pattern — a test re-stating a production formula instead of deriving
+  // it — is what let the RFC 8188 push CEK bug ship undetected. Count the leading zero bits
+  // DIRECTLY instead, so the work factor is pinned independently of the arithmetic.
+  it('work factor: the digest has at least `difficulty` leading zero BITS (counted directly)', async () => {
+    const { challenge, nonce, difficulty } = await getToken();
+    const digest = new Uint8Array(await subtle.digest('SHA-256', new TextEncoder().encode(`${challenge}:${nonce}`)));
+    let zeros = 0;
+    for (const b of digest) {
+      if (b === 0) { zeros += 8; continue; }
+      let x = b;
+      while ((x & 0x80) === 0) { zeros++; x = (x << 1) & 0xff; }
+      break;
+    }
+    expect(zeros).toBeGreaterThanOrEqual(difficulty);
+  }, 60000);
+
+  it('work factor is exact: verify rejects the same token at difficulty+1 above its real zeros', async () => {
+    // Guards the other direction — that difficulty is not silently weaker than advertised.
+    // Raising the claimed difficulty past the digest's actual leading-zero count must fail.
+    const token = await getToken();
+    const digest = new Uint8Array(await subtle.digest('SHA-256',
+      new TextEncoder().encode(`${token.challenge}:${token.nonce}`)));
+    let zeros = 0;
+    for (const b of digest) {
+      if (b === 0) { zeros += 8; continue; }
+      let x = b;
+      while ((x & 0x80) === 0) { zeros++; x = (x << 1) & 0xff; }
+      break;
+    }
+    const overclaim = { ...token, difficulty: zeros + 1 };
+    const r = await verify(subtle, overclaim, PUB);
+    expect(r.ok).toBe(false);
+  }, 60000);
+
   it('clamps difficulty below minimum to 16', async () => {
     // getToken() requested difficulty 0; the module must have clamped it up to the 16
     // minimum. Reusing the shared solve here avoids a second ~65k-hash solve (de-flakes
