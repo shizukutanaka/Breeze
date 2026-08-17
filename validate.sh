@@ -120,6 +120,12 @@ echo ""
 
 # ═══ Gate 5: Performance ═══
 echo "Gate 5: Performance"
+# CSP script-src is hash-pinned (no 'unsafe-inline'), so the hash MUST track index.html.
+# A stale hash blocks the entire app in production and is invisible to the E2E harness, which
+# serves index.html without _headers — so drift has to fail here. Fix: node tools/csp-hash.mjs --write
+if node tools/csp-hash.mjs --check >/dev/null 2>&1; then pass "CSP script-src hash pinned + no unsafe-inline" 4
+else fail "CSP script-src hash STALE or unsafe-inline present (node tools/csp-hash.mjs --write)" 4; fi
+
 LINES=$(wc -l < index.html)
 if [ "$LINES" -lt 12000 ]; then pass "Total lines: $LINES (<12K)" 5
 elif [ "$LINES" -lt 15000 ]; then warn "Total lines: $LINES (12-15K)" 5

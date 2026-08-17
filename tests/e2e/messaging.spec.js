@@ -15,6 +15,7 @@
 // IndexedDB (a standard Web API, unlike the app's own closure state) and every other
 // step is driven through real clicks/inputs against the shipped UI.
 import { test, expect } from '@playwright/test';
+import { createHash } from 'node:crypto';
 
 async function createIdentity(page, name) {
   await page.goto('/');
@@ -85,13 +86,26 @@ test('two browsers exchange a 1:1 message over the sealed-sender relay', async (
 // Serve-time patch flipping one CONFIG flag for a single browser context, without touching the
 // committed file — simulates real client-version skew (an upgraded client talking to a legacy
 // one). CONFIG is a plain top-level const, not runtime-toggleable, so a text patch is the only way.
+// script-src is hash-pinned (no 'unsafe-inline'), and the E2E server computed that hash for the
+// body IT served. Patching CONFIG here changes those bytes, so the pinned hash no longer matches
+// and the browser refuses the whole bundle. Re-pin for the patched body — same security property
+// (hash-pinned, no 'unsafe-inline'), digest just tracks what we actually serve.
+function repinnedCspHeaders(resp, body) {
+  const csp = resp.headers()['content-security-policy'];
+  if (!csp) return resp.headers();
+  const hashes = [...body.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)]
+    .map((m) => `'sha256-${createHash('sha256').update(m[1], 'utf8').digest('base64')}'`);
+  if (!hashes.length) return resp.headers();
+  return { ...resp.headers(), 'content-security-policy': csp.replace(/script-src [^;]+/, `script-src 'self' ${hashes.join(' ')}`) };
+}
+
 async function withConfigFlagPatched(context, flag) {
   await context.route('**/*', async (route) => {
     if (route.request().resourceType() !== 'document') return route.continue();
     const resp = await route.fetch();
     const body = (await resp.text()).replace(`${flag}: false,`, `${flag}: true,`);
     if (!body.includes(`${flag}: true,`)) throw new Error(`withConfigFlagPatched: '${flag}: false,' marker not found — CONFIG moved, update this test`);
-    await route.fulfill({ response: resp, body });
+    await route.fulfill({ response: resp, body, headers: repinnedCspHeaders(resp, body) });
   });
 }
 

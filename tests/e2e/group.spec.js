@@ -4,6 +4,7 @@
 // screen, contact click, compose, send). Exercises createGroup/createGroupInviteLink/
 // processJoinToken/startGroupMemberPoll/encryptGroupMsg/distributeSenderKey end to end.
 import { test, expect } from '@playwright/test';
+import { createHash } from 'node:crypto';
 
 // Distinct synthetic CF-Connecting-IP per context — see messaging.spec.js for why: without
 // it both contexts share the local harness's single 'unknown'-IP rate-limit bucket.
@@ -240,13 +241,26 @@ test('a non-creator leaving a group removes only them server-side (group survive
 // (an upgraded client talking to a not-yet-upgraded one) rather than two copies of the
 // same build. CONFIG is a plain top-level const, not exposed on window/runtime-toggleable,
 // so a serve-time text patch is the only way to flip it for one browser context only.
+// script-src is hash-pinned (no 'unsafe-inline'), and the E2E server computed that hash for the
+// body IT served. Patching CONFIG here changes those bytes, so the pinned hash no longer matches
+// and the browser refuses the whole bundle. Re-pin for the patched body — same security property
+// (hash-pinned, no 'unsafe-inline'), digest just tracks what we actually serve.
+function repinnedCspHeaders(resp, body) {
+  const csp = resp.headers()['content-security-policy'];
+  if (!csp) return resp.headers();
+  const hashes = [...body.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)]
+    .map((m) => `'sha256-${createHash('sha256').update(m[1], 'utf8').digest('base64')}'`);
+  if (!hashes.length) return resp.headers();
+  return { ...resp.headers(), 'content-security-policy': csp.replace(/script-src [^;]+/, `script-src 'self' ${hashes.join(' ')}`) };
+}
+
 async function withGroupV5Patched(context) {
   await context.route('**/*', async (route) => {
     if (route.request().resourceType() !== 'document') return route.continue();
     const resp = await route.fetch();
     const body = (await resp.text()).replace('GROUP_RATCHET_V5: false,', 'GROUP_RATCHET_V5: true,');
     if (!body.includes('GROUP_RATCHET_V5: true,')) throw new Error('withGroupV5Patched: marker not found — CONFIG moved, update this test');
-    await route.fulfill({ response: resp, body });
+    await route.fulfill({ response: resp, body, headers: repinnedCspHeaders(resp, body) });
   });
 }
 

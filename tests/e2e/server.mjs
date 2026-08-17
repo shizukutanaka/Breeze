@@ -10,6 +10,7 @@
 // this script rewrites just that one line when serving index.html — a serve-time
 // transform for the test harness only; the committed file is never touched.
 import { createServer } from 'node:http';
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -45,6 +46,15 @@ const _headersFile = await readFile(join(ROOT, '_headers'), 'utf8').catch(() => 
 const _cspMatch = _headersFile.match(/^\s*Content-Security-Policy:\s*(.+)$/m);
 const REAL_CSP = _cspMatch ? _cspMatch[1].trim() : null;
 
+// Rewrite script-src's sha256 entries to match the body actually being served. Mirrors what
+// tools/csp-hash.mjs does for the real file; kept here so the harness stays self-consistent.
+function repinCsp(csp, html) {
+  const hashes = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)]
+    .map((m) => `'sha256-${createHash('sha256').update(m[1], 'utf8').digest('base64')}'`);
+  if (!hashes.length) return csp;
+  return csp.replace(/script-src [^;]+/, `script-src 'self' ${hashes.join(' ')}`);
+}
+
 async function serveStatic(req, res, pathname) {
   const rel = pathname === '/' ? '/index.html' : pathname;
   const filePath = join(ROOT, rel.replace(/^\/+/, ''));
@@ -57,7 +67,13 @@ async function serveStatic(req, res, pathname) {
         throw new Error('E2E server: index.html\'s API-detection line moved/changed — update server.mjs\'s API_LINE_RE to match, or this test harness will silently run with no backend.');
       }
       body = body.replace(API_LINE_RE, "const API = '/api';");
-      if (REAL_CSP) headers['Content-Security-Policy'] = REAL_CSP;
+      // script-src is hash-pinned in _headers (no 'unsafe-inline'), and the patch above changed
+      // the script bytes — so the shipped hash no longer matches what we are about to serve.
+      // Recompute it for THIS body, exactly as production's hash matches production's file.
+      // Without this the browser refuses the whole bundle and every spec fails with an invisible
+      // UI. The security property under test is preserved: the policy is still hash-pinned with
+      // no 'unsafe-inline'; only the digest tracks the patched bytes.
+      if (REAL_CSP) headers['Content-Security-Policy'] = repinCsp(REAL_CSP, body);
     }
     res.writeHead(200, headers);
     res.end(body);

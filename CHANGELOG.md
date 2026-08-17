@@ -1,5 +1,23 @@
 # Changelog
 
+## Remove `script-src 'unsafe-inline'`: hash-pin the CSP (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+853 vitest + **16** Playwright E2E (+2); `_headers`, `validate.sh`, `SECURITY.md`, new `tools/csp-hash.mjs` + `tests/e2e/csp.spec.js`, and two E2E harness fixes. `index.html` byte-unchanged at 14,999 lines — gate-free.
+
+`script-src 'unsafe-inline'` is the policy that lets an injected `<script>` or `onerror=` payload run, i.e. lets an XSS read the identity private key out of IndexedDB. That is the core web risk SECURITY.md's own threat model names, and the codebase already flagged it inline (see the translate-indicator comment: *"under 'unsafe-inline' CSP an injected onerror= payload would execute"*). It was there only because the single-file architecture puts all JS in an inline `<script>`.
+
+Replaced with a **hash-pinned `script-src`**: the browser runs only the bundle whose SHA-256 was published. Feasible because the app has **zero inline event handlers, zero `javascript:` URLs and no `eval`/`new Function`** — verified before starting. This raises the bar for *injection*; it does not constrain a *compromised server*, which can publish a new hash — the ceiling already documented in the threat model.
+
+The hazard is that the hash covers exact script bytes, so any edit to `index.html` invalidates it and a stale hash blocks the entire app. Three mechanisms make that impossible to ship silently:
+- `tools/csp-hash.mjs --write/--check` computes and verifies the hashes; **`validate.sh` runs `--check`**, so an ordinary edit now *blocks the deploy* until the hash is regenerated (verified by editing the script and watching the gate flip to BLOCKED).
+- `tests/e2e/csp.spec.js` boots the app under the real policy and asserts zero violations, plus a **teeth test** proving a corrupted hash is genuinely fatal — without which the boot test could pass for the wrong reason.
+
+The hash lives **only in `_headers`, not in the `<meta>` CSP**. Browsers enforce the *intersection* of all policies, so the strict header alone makes the hash binding in production, while the permissive meta copy keeps serve-time HTML rewrites working. Pinning both broke all 14 E2E specs on the first attempt.
+
+That failure was worth having: it surfaced that `tests/e2e/server.mjs` already applies the real `_headers` CSP (a good existing design), while also rewriting one line of `index.html` — so the shipped hash could never match what it served. The harness and the two `route.fulfill` config-patching helpers now re-pin the digest for the body they actually serve, preserving the property under test (hash-pinned, no `'unsafe-inline'`) rather than weakening it.
+
+---
+
 ## Audit the PoW work factor; pin it independently of the implementation's arithmetic (branch claude/nice-ride-T6yb0, 2026-07-11)
 
 853 vitest (+2); `tests/pow.test.js` only — no production change. `validate.sh` PASSED.

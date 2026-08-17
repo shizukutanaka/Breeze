@@ -42,6 +42,13 @@ Mitigations, in order of assurance:
 - **Reproducible artifact**: `build.sh` produces `breeze.zip`; publishing and pinning its
   SHA-256 lets a motivated user diff the served page against a known-reviewed build.
 - **Subresource Integrity** pins the one external script (`lang.js`).
+- **Hash-pinned `script-src`** (no `'unsafe-inline'`): the browser executes only the inline
+  bundle whose SHA-256 was published in `_headers`. An injected `<script>` or `onerror=`
+  payload is refused, so an HTML-injection bug can no longer reach the identity private key in
+  IndexedDB. `tools/csp-hash.mjs --check` runs in `validate.sh`, so a stale hash blocks the
+  deploy rather than the app; `tests/e2e/csp.spec.js` boots the app under the real policy and
+  proves a corrupted hash is fatal. Note this raises the bar for *injection*, not for a
+  *compromised server*, which can simply publish a new hash — see the ceiling above.
 - **Roadmap**: web-app code transparency (e.g. WEBCAT-style enrollment / signed,
   append-only web-app manifests) to give the PWA a verifiable-code guarantee closer to
   the native builds. Tracked, not yet deployed.
@@ -89,7 +96,7 @@ Breeze uses the following cryptographic primitives:
 
 | Header | Value |
 |--------|-------|
-| Content-Security-Policy | default-src 'self'; script-src 'self' 'unsafe-inline'; ... |
+| Content-Security-Policy | `default-src 'self'; script-src 'self' 'sha256-…'` (hash-pinned — **no `'unsafe-inline'`**), `object-src 'none'`, `base-uri 'self'`, `frame-ancestors 'none'`, `require-trusted-types-for 'script'` |
 | Cross-Origin-Opener-Policy | same-origin |
 | Permissions-Policy | camera=(self), microphone=(self), geolocation=() |
 | Strict-Transport-Security | max-age=63072000; includeSubDomains; preload |
