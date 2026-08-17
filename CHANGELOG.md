@@ -1,5 +1,19 @@
 # Changelog
 
+## Spec-conformance audit of the deployed crypto surface; pin the RFC 8291 IKM step (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+851 vitest (+1); `tests/push.test.js` only — no production change. `validate.sh` PASSED.
+
+Audited four deployed surfaces against their published specs, using the method that found the four real bugs earlier this session (shipped code vs authoritative spec, proven empirically rather than by reading). **Three surfaces came back clean, and are recorded as such rather than padded with invented findings:**
+
+- **VAPID / `buildVapidJwt` (RFC 8292, RFC 7515/7518)** — conformant. `aud` is the bare push-service origin with no path (the classic VAPID bug, avoided), `exp` is 12 h against the 24 h cap, `sub` is a valid `mailto:` URI, base64url is unpadded and URL-safe, and the ES256 signature is raw 64-byte r‖s as JWS requires (not DER). Verified by building a real JWT and validating its signature with the `k=` public key exactly as a push service does. Existing tests already pin all of this, including signature verification.
+- **Group v5 sender-key ratchet** — the hypothesis that it lacked the 1:1 path's forged-counter bound was **wrong**: `targetC - counter > GROUP_MAX_SKIP` rejects oversized gaps, and consumed skipped keys are deleted, so a replayed counter fails closed.
+- **Sealed-sender poll/ack** — the same-millisecond high-water-mark race (two envelopes sharing a `ts`, the second deleted unpolled) is **already fixed**: `handleSealedSend` forces strictly-increasing `ts` with a +1 ms bump.
+
+One genuine gap was closed. The RFC 8291 §3.3 IKM step (`key_info = "WebPush: info" ‖ 0x00 ‖ ua_public ‖ as_public`) is correct, but was the last place `tests/push.test.js` still **restated a production info string instead of deriving it** — the exact pattern that let the CEK/nonce bug ship undetected. Appending `\x01` there, the same mistake that was shipped one line below, would have been mirrored by the test decryptor and passed. It is now pinned against the RFC formula computed from raw HMAC, with the counter-appended form asserted *not* to match, plus a source assertion that the worker uses the counter-free string.
+
+---
+
 ## Fix: Web Push payloads were undecryptable by every browser (RFC 8188 deviation) (branch claude/nice-ride-T6yb0, 2026-07-11)
 
 850 vitest (+3) + 14 E2E; `_worker.js` + `tests/push.test.js`. `validate.sh` PASSED. **`index.html` untouched** — gate-free.

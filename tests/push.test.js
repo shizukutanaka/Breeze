@@ -114,6 +114,40 @@ describe('RFC 8188 key derivation conformance', () => {
     expect(Array.from(await viaDeriveBits('Content-Encoding: aes128gcm\x00\x01', 128))).not.toEqual(Array.from(spec));
   });
 
+  it('IKM (RFC 8291 §3.3): key_info must terminate at the as_public key — no counter byte', async () => {
+    // The one remaining place the test decryptor still restates a production info string. It is
+    // correct today, but was UNPINNED: appending \x01 here — the exact mistake that was shipped on
+    // the CEK line — would have been mirrored by the decryptor and passed. Pin it to the spec.
+    //   key_info = "WebPush: info" || 0x00 || ua_public || as_public
+    //   IKM      = HMAC(HMAC(auth_secret, ecdh_secret), key_info || 0x01)   <- 0x01 is HKDF's counter
+    const ecdh = new Uint8Array(32).fill(3);
+    const auth = new Uint8Array(16).fill(5);
+    const uaPub = new Uint8Array(65).fill(4);
+    const asPub = new Uint8Array(65).fill(6);
+    const keyInfo = concatBytes(new TextEncoder().encode('WebPush: info\x00'), uaPub, asPub);
+
+    const hmac = async (k, d) => new Uint8Array(await subtle.sign('HMAC',
+      await subtle.importKey('raw', k, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']), d));
+    const prk = await hmac(auth, ecdh);
+    const spec = (await hmac(prk, concatBytes(keyInfo, new Uint8Array([0x01])))).slice(0, 32);
+
+    const key = await subtle.importKey('raw', ecdh, 'HKDF', false, ['deriveBits']);
+    const viaHkdf = new Uint8Array(await subtle.deriveBits(
+      { name: 'HKDF', hash: 'SHA-256', salt: auth, info: keyInfo }, key, 256));
+    expect(Array.from(viaHkdf)).toEqual(Array.from(spec));
+
+    // ...and the counter-appended form must NOT match the spec.
+    const wrong = new Uint8Array(await subtle.deriveBits(
+      { name: 'HKDF', hash: 'SHA-256', salt: auth,
+        info: concatBytes(keyInfo, new Uint8Array([0x01])) }, key, 256));
+    expect(Array.from(wrong)).not.toEqual(Array.from(spec));
+
+    // And the deployed worker must use the counter-free form.
+    const src = readFileSync(new URL('../_worker.js', import.meta.url), 'utf8');
+    expect(src).toContain("'WebPush: info\\x00'");
+    expect(src).not.toContain("'WebPush: info\\x00\\x01'");
+  });
+
   it('nonce: same rule', async () => {
     const spec = await rfc8188Derive(SALT, PRK_IKM, 'Content-Encoding: nonce', 12);
     expect(Array.from(await viaDeriveBits('Content-Encoding: nonce\x00', 96))).toEqual(Array.from(spec));
