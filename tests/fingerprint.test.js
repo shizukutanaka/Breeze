@@ -231,3 +231,28 @@ describe('scannable (QR) safety number', () => {
     expect(bad.match).toBe(false);
   });
 });
+
+describe('deployed safety number: measured strength (guards a corrected claim)', () => {
+  // An earlier fingerprint.js header called the deployed number "weak … feasible to grind
+  // offline" (~40 bits) and used that to justify a migration. It is wrong, and this pins why:
+  // each group is (b[2i]<<8 | b[2i+1]) % 100000, and a 16-bit value maxes at 65535 < 100000, so
+  // the modulo is the IDENTITY — all 12 bytes (96 bits) are displayed with nothing lost. 96 bits
+  // is infeasible to collide, so the migration is a display/UX improvement, not a fix.
+  it('the modulo loses no entropy: every 16-bit group round-trips', () => {
+    for (const v of [0, 1, 12345, 65534, 65535]) {
+      expect(v % 100000).toBe(v);
+    }
+  });
+
+  it('the deployed format displays 6 groups covering 12 bytes = 96 bits', async () => {
+    const combined = 'AAA' + 'BBB';
+    const hash = new Uint8Array(await subtle.digest('SHA-256', new TextEncoder().encode(combined)));
+    let num = '';
+    for (let i = 0; i < 6; i++) num += String((hash[i * 2] << 8 | hash[i * 2 + 1]) % 100000).padStart(5, '0') + ' ';
+    const groups = num.trim().split(' ');
+    expect(groups).toHaveLength(6);
+    // Reconstructing the 12 source bytes from the displayed digits proves nothing was discarded.
+    const recovered = groups.flatMap((g) => { const v = Number(g); return [(v >> 8) & 0xff, v & 0xff]; });
+    expect(recovered).toEqual(Array.from(hash.slice(0, 12)));
+  });
+});

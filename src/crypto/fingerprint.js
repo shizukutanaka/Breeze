@@ -1,18 +1,31 @@
 // ============================================================================
 // Breeze — Numeric safety number (key fingerprint) for out-of-band MITM check
 //
-// Research-driven hardening of the original index.html `safetyNumber()`, which
-// did a SINGLE SHA-256 over 12 of 32 bytes (~30 displayed digits). That is weak:
-// a malicious relay performing MITM only needs to find a substituted identity
-// key whose 12-byte truncated single-hash collides — feasible to grind offline.
+// Hardening of index.html's `safetyNumber()`, which does a SINGLE SHA-256 truncated to 12 of
+// 32 bytes and shows it as 6 groups of 5 digits.
+//
+// CORRECTION (v3.6.1, measured): an earlier version of this header called that "weak … feasible
+// to grind offline", and elsewhere "~40 bits". Both are WRONG, and the error nearly bought an
+// unnecessary migration. Each displayed group is `(b[2i]<<8 | b[2i+1]) % 100000`, and a 16-bit
+// value maxes at 65535 < 100000, so the modulo is the IDENTITY: all 12 bytes = **96 bits** are
+// displayed, losing nothing. A MITM must find a substituted identity key colliding on those 96
+// bits — about 2^96 (~7.9e28) work. That is infeasible, so the deployed number is already
+// adequate against the attack it exists to stop.
+//
+// What this module actually adds over it is therefore NARROWER than "fixing a weak number":
+// 5200 iterations (raises per-candidate cost — immaterial when the search is already 2^96),
+// 60 displayed digits instead of 30, and binding a stable identifier (user id) alongside the
+// key. Worth having eventually; NOT worth a coordinated display migration on its own, since two
+// clients on different versions would show different numbers and users would read that as a MITM
+// alarm. Deploy it together with something that already requires a capability negotiation.
 //
 // This module is byte-exact with Signal's NumericFingerprintGenerator — verified against
 // libsignal's own published test vectors (see tests/fingerprint.test.js):
 //   - ITERATED hash (default 5200 rounds of SHA-512 over `hash ‖ key`), which
 //     makes precomputing a colliding key ~5200x more expensive per candidate.
 //   - Per-party fingerprint binds (version ‖ identityKey ‖ stableIdentifier).
-//   - 60 displayed digits total (30 per party) instead of 30 — Signal-equivalent
-//     verification strength (~112 bits shown vs the old ~40 bits).
+//   - 60 displayed digits total (30 per party) instead of 30 — more shown entropy than
+//     the deployed 96 bits, though 96 bits is already infeasible to attack (see CORRECTION).
 //   - The two per-party fingerprints are concatenated in sorted order, so BOTH
 //     participants compute the identical string regardless of who is "local"
 //     (preserves the symmetry the old `[a,b].sort()` relied on).
