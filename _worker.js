@@ -208,7 +208,6 @@ export default {
         '/api/turn': 10,
         '/api/account/slots': 20,
         '/api/online': 20,
-        '/api/ogp': 10, // fetches external URLs — cap below the 30 rpm default
       };
       // Cap 'unknown' IP (no CF-Connecting-IP) at 5 rpm regardless of path —
       // prevents a shared bucket from being monopolized in non-CF deployments.
@@ -321,7 +320,6 @@ export default {
         case '/api/push/subscribe':   return await handlePushSubscribe(body, env, request);
         case '/api/push/unsubscribe': return await handlePushUnsubscribe(body, env, request);
         case '/api/turn':           return await handleTurn(body, env, request);
-        case '/api/ogp':            return await handleOGP(body, env, request);
         case '/api/account/purchase': return await handleAccountPurchase(body, env, request);
         case '/api/account/slots':    return await handleAccountSlots(body, env, request);
         case '/api/prekey/upload':    return await handlePreKeyUpload(body, env, request);
@@ -2720,159 +2718,6 @@ async function handleDropRead(body, env, request) {
 // OGP request AND every redirect hop — validating only the initial URL is a bypass:
 // a public URL can 302-redirect to http://169.254.169.254/ (metadata) or an internal
 // host, and `redirect: 'follow'` would chase it past the guard.
-function isSSRFBlocked(parsed) {
-  if (!['http:', 'https:'].includes(parsed.protocol)) return true;
-  const host = parsed.hostname.toLowerCase();
-  // IPv6 literals arrive BRACKETED ([::1], [::ffff:a00:1]) and the URL parser
-  // compresses the embedded IPv4 to hex (::ffff:10.0.0.1 → ::ffff:a00:1). The old
-  // code checked `host.startsWith('::ffff:')` against the bracketed+compressed form,
-  // so it NEVER matched — the IPv4-mapped-IPv6 bypass guard was inert. Strip the
-  // brackets first so the ::1 / ::ffff: / fc / fd / fe80 prefix checks actually fire
-  // (hostnames have no brackets, so h === host for them — no behavior change there).
-  const isIPv6 = host.startsWith('[') && host.endsWith(']');
-  const h = isIPv6 ? host.slice(1, -1) : host;
-  // IPv6-literal-only checks. These MUST be gated behind isIPv6: an unbracketed host
-  // is a DNS name or IPv4, and bare prefix tests like startsWith('fc')/startsWith('fd')
-  // would false-positive on legitimate hostnames (fc2.com, fdroid.org, …) and silently
-  // kill their link previews. IPv6 literals always arrive bracketed (the URL parser
-  // throws on unbracketed `::1`), so this gate is exact.
-  if (isIPv6) {
-    if (h === '::1' || h === '::' ||
-        h.startsWith('fc') || h.startsWith('fd') || h.startsWith('fe80') ||
-        h.startsWith('::ffff:')) {  // IPv4-mapped IPv6 (any embedded IPv4; parser compresses to hex)
-      return true;
-    }
-  }
-  // Coerce to a strict boolean: the trailing `parsed.port && …` returns the empty
-  // string (not false) for default ports, which callers comparing === false trip on.
-  return !!(h === 'localhost' || h.startsWith('127.') || h === '0.0.0.0' ||
-    h.startsWith('10.') || h.startsWith('192.168.') ||
-    (h.startsWith('172.') && parseInt(h.split('.')[1]) >= 16 && parseInt(h.split('.')[1]) <= 31) ||
-    h === '169.254.169.254' || h.startsWith('169.254.') ||
-    h.endsWith('.internal') || h.endsWith('.local') || h.endsWith('.localhost') ||
-    h === 'metadata.google.internal' ||
-    (parsed.port && !['80', '443', ''].includes(parsed.port)));
-}
-
-// Fetch following up to maxHops redirects MANUALLY, re-applying the SSRF guard to
-// each Location. Returns the final non-redirect Response, or null if a hop is blocked
-// / the chain is malformed / too long. Replaces `redirect: 'follow'`, which would
-// bypass isSSRFBlocked() on every hop after the first.
-async function ssrfSafeFetch(initialUrl, opts, timeoutMs, maxHops = 3) {
-  let current = initialUrl;
-  for (let hop = 0; hop <= maxHops; hop++) {
-    const resp = await fetchWithTimeout(current, { ...opts, redirect: 'manual' }, timeoutMs);
-    // Cloudflare surfaces opaqueredirect via status 0 when redirect is 'manual' in
-    // some modes; treat 3xx + a Location header as a redirect to re-validate.
-    if (resp.status >= 300 && resp.status < 400) {
-      const loc = resp.headers.get('Location');
-      if (!loc) return resp; // redirect with no target — nothing to follow
-      let next;
-      try { next = new URL(loc, current); } catch { return null; }
-      if (isSSRFBlocked(next)) return null; // blocked internal/metadata target
-      current = next.toString();
-      continue;
-    }
-    return resp;
-  }
-  return null; // too many redirects
-}
-
-async function handleOGP(body, env, request) {
-  const { url } = body;
-  if (!url || typeof url !== 'string') return json({ error: 'url required', code: 'MISSING_URL' }, 400, request);
-  if (url.length > 2048) return json({ error: 'url too long (max 2048)', code: 'URL_TOO_LONG' }, 400, request);
-  if (!url.startsWith('http')) return json({ error: 'url required', code: 'MISSING_URL' }, 400, request);
-
-  // SSRF protection: block private/internal IPs and non-http schemes (initial URL).
-  try {
-    if (isSSRFBlocked(new URL(url))) return json({}, 200, request);
-  } catch(e) { return json({}, 200, request); }
-
-  // Cache OGP results for 24h — hash the URL so two URLs sharing a 200-char prefix
-  // don't collide, and so very long URLs don't inflate the KV key.
-  const cacheKey = `ogp:${await sha256Short(url)}`;
-  const cached = await kvGet(env, cacheKey);
-  if (cached) { try { return json(JSON.parse(cached), 200, request); } catch { /* fall through on corrupt cache */ } }
-
-  try {
-    // SSRF-safe manual redirect following: each hop's target is re-validated against
-    // isSSRFBlocked(), so a public URL can't 302-bounce us into an internal/metadata host.
-    const resp = await ssrfSafeFetch(url, {
-      headers: { 'User-Agent': 'BreezeBot/1.0 (link preview)', 'Accept': 'text/html' },
-      cf: { cacheTtl: 3600 },
-    }, 5000);
-    if (!resp || !resp.ok) return json({}, 200, request);
-
-    const ct = resp.headers.get('content-type') || '';
-    if (!ct.includes('text/html')) return json({}, 200, request);
-
-    // Read first 32KB only (performance). Truncate AFTER each chunk so a single
-    // large chunk (e.g. from a slow-drip attacker) can't bloat memory beyond cap.
-    const reader = resp.body.getReader();
-    // One streaming TextDecoder for the whole body: a multibyte UTF-8 sequence (e.g. a
-    // 3-byte Japanese character) split across a chunk boundary is held and reassembled on
-    // the next chunk instead of becoming two replacement characters (�). A fresh per-chunk
-    // decoder without {stream:true} corrupted every non-ASCII title/description that
-    // happened to straddle a read boundary — common for JA/CJK link previews.
-    const decoder = new TextDecoder();
-    let html = '';
-    // The 5s timeout in ssrfSafeFetch only bounds time-to-HEADERS; it is cleared the moment
-    // headers arrive. Without a second bound here a slow-drip server (fast headers, then a
-    // byte-per-second body) keeps reader.read() trickling and ties the worker up far past the
-    // intended budget — the memory cap above does nothing against a TIME attack. Race each
-    // read against the remaining deadline so total body-read time is bounded. Operator-tunable
-    // via OGP_READ_BUDGET_MS (clamped 200ms–15s) for slow-link self-hosters.
-    const bodyReadBudgetMs = Math.min(Math.max(parseInt(env.OGP_READ_BUDGET_MS) || 5000, 200), 15000);
-    const readDeadline = Date.now() + bodyReadBudgetMs;
-    try {
-      while (html.length < 32768) {
-        const remaining = readDeadline - Date.now();
-        if (remaining <= 0) break;
-        let timer;
-        const { done, value } = await Promise.race([
-          reader.read(),
-          new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('OGP body read timeout')), remaining); }),
-        ]).finally(() => clearTimeout(timer));
-        if (done) { html = (html + decoder.decode()).slice(0, 32768); break; } // flush trailing bytes
-        html = (html + decoder.decode(value, { stream: true })).slice(0, 32768);
-      }
-    } catch { /* read timeout or stream error — proceed with whatever was read so far */ }
-    reader.cancel().catch(() => {});
-
-    // Extract OGP meta tags
-    const og = (prop) => {
-      const m = html.match(new RegExp(`<meta[^>]*property=["']og:${prop}["'][^>]*content=["']([^"']+)`, 'i'))
-            || html.match(new RegExp(`<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:${prop}`, 'i'));
-      return m?.[1] || '';
-    };
-    const meta = (name) => {
-      const m = html.match(new RegExp(`<meta[^>]*name=["']${name}["'][^>]*content=["']([^"']+)`, 'i'));
-      return m?.[1] || '';
-    };
-
-    const title = og('title') || html.match(/<title[^>]*>([^<]+)/i)?.[1]?.trim() || '';
-    const description = og('description') || meta('description');
-    const image = og('image');
-    const siteName = og('site_name') || '';
-
-    const safeImage = (() => { try { return new URL(image).protocol === 'https:' ? image.slice(0, 500) : ''; } catch { return ''; } })();
-    const result = { title: title.slice(0, 200), description: description.slice(0, 300), image: safeImage, siteName: siteName.slice(0, 100), url };
-
-    // Cache for 24h
-    await kvPut(env, cacheKey, JSON.stringify(result), { expirationTtl: TTL.DAY });
-
-    return json(result, 200, request);
-  } catch(e) {
-    // Log for operator visibility (SSRF bypass attempts, network failures) without leaking
-    // the full URL or response body to the client — the response is always empty {}.
-    console.error('[OGP]', e?.message ?? e);
-    return json({}, 200, request);
-  }
-}
-
-// Helpers
-// ============================================================
 function json(data, status, request, _rid) {
   // v3.3: Auto-inject reqId into error responses for enterprise traceability
   if (status >= 400 && _rid && !data.reqId) data.reqId = _rid;
@@ -2983,9 +2828,6 @@ export {
   handleSignal,
   handlePresence,
   handleOnlineCount,
-  handleOGP,
-  isSSRFBlocked,
-  ssrfSafeFetch,
   handleTurn,
   handleAccountSlots,
   handleAccountPurchase,

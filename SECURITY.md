@@ -53,6 +53,16 @@ Mitigations, in order of assurance:
   append-only web-app manifests) to give the PWA a verifiable-code guarantee closer to
   the native builds. Tracked, not yet deployed.
 
+### Removed: server-side link previews (v3.6.1)
+
+Rendering a message containing a URL used to POST that URL to the relay for an Open Graph
+preview — **including messages you received**. So the relay learned link contents out of
+end-to-end encrypted messages, for a recipient who never chose to share them, and the
+sender-side variant reported every link before it was even sent. It was also the only
+server-side fetch of user-supplied URLs in the product, i.e. the entire SSRF surface
+(`isSSRFBlocked`/`ssrfSafeFetch` existed solely to contain it). Deleted; links still render
+as clickable links, without a preview card.
+
 ### Removed: server-side AI and translation (v3.6.1)
 
 Breeze previously proxied message text to third-party LLM and translation providers
