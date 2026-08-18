@@ -181,3 +181,54 @@ test('receiving a message keeps the compose box usable (smart replies do not squ
   await aliceCtx.close();
   await bobCtx.close();
 });
+
+test('franking (I17): a received message can be reported and the relay verifies it', async ({ browser }) => {
+  // The whole point of franking: the relay can confirm a reported message was GENUINELY sent,
+  // without ever seeing un-reported messages. Sender records HMAC(Kf, plaintext) under a random
+  // frankId at send time; the recipient re-derives Kf from the message key (it is never
+  // transmitted) and reveals (frankId, plaintext, Kf) to report.
+  const aliceCtx = await browser.newContext({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.34' } });
+  const bobCtx = await browser.newContext({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.35' } });
+  const alice = await aliceCtx.newPage();
+  const bob = await bobCtx.newPage();
+
+  const alicePub = await createIdentity(alice, 'Alice');
+  const bobPub = await createIdentity(bob, 'Bob');
+  await addAndOpen(alice, bobPub);
+  await addAndOpen(bob, alicePub);
+
+  const abusive = 'abusive content ' + Date.now();
+  await alice.locator('#msg-input').fill(abusive);
+  await alice.locator('#b-msg-send').click();
+  await expect(bob.locator('#msg-messages')).toContainText(abusive, { timeout: 15_000 });
+
+  // Bob's stored copy must carry the frankId and the derived opening.
+  const stored = await bob.evaluate(() => new Promise((resolve) => {
+    const req = indexedDB.open('breeze-messenger', 5);
+    req.onsuccess = () => {
+      const all = req.result.transaction('messages', 'readonly').objectStore('messages').getAll();
+      all.onsuccess = () => resolve(all.result.filter((m) => m.frankId));
+    };
+  }));
+  expect(stored.length, 'received message carries franking material').toBeGreaterThan(0);
+  const rec = stored.find((m) => m.text === abusive);
+  expect(rec, 'the abusive message itself is frankable').toBeTruthy();
+  expect(typeof rec.frankOpening).toBe('string');
+
+  // The relay verifies a genuine report...
+  const good = await bob.request.post('/api/abuse/report', {
+    data: { frankId: rec.frankId, message: rec.text, opening: rec.frankOpening },
+  });
+  expect(good.status()).toBe(200);
+  expect((await good.json()).verified).toBe(true);
+
+  // ...and rejects a report that claims a DIFFERENT message under the same frankId (binding).
+  const forged = await bob.request.post('/api/abuse/report', {
+    data: { frankId: rec.frankId, message: 'something he never sent', opening: rec.frankOpening },
+  });
+  expect(forged.status()).toBe(400);
+  expect((await forged.json()).code).toBe('FRANK_MISMATCH');
+
+  await aliceCtx.close();
+  await bobCtx.close();
+});

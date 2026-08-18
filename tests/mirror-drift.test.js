@@ -29,6 +29,7 @@ import { makeChallengeString, solve as powSolve, verify as powVerify } from '../
 import { createRatchet } from '../src/crypto/ratchet.js';
 import { checkRollover, auditBundle, appendChainEntry } from '../src/crypto/ktlog.js';
 import { negotiateGroup } from '../src/crypto/negotiate.js';
+import { createFranking } from '../src/crypto/franking.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -741,10 +742,56 @@ describe('key commitment mirror (I16) — inline _keyCommit vs ratchet.js keyCom
   });
 });
 
+// ---------------------------------------------------------------------------
+// I17 FRANKING MIRROR. The deployed client computes Cf = HMAC(Kf, plaintext) inline; the relay
+// verifies it with hmacVerifyFrank, and src/crypto/franking.js is the tested reference for the
+// same construction. A drift in the HMAC input or the base64 encoding would make every abuse
+// report fail verification — silently, since nothing else exercises the pair.
+//
+// One DELIBERATE divergence from the reference: the deployed client DERIVES Kf from the message
+// key (HKDF(msgKey, 0^32, 'breeze-frank', 32)) instead of drawing it randomly and shipping it,
+// which removes key transport entirely — only the opaque frankId goes on the wire. The
+// commitment function itself is identical, which is what this block pins.
+// ---------------------------------------------------------------------------
+describe('franking mirror (I17) — inline _frankCommit vs franking.js', () => {
+  const F = createFranking();
+  const inlineFrankCommit = async (kf, text) => {
+    const k = await crypto.subtle.importKey('raw', kf, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    return Buffer.from(new Uint8Array(await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(text)))).toString('base64');
+  };
+
+  it('a commitment made inline verifies under the reference implementation', async () => {
+    const kf = new Uint8Array(32).fill(9);
+    const commitment = await inlineFrankCommit(kf, 'abusive message');
+    expect(await F.verify('abusive message', Buffer.from(commitment, 'base64'), kf)).toBe(true);
+  });
+
+  it('binding: the reference rejects a different message under the same opening', async () => {
+    const kf = new Uint8Array(32).fill(9);
+    const commitment = await inlineFrankCommit(kf, 'abusive message');
+    expect(await F.verify('a different message', Buffer.from(commitment, 'base64'), kf)).toBe(false);
+  });
+
+  it('a different opening yields a different commitment', async () => {
+    expect(await inlineFrankCommit(new Uint8Array(32).fill(1), 'msg'))
+      .not.toBe(await inlineFrankCommit(new Uint8Array(32).fill(2), 'msg'));
+  });
+
+  it('the deployed client derives Kf rather than transmitting it (no opening on the wire)', () => {
+    expect(html).toContain("'breeze-frank'");
+    const enc = html.slice(html.indexOf('async function encryptFor'), html.indexOf('async function decryptFrom'));
+    expect(enc).toContain('...(fi ? { fi } : {})');
+  });
+});
+
 describe('reference-drift tracking — modules that are tested references, NOT yet deployed', () => {
   const REFERENCE_ONLY = [
     { module: 'fingerprint.js (Signal iterated 5200×SHA-512 safety number)', marker: 'fingerprintBytes' },
-    { module: 'franking.js (abuse-report message franking)', marker: 'createFranking' },
+    // franking.js's COMMITMENT math GRADUATED to deployed (inline _frankKey/_frankCommit) — see the
+    // "franking mirror" block above for its parity guard. Only the module factory and the
+    // relay-side verifyReport helper stay reference-only; the deployed relay check is the Worker's
+    // hmacVerifyFrank, cross-tested against this reference in tests/worker.test.js.
+    { module: 'franking.js (module factory)', marker: 'createFranking' },
     // pq.js (PQXDH hybrid). Reference-only until browsers ship ML-KEM (WICG modern-algos,
     // ~2027) — the client currently only DETECTS ML-KEM support, it never key-agrees with it.
     { module: 'pq.js (PQXDH hybrid X25519+ML-KEM key agreement)', marker: 'createPQXDH' },

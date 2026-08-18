@@ -1701,6 +1701,10 @@ const _I = {
     archived: 'Archived',
     unarchived: 'Unarchived',
     select: 'Select',
+    report: 'Report',
+    confirmReport: 'Report this message to the operator? The message text and a one-time proof are sent so it can be verified. Other messages stay private.',
+    toastReported: 'Reported',
+    toastReportFail: 'Report failed',
     copy: 'Copy',
     toastCopied: 'Copied to clipboard',
     toastCopyFail: 'Could not copy to clipboard',
@@ -2518,6 +2522,10 @@ const _I = {
     archived: 'アーカイブ済み',
     unarchived: 'アーカイブ解除',
     select: '選択',
+    report: '通報',
+    confirmReport: 'このメッセージを運営に通報しますか？検証のためメッセージ本文と一回限りの証明を送信します。他のメッセージは非公開のままです。',
+    toastReported: '通報しました',
+    toastReportFail: '通報に失敗しました',
     copy: 'コピー',
     toastCopied: 'クリップボードにコピーしました',
     toastCopyFail: 'クリップボードへのコピーに失敗しました',
@@ -5494,6 +5502,20 @@ async function initMessenger(dbName) {
   // Wire MUST stay arr() to match the reference. _cmOk = verify-if-present, constant-time.
   async function _keyCommit(mk) { return arr(await hkdf(u8(mk), new Uint8Array(32), 'breeze-commit', 32)); }
   async function _cmOk(p, mk) { return !p.cm || await timingSafeEqual(u8(p.cm).join(','), (await _keyCommit(mk)).join(',')); }
+  // I17 message franking. Cf = HMAC(Kf, plaintext) is recorded at the relay at send time; a
+  // recipient reporting abuse reveals (frankId, plaintext, Kf) and the relay recomputes the HMAC,
+  // so it can verify a reported message was really sent WITHOUT ever seeing un-reported content.
+  // Kf is DERIVED from the message key rather than drawn randomly and shipped (as
+  // src/crypto/franking.js does): both parties already hold msgKey, so deriving removes the key
+  // transport entirely — only the opaque frankId goes on the wire, and old clients ignore it.
+  // HKDF is one-way, so revealing Kf in a report discloses nothing about msgKey or any other message.
+  // Limit (CRYPTO-SPEC §9 N4): symmetric franking cannot bind a MALICIOUS sender, who can simply
+  // skip the /abuse/record call; it stops forged reports, not a determined abuser.
+  async function _frankKey(mk) { return hkdf(u8(mk), new Uint8Array(32), 'breeze-frank', 32); }
+  async function _frankCommit(kf, text) {
+    const k = await crypto.subtle.importKey('raw', kf, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    return bufToB64(new Uint8Array(await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(text))));
+  }
 
   // --- Session store (IDB) with CryptoKey serialization ---
   async function getSession(peerId) {
@@ -5797,7 +5819,7 @@ async function initMessenger(dbName) {
   }
 
   // --- Encrypt with Double Ratchet ---
-  async function encryptFor(text, peerPubB64) {
+  async function encryptFor(text, peerPubB64, frank) {
     try {  
       const peerId = peerPubB64.slice(0, 12);
       let sess = await getSession(peerId);
@@ -5831,8 +5853,16 @@ async function initMessenger(dbName) {
         ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, importedKey, padded);
       }
       const cm = await _keyCommit(msgKey); // must precede zeroBuffer — it wipes msgKey
+      // Franking is opt-in per call: only real user messages ask for it (`frank`), never
+      // control/signal traffic, and the derivation must also precede zeroBuffer.
+      let fi;
+      if (frank) {
+        const kf = await _frankKey(msgKey);
+        fi = bufToB64(crypto.getRandomValues(new Uint8Array(12)));
+        frank.frankId = fi; frank.opening = bufToB64(kf); frank.commitment = await _frankCommit(kf, text);
+      }
       zeroBuffer(msgKey); // Best-effort key erasure
-      const innerMsg = JSON.stringify({ v: 4, i: arr(iv), d: arr(new Uint8Array(ct)), rk: sess.ratchetPub, c: sess.sendCounter, cm });
+      const innerMsg = JSON.stringify({ v: 4, i: arr(iv), d: arr(new Uint8Array(ct)), rk: sess.ratchetPub, c: sess.sendCounter, cm, ...(fi ? { fi } : {}) });
       // X3DH v5 first message only: wrap for the responder's bootstrap, drop the marker.
       let outMsg = innerMsg;
       if (sess._pkm) {
@@ -5849,7 +5879,7 @@ async function initMessenger(dbName) {
   // Track decrypt failures per peer for auto-reset
   const _decryptFailures = {};
 
-  async function decryptFrom(payload, peerPubB64) {
+  async function decryptFrom(payload, peerPubB64, frank) {
     try {
       const peerId = peerPubB64.slice(0, 12);
       let sess = await getSession(peerId);
@@ -5882,6 +5912,7 @@ async function initMessenger(dbName) {
             const mkData = sess.skippedKeys[skKey];
             delete sess.skippedKeys[skKey];
             if (!(await _cmOk(p, u8(mkData)))) { _dbg(null, 'key commitment mismatch (skipped key)'); return null; }
+            if (frank && p.fi) { frank.frankId = p.fi; frank.opening = bufToB64(await _frankKey(u8(mkData))); }
             const importedKey = await crypto.subtle.importKey('raw', u8(mkData), { name: 'AES-GCM' }, false, ['decrypt']);
             const padded = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, importedKey, u8(p.d)));
             const text = _unpadAndDecompress(padded, p.v);
@@ -5926,6 +5957,7 @@ async function initMessenger(dbName) {
         sess.seenMsgIds.push(msgId);
         if (sess.seenMsgIds.length > CONFIG.REPLAY_CACHE_SIZE) sess.seenMsgIds = sess.seenMsgIds.slice(-CONFIG.REPLAY_CACHE_SIZE);
         if (!(await _cmOk(p, msgKey))) { _dbg(null, 'key commitment mismatch'); return null; }
+        if (frank && p.fi) { frank.frankId = p.fi; frank.opening = bufToB64(await _frankKey(msgKey)); }
         const importedKey = await crypto.subtle.importKey('raw', msgKey, { name: 'AES-GCM' }, false, ['decrypt']);
         let padded;
         const wResult = await workerCrypto('decrypt', msgKey, u8(p.i), u8(p.d).buffer.slice(u8(p.d).byteOffset, u8(p.d).byteOffset + u8(p.d).byteLength));
@@ -7872,6 +7904,7 @@ async function initMessenger(dbName) {
       [t('pin'), () => pinMsg(msg)],
       [t('bookmark'), () => bookmarkMsg(msg)],
       [t('select'), () => enterSelectMode(el)],
+      (!msg.isMine && msg.frankId) ? [t('report'), () => reportMsg(msg), true] : null,
     ].filter(Boolean);
 
     for (const item of items) {
@@ -7887,6 +7920,19 @@ async function initMessenger(dbName) {
     setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), CONFIG.DOM_SETTLE_MS);
     const escHandler = (e) => { if (e.key === 'Escape') { menu.remove(); document.removeEventListener('keydown', escHandler); } };
     document.addEventListener('keydown', escHandler, { signal: _ac.signal });
+  }
+
+  // I17: report an abusive message. Reveals (frankId, plaintext, Kf) for THIS message only; the
+  // relay recomputes HMAC(Kf, plaintext) against the commitment it recorded at send time, so it
+  // can confirm the message was genuinely sent without ever seeing un-reported messages.
+  async function reportMsg(msg) {
+    if (!msg?.frankId || !msg.frankOpening || !API) return;
+    if (!await showConfirm(t('confirmReport'), { danger: true, okText: t('report') })) return;
+    try {
+      const resp = await postAPIRaw('/abuse/report', { frankId: msg.frankId, message: msg.text, opening: msg.frankOpening });
+      const data = await resp.json().catch(() => ({}));
+      showToast(t(resp.ok && data.verified ? 'toastReported' : 'toastReportFail'), resp.ok && data.verified ? 'success' : 'error');
+    } catch(e) { _dbg(e, 'report'); showToast(t('toastReportFail'), 'error'); }
   }
 
   // --- Reply ---
@@ -8333,8 +8379,15 @@ async function initMessenger(dbName) {
       }
     } else {
       // 1:1: v3 Double Ratchet + P2P + Sealed Sender
-      const encrypted = await encryptFor(text, activeContact.pubB64);
+      const _frank = {};
+      const encrypted = await encryptFor(text, activeContact.pubB64, _frank);
       if (!encrypted) { showToast(t('toastSendFail'), 'error'); _isSending = false; return; }
+      // Record the commitment BEFORE the message can be reported. Fire-and-forget: a failed
+      // record must never block or fail a send — it only means this message can't be reported.
+      if (_frank.frankId && API) {
+        postAPIRaw('/abuse/record', { frankId: _frank.frankId, commitment: _frank.commitment })
+          .catch(e => _dbg(e, 'frank-record'));
+      }
       const peer = peers[activeContact.pubB64];
       const envelope = { v: CONFIG.PROTOCOL_VERSION, type: 'msg', payload: encrypted, ts, sender: myPubB64, name: myName };
       // v3.3: Ed25519 message signing (authenticity)
@@ -10102,7 +10155,8 @@ async function initMessenger(dbName) {
         await dbPut('messages', { msgId, contactId, text, mine: false, ts: msg.ts, fileData: fileMsg, ...meta });
       } catch { return; }
     } else {
-      text = await decryptFrom(msg.payload, contact.pubB64);
+      const _frank = {};
+      text = await decryptFrom(msg.payload, contact.pubB64, _frank);
       if (!text) return;
       // Reject oversized text: the relay caps payloads at 256 KB but the P2P DataChannel has no server check.
       // 64 KB is generous for chat text while preventing memory/render DoS from a malicious peer.
@@ -10130,7 +10184,7 @@ async function initMessenger(dbName) {
           // null = cannot verify (no Ed25519 support)
         }
       }
-      await dbPut('messages', { msgId, contactId, text, mine: false, ts: msg.ts, ...meta });
+      await dbPut('messages', { msgId, contactId, text, mine: false, ts: msg.ts, ...meta, ...(_frank.frankId ? { frankId: _frank.frankId, frankOpening: _frank.opening } : {}) });
     }
 
     contact.lastMsg = text.slice(0, 40);
