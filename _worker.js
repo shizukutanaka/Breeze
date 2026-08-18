@@ -131,8 +131,6 @@ export default {
           push: !!(env.VAPID_PUBLIC_KEY),
           turn: !!(env.TURN_URL),
           backup: kvOk,
-          ai: !!(env.ANTHROPIC_API_KEY || env.OPENAI_API_KEY || env.GROQ_API_KEY),
-          translate: !!(env.DEEPL_API_KEY || env.GOOGLE_TRANSLATE_KEY || env.TRANSLATE_URL),
         },
         // Always-on endpoint capabilities (independent of env config) so a client can
         // feature-detect during a staged rollout — e.g. show the delete-account /
@@ -210,8 +208,6 @@ export default {
         '/api/turn': 10,
         '/api/account/slots': 20,
         '/api/online': 20,
-        '/api/translate': 15,
-        '/api/ai': 10,
         '/api/ogp': 10, // fetches external URLs — cap below the 30 rpm default
       };
       // Cap 'unknown' IP (no CF-Connecting-IP) at 5 rpm regardless of path —
@@ -346,8 +342,6 @@ export default {
         case '/api/group/leave':      return await handleGroupLeave(body, env, request);
         case '/api/group/delete':     return await handleGroupDelete(body, env, request);
         case '/api/account/delete':   return await handleAccountDelete(body, env, request);
-        case '/api/translate':        return await handleTranslate(body, env, request);
-        case '/api/ai':               return await handleAI(body, env, request);
         case '/api/drop/create':      return await handleDropCreate(body, env, request);
         case '/api/drop/read':        return await handleDropRead(body, env, request);
         case '/api/abuse/record':     return await handleAbuseRecord(body, env, request);
@@ -2893,306 +2887,9 @@ function json(data, status, request, _rid) {
   });
 }
 
-// ================================================================
-// Translation API — multi-provider with KV cache
-// Providers: DeepL (DEEPL_API_KEY) → LibreTranslate (TRANSLATE_URL) → MyMemory (free)
-// ================================================================
-async function handleTranslate(body, env, request) {
-  const { text, from, to } = body;
-  if (!text || !to) return json({ error: 'text and to required', code: 'MISSING_FIELDS' }, 400, request);
-  if (typeof text !== 'string' || text.length > 2000) return json({ error: 'text too long (max 2000)', code: 'PAYLOAD_TOO_LARGE' }, 400, request);
-  if (typeof to !== 'string') return json({ error: 'to must be a string', code: 'INVALID_FIELD' }, 400, request);
-  // Sanitize language codes to BCP-47 safe characters ([a-zA-Z0-9-]) before passing to
-  // third-party APIs (DeepL, LibreTranslate, Google, MyMemory). handleAI uses the same
-  // strip — keep both consistent. Raw slice() alone allows newlines or special chars that
-  // could inject into URL params or HTTP headers in providers that don't further encode.
-  const src = (typeof from === 'string' ? from.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 20) : '') || 'auto';
-  const tgt = to.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 20);
-  if (!tgt) return json({ error: 'invalid target language code', code: 'INVALID_LANG' }, 400, request);
-
-  // KV cache (7-day TTL)
-  // Cache key must unambiguously separate the three components. Plain `text + src + tgt`
-  // concatenation collides across distinct inputs because src/tgt are short, variable-length
-  // codes adjacent to free-form text — e.g. ("test","en","ja") and ("teste","n","ja") both
-  // yield "testenja", so one requester could be served the other's cached translation.
-  // JSON.stringify quotes/escapes each field, removing the boundary ambiguity.
-  const hash = await sha256Short(JSON.stringify([text, src, tgt]));
-  const cacheKey = `tr:${hash}`;
-  const cached = await kvGet(env, cacheKey);
-  if (cached) {
-    try { return json({ ...JSON.parse(cached), cached: true }, 200, request); } catch(e) { console.error('[translate-cache]', e?.message ?? e); }
-  }
-
-  // When AI_REQUIRE_AUTH=true, only registered users (who completed PoW + prekey upload)
-  // may trigger a live provider call. Cached results are still served to everyone.
-  if (env.AI_REQUIRE_AUTH) {
-    const { userId } = body;
-    if (!userId || !validateUserId(userId)) return json({ error: 'userId required', code: 'AUTH_REQUIRED' }, 401, request);
-    if (!(await kvGet(env, `prekey:${userId}`))) return json({ error: 'User not registered', code: 'UNREGISTERED' }, 401, request);
-  }
-
-  let translated = null;
-  let provider = null;
-  let detectedFrom = src;
-
-  // Provider 1: DeepL (if DEEPL_API_KEY configured)
-  if (!translated && env.DEEPL_API_KEY) {
-    try {
-      const base = env.DEEPL_API_KEY.endsWith(':fx')
-        ? 'https://api-free.deepl.com' : 'https://api.deepl.com';
-      const params = new URLSearchParams();
-      params.set('text', text);
-      params.set('target_lang', tgt.toUpperCase());
-      if (src !== 'auto') params.set('source_lang', src.toUpperCase());
-      const resp = await fetchWithTimeout(`${base}/v2/translate`, {
-        method: 'POST',
-        headers: { 'Authorization': `DeepL-Auth-Key ${env.DEEPL_API_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params.toString(),
-      });
-      if (resp.ok) {
-        const d = await resp.json();
-        if (d.translations?.[0]?.text) {
-          translated = d.translations[0].text;
-          detectedFrom = d.translations[0].detected_source_language?.toLowerCase() || src;
-          provider = 'deepl';
-        }
-      }
-    } catch(e) { console.error('[translate] DeepL:', e?.message ?? e); }
-  }
-
-  // Provider 2: LibreTranslate (if TRANSLATE_URL configured, e.g. self-hosted)
-  if (!translated && env.TRANSLATE_URL) {
-    try {
-      const resp = await fetchWithTimeout(env.TRANSLATE_URL + '/translate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ q: text, source: src === 'auto' ? 'auto' : src, target: tgt, api_key: env.TRANSLATE_KEY || '' }),
-      });
-      if (resp.ok) {
-        const d = await resp.json();
-        if (d.translatedText) { translated = d.translatedText; detectedFrom = d.detectedLanguage?.language || src; provider = 'libre'; }
-      }
-    } catch(e) { console.error('[translate] LibreTranslate:', e?.message ?? e); }
-  }
-
-  // Provider 3: Google Cloud Translation (if GOOGLE_TRANSLATE_KEY configured)
-  if (!translated && env.GOOGLE_TRANSLATE_KEY) {
-    try {
-      const params = new URLSearchParams({ q: text, target: tgt, format: 'text', key: env.GOOGLE_TRANSLATE_KEY });
-      if (src !== 'auto') params.set('source', src);
-      const resp = await fetchWithTimeout('https://translation.googleapis.com/language/translate/v2?' + params.toString());
-      if (resp.ok) {
-        const d = await resp.json();
-        if (d.data?.translations?.[0]?.translatedText) {
-          translated = d.data.translations[0].translatedText;
-          detectedFrom = d.data.translations[0].detectedSourceLanguage || src;
-          provider = 'google';
-        }
-      }
-    } catch(e) { console.error('[translate] Google:', e?.message ?? e); }
-  }
-
-  // Provider 4: MyMemory (free, no API key, 5000 chars/day)
-  if (!translated) {
-    try {
-      const langpair = `${src === 'auto' ? 'autodetect' : src}|${tgt}`;
-      const resp = await fetchWithTimeout(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${encodeURIComponent(langpair)}`);
-      if (resp.ok) {
-        const d = await resp.json();
-        if (d.responseData?.translatedText && d.responseStatus === 200) {
-          translated = d.responseData.translatedText;
-          detectedFrom = d.responseData.match?.source || src;
-          provider = 'mymemory';
-        }
-      }
-    } catch(e) { console.error('[translate] MyMemory:', e?.message ?? e); }
-  }
-
-  if (!translated) return json({ error: 'Translation failed', code: 'TRANSLATE_FAILED' }, 502, request);
-
-  // Cap the translation text before caching. Input is ≤2000 chars; output should be ≈1:1
-  // in length, but a misbehaving provider could return more. 8000 chars is a generous ceiling
-  // (~4× input); anything beyond is anomalous and should not be cached to avoid KV bloat.
-  // The full response is still returned to the caller — only the cache write is guarded.
-  const safeTranslated = translated.slice(0, 8000);
-  // `detectedFrom` is the source-language code echoed from the external translation
-  // provider's response — untrusted. Strip to a short alnum/`-` language tag (e.g. "en",
-  // "zh-CN") so a misbehaving provider can't smuggle markup to the client's innerHTML sink.
-  const safeFrom = typeof detectedFrom === 'string' ? detectedFrom.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 16) : detectedFrom;
-  const result = { text, translated: safeTranslated, from: safeFrom, to: tgt, provider };
-  const serialized = JSON.stringify(result);
-  // Final serialized-size guard: skip cache rather than write an unexpectedly large entry.
-  if (serialized.length <= 64 * 1024) await kvPut(env, cacheKey, serialized, { expirationTtl: TTL.WEEK });
-  return json({ ...result, cached: false }, 200, request);
-}
-
-// ================================================================
-// AI Chat API — multi-provider with KV cache
-// Providers: Anthropic Claude → OpenAI → Groq → (error)
-// Actions: chat, summarize, reply_suggest, translate_context
-// ================================================================
-async function handleAI(body, env, request) {
-  const { action, messages, text, context, lang } = body;
-  if (!action) return json({ error: 'action required', code: 'MISSING_FIELDS' }, 400, request);
-
-  // Check if any AI provider is configured
-  const hasAI = env.ANTHROPIC_API_KEY || env.OPENAI_API_KEY || env.GROQ_API_KEY;
-  if (!hasAI) return json({ error: 'No AI provider configured', code: 'NO_AI', hint: 'Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GROQ_API_KEY' }, 503, request);
-
-  let systemPrompt = '';
-  let userContent = '';
-  const maxTokens = 500;
-
-  // Build prompt based on action
-  switch (action) {
-    case 'chat':
-      if (!text || typeof text !== 'string' || text.length > 2000) return json({ error: 'text required (max 2000)', code: 'MISSING_FIELDS' }, 400, request);
-      systemPrompt = 'You are a helpful assistant embedded in a P2P messenger. Keep answers concise (2-3 sentences). Reply in the same language as the user.';
-      userContent = text;
-      break;
-
-    case 'summarize':
-      if (!messages || !Array.isArray(messages)) return json({ error: 'messages array required', code: 'MISSING_FIELDS' }, 400, request);
-      systemPrompt = 'Summarize this chat conversation in 3-5 bullet points. Identify key topics, decisions, and action items. Reply in the same language as the messages.';
-      // Cap individual fields before joining to bound peak memory (not just the aggregate).
-      // Guard against null/undefined items: JSON.parse on a client-crafted array can
-      // produce sparse arrays or explicit nulls, which would throw TypeError on m.sender.
-      userContent = messages.slice(-50).map(m => {
-        const s = String((m && m.sender) || '').slice(0, 100);
-        const t = String((m && m.text)   || '').slice(0, 500);
-        return `${s}: ${t}`;
-      }).join('\n');
-      if (userContent.length > 4000) userContent = userContent.slice(-4000);
-      break;
-
-    case 'reply_suggest':
-      if (!context || typeof context !== 'string') return json({ error: 'context required (string)', code: 'MISSING_FIELDS' }, 400, request);
-      systemPrompt = 'Generate 3 short reply suggestions (each under 30 chars) for the last message in this chat. Return ONLY a JSON array of 3 strings. Reply in the same language as the conversation.';
-      userContent = context.slice(-1000);
-      break;
-
-    case 'translate_context': {
-      if (!text || typeof text !== 'string' || !lang) return json({ error: 'text and lang required', code: 'MISSING_FIELDS' }, 400, request);
-      // Sanitize lang to a valid BCP-47 tag (e.g. 'en', 'ja', 'zh-CN') to prevent
-      // prompt injection via a crafted language string in the system prompt.
-      const safeLang = String(lang).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 20);
-      if (!safeLang) return json({ error: 'invalid lang code', code: 'INVALID_FIELD' }, 400, request);
-      systemPrompt = `Translate the following message to ${safeLang}. Preserve tone, formality level, and emoji. Return ONLY the translation.`;
-      userContent = text.slice(0, 2000);
-      break;
-    }
-
-    default:
-      return json({ error: 'Unknown action: ' + String(action).slice(0, 32), code: 'INVALID_ACTION' }, 400, request);
-  }
-
-  // KV cache (1h for chat, 24h for summarize/translate)
-  const cacheTTL = action === 'chat' ? TTL.HOUR : TTL.DAY;
-  const hash = await sha256Short(action + userContent + systemPrompt);
-  const cacheKey = `ai:${hash}`;
-  const cached = await kvGet(env, cacheKey);
-  if (cached) {
-    try { return json({ ...JSON.parse(cached), cached: true }, 200, request); } catch(e) { console.error('[ai-cache]', e?.message ?? e); }
-  }
-
-  // When AI_REQUIRE_AUTH=true, only registered users (who completed PoW + prekey upload)
-  // may trigger a live provider call. Cached results are still served to everyone.
-  if (env.AI_REQUIRE_AUTH) {
-    const { userId } = body;
-    if (!userId || !validateUserId(userId)) return json({ error: 'userId required', code: 'AUTH_REQUIRED' }, 401, request);
-    if (!(await kvGet(env, `prekey:${userId}`))) return json({ error: 'User not registered', code: 'UNREGISTERED' }, 401, request);
-  }
-
-  let result = null;
-  let provider = null;
-
-  // Provider 1: Anthropic Claude
-  if (!result && env.ANTHROPIC_API_KEY) {
-    try {
-      const resp = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'x-api-key': env.ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
-          max_tokens: maxTokens,
-          system: systemPrompt,
-          messages: [{ role: 'user', content: userContent }],
-        }),
-      });
-      if (resp.ok) {
-        const d = await resp.json();
-        const text = d.content?.find(b => b.type === 'text')?.text;
-        if (text) { result = text; provider = 'anthropic'; }
-      }
-    } catch(e) { console.error('[ai] Anthropic:', e?.message ?? e); }
-  }
-
-  // Provider 2: OpenAI
-  if (!result && env.OPENAI_API_KEY) {
-    try {
-      const base = env.OPENAI_BASE_URL || 'https://api.openai.com';
-      const resp = await fetchWithTimeout(base + '/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + env.OPENAI_API_KEY, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: env.OPENAI_MODEL || 'gpt-4o-mini',
-          max_tokens: maxTokens,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userContent },
-          ],
-        }),
-      });
-      if (resp.ok) {
-        const d = await resp.json();
-        const text = d.choices?.[0]?.message?.content;
-        if (text) { result = text; provider = 'openai'; }
-      }
-    } catch(e) { console.error('[ai] OpenAI:', e?.message ?? e); }
-  }
-
-  // Provider 3: Groq (fast, generous free tier)
-  if (!result && env.GROQ_API_KEY) {
-    try {
-      const resp = await fetchWithTimeout('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + env.GROQ_API_KEY, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: env.GROQ_MODEL || 'llama-3.3-70b-versatile',
-          max_tokens: maxTokens,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userContent },
-          ],
-        }),
-      });
-      if (resp.ok) {
-        const d = await resp.json();
-        const text = d.choices?.[0]?.message?.content;
-        if (text) { result = text; provider = 'groq'; }
-      }
-    } catch(e) { console.error('[ai] Groq:', e?.message ?? e); }
-  }
-
-  if (!result) return json({ error: 'AI generation failed', code: 'AI_FAILED' }, 502, request);
-
-  // Cap the AI result before caching. maxTokens is 500 (~2KB), but a provider that ignores
-  // the limit could return much more. 8000 chars is a generous ceiling; anything beyond is
-  // anomalous. The full result is returned to the caller; only the cache write is guarded.
-  const safeResult = result.slice(0, 8000);
-  const out = { result: safeResult, provider, action };
-  const serialized = JSON.stringify(out);
-  if (serialized.length <= 32 * 1024) await kvPut(env, cacheKey, serialized, { expirationTtl: cacheTTL });
-  return json({ ...out, cached: false }, 200, request);
-}
-
 async function sha256Short(text) {
   // 16 bytes (32 hex chars) → 2^64 birthday-collision resistance, up from 8 bytes (2^32).
-  // KV cache keys are 'ogp:', 'tr:', 'ai:' prefixed; the extra 16 chars are negligible
+  // KV cache keys are 'ogp:' prefixed; the extra 16 chars are negligible
   // vs. the 512-byte KV key limit and removes the theoretically-breakable 2^32 window.
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return Array.from(new Uint8Array(buf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -3293,7 +2990,5 @@ export {
   handleAccountSlots,
   handleAccountPurchase,
   handlePortal,
-  handleAI,
-  handleTranslate,
 };
 

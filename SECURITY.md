@@ -53,6 +53,19 @@ Mitigations, in order of assurance:
   append-only web-app manifests) to give the PWA a verifiable-code guarantee closer to
   the native builds. Tracked, not yet deployed.
 
+### Removed: server-side AI and translation (v3.6.1)
+
+Breeze previously proxied message text to third-party LLM and translation providers
+(Anthropic/OpenAI/Groq, DeepL/Google/LibreTranslate/MyMemory) for translation, summaries, smart
+replies and an `/ai` command. Those features decrypted a message and sent the **plaintext off the
+device**, which is flatly incompatible with the zero-knowledge property the rest of this document
+describes — a user could not tell, from the security model, that tapping "translate" published
+their message to a third party. The endpoints and all client wiring have been deleted rather than
+gated: an opt-in toggle still leaves the contradiction one tap away, and a relay that *can* read
+plaintext is a different threat model from one that cannot.
+
+`/summarize` and smart replies survive, computed **locally** on-device with no network egress.
+
 ### Other known limitations
 
 - **Metadata**: Sealed Sender hides the *sender* from the relay, but the relay still sees

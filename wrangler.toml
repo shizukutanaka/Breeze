@@ -37,21 +37,10 @@ id = ""  # ← REQUIRED: paste your KV namespace ID here
 # Option D: No config → auto-falls to free Open Relay (20GB/month)
 #
 # --- Translation (optional — cascading fallback) ---
-# wrangler pages secret put DEEPL_API_KEY             # DeepL API key (free or pro)
-# wrangler pages secret put GOOGLE_TRANSLATE_KEY       # Google Cloud Translation API key
-# wrangler pages secret put TRANSLATE_URL              # LibreTranslate URL (self-hosted)
-# wrangler pages secret put TRANSLATE_KEY              # LibreTranslate API key
 # If none set, falls back to MyMemory (free, 5K chars/day)
 #
 # --- AI (optional — cascading fallback) ---
-# wrangler pages secret put ANTHROPIC_API_KEY          # Claude (sonnet-4 default)
-# wrangler pages secret put OPENAI_API_KEY             # GPT-4o-mini default
-# wrangler pages secret put GROQ_API_KEY               # Llama 3.3 70B default
 # Optional model override:
-# wrangler pages secret put ANTHROPIC_MODEL            # e.g. claude-sonnet-4-20250514
-# wrangler pages secret put OPENAI_MODEL               # e.g. gpt-4o
-# wrangler pages secret put GROQ_MODEL                 # e.g. llama-3.3-70b-versatile
-# wrangler pages secret put OPENAI_BASE_URL            # e.g. https://api.openai.com
 #
 # --- Auth hardening (recommended — off by default for zero-config self-hosting) ---
 # Every registered client already signs the actions below with its Ed25519 identity key;
@@ -65,7 +54,6 @@ id = ""  # ← REQUIRED: paste your KV namespace ID here
 # wrangler pages secret put PUSH_REQUIRE_AUTH          # true — reject unsigned push subscribe/unsubscribe
 # wrangler pages secret put TURN_REQUIRE_AUTH          # true — reject unsigned TURN credential requests
 # wrangler pages secret put BACKUP_REQUIRE_AUTH        # true — without this, knowing a userId is enough to download that user's encrypted backup blob
-# wrangler pages secret put AI_REQUIRE_AUTH            # true — reject /api/ai and /api/translate from unregistered callers
 #
 # === STRIPE SETUP ===
 #

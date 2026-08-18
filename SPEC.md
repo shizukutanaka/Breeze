@@ -146,8 +146,6 @@ Sender                          Server                         Receiver
 | /api/sealed/ack | default | Acknowledge sealed message delivery |
 | /api/drop/create | default | Create file drop (encrypted transfer) |
 | /api/drop/read | default | Download file drop |
-| /api/ai | 5/min | AI assistant (operator-gated) |
-| /api/translate | 10/min | Message translation (operator-gated) |
 | /api/abuse/record | default | Record abuse metadata for reporting |
 | /api/abuse/report | default | Submit abuse report |
 | /api/health | unlimited | Health check (no auth) |
@@ -496,7 +494,7 @@ Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline';
 | Message compression | ✓ v3.6.0 | deflate-raw adaptive threshold |
 | Skipped message keys | ✓ v3.6.0 | Signal §3.4, 100 keys/session |
 | iOS QR (ISO 18004) | ✓ v3.6.0 | Reed-Solomon, pure JS |
-| AI/translate proxy | ✓ v3.6.0 | Claude/GPT/Groq + DeepL/Google/Libre |
+| AI/translate proxy | ✗ removed v3.6.1 | Sent decrypted plaintext to third parties — incompatible with the zero-knowledge claim. `/summarize` and smart replies remain, computed locally. |
 | Tauri desktop | ✓ v3.6.0 | Rust binary ~5MB |
 | Haptic feedback | ✓ v3.6.0 | 5 patterns + iOS Capacitor native |
 | Platform-specific CSS | ✓ v3.6.0 | iOS/Android/Desktop/PWA/Electron |

@@ -1515,10 +1515,7 @@ const _I = {
     aiSuggestLabel: 'AI smart reply suggestions (sends recent messages to AI server)',
     react: 'React',
     bookmark: 'Bookmark',
-    translate: 'Translate',
-    translating: 'Translating...',
     loading: 'Loading...',
-    translateFailed: 'Translation unavailable',
     forwarded: '↗ Forwarded',
     debugOn: 'Debug mode ON (reload to apply)',
     debugOff: 'Debug mode OFF (reload to apply)',
@@ -1607,7 +1604,6 @@ const _I = {
     settingsNotif: 'Notifications',
     autoLockLabel: 'Auto-lock on tab switch',
     newContact: 'New Contact',
-    aiCached: 'cached',
     msgSenderThem: 'Them',
     labelNoneHint: 'No labels yet. Right-click a contact or use /label', labelFilterEmpty: (l) => `No contacts with label "${l}"`, labelNoneContacts: 'No labels yet. Right-click a contact to add one.', labelNoneCmd: 'No labels. Use /label Work, Family to add.',
     enableNotif: 'Enable push notifications',
@@ -1745,16 +1741,12 @@ const _I = {
     wipeConfirm: 'Permanently delete all messages, contacts, keys, and settings?',
     wipeDone: 'Full wipe executed',
     aiSummarizing: 'Summarizing with AI...',
-    aiSummary: 'AI Summary',
     aiSummaryLocal: 'Summary (local)',
     aiSummarizeEmpty: 'No messages to summarize.',
     aiSummarizeNoText: 'No text messages to summarize.',
     aiSummarizeMsgCount: (n) => `${n} messages`,
     aiSummarizeTopics: 'Topics',
     aiChat: 'AI',
-    aiThinking: 'Thinking...',
-    aiError: 'AI unavailable. Check /about for provider status.',
-    aiNotConfigured: 'AI not configured. Server needs ANTHROPIC_API_KEY, OPENAI_API_KEY, or GROQ_API_KEY.',
     aiUnavailable: 'No AI provider configured',
     promotedAdmin: (name) => `${name} is now a group admin`,
     wipeBtn: 'WIPE',
@@ -2339,10 +2331,7 @@ const _I = {
     sendSound: '送信音',
     react: 'リアクション',
     bookmark: 'ブックマーク',
-    translate: '翻訳',
-    translating: '翻訳中...',
     loading: '読込中...',
-    translateFailed: '翻訳できませんでした',
     forwarded: '↗ 転送済み',
     debugOn: 'デバッグモード ON (リロードで反映)',
     debugOff: 'デバッグモード OFF (リロードで反映)',
@@ -2506,7 +2495,6 @@ const _I = {
     autoLockLabel: 'タブ切替時に自動ロック',
     aiSuggestLabel: 'AIスマート返信（最近のメッセージをAIサーバーに送信）',
     newContact: '新しい連絡先',
-    aiCached: 'キャッシュ',
     msgSenderThem: '相手',
     labelNoneHint: 'ラベルがありません。連絡先を右クリックするか /label を使用してください', labelFilterEmpty: (l) => `"${l}" のラベルを持つ連絡先がありません`, labelNoneContacts: 'ラベルがありません。連絡先を右クリックして追加してください。', labelNoneCmd: 'ラベルがありません。/label 仕事,家族 のように使用してください。',
     enableNotif: 'プッシュ通知を有効にする',
@@ -2570,16 +2558,12 @@ const _I = {
     wipeConfirm: '全てのメッセージ、連絡先、鍵、設定を完全に削除しますか?',
     wipeDone: '完全消去を実行しました',
     aiSummarizing: 'AIで要約中...',
-    aiSummary: 'AI要約',
     aiSummaryLocal: '要約 (ローカル)',
     aiSummarizeEmpty: 'まとめるメッセージがありません',
     aiSummarizeNoText: 'テキストメッセージがありません',
     aiSummarizeMsgCount: (n) => `${n}件のメッセージ`,
     aiSummarizeTopics: 'トピック',
     aiChat: 'AI',
-    aiThinking: '考え中...',
-    aiError: 'AI利用不可。/about でプロバイダ状態を確認してください。',
-    aiNotConfigured: 'AIが未設定です。サーバーにANTHROPIC_API_KEY、OPENAI_API_KEY、またはGROQ_API_KEYが必要です。',
     aiUnavailable: 'AIプロバイダが未設定です',
     promotedAdmin: (name) => `${name} がグループ管理者に昇格しました`,
     wipeBtn: '完全消去',
@@ -7882,7 +7866,6 @@ async function initMessenger(dbName) {
       [t('react'), () => { menu.remove(); showReactPicker(el, msg.msgId); }],
       [t('reply'), () => startReply(msg)],
       msg.text ? [t('copy'), async () => { try { await navigator.clipboard.writeText(msg.text); showToast(t('toastCopied'), 'success'); } catch { showToast(t('toastCopyFail'), 'error'); } }] : null,
-      msg.text ? [t('translate'), () => translateMsg(el, msg)] : null,
       msg.isMine ? [t('edit'), () => startEdit(msg)] : null,
       msg.isMine ? [t('delete'), () => deleteMsg(msg), true] : null,
       [t('forward'), () => forwardMsg(msg)],
@@ -8105,56 +8088,6 @@ async function initMessenger(dbName) {
   }
 
   // v3.6: Translate message inline (DeepL → LibreTranslate → MyMemory)
-  async function translateMsg(el, msg) {
-    if (!msg.text || !API) return;
-    // Toggle off if already translated
-    const existing = el.querySelector('.msg-translate');
-    if (existing) { existing.remove(); return; }
-    // Smart target detection: if msg is in user's lang, translate to the other common lang
-    const userLang = LANG === 'ja' ? 'ja' : LANG.split('-')[0] || 'en';
-    const hasJa = /[\u3000-\u9fff\uff00-\uffef]/.test(msg.text);
-    const toLang = (userLang === 'ja' && hasJa) ? 'en' : (userLang === 'en' && !hasJa) ? 'ja' : userLang;
-    const indicator = document.createElement('div');
-    indicator.className = 'msg-translate loading';
-    indicator.textContent = t('translating');
-    el.appendChild(indicator);
-    let success = false;
-    // Try 1: /api/translate (DeepL → Google → LibreTranslate → MyMemory)
-    try {
-      const resp = await postAPIRaw('/translate', { text: msg.text.slice(0, 2000), from: 'auto', to: toLang });
-      if (resp?.ok) {
-        const data = await resp.json();
-        if (data.translated) {
-          indicator.classList.remove('loading');
-          // esc() the meta fields: data.from is the detected source language echoed
-          // straight from the (external, untrusted) translation provider's response and
-          // is returned unsanitized by the worker; under 'unsafe-inline' CSP an injected
-          // onerror= payload would execute. data.to/data.provider esc'd for consistency.
-          safeSetHTML(indicator, `<span class="tr-text">${esc(data.translated)}</span><span class="tr-meta">${esc(data.from || 'auto')} → ${esc(data.to || '')} · ${esc(data.provider || '')}${data.cached ? ' · ' + t('aiCached') : ''}</span>`);
-          success = true;
-        }
-      }
-    } catch(e) { _dbg(e, 'translate-direct'); }
-    // Try 2: AI context-aware translation (preserves tone/formality)
-    if (!success) {
-      try {
-        const resp = await postAPIRaw('/ai', { action: 'translate_context', text: msg.text.slice(0, 2000), lang: toLang });
-        if (resp?.ok) {
-          const data = await resp.json();
-          if (data.result) {
-            indicator.classList.remove('loading');
-            safeSetHTML(indicator, `<span class="tr-text">${esc(data.result)}</span><span class="tr-meta">→ ${esc(toLang)} · ${esc(data.provider || 'AI')}${data.cached ? ' · ' + t('aiCached') : ''}</span>`);
-            success = true;
-          }
-        }
-      } catch(e) { _dbg(e, 'translate-ai'); }
-    }
-    if (!success) {
-      indicator.textContent = t('translateFailed');
-      setTimeout(() => indicator.remove(), CONFIG.TOAST_DURATION_MS);
-    }
-  }
-
   // Signal helper for edit/delete/reaction sync (1:1 + group)
   function sendSignal(data) {
     if (!activeContact) return;
@@ -8965,37 +8898,6 @@ async function initMessenger(dbName) {
       btn.textContent = r;
       btn.onclick = () => { _DOM.get('msg-input').value = r; sendMessage(); bar.classList.add('hidden'); };
       bar.appendChild(btn);
-    }
-    // v3.6: Async AI upgrade — replace local with AI suggestions if available
-    // Gate on explicit opt-in: never send message context to AI without consent
-    if (API && activeContact && localStorage.getItem('brz-ai-suggest') === '1') {
-      const recentMsgs = [];
-      const msgEls = _DOM.get('msg-messages')?.querySelectorAll('.msg');
-      if (msgEls) {
-        const last5 = Array.from(msgEls).slice(-5);
-        for (const el of last5) {
-          const txt = el.textContent?.slice(0, 100) || '';
-          recentMsgs.push((el.classList.contains('me') ? myName : activeContact.name) + ': ' + txt);
-        }
-      }
-      postAPIRaw('/ai', { action: 'reply_suggest', context: recentMsgs.join('\n') })
-        .then(resp => resp?.ok ? resp.json() : null)
-        .then(data => {
-          if (!data?.result || bar.classList.contains('hidden')) return;
-          try {
-            const suggestions = JSON.parse(data.result);
-            if (Array.isArray(suggestions) && suggestions.length >= 2) {
-              bar.replaceChildren();
-              for (const r of suggestions.slice(0, 3)) {
-                const btn = document.createElement('button');
-                btn.className = 'btn btn-o btn-sm smart-reply';
-                btn.textContent = String(r).slice(0, 40);
-                btn.onclick = () => { _DOM.get('msg-input').value = r; sendMessage(); bar.classList.add('hidden'); };
-                bar.appendChild(btn);
-              }
-            }
-          } catch {}
-        }).catch(() => {}); // Silent — local replies already shown
     }
     setTimeout(() => { bar.classList.add('hidden'); }, CONFIG.SMART_REPLY_HIDE_MS);
   }
@@ -12513,7 +12415,6 @@ async function initMessenger(dbName) {
         '/drop &lt;secret&gt; · /room [name]',
         '',
         '<b>' + t('aiChat') + '</b>',
-        '/ai &lt;question&gt; · /summarize (AI + local)',
         '',
         '<b>' + t('helpFormat') + '</b>',
         '**bold** *italic* ~~strike~~ `code` ```block``` ||spoiler|| @mention',
@@ -12904,23 +12805,6 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       d.className = 'cmd-panel';
       safeSetHTML(d, '<b class="i-g">' + t('aiSummarizing') + '</b>');
       box.appendChild(d); box.scrollTop = box.scrollHeight;
-      // Try AI summarize first
-      if (API) {
-        try {
-          const aiMsgs = recent.filter(m => m.text && !m.deleted).map(m => ({
-            sender: m.mine ? myName : (activeContact.name || t('msgSenderThem')), text: m.text.slice(0, 200)
-          }));
-          const resp = await postAPIRaw('/ai', { action: 'summarize', messages: aiMsgs });
-          if (resp?.ok) {
-            const data = await resp.json();
-            if (data.result) {
-              safeSetHTML(d, '<b class="i-g">' + t('aiSummary') + '</b> <span class="i-t3-10">(' + esc(data.provider || 'AI') + ')</span><br>' + esc(data.result).replace(/\n/g, '<br>'));
-              box.scrollTop = box.scrollHeight;
-              return;
-            }
-          }
-        } catch(e) { _dbg(e, 'ai-summarize'); }
-      }
       // Fallback: local summarize
       const summary = summarizeMessages(recent);
       safeSetHTML(d, '<b class="i-g">' + t('aiSummaryLocal') + '</b><br>' + esc(summary));
@@ -13742,38 +13626,6 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     }
 
     // v3.6: /ai <question> — Ask AI assistant
-    if (val.startsWith('/ai ')) {
-      e.preventDefault(); clearInput();
-      const question = val.slice(4).trim().slice(0, 2000);
-      if (!question) return;
-      if (!API) { showToast(t('aiError'), 'error'); return; }
-      // v3.6: Check if AI providers are configured on server
-      if (window._serverFeatures && !window._serverFeatures.ai) { showToast(t('aiNotConfigured'), 'info', 8000); return; }
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel';
-      safeSetHTML(d, '<b class="i-g">' + t('aiChat') + '</b> <span class="i-t3-10">' + t('aiThinking') + '</span>');
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
-      try {
-        const resp = await postAPIRaw('/ai', { action: 'chat', text: question });
-        if (resp?.ok) {
-          const data = await resp.json();
-          if (data.result) {
-            safeSetHTML(d, '<b class="i-g">' + t('aiChat') + '</b> <span class="i-t3-10">(' + esc(data.provider || '?') + (data.cached ? ' · ' + t('aiCached') : '') + ')</span><br><br>' + esc(data.result).replace(/\n/g, '<br>'));
-          } else {
-            safeSetHTML(d, '<b class="i-g">' + t('aiChat') + '</b><br>' + t('aiError'));
-          }
-        } else {
-          safeSetHTML(d, '<b class="i-g">' + t('aiChat') + '</b><br>' + t('aiError'));
-        }
-      } catch(e) {
-        _dbg(e, 'ai-chat');
-        safeSetHTML(d, '<b class="i-g">' + t('aiChat') + '</b><br>' + t('aiError'));
-      }
-      box.scrollTop = box.scrollHeight;
-      return;
-    }
-
     // v3.2: /debug — Toggle debug mode
     if (val === '/debug') {
       e.preventDefault();
