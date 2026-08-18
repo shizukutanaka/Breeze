@@ -254,12 +254,14 @@ function repinnedCspHeaders(resp, body) {
   return { ...resp.headers(), 'content-security-policy': csp.replace(/script-src [^;]+/, `script-src 'self' ${hashes.join(' ')}`) };
 }
 
-async function withGroupV5Patched(context) {
+// GROUP_RATCHET_V5 now ships ON, so the client worth simulating is a LEGACY one that does not
+// advertise the group-v5 capability — that is the peer the AND-rule negotiation has to protect.
+async function withGroupV5Disabled(context) {
   await context.route('**/*', async (route) => {
     if (route.request().resourceType() !== 'document') return route.continue();
     const resp = await route.fetch();
-    const body = (await resp.text()).replace('GROUP_RATCHET_V5: false,', 'GROUP_RATCHET_V5: true,');
-    if (!body.includes('GROUP_RATCHET_V5: true,')) throw new Error('withGroupV5Patched: marker not found — CONFIG moved, update this test');
+    const body = (await resp.text()).replace('GROUP_RATCHET_V5: true,', 'GROUP_RATCHET_V5: false,');
+    if (!body.includes('GROUP_RATCHET_V5: false,')) throw new Error('withGroupV5Disabled: marker not found — CONFIG moved or the default changed; update this test');
     await route.fulfill({ response: resp, body, headers: repinnedCspHeaders(resp, body) });
   });
 }
@@ -277,8 +279,9 @@ async function readGroupSenderKey(page, groupId) {
 test('group-v5 negotiation: one legacy member keeps the whole group on the v3 fallback', async ({ browser }) => {
   const aliceCtx = await browser.newContext(ctxOpts('203.0.113.16'));
   const bobCtx = await browser.newContext(ctxOpts('203.0.113.17'));
-  await withGroupV5Patched(aliceCtx); // Alice's client supports group-v5...
-  // ...Bob's stays the pristine default (GROUP_RATCHET_V5: false) — a legacy peer.
+  // Alice runs the shipped default (group-v5 ON); Bob is patched to a LEGACY client that never
+  // advertises the capability. The N-party AND rule must hold the whole group on v3 for his sake.
+  await withGroupV5Disabled(bobCtx);
   const alice = await aliceCtx.newPage();
   const bob = await bobCtx.newPage();
 
@@ -314,8 +317,7 @@ test('group-v5 negotiation: one legacy member keeps the whole group on the v3 fa
 test('group-v5 negotiation: both members supporting it upgrades the group to the v5 ratchet', async ({ browser }) => {
   const aliceCtx = await browser.newContext(ctxOpts('203.0.113.18'));
   const bobCtx = await browser.newContext(ctxOpts('203.0.113.19'));
-  await withGroupV5Patched(aliceCtx);
-  await withGroupV5Patched(bobCtx);
+  // Both contexts run the shipped default (GROUP_RATCHET_V5: true) — no patching needed.
   const alice = await aliceCtx.newPage();
   const bob = await bobCtx.newPage();
 

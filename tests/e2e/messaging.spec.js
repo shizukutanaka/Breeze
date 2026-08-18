@@ -99,19 +99,19 @@ function repinnedCspHeaders(resp, body) {
   return { ...resp.headers(), 'content-security-policy': csp.replace(/script-src [^;]+/, `script-src 'self' ${hashes.join(' ')}`) };
 }
 
-async function withConfigFlagPatched(context, flag) {
+async function withConfigFlagDisabled(context, flag) {
   await context.route('**/*', async (route) => {
     if (route.request().resourceType() !== 'document') return route.continue();
     const resp = await route.fetch();
-    const body = (await resp.text()).replace(`${flag}: false,`, `${flag}: true,`);
-    if (!body.includes(`${flag}: true,`)) throw new Error(`withConfigFlagPatched: '${flag}: false,' marker not found — CONFIG moved, update this test`);
+    const body = (await resp.text()).replace(`${flag}: true,`, `${flag}: false,`);
+    if (!body.includes(`${flag}: false,`)) throw new Error(`withConfigFlagDisabled: '${flag}: true,' marker not found — CONFIG moved or the default changed; update this test`);
     await route.fulfill({ response: resp, body, headers: repinnedCspHeaders(resp, body) });
   });
 }
 
 test('X3DH v5 interop: a v5-enabled client and a legacy client still exchange a 1:1 message', async ({ browser }) => {
-  // Alice runs with authenticated X3DH v5 ON; Bob stays the pristine default (X3DH_V5_ENABLED:
-  // false) — a legacy peer that never advertises the x3dh-v5 capability. This is the safety
+  // Alice runs the shipped default (authenticated X3DH v5 ON); Bob is patched down to a LEGACY
+  // client that never advertises the x3dh-v5 capability. This is the safety
   // property that must hold before X3DH_V5_ENABLED can ever default on: _peerSupportsX3dhV5 gates
   // on BOTH the local flag AND the peer's advertised caps, so Alice's initSessionV5Initiator sees
   // Bob has no x3dh-v5 cap, returns null, and falls back to the legacy initSession — the message
@@ -119,7 +119,7 @@ test('X3DH v5 interop: a v5-enabled client and a legacy client still exchange a 
   // break first contact against every not-yet-upgraded contact.
   const aliceCtx = await browser.newContext({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.30' } });
   const bobCtx = await browser.newContext({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.31' } });
-  await withConfigFlagPatched(aliceCtx, 'X3DH_V5_ENABLED');
+  await withConfigFlagDisabled(bobCtx, 'X3DH_V5_ENABLED');
   const alice = await aliceCtx.newPage();
   const bob = await bobCtx.newPage();
 

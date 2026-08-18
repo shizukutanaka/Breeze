@@ -75,10 +75,13 @@ plaintext is a different threat model from one that cannot.
   Sealed Sender it does not cryptographically bind *which* sender sent it — a malicious
   reporter cannot forge a report, but sender-binding needs asymmetric franking / Hecate
   (CRYPTO-SPEC §9 N4).
-- **Opt-in hardening**: several strong defenses (authenticated X3DH v5, group forward
-  secrecy, at-rest key wrapping, call-signaling E2E) are capability-negotiated and
-  **default-off** to preserve interop during rollout — enable per the CONFIG flags /
-  `wrangler.toml` `*_REQUIRE_AUTH` docs once your user base has upgraded.
+- **Defaults (v3.6.1)**: authenticated X3DH v5 and group forward secrecy are now **ON by
+  default**. Both are capability-negotiated with an AND rule and fall back to the legacy path
+  whenever any peer/member is un-upgraded, so first contact is authenticated and group messages
+  are forward-secret without breaking older clients. Still opt-in: at-rest key wrapping (needs a
+  user passphrase, `/keywrap`) and call-signaling E2E (`CALL_E2E_SIGNAL` has no capability
+  negotiation yet, so enabling it requires both ends). Worker-side `*_REQUIRE_AUTH` flags remain
+  operator choices — see `wrangler.toml`.
 - **Post-quantum**: key exchange is classical (X25519) today; ML-KEM hybrid is detected but
   not yet deployed (browsers ship ML-KEM ~2027).
 

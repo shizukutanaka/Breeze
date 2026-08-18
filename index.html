@@ -1272,12 +1272,12 @@ const CONFIG = {
   // revocation: on kick/leave the admin makes a fresh chain key for the bumped epoch, re-distributes
   // to remaining members only; messages carry `ep` and a mismatch is rejected without fallback,
   // so a kicked member's stale key can't decrypt new-epoch messages. OFF: byte-identical to v3.
-  GROUP_RATCHET_V5: false,
+  GROUP_RATCHET_V5: true,
   GROUP_MAX_SKIP: 50, // max tolerated out-of-order gap in the group v5 hash ratchet
   // Authenticated X3DH (I1/G1): default initSession() is a bare unverified DH(IK_A, IK_B) — an
   // undetected MITM risk. ON: verifies the peer's signed pre-key against their Ed25519 key when
   // BOTH sides negotiate it (else falls back byte-identically). Also runs the KT chain+rollover audit.
-  X3DH_V5_ENABLED: false,
+  X3DH_V5_ENABLED: true,
   // v3.6 SECURITY (default OFF — opt-in via /keywrap, run again to disable): wrap the identity
   // ECDH + Ed25519 signing private keys with AES-256-GCM under a PBKDF2 key (600k iter, random
   // salt) before IndexedDB storage. Guards against XSS cookie-theft, device forensics, IDB-reading
