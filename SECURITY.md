@@ -97,6 +97,13 @@ plaintext is a different threat model from one that cannot.
   add outright, a **rolled** key warns. This detects a relay rewriting key *history*; it cannot
   detect a relay that has served one consistent wrong key from the start (TOFU). Adding by raw
   public key or QR avoids the question entirely — there the key *is* the identity.
+- **The plan/account-slot limit is not a security control.** `getAccountSlots()` reads
+  `localStorage['brz-acc-slots']` and the check is a client-side `if (accs.length >= slots)
+  return`. The relay stores `slots:{userId}` but gates no actual resource on it, because
+  "accounts" are local browser profiles — nothing is allocated server-side per slot. Anyone can
+  raise their own limit with one `localStorage.setItem`. This is noted so the limit is not
+  mistaken for an enforced boundary; it is a nudge. Making it real would require the server to
+  own a per-slot resource, which today it does not.
 - **Post-quantum**: key exchange is classical (X25519) today; ML-KEM hybrid is detected but
   not yet deployed (browsers ship ML-KEM ~2027).
 
