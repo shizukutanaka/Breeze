@@ -60,12 +60,16 @@ test('/verify auto-verifies a fresh contact against the server key-transparency 
   // before issuing the command (otherwise, under parallel load, activeContact can still be null).
   await expect(alice.locator('#msg-input-bar')).toBeVisible();
 
-  // /verify opens the safety-number modal with a live KT status line.
-  await alice.locator('#msg-input').fill('/verify');
-  await alice.locator('#msg-input').press('Enter');
-
+  // /verify opens the safety-number modal with a live KT status line. Retry the command itself:
+  // under 2-worker parallel load the Enter key has been observed to land before the slash-command
+  // listener is wired, which drops the command silently — waiting longer cannot recover that, only
+  // re-issuing it can. (Observed as a rare 'element(s) not found' on the modal.)
   const modal = alice.locator('.overlay.overlay-dark');
-  await expect(modal).toBeVisible({ timeout: 10_000 });
+  await expect(async () => {
+    await alice.locator('#msg-input').fill('/verify');
+    await alice.locator('#msg-input').press('Enter');
+    await expect(modal).toBeVisible({ timeout: 3_000 });
+  }).toPass({ timeout: 20_000 });
   const status = alice.locator('#kt-audit-status');
   await expect(status).toBeVisible();
 

@@ -1702,6 +1702,8 @@ const _I = {
     unarchived: 'Unarchived',
     select: 'Select',
     report: 'Report',
+    toastAliasTampered: 'Blocked: this handle\u2019s key history has been tampered with. Ask the person for their public key directly.',
+    toastAliasRolled: 'Warning: this handle\u2019s key changed recently. Verify the safety number before trusting it.',
     confirmReport: 'Report this message to the operator? The message text and a one-time proof are sent so it can be verified. Other messages stay private.',
     toastReported: 'Reported',
     toastReportFail: 'Report failed',
@@ -2523,6 +2525,8 @@ const _I = {
     unarchived: 'アーカイブ解除',
     select: '選択',
     report: '通報',
+    toastAliasTampered: 'ブロックしました: このハンドルの鍵履歴が改竄されています。相手から公開鍵を直接受け取ってください。',
+    toastAliasRolled: '警告: このハンドルの鍵が最近変更されました。安全確認番号を照合してください。',
     confirmReport: 'このメッセージを運営に通報しますか？検証のためメッセージ本文と一回限りの証明を送信します。他のメッセージは非公開のままです。',
     toastReported: '通報しました',
     toastReportFail: '通報に失敗しました',
@@ -10949,7 +10953,7 @@ async function initMessenger(dbName) {
   }
 
   async function resolveAndAdd(input) {
-    let pubB64, name = 'Contact';
+    let pubB64, name = 'Contact', aliasResolved = false;
     // Parse URL
     try {
       const url = new URL(input);
@@ -10963,13 +10967,23 @@ async function initMessenger(dbName) {
         const resp = await postAPIRaw('/alias/get', { alias: input.slice(1) });
         if (resp.ok) {
           const data = await resp.json();
-          pubB64 = data.pub; name = data.name || name;
+          pubB64 = data.pub; name = data.name || name; aliasResolved = true;
         } else { showToast(t('toastAliasNotFound'), 'error'); return; }
       } catch(e) { _dbg(e,'alias'); showToast(t('toastAliasResolveFail'), 'error'); return; }
     } else {
       pubB64 = input;
     }
     if (!pubB64 || pubB64 === myPubB64) return;
+    // An @alias is resolved BY THE RELAY, which returns an unsigned {pub}: a malicious or
+    // compromised relay can hand back any key for a handle and the user has no signal. Audit the
+    // key-transparency log before trusting it. A tampered hash chain means the relay is rewriting
+    // key history, so refuse the add outright; a rolled key is legitimate-but-notable, so warn and
+    // let the user decide. (Raw-pubkey and QR adds skip this — there the key IS the identity.)
+    if (aliasResolved) {
+      const audit = await _auditKeyTransparency({ id: pubB64.slice(0, 12), pubB64 });
+      if (audit?.verdict === 'tampered') { showToast(t('toastAliasTampered'), 'error', 10000); return; }
+      if (audit?.verdict === 'rolled') showToast(t('toastAliasRolled'), 'warn', 8000);
+    }
     await addContact(pubB64, name);
   }
   // PRESENCE POLLING — single batch check (P2 FIX: no rate limit issue)

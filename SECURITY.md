@@ -82,6 +82,11 @@ plaintext is a different threat model from one that cannot.
   user passphrase, `/keywrap`) and call-signaling E2E (`CALL_E2E_SIGNAL` has no capability
   negotiation yet, so enabling it requires both ends). Worker-side `*_REQUIRE_AUTH` flags remain
   operator choices — see `wrangler.toml`.
+- **@alias resolution** is answered by the relay, which returns an unsigned `{pub}`. Since
+  v3.6.1 an alias add runs the key-transparency audit first: a **tampered** hash chain blocks the
+  add outright, a **rolled** key warns. This detects a relay rewriting key *history*; it cannot
+  detect a relay that has served one consistent wrong key from the start (TOFU). Adding by raw
+  public key or QR avoids the question entirely — there the key *is* the identity.
 - **Post-quantum**: key exchange is classical (X25519) today; ML-KEM hybrid is detected but
   not yet deployed (browsers ship ML-KEM ~2027).
 
