@@ -138,9 +138,6 @@ Sender                          Server                         Receiver
 | /api/turn | default | TURN credential request |
 | /api/ogp | 20/min | Open Graph Protocol link preview |
 | /api/online | default | Online user count |
-| /api/portal | default | Stripe customer portal |
-| /api/account/purchase | default | Additional account purchase |
-| /api/account/slots | default | Account slot query |
 | /api/backup/upload | 2/min | Encrypted backup upload |
 | /api/backup/download | 5/min | Encrypted backup download |
 | /api/sealed/ack | default | Acknowledge sealed message delivery |
@@ -149,7 +146,6 @@ Sender                          Server                         Receiver
 | /api/abuse/record | default | Record abuse metadata for reporting |
 | /api/abuse/report | default | Submit abuse report |
 | /api/health | unlimited | Health check (no auth) |
-| /api/webhook | unlimited | Stripe webhook receiver |
 
 ### 3.3 Worker Environment Variables
 

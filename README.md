@@ -6,7 +6,7 @@
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/shizukutanaka?style=flat&logo=github)](https://github.com/sponsors/shizukutanaka)
 [![Deploy to Cloudflare](https://img.shields.io/badge/Deploy-Cloudflare%20Pages-F38020?logo=cloudflare)](https://dash.cloudflare.com/?to=/:account/pages/new/provider/polaris)
 
-End-to-end encrypted P2P messenger. No phone number. No registration. No app store required.
+End-to-end encrypted P2P messenger. No phone number. No registration. No app store. No paywall — every feature is free.
 
 > **Single HTML file** — deploys to Cloudflare Pages in 60 seconds. Runs at **$0/month**.
 

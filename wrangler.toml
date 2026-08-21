@@ -12,11 +12,6 @@ id = ""  # ← REQUIRED: paste your KV namespace ID here
 # === SECRETS (set via CLI — never commit values) ===
 #
 # --- Stripe Billing ---
-# wrangler pages secret put STRIPE_SECRET_KEY         # sk_live_... or sk_test_...
-# wrangler pages secret put STRIPE_WEBHOOK_SECRET     # whsec_...
-# wrangler pages secret put STRIPE_PRICE_LITE          # price_... ($0.99/mo, Lite)
-# wrangler pages secret put STRIPE_PRICE_PLUS          # price_... ($5.99/mo, Plus)
-# wrangler pages secret put STRIPE_PRICE_PRO           # price_... ($19.99/mo, Pro)
 #
 # --- Web Push ---
 # npx web-push generate-vapid-keys

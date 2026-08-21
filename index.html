@@ -152,10 +152,6 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .mb-3 { margin-bottom: 12px }
 
 /* ─── Pricing ─── */
-.pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 16px }
-.price-card { background: var(--s1); backdrop-filter: blur(12px); border-radius: var(--rad-lg); padding: 24px 16px; text-align: center; border: 1px solid var(--b1); transition: transform .2s var(--bounce), box-shadow .2s ease; box-shadow: var(--shadow-sm) }
-.price-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-float) }
-.price-card.featured { border: 2px solid var(--g); box-shadow: 0 4px 20px rgba(52,211,153,.15) }
 .price-name { font-weight: 700; font-size: 16px; margin-bottom: 4px }
 .price-amount { font-size: 28px; font-weight: 800; margin-bottom: 8px; letter-spacing: -.02em }
 .price-period { font-size: 13px; font-weight: 400; color: var(--t2) }
@@ -679,7 +675,6 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 .reply-preview { background: var(--s2); border-left: 3px solid var(--g); padding: 6px 12px; font-size: 12px; color: var(--t3); border-radius: 0 var(--rad) var(--rad) 0; margin-bottom: 4px; display: flex; align-items: center; gap: 8px }
 .import-result { font-size: 12px; color: var(--t2); line-height: 1.6; margin-top: 8px }
 .delivery-state { font-size: 10px; opacity: .5; margin-left: 2px }
-.plan-badge { padding: 2px 8px; border-radius: 6px; font-weight: 700; font-family: var(--mono); font-size: 11px }
 .badge-active { background: var(--g); color: #000 }
 .badge-free { background: var(--s3); color: var(--t2) }
 .overlay-dark { background: rgba(0,0,0,.85) }
@@ -720,7 +715,6 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 .server-banner { background: var(--r); color: #fff; padding: 8px 16px; font-size: 13px; text-align: center; border-radius: var(--rad); margin-bottom: 4px }
 .sidebar-meta { font-size: 10px; color: var(--g); font-family: var(--mono) }
 .conv-status { font-size: 10px; font-family: var(--mono); color: var(--t3) }
-.pricing-note { color: var(--t3); text-align: center; font-size: 11px }
 .char-count { font-size: 10px; color: var(--t3); font-family: var(--mono); min-width: 24px; text-align: right }
 .msg-area { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 4px; min-height: 0; contain: layout style paint; overscroll-behavior-y: contain; overflow-anchor: none }
 /* v3.6: Scroll anchor sentinel — keeps view pinned to bottom during prepend (research: Chrome/Firefox) */
@@ -861,7 +855,6 @@ del.md-del { opacity: .6 }
 .contact-filter:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(52,211,153,.12) }
 .contact-filter-wrap { padding: 8px 12px }
 .clickable { cursor: pointer }
-.pricing-note a { color: var(--t2) }
 .tool { cursor: pointer }
 .consent-banner button { white-space: nowrap }
 
@@ -960,7 +953,6 @@ del.md-del { opacity: .6 }
 .is-android .msg.me { border-bottom-right-radius: 6px }
 .is-android .msg.them { border-bottom-left-radius: 6px }
 .is-android .modal { border-radius: var(--rad-lg) }
-.is-android .price-card { border-radius: var(--rad-lg) }
 /* Android: edge-to-edge status/nav bar transparent */
 .is-android.is-pwa .sidebar { padding-top: env(safe-area-inset-top) }
 /* Android ripple effect on interactive elements */
@@ -1041,7 +1033,6 @@ del.md-del { opacity: .6 }
   <div class="wrap flex-c">
     <span class="logo"><b>B</b>reeze</span>
     <nav>
-      <a href="?pricing">Pricing</a>
       <a href="?terms">Terms</a>
       <a href="?privacy">Privacy</a>
     </nav>
@@ -1097,40 +1088,6 @@ del.md-del { opacity: .6 }
       <p><b>9. Changes.</b> We will update this policy as needed. The "Last updated" date reflects the most recent revision.</p>
       <p><b>10. Contact.</b> For privacy inquiries, use /help in the app or open an issue on GitHub.</p>
     </div>
-    <div id="legal-commercial" class="hidden legal-section">
-      <h2 class="color-g">特定商取引法に基づく表記</h2>
-      <p>販売事業者: (デプロイ時に設定)<br>所在地: (デプロイ時に設定)<br>連絡先: (デプロイ時に設定)<br>販売価格: Lite $0.99/月, Plus $5.99/月, Pro $19.99/月（1アカウント目は無料）<br>支払方法: クレジットカード (Stripe)<br>引渡時期: 決済完了後即時<br>返品: Customer Portalからキャンセル可能。日割り返金はありません。</p>
-    </div>
-    <div id="legal-pricing" class="hidden legal-section">
-      <h2 class="color-g mb-3" data-i18n="pricingTitle">Pricing</h2>
-      <div class="pricing-grid">
-        <div class="price-card">
-          <div class="price-name" data-i18n="planFree">Free</div>
-          <div class="price-amount color-g">$0</div>
-          <div class="price-features" data-i18n-html="priceFreeDesc">E2E encrypted messaging<br>Voice and video calls<br>TURN relay included<br>Files up to 50 MB<br>Groups up to 100<br>1 account</div>
-          <a href="?" class="btn btn-o w-full" data-i18n="priceGetFree">Current plan</a>
-        </div>
-        <div class="price-card">
-          <div class="price-name" data-i18n="planLite">Lite</div>
-          <div class="price-amount">$0.99<span class="price-period">/mo</span></div>
-          <div class="price-features" data-i18n-html="priceLiteDesc">Everything in Free<br><b>+1 account</b> (2 total)<br>Work / personal separation<br>Cancel anytime</div>
-          <button class="btn btn-o w-full" data-plan="lite" data-i18n="priceGetLite">Get Lite</button>
-        </div>
-        <div class="price-card featured">
-          <div class="price-name" data-i18n="planPlus">Plus</div>
-          <div class="price-amount">$5.99<span class="price-period">/mo</span></div>
-          <div class="price-features" data-i18n-html="pricePlusDesc">Everything in Free<br><b>+3 accounts</b> (4 total)<br>Ideal for freelancers<br>Cancel anytime</div>
-          <button class="btn btn-g w-full" data-plan="plus" data-i18n="priceGetPlus">Get Plus</button>
-        </div>
-        <div class="price-card">
-          <div class="price-name" data-i18n="planPro">Pro</div>
-          <div class="price-amount">$19.99<span class="price-period">/mo</span></div>
-          <div class="price-features" data-i18n-html="priceProDesc">Everything in Free<br><b>Unlimited accounts</b><br>Teams &amp; organizations<br>Cancel anytime</div>
-          <button class="btn btn-o w-full" data-plan="pro" data-i18n="priceGetPro">Get Pro</button>
-        </div>
-      </div>
-      <div class="pricing-note mt-16" data-i18n-html="pricingNote">1st account always free. All plans include every feature. Cancel anytime. <a href="?terms">Terms</a></div>
-    </div>
   </div>
 </div>
 
@@ -1185,9 +1142,6 @@ del.md-del { opacity: .6 }
           <div class="skeleton skeleton-contact"></div>
           <div class="skeleton skeleton-contact"></div>
         </div>
-        <div id="msg-billing" class="billing-panel hidden">
-          <span id="msg-plan-badge" class="plan-badge"></span>
-          <button id="b-msg-billing" class="btn btn-o btn-sm"></button>
         </div>
       </div>
 
@@ -1236,7 +1190,7 @@ del.md-del { opacity: .6 }
 
 </div></main>
 
-<footer><div class="wrap">Breeze v3.6.0 — P2P encrypted messenger. <a href="?pricing">Pricing</a> · <a href="?terms">Terms</a> · <a href="?privacy">Privacy</a> · <a href="?commercial">特定商取引法</a></div></footer>
+<footer><div class="wrap">Breeze v3.6.0 — P2P encrypted messenger. <a href="?terms">Terms</a> · <a href="?privacy">Privacy</a></div></footer>
 
 <script src="lang.js" async integrity="sha384-Z86EvTYAMKtHSwoqtUfrsG6938uHML7p7qNNAVpvCdxLI2pUd5kJyh4pVf5x7LnQ" crossorigin="anonymous"></script>
 <script>
@@ -1435,7 +1389,6 @@ const _I = {
     serverNotConfigured: 'Server not configured: KV binding required. Follow README setup. P2P and message relay unavailable.',
     localMode: 'Cannot reach server. Running in local mode.',
     noIdentity: 'Create an identity in the messenger first',
-    billingNotConfigured: 'Billing not configured',
     // Misc
     deleted: 'Message deleted', edited: '(edited)',
     contactDeleted: 'Contact deleted.',
@@ -1464,35 +1417,12 @@ const _I = {
     // v3.1 UI strings
     offlineBanner: 'Offline — P2P chats still work',
     reconnected: 'Back online',
-    slotAdded: 'Account slot added! You can now create a new account.',
     purchaseDone: 'Purchase complete. May take a moment to reflect.',
     noSwitchCall: 'Cannot switch accounts during a call',
     accountName: 'Account name:',
     newName: 'New name:',
     deleteAccount: 'Delete this account?',
-    addAccountBtn: 'Add account',
-    planFree: 'Free',
-    planLite: 'Lite',
-    planPlus: 'Plus',
-    planPro: 'Pro',
-    priceGetFree: 'Current Plan',
-    priceGetLite: 'Get Lite',
-    priceGetPlus: 'Get Plus',
-    priceGetPro: 'Get Pro',
-    priceFreeDesc: 'E2E encrypted messaging<br>Voice and video calls<br>TURN relay included<br>Files up to 50 MB<br>Groups up to 100<br>1 account',
-    priceLiteDesc: 'Everything in Free<br><b>+1 account</b> (2 total)<br>Work / personal separation<br>Cancel anytime',
-    pricePlusDesc: 'Everything in Free<br><b>+3 accounts</b> (4 total)<br>Ideal for freelancers<br>Cancel anytime',
-    priceProDesc: 'Everything in Free<br><b>Unlimited accounts</b><br>Teams &amp; organizations<br>Cancel anytime',
     priceNote: 'All plans include E2E encryption, P2P messaging, and 924 languages.',
-    pricingTitle: 'Pricing',
-    pricingNote: '1st account always free. All plans include every feature. Cancel anytime. <a href="?terms">Terms</a>',
-    manageSubscription: 'Manage subscription',
-    billingTitle: 'Billing Dashboard',
-    billingPlan: 'Plan',
-    billingAccounts: 'Accounts',
-    billingUpgrade: 'Upgrade: Lite +1 ($0.99) · Plus +3 ($5.99) · Pro ∞ ($19.99)',
-    billingSlotsAvail: (n) => `${n} slot(s) available. Use the + tab to create.`,
-    billingVisit: 'Visit ?pricing for details.',
     use1to1: 'Use in a 1:1 chat',
     backupBtn: 'Create Backup',
     restoreBtn: 'Restore Backup',
@@ -1805,7 +1735,6 @@ const _I = {
     permanentRoom: 'Permanent room',
     roomDefault: 'Room', roomTTLPrompt: 'Room TTL: 1=1h, 2=24h, 3=7d, 4=Permanent',
     copiedClipboard: 'Copied to clipboard',
-    nudgeAccount: (used, total) => `Account limit reached (${used}/${total}). Upgrade your plan at ?pricing`,
     roomExpires: (h) => `Expires in ${h}h`,
     imported: (n, src, total, dup) => `Imported ${n} messages from ${src} (${total} total, ${dup} duplicates skipped).`,
     inviteCopied: 'Invite message copied to clipboard. Paste it in LINE, WhatsApp, or any app.',
@@ -1997,7 +1926,6 @@ const _I = {
     cmdStorageAvgMsg: (kb) => `  avg/msg: ${kb}`,
     cmdStorageSW: (active) => `  Service Worker: ${active ? '✓ Active' : '✗ None'}`,
     aboutTagline: 'P2P Encrypted Messenger',
-    aboutPlan: (plan, used, total) => `Plan: ${plan} (${used}/${total} accounts)`,
     aboutArch: 'Architecture: Single HTML + Cloudflare Worker',
     aboutProtocol: 'Protocol: X3DH + Double Ratchet + Sender Key',
     aboutEncryption: 'Encryption: X25519 + Ed25519 + AES-256-GCM + HKDF',
@@ -2258,7 +2186,6 @@ const _I = {
     serverNotConfigured: 'サーバー未設定: KVバインディングが必要です。READMEの手順に従ってください。',
     localMode: 'サーバーに接続できません。ローカルモードで動作中。',
     noIdentity: 'まずメッセンジャーでIDを作成してください',
-    billingNotConfigured: '課金機能が未設定です',
     deleted: 'メッセージ削除済み', edited: '(編集済み)',
     contactDeleted: '連絡先を削除しました。',
     // v3 セキュリティ
@@ -2287,35 +2214,12 @@ const _I = {
     // v3.1 UI strings
     offlineBanner: '🔌 オフライン — P2P接続中のチャットは引き続き利用可能',
     reconnected: 'オンラインに復帰',
-    slotAdded: 'アカウントスロット追加完了! 新しいアカウントを作成できます。',
     purchaseDone: '購入完了。反映に少し時間がかかる場合があります。',
     noSwitchCall: '通話中はアカウントを切り替えられません',
     accountName: 'アカウント名:',
     newName: '新しい名前:',
     deleteAccount: 'このアカウントを削除しますか?',
-    addAccountBtn: 'アカウント追加',
-    planFree: '無料',
-    planLite: 'Lite',
-    planPlus: 'Plus',
-    planPro: 'Pro',
-    priceGetFree: '現在のプラン',
-    priceGetLite: 'Liteにする',
-    priceGetPlus: 'Plusにする',
-    priceGetPro: 'Proにする',
-    priceFreeDesc: 'E2E暗号化メッセージ<br>音声・ビデオ通話<br>TURNリレー込み<br>50MBまでのファイル<br>100人までのグループ<br>1アカウント',
-    priceLiteDesc: 'Freeの全機能<br><b>+1アカウント</b> (計2)<br>仕事/プライベートの分離<br>いつでもキャンセル',
-    pricePlusDesc: 'Freeの全機能<br><b>+3アカウント</b> (計4)<br>フリーランスに最適<br>いつでもキャンセル',
-    priceProDesc: 'Freeの全機能<br><b>無制限アカウント</b><br>チーム・組織向け<br>いつでもキャンセル',
     priceNote: '全プランにE2E暗号化、P2Pメッセージ、924言語が含まれます。',
-    pricingTitle: '料金プラン',
-    pricingNote: '1アカウント目は常に無料。全プラン全機能込み。いつでもキャンセル可。<a href="?terms">利用規約</a>',
-    manageSubscription: 'サブスクリプション管理',
-    billingTitle: '課金ダッシュボード',
-    billingPlan: 'プラン',
-    billingAccounts: 'アカウント',
-    billingUpgrade: 'アップグレード: Lite +1 ($0.99) · Plus +3 ($5.99) · Pro ∞ ($19.99)',
-    billingSlotsAvail: (n) => `${n}スロット空き。+タブで作成できます。`,
-    billingVisit: '?pricingで詳細を確認',
     use1to1: '1:1チャットで使用してください',
     backupBtn: '🔐 バックアップ作成',
     restoreBtn: '📥 バックアップ復元',
@@ -2628,7 +2532,6 @@ const _I = {
     permanentRoom: '永続ルーム',
     roomDefault: 'ルーム', roomTTLPrompt: '部屋の有効期限: 1=1時間, 2=24時間, 3=7日, 4=永久',
     copiedClipboard: 'クリップボードにコピー済み',
-    nudgeAccount: (used, total) => `アカウント上限 (${used}/${total})。?pricingでプランをアップグレード`,
     roomExpires: (h) => `${h}時間後に消滅`,
     imported: (n, src, total, dup) => `${src}から${n}件インポート (全${total}件、${dup}件重複スキップ)`,
     inviteCopied: '招待メッセージをクリップボードにコピーしました。LINE等に貼り付けてください。',
@@ -2819,7 +2722,6 @@ const _I = {
     cmdStorageAvgMsg: (kb) => `  平均/メッセージ: ${kb}`,
     cmdStorageSW: (active) => `  Service Worker: ${active ? '✓ 有効' : '✗ なし'}`,
     aboutTagline: 'P2P暗号化メッセンジャー',
-    aboutPlan: (plan, used, total) => `プラン: ${plan} (${used}/${total} アカウント)`,
     aboutArch: 'アーキテクチャ: 単一HTML + Cloudflare Worker',
     aboutProtocol: 'プロトコル: X3DH + Double Ratchet + Sender Key',
     aboutEncryption: '暗号化: X25519 + Ed25519 + AES-256-GCM + HKDF',
@@ -3415,28 +3317,6 @@ function showContextMenu(x, y, items) {
 }
 
 // UPGRADE NUDGE modal (top-level like caller addAccount; used to live in initMessenger's closure and threw every call).
-function showUpgradeNudge(reason) {
-  document.querySelectorAll('.overlay.upgrade-modal').forEach(m => m.remove());
-  const modal = document.createElement('div');
-  modal.className = 'overlay overlay-dark upgrade-modal';
-  safeSetHTML(modal, `<div class="modal upgrade-modal">
-    <div class="nudge-icon">👤</div>
-    <div class="nudge-title">${t('upgTitle')}</div>
-    <div class="nudge-desc">${esc(reason)}</div>
-    <div class="nudge-features">
-      ✓ Separate identity &amp; contacts<br>
-      ✓ Work / personal separation<br>
-      ✓ All features included per account<br>
-      ✓ Cancel anytime
-    </div>
-    <div class="nudge-actions">
-      <button data-action="go-pricing" class="btn btn-g nudge-btn-main">${t('upgCta')}</button>
-      <button data-close="overlay" class="btn btn-o nudge-btn-later">${t('later')}</button>
-    </div>
-  </div>`);
-  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
-  document.body.appendChild(modal);
-}
 
 const PLATFORM = (() => {
   if (typeof window !== 'undefined' && window.process?.versions?.electron) return 'electron';
@@ -3840,12 +3720,11 @@ if (P.has('drop')) {
     } catch(e) { _DOM.get('drop-status').textContent = t('dropReadFailed'); }
   })();
 } else
-if (P.has('terms') || P.has('privacy') || P.has('legal') || P.has('commercial') || P.has('pricing')) {
+if (P.has('terms') || P.has('privacy') || P.has('legal')) {
   show('v-legal');
   if (P.has('terms')) _DOM.get('legal-terms').classList.remove('hidden');
   else if (P.has('privacy')) _DOM.get('legal-privacy').classList.remove('hidden');
-  else if (P.has('legal') || P.has('commercial')) _DOM.get('legal-commercial').classList.remove('hidden');
-  else if (P.has('pricing')) _DOM.get('legal-pricing').classList.remove('hidden');
+  else if (P.has('legal')) _DOM.get('legal-terms').classList.remove('hidden');
 } else {
   show('v-msg');
   initMessenger().catch(e => {
@@ -3865,19 +3744,9 @@ function show(id) {
   }
 }
 
-// Global billing state
 let _userId = '';
-let _accountSlots = 1; // Free=1, Lite=2, Plus=4, Pro=unlimited
 let _turnCredential = null; // v3.6: { iceServers: [...], ttl, provider } — from /api/turn
 try { _userId = localStorage.getItem('brz-uid') || ''; } catch(e) { _dbg(e); }
-
-// Check account slots on load
-if (_userId && API) {
-  postAPIRaw('/account/slots', { userId: _userId })
-    .then(r => r?.ok ? r.json() : null)
-    .then(d => { if (d && d.slots) { _accountSlots = d.slots; localStorage.setItem('brz-acc-slots', String(d.slots)); if (d.plan) localStorage.setItem('brz-plan', d.plan); } })
-    .catch(e => _dbg(e));
-}
 
 // If arriving via ?join=token, show group info on setup screen
 if (joinToken && API) {
@@ -3895,34 +3764,6 @@ if (joinToken && API) {
     .catch(e => _dbg(e));
 }
 
-// Handle billing redirect — plan purchase success
-if ((P.get('billing') === 'success' || P.get('billing') === 'account-success') && API) {
-  (async () => {
-    const uid = localStorage.getItem('brz-uid');
-    if (!uid) return;
-    for (let attempt = 0; attempt < 10; attempt++) {
-      await new Promise(r => setTimeout(r, 1.5 * MS.SEC));
-      try {
-        const resp = await postAPIRaw('/account/slots', { userId: uid });
-        if (resp.ok) {
-          const data = await resp.json();
-          if (data.slots > getAccountSlots()) {
-            localStorage.setItem('brz-acc-slots', String(data.slots));
-            if (data.plan) localStorage.setItem('brz-plan', data.plan);
-            _accountSlots = data.slots;
-            showToast(t('slotAdded'), 'success');
-            history.replaceState(null, '', '/');
-            return;
-          }
-        }
-      } catch(e) { _dbg(e); }
-    }
-    history.replaceState(null, '', '/');
-  })();
-} else if (P.get('billing') === 'cancel') {
-  history.replaceState(null, '', '/');
-}
-
 // v3.6: Web Share Target handler — receive shared text/URLs from other apps
 if (P.get('text') || P.get('url') || P.get('title')) {
   const sharedText = [P.get('title'), P.get('text'), P.get('url')].filter(Boolean).join('\n');
@@ -3937,24 +3778,6 @@ if (P.get('text') || P.get('url') || P.get('title')) {
     }, 1000);
   }
 }
-
-// Plan purchase buttons (Lite $0.99, Plus $5.99, Pro $19.99)
-document.querySelectorAll('[data-plan]').forEach(btn => {
-  const origText = btn.textContent;
-  btn.addEventListener('click', async () => {
-    const plan = btn.dataset.plan;
-    const uid = localStorage.getItem('brz-uid');
-    if (!uid) { showToast(t('noIdentity'), 'error'); window.location.href = '/'; return; }
-    if (!API) { showToast(t('uiNoServer'), 'error'); return; }
-    btn.disabled = true; btn.textContent = '...';
-    try {
-      const r = await postAPIRaw('/account/purchase', { userId: uid, plan });
-      if (r?.ok) { const d = await r.json(); if (d.url) { safeRedirect(d.url); return; } }
-      showToast(t('billingNotConfigured'), 'error');
-    } catch(e) { showToast(t('billingNotConfigured'), 'error'); }
-    btn.disabled = false; btn.textContent = origText;
-  });
-});
 
 // ======================== CRYPTO ========================
 async function deriveKey(passphrase, salt, usage) {
@@ -4231,7 +4054,9 @@ function _updateTitle(unreadCount) {
 }
 
 // v3.5: SECURITY — Safe redirect (prevents open redirect via server response)
-const SAFE_REDIRECT_DOMAINS = ['checkout.stripe.com', 'billing.stripe.com', 'dashboard.stripe.com'];
+// Billing was the only consumer of safeRedirect/safeOpen; with it gone the allowlist is empty,
+// so any future external redirect fails closed until a domain is deliberately added.
+const SAFE_REDIRECT_DOMAINS = [];
 function safeRedirect(url) {
   try {
     const parsed = new URL(url);
@@ -4465,10 +4290,6 @@ function getActiveAccountId() {
 function setActiveAccountId(id) {
   try { localStorage.setItem('brz-active', id); } catch(e) { _dbg(e); }
 }
-function getAccountSlots() {
-  // Free: 1 slot. Additional purchased via Stripe.
-  try { return parseInt(localStorage.getItem('brz-acc-slots') || '1'); } catch { return 1; }
-}
 
 // Migrate: if no accounts list but old DB exists, create first account
 (function migrateToMultiAccount() {
@@ -4543,13 +4364,6 @@ async function switchAccount(accountId) {
 
 async function addAccount() {
   const accs = getAccounts();
-  const slots = getAccountSlots();
-
-  if (accs.length >= slots) {
-    // Need to upgrade plan — show pricing page
-    showUpgradeNudge(t('nudgeAccount', accs.length, slots === 999 ? '∞' : slots));
-    return;
-  }
 
   const name = await showPrompt(t('accountName'), '', { placeholder: t('accountNamePh') });
   if (!name) return;
@@ -6410,7 +6224,7 @@ async function initMessenger(dbName) {
       // v3.1: Defer notification permission to first conversation open (better UX)
       // Don't request on page load — wait until user is engaged
     }
-    initBilling();
+    initTurn();
     initPushNotifications();
     initSigning(); // v3.3: Ed25519 message signing
     // v3.3: Enterprise features
@@ -6609,7 +6423,7 @@ async function initMessenger(dbName) {
     _DOM.get('msg-my-name').textContent = myName;
     startPresence();
     startPolling();
-    initBilling();
+    initTurn();
     initPushNotifications();
     initSigning(); // fallback for API-less setups; createIdentity() covers the normal case
     // /keywrap is opt-in and off by default — surface it once, right after setup,
@@ -11004,44 +10818,11 @@ async function initMessenger(dbName) {
   // BILLING: Multi-account plans (Lite $0.99, Plus $5.99, Pro $19.99)
   // Free=1 account, Lite=2, Plus=4, Pro=unlimited
 
-  async function initBilling() {
+  // TURN credentials are for everyone (NAT traversal), not a paid feature. This used to live
+  // inside initTurn(); the billing system is gone but the TURN fetch must remain.
+  async function initTurn() {
     if (!API || !_userId) return;
-    fetchTurnCredentials(); // TURN available to all users
-    try {
-      const resp = await postAPIRaw('/account/slots', { userId: _userId });
-      if (!resp.ok) return;
-      const data = await resp.json();
-      if (data.slots) { _accountSlots = data.slots; localStorage.setItem('brz-acc-slots', String(data.slots)); if (data.plan) localStorage.setItem('brz-plan', data.plan); }
-
-      const el = _DOM.get('msg-billing');
-      const badge = _DOM.get('msg-plan-badge');
-      const btn = _DOM.get('b-msg-billing');
-      if (!el || !badge || !btn) return;
-
-      el.classList.remove('hidden');
-      const accs = getAccounts();
-      const planName = _accountSlots <= 1 ? t('planFree') : _accountSlots <= 2 ? t('planLite') : _accountSlots <= 4 ? t('planPlus') : t('planPro');
-
-      if (_accountSlots > 1) {
-        badge.textContent = planName;
-        badge.className = 'plan-badge badge-active';
-        btn.textContent = t('manageSubscription');
-        btn.onclick = async () => {
-          btn.disabled = true;
-          const prevText = btn.textContent;
-          btn.textContent = t('loading');
-          try {
-          const r = await postAPIRaw('/portal', { userId: _userId });
-          if (r?.ok) { const d = await r.json(); if (d.url) safeOpen(d.url); }
-          } finally { btn.disabled = false; btn.textContent = prevText; }
-        };
-      } else {
-        badge.textContent = t('planFree');
-        badge.className = 'plan-badge badge-free';
-        btn.textContent = t('addAccountBtn');
-        btn.onclick = () => { window.location.href = '?pricing'; };
-      }
-    } catch(e) { _dbg(e); }
+    fetchTurnCredentials();
   }
 
   // WEB PUSH NOTIFICATIONS — subscribe for background notifications
@@ -11783,12 +11564,6 @@ async function initMessenger(dbName) {
       }
       return;
     }
-    // Go to pricing
-    if (e.target.closest('[data-action="go-pricing"]')) {
-      e.target.closest('.overlay')?.remove();
-      location.href = '?pricing';
-      return;
-    }
     // Backup/Restore
     if (e.target.closest('[data-action="backup"]')) { createCloudBackup(); return; }
     if (e.target.closest('[data-action="restore"]')) { restoreCloudBackup(); return; }
@@ -12388,7 +12163,7 @@ async function initMessenger(dbName) {
         '/sessions · /wipe · /gdpr · /panic (Ctrl+Shift+Backspace)',
         '',
         '<b>' + t('helpDiag') + '</b>',
-        '/network · /peers · /about · /storage · /billing · /perf · /stats · /speedtest · /retry',
+        '/network · /peers · /about · /storage · /perf · /stats · /speedtest · /retry',
         '',
         '<b>' + t('helpDeadDrop') + '</b>',
         '/drop &lt;secret&gt; · /room [name]',
@@ -13232,13 +13007,10 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     // v3.5: /about — Product information
     if (val === '/about') {
       e.preventDefault(); clearInput();
-      const slots = getAccountSlots();
-      const planLabel = slots <= 1 ? t('planFree') : slots <= 2 ? t('planLite') : slots <= 4 ? t('planPlus') : t('planPro');
       const lines = [
         'Breeze Messenger v' + CONFIG.VERSION,
         t('aboutTagline'),
         '',
-        t('aboutPlan', planLabel, getAccounts().length, slots === 999 ? '∞' : slots),
         t('aboutArch'),
         t('aboutProtocol'),
         t('aboutEncryption'),
@@ -13270,35 +13042,6 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         'https://github.com/shizukutanaka/Breeze',
       ];
       cmdOutput('cmd-panel', '<pre>' + lines.map(l => esc(l)).join('\n') + '</pre>');
-      return;
-    }
-
-    // v3.5: /billing — Account slot management
-    if (val === '/billing') {
-      e.preventDefault(); clearInput();
-      const accs = getAccounts();
-      const slots = getAccountSlots();
-      const planName = slots <= 1 ? t('planFree') : slots <= 2 ? t('planLite') : slots <= 4 ? t('planPlus') : t('planPro');
-      const lines = [
-        `=== ${t('billingTitle')} ===`,
-        '',
-        `${t('billingPlan')}: ${planName}`,
-        `${t('billingAccounts')}: ${accs.length} / ${slots === 999 ? '∞' : slots}`,
-        '',
-      ];
-      accs.forEach((acc, i) => {
-        const isCurrent = acc.id === getActiveAccountId();
-        lines.push(`  ${isCurrent ? '●' : '○'} ${acc.name || acc.id.slice(0, 8)}`);
-      });
-      lines.push('');
-
-      if (slots <= 1) {
-        lines.push(t('billingUpgrade'));
-      } else if (accs.length < slots && slots !== 999) {
-        lines.push(t('billingSlotsAvail', slots - accs.length));
-      }
-      lines.push(t('billingVisit'));
-      cmdOutput('cmd-panel-mono', '<pre>' + lines.map(l => esc(l)).join('\n') + '</pre>');
       return;
     }
 
@@ -13881,7 +13624,6 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         'X25519 key exchange',
         'Sealed Sender + Safety Number',
         'Sender Key O(1) groups',
-        'Multi-account billing (Stripe)',
         '',
         '<b>v2.0.0 (Protocol v2)</b>',
         'Initial release',

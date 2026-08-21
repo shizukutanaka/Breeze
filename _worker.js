@@ -98,7 +98,6 @@ export default {
     // Health check — no auth, no rate limit
     if (path === '/api/health') {
       const kvOk = !!env.KV;
-      const stripeOk = !!env.STRIPE_SECRET_KEY;
       // v3.6: Probabilistic cleanup — 10% of health checks clean stale signal data
       if (kvOk && Math.random() < 0.1) {
         try {
@@ -113,21 +112,14 @@ export default {
         ok: kvOk,
         version: '3.6.0',
         protocol: 4,
-        endpoints: 43,
+        endpoints: 38,
         reqId,
         serverTime: Date.now(), // v3.6: Client can detect clock drift
         kv: kvOk,
-        stripe: stripeOk,
         push: !!(env.VAPID_PUBLIC_KEY),
         turn: !!(env.TURN_URL),
         vapidPublicKey: env.VAPID_PUBLIC_KEY || null,
-        plans: stripeOk ? {
-          lite: !!env.STRIPE_PRICE_LITE,
-          plus: !!env.STRIPE_PRICE_PLUS,
-          pro: !!env.STRIPE_PRICE_PRO,
-        } : null,
         features: {
-          billing: stripeOk,
           push: !!(env.VAPID_PUBLIC_KEY),
           turn: !!(env.TURN_URL),
           backup: kvOk,
@@ -146,12 +138,6 @@ export default {
         ts: Date.now(),
         responseMs: Date.now() - _startMs,
       }, kvOk ? 200 : 503, request);
-    }
-
-    // Webhook needs raw body — handle before JSON parsing
-    if (path === '/api/webhook' && request.method === 'POST') {
-      try { return await handleWebhook(request, env); }
-      catch { return new Response('Internal error', { status: 500 }); }
     }
 
     // All other API routes: POST only
@@ -184,7 +170,6 @@ export default {
         '/api/drop/read': 20,
         '/api/abuse/record': 30,
         '/api/abuse/report': 10,
-        '/api/account/purchase': 3,
         '/api/alias/set': 10,
         '/api/alias/get': 30,
         '/api/alias/delete': 5,
@@ -195,7 +180,6 @@ export default {
         '/api/group/create': 5,
         '/api/group/join': 10,
         '/api/group/info': 20,
-        '/api/portal': 5,
         '/api/group/kick': 5,
         '/api/group/admin': 10,
         '/api/group/transfer': 5,
@@ -206,7 +190,6 @@ export default {
         '/api/push/subscribe': 5,
         '/api/push/unsubscribe': 5,
         '/api/turn': 10,
-        '/api/account/slots': 20,
         '/api/online': 20,
       };
       // Cap 'unknown' IP (no CF-Connecting-IP) at 5 rpm regardless of path —
@@ -312,16 +295,12 @@ export default {
         case '/api/alias/set': return await handleAliasSet(body, env, request);
         case '/api/alias/get': return await handleAliasGet(body, env, request);
         case '/api/alias/delete': return await handleAliasDelete(body, env, request);
-        
-        case '/api/portal':    return await handlePortal(body, env, request);
         case '/api/group/create': return await handleGroupCreate(body, env, request);
         case '/api/group/join':   return await handleGroupJoin(body, env, request);
         case '/api/group/info':   return await handleGroupInfo(body, env, request);
         case '/api/push/subscribe':   return await handlePushSubscribe(body, env, request);
         case '/api/push/unsubscribe': return await handlePushUnsubscribe(body, env, request);
         case '/api/turn':           return await handleTurn(body, env, request);
-        case '/api/account/purchase': return await handleAccountPurchase(body, env, request);
-        case '/api/account/slots':    return await handleAccountSlots(body, env, request);
         case '/api/prekey/upload':    return await handlePreKeyUpload(body, env, request);
         case '/api/prekey/fetch':     return await handlePreKeyFetch(body, env, request);
         case '/api/prekey/fetch/batch': return await handlePreKeyFetchBatch(body, env, request);
@@ -860,225 +839,6 @@ async function handleAliasGet(body, env, request) {
   if (!aliasData) return json({ error: 'Not found', code: 'NOT_FOUND' }, 404, request);
   return json(aliasData, 200, request);
 }
-
-async function handleWebhook(request, env) {
-  if (!env.STRIPE_SECRET_KEY || !env.STRIPE_WEBHOOK_SECRET) {
-    return new Response('Not configured', { status: 503 });
-  }
-
-  // The webhook is dispatched before the global MAX_BODY_BYTES guard (it needs the raw body
-  // for signature verification, ahead of JSON parsing), so it must cap the body itself —
-  // otherwise an attacker could force the worker to buffer + HMAC an arbitrarily large body
-  // before the signature check rejects it. Stripe events are far under this limit.
-  const contentLength = parseInt(request.headers.get('Content-Length') || '0');
-  if (contentLength > MAX_BODY_BYTES) return new Response('Payload too large', { status: 413 });
-
-  const body = await request.text();
-  if (body.length > MAX_BODY_BYTES) return new Response('Payload too large', { status: 413 });
-  const sig = request.headers.get('stripe-signature');
-
-  const verified = await verifyStripeSignature(body, sig, env.STRIPE_WEBHOOK_SECRET);
-  if (!verified) return new Response('Invalid signature', { status: 400 });
-
-  let event;
-  try { event = JSON.parse(body); }
-  catch { return new Response('Invalid JSON', { status: 400 }); }
-
-  // P1 FIX: Idempotency — check if we've already processed this event.
-  // Mark *after* processing (process-then-mark): slot assignment is an idempotent
-  // absolute write, so a Stripe retry after a mid-handler failure safely re-runs
-  // instead of being swallowed as "already processed" with slots never granted.
-  const eventKey = `evt:${event.id}`;
-  if (await kvGet(env, eventKey)) {
-    return new Response('Already processed', { status: 200 });
-  }
-
-  // --- checkout.session.completed ---
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
-    const userId = session.metadata?.userId || session.client_reference_id;
-    const customerId = session.customer;
-
-    // validateUserId: userId originates from Stripe checkout metadata (client-supplied).
-    // Invalid IDs are silently ignored — failing would cause Stripe retries for an
-    // unparseable event, which is worse than a no-op.
-    if (userId && validateUserId(userId) && session.metadata?.type === 'account_plan') {
-      // Plan-based slot assignment: Lite=2, Plus=4, Pro=999
-      // Use || 2 fallback: parseInt returns NaN for non-numeric strings (e.g. corrupted
-      // Stripe metadata), and NaN stored in KV silently downgrades users to 1 slot via
-      // the `parsed.slots || 1` read path.  Our code always sends a numeric string, but
-      // a Stripe metadata edit or replay of a tampered event would reach this path.
-      const planSlots = parseInt(session.metadata.slots) || 2;
-      // Only store known plan identifiers; reject arbitrary strings from tampered Stripe metadata.
-      const VALID_PLANS = new Set(['lite', 'plus', 'pro']);
-      const plan = VALID_PLANS.has(session.metadata.plan) ? session.metadata.plan : 'lite';
-      const slotsOk = await kvPut(env, `slots:${userId}`, JSON.stringify({ slots: planSlots, plan, customerId, updatedAt: Date.now() }));
-      if (!slotsOk) return new Response('KV write failed', { status: 500 });
-      if (customerId) {
-        const custOk = await kvPut(env, `cust:${customerId}`, userId);
-        if (!custOk) return new Response('KV write failed', { status: 500 });
-      }
-    }
-  }
-
-  // --- subscription deleted / paused ---
-  if (event.type === 'customer.subscription.deleted' || event.type === 'customer.subscription.paused') {
-    const sub = event.data.object;
-    let userId = sub.metadata?.userId;
-    if (!userId && sub.customer) {
-      userId = await kvGet(env, `cust:${sub.customer}`);
-    }
-    // Re-validate after KV retrieval: the stored value could be stale pre-validation data.
-    if (userId && validateUserId(userId)) {
-      // Reset to free tier (1 account)
-      const slotsOk = await kvPut(env, `slots:${userId}`, JSON.stringify({ slots: 1, plan: 'free', updatedAt: Date.now() }));
-      if (!slotsOk) return new Response('KV write failed', { status: 500 });
-    }
-  }
-
-  // --- invoice.payment_failed (grace period — Stripe handles cancellation) ---
-  if (event.type === 'invoice.payment_failed') {
-    // No slot change — Stripe will fire subscription.deleted after grace period
-  }
-
-  // --- invoice.paid (renewal confirmation) ---
-  if (event.type === 'invoice.paid') {
-    // Slots already set — no action needed
-  }
-
-  // --- customer.subscription.updated (plan upgrade/downgrade) ---
-  if (event.type === 'customer.subscription.updated') {
-    const sub = event.data.object;
-    let userId = sub.metadata?.userId;
-    if (!userId && sub.customer) userId = await kvGet(env, `cust:${sub.customer}`);
-    if (userId && validateUserId(userId) && sub.metadata?.slots) {
-      // Same NaN guard as checkout.session.completed: fall back to 1 (free tier) on
-      // parse failure so a bad metadata value doesn't store NaN in KV.
-      const newSlots = parseInt(sub.metadata.slots) || 1;
-      const slotsOk = await kvPut(env, `slots:${userId}`, JSON.stringify({
-        slots: newSlots, plan: ['lite', 'plus', 'pro'].includes(sub.metadata.plan) ? sub.metadata.plan : 'lite',
-        customerId: sub.customer, updatedAt: Date.now()
-      }));
-      if (!slotsOk) return new Response('KV write failed', { status: 500 });
-    }
-  }
-
-  // Mark processed only after handlers above have run (24h dedup window).
-  await kvPut(env, eventKey, '1', { expirationTtl: TTL.DAY });
-  return new Response('ok', { status: 200 });
-}
-
-async function handlePortal(body, env, request) {
-  if (!env.STRIPE_SECRET_KEY) return json({ error: 'Billing not configured', code: 'NOT_CONFIGURED' }, 503, request);
-
-  const { userId, ts, sig } = body;
-  if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
-  if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
-
-  // Authorization. A Stripe billing-portal session is a BEARER link that exposes the
-  // customer's invoices (name/email/address/card last4) and lets the holder cancel the
-  // subscription. Handing it to anyone who merely knows a (publicly-discoverable via alias)
-  // userId is an IDOR / PII leak. Require Ed25519 ownership proof, same pattern as
-  // account-delete / backup: verified whenever {ts,sig} are supplied (forgeries always
-  // rejected), and required outright when PORTAL_REQUIRE_AUTH is set — flip that on once
-  // clients send the signature. Default (no sig + flag unset) preserves the legacy flow so
-  // the current client's portal button keeps working until it's updated.
-  const hasSig = ts !== undefined || sig !== undefined;
-  if (hasSig) {
-    if (ts === undefined || sig === undefined) return json({ error: 'ts and sig must both be provided', code: 'PARTIAL_AUTH' }, 400, request);
-    if (typeof sig !== 'string' || sig.length > 500) return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
-    if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS) return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
-    const pkRaw = await kvGet(env, `prekey:${userId}`);
-    const bundle = pkRaw ? safeJsonParse(pkRaw) : null;
-    if (!bundle || typeof bundle.edIdentityKey !== 'string' || !bundle.edIdentityKey) return json({ error: 'No registered identity key', code: 'NO_IDENTITY_KEY' }, 403, request);
-    const ok = await verifyEd25519(bundle.edIdentityKey, btoa(`breeze-portal:${userId}:${ts}`), sig);
-    if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
-  } else if (env.PORTAL_REQUIRE_AUTH === 'true') {
-    return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
-  }
-
-  // Get customerId from slots data or reverse lookup
-  const data = await kvGet(env, `slots:${userId}`);
-  let customerId = null;
-  if (data) {
-    const parsed = safeJsonParse(data);
-    customerId = parsed?.customerId ?? null;
-  }
-  if (!customerId) return json({ error: 'No subscription found', code: 'NOT_FOUND' }, 404, request);
-
-  // Redirect target = this worker's OWN origin, never the client-supplied Origin/Referer.
-  // Those headers are forgeable by a non-browser caller, and feeding them into the Stripe
-  // return_url is an open redirect: an attacker could mint a portal link that bounces the
-  // victim to a phishing page after the trusted Stripe flow. Breeze serves the app and the
-  // worker from the same origin, so request.url's origin is the correct, safe target.
-  const origin = new URL(request.url).origin;
-
-  const params = new URLSearchParams();
-  params.set('customer', customerId);
-  params.set('return_url', origin + '/');
-
-  const resp = await fetchWithTimeout('https://api.stripe.com/v1/billing_portal/sessions', {
-    method: 'POST',
-    headers: {
-      'Authorization': 'Bearer ' + env.STRIPE_SECRET_KEY,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: params.toString(),
-  });
-
-  if (!resp.ok) return json({ error: 'Portal creation failed', code: 'PORTAL_FAILED' }, 500, request);
-  const portal = await resp.json();
-  return json({ url: portal.url }, 200, request);
-}
-
-// Stripe webhook signature verification (HMAC-SHA256)
-async function verifyStripeSignature(payload, header, secret) {
-  if (!header || !secret) return false;
-  try {
-    const parts = Object.fromEntries(header.split(',').map(p => { const [k,v] = p.split('='); return [k.trim(), v]; }));
-    const timestamp = parts.t;
-    const sig = parts.v1;
-    if (!timestamp || !sig) return false;
-
-    // Reject if timestamp is too old (5 min tolerance). Parse explicitly and fail CLOSED
-    // on a non-numeric value: parseInt('abc') is NaN, and `Math.abs(now - NaN) > 300` is
-    // `false`, which would silently SKIP the staleness check (fail-open). The HMAC below is
-    // the primary forgery gate, but this freshness check is the replay-window guard and must
-    // not no-op on a malformed timestamp — mirrors the Number.isFinite guards used for the
-    // PoW freshness check (~688), the poll cursor, and disappearAt elsewhere in this file.
-    const tsNum = parseInt(timestamp, 10);
-    if (!Number.isFinite(tsNum)) return false;
-    if (Math.abs(Date.now() / 1000 - tsNum) > 300) return false;
-
-    const signedPayload = timestamp + '.' + payload;
-    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-    const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(signedPayload));
-    const expected = Array.from(new Uint8Array(mac)).map(b => b.toString(16).padStart(2, '0')).join('');
-
-    // Constant-time comparison via double-HMAC (prevents timing attacks)
-    const cmpKey = await crypto.subtle.importKey('raw', crypto.getRandomValues(new Uint8Array(32)), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-    const hmac1 = new Uint8Array(await crypto.subtle.sign('HMAC', cmpKey, new TextEncoder().encode(expected)));
-    const hmac2 = new Uint8Array(await crypto.subtle.sign('HMAC', cmpKey, new TextEncoder().encode(sig)));
-    if (hmac1.length !== hmac2.length) return false;
-    let diff = 0;
-    for (let i = 0; i < hmac1.length; i++) diff |= hmac1[i] ^ hmac2[i];
-    return diff === 0;
-  } catch { return false; }
-}
-
-// ============================================================
-// GROUP INVITE LINKS — solve the migration deadlock
-//
-// Flow:
-//   1. Creator POST /api/group/create → {token, joinUrl}
-//   2. Creator shares joinUrl in LINE/WhatsApp
-//   3. New user opens ?join=token → creates identity → POST /api/group/join
-//   4. Worker adds member to group registry in KV
-//   5. Client polls /api/group/info to discover new members
-//
-// KV schema:
-//   grp:{token} = { name, creatorId, creatorPub, creatorName, members:[{id,pub,name}], createdAt }
-// ============================================================
 
 async function handleGroupCreate(body, env, request) {
   const { name: rawName, creatorId, creatorPub: rawCreatorPub, creatorName: rawCreatorName, members, ttl, caps } = body;
@@ -1880,82 +1640,6 @@ async function handleTurn(body, env, request) {
 // Free=1, Lite($0.99)=2, Plus($5.99)=4, Pro($19.99)=unlimited
 // ============================================================
 
-async function handleAccountPurchase(body, env, request) {
-  if (!env.STRIPE_SECRET_KEY) return json({ error: 'Billing not configured', code: 'NOT_CONFIGURED' }, 503, request);
-  const { userId, plan } = body;
-  if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
-  if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
-
-  const priceMap = {
-    lite: env.STRIPE_PRICE_LITE,
-    plus: env.STRIPE_PRICE_PLUS,
-    pro: env.STRIPE_PRICE_PRO,
-  };
-  const slotMap = { lite: 2, plus: 4, pro: 999 };
-  const planKey = plan && priceMap[plan] ? plan : 'lite';
-  const priceId = priceMap[planKey];
-
-  if (!priceId) return json({ error: 'Price not configured for plan: ' + planKey, code: 'PRICE_NOT_CONFIGURED' }, 503, request);
-
-  // Use this worker's OWN origin for the checkout success/cancel URLs, never the forgeable
-  // client Origin/Referer — otherwise an attacker could craft a checkout whose success_url
-  // redirects the paying victim to a phishing page (open redirect after the Stripe flow).
-  const origin = new URL(request.url).origin;
-
-  const params = new URLSearchParams();
-  params.set('mode', 'subscription');
-  params.set('line_items[0][price]', priceId);
-  params.set('line_items[0][quantity]', '1');
-  params.set('success_url', origin + '/?billing=account-success');
-  params.set('cancel_url', origin + '/?billing=cancel');
-  params.set('client_reference_id', userId);
-  params.set('metadata[userId]', userId);
-  params.set('metadata[type]', 'account_plan');
-  params.set('metadata[plan]', planKey);
-  params.set('metadata[slots]', String(slotMap[planKey]));
-  params.set('subscription_data[metadata][userId]', userId);
-  params.set('subscription_data[metadata][type]', 'account_plan');
-  params.set('subscription_data[metadata][plan]', planKey);
-  params.set('subscription_data[metadata][slots]', String(slotMap[planKey]));
-
-  const resp = await fetchWithTimeout('https://api.stripe.com/v1/checkout/sessions', {
-    method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + env.STRIPE_SECRET_KEY, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: params.toString(),
-  });
-  if (!resp.ok) return json({ error: 'Checkout failed', code: 'CHECKOUT_FAILED' }, 500, request);
-  const session = await resp.json();
-  return json({ url: session.url }, 200, request);
-}
-
-async function handleAccountSlots(body, env, request) {
-  const { userId } = body;
-  if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
-  if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
-  const data = await kvGet(env, `slots:${userId}`);
-  if (!data) return json({ slots: 1, plan: 'free' }, 200, request);
-  const parsed = safeJsonParse(data);
-  if (!parsed) return json({ slots: 1, plan: 'free' }, 200, request);
-  return json({ slots: parsed.slots || 1, plan: parsed.plan || 'free' }, 200, request);
-}
-
-// ============================================================
-// ACCOUNT DELETION — server-side data erasure (GDPR Art. 17)
-//
-// The client's /wipe deletes LOCAL data only. Without this endpoint the
-// server retains inbox + sealed queues (up to 7 days), prekeys + push
-// subscriptions (30 days), the key-transparency log and encrypted backup
-// (90 days), and the billing slots record (no TTL) until KV TTLs lapse —
-// while the privacy policy promises full deletion. This erases them now.
-//
-// Auth: the request is signed with the account's Ed25519 identity key (the
-// same key that signs the pre-key bundle, stored server-side on upload):
-//   sig = Ed25519-sign(`breeze-account-delete:${userId}:${ts}`)
-// An unauthenticated delete would let anyone destroy a victim's prekeys
-// (blocking new-session establishment) and backup. Accounts that never
-// uploaded an Ed25519 key cannot be authenticated → 403; their data
-// expires via the TTLs above.
-// ============================================================
 async function handleAccountDelete(body, env, request) {
   const { userId, ts, sig, alias, groups } = body;
   if (!userId || !sig || ts === undefined) return json({ error: 'userId, ts, sig required', code: 'MISSING_FIELDS' }, 400, request);
@@ -2778,8 +2462,6 @@ async function kvDel(env, key) {
 // above; these additional named exports are inert at runtime and let the test
 // harness import individual handlers/helpers directly. Do not remove.
 export {
-  handleWebhook,
-  verifyStripeSignature,
   handlePreKeyUpload,
   handlePreKeyFetch,
   handlePreKeyFetchBatch,
@@ -2829,8 +2511,5 @@ export {
   handlePresence,
   handleOnlineCount,
   handleTurn,
-  handleAccountSlots,
-  handleAccountPurchase,
-  handlePortal,
 };
 
