@@ -2,33 +2,32 @@
 // ============================================================================
 // Locale integrity checker.
 //
-// Locale tables used to be JavaScript — 340 of the entries were arrow functions like
-// `(n) => `${n} replies``. That made them un-checkable, un-translatable by non-programmers,
-// and impossible to move out of index.html. They are now pure data: plain strings with {0}
-// placeholders, plus plural objects keyed by CLDR categories.
+// Architecture: ENGLISH is the only locale inside index.html — it is the reference table and
+// the runtime fallback. Every other language is a pure-JSON file in locales/<lang>.json,
+// fetched at boot and merged over English. That split exists because locale tables used to be
+// JavaScript (340 arrow functions), which made them un-checkable, un-translatable by
+// non-programmers, and impossible to move out of the 15,000-line index.html.
 //
-// Being data means a machine can verify them, which is what this does. Adding a language
-// should be a mechanical, gated operation — not a careful manual diff.
-//
-// Checks, per locale against the English reference:
-//   1. KEY PARITY      — no missing keys (a missing key silently falls back to English, so
-//                        this is invisible at runtime and only shows up as an untranslated UI).
-//   2. PLACEHOLDERS    — the same {0}..{n} set. A translator dropping {0} produces a string
-//                        that renders a blank where a filename or count belonged.
-//   3. PLURAL SHAPE    — a plural entry must supply exactly the CLDR categories the language
-//                        actually uses (Intl.PluralRules is the authority: English needs
-//                        one/other, Japanese only other, Polish one/few/many/other).
-//   4. NO CODE         — no functions may creep back in, or the table stops being portable data.
+// Being data means a machine can verify them. Checks:
+//   1. EN PURITY       — the inline reference contains no functions (data only, forever).
+//   2. KEY VALIDITY    — every key in a locale file exists in English (no dead keys).
+//   3. PLACEHOLDERS    — each translated string carries the same {0}..{n} set as English.
+//                        A dropped {0} renders a blank where a filename or count belonged.
+//   4. PLURAL SHAPE    — plural entries carry exactly the CLDR categories that language uses
+//                        (Intl.PluralRules is the authority: en needs one/other, ja only
+//                        other, ar six). Matching English's shape is NOT enough.
+//   5. COVERAGE        — ja is the founding locale and must stay 100%. Other locales must
+//                        cover >= 95% of CORE keys (everything except diagnostics-command
+//                        output and legal prose, which fall back to English by design).
 // ============================================================================
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const html = readFileSync(join(ROOT, 'index.html'), 'utf8');
 
-// Extract the `const _I = {...}` table by brace matching.
-function extractTable() {
+function extractInline() {
   const start = html.indexOf('const _I = {');
   if (start < 0) throw new Error('i18n-check: could not find `const _I = {` in index.html');
   let depth = 0;
@@ -39,73 +38,84 @@ function extractTable() {
   throw new Error('i18n-check: unbalanced braces in _I');
 }
 
-const raw = extractTable();
-if (/=>/.test(raw)) {
-  console.error('i18n-check: FAIL — the locale table contains a function (`=>`).');
-  console.error('  Locales must stay pure data so they can be verified, translated and externalised.');
-  console.error('  Use a "{0}" placeholder, or a plural object like { one: "...", other: "..." }.');
+const rawInline = extractInline();
+if (/=>/.test(rawInline)) {
+  console.error('i18n-check: FAIL — the inline English table contains a function (`=>`).');
+  console.error('  Locales are pure data. Use a "{0}" placeholder or a plural object.');
   process.exit(1);
 }
+let EN;
+try { EN = (0, eval)('(' + rawInline + ')').en; }
+catch (e) { console.error('i18n-check: FAIL — inline table not valid data: ' + e.message); process.exit(1); }
+if (!EN) { console.error('i18n-check: FAIL — no `en` table found inline'); process.exit(1); }
 
-let table;
-try { table = (0, eval)('(' + raw + ')'); }
-catch (e) { console.error('i18n-check: FAIL — locale table is not valid data: ' + e.message); process.exit(1); }
+// CORE = what a normal user sees. Diagnostics command dumps and legal prose intentionally
+// fall back to English, so they do not count against a locale's coverage.
+const isDiag = (k) => /^(sec|stats|cmd|uptime|net[A-Z]|peer[A-Z]|debug|perf|whoami|storage|kt[A-Z])/.test(k);
+const isLegal = (k) => /^(terms|privacy|legal|tosBody|privacyBody)/.test(k);
+const refKeys = Object.keys(EN);
+const coreKeys = refKeys.filter((k) => !isDiag(k) && !isLegal(k));
 
 const placeholders = (s) => [...new Set((s.match(/\{(\d+)\}/g) || []))].sort().join(',');
 const categoriesFor = (loc) => {
-  // Probe a spread of counts to learn which CLDR categories this language actually uses.
   const pr = new Intl.PluralRules(loc);
   return new Set([0, 1, 2, 3, 5, 11, 21, 101, 1.5].map((n) => pr.select(n)));
 };
 
-const REF = 'en';
-const refKeys = Object.keys(table[REF]);
+const localeFiles = readdirSync(join(ROOT, 'locales')).filter((f) => f.endsWith('.json'));
 const problems = [];
+const summary = [];
 
-for (const loc of Object.keys(table)) {
-  if (loc === REF) continue;
-  const t = table[loc];
+for (const file of localeFiles) {
+  const loc = file.replace(/\.json$/, '');
+  let T;
+  try { T = JSON.parse(readFileSync(join(ROOT, 'locales', file), 'utf8')); }
+  catch (e) { problems.push(`${loc}: not valid JSON — ${e.message}`); continue; }
+
   const cats = categoriesFor(loc);
-
-  for (const key of refKeys) {
-    const rv = table[REF][key], v = t[key];
-    if (v === undefined) { problems.push(`${loc}: missing key "${key}"`); continue; }
-
+  for (const [key, v] of Object.entries(T)) {
+    const rv = EN[key];
+    if (rv === undefined) { problems.push(`${loc}: dead key "${key}" (not in English)`); continue; }
     const rIsPlural = rv && typeof rv === 'object';
     const vIsPlural = v && typeof v === 'object';
     if (rIsPlural !== vIsPlural) {
       problems.push(`${loc}."${key}": ${vIsPlural ? 'is' : 'is not'} a plural object but English ${rIsPlural ? 'is' : 'is not'}`);
       continue;
     }
-
     if (vIsPlural) {
-      for (const cat of cats) {
-        if (v[cat] === undefined) problems.push(`${loc}."${key}": missing plural category "${cat}" (required for ${loc})`);
-      }
+      for (const cat of cats) if (v[cat] === undefined) problems.push(`${loc}."${key}": missing plural category "${cat}"`);
       for (const cat of Object.keys(v)) {
-        if (!cats.has(cat)) problems.push(`${loc}."${key}": unused plural category "${cat}" (${loc} never selects it)`);
+        if (!cats.has(cat)) problems.push(`${loc}."${key}": unused plural category "${cat}"`);
+        if (typeof v[cat] !== 'string') problems.push(`${loc}."${key}.${cat}": not a string`);
       }
       const refPh = placeholders(Object.values(rv).join(''));
-      const vPh = placeholders(Object.values(v).join(''));
+      const vPh = placeholders(Object.values(v).filter((x) => typeof x === 'string').join(''));
       if (refPh !== vPh) problems.push(`${loc}."${key}": placeholders ${vPh || '(none)'} != English ${refPh || '(none)'}`);
       continue;
     }
-
     if (typeof v !== 'string') { problems.push(`${loc}."${key}": not a string`); continue; }
-    const rp = placeholders(rv), vp = placeholders(v);
-    if (rp !== vp) problems.push(`${loc}."${key}": placeholders ${vp || '(none)'} != English ${rp || '(none)'}`);
+    if (placeholders(rv) !== placeholders(v)) {
+      problems.push(`${loc}."${key}": placeholders ${placeholders(v) || '(none)'} != English ${placeholders(rv) || '(none)'}`);
+    }
   }
 
-  for (const key of Object.keys(t)) {
-    if (!(key in table[REF])) problems.push(`${loc}: extra key "${key}" not present in English`);
+  const coveredCore = coreKeys.filter((k) => T[k] !== undefined).length;
+  const corePct = Math.round((coveredCore / coreKeys.length) * 100);
+  const totalPct = Math.round((Object.keys(T).filter((k) => EN[k] !== undefined).length / refKeys.length) * 100);
+  summary.push(`${loc}: ${corePct}% core (${coveredCore}/${coreKeys.length}), ${totalPct}% total`);
+
+  if (loc === 'ja') {
+    for (const k of refKeys) if (T[k] === undefined) problems.push(`ja: missing key "${k}" (ja must stay 100%)`);
+  } else if (corePct < 95) {
+    problems.push(`${loc}: core coverage ${corePct}% is below the 95% floor`);
   }
 }
 
-const locales = Object.keys(table);
 if (problems.length) {
-  console.error(`i18n-check: FAIL — ${problems.length} problem(s) across ${locales.length} locales`);
+  console.error(`i18n-check: FAIL — ${problems.length} problem(s)`);
   for (const p of problems.slice(0, 40)) console.error('  - ' + p);
   if (problems.length > 40) console.error(`  ... and ${problems.length - 40} more`);
   process.exit(1);
 }
-console.log(`i18n-check: OK — ${locales.length} locales (${locales.join(', ')}), ${refKeys.length} keys, placeholders and plural categories consistent`);
+console.log(`i18n-check: OK — inline EN reference (${refKeys.length} keys, pure data) + ${localeFiles.length} locale file(s)`);
+for (const s of summary) console.log('  ' + s);
