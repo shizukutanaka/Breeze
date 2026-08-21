@@ -1228,6 +1228,7 @@ const CONFIG = {
   // undetected MITM risk. ON: verifies the peer's signed pre-key against their Ed25519 key when
   // BOTH sides negotiate it (else falls back byte-identically). Also runs the KT chain+rollover audit.
   X3DH_V5_ENABLED: true,
+  SEAL_V2_ENABLED: true, // Sealed Sender v2: encrypt sender metadata to the recipient (capability-gated)
   // v3.6 SECURITY (default OFF — opt-in via /keywrap, run again to disable): wrap the identity
   // ECDH + Ed25519 signing private keys with AES-256-GCM under a PBKDF2 key (600k iter, random
   // salt) before IndexedDB storage. Guards against XSS cookie-theft, device forensics, IDB-reading
@@ -4623,6 +4624,7 @@ async function initMessenger(dbName) {
     const caps = [];
     if (CONFIG.X3DH_V5_ENABLED) caps.push(CAPS_X3DH_V5);
     if (CONFIG.GROUP_RATCHET_V5) caps.push(CAPS_GROUP_V5);
+    if (CONFIG.SEAL_V2_ENABLED) caps.push(CAPS_SEAL_V2);
     if (caps.length) body.caps = caps;
     return body;
   }
@@ -4788,6 +4790,7 @@ async function initMessenger(dbName) {
   // file per CLAUDE.md). Signing: ratchet.js signs RAW SPK bytes, but the Worker's
   // verifyEd25519 verifies the base64 STRING, so this uses signMessage/verifySignature.
   const CAPS_X3DH_V5 = 'x3dh-v5';
+  const CAPS_SEAL_V2 = 'seal-v2';
 
   function _parsePeerCaps(bundle) {
     if (!bundle) return [];
@@ -5330,13 +5333,84 @@ async function initMessenger(dbName) {
     } catch { return []; }
   }
 
-  async function relaySend(to, payload) {
+  // ═══ Sealed Sender v2 (inline mirror of src/crypto/seal.js) ═══
+  // The pre-v2 "sealed" envelope carried from/fromPub/fromName — and the replyTo PLAINTEXT
+  // preview — in the clear inside the JSON string the relay stores, so "the Worker doesn't
+  // see the sender" was only true of a Worker that chose not to look (Socratic-found). v2
+  // encrypts ALL sender-identifying metadata to the RECIPIENT's identity key: ephemeral
+  // X25519/P-256 ECDH → HKDF('breeze-seal-v2') → AES-256-GCM with AAD binding to+ts (no
+  // cross-recipient/cross-time splicing). The relay now sees only {to, ts, ratchet
+  // ciphertext, sealed blob}. Capability-gated: recipients advertise 'seal-v2' in their
+  // prekey-bundle caps; senders read caps via /prekey/status (consumes NO one-time prekey)
+  // and fall back to the legacy envelope for un-upgraded peers — delivery over privacy,
+  // and the /msg fallback + offline retry queue stay legacy (documented in SECURITY.md).
+  const SEAL_INFO = 'breeze-seal-v2';
+  async function sealMeta(recipPubB64, meta, to, ts) {
+    try {
+      const recipRaw = Uint8Array.from(atob(recipPubB64), c => c.charCodeAt(0));
+      const eph = await genRatchetKey();
+      const shared = await ecdhBits(eph.privateKey, recipRaw);
+      if (!shared) return null;
+      const key = await hkdf(shared, new Uint8Array(32), SEAL_INFO, 32);
+      const iv = crypto.getRandomValues(new Uint8Array(CONFIG.IV_BYTES));
+      const aad = new TextEncoder().encode(`${SEAL_INFO}:${to}:${ts}`);
+      const k = await crypto.subtle.importKey('raw', key, { name: 'AES-GCM' }, false, ['encrypt']);
+      const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: aad }, k, new TextEncoder().encode(JSON.stringify(meta)));
+      zeroBuffer(key);
+      return { ek: btoa(String.fromCharCode(...new Uint8Array(eph.pub))), iv: arr(iv), ct: arr(new Uint8Array(ct)) };
+    } catch(e) { _dbg(e, 'seal'); return null; }
+  }
+  async function unsealMeta(identityPriv, se, to, ts) {
+    try {
+      const ekRaw = Uint8Array.from(atob(se.ek), c => c.charCodeAt(0));
+      const shared = await ecdhBits(identityPriv, ekRaw);
+      if (!shared) return null;
+      const key = await hkdf(shared, new Uint8Array(32), SEAL_INFO, 32);
+      const aad = new TextEncoder().encode(`${SEAL_INFO}:${to}:${ts}`);
+      const k = await crypto.subtle.importKey('raw', key, { name: 'AES-GCM' }, false, ['decrypt']);
+      const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: new Uint8Array(se.iv), additionalData: aad }, k, new Uint8Array(se.ct));
+      zeroBuffer(key);
+      return JSON.parse(new TextDecoder().decode(pt));
+    } catch(e) { _dbg(e, 'unseal'); return null; }
+  }
+  // ═══ end inline mirror of src/crypto/seal.js ═══
+  // Does this peer understand sealed-v2 envelopes? Read from /prekey/status (no OTP cost),
+  // cached 1 h. Any failure answers "no" — the message still delivers, just legacy-shaped.
+  const _sealCapsCache = new Map();
+  async function _peerSealV2(peerId) {
+    try {
+      const c = _sealCapsCache.get(peerId);
+      if (c && Date.now() - c.ts < MS.HOUR) return c.ok;
+      const resp = await postAPIRaw('/prekey/status', { userId: peerId });
+      const data = resp?.ok ? await resp.json() : null;
+      const ok = Array.isArray(data?.caps) && data.caps.includes(CAPS_SEAL_V2);
+      _sealCapsCache.set(peerId, { ok, ts: Date.now() });
+      return ok;
+    } catch { return false; }
+  }
+
+  async function relaySend(to, payload, sealPub) {
     if (!API) return;
     if (_isOffline) { if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, attempts: 0 }); _saveRetryQueue(); scheduleRetry(); } registerBackgroundSync(); return; }
     const msgTs = payload.ts;
-    // Sealed Sender (preferred — Worker doesn't see sender)
+    // Sealed Sender (preferred — and with v2, actually sealed: see sealMeta above)
+    let wire = payload;
+    if (sealPub && CONFIG.SEAL_V2_ENABLED && await _peerSealV2(to)) {
+      const { to: _t, ts: _ts, payload: _p, ...meta } = payload;
+      // Session-bootstrap leak: the first message of a session wraps the ratchet ciphertext
+      // in a plaintext X3DH header whose `ik` IS the sender's identity key — so a sealed
+      // envelope would still identify the sender on first contact (wiretap-E2E-found).
+      // Relocate ik into the sealed block; the recipient re-injects it before decrypting.
+      let wirePayload = payload.payload;
+      try {
+        const pkm = JSON.parse(wirePayload);
+        if (pkm?.t === 'pkm' && pkm.ik) { meta._pkik = pkm.ik; delete pkm.ik; wirePayload = JSON.stringify(pkm); }
+      } catch {}
+      const se = await sealMeta(sealPub, meta, to, msgTs);
+      if (se) wire = { to, ts: msgTs, payload: wirePayload, sv: 2, se };
+    }
     try {
-      const resp = await postAPIRaw('/sealed/send', { to, envelope: JSON.stringify(payload) });
+      const resp = await postAPIRaw('/sealed/send', { to, envelope: JSON.stringify(wire) });
       if (resp.ok) {
         const data = await resp.json().catch(() => ({}));
         if (data.ack && msgTs) updateMsgStatus(msgTs, 'delivered');
@@ -5588,7 +5662,7 @@ async function initMessenger(dbName) {
       const encrypted = await encryptFor(JSON.stringify(skPayload), memberPubB64);
       if (!encrypted) { _dbg(null, 'encrypt failed'); return; }
       const memberId = memberPubB64.slice(0, 12);
-      await relaySend(memberId, { to: memberId, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: Date.now(), isSenderKey: true });
+      await relaySend(memberId, { to: memberId, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: Date.now(), isSenderKey: true }, memberPubB64);
     } catch(_e) { _dbg(_e, 'distributeSenderKey'); }
   }
 
@@ -5601,7 +5675,7 @@ async function initMessenger(dbName) {
       for (const m of targets) {
         const encrypted = await encryptFor(JSON.stringify({ type: 'group_kick', groupId, kickedId, epoch }), m.pubB64);
         if (!encrypted) continue;
-        await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: Date.now(), isGroupKick: true });
+        await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: Date.now(), isGroupKick: true }, m.pubB64);
       }
     } catch(_e) { _dbg(_e, 'notifyGroupKick'); }
   }
@@ -7011,7 +7085,7 @@ async function initMessenger(dbName) {
       if (!encrypted) { _dbg(null, 'encrypt failed'); return; }
       const peer = peers[activeContact.pubB64];
       if (peer?.connected && peer.dc?.readyState === 'open') peer.dc.send(JSON.stringify({ type: 'msg', payload: encrypted, ts }));
-      await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts });
+      await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts }, activeContact.pubB64);
       renderContacts();
     
     } catch(_e) { _dbg(_e, 'createPoll'); }
@@ -7272,7 +7346,7 @@ async function initMessenger(dbName) {
           target.lastMsg = msg.text.slice(0, 40);
           target.lastMsgAt = ts;
           await dbPut('contacts', target);
-          await relaySend(target.id, { to: target.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts });
+          await relaySend(target.id, { to: target.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts }, target.pubB64);
           sent++;
         } catch(e) { _dbg(e, 'forward'); }
       }
@@ -7328,7 +7402,7 @@ async function initMessenger(dbName) {
             if (persistTypes.includes(data.type)) {
               const encrypted = await encryptFor(signalPayload, member.pubB64);
               if (encrypted) await relaySend(member.id, { to: member.id, from: myId, fromPub: myPubB64, fromName: myName,
-                payload: encrypted, ts: data.ts || Date.now(), isSignal: true, groupId: activeContact.id });
+                payload: encrypted, ts: data.ts || Date.now(), isSignal: true, groupId: activeContact.id }, member.pubB64);
             }
           } catch(e) { _dbg(e, 'group-signal'); }
         }
@@ -7350,7 +7424,7 @@ async function initMessenger(dbName) {
           const encrypted = await encryptFor(signalPayload, activeContact.pubB64);
           if (!encrypted) { _dbg(null, 'encrypt-signal: failed'); return; }
           await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName,
-            payload: encrypted, ts: data.ts || Date.now(), isSignal: true });
+            payload: encrypted, ts: data.ts || Date.now(), isSignal: true }, activeContact.pubB64);
         } catch(e) { _dbg(e, 'encrypt-signal'); }
       })();
     }
@@ -7544,7 +7618,7 @@ async function initMessenger(dbName) {
         try {
           await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName,
             payload: groupCiphertext, ts, groupId, groupName: activeContact.name,
-            replyTo: meta.replyTo, disappearAt: meta.disappearAt, isGroupSK: true });
+            replyTo: meta.replyTo, disappearAt: meta.disappearAt, isGroupSK: true }, m.pubB64);
         } catch(e) { _dbg(e); }
       }
     } else {
@@ -7616,7 +7690,7 @@ async function initMessenger(dbName) {
       // Relay: Sealed Sender (Worker doesn't see sender)
       await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName,
         payload: encrypted, ts, replyTo: envelope.replyTo, disappearAt: envelope.disappearAt,
-        sig: envelope.sig, sigPub: envelope.sigPub, acctRoot: envelope.acctRoot });
+        sig: envelope.sig, sigPub: envelope.sigPub, acctRoot: envelope.acctRoot }, activeContact.pubB64);
 
       // Multi-device fan-out. Each extra device is its own identity with its own ratchet, so the
       // SAME plaintext is re-encrypted per device — never the same ciphertext or key twice.
@@ -7630,7 +7704,7 @@ async function initMessenger(dbName) {
             const devEnc = await encryptFor(text, devPub);
             if (devEnc) await relaySend(devPub.slice(0, 12), { to: devPub.slice(0, 12), from: myId,
               fromPub: myPubB64, fromName: myName, payload: devEnc, ts,
-              sig: envelope.sig, sigPub: envelope.sigPub, acctRoot: envelope.acctRoot });
+              sig: envelope.sig, sigPub: envelope.sigPub, acctRoot: envelope.acctRoot }, devPub);
           }
           // 2) Self-sync: my own other devices get a copy tagged with the conversation it
           // belongs to, so "sent from the phone" also appears as sent on the laptop.
@@ -7641,7 +7715,7 @@ async function initMessenger(dbName) {
             // on the new device (Socratic round: "how does a fresh laptop learn who I talk to?").
             if (devEnc) await relaySend(devPub.slice(0, 12), { to: devPub.slice(0, 12), from: myId,
               fromPub: myPubB64, fromName: myName, payload: devEnc, ts,
-              selfSync: true, sfFor: snapContact.id, sfPub: snapContact.pubB64, sfName: snapContact.name });
+              selfSync: true, sfFor: snapContact.id, sfPub: snapContact.pubB64, sfName: snapContact.name }, devPub);
           }
         } catch(e) { _dbg(e, 'multidevice-fanout'); }
       })();
@@ -7786,7 +7860,7 @@ async function initMessenger(dbName) {
       await dbPut('messages', { msgId: genMsgId(), contactId: activeContact.id, text, mine: true, ts, fileData: fileMsg });
       const encrypted = await encryptFor(fileMsg, activeContact.pubB64);
       if (!encrypted) { _dbg(null, 'encrypt failed'); return; }
-      await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts, isFile: true });
+      await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts, isFile: true }, activeContact.pubB64);
     
     } catch(_e) { _dbg(_e, '_sendFile'); }
   }
@@ -8061,7 +8135,7 @@ async function initMessenger(dbName) {
               await dbPut('messages', { msgId: genMsgId(), contactId: activeContact.id, text, mine: true, ts, fileData: filePayload });
               activeContact.lastMsg = text; activeContact.lastMsgAt = ts;
               await dbPut('contacts', activeContact);
-              await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts, isFile: true });
+              await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts, isFile: true }, activeContact.pubB64);
               appendMsg(text, true, ts, null, filePayload, { msgId: genMsgId() });
               renderContacts();
               haptic.success();
@@ -8447,7 +8521,7 @@ async function initMessenger(dbName) {
       // Also notify via msg relay (so recipient's poll detects the call)
       const callNotif = await _wrapCallSignal(contact.pubB64, { sdp: offer, video: withVideo });
       if (callNotif != null) await relaySend(contact.id, { to: contact.id, from: myId, fromPub: myPubB64, fromName: myName,
-        payload: callNotif, ts: Date.now(), isCall: true, isVideoCall: withVideo });
+        payload: callNotif, ts: Date.now(), isCall: true, isVideoCall: withVideo }, contact.pubB64);
 
       // Poll for answer
       pollCallSignals(contact, room);
@@ -8796,7 +8870,7 @@ async function initMessenger(dbName) {
         if (m.id === myId) continue;
         const encrypted = await encryptFor(JSON.stringify({ type: 'group_invite', groupId, name, members }), m.pubB64);
         if (!encrypted) { _dbg(null, 'encrypt failed for invite to ' + m.id?.slice(0,8)); continue; }
-        await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: Date.now(), isGroupInvite: true });
+        await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: Date.now(), isGroupInvite: true }, m.pubB64);
       }
     
     } catch(_e) { _dbg(_e, 'createGroup'); }
@@ -9007,8 +9081,20 @@ async function initMessenger(dbName) {
             let sealedProcessed = 0;
             for (const sealed of (sData.messages || [])) {
               try {
-                const env = JSON.parse(sealed.envelope);
+                let env = JSON.parse(sealed.envelope);
                 if (!env || typeof env !== 'object') { sealedProcessed++; continue; } // malformed: ACK+skip to avoid infinite retry
+                if (env.sv === 2 && env.se) {
+                  // Sealed Sender v2: sender metadata is encrypted to OUR identity key.
+                  const meta = await unsealMeta(myKeys.privateKey, env.se, env.to, env.ts);
+                  if (!meta || typeof meta !== 'object') { sealedProcessed++; continue; } // not ours/tampered: ACK+skip
+                  let pl = env.payload;
+                  if (meta._pkik) {
+                    // Re-inject the X3DH identity key the sender relocated into the sealed block.
+                    try { const pkm = JSON.parse(pl); pkm.ik = meta._pkik; pl = JSON.stringify(pkm); } catch(e) { _dbg(e, 'pkik'); }
+                    delete meta._pkik;
+                  }
+                  env = { to: env.to, ts: env.ts, payload: pl, ...meta };
+                }
                 await handleIncoming(env);
                 sealedProcessed++;
               } catch(e) { _dbg(e, 'sealed-parse'); }
@@ -11089,7 +11175,7 @@ async function initMessenger(dbName) {
             if (stored && stored.mine && activeContact) {
               const encrypted = await encryptFor(stored.text, activeContact.pubB64);
               if (encrypted) {
-                await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: stored.ts });
+                await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: stored.ts }, activeContact.pubB64);
                 const statusEl = msgEl.querySelector('.msg-status');
                 if (statusEl) { statusEl.className = 'msg-status sent'; statusEl.textContent = '✓'; statusEl.title = t('sent'); statusEl.removeAttribute('data-action'); }
               }

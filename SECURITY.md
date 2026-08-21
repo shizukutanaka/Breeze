@@ -78,9 +78,20 @@ plaintext is a different threat model from one that cannot.
 
 ### Other known limitations
 
-- **Metadata**: Sealed Sender hides the *sender* from the relay, but the relay still sees
-  recipient, timing, and message size (padded to 256 B boundaries). Cover traffic / onion
-  routing are deferred (see SPEC §12).
+- **Metadata**: Sealed Sender **v2** hides the sender from the relay *cryptographically*:
+  all sender-identifying fields (id, public key, display name, signature keys, the reply
+  preview, multi-device markers — and the X3DH bootstrap header's initiator identity key,
+  which used to expose the sender on first contact) are encrypted to the recipient's
+  identity key (ephemeral ECDH → HKDF `breeze-seal-v2` → AES-256-GCM; AAD binds
+  recipient+timestamp against splicing). The relay stores only {recipient, timestamp,
+  ratchet ciphertext, sealed blob}. **Honesty note**: pre-v2 envelopes carried the sender in
+  cleartext inside the stored JSON — "the Worker doesn't parse it" was an implementation
+  choice, not a guarantee; treat pre-v2 traffic as sender-visible to the relay. v2 is
+  capability-negotiated (`seal-v2` in the prekey-bundle caps, read via `/prekey/status`
+  which consumes no one-time prekey): messages to un-upgraded peers, the `/msg` fallback
+  path, and the offline retry queue still use legacy envelopes and remain sender-visible.
+  The relay still sees recipient, timing, and message size (padded to 256 B boundaries);
+  cover traffic / onion routing are deferred (see SPEC §12).
 - **Symmetric franking (I17)** proves a reported ciphertext was genuinely sent, but under
   Sealed Sender it does not cryptographically bind *which* sender sent it — a malicious
   reporter cannot forge a report, but sender-binding needs asymmetric franking / Hecate
@@ -151,6 +162,7 @@ Breeze uses the following cryptographic primitives:
 | Protocol (group) | Sender Key chain-ratchet + epoch rotation | Group FS (I2) + PCS/kick (I3) |
 | Group Auth | Ed25519 per-message signature | Forgery resistance within group (N2) |
 | Franking | HMAC-SHA256 commitment/opening | Verifiable abuse reporting without escrow (I17) |
+| Sealed Sender v2 | Ephemeral X25519 ECDH + HKDF('breeze-seal-v2') + AES-256-GCM (AAD: to+ts) | Sender anonymity vs the relay, incl. first-contact X3DH header |
 | Anti-Replay | Counter + msgId dedup + TTL-expiring skipped-key cache | Replay + stale-key FS (I7) |
 | Trusted Types | breeze-sanitizer policy | DOM XSS prevention |
 | File Validation | Magic bytes (PE/ELF/Mach-O/shebang) | Executable upload blocking |
@@ -172,7 +184,7 @@ Breeze uses the following cryptographic primitives:
 - **No phone/email**: Identity = cryptographic key pair
 - **Client-side encryption**: All crypto operations in browser WebCrypto API
 - **Forward secrecy**: Every message uses a unique ephemeral key via Double Ratchet
-- **Sealed Sender**: Server cannot identify message sender
+- **Sealed Sender v2**: sender metadata encrypted to the recipient (ECIES-style); the server cannot identify the sender of a v2 envelope — legacy envelopes (old peers, `/msg` fallback, retry queue) remain sender-visible
 - **Key change warning**: 3 decrypt failures → yellow banner (MITM detection)
 - **P2P-only mode**: Functions without server when P2P connections are active
 - **Dual-path delivery**: P2P direct + sealed sender relay with dedup

@@ -30,6 +30,7 @@ import { createRatchet } from '../src/crypto/ratchet.js';
 import { checkRollover, auditBundle, appendChainEntry } from '../src/crypto/ktlog.js';
 import { negotiateGroup } from '../src/crypto/negotiate.js';
 import { createFranking } from '../src/crypto/franking.js';
+import { sealMeta as refSealMeta, unsealMeta as refUnsealMeta } from '../src/crypto/seal.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -1102,5 +1103,86 @@ describe('KTLog audit mirror — inline _auditKeyHistory (index.html) vs referen
     const inline = await inlineAuditKeyHistory('ik-v1', log);
     expect(ref.verdict).toBe('rolled');
     expect(inline.verdict).toBe('rolled');
+  });
+});
+
+// ─── Sealed Sender v2 mirror ──────────────────────────────────────────────────
+// index.html's sealMeta/unsealMeta vs src/crypto/seal.js. A drift in the HKDF info
+// label, the AAD domain string, or the wire field shape ({ek,iv,ct}) would make new
+// clients unable to open each other's sealed envelopes — silently, since both sides
+// fall back to "undecryptable: ack+skip" and the message just vanishes.
+const SEAL_START = "const SEAL_INFO = 'breeze-seal-v2';";
+const SEAL_END = '// ═══ end inline mirror of src/crypto/seal.js ═══';
+const ss = html.indexOf(SEAL_START);
+const se_ = html.indexOf(SEAL_END, ss);
+if (ss < 0 || se_ < 0) {
+  throw new Error(
+    'mirror-drift guard: could not locate the inline seal block in index.html ' +
+    '(markers "const SEAL_INFO" .. "end inline mirror of src/crypto/seal.js"). ' +
+    'If it moved, update tests/mirror-drift.test.js.',
+  );
+}
+const sealBlock = html.slice(ss, se_);
+const _sealDeps = (() => {
+  const genRatchetKey = async () => {
+    const kp = await subtle.generateKey({ name: 'X25519' }, true, ['deriveBits']);
+    return { pub: new Uint8Array(await subtle.exportKey('raw', kp.publicKey)), privateKey: kp.privateKey };
+  };
+  const ecdhBits = async (privKey, peerPubRaw) => {
+    const peerPub = await subtle.importKey('raw', peerPubRaw, { name: 'X25519' }, false, []);
+    return new Uint8Array(await subtle.deriveBits({ name: 'X25519', public: peerPub }, privKey, 256));
+  };
+  const hkdf = async (ikm, salt, info, length) => {
+    const key = await subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
+    return new Uint8Array(await subtle.deriveBits(
+      { name: 'HKDF', hash: 'SHA-256', salt, info: new TextEncoder().encode(info) }, key, length * 8));
+  };
+  return { genRatchetKey, ecdhBits, hkdf };
+})();
+const { sealMeta: inlineSealMeta, unsealMeta: inlineUnsealMeta } = new Function(
+  'crypto', 'CONFIG', '_dbg', 'genRatchetKey', 'ecdhBits', 'hkdf', 'zeroBuffer', 'arr',
+  sealBlock + '\nreturn { sealMeta, unsealMeta };',
+)(globalThis.crypto, { IV_BYTES: 12 }, () => {},
+  _sealDeps.genRatchetKey, _sealDeps.ecdhBits, _sealDeps.hkdf, (b) => b.fill?.(0), (u8) => Array.from(u8));
+
+describe('Sealed Sender v2 mirror — inline sealMeta/unsealMeta (index.html) vs reference (src/crypto/seal.js)', () => {
+  const S_TO = 'mmmmnnnnoooo';
+  const S_TS = 1755123456789;
+  const S_META = { from: 'ddddeeeeffff', fromPub: 'F'.repeat(43) + '=', fromName: 'Mallory-Test',
+    replyTo: { text: 'preview text that must never reach the relay' } };
+  const mkRecipient = async () => {
+    const kp = await subtle.generateKey({ name: 'X25519' }, true, ['deriveBits']);
+    return { kp, pubB64: Buffer.from(new Uint8Array(await subtle.exportKey('raw', kp.publicKey))).toString('base64') };
+  };
+
+  it('PARITY: a blob sealed by the INLINE impl opens with the REFERENCE impl', async () => {
+    const r = await mkRecipient();
+    const blob = await inlineSealMeta(r.pubB64, S_META, S_TO, S_TS);
+    expect(blob).toBeTruthy();
+    const opened = await refUnsealMeta(subtle, r.kp.privateKey, blob, S_TO, S_TS);
+    expect(opened).toEqual(S_META);
+  });
+
+  it('PARITY: a blob sealed by the REFERENCE impl opens with the INLINE impl', async () => {
+    const r = await mkRecipient();
+    const blob = await refSealMeta(subtle, r.pubB64, S_META, S_TO, S_TS);
+    const opened = await inlineUnsealMeta(r.kp.privateKey, blob, S_TO, S_TS);
+    expect(opened).toEqual(S_META);
+  });
+
+  it('the inline wire blob leaks no sender metadata in cleartext', async () => {
+    const r = await mkRecipient();
+    const blob = await inlineSealMeta(r.pubB64, S_META, S_TO, S_TS);
+    const wire = JSON.stringify({ to: S_TO, ts: S_TS, payload: 'ct', sv: 2, se: blob });
+    for (const leak of [S_META.from, S_META.fromPub, S_META.fromName, S_META.replyTo.text]) {
+      expect(wire).not.toContain(leak);
+    }
+  });
+
+  it('BOTH impls refuse a blob re-addressed to a different inbox or timestamp (AAD parity)', async () => {
+    const r = await mkRecipient();
+    const blob = await inlineSealMeta(r.pubB64, S_META, S_TO, S_TS);
+    expect(await inlineUnsealMeta(r.kp.privateKey, blob, 'zzzzyyyyxxxx', S_TS)).toBeNull();
+    expect(await refUnsealMeta(subtle, r.kp.privateKey, blob, S_TO, S_TS + 1)).toBeNull();
   });
 });

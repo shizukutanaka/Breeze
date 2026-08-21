@@ -1,5 +1,19 @@
 # Changelog
 
+## Socratic round 4 — "Sealed Sender: does the relay REALLY not see the sender?" (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+784 vitest (+11: 7 seal reference + 4 mirror-guard) + **24** Playwright E2E (+1 wiretap spec); `index.html` (+~90), new `src/crypto/seal.js` + `tests/seal.test.js` + `tests/e2e/seal.spec.js`, `tests/mirror-drift.test.js`, `SECURITY.md`, `CLAUDE.md`. Zero Worker changes — the sealed path already stores envelopes verbatim.
+
+**Q: SECURITY.md says "Sealed Sender: server cannot identify message sender." Is that true of the bytes?** No. The "sealed" envelope was `JSON.stringify({from, fromPub, fromName, payload, sig, sigPub, ...})` — the sender's id, full public key, display name, and even the **plaintext replyTo preview** (message *content*) sat in the clear inside the string the relay stores. "The Worker doesn't parse it" was an implementation choice, not a guarantee; against an honest-but-curious relay the claim was false.
+
+Fix — **Sealed Sender v2**: everything sender-identifying moves into a block encrypted to the *recipient's identity key* (ephemeral X25519 ECDH → HKDF `breeze-seal-v2` → AES-256-GCM; AAD binds recipient+timestamp so a blob can't be spliced onto another inbox or replayed at a shifted time). The relay now stores `{to, ts, ratchet-ciphertext, sealed blob}`. Capability-negotiated with the existing machinery: recipients advertise `seal-v2` in prekey-bundle caps, senders read caps via `/prekey/status` — which was *already built* to answer capability questions **without consuming a one-time prekey** — cached 1 h, failing closed to legacy (delivery over privacy). All 15 relaySend call sites pass the recipient pub; `/msg` fallback and the offline retry queue stay legacy and are documented as sender-visible.
+
+The new wiretap E2E then asked the question *again* of the actual bytes — and caught a second leak the design review missed: the first message of every session wraps the ratchet ciphertext in a plaintext X3DH header whose `ik` **is the sender's identity key as a raw byte array**, so sealed first-contact messages still identified the sender. v2 now relocates `ik` into the sealed block (`_pkik`) and the recipient re-injects it before decrypting. The E2E asserts the identity key is absent in *both* encodings (base64 and `23,143,…` byte-array text) from every envelope either browser hands the relay — while both directions still deliver.
+
+Discipline kept: reference implementation in `src/crypto/seal.js` (dependency-injected like `pow.js`), 7 reference tests (round-trip, wrong-key, AAD-splice ×2, tamper, wire-leak, b64-input), and a **mirror-drift guard** cross-sealing/unsealing inline↔reference in both directions — a drift in the HKDF label, AAD domain, or wire shape now fails CI instead of silently making new clients' messages vanish. SECURITY.md's claims rewritten to match the bytes, including an honesty note that pre-v2 traffic must be treated as sender-visible.
+
+---
+
 ## Socratic round 3 — "How does a fresh laptop learn who I talk to?" (branch claude/nice-ride-T6yb0, 2026-08-21)
 
 773 vitest + 23 Playwright E2E (multi-device Test 1 restructured to model the REAL fresh-laptop flow); `index.html` (+~12), `_worker.js` (+4), `locales/ja.json`.
