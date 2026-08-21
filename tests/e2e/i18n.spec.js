@@ -79,3 +79,19 @@ test('a Korean browser loads locales/ko.json (proves the pattern scales past the
   expect(errors).toEqual([]);
   await ctx.close();
 });
+
+test('a Thai browser loads locales/th.json (second non-Latin script verified in a real browser)', async ({ browser }) => {
+  const ctx = await browser.newContext({
+    locale: 'th-TH',
+    extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.48' },
+  });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+
+  await page.goto('/');
+  const th = JSON.parse(readFileSync(join(ROOT, 'locales', 'th.json'), 'utf8'));
+  await expect(page.locator('#b-msg-setup')).toHaveText(th.createFree, { timeout: 10_000 });
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
