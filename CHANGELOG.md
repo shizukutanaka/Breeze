@@ -1,5 +1,17 @@
 # Changelog
 
+## Socratic round 1 — "Sent from the laptop, who does the recipient see?" (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+773 vitest + **23** Playwright E2E (multi-device Test 1 extended to a third assertion); `index.html` (+~40, 14,186 lines — under gate), `_worker.js` (+3), `SECURITY.md`.
+
+Method for this session: interrogate each shipped claim until it contradicts itself or survives. **Q1: multi-device Phase 1 proved messages *reach* both devices — so what happens when the linked laptop *sends*?** The code's answer was a contradiction: `handleIncoming`'s 1:1 branch looks the sender up by pub, finds nothing, and **auto-creates a stranger contact** — so sending from a second device split the conversation in two on the recipient's side and grew an "Unknown" in their contact list. The one-account-one-conversation promise held in only one direction.
+
+Fix reuses the existing trust machinery, adding none: a secondary device *names* its account root in the envelope (`acctRoot`), and the recipient attributes the message to that account **only after re-verifying the root-signed device registry** (fetched with the root's pinned signing key, cached 5 min) lists the sending device — then decrypts against the *device's* own ratchet while storing under the root's conversation. The claim alone is never trusted: a forged `acctRoot` fails the registry check and falls back to the exact pre-existing stranger path. Attributed senders skip the per-contact Ed25519 TOFU pin — their signing key legitimately differs from the root's, and pinning it would have fired a false MITM banner; identity is carried by the registry, the signature is checked for self-consistency only. The relay change is two lines (ferry `acctRoot` through the `/msg` fallback; the sealed path already passes envelopes verbatim), and primary/legacy sends carry no new field — byte-identical wire.
+
+**Q2 ("the registry is world-readable — what does that leak?")** survived questioning: device count and device pubs are visible to anyone holding the accountId — metadata of the same class as Signal's public prekey bundles, now stated plainly in SECURITY.md rather than left implicit. The E2E now proves all three directions in one run: contact→both devices, phone→contact+laptop-sync, and **laptop→contact lands in the Alice conversation with zero new contacts** (asserted by counting the recipient's contact rows).
+
+---
+
 ## Multi-device Phase 1: phone + laptop on one account (branch claude/nice-ride-T6yb0, 2026-08-21)
 
 773 vitest (+8 device-registry) + **23** Playwright E2E (+2 multi-device); `_worker.js` (+~70), `index.html` (+~280, under the 15,000 gate), `locales/ja.json`, `SECURITY.md`, new `tests/e2e/multidevice.spec.js`.

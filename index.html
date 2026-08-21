@@ -5311,6 +5311,9 @@ async function initMessenger(dbName) {
     contact._devCacheTs = now;
     return contact._devCache;
   }
+  // Receiver-side registry cache for sender attribution (handleIncoming) — keyed by root id,
+  // 5-min TTL like the sender-side caches. Bounds /device/list traffic to 1 per account/5 min.
+  const _attribDevCache = new Map();
   // My OWN other devices (for self-sync). Uses the local account record written by /link.
   let _myDevCache = null, _myDevCacheTs = 0;
   async function _myOtherDevices() {
@@ -7557,6 +7560,12 @@ async function initMessenger(dbName) {
       }
       const peer = peers[activeContact.pubB64];
       const envelope = { v: CONFIG.PROTOCOL_VERSION, type: 'msg', payload: encrypted, ts, sender: myPubB64, name: myName };
+      // Multi-device: a SECONDARY device names its account root so the recipient can attribute
+      // this message to the root's conversation instead of auto-adding a stranger contact.
+      // The claim alone proves nothing — the recipient verifies it against the ROOT-SIGNED
+      // device registry (see handleIncoming). Primary sends carry nothing (root IS the contact).
+      const _sendAcct = await dbGet('identity', 'account').catch(() => null);
+      if (_sendAcct?.root && _sendAcct.root !== myPubB64) envelope.acctRoot = _sendAcct.root;
       // v3.3: Ed25519 message signing (authenticity)
       if (_signingKey) {
         const sig = await signMessage(text);
@@ -7607,7 +7616,7 @@ async function initMessenger(dbName) {
       // Relay: Sealed Sender (Worker doesn't see sender)
       await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName,
         payload: encrypted, ts, replyTo: envelope.replyTo, disappearAt: envelope.disappearAt,
-        sig: envelope.sig, sigPub: envelope.sigPub });
+        sig: envelope.sig, sigPub: envelope.sigPub, acctRoot: envelope.acctRoot });
 
       // Multi-device fan-out. Each extra device is its own identity with its own ratchet, so the
       // SAME plaintext is re-encrypted per device — never the same ciphertext or key twice.
@@ -7621,7 +7630,7 @@ async function initMessenger(dbName) {
             const devEnc = await encryptFor(text, devPub);
             if (devEnc) await relaySend(devPub.slice(0, 12), { to: devPub.slice(0, 12), from: myId,
               fromPub: myPubB64, fromName: myName, payload: devEnc, ts,
-              sig: envelope.sig, sigPub: envelope.sigPub });
+              sig: envelope.sig, sigPub: envelope.sigPub, acctRoot: envelope.acctRoot });
           }
           // 2) Self-sync: my own other devices get a copy tagged with the conversation it
           // belongs to, so "sent from the phone" also appears as sent on the laptop.
@@ -9280,13 +9289,35 @@ async function initMessenger(dbName) {
     }
 
     // === 1:1 message (text, file, edit, delete) ===
-    const contactId = msg.from;
+    let contactId = msg.from;
     let contact = await dbGet('contacts', contactId);
+    // Multi-device sender attribution: an unknown sender claiming an account root is checked
+    // against that root's SIGNED device registry (verified with the root's pinned signing key
+    // in _fetchDeviceList). Listed -> the message belongs to the root's conversation; the
+    // session peer stays the DEVICE's pub (its own ratchet). The claim alone is never trusted:
+    // unverifiable/absent registry falls through to the stranger-contact path below.
+    let _attribPub = null;
+    if (!contact && msg.fromPub && typeof msg.acctRoot === 'string') {
+      try {
+        const rootId = msg.acctRoot.slice(0, 12);
+        const rootContact = rootId !== contactId ? await dbGet('contacts', rootId) : null;
+        if (rootContact?.pubB64 === msg.acctRoot) {
+          let devs = _attribDevCache.get(rootId);
+          if (!devs || Date.now() - devs.ts > 5 * MS.MIN) {
+            devs = { list: await _fetchDeviceList(rootId, msg.acctRoot) || [], ts: Date.now() };
+            _attribDevCache.set(rootId, devs);
+          }
+          if (devs.list.includes(msg.fromPub)) { contact = rootContact; contactId = rootContact.id; _attribPub = msg.fromPub; }
+        }
+      } catch(e) { _dbg(e, 'device-attribution'); }
+    }
     if (!contact && msg.fromPub) {
       await addContact(msg.fromPub, msg.fromName || t('unknown'));
       contact = await dbGet('contacts', contactId);
     }
     if (!contact) return;
+    // Session peer key: the attributed device's own pub, else the contact's.
+    const _peerPub = _attribPub || contact.pubB64;
 
     // SECURITY (removed): the deprecated PLAINTEXT signal handlers (type 'edit' /
     // 'delete' / 'reaction' / 'poll_vote') were processed here with NO decryption and
@@ -9313,7 +9344,7 @@ async function initMessenger(dbName) {
     // v3.6: Encrypted signal (edit/delete) — decrypt and process
     if (msg.isSignal && msg.payload) {
       try {
-        const signalJson = await decryptFrom(msg.payload, contact.pubB64);
+        const signalJson = await decryptFrom(msg.payload, _peerPub);
         if (!signalJson) return;
         const signal = JSON.parse(signalJson);
         // Sanitize peer-supplied msgId before querySelector (CSS selector injection guard).
@@ -9357,7 +9388,7 @@ async function initMessenger(dbName) {
 
     if (msg.isFile) {
       try {
-        const fileMsg = await decryptFrom(msg.payload, contact.pubB64);
+        const fileMsg = await decryptFrom(msg.payload, _peerPub);
         if (!fileMsg) return;
         const _fp = JSON.parse(fileMsg);
         // Cap file data: reject oversized base64 payloads before IDB write and atob() decode.
@@ -9371,7 +9402,7 @@ async function initMessenger(dbName) {
       } catch { return; }
     } else {
       const _frank = {};
-      text = await decryptFrom(msg.payload, contact.pubB64, _frank);
+      text = await decryptFrom(msg.payload, _peerPub, _frank);
       if (!text) return;
       // Reject oversized text: the relay caps payloads at 256 KB but the P2P DataChannel has no server check.
       // 64 KB is generous for chat text while preventing memory/render DoS from a malicious peer.
@@ -9382,7 +9413,15 @@ async function initMessenger(dbName) {
       // message is self-consistent — an attacker can sign forged text with their
       // own key. Pin the signing key on first sighting and require it to match
       // thereafter, so the "verified" badge actually binds to the known identity.
-      if (msg.sig && msg.sigPub) {
+      if (msg.sig && msg.sigPub && _attribPub) {
+        // Attributed device sender: its Ed25519 key legitimately differs from the root's pinned
+        // sigPub, so the TOFU pin/compare below would fire a false MITM banner. Identity here is
+        // carried by the root-signed registry + a successful ratchet decrypt against the listed
+        // device pub; the signature is only checked for self-consistency (never pinned).
+        const verified = await verifySignature(text, msg.sig, msg.sigPub);
+        if (verified === true) meta.verified = true;
+        else if (verified === false) { meta.tampered = true; _dbg(null, 'Signature verification FAILED for device msg from ' + contactId); }
+      } else if (msg.sig && msg.sigPub) {
         if (!contact.sigPub) {
           contact.sigPub = msg.sigPub; // trust on first use
         } else if (contact.sigPub !== msg.sigPub) {

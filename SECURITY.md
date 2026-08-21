@@ -122,6 +122,17 @@ plaintext is a different threat model from one that cannot.
   - **Secondary-device trust is anchored at link time**: `/linkto` pins the root's signing key
     obtained while physically holding both devices (same TOFU gesture as adding a contact by
     raw key), and the registry must already list the new device before it binds.
+  - **Sender attribution is registry-gated, never claim-gated.** A secondary device names its
+    account root in the envelope (`acctRoot`), but the recipient attributes the message to that
+    account only after re-verifying the root-signed registry (with the root's *pinned* signing
+    key) lists the sending device's pub — and the ratchet decrypt must then succeed against
+    that exact pub. A forged claim fails the registry check and falls back to today's
+    stranger-contact path. Attributed senders skip the per-contact Ed25519 TOFU pin (their key
+    legitimately differs from the root's); identity is carried by the registry, not the pin.
+  - **The registry is publicly readable** (senders must fetch it): anyone who knows an
+    accountId can learn the account's *device count* and device public keys. This is metadata
+    of the same class as Signal's public prekey bundles — it reveals nothing about message
+    content, contacts, or traffic.
 
 ## Security Architecture
 

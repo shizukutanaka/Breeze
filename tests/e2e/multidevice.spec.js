@@ -104,6 +104,22 @@ test('link a second device: contact messages reach BOTH devices; sent messages s
   }, fromA);
   expect(isMine).toBe(true);
 
+  // === The point #3: B sends from the "laptop". C must see it in the ALICE conversation —
+  // NOT as a new stranger contact — because the envelope's account-root claim verifies
+  // against the root-signed device registry. And A gets the self-sync copy.
+  const fromB = 'sent from the laptop ' + Date.now();
+  await B.locator('#msg-input').fill(fromB);
+  await B.locator('#b-msg-send').click();
+  await expect(C.locator('#msg-messages')).toContainText(fromB, { timeout: 20_000 });
+  await expect(C.locator('#msg-contacts .contact')).toHaveCount(1); // no stranger appeared
+  await expect(A.locator('#msg-messages')).toContainText(fromB, { timeout: 20_000 });
+  const isMineOnA = await A.evaluate((needle) => {
+    const els = [...document.querySelectorAll('#msg-messages .msg')];
+    const el = els.find((x) => x.textContent.includes(needle));
+    return el ? el.classList.contains('me') : null;
+  }, fromB);
+  expect(isMineOnA).toBe(true);
+
   await ctxA.close(); await ctxB.close(); await ctxC.close();
 });
 

@@ -445,6 +445,9 @@ async function handleMsgSend(body, ip, env, request) {
   // Multi-device self-sync markers pass through opaquely (validated client-side against the
   // signature-verified device registry; the relay only ferries them).
   if (body.selfSync === true && typeof body.sfFor === 'string') { msg.selfSync = true; msg.sfFor = body.sfFor.slice(0, 64); }
+  // Multi-device sender attribution: a secondary device names its account root; the recipient
+  // verifies the claim against the root-signed device registry (relay just ferries it).
+  if (typeof body.acctRoot === 'string') msg.acctRoot = body.acctRoot.slice(0, 200);
   // Server-assigned unique message id — groundwork for an exclusive poll cursor.
   // Two messages stored in the same millisecond share a ts, and the ts-only cursor
   // (`m.ts > lastTs`) drops the second one if a poll lands between them. Current
