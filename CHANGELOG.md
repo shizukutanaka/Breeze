@@ -1,5 +1,17 @@
 # Changelog
 
+## Socratic rounds 9–11 — "Does an unlinked device KNOW? How long is the downgrade window? Is DELETE proven?" (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+789 vitest + 24 Playwright E2E (multi-device Test 1 gains a 5th act: delete propagates everywhere); `index.html` (+~25), `locales/ja.json`, `tests/e2e/multidevice.spec.js`.
+
+**Q9: "/unlink removes a device from the registry — does that device ever find out?"** No: its fan-out just stopped and the user would stare at a silently dead account — the worst failure mode (quiet). Now `_myOtherDevices` treats a **verified** registry that no longer lists this device as the answer it is: the user is told once ("this device was removed — it now works standalone"), and the stale account binding is deleted so the install cleanly reverts to a standalone identity (`/link` works again). Deliberately conservative trigger: only a signature-verified, non-empty list may unlink — a failed or unverifiable fetch never can, so a flaky relay cannot kick devices off accounts.
+
+**Q10: "seal-v2 capability is cached 1 h — what happens during a peer's downgrade?"** Sealed envelopes the peer can no longer open are ack+skipped — silently lost — for up to the cache TTL. The TTL *is* the loss window, so it now matches every other cache in the system: 5 minutes, with the trade-off stated in the code comment instead of hidden in a constant.
+
+**Q11: "the E2E proves EDIT syncs — where's DELETE?"** Proven now: act 5 deletes the edited message on the phone and asserts it disappears from the contact *and* the laptop. Getting there surfaced two E2E-environment truths worth recording: the consent banner (bottom-fixed) intercepts context-menu clicks — the spec now pre-accepts it, since consent UX is not what this test interrogates — and backgrounded tabs poll at 15 s, so the delete assertions get a 30 s window with the laptop brought forward. 3/3 green after hardening; a debug run also confirmed reaction/delete share the exact code path the sibling-mutation branch already covers.
+
+---
+
 ## Socratic rounds 7+8 — "Offline in Japanese? And what does RESTORE do to multi-device?" (branch claude/nice-ride-T6yb0, 2026-08-21)
 
 789 vitest (+3) + 24 Playwright E2E; `index.html` (+~20), `_worker.js` (+~15), `locales/ja.json`, `tests/worker.test.js`.

@@ -1683,6 +1683,7 @@ const _I = {
     devSetFail: "Failed to update the device list",
     toastMsgsDropped: "{0} message(s) may have been lost while you were offline (relay queue overflowed)",
     toastIdentityClone: "This identity is ALSO active on another device. Using both will corrupt your conversations — retire one, or link devices with /link instead.",
+    devUnlinkedNotice: "This device was removed from the account — it no longer receives the account's messages. It now works as a standalone identity.",
     devListTitle: "Account devices",
     devThis: "this device",
     toastAliasTampered: 'Blocked: this handle\u2019s key history has been tampered with. Ask the person for their public key directly.',
@@ -5321,7 +5322,7 @@ async function initMessenger(dbName) {
   // 5-min TTL like the sender-side caches. Bounds /device/list traffic to 1 per account/5 min.
   const _attribDevCache = new Map();
   // My OWN other devices (for self-sync). Uses the local account record written by /link.
-  let _myDevCache = null, _myDevCacheTs = 0;
+  let _myDevCache = null, _myDevCacheTs = 0, _unlinkNoticed = false;
   async function _myOtherDevices() {
     try {
       const acct = await dbGet('identity', 'account');
@@ -5329,8 +5330,19 @@ async function initMessenger(dbName) {
       const now = Date.now();
       if (_myDevCache && now - _myDevCacheTs < 5 * MS.MIN) return _myDevCache;
       const rootId = acct.root.slice(0, 12);
-      const list = await _fetchDeviceList(rootId, acct.root) || [];
-      _myDevCache = list.filter(p => p !== myPubB64);
+      const list = await _fetchDeviceList(rootId, acct.root);
+      // Unlink self-awareness (Socratic round — "does an unlinked device KNOW?"): a VERIFIED
+      // registry that no longer lists this device means the account holder removed it. Tell
+      // the user instead of letting fan-out silently stop, and drop the stale account binding
+      // so this install cleanly reverts to a standalone identity. Only a verified, non-empty
+      // list may trigger this — a failed/unverifiable fetch (null) must never unlink anyone.
+      if (acct.root !== myPubB64 && Array.isArray(list) && list.length && !list.includes(myPubB64)) {
+        if (!_unlinkNoticed) { _unlinkNoticed = true; showToast(t('devUnlinkedNotice'), 'error', 10000); }
+        await dbDel('identity', 'account'); // clean revert to a standalone identity (/link works again)
+        _myDevCache = []; _myDevCacheTs = now;
+        return [];
+      }
+      _myDevCache = (list || []).filter(p => p !== myPubB64);
       _myDevCacheTs = now;
       return _myDevCache;
     } catch { return []; }
@@ -5378,12 +5390,15 @@ async function initMessenger(dbName) {
   }
   // ═══ end inline mirror of src/crypto/seal.js ═══
   // Does this peer understand sealed-v2 envelopes? Read from /prekey/status (no OTP cost),
-  // cached 1 h. Any failure answers "no" — the message still delivers, just legacy-shaped.
+  // cached 5 min — the cache TTL IS the downgrade window: a peer that stops advertising
+  // seal-v2 (version rollback, identity re-registration) receives sealed envelopes it
+  // ack+skips until the cache expires, so keep the window as short as the other caches.
+  // Any failure answers "no" — the message still delivers, just legacy-shaped.
   const _sealCapsCache = new Map();
   async function _peerSealV2(peerId) {
     try {
       const c = _sealCapsCache.get(peerId);
-      if (c && Date.now() - c.ts < MS.HOUR) return c.ok;
+      if (c && Date.now() - c.ts < 5 * MS.MIN) return c.ok;
       const resp = await postAPIRaw('/prekey/status', { userId: peerId });
       const data = resp?.ok ? await resp.json() : null;
       const ok = Array.isArray(data?.caps) && data.caps.includes(CAPS_SEAL_V2);

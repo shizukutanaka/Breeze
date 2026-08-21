@@ -11,6 +11,9 @@ import { test, expect } from '@playwright/test';
 const ip = (n) => ({ extraHTTPHeaders: { 'CF-Connecting-IP': `203.0.113.${n}` } });
 
 async function createIdentity(page, name) {
+  // Pre-accept the consent banner: it renders bottom-fixed and intercepts clicks on the
+  // context menu this spec drives (consent UX is not under test here).
+  await page.addInitScript(() => { try { localStorage.setItem('brz-consent', String(Date.now())); } catch {} });
   await page.goto('/');
   await page.locator('#msg-name').fill(name);
   await page.locator('#b-msg-setup').click();
@@ -138,6 +141,17 @@ test('link a second device: contact messages reach BOTH devices; sent messages s
   await editDialog.locator('[value="ok"]').click();
   await expect(C.locator('#msg-messages')).toContainText(editedText, { timeout: 20_000 });
   await expect(B.locator('#msg-messages')).toContainText(editedText, { timeout: 20_000 });
+
+  // === The point #5: DELETE follows too — the same message is removed everywhere.
+  await A.locator('#msg-messages .msg', { hasText: editedText }).click({ button: 'right' });
+  await A.locator('.ctx-menu div', { hasText: /^Delete$|^削除$/ }).click();
+  const delDialog = A.locator('dialog[aria-labelledby]');
+  await delDialog.locator('[value="ok"]').click();
+  await expect(C.locator('#msg-messages')).not.toContainText(editedText, { timeout: 30_000 });
+  // Backgrounded tabs poll at POLL_SLOW_MS (15 s) — bring B forward so the 30 s window
+  // comfortably covers a worst-case poll landing just after the signal was queued.
+  await B.bringToFront();
+  await expect(B.locator('#msg-messages')).not.toContainText(editedText, { timeout: 30_000 });
 
   await ctxA.close(); await ctxB.close(); await ctxC.close();
 });
