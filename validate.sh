@@ -120,6 +120,12 @@ echo ""
 
 # ═══ Gate 5: Performance ═══
 echo "Gate 5: Performance"
+# Locale tables are pure data (no functions), key-complete, and their {0} placeholders and
+# CLDR plural categories line up across every locale. A missing key silently falls back to
+# English, so it is invisible at runtime — this is the only place it can be caught.
+if node tools/i18n-check.mjs >/dev/null 2>&1; then pass "i18n: locales complete + placeholders/plurals consistent" 4
+else fail "i18n: locale drift (run: node tools/i18n-check.mjs)" 4; fi
+
 # CSP script-src is hash-pinned (no 'unsafe-inline'), so the hash MUST track index.html.
 # A stale hash blocks the entire app in production and is invisible to the E2E harness, which
 # serves index.html without _headers — so drift has to fail here. Fix: node tools/csp-hash.mjs --write
