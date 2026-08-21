@@ -3767,6 +3767,31 @@ describe('presence heartbeat and check', () => {
     expect(j.name).toBe('Bob');
   });
 
+  // Socratic round: restoring a backup on a second browser while the original stays active
+  // runs ONE identity on TWO installs — a Double-Ratchet-fork hazard. The heartbeat's
+  // per-install `inst` id lets the relay notice and warn.
+  it('flags a conflict when the SAME identity heartbeats from two different installs', async () => {
+    const e = makeEnv();
+    const first = await (await handlePresence({ id: 'cloneuser1', pub: 'p', name: 'A', inst: 'aaaa1111' }, e, req({}))).json();
+    expect(first.conflict).toBeUndefined();
+    const second = await (await handlePresence({ id: 'cloneuser1', pub: 'p', name: 'A', inst: 'bbbb2222' }, e, req({}))).json();
+    expect(second.conflict).toBe(true);
+  });
+
+  it('the same install heartbeating repeatedly is never flagged', async () => {
+    const e = makeEnv();
+    await handlePresence({ id: 'cloneuser2', pub: 'p', name: 'B', inst: 'cccc3333' }, e, req({}));
+    const again = await (await handlePresence({ id: 'cloneuser2', pub: 'p', name: 'B', inst: 'cccc3333' }, e, req({}))).json();
+    expect(again.conflict).toBeUndefined();
+  });
+
+  it('legacy clients without inst are never flagged (backward compat)', async () => {
+    const e = makeEnv();
+    await handlePresence({ id: 'cloneuser3', pub: 'p', name: 'C' }, e, req({}));
+    const again = await (await handlePresence({ id: 'cloneuser3', pub: 'p', name: 'C', inst: 'dddd4444' }, e, req({}))).json();
+    expect(again.conflict).toBeUndefined(); // previous record had no inst — nothing to compare
+  });
+
   it('round-trips advertised capabilities (N3 negotiation before bundle fetch)', async () => {
     const e = makeEnv();
     // advertise() output: a heartbeat carrying the supported protocol caps.

@@ -630,7 +630,22 @@ async function handlePresence(body, env, request) {
   const lastWrite = globalThis._presenceCache.get(presKey) || 0;
   // Cap pub to 200 chars (a base64 X25519/P-256 key is ≤88 chars; large values are abuse).
   const safePub = typeof pub === 'string' ? pub.slice(0, 200) : undefined;
+  // Identity-clone detection: `inst` is a per-INSTALL random id. Two different live insts
+  // heartbeating the same identity within a heartbeat window = the same identity running on
+  // two installs at once (e.g. a backup restored while the original device stays active) —
+  // a Double-Ratchet-fork hazard the client warns the user about. Best-effort: the previous
+  // record may live in another isolate's memory or a ≤5-min-stale KV entry, so a miss is
+  // possible; a hit is always real (inst is compared only within the same identity).
+  const safeInst = typeof body.inst === 'string' ? body.inst.slice(0, 32) : undefined;
+  let conflict = false;
+  if (safeInst) {
+    let prevRaw = globalThis._presenceCache.get(presKey + ':data');
+    if (!prevRaw) prevRaw = await kvGet(env, presKey);
+    const prev = prevRaw ? safeJsonParse(prevRaw) : null;
+    if (prev?.inst && prev.inst !== safeInst && Date.now() - prev.at < 90000) conflict = true;
+  }
   const presData = { pub: safePub, name: sanitizeString(name, 64), at: Date.now() };
+  if (safeInst) presData.inst = safeInst;
   if (safeCaps) presData.caps = safeCaps;
   if (Date.now() - lastWrite > TIMEOUT_MS.PRESENCE_WRITE) { // throttle KV writes
     await kvPut(env, presKey, JSON.stringify(presData), { expirationTtl: TTL.MIN * 6 }); // 6min TTL (covers 5min interval + slack)
@@ -647,7 +662,7 @@ async function handlePresence(body, env, request) {
     globalThis._onlineCounter = { minute: currentMinute, count: 0, prev: globalThis._onlineCounter.count };
   }
   globalThis._onlineCounter.count++;
-  return json({ ok: true }, 200, request);
+  return json(conflict ? { ok: true, conflict: true } : { ok: true }, 200, request);
 }
 
 // v3.3: Online user count (approximate)

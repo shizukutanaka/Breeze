@@ -1682,6 +1682,7 @@ const _I = {
     devNotListed: "This device is not on that account's list yet — run /link <this device's key> on the primary first",
     devSetFail: "Failed to update the device list",
     toastMsgsDropped: "{0} message(s) may have been lost while you were offline (relay queue overflowed)",
+    toastIdentityClone: "This identity is ALSO active on another device. Using both will corrupt your conversations — retire one, or link devices with /link instead.",
     devListTitle: "Account devices",
     devThis: "this device",
     toastAliasTampered: 'Blocked: this handle\u2019s key history has been tampered with. Ask the person for their public key directly.',
@@ -10069,9 +10070,25 @@ async function initMessenger(dbName) {
 
   // ===== Presence heartbeat (v3.3: adaptive — slower in background) =====
   let _presenceTimer = null;
+  let _cloneWarnedAt = 0;
   function startPresence() {
     if (!API) return;
-    const beat = () => postAPIRaw('/presence', { id: myId, pub: myPubB64, name: myName }).catch(e => _dbg(e));
+    const beat = async () => {
+      try {
+        // Per-INSTALL instance id, deliberately NOT part of backups: a restored backup on a
+        // second browser generates a fresh one, which is exactly how the relay detects the
+        // same identity heartbeating from two live installs at once (ratchet-fork hazard —
+        // the catastrophe /link exists to prevent; restore is for MIGRATION, not multi-device).
+        let inst = await dbGet('identity', 'inst').catch(() => null);
+        if (!inst?.v) { inst = { v: Array.from(crypto.getRandomValues(new Uint8Array(8)), b => b.toString(16).padStart(2, '0')).join('') }; await dbPut('identity', inst, 'inst'); }
+        const resp = await postAPIRaw('/presence', { id: myId, pub: myPubB64, name: myName, inst: inst.v });
+        const data = resp?.ok ? await resp.json().catch(() => null) : null;
+        if (data?.conflict && Date.now() - _cloneWarnedAt > 5 * MS.MIN) {
+          _cloneWarnedAt = Date.now();
+          showToast(t('toastIdentityClone'), 'error', 10000);
+        }
+      } catch(e) { _dbg(e, 'presence'); }
+    };
     beat();
     function schedulePresence() {
       if (_presenceTimer) clearTimeout(_presenceTimer);

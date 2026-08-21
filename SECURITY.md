@@ -133,6 +133,14 @@ plaintext is a different threat model from one that cannot.
   - **Secondary-device trust is anchored at link time**: `/linkto` pins the root's signing key
     obtained while physically holding both devices (same TOFU gesture as adding a contact by
     raw key), and the registry must already list the new device before it binds.
+  - **Backup restore is migration, not multi-device.** Restoring a backup clones the
+    identity; running the original and the clone simultaneously forks every Double-Ratchet
+    session and corrupts conversations — the exact failure `/link` exists to prevent. The
+    presence heartbeat carries a per-install instance id (deliberately excluded from
+    backups), and the relay flags the same identity heartbeating from two live installs;
+    the client then warns the user to retire one install or use `/link`. Detection is
+    best-effort (isolate-local cache, ≤5-min-stale KV): a miss is possible, a flag is
+    always real. It is a safety net, not a lock — the relay cannot prevent concurrent use.
   - **Mutations follow messages.** Edit/delete/reaction signals fan out to the contact's
     devices and self-sync to the sender's own devices. A registry-verified sibling device may
     mutate messages marked `mine` — it *is* the same account holder — while a contact remains

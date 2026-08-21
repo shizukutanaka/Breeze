@@ -1,5 +1,17 @@
 # Changelog
 
+## Socratic rounds 7+8 — "Offline in Japanese? And what does RESTORE do to multi-device?" (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+789 vitest (+3) + 24 Playwright E2E; `index.html` (+~20), `_worker.js` (+~15), `locales/ja.json`, `tests/worker.test.js`.
+
+**Q7: "locales moved out of index.html — so what does a Japanese PWA user see offline?"** The defense held: sw.js's stale-while-revalidate runtime-caches `locales/ja.json` on the first (necessarily online) boot, so offline launches keep their language. No change needed — recorded as a survived question rather than an invented fix.
+
+**Q8: "restore a backup on a second browser while the first stays open — what happens?"** Nothing stops you, and what happens is the exact catastrophe `/link` was built to prevent: one identity on two installs forks every Double-Ratchet session — both devices advance the same send chain independently, the contact's decrypts start failing, and the session auto-reset loop grinds. The backup feature quietly invites the disaster the multi-device feature exists to avoid.
+
+Fix — an **identity-clone detector** on the existing presence heartbeat (zero new endpoints): each install generates a random instance id, deliberately **excluded from backups** (that exclusion is the mechanism: a restored clone necessarily heartbeats with a fresh id). The relay compares insts within the same identity; two different live insts inside a 90-second window → `conflict: true` on the heartbeat response → the client warns (rate-limited to one toast per 5 min): "retire one install, or link devices with /link". Detection is best-effort by design — the previous record may sit in another isolate's memory or a ≤5-min-stale KV entry — so a miss is possible but a flag is always real; SECURITY.md states it as a safety net, not a lock. Three Worker tests pin it: different-inst flags, same-inst never flags, legacy no-inst clients never flag.
+
+---
+
 ## Socratic rounds 5+6 — "Does an EDIT sync? And where does message 101 go?" (branch claude/nice-ride-T6yb0, 2026-08-21)
 
 786 vitest (+2) + 24 Playwright E2E (multi-device Test 1 gains a 4th act: edit on the phone → contact AND laptop update); `index.html` (+~80), `_worker.js` (+~15), `locales/ja.json`, `tests/worker.test.js`.
