@@ -171,6 +171,8 @@ export default {
         '/api/abuse/record': 30,
         '/api/abuse/report': 10,
         '/api/alias/set': 10,
+        '/api/device/set': 5,
+        '/api/device/list': 30,
         '/api/alias/get': 30,
         '/api/alias/delete': 5,
         // Group create/join write to KV on every call; cap them like prekey/upload (5) and
@@ -294,6 +296,8 @@ export default {
         case '/api/presence':  return await handlePresence(body, env, request);
         case '/api/alias/set': return await handleAliasSet(body, env, request);
         case '/api/alias/get': return await handleAliasGet(body, env, request);
+        case '/api/device/set': return await handleDeviceSet(body, env, request);
+        case '/api/device/list': return await handleDeviceList(body, env, request);
         case '/api/alias/delete': return await handleAliasDelete(body, env, request);
         case '/api/group/create': return await handleGroupCreate(body, env, request);
         case '/api/group/join':   return await handleGroupJoin(body, env, request);
@@ -438,6 +442,9 @@ async function handleMsgSend(body, ip, env, request) {
   const safePub  = typeof fromPub  === 'string' ? fromPub.slice(0, 200)  : undefined;
   const safeName = typeof fromName === 'string' ? fromName.slice(0, 64)  : undefined;
   const msg = { from, fromPub: safePub, fromName: safeName, payload, ts: ts || Date.now() };
+  // Multi-device self-sync markers pass through opaquely (validated client-side against the
+  // signature-verified device registry; the relay only ferries them).
+  if (body.selfSync === true && typeof body.sfFor === 'string') { msg.selfSync = true; msg.sfFor = body.sfFor.slice(0, 64); }
   // Server-assigned unique message id — groundwork for an exclusive poll cursor.
   // Two messages stored in the same millisecond share a ts, and the ts-only cursor
   // (`m.ts > lastTs`) drops the second one if a poll lands between them. Current
@@ -798,6 +805,74 @@ async function handleAliasDelete(body, env, request) {
   const aliasDeleted = await kvDel(env, `alias:${clean}`);
   if (!aliasDeleted) return json({ error: 'Failed to delete alias', code: 'STORE_FAILED' }, 500, request);
   return json({ ok: true, removed: true }, 200, request);
+}
+
+// ============================================================
+// DEVICE REGISTRY — multi-device Phase 1
+//
+// A "device" is just another Breeze identity (its own keypair, prekeys, inbox and ratchet
+// sessions — all machinery that already exists per-pubkey). This registry is the ONLY new
+// primitive: a root-signed list binding several device identities into one account, so a
+// sender can fan the same message out to every device. The wire format is unchanged; a
+// client that has no registry entry keeps being addressed as a single device.
+//
+// Trust model: the FIRST device's Ed25519 identity key is the account root and the sole
+// signer. The relay stores the list but cannot forge it — clients re-verify the signature
+// against the root key they already pinned for the contact. A malicious relay can at worst
+// WITHHOLD the list, which degrades to today's single-device behaviour (fail-open by design).
+// ============================================================
+async function handleDeviceSet(body, env, request) {
+  const { accountId, root, devices, ts, sig } = body;
+  if (!accountId || !root || !Array.isArray(devices) || !ts || !sig)
+    return json({ error: 'accountId, root, devices, ts, sig required', code: 'MISSING_FIELDS' }, 400, request);
+  if (!validateUserId(accountId)) return json({ error: 'invalid accountId', code: 'INVALID_ID' }, 400, request);
+  if (typeof root !== 'string' || root.length > 200) return json({ error: 'invalid root', code: 'INVALID_FIELD' }, 400, request);
+  // accountId must be derived from root — the registry key is not free-form.
+  if (root.slice(0, 12) !== accountId) return json({ error: 'accountId must match root', code: 'ID_MISMATCH' }, 400, request);
+  if (devices.length < 1 || devices.length > 10) return json({ error: '1-10 devices', code: 'INVALID_FIELD' }, 400, request);
+  for (const d of devices) {
+    if (!d || typeof d.pub !== 'string' || d.pub.length > 200) return json({ error: 'invalid device pub', code: 'INVALID_FIELD' }, 400, request);
+    d.name = sanitizeString(d.name || '', 30);
+  }
+  // The root device must itself be in the list (removing it would orphan the registry).
+  if (!devices.some(d => d.pub === root)) return json({ error: 'root must be a device', code: 'ROOT_NOT_DEVICE' }, 400, request);
+  if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS)
+    return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
+
+  // Signature: root's REGISTERED Ed25519 key (from its prekey bundle) over a digest of the
+  // canonical device list. Using the registered key means a stolen root X25519 pub alone
+  // cannot rewrite the registry, and binding ts bounds replay of a captured set.
+  const pkRaw = await kvGet(env, `prekey:${accountId}`);
+  const bundle = pkRaw ? safeJsonParse(pkRaw) : null;
+  if (!bundle || typeof bundle.edIdentityKey !== 'string' || !bundle.edIdentityKey)
+    return json({ error: 'No registered identity key for root', code: 'NO_IDENTITY_KEY' }, 403, request);
+  const digest = await sha256Short(JSON.stringify(devices.map(d => d.pub)));
+  const ok = await verifyEd25519(bundle.edIdentityKey, utf8ToB64(`breeze-device-set:${accountId}:${ts}:${digest}`), sig);
+  if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
+
+  const stored = await kvPut(env, `devices:${accountId}`,
+    JSON.stringify({ root, devices, ts, sig }), { expirationTtl: TTL.MONTH * 3 });
+  if (!stored) return json({ error: 'Failed to store device list', code: 'STORE_FAILED' }, 500, request);
+  return json({ ok: true, count: devices.length }, 200, request);
+}
+
+// Public read: returns the signed record verbatim so the CLIENT can verify the root's
+// signature itself instead of trusting the relay's word for the device set.
+async function handleDeviceList(body, env, request) {
+  const { accountId } = body;
+  if (!accountId) return json({ error: 'accountId required', code: 'MISSING_ID' }, 400, request);
+  if (!validateUserId(accountId)) return json({ error: 'invalid accountId', code: 'INVALID_ID' }, 400, request);
+  const raw = await kvGet(env, `devices:${accountId}`);
+  if (!raw) return json({ devices: null }, 200, request);
+  const rec = safeJsonParse(raw);
+  if (!rec) return json({ devices: null }, 200, request);
+  // Include the root's registered Ed25519 key so a LINKING device can TOFU-pin it in the same
+  // gesture that carries the root pub out-of-band. Established clients ignore this field and
+  // verify against the signing key they already pinned from message signatures — never against
+  // a relay-supplied key, which would make the check circular.
+  const pk = safeJsonParse(await kvGet(env, `prekey:${accountId}`) || 'null');
+  if (pk?.edIdentityKey) rec.rootEd = pk.edIdentityKey;
+  return json(rec, 200, request);
 }
 
 async function handleAliasGet(body, env, request) {
@@ -2490,6 +2565,8 @@ export {
   handleMsgPoll,
   handleAliasSet,
   handleAliasGet,
+  handleDeviceSet,
+  handleDeviceList,
   handleAliasDelete,
   validateUserId,
   sanitizeString,

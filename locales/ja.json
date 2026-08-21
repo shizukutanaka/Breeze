@@ -903,5 +903,20 @@
  "cmdKeyHelpLine": "/help で全スラッシュコマンドを表示",
  "cmdChangelogTitle": "Breeze 更新履歴",
  "cmdChangelogCurrent": "最新",
- "cmdInfoFilesBookmarks": "📎 ファイル: {0} | 🔖 ブックマーク: {1}"
+ "cmdInfoFilesBookmarks": "📎 ファイル: {0} | 🔖 ブックマーク: {1}",
+ "devLinkTitle": "このデバイスをリンク",
+ "devLinkHint": "1. このデバイスキーをコピー。2. メイン端末で /link <キー> を実行。3. この端末に戻り /linkto <メイン端末のキー> を実行。",
+ "devLinkConfirm": "デバイス {0} をアカウントに追加しますか?追加後は新しいメッセージのコピーを受信します。",
+ "devLinked": "デバイスをアカウントにリンクしました",
+ "devAdded": "デバイスを追加しました — 相手端末で /linkto を実行してください",
+ "devRemoved": "デバイスをアカウントから削除しました",
+ "devAlready": "そのデバイスは既にリンク済みです",
+ "devSelfLink": "それはこのデバイス自身のキーです",
+ "devBadPub": "有効なデバイスキーではありません",
+ "devBadIndex": "デバイス番号が不正です(メイン端末は削除できません)",
+ "devPrimaryOnly": "デバイスリストの管理はメイン端末のみ可能です",
+ "devNotListed": "このデバイスはまだそのアカウントのリストに載っていません — 先にメイン端末で /link <このデバイスのキー> を実行してください",
+ "devSetFail": "デバイスリストの更新に失敗しました",
+ "devListTitle": "アカウントのデバイス",
+ "devThis": "このデバイス"
 }

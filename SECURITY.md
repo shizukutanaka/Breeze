@@ -106,6 +106,22 @@ plaintext is a different threat model from one that cannot.
   own a per-slot resource, which today it does not.
 - **Post-quantum**: key exchange is classical (X25519) today; ML-KEM hybrid is detected but
   not yet deployed (browsers ship ML-KEM ~2027).
+- **Multi-device (Phase 1)**: a linked device is a full Breeze identity with its own ratchets;
+  the account is a **root-Ed25519-signed device registry** on the relay, re-verified by every
+  sender before fan-out. Consequences to understand:
+  - **The relay cannot inject a device** — an unverifiable or unsigned registry makes senders
+    fall back to single-device (fail-closed on trust, fail-open on delivery). But the relay
+    *can withhold* the registry, silently degrading an account to single-device delivery.
+  - **Root loss = device-management loss.** Only the root key signs the registry; if the
+    primary device is lost, devices can no longer be added or removed (messaging on surviving
+    devices keeps working). Keep a backup of the primary (`/backup`).
+  - **Revocation lags by the sender-side cache TTL (≤5 min).** After `/unlink`, a contact who
+    fetched the registry recently may fan out to the removed device for up to 5 more minutes.
+  - **No history sync** (like Signal): a newly linked device starts empty; `/backup`+restore is
+    the migration path. Self-sync copies only messages sent *after* linking.
+  - **Secondary-device trust is anchored at link time**: `/linkto` pins the root's signing key
+    obtained while physically holding both devices (same TOFU gesture as adding a contact by
+    raw key), and the registry must already list the new device before it binds.
 
 ## Security Architecture
 

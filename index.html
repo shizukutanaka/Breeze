@@ -1667,6 +1667,21 @@ const _I = {
     unarchived: 'Unarchived',
     select: 'Select',
     report: 'Report',
+    devLinkTitle: "Link this device",
+    devLinkHint: "1. Copy this device key. 2. On your PRIMARY device run /link <key>. 3. Back here, run /linkto <primary's key>.",
+    devLinkConfirm: "Add device {0} to your account? It will receive copies of your new messages.",
+    devLinked: "Device linked to the account",
+    devAdded: "Device added — it should now run /linkto with your key",
+    devRemoved: "Device removed from the account",
+    devAlready: "That device is already linked",
+    devSelfLink: "That is this device's own key",
+    devBadPub: "Not a valid device key",
+    devBadIndex: "Invalid device number (cannot remove the primary)",
+    devPrimaryOnly: "Only the primary device can manage the device list",
+    devNotListed: "This device is not on that account's list yet — run /link <this device's key> on the primary first",
+    devSetFail: "Failed to update the device list",
+    devListTitle: "Account devices",
+    devThis: "this device",
     toastAliasTampered: 'Blocked: this handle\u2019s key history has been tampered with. Ask the person for their public key directly.',
     toastAliasRolled: 'Warning: this handle\u2019s key changed recently. Verify the safety number before trusting it.',
     confirmReport: 'Report this message to the operator? The message text and a one-time proof are sent so it can be verified. Other messages stay private.',
@@ -5248,6 +5263,70 @@ async function initMessenger(dbName) {
     } catch {}
   }
 
+  // ---- Multi-device (Phase 1) ----
+  // A "device" is just another Breeze identity; this account's devices are bound by a
+  // root-signed registry on the relay (see _worker.js handleDeviceSet). The registry is
+  // client-verified: we check the root's Ed25519 signature ourselves, so the relay can
+  // withhold the list (degrades to single-device) but cannot forge devices into it.
+  async function _fetchDeviceList(accountId, rootPubB64) {
+    if (!API) return null;
+    try {
+      const resp = await postAPIRaw('/device/list', { accountId });
+      if (!resp.ok) return null;
+      const rec = await resp.json();
+      if (!rec || !rec.root || !Array.isArray(rec.devices)) return null;
+      if (rootPubB64 && rec.root !== rootPubB64) return null; // registry for a different root
+      // Recompute the signed digest and verify against the ROOT's registered signing key.
+      const digestBuf = await crypto.subtle.digest('SHA-256',
+        new TextEncoder().encode(JSON.stringify(rec.devices.map(d => d.pub))));
+      const digest = Array.from(new Uint8Array(digestBuf)).slice(0, 16)
+        .map(b => b.toString(16).padStart(2, '0')).join('');
+      if (!rec.devices.some(d => d.pub === rec.root)) return null;
+      // Verify under the account's PINNED signing key (TOFU pin from message signatures), or my
+      // own signing key when the registry is mine. No pinned key -> DO NOT trust extra devices:
+      // an unverifiable registry falls back to single-device rather than letting the relay
+      // inject a listening device. (Withholding degrades to today's behaviour either way.)
+      let sigPub = null;
+      if (accountId === myId) sigPub = _signingPubB64;
+      if (!sigPub) sigPub = (await dbGet('contacts', accountId).catch(() => null))?.sigPub || null;
+      if (!sigPub) {
+        // Secondary device verifying its OWN account: use the root signing key pinned at link
+        // time (TOFU anchored to the physically-pasted root pub, like adding a contact by key).
+        const acct = await dbGet('identity', 'account').catch(() => null);
+        if (acct?.root && acct.root.slice(0, 12) === accountId && acct.rootEd) sigPub = acct.rootEd;
+      }
+      if (!sigPub) { _dbg(null, 'device list: no pinned signing key for ' + accountId + ' — staying single-device'); return null; }
+      const okSig = await verifySignature(`breeze-device-set:${accountId}:${rec.ts}:${digest}`, rec.sig, sigPub);
+      if (okSig !== true) { _dbg(null, 'device list signature not verified — ignoring registry'); return null; }
+      return rec.devices.map(d => d.pub);
+    } catch(e) { _dbg(e, 'device-list'); return null; }
+  }
+  // Devices of a CONTACT (for send fan-out). 5-min cache on the contact object.
+  async function _devicesFor(contact) {
+    if (!contact?.pubB64) return [];
+    const now = Date.now();
+    if (contact._devCache && now - contact._devCacheTs < 5 * MS.MIN) return contact._devCache;
+    const list = await _fetchDeviceList(contact.id, contact.pubB64);
+    contact._devCache = (list && list.length) ? list : [contact.pubB64];
+    contact._devCacheTs = now;
+    return contact._devCache;
+  }
+  // My OWN other devices (for self-sync). Uses the local account record written by /link.
+  let _myDevCache = null, _myDevCacheTs = 0;
+  async function _myOtherDevices() {
+    try {
+      const acct = await dbGet('identity', 'account');
+      if (!acct?.root) return [];
+      const now = Date.now();
+      if (_myDevCache && now - _myDevCacheTs < 5 * MS.MIN) return _myDevCache;
+      const rootId = acct.root.slice(0, 12);
+      const list = await _fetchDeviceList(rootId, acct.root) || [];
+      _myDevCache = list.filter(p => p !== myPubB64);
+      _myDevCacheTs = now;
+      return _myDevCache;
+    } catch { return []; }
+  }
+
   async function relaySend(to, payload) {
     if (!API) return;
     if (_isOffline) { if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, attempts: 0 }); _saveRetryQueue(); scheduleRetry(); } registerBackgroundSync(); return; }
@@ -6305,6 +6384,9 @@ async function initMessenger(dbName) {
       else delete _drafts[activeContact.id];
       _persistDrafts();
     }
+    // Snapshot the input NOW: the draft restore below runs after awaits, and anything the
+    // user types in that gap must never be clobbered (fast type-after-click loses text — E2E-found).
+    const _inputAtSwitch = _DOM.get('msg-input')?.value ?? '';
     // v3.1: Request notification permission on first conversation (contextual)
     if (!_notifRequested && Notification?.permission === 'default') {
       _notifRequested = true;
@@ -6433,8 +6515,9 @@ async function initMessenger(dbName) {
     };
     await renderContacts();
     const _msgInput = _DOM.get('msg-input');
-    // v3.3: Restore draft for this contact
-    _msgInput.value = _drafts[contact.id] || '';
+    // v3.3: Restore draft for this contact — but only if the user hasn't typed while the
+    // switch was in flight (see _inputAtSwitch above).
+    if (_msgInput.value === _inputAtSwitch) _msgInput.value = _drafts[contact.id] || '';
     // v3.6: Paste shared text from Web Share Target
     const shared = sessionStorage.getItem('brz-shared-text');
     if (shared && !_msgInput.value) { _msgInput.value = shared; sessionStorage.removeItem('brz-shared-text'); }
@@ -7419,7 +7502,15 @@ async function initMessenger(dbName) {
     if (!saved) _dbg(null, 'msg persistence failed (storage full)');
     contact.lastMsg = text.slice(0, 40);
     contact.lastMsgAt = ts;
-    await dbPut('contacts', contact);
+    // Read-modify-write against the STORED record: activeContact is a render-time snapshot,
+    // and writing it back verbatim erases fields the receive path persisted after the snapshot
+    // was taken (e.g. the TOFU-pinned sigPub — which the device-registry verification needs).
+    const _storedC = await dbGet('contacts', contact.id).catch(() => null);
+    if (_storedC) {
+      _storedC.lastMsg = contact.lastMsg; _storedC.lastMsgAt = contact.lastMsgAt;
+      if (_storedC.sigPub && !contact.sigPub) contact.sigPub = _storedC.sigPub;
+      await dbPut('contacts', _storedC);
+    } else await dbPut('contacts', contact);
 
     if (activeContact.isGroup) {
       // v3.1: Sender Key: encrypt ONCE with group key, send same ciphertext to all members
@@ -7517,6 +7608,31 @@ async function initMessenger(dbName) {
       await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName,
         payload: encrypted, ts, replyTo: envelope.replyTo, disappearAt: envelope.disappearAt,
         sig: envelope.sig, sigPub: envelope.sigPub });
+
+      // Multi-device fan-out. Each extra device is its own identity with its own ratchet, so the
+      // SAME plaintext is re-encrypted per device — never the same ciphertext or key twice.
+      // Fire-and-forget: fan-out failure must never fail the primary send.
+      (async () => {
+        try {
+          const snapContact = activeContact; if (!snapContact) return;
+          // 1) The contact's other devices (registry-verified; [] when unregistered).
+          for (const devPub of await _devicesFor(snapContact)) {
+            if (devPub === snapContact.pubB64) continue; // primary already sent above
+            const devEnc = await encryptFor(text, devPub);
+            if (devEnc) await relaySend(devPub.slice(0, 12), { to: devPub.slice(0, 12), from: myId,
+              fromPub: myPubB64, fromName: myName, payload: devEnc, ts,
+              sig: envelope.sig, sigPub: envelope.sigPub });
+          }
+          // 2) Self-sync: my own other devices get a copy tagged with the conversation it
+          // belongs to, so "sent from the phone" also appears as sent on the laptop.
+          for (const devPub of await _myOtherDevices()) {
+            const devEnc = await encryptFor(text, devPub);
+            if (devEnc) await relaySend(devPub.slice(0, 12), { to: devPub.slice(0, 12), from: myId,
+              fromPub: myPubB64, fromName: myName, payload: devEnc, ts,
+              selfSync: true, sfFor: snapContact.id });
+          }
+        } catch(e) { _dbg(e, 'multidevice-fanout'); }
+      })();
     }
     renderContacts();
     } catch(err) {
@@ -8931,6 +9047,29 @@ async function initMessenger(dbName) {
     if (msg.disappearAt !== undefined && (typeof msg.disappearAt !== 'number' || !Number.isFinite(msg.disappearAt) || msg.disappearAt <= 0)) {
       msg = { ...msg, disappearAt: undefined };
     }
+    // Multi-device self-sync: a copy of a message I SENT from another of my own devices.
+    // Handled before contact resolution — the sending device is not a contact and must never
+    // be auto-added as one. Membership is enforced against the signature-verified device
+    // registry, so a stranger cannot plant "sent by me" messages by setting a flag.
+    if (msg.selfSync && msg.sfFor && msg.fromPub) {
+      try {
+        const mine = await _myOtherDevices();
+        if (!mine.includes(msg.fromPub)) { _dbg(null, 'selfSync from non-account device — dropped'); return; }
+        const syncText = await decryptFrom(msg.payload, msg.fromPub);
+        if (!syncText || syncText.length > 65536) return;
+        const target = await dbGet('contacts', String(msg.sfFor).slice(0, 64));
+        if (!target) return; // conversation unknown on this device — nothing to attach to
+        const syncId = target.id + ':' + msg.ts;
+        if (await dbGet('messages', syncId)) return; // dedup
+        await dbPut('messages', { msgId: syncId, contactId: target.id, text: syncText, mine: true, ts: msg.ts, synced: true });
+        target.lastMsg = syncText.slice(0, 40); target.lastMsgAt = msg.ts;
+        await dbPut('contacts', target);
+        if (activeContact?.id === target.id) appendMsg(syncText, true, msg.ts, null, null, { synced: true });
+        renderContacts();
+      } catch(e) { _dbg(e, 'self-sync'); }
+      return;
+    }
+
     // v3.1: Block check — silently drop messages from blocked contacts
     if (msg.from) {
       const sender = await dbGet('contacts', msg.from);
@@ -13273,6 +13412,101 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       box.appendChild(d); box.scrollTop = box.scrollHeight;
     }
     // v3.1: /alias — Set or change Breeze ID
+    // ---- Multi-device commands (Phase 1) ----
+    // /link            -> show THIS device's pub (paste it on the primary to link)
+    // /link <pub>      -> (primary) add that device to the account and sign the registry
+    // /devices         -> list account devices    /unlink <n> -> remove device n (primary only)
+    if (val === '/link' || val.startsWith('/link ')) {
+      e.preventDefault(); clearInput();
+      const arg = val.slice(5).trim();
+      if (!API) { showToast(t('uiNoServer'), 'error'); return; }
+      if (!arg) {
+        // Secondary-device side: expose my pub for the primary to add, then poll for inclusion.
+        const box = _DOM.get('msg-messages');
+        const d = document.createElement('div'); d.className = 'cmd-panel';
+        safeSetHTML(d, '<b class="i-g">' + t('devLinkTitle') + '</b><br>' + t('devLinkHint') + '<br><code class="i-select-all">' + esc(myPubB64) + '</code>');
+        box.appendChild(d); box.scrollTop = box.scrollHeight;
+        try { await navigator.clipboard.writeText(myPubB64); showToast(t('toastCopied'), 'success'); } catch {}
+        return;
+      }
+      // Primary side: add the pasted device pub to my registry and sign it.
+      if (arg === myPubB64) { showToast(t('devSelfLink'), 'error'); return; }
+      if (!/^[A-Za-z0-9+/=_-]{40,200}$/.test(arg)) { showToast(t('devBadPub'), 'error'); return; }
+      if (!await showConfirm(t('devLinkConfirm', arg.slice(0, 16) + '…'))) return;
+      try {
+        const acct = (await dbGet('identity', 'account')) || { root: myPubB64, isPrimary: true };
+        if (acct.root !== myPubB64) { showToast(t('devPrimaryOnly'), 'error'); return; }
+        const current = (await _fetchDeviceList(myId, myPubB64)) || [myPubB64];
+        if (current.includes(arg)) { showToast(t('devAlready'), 'info'); return; }
+        const devices = [...new Set([myPubB64, ...current, arg])].map(p => ({ pub: p, name: p === myPubB64 ? 'primary' : '' }));
+        const ts = Date.now();
+        const digestBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(devices.map(d => d.pub))));
+        const digest = Array.from(new Uint8Array(digestBuf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
+        const sig = await signMessage(`breeze-device-set:${myId}:${ts}:${digest}`);
+        const resp = await postAPIRaw('/device/set', { accountId: myId, root: myPubB64, devices, ts, sig });
+        if (resp?.ok) {
+          await dbPut('identity', acct, 'account');
+          _myDevCache = null; // bust the cache so self-sync starts immediately
+          showToast(t('devAdded'), 'success');
+        } else showToast(t('devSetFail'), 'error');
+      } catch(err) { _dbg(err, 'link'); showToast(t('devSetFail'), 'error'); }
+      return;
+    }
+    // Secondary device, final step: bind THIS device to the account whose root pub the user
+    // physically carried over. That gesture is the trust anchor (same TOFU as adding a contact
+    // by raw key); the root's Ed25519 signing key is pinned here and required stable afterwards.
+    if (val.startsWith('/linkto ')) {
+      e.preventDefault(); clearInput();
+      const rootPub = val.slice(8).trim();
+      if (!API) { showToast(t('uiNoServer'), 'error'); return; }
+      if (!/^[A-Za-z0-9+/=_-]{40,200}$/.test(rootPub)) { showToast(t('devBadPub'), 'error'); return; }
+      if (rootPub === myPubB64) { showToast(t('devSelfLink'), 'error'); return; }
+      try {
+        const resp = await postAPIRaw('/device/list', { accountId: rootPub.slice(0, 12) });
+        const rec = resp?.ok ? await resp.json() : null;
+        if (!rec?.devices || rec.root !== rootPub) { showToast(t('devNotListed'), 'error'); return; }
+        if (!rec.devices.some(d => d.pub === myPubB64)) { showToast(t('devNotListed'), 'error'); return; }
+        await dbPut('identity', { root: rootPub, rootEd: rec.rootEd || null, isPrimary: false }, 'account');
+        _myDevCache = null;
+        showToast(t('devLinked'), 'success');
+      } catch(err) { _dbg(err, 'linkto'); showToast(t('devSetFail'), 'error'); }
+      return;
+    }
+    if (val === '/devices') {
+      e.preventDefault(); clearInput();
+      const box = _DOM.get('msg-messages');
+      const d = document.createElement('div'); d.className = 'cmd-panel';
+      const acct = await dbGet('identity', 'account');
+      const rootPub = acct?.root || myPubB64;
+      const list = await _fetchDeviceList(rootPub.slice(0, 12), rootPub);
+      const rows = (list || [myPubB64]).map((p, i) =>
+        `${i + 1}. <code>${esc(p.slice(0, 20))}…</code>${p === myPubB64 ? ' ← ' + t('devThis') : ''}`);
+      safeSetHTML(d, '<b class="i-g">' + t('devListTitle') + '</b><br>' + rows.join('<br>'));
+      box.appendChild(d); box.scrollTop = box.scrollHeight;
+      return;
+    }
+    if (val.startsWith('/unlink ')) {
+      e.preventDefault(); clearInput();
+      const idx = parseInt(val.slice(8).trim(), 10);
+      const acct = await dbGet('identity', 'account');
+      if (!acct || acct.root !== myPubB64) { showToast(t('devPrimaryOnly'), 'error'); return; }
+      const current = (await _fetchDeviceList(myId, myPubB64)) || [myPubB64];
+      const victim = current[idx - 1];
+      if (!victim || victim === myPubB64) { showToast(t('devBadIndex'), 'error'); return; }
+      if (!await showConfirm(t('devUnlinkConfirm', victim.slice(0, 16) + '…'), { danger: true })) return;
+      try {
+        const devices = current.filter(p => p !== victim).map(p => ({ pub: p, name: p === myPubB64 ? 'primary' : '' }));
+        const ts = Date.now();
+        const digestBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(devices.map(d => d.pub))));
+        const digest = Array.from(new Uint8Array(digestBuf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
+        const sig = await signMessage(`breeze-device-set:${myId}:${ts}:${digest}`);
+        const resp = await postAPIRaw('/device/set', { accountId: myId, root: myPubB64, devices, ts, sig });
+        if (resp?.ok) { _myDevCache = null; showToast(t('devRemoved'), 'success'); }
+        else showToast(t('devSetFail'), 'error');
+      } catch(err) { _dbg(err, 'unlink'); showToast(t('devSetFail'), 'error'); }
+      return;
+    }
+
     if (val.startsWith('/alias ')) {
       e.preventDefault();
       clearInput();

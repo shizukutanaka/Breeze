@@ -1,5 +1,21 @@
 # Changelog
 
+## Multi-device Phase 1: phone + laptop on one account (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+773 vitest (+8 device-registry) + **23** Playwright E2E (+2 multi-device); `_worker.js` (+~70), `index.html` (+~280, under the 15,000 gate), `locales/ja.json`, `SECURITY.md`, new `tests/e2e/multidevice.spec.js`.
+
+The last big LINE-parity gap: Breeze was strictly single-device — one identity per browser, and reusing a key on two devices forks the Double Ratchet chain and corrupts the conversation. The simplifying decision (question the requirement → delete the complexity): **a device is just another Breeze identity.** Prekeys, inboxes and sessions are already keyed by pubkey, so all of it is reused verbatim. The only genuinely new state is a **root-signed device registry** on the relay, and the only new behaviour is **sender-side fan-out**: the same plaintext is re-encrypted per device (each with its own ratchet — never the same ciphertext or key twice) plus a `selfSync` copy to the sender's own other devices so a message sent from the phone appears as *sent* on the laptop. The wire format is unchanged, so contacts with no registry — and clients that predate the feature — keep working exactly as before (proved by a dedicated backward-compat E2E test).
+
+Trust model: the registry record is signed by the **root device's Ed25519 key** over `breeze-device-set:{accountId}:{ts}:{digest}` and every sender re-verifies it against the *pinned* signing key (TOFU from message signatures; a secondary verifying its own account uses the root key pinned at `/linkto` time). An unverifiable registry is **ignored** — the relay can withhold devices (degrades to single-device, today's behaviour) but cannot inject a listening device. Registry writes are replay-bounded (±5 min ts window) and capped at 10 devices. Self-sync envelopes are accepted only from registry-verified sibling devices, so a stranger cannot plant "sent by me" messages by setting a flag. Scope-outs are documented in SECURITY.md: root loss ends device management, revocation lags the ≤5-min sender cache, and there is no history sync (deliberate — same call Signal made; `/backup` is the migration path). Group send from a secondary is Phase 2.
+
+Link UX is command-MVP: `/link` (show this device's key), `/link <pub>` (primary signs the addition), `/linkto <rootPub>` (secondary binds; the physical carry-over of the root key is the trust anchor), `/devices`, `/unlink <n>`.
+
+The three-browser E2E (primary + linked secondary + contact) earned its keep before it ever passed — it found **two real product bugs**, both now fixed:
+- **Stale-snapshot clobber**: `sendMessage` wrote the render-time `activeContact` object back to IndexedDB on every send, silently erasing any field the receive path had persisted since the snapshot — including the TOFU-pinned `sigPub`, which made registry verification fail closed and killed fan-out. Sends now read-modify-write the stored record.
+- **Draft-restore race**: `openConversation` restores the contact's draft *after* several awaits, so text typed in the gap between clicking a conversation and the restore was silently destroyed. The restore now yields to anything the user typed while the switch was in flight.
+
+---
+
 ## Remove `script-src 'unsafe-inline'`: hash-pin the CSP (branch claude/nice-ride-T6yb0, 2026-07-11)
 
 853 vitest + **16** Playwright E2E (+2); `_headers`, `validate.sh`, `SECURITY.md`, new `tools/csp-hash.mjs` + `tests/e2e/csp.spec.js`, and two E2E harness fixes. `index.html` byte-unchanged at 14,999 lines — gate-free.

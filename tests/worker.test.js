@@ -34,6 +34,8 @@ import worker, {
   handleMsgPoll,
   handleAliasSet,
   handleAliasGet,
+  handleDeviceSet,
+  handleDeviceList,
   handleAliasDelete,
   handleDropCreate,
   handleDropRead,
@@ -4803,5 +4805,114 @@ describe('signed group rename — UTF-8 signing contract', () => {
     const res = await handleGroupRename(
       { token, adminId: 'creator1', name: '日本語', ts: Date.now(), sig: tb64(new Uint8Array(64)) }, env, rq());
     expect(res.status).toBe(403);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DEVICE REGISTRY (multi-device Phase 1). The registry is the only new primitive
+// multi-device adds: a root-signed device list. These pin the trust model — only the
+// registered root Ed25519 key can write, the record round-trips verbatim so clients can
+// re-verify, and every malformed/forged/replayed variant is rejected.
+// ---------------------------------------------------------------------------
+describe('device registry (/api/device/set + /api/device/list)', () => {
+  const rq = () => apiRequest('/api/device/x', {});
+  const db64 = (b) => Buffer.from(b).toString('base64');
+
+  // A root identity: prekey bundle with a REAL Ed25519 key registered, like a live client has.
+  async function makeRoot(env, accountId, rootPub) {
+    const kp = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const raw = new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey));
+    await env.KV.put(`prekey:${accountId}`, JSON.stringify({ edIdentityKey: db64(raw) }));
+    return async (text) => db64(new Uint8Array(
+      await crypto.subtle.sign({ name: 'Ed25519' }, kp.privateKey, new TextEncoder().encode(text))));
+  }
+  const digestOf = async (devices) => {
+    const buf = await crypto.subtle.digest('SHA-256',
+      new TextEncoder().encode(JSON.stringify(devices.map((d) => d.pub))));
+    return Array.from(new Uint8Array(buf)).slice(0, 16).map((b) => b.toString(16).padStart(2, '0')).join('');
+  };
+
+  const ROOT_PUB = 'rootpubkey01' + 'A'.repeat(30);
+  const ACCT = ROOT_PUB.slice(0, 12);
+  const DEV2 = 'seconddevice' + 'B'.repeat(30);
+
+  async function setList(env, sign, devices, tsOverride, sigOverride) {
+    const ts = tsOverride ?? Date.now();
+    const digest = await digestOf(devices);
+    const sig = sigOverride ?? await sign(`breeze-device-set:${ACCT}:${ts}:${digest}`);
+    return handleDeviceSet({ accountId: ACCT, root: ROOT_PUB, devices, ts, sig }, env, rq());
+  }
+
+  it('accepts a genuinely signed device list and lists it back verbatim', async () => {
+    const env = makeEnv();
+    const sign = await makeRoot(env, ACCT, ROOT_PUB);
+    const devices = [{ pub: ROOT_PUB, name: 'Phone' }, { pub: DEV2, name: 'Laptop' }];
+    const res = await setList(env, sign, devices);
+    expect(res.status).toBe(200);
+    expect((await res.json()).count).toBe(2);
+
+    const list = await handleDeviceList({ accountId: ACCT }, env, rq());
+    const rec = await list.json();
+    expect(rec.root).toBe(ROOT_PUB);
+    expect(rec.devices.map((d) => d.pub)).toEqual([ROOT_PUB, DEV2]);
+    expect(typeof rec.sig).toBe('string'); // verbatim signed record — client can re-verify
+  });
+
+  it('rejects a forged signature', async () => {
+    const env = makeEnv();
+    await makeRoot(env, ACCT, ROOT_PUB);
+    const res = await setList(env, null, [{ pub: ROOT_PUB, name: 'x' }], undefined, db64(new Uint8Array(64)));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+  });
+
+  it('rejects a signature over a DIFFERENT device list (digest binding)', async () => {
+    const env = makeEnv();
+    const sign = await makeRoot(env, ACCT, ROOT_PUB);
+    const ts = Date.now();
+    const goodDigest = await digestOf([{ pub: ROOT_PUB }]);
+    const sig = await sign(`breeze-device-set:${ACCT}:${ts}:${goodDigest}`);
+    // submit a list that ADDS a device the signature never covered
+    const res = await handleDeviceSet({ accountId: ACCT, root: ROOT_PUB,
+      devices: [{ pub: ROOT_PUB, name: 'x' }, { pub: DEV2, name: 'evil' }], ts, sig }, env, rq());
+    expect(res.status).toBe(403);
+  });
+
+  it('rejects a stale timestamp (replay window)', async () => {
+    const env = makeEnv();
+    const sign = await makeRoot(env, ACCT, ROOT_PUB);
+    const res = await setList(env, sign, [{ pub: ROOT_PUB, name: 'x' }], Date.now() - 10 * 60 * 1000);
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_TIMESTAMP');
+  });
+
+  it('rejects an accountId that does not match the root pub', async () => {
+    const env = makeEnv();
+    const sign = await makeRoot(env, ACCT, ROOT_PUB);
+    const ts = Date.now();
+    const devices = [{ pub: ROOT_PUB, name: 'x' }];
+    const sig = await sign(`breeze-device-set:otherAccount:${ts}:${await digestOf(devices)}`);
+    const res = await handleDeviceSet({ accountId: 'otherAcct001', root: ROOT_PUB, devices, ts, sig }, env, rq());
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects a list that drops the root device (would orphan the registry)', async () => {
+    const env = makeEnv();
+    const sign = await makeRoot(env, ACCT, ROOT_PUB);
+    const res = await setList(env, sign, [{ pub: DEV2, name: 'only-secondary' }]);
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('ROOT_NOT_DEVICE');
+  });
+
+  it('rejects when the root has no registered identity key', async () => {
+    const env = makeEnv(); // no prekey bundle written
+    const res = await setList(env, async () => 'AAAA', [{ pub: ROOT_PUB, name: 'x' }]);
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('NO_IDENTITY_KEY');
+  });
+
+  it('list returns { devices: null } for an unregistered account (fail-open to single-device)', async () => {
+    const res = await handleDeviceList({ accountId: 'nosuchacct01' }, makeEnv(), rq());
+    expect((await res.json()).devices).toBeNull();
   });
 });
