@@ -1668,7 +1668,7 @@ const _I = {
     select: 'Select',
     report: 'Report',
     devLinkTitle: "Link this device",
-    devLinkHint: "1. Copy this device key. 2. On your PRIMARY device run /link <key>. 3. Back here, run /linkto <primary's key>.",
+    devLinkHint: "1. Copy this device key. 2. On your PRIMARY device run /link <key>. 3. Back here, add the primary's key as a contact, open it, and run /linkto <primary's key>.",
     devLinkConfirm: "Add device {0} to your account? It will receive copies of your new messages.",
     devLinked: "Device linked to the account",
     devAdded: "Device added — it should now run /linkto with your key",
@@ -7636,9 +7636,12 @@ async function initMessenger(dbName) {
           // belongs to, so "sent from the phone" also appears as sent on the laptop.
           for (const devPub of await _myOtherDevices()) {
             const devEnc = await encryptFor(text, devPub);
+            // sfPub/sfName let a sibling device CREATE the conversation it doesn't have yet —
+            // without them, everything sent before the contact ever replies is silently dropped
+            // on the new device (Socratic round: "how does a fresh laptop learn who I talk to?").
             if (devEnc) await relaySend(devPub.slice(0, 12), { to: devPub.slice(0, 12), from: myId,
               fromPub: myPubB64, fromName: myName, payload: devEnc, ts,
-              selfSync: true, sfFor: snapContact.id });
+              selfSync: true, sfFor: snapContact.id, sfPub: snapContact.pubB64, sfName: snapContact.name });
           }
         } catch(e) { _dbg(e, 'multidevice-fanout'); }
       })();
@@ -9066,8 +9069,15 @@ async function initMessenger(dbName) {
         if (!mine.includes(msg.fromPub)) { _dbg(null, 'selfSync from non-account device — dropped'); return; }
         const syncText = await decryptFrom(msg.payload, msg.fromPub);
         if (!syncText || syncText.length > 65536) return;
-        const target = await dbGet('contacts', String(msg.sfFor).slice(0, 64));
-        if (!target) return; // conversation unknown on this device — nothing to attach to
+        let target = await dbGet('contacts', String(msg.sfFor).slice(0, 64));
+        if (!target && typeof msg.sfPub === 'string' && msg.sfPub.slice(0, 12) === msg.sfFor) {
+          // Conversation unknown on this device: create it from the sibling's data. Safe —
+          // the sender was just verified against the signed device registry (it IS my other
+          // device), and sfPub must be consistent with the sfFor id it claims to name.
+          await addContact(msg.sfPub, typeof msg.sfName === 'string' ? msg.sfName.slice(0, 64) : t('unknown'));
+          target = await dbGet('contacts', msg.sfFor);
+        }
+        if (!target) return; // still unknown (group sync or malformed) — nothing to attach to
         const syncId = target.id + ':' + msg.ts;
         if (await dbGet('messages', syncId)) return; // dedup
         await dbPut('messages', { msgId: syncId, contactId: target.id, text: syncText, mine: true, ts: msg.ts, synced: true });

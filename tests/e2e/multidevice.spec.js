@@ -78,31 +78,38 @@ test('link a second device: contact messages reach BOTH devices; sent messages s
   expect(rec.root).toBe(pubA);
   expect(rec.devices.map((d) => d.pub).sort()).toEqual([pubA, pubB].sort());
 
-  // B binds to the account (the user physically carries the root pub over).
-  await addAndOpen(B, pubC); // open any conversation so the command bar exists
+  // B binds to the account. The fresh laptop knows NOTHING about C — it adds only the
+  // PRIMARY's key (the one the user physically carried over) to get a command bar.
+  await addAndOpen(B, pubA);
   await runCommand(B, `/linkto ${pubA}`);
   await expect(B.locator('.toast-container')).toContainText(/linked|リンク/i, { timeout: 10_000 });
 
-  // === The point of multi-device #1: C sends ONE message; BOTH of Alice's devices get it. ===
-  const fromC = 'hello alice on all your devices ' + Date.now();
-  await C.locator('#msg-input').fill(fromC);
-  await C.locator('#b-msg-send').click();
-  await expect(A.locator('#msg-messages')).toContainText(fromC, { timeout: 20_000 });
-  await expect(B.locator('#msg-messages')).toContainText(fromC, { timeout: 20_000 });
-
-  // === The point #2: A sends from the "phone"; C receives it AND the "laptop" self-syncs it. ===
+  // === The point #1: A sends from the "phone" while the laptop has never heard of C.
+  // C receives it AND the laptop bootstraps the WHOLE conversation from the self-sync copy
+  // (sfPub/sfName) — before this existed, everything sent pre-reply was silently dropped.
   const fromA = 'sent from the phone ' + Date.now();
   await A.locator('#msg-input').fill(fromA);
   await A.locator('#b-msg-send').click();
   await expect(C.locator('#msg-messages')).toContainText(fromA, { timeout: 20_000 });
-  await expect(B.locator('#msg-messages')).toContainText(fromA, { timeout: 20_000 });
-  // ...and on B it is rendered as an OUTGOING message (mine), not an incoming one.
+  // The laptop now shows a NEW conversation carrying that message...
+  const cRowOnB = B.locator('#msg-contacts .contact', { hasText: fromA.slice(0, 20) });
+  await expect(cRowOnB).toBeVisible({ timeout: 20_000 });
+  await cRowOnB.click();
+  await expect(B.locator('#msg-messages')).toContainText(fromA, { timeout: 10_000 });
+  // ...rendered as an OUTGOING message (mine), not an incoming one.
   const isMine = await B.evaluate((needle) => {
     const els = [...document.querySelectorAll('#msg-messages .msg')];
     const el = els.find((x) => x.textContent.includes(needle));
     return el ? el.classList.contains('me') : null;
   }, fromA);
   expect(isMine).toBe(true);
+
+  // === The point #2: C sends ONE message; BOTH of Alice's devices get it. ===
+  const fromC = 'hello alice on all your devices ' + Date.now();
+  await C.locator('#msg-input').fill(fromC);
+  await C.locator('#b-msg-send').click();
+  await expect(A.locator('#msg-messages')).toContainText(fromC, { timeout: 20_000 });
+  await expect(B.locator('#msg-messages')).toContainText(fromC, { timeout: 20_000 });
 
   // === The point #3: B sends from the "laptop". C must see it in the ALICE conversation —
   // NOT as a new stranger contact — because the envelope's account-root claim verifies

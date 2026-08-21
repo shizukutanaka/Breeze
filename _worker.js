@@ -444,7 +444,11 @@ async function handleMsgSend(body, ip, env, request) {
   const msg = { from, fromPub: safePub, fromName: safeName, payload, ts: ts || Date.now() };
   // Multi-device self-sync markers pass through opaquely (validated client-side against the
   // signature-verified device registry; the relay only ferries them).
-  if (body.selfSync === true && typeof body.sfFor === 'string') { msg.selfSync = true; msg.sfFor = body.sfFor.slice(0, 64); }
+  if (body.selfSync === true && typeof body.sfFor === 'string') {
+    msg.selfSync = true; msg.sfFor = body.sfFor.slice(0, 64);
+    if (typeof body.sfPub === 'string') msg.sfPub = body.sfPub.slice(0, 200);
+    if (typeof body.sfName === 'string') msg.sfName = body.sfName.slice(0, 64);
+  }
   // Multi-device sender attribution: a secondary device names its account root; the recipient
   // verifies the claim against the root-signed device registry (relay just ferries it).
   if (typeof body.acctRoot === 'string') msg.acctRoot = body.acctRoot.slice(0, 200);

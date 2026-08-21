@@ -1,5 +1,15 @@
 # Changelog
 
+## Socratic round 3 — "How does a fresh laptop learn who I talk to?" (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+773 vitest + 23 Playwright E2E (multi-device Test 1 restructured to model the REAL fresh-laptop flow); `index.html` (+~12), `_worker.js` (+4), `locales/ja.json`.
+
+**Q: self-sync attaches a copy to an existing conversation (`if (!target) return`) — so what does a brand-new linked device do with messages for conversations it has never seen?** Answer: it silently dropped every one of them. A contact only appeared on the laptop once that contact *sent* something (the incoming path auto-adds by `fromPub`), so everything you sent before their first reply was lost on the new device — the exact opposite of what "your messages appear on both devices" promises.
+
+Fix: the self-sync envelope now names the conversation partner (`sfPub`/`sfName`), and the receiving sibling **creates the missing conversation** before attaching the copy. The trust argument is unchanged — the sender was already verified against the signed device registry (it *is* my other device), and `sfPub` must be consistent with the `sfFor` id it claims to name. The E2E was restructured to stop flattering the code: the laptop now adds only the primary's key (the one the user physically carries over — `devLinkHint` updated to say so), and the phone sends *first*, while the laptop has never heard of the contact. The test then asserts a whole new conversation materializes on the laptop carrying the message as *sent*. A second question — "the registry admits ≤10 devices, what does an 11th `/link` do?" — survived: the Worker rejects, the client toasts the failure, no state corrupts.
+
+---
+
 ## Socratic round 1 — "Sent from the laptop, who does the recipient see?" (branch claude/nice-ride-T6yb0, 2026-08-21)
 
 773 vitest + **23** Playwright E2E (multi-device Test 1 extended to a third assertion); `index.html` (+~40, 14,186 lines — under gate), `_worker.js` (+3), `SECURITY.md`.
