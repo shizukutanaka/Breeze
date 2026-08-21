@@ -133,6 +133,11 @@ plaintext is a different threat model from one that cannot.
   - **Secondary-device trust is anchored at link time**: `/linkto` pins the root's signing key
     obtained while physically holding both devices (same TOFU gesture as adding a contact by
     raw key), and the registry must already list the new device before it binds.
+  - **Mutations follow messages.** Edit/delete/reaction signals fan out to the contact's
+    devices and self-sync to the sender's own devices. A registry-verified sibling device may
+    mutate messages marked `mine` — it *is* the same account holder — while a contact remains
+    restricted to mutating only their own messages (the `stored.mine` guard). Signal delivery
+    is best-effort via the same queues as messages.
   - **Sender attribution is registry-gated, never claim-gated.** A secondary device names its
     account root in the envelope (`acctRoot`), but the recipient attributes the message to that
     account only after re-verifying the root-signed registry (with the root's *pinned* signing

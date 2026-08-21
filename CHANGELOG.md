@@ -1,5 +1,21 @@
 # Changelog
 
+## Socratic rounds 5+6 — "Does an EDIT sync? And where does message 101 go?" (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+786 vitest (+2) + 24 Playwright E2E (multi-device Test 1 gains a 4th act: edit on the phone → contact AND laptop update); `index.html` (+~80), `_worker.js` (+~15), `locales/ja.json`, `tests/worker.test.js`.
+
+**Q5: "the send syncs to every device — so what happens when I *edit* it?"** The honest answer was layered, and each layer was its own pre-existing bug:
+1. `sendSignal` sent 1:1 mutations to the contact's primary only — no device fan-out, no self-sync. Your laptop kept showing the old text; deleted messages lived on.
+2. Deeper: the sender stored its own messages under a random `genMsgId()` while every receiver stores `${senderId}:${ts}` — the ids **never matched**, so a relayed 1:1 edit/delete/reaction could not find its target on the other side. Ever.
+3. Deeper still: even with matching ids, the signal envelope's ts made `${from}:${ts}` collide with the original message and the new-message dedup swallowed the signal as "already persisted" — a second, independent total-breakage.
+4. And the UI layer: the delegated context menu (the one that actually wins on right-click) called `startEdit(msgId)` with a bare string where a `{msgId, text, ts}` object is expected, so the signal left the device with **no target id at all**.
+
+Four stacked faults, each alone sufficient to break remote mutations — which is precisely why no one noticed: there was no E2E asking the question. Fixes: outgoing message identity is now the wire-visible `${myId}:${ts}` (with a monotonic +1 ms bump mirroring the Worker's inbox guarantee, so same-ms sends stay unique); receivers key by the *actual sender* (`msg.from`), which also makes device-attributed messages editable; the isSignal branch moved above the dedup; the delegated menu hydrates the stored record before calling; and `sendSignal` fans out exactly like `sendMessage` — contact devices via the registry, own devices with `selfSync` where the `stored.mine` guard is deliberately waived (a registry-verified sibling *is* me; a contact still can't touch my messages). The E2E's 4th act pins the whole chain: right-click → edit on the phone, new text asserted on the contact AND the laptop.
+
+**Q6: "the sealed queue caps at 100 — where does message 101 go while I'm offline?"** It silently evaporated (oldest-first). The relay can't prevent that (bounded storage is real), but it can stop lying by omission: `handleSealedSend` now counts trimmed envelopes per recipient, the next `/sealed/poll` confesses `dropped: n` exactly once, and the client shows "N messages may have been lost while you were offline". Two Worker tests pin the confess-once-then-reset behaviour; the legacy `/msg` inbox keeps its silent cap and is noted as such.
+
+---
+
 ## Socratic round 4 — "Sealed Sender: does the relay REALLY not see the sender?" (branch claude/nice-ride-T6yb0, 2026-08-21)
 
 784 vitest (+11: 7 seal reference + 4 mirror-guard) + **24** Playwright E2E (+1 wiretap spec); `index.html` (+~90), new `src/crypto/seal.js` + `tests/seal.test.js` + `tests/e2e/seal.spec.js`, `tests/mirror-drift.test.js`, `SECURITY.md`, `CLAUDE.md`. Zero Worker changes — the sealed path already stores envelopes verbatim.

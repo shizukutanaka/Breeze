@@ -2290,6 +2290,14 @@ async function handleSealedSend(body, env, request) {
     : Date.now();
   queue.push({ envelope, ts: newTs });
   const trimmed = capQueueBytes(queue.slice(-100), m => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
+  // Queue overflow drops the OLDEST envelopes. Don't do it silently (Socratic round —
+  // "what happens to message 101 while the recipient is offline?"): count the drops so the
+  // recipient's next poll can say "N messages were lost", instead of them never knowing.
+  const droppedNow = queue.length - trimmed.length;
+  if (droppedNow > 0) {
+    const prev = parseInt(await kvGet(env, `${key}:dropped`) || '0') || 0;
+    await kvPut(env, `${key}:dropped`, String(Math.min(prev + droppedNow, 99999)), { expirationTtl: TTL.WEEK });
+  }
   const stored = await kvPut(env, key, JSON.stringify(trimmed), { expirationTtl: TTL.WEEK });
   if (!stored) {
     // Un-mark the dedup key on a failed store (set before this write): otherwise the
@@ -2323,7 +2331,11 @@ async function handleSealedPoll(body, env, request) {
   let maxTs = 0;
   for (const m of messages) { if (Number.isFinite(m?.ts) && m.ts > maxTs) maxTs = m.ts; }
   if (maxTs > 0) await kvPut(env, `${key}:hwm`, String(maxTs), { expirationTtl: TTL.MIN * 5 });
-  return json({ messages }, 200, request);
+  // Surface queue-overflow losses once, then reset the counter (see handleSealedSend).
+  const droppedStr = await kvGet(env, `${key}:dropped`);
+  const dropped = parseInt(droppedStr || '0') || 0;
+  if (dropped > 0) await kvDel(env, `${key}:dropped`);
+  return json(dropped > 0 ? { messages, dropped } : { messages }, 200, request);
 }
 
 // v3.6: Sealed ACK — client confirms processing, worker deletes messages

@@ -1681,6 +1681,7 @@ const _I = {
     devPrimaryOnly: "Only the primary device can manage the device list",
     devNotListed: "This device is not on that account's list yet — run /link <this device's key> on the primary first",
     devSetFail: "Failed to update the device list",
+    toastMsgsDropped: "{0} message(s) may have been lost while you were offline (relay queue overflowed)",
     devListTitle: "Account devices",
     devThis: "this device",
     toastAliasTampered: 'Blocked: this handle\u2019s key history has been tampered with. Ask the person for their public key directly.',
@@ -4552,6 +4553,7 @@ async function initMessenger(dbName) {
   let myShortId = ''; // v3.3: Human-readable ID (e.g. breeze-a3f1-9c2e)
   // v3.5: Message ID generator (needs closure-local myId — a top-level version threw E2E-found).
   let _msgSeq = 0;
+  let _lastSendTs = 0; // monotonic guard for sendMessage's wire ts (= message identity)
   function genMsgId() { return myId + ':' + Date.now() + ':' + (++_msgSeq); }
 
   // v3.3: Generate human-readable short ID from public key
@@ -7420,11 +7422,30 @@ async function initMessenger(dbName) {
     if (persistentTypes.includes(data.type)) {
       (async () => {
         try {
+          const snapContact = activeContact; if (!snapContact) return;
+          const sigTs = data.ts || Date.now();
           const signalPayload = JSON.stringify(data);
-          const encrypted = await encryptFor(signalPayload, activeContact.pubB64);
+          const encrypted = await encryptFor(signalPayload, snapContact.pubB64);
           if (!encrypted) { _dbg(null, 'encrypt-signal: failed'); return; }
-          await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName,
-            payload: encrypted, ts: data.ts || Date.now(), isSignal: true }, activeContact.pubB64);
+          const acct = await dbGet('identity', 'account').catch(() => null);
+          const acctRoot = (acct?.root && acct.root !== myPubB64) ? acct.root : undefined;
+          await relaySend(snapContact.id, { to: snapContact.id, from: myId, fromPub: myPubB64, fromName: myName,
+            payload: encrypted, ts: sigTs, isSignal: true, acctRoot }, snapContact.pubB64);
+          // Multi-device: mutations must follow the messages they mutate (Socratic round —
+          // "the send syncs, so what happens when I EDIT it?"). Same fan-out as sendMessage:
+          // the contact's other devices get the signal via registry, and MY other devices get
+          // a selfSync-tagged copy that is allowed to mutate `mine` messages there.
+          for (const devPub of await _devicesFor(snapContact)) {
+            if (devPub === snapContact.pubB64) continue;
+            const devEnc = await encryptFor(signalPayload, devPub);
+            if (devEnc) await relaySend(devPub.slice(0, 12), { to: devPub.slice(0, 12), from: myId,
+              fromPub: myPubB64, fromName: myName, payload: devEnc, ts: sigTs, isSignal: true, acctRoot }, devPub);
+          }
+          for (const devPub of await _myOtherDevices()) {
+            const devEnc = await encryptFor(signalPayload, devPub);
+            if (devEnc) await relaySend(devPub.slice(0, 12), { to: devPub.slice(0, 12), from: myId,
+              fromPub: myPubB64, fromName: myName, payload: devEnc, ts: sigTs, isSignal: true, selfSync: true }, devPub);
+          }
         } catch(e) { _dbg(e, 'encrypt-signal'); }
       })();
     }
@@ -7548,8 +7569,17 @@ async function initMessenger(dbName) {
     // v3.6: Clear persistent draft on send
     delete _drafts[activeContact.id]; _persistDrafts();
     try {
-    const ts = correctedNow();
-    const msgId = genMsgId();
+    // Monotonic send timestamp: two sends in the same millisecond would otherwise share a
+    // wire ts AND (below) a msgId. The +1ms bump mirrors the Worker's inbox guarantee.
+    let ts = correctedNow();
+    if (ts <= _lastSendTs) ts = _lastSendTs + 1;
+    _lastSendTs = ts;
+    // Message identity must MATCH on both ends: every receiver stores an incoming message
+    // as `${senderId}:${ts}`, so the sender must store its own copy under the same id —
+    // otherwise an edit/delete/reaction signal (which carries the sender's msgId) can never
+    // find its target remotely. genMsgId()'s random-seq ids meant 1:1 remote mutations
+    // NEVER matched — silently broken until the multi-device edit E2E asked (Socratic).
+    const msgId = myId + ':' + ts;
 
     // Build metadata
     const meta = { msgId };
@@ -9078,6 +9108,9 @@ async function initMessenger(dbName) {
           const sResp = await postAPIRaw('/sealed/poll', { id: myId });
           if (sResp.ok) {
             const sData = await sResp.json();
+            // Honesty over silence: the relay counts envelopes its queue caps forced it to
+            // drop while we were offline — tell the user instead of losing them wordlessly.
+            if (Number.isInteger(sData.dropped) && sData.dropped > 0) showToast(t('toastMsgsDropped', sData.dropped), 'error');
             let sealedProcessed = 0;
             for (const sealed of (sData.messages || [])) {
               try {
@@ -9149,12 +9182,39 @@ async function initMessenger(dbName) {
     // Handled before contact resolution — the sending device is not a contact and must never
     // be auto-added as one. Membership is enforced against the signature-verified device
     // registry, so a stranger cannot plant "sent by me" messages by setting a flag.
-    if (msg.selfSync && msg.sfFor && msg.fromPub) {
+    if (msg.selfSync && msg.fromPub && (msg.sfFor || msg.isSignal)) {
       try {
         const mine = await _myOtherDevices();
         if (!mine.includes(msg.fromPub)) { _dbg(null, 'selfSync from non-account device — dropped'); return; }
         const syncText = await decryptFrom(msg.payload, msg.fromPub);
         if (!syncText || syncText.length > 65536) return;
+        if (msg.isSignal) {
+          // A mutation (edit/delete/reaction) performed on ANOTHER of my own devices. The
+          // sender is registry-verified as me, so the `stored.mine` guard that (correctly)
+          // stops a CONTACT from mutating my messages does not apply — my other device IS me.
+          const signal = JSON.parse(syncText);
+          const smId = safeMsgId(signal.msgId || '');
+          const stored = await dbGet('messages', smId);
+          if (!stored) return; // mutation for a message this device never had
+          if (signal.type === 'edit' && typeof signal.text === 'string') {
+            stored.text = signal.text.slice(0, 65536); stored.edited = true; await dbPut('messages', stored);
+            const el = document.querySelector(`[data-msgid="${smId}"]`);
+            if (el) { const tm = new Date(signal.ts || msg.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); safeSetHTML(el, renderLinks(renderMarkdown(esc(stored.text))) + ' <span class="i-edited">' + t('edited') + '</span><span class="ts">' + tm + '</span>'); }
+          } else if (signal.type === 'delete') {
+            stored.deleted = true; stored.text = ''; await dbPut('messages', stored);
+            const el = document.querySelector(`[data-msgid="${smId}"]`);
+            if (el) safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>');
+          } else if (signal.type === 'reaction' && typeof signal.emoji === 'string' && signal.emoji.length <= 64) {
+            if (!stored.reactions) stored.reactions = {};
+            if (!stored.reactions[signal.emoji] && Object.keys(stored.reactions).length < 20) stored.reactions[signal.emoji] = [];
+            if (signal.add) { if (!stored.reactions[signal.emoji]?.includes(myId) && (stored.reactions[signal.emoji]?.length ?? 100) < 100) stored.reactions[signal.emoji].push(myId); }
+            else if (stored.reactions[signal.emoji]) { stored.reactions[signal.emoji] = stored.reactions[signal.emoji].filter(u => u !== myId); if (stored.reactions[signal.emoji].length === 0) delete stored.reactions[signal.emoji]; }
+            await dbPut('messages', stored);
+            const el = document.querySelector(`[data-msgid="${smId}"]`);
+            if (el) { const existing = el.querySelector('.msg-reactions'); if (existing) _safeReplace(existing, renderReactions(stored.reactions, smId)); else _safeAppend(el, renderReactions(stored.reactions, smId)); }
+          }
+          return;
+        }
         let target = await dbGet('contacts', String(msg.sfFor).slice(0, 64));
         if (!target && typeof msg.sfPub === 'string' && msg.sfPub.slice(0, 12) === msg.sfFor) {
           // Conversation unknown on this device: create it from the sibling's data. Safe —
@@ -9164,7 +9224,9 @@ async function initMessenger(dbName) {
           target = await dbGet('contacts', msg.sfFor);
         }
         if (!target) return; // still unknown (group sync or malformed) — nothing to attach to
-        const syncId = target.id + ':' + msg.ts;
+        // Store under the SENDING SIBLING's `${senderId}:${ts}` id — the same id that device
+        // holds locally — so its later edit/delete signals find this copy.
+        const syncId = msg.from + ':' + msg.ts;
         if (await dbGet('messages', syncId)) return; // dedup
         await dbPut('messages', { msgId: syncId, contactId: target.id, text: syncText, mine: true, ts: msg.ts, synced: true });
         target.lastMsg = syncText.slice(0, 40); target.lastMsgAt = msg.ts;
@@ -9415,28 +9477,11 @@ async function initMessenger(dbName) {
     // Session peer key: the attributed device's own pub, else the contact's.
     const _peerPub = _attribPub || contact.pubB64;
 
-    // SECURITY (removed): the deprecated PLAINTEXT signal handlers (type 'edit' /
-    // 'delete' / 'reaction' / 'poll_vote') were processed here with NO decryption and
-    // NO sender authentication. A sealed envelope is opaque attacker-controlled JSON
-    // (handleSealedSend stores `envelope` verbatim; /sealed/poll → handleIncoming(JSON.parse(envelope))),
-    // so any sender could POST {type:'edit', msgId, text} for any recipient and silently
-    // rewrite/delete a stored message in the victim's DB — message-integrity tampering
-    // with zero compensating control. The standard /msg relay strips these fields and the
-    // P2P DataChannel routes them inline, so these handlers had no legitimate relay sender:
-    // current clients send edit/delete/reaction via the ENCRYPTED isSignal path (handled
-    // above, gated by a successful decryptFrom that proves session-key possession) and
-    // poll_vote over the authenticated P2P DataChannel only. Removed outright — the
-    // encrypted path is the sole authority for mutating an existing message.
-
-    // New message (text or file)
-    const msgId = contactId + ':' + msg.ts;
-    if (_replayCache.has(msgId)) return; // Fast in-memory dedup
-    _replayCache.add(msgId); // Speculative mark before first await — blocks concurrent-path duplicates
-    if (await dbGet('messages', msgId)) return; // Already persisted
-
-    let text, storedFileData = null;
-    const meta = { msgId, replyTo: msg.replyTo, disappearAt: msg.disappearAt, senderName: msg.fromName };
-
+    // Mutation signals are handled BEFORE the new-message dedup below: a signal envelope
+    // carries the ORIGINAL message's ts, so `${from}:${ts}` collides with the stored message
+    // and 'Already persisted' silently swallowed every relayed 1:1 edit/delete/reaction
+    // (Socratic-found — with the msgId mismatch fixed, this was the second independent
+    // reason remote mutations never worked over the relay).
     // v3.6: Encrypted signal (edit/delete) — decrypt and process
     if (msg.isSignal && msg.payload) {
       try {
@@ -9481,6 +9526,32 @@ async function initMessenger(dbName) {
       } catch(e) { _dbg(e, 'decrypt-signal'); }
       return;
     }
+
+    // SECURITY (removed): the deprecated PLAINTEXT signal handlers (type 'edit' /
+    // 'delete' / 'reaction' / 'poll_vote') were processed here with NO decryption and
+    // NO sender authentication. A sealed envelope is opaque attacker-controlled JSON
+    // (handleSealedSend stores `envelope` verbatim; /sealed/poll → handleIncoming(JSON.parse(envelope))),
+    // so any sender could POST {type:'edit', msgId, text} for any recipient and silently
+    // rewrite/delete a stored message in the victim's DB — message-integrity tampering
+    // with zero compensating control. The standard /msg relay strips these fields and the
+    // P2P DataChannel routes them inline, so these handlers had no legitimate relay sender:
+    // current clients send edit/delete/reaction via the ENCRYPTED isSignal path (handled
+    // above, gated by a successful decryptFrom that proves session-key possession) and
+    // poll_vote over the authenticated P2P DataChannel only. Removed outright — the
+    // encrypted path is the sole authority for mutating an existing message.
+
+    // New message (text or file)
+    // Identity by the ACTUAL sender (msg.from), not the conversation id: for device-
+    // attributed messages these differ, and mutation signals look up the sender's
+    // `${senderId}:${ts}` id. Non-attributed senders: msg.from === contactId, unchanged.
+    const msgId = msg.from + ':' + msg.ts;
+    if (_replayCache.has(msgId)) return; // Fast in-memory dedup
+    _replayCache.add(msgId); // Speculative mark before first await — blocks concurrent-path duplicates
+    if (await dbGet('messages', msgId)) return; // Already persisted
+
+    let text, storedFileData = null;
+    const meta = { msgId, replyTo: msg.replyTo, disappearAt: msg.disappearAt, senderName: msg.fromName };
+
 
     if (msg.isFile) {
       try {
@@ -11144,9 +11215,17 @@ async function initMessenger(dbName) {
         _DOM.get('msg-input')?.focus();
       }
       if (action === 'copy') navigator.clipboard?.writeText(text);
-      if (action === 'pin') { if (typeof pinMsg === 'function') await pinMsg(msgId); }
-      if (action === 'edit') { if (typeof startEdit === 'function') await startEdit(msgId); }
-      if (action === 'delete') { if (typeof deleteMsg === 'function') await deleteMsg(msgId); }
+      // pinMsg/startEdit/deleteMsg take a MESSAGE OBJECT ({msgId, text, ts}), not a bare id —
+      // this handler passed the raw string, so msg.msgId was undefined inside them and the
+      // edit/delete signal went out with no target (remote mutation silently no-oped;
+      // Socratic-found via the multi-device edit E2E). Hydrate from the stored record.
+      if (action === 'pin' || action === 'edit' || action === 'delete') {
+        const stored = await dbGet('messages', msgId).catch(() => null);
+        const msgObj = { msgId, text: stored?.text ?? text, ts: stored?.ts };
+        if (action === 'pin' && typeof pinMsg === 'function') await pinMsg(msgObj);
+        if (action === 'edit' && typeof startEdit === 'function') await startEdit(msgObj);
+        if (action === 'delete' && typeof deleteMsg === 'function') await deleteMsg(msgObj);
+      }
       if (action === 'forward') {
         _DOM.get('msg-input').value = '/reply ' + text.slice(0, 100);
         _DOM.get('msg-input').focus();

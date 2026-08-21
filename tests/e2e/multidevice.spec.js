@@ -127,6 +127,18 @@ test('link a second device: contact messages reach BOTH devices; sent messages s
   }, fromB);
   expect(isMineOnA).toBe(true);
 
+  // === The point #4: mutations follow the messages. A EDITS the message it sent from the
+  // phone; the contact sees the new text AND the laptop's self-synced copy updates too
+  // (registry-verified sibling devices may mutate `mine` messages — they ARE me).
+  const editedText = 'edited on the phone ' + Date.now();
+  await A.locator('#msg-messages .msg', { hasText: fromA }).click({ button: 'right' });
+  await A.locator('.ctx-menu div', { hasText: /^Edit$|^編集$/ }).click();
+  const editDialog = A.locator('dialog[aria-labelledby]');
+  await editDialog.locator('.modal-input').fill(editedText);
+  await editDialog.locator('[value="ok"]').click();
+  await expect(C.locator('#msg-messages')).toContainText(editedText, { timeout: 20_000 });
+  await expect(B.locator('#msg-messages')).toContainText(editedText, { timeout: 20_000 });
+
   await ctxA.close(); await ctxB.close(); await ctxC.close();
 });
 

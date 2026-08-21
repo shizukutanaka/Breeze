@@ -2047,6 +2047,29 @@ describe('sealed sender send / poll / ack', () => {
     expect(res.status).toBe(400);
   });
 
+  // Socratic round: "what happens to message 101 while the recipient is offline?" The
+  // queue caps at 100 and silently dropped the oldest. Now the relay counts the drops and
+  // the next poll confesses them — once — so the recipient at least knows.
+  it('reports queue-overflow drops on the next poll, exactly once', async () => {
+    const env = makeEnv();
+    for (let i = 0; i < 103; i++) {
+      await handleSealedSend({ to: 'busybee1', envelope: `E${i}-${'x'.repeat(40)}` }, env, req({}));
+    }
+    const first = await (await handleSealedPoll({ id: 'busybee1' }, env, req({}))).json();
+    expect(first.messages.length).toBe(100);
+    expect(first.dropped).toBe(3); // 103 sent, cap 100 — three oldest were lost
+    const second = await (await handleSealedPoll({ id: 'busybee1' }, env, req({}))).json();
+    expect(second.dropped).toBeUndefined(); // confessed once, counter reset
+  });
+
+  it('a queue that never overflows reports no drops', async () => {
+    const env = makeEnv();
+    await handleSealedSend({ to: 'quietone', envelope: 'just-one' }, env, req({}));
+    const polled = await (await handleSealedPoll({ id: 'quietone' }, env, req({}))).json();
+    expect(polled.messages.length).toBe(1);
+    expect(polled.dropped).toBeUndefined();
+  });
+
   // Item 40: an envelope that arrives AFTER a poll but BEFORE the ack must survive the ack
   // (the ack clears only up to the polled high-water mark, not the whole queue).
   it('preserves an envelope sent in the poll->ack window (no blind full-delete)', async () => {
