@@ -1,5 +1,21 @@
 # Changelog
 
+## Musk step 2 — delete: the developer-diagnostic command cluster is gone (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+794 vitest + 24 Playwright E2E, both unchanged — nothing real was load-bearing on any of it. `index.html` **14,483 → 13,689 lines (−794)**, 69 slash commands → 58, 212 dead i18n keys removed across 8 locales.
+
+Twelve rounds of questioning had been spent on step 1 of the algorithm; step 2 was overdue. First-principles inventory of the client found 2,309 lines — 16% of the whole app — living in slash commands, and asked the only question that matters: *does a person messaging a friend ever type this?*
+
+Deleted outright: `/perf` `/speedtest` `/network` `/peers` `/storage` `/stats` `/uptime` `/status` `/about` `/changelog` `/keyboard`. These dumped ICE candidate types, KV counters, DOM node counts, `performance.memory` readings and an in-app copy of a 3,000-line changelog. The connection quality a user actually needs is already in the conversation header (Direct/STUN/TURN + RTT); the changelog lives in the repo, where it cannot go stale; the rest was a WebRTC debugging console shipped to every phone on earth.
+
+The second-order cost was larger than the first: 212 i18n keys existed only to label those dumps, and every one was a translation obligation across 8 locales forever. Removing them lifted total locale coverage from 65% to 80% **without translating a single new string** — the untranslated tail was mostly diagnostics nobody would ever read. `isSafeMediaUrl` fell out as dead code with them.
+
+What this buys, in the terms that actually constrain this codebase: the 15,000-line `index.html` gate went from ~500 lines of headroom to ~1,300. Deletion is what makes the next feature possible.
+
+Kept deliberately, against the temptation to keep cutting: `/audit`, `/sessions`, `/security`, `/verify` (security transparency a privacy product owes its users), `/migrate` (the LINE on-ramp this product exists for), and `/retry` (the one diagnostic with a user-facing purpose — resending stuck messages).
+
+---
+
 ## Socratic rounds 12–14 — a 6-lens parallel audit turns the questioning on itself (branch claude/nice-ride-T6yb0, 2026-08-21)
 
 794 vitest (+5) + 24 Playwright E2E; `index.html` (net +90 after deletions), `_worker.js` (+~45), `SPEC.md`, `SECURITY.md`, `locales/*`, `tests/worker.test.js`, `tests/mirror-drift.test.js`.

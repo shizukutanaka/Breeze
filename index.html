@@ -1426,8 +1426,6 @@ const _I = {
     sessionReset: 'Session re-established for security.',
     preKeysReplenished: 'Security keys refreshed.',
     verifyHint: 'Use /verify in a 1:1 chat to check.',
-    peerRelayHeld: 'Message held by peer relay — will deliver when online.',
-    peerRelayDelivered: 'Peer relay delivered.',
     backupCreated: 'Backup complete! Remember your passphrase.',
     backupCreatedUntil: 'Backup complete! Remember your passphrase. The relay keeps it until {0} — re-upload before then.',
     backupFailed: 'Backup failed',
@@ -1647,18 +1645,6 @@ const _I = {
     dropExpires: 'Expires in 24 hours if unread.',
     dropFailed: 'Failed to create Dead Drop',
     outboxPending: 'messages pending',
-    speedNeedConvo: 'Open a conversation first',
-    speedNeedP2P: 'No P2P connection — connect first',
-    speedRunning: 'Running speed test...',
-    speedTestTitle: 'P2P Speed Test',
-    speedTestSent: "Sent: {0} KB ({1} × {2}KB)",
-    speedTestTime: "Time: {0}s",
-    speedTestThroughput: "Throughput: {0} Mbps",
-    speedTestRTT: "RTT: {0}ms",
-    speedTestChannel: "Channel: SCTP ({0})",
-    speedTestOrdered: 'ordered',
-    speedTestUnordered: 'unordered',
-    speedTestFailed: 'Speed test failed',
     keyChanged: "⚠️ Security key changed for {0}. Verify their identity with /verify.",
     p2pOnlyMode: 'P2P-only mode: server unreachable. Direct connections still work.',
     storageWarning: "Storage {0}% full. Old messages may be auto-deleted.",
@@ -1738,42 +1724,7 @@ const _I = {
     promotedAdmin: "{0} is now a group admin",
     wipeBtn: 'WIPE',
     clearing: 'Clearing...',
-    peerTitle: 'Peer Connections',
-    peerNoConn: 'no connection',
-    peerConnected: "Connected: {0}/{1}",
-    statsTitle: 'Breeze Statistics',
-    statsMessages: 'Messages',
     statsTotal: 'Total',
-    statsSent: 'sent',
-    statsReceived: 'received',
-    statsBookmarked: 'Bookmarked',
-    statsPinned: 'Pinned',
-    statsDataSize: 'Data size',
-    statsContacts: 'Contacts',
-    statsGroups: 'Groups',
-    statsBlocked: 'Blocked',
-    statsArchived: 'Archived',
-    statsMuted: 'Muted',
-    statsStorage: 'Storage',
-    statsVersion: 'Version',
-    statsCrypto: 'Crypto',
-    statsIndexedDB: 'IndexedDB',
-    statsP2PConnections: 'P2P Connections',
-    statsP2PActive: "Active: {0} / {1}",
-    statsOutboxQueue: "Outbox queue: {0} pending",
-    statsDataChannels: "DataChannels: {0} chat + {1} state",
-    statsPerformance: 'Performance',
-    statsDOMMessages: "DOM messages: {0} / {1} limit",
-    statsContactsRendered: "Contacts rendered: {0}",
-    statsNetwork: "Network: {0} ({1})",
-    statsCryptoWorkerOn: "Crypto worker: ✓ Active",
-    statsCryptoWorkerOff: "Crypto worker: ✗ Main thread",
-    statsUptime: "Uptime: {0} min",
-    statsHeartbeats: "Heartbeats: {0} active",
-    statsOutboxPersistent: "Outbox (persistent): {0} peer queues",
-    statsSealedPollOn: "Sealed poll: ✓ Relay active",
-    statsSealedPollOff: "Sealed poll: ⚠ P2P-only mode",
-    statsAdaptive: "Adaptive: compress>{0}B, poll={1}s, img={2}%",
     sharedFiles: "Shared Files ({0})",
     you: 'You',
     unknown: 'Unknown',
@@ -1892,126 +1843,11 @@ const _I = {
     shareDialogTitle: 'Chat with me on Breeze',
     shareDialogText: "{0} on Breeze",
     toastWallpaperUsage: 'Use: /wallpaper #1a2b3c, /wallpaper reset, or /wallpaper ocean|sunset|forest|midnight|aurora',
-    uptimeUptime: "Uptime: {0}h {1}m {2}s",
-    uptimeP2P: "P2P: {0}/{1} connected",
-    uptimeServerOn: "Server: ✓ Online",
-    uptimeServerOff: "Server: ✗ Offline (P2P-only)",
-    uptimeLeaderOn: "Leader tab: ✓ This tab",
-    uptimeLeaderOff: "Leader tab: ✗ Another tab",
-    uptimeOutbox: "Outbox: {0} relay + {1} P2P pending",
-    uptimeNetwork: "Network: {0} ({1})",
-    uptimeHeartbeats: "Heartbeats: {0} active",
-    uptimeAdaptive: "Adaptive: img={0}% poll={1}s",
-    uptimeImage: "Image: {0}",
-    uptimeImageOff: '✓ Original (no loss)',
-    uptimeImageLossless: '↕ Resize only',
-    uptimeImageAuto: '⚡ Auto WebP',
-    uptimeCrypto: "Crypto: {0} | TT: {1}",
-    uptimeNetOn: "✓ Online",
-    uptimeNetOff: "✗ Offline",
-    uptimeCryptoWorker: "Worker ✓",
-    uptimeCryptoMain: "Main thread",
-    netTitle: 'Network Health Dashboard',
-    netConnections: "Connections: {0} P2P / {1} reconnecting / {2} offline",
-    netActivePeer: "Active peer: {0}",
-    netActivePeerOff: "Active peer: {0} — not connected",
-    netStateMachine: "  State machine: {0} ({1})",
-    netICEState: "  ICE state: {0}",
-    netConnState: "  Connection: {0}",
-    netDataChannel: "  DataChannel: {0}",
-    netRTT: "  RTT: {0}ms",
-    netBytesSent: "  Bytes sent: {0} KB",
-    netBytesReceived: "  Bytes received: {0} KB",
-    netBandwidth: "  Bandwidth: {0} kbps",
-    netLocal: "  Local: {0} ({1}) {2}:{3}",
-    netRemote: "  Remote: {0} ({1})",
-    netStatsUnavail: '  Stats: unavailable',
-    netConfig: 'Config:',
-    netICEPool: "  ICE pool: {0}",
-    netPoWDiff: "  PoW difficulty: {0} bits",
-    netReconnect: "  Reconnect: {0}ms base, {1} max attempts",
-    netCompression: "  Compression: > {0} bytes",
-    netProtocol: "  Protocol: v{0}",
-    netTURN: '  TURN: configured',
     connDirect: 'Direct',
     connSTUN: 'STUN',
     connTURN: 'TURN',
     connTURNRelay: 'TURN (relay-only)',
-    netBrowser: 'Browser:',
-    netOnlineOn: "  Online: yes",
-    netOnlineOff: "  Online: NO",
-    netConnectionInfo: "  Connection: {0} (effective: {1})",
-    netDownlink: "  Downlink: {0} Mbps",
-    netRTTEstimate: "  RTT estimate: {0} ms",
-    netSaveData: '  Save-Data: ON',
-    netCompressionStreamOn: "  CompressionStream: yes",
-    netCompressionStreamOff: "  CompressionStream: no",
-    netWebRTCOn: "  WebRTC: yes",
-    netWebRTCOff: "  WebRTC: no",
-    netReplayCache: "  Replay cache: {0}/{1}",
-    netStorage: "  Storage: {0} MB / {1} MB",
-    peerSummary: "Connected: {0}/{1} | Outbox: {2} queues",
     peerState: "  State: {0} ({1}) | ICE: {2}",
-    peerDC: "  Chat DC: {0} | State DC: {1}",
-    peerRetries: " | Retries: {0}",
-    peerRTT: "  RTT: {0} {1}ms | ↑{2} ↓{3}",
-    peerHeartbeatOn: "  Heartbeat: ✓ active",
-    peerHeartbeatOff: "  Heartbeat: ✗ none",
-    peerLocal: "  Local: {0} ({1})",
-    peerRemote: "  Remote: {0}",
-    perfTitle: 'Performance Dashboard',
-    perfTiming: 'Timing:',
-    perfMemory: 'Memory:',
-    perfMemUsed: "  Used: {0} MB",
-    perfMemTotal: "  Total: {0} MB",
-    perfMemLimit: "  Limit: {0} MB",
-    perfDOM: 'DOM:',
-    perfDOMElements: "  Elements: {0}",
-    perfDOMMessages: "  Messages visible: {0} / {1} limit",
-    perfDOMCache: "  DOM cache entries: {0}",
-    perfCaches: 'Caches:',
-    perfReplayCache: "  Replay cache: {0} / {1}",
-    perfCrossUnread: "  Cross-account unread: {0}",
-    perfErrorCount: "  Error count: {0}",
-    perfNetwork: 'Network:',
-    perfNetType: "  Type: {0} ({1})",
-    perfNetDownlink: "  Downlink: {0} Mbps",
-    perfNetRTT: "  RTT: {0}ms",
-    perfStorageSection: 'Storage:',
-    perfStorageUsed: "  Used: {0} MB",
-    perfStorageQuota: "  Quota: {0} MB",
-    perfStorageUsage: "  Usage: {0}%",
-    cmdStoragePersistedLbl: "Persisted: {0}",
-    cmdStorageContacts: "  contacts: {0}",
-    cmdStorageGroups: "  groups: {0}",
-    cmdStorageMessages: "  messages: {0}",
-    cmdStorageScheduled: "  scheduled: {0}",
-    cmdStorageAvgMsg: "  avg/msg: {0}",
-    cmdStorageSWOn: "  Service Worker: ✓ Active",
-    cmdStorageSWOff: "  Service Worker: ✗ None",
-    aboutTagline: 'P2P Encrypted Messenger',
-    aboutArch: 'Architecture: Single HTML + Cloudflare Worker',
-    aboutProtocol: 'Protocol: X3DH + Double Ratchet + Sender Key',
-    aboutEncryption: 'Encryption: X25519 + Ed25519 + AES-256-GCM + HKDF',
-    aboutPadding: "Padding: {0}-byte boundary",
-    aboutLanguages: 'Languages: EN, JA, KO, ZH-TW, ES, TH, ID, PT-BR',
-    aboutPlatforms: 'Platforms: Web, PWA, Electron, Tauri, Android, iOS',
-    aboutLicense: 'License: MIT',
-    aboutHighlights: 'v3.6 Highlights:',
-    aboutHl1: '  Dead Drop (one-time secret sharing)',
-    aboutHl2: '  Inline Crypto Web Worker',
-    aboutHl3: '  Native <dialog> modals + Trusted Types',
-    aboutHl4: '  Markdown tables + OGP favicon',
-    aboutHl5: '  Group typing (multi-person)',
-    aboutHl6: '  P2P speed test + getAllRecords',
-    aboutSecurity: 'Security:',
-    aboutSec1: '  Forward secrecy (Double Ratchet)',
-    aboutSec2: '  Double HMAC timing-safe comparison',
-    aboutSec3: '  Magic bytes file validation',
-    aboutSec4: '  CSP + COOP + Permissions-Policy',
-    aboutSec5: '  Sealed sender (server blind)',
-    aboutSec6: "  PBKDF2 lock ({0}K iterations)",
-    aboutPrivacy: 'Privacy: No analytics. No tracking. No ads.',
     helpDeadDrop: '🔐 Dead Drop / Room',
     helpTableHint: '| col | col | — markdown table',
     helpKeysHint: 'Ctrl+F search · Ctrl+K contacts · Ctrl+1..9 accounts · ? shortcuts',
@@ -2190,40 +2026,18 @@ const _I = {
     cmdLblStorage: 'Storage',
     cmdMembersLabel: 'members',
     cmdMemberYou: '(you)',
-    cmdStatusTitle: "Breeze v{0} Status",
-    cmdLblProtocol: 'Protocol',
-    cmdLblPlatform: 'Platform',
     cmdLblCrypto: 'Crypto',
     cmdLblUserId: 'User ID',
     cmdLblAlias: 'Alias',
-    cmdSectionConn: 'Connection',
     cmdLblPeer: 'Peer',
     cmdNoContact: 'No active contact',
-    cmdLblMessages: 'Messages',
-    cmdLblLastActivity: 'Last activity',
-    cmdNever: 'never',
-    cmdNone: 'none',
-    cmdLblIce: 'ICE',
-    cmdLblDC: 'DataChannel',
-    cmdLblRtt: 'RTT',
-    cmdSectionCrypto: "Crypto (v{0})",
     cmdLblSession: 'Session',
-    cmdLblSendCtr: 'Send counter',
-    cmdLblRecvCtr: 'Recv counter',
-    cmdLblRatchetKey: 'Ratchet key',
-    cmdLblReplayCache: 'Replay cache',
-    cmdLblPQ: 'PQ',
     pqReady: 'Ready (X25519+ML-KEM hybrid planned)',
     statusActive: 'Active',
     statusNoSession: 'No session',
     statusHidden: 'Hidden',
     statusSending: 'Sending',
-    cmdNotConnected: 'Not connected',
     cmdLblKeyExchange: 'Key Exchange',
-    cmdSectionPrivacy: 'Privacy',
-    cmdLblReadReceipts: 'Read receipts',
-    cmdLblTypingIndicator: 'Typing indicator',
-    cmdLblServer: 'Server',
     cmdMyIdentity: 'My Identity',
     cmdShareLinks: 'Share links',
     cmdNoAlias: '(none — use /alias to set)',
@@ -2231,12 +2045,6 @@ const _I = {
     cmdWhoamiNoAlias: 'No username (/alias to set)',
     cmdWhoamiFeatures: 'All features included',
     cmdWhoamiPqReady: 'PQ Ready',
-    cmdStorageTitle: 'Storage & System Status',
-    cmdStoragePersisted: '✓ Protected',
-    cmdStorageEvict: '✗ May be evicted',
-    cmdSectionDatabase: 'Database',
-    cmdSectionRuntime: 'Runtime',
-    cmdStorageRequestPersist: 'Request persistent storage',
     cmdCryptoTitle: 'Breeze Security Profile',
     cmdSectionCryptoStack: 'Cryptographic Stack',
     cmdSectionPQ: 'Post-Quantum Readiness',
@@ -2248,26 +2056,6 @@ const _I = {
     cmdCryptoPqHybrid: 'Hybrid plan: X25519 + ML-KEM-768 (when available)',
     cmdCryptoFwdSec: '✓ Each message uses unique key',
     cmdCryptoCompression: '✗ off by design (avoids CRIME/BREACH)',
-    cmdKeyboardTitle: 'Keyboard Shortcuts',
-    cmdSectionNavigation: 'Navigation',
-    cmdSectionMessaging: 'Messaging',
-    cmdSectionActions: 'Actions',
-    cmdKeyFocusSearch: '%s+K — Focus contact search',
-    cmdKeyChatSearch: '%s+F — Search in chat (Ctrl+F)',
-    cmdKeyNextUnread: 'Ctrl+N — Jump to next unread',
-    cmdKeyNavContacts: '↑/↓ — Navigate contacts (when sidebar focused)',
-    cmdKeyOpenSend: 'Enter — Open contact / Send message',
-    cmdKeyEscape: 'Escape — Close dialog / Clear filter',
-    cmdKeySend: 'Enter — Send message',
-    cmdKeyNewLine: 'Shift+Enter — New line',
-    cmdKeyMention: '@ — Mention a group member',
-    cmdKeyTab: 'Tab — Accept mention suggestion',
-    cmdKeyContext: 'Right-click message — Context menu',
-    cmdKeyReact: 'Double-tap — Quick react 👍',
-    cmdKeySearchAll: '%s+Shift+F — Search all chats',
-    cmdKeyHelpLine: 'Type /help for all slash commands',
-    cmdChangelogTitle: 'Breeze Changelog',
-    cmdChangelogCurrent: 'Current',
     cmdInfoFilesBookmarks: "📎 Files: {0} | 🔖 Bookmarks: {1}",
   },
   // ja (and every future locale) lives in locales/<lang>.json — fetched at boot by _loadLocale()
@@ -3467,13 +3255,6 @@ function safeOpen(url) {
 }
 
 // v3.5: SECURITY — Validate URL scheme for OGP/external content
-function isSafeMediaUrl(url) {
-  if (!url || typeof url !== 'string') return false;
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === 'https:' || parsed.protocol === 'data:' || parsed.protocol === 'blob:';
-  } catch { return false; }
-}
 
 // v3.5: DRY helpers for slash command output (52x→1x dedup)
 function clearInput() { _DOM.get('msg-input').value = ''; }
@@ -11983,15 +11764,15 @@ async function initMessenger(dbName) {
         '/contacts export · /contacts import',
         '',
         '<b>' + t('helpSettings') + '</b>',
-        '/settings · /theme · /wallpaper · /lock · /sound · /keyboard · /compress',
-        '/whoami · /debug · /online · /uptime · /changelog',
+        '/settings · /theme · /wallpaper · /lock · /sound · /compress',
+        '/whoami · /debug · /online',
         '',
         '<b>' + t('helpSecurity') + '</b>',
         '/security · /verify · /audit · /retention · /backup · /keywrap',
         '/sessions · /wipe · /gdpr · /panic (Ctrl+Shift+Backspace)',
         '',
         '<b>' + t('helpDiag') + '</b>',
-        '/network · /peers · /about · /storage · /perf · /stats · /speedtest · /retry',
+        '/retry',
         '',
         '<b>' + t('helpDeadDrop') + '</b>',
         '/drop &lt;secret&gt; · /room [name]',
@@ -12498,64 +12279,13 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     }
 
     // v3: /status — Show connection and crypto info
-    if (val === '/status') {
-      e.preventDefault();
-      clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel-mono';
-      const peer = activeContact ? peers[activeContact.pubB64] : null;
-      const sess = activeContact ? await getSession(activeContact.pubB64?.slice(0, 12)) : null;
-      // v3.1: Connection quality (RTT)
-      let rttStr = '-';
-      if (peer?.pc) { try { const stats = await peer.pc.getStats(); stats.forEach(s => { if (s.type === 'candidate-pair' && s.state === 'succeeded') rttStr = (s.currentRoundTripTime * 1000).toFixed(0) + 'ms'; }); } catch(e) { _dbg(e); } }
-      // v3.1: Message count
-      let msgCount = 0;
-      if (activeContact) { try { const msgs = await dbGetByIndex('messages', 'contact', activeContact.id); msgCount = msgs.length; } catch(e) {} }
-      // v3.1: Last seen
-      const lastSeen = activeContact?.lastMsgAt ? new Date(activeContact.lastMsgAt).toLocaleString() : t('cmdNever');
-      safeSetHTML(d, [
-        '<b class="i-g">' + t('cmdStatusTitle', CONFIG.VERSION) + '</b>',
-        t('cmdLblProtocol') + ': v' + CONFIG.PROTOCOL_VERSION,
-        t('cmdLblPlatform') + ': ' + PLATFORM,
-        t('cmdLblCrypto') + ': ' + (_hasX25519 ? 'X25519' : 'P-256 (ECDH)'),
-        t('cmdLblUserId') + ': ' + (myId || t('cmdNone')),
-        t('cmdLblAlias') + ': ' + (myAlias || t('cmdNone')),
-        '',
-        '<b>' + t('cmdSectionConn') + '</b>',
-        activeContact ? t('cmdLblPeer') + ': ' + activeContact.name + (activeContact.muted ? ' 🔇' : '') + (activeContact.blocked ? ' 🚫' : '') : t('cmdNoContact'),
-        'P2P: ' + (peer?.connected ? '<span class="i-g">✓ ' + t('connDirect') + '</span>' : '✗ ' + t('cmdNotConnected')),
-        t('cmdLblIce') + ': ' + (peer?.pc?.iceConnectionState || '-'),
-        t('cmdLblDC') + ': ' + (peer?.dc?.readyState || '-'),
-        t('cmdLblRtt') + ': ' + rttStr,
-        t('cmdLblMessages') + ': ' + msgCount,
-        t('cmdLblLastActivity') + ': ' + lastSeen,
-        '',
-        '<b>' + t('cmdSectionCrypto', CONFIG.PROTOCOL_VERSION) + '</b>',
-        t('cmdLblKeyExchange') + ': ' + _cryptoStack.keyExchange,
-        t('cmdLblSigning') + ': ' + _cryptoStack.signing + (_signingPubB64 ? ' ✓' : ''),
-        t('cmdLblSession') + ': ' + (sess ? '<span class="i-g">✓ ' + t('statusActive') + '</span>' : '✗ ' + t('statusNoSession')),
-        t('cmdLblSendCtr') + ': ' + (sess?.sendCounter || 0),
-        t('cmdLblRecvCtr') + ': ' + (sess?.recvCounter || 0),
-        t('cmdLblRatchetKey') + ': ' + (sess?.ratchetPub ? '✓ ' + sess.ratchetPub.slice(0, 4).join('.') + '...' : '✗'),
-        t('cmdLblReplayCache') + ': ' + (sess?.seenMsgIds?.length || 0) + '/' + CONFIG.REPLAY_CACHE_SIZE,
-        t('cmdLblPQ') + ': ' + (_hasPQ ? '<span class="i-g">✓ ML-KEM</span>' : t('pqReady')),
-        '',
-        '<b>' + t('cmdSectionPrivacy') + '</b>',
-        t('cmdLblReadReceipts') + ': ' + (_privacyHideReadReceipts ? '✗ ' + t('statusHidden') : '✓ ' + t('statusSending')),
-        t('cmdLblTypingIndicator') + ': ' + (_privacyHideTyping ? '✗ ' + t('statusHidden') : '✓ ' + t('statusSending')),
-        '',
-        t('cmdLblServer') + ': ' + (API || t('cmdNone')),
-
-      ].join('<br>'));
-      box.appendChild(d);
-      box.scrollTop = box.scrollHeight;
-    }
-
-    // v3: /backup — Encrypted cloud backup
-    // v3.6: /drop <message> — Dead Drop (one-time encrypted secret sharing)
-    // Strategy: Primary viral acquisition tool — "URLを渡すだけで暗号化された何かを届けられる"
-    // Client-side AES-256-GCM encryption → key in URL fragment (never sent to server)
+    // DELETED (v3.7, first-principles pass): the developer-diagnostic command cluster —
+    // /perf /speedtest /network /peers /storage /stats /uptime /status /about /changelog
+    // /keyboard. 582 lines and ~90 i18n keys × 8 locales spent on WebRTC candidate dumps, KV
+    // counters and an in-app copy of a 3,000-line changelog. Nobody messaging a friend types
+    // /speedtest; the connection quality users actually need is already in the conversation
+    // header (Direct/STUN/TURN + RTT), and the changelog lives in the repo where it is never
+    // stale. The most common error is optimising a thing that should not exist.
     if (val.startsWith('/drop ')) {
       e.preventDefault(); clearInput();
       const secret = val.slice(6).trim();
@@ -12723,344 +12453,6 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     }
 
     // v3.5: /storage — Show storage usage
-    if (val === '/storage') {
-      e.preventDefault();
-      clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel-mono';
-      try {
-        const est = await navigator.storage?.estimate();
-        const contacts = await dbGetAll('contacts');
-        const msgCount = await dbGetAll('messages');
-        const groups = await dbGetAll('contacts').then(c => c.filter(x => x.isGroup));
-        const scheduled = await dbGetAll('scheduled').catch(() => []);
-        const usedMB = est ? (est.usage / 1024 / 1024).toFixed(1) : '?';
-        const quotaMB = est ? (est.quota / 1024 / 1024).toFixed(0) : '?';
-        const pct = est ? Math.round(est.usage / est.quota * 100) : '?';
-        const persisted = await navigator.storage?.persisted();
-        // Per-store estimates
-        const storeStats = [
-          t('cmdStorageContacts', contacts.length),
-          t('cmdStorageGroups', groups.length),
-          t('cmdStorageMessages', msgCount.length),
-          t('cmdStorageScheduled', scheduled.length),
-        ];
-        // Connection stats
-        const peerCount = Object.values(peers).filter(p => p.connected).length;
-        const totalPeers = Object.keys(peers).length;
-        safeSetHTML(d, [
-          '<b class="i-g">' + t('cmdStorageTitle') + '</b>',
-          '',
-          `${t('cmdLblStorage')}: ${usedMB} MB / ${quotaMB} MB (${pct}%)`,
-          t('cmdStoragePersistedLbl', persisted ? t('cmdStoragePersisted') : t('cmdStorageEvict')),
-          '',
-          '<b>' + t('cmdSectionDatabase') + '</b>',
-          ...storeStats,
-          t('cmdStorageAvgMsg', msgCount.length > 0 ? ((est?.usage || 0) / msgCount.length / 1024).toFixed(1) + ' KB' : 'N/A'),
-          '',
-          '<b>' + t('cmdSectionRuntime') + '</b>',
-          `  ${t('cmdLblP2PConn')}: ${peerCount}/${totalPeers}`,
-          t(navigator.serviceWorker?.controller ? 'cmdStorageSWOn' : 'cmdStorageSWOff'),
-          `  ${t('cmdLblProtocol')}: v${CONFIG.PROTOCOL_VERSION}`,
-          `  ${t('cmdLblPlatform')}: ${typeof PLATFORM !== 'undefined' ? PLATFORM : 'web'}`,
-          '',
-          persisted ? '' : '<span class="i-g i-cur" data-action="persist-storage">' + t('cmdStorageRequestPersist') + '</span>',
-        ].filter(Boolean).join('<br>'));
-        d.addEventListener('click', async (ev) => {
-          if (ev.target.dataset.action === 'persist-storage') {
-            const ok = await navigator.storage?.persist();
-            showToast(ok ? t('toastStoragePersist') : t('toastStorageDenied'), ok ? 'success' : 'error');
-          }
-        });
-      } catch(err) { d.textContent = t('uiStorageUnavail'); }
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
-    }
-
-    // v3.5: /peers — Connection state overview
-    if (val === '/peers') {
-      e.preventDefault(); clearInput();
-      const contactsList = await dbGetAll('contacts');
-      const lines = ['=== ' + t('peerTitle') + ' ===', ''];
-      let connected = 0, total = 0;
-      for (const c of contactsList) {
-        if (c.isGroup) continue;
-        total++;
-        const peer = peers[c.pubB64];
-        if (peer) {
-          const state = peer.connState || 'UNKNOWN';
-          const age = peer.stateTs ? Math.round((Date.now() - peer.stateTs) / 1000) + 's' : '?';
-          const dc = peer.dc?.readyState || 'none';
-          const sc = peer.stateDC?.readyState || 'none';
-          const ice = peer.pc?.iceConnectionState || '?';
-          const reconn = peer._reconnAttempts || 0;
-          lines.push(`${peer.connected ? '🟢' : '⚫'} ${c.name}`);
-          lines.push(t('peerState', state, age, ice));
-          lines.push(t('peerDC', dc, sc) + (reconn ? t('peerRetries', reconn) : ''));
-          if (peer._lastRtt != null) {
-            const rtt = peer._lastRtt;
-            const q = rtt < 100 ? '🟢' : rtt < 300 ? '🟡' : '🔴';
-            lines.push(t('peerRTT', q, rtt, fmtSize(peer._bytesSent || 0), fmtSize(peer._bytesRecv || 0)));
-          }
-          // v3.6: Show heartbeat status
-          lines.push(t(peer._heartbeat ? 'peerHeartbeatOn' : 'peerHeartbeatOff'));
-          // v3.6: Show candidate type (host/srflx/relay)
-          if (peer.pc?.getStats) {
-            try {
-              const stats = await peer.pc.getStats();
-              stats.forEach(s => {
-                if (s.type === 'candidate-pair' && s.state === 'succeeded') {
-                  const local = [...stats.values()].find(x => x.id === s.localCandidateId);
-                  const remote = [...stats.values()].find(x => x.id === s.remoteCandidateId);
-                  if (local) lines.push(t('peerLocal', local.candidateType || '?', local.protocol || '?'));
-                  if (remote) lines.push(t('peerRemote', remote.candidateType || '?'));
-                }
-              });
-            } catch {}
-          }
-          if (peer.connected) connected++;
-        } else {
-          lines.push(`⚫ ${c.name} — ${t('peerNoConn')}`);
-        }
-        lines.push('');
-      }
-      lines.splice(2, 0, t('peerSummary', connected, total, _outbox.size));
-      cmdOutput('cmd-panel', '<pre>' + lines.map(l => esc(l)).join('\n') + '</pre>');
-      return;
-    }
-
-    // v3.3: /security — Detailed cryptographic stack information
-    // v3.5: /about — Product information
-    if (val === '/about') {
-      e.preventDefault(); clearInput();
-      const lines = [
-        'Breeze Messenger v' + CONFIG.VERSION,
-        t('aboutTagline'),
-        '',
-        t('aboutArch'),
-        t('aboutProtocol'),
-        t('aboutEncryption'),
-        t('aboutPadding', CONFIG.MSG_PAD_BOUNDARY),
-        t('aboutLanguages'),
-        t('aboutPlatforms'),
-        t('aboutLicense'),
-        '',
-        t('aboutHighlights'),
-        t('aboutHl1'),
-        t('aboutHl2'),
-        t('aboutHl3'),
-        t('aboutHl4'),
-        t('aboutHl5'),
-        t('aboutHl6'),
-        '',
-        t('aboutSecurity'),
-        t('aboutSec1'),
-        t('aboutSec2'),
-        t('aboutSec3'),
-        t('aboutSec4'),
-        t('aboutSec5'),
-        t('aboutSec6', CONFIG.PBKDF2_ITERATIONS / 1000),
-        '',
-        t('aboutPrivacy'),
-        '',
-        'https://github.com/shizukutanaka/Breeze',
-      ];
-      cmdOutput('cmd-panel', '<pre>' + lines.map(l => esc(l)).join('\n') + '</pre>');
-      return;
-    }
-
-    // v3.5: /perf — Performance diagnostics (Skill Guide Pattern 3: Quality Gates)
-    if (val === '/perf') {
-      e.preventDefault(); clearInput();
-      const lines = ['=== ' + t('perfTitle') + ' ===', ''];
-
-      // Performance API entries
-      const entries = performance.getEntriesByType('measure').filter(e => e.name.startsWith('brz:'));
-      if (entries.length > 0) {
-        lines.push(t('perfTiming'));
-        entries.slice(-10).forEach(e => {
-          lines.push(`  ${e.name.replace('brz:', '')}: ${Math.round(e.duration)}ms`);
-        });
-        lines.push('');
-      }
-
-      // Memory (Chrome only)
-      if (performance.memory) {
-        const mem = performance.memory;
-        lines.push(t('perfMemory'));
-        lines.push(t('perfMemUsed', (mem.usedJSHeapSize / 1024 / 1024).toFixed(1)));
-        lines.push(t('perfMemTotal', (mem.totalJSHeapSize / 1024 / 1024).toFixed(1)));
-        lines.push(t('perfMemLimit', (mem.jsHeapSizeLimit / 1024 / 1024).toFixed(0)));
-        lines.push('');
-      }
-
-      // DOM stats
-      lines.push(t('perfDOM'));
-      lines.push(t('perfDOMElements', document.querySelectorAll('*').length));
-      lines.push(t('perfDOMMessages', document.querySelectorAll('.msg').length, CONFIG.MSG_DOM_LIMIT));
-      lines.push(t('perfDOMCache', Object.keys(_DOM._cache).length));
-      lines.push('');
-
-      // Cache stats
-      lines.push(t('perfCaches'));
-      lines.push(t('perfReplayCache', _replayCache.size(), CONFIG.REPLAY_CACHE_SIZE));
-      lines.push(t('perfCrossUnread', JSON.stringify(_crossAccountUnread)));
-      lines.push(t('perfErrorCount', _errorCount));
-      lines.push('');
-
-      // Network
-      const conn = navigator.connection || navigator.mozConnection;
-      if (conn) {
-        lines.push(t('perfNetwork'));
-        lines.push(t('perfNetType', conn.type || '?', conn.effectiveType || '?'));
-        if (conn.downlink) lines.push(t('perfNetDownlink', conn.downlink));
-        if (conn.rtt) lines.push(t('perfNetRTT', conn.rtt));
-        lines.push('');
-      }
-
-      // Storage
-      if (navigator.storage?.estimate) {
-        try {
-          const est = await navigator.storage.estimate();
-          lines.push(t('perfStorageSection'));
-          lines.push(t('perfStorageUsed', (est.usage / 1024 / 1024).toFixed(1)));
-          lines.push(t('perfStorageQuota', (est.quota / 1024 / 1024).toFixed(0)));
-          lines.push(t('perfStorageUsage', ((est.usage / est.quota) * 100).toFixed(1)));
-        } catch(e) {}
-      }
-
-      cmdOutput('cmd-panel-mono', '<pre>' + lines.map(l => esc(l)).join('\n') + '</pre>');
-      return;
-    }
-
-    // v3.6: /speedtest — Measure P2P DataChannel throughput
-    if (val === '/speedtest') {
-      e.preventDefault(); clearInput();
-      if (!activeContact) { showToast(t('speedNeedConvo'), 'info'); return; }
-      const peer = peers[activeContact.pubB64];
-      if (!peer?.connected || !peer.dc || peer.dc.readyState !== 'open') {
-        showToast(t('speedNeedP2P'), 'error'); return;
-      }
-      showToast(t('speedRunning'), 'info');
-      const dc = peer.dc;
-      const PKT = 16384; // 16KB
-      const N = 64;      // 1MB total
-      const buf = new Uint8Array(PKT);
-      crypto.getRandomValues(buf);
-      const t0 = performance.now();
-      let sent = 0;
-      try {
-        for (let i = 0; i < N; i++) {
-          if (dc.bufferedAmount > CONFIG.DC_BUFFER_MAX) {
-            await new Promise(r => { const h = () => { dc.removeEventListener('bufferedamountlow', h); r(); }; dc.addEventListener('bufferedamountlow', h); setTimeout(r, MS.SEC * 3); });
-          }
-          dc.send(buf); sent += PKT;
-        }
-        if (dc.bufferedAmount > 0) await new Promise(r => { const h = () => { dc.removeEventListener('bufferedamountlow', h); r(); }; dc.addEventListener('bufferedamountlow', h); setTimeout(r, MS.SEC * 5); });
-        const sec = (performance.now() - t0) / 1000;
-        const mbps = ((sent * 8) / sec / 1e6).toFixed(2);
-        const rtt = peer._lastRtt || '?';
-        cmdOutput('cmd-panel-mono', [
-          '<b class="i-g">' + t('speedTestTitle') + '</b>', '',
-          t('speedTestSent', (sent/1024).toFixed(0), N, PKT/1024),
-          t('speedTestTime', sec.toFixed(2)),
-          '<b class="i-g">' + t('speedTestThroughput', mbps) + '</b>',
-          t('speedTestRTT', rtt),
-          t('speedTestChannel', dc.ordered ? t('speedTestOrdered') : t('speedTestUnordered')),
-        ].join('<br>'));
-        haptic.success();
-      } catch(err) { cmdOutput('cmd-panel-mono', '<b class="i-r">' + t('speedTestFailed') + '</b>: ' + esc(err.message)); }
-      return;
-    }
-
-    // v3.5 SPEC: /network — Connection health dashboard
-    if (val === '/network') {
-      e.preventDefault(); clearInput();
-      const lines = [];
-      lines.push('=== ' + t('netTitle') + ' ===');
-      lines.push('');
-
-      // Connection summary
-      const contactsList = await dbGetAll('contacts');
-      let p2pCount = 0, relayCount = 0, offlineCount = 0, reconnCount = 0;
-      for (const c of contactsList) {
-        const peer = peers[c.pubB64];
-        if (peer?.connected) {
-          p2pCount++;
-        } else if (peer?.connState === 'RECONNECTING') {
-          reconnCount++;
-        } else {
-          offlineCount++;
-        }
-      }
-      lines.push(t('netConnections', p2pCount, reconnCount, offlineCount));
-      lines.push('');
-
-      // Active peer stats
-      if (activeContact) {
-        const peer = peers[activeContact.pubB64];
-        if (peer?.pc) {
-          lines.push(t('netActivePeer', esc(activeContact.name)));
-          lines.push(t('netStateMachine', peer.connState || 'N/A', peer.stateTs ? Math.round((Date.now() - peer.stateTs)/1000) + 's' : ''));
-          lines.push(t('netICEState', peer.pc.iceConnectionState));
-          lines.push(t('netConnState', peer.pc.connectionState));
-          lines.push(t('netDataChannel', peer.dc?.readyState || 'none'));
-          try {
-            const stats = await peer.pc.getStats();
-            stats.forEach(s => {
-              if (s.type === 'candidate-pair' && s.state === 'succeeded') {
-                lines.push(t('netRTT', (s.currentRoundTripTime * 1000).toFixed(0)));
-                lines.push(t('netBytesSent', (s.bytesSent / 1024).toFixed(1)));
-                lines.push(t('netBytesReceived', (s.bytesReceived / 1024).toFixed(1)));
-                if (s.availableOutgoingBitrate) lines.push(t('netBandwidth', (s.availableOutgoingBitrate / 1024).toFixed(0)));
-              }
-              if (s.type === 'local-candidate') {
-                lines.push(t('netLocal', s.candidateType, s.protocol, s.address || '', s.port || ''));
-              }
-              if (s.type === 'remote-candidate') {
-                lines.push(t('netRemote', s.candidateType, s.protocol));
-              }
-            });
-          } catch(e) { lines.push(t('netStatsUnavail')); }
-        } else {
-          lines.push(t('netActivePeerOff', esc(activeContact.name)));
-        }
-      }
-      lines.push('');
-
-      // Config
-      lines.push(t('netConfig'));
-      lines.push(t('netICEPool', CONFIG.ICE_CANDIDATE_POOL_SIZE));
-      lines.push(t('netPoWDiff', CONFIG.POW_DIFFICULTY));
-      lines.push(t('netReconnect', CONFIG.RECONNECT_BASE_MS, CONFIG.RECONNECT_MAX_ATTEMPTS));
-      lines.push(t('netCompression', CONFIG.COMPRESS_MIN_BYTES));
-      lines.push(t('netProtocol', CONFIG.PROTOCOL_VERSION));
-      
-      if (_turnCredential) lines.push(t('netTURN'));
-
-      // Browser
-      lines.push('');
-      lines.push(t('netBrowser'));
-      lines.push(t(navigator.onLine ? 'netOnlineOn' : 'netOnlineOff'));
-      // NetworkInformation API (Spec v6 §12)
-      const conn = navigator.connection || navigator.mozConnection;
-      if (conn) {
-        lines.push(t('netConnectionInfo', conn.type || '?', conn.effectiveType || '?'));
-        if (conn.downlink) lines.push(t('netDownlink', conn.downlink));
-        if (conn.rtt) lines.push(t('netRTTEstimate', conn.rtt));
-        if (conn.saveData) lines.push(t('netSaveData'));
-      }
-      lines.push(t(typeof CompressionStream !== 'undefined' ? 'netCompressionStreamOn' : 'netCompressionStreamOff'));
-      lines.push(t(typeof RTCPeerConnection !== 'undefined' ? 'netWebRTCOn' : 'netWebRTCOff'));
-      lines.push(t('netReplayCache', _replayCache.size(), CONFIG.REPLAY_CACHE_SIZE));
-      if (navigator.storage?.estimate) {
-        try { const est = await navigator.storage.estimate(); lines.push(t('netStorage', (est.usage / 1024 / 1024).toFixed(1), (est.quota / 1024 / 1024).toFixed(0))); } catch(e) {}
-      }
-
-      cmdOutput('cmd-panel', '<pre>' + lines.map(l => esc(l)).join('\n') + '</pre>');
-      return;
-    }
-
     if (val === '/security') {
       e.preventDefault();
       clearInput();
@@ -13276,68 +12668,6 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.2: /uptime — Show app uptime
     // v3.3: /keyboard — Keyboard shortcuts reference
-    if (val === '/keyboard') {
-      e.preventDefault();
-      clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel';
-      const isMac = navigator.platform?.includes('Mac');
-      const mod = isMac ? '⌘' : 'Ctrl';
-      safeSetHTML(d, [
-        '<b class="i-g13">' + t('cmdKeyboardTitle') + '</b>',
-        '',
-        '<b>' + t('cmdSectionNavigation') + '</b>',
-        t('cmdKeyFocusSearch').replace('%s', mod),
-        t('cmdKeyChatSearch').replace('%s', mod),
-        t('cmdKeyNextUnread'),
-        t('cmdKeyNavContacts'),
-        t('cmdKeyOpenSend'),
-        t('cmdKeyEscape'),
-        '',
-        '<b>' + t('cmdSectionMessaging') + '</b>',
-        t('cmdKeySend'),
-        t('cmdKeyNewLine'),
-        t('cmdKeyMention'),
-        t('cmdKeyTab'),
-        '',
-        '<b>' + t('cmdSectionActions') + '</b>',
-        t('cmdKeyContext'),
-        t('cmdKeyReact'),
-        t('cmdKeySearchAll').replace('%s', mod),
-        '',
-        '<b>' + t('cmdKeyHelpLine') + '</b>',
-      ].join('<br>'));
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
-    }
-
-    if (val === '/uptime') {
-      e.preventDefault();
-      clearInput();
-      const upMs = Date.now() - _appStartTime;
-      const h = Math.floor(upMs / MS.HOUR);
-      const m = Math.floor((upMs % MS.HOUR) / MS.MIN);
-      const s = Math.floor((upMs % MS.MIN) / MS.SEC);
-      const p2p = Object.values(peers).filter(p => p.connected).length;
-      const totalPeers = Object.keys(peers).length;
-      const outbox = _retryQueue.length;
-      let persistQ = 0; for (const [, q] of _outbox) persistQ += q.length;
-      const lines = [
-        t('uptimeUptime', h, m, s),
-        t('uptimeP2P', p2p, totalPeers),
-        t(_serverOk ? 'uptimeServerOn' : 'uptimeServerOff'),
-        t(_isLeaderTab ? 'uptimeLeaderOn' : 'uptimeLeaderOff'),
-        t('uptimeOutbox', outbox, persistQ),
-        t('uptimeNetwork', navigator.onLine ? t('uptimeNetOn') : t('uptimeNetOff'), _effectiveType || '?'),
-        t('uptimeHeartbeats', Object.values(peers).filter(p => p._heartbeat).length),
-        t('uptimeAdaptive', Math.round(_adaptiveConfig.imageQuality * 100), (_adaptiveConfig.pollInterval/1000).toFixed(0)),
-        t('uptimeImage', _imgCompress === 'off' ? t('uptimeImageOff') : _imgCompress === 'lossless' ? t('uptimeImageLossless') : t('uptimeImageAuto')),
-        t('uptimeCrypto', _cryptoWorker ? t('uptimeCryptoWorker') : t('uptimeCryptoMain'), typeof trustedTypes !== 'undefined' ? '✓' : '✗'),
-      ];
-      cmdOutput('cmd-panel-mono', lines.join('<br>'));
-    }
-
-    // v3.3: /sound — Toggle notification sound
     if (val === '/sound') {
       e.preventDefault();
       clearInput();
@@ -13389,69 +12719,6 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     }
 
     // v3.3: /changelog — Version history
-    if (val === '/changelog') {
-      e.preventDefault();
-      clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel';
-      safeSetHTML(d, [
-        '<b class="i-g13">' + t('cmdChangelogTitle') + '</b>',
-        '',
-        '<b>v3.6.0 (' + t('cmdChangelogCurrent') + ')</b>',
-        'Dead Drop one-time secret sharing (/drop)',
-        'Inline Crypto Web Worker (AES-GCM offload)',
-        'Native &lt;dialog&gt; modals + Trusted Types',
-        'Real voice waveform (AnalyserNode FFT)',
-        'Markdown tables + theme smooth transition',
-        'Group typing indicator (multi-person)',
-        'P2P speed test (/speedtest)',
-        'OGP favicon + site name in link previews',
-        'Emoji frequency-weighted recent',
-        'getAllRecords reverse-read (Chrome 141+)',
-        'CSP + COOP + Permissions-Policy headers',
-        '',
-        '<b>v3.5.0</b>',
-        'iOS/Nintendo design system (Airy Joy)',
-        'Tauri desktop build (Rust ~5MB)',
-        'Platform CSS (iOS/Android/Desktop/PWA)',
-        'Haptic feedback (5 patterns)',
-        'Persistent drafts + unread separator',
-        'Pinch-to-zoom lightbox',
-        'Install banner (PWA/Desktop)',
-        '',
-        '<b>v3.3.0 (Protocol v4)</b>',
-        'Ed25519 message signing + verification',
-        'Post-Quantum ML-KEM readiness',
-        '@mention autocomplete + highlight',
-        'Adaptive polling (battery saver)',
-        'Background Sync for offline messages',
-        'WCAG 2.2 AA compliance',
-        '/security /lock /uptime /exportcsv /sound /changelog',
-        '',
-        '<b>v3.2.0 (Protocol v3)</b>',
-        'Contact search + sort + folders',
-        'Emoji reactions + polls',
-        'Scroll FAB + copy button + lightbox',
-        'Message retry queue + sendBeacon',
-        'Print CSS + IntersectionObserver',
-        '',
-        '<b>v3.0.0 (Protocol v3)</b>',
-        'Double Ratchet (Forward Secrecy)',
-        'X25519 key exchange',
-        'Sealed Sender + Safety Number',
-        'Sender Key O(1) groups',
-        '',
-        '<b>v2.0.0 (Protocol v2)</b>',
-        'Initial release',
-        'P2P WebRTC + relay messaging',
-        'Voice/video calls',
-        'Multi-account support',
-      ].join('<br>'));
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
-    }
-
-    // v3.3: /note — Set a private note on active contact
     if (val.startsWith('/note ')) {
       e.preventDefault();
       clearInput();
@@ -13910,67 +13177,6 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     }
 
     // v3.1: /stats — Global statistics
-    if (val === '/stats') {
-      e.preventDefault();
-      clearInput();
-      const allMsgs = await dbGetAll('messages');
-      const allContacts = await dbGetAll('contacts');
-      const totalSize = allMsgs.reduce((s, m) => s + (m.text?.length || 0) + (m.fileData?.length || 0), 0);
-      const groups = allContacts.filter(c => c.isGroup).length;
-      const blocked = allContacts.filter(c => c.blocked).length;
-      const archived = allContacts.filter(c => c.archived).length;
-      const muted = allContacts.filter(c => c.muted).length;
-      const bookmarked = allMsgs.filter(m => m.bookmarked).length;
-      const pinned = allMsgs.filter(m => m.pinned).length;
-      const myMsgs = allMsgs.filter(m => m.mine).length;
-      const theirMsgs = allMsgs.length - myMsgs;
-      // Storage estimate
-      let storageStr = '-';
-      if (navigator.storage?.estimate) { try { const e = await navigator.storage.estimate(); storageStr = (e.usage / 1024 / 1024).toFixed(1) + ' MB / ' + (e.quota / 1024 / 1024).toFixed(0) + ' MB'; } catch(e) {} }
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel-mono';
-      safeSetHTML(d, [
-        '<b class="i-g">' + t('statsTitle') + '</b>',
-        '',
-        '<b>' + t('statsMessages') + '</b>',
-        t('statsTotal') + ': ' + allMsgs.length + ' (' + myMsgs + ' ' + t('statsSent') + ', ' + theirMsgs + ' ' + t('statsReceived') + ')',
-        t('statsBookmarked') + ': ' + bookmarked,
-        t('statsPinned') + ': ' + pinned,
-        t('statsDataSize') + ': ~' + (totalSize / 1024).toFixed(0) + ' KB',
-        '',
-        '<b>' + t('statsContacts') + '</b>',
-        t('statsTotal') + ': ' + allContacts.length,
-        t('statsGroups') + ': ' + groups,
-        t('statsBlocked') + ': ' + blocked,
-        t('statsArchived') + ': ' + archived,
-        t('statsMuted') + ': ' + muted,
-        '',
-        '<b>' + t('statsStorage') + '</b>',
-        t('statsIndexedDB') + ': ' + storageStr,
-        t('statsVersion') + ': ' + CONFIG.VERSION,
-        t('statsCrypto') + ': ' + (_hasX25519 ? 'X25519' : 'P-256'),
-        '',
-        '<b>' + t('statsP2PConnections') + '</b>',
-        t('statsP2PActive', Object.values(peers).filter(p => p.connected).length, Object.keys(peers).length),
-        t('statsOutboxQueue', _retryQueue.length),
-        t('statsDataChannels', Object.values(peers).filter(p => p.dc?.readyState === 'open').length, Object.values(peers).filter(p => p.stateDC?.readyState === 'open').length),
-        '',
-        '<b>' + t('statsPerformance') + '</b>',
-        t('statsDOMMessages', document.querySelectorAll('.msg').length, CONFIG.MSG_DOM_LIMIT),
-        t('statsContactsRendered', document.querySelectorAll('.contact').length),
-        t('statsNetwork', _effectiveType, _networkType),
-        t(_cryptoWorker ? 'statsCryptoWorkerOn' : 'statsCryptoWorkerOff'),
-        t('statsUptime', Math.floor((Date.now() - _startTime) / MS.MIN)),
-        t('statsHeartbeats', Object.values(peers).filter(p => p._heartbeat).length),
-        t('statsOutboxPersistent', _outbox.size),
-        t(_serverOk ? 'statsSealedPollOn' : 'statsSealedPollOff'),
-        t('statsAdaptive', _adaptiveConfig.compressMin, _adaptiveConfig.pollInterval/1000, Math.round(_adaptiveConfig.imageQuality*100)),
-      ].join('<br>'));
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
-    }
-
-    // v3.1: /mute — Toggle mute for active contact
     if (val === '/mute') {
       e.preventDefault();
       clearInput();
