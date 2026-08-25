@@ -19,6 +19,9 @@
 //   5. COVERAGE        — ja is the founding locale and must stay 100%. Other locales must
 //                        cover >= 95% of CORE keys (everything except diagnostics-command
 //                        output and legal prose, which fall back to English by design).
+//   6. DEAD KEYS       — an English key nothing references is deleted, not translated. Without
+//                        this check 212 of them accumulated behind removed features, each one
+//                        an eternal translation obligation in 8 locales.
 // ============================================================================
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -110,6 +113,17 @@ for (const file of localeFiles) {
     problems.push(`${loc}: core coverage ${corePct}% is below the 95% floor`);
   }
 }
+
+// 6. DEAD KEYS — an English key that nothing in index.html references is pure rot: it costs a
+//    translation obligation in every locale forever and labels a feature that no longer exists.
+//    212 of them had accumulated behind deleted commands before this check existed, and the
+//    only reason anyone noticed was a manual first-principles inventory. Now it is mechanical.
+//    A key counts as referenced if its identifier appears anywhere in index.html besides its
+//    own definition line — t('k'), data-i18n="k", or a computed `const key = cond ? 'a' : 'b'`
+//    all leave the bare identifier in the source, so a single textual occurrence means dead.
+const KEY_RE = (k) => new RegExp('\\b' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'g');
+const deadKeys = refKeys.filter((k) => (html.match(KEY_RE(k)) || []).length <= 1);
+for (const k of deadKeys) problems.push(`EN."${k}": defined but never referenced (dead key — delete it)`);
 
 if (problems.length) {
   console.error(`i18n-check: FAIL — ${problems.length} problem(s)`);

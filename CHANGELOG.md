@@ -1,5 +1,21 @@
 # Changelog
 
+## Musk step 5 — automate: the rot that made step 2 necessary now fails CI (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+794 vitest + 24 Playwright E2E unchanged; `validate.sh` 38 → **39 checks**, `tools/i18n-check.mjs` gains check 6, `index.html` 13,689 → **13,634** lines, EN reference **924 → 642 keys**.
+
+The previous entry deleted 212 dead i18n keys and one unreachable function by hand. The real question is why a human had to find them: nothing in the toolchain could see dead weight, so it accumulated silently for as long as the project has existed. Deleting the rot without automating its detection just resets the clock.
+
+Two gates now do it mechanically:
+- **Dead i18n keys** (`i18n-check` check 6): an English key whose identifier appears only once in `index.html` — its own definition — is referenced by nothing and fails the build. Every form of real use leaves the bare identifier in the source (`t('k')`, `data-i18n="k"`, a computed `cond ? 'a' : 'b'`), so a single occurrence is proof of death, not a heuristic.
+- **Unreachable functions** (`validate.sh`): same test applied to `function` declarations in the deployed client.
+
+Turning them on immediately found **55 more dead keys that predated this session's deletions** — landing-page strings, toast messages, and status labels for UI that had been rewritten out from under them, each one still an obligation in 8 locale files. The English reference is now 642 keys, down from 924: **31% of the translation surface was labelling nothing at all.**
+
+Both gates were teeth-tested rather than assumed: a deliberately-planted unused key and an unreachable function each flip the build to BLOCKED, then the plants were removed. A gate nobody has watched fail is a gate nobody knows works.
+
+---
+
 ## Musk step 2 — delete: the developer-diagnostic command cluster is gone (branch claude/nice-ride-T6yb0, 2026-08-21)
 
 794 vitest + 24 Playwright E2E, both unchanged — nothing real was load-bearing on any of it. `index.html` **14,483 → 13,689 lines (−794)**, 69 slash commands → 58, 212 dead i18n keys removed across 8 locales.

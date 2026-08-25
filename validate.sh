@@ -123,8 +123,19 @@ echo "Gate 5: Performance"
 # Locale tables are pure data (no functions), key-complete, and their {0} placeholders and
 # CLDR plural categories line up across every locale. A missing key silently falls back to
 # English, so it is invisible at runtime — this is the only place it can be caught.
-if node tools/i18n-check.mjs >/dev/null 2>&1; then pass "i18n: locales complete + placeholders/plurals consistent" 4
-else fail "i18n: locale drift (run: node tools/i18n-check.mjs)" 4; fi
+if node tools/i18n-check.mjs >/dev/null 2>&1; then pass "i18n: locales complete, no dead keys, placeholders/plurals consistent" 4
+else fail "i18n: locale drift or dead keys (run: node tools/i18n-check.mjs)" 4; fi
+
+# Dead-code gate. Deleting a feature leaves its helper functions behind, and nothing noticed
+# until a manual inventory found them. A function defined in index.html whose name appears
+# exactly once (its own definition) is unreachable — delete it rather than carry it.
+DEADFN=$(node -e '
+const fs=require("fs");const h=fs.readFileSync("index.html","utf8");
+const fns=[...h.matchAll(/^\s*(?:async\s+)?function\s+([A-Za-z_][\w]*)\s*\(/gm)].map(m=>m[1]);
+const dead=[...new Set(fns)].filter(f=>(h.match(new RegExp("\\b"+f+"\\b","g"))||[]).length<=1);
+process.stdout.write(dead.join(" "));' 2>/dev/null)
+if [ -z "$DEADFN" ]; then pass "no unreachable functions in index.html" 3
+else fail "unreachable function(s) in index.html: $DEADFN" 3; fi
 
 # CSP script-src is hash-pinned (no 'unsafe-inline'), so the hash MUST track index.html.
 # A stale hash blocks the entire app in production and is invisible to the E2E harness, which
