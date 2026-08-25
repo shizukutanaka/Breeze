@@ -78,6 +78,17 @@ plaintext is a different threat model from one that cannot.
 
 ### Other known limitations
 
+- **Relay state has TTLs, and TTLs are a liveness property.** Device registries and group
+  records are refreshed on read (once per day per record) so state that is actively *used*
+  cannot expire underneath its users; prekey records self-heal — the client detects a 404 from
+  `/prekey/status` and re-registers, so a long-quiet identity becomes reachable again instead
+  of staying permanently unreachable to new contacts. Cloud backups are the deliberate
+  exception (see below): they expire on schedule and now say so.
+- **The sealed queue is a bounded, last-write-wins KV value.** Cloudflare KV offers no
+  transactions, so the queue's read-modify-write can lose an envelope if two senders write in
+  the same instant from different PoPs. Mitigations: content-keyed dedup, the client retry
+  queue, and the overflow confession (`dropped: n`) — but the sealed path is *best-effort
+  reliable*, not exactly-once. P2P delivery and re-send are the recovery paths.
 - **Metadata**: Sealed Sender **v2** hides the sender from the relay *cryptographically*:
   all sender-identifying fields (id, public key, display name, signature keys, the reply
   preview, multi-device markers — and the X3DH bootstrap header's initiator identity key,
@@ -115,6 +126,15 @@ plaintext is a different threat model from one that cannot.
   raise their own limit with one `localStorage.setItem`. This is noted so the limit is not
   mistaken for an enforced boundary; it is a nudge. Making it real would require the server to
   own a per-slot resource, which today it does not.
+- **Presence discloses online status, not identity.** A `/presence` check answers only
+  `online` plus protocol capabilities. It no longer returns the account's display name
+  (removed v3.7): the endpoint is unauthenticated, so anyone holding a 12-character user id
+  could read the chosen name of the person behind it. Online-status itself remains visible to
+  anyone who knows an id — reduce exposure by not sharing your id publicly.
+- **/group/info discloses the roster to invite-token holders.** Anyone presenting a valid
+  invite token can read the full member list (ids, public keys, names) without joining.
+  Treat an invite link as equivalent to the roster it opens; revoke by rotating the group.
+  Tightening this to members-only is tracked as future work.
 - **Post-quantum**: key exchange is classical (X25519) today; ML-KEM hybrid is detected but
   not yet deployed (browsers ship ML-KEM ~2027).
 - **Multi-device (Phase 1)**: a linked device is a full Breeze identity with its own ratchets;
@@ -133,6 +153,10 @@ plaintext is a different threat model from one that cannot.
   - **Secondary-device trust is anchored at link time**: `/linkto` pins the root's signing key
     obtained while physically holding both devices (same TOFU gesture as adding a contact by
     raw key), and the registry must already list the new device before it binds.
+  - **Cloud backups expire.** The relay keeps an uploaded backup for 90 days after its last
+    upload and nothing renews it. The upload response now carries `expiresAt` and the client
+    shows the date, because a safety net that quietly stopped existing is worse than no
+    safety net. Re-upload before the date to keep the recovery path alive.
   - **Backup restore is migration, not multi-device.** Restoring a backup clones the
     identity; running the original and the clone simultaneously forks every Double-Ratchet
     session and corrupts conversations — the exact failure `/link` exists to prevent. The

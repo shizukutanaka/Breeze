@@ -1177,7 +1177,7 @@ del.md-del { opacity: .6 }
           <label class="tool" data-i18n-title="ttAttach">📎<input type="file" id="msg-file" class="hidden" data-i18n-aria="ttAttach"></label>
           <button id="b-msg-voice" class="tool" data-i18n-aria="ariaVoice" aria-pressed="false">🎤</button>
           <button id="b-msg-stt" class="tool hidden" data-i18n-aria="ariaDict" aria-pressed="false">🗣</button>
-          <textarea id="msg-input" data-i18n-ph="msgPlaceholder" data-i18n-aria="ariaMessage" maxlength="4096" rows="1" enterkeyhint="send"></textarea>
+          <textarea id="msg-input" dir="auto" data-i18n-ph="msgPlaceholder" data-i18n-aria="ariaMessage" maxlength="4096" rows="1" enterkeyhint="send"></textarea>
           <span id="msg-char-count" class="char-count hidden"></span>
           <button id="b-msg-emoji" class="tool" data-i18n-aria="ttEmoji" data-i18n-title="ttEmoji" aria-expanded="false" aria-haspopup="dialog">😀</button>
           <button class="send" id="b-msg-send" data-i18n-aria="send">↑</button>
@@ -1282,8 +1282,6 @@ const CONFIG = {
   POW_DIFFICULTY: 20,               // leading zero bits for PoW token
   POW_REQUIRED_ACTIONS: ['alias/set', 'group/create', 'group/join'], // actions requiring PoW
   // v3.5: Spec — Session auto-rekey threshold
-  REKEY_MSG_THRESHOLD: 500,         // rekey after N messages
-  REKEY_TIME_MS: 3600000,           // rekey after 1 hour
   // v3.5: Spec — WebRTC reconnect backoff
   RECONNECT_BASE_MS: 1000,          // initial reconnect delay
   RECONNECT_MAX_MS: 60000,          // max reconnect delay
@@ -1431,6 +1429,7 @@ const _I = {
     peerRelayHeld: 'Message held by peer relay — will deliver when online.',
     peerRelayDelivered: 'Peer relay delivered.',
     backupCreated: 'Backup complete! Remember your passphrase.',
+    backupCreatedUntil: 'Backup complete! Remember your passphrase. The relay keeps it until {0} — re-upload before then.',
     backupFailed: 'Backup failed',
     backupRestored: 'Restore complete! Reloading.',
     backupWrongPass: 'Wrong passphrase or corrupted backup.',
@@ -1927,12 +1926,9 @@ const _I = {
     netLocal: "  Local: {0} ({1}) {2}:{3}",
     netRemote: "  Remote: {0} ({1})",
     netStatsUnavail: '  Stats: unavailable',
-    netSessionMsgs: "  Session msgs: {0} / {1}",
-    netSessionAge: "  Session age: {0}m / {1}m",
     netConfig: 'Config:',
     netICEPool: "  ICE pool: {0}",
     netPoWDiff: "  PoW difficulty: {0} bits",
-    netRekey: "  Rekey threshold: {0} msgs / {1}m",
     netReconnect: "  Reconnect: {0}ms base, {1} max attempts",
     netCompression: "  Compression: > {0} bytes",
     netProtocol: "  Protocol: v{0}",
@@ -2282,21 +2278,38 @@ const _I = {
 // Locales with a full translation file in locales/ (LINE's core markets + world reach).
 // Everything else falls back to lang.js's 25 core strings, then English.
 const FULL_LOCALES = ['ja', 'ko', 'zh-TW', 'es', 'th', 'id', 'pt-BR'];
-const LANG = (() => {
+// Re-derivable on purpose: lang.js (the 924-language core table) is loaded with `async`, so
+// the very first call almost always runs BEFORE window._LANG_DATA exists — a `const` computed
+// once could never see it, and the 924-language claim silently degraded to English for every
+// language outside FULL_LOCALES (Socratic worldwide lens). detectLang() is re-run when lang.js
+// finishes loading, and applyI18n() (idempotent) re-paints the static DOM.
+function detectLang() {
   const nav = (navigator.language || 'en');
   const lower = nav.toLowerCase();
   // exact region match first (zh-TW vs zh-CN matters), then base language
   const exact = FULL_LOCALES.find(l => l.toLowerCase() === lower);
   if (exact) return exact;
-  const base = lower.split('-')[0];
+  const parts = lower.split('-');
+  const base = parts[0];
+  // Traditional Chinese by SCRIPT or REGION subtag, before the base-language fallback: real
+  // browsers send zh-Hant-TW / zh-Hant-HK / zh-HK, none of which an exact-string test caught,
+  // so Traditional-Chinese users were served the Simplified core strings.
+  if (base === 'zh') {
+    if (parts.includes('hant') || parts.includes('tw') || parts.includes('hk') || parts.includes('mo')) return 'zh-TW';
+  }
   const baseHit = FULL_LOCALES.find(l => l.toLowerCase() === base);
   if (baseHit) return baseHit;
-  // Traditional-Chinese regions map to zh-TW; other zh stays on the lang.js core strings
-  if (lower === 'zh-hk' || lower === 'zh-mo' || lower === 'zh-hant') return 'zh-TW';
   if (window._LANG_DATA?.[lower]) return lower;
   if (window._LANG_DATA?.[base]) return base;
   return 'en';
-})();
+}
+let LANG = detectLang();
+// Right-to-left scripts: the app previously set dir only on message bubbles, so the whole
+// chrome (contact list, headers, input bar) stayed LTR for Arabic/Hebrew/Persian/Urdu readers.
+const RTL_LANGS = ['ar', 'he', 'fa', 'ur', 'ps', 'sd', 'ckb', 'dv', 'yi'];
+function applyDir() {
+  try { document.documentElement.dir = RTL_LANGS.includes(LANG.split('-')[0]) ? 'rtl' : 'ltr'; } catch {}
+}
 function t(key, ...args) {
   // Priority: full locale → English fallback → lang.js core strings → the key itself.
   let v = _I[LANG]?.[key] ?? _I.en?.[key] ?? window._LANG_DATA?.[LANG]?.[key] ?? key;
@@ -2320,7 +2333,16 @@ function applyI18n() {
   document.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
   document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
 }
+applyDir();
 applyI18n();
+// lang.js is async: when it lands, re-derive LANG (it may now resolve to one of the 924 core
+// languages) and re-paint. Both calls are idempotent, so the no-op case costs nothing.
+(() => {
+  const tag = document.querySelector('script[src="lang.js"]');
+  const reapply = () => { const next = detectLang(); if (next !== LANG) { LANG = next; applyDir(); } applyI18n(); };
+  if (window._LANG_DATA) reapply();
+  else if (tag) tag.addEventListener('load', reapply, { once: true });
+})();
 // Non-English locales load as DATA from locales/<lang>.json (same-origin fetch, sw-cached).
 // English stays inline as the reference and fallback, so the UI is never blank while the file
 // is in flight; on arrival the static DOM re-applies. Dynamic UI naturally uses the merged
@@ -3515,20 +3537,6 @@ async function isBlockedMagicBytes(file) {
   } catch {}
   return false;
 }
-// v3.5 SPEC: Session rekey tracking — triggers rekey after REKEY_MSG_THRESHOLD msgs or REKEY_TIME_MS.
-const _sessionMsgCounters = {}; // peerId → { count, startTime }
-function shouldRekey(peerId) {
-  const c = _sessionMsgCounters[peerId];
-  if (!c) { _sessionMsgCounters[peerId] = { count: 1, startTime: Date.now() }; return false; }
-  c.count++;
-  if (c.count >= CONFIG.REKEY_MSG_THRESHOLD) return true;
-  if (Date.now() - c.startTime > CONFIG.REKEY_TIME_MS) return true;
-  return false;
-}
-function resetRekeyCounter(peerId) {
-  _sessionMsgCounters[peerId] = { count: 0, startTime: Date.now() };
-}
-
 // v3.5 SPEC: Client-side send rate limiter (token bucket) — prevents flooding the network.
 const _rateLimiter = {
   tokens: 30,        // max burst
@@ -5002,7 +5010,30 @@ async function initMessenger(dbName) {
   }
 
   // --- Encrypt with Double Ratchet ---
-  async function encryptFor(text, peerPubB64, frank) {
+  // Per-peer session lock. The Double Ratchet session is a read-modify-write record
+  // (getSession -> advance chain -> saveSession); multi-device fan-out fires concurrent
+  // encryptFor calls at the same peer, and two racers that both read chain counter N emit
+  // TWO messages under the SAME message key — the receiver drops the second as a replay
+  // and the copy is silently lost (Socratic concurrency lens). One promise-chain per peer
+  // serializes every encrypt AND decrypt touching that session. Failures release the lock.
+  // The in-tab promise chain alone is not enough: the session lives in SHARED IndexedDB, so
+  // a second TAB has its own Map and can interleave with this one. navigator.locks makes the
+  // critical section cross-tab (same-origin, auto-released if a tab dies); the promise chain
+  // stays as the inner guard and as the fallback where Web Locks is unavailable.
+  const _peerLocks = new Map();
+  function _withPeerLock(peerId, fn) {
+    const prev = _peerLocks.get(peerId) || Promise.resolve();
+    const guarded = (typeof navigator !== 'undefined' && navigator.locks)
+      ? () => navigator.locks.request('breeze-sess:' + peerId, fn).catch(fn)
+      : fn;
+    const next = prev.then(guarded, guarded);
+    _peerLocks.set(peerId, next.then(() => {}, () => {}));
+    return next;
+  }
+  function encryptFor(text, peerPubB64, frank) {
+    return _withPeerLock((peerPubB64 || '').slice(0, 12), () => _encryptForRaw(text, peerPubB64, frank));
+  }
+  async function _encryptForRaw(text, peerPubB64, frank) {
     try {  
       const peerId = peerPubB64.slice(0, 12);
       let sess = await getSession(peerId);
@@ -5062,7 +5093,10 @@ async function initMessenger(dbName) {
   // Track decrypt failures per peer for auto-reset
   const _decryptFailures = {};
 
-  async function decryptFrom(payload, peerPubB64, frank) {
+  function decryptFrom(payload, peerPubB64, frank) {
+    return _withPeerLock((peerPubB64 || '').slice(0, 12), () => _decryptFromRaw(payload, peerPubB64, frank));
+  }
+  async function _decryptFromRaw(payload, peerPubB64, frank) {
     try {
       const peerId = peerPubB64.slice(0, 12);
       let sess = await getSession(peerId);
@@ -5405,6 +5439,31 @@ async function initMessenger(dbName) {
       _sealCapsCache.set(peerId, { ok, ts: Date.now() });
       return ok;
     } catch { return false; }
+  }
+
+  // Multi-device fan-out for FILES and voice notes. sendMessage() got this in v3.7 but the
+  // attachment paths did not, so on a linked account a photo reached only the contact's
+  // primary device and never self-synced to your own laptop — the feature quietly covered
+  // text only (Socratic test-gap lens). Same shape as the text fan-out: fire-and-forget, the
+  // contact's registry devices plus my own siblings, each re-encrypted under its own ratchet.
+  async function _fanOutAttachment(snapContact, filePlain, ts) {
+    try {
+      if (!snapContact?.pubB64) return;
+      const acct = await dbGet('identity', 'account').catch(() => null);
+      const acctRoot = (acct?.root && acct.root !== myPubB64) ? acct.root : undefined;
+      for (const devPub of await _devicesFor(snapContact)) {
+        if (devPub === snapContact.pubB64) continue;
+        const enc = await encryptFor(filePlain, devPub);
+        if (enc) await relaySend(devPub.slice(0, 12), { to: devPub.slice(0, 12), from: myId,
+          fromPub: myPubB64, fromName: myName, payload: enc, ts, isFile: true, acctRoot }, devPub);
+      }
+      for (const devPub of await _myOtherDevices()) {
+        const enc = await encryptFor(filePlain, devPub);
+        if (enc) await relaySend(devPub.slice(0, 12), { to: devPub.slice(0, 12), from: myId,
+          fromPub: myPubB64, fromName: myName, payload: enc, ts, isFile: true,
+          selfSync: true, sfFor: snapContact.id, sfPub: snapContact.pubB64, sfName: snapContact.name }, devPub);
+      }
+    } catch(e) { _dbg(e, 'attachment-fanout'); }
   }
 
   async function relaySend(to, payload, sealPub) {
@@ -7707,16 +7766,17 @@ async function initMessenger(dbName) {
       if (peer?.connected && peer.dc?.readyState === 'open') {
         await waitForBuffer(peer.dc); // v3.5 SPEC: Backpressure
         peer.dc.send(JSON.stringify(envelope));
-        // v3.5 SPEC: Session rekey check — force DH ratchet after threshold
-        if (activeContact.pubB64 && shouldRekey(activeContact.pubB64)) {
-          _dbg(null, 'Session rekey triggered for ' + activeContact.id);
-          resetRekeyCounter(activeContact.pubB64);
-          // Force new ratchet step by generating fresh ephemeral
-          if (typeof dhRatchetStep === 'function') {
-            try { await dhRatchetStep(activeContact.pubB64); } catch(e) { _dbg(e, 'rekey'); }
-          }
-          auditLog('crypto', 'Session rekeyed: ' + activeContact.id);
-        }
+        // REMOVED (Socratic concurrency lens): a "forced session rekey after 500 msgs / 1 h"
+        // block used to sit here. It called dhRatchetStep(activeContact.pubB64) — a base64
+        // STRING — where the signature is (sess, peerPubRaw), so it threw on every single
+        // invocation, was swallowed by its own catch, and then wrote `auditLog('crypto',
+        // 'Session rekeyed')`: a security audit entry asserting something that never once
+        // happened. A false audit trail is worse than a missing feature, so the block is gone
+        // and SPEC.md now states the honest status. Forward secrecy is unaffected — the KDF
+        // chain re-keys every message and a real DH step runs whenever the peer's ratchet key
+        // changes (dhRatchetStep in decryptFrom). A UNILATERAL sender-side step is not a safe
+        // drop-in: it also re-derives recvChainKey/recvCounter, which the peer would not
+        // mirror, breaking in-flight messages. Deliberately not "fixed" in place.
       } else {
         // v3.5 SPEC: Queue to outbox for later delivery when peer reconnects
         if (activeContact.pubB64) {
@@ -7907,6 +7967,7 @@ async function initMessenger(dbName) {
       const encrypted = await encryptFor(fileMsg, activeContact.pubB64);
       if (!encrypted) { _dbg(null, 'encrypt failed'); return; }
       await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts, isFile: true }, activeContact.pubB64);
+      _fanOutAttachment(activeContact, fileMsg, ts);
     
     } catch(_e) { _dbg(_e, '_sendFile'); }
   }
@@ -8182,6 +8243,7 @@ async function initMessenger(dbName) {
               activeContact.lastMsg = text; activeContact.lastMsgAt = ts;
               await dbPut('contacts', activeContact);
               await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts, isFile: true }, activeContact.pubB64);
+              _fanOutAttachment(activeContact, filePayload, ts);
               appendMsg(text, true, ts, null, filePayload, { msgId: genMsgId() });
               renderContacts();
               haptic.success();
@@ -9089,16 +9151,22 @@ async function initMessenger(dbName) {
     if (!API || Date.now() - _lastPreKeyCheck < MS.MIN * 5) return;
     _lastPreKeyCheck = Date.now();
     try {
-      // Check if we have enough OTP keys on server
-      const resp = await postAPIRaw('/prekey/fetch', { userId: myId });
-      if (!resp.ok) return;
-      const bundle = await resp.json();
-      // If no oneTimePreKey returned, server is out — upload more
-      if (!bundle.oneTimePreKey) {
+      // Ask /prekey/status, not /prekey/fetch: fetch CONSUMES a one-time prekey (that is its
+      // job — handing one to a new contact), so self-checking with it burned our own OTPs.
+      // status is the purpose-built read: it reports otpCount/replenishOTP/replenishSPK and
+      // touches no OTP entry (Socratic lifecycle lens).
+      const resp = await postAPIRaw('/prekey/status', { userId: myId });
+      // 404 = the record itself EXPIRED (relay TTL) — the one lapse the old code could never
+      // recover from: it returned on !ok, so a 30-day-quiet identity stayed permanently
+      // unreachable to every new contact. Re-upload is exactly the cure.
+      const expired = resp && resp.status === 404;
+      const st = (resp && resp.ok) ? await resp.json().catch(() => null) : null;
+      if (!expired && !st) return; // network/other error: try again next cycle
+      if (expired || st.replenishOTP || st.replenishSPK) {
         const freshBundle = await generatePreKeyBundle();
         const upResp = await postAPIRaw('/prekey/upload', { userId: myId, identityKey: myPubB64, ...freshBundle });
         if (!upResp?.ok) { _lastPreKeyCheck = Date.now() - MS.MIN * 4; return; } // retry in ~1 min
-        _dbg(null, 'PreKeys replenished: ' + freshBundle.oneTimePreKeys.length + ' OTPs');
+        _dbg(null, (expired ? 'PreKey record had EXPIRED — re-registered: ' : 'PreKeys replenished: ') + freshBundle.oneTimePreKeys.length + ' OTPs');
       }
     } catch(e) { _lastPreKeyCheck = Date.now() - MS.MIN * 4; _dbg(e, 'prekey-replenish'); } // retry in ~1 min on network error
   }
@@ -9244,6 +9312,23 @@ async function initMessenger(dbName) {
         // holds locally — so its later edit/delete signals find this copy.
         const syncId = msg.from + ':' + msg.ts;
         if (await dbGet('messages', syncId)) return; // dedup
+        // Attachments self-sync too: mirror the 1:1 isFile store shape so the copy renders as
+        // a real file bubble on this device rather than a wall of base64.
+        if (msg.isFile) {
+          let fileName = 'file';
+          try {
+            const fp = JSON.parse(syncText);
+            if (typeof fp.data === 'string' && fp.data.length > 350000) return; // same cap as the 1:1 path
+            if (typeof fp.name === 'string') fileName = fp.name.slice(0, 255);
+          } catch { return; }
+          const fileText = '📎 ' + fileName;
+          await dbPut('messages', { msgId: syncId, contactId: target.id, text: fileText, mine: true, ts: msg.ts, fileData: syncText, synced: true });
+          target.lastMsg = fileText.slice(0, 40); target.lastMsgAt = msg.ts;
+          await dbPut('contacts', target);
+          if (activeContact?.id === target.id) appendMsg(fileText, true, msg.ts, null, syncText, { synced: true });
+          renderContacts();
+          return;
+        }
         await dbPut('messages', { msgId: syncId, contactId: target.id, text: syncText, mine: true, ts: msg.ts, synced: true });
         target.lastMsg = syncText.slice(0, 40); target.lastMsgAt = msg.ts;
         await dbPut('contacts', target);
@@ -10096,7 +10181,10 @@ async function initMessenger(dbName) {
         // the catastrophe /link exists to prevent; restore is for MIGRATION, not multi-device).
         let inst = await dbGet('identity', 'inst').catch(() => null);
         if (!inst?.v) { inst = { v: Array.from(crypto.getRandomValues(new Uint8Array(8)), b => b.toString(16).padStart(2, '0')).join('') }; await dbPut('identity', inst, 'inst'); }
-        const resp = await postAPIRaw('/presence', { id: myId, pub: myPubB64, name: myName, inst: inst.v });
+        // Sign the instance id: the relay only honours a SIGNED inst, so a stranger cannot
+        // POST a fake one for our id and manufacture a clone warning on our screen.
+        const instSig = await signMessage(`breeze-inst:${myId}:${inst.v}`);
+        const resp = await postAPIRaw('/presence', { id: myId, pub: myPubB64, name: myName, inst: inst.v, instSig });
         const data = resp?.ok ? await resp.json().catch(() => null) : null;
         if (data?.conflict && Date.now() - _cloneWarnedAt > 5 * MS.MIN) {
           _cloneWarnedAt = Date.now();
@@ -10667,7 +10755,16 @@ async function initMessenger(dbName) {
         const upSig = await signMessage(`breeze-backup-upload:${myId}:${upTs}`);
         if (upSig) upBody.sig = upSig;
         const resp = await postAPIRaw('/backup/upload', upBody);
-        if (resp.ok) showToast(t('backupCreated'), 'success');
+        if (resp.ok) {
+          // Surface the retention deadline the relay just told us: a cloud backup is deleted
+          // 90 days after its last upload and nothing renews it, so "I have a backup" quietly
+          // stops being true. Say the date instead of letting the user find out on the day
+          // they actually need it.
+          const info = await resp.json().catch(() => null);
+          showToast(info?.expiresAt
+            ? t('backupCreatedUntil', new Date(info.expiresAt).toLocaleDateString())
+            : t('backupCreated'), 'success');
+        }
         else showToast(t('backupFailed'), 'error');
       }
     } catch(e) { _dbg(e, 'backup'); showToast(t('backupFailed') + ': ' + e.message, 'error'); }
@@ -12925,12 +13022,6 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
               }
             });
           } catch(e) { lines.push(t('netStatsUnavail')); }
-          // Rekey counter
-          const rc = _sessionMsgCounters[activeContact.pubB64];
-          if (rc) {
-            lines.push(t('netSessionMsgs', rc.count, CONFIG.REKEY_MSG_THRESHOLD));
-            lines.push(t('netSessionAge', Math.round((Date.now() - rc.startTime) / MS.MIN), Math.round(CONFIG.REKEY_TIME_MS / MS.MIN)));
-          }
         } else {
           lines.push(t('netActivePeerOff', esc(activeContact.name)));
         }
@@ -12941,7 +13032,6 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       lines.push(t('netConfig'));
       lines.push(t('netICEPool', CONFIG.ICE_CANDIDATE_POOL_SIZE));
       lines.push(t('netPoWDiff', CONFIG.POW_DIFFICULTY));
-      lines.push(t('netRekey', CONFIG.REKEY_MSG_THRESHOLD, CONFIG.REKEY_TIME_MS / MS.MIN));
       lines.push(t('netReconnect', CONFIG.RECONNECT_BASE_MS, CONFIG.RECONNECT_MAX_ATTEMPTS));
       lines.push(t('netCompression', CONFIG.COMPRESS_MIN_BYTES));
       lines.push(t('netProtocol', CONFIG.PROTOCOL_VERSION));

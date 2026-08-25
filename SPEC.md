@@ -67,7 +67,10 @@ Breeze is a serverless, end-to-end encrypted P2P messenger deployed as a single 
 - **Identity Key Pair**: X25519 (or P-256), generated on first setup, stored in IDB `identity` store
 - **Signed PreKey (SPK)**: Uploaded to server, rotated periodically
 - **One-Time PreKeys (OTP)**: 10 keys generated, auto-replenished when < 5 remain
-- **Session Rekey**: After 500 messages OR 1 hour (CONFIG.REKEY_MSG_THRESHOLD / REKEY_TIME_MS)
+- **Session Rekey**: *not implemented* (removed v3.7). A threshold-based forced rekey shipped
+  as dead code — it called `dhRatchetStep` with the wrong arguments, threw on every call, and
+  still wrote a "Session rekeyed" audit entry. Forward secrecy comes from the per-message KDF
+  chain plus the real DH step that runs whenever the peer's ratchet key changes.
 - **Ratchet Keys**: Per-message ephemeral keys via Double Ratchet
 - **Group Sender Key**: Per-group, per-member, epoch-based rotation
 
@@ -208,8 +211,7 @@ TOAST_DURATION_MS: 2000       BANNER_HIDE_MS: 2000
 FADE_OUT_MS: 300              DEBOUNCE_MS: 800
 DISAPPEAR_CHECK_MS: 30000     SMART_REPLY_HIDE_MS: 30000
 CLEANUP_INTERVAL_MS: 3600000  AUTO_BACKUP_MS: 86400000
-POW_DIFFICULTY: 16            REKEY_MSG_THRESHOLD: 500
-REKEY_TIME_MS: 3600000        RECONNECT_BASE_MS: 1000
+POW_DIFFICULTY: 16            RECONNECT_BASE_MS: 1000
 RECONNECT_MAX_MS: 60000       RECONNECT_MAX_ATTEMPTS: 8
 COMPRESS_MIN_BYTES: 256
 ```
@@ -479,7 +481,7 @@ Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline';
 | Safety number | ✓ Implemented | /verify command |
 | TURN relay | ✓ Implemented | NAT traversal |
 | Proof-of-Work | ✓ Implemented | 16-bit hashcash |
-| Session auto-rekey | ✓ Implemented | 500 msgs / 1 hour |
+| Session auto-rekey | ✗ Removed (v3.7) | shipped as dead code + false audit entry; per-message KDF chain + peer-driven DH step provide FS |
 | Connection state machine | ✓ Implemented | 7 transitions |
 | Connection health monitor | ✓ Implemented | 15s RTT/bandwidth |
 | DataChannel backpressure | ✓ Implemented | 256 KB buffer max |

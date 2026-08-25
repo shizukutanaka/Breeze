@@ -587,16 +587,22 @@ async function handlePresence(body, env, request) {
     // v3.6: Check in-memory cache first (same isolate = instant, no KV read)
     if (!globalThis._presenceCache) globalThis._presenceCache = new Map();
     const memData = globalThis._presenceCache.get(`presence:${id}:data`);
+    // NOTE: `name` is deliberately NOT returned. This endpoint is unauthenticated, so any
+    // party holding only a 12-char user id could read that account's chosen DISPLAY NAME —
+    // a PII disclosure to strangers that no contact relationship gated and no user could
+    // refuse (Socratic metadata lens). `caps` stays: it is protocol capability data the N3
+    // negotiation needs, and it says nothing about the person. The batch path never leaked
+    // the name either, and no client code consumed it.
     if (memData) {
       const p = safeJsonParse(memData);
       if (!p) return json({ online: false }, 200, request);
-      return json({ online: (Date.now() - p.at) < 60000, name: p.name, caps: p.caps }, 200, request);
+      return json({ online: (Date.now() - p.at) < 60000, caps: p.caps }, 200, request);
     }
     const data = await kvGet(env, `presence:${id}`);
     if (!data) return json({ online: false }, 200, request);
     const p = safeJsonParse(data);
     if (!p) return json({ online: false }, 200, request);
-    return json({ online: (Date.now() - p.at) < 60000, name: p.name, caps: p.caps }, 200, request);
+    return json({ online: (Date.now() - p.at) < 60000, caps: p.caps }, 200, request);
   }
 
   // Store presence heartbeat
@@ -636,7 +642,20 @@ async function handlePresence(body, env, request) {
   // a Double-Ratchet-fork hazard the client warns the user about. Best-effort: the previous
   // record may live in another isolate's memory or a ≤5-min-stale KV entry, so a miss is
   // possible; a hit is always real (inst is compared only within the same identity).
-  const safeInst = typeof body.inst === 'string' ? body.inst.slice(0, 32) : undefined;
+  // The inst must be SIGNED by the identity that owns this id. Presence writes are otherwise
+  // unauthenticated (PRESENCE_REQUIRE_AUTH is off by default), so an unsigned inst let any
+  // stranger POST a random inst for someone else's id and make that user see a scary
+  // "your identity is running on two devices" warning on demand — a spoofable security alarm
+  // trains users to ignore the real one (Socratic crypto-edge lens). Unsigned or
+  // badly-signed insts are ignored entirely: no conflict raised, nothing stored.
+  let safeInst = typeof body.inst === 'string' ? body.inst.slice(0, 32) : undefined;
+  if (safeInst) {
+    const instSig = typeof body.instSig === 'string' ? body.instSig.slice(0, 200) : '';
+    const pk = safeJsonParse(await kvGet(env, `prekey:${id}`) || 'null');
+    const ok = instSig && pk?.edIdentityKey
+      && await verifyEd25519(pk.edIdentityKey, utf8ToB64(`breeze-inst:${id}:${safeInst}`), instSig);
+    if (!ok) safeInst = undefined;
+  }
   let conflict = false;
   if (safeInst) {
     let prevRaw = globalThis._presenceCache.get(presKey + ':data');
@@ -888,6 +907,22 @@ async function handleDeviceList(body, env, request) {
   if (!raw) return json({ devices: null }, 200, request);
   const rec = safeJsonParse(raw);
   if (!rec) return json({ devices: null }, 200, request);
+  // Touch-on-read: the registry is only ever WRITTEN by /link and /unlink, so an account
+  // that simply keeps messaging would hit the 3-month KV TTL and silently drop back to
+  // single-device — the promise dies of old age (Socratic lifecycle lens). An ACTIVE
+  // account's registry is read constantly (every sender, every 5 min), so refreshing the
+  // TTL on read keeps it alive exactly as long as anyone still uses it. Throttled to one
+  // rewrite per account per day per isolate.
+  if (!globalThis._devTouch) globalThis._devTouch = new Map();
+  const lastTouch = globalThis._devTouch.get(accountId) || 0;
+  if (Date.now() - lastTouch > 86400000) {
+    globalThis._devTouch.set(accountId, Date.now());
+    if (globalThis._devTouch.size > 2000) {
+      const entries = [...globalThis._devTouch.entries()];
+      globalThis._devTouch = new Map(entries.slice(-1000));
+    }
+    await kvPut(env, `devices:${accountId}`, raw, { expirationTtl: TTL.MONTH * 3 });
+  }
   // Include the root's registered Ed25519 key so a LINKING device can TOFU-pin it in the same
   // gesture that carries the root pub out-of-band. Established clients ignore this field and
   // verify against the signing key they already pinned from message signatures — never against
@@ -1062,6 +1097,19 @@ async function handleGroupInfo(body, env, request) {
 
   const group = safeJsonParse(data);
   if (!group) return json({ error: 'Not found', code: 'NOT_FOUND' }, 404, request);
+  // Touch-on-read (same pattern and reasoning as handleDeviceList): `grp:` is written ONLY by
+  // membership mutations — create/join/kick/admin/rename/leave — each with a 1-month TTL. A
+  // stable group that simply keeps chatting never mutates its roster, so after 30 quiet days
+  // the record evaporated and every invite link, roster and moderation state went with it
+  // (Socratic lifecycle lens). Reads keep an in-use group alive; throttled to 1/day/group.
+  if (!globalThis._grpTouch) globalThis._grpTouch = new Map();
+  if (Date.now() - (globalThis._grpTouch.get(token) || 0) > 86400000) {
+    globalThis._grpTouch.set(token, Date.now());
+    if (globalThis._grpTouch.size > 2000) {
+      globalThis._grpTouch = new Map([...globalThis._grpTouch.entries()].slice(-1000));
+    }
+    await kvPut(env, `grp:${token}`, data, { expirationTtl: TTL.MONTH });
+  }
   // Expose creatorId + admins so clients can render moderation badges and gate the
   // kick/admin UI to the right members (the server still re-authorizes every action).
   return json({
@@ -2423,7 +2471,12 @@ async function handleBackupUpload(body, env, request) {
   if (backup.length > 5 * 1024 * 1024) return json({ error: 'Backup too large', code: 'PAYLOAD_TOO_LARGE' }, 413, request);
   const backupSaved = await kvPut(env, `backup:${userId}`, backup, { expirationTtl: TTL.QUARTER }); // 90 day retention
   if (!backupSaved) return json({ error: 'Failed to store backup', code: 'STORE_FAILED' }, 500, request);
-  return json({ ok: true, size: backup.length, authenticated: hasSig }, 200, request);
+  // Tell the client WHEN this backup dies. The relay deletes it 90 days after the last
+  // upload and nothing refreshes it, so a user who "made a backup" a year ago has no backup
+  // — while SECURITY.md tells multi-device users a backup is their recovery path for root
+  // loss. Silent expiry of a safety net is the failure users can least afford to discover
+  // late (Socratic lifecycle lens); disclosure is the honest minimum.
+  return json({ ok: true, size: backup.length, authenticated: hasSig, expiresAt: Date.now() + TTL.QUARTER * 1000 }, 200, request);
 }
 
 async function handleBackupDownload(body, env, request) {

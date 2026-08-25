@@ -3764,32 +3764,79 @@ describe('presence heartbeat and check', () => {
     expect(r.status).toBe(200);
     const j = await r.json();
     expect(j.online).toBe(true);
-    expect(j.name).toBe('Bob');
+    // The display name is deliberately NOT returned (v3.7): this endpoint is unauthenticated,
+    // so returning it handed any holder of a 12-char id the account's real name.
+    expect(j.name).toBeUndefined();
   });
 
   // Socratic round: restoring a backup on a second browser while the original stays active
   // runs ONE identity on TWO installs — a Double-Ratchet-fork hazard. The heartbeat's
-  // per-install `inst` id lets the relay notice and warn.
+  // per-install `inst` id lets the relay notice and warn. The inst must be SIGNED by the
+  // identity, or anyone could manufacture that warning on a stranger's screen.
+  const b64 = (u8) => Buffer.from(u8).toString('base64');
+  async function instSigner(env, id) {
+    const kp = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const raw = new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey));
+    await env.KV.put(`prekey:${id}`, JSON.stringify({ edIdentityKey: b64(raw) }));
+    return async (inst) => b64(new Uint8Array(await crypto.subtle.sign(
+      { name: 'Ed25519' }, kp.privateKey, new TextEncoder().encode(`breeze-inst:${id}:${inst}`))));
+  }
+  const beat = (e, id, inst, instSig) => handlePresence({ id, pub: 'p', name: 'X', inst, instSig }, e, req({}));
+
   it('flags a conflict when the SAME identity heartbeats from two different installs', async () => {
     const e = makeEnv();
-    const first = await (await handlePresence({ id: 'cloneuser1', pub: 'p', name: 'A', inst: 'aaaa1111' }, e, req({}))).json();
+    const sign = await instSigner(e, 'cloneuser1');
+    const first = await (await beat(e, 'cloneuser1', 'aaaa1111', await sign('aaaa1111'))).json();
     expect(first.conflict).toBeUndefined();
-    const second = await (await handlePresence({ id: 'cloneuser1', pub: 'p', name: 'A', inst: 'bbbb2222' }, e, req({}))).json();
+    const second = await (await beat(e, 'cloneuser1', 'bbbb2222', await sign('bbbb2222'))).json();
     expect(second.conflict).toBe(true);
   });
 
   it('the same install heartbeating repeatedly is never flagged', async () => {
     const e = makeEnv();
-    await handlePresence({ id: 'cloneuser2', pub: 'p', name: 'B', inst: 'cccc3333' }, e, req({}));
-    const again = await (await handlePresence({ id: 'cloneuser2', pub: 'p', name: 'B', inst: 'cccc3333' }, e, req({}))).json();
+    const sign = await instSigner(e, 'cloneuser2');
+    const sig = await sign('cccc3333');
+    await beat(e, 'cloneuser2', 'cccc3333', sig);
+    const again = await (await beat(e, 'cloneuser2', 'cccc3333', sig)).json();
     expect(again.conflict).toBeUndefined();
   });
 
   it('legacy clients without inst are never flagged (backward compat)', async () => {
     const e = makeEnv();
+    const sign = await instSigner(e, 'cloneuser3');
     await handlePresence({ id: 'cloneuser3', pub: 'p', name: 'C' }, e, req({}));
-    const again = await (await handlePresence({ id: 'cloneuser3', pub: 'p', name: 'C', inst: 'dddd4444' }, e, req({}))).json();
+    const again = await (await beat(e, 'cloneuser3', 'dddd4444', await sign('dddd4444'))).json();
     expect(again.conflict).toBeUndefined(); // previous record had no inst — nothing to compare
+  });
+
+  // An UNSIGNED (or wrongly-signed) inst must be ignored outright: presence writes are
+  // unauthenticated by default, so honouring one would let any stranger raise a fake
+  // "your identity is cloned" alarm on someone else's screen — and a spoofable security
+  // warning teaches users to ignore the real one.
+  it('ignores an inst with no signature (no conflict can be manufactured)', async () => {
+    const e = makeEnv();
+    const sign = await instSigner(e, 'clonespoof');
+    await beat(e, 'clonespoof', 'realinst1', await sign('realinst1'));
+    const spoof = await (await handlePresence({ id: 'clonespoof', pub: 'p', name: 'X', inst: 'evilinst9' }, e, req({}))).json();
+    expect(spoof.conflict).toBeUndefined();
+  });
+
+  it('ignores an inst carrying a forged signature', async () => {
+    const e = makeEnv();
+    const sign = await instSigner(e, 'clonefrgd');
+    await beat(e, 'clonefrgd', 'realinst2', await sign('realinst2'));
+    const forged = await (await beat(e, 'clonefrgd', 'evilinstX', b64(new Uint8Array(64)))).json();
+    expect(forged.conflict).toBeUndefined();
+  });
+
+  // Socratic metadata lens: the unauthenticated single-check used to hand the account's
+  // chosen DISPLAY NAME to anyone holding a 12-char id.
+  it('single presence check never discloses the display name', async () => {
+    const e = makeEnv();
+    await handlePresence({ id: 'privacyusr', pub: 'p', name: 'Real Human Name' }, e, req({}));
+    const j = await (await handlePresence({ id: 'privacyusr', check: true }, e, req({}))).json();
+    expect(j.online).toBe(true);
+    expect(j.name).toBeUndefined();
   });
 
   it('round-trips advertised capabilities (N3 negotiation before bundle fetch)', async () => {
@@ -4962,5 +5009,21 @@ describe('device registry (/api/device/set + /api/device/list)', () => {
   it('list returns { devices: null } for an unregistered account (fail-open to single-device)', async () => {
     const res = await handleDeviceList({ accountId: 'nosuchacct01' }, makeEnv(), rq());
     expect((await res.json()).devices).toBeNull();
+  });
+
+  // Socratic lifecycle round: the registry KV entry has a 3-month TTL and only /link and
+  // /unlink ever wrote it — an account that just kept MESSAGING would silently lose
+  // multi-device at the TTL. Reads must refresh the TTL (throttled to one rewrite per day).
+  it('list TOUCHES the registry TTL on read, throttled to once per day', async () => {
+    const env = makeEnv();
+    globalThis._devTouch = new Map(); // isolate throttle state from other tests
+    env.KV.store.set('devices:touchacct01', JSON.stringify({ root: 'R', devices: [{ pub: 'R' }], ts: 1, sig: 's' }));
+    let puts = 0;
+    const origPut = env.KV.put.bind(env.KV);
+    env.KV.put = async (k, v, o) => { if (k === 'devices:touchacct01') puts++; return origPut(k, v, o); };
+    await handleDeviceList({ accountId: 'touchacct01' }, env, rq());
+    expect(puts).toBe(1); // first read refreshes the TTL...
+    await handleDeviceList({ accountId: 'touchacct01' }, env, rq());
+    expect(puts).toBe(1); // ...and the next read inside the throttle window does not
   });
 });

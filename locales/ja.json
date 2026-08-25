@@ -553,12 +553,9 @@
  "netLocal": "  ローカル: {0} ({1}) {2}:{3}",
  "netRemote": "  リモート: {0} ({1})",
  "netStatsUnavail": "  統計: 利用不可",
- "netSessionMsgs": "  セッションメッセージ: {0} / {1}",
- "netSessionAge": "  セッション経過時間: {0}分 / {1}分",
  "netConfig": "設定:",
  "netICEPool": "  ICEプール: {0}",
  "netPoWDiff": "  PoW難易度: {0} ビット",
- "netRekey": "  再鍵更新: {0}件 / {1}分",
  "netReconnect": "  再接続: {0}ms ベース, {1}回最大",
  "netCompression": "  圧縮: > {0} バイト",
  "netProtocol": "  プロトコル: v{0}",
@@ -921,5 +918,6 @@
  "toastIdentityClone": "このidentityは別の端末でも稼働中です。両方で使うと会話が壊れます — 片方を停止するか、/link でデバイスをリンクしてください。",
  "devUnlinkedNotice": "この端末はアカウントから削除されました — アカウント宛のメッセージは届かなくなります。以後は独立したidentityとして動作します。",
  "devListTitle": "アカウントのデバイス",
- "devThis": "このデバイス"
+ "devThis": "このデバイス",
+ "backupCreatedUntil": "バックアップ完了! パスフレーズを忘れないでください。中継サーバーの保持期限は {0} です — それまでに再アップロードしてください。"
 }

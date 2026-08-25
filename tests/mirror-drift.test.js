@@ -780,7 +780,8 @@ describe('franking mirror (I17) — inline _frankCommit vs franking.js', () => {
 
   it('the deployed client derives Kf rather than transmitting it (no opening on the wire)', () => {
     expect(html).toContain("'breeze-frank'");
-    const enc = html.slice(html.indexOf('async function encryptFor'), html.indexOf('async function decryptFrom'));
+    // _encryptForRaw/_decryptFromRaw: the lock wrappers renamed the bodies (per-peer session lock).
+    const enc = html.slice(html.indexOf('async function _encryptForRaw'), html.indexOf('async function _decryptFromRaw'));
     expect(enc).toContain('...(fi ? { fi } : {})');
   });
 });
@@ -992,6 +993,24 @@ describe('Bare-IK session bootstrap — inline encryptFor/decryptFrom convergenc
     const D = makeSessionDevice(dave.keys, dave.pubB64);
     const wire = await D.encryptFor('dave speaks first', carol.pubB64);
     expect(await C.decryptFrom(wire, dave.pubB64)).toBe('dave speaks first');
+  });
+
+  it('CONCURRENT sends to one peer never reuse a chain counter (per-peer session lock)', async () => {
+    // Multi-device fan-out fires overlapping encryptFor calls at the same peer. Without the
+    // per-peer lock, two racers read the same chain state and emit two messages under the
+    // SAME key/counter — the receiver drops the second as a replay and it is silently lost.
+    const alice = await genSessionIdentity();
+    const bob = await genSessionIdentity();
+    const A = makeSessionDevice(alice.keys, alice.pubB64);
+    const B = makeSessionDevice(bob.keys, bob.pubB64);
+    const wires = await Promise.all(
+      Array.from({ length: 5 }, (_, i) => A.encryptFor('burst ' + i, bob.pubB64)),
+    );
+    const counters = wires.map((w) => { const o = JSON.parse(w); return o.t === 'pkm' ? JSON.parse(o.msg).c : o.c; });
+    expect(new Set(counters).size).toBe(5); // all distinct — no key reuse
+    for (let i = 0; i < 5; i++) {
+      expect(await B.decryptFrom(wires[i], alice.pubB64)).toBe('burst ' + i);
+    }
   });
 
   it('survives several back-and-forth turns after first contact (ratchet keeps converging)', async () => {
