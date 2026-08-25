@@ -1619,6 +1619,50 @@ describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
     expect(fetch2.status).toBe(404);
   });
 
+  // The relay has no reverse index from a user to their @alias or their groups, so a wipe
+  // that omits them leaves the alias squatting forever and the account readable in every
+  // group roster for the full 30-day TTL. The Worker built the release path and documented
+  // the dependency; the client shipped without honouring it. These pin the contract.
+  it('releases the @alias and leaves every group the wipe request names', async () => {
+    const env = makeEnv();
+    const userId = 'wipefull1';
+    const { ed } = await registeredAccount(env, userId);
+    const bundle = JSON.parse(await env.KV.get(`prekey:${userId}`));
+    await env.KV.put('alias:wipeme', JSON.stringify({ pub: bundle.identityKey }));
+    await env.KV.put('grp:tokmember', JSON.stringify({
+      creatorId: 'someoneelse', epoch: 3,
+      members: [{ id: 'someoneelse', pub: 'x' }, { id: userId, pub: 'y', name: 'Wiped' }],
+    }));
+    await env.KV.put('grp:tokcreator', JSON.stringify({
+      creatorId: userId, epoch: 1, members: [{ id: userId, pub: 'y' }, { id: 'other', pub: 'z' }],
+    }));
+    const ts = Date.now();
+    const res = await handleAccountDelete(
+      { userId, ts, sig: await signDelete(ed, userId, ts), alias: 'wipeme', groups: ['tokmember', 'tokcreator'] },
+      env, req({}));
+    const j = await res.json();
+    expect(j.aliasDeleted).toBe(true);
+    expect(await env.KV.get('alias:wipeme')).toBeNull();
+    // Member group: removed from the roster, epoch bumped so they cannot read new traffic.
+    const left = JSON.parse(await env.KV.get('grp:tokmember'));
+    expect(left.members.some((m) => m.id === userId)).toBe(false);
+    expect(left.epoch).toBe(4);
+    // Group they created: deleted outright — a creator-less group is unmoderatable.
+    expect(await env.KV.get('grp:tokcreator')).toBeNull();
+  });
+
+  it('refuses to release an alias that belongs to someone else (squat guard)', async () => {
+    const env = makeEnv();
+    const userId = 'wipesquat';
+    const { ed } = await registeredAccount(env, userId);
+    await env.KV.put('alias:victim', JSON.stringify({ pub: 'SOMEONE-ELSES-IDENTITY-KEY' }));
+    const ts = Date.now();
+    const res = await handleAccountDelete(
+      { userId, ts, sig: await signDelete(ed, userId, ts), alias: 'victim' }, env, req({}));
+    expect((await res.json()).aliasDeleted).toBe(false);
+    expect(await env.KV.get('alias:victim')).not.toBeNull();
+  });
+
   // Item 38: the reverse cust:{customerId} -> userId mapping must also be erased, or the
   // payment-identity linkage (and a webhook resolution path to the deleted account)
   // survives deletion. The handler reads slots:{userId}.customerId before deleting slots.

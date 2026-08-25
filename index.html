@@ -12144,7 +12144,18 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         try {
           const delTs = Date.now();
           const delSig = await signMessage(`breeze-account-delete:${myId}:${delTs}`);
-          if (delSig) await postAPIRaw('/account/delete', { userId: myId, ts: delTs, sig: delSig });
+          // Hand the relay the two things it CANNOT derive on its own. handleAccountDelete
+          // erases everything keyed by userId, but there is no reverse index from a user to
+          // their @alias or their groups — so a "full wipe" that omits them left the alias
+          // squatting on the relay forever (unreclaimable, still resolving to a dead key) and
+          // the wiped account's id/pub/name readable in every group roster it had joined for
+          // the whole 30-day group TTL. The server documented this dependency and the client
+          // never honoured it: a delete-everything promise the code did not keep.
+          const wipeGroups = (await dbGetAll('contacts').catch(() => []))
+            .filter((g) => g?.isGroup && typeof g.joinToken === 'string' && g.joinToken)
+            .map((g) => g.joinToken).slice(0, 50);
+          if (delSig) await postAPIRaw('/account/delete', { userId: myId, ts: delTs, sig: delSig,
+            ...(myAlias ? { alias: myAlias } : {}), ...(wipeGroups.length ? { groups: wipeGroups } : {}) });
         } catch(e) { _dbg(e); }
         // Belt-and-suspenders: unsubscribe push explicitly so notifications can't
         // arrive on this device for a wiped account even if /account/delete failed.

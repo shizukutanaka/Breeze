@@ -1,5 +1,21 @@
 # Changelog
 
+## Completion pass — the delete-everything promise the code did not keep (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+796 vitest (+2) + 24 Playwright E2E; `index.html` (+12), `docs/PRODUCT-ANALYSIS.md` corrected against reality.
+
+With the algorithm's five steps run once, the question became: what stops this being a *finished* product rather than a well-audited one? The roadmap's top open item was "client-side wiring" — server endpoints built but never called. Verifying it rather than trusting it found the list two-thirds stale, and the remaining third worse than described.
+
+**Stale:** `/wipe` already called `/api/account/delete` with a signature, and group leave/delete was already wired — invisible to a naive grep only because the client builds the path dynamically (`'/group/' + gAction`). **Not a gap:** `src/crypto/*` "integration" is the architecture, not a TODO — the deployed artifact is single-file and dependency-free by design, with those modules as tested references guarded by mirror-drift.
+
+**Real, and worse than the roadmap said:** the wipe request sent `{ userId, ts, sig }` and nothing else. The relay erases everything keyed by userId, but it has **no reverse index from a user to their @alias or their groups** — so a "full wipe" left the alias squatting on the relay permanently (unreclaimable, still resolving to a dead key) and left the wiped account's id, public key and display name readable in every group roster it had joined, for the full 30-day group TTL. The Worker had built the release path *and written a comment stating this exact dependency*; the client simply never honoured it. A delete-everything button that does not delete everything is the same class of falsehood as the audit entry for a rekey that never ran.
+
+Fixed: the wipe now hands over the alias and every stored group token (capped at 50, matching the server's own bound). Two tests pin the contract — a member group loses the member and bumps its epoch, a group they created is deleted outright, and an alias belonging to *someone else* is refused rather than released (the squat guard, which would otherwise let a wipe free a third party's handle).
+
+The roadmap entry is rewritten to say what is actually true, including the lesson that produced this pass: **building an endpoint is not shipping a feature — the caller has to keep the promise.**
+
+---
+
 ## Musk steps 3+4 — simplify, then accelerate (branch claude/nice-ride-T6yb0, 2026-08-21)
 
 794 vitest + 24 Playwright E2E, all green; `index.html` 13,634 → **13,610** lines. Two cycle times cut: the product's and the developer's.
