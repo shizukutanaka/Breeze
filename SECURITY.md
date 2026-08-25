@@ -103,6 +103,12 @@ plaintext is a different threat model from one that cannot.
   path, and the offline retry queue still use legacy envelopes and remain sender-visible.
   The relay still sees recipient, timing, and message size (padded to 256 B boundaries);
   cover traffic / onion routing are deferred (see SPEC §12).
+- **Read-receipt timing.** A receipt fired the instant a conversation opens is a precise
+  timestamp of when a specific person looked at their phone, and correlating those against
+  sends is a known de-anonymisation route against sealed-sender systems (NDSS'21). `/quiet N`
+  holds receipts for N seconds with ±20% jitter, so the signal an observer gets is blurred.
+  The stronger setting remains "hide read receipts" (send none at all); the delay is the
+  middle option for people who want to keep the courtesy without the precision.
 - **Symmetric franking (I17)** proves a reported ciphertext was genuinely sent, but under
   Sealed Sender it does not cryptographically bind *which* sender sent it — a malicious
   reporter cannot forge a report, but sender-binding needs asymmetric franking / Hecate

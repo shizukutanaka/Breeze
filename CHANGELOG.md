@@ -1,5 +1,24 @@
 # Changelog
 
+## 静かなメッセンジャー — the app asks less of you (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+796 vitest + **27** Playwright E2E (+3, new `tests/e2e/quiet.spec.js`); `index.html` 13,621 → **13,736** lines, EN 642 → 660 keys, **all 18 new strings translated into all 7 locales** (no English-only feature in a product that claims to be worldwide).
+
+Checking the LINE-complaints list against the code first: **10 of 14 were already done** — no ads, bloat deleted, E2E, PC/phone parity via multi-device, no account creation at all (the key *is* the identity, so email/QR/Passkey are all unnecessary), single-file speed, original-quality photo send (`_imgCompress` already has `off`/`lossless`), scheduled send, expiring messages, backup/restore. What remained was the part the source document itself calls the concept: **reducing the obligation the app imposes**. That is also the one thing LINE structurally cannot copy, because its business model is engagement.
+
+Four features, all client-side, all invisible to the relay, all backward-compatible:
+
+- **返信不要マーク (no reply needed).** The sender states in the message itself that no answer is owed; the recipient gets it in full but it **raises no unread badge and rings nothing**. The obligation is removed at its source instead of managed afterwards. One-shot by design — it resets after sending, so it can never quietly mute a thread. The flag rides inside the sealed-v2 meta block, so the relay cannot see which messages are low-pressure either.
+- **遅延既読 (`/quiet N`).** Read receipts are held N seconds instead of firing the instant the chat opens — the moment that turns "I saw it" into "why haven't you replied". Walking away during the delay cancels it: you never claim to have read something you didn't. **The UX fix and a privacy fix turned out to be the same change**: instant receipts are a precise timestamp of when a named person picked up their phone, a known de-anonymisation route against sealed-sender systems (NDSS'21), so the ±20% jitter closes a roadmap item that had been open for months.
+- **集中モード (`/focus 60 [all]`).** Time-boxed quiet with a live banner (tap to end, survives reload). Unread counts keep accruing — **focus hides the interruption, never the information**. Without `all`, VIPs and @mentions still get through.
+- **重要度判定 — and it is not AI.** The source document asks for "AIが優先順位を判定". What the job actually needs is a *rule*: an @mention of you, or a contact you marked VIP (the exact inverse of mute, and the only input the rule takes). It runs entirely on-device. This product deleted server-side AI precisely because it sent plaintext off the device; calling a local heuristic "AI" would be the same class of claim as an audit log for a rekey that never ran.
+
+**Deliberately not built**, with reasons rather than silence: a *reply-later list* (bookmarks already are one — a second list would be duplicated machinery); *timezone-aware send* (the recipient's timezone is new metadata about where someone lives, which an E2E messenger should not invent — `/schedule` already lets the sender choose); *cloud AI summaries/minutes/secretary* (incompatible with E2E; on-device browser AI is Chrome-only today, which would make "worldwide" untrue).
+
+Also **not adopted, and why**: the proposed Flutter/Rust/PostgreSQL/Matrix stack is a rewrite that discards a working crypto core, and Flutter's purpose is store distribution — which contradicts the project's own "no store distribution" constraint. A sticker marketplace contradicts "no stickers". And "make chat no longer the centre / Intent Graph / Goal Dashboard" is a new product, not an improvement to this one; the single portable insight from those chapters — *notifications are a design that takes human attention, so only what matters should reach the human* — is exactly what shipped above.
+
+---
+
 ## Completion pass — the delete-everything promise the code did not keep (branch claude/nice-ride-T6yb0, 2026-08-21)
 
 796 vitest (+2) + 24 Playwright E2E; `index.html` (+12), `docs/PRODUCT-ANALYSIS.md` corrected against reality.

@@ -516,6 +516,9 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .i-pad68 { padding: 6px 8px }
 .i-overflow-h { overflow: hidden }
 .i-muted { color: var(--t2) }
+.focus-bar { background: var(--gl); color: var(--g); cursor: pointer }
+#b-msg-nrn.nrn-on { background: var(--gl); color: var(--g); border-color: var(--g) }
+.msg-nrn { font-size: 10px; color: var(--t3); margin-left: 6px; opacity: .8 }
 .i-mt6 { margin-top: 6px }
 .i-fs10 { font-size: 10px }
 .nudge-icon { font-size: 32px; margin-bottom: 12px }
@@ -1157,6 +1160,7 @@ del.md-del { opacity: .6 }
           <button class="btn btn-o btn-sm hidden" id="b-msg-clear" data-i18n-aria="ariaClearChat" data-i18n-title="ariaClearChat">🗑</button>
         </div>
         <div class="offline-bar" id="offline-bar" role="alert"></div>
+        <div class="offline-bar focus-bar" id="focus-bar" role="status"></div>
         <div class="outbox-badge" id="outbox-badge" role="status"><span class="dot"></span><span id="outbox-text"></span></div>
         <div class="search-bar" id="search-bar">
           <input id="search-chat-input" placeholder="Search..." data-i18n-ph="searchPh" data-i18n-aria="ariaSearchChat" autocomplete="off" enterkeyhint="search">
@@ -1180,6 +1184,7 @@ del.md-del { opacity: .6 }
           <textarea id="msg-input" dir="auto" data-i18n-ph="msgPlaceholder" data-i18n-aria="ariaMessage" maxlength="4096" rows="1" enterkeyhint="send"></textarea>
           <span id="msg-char-count" class="char-count hidden"></span>
           <button id="b-msg-emoji" class="tool" data-i18n-aria="ttEmoji" data-i18n-title="ttEmoji" aria-expanded="false" aria-haspopup="dialog">😀</button>
+          <button class="btn btn-o btn-sm" id="b-msg-nrn" data-i18n-aria="nrnAria" data-i18n-title="nrnAria">🕊</button>
           <button class="send" id="b-msg-send" data-i18n-aria="send">↑</button>
         </div>
       </div>
@@ -1651,6 +1656,24 @@ const _I = {
     devSetFail: "Failed to update the device list",
     toastMsgsDropped: "{0} message(s) may have been lost while you were offline (relay queue overflowed)",
     toastIdentityClone: "This identity is ALSO active on another device. Using both will corrupt your conversations — retire one, or link devices with /link instead.",
+    nrnAria: 'Mark this message as needing no reply',
+    nrnBadge: 'no reply needed',
+    nrnOn: 'Next message: no reply needed',
+    nrnOff: 'Next message: normal',
+    focusOn: 'Focus mode on for {0} min — VIPs and mentions still get through',
+    focusOnStrict: 'Focus mode on for {0} min — everything silenced',
+    focusOff: 'Focus mode off',
+    focusIdle: 'Focus mode is off. Use /focus 60 for an hour of quiet.',
+    focusRemaining: 'Focus mode: {0} min remaining',
+    focusBar: '🌙 Focus — {0} min left (tap to end)',
+    focusBarStrict: '🌙 Focus, all silenced — {0} min left (tap to end)',
+    vipOn: 'Mark as VIP',
+    vipOff: 'Remove VIP',
+    vipSet: '{0} will reach you during focus mode',
+    vipCleared: '{0} is no longer a VIP',
+    quietSet: 'Read receipts held for {0}s',
+    quietOff: 'Read receipts sent immediately',
+    quietState: 'Read-receipt delay: {0}s (use /quiet 30, or /quiet off)',
     devUnlinkedNotice: "This device was removed from the account — it no longer receives the account's messages. It now works as a standalone identity.",
     devListTitle: "Account devices",
     devThis: "this device",
@@ -4129,6 +4152,11 @@ async function initMessenger(dbName) {
     retentionDays: 0,        // 0 = forever, 7/30/90/365
     wallpaper: '',           // chat background color
     language: 'auto',        // auto | en | ja
+    // "Quiet messenger" settings — the app's job is to reduce the obligation it imposes,
+    // not to maximise engagement. All three are local-only; nothing reaches the relay.
+    readReceiptDelay: 0,     // seconds to hold a read receipt (0 = send immediately)
+    focusUntil: 0,           // epoch ms; while in the future, notifications are suppressed
+    focusStrict: false,      // focus mode: true = silence everything, false = let VIPs through
   };
   let _settings = { ..._defaultSettings };
 
@@ -4159,6 +4187,53 @@ async function initMessenger(dbName) {
       if (_settings.wallpaper) localStorage.setItem('brz-wallpaper', _settings.wallpaper);
       else localStorage.removeItem('brz-wallpaper');
     } catch(e) { _dbg(e, 'save-settings'); }
+  }
+
+  // Focus banner: the mode must be visible while it holds, or a user who forgot they enabled
+  // it will read silence as "nobody messaged me". Clicking it ends focus immediately.
+  let _focusTimer = null;
+  let _readTimer = null; // pending delayed read receipt (see openConversation)
+  let _noReplyNeeded = false; // one-shot: marks the NEXT message as needing no reply
+  function _updateNrnButton() {
+    const b = _DOM.get('b-msg-nrn');
+    if (b) b.classList.toggle('nrn-on', _noReplyNeeded);
+  }
+  function _updateFocusBanner() {
+    const bar = _DOM.get('focus-bar');
+    if (!bar) return;
+    if (_focusTimer) { clearTimeout(_focusTimer); _focusTimer = null; }
+    if (!_focusActive()) { bar.classList.remove('active'); bar.textContent = ''; return; }
+    bar.textContent = t(_settings.focusStrict ? 'focusBarStrict' : 'focusBar', _focusRemainingMin());
+    bar.classList.add('active'); // .offline-bar is display:none until .active (shared convention)
+    bar.onclick = async () => { _settings.focusUntil = 0; _settings.focusStrict = false; await saveSettings(); _updateFocusBanner(); showToast(t('focusOff'), 'info'); };
+    // Re-render every minute so the countdown is honest, and self-clear on expiry.
+    _focusTimer = setTimeout(_updateFocusBanner, MS.MIN);
+  }
+
+  // ═══ Quiet messenger: one decision point for "should this interrupt the human?" ═══
+  // The premise, from the product's own first principles: a messenger's job is to carry a
+  // message, not to manufacture obligation. Focus mode suppresses the interruption while
+  // still accruing the unread badge — information is never withheld, only the demand for
+  // your attention. Importance is judged ENTIRELY on-device: an @mention of you, or a
+  // contact you marked VIP. It is a RULE, not an AI. This product deleted server-side AI
+  // because it sent plaintext off the device; dressing a heuristic up as intelligence would
+  // be the same kind of claim the code cannot keep.
+  function _focusActive() { return (_settings.focusUntil || 0) > Date.now(); }
+  function _focusRemainingMin() { return Math.max(0, Math.ceil(((_settings.focusUntil || 0) - Date.now()) / MS.MIN)); }
+  function _isImportant(contact, text) {
+    if (contact?.vip) return true;
+    const s = String(text || '');
+    if (myName && s.includes('@' + myName)) return true;
+    if (myAlias && s.includes('@' + myAlias)) return true;
+    return false;
+  }
+  // true = ring + OS notification. Muting a contact is an explicit instruction and always
+  // wins; outside focus mode behaviour is exactly what it was before (no regression).
+  function _shouldAlert(contact, text) {
+    if (contact?.muted) return false;
+    if (!_focusActive()) return true;
+    if (_settings.focusStrict) return false;
+    return _isImportant(contact, text);
   }
 
   // v3.3: ENTERPRISE — MESSAGE RETENTION POLICY
@@ -5541,6 +5616,7 @@ async function initMessenger(dbName) {
     initSigning(); // v3.3: Ed25519 message signing
     // v3.3: Enterprise features
     await loadSettings();
+    _updateFocusBanner(); // focus mode survives a reload — show it, or silence looks like "no messages"
     await _loadRetryQueue(); // v3.6: Restore pending messages from IDB
 
     // v3.6: Prune stale Double Ratchet sessions (contacts deleted but sessions remain)
@@ -6102,10 +6178,14 @@ async function initMessenger(dbName) {
         const blockLabel = c.blocked ? t('unblockContact') : t('blockContact');
         const muteLabel = c.muted ? t('unmuteContact') : t('muteContact');
         const archiveLabel = c.archived ? t('unarchived') : t('archived');
+        // VIP = "this person still reaches me in focus mode". The inverse of mute, and the
+        // only input the local importance rule takes from the user.
+        const vipLabel = c.vip ? t('vipOff') : t('vipOn');
         const menuItems = c.isGroup ? [
           { label: t('rename'), action: 'rename' },
           { label: pinLabel, action: 'pin' },
           { label: muteLabel, action: 'mute' },
+          { label: vipLabel, action: 'vip' },
           { label: archiveLabel, action: 'archive' },
           { label: t('labelContact'), action: 'label' },
           ...(c.unread > 0 ? [{ label: t('markRead'), action: 'markread' }] : []),
@@ -6116,6 +6196,7 @@ async function initMessenger(dbName) {
           { label: t('safetyNumber'), action: 'safety' },
           { label: pinLabel, action: 'pin' },
           { label: muteLabel, action: 'mute' },
+          { label: vipLabel, action: 'vip' },
           { label: archiveLabel, action: 'archive' },
           { label: blockLabel, action: 'block' },
           { label: t('labelContact'), action: 'label' },
@@ -6178,8 +6259,15 @@ async function initMessenger(dbName) {
           if (c.blocked && peers[c.pubB64]) { if (peers[c.pubB64]._healthTimer) clearInterval(peers[c.pubB64]._healthTimer); peers[c.pubB64].pc?.close(); delete peers[c.pubB64]; }
           if (c.blocked && c.pubB64) { _outbox.delete(c.pubB64); _persistOutbox(); }
           renderContacts();
+        } else if (action === 'vip') {
+          c.vip = !c.vip;
+          if (c.vip) c.muted = false; // VIP and mute are opposites — holding both is incoherent
+          await dbPut('contacts', c);
+          showToast(t(c.vip ? 'vipSet' : 'vipCleared', c.name), 'info');
+          renderContacts();
         } else if (action === 'mute') {
           c.muted = !c.muted;
+          if (c.muted) c.vip = false;
           await dbPut('contacts', c);
           renderContacts();
         } else if (action === 'label') {
@@ -6433,17 +6521,34 @@ async function initMessenger(dbName) {
       }
     }
 
-    // Send read receipt (1:1 only, respects privacy setting)
+    // Send read receipt (1:1 only, respects privacy setting).
+    // DELAYED by design when `readReceiptDelay` is set: firing the instant a conversation
+    // opens is what turns "I saw it" into "why haven't you answered yet" — the obligation
+    // this product exists to remove. The delay also blunts read-receipt TIMING analysis
+    // (NDSS'21): an observer correlating open-times against sends learns much less from a
+    // jittered receipt, so the UX fix and the privacy fix are the same change. ±20% jitter
+    // keeps the delay from being a fingerprint of its own.
+    if (_readTimer) { clearTimeout(_readTimer); _readTimer = null; }
     if (!contact.isGroup && !_privacyHideReadReceipts) {
-      const peer = peers[contact.pubB64];
-      if (peer?.connected && peer.dc?.readyState === 'open') {
-        // v3.6: Use unreliable state channel for read receipts
-        const rsc = peer.stateDC?.readyState === 'open' ? peer.stateDC : peer.dc;
-        rsc.send(JSON.stringify({ type: 'read', sender: myId, ts: Date.now() }));
-      }
-      if (API) {
-        _signal(_dmRoom(contact.id), 'read', String(Date.now()));
-      }
+      const snap = contact;
+      const fire = () => {
+        _readTimer = null;
+        // Only claim "read" if this is still the open conversation: walking away during the
+        // delay means the message was never really read.
+        if (activeContact?.id !== snap.id) return;
+        const peer = peers[snap.pubB64];
+        if (peer?.connected && peer.dc?.readyState === 'open') {
+          // v3.6: Use unreliable state channel for read receipts
+          const rsc = peer.stateDC?.readyState === 'open' ? peer.stateDC : peer.dc;
+          rsc.send(JSON.stringify({ type: 'read', sender: myId, ts: Date.now() }));
+        }
+        if (API) {
+          _signal(_dmRoom(snap.id), 'read', String(Date.now()));
+        }
+      };
+      const base = (_settings.readReceiptDelay || 0) * MS.SEC;
+      if (base > 0) _readTimer = setTimeout(fire, Math.round(base * (0.8 + Math.random() * 0.4)));
+      else fire();
       if (_lastReadTs[contact.id]) showReadReceipt(contact.id, _lastReadTs[contact.id]);
     }
   }
@@ -6551,6 +6656,7 @@ async function initMessenger(dbName) {
     if (meta.deleted) { safeSetHTML(d, '<span class="msg-deleted">' + t('deleted') + '</span>'); box.appendChild(d); return; }
     if (meta.pinned) d.classList.add('msg-pinned');
     if (meta.bookmarked) d.classList.add('msg-bookmarked');
+    if (meta.nrn) { const nb = document.createElement('span'); nb.className = 'msg-nrn'; nb.textContent = '🕊 ' + t('nrnBadge'); d.appendChild(nb); }
 
     const time = new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const fullDate = new Date(ts).toLocaleString();
@@ -7385,6 +7491,11 @@ async function initMessenger(dbName) {
       document.querySelector('.reply-preview')?.remove();
     }
     if (_disappearTimer > 0) meta.disappearAt = ts + _disappearTimer * 1000;
+    // "No reply needed": the sender states, in the message itself, that no answer is owed.
+    // The recipient sees a badge and the message does NOT raise their unread count — the
+    // obligation is removed at its source instead of being managed after the fact. One-shot:
+    // it applies to this message only, so it can never silently mute a conversation.
+    if (_noReplyNeeded) { meta.nrn = true; _noReplyNeeded = false; _updateNrnButton(); }
     if (activeContact.isGroup) {
       meta.senderName = myName;
       meta.mentions = [...text.matchAll(/@(\w+)/g)].map(m => m[1]);
@@ -7460,6 +7571,7 @@ async function initMessenger(dbName) {
       }
       const peer = peers[activeContact.pubB64];
       const envelope = { v: CONFIG.PROTOCOL_VERSION, type: 'msg', payload: encrypted, ts, sender: myPubB64, name: myName };
+      if (meta.nrn) envelope.nrn = true; // rides inside the sealed-v2 meta block — invisible to the relay
       // Multi-device: a SECONDARY device names its account root so the recipient can attribute
       // this message to the root's conversation instead of auto-adding a stranger contact.
       // The claim alone proves nothing — the recipient verifies it against the ROOT-SIGNED
@@ -7517,7 +7629,7 @@ async function initMessenger(dbName) {
       // Relay: Sealed Sender (Worker doesn't see sender)
       await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName,
         payload: encrypted, ts, replyTo: envelope.replyTo, disappearAt: envelope.disappearAt,
-        sig: envelope.sig, sigPub: envelope.sigPub, acctRoot: envelope.acctRoot }, activeContact.pubB64);
+        sig: envelope.sig, sigPub: envelope.sigPub, acctRoot: envelope.acctRoot, nrn: envelope.nrn }, activeContact.pubB64);
 
       // Multi-device fan-out (see _fanOut). Fire-and-forget: it must never fail the send.
       // sfPub/sfName let a sibling device CREATE a conversation it has never seen, so messages
@@ -7674,6 +7786,11 @@ async function initMessenger(dbName) {
   }
 
   _DOM.get('b-msg-send')?.addEventListener('click', sendMessage);
+  _DOM.get('b-msg-nrn')?.addEventListener('click', () => {
+    _noReplyNeeded = !_noReplyNeeded;
+    _updateNrnButton();
+    showToast(t(_noReplyNeeded ? 'nrnOn' : 'nrnOff'), 'info');
+  });
 
   // v3.5: Drag-and-drop file upload
   (() => {
@@ -9053,7 +9170,8 @@ async function initMessenger(dbName) {
       // Start polling for call signals and show incoming UI
       handleCallOffer(contact, msg.payload);
       pollCallSignals(contact, room);
-      playNotif();
+      // A ringing call is inherently important; only strict focus ("/focus N all") silences it.
+      if (!(_focusActive() && _settings.focusStrict)) playNotif();
       if (Notification?.permission === 'granted') {
         new Notification(contact.name, { body: msg.isVideoCall ? t('videoCall') : t('voiceCall'), tag: 'breeze-call' });
       }
@@ -9122,7 +9240,8 @@ async function initMessenger(dbName) {
         const inviteMembers = (Array.isArray(invite.members) ? invite.members : []).slice(0, CONFIG.GROUP_MAX);
         if (invite.type === 'group_invite' && inviteGroupId && !(await dbGet('contacts', inviteGroupId))) {
           await dbPut('contacts', { id: inviteGroupId, name: inviteName, isGroup: true, members: inviteMembers, addedAt: Date.now(), unread: 0, pubB64: '' });
-          playNotif(); _renderContactsThrottled();
+          if (!_focusActive()) playNotif();
+          _renderContactsThrottled();
         }
       } catch(e) { _dbg(e); }
       return;
@@ -9209,9 +9328,13 @@ async function initMessenger(dbName) {
       group.lastMsgSender = msg.fromName;
       group.lastMsgAt = msg.ts;
       if (activeContact?.id !== msg.groupId) {
-        group.unread = (group.unread || 0) + 1; playNotif();
+        group.unread = (group.unread || 0) + 1;
         const mentions = [...text.matchAll(/@(\w+)/g)].map(m => m[1]);
-        if (mentions.some(m => m === myName || m === myAlias) && Notification?.permission === 'granted') {
+        const mentionsMe = mentions.some(m => m === myName || m === myAlias);
+        // A group that is not talking TO you should not interrupt you: in focus mode only a
+        // mention (or a VIP group) gets through, and never in strict mode.
+        if (_shouldAlert(group, mentionsMe ? '@' + myName : text)) playNotif();
+        if (mentionsMe && _shouldAlert(group, '@' + myName) && Notification?.permission === 'granted') {
           new Notification(group.name, { body: `@${msg.fromName}: ${text.slice(0, 80)}`, tag: 'breeze-' + msg.groupId });
         }
       }
@@ -9241,7 +9364,7 @@ async function initMessenger(dbName) {
         const meta = { msgId, voice: v.data };
         await dbPut('messages', { msgId, contactId: msg.from, text: t('voiceMsg'), mine: false, ts: msg.ts, voice: v.data });
         contact.lastMsg = t('voiceMsg'); contact.lastMsgAt = msg.ts;
-        if (activeContact?.id !== msg.from) { contact.unread = (contact.unread || 0) + 1; playNotif(); }
+        if (activeContact?.id !== msg.from) { contact.unread = (contact.unread || 0) + 1; if (_shouldAlert(contact, t('voiceMsg'))) playNotif(); }
         await dbPut('contacts', contact);
         if (activeContact?.id === msg.from) appendMsg(t('voiceMsg'), false, msg.ts, null, null, meta);
         _renderContactsThrottled();
@@ -9353,7 +9476,8 @@ async function initMessenger(dbName) {
     if (await dbGet('messages', msgId)) return; // Already persisted
 
     let text, storedFileData = null;
-    const meta = { msgId, replyTo: msg.replyTo, disappearAt: msg.disappearAt, senderName: msg.fromName };
+    const meta = { msgId, replyTo: msg.replyTo, disappearAt: msg.disappearAt, senderName: msg.fromName,
+      ...(msg.nrn === true ? { nrn: true } : {}) };
 
 
     if (msg.isFile) {
@@ -9414,8 +9538,10 @@ async function initMessenger(dbName) {
     contact.lastMsg = text.slice(0, 40);
     contact.lastMsgAt = msg.ts;
     if (activeContact?.id !== contactId) {
-      contact.unread = (contact.unread || 0) + 1;
-      if (!contact.muted) { playNotif();
+      // A message marked "no reply needed" is delivered in full but never adds to the unread
+      // count and never rings: the sender explicitly said it does not require you.
+      if (!meta.nrn) contact.unread = (contact.unread || 0) + 1;
+      if (!meta.nrn && _shouldAlert(contact, text)) { playNotif();
         if (Notification?.permission === 'granted') {
           const unread = contact.unread || 1;
           const body = unread > 1
@@ -11685,6 +11811,7 @@ async function initMessenger(dbName) {
         '/contacts export · /contacts import',
         '',
         '<b>' + t('helpSettings') + '</b>',
+        '/focus [min] [all] · /quiet [sec|off]',
         '/settings · /theme · /wallpaper · /lock · /sound · /compress',
         '/whoami · /debug · /online',
         '',
@@ -12542,6 +12669,42 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       await dbPut('contacts', activeContact);
       showToast(t(activeContact.pinned ? 'toastPinToggleOn' : 'toastPinToggleOff', activeContact.name), 'success');
       renderContacts();
+    }
+
+    // ═══ Quiet-messenger commands ═══
+    // /focus [minutes] [all] — time-boxed do-not-disturb. Unread badges keep accruing; only
+    // the interruption stops. Without "all", VIP contacts and @mentions still get through.
+    if (val === '/focus' || val.startsWith('/focus ')) {
+      e.preventDefault(); clearInput();
+      const arg = val.slice(6).trim().toLowerCase();
+      if (arg === 'off') {
+        _settings.focusUntil = 0; _settings.focusStrict = false;
+        await saveSettings(); _updateFocusBanner();
+        showToast(t('focusOff'), 'info');
+        return;
+      }
+      if (!arg) { // no argument: report state rather than guessing an intent
+        showToast(_focusActive() ? t('focusRemaining', _focusRemainingMin()) : t('focusIdle'), 'info');
+        return;
+      }
+      const mins = Math.min(Math.max(parseInt(arg, 10) || 0, 1), 1440); // 1 min .. 24 h
+      _settings.focusUntil = Date.now() + mins * MS.MIN;
+      _settings.focusStrict = /\ball\b/.test(arg);
+      await saveSettings(); _updateFocusBanner();
+      showToast(t(_settings.focusStrict ? 'focusOnStrict' : 'focusOn', mins), 'success');
+      return;
+    }
+    // /quiet [off|30|300] — hold read receipts for N seconds so opening a message does not
+    // instantly put the other person on the clock. Also blunts read-receipt timing analysis.
+    if (val === '/quiet' || val.startsWith('/quiet ')) {
+      e.preventDefault(); clearInput();
+      const arg = val.slice(6).trim().toLowerCase();
+      if (!arg) { showToast(t('quietState', _settings.readReceiptDelay || 0), 'info'); return; }
+      const secs = arg === 'off' ? 0 : Math.min(Math.max(parseInt(arg, 10) || 0, 0), 3600);
+      _settings.readReceiptDelay = secs;
+      await saveSettings();
+      showToast(t(secs ? 'quietSet' : 'quietOff', secs), 'success');
+      return;
     }
 
     // v3.3: /online — Show online user count

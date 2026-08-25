@@ -452,6 +452,9 @@ async function handleMsgSend(body, ip, env, request) {
   // Multi-device sender attribution: a secondary device names its account root; the recipient
   // verifies the claim against the root-signed device registry (relay just ferries it).
   if (typeof body.acctRoot === 'string') msg.acctRoot = body.acctRoot.slice(0, 200);
+  // "No reply needed" marker: opaque to the relay, consumed by the recipient's UI. Passed
+  // through on the /msg fallback so the flag survives when sealed sending is unavailable.
+  if (body.nrn === true) msg.nrn = true;
   // Server-assigned unique message id — groundwork for an exclusive poll cursor.
   // Two messages stored in the same millisecond share a ts, and the ts-only cursor
   // (`m.ts > lastTs`) drops the second one if a poll lands between them. Current
