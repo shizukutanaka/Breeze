@@ -534,7 +534,7 @@
  "vipOff": "Hapus VIP",
  "vipSet": "{0} tetap bisa menghubungi Anda saat mode fokus",
  "vipCleared": "{0} bukan lagi VIP",
- "quietSet": "Tanda dibaca ditahan {0} detik",
- "quietOff": "Tanda dibaca dikirim langsung",
- "quietState": "Penundaan tanda dibaca: {0} detik (pakai /quiet 30, atau /quiet off)"
+ "rrDelayLabel": "Tunda tanda dibaca (2 mnt)",
+ "focusLabel": "Mode fokus selama 1 jam",
+ "focusStrictLabel": "Senyapkan semua (tanpa pengecualian VIP)"
 }

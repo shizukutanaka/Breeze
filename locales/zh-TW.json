@@ -534,7 +534,7 @@
  "vipOff": "取消 VIP",
  "vipSet": "專注模式期間仍會收到 {0} 的通知",
  "vipCleared": "已取消 {0} 的 VIP 設定",
- "quietSet": "已讀回條延後 {0} 秒送出",
- "quietOff": "已讀回條立即送出",
- "quietState": "已讀回條延遲：{0} 秒（用 /quiet 30 設定，/quiet off 關閉）"
+ "rrDelayLabel": "延後已讀回條（2 分鐘）",
+ "focusLabel": "專注模式 1 小時",
+ "focusStrictLabel": "全部靜音（VIP 也不例外）"
 }

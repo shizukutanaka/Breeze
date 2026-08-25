@@ -1,5 +1,21 @@
 # Changelog
 
+## The algorithm applied to code twenty minutes old (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+796 vitest + 27 Playwright E2E, unchanged; `index.html` net +48 after deletions, EN 660 keys (a menu of options came and went without ever shipping).
+
+The quiet-messenger features had just landed. Rather than move on, the same questions were put to them — because code written twenty minutes ago is exactly the code nobody has audited yet. Three findings, all self-inflicted:
+
+**A preference is not an action.** `/quiet N` set a persistent setting from the command line, alongside `hideReadReceipts` which lives in the settings panel. Two homes for the same kind of thing. `/quiet` is deleted; the read-receipt delay now sits in the privacy panel where the related setting already was. `/focus` stays a command because starting a timer genuinely *is* an action — but it also gained a settings entry.
+
+**A feature nobody can find does not exist.** This is a product whose pitch includes "LINE's UI is too complicated", and its flagship differentiator — the whole reason it claims to be a *quiet* messenger — was reachable only by typing a slash command no ordinary person would ever guess. Both features are now visible in `/settings`, which is where someone fleeing a noisy app would actually look.
+
+**A menu of durations was a requirement nobody asked for.** The first attempt gave each feature a four-option `<select>`. It failed the E2E instantly, because the Trusted-Types sanitizer's tag allowlist does not include `select` — and the reflex is to widen the allowlist. The better question was whether the menu should exist. It should not: each feature got one sensible default (delay 2 minutes, focus 1 hour) as a plain checkbox matching the panel's existing idiom. No allowlist change, no new markup shape, four i18n keys deleted before they ever shipped, and `/focus N` still covers anyone who wants exactly 23 minutes. **The security control was never the obstacle — the invented requirement was.**
+
+The dead-key gate built earlier this session caught the `quiet*` strings the moment `/quiet` was deleted, and again caught the option keys when the menu was dropped. It was built for exactly this and needed no prompting.
+
+---
+
 ## 静かなメッセンジャー — the app asks less of you (branch claude/nice-ride-T6yb0, 2026-08-21)
 
 796 vitest + **27** Playwright E2E (+3, new `tests/e2e/quiet.spec.js`); `index.html` 13,621 → **13,736** lines, EN 642 → 660 keys, **all 18 new strings translated into all 7 locales** (no English-only feature in a product that claims to be worldwide).

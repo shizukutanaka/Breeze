@@ -100,7 +100,7 @@ test('a "no reply needed" message arrives in full but raises no unread badge', a
   await ctxA.close(); await ctxB.close();
 });
 
-test('/quiet holds the read receipt instead of firing it the instant you open the chat', async ({ browser }) => {
+test('the settings panel holds the read receipt instead of firing it the instant you open the chat', async ({ browser }) => {
   const ctxA = await browser.newContext(ip(122));
   const ctxB = await browser.newContext(ip(123));
   const A = await ctxA.newPage(), B = await ctxB.newPage();
@@ -109,14 +109,16 @@ test('/quiet holds the read receipt instead of firing it the instant you open th
   await addAndOpen(A, pubB);
   await addAndOpen(B, pubA);
 
-  // A holds read receipts for 30s. Opening the chat must NOT emit one immediately.
-  await runCommand(A, '/quiet 30');
-  await expect(A.locator('.toast-container')).toContainText(/30/, { timeout: 10_000 });
+  // Set the delay the way a real user does — through the settings panel, not a command
+  // only a power user would guess. (The command was deleted for exactly that reason: a
+  // persistent preference belongs in settings; the command line is for actions.)
+  await runCommand(A, '/settings');
+  await A.locator('input[data-setting="rr-delay"]').check();
   const delay = await A.evaluate(() => new Promise((r) => {
     const q = indexedDB.open('breeze-messenger', 5);
     q.onsuccess = () => { q.result.transaction('settings', 'readonly').objectStore('settings').get('app').onsuccess = (e) => r(e.target.result?.readReceiptDelay); };
   }));
-  expect(delay).toBe(30);
+  expect(delay).toBe(120); // the panel's one sensible default
 
   // Watch the wire: opening the conversation must not produce a 'read' signal right away.
   const reads = [];

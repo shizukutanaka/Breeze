@@ -541,7 +541,7 @@
  "vipOff": "Remover VIP",
  "vipSet": "{0} continuará te alcançando durante o modo foco",
  "vipCleared": "{0} não é mais VIP",
- "quietSet": "Confirmações de leitura retidas por {0}s",
- "quietOff": "Confirmações de leitura enviadas na hora",
- "quietState": "Atraso da confirmação de leitura: {0}s (use /quiet 30 ou /quiet off)"
+ "rrDelayLabel": "Atrasar confirmações de leitura (2 min)",
+ "focusLabel": "Modo foco por 1 hora",
+ "focusStrictLabel": "Silenciar tudo (sem exceções VIP)"
 }

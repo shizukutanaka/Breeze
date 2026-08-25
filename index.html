@@ -1656,6 +1656,9 @@ const _I = {
     devSetFail: "Failed to update the device list",
     toastMsgsDropped: "{0} message(s) may have been lost while you were offline (relay queue overflowed)",
     toastIdentityClone: "This identity is ALSO active on another device. Using both will corrupt your conversations — retire one, or link devices with /link instead.",
+    rrDelayLabel: 'Delay read receipts (2 min)',
+    focusLabel: 'Focus mode for 1 hour',
+    focusStrictLabel: 'Silence everything (no VIP exceptions)',
     nrnAria: 'Mark this message as needing no reply',
     nrnBadge: 'no reply needed',
     nrnOn: 'Next message: no reply needed',
@@ -1671,9 +1674,6 @@ const _I = {
     vipOff: 'Remove VIP',
     vipSet: '{0} will reach you during focus mode',
     vipCleared: '{0} is no longer a VIP',
-    quietSet: 'Read receipts held for {0}s',
-    quietOff: 'Read receipts sent immediately',
-    quietState: 'Read-receipt delay: {0}s (use /quiet 30, or /quiet off)',
     devUnlinkedNotice: "This device was removed from the account — it no longer receives the account's messages. It now works as a standalone identity.",
     devListTitle: "Account devices",
     devThis: "this device",
@@ -11811,7 +11811,7 @@ async function initMessenger(dbName) {
         '/contacts export · /contacts import',
         '',
         '<b>' + t('helpSettings') + '</b>',
-        '/focus [min] [all] · /quiet [sec|off]',
+        '/focus [min] [all]',
         '/settings · /theme · /wallpaper · /lock · /sound · /compress',
         '/whoami · /debug · /online',
         '',
@@ -12694,19 +12694,6 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       showToast(t(_settings.focusStrict ? 'focusOnStrict' : 'focusOn', mins), 'success');
       return;
     }
-    // /quiet [off|30|300] — hold read receipts for N seconds so opening a message does not
-    // instantly put the other person on the clock. Also blunts read-receipt timing analysis.
-    if (val === '/quiet' || val.startsWith('/quiet ')) {
-      e.preventDefault(); clearInput();
-      const arg = val.slice(6).trim().toLowerCase();
-      if (!arg) { showToast(t('quietState', _settings.readReceiptDelay || 0), 'info'); return; }
-      const secs = arg === 'off' ? 0 : Math.min(Math.max(parseInt(arg, 10) || 0, 0), 3600);
-      _settings.readReceiptDelay = secs;
-      await saveSettings();
-      showToast(t(secs ? 'quietSet' : 'quietOff', secs), 'success');
-      return;
-    }
-
     // v3.3: /online — Show online user count
     if (val === '/online') {
       e.preventDefault();
@@ -13297,12 +13284,15 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const _notifSoundEnabled = localStorage.getItem('brz-notif-sound') !== '0';
       safeSetHTML(d, `<b class="i-g">${t('settingsPrivacy')}</b><br>
         <label class="i-cur"><input type="checkbox" data-setting="hide-rr" ${_privacyHideReadReceipts ? 'checked' : ''}> ${t('hideReadReceipts')}</label><br>
+        <label class="i-cur"><input type="checkbox" data-setting="rr-delay" ${_settings.readReceiptDelay ? 'checked' : ''}> ${t('rrDelayLabel')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="hide-typing" ${_privacyHideTyping ? 'checked' : ''}> ${t('hideTyping')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="relay-only" ${_settings.relayOnly ? 'checked' : ''}> ${t('relayOnly')}</label><br>
         <br><b class="i-g">${t('settingsSound')}</b><br>
         <label class="i-cur"><input type="checkbox" data-setting="notif-sound" ${_notifSoundEnabled ? 'checked' : ''}> ${t('notifSound')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="send-sound" ${_sendSoundEnabled ? 'checked' : ''}> ${t('sendSound')}</label><br>
         <br><b class="i-g">${t('settingsNotif')}</b><br>
+        <label class="i-cur"><input type="checkbox" data-setting="focus" ${_focusActive() ? 'checked' : ''}> ${t('focusLabel')}</label><br>
+        <label class="i-cur"><input type="checkbox" data-setting="focus-strict" ${_settings.focusStrict ? 'checked' : ''}> ${t('focusStrictLabel')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="notif-perm" ${Notification?.permission === 'granted' ? 'checked' : ''}> ${t('enableNotif')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="auto-lock" ${localStorage.getItem('brz-autolock') === '1' ? 'checked' : ''}> ${t('autoLockLabel')}</label><br>
         <br><span class="i-t3-10">${t('settingsImmediate')}</span>`);
@@ -13312,6 +13302,16 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         const s = cb.dataset.setting;
         if (!s) return;
         haptic.tap();
+        // One sensible default each — a menu of durations was a requirement nobody asked for.
+        // `/focus N` still exists for anyone who wants an exact number of minutes.
+        if (s === 'rr-delay') { _settings.readReceiptDelay = cb.checked ? 120 : 0; saveSettings(); return; }
+        if (s === 'focus') {
+          _settings.focusUntil = cb.checked ? Date.now() + 60 * MS.MIN : 0;
+          if (!cb.checked) _settings.focusStrict = false;
+          saveSettings(); _updateFocusBanner();
+          return;
+        }
+        if (s === 'focus-strict') { _settings.focusStrict = cb.checked; saveSettings(); _updateFocusBanner(); return; }
         if (s === 'hide-rr') { localStorage.setItem('brz-hide-rr', cb.checked ? '1' : '0'); _privacyHideReadReceipts = cb.checked; window._privacyHideReadReceipts = cb.checked; }
         else if (s === 'hide-typing') { localStorage.setItem('brz-hide-typing', cb.checked ? '1' : '0'); _privacyHideTyping = cb.checked; window._privacyHideTyping = cb.checked; }
         else if (s === 'relay-only') { localStorage.setItem('brz-relay-only', cb.checked ? '1' : '0'); _settings.relayOnly = cb.checked; }
