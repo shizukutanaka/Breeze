@@ -1,5 +1,19 @@
 # Changelog
 
+## Musk steps 3+4 — simplify, then accelerate (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+794 vitest + 24 Playwright E2E, all green; `index.html` 13,634 → **13,610** lines. Two cycle times cut: the product's and the developer's.
+
+**Simplify — three copies of the fan-out became one.** Multi-device delivery had been written three times: text in `sendMessage`, attachments in `_sendFile`/voice, mutations in `sendSignal`. The bodies were identical apart from which envelope flags they set, which is exactly why attachments were *forgotten* when the feature shipped — the rule lived in three heads at once. Collapsed into a single `_fanOut(contact, plaintext, ts, peerExtra, selfExtra)`; the four call sites now differ only in the flags that genuinely differ. A device rule fixed once is fixed everywhere.
+
+**Accelerate the product — fan-out went from N round-trips to one.** The loops awaited each device sequentially, so an account with three linked devices paid three encrypt-and-send round-trips before the last one saw the message; latency scaled with how many devices you own, which is precisely backwards. Devices are distinct peers and the ratchet lock is per-peer, so nothing but the `await` was serialising them. They now dispatch in parallel via `Promise.all`, and the registry lookups for both sides run concurrently too.
+
+**Accelerate the developer — the test suite is 4.4× faster.** Profiling the suite showed single tests taking 6.8 s, 8.1 s, **16.2 s** — all of them brute-forcing hashcash. Twenty PoW solves at difficulty 16 (~65,000 SHA-256 attempts each) meant over a minute of every run spent proving only that hashing is slow. Every property those tests verify — the challenge embeds the public key, the freshness window, replay rejection, the floor itself — is *independent of the bit count*. The test-only floor drops to 8, and the one test that must prove a too-easy token is rejected now pins its own floor explicitly (solve at 4, floor at 8) so it keeps its teeth regardless of the suite default.
+
+Result: `worker.test.js` 88 s → 24.5 s, the full suite **85 s → 19.3 s**, with all 794 tests still passing. Production difficulty is untouched at 20 bits — this changed what the tests pay, not what an alias-spammer pays.
+
+---
+
 ## Musk step 5 — automate: the rot that made step 2 necessary now fails CI (branch claude/nice-ride-T6yb0, 2026-08-21)
 
 794 vitest + 24 Playwright E2E unchanged; `validate.sh` 38 → **39 checks**, `tools/i18n-check.mjs` gains check 6, `index.html` 13,689 → **13,634** lines, EN reference **924 → 642 keys**.

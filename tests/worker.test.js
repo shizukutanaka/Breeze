@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-// Solve a difficulty-N PoW puzzle for testing (brute-force, fast enough at N≤16).
+// Solve a difficulty-N PoW puzzle for testing (brute-force; keep N small — see mockKV).
 // challenge defaults to "${pub}:breeze-test" (no timestamp → freshness check skipped).
-async function solvePoW(pub, difficulty = 16, challenge) {
+async function solvePoW(pub, difficulty = 8, challenge) {
   const ch = challenge ?? `${pub}:breeze-test`;
   const target = (2 ** (32 - difficulty)) >>> 0;
   for (let nonce = 0; nonce < 10_000_000; nonce++) {
@@ -2598,9 +2598,11 @@ describe('alias set / get (PoW anti-spam)', () => {
   it('rejects a PoW below the difficulty floor even when validly solved (anti-spam)', async () => {
     const pub = 'LOWDIFF01';
     const challenge = `${pub}:${Date.now()}`;            // includes pub, fresh, short
-    const pow = await solvePoW(pub, 8, challenge);        // a real difficulty-8 solution
-    expect(pow.difficulty).toBe(8);                       // the only failing condition is the floor
-    const res = await handleAliasSet({ alias: 'lowdiff', pub, pow }, makeEnv(), req({}));
+    const pow = await solvePoW(pub, 4, challenge);        // a real difficulty-4 solution
+    expect(pow.difficulty).toBe(4);                       // the only failing condition is the floor
+    // Floor pinned explicitly here so this test keeps its meaning regardless of the suite
+    // default: a genuinely-solved token below the floor must still be refused.
+    const res = await handleAliasSet({ alias: 'lowdiff', pub, pow }, makeEnv({ MIN_POW_DIFFICULTY: '8' }), req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('POW_INVALID');
   });

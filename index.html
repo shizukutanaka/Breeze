@@ -5167,29 +5167,35 @@ async function initMessenger(dbName) {
     } catch { return false; }
   }
 
-  // Multi-device fan-out for FILES and voice notes. sendMessage() got this in v3.7 but the
-  // attachment paths did not, so on a linked account a photo reached only the contact's
-  // primary device and never self-synced to your own laptop — the feature quietly covered
-  // text only (Socratic test-gap lens). Same shape as the text fan-out: fire-and-forget, the
-  // contact's registry devices plus my own siblings, each re-encrypted under its own ratchet.
-  async function _fanOutAttachment(snapContact, filePlain, ts) {
+  // ONE fan-out for every kind of outgoing content. Three near-identical copies of this loop
+  // had accumulated — text in sendMessage, attachments in _sendFile/voice, mutations in
+  // sendSignal — differing only in which envelope flags they set, so each new device rule had
+  // to be remembered in three places (attachments were forgotten exactly that way). Collapsed
+  // to one function taking those flags: a fix now lands on every path at once.
+  //
+  // Devices are dispatched in PARALLEL. They are distinct peers and the ratchet lock is
+  // per-peer, so nothing serialises them but the old sequential `await` in the loop — which
+  // made fan-out latency linear in device count (an account with 3 devices paid three
+  // round-trips before the last one saw the message). Now it costs one.
+  async function _fanOut(snapContact, plaintext, ts, peerExtra, selfExtra) {
     try {
-      if (!snapContact?.pubB64) return;
+      if (!snapContact?.pubB64 || !plaintext) return;
       const acct = await dbGet('identity', 'account').catch(() => null);
       const acctRoot = (acct?.root && acct.root !== myPubB64) ? acct.root : undefined;
-      for (const devPub of await _devicesFor(snapContact)) {
-        if (devPub === snapContact.pubB64) continue;
-        const enc = await encryptFor(filePlain, devPub);
-        if (enc) await relaySend(devPub.slice(0, 12), { to: devPub.slice(0, 12), from: myId,
-          fromPub: myPubB64, fromName: myName, payload: enc, ts, isFile: true, acctRoot }, devPub);
-      }
-      for (const devPub of await _myOtherDevices()) {
-        const enc = await encryptFor(filePlain, devPub);
-        if (enc) await relaySend(devPub.slice(0, 12), { to: devPub.slice(0, 12), from: myId,
-          fromPub: myPubB64, fromName: myName, payload: enc, ts, isFile: true,
-          selfSync: true, sfFor: snapContact.id, sfPub: snapContact.pubB64, sfName: snapContact.name }, devPub);
-      }
-    } catch(e) { _dbg(e, 'attachment-fanout'); }
+      const [peerDevs, myDevs] = await Promise.all([_devicesFor(snapContact), _myOtherDevices()]);
+      const send = async (devPub, extra) => {
+        const enc = await encryptFor(plaintext, devPub);
+        if (!enc) return;
+        await relaySend(devPub.slice(0, 12), { to: devPub.slice(0, 12), from: myId,
+          fromPub: myPubB64, fromName: myName, payload: enc, ts, ...extra }, devPub);
+      };
+      await Promise.all([
+        // The contact's OTHER devices (registry-verified; the primary was already sent to).
+        ...peerDevs.filter((p) => p !== snapContact.pubB64).map((p) => send(p, { ...peerExtra, acctRoot })),
+        // My own siblings — tagged selfSync so they store it as sent, not received.
+        ...myDevs.map((p) => send(p, { ...selfExtra, selfSync: true })),
+      ]);
+    } catch(e) { _dbg(e, 'fanout'); }
   }
 
   async function relaySend(to, payload, sealPub) {
@@ -7232,21 +7238,10 @@ async function initMessenger(dbName) {
           const acctRoot = (acct?.root && acct.root !== myPubB64) ? acct.root : undefined;
           await relaySend(snapContact.id, { to: snapContact.id, from: myId, fromPub: myPubB64, fromName: myName,
             payload: encrypted, ts: sigTs, isSignal: true, acctRoot }, snapContact.pubB64);
-          // Multi-device: mutations must follow the messages they mutate (Socratic round —
-          // "the send syncs, so what happens when I EDIT it?"). Same fan-out as sendMessage:
-          // the contact's other devices get the signal via registry, and MY other devices get
-          // a selfSync-tagged copy that is allowed to mutate `mine` messages there.
-          for (const devPub of await _devicesFor(snapContact)) {
-            if (devPub === snapContact.pubB64) continue;
-            const devEnc = await encryptFor(signalPayload, devPub);
-            if (devEnc) await relaySend(devPub.slice(0, 12), { to: devPub.slice(0, 12), from: myId,
-              fromPub: myPubB64, fromName: myName, payload: devEnc, ts: sigTs, isSignal: true, acctRoot }, devPub);
-          }
-          for (const devPub of await _myOtherDevices()) {
-            const devEnc = await encryptFor(signalPayload, devPub);
-            if (devEnc) await relaySend(devPub.slice(0, 12), { to: devPub.slice(0, 12), from: myId,
-              fromPub: myPubB64, fromName: myName, payload: devEnc, ts: sigTs, isSignal: true, selfSync: true }, devPub);
-          }
+          // Mutations must follow the messages they mutate: a sibling device may rewrite a
+          // `mine` message because a registry-verified sibling IS me. Signals carry the target
+          // msgId, so the self-sync copy needs no conversation pointer.
+          _fanOut(snapContact, signalPayload, sigTs, { isSignal: true }, { isSignal: true });
         } catch(e) { _dbg(e, 'encrypt-signal'); }
       })();
     }
@@ -7524,33 +7519,12 @@ async function initMessenger(dbName) {
         payload: encrypted, ts, replyTo: envelope.replyTo, disappearAt: envelope.disappearAt,
         sig: envelope.sig, sigPub: envelope.sigPub, acctRoot: envelope.acctRoot }, activeContact.pubB64);
 
-      // Multi-device fan-out. Each extra device is its own identity with its own ratchet, so the
-      // SAME plaintext is re-encrypted per device — never the same ciphertext or key twice.
-      // Fire-and-forget: fan-out failure must never fail the primary send.
-      (async () => {
-        try {
-          const snapContact = activeContact; if (!snapContact) return;
-          // 1) The contact's other devices (registry-verified; [] when unregistered).
-          for (const devPub of await _devicesFor(snapContact)) {
-            if (devPub === snapContact.pubB64) continue; // primary already sent above
-            const devEnc = await encryptFor(text, devPub);
-            if (devEnc) await relaySend(devPub.slice(0, 12), { to: devPub.slice(0, 12), from: myId,
-              fromPub: myPubB64, fromName: myName, payload: devEnc, ts,
-              sig: envelope.sig, sigPub: envelope.sigPub, acctRoot: envelope.acctRoot }, devPub);
-          }
-          // 2) Self-sync: my own other devices get a copy tagged with the conversation it
-          // belongs to, so "sent from the phone" also appears as sent on the laptop.
-          for (const devPub of await _myOtherDevices()) {
-            const devEnc = await encryptFor(text, devPub);
-            // sfPub/sfName let a sibling device CREATE the conversation it doesn't have yet —
-            // without them, everything sent before the contact ever replies is silently dropped
-            // on the new device (Socratic round: "how does a fresh laptop learn who I talk to?").
-            if (devEnc) await relaySend(devPub.slice(0, 12), { to: devPub.slice(0, 12), from: myId,
-              fromPub: myPubB64, fromName: myName, payload: devEnc, ts,
-              selfSync: true, sfFor: snapContact.id, sfPub: snapContact.pubB64, sfName: snapContact.name }, devPub);
-          }
-        } catch(e) { _dbg(e, 'multidevice-fanout'); }
-      })();
+      // Multi-device fan-out (see _fanOut). Fire-and-forget: it must never fail the send.
+      // sfPub/sfName let a sibling device CREATE a conversation it has never seen, so messages
+      // sent before the contact ever replies are not dropped on a freshly linked device.
+      _fanOut(activeContact, text, ts,
+        { sig: envelope.sig, sigPub: envelope.sigPub },
+        { sfFor: activeContact.id, sfPub: activeContact.pubB64, sfName: activeContact.name });
     }
     renderContacts();
     } catch(err) {
@@ -7693,7 +7667,8 @@ async function initMessenger(dbName) {
       const encrypted = await encryptFor(fileMsg, activeContact.pubB64);
       if (!encrypted) { _dbg(null, 'encrypt failed'); return; }
       await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts, isFile: true }, activeContact.pubB64);
-      _fanOutAttachment(activeContact, fileMsg, ts);
+      _fanOut(activeContact, fileMsg, ts, { isFile: true },
+        { isFile: true, sfFor: activeContact.id, sfPub: activeContact.pubB64, sfName: activeContact.name });
     
     } catch(_e) { _dbg(_e, '_sendFile'); }
   }
@@ -7969,7 +7944,8 @@ async function initMessenger(dbName) {
               activeContact.lastMsg = text; activeContact.lastMsgAt = ts;
               await dbPut('contacts', activeContact);
               await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts, isFile: true }, activeContact.pubB64);
-              _fanOutAttachment(activeContact, filePayload, ts);
+              _fanOut(activeContact, filePayload, ts, { isFile: true },
+                { isFile: true, sfFor: activeContact.id, sfPub: activeContact.pubB64, sfName: activeContact.name });
               appendMsg(text, true, ts, null, filePayload, { msgId: genMsgId() });
               renderContacts();
               haptic.success();
