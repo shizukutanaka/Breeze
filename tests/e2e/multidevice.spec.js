@@ -48,7 +48,10 @@ async function runCommand(page, cmd) {
 }
 
 test('link a second device: contact messages reach BOTH devices; sent messages self-sync', async ({ browser }) => {
-  test.setTimeout(120_000);
+  // Five acts across three real browsers. A page that is not in front polls the relay every
+  // POLL_SLOW_MS (15 s) rather than POLL_FAST_MS (3 s), so under full-suite load the delivery
+  // waits stretch; measured standalone runs are 30-35 s, and the budget carries that margin.
+  test.setTimeout(240_000);
   const ctxA = await browser.newContext(ip(60)); // primary
   const ctxB = await browser.newContext(ip(61)); // secondary
   const ctxC = await browser.newContext(ip(62)); // contact

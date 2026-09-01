@@ -1,5 +1,19 @@
 # Changelog
 
+## Lifecycle tests, a flake hunted to its cause, and an honest assessment (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+796 vitest + **32** Playwright E2E (+2, new `tests/e2e/lifecycle.spec.js`); new `docs/ASSESSMENT.md`.
+
+**Closing the hole the boot crash came through.** That bug was not an isolated defect but the product of a blind spot: of ten E2E spec files, only three ever call `reload()` — and all three were added in the last hours. The suite tested the first session and nothing else. So the highest-value place to look was not the UI but the CRYPTO state, which no test had ever carried across a reload. Two tests now do, and both pass: a 1:1 Double Ratchet conversation continues in both directions after the sender reloads, and a reloaded group member still decrypts what the owner posts. **Yesterday's conversation still works today** — now asserted rather than assumed.
+
+Writing the group half surfaced a test-setup trap rather than a product bug, and a control run proved it: the same test *without* the reload failed identically, so the reload was innocent. The owner only learns of a joiner through a 5-second member poll, and until it lands her member list is just herself — the exact trap `group.spec.js` already documents.
+
+**A flake, hunted rather than papered over.** Two full-suite runs split 31/32. Standalone the suspect ran 9/9 (30-35 s against a 120 s budget), so the test itself was fine; the failure then *moved* to a different spec on the next run, which is the signature of load, not logic. Preserving the artifact instead of letting the next green run delete it gave the answer: a reloaded page that is not in front polls the relay every `POLL_SLOW_MS` (15 s) instead of `POLL_FAST_MS` (3 s), so a 20 s delivery budget was marginal — and only in the direction that needed the *receiving* page to poll. The direction needing no poll never flaked. Fix: bring the receiving page to the front before delivery assertions (which is also what a real user does — they are looking at the app) and size the budgets to a slow-poll cycle. Three consecutive full runs: **32/32, 32/32, 32/32.**
+
+**`docs/ASSESSMENT.md`** records what this product is good and bad at, in measured numbers with reproduction commands, and sorts every weakness by where the cause lives: waiting on the outside world (CI's OAuth scope, ML-KEM in browsers), a deliberate design limit (group send is primary-only, no history sync), a real remaining weakness (the sealed queue is best-effort under KV last-write-wins; `/group/info` hands the roster to any invite-token holder; a backgrounded PWA can lag 15 s), or **a weakness in how we test** — the last being the most useful finding of the session: green tests mean the tested range is correct and nothing more.
+
+---
+
 ## The app did not work for returning users (branch claude/nice-ride-T6yb0, 2026-08-21)
 
 796 vitest + **30** Playwright E2E (+3); `index.html` (boot wrapped in a function — 2 lines of real change), `tests/e2e/smoke.spec.js`, `CLAUDE.md`.
