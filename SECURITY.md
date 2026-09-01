@@ -137,10 +137,15 @@ plaintext is a different threat model from one that cannot.
   (removed v3.7): the endpoint is unauthenticated, so anyone holding a 12-character user id
   could read the chosen name of the person behind it. Online-status itself remains visible to
   anyone who knows an id — reduce exposure by not sharing your id publicly.
-- **/group/info discloses the roster to invite-token holders.** Anyone presenting a valid
-  invite token can read the full member list (ids, public keys, names) without joining.
-  Treat an invite link as equivalent to the roster it opens; revoke by rotating the group.
-  Tightening this to members-only is tracked as future work.
+- **An invite token is effectively group membership.** `/group/info` returns the full member
+  list (ids, public keys, names) to any token holder without joining — but restricting that
+  read would not help: `/group/join` accepts the same token with no signature and no approval,
+  and its response contains the roster anyway, along with message access. Gating the weaker
+  read while the stronger write stays open is a control that looks like security and is not;
+  it was implemented, measured, and reverted for exactly that reason. **Treat an invite link
+  as equivalent to membership**: share it the way you would add someone to the group, and
+  rotate the group to revoke. Making this genuinely restrictive means gating *join* (e.g.
+  admin approval), which is a product decision rather than a privacy patch.
 - **Post-quantum**: key exchange is classical (X25519) today; ML-KEM hybrid is detected but
   not yet deployed (browsers ship ML-KEM ~2027).
 - **Multi-device (Phase 1)**: a linked device is a full Breeze identity with its own ratchets;

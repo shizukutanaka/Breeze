@@ -1,5 +1,19 @@
 # Changelog
 
+## A security control that looked like security, measured and reverted (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+796 vitest + 32 Playwright E2E — unchanged, because the code change was reverted. `docs/ASSESSMENT.md` and `SECURITY.md` corrected.
+
+The assessment written an hour earlier listed `/group/info` disclosing the group roster to any invite-token holder, and classed it "internal — closable". Leaving that written and unclosed would be the same failure this session has been removing, so it got built: the roster became members-only, gated behind the Ed25519 proof every other group action already uses, with the caller additionally required to appear in the roster. The invite preview kept exactly what an invitee needs to decide (name, who invited them, member count) and nothing more. Four tests pinned the new boundary.
+
+**Then thirteen existing tests failed** — far past the blast radius a privacy patch should have. That was the signal to stop and re-derive the premise instead of mechanically updating them, and the premise did not survive: **`/group/join` accepts the same invite token with no signature and no approval, and its response returns the roster anyway** — along with the ability to read the group's messages. Restricting the weaker read while leaving the stronger write wide open protects nothing; an attacker walks around it in one call, and comes out with more than they started with.
+
+So the change was reverted in full. What replaces it is an accurate statement: **an invite link is effectively group membership**, and should be shared the way you would add someone to the group. Making it genuinely restrictive means gating *join* — admin approval — which is a product decision, not a privacy patch, and is now recorded as such rather than as a to-do that sounds cheap.
+
+The generalisable lesson is added to the assessment's closing section, because it applies to every future entry there: **an improvement is a claim too, and gets tested like one. Before hardening a path, count the shortest route an attacker has around it.** Thirteen red tests were not an obstacle to route around; they were the measurement that showed the control was decorative.
+
+---
+
 ## Lifecycle tests, a flake hunted to its cause, and an honest assessment (branch claude/nice-ride-T6yb0, 2026-08-21)
 
 796 vitest + **32** Playwright E2E (+2, new `tests/e2e/lifecycle.spec.js`); new `docs/ASSESSMENT.md`.
