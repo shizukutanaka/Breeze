@@ -536,5 +536,6 @@
  "vipCleared": "{0} 님의 VIP 지정을 해제했습니다",
  "rrDelayLabel": "읽음 표시 지연(2분)",
  "focusLabel": "집중 모드 1시간",
- "focusStrictLabel": "모두 무음(VIP도 예외 없음)"
+ "focusStrictLabel": "모두 무음(VIP도 예외 없음)",
+ "groupPrimaryOnly": "그룹 메시지는 기본 기기에서 보내야 합니다"
 }

@@ -156,6 +156,49 @@ test('link a second device: contact messages reach BOTH devices; sent messages s
   await ctxA.close(); await ctxB.close(); await ctxC.close();
 });
 
+// A secondary device is not in any group roster (the roster holds the account ROOT's id), so
+// members' `if (!member) return` would drop its group messages on the floor while this device
+// rendered them as sent. Group send is primary-only BY DESIGN — but it must say so, not lie.
+// Single context: the guard reads only the `identity/account` record that /linkto writes.
+test('a linked secondary device refuses to send to a group instead of silently dropping it', async ({ browser }) => {
+  const ctx = await browser.newContext(ip(65));
+  const page = await ctx.newPage();
+  await createIdentity(page, 'Laptop-Only');
+
+  // Create a real group the way the app does (group.spec.js's proven path: the "group:" add
+  // syntax, then an empty member list to take the invite-link branch).
+  await page.locator('#b-msg-add').click();
+  const gDlg = page.locator('dialog[aria-labelledby]');
+  await gDlg.locator('.modal-input').fill('group:Guard Test Group');
+  await gDlg.locator('[value="ok"]').click();
+  const membersDlg = page.locator('dialog[aria-labelledby]');
+  await expect(membersDlg).toBeVisible();
+  await membersDlg.locator('[value="ok"]').click();
+  await expect(page.locator('.i-mono-box')).toBeVisible();
+
+  // Make this install a linked SECONDARY: exactly the record /linkto writes.
+  await page.evaluate(() => new Promise((resolve) => {
+    const q = indexedDB.open('breeze-messenger', 5);
+    q.onsuccess = () => {
+      const tx = q.result.transaction('identity', 'readwrite');
+      tx.objectStore('identity').put({ root: 'SOME-OTHER-ROOT-PUBKEY=', rootEd: null, isPrimary: false }, 'account');
+      tx.oncomplete = () => { q.result.close(); resolve(true); };
+    };
+  }));
+  await page.reload();
+  await expect(page.locator('#msg-main')).toBeVisible();
+
+  await page.locator('#msg-contacts .contact', { hasText: 'Guard Test Group' }).click();
+  await expect(page.locator('#msg-input-bar')).toBeVisible();
+  const attempt = 'this must not vanish ' + Date.now();
+  await page.locator('#msg-input').fill(attempt);
+  await page.locator('#b-msg-send').click();
+  await expect(page.locator('.toast-container')).toContainText(/primary device|メイン端末/i, { timeout: 10_000 });
+  // The text is handed back, not eaten — the user never loses what they typed.
+  await expect(page.locator('#msg-input')).toHaveValue(attempt);
+  await ctx.close();
+});
+
 test('a contact with no device registry keeps working exactly as before (backward compat)', async ({ browser }) => {
   const ctx1 = await browser.newContext(ip(63));
   const ctx2 = await browser.newContext(ip(64));

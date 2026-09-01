@@ -536,5 +536,6 @@
  "vipCleared": "{0} bukan lagi VIP",
  "rrDelayLabel": "Tunda tanda dibaca (2 mnt)",
  "focusLabel": "Mode fokus selama 1 jam",
- "focusStrictLabel": "Senyapkan semua (tanpa pengecualian VIP)"
+ "focusStrictLabel": "Senyapkan semua (tanpa pengecualian VIP)",
+ "groupPrimaryOnly": "Pesan grup harus dikirim dari perangkat utama Anda"
 }

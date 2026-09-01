@@ -536,5 +536,6 @@
  "vipCleared": "{0} ไม่ใช่ VIP แล้ว",
  "rrDelayLabel": "หน่วงการแจ้งอ่านแล้ว (2 นาที)",
  "focusLabel": "โหมดโฟกัส 1 ชั่วโมง",
- "focusStrictLabel": "ปิดเสียงทั้งหมด (ไม่ยกเว้น VIP)"
+ "focusStrictLabel": "ปิดเสียงทั้งหมด (ไม่ยกเว้น VIP)",
+ "groupPrimaryOnly": "ต้องส่งข้อความกลุ่มจากอุปกรณ์หลักของคุณ"
 }

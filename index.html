@@ -1659,6 +1659,7 @@ const _I = {
     rrDelayLabel: 'Delay read receipts (2 min)',
     focusLabel: 'Focus mode for 1 hour',
     focusStrictLabel: 'Silence everything (no VIP exceptions)',
+    groupPrimaryOnly: 'Group messages must be sent from your primary device',
     nrnAria: 'Mark this message as needing no reply',
     nrnBadge: 'no reply needed',
     nrnOn: 'Next message: no reply needed',
@@ -4194,6 +4195,15 @@ async function initMessenger(dbName) {
   let _focusTimer = null;
   let _readTimer = null; // pending delayed read receipt (see openConversation)
   let _noReplyNeeded = false; // one-shot: marks the NEXT message as needing no reply
+  // True when this install is a LINKED secondary (see /linkto). Group sending is primary-only
+  // by design; resolved at boot and refreshed by /link, /linkto and /unlink.
+  let _isSecondaryDevice = false;
+  async function _refreshDeviceRole() {
+    try {
+      const acct = await dbGet('identity', 'account');
+      _isSecondaryDevice = !!(acct?.root && acct.root !== myPubB64);
+    } catch { _isSecondaryDevice = false; }
+  }
   function _updateNrnButton() {
     const b = _DOM.get('b-msg-nrn');
     if (b) b.classList.toggle('nrn-on', _noReplyNeeded);
@@ -5174,6 +5184,7 @@ async function initMessenger(dbName) {
       if (acct.root !== myPubB64 && Array.isArray(list) && list.length && !list.includes(myPubB64)) {
         if (!_unlinkNoticed) { _unlinkNoticed = true; showToast(t('devUnlinkedNotice'), 'error', 10000); }
         await dbDel('identity', 'account'); // clean revert to a standalone identity (/link works again)
+        await _refreshDeviceRole();
         _myDevCache = []; _myDevCacheTs = now;
         return [];
       }
@@ -5586,6 +5597,18 @@ async function initMessenger(dbName) {
   }
 
   // ===== Setup or Load =====
+  // DELIBERATELY a function, invoked at the very END of initMessenger (grep "_boot()").
+  // Running this inline here was a Temporal Dead Zone crash: renderContacts() reads
+  // _activeFolder/_activeLabel/_contactSort/_contactFilter/_drafts/activeContact, every one of
+  // them a `let` declared FURTHER DOWN this function. The first access threw ReferenceError,
+  // so on any load with an existing identity boot aborted at its first line and everything
+  // after it — including startPolling() — never ran: a returning user saw an empty contact
+  // list and received no messages at all. It only worked in the session that created the
+  // identity, which is why every E2E passed (they all start from a fresh identity).
+  // This is the SECOND occurrence of this class here; see the _perf note near the top.
+  // Keep boot last, and keep it a function: that is what makes the ordering safe rather than
+  // lucky. tests/e2e/smoke.spec.js guards both symptoms.
+  async function _boot() {
   const hasId = await loadIdentity();
   if (hasId) {
     // Scope the outbox to this account before any peer activity. Without this,
@@ -5617,6 +5640,7 @@ async function initMessenger(dbName) {
     // v3.3: Enterprise features
     await loadSettings();
     _updateFocusBanner(); // focus mode survives a reload — show it, or silence looks like "no messages"
+    await _refreshDeviceRole();
     await _loadRetryQueue(); // v3.6: Restore pending messages from IDB
 
     // v3.6: Prune stale Double Ratchet sessions (contacts deleted but sessions remain)
@@ -5798,6 +5822,7 @@ async function initMessenger(dbName) {
     _DOM.get('msg-setup').classList.remove('hidden');
     _DOM.get('msg-main').classList.add('hidden');
   }
+  } // end _boot
 
   _DOM.get('b-msg-setup')?.addEventListener('click', async () => {
     const name = _DOM.get('msg-name').value.trim().slice(0, 64) || 'Anonymous';
@@ -7497,6 +7522,20 @@ async function initMessenger(dbName) {
     // it applies to this message only, so it can never silently mute a conversation.
     if (_noReplyNeeded) { meta.nrn = true; _noReplyNeeded = false; _updateNrnButton(); }
     if (activeContact.isGroup) {
+      // A linked SECONDARY device is not in the group roster — the roster holds the account
+      // ROOT's id — so every member's `if (!member) return` drops its group messages on the
+      // floor while this device cheerfully renders them as sent. Refusing out loud is the
+      // honest behaviour: the limitation is a deliberate scope decision (per-device roster
+      // entries would multiply membership, epoch churn and kick semantics by device count),
+      // but silently discarding a message the user watched "send" is a lie, and this product
+      // spent a whole audit removing those. Group send stays on the primary device.
+      if (_isSecondaryDevice) {
+        showToast(t('groupPrimaryOnly'), 'error');
+        input.value = text; // give the message back rather than eating it
+        _isSending = false;
+        if (sendBtn) { sendBtn.disabled = false; sendBtn.classList.add('i-op-full'); sendBtn.classList.remove('pulse'); }
+        return;
+      }
       meta.senderName = myName;
       meta.mentions = [...text.matchAll(/@(\w+)/g)].map(m => m[1]);
     }
@@ -7753,6 +7792,7 @@ async function initMessenger(dbName) {
   async function _sendFile(file) {
     try {  
       if (!activeContact) return;
+      if (activeContact.isGroup && _isSecondaryDevice) { showToast(t('groupPrimaryOnly'), 'error'); return; }
       // v3.6: Auto-compress images
       file = await _compressImage(file);
       const ts = correctedNow();
@@ -13152,7 +13192,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         if (!rec?.devices || rec.root !== rootPub) { showToast(t('devNotListed'), 'error'); return; }
         if (!rec.devices.some(d => d.pub === myPubB64)) { showToast(t('devNotListed'), 'error'); return; }
         await dbPut('identity', { root: rootPub, rootEd: rec.rootEd || null, isPrimary: false }, 'account');
-        _myDevCache = null;
+        _myDevCache = null; await _refreshDeviceRole();
         showToast(t('devLinked'), 'success');
       } catch(err) { _dbg(err, 'linkto'); showToast(t('devSetFail'), 'error'); }
       return;
@@ -13399,6 +13439,9 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
   window.createCloudBackup = createCloudBackup;
   window.restoreCloudBackup = restoreCloudBackup;
   window.showSafetyNumber = showSafetyNumber;
+
+  // Boot LAST — see the _boot definition for why this line's position is load-bearing.
+  await _boot();
 
 // ======================== NATIVE APP INTEGRATION ========================
 }

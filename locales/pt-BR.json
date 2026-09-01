@@ -543,5 +543,6 @@
  "vipCleared": "{0} não é mais VIP",
  "rrDelayLabel": "Atrasar confirmações de leitura (2 min)",
  "focusLabel": "Modo foco por 1 hora",
- "focusStrictLabel": "Silenciar tudo (sem exceções VIP)"
+ "focusStrictLabel": "Silenciar tudo (sem exceções VIP)",
+ "groupPrimaryOnly": "Mensagens de grupo devem ser enviadas do seu dispositivo principal"
 }

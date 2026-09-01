@@ -1,0 +1,53 @@
+import { chromium } from 'playwright';
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+const mk = async (ipn, name) => {
+  const c = await b.newContext({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.' + ipn } });
+  await c.addInitScript(()=>{try{localStorage.setItem('brz-consent',String(Date.now()));}catch{}});
+  const p = await c.newPage();
+  p.on('pageerror', e => console.log(name, 'PAGEERR', e.message.slice(0, 200)));
+  await p.goto('http://127.0.0.1:8787/');
+  await p.locator('#msg-name').fill(name); await p.locator('#b-msg-setup').click();
+  await p.locator('#msg-main').waitFor({ state: 'visible' });
+  const pub = await p.evaluate(()=>new Promise(r=>{const q=indexedDB.open('breeze-messenger',5);q.onsuccess=()=>{q.result.transaction('identity','readonly').objectStore('identity').get('keys').onsuccess=e=>r(e.target.result?.pubB64);};}));
+  return { p, pub };
+};
+const readIdb = (p) => p.evaluate(()=>new Promise(r=>{
+  const q=indexedDB.open('breeze-messenger',5);
+  q.onerror=()=>r('OPEN-ERR:'+q.error);
+  q.onsuccess=()=>{const o=[];const st=q.result.transaction('contacts','readonly').objectStore('contacts');st.openCursor().onsuccess=e=>{const c=e.target.result;if(c){o.push(c.value.name);c.continue();}else r(o);};};
+}));
+const dbNames = (p) => p.evaluate(()=>indexedDB.databases ? indexedDB.databases().then(d=>d.map(x=>x.name+'@'+x.version)) : 'n/a');
+
+const A = await mk(72,'Keeper'), B = await mk(73,'Kept');
+await A.p.locator('#b-msg-add').click();
+const d = A.p.locator('dialog[aria-labelledby]');
+await d.locator('.modal-input').fill(B.pub);
+await d.locator('[value="ok"]').click();
+await d.waitFor({state:'hidden'});
+await A.p.locator('#msg-contacts .contact').first().waitFor({timeout:10000});
+console.log('BEFORE  rows:', (await A.p.locator('#msg-contacts .contact').count()));
+console.log('BEFORE  idb :', JSON.stringify(await readIdb(A.p)));
+console.log('BEFORE  dbs :', JSON.stringify(await dbNames(A.p)));
+console.log('BEFORE  uid :', await A.p.evaluate(()=>localStorage.getItem('brz-uid')), 'active:', await A.p.evaluate(()=>localStorage.getItem('brz-active')), 'accs:', await A.p.evaluate(()=>localStorage.getItem('brz-accounts')));
+await A.p.reload();
+await A.p.locator('#msg-main').waitFor({state:'visible'});
+await A.p.waitForTimeout(4000);
+// Does anything AFTER line 5618 in boot still run? Send B->A and see if it ever arrives.
+await B.p.locator('#b-msg-add').click();
+const d2 = B.p.locator('dialog[aria-labelledby]');
+await d2.locator('.modal-input').fill(A.pub);
+await d2.locator('[value="ok"]').click();
+await d2.waitFor({state:'hidden'});
+await B.p.locator('#msg-contacts .contact').first().click();
+await B.p.locator('#msg-input-bar').waitFor({state:'visible'});
+const probe = 'does polling still run ' + Date.now();
+await B.p.locator('#msg-input').fill(probe);
+await B.p.locator('#b-msg-send').click();
+await A.p.waitForTimeout(12000);
+const got = await A.p.evaluate((n)=>new Promise(r=>{const q=indexedDB.open('breeze-messenger',5);q.onsuccess=()=>{let f=false;q.result.transaction('messages','readonly').objectStore('messages').openCursor().onsuccess=e=>{const c=e.target.result;if(c){if((c.value.text||'').includes(n))f=true;c.continue();}else r(f);};};}), probe);
+console.log('POLLING-AFTER-RELOAD delivered:', got);
+console.log('AFTER   rows:', (await A.p.locator('#msg-contacts .contact').count()));
+console.log('AFTER   idb :', JSON.stringify(await readIdb(A.p)));
+console.log('AFTER   dbs :', JSON.stringify(await dbNames(A.p)));
+console.log('AFTER   uid :', await A.p.evaluate(()=>localStorage.getItem('brz-uid')), 'active:', await A.p.evaluate(()=>localStorage.getItem('brz-active')), 'accs:', await A.p.evaluate(()=>localStorage.getItem('brz-accounts')));
+await b.close();

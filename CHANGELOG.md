@@ -1,5 +1,30 @@
 # Changelog
 
+## The app did not work for returning users (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+796 vitest + **30** Playwright E2E (+3); `index.html` (boot wrapped in a function — 2 lines of real change), `tests/e2e/smoke.spec.js`, `CLAUDE.md`.
+
+The most severe bug of this session, found while auditing what was left before calling the product finished. It had been in the tree the whole time.
+
+**Symptom:** add a contact, reload the page, and the contact list is empty. **Real severity, measured:** after a reload, `startPolling()` never runs either — a returning user receives *no messages at all*. The app only worked in the session that created the identity.
+
+**Root cause, after a wrong guess.** The first hypothesis was data loss: `dbPut` uses `durability: 'relaxed'` and resolves on `req.onsuccess` rather than `tx.oncomplete`, both of which can drop a write that is followed immediately by a reload. Each was tried on its own; **both failed to fix it**, which killed the hypothesis. Measuring instead of guessing gave the answer immediately:
+
+```
+AFTER reload  rows: 0            ← nothing rendered
+AFTER reload  idb : ["Contact"]  ← but the data is right there
+```
+
+Not data loss — render failure. Boot called `await renderContacts()` at line 5618, and `renderContacts` reads `_activeFolder` (5956), `_activeLabel` (5957), `_contactSort` (5958), `_contactFilter` (6038), `_drafts` (6360) and `activeContact` — every one a `let` declared *further down the same function*. The first access threw `ReferenceError` from the **temporal dead zone**, aborting the entire boot block, which is why everything after that line — polling included — never ran. This is the **second** occurrence of this exact class in this file; the note near the top records the first (`_perf`, which "crashed boot for every real user until found via E2E").
+
+**Fix:** the boot block becomes `async function _boot()` — a hoisted declaration, so not one line of its body moves — and is invoked at the *end* of `initMessenger`, after every declaration it depends on is initialised. Ordering is now safe rather than lucky, and the comment says so.
+
+**Why 29 green tests missed it** is the more useful finding: of nine E2E spec files, **only two ever call `reload()` — and both of those reloads were added in the last hour.** The entire suite tested the first session and nothing else, so the state every user is in from their second visit onward was never exercised. Two guards now cover it: the visible symptom (`the contact list survives a reload`) and the real one (`messages still arrive after a reload (boot runs to completion)`), the latter failing loudly whenever boot stops short.
+
+Also in this pass: a linked **secondary device now refuses to send to a group** instead of pretending. Its messages were dropped by every member's `if (!member) return` — the roster holds the account root's id, not the device's — while the sending device rendered them as sent. Group send is primary-only by design; silently discarding a message the user watched leave is not a design, it is a lie. `CLAUDE.md` also gains two corrections: the deployed safety number is measured at 96 bits (not weak, per `fingerprint.js`'s own arithmetic), and `validate.sh` is 39 checks, not 35.
+
+---
+
 ## The algorithm applied to code twenty minutes old (branch claude/nice-ride-T6yb0, 2026-08-21)
 
 796 vitest + 27 Playwright E2E, unchanged; `index.html` net +48 after deletions, EN 660 keys (a menu of options came and went without ever shipping).
