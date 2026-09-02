@@ -85,10 +85,16 @@ plaintext is a different threat model from one that cannot.
   of staying permanently unreachable to new contacts. Cloud backups are the deliberate
   exception (see below): they expire on schedule and now say so.
 - **The sealed queue is a bounded, last-write-wins KV value.** Cloudflare KV offers no
-  transactions, so the queue's read-modify-write can lose an envelope if two senders write in
-  the same instant from different PoPs. Mitigations: content-keyed dedup, the client retry
-  queue, and the overflow confession (`dropped: n`) — but the sealed path is *best-effort
-  reliable*, not exactly-once. P2P delivery and re-send are the recovery paths.
+  transactions, so the queue's read-modify-write can lose an envelope if two senders write to
+  the same recipient in the same instant from different PoPs — and both senders would be
+  answered 200, making the loss silent. The send path now **reads the key back and re-appends
+  its own envelope if it is missing**, which recovers the common case for one extra read on the
+  cold send path. Deliberately not the textbook fix: a key per envelope removes the race
+  outright but replaces one `get` per poll with a `list` plus a `get` per message on the
+  hottest path, in a relay that already throttles presence writes to survive the free tier.
+  So the sealed path remains **best-effort with recovery, not exactly-once**; content-keyed
+  dedup, the client retry queue and the overflow confession (`dropped: n`) still back it, and
+  P2P delivery plus re-send remain the ultimate recovery paths.
 - **Metadata**: Sealed Sender **v2** hides the sender from the relay *cryptographically*:
   all sender-identifying fields (id, public key, display name, signature keys, the reply
   preview, multi-device markers — and the X3DH bootstrap header's initiator identity key,

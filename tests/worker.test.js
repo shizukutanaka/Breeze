@@ -2106,6 +2106,41 @@ describe('sealed sender send / poll / ack', () => {
     expect(second.dropped).toBeUndefined(); // confessed once, counter reset
   });
 
+  // The sealed queue is a single KV value mutated read-modify-write, and KV is
+  // last-write-wins: two senders hitting the same recipient at once both read the old queue
+  // and one envelope vanishes — with both senders told 200. The send path now reads the key
+  // back and re-appends if its own entry is missing. This simulates the losing race
+  // deterministically by having a "concurrent" writer clobber the queue at the moment of the
+  // put, then asserts the envelope is present anyway.
+  it('recovers an envelope that a concurrent writer clobbered (lost-write recovery)', async () => {
+    const env = makeEnv();
+    const key = 'sealed:racetgt1';
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbered = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true; // the other sender's write lands last and wins — our entry is gone
+        await origPut(k, JSON.stringify([{ envelope: 'THE-OTHER-SENDERS-ENVELOPE', ts: Date.now() }]), o);
+      }
+    };
+    const res = await handleSealedSend({ to: 'racetgt1', envelope: 'MINE-must-survive' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect(clobbered).toBe(true); // the race really happened
+
+    const polled = await (await handleSealedPoll({ id: 'racetgt1' }, env, req({}))).json();
+    const envelopes = polled.messages.map((m) => m.envelope);
+    expect(envelopes).toContain('MINE-must-survive');          // recovered...
+    expect(envelopes).toContain('THE-OTHER-SENDERS-ENVELOPE'); // ...without evicting the winner
+  });
+
+  it('does not re-append when the write landed cleanly (no duplicates in the common case)', async () => {
+    const env = makeEnv();
+    await handleSealedSend({ to: 'noracetgt', envelope: 'only-once' }, env, req({}));
+    const polled = await (await handleSealedPoll({ id: 'noracetgt' }, env, req({}))).json();
+    expect(polled.messages.filter((m) => m.envelope === 'only-once').length).toBe(1);
+  });
+
   it('a queue that never overflows reports no drops', async () => {
     const env = makeEnv();
     await handleSealedSend({ to: 'quietone', envelope: 'just-one' }, env, req({}));

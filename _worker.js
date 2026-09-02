@@ -2372,6 +2372,35 @@ async function handleSealedSend(body, env, request) {
     globalThis._sealedDedup.delete(dedupKey);
     return json({ error: 'Failed to store sealed message', code: 'STORE_FAILED' }, 500, request);
   }
+  // Lost-write recovery. `sealed:{to}` is one KV value mutated read-modify-write, and KV is
+  // last-write-wins with no transactions: two senders writing to the SAME recipient in the same
+  // instant both read the old queue, one envelope disappears — and BOTH senders are answered
+  // 200. The silence is the defect, not the race: a rare loss you can see is an inconvenience,
+  // a rare loss you cannot is a messenger that drops messages.
+  //
+  // Reading the key back catches the common case for ONE extra read on the SEND path, which is
+  // cold next to polling (every 3 s per user). Deliberately NOT the textbook fix — splitting
+  // the queue into a key per envelope removes the race outright, but replaces one `get` per
+  // poll with a `list` plus a `get` per message on the hottest path in a relay that already
+  // throttles presence writes to survive the free tier's 1000 writes/day. This is recovery,
+  // not exactly-once (SECURITY.md says so plainly), and it cannot make delivery worse: a stale
+  // read just skips the retry, and a duplicate re-append is dropped by the recipient's msgId
+  // dedup.
+  //
+  // Identity is the ENVELOPE, not the timestamp. Matching on ts alone looked cheaper and was
+  // wrong: the racing writer's entry can carry the same millisecond, so the check would report
+  // "mine is present" in exactly the case it exists to detect. The length test short-circuits
+  // the string compare for the common case. (Caught by the deterministic race test, which is
+  // the point of writing one.)
+  const verifyRaw = await kvGet(env, key);
+  const seen = verifyRaw ? safeJsonParse(verifyRaw, []) : [];
+  const mine = (m) => m && typeof m.envelope === 'string'
+    && m.envelope.length === envelope.length && m.envelope === envelope;
+  if (Array.isArray(seen) && !seen.some(mine)) {
+    seen.push({ envelope, ts: newTs });
+    const requeued = capQueueBytes(seen.slice(-100), (m) => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
+    await kvPut(env, key, JSON.stringify(requeued), { expirationTtl: TTL.WEEK });
+  }
   sendPushToUser(to, { title: 'Breeze', body: 'New message', tag: 'breeze-sealed', contactId: to }, env).catch(() => {});
   return json({ ok: true, ack: Date.now() }, 200, request);
 }

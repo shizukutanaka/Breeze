@@ -1,5 +1,19 @@
 # Changelog
 
+## Lost-write recovery on the sealed queue — the textbook fix measured and declined (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+798 vitest (+2) + 32 Playwright E2E; `_worker.js` (+~20), `SECURITY.md`, `docs/ASSESSMENT.md`.
+
+Improvement #3 on the assessment: the sealed queue is one KV value mutated read-modify-write, KV is last-write-wins, so two senders hitting the same recipient in the same instant lose an envelope — and **both are answered 200**. The silence, not the race, is the defect.
+
+**The textbook fix was measured first and declined.** A key per envelope (`sealed:{to}:{ts}:{rand}` + `list`) removes the race outright. It also replaces one `get` per poll with a `list` plus one `get` per pending message, on the single hottest path in the product — 28,800 polls per user per day at the 3 s interval — in a relay that already runs an in-memory rate limiter, in-memory dedup and a 5-minute presence write throttle specifically to survive the free tier's 1,000 writes/day. Paying that on every poll to close a race that requires two *different* senders to target the *same* recipient in the *same* instant is the wrong trade, and the assessment now says so with the numbers instead of listing it as a cheap-sounding to-do.
+
+**What shipped instead:** after the write, the send path reads the key back and re-appends its own envelope if it is missing. One extra read on the cold send path; recovers the common case; cannot make delivery worse (a stale read skips the retry, a duplicate is dropped by the recipient's msgId dedup). Best-effort *with recovery* — still not exactly-once, and SECURITY.md is explicit about which.
+
+**The test caught a design error before it shipped.** The first version identified "my entry" by timestamp, because comparing 256 KB envelope strings looked expensive. The deterministic race test — a mock writer that clobbers the queue at the moment of the put — failed immediately: the racing entry can carry the *same millisecond*, so the check reported "present" in precisely the case it exists to detect. Identity is now the envelope itself, with a length check to short-circuit the compare. Writing the adversarial test first is what made the flaw visible; it would have passed a happy-path test forever.
+
+---
+
 ## A security control that looked like security, measured and reverted (branch claude/nice-ride-T6yb0, 2026-08-21)
 
 796 vitest + 32 Playwright E2E — unchanged, because the code change was reverted. `docs/ASSESSMENT.md` and `SECURITY.md` corrected.
