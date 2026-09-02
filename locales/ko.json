@@ -541,5 +541,7 @@
  "settingsAccounts": "계정",
  "addAccountBtn": "계정 추가",
  "devUnlinkConfirm": "기기 {0} 을(를) 계정에서 제거할까요?",
- "p2pDirect": "직접 연결"
+ "p2pDirect": "직접 연결",
+ "backupFileBtn": "💾 파일로 저장",
+ "restoreFileBtn": "📂 파일에서 복원"
 }

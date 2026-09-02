@@ -541,5 +541,7 @@
  "settingsAccounts": "บัญชี",
  "addAccountBtn": "เพิ่มบัญชี",
  "devUnlinkConfirm": "นำอุปกรณ์ {0} ออกจากบัญชีหรือไม่?",
- "p2pDirect": "เชื่อมต่อโดยตรง"
+ "p2pDirect": "เชื่อมต่อโดยตรง",
+ "backupFileBtn": "💾 บันทึกเป็นไฟล์",
+ "restoreFileBtn": "📂 กู้คืนจากไฟล์"
 }

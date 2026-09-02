@@ -548,5 +548,7 @@
  "settingsAccounts": "Contas",
  "addAccountBtn": "Adicionar conta",
  "devUnlinkConfirm": "Remover o dispositivo {0} da sua conta?",
- "p2pDirect": "Direto"
+ "p2pDirect": "Direto",
+ "backupFileBtn": "💾 Salvar em arquivo",
+ "restoreFileBtn": "📂 Restaurar de arquivo"
 }

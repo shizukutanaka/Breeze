@@ -541,5 +541,7 @@
  "settingsAccounts": "Akun",
  "addAccountBtn": "Tambah akun",
  "devUnlinkConfirm": "Hapus perangkat {0} dari akun Anda?",
- "p2pDirect": "Langsung"
+ "p2pDirect": "Langsung",
+ "backupFileBtn": "💾 Simpan ke file",
+ "restoreFileBtn": "📂 Pulihkan dari file"
 }

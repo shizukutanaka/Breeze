@@ -541,5 +541,7 @@
  "settingsAccounts": "帳號",
  "addAccountBtn": "新增帳號",
  "devUnlinkConfirm": "要將裝置 {0} 從帳號移除嗎？",
- "p2pDirect": "直連"
+ "p2pDirect": "直連",
+ "backupFileBtn": "💾 儲存為檔案",
+ "restoreFileBtn": "📂 從檔案還原"
 }

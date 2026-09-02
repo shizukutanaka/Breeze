@@ -677,5 +677,7 @@
  "settingsAccounts": "アカウント",
  "addAccountBtn": "アカウントを追加",
  "devUnlinkConfirm": "デバイス {0} をアカウントから削除しますか?",
- "p2pDirect": "直接接続"
+ "p2pDirect": "直接接続",
+ "backupFileBtn": "💾 ファイルに保存",
+ "restoreFileBtn": "📂 ファイルから復元"
 }

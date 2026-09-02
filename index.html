@@ -1660,6 +1660,8 @@ const _I = {
     focusLabel: 'Focus mode for 1 hour',
     focusStrictLabel: 'Silence everything (no VIP exceptions)',
     settingsAccounts: 'Accounts',
+    backupFileBtn: '💾 Save to file',
+    restoreFileBtn: '📂 Restore from file',
     devUnlinkConfirm: 'Remove device {0} from your account?',
     p2pDirect: 'Direct',
     addAccountBtn: 'Add account',
@@ -6069,7 +6071,6 @@ async function initMessenger(dbName) {
     else if (e.key === 'End') next = tabs.length - 1;
     if (next !== undefined) { tabs[next].click(); tabs[next].focus(); }
   });
-  _DOM.get('contact-sort')?.addEventListener('change', (e) => { _contactSort = e.target.value; renderContacts(); });
   // v3.2: Contact search filter
   let _contactFilter = '';
   _DOM.get('contact-filter')?.addEventListener('input', debounce((e) => { _contactFilter = e.target.value.trim().toLowerCase(); renderContacts(); }, 150));
@@ -10325,7 +10326,7 @@ async function initMessenger(dbName) {
   }
 
   // ===== Backup & Restore =====
-  _DOM.get('b-msg-backup')?.addEventListener('click', async () => {
+  async function backupToFile() {
     const identity = await dbGet('identity', 'keys');
     const contacts = await dbGetAll('contacts');
     if (!identity) { showToast(t('toastNoIdentityBackup'), 'error'); return; }
@@ -10337,10 +10338,21 @@ async function initMessenger(dbName) {
     const enc = await encrypt(pass, data);
     const blob = new Blob([JSON.stringify(enc)], { type: 'application/json' });
     downloadBlob(blob, 'breeze-backup-' + new Date().toISOString().slice(0, 10) + '.json');
-  });
+  }
 
-  // Panic button (no confirmation — this is intentional)
-  _DOM.get('b-msg-panic')?.addEventListener('click', () => executePanic());
+  // Restoring used to require knowing you could drag a file onto the sidebar. Same file, same
+  // decryption path — just an entry point a person can find.
+  function restoreFromFilePicker() {
+    const picker = document.createElement('input');
+    picker.type = 'file';
+    picker.accept = 'application/json,.json';
+    picker.onchange = async () => { const f = picker.files?.[0]; if (f) await restoreBackup(f); };
+    picker.click();
+  }
+
+  // REMOVED: click listeners for #b-msg-panic and #contact-sort. Both elements were deleted
+  // from the markup at some point; the registrations survived, silently attached to nothing.
+  // Neither feature was lost — /panic (and Ctrl+Shift+Backspace) and /sort still reach them.
 
   // Theme toggle
   _DOM.get('b-msg-theme')?.addEventListener('click', toggleTheme);
@@ -11287,6 +11299,13 @@ async function initMessenger(dbName) {
     // Backup/Restore
     if (e.target.closest('[data-action="backup"]')) { createCloudBackup(); return; }
     if (e.target.closest('[data-action="restore"]')) { restoreCloudBackup(); return; }
+    // Local file backup/restore. The download half was wired to #b-msg-backup — a button that
+    // does not exist in the markup — so you could RESTORE a local backup (by dragging the file
+    // onto the sidebar) that you had no way to CREATE. An asymmetric dead end, and the half
+    // that was missing is the one SECURITY.md points at for root-key loss: unlike the cloud
+    // copy, a file on your disk does not expire after 90 days.
+    if (e.target.closest('[data-action="backup-file"]')) { backupToFile(); return; }
+    if (e.target.closest('[data-action="restore-file"]')) { restoreFromFilePicker(); return; }
   }, { signal: _ac.signal });
   window.toggleCompact = function() {
     document.body.classList.toggle('compact');
@@ -12474,6 +12493,8 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       safeSetHTML(d, `<b class="i-g">${t('cmdBackupTitle')}</b><br>
         <button data-action="backup" class="btn btn-g btn-sm i-m4">${t('backupBtn')}</button>
         <button data-action="restore" class="btn btn-o btn-sm i-m4">${t('restoreBtn')}</button><br>
+        <button data-action="backup-file" class="btn btn-o btn-sm i-m4">${t('backupFileBtn')}</button>
+        <button data-action="restore-file" class="btn btn-o btn-sm i-m4">${t('restoreFileBtn')}</button><br>
         <span class="text-xs color-t3">${t('backupNote')}</span>`);
       box.appendChild(d);
       box.scrollTop = box.scrollHeight;

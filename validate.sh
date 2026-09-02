@@ -129,6 +129,10 @@ else fail "i18n: locale drift or dead keys (run: node tools/i18n-check.mjs)" 4; 
 # Dead-code gate. Deleting a feature leaves its helper functions behind, and nothing noticed
 # until a manual inventory found them. A function defined in index.html whose name appears
 # exactly once (its own definition) is unreachable — delete it rather than carry it.
+# Dead-wiring gate — see tools/dead-wiring.mjs for why this class is invisible without it.
+if node tools/dead-wiring.mjs >/dev/null 2>&1; then pass "no listeners wired to non-existent DOM ids" 3
+else fail "listener(s) wired to missing DOM id(s) (run: node tools/dead-wiring.mjs)" 3; fi
+
 DEADFN=$(node -e '
 const fs=require("fs");const h=fs.readFileSync("index.html","utf8");
 const fns=[...h.matchAll(/^\s*(?:async\s+)?function\s+([A-Za-z_][\w]*)\s*\(/gm)].map(m=>m[1]);

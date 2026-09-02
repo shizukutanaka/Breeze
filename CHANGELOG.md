@@ -1,5 +1,19 @@
 # Changelog
 
+## Three more listeners wired to nothing — and the gate that finds them (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+798 vitest + 33 Playwright E2E; `index.html`, new `tools/dead-wiring.mjs`, `validate.sh` **39 → 40 checks**, all 7 locales, `docs/ASSESSMENT.md`.
+
+Multi-account being complete-but-unreachable was the second unreachable-feature bug in two rounds, so the question stopped being "is this one broken" and became **"how many other doors are nailed shut?"** `_DOM.get('id')` returns null for an id that does not exist, and the client uses optional chaining nearly everywhere, so a renamed or deleted element leaves its listener attached to nothing — no error, no warning, no failing test. Cross-checking all 77 literal id lookups against every id the app declares (static markup, template strings, runtime assignment) found three orphans.
+
+**One of them lost a capability.** Local encrypted backup-to-file was wired to `#b-msg-backup`, which does not exist. Its *restore* half still worked — drag a backup file onto the sidebar — so the app could restore a file it gave you no way to create. That asymmetry mattered more than it looks: SECURITY.md points at backups as the recovery path for root-key loss, and the cloud copy expires 90 days after upload while a file on your own disk does not. The half that was missing was the durable one. Both now sit in the `/backup` panel next to the cloud pair, with a file picker replacing "somehow know that dragging works".
+
+The other two — `#b-msg-panic` and `#contact-sort` — were handlers that outlived their buttons. Nothing was lost (`/panic`, Ctrl+Shift+Backspace, and `/sort` still reach both features), so the dead registrations were simply deleted.
+
+**`tools/dead-wiring.mjs`** now performs that cross-check on every `validate.sh` run. It resolves ids declared any of the three ways this single-file app uses, and deliberately skips computed lookups like `` _DOM.get(`dur-${id}`) `` — the goal is catching typos and orphans, not proving reachability. First written as a shell one-liner, it produced a screenful of false positives from template literals; that was the signal to make it a real tool alongside `csp-hash.mjs` and `i18n-check.mjs` rather than ship a noisy gate nobody would trust. Teeth-tested by pointing a live lookup at a ghost id and watching the build turn BLOCKED.
+
+---
+
 ## Multi-account was complete, and unreachable (branch claude/nice-ride-T6yb0, 2026-08-21)
 
 798 vitest + **33** Playwright E2E (+1, new `tests/e2e/account.spec.js`); `index.html`, `tools/i18n-check.mjs` (+check 7), all 7 locales, `docs/ASSESSMENT.md`.
