@@ -22,6 +22,10 @@
 //   6. DEAD KEYS       — an English key nothing references is deleted, not translated. Without
 //                        this check 212 of them accumulated behind removed features, each one
 //                        an eternal translation obligation in 8 locales.
+//   7. MISSING KEYS    — the mirror: a key that IS referenced but never defined renders as the
+//                        raw key name, because t() falls back to its argument. Check 6 cannot
+//                        see these (it only inspects keys that exist), and one hid for months
+//                        behind a button no user could reach.
 // ============================================================================
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -124,6 +128,21 @@ for (const file of localeFiles) {
 const KEY_RE = (k) => new RegExp('\\b' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'g');
 const deadKeys = refKeys.filter((k) => (html.match(KEY_RE(k)) || []).length <= 1);
 for (const k of deadKeys) problems.push(`EN."${k}": defined but never referenced (dead key — delete it)`);
+
+// 7. MISSING KEYS — the mirror of check 6, and the more visible failure of the two: `t()`
+//    falls back to the key itself, so an undefined key renders as raw "addAccountBtn" in the
+//    UI. That exact key sat referenced-but-undefined behind an unreachable button until it
+//    was reached, and check 6 could not see it — it only looks at keys that exist. Both
+//    directions are now covered. Only literal t('...') calls are checked; a computed key
+//    cannot be resolved statically and is out of scope by design.
+const referenced = new Set([...html.matchAll(/\bt\(\s*'([A-Za-z][A-Za-z0-9_]*)'/g)].map((m) => m[1]));
+for (const el of html.matchAll(/data-i18n(?:-ph|-aria|-title|-html)?="([A-Za-z][A-Za-z0-9_]*)"/g)) {
+  referenced.add(el[1]);
+}
+const known = new Set(refKeys);
+for (const k of [...referenced].sort()) {
+  if (!known.has(k)) problems.push(`t("${k}") is used but not defined in the EN table (renders as the raw key)`);
+}
 
 if (problems.length) {
   console.error(`i18n-check: FAIL — ${problems.length} problem(s)`);

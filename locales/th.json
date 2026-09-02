@@ -537,5 +537,9 @@
  "rrDelayLabel": "หน่วงการแจ้งอ่านแล้ว (2 นาที)",
  "focusLabel": "โหมดโฟกัส 1 ชั่วโมง",
  "focusStrictLabel": "ปิดเสียงทั้งหมด (ไม่ยกเว้น VIP)",
- "groupPrimaryOnly": "ต้องส่งข้อความกลุ่มจากอุปกรณ์หลักของคุณ"
+ "groupPrimaryOnly": "ต้องส่งข้อความกลุ่มจากอุปกรณ์หลักของคุณ",
+ "settingsAccounts": "บัญชี",
+ "addAccountBtn": "เพิ่มบัญชี",
+ "devUnlinkConfirm": "นำอุปกรณ์ {0} ออกจากบัญชีหรือไม่?",
+ "p2pDirect": "เชื่อมต่อโดยตรง"
 }

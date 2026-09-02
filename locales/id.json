@@ -537,5 +537,9 @@
  "rrDelayLabel": "Tunda tanda dibaca (2 mnt)",
  "focusLabel": "Mode fokus selama 1 jam",
  "focusStrictLabel": "Senyapkan semua (tanpa pengecualian VIP)",
- "groupPrimaryOnly": "Pesan grup harus dikirim dari perangkat utama Anda"
+ "groupPrimaryOnly": "Pesan grup harus dikirim dari perangkat utama Anda",
+ "settingsAccounts": "Akun",
+ "addAccountBtn": "Tambah akun",
+ "devUnlinkConfirm": "Hapus perangkat {0} dari akun Anda?",
+ "p2pDirect": "Langsung"
 }

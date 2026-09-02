@@ -537,5 +537,9 @@
  "rrDelayLabel": "延後已讀回條（2 分鐘）",
  "focusLabel": "專注模式 1 小時",
  "focusStrictLabel": "全部靜音（VIP 也不例外）",
- "groupPrimaryOnly": "群組訊息必須從主要裝置傳送"
+ "groupPrimaryOnly": "群組訊息必須從主要裝置傳送",
+ "settingsAccounts": "帳號",
+ "addAccountBtn": "新增帳號",
+ "devUnlinkConfirm": "要將裝置 {0} 從帳號移除嗎？",
+ "p2pDirect": "直連"
 }

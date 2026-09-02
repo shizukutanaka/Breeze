@@ -544,5 +544,9 @@
  "rrDelayLabel": "Retrasar confirmaciones de lectura (2 min)",
  "focusLabel": "Modo concentración durante 1 hora",
  "focusStrictLabel": "Silenciar todo (sin excepciones VIP)",
- "groupPrimaryOnly": "Los mensajes de grupo deben enviarse desde tu dispositivo principal"
+ "groupPrimaryOnly": "Los mensajes de grupo deben enviarse desde tu dispositivo principal",
+ "settingsAccounts": "Cuentas",
+ "addAccountBtn": "Añadir cuenta",
+ "devUnlinkConfirm": "¿Quitar el dispositivo {0} de tu cuenta?",
+ "p2pDirect": "Directo"
 }

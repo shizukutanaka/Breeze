@@ -537,5 +537,9 @@
  "rrDelayLabel": "읽음 표시 지연(2분)",
  "focusLabel": "집중 모드 1시간",
  "focusStrictLabel": "모두 무음(VIP도 예외 없음)",
- "groupPrimaryOnly": "그룹 메시지는 기본 기기에서 보내야 합니다"
+ "groupPrimaryOnly": "그룹 메시지는 기본 기기에서 보내야 합니다",
+ "settingsAccounts": "계정",
+ "addAccountBtn": "계정 추가",
+ "devUnlinkConfirm": "기기 {0} 을(를) 계정에서 제거할까요?",
+ "p2pDirect": "직접 연결"
 }

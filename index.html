@@ -1659,6 +1659,10 @@ const _I = {
     rrDelayLabel: 'Delay read receipts (2 min)',
     focusLabel: 'Focus mode for 1 hour',
     focusStrictLabel: 'Silence everything (no VIP exceptions)',
+    settingsAccounts: 'Accounts',
+    devUnlinkConfirm: 'Remove device {0} from your account?',
+    p2pDirect: 'Direct',
+    addAccountBtn: 'Add account',
     groupPrimaryOnly: 'Group messages must be sent from your primary device',
     nrnAria: 'Mark this message as needing no reply',
     nrnBadge: 'no reply needed',
@@ -3474,6 +3478,11 @@ async function switchAccount(accountId) {
     _DOM.get('msg-setup')?.classList.add('hidden');
   
     await initMessenger(acc.dbName || 'breeze-acc-' + accountId);
+    // Re-render AFTER init: only now is it known whether this account landed on the setup
+    // screen (a brand-new account, whose database has no identity) or the main UI, and the
+    // switcher has to be attached to whichever one is actually visible. The call above runs
+    // before that is decided, so on its own it would leave the bar inside the hidden #msg-main.
+    renderAccountTabs();
 
     // Remove overlay
     overlay?.remove();
@@ -3518,6 +3527,20 @@ function renderAccountTabs() {
     tabs.setAttribute('aria-label', t('ariaAccounts'));
     const sidebar = _DOM.get('msg-sidebar');
     if (sidebar) sidebar.insertBefore(tabs, sidebar.firstChild);
+  }
+  // The sidebar lives inside #msg-main, which is hidden while the SETUP screen shows — and a
+  // freshly created account always starts on setup, because its database has no identity yet.
+  // Rendering the switcher only there meant creating an account trapped you in it: no visible
+  // way back, only the undiscoverable Ctrl+1..9. When setup is showing, mirror the bar into
+  // #v-msg (the shared parent of setup and main) so switching is always reachable.
+  {
+    const setupVisible = !_DOM.get('msg-setup')?.classList.contains('hidden');
+    const host = _DOM.get('v-msg');
+    if (setupVisible && host && tabs.parentElement !== host) host.insertBefore(tabs, host.firstChild);
+    else if (!setupVisible) {
+      const sb = _DOM.get('msg-sidebar');
+      if (sb && tabs.parentElement !== sb) sb.insertBefore(tabs, sb.firstChild);
+    }
   }
 
   const activeId = getActiveAccountId();
@@ -8288,7 +8311,7 @@ async function initMessenger(dbName) {
         overlay.className = 'overlay';
         const name = 'paste-' + Date.now() + '.' + (file.type.split('/')[1] || 'png');
         safeSetHTML(overlay, `<div class="modal i-center">
-          <div class="i-sub12">${esc(t('sendImage') || t('sendImageConfirm'))}</div>
+          <div class="i-sub12">${esc(t('sendImageConfirm'))}</div>
           <img src="${url}" class="i-img-preview" decoding="async">
           <div class="i-small-muted">${fmtSize(file.size)}</div>
           <div class="i-flex-c">
@@ -13334,8 +13357,23 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         <label class="i-cur"><input type="checkbox" data-setting="focus" ${_focusActive() ? 'checked' : ''}> ${t('focusLabel')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="focus-strict" ${_settings.focusStrict ? 'checked' : ''}> ${t('focusStrictLabel')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="notif-perm" ${Notification?.permission === 'granted' ? 'checked' : ''}> ${t('enableNotif')}</label><br>
+        <br><b class="i-g">${t('settingsAccounts')}</b><br>
+        <button class="btn btn-o btn-sm" data-action="add-account">${t('addAccountBtn')}</button><br>
         <label class="i-cur"><input type="checkbox" data-setting="auto-lock" ${localStorage.getItem('brz-autolock') === '1' ? 'checked' : ''}> ${t('autoLockLabel')}</label><br>
         <br><span class="i-t3-10">${t('settingsImmediate')}</span>`);
+      // Multi-account was UNREACHABLE: the "+" that creates a second account lives inside the
+      // account tab bar, and renderAccountTabs() only builds that bar once you already have
+      // two accounts — a bootstrap deadlock, verified in a browser (three sessions, zero
+      // #acc-tabs, zero .acc-add). The whole subsystem is complete — switching, per-account
+      // databases, cross-account unread badges, Ctrl+1..9, rename/avatar/delete — so the fix
+      // is a door, not a rewrite. Putting it in Settings rather than forcing a tab bar on
+      // every single-account user keeps the default UI as plain as it is now.
+      d.addEventListener('click', (ev) => {
+        const btn = ev.target.closest('[data-action="add-account"]');
+        if (!btn) return;
+        haptic.tap();
+        if (typeof addAccount === 'function') addAccount();
+      });
       // v3.6: Event delegation for settings toggles (no inline onchange)
       d.addEventListener('change', (ev) => {
         const cb = ev.target;

@@ -1,5 +1,21 @@
 # Changelog
 
+## Multi-account was complete, and unreachable (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+798 vitest + **33** Playwright E2E (+1, new `tests/e2e/account.spec.js`); `index.html`, `tools/i18n-check.mjs` (+check 7), all 7 locales, `docs/ASSESSMENT.md`.
+
+Improvement #4 on the assessment was "enumerate the untested lifecycle states". Grepping for coverage of account switching returned nothing — no E2E, no unit test — for a subsystem reachable from the UI that calls `initMessenger()` a *second* time, i.e. the path most exposed to the boot reordering shipped hours earlier. Reaching for a test found something better than a regression.
+
+**The feature could not be reached at all.** The "+" that creates a second account lives inside the account tab bar, and `renderAccountTabs()` returned early unless you already had two accounts. You cannot get a second account without the button, and you cannot get the button without a second account. Verified in a browser across three sessions: account `0` present in localStorage, `#acc-tabs` zero, `.acc-add` zero. Switching, per-account databases, cross-account unread badges, Ctrl+1..9, rename/avatar/delete — all complete, all dead behind a door that never opened.
+
+**And the door opened onto a trap.** A brand-new account has no identity, so it lands on the setup screen — which sits outside `#msg-main`, where the tab bar is rendered. Create an account and you were stranded in it, with only the undiscoverable Ctrl+1..9 as an exit. Fixed by mirroring the switcher into the shared parent when setup is showing, and by re-rendering *after* `initMessenger()` — the existing call ran before the app had decided which screen to show, so on its own it always attached the bar to the hidden one.
+
+Deleting the subsystem was the other option and was rejected on the evidence: a complete, coherent feature with a one-condition bug is not dead weight. The entry point went into Settings rather than forcing a tab bar onto every single-account user — the same reasoning that put focus mode there.
+
+**The i18n gate had the mirror hole.** Check 6 finds keys defined but never referenced; nothing found keys *referenced but never defined*, which is the more visible failure because `t()` falls back to its argument and renders the raw key name to the user. `addAccountBtn` had been in exactly that state, invisible because the button was unreachable. Check 7 covers the other direction and immediately found three more: `devUnlinkConfirm`, `p2pDirect`, and `sendImage` — the last hiding behind `t('sendImage') || t('sendImageConfirm')`, a fallback that can never fire because `t()` never returns a falsy value, so the raw key always won. All four defined and translated into all seven locales; the gate teeth-tested with a planted key.
+
+---
+
 ## Lost-write recovery on the sealed queue — the textbook fix measured and declined (branch claude/nice-ride-T6yb0, 2026-08-21)
 
 798 vitest (+2) + 32 Playwright E2E; `_worker.js` (+~20), `SECURITY.md`, `docs/ASSESSMENT.md`.

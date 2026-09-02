@@ -673,5 +673,9 @@
  "rrDelayLabel": "既読を遅らせる(2分)",
  "focusLabel": "集中モードを1時間",
  "focusStrictLabel": "すべて無音にする(VIPも通さない)",
- "groupPrimaryOnly": "グループへの送信はメイン端末から行ってください"
+ "groupPrimaryOnly": "グループへの送信はメイン端末から行ってください",
+ "settingsAccounts": "アカウント",
+ "addAccountBtn": "アカウントを追加",
+ "devUnlinkConfirm": "デバイス {0} をアカウントから削除しますか?",
+ "p2pDirect": "直接接続"
 }
