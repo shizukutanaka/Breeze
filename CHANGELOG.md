@@ -1,5 +1,23 @@
 # Changelog
 
+## First-principles decomposition and the Socratic record (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+New `docs/FIRST-PRINCIPLES.md` (197 lines); `docs/ASSESSMENT.md` cross-linked. No code change — this is the analysis the engineering was serving, written down so it can be argued with.
+
+`ASSESSMENT.md` answers *what* is good and bad in measured numbers. This answers *why*, as questions and refutations rather than conclusions.
+
+**The decomposition.** Strip every feature and ask what cannot be removed: chat UI, groups, multi-device, notifications, receipts, reactions — all removable. What remains is one sentence: *two people exchange bytes nobody else can read*. Measured, that core is **573 lines, 4.1% of the client**. The other 95.9% is convenience — not a criticism, but it has a consequence: convenience erodes the core silently unless a machine watches. Every defect this session found proves it, and **none of them were crypto errors**. Sealed Sender v1's cryptography was correct; the sender's name simply rode *outside* the envelope. The boot crash delivered nothing to returning users with a perfectly good ratchet. Group sends from a secondary device were dropped in silence while the UI said "sent".
+
+**The moat is not features.** LINE can copy any feature. It cannot copy the absence of ads (its revenue), the refusal to maximise engagement (its metric), or the absence of data collection (its asset). That yields a usable test for every design decision: *could LINE ship this?* If yes, it is not differentiation. Verified rather than asserted — grepping for ad and tracking code returns four hits, all of them privacy-policy prose and variable names.
+
+**The trade-offs, stated as prices paid.** No store distribution buys freedom from review and costs discoverability plus iOS notification limits. Key-as-identity means there is no data to collect and **no account recovery** — backups are the only insurance. A single dependency-free file is auditable and fast, and caps the product at 15,000 lines. A PWA runs everywhere and lags up to 15 s when backgrounded. These are not defects; they are the bill. The document is explicit that an undocumented price is a fraud, which is why SECURITY.md enumerates root-key loss, the 5-minute revocation lag, the 90-day backup expiry, and invite-link-equals-membership.
+
+**And the eighth question, the one most easily skipped: is the improvement itself verified?** It was not. Gating `/group/info` to members was implemented, then reverted on measurement — the same invite token still joins, and joining returns the roster anyway. Thirteen failing tests were the signal that the premise, not the tests, needed re-deriving.
+
+Writing it surfaced two drifted numbers in my own draft (spec-file count, line total). Both were corrected against fresh measurements before commit, which is the document's own standard applied to itself.
+
+---
+
 ## Three more listeners wired to nothing — and the gate that finds them (branch claude/nice-ride-T6yb0, 2026-08-21)
 
 798 vitest + 33 Playwright E2E; `index.html`, new `tools/dead-wiring.mjs`, `validate.sh` **39 → 40 checks**, all 7 locales, `docs/ASSESSMENT.md`.
