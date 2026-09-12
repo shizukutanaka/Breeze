@@ -124,7 +124,12 @@ pseudolocalization to CI.
 
 ## 16 — Monetization & billing (privacy-preserving)
 
-Breeze: Stripe plans (Lite/Plus/Pro). Risk: billing identity ↔ messaging identity linkage.
+**Status update (2026-09): the Stripe billing this section assumed as a baseline was found
+removed from the codebase** — no checkout/webhook/portal route exists, and `addAccount()`
+enforces no plan limit (see `SECURITY.md`'s "Removed: multi-account billing"). The research
+below is roadmap material for *if* billing is rebuilt, not a description of current state.
+
+Originally: Breeze: Stripe plans (Lite/Plus/Pro). Risk: billing identity ↔ messaging identity linkage.
 
 1. *Privacy Pass* ([PETS 2018](https://petsymposium.org/2018/files/papers/issue3/popets-2018-0026.pdf)) → **blind-signed access tokens**: prove "paid" without linking payment to the messaging account.
 2. Chaum, *Blind Signatures for Untraceable Payments* (1982) → the primitive behind unlinkable paid access.
