@@ -330,6 +330,13 @@ export default {
         default:            return json({ error: 'Not found', code: 'NOT_FOUND' }, 404, request, reqId);
       }
     } catch (e) {
+      // Last-resort boundary for any handler that throws unexpectedly. Every other catch
+      // in this file logs (see `[kv]`/`[push]`/`[cleanup]`), but this one only ever
+      // returned the client a bare rid with nothing recorded server-side to match it —
+      // an unanticipated bug here left zero diagnostic trail. Log path + reqId so a
+      // client-reported rid is actually correlatable, and the stack so the cause is
+      // findable instead of just "something threw somewhere in this route".
+      console.error('[unhandled]', path, reqId, e?.stack || e?.message || e);
       return json({ error: 'Server error', code: 'SERVER_ERROR', rid: reqId }, 500, request, reqId);
     }
   }
@@ -1758,7 +1765,7 @@ async function handleTurn(body, env, request) {
           return json({ iceServers: [...iceServers, ...data.iceServers], ttl, provider: 'cloudflare' }, 200, request);
         }
       }
-    } catch(e) { /* fallthrough to next provider */ }
+    } catch(e) { console.error('[turn] Cloudflare Calls request failed, falling through to next provider:', e?.message ?? e); }
   }
 
   // Option B: Custom TURN (HMAC-based — Coturn, etc.)
@@ -2040,7 +2047,7 @@ async function handlePreKeyUpload(body, env, request) {
     // 11 times to evict the oldest entry and hide the initial key compromise.
     const trimmed = log.slice(-100);
     await kvPut(env, logKey, JSON.stringify(trimmed), { expirationTtl: TTL.QUARTER });
-  } catch (e) { /* log failure is non-fatal */ }
+  } catch (e) { console.error('[ktlog] append failed (non-fatal, upload already saved):', e?.message ?? e); }
 
   // Store one-time prekeys individually; cap each entry to prevent KV inflation.
   // Type guard: only store string entries. JSON.stringify(null) = 'null' (4 chars)
