@@ -255,7 +255,10 @@ Layout (12), Typography (18), Color (8), Spacing (10), State (6), Component-spec
 
 ---
 
-## 5. Slash Commands (52 exact + 18 startsWith = 70 total)
+## 5. Slash Commands
+
+> The exact count drifts as commands are added/removed — grep `index.html`'s `val === '/...'`
+> and `startsWith('/...'` dispatch sites for the live count rather than trust a number here.
 
 ### 5.1 Messaging
 
@@ -309,10 +312,16 @@ Layout (12), Typography (18), Color (8), Spacing (10), State (6), Component-spec
 | /debug | Toggle debug mode |
 | /whoami | Identity + alias + public key |
 
-> Note: `/network`, `/peers`, `/storage`, `/perf`, `/billing`, `/about`, `/uptime` were removed
-> from this table (2026-09) after verifying none of them exist in `index.html` anymore — a wider
-> command-reference audit against the current full command set is tracked as a follow-up in
-> `docs/ASSESSMENT.md` rather than done here.
+> Note: `/network`, `/peers`, `/storage`, `/perf`, `/about`, `/uptime` (plus `/keyboard` from
+> §5.5) were removed from this doc (2026-09) — `index.html` carries its own deletion note
+> (v3.7, "first-principles pass"): this whole developer-diagnostic command cluster
+> (`/perf /speedtest /network /peers /storage /stats /uptime /status /about /changelog
+> /keyboard`) was deleted as 582 lines and ~90 i18n keys × 8 locales spent on diagnostics nobody
+> messaging a friend needs — connection quality is already shown in the conversation header, and
+> the changelog lives in the repo instead of being duplicated in-app. `/billing` was a separate,
+> undocumented removal (see `SECURITY.md`'s "Removed: multi-account billing"). A wider
+> command-reference audit against the full current command set is tracked as a follow-up in
+> `docs/ASSESSMENT.md`.
 
 ### 5.5 UI & Settings
 
@@ -323,7 +332,6 @@ Layout (12), Typography (18), Color (8), Spacing (10), State (6), Component-spec
 | /settings | Open settings panel |
 | /sound | Toggle notification sound |
 | /help | Full command list |
-| /keyboard | Keyboard shortcuts |
 | /qr | Show QR code for contact sharing |
 | /share | Share Breeze ID + invite link |
 | /summarize | Local extractive conversation summary |

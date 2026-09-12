@@ -141,11 +141,21 @@ updatedAt }`)は `handleAccountDelete` の削除処理が読み取り専用で�
 前提が残っているが、前者は探索的リサーチ文書、後者はツール定義であり製品ドキュメントの中核では
 ないため今回は対象外——次に触れる機会があれば併せて更新する。
 
-**副次的発見: `SPEC.md`の「5.4 Diagnostics」コマンド表も広範に陳腐化。** `/billing`行の検証中に
-同表の `/network`・`/peers`・`/storage`・`/perf`・`/about`・`/uptime` も実際には存在しないことが
-判明(`val === '/xxx'` の呼び出しパターンで確認)。該当行は削除し表内に注記を残したが、**コマンド
-一覧全体を現状に合わせて再構築する作業は別サイクルのフォローアップとする**(正確な再分類には
-現存する全52+コマンドの目的別棚卸しが必要で、今回のスコープを超えるため)。
+**副次的発見、そして解決: `SPEC.md`の「5.4 Diagnostics」コマンド表の陳腐化は、根拠のある
+意図的削除だった。** `/billing`行の検証中に同表の `/network`・`/peers`・`/storage`・`/perf`・
+`/about`・`/uptime` も実際には存在しないことが判明(`val === '/xxx'` の呼び出しパターンで確認)。
+次サイクルで `index.html` 内の孤立コメント(`// v3: /status — Show connection and crypto info`
+の直後に無関係なコードが続く、既出パターンと同一)を追ったところ、**自己文書化された削除記録**を
+発見: 「DELETED (v3.7, first-principles pass): the developer-diagnostic command cluster —
+/perf /speedtest /network /peers /storage /stats /uptime /status /about /changelog /keyboard.
+582 lines and ~90 i18n keys × 8 locales spent on WebRTC candidate dumps, KV counters and an
+in-app copy of a 3,000-line changelog. [...] The most common error is optimising a thing that
+should not exist.」——billingとは異なり、この11コマンド群は理由つきで意図的に削除されていた
+(「友達にメッセージを送る人は`/speedtest`など打たない」)。SPEC.mdの5.4/5.5表から該当コマンド
+(`/keyboard`含む)を削除し、この削除記録を注記として反映。README/SPEC.mdのコマンド総数の
+ハードコード値(「59」「52 exact + 18 startsWith = 70」)も検証のたびに食い違ったため、
+validate.sh方式(固定数値でなくツールで都度計測)に倣い、SPEC.mdの見出しは実数を主張しない
+注記に変更、READMEは「60+」という下限保証の表現に変更。
 
 ### 2-4. プロセスの弱点(本セッション最大の学び)
 **E2Eが「初回セッション」に偏っていた。** 10本のspecのうちリロードを行うのは3本のみで、
