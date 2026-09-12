@@ -565,13 +565,22 @@ async function handlePresence(body, env, request) {
   if (isCheck && ids && Array.isArray(ids)) {
     const online = {};
     const memCache = globalThis._presenceCache || null;
-    for (const cid of ids.slice(0, 50).filter(x => typeof x === 'string' && validateUserId(x))) {
+    const validIds = ids.slice(0, 50).filter(x => typeof x === 'string' && validateUserId(x));
+    // Cache hits resolve synchronously; only cache misses need a KV round-trip, and those
+    // are independent reads — firing them concurrently instead of one-at-a-time turns up to
+    // 50 sequential round-trips into one parallel batch (was the exact class of unconditional
+    // KV cost this cache was added to avoid, just for the miss path instead of the hit path).
+    const misses = [];
+    for (const cid of validIds) {
       const memRaw = memCache ? memCache.get(`presence:${cid}:data`) : null;
       if (memRaw) {
         const p = safeJsonParse(memRaw);
         online[cid] = p ? (Date.now() - p.at) < 60000 : false;
-        continue;
+      } else {
+        misses.push(cid);
       }
+    }
+    await Promise.all(misses.map(async (cid) => {
       const data = await kvGet(env, `presence:${cid}`);
       if (data) {
         const p = safeJsonParse(data);
@@ -579,7 +588,7 @@ async function handlePresence(body, env, request) {
       } else {
         online[cid] = false;
       }
-    }
+    }));
     return json({ online }, 200, request);
   }
 
@@ -956,10 +965,12 @@ async function handleAliasGet(body, env, request) {
       cleaned.push(c);
       if (cleaned.length >= 50) break;
     }
-    for (const c of cleaned) {
+    // Independent reads — fire concurrently instead of one-at-a-time so up to 50
+    // sequential round-trips become one parallel batch (same fix as the presence batch-check).
+    await Promise.all(cleaned.map(async (c) => {
       const raw = await kvGet(env, `alias:${c}`);
       results[c] = raw ? (safeJsonParse(raw) || null) : null;
-    }
+    }));
     return json({ results }, 200, request);
   }
 
