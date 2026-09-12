@@ -26,6 +26,20 @@
 //                        raw key name, because t() falls back to its argument. Check 6 cannot
 //                        see these (it only inspects keys that exist), and one hid for months
 //                        behind a button no user could reach.
+//   8. CALLED-AS-FUNCTION — t() returns a plain STRING, always (see its definition: it takes
+//                        the interpolation args as its OWN extra parameters — `t('key', a, b)`
+//                        — and substitutes {0}/{1} internally). Writing `t('key')(a, b)` calls
+//                        that returned string as a function and throws a TypeError. Four call
+//                        sites had this exact typo (alias-set, schedule, import, GDPR export):
+//                        each one's real work (the alias WAS set, the message WAS scheduled)
+//                        completed and then threw on the success toast, so the user saw a raw
+//                        "t(...) is not a function" error via the global unhandledrejection
+//                        handler instead of a confirmation — the opposite of check 6/7's
+//                        failure mode, but the same family: a claim (success) contradicted by
+//                        what the code actually does. /schedule was worse than cosmetic: the
+//                        throw happened BEFORE the setTimeout that arms in-session delivery,
+//                        so a scheduled send silently didn't fire until the next reload's
+//                        boot-time recovery scan picked it up.
 // ============================================================================
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -142,6 +156,14 @@ for (const el of html.matchAll(/data-i18n(?:-ph|-aria|-title|-html)?="([A-Za-z][
 const known = new Set(refKeys);
 for (const k of [...referenced].sort()) {
   if (!known.has(k)) problems.push(`t("${k}") is used but not defined in the EN table (renders as the raw key)`);
+}
+
+// 8. CALLED-AS-FUNCTION — t() always returns a string; `t('key')(args)` calls that string as
+//    a function and throws. The correct form passes the interpolation args directly to t()
+//    itself: `t('key', args)`. A literal-key call followed immediately by a parenthesised
+//    argument list is unambiguous — nothing else in this codebase calls t()'s return value.
+for (const m of html.matchAll(/\bt\(\s*'([A-Za-z][A-Za-z0-9_]*)'\s*\)\(/g)) {
+  problems.push(`t('${m[1]}')(...) calls the returned STRING as a function (TypeError at runtime) — use t('${m[1]}', ...) instead`);
 }
 
 if (problems.length) {

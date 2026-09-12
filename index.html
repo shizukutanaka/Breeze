@@ -11409,7 +11409,7 @@ async function initMessenger(dbName) {
   
       // Refresh conversation
       await openConversation(activeContact);
-      showToast(t('toastImported')(imported, source), "success");
+      showToast(t('toastImported', imported, source), "success");
     
     } catch(_e) { _dbg(_e, 'importChat'); }
   }
@@ -12135,7 +12135,7 @@ async function initMessenger(dbName) {
       // write happens earlier and an unbound value bloats the identity store on startup load.
       await dbPut('identity', { id: schedId, contactId: contact.id, text: text.slice(0, 65536), sendAt });
       const timeStr = delayMs < MS.MIN ? Math.round(delayMs/MS.SEC) + 's' : delayMs < MS.HOUR ? Math.round(delayMs/MS.MIN) + 'm' : Math.round(delayMs/MS.HOUR) + 'h';
-      showToast(t('toastScheduled')(timeStr, text.slice(0, 30)), 'success');
+      showToast(t('toastScheduled', timeStr, text.slice(0, 30)), 'success');
       // Set timer
       setTimeout(async () => {
         try {
@@ -12335,7 +12335,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       downloadBlob(blob, `breeze-gdpr-export-${new Date().toISOString().slice(0,10)}.json`);
       auditLog('settings', 'GDPR data export performed');
-      showToast(t('toastGdprExport')(data.totalMessages, data.totalContacts, data.totalFiles), 'success');
+      showToast(t('toastGdprExport', data.totalMessages, data.totalContacts, data.totalFiles), 'success');
     }
 
     // v3.3: ENTERPRISE — /wipe — Remote wipe (send wipe signal to other devices)
@@ -13290,6 +13290,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       }
       if (API) {
         try {
+          const oldAlias = myAlias; // captured before overwrite — released below on success
           // v3.5 SPEC: Proof-of-Work required for alias registration (anti-spam)
           showToast(t('toastPoW'), 'info');
           const powToken = await generatePoW(myPubB64 + ':' + newAlias + ':' + Date.now(), CONFIG.POW_DIFFICULTY);
@@ -13298,7 +13299,20 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
             myAlias = newAlias;
             const id = await dbGet('identity', 'keys');
             if (id) { id.alias = newAlias; await dbPut('identity', id, 'keys'); }
-            showToast(t('toastAliasSet')(newAlias), 'success');
+            showToast(t('toastAliasSet', newAlias), 'success');
+            // Release the OLD @handle so it doesn't squat on the relay forever (no TTL —
+            // "aliases are permanent" per handleAliasSet). /api/alias/delete exists for
+            // exactly this ("release a vanity alias without deleting the account") but the
+            // client never called it: renaming left every previous @handle unreclaimable,
+            // still resolving to a now-orphaned identity, with no way to release it short
+            // of the full /wipe. Best-effort — the rename itself already succeeded.
+            if (oldAlias && oldAlias !== newAlias) {
+              try {
+                const delTs = Date.now();
+                const delSig = await signMessage(`breeze-alias-delete:${oldAlias}:${delTs}`);
+                if (delSig) await postAPIRaw('/alias/delete', { alias: oldAlias, userId: myId, ts: delTs, sig: delSig });
+              } catch(relErr) { _dbg(relErr, 'alias-release'); }
+            }
           } else {
             const d = await resp.json().catch(() => ({}));
             showToast(d.error || t('toastAliasTaken'), 'error');

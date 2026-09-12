@@ -1,5 +1,19 @@
 # Changelog
 
+## @alias release was a fourth unreachable feature, and its command threw on success (branch claude/nice-ride-T6yb0, 2026-09-12)
+
+798 vitest + **34** Playwright E2E (+1, new `tests/e2e/alias.spec.js`); `index.html`, `tools/i18n-check.mjs` (+check 8), `CLAUDE.md`.
+
+Continuing the pattern from `/api/alias/delete`'s own header comment down to its Worker tests: complete, correctly authenticated, seven unit tests deep — and never called. `/alias newname` sets a new @handle and never released the old one. Alias records carry no TTL ("aliases are permanent"), so every rename left the previous handle squatting on the relay forever: unreclaimable, still resolving to a now-orphaned identity, with no way back short of `/wipe`-ing the whole account. Wired the client to release the old alias on a successful rename, signing the same `breeze-alias-delete:{alias}:{ts}` challenge the endpoint already verifies.
+
+**Wiring it up surfaced a second, independent bug in the same command.** The success toast was `showToast(t('toastAliasSet')(newAlias), 'success')` — `t()` always returns a string, and calling that string as a function throws a `TypeError`. Grepping the same shape (`t('key')(...)`) found **four** instances: alias-set, `/schedule`, chat import, and GDPR export. Every one completes its real work and then throws immediately on the confirmation toast, which the global `unhandledrejection` handler turns into a raw `t(...) is not a function` error shown in red — the opposite of what happened. `/schedule` was the sharpest case: the throw lands *before* the `setTimeout` that arms same-session delivery, so a scheduled message silently didn't fire until the next reload's boot-time recovery scan picked it up. All four fixed to `t('key', args)`; `tools/i18n-check.mjs` gains check 8, a static scan for the pattern, so a fifth instance fails the build instead of shipping.
+
+The new E2E seeds the pre-existing alias via a Node-side, low-difficulty PoW solve (the harness's `MIN_POW_DIFFICULTY` floor is 8) so only the ONE real client-triggered rename pays the shipped 20-bit solve cost, then asserts the old handle 404s and the new one resolves — proving both bugs fixed at once, since the surviving `t()(args)` typo would have swallowed the success toast the test waits on.
+
+Also: `CLAUDE.md`'s own Validate section had drifted to "39 checks" after `dead-wiring.mjs` shipped at 40 — corrected, a small reminder that documentation is a claim like any other and gets the same scrutiny.
+
+---
+
 ## First-principles decomposition and the Socratic record (branch claude/nice-ride-T6yb0, 2026-08-21)
 
 New `docs/FIRST-PRINCIPLES.md` (197 lines); `docs/ASSESSMENT.md` cross-linked. No code change — this is the analysis the engineering was serving, written down so it can be argued with.

@@ -117,6 +117,11 @@ test('messages still arrive after a reload (boot runs to completion)', async ({ 
   await B.locator('#msg-input').fill(probe);
   await B.locator('#b-msg-send').click();
 
+  // A must be FOREGROUNDED for this: a backgrounded page polls at POLL_SLOW_MS (15s) instead
+  // of POLL_FAST_MS (3s), so under full-suite load a 15s delivery budget was marginal — the
+  // same flake class fixed in lifecycle.spec.js and multidevice.spec.js. Foregrounding is also
+  // the honest scenario: a user who just reopened the app is looking at it.
+  await A.bringToFront();
   await expect.poll(async () => A.evaluate((needle) => new Promise((r) => {
     const q = indexedDB.open('breeze-messenger', 5);
     q.onsuccess = () => {
