@@ -2428,6 +2428,20 @@ function showContextMenu(x, y, items) {
     // Position: keep within viewport
     menu.style.left = Math.min(x, window.innerWidth - 160) + 'px';
     menu.style.top = Math.min(y, window.innerHeight - items.length * 40 - 8) + 'px';
+    // Single cleanup path so every way of dismissing the menu (item click, outside
+    // click, Escape) removes BOTH document-level listeners — closing any other way
+    // used to leave the keydown listener attached forever (leak, one per menu open).
+    const cleanup = () => {
+      menu.remove();
+      document.removeEventListener('click', closeHandler);
+      document.removeEventListener('keydown', escHandler);
+    };
+    const closeHandler = (e) => {
+      if (!menu.contains(e.target)) { cleanup(); resolve(null); }
+    };
+    const escHandler = (e) => {
+      if (e.key === 'Escape') { cleanup(); resolve(null); }
+    };
     items.forEach(item => {
       if (item === '---') {
         const sep = document.createElement('div');
@@ -2441,7 +2455,7 @@ function showContextMenu(x, y, items) {
       el.textContent = item.label;
       el.tabIndex = 0;
       el.setAttribute('role', 'menuitem');
-      el.onclick = () => { menu.remove(); document.removeEventListener('click', closeHandler); resolve(item.action); };
+      el.onclick = () => { cleanup(); resolve(item.action); };
       el.onkeydown = (e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); }
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -2458,14 +2472,9 @@ function showContextMenu(x, y, items) {
     document.body.appendChild(menu);
     // Focus first item for keyboard users
     requestAnimationFrame(() => { const first = menu.querySelector('.ctx-item'); if (first) first.focus(); });
-    const closeHandler = (e) => {
-      if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', closeHandler); resolve(null); }
-    };
     // Delay to avoid immediate close from the triggering right-click
     requestAnimationFrame(() => document.addEventListener('click', closeHandler));
-    document.addEventListener('keydown', function escH(e) {
-      if (e.key === 'Escape') { menu.remove(); document.removeEventListener('click', closeHandler); document.removeEventListener('keydown', escH); resolve(null); }
-    });
+    document.addEventListener('keydown', escHandler);
   });
 }
 
