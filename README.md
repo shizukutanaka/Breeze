@@ -1,7 +1,5 @@
 # Breeze Messenger
 
-[![CI](https://github.com/shizukutanaka/Breeze/actions/workflows/ci.yml/badge.svg)](https://github.com/shizukutanaka/Breeze/actions/workflows/ci.yml)
-[![Release](https://github.com/shizukutanaka/Breeze/actions/workflows/release.yml/badge.svg)](https://github.com/shizukutanaka/Breeze/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/shizukutanaka?style=flat&logo=github)](https://github.com/sponsors/shizukutanaka)
 [![Deploy to Cloudflare](https://img.shields.io/badge/Deploy-Cloudflare%20Pages-F38020?logo=cloudflare)](https://dash.cloudflare.com/?to=/:account/pages/new/provider/polaris)
@@ -48,7 +46,7 @@ Try the hosted version: **[breeze.pages.dev](https://breeze.pages.dev)**
 - **Files**: Up to 50MB, encrypted, auto-compress images (WebP), progress bar
 - **Multi-account**: Work/personal separation (Free=1, Lite=2, Plus=4, Pro=unlimited)
 - **924 languages**: Lazy-loaded, auto-detected
-- **70 slash commands**: /help, /search, /export [json|csv|html|all], /schedule [list|cancel], /contacts, /compress, /retry, /security, /network, /peers, etc.
+- **59 slash commands**: /help, /search, /export [json|csv|html|all], /schedule [list|cancel], /contacts, /compress, /retry, /security, /alias, /focus, etc.
 - **PWA**: Engagement-gated install, works offline, push notifications
 - **6 platforms**: Web, Electron, Tauri (~5MB), Android (Capacitor), iOS
 - **Security**: Trusted Types, CSP+COOP, magic bytes validation, key change warning
@@ -95,17 +93,16 @@ wrangler kv:namespace create KV
 # 3. Done! Open https://breeze.pages.dev
 ```
 
-That's it. TURN relay, translation, and all core features work with zero configuration.
-See [.env.example](.env.example) for optional features (billing, AI, push notifications).
+That's it. TURN relay and all core features work with zero configuration.
+See [.env.example](.env.example) for optional features (billing, push notifications).
 Full guide: [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md)
 
-### Full Deployment (with billing + AI)
+### Full Deployment (with billing)
 
 ```bash
-# Secrets (only if you want billing/AI/push)
+# Secrets (only if you want billing/push)
 wrangler secret put STRIPE_SECRET_KEY      # Billing
 wrangler secret put VAPID_PUBLIC_KEY       # Push notifications
-wrangler secret put GROQ_API_KEY           # AI (free tier)
 # See .env.example for all options
 ```
 
@@ -143,13 +140,15 @@ Run `./validate.sh` or `./build.sh validate`:
 
 - Gate 1: Syntax (3 files)
 - Gate 2: Security (eval, innerHTML, CSP, API keys)
-- Gate 3: i18n (hardcoded strings, toast coverage)
-- Gate 4: Code Quality (.style.X, onclick, DRY, DOM cache)
+- Gate 3: Internationalization (dead/missing i18n keys in both directions, placeholders, CLDR plurals)
+- Gate 4: Code Quality (.style.X, onclick, DRY, DOM cache, no listeners wired to a missing element)
 - Gate 5: Performance (lines, RAF, Fragment, throttle)
-- Gate 6: Protocol Spec (6 crypto features)
-- Gate 7: Required Files (10 files)
+- Gate 6: Protocol Spec Compliance (crypto features)
+- Gate 7: Required Files
 
-Current score: **33/36 (93%)**
+The gate count grows as new checks land (currently 40 individual checks across
+the 7 gates) — run `./validate.sh` for the live score rather than trust a
+number here, which would only go stale again.
 
 ## Development & Tests
 
@@ -184,7 +183,6 @@ Breeze uses an **open-core** model: the full messenger is MIT-licensed and free 
 | Groups (100 members) | ✓ | ✓ |
 | 924 languages | ✓ | ✓ |
 | Multi-account | 1 account | Lite: 2 / Plus: 4 / Pro: ∞ |
-| AI assistant | Bring your own key | Included (Groq free) |
 | Custom domain | ✓ | ✗ |
 | Your own KV | ✓ | Shared |
 
@@ -208,8 +206,6 @@ Revenue goes to: infrastructure costs → development → security audits.
 | KV | 100K reads + 1K writes/day | 10M reads + 1M writes/mo |
 | TURN | Open Relay (20GB free) | Cloudflare Calls ($0.05/GB) |
 | STUN | Cloudflare + Google (free) | — |
-| Translation | MyMemory (5K chars/day) | DeepL ($0) |
-| AI | Groq free (30 RPM) | Anthropic/OpenAI |
 | Push | Web Push VAPID (free) | — |
 | Domain | *.pages.dev (free) | Custom ($10/yr) |
 | **Total** | **$0/month** | **$5/month** |
