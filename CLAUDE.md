@@ -77,10 +77,10 @@ only greps conventions, it never runs an encrypt/decrypt round-trip.
 - Connection display: Direct/STUN/TURN + RTT + protocol
 
 ## Compaction
-When compacting, preserve: current file paths, test/validation results, billing plan structure (Lite/Plus/Pro), crypto protocol decisions, i18n EN+JA parity (verify parity, not a fixed number — the count drifts every session).
+When compacting, preserve: current file paths, test/validation results, crypto protocol decisions, i18n EN+JA parity (verify parity, not a fixed number — the count drifts every session). Multi-account billing (Lite/Plus/Pro) is documented as removed, not a live feature — see SECURITY.md's "Removed: multi-account billing" section; don't reintroduce it as an assumption.
 
 ## Key Files
-- AGENTS.md — Full rules + examples (210 lines)
-- SPEC.md — 75 compliance items (543 lines)
+- AGENTS.md — Full rules + examples (~250 lines, drifts — verify with `wc -l` rather than trust a number here)
+- SPEC.md — Compliance/architecture reference (~550 lines, drifts — same caveat)
 - CONTRIBUTING.md — Dev guide
-- CHANGELOG.md — v3.6.0 session 2 changes (186 lines)
+- CHANGELOG.md — Full session-by-session history (thousands of lines and growing — this is a living log, not a fixed-size snapshot)
