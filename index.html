@@ -151,12 +151,6 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .text-xs { font-size: 11px }
 .mb-3 { margin-bottom: 12px }
 
-/* ─── Pricing ─── */
-.price-name { font-weight: 700; font-size: 16px; margin-bottom: 4px }
-.price-amount { font-size: 28px; font-weight: 800; margin-bottom: 8px; letter-spacing: -.02em }
-.price-period { font-size: 13px; font-weight: 400; color: var(--t2) }
-.price-features { font-size: 12px; color: var(--t2); line-height: 1.8; margin-bottom: 16px; text-align: left }
-
 /* ─── Messenger layout ─── */
 .msg-layout {
   display: flex; gap: 0;
@@ -260,10 +254,6 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .msg-sig { font-size: 9px }
 .msg-sig.ok { color: var(--g) }
 .msg-sig.bad { color: var(--r) }
-.msg-translate { margin-top: 6px; padding: 6px 8px; background: rgba(16,185,129,.08); border-left: 2px solid var(--g); border-radius: 0 var(--rad) var(--rad) 0; font-size: 12px }
-.msg-translate.loading { opacity: .6; font-style: italic }
-.msg-translate .tr-text { display: block; margin-bottom: 2px }
-.msg-translate .tr-meta { font-size: 9px; opacity: .5 }
 .msg-fwd { font-size: 10px; color: var(--t3); font-style: italic; margin-bottom: 2px }
 .msg-voice audio { max-width: 220px; height: 32px }
 .voice-dur { font-size: 10px; color: var(--t3); margin-left: 6px; min-width: 28px }
@@ -423,7 +413,6 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .bg-y { background: rgba(251,191,36,.15); color: #fbbf24 }
 .bg-t3 { background: var(--t3) }
 .mt-8 { margin-top: 8px }
-.mt-16 { margin-top: 16px }
 .op-half { opacity: 0.5 }
 
 /* ─── Template utility classes (v3.5: inline style elimination) ─── */
@@ -452,7 +441,6 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .i-pad8 { padding: 8px }
 .i-w100 { width: 100% }
 .i-flex-col { display: flex; flex-direction: column; gap: 16px }
-.i-bg-r { background: var(--r) }
 .i-bg-s2 { background: var(--s2) }
 .i-mb8 { margin-bottom: 8px }
 .i-op0 { opacity: 0 }
@@ -469,25 +457,19 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .i-color-g { color: var(--g) }
 .i-color-r { color: var(--r) }
 .i-color-t3 { color: var(--t3) }
-.i-color-reset { color: inherit }
 .i-op-full { opacity: 1 }
 .i-pad-more { padding: 2px 4px 8px }
 .i-pad-4 { padding: 4px }
 /* R97: Template style extraction (longest → CSS class) */
 .i-filter-input { width: 100%; padding: 6px 8px; border: 1px solid var(--b1); border-radius: 6px; background: var(--s2); color: var(--t1); font-size: 12px; margin-bottom: 8px; outline: none }
 .i-mono-box { background: var(--s3); padding: 8px 12px; border-radius: 6px; font-family: var(--mono); font-size: 11px; word-break: break-all; margin-bottom: 12px }
-.i-clamp2 { font-size: 10px; color: var(--t3); margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
-.i-ellip-name { font-size: 11px; font-weight: 600; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
 .i-green-word { font-size: 12px; color: var(--g); word-break: break-all; margin-bottom: 16px; max-height: 60px; overflow: hidden }
 .i-safety-num { font-family: var(--mono); font-size: 18px; letter-spacing: 2px; color: var(--g); margin-bottom: 12px }
-.i-thumb-60 { width: 60px; height: 60px; object-fit: cover; border-radius: 4px; flex-shrink: 0 }
 .i-ctx-item { cursor: pointer; padding: 8px 12px; display: flex; align-items: center; gap: 8px }
-.i-cover-img { width: 100%; max-height: 120px; object-fit: cover; border-radius: 6px 6px 0 0 }
 .i-heading-b { font-weight: 700; font-size: 13px; margin-bottom: 8px; color: var(--t1) }
 .i-sub12 { font-size: 12px; font-weight: 600; color: var(--t1); margin-bottom: 8px }
 .i-sub14 { font-size: 14px; font-weight: 600; color: var(--t1); margin-bottom: 8px }
 .i-title-g { font-weight: 700; color: var(--g); font-size: 15px; margin-bottom: 8px }
-.i-small-meta { font-size: 10px; color: var(--t3); margin-top: 2px; line-height: 1.3 }
 .i-fullscreen { position: fixed; inset: 0; background: #000; z-index: 999999 }
 .i-small-muted { font-size: 11px; color: var(--t3); margin-bottom: 12px }
 .i-desc12 { font-size: 12px; color: var(--t2); margin-bottom: 12px }
@@ -496,16 +478,13 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .i-emoji-lg { font-size: 28px; margin-bottom: 12px }
 .i-center-box { max-width: 360px; text-align: center }
 .i-accent-g { accent-color: var(--g) }
-.i-pad-1024 { padding: 10px 24px }
 .i-w100-mt8 { width: 100%; margin-top: 8px }
 .i-flex1 { flex: 1 }
 .i-flex2 { flex: 2 }
 /* R103: Final template style extraction */
-.i-info-line { font-weight: 600; font-size: 11px; color: var(--t1); line-height: 1.3 }
 .i-ctx-row { padding: 6px 10px; cursor: pointer; font-size: 12px; color: var(--t1) }
 .i-highlight { background: var(--g); color: #000; border-radius: 2px; padding: 0 2px }
 .i-tiny-meta { font-size: 10px; color: var(--t3); margin-top: 6px }
-.i-tiny-sub { font-size: 9px; color: var(--t3); margin-top: 2px }
 .i-body13 { font-size: 13px; color: var(--t2); margin: 4px 0 }
 .i-small-pad { font-size: 11px; color: var(--t3); padding: 4px }
 .i-break-sm { font-size: 10px; word-break: break-all }
@@ -513,13 +492,10 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .i-muted12 { color: var(--t2); font-size: 12px }
 .i-green14 { color: var(--g); font-size: 14px }
 .i-mb12 { margin-bottom: 12px }
-.i-pad68 { padding: 6px 8px }
-.i-overflow-h { overflow: hidden }
 .i-muted { color: var(--t2) }
 .focus-bar { background: var(--gl); color: var(--g); cursor: pointer }
 #b-msg-nrn.nrn-on { background: var(--gl); color: var(--g); border-color: var(--g) }
 .msg-nrn { font-size: 10px; color: var(--t3); margin-left: 6px; opacity: .8 }
-.i-mt6 { margin-top: 6px }
 .i-fs10 { font-size: 10px }
 /* ─── Account tabs ─── */
 .acc-tabs { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--b1); overflow-x: auto; flex-shrink: 0 }
@@ -588,7 +564,6 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
   box-shadow: var(--shadow-float); animation: modalSlide .3s var(--bounce)
 }
 @keyframes modalSlide { from { opacity: 0; transform: translateY(20px) scale(.96) } to { opacity: 1; transform: none } }
-.modal-sm { max-width: 320px; text-align: center }
 .modal-title { font-weight: 700; font-size: 15px; color: var(--t1); margin-bottom: 12px; line-height: 1.5 }
 .modal-actions { display: flex; gap: 8px; justify-content: center }
 .modal-actions .btn { flex: 1 }
@@ -650,7 +625,6 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 .swiping { transition: none !important }
 .swipe-back { transition: transform .2s var(--bounce) !important; transform: translateX(0) !important }
 /* v3.6: State utility classes (reduces .style.X count further) */
-.d-block { display: block }
 .d-none { display: none }
 .fade-out { opacity: 0; transform: scale(.9); transition: all .3s ease }
 .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.9); backdrop-filter: blur(8px); z-index: 200; display: flex; align-items: center; justify-content: center; cursor: zoom-out; animation: overlayFade .2s ease }
@@ -670,8 +644,6 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 .reply-preview { background: var(--s2); border-left: 3px solid var(--g); padding: 6px 12px; font-size: 12px; color: var(--t3); border-radius: 0 var(--rad) var(--rad) 0; margin-bottom: 4px; display: flex; align-items: center; gap: 8px }
 .import-result { font-size: 12px; color: var(--t2); line-height: 1.6; margin-top: 8px }
 .delivery-state { font-size: 10px; opacity: .5; margin-left: 2px }
-.badge-active { background: var(--g); color: #000 }
-.badge-free { background: var(--s3); color: var(--t2) }
 .overlay-dark { background: rgba(0,0,0,.85) }
 .qr-modal { text-align: center }
 .qr-url { font-size: 10px; color: var(--t3); word-break: break-all; margin-top: 8px; font-family: var(--mono) }
