@@ -11,7 +11,7 @@ cd breeze
 
 No build step required — open `index.html` directly in a browser for local development.
 
-For server features (signaling, billing), deploy to Cloudflare Pages:
+For server features (signaling, TURN credentials), deploy to Cloudflare Pages:
 ```bash
 wrangler pages dev .
 ```
@@ -39,7 +39,7 @@ Every change should align with our three principles:
 
 ### Before Submitting
 
-1. Run `./validate.sh` — must score 35/35 (100%)
+1. Run `./validate.sh` — must print `PASSED` (the check count grows over time; don't hardcode a score, the tool always reports the live one)
 2. Test in Chrome, Firefox, and Safari
 3. Check browser DevTools console for errors
 4. Add i18n keys for both EN and JA if adding UI text
