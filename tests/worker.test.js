@@ -87,7 +87,7 @@ describe('routing & request validation (export default fetch)', () => {
     // The lifecycle endpoints added this session must be discoverable.
     for (const cap of [
       'account-delete', 'group-leave', 'group-delete', 'group-transfer', 'group-rename',
-      'batch-alias', 'group-caps', 'backup-auth', 'alias-auth', 'drop-server-id', 'portal-auth', 'group-auth', 'group-ban',
+      'batch-alias', 'group-caps', 'backup-auth', 'alias-auth', 'drop-server-id', 'group-auth', 'group-ban',
     ]) {
       expect(j.capabilities).toContain(cap);
     }
