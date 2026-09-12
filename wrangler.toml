@@ -11,8 +11,6 @@ id = ""  # ← REQUIRED: paste your KV namespace ID here
 
 # === SECRETS (set via CLI — never commit values) ===
 #
-# --- Stripe Billing ---
-#
 # --- Web Push ---
 # npx web-push generate-vapid-keys
 # wrangler pages secret put VAPID_PUBLIC_KEY
@@ -31,12 +29,6 @@ id = ""  # ← REQUIRED: paste your KV namespace ID here
 # wrangler pages secret put TURN_CREDENTIAL            # static credential
 # Option D: No config → auto-falls to free Open Relay (20GB/month)
 #
-# --- Translation (optional — cascading fallback) ---
-# If none set, falls back to MyMemory (free, 5K chars/day)
-#
-# --- AI (optional — cascading fallback) ---
-# Optional model override:
-#
 # --- Auth hardening (recommended — off by default for zero-config self-hosting) ---
 # Every registered client already signs the actions below with its Ed25519 identity key;
 # these flags just tell the Worker to REJECT a request that omits/fails that signature
@@ -44,26 +36,7 @@ id = ""  # ← REQUIRED: paste your KV namespace ID here
 # clients that predate this signing (check CHANGELOG.md for when each call started signing).
 # wrangler pages secret put PRESENCE_REQUIRE_AUTH      # true — reject unsigned presence writes
 # wrangler pages secret put ALIAS_REQUIRE_AUTH         # true — reject unsigned @alias registration
-# wrangler pages secret put PORTAL_REQUIRE_AUTH        # true — reject unsigned billing-portal requests
 # wrangler pages secret put GROUP_REQUIRE_AUTH         # true — reject unsigned group kick/rename/admin/leave/delete/transfer
 # wrangler pages secret put PUSH_REQUIRE_AUTH          # true — reject unsigned push subscribe/unsubscribe
 # wrangler pages secret put TURN_REQUIRE_AUTH          # true — reject unsigned TURN credential requests
 # wrangler pages secret put BACKUP_REQUIRE_AUTH        # true — without this, knowing a userId is enough to download that user's encrypted backup blob
-#
-# === STRIPE SETUP ===
-#
-# Products (1):
-#   "Breeze Lite"  → $0.99/month (USD, Recurring) — +1 account
-#   "Breeze Plus"  → $5.99/month (USD, Recurring) — +3 accounts
-#   "Breeze Pro"   → $19.99/month (USD, Recurring) — unlimited accounts
-#   1st account is always free.
-#
-# Webhook:
-#   URL: https://your-domain/api/webhook
-#   Events: checkout.session.completed, customer.subscription.deleted,
-#           customer.subscription.paused, customer.subscription.updated,
-#           invoice.payment_failed, invoice.paid
-#
-# Enable:
-#   - Settings → Customer Portal → Activate
-#   - Settings → Tax → Enable Stripe Tax (optional)
