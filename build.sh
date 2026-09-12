@@ -106,7 +106,7 @@ case "${1:-help}" in
   *)
     echo "Usage: ./build.sh <command>"
     echo ""
-    echo "  validate   Run quality gates (35 checks)"
+    echo "  validate   Run quality gates (./validate.sh reports the live count)"
     echo "  test       Run vitest unit tests"
     echo "  zip        Build breeze.zip artifact from tracked source"
     echo "  web        Deploy to Cloudflare Pages"
