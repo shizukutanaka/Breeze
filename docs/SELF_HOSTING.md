@@ -23,7 +23,7 @@ wrangler kv:namespace create KV
 # 5. Visit https://breeze.pages.dev
 ```
 
-**That's it.** All features work except billing, AI, and push notifications.
+**That's it.** All features work except billing and push notifications.
 
 ## What Works at $0
 
@@ -37,9 +37,7 @@ wrangler kv:namespace create KV
 | File transfer | ✓ | Up to 50MB via P2P |
 | 924 languages | ✓ | Auto-detected |
 | Offline/PWA | ✓ | Service Worker |
-| Translation | ✓ | MyMemory (5K chars/day free) |
 | Billing/subscriptions | ✗ | Needs Stripe keys |
-| AI assistant | ✗ | Needs API key (Groq is free) |
 | Push notifications | ✗ | Needs VAPID keys |
 
 ## Free Tier Limits
@@ -65,13 +63,6 @@ npx web-push generate-vapid-keys
 # Set secrets
 wrangler pages secret put VAPID_PUBLIC_KEY
 wrangler pages secret put VAPID_PRIVATE_KEY
-```
-
-### AI Assistant (free with Groq)
-
-```bash
-# Sign up: https://console.groq.com
-wrangler pages secret put GROQ_API_KEY
 ```
 
 ### Billing (Stripe — $0 until first sale)
