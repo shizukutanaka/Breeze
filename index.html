@@ -7133,13 +7133,17 @@ async function initMessenger(dbName) {
       btn.textContent = item[0];
       btn.className = 'ctx-item';
       if (item[2]) btn.classList.add('color-r');
-      btn.onclick = () => { menu.remove(); item[1](); };
+      btn.onclick = () => { cleanup(); item[1](); };
       menu.appendChild(btn);
     }
 
     el.appendChild(menu);
-    setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), CONFIG.DOM_SETTLE_MS);
-    const escHandler = (e) => { if (e.key === 'Escape') { menu.remove(); document.removeEventListener('keydown', escHandler); } };
+    // Closing via an item click (btn.onclick above) used to leave this keydown listener
+    // attached to document forever — same leak class fixed in showContextMenu. Route both
+    // exit paths through one cleanup so a click also detaches the Escape handler.
+    const escHandler = (e) => { if (e.key === 'Escape') cleanup(); };
+    function cleanup() { menu.remove(); document.removeEventListener('keydown', escHandler); }
+    setTimeout(() => document.addEventListener('click', cleanup, { once: true }), CONFIG.DOM_SETTLE_MS);
     document.addEventListener('keydown', escHandler, { signal: _ac.signal });
   }
 
@@ -11085,11 +11089,15 @@ async function initMessenger(dbName) {
     img.decoding = 'async';
     img.src = src;
     img.alt = t('fullSizeImage');
-    img.onerror = () => lb.remove();
+    // Closing via backdrop click or an image load error used to leave this keydown
+    // listener attached to document forever — same leak class as showContextMenu/
+    // showMsgMenu. Route every exit path through one cleanup.
+    const handler = (e) => { if (e.key === 'Escape') cleanup(); };
+    function cleanup() { lb.remove(); document.removeEventListener('keydown', handler); }
+    img.onerror = cleanup;
     lb.appendChild(img);
-    lb.onclick = (e) => { if (e.target === lb) lb.remove(); };
+    lb.onclick = (e) => { if (e.target === lb) cleanup(); };
     document.body.appendChild(lb);
-    const handler = (e) => { if (e.key === 'Escape') { lb.remove(); document.removeEventListener('keydown', handler); } };
     document.addEventListener('keydown', handler, { signal: _ac.signal });
 
     // v3.6: Mobile pinch-to-zoom + drag
@@ -11131,7 +11139,7 @@ async function initMessenger(dbName) {
         // Reset if zoomed out too far
         if (scale < 0.8) { scale = 1; lastScale = 1; posX = 0; posY = 0; img.style.transform = ''; }
         // Swipe down to dismiss (when not zoomed)
-        if (scale <= 1 && posY > 80) lb.remove();
+        if (scale <= 1 && posY > 80) cleanup();
       }, { passive: true });
 
       // Double-tap to zoom
