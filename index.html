@@ -521,14 +521,6 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .msg-nrn { font-size: 10px; color: var(--t3); margin-left: 6px; opacity: .8 }
 .i-mt6 { margin-top: 6px }
 .i-fs10 { font-size: 10px }
-.nudge-icon { font-size: 32px; margin-bottom: 12px }
-.nudge-title { font-size: 16px; font-weight: 700; color: var(--t1); margin-bottom: 8px }
-.nudge-desc { font-size: 13px; color: var(--t2); margin-bottom: 16px; line-height: 1.5 }
-.nudge-features { font-size: 12px; color: var(--t3); text-align: left; line-height: 1.8; margin-bottom: 16px; padding: 12px; background: var(--s2); border-radius: var(--rad) }
-.nudge-actions { display: flex; gap: 8px; flex-direction: column }
-.nudge-btn-main { margin: 0; font-size: 14px; padding: 12px }
-.nudge-btn-later { margin: 0; font-size: 12px; padding: 8px }
-
 /* ─── Account tabs ─── */
 .acc-tabs { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--b1); overflow-x: auto; flex-shrink: 0 }
 .acc-tabs--cap { padding: 8px 12px; gap: 8px; -webkit-overflow-scrolling: touch }
@@ -681,7 +673,6 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 .badge-active { background: var(--g); color: #000 }
 .badge-free { background: var(--s3); color: var(--t2) }
 .overlay-dark { background: rgba(0,0,0,.85) }
-.upgrade-modal { max-width: 360px }
 .qr-modal { text-align: center }
 .qr-url { font-size: 10px; color: var(--t3); word-break: break-all; margin-top: 8px; font-family: var(--mono) }
 .search-hl { background: rgba(16,185,129,.3); border-radius: 2px; padding: 0 1px }
@@ -1056,7 +1047,7 @@ del.md-del { opacity: .6 }
       <p><b>2. Eligibility.</b> You must be at least 13 years old (or the minimum age in your jurisdiction) to use Breeze. If you are under 18, you must have parental consent.</p>
       <p><b>3. Account.</b> Your identity is a cryptographic key pair generated on your device. We do not store passwords, emails, or phone numbers. You are responsible for securing your device and any lock passwords you set.</p>
       <p><b>4. Acceptable Use.</b> You agree not to: (a) use the Service for illegal activities; (b) transmit malware or harmful content; (c) attempt to intercept or decrypt other users' communications; (d) abuse the relay infrastructure (DDoS, spam); (e) impersonate others.</p>
-      <p><b>5. Account Plans.</b> The first account is free. Lite ($0.99/mo, +1 account), Plus ($5.99/mo, +3 accounts), Pro ($19.99/mo, unlimited accounts). Subscriptions auto-renew. Cancel anytime via Customer Portal.</p>
+      <p><b>5. Account Plans.</b> Every account is free. Additional local accounts are unlimited. No subscriptions, payment processing, or paid plans are currently offered.</p>
       <p><b>6. Intellectual Property.</b> Breeze is open-source software under the MIT License. You retain ownership of all content you send.</p>
       <p><b>7. Disclaimer.</b> The Service is provided "AS IS" without warranty. We do not guarantee message delivery, uptime, or security against all threats.</p>
       <p><b>8. Limitation of Liability.</b> To the maximum extent permitted by law, Breeze shall not be liable for any indirect, incidental, or consequential damages arising from use of the Service.</p>
@@ -1072,13 +1063,11 @@ del.md-del { opacity: .6 }
       <p>(a) <b>Encrypted relay data:</b> When a P2P connection is unavailable, messages are relayed through our server in encrypted form. This data is automatically deleted within 7 days. We cannot decrypt it.</p>
       <p>(b) <b>Presence heartbeats:</b> Online/offline status with a 60-second TTL. No history stored.</p>
       <p>(c) <b>Anonymous aggregate counts:</b> Total connected users (no identifiers).</p>
-      <p>(d) <b>Payment data (multi-account):</b> Processed by Stripe. We store only a user ID linked to your subscription. We never see your credit card number.</p>
       <p><b>2. Data We Cannot Access.</b> Message content, contact lists, files, voice messages, call audio/video, cryptographic keys, lock passwords, labels, notes, or any data stored in IndexedDB on your device.</p>
       <p><b>3. Data Stored on Your Device.</b> All messages, contacts, keys, and settings are stored locally in IndexedDB and localStorage. This data never leaves your device unless you explicitly send it (encrypted) to another user.</p>
       <p><b>4. Third-Party Services.</b></p>
       <p>(a) <b>Cloudflare:</b> Hosting and CDN. Subject to Cloudflare's privacy policy.</p>
-      <p>(b) <b>Stripe:</b> Payment processing (additional accounts only). Subject to Stripe's privacy policy.</p>
-      <p>(c) <b>STUN/TURN:</b> WebRTC connection establishment. Only IP addresses are visible to the STUN server during connection setup.</p>
+      <p>(b) <b>STUN/TURN:</b> WebRTC connection establishment. Only IP addresses are visible to the STUN server during connection setup.</p>
       <p>We do not use analytics, tracking pixels, advertising networks, or data brokers.</p>
       <p><b>5. Your Rights (GDPR/CCPA).</b></p>
       <p>(a) <b>Access:</b> Use /gdpr command to export all your data.</p>
@@ -2477,8 +2466,6 @@ function showContextMenu(x, y, items) {
     document.addEventListener('keydown', escHandler);
   });
 }
-
-// UPGRADE NUDGE modal (top-level like caller addAccount; used to live in initMessenger's closure and threw every call).
 
 const PLATFORM = (() => {
   if (typeof window !== 'undefined' && window.process?.versions?.electron) return 'electron';
@@ -10542,9 +10529,6 @@ async function initMessenger(dbName) {
       el.textContent = '✓✓';
     });
   }
-
-  // BILLING: Multi-account plans (Lite $0.99, Plus $5.99, Pro $19.99)
-  // Free=1 account, Lite=2, Plus=4, Pro=unlimited
 
   // TURN credentials are for everyone (NAT traversal), not a paid feature. This used to live
   // inside initTurn(); the billing system is gone but the TURN fetch must remain.

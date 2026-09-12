@@ -107,9 +107,7 @@ index.html          — Client: HTML + CSS + JS (single file, ~10K lines)
 _worker.js          — Cloudflare Worker: 43 API endpoints (~2K lines)
   Rate limiting     — Per-IP, per-endpoint, per-minute
   Input validation  — sanitizeString, validateUserId, size limits
-  Billing           — Stripe (Lite $0.99, Plus $5.99, Pro $19.99)
-  Webhook           — checkout.session.completed, subscription.deleted/updated
-  KV structure      — slots:{userId}, cust:{customerId}, sig:{room}, msg:{}, etc.
+  KV structure      — slots:{userId} (scaffolded, unused — see SECURITY.md), sig:{room}, msg:{}, etc.
 
 sw.js               — Service Worker: offline cache + push notifications
 lang.js             — 924 languages (generated, do not edit manually)

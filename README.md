@@ -65,14 +65,12 @@ Cloudflare Worker
   ├── Message relay (/api/msg/send, /poll)
   ├── Sealed Sender (/api/sealed/send, /poll)
   ├── Groups (create/join/info/rename/kick/admin/transfer/leave/delete)
-  ├── Account management (slots, purchase, portal, delete)
+  ├── Account management (delete)
   ├── Key transparency (/api/ktlog/get — audit peer key history without OTP cost)
-  ├── Presence + TURN + Push
-  └── Stripe billing
+  └── Presence + TURN + Push
 
 KV Storage
   ├── Signals, messages (TTL: ephemeral)
-  ├── Licenses, slots (persistent)
   └── Aliases, PreKeys (persistent)
 ```
 
@@ -94,14 +92,13 @@ wrangler kv:namespace create KV
 ```
 
 That's it. TURN relay and all core features work with zero configuration.
-See [.env.example](.env.example) for optional features (billing, push notifications).
+See [.env.example](.env.example) for optional features (push notifications).
 Full guide: [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md)
 
-### Full Deployment (with billing)
+### Full Deployment (with push notifications)
 
 ```bash
-# Secrets (only if you want billing/push)
-wrangler secret put STRIPE_SECRET_KEY      # Billing
+# Secrets (only if you want push notifications)
 wrangler secret put VAPID_PUBLIC_KEY       # Push notifications
 # See .env.example for all options
 ```
@@ -173,29 +170,11 @@ CI runs syntax checks, `npm test`, `validate.sh`, and uploads `breeze.zip`.
 
 ## Business Model
 
-Breeze uses an **open-core** model: the full messenger is MIT-licensed and free to self-host.
-
-| Feature | Free (self-host) | Hosted (breeze.pages.dev) |
-|---------|-----------------|--------------------------|
-| E2E encrypted messaging | ✓ | ✓ |
-| P2P + sealed sender | ✓ | ✓ |
-| Voice/video calls | ✓ | ✓ |
-| Groups (100 members) | ✓ | ✓ |
-| 924 languages | ✓ | ✓ |
-| Multi-account | 1 account | Lite: 2 / Plus: 4 / Pro: ∞ |
-| Custom domain | ✓ | ✗ |
-| Your own KV | ✓ | Shared |
-
-### Pricing (hosted instance only)
-
-| Plan | Price | Accounts | Extras |
-|------|-------|----------|--------|
-| Free | $0/month | 1 | Core features |
-| Lite | $0.99/month | 2 | — |
-| Plus | $5.99/month | 4 | Priority relay |
-| Pro | $19.99/month | Unlimited | Priority relay + TURN |
-
-Revenue goes to: infrastructure costs → development → security audits.
+Breeze is MIT-licensed and free to self-host — every feature, unlimited local accounts, no
+paywall. The hosted instance at [breeze.pages.dev](https://breeze.pages.dev) is currently
+single-account/free-tier only: multi-account paid plans are not available yet (see
+[SECURITY.md](SECURITY.md) for why — the billing system was never wired up, so it isn't
+advertised as working).
 
 ## Running Costs
 

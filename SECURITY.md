@@ -76,6 +76,22 @@ plaintext is a different threat model from one that cannot.
 
 `/summarize` and smart replies survive, computed **locally** on-device with no network egress.
 
+### Removed: multi-account billing
+
+README, `.env.example`, and the in-app Terms of Service/Privacy Policy described a working
+Free/Lite/Plus/Pro multi-account subscription system (Stripe Checkout, webhook fulfillment,
+Customer Portal). It's gone from the code — `index.html` still carries comments confirming it
+once existed ("the billing system is gone but the TURN fetch must remain") — but the removal was
+never documented the way the AI/translation and link-preview removals were, so the docs and
+in-app legal text kept describing it as live. Today there is no checkout, webhook, or portal
+route anywhere in `_worker.js`, and no call to `api.stripe.com` anywhere in the repo. The
+`slots:{userId}` KV record (`{ slots, plan, customerId, updatedAt }`) is still scaffolded in the
+storage schema and read/deleted on account deletion, but nothing writes a real plan into it, and
+the client never checks it — every account, self-hosted or hosted, can add unlimited local
+accounts today with no plan enforcement. Documentation and in-app legal text have been corrected
+to stop advertising this as available rather than rebuilding it retroactively; that remains
+separate, explicitly-scoped future work if it's wanted.
+
 ### Other known limitations
 
 - **Relay state has TTLs, and TTLs are a liveness property.** Device registries and group

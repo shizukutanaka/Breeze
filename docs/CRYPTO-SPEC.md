@@ -213,11 +213,8 @@ Covered by `tests/worker.test.js` (197 tests):
 - Backup: upload/download round-trip, 5MB limit, 404 on missing.
 - Signal relay: store/poll, filters own-signals, 50-msg cap.
 - Presence: heartbeat + single/batch check, online counter.
-- Account slots: free default, stored plan, missing userId.
-- OGP SSRF guard: 11 private/internal URL patterns blocked (return 200+{}).
 - Push subscribe: trusted endpoint allow/deny.
 - Push encryption (C12): RFC 8291 round-trip decrypt, VAPID JWT ES256 verify.
-- Webhook: Stripe signature verify + idempotency.
 - TURN credentials: missing-userId, openrelay fallback, HMAC, static.
 **Implemented.** Gaps: §8.
 
@@ -294,37 +291,29 @@ prekey (0-OTP replenish hint + caps round-trip + caps sanitization + x3dh legacy
 field + N5 chain hash round-trip + tamper detection + upload/fetch malformed-id guard
 + field size caps: identityKey/edIdentityKey/signedPreKey/signedPreKeySig/OTP entries),
 group create/join/info/kick/epoch (self-kick guard + post-kick join epoch + malformed-id
-guards + token length cap), account slots (malformed-id guard), franking relay
+guards + token length cap), franking relay
 (opening DoS guard), sealed sender (multi-sender + missing-id + send validation +
 malformed-to guard), msg send/poll (payload-size limit + lastTs cursor + MISSING_FIELDS
 + malformed-id guards), alias PoW (PoW freshness check + pub size cap), key-history
 log (N5 chain), dead drop, backup (malformed-id guard), signal relay (sanitizeString
 strip ctrl chars + data size cap), presence (heartbeat + malformed-id guards + batch
-filter), online count, OGP SSRF guard (11 blocked patterns + IPv4-mapped IPv6 bypass
-+ malformed URL + URL length cap + hash cache key), push subscribe (SSRF + 5-device
+filter), online count, push subscribe (SSRF + 5-device
 cap + malformed-id guard + subscription field sanitization), push encryption (RFC 8291),
-TURN credentials (malformed-id guard), webhook (signature verify + idempotency + userId
-KV injection guard), body size enforcement (Content-Length spoof), AI handler input
-validation (lang injection strip + empty lang reject + oversized summarize fields +
-unknown action), translate handler (missing-field + type guards).
+TURN credentials (malformed-id guard), body size enforcement (Content-Length spoof).
 Security additions: ratchet MAX_SKIP storage-bound (forward secrecy), consumed-
 skipped-key replay guard (ratchet + group), group future-epoch rejection, N3 caps +
 x3dh legacy compat persistence in worker prekey bundle (v5 capability advertisement
 flow complete), PoW freshness check (maxAge), N5 hash-chained key-transparency log,
-validateUserId() on all KV-key-constructing handlers including presence heartbeat/check,
-account purchase, webhook (checkout/subscription.deleted/updated metadata) and OTP
-write path (KV key injection prevention + Stripe metadata hygiene), Origin:null CORS
+validateUserId() on all KV-key-constructing handlers including presence heartbeat/check
+and OTP write path (KV key injection prevention), Origin:null CORS
 bypass blocked (sandboxed iframe protection), actual body size enforcement (Content-Length
 spoof bypass fix), signal data size cap (64KB DoS guard), batch presence id filter via
 validateUserId (JS coercion + KV injection guard), public key field size caps (identityKey/
 signedPreKey ≤5000 chars, edIdentityKey/signedPreKeySig ≤500 chars, alias pub ≤2000
-chars), OTP per-entry size cap (5000 chars), group token length cap (128 chars), AI
-handler lang prompt-injection prevention (BCP-47 charset sanitization), AI summarize
-per-field bounds (sender ≤100 chars, text ≤500 chars), translate `to` type guard, PoW
+chars), OTP per-entry size cap (5000 chars), group token length cap (128 chars), PoW
 freshness check in handleAliasSet (10 min maxAge, backward-compatible with old-format
 challenges), N2 two-layer group authentication (partial AFKS: epoch sig + per-message
-sig, both required; forging requires simultaneous compromise of both keys), OGP URL
-length cap (2048 chars) + sha256Short hash cache key (fixes URL prefix-collision bug),
+sig, both required; forging requires simultaneous compromise of both keys),
 abuse report `opening` field size cap (128 chars, HMAC key is 44 base64 chars),
 push subscription object sanitization (whitelist endpoint/keys/expirationTime, cap
 p256dh ≤100 chars, auth ≤50 chars; extra fields stripped before KV storage).

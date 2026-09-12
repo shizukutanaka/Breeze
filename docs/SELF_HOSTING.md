@@ -23,7 +23,7 @@ wrangler kv:namespace create KV
 # 5. Visit https://breeze.pages.dev
 ```
 
-**That's it.** All features work except billing and push notifications.
+**That's it.** All features work except push notifications.
 
 ## What Works at $0
 
@@ -37,8 +37,11 @@ wrangler kv:namespace create KV
 | File transfer | ✓ | Up to 50MB via P2P |
 | 924 languages | ✓ | Auto-detected |
 | Offline/PWA | ✓ | Service Worker |
-| Billing/subscriptions | ✗ | Needs Stripe keys |
 | Push notifications | ✗ | Needs VAPID keys |
+
+Multi-account billing (Lite/Plus/Pro) is not available — see
+[SECURITY.md](../SECURITY.md)'s "Removed: multi-account billing" section. Every account gets
+unlimited local sub-accounts for free with no plan gating.
 
 ## Free Tier Limits
 
@@ -63,19 +66,6 @@ npx web-push generate-vapid-keys
 # Set secrets
 wrangler pages secret put VAPID_PUBLIC_KEY
 wrangler pages secret put VAPID_PRIVATE_KEY
-```
-
-### Billing (Stripe — $0 until first sale)
-
-```bash
-# Sign up: https://dashboard.stripe.com
-# Create 3 products with monthly prices
-
-wrangler pages secret put STRIPE_SECRET_KEY
-wrangler pages secret put STRIPE_WEBHOOK_SECRET
-wrangler pages secret put STRIPE_PRICE_LITE    # $0.99/mo
-wrangler pages secret put STRIPE_PRICE_PLUS    # $5.99/mo
-wrangler pages secret put STRIPE_PRICE_PRO     # $19.99/mo
 ```
 
 ### TURN Server (for restrictive networks)

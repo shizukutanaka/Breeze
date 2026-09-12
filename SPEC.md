@@ -22,11 +22,11 @@ Breeze is a serverless, end-to-end encrypted P2P messenger deployed as a single 
 
 | File | Size | Purpose |
 |------|------|---------|
-| index.html | 476 KB | Client: UI + CSS + JS (single file) |
-| _worker.js | 45 KB | Cloudflare Worker: API + billing + signals |
-| sw.js | 3 KB | Service Worker: offline cache + push |
-| lang.js | 570 KB | 924 languages (lazy-loaded) |
-| manifest.json | 2 KB | PWA manifest |
+| index.html | 712 KB | Client: UI + CSS + JS (single file) |
+| _worker.js | 160 KB | Cloudflare Worker: API + signals |
+| sw.js | 8 KB | Service Worker: offline cache + push |
+| lang.js | 572 KB | 924 languages (lazy-loaded) |
+| manifest.json | 4 KB | PWA manifest |
 | icon-192.png / icon-512.png | — | PWA icons |
 | 404.html | — | Custom 404 page |
 | _headers | — | Cloudflare Pages HTTP headers |
@@ -139,7 +139,6 @@ Sender                          Server                         Receiver
 | /api/group/kick | default | Remove group member |
 | /api/push/subscribe | default | Web Push subscription |
 | /api/turn | default | TURN credential request |
-| /api/ogp | 20/min | Open Graph Protocol link preview |
 | /api/online | default | Online user count |
 | /api/backup/upload | 2/min | Encrypted backup upload |
 | /api/backup/download | 5/min | Encrypted backup download |
@@ -155,11 +154,6 @@ Sender                          Server                         Receiver
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | KV | Yes | Cloudflare KV namespace binding |
-| STRIPE_SECRET_KEY | For billing | Stripe API secret |
-| STRIPE_WEBHOOK_SECRET | For billing | Stripe webhook verification |
-| STRIPE_PRICE_LITE | For billing | Lite plan price ID ($0.99/mo) |
-| STRIPE_PRICE_PLUS | For billing | Plus plan price ID ($5.99/mo) |
-| STRIPE_PRICE_PRO | For billing | Pro plan price ID ($19.99/mo) |
 | VAPID_PUBLIC_KEY | For push | Web Push VAPID public key |
 | VAPID_PRIVATE_KEY | For push | Web Push VAPID private key |
 | TURN_URL | Recommended | TURN server URL |
@@ -312,15 +306,13 @@ Layout (12), Typography (18), Color (8), Spacing (10), State (6), Component-spec
 
 | Command | Description |
 |---------|-------------|
-| /network | Connection health dashboard |
-| /peers | P2P peer RTT + bandwidth stats |
-| /storage | IndexedDB + SW + quota stats |
-| /perf | Performance API dashboard |
-| /billing | Account slots + billing info |
-| /about | Version + protocol + build info |
-| /uptime | Session uptime |
 | /debug | Toggle debug mode |
 | /whoami | Identity + alias + public key |
+
+> Note: `/network`, `/peers`, `/storage`, `/perf`, `/billing`, `/about`, `/uptime` were removed
+> from this table (2026-09) after verifying none of them exist in `index.html` anymore — a wider
+> command-reference audit against the current full command set is tracked as a follow-up in
+> `docs/ASSESSMENT.md` rather than done here.
 
 ### 5.5 UI & Settings
 
@@ -340,14 +332,9 @@ Layout (12), Typography (18), Color (8), Spacing (10), State (6), Component-spec
 
 ## 6. Billing Model
 
-| Item | Price | Type | Stripe |
-|------|-------|------|--------|
-| 1st account | Free | — | — |
-| Lite (+1 account) | $0.99/month | Subscription | STRIPE_PRICE_LITE |
-| Plus (+3 accounts) | $5.99/month | Subscription | STRIPE_PRICE_PLUS |
-| Pro (unlimited) | $19.99/month | Subscription | STRIPE_PRICE_PRO |
-
-All features included for every account. No feature gating. No Pro tier.
+No billing is implemented. Every account gets every feature, with no plan gating and unlimited
+local accounts. See [SECURITY.md](SECURITY.md)'s "Removed: multi-account billing" section — it
+was built at one point and removed, but the docs kept describing it as live.
 
 ---
 
