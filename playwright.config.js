@@ -11,6 +11,15 @@ export default defineConfig({
   testDir: './tests/e2e',
   testMatch: '**/*.spec.js',
   fullyParallel: false, // tests share one in-memory Worker KV — keep them serial to avoid cross-test interference
+  // fullyParallel only serializes tests WITHIN a file; without workers:1, Playwright's
+  // default (~half the CPU cores, 2 on this 4-core box) still runs DIFFERENT spec files
+  // concurrently in separate worker processes — each hitting the same in-memory KV via
+  // server.mjs, exactly the cross-test interference the line above claims to prevent.
+  // Confirmed empirically: two full-suite runs each failed one arrival-after-reload
+  // assertion, both times on the message never arriving in time (a different test in
+  // each run) — every failure passed 3/3 and 6/6 when the same file ran alone. Root
+  // cause was inter-file contention, not a product bug.
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'github' : 'list',
