@@ -86,15 +86,16 @@ Ask first:
 ## Project structure
 
 ```
-index.html          — Client: HTML + CSS + JS (single file, ~10K lines)
-  <style>           — All CSS (lines 1-700)
-  <body>            — HTML structure (lines 700-920)
-  <script>          — All JS (lines 920-10200)
-    CONFIG          — Constants (line ~889)
-    MS              — Time constants (line ~952)
-    _DOM            — Memoized DOM cache (line ~954)
-    _H              — JSON headers constant (line ~965)
-    _I              — i18n translations EN+JA (line ~968)
+index.html          — Client: HTML + CSS + JS (single file, grows every session — wc -l for
+                      the live count rather than trust a number here)
+  <style>           — All CSS (grep -n '^<style>')
+  <body>            — HTML structure (grep -n '^<body>')
+  <script>          — All JS (grep -n '^<script>')
+    CONFIG          — Constants (grep -n '^const CONFIG')
+    MS              — Time constants (grep -n '^const MS')
+    _DOM            — Memoized DOM cache (grep -n '^const _DOM')
+    _H              — JSON headers constant (grep -n '^const _H')
+    _I              — i18n translations EN+JA (grep -n '^const _I')
     LANG / t()      — Language detection + translation function
     _adaptiveConfig — Network-aware settings
     Crypto          — X25519/AES-256-GCM/Double Ratchet
@@ -102,9 +103,11 @@ index.html          — Client: HTML + CSS + JS (single file, ~10K lines)
     Multi-account   — Account switching, tabs
     WebRTC          — P2P DataChannel + voice/video calls
     UI              — Contact list, chat, modals, commands
-    Slash commands  — 52+ commands (/help, /security, /network, etc.)
+    Slash commands  — 60+ commands (/help, /security, /alias, etc. — count drifts, grep
+                      val === '/ and startsWith('/ dispatch sites for the live list)
 
-_worker.js          — Cloudflare Worker: 43 API endpoints (~2K lines)
+_worker.js          — Cloudflare Worker: API endpoints (count drifts — grep case '/api/'
+                      for the live count rather than trust a number here)
   Rate limiting     — Per-IP, per-endpoint, per-minute
   Input validation  — sanitizeString, validateUserId, size limits
   KV structure      — slots:{userId} (scaffolded, unused — see SECURITY.md), sig:{room}, msg:{}, etc.
