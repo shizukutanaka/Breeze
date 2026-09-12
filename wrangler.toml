@@ -29,6 +29,15 @@ id = ""  # ← REQUIRED: paste your KV namespace ID here
 # wrangler pages secret put TURN_CREDENTIAL            # static credential
 # Option D: No config → auto-falls to free Open Relay (20GB/month)
 #
+# --- Moderation (optional) ---
+# wrangler pages secret put ABUSE_WEBHOOK_URL          # Notified on verified abuse reports
+#                                                       # (metadata only — frankId, message
+#                                                       # length, timestamp; never message content)
+#
+# --- Anti-spam tuning (optional — default 20, matches the client's PoW difficulty) ---
+# wrangler pages secret put MIN_POW_DIFFICULTY         # Server-side PoW acceptance floor for
+#                                                       # @alias registration
+#
 # --- Auth hardening (recommended — off by default for zero-config self-hosting) ---
 # Every registered client already signs the actions below with its Ed25519 identity key;
 # these flags just tell the Worker to REJECT a request that omits/fails that signature
