@@ -1,5 +1,19 @@
 # Changelog
 
+## Every toast in the app rendered as a 143px column of one word per line (branch claude/nice-ride-T6yb0, 2026-09-13)
+
+798 vitest + **39** Playwright E2E (+2, `tests/e2e/layout.spec.js`); `index.html`, `_headers` (CSP hash).
+
+The screenshots taken while verifying the layout fix above showed the boot tip toast as a narrow vertical strip — a detail easy to dismiss as a headless-rendering artifact. Measured instead: **143px wide × 234px tall, 13 lines**, for one sentence. `showToast()` is the app's only feedback channel — 60+ call sites, every error and every confirmation — and it has been unreadable on every screen.
+
+`.toast` carried `position: fixed; top: 16px; left: 50%; transform: translateX(-50%)`, which `.toast-container` already does; the container was added later to stack multiple toasts in a flex column and the child's own positioning was never removed. That redundancy is what broke it: the container's `transform` makes it the containing block for `position: fixed` descendants, and because every one of its children was then out of flow, **the container measured 0px wide**. Each toast resolved `left: 50%` against a zero-width box, got zero available width, and collapsed to its min-content width — the longest single word.
+
+Fixed by deleting the duplicate positioning (and the matching `translateX(-50%)` from the `toastBounce`/`fadeOut` keyframes, which would otherwise have shifted every toast half its own width to the left), and giving the container `width: max-content; max-width: 90vw` so it sizes to its toasts and still fits a phone. Verified in a real Chromium: 826×47 single line at 1280px, 351px (=90vw) wrapped and centred at 390px. Two more `layout.spec.js` tests assert the shape at both widths — teeth-tested, both fail against the old CSS.
+
+Same root pattern as the `</div>` below it, found by the same means: the text was always present and correct in the DOM, only its geometry was wrong, and nothing in the repo measured geometry.
+
+---
+
 ## One stray `</div>` deleted the desktop two-pane layout, and 833 green tests never noticed (branch claude/nice-ride-T6yb0, 2026-09-13)
 
 798 vitest + **37** Playwright E2E (+2, new `tests/e2e/layout.spec.js`); `index.html` (−1 line), new `tools/html-balance.mjs`, `validate.sh` **41 → 42 checks**, `.gitignore`, removed `dbg_p.mjs`.

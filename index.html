@@ -570,8 +570,15 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 .modal-input { width: 100%; padding: 10px 14px; border: 1px solid var(--b1); border-radius: var(--rad); background: var(--s2); color: var(--t1); font-size: 14px; margin-bottom: 12px; outline: none; transition: border-color .2s ease }
 .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(52,211,153,.15) }
 .legal-section { margin-top: 16px }
+/* Positioning belongs to .toast-container, NOT here. A toast is only ever created by
+   showToast() and appended to that container, and the container is itself fixed,
+   centred and a flex column (it exists to stack multiple toasts). Repeating
+   `position: fixed; left: 50%` on the child was worse than redundant: the container's
+   own `transform` makes it the containing block for fixed-position descendants, and
+   with every child out of flow the container measured 0px wide — so each toast
+   resolved `left: 50%` against a zero-width box and collapsed to its min-content
+   width. Every message in the app rendered as a 143px column of one word per line. */
 .toast {
-  position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
   padding: 12px 24px; border-radius: var(--rad-full);
   font-size: 13px; font-weight: 600; z-index: 200;
   animation: toastBounce .4s var(--bounce); pointer-events: none;
@@ -581,9 +588,9 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 .toast-success { background: rgba(52,211,153,.9); color: #000 }
 .toast-error { background: rgba(255,107,107,.9); color: #fff }
 .toast-info { background: var(--s1); backdrop-filter: var(--glass); color: var(--t1); border: 1px solid var(--b1) }
-@keyframes toastBounce { 0% { opacity: 0; transform: translateX(-50%) translateY(-20px) scale(.9) } 60% { transform: translateX(-50%) translateY(3px) scale(1.02) } 100% { opacity: 1; transform: translateX(-50%) } }
+@keyframes toastBounce { 0% { opacity: 0; transform: translateY(-20px) scale(.9) } 60% { transform: translateY(3px) scale(1.02) } 100% { opacity: 1; transform: none } }
 .toast-fade { animation: fadeOut .3s ease forwards }
-@keyframes fadeOut { to { opacity: 0; transform: translateX(-50%) translateY(-8px) } }
+@keyframes fadeOut { to { opacity: 0; transform: translateY(-8px) } }
 
 /* ─── Search / Offline / Scroll ─── */
 .search-bar { display: none; padding: 8px 12px; gap: 8px; align-items: center; border-bottom: 1px solid var(--b1); background: var(--s1) }
@@ -635,7 +642,7 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 :focus-visible { outline: 2px solid var(--g); outline-offset: 2px }
 
 /* ─── Dynamic UI classes (JS-generated elements) ─── */
-.toast-container { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column; gap: 8px; align-items: center }
+.toast-container { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column; gap: 8px; align-items: center; width: max-content; max-width: 90vw; pointer-events: none }
 .ctx-menu { position: fixed; background: var(--s1); backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass); border: 1px solid var(--b1); border-radius: var(--rad); padding: 6px; z-index: 50; min-width: 160px; box-shadow: var(--shadow-float); animation: ctxPop .2s var(--bounce) }
 .ctx-item { padding: 10px 14px; font-size: 13px; cursor: pointer; transition: background .15s ease, transform .1s ease; white-space: nowrap; border-radius: 10px; margin: 1px 0 }
 .ctx-item:hover { background: var(--s2) }

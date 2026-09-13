@@ -70,3 +70,30 @@ test('the message list scrolls inside its own box instead of growing the page', 
   // The composer must stay reachable no matter how long the conversation gets.
   await expect(page.locator('#msg-input-bar')).toBeInViewport();
 });
+
+// showToast() is the app's only feedback channel — 60+ call sites, every error and every
+// confirmation. It rendered as a 143px column of one word per line on every screen,
+// because .toast repeated the `position: fixed; left: 50%` its container already does,
+// and the container's own transform made it the containing block for that fixed child.
+// With every child out of flow the container measured 0px wide, so `left: 50%` resolved
+// against nothing and the toast collapsed to min-content. Unreadable, and invisible to
+// every test — the text was all there in the DOM, just shaped into a strip.
+for (const width of [1280, 390]) {
+  test(`a toast renders as a readable line, not a min-content strip (${width}px)`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 });
+    await boot(page, 'Layout Toast');
+
+    await page.evaluate(() => showToast('Short toast', 'info'));
+    const box = await page.evaluate(() => {
+      const t = [...document.querySelectorAll('.toast')].pop().getBoundingClientRect();
+      return { w: t.width, h: t.height, mid: t.x + t.width / 2 };
+    });
+
+    // A short message must fit on one line. The collapsed bug gave ~143px and ~13 lines,
+    // so assert on shape (wider than tall) rather than an exact pixel count.
+    expect(box.w, 'toast is wider than it is tall — one line, not a column').toBeGreaterThan(box.h * 2);
+    expect(box.h, 'a short toast occupies a single line').toBeLessThan(60);
+    expect(box.w, 'toast never overflows the viewport').toBeLessThanOrEqual(width);
+    expect(Math.abs(box.mid - width / 2), 'toast stays horizontally centred').toBeLessThan(3);
+  });
+}
