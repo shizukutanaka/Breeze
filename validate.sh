@@ -131,6 +131,13 @@ else fail "i18n: locale drift or dead keys (run: node tools/i18n-check.mjs)" 4; 
 if node tools/dead-wiring.mjs >/dev/null 2>&1; then pass "no listeners wired to non-existent DOM ids" 3
 else fail "listener(s) wired to missing DOM id(s) (run: node tools/dead-wiring.mjs)" 3; fi
 
+# Unreachable-branch gate. A misplaced brace once trapped ~190 lines of client code inside
+# `if (PLATFORM === 'electron')`, silently disabling keyboard shortcuts, the scroll-to-bottom
+# FAB and the in-chat search bar on web — invisible to every test, because the code parses
+# perfectly and simply never runs. See tools/unreachable-branch.mjs.
+if node tools/unreachable-branch.mjs >/dev/null 2>&1; then pass "no platform branch nested inside an incompatible one" 3
+else fail "unreachable platform branch (run: node tools/unreachable-branch.mjs)" 3; fi
+
 DEADFN=$(node -e '
 const fs=require("fs");const h=fs.readFileSync("index.html","utf8");
 const fns=[...h.matchAll(/^\s*(?:async\s+)?function\s+([A-Za-z_][\w]*)\s*\(/gm)].map(m=>m[1]);
