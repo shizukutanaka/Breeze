@@ -1158,7 +1158,6 @@ del.md-del { opacity: .6 }
 
 <footer><div class="wrap">Breeze v3.6.0 — P2P encrypted messenger. <a href="?terms">Terms</a> · <a href="?privacy">Privacy</a></div></footer>
 
-<script src="lang.js" async integrity="sha384-Z86EvTYAMKtHSwoqtUfrsG6938uHML7p7qNNAVpvCdxLI2pUd5kJyh4pVf5x7LnQ" crossorigin="anonymous"></script>
 <script>
 
 'use strict';
@@ -2001,14 +2000,13 @@ const _I = {
   // the app is never blank while a locale file is in flight. Locale files are pure data,
   // validated by tools/i18n-check.mjs (wired into validate.sh).
 };
-// Locales with a full translation file in locales/ (LINE's core markets + world reach).
-// Everything else falls back to lang.js's 25 core strings, then English.
+// Locales with a full translation file in locales/. Everything else falls back to English.
+// (A 924-language × 25-string table, lang.js, used to sit between the two. Deleted: measured,
+// it supplied ZERO strings to the UI — 18 of its 25 keys were shadowed by the complete inline
+// English table, which t() consults first, and the other 7 are never passed to t() anywhere.
+// It cost 569 KB, 44% of the app's payload, on every cold load. Even working it could only
+// ever reach ~25 of 667 strings: a 96%-English UI, which is not "supporting a language".)
 const FULL_LOCALES = ['ja', 'ko', 'zh-TW', 'es', 'th', 'id', 'pt-BR'];
-// Re-derivable on purpose: lang.js (the 924-language core table) is loaded with `async`, so
-// the very first call almost always runs BEFORE window._LANG_DATA exists — a `const` computed
-// once could never see it, and the 924-language claim silently degraded to English for every
-// language outside FULL_LOCALES (Socratic worldwide lens). detectLang() is re-run when lang.js
-// finishes loading, and applyI18n() (idempotent) re-paints the static DOM.
 function detectLang() {
   const nav = (navigator.language || 'en');
   const lower = nav.toLowerCase();
@@ -2025,8 +2023,6 @@ function detectLang() {
   }
   const baseHit = FULL_LOCALES.find(l => l.toLowerCase() === base);
   if (baseHit) return baseHit;
-  if (window._LANG_DATA?.[lower]) return lower;
-  if (window._LANG_DATA?.[base]) return base;
   return 'en';
 }
 let LANG = detectLang();
@@ -2034,11 +2030,18 @@ let LANG = detectLang();
 // chrome (contact list, headers, input bar) stayed LTR for Arabic/Hebrew/Persian/Urdu readers.
 const RTL_LANGS = ['ar', 'he', 'fa', 'ur', 'ps', 'sd', 'ckb', 'dv', 'yi'];
 function applyDir() {
-  try { document.documentElement.dir = RTL_LANGS.includes(LANG.split('-')[0]) ? 'rtl' : 'ltr'; } catch {}
+  // Read the BROWSER language, not LANG: none of FULL_LOCALES is RTL, so keying off LANG would
+  // mean an Arabic/Hebrew/Persian/Urdu reader always gets an LTR chrome. This used to work only
+  // because the deleted 924-language table let LANG become 'ar' — RTL never needed 569 KB of
+  // strings to know a script direction, just the browser's own tag.
+  try {
+    const base = (navigator.language || 'en').toLowerCase().split('-')[0];
+    document.documentElement.dir = RTL_LANGS.includes(base) ? 'rtl' : 'ltr';
+  } catch {}
 }
 function t(key, ...args) {
-  // Priority: full locale → English fallback → lang.js core strings → the key itself.
-  let v = _I[LANG]?.[key] ?? _I.en?.[key] ?? window._LANG_DATA?.[LANG]?.[key] ?? key;
+  // Priority: full locale → English reference → the key itself.
+  let v = _I[LANG]?.[key] ?? _I.en?.[key] ?? key;
   // Plural forms are objects keyed by CLDR categories and resolved with Intl.PluralRules, so
   // every language uses its OWN rules — Slavic needs 3-4 forms and Arabic 6, none of which a
   // hardcoded `n === 1` test can express. args[0] is the count by convention.
@@ -2061,14 +2064,6 @@ function applyI18n() {
 }
 applyDir();
 applyI18n();
-// lang.js is async: when it lands, re-derive LANG (it may now resolve to one of the 924 core
-// languages) and re-paint. Both calls are idempotent, so the no-op case costs nothing.
-(() => {
-  const tag = document.querySelector('script[src="lang.js"]');
-  const reapply = () => { const next = detectLang(); if (next !== LANG) { LANG = next; applyDir(); } applyI18n(); };
-  if (window._LANG_DATA) reapply();
-  else if (tag) tag.addEventListener('load', reapply, { once: true });
-})();
 // Non-English locales load as DATA from locales/<lang>.json (same-origin fetch, sw-cached).
 // English stays inline as the reference and fallback, so the UI is never blank while the file
 // is in flight; on arrival the static DOM re-applies. Dynamic UI naturally uses the merged
@@ -12639,9 +12634,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         'Negotiation: Perfect Negotiation (glare-safe, MDN spec)',
         'Backpressure: bufferedAmountLowThreshold (' + CONFIG.DC_BUFFER_LOW + 'B)',
         'Chunk size: ' + CONFIG.CHUNK_SIZE + 'B (safe cross-browser)',
-        'Translation API: ' + (API ? '✓ /api/translate (DeepL → Google → Libre → MyMemory)' : '✗'),
-        'AI API: ' + (API ? '✓ /api/ai (Anthropic → OpenAI → Groq)' : '✗'),
-        'Subresource Integrity: ✓ (lang.js SHA-384)',
+        'External scripts: none (nothing to pin with SRI)',
         'CSP: ' + (document.querySelector('meta[http-equiv="Content-Security-Policy"]') ? '✓ ' + t('secActive') : '✗'),
         'HTTPS: ' + (location.protocol === 'https:' ? '✓' : '⚠ HTTP'),
         '',

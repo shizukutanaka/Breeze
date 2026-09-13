@@ -30,7 +30,8 @@ deploying any is a breaking change). See the deployed-vs-reference table in CLAU
 - keep functions small and focused (single responsibility)
 - keep diffs small — avoid repo-wide rewrites unless explicitly asked
 - add `try/catch` around all `await` calls
-- always run `./validate.sh` after changes (must score 35/35)
+- always run `./validate.sh` after changes (must print PASSED — the check count grows, so
+  don't trust a hardcoded score)
 
 ## Don't
 - don't hardcode colors — use CSS custom properties (`var(--g)`, `var(--t1)`, etc.)
@@ -113,7 +114,6 @@ _worker.js          — Cloudflare Worker: API endpoints (count drifts — grep 
   KV structure      — slots:{userId} (scaffolded, unused — see SECURITY.md), sig:{room}, msg:{}, etc.
 
 sw.js               — Service Worker: offline cache + push notifications
-lang.js             — 924 languages (generated, do not edit manually)
 ```
 
 ## Good examples (copy these patterns)

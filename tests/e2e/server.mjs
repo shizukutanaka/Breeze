@@ -1,4 +1,4 @@
-// Local E2E server: serves the REAL, UNMODIFIED index.html/sw.js/lang.js/assets from
+// Local E2E server: serves the REAL, UNMODIFIED index.html/sw.js/assets from
 // the repo root over plain HTTP, and proxies /api/* to the actual _worker.js Worker
 // code (its default export's fetch(request, env, ctx)) backed by an in-memory KV —
 // the same mockKV.js helper the vitest worker tests already use. This lets Playwright

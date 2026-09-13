@@ -25,7 +25,6 @@ const ASSETS = [
   ['index.html',    'index.html',    true],
   ['sw.js',         'sw.js',         true],
   ['manifest.json', 'manifest.json', true],
-  ['lang.js',       'lang.js',       true],
   ['icon-192.png',  'icon-192.png',  true],
   ['icon-512.png',  'icon-512.png',  true],
   ['404.html',      '404.html',      false],

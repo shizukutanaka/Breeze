@@ -3,7 +3,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"; cd "$SCRIPT_DIR"
 
 VERSION="3.6.0"
-WEB_FILES=(index.html sw.js manifest.json lang.js icon-192.png icon-512.png)
+WEB_FILES=(index.html sw.js manifest.json icon-192.png icon-512.png)
 # ESM crypto reference modules. index.html loads these via `import './src/crypto/*.js'`
 # once the browser port lands (docs/INTEGRATION.md §0), so packaged builds must ship the
 # directory — flattening into the app root would break the relative import path.

@@ -25,7 +25,6 @@ Breeze is a serverless, end-to-end encrypted P2P messenger deployed as a single 
 | index.html | 712 KB | Client: UI + CSS + JS (single file) |
 | _worker.js | 160 KB | Cloudflare Worker: API + signals |
 | sw.js | 8 KB | Service Worker: offline cache + push |
-| lang.js | 572 KB | 924 languages (lazy-loaded) |
 | manifest.json | 4 KB | PWA manifest |
 | icon-192.png / icon-512.png | — | PWA icons |
 | 404.html | — | Custom 404 page |
@@ -449,7 +448,7 @@ Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline';
 ## 11. i18n
 
 - **Built-in**: English (372 keys), Japanese (372 keys)
-- **External**: 924 languages via lang.js (lazy-loaded, 570 KB, gzip ~33 KB)
+- **External**: none — the 924-language `lang.js` table was deleted (supplied zero strings to the UI at 44% of payload; see SECURITY.md)
 - **Hardcoded UI strings**: 0 (100% coverage via `t()` function)
 - **Toast i18n**: 100%
 - **Mechanism**: `data-i18n`, `data-i18n-html`, `data-i18n-ph` attributes + JS `t(key, ...args)`

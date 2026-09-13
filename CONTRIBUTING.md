@@ -50,7 +50,6 @@ Every change should align with our three principles:
 index.html      — Client (HTML + CSS + JS, single file)
 _worker.js      — Cloudflare Worker (API endpoints)
 sw.js           — Service Worker (offline + push)
-lang.js         — 924 languages (generated, do not edit)
 validate.sh     — Quality gate validator
 build.sh        — Multi-platform build script
 ```

@@ -41,7 +41,10 @@ Mitigations, in order of assurance:
   includes a hostile server, prefer the native app over the web PWA.
 - **Reproducible artifact**: `build.sh` produces `breeze.zip`; publishing and pinning its
   SHA-256 lets a motivated user diff the served page against a known-reviewed build.
-- **Subresource Integrity** pins the one external script (`lang.js`).
+- **Zero external scripts.** The app loads no third-party or separate script file at all, so
+  there is no supply-chain surface to pin with SRI. This replaced an SRI-pinned `lang.js`
+  (the 924-language table, deleted — see "Removed: the 924-language table" below);
+  `validate.sh` now gates on the absence of any external `<script src>` rather than on a hash.
 - **Hash-pinned `script-src`** (no `'unsafe-inline'`): the browser executes only the inline
   bundle whose SHA-256 was published in `_headers`. An injected `<script>` or `onerror=`
   payload is refused, so an HTML-injection bug can no longer reach the identity private key in
@@ -75,6 +78,26 @@ gated: an opt-in toggle still leaves the contradiction one tap away, and a relay
 plaintext is a different threat model from one that cannot.
 
 `/summarize` and smart replies survive, computed **locally** on-device with no network egress.
+
+### Removed: the 924-language table (`lang.js`)
+
+`lang.js` shipped 924 languages × 25 core UI strings (569 KB — 44% of the app's total
+payload) and was fetched by every user on every cold load. Measured, it supplied **zero**
+strings to the UI: `t()` resolves `full locale → English → lang.js`, and the inline English
+table is the complete reference (every key the app uses is guaranteed present by
+`tools/i18n-check.mjs`), so English short-circuited it every time. 18 of its 25 keys were
+shadowed that way; the other 7 are never passed to `t()` anywhere in the app.
+
+An earlier fix had repaired the *detection* half of this (`detectLang()` re-runs when the
+async file lands, so `LANG` really did become e.g. `sw`) and stopped there — the strings
+still never rendered, which is the outcome that fix existed to deliver. Verified in a real
+browser before and after: a Swahili-locale client showed an English UI either way.
+
+Deleted rather than repaired, because repairing it could only ever reach ~25 of 667 strings
+(3.7%) — a 96%-English UI with 25 foreign words reads as broken, not translated. The seven
+locales with complete translation files (`ja`, `ko`, `zh-TW`, `es`, `th`, `id`, `pt-BR`)
+are unaffected and still fully work. RTL for Arabic/Hebrew/Persian/Urdu also still works:
+it never needed the table, only `navigator.language`, and now reads that directly.
 
 ### Removed: multi-account billing
 

@@ -210,13 +210,14 @@ malicious relay can't silently swap keys (I11). Order: I4 → I11 → I12/I13.
 
 ## 8 — Web client security & supply-chain integrity
 
-Breeze: single-file inline app; CSP + Trusted Types (`safeSetHTML`); SRI on `lang.js`.
+Breeze: single-file inline app; CSP + Trusted Types (`safeSetHTML`); zero external scripts
+(the SRI-pinned `lang.js` was deleted — see SECURITY.md).
 The hardest web-E2EE problem: **the server can serve malicious JS**.
 
 **Academic / standards**
 1. *W3C Trusted Types* ([spec](https://www.w3.org/TR/trusted-types/)) → enforce `require-trusted-types-for 'script'` to kill DOM-XSS sinks (Breeze already has a sanitizer policy — enforce it; cf. Phase 2d).
 2. *W3C CSP Level 3* ([spec](https://www.w3.org/TR/CSP3/)) → tighten script-src; the inline single-file design forces `'unsafe-inline'` via hash/nonce — pin via hash.
-3. *Subresource Integrity* ([W3C SRI](https://www.w3.org/TR/SRI/)) → already on `lang.js`; extend to every external asset.
+3. *Subresource Integrity* ([W3C SRI](https://www.w3.org/TR/SRI/)) → moot as of the `lang.js` deletion (no external assets remain); re-apply if one is ever added.
 4. *Reproducible Builds* ([reproducible-builds.org](https://reproducible-builds.org/)) → deterministic build of `breeze.zip` so third parties can verify the published artifact matches source.
 5. *Binary/Code Transparency* (e.g. Google's, [arXiv 2011.04551 — "Contour"/transparency]) → publish app-hash to an append-only log so a targeted malicious build is detectable.
 6. "JavaScript Cryptography Considered Harmful" (classic) → the threat model code-signing addresses; counter it with verified delivery, not avoidance.

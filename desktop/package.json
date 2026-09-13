@@ -44,10 +44,6 @@
         "to": "manifest.json"
       },
       {
-        "from": "../lang.js",
-        "to": "lang.js"
-      },
-      {
         "from": "../icon-192.png",
         "to": "icon-192.png"
       },
