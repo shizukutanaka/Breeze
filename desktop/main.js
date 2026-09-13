@@ -213,9 +213,16 @@ function setupAutoUpdate() {
 // ── Deep link handling ──────────────────────────────────────
 function handleDeepLink(url) {
   try {
-    const parsed = new URL(url);
-    const query = parsed.pathname ? '?' + parsed.pathname.replace(/^\/+/, '') : '';
-    if (query) loadApp(query);
+    // `breeze://join=TOKEN` — the form a plain link or the OS hands us — puts the whole
+    // payload in the URL *host*, not the pathname, so reading `parsed.pathname` yielded ''
+    // and silently dropped every such link; only the unnatural `breeze:///join=TOKEN`
+    // triple-slash form ever reached loadApp(). Re-deriving it from URL components is the
+    // wrong tool anyway: new URL() applies web-host semantics, lowercasing the host and
+    // splitting on '@' as userinfo (`breeze://add=@alice` parses to host "alice"), which
+    // corrupts case-sensitive payloads like a base64 ?add= key. The payload after a custom
+    // scheme is opaque — take the raw remainder.
+    const payload = String(url).replace(new RegExp('^' + PROTOCOL + ':', 'i'), '').replace(/^\/+/, '');
+    if (payload) loadApp('?' + payload);
     showWindow();
   } catch {}
 }
