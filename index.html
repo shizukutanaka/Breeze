@@ -2667,7 +2667,11 @@ function toggleTheme() {
 
 const API = location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? '' : location.origin + '/api';
 const P = new URLSearchParams(location.search);
-const joinToken = P.get('join');
+// manifest.json registers web+breeze: as a protocol handler → /?join=%s, where %s is the
+// ENTIRE activated URL (e.g. "web+breeze:abc123"), not the bare token real invite links pass
+// (?join=abc123 from createGroupInviteLink). Strip the scheme prefix so both paths converge
+// on the same bare token processJoinToken() expects.
+const joinToken = P.get('join')?.replace(/^web\+breeze:\/{0,2}/, '') || null;
 
 // Performance Markers (optional — no-op if Performance API unavailable). Moved up here: initMessenger() (hoisted call below) reads _perf on its first line; declared later, that `const` stays TDZ-locked — crashed boot for every real user until found via E2E.
 const _perf = {
@@ -5811,6 +5815,13 @@ async function initMessenger(dbName) {
     }
     // Auto-join group from URL (?join=token)
     if (joinToken) await processJoinToken(joinToken);
+    // Auto-open settings from URL (?settings — PWA manifest "Settings" shortcut).
+    // manifest.json advertised this shortcut with nothing on the boot path ever reading the
+    // param, so long-pressing the installed app icon → Settings silently did nothing.
+    if (P.has('settings')) {
+      const input = _DOM.get('msg-input');
+      if (input) { input.value = '/settings'; input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' })); }
+    }
   } else {
     _DOM.get('msg-setup').classList.remove('hidden');
     _DOM.get('msg-main').classList.add('hidden');
@@ -13405,7 +13416,6 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         else if (s === 'send-sound') { localStorage.setItem('brz-send-sound', cb.checked ? '1' : '0'); }
         else if (s === 'notif-perm') { if (cb.checked) Notification?.requestPermission().then(p => { if (p !== 'granted') cb.checked = false; }).catch(() => { cb.checked = false; }); }
         else if (s === 'auto-lock') { localStorage.setItem('brz-autolock', cb.checked ? '1' : '0'); }
-        else if (s === 'ai-suggest') { localStorage.setItem('brz-ai-suggest', cb.checked ? '1' : '0'); }
       });
       box.appendChild(d); box.scrollTop = box.scrollHeight;
     }
