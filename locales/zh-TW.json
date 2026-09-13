@@ -398,7 +398,7 @@
  "connTURNRelay": "TURN（僅中繼）",
  "helpDeadDrop": "🔐 Dead Drop / 聊天室",
  "helpTableHint": "| 欄 | 欄 | — Markdown 表格",
- "helpKeysHint": "Ctrl+F 搜尋 · Ctrl+K 聯絡人 · Ctrl+1..9 帳號 · ? 快捷鍵",
+ "helpKeysHint": "Ctrl+F 搜尋 · Ctrl+K 聯絡人 · ? 快捷鍵",
  "uiPinnedCount": {
   "other": "{0} 則釘選訊息"
  },

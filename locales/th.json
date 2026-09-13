@@ -398,7 +398,7 @@
  "connTURNRelay": "TURN (รีเลย์เท่านั้น)",
  "helpDeadDrop": "🔐 Dead Drop / ห้อง",
  "helpTableHint": "| คอลัมน์ | คอลัมน์ | — ตาราง Markdown",
- "helpKeysHint": "Ctrl+F ค้นหา · Ctrl+K รายชื่อ · Ctrl+1..9 บัญชี · ? คีย์ลัด",
+ "helpKeysHint": "Ctrl+F ค้นหา · Ctrl+K รายชื่อ · ? คีย์ลัด",
  "uiPinnedCount": {
   "other": "ข้อความปักหมุด {0} รายการ"
  },

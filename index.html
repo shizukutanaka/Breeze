@@ -1785,7 +1785,7 @@ const _I = {
     connTURNRelay: 'TURN (relay-only)',
     helpDeadDrop: '🔐 Dead Drop / Room',
     helpTableHint: '| col | col | — markdown table',
-    helpKeysHint: 'Ctrl+F search · Ctrl+K contacts · Ctrl+1..9 accounts · ? shortcuts',
+    helpKeysHint: 'Ctrl+F search · Ctrl+K contacts · ? shortcuts',
     uiPinnedCount: { one: "{0} pinned message", other: "{0} pinned messages" },
     uiMoreCount: "+{0} more",
     secActiveProtections: 'Active Protections (this device)',
@@ -13598,11 +13598,8 @@ if (!IS_MOBILE) {
       if (typeof togglePicker === 'function') togglePicker();
       else window.togglePicker?.();
     }
-    // v3.6: Ctrl+K → Focus contact filter (Spotlight-style)
-    if ((e.ctrlKey || e.metaKey) && e.key === 'k' && !e.shiftKey) {
-      e.preventDefault();
-      _DOM.get('contact-filter')?.focus();
-    }
+    // Ctrl+K lives in the global handler below (it also selects and sets the hint placeholder).
+    // A second copy here fired on the same keystroke, so the action ran twice.
   });
 }
 
@@ -13620,7 +13617,11 @@ if (PLATFORM === 'electron' && window.breeze) {
 
   // Badge: count total unread across all contacts
   const _origRenderContacts = window._breezeRenderForBadge;
-  _intervals.push(setInterval(async () => {
+  // Page-level interval: created once on load, not per account switch, so it is NOT
+  // tracked in initMessenger's _intervals (that array exists to cancel PER-ACCOUNT
+  // timers on switch, and is out of scope here — referencing it threw a ReferenceError
+  // the moment this block stopped being dead code).
+  setInterval(async () => {
     try {
       const db = indexedDB.open('breeze-messenger', 2);
       // Simple approach: read unread count from contact list DOM
@@ -13631,7 +13632,7 @@ if (PLATFORM === 'electron' && window.breeze) {
       // Update window title
       _updateTitle(total);
     } catch(e) { _dbg(e); }
-  }, 5000));
+  }, 5000);
 
   // Auto-update UI
   window.breeze.onUpdateAvailable((info) => {
@@ -13694,6 +13695,17 @@ if (PLATFORM === 'electron' && window.breeze) {
       }
     });
   }
+} // ← END of the Electron-only block. It used to close ~190 lines further down, which
+  // silently trapped everything below inside `PLATFORM === 'electron' && window.breeze`:
+  // the handler that calls ITSELF "all platforms", the scroll-to-bottom FAB, the unread
+  // badge bump while scrolled up, the disappearing-message countdown, the in-chat search
+  // bar wiring, an `if (IS_MOBILE)` block and an `if (PLATFORM === 'capacitor')` block
+  // (neither can ever be true inside an electron guard). On web — the primary platform —
+  // none of it ran: verified in a browser, where pressing Escape left an .overlay in place
+  // while #scroll-fab and #search-bar sat in the DOM as dead UI.
+  // The code below is deliberately left at its original indentation: it sits inside
+  // template literals whose leading whitespace is part of the emitted HTML, so re-indenting
+  // would change strings, not just formatting. Read it as top level.
 
   // Global: Escape to close modals + keyboard shortcuts (all platforms)
   document.addEventListener('keydown', (e) => {
@@ -13701,8 +13713,12 @@ if (PLATFORM === 'electron' && window.breeze) {
       document.querySelectorAll('.overlay').forEach(m => m.remove());
       document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
     }
-    // Cmd/Ctrl+K: command palette (focus search with slash prompt)
-    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+    // Cmd/Ctrl+K: command palette (focus search with slash prompt).
+    // Not while typing: Ctrl+K is ALSO the composer's "wrap selection in `code`" shortcut, and
+    // both fired on one keystroke — you got your backticks and were then yanked out of the
+    // composer into the contact filter, mid-message. The composer binding wins where the caret
+    // is (same INPUT/TEXTAREA guard the '?' shortcut already uses).
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k' && !['INPUT', 'TEXTAREA'].includes(e.target?.tagName)) {
       e.preventDefault();
       const cf = _DOM.get('contact-filter');
       if (cf) { cf.focus(); cf.select(); cf.placeholder = t('searchContactsHint'); }
@@ -13770,7 +13786,11 @@ if (PLATFORM === 'electron' && window.breeze) {
   }
 
   // v3.6: Live countdown for disappearing messages
-  _intervals.push(setInterval(() => {
+  // Page-level interval: created once on load, not per account switch, so it is NOT
+  // tracked in initMessenger's _intervals (that array exists to cancel PER-ACCOUNT
+  // timers on switch, and is out of scope here — referencing it threw a ReferenceError
+  // the moment this block stopped being dead code).
+  setInterval(() => {
     const badges = document.querySelectorAll('.msg-timer-badge');
     for (const badge of badges) {
       const msg = badge.closest('.msg');
@@ -13791,7 +13811,7 @@ if (PLATFORM === 'electron' && window.breeze) {
         badge.textContent = '⏱' + (mins >= 60 ? Math.floor(mins / 60) + 'h' : mins + 'm');
       }
     }
-  }, 30000)); // Update every 30s
+  }, 30000); // Update every 30s
 
   // v3.3: Search in chat (Ctrl+Shift+F)
   const _searchBar = _DOM.get('search-bar');
@@ -13883,7 +13903,6 @@ if (PLATFORM === 'electron' && window.breeze) {
       tabs.classList.add('acc-tabs--cap');
     }
   }
-}
 
 </script>
 </body>

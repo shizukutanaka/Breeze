@@ -398,7 +398,7 @@
  "connTURNRelay": "TURN (릴레이 전용)",
  "helpDeadDrop": "🔐 Dead Drop / 룸",
  "helpTableHint": "| 열 | 열 | — 마크다운 표",
- "helpKeysHint": "Ctrl+F 검색 · Ctrl+K 연락처 · Ctrl+1..9 계정 · ? 단축키",
+ "helpKeysHint": "Ctrl+F 검색 · Ctrl+K 연락처 · ? 단축키",
  "uiPinnedCount": {
   "other": "고정 메시지 {0}개"
  },

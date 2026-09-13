@@ -398,7 +398,7 @@
  "connTURNRelay": "TURN (relai saja)",
  "helpDeadDrop": "🔐 Dead Drop / Ruang",
  "helpTableHint": "| kolom | kolom | — tabel markdown",
- "helpKeysHint": "Ctrl+F cari · Ctrl+K kontak · Ctrl+1..9 akun · ? pintasan",
+ "helpKeysHint": "Ctrl+F cari · Ctrl+K kontak · ? pintasan",
  "uiPinnedCount": {
   "other": "{0} pesan tersemat"
  },

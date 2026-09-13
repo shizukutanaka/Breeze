@@ -402,7 +402,7 @@
  "connTURNRelay": "TURN (solo relé)",
  "helpDeadDrop": "🔐 Dead Drop / Sala",
  "helpTableHint": "| col | col | — tabla Markdown",
- "helpKeysHint": "Ctrl+F buscar · Ctrl+K contactos · Ctrl+1..9 cuentas · ? atajos",
+ "helpKeysHint": "Ctrl+F buscar · Ctrl+K contactos · ? atajos",
  "uiPinnedCount": {
   "one": "{0} mensaje fijado",
   "other": "{0} mensajes fijados"

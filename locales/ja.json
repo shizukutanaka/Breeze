@@ -422,7 +422,7 @@
  "connTURNRelay": "TURN (リレー専用)",
  "helpDeadDrop": "🔐 Dead Drop / Room",
  "helpTableHint": "| 列 | 列 | — Markdownテーブル",
- "helpKeysHint": "Ctrl+F 検索 · Ctrl+K 連絡先 · Ctrl+1..9 アカウント · ? ショートカット",
+ "helpKeysHint": "Ctrl+F 検索 · Ctrl+K 連絡先 · ? ショートカット",
  "uiPinnedCount": {
   "other": "{0}件のピン留めメッセージ"
  },
