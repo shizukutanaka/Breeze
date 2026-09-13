@@ -144,3 +144,46 @@ test('a reloaded member still receives group messages (sender-key state survives
 
   await ctxA.close(); await ctxB.close();
 });
+
+test('a follower tab is promoted to leader and polls when the leader goes away', async ({ browser }) => {
+  // Only the leader tab polls the relay, so a follower that is never promoted receives
+  // NOTHING — silently, forever. acquireLeaderLock() used ifAvailable:true with no retry and
+  // never awaited the lock decision, so a reload (where the PREVIOUS document still briefly
+  // holds the lock) left the new document a permanent follower with no leader in existence.
+  // Measured before the fix: 4 of 6 reloads made zero API requests for the whole delivery
+  // window while the message sat unread in the relay's sealed queue.
+  //
+  // That bug reached production behind an "intermittent" smoke failure, because reproducing it
+  // via reload is a race that only lands 30-60% of the time. Two pages in the SAME browser
+  // context share one Web Locks scope, so a second page takes the contended path
+  // DETERMINISTICALLY — no reload race, no flake.
+  //
+  // Count only SUSTAINED polling that starts after the leader goes away: checkRemoteWipe()
+  // fires a one-shot /msg/poll at boot regardless of leadership, and an earlier draft of this
+  // test counted that and passed against the very bug it exists to catch.
+  const ctx = await browser.newContext(ip(61));
+  const leader = await ctx.newPage();
+  await createIdentity(leader, 'Leader');
+
+  // Second tab of the same account: the lock is already held, so this one boots as a follower.
+  const follower = await ctx.newPage();
+  let polls = 0;
+  follower.on('request', (r) => { if (r.url().includes('/api/msg/poll')) polls++; });
+  await follower.addInitScript(() => { try { localStorage.setItem('brz-consent', String(Date.now())); } catch {} });
+  await follower.goto('/');
+  await expect(follower.locator('#msg-main')).toBeVisible();
+
+  // Let boot settle (including that one-shot), then require genuine silence: a follower must
+  // not be polling while a leader is alive.
+  await follower.waitForTimeout(6000);
+  polls = 0;
+  await follower.waitForTimeout(6000);
+  expect(polls, 'a follower must not poll while a leader holds the lock').toBe(0);
+
+  // The leader goes away (tab closed, or a reload replacing the document) — the follower must
+  // take over. Before the fix it stayed a follower forever and this never moved off zero.
+  await leader.close();
+  await expect.poll(() => polls, { timeout: 25_000, intervals: [500] }).toBeGreaterThan(0);
+
+  await ctx.close();
+});
