@@ -1,5 +1,21 @@
 # Changelog
 
+## Clicking send on a slash command transmitted it to your contact — including `/drop <secret>` (branch claude/nice-ride-T6yb0, 2026-09-13)
+
+798 vitest + **41** Playwright E2E (+2, new `tests/e2e/commands.spec.js`); `index.html`, `_headers` (CSP hash).
+
+A geometry sweep across four viewports came back clean, so the sweep script's *own* failure became the finding: it drove `/help` by clicking the send button and nothing happened. The app was right and the script was wrong — commands are dispatched by a `keydown` listener on `#msg-input`, so only Enter runs them. But asking the obvious next question turned the script's mistake into a real one: **what does the send button do with a command, then?**
+
+It sends it. `sendMessage()` never looked for a leading `/`, so clicking ↑ encrypted the command and delivered it to the contact as an ordinary chat message — E2E-confirmed from the *peer's* IndexedDB, which held a message whose text was `/help`. The Enter handler beside it already guards exactly this, and carries a comment recording that an earlier E2E caught commands being "sent as literal text first": the fix was applied to Enter only, and the button — the single most obvious affordance, and the only one on a touch keyboard that does not also insert a newline — kept the bug.
+
+The lost command is the mild half. The arguments travel too: `/note <private note about this contact>` delivers that note **to that contact**, `/searchall <query>` ships the query, and `/drop <secret>` — a feature that exists precisely so a secret does not sit in a chat log — puts it straight into one.
+
+Fixed at the button's click handler rather than inside `sendMessage()`: a leading `/` now synthesises the Enter the command listener is already waiting for, so one dispatcher serves both affordances instead of a second copy of the 60-command table. Deliberately *not* inside `sendMessage()` — its other callers (notification quick-reply, and `/reply`, which itself runs inside that listener) must keep calling it directly, or a `/`-leading reply body would re-enter the listener.
+
+Two E2E tests: one asserts the peer's database never receives the command (the sender's own UI cannot show this), the other that a message merely *containing* a slash — `run /help to see the commands` — still sends, so the fix cannot silently eat real messages. Only the first fails against the pre-fix build, which is the correct signature for a bug reproducer plus a non-regression guard.
+
+---
+
 ## Every toast in the app rendered as a 143px column of one word per line (branch claude/nice-ride-T6yb0, 2026-09-13)
 
 798 vitest + **39** Playwright E2E (+2, `tests/e2e/layout.spec.js`); `index.html`, `_headers` (CSP hash).

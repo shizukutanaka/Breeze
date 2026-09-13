@@ -7845,7 +7845,27 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, '_sendFile'); }
   }
 
-  _DOM.get('b-msg-send')?.addEventListener('click', sendMessage);
+  // A slash command is never a message — but only the Enter key knew that. Its keydown
+  // handler skips sendMessage() for '/' text and lets the command listener take it
+  // (see the "used to send them as literal text first" note there); the send button —
+  // the big obvious ↑ affordance a beginner reaches for — called sendMessage() directly
+  // and TRANSMITTED the command to the contact as plaintext chat. E2E-confirmed end to
+  // end: the peer's IndexedDB held a message whose text was "/help". The same click sends
+  // '/note <private note about that contact>' to that very contact, and '/drop <secret>'
+  // — a feature whose entire purpose is not putting a secret in a chat — straight into
+  // the chat. Synthesise the Enter the command listener is already waiting for, so one
+  // dispatcher serves both affordances instead of a second copy of the command table.
+  // Deliberately wired here and not inside sendMessage(): its other callers (notification
+  // quick-reply, and /reply, which itself runs inside that listener) must keep calling it
+  // directly, or a '/'-leading reply body would re-enter the listener.
+  _DOM.get('b-msg-send')?.addEventListener('click', () => {
+    const input = _DOM.get('msg-input');
+    if (input?.value.trim().startsWith('/')) {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      return;
+    }
+    sendMessage();
+  });
   _DOM.get('b-msg-nrn')?.addEventListener('click', () => {
     _noReplyNeeded = !_noReplyNeeded;
     _updateNrnButton();
