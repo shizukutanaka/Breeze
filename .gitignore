@@ -35,6 +35,12 @@ ios/
 test.js
 e2e.js
 
+# Throwaway browser diagnostics. These get written constantly while chasing a
+# layout/boot bug in a real Chromium, and one (dbg_p.mjs) was accidentally committed
+# and then carried for several releases. A real finding belongs in tests/e2e/*.spec.js
+# or tools/*.mjs, never in a dbg_ script.
+dbg_*.mjs
+
 # OS files
 .DS_Store
 Thumbs.db

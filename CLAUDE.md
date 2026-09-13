@@ -64,7 +64,7 @@ the tripwire test fails, and you must update this table + add a real mirror-drif
 - No `a.href = URL.createObjectURL` — use `downloadBlob()`
 
 ## Validate
-Always run after changes: `./validate.sh` (style/convention gate — must print PASSED; the check count grows as gates land, so read the live score rather than trust a number here). It also gates dead i18n keys (both directions: defined-but-unused AND used-but-undefined), unreachable functions, listeners wired to DOM ids that do not exist (tools/dead-wiring.mjs), and platform branches nested inside an incompatible one (tools/unreachable-branch.mjs).
+Always run after changes: `./validate.sh` (style/convention gate — must print PASSED; the check count grows as gates land, so read the live score rather than trust a number here). It also gates dead i18n keys (both directions: defined-but-unused AND used-but-undefined), unreachable functions, listeners wired to DOM ids that do not exist (tools/dead-wiring.mjs), platform branches nested inside an incompatible one (tools/unreachable-branch.mjs), and mismatched HTML tag nesting (tools/html-balance.mjs — one stray `</div>` silently re-parents every element after it, which no test catches because the elements all still exist).
 Syntax check: `node -c _worker.js && node -c sw.js`
 Crypto/worker changes: `npm test` (vitest) is the real correctness gate — validate.sh
 only greps conventions, it never runs an encrypt/decrypt round-trip.

@@ -1,5 +1,21 @@
 # Changelog
 
+## One stray `</div>` deleted the desktop two-pane layout, and 833 green tests never noticed (branch claude/nice-ride-T6yb0, 2026-09-13)
+
+798 vitest + **37** Playwright E2E (+2, new `tests/e2e/layout.spec.js`); `index.html` (−1 line), new `tools/html-balance.mjs`, `validate.sh` **41 → 42 checks**, `.gitignore`, removed `dbg_p.mjs`.
+
+Chasing why the scroll-to-bottom FAB never appeared — one of the features un-trapped from the Electron-only block earlier this session — the measurement came back stranger than a dead button: `#msg-messages` reported `scrollHeight === clientHeight` and fired **zero** scroll events. It was not failing to scroll; it was never overflowing, because nothing bounded its height. Walking its real parent chain in a live browser found `.msg-layout` **missing from it entirely** — `DIV#msg-messages` → `.chat-area` → `#msg-main`, skipping the flex container that gives the whole screen its height.
+
+The cause is one duplicated `</div>` after the sidebar's contact list. HTML has no syntax errors: the parser closed `.msg-layout` ~50 lines early and silently re-parented everything after it, so `.chat-area` stopped being the layout's second column and became a block-level sibling below it. On a 1280×800 desktop the sidebar filled the entire 700px layout box — its right two-thirds blank white — and the conversation pane rendered at **y=781, below the fold**. Reaching your own messages required scrolling past a full-height empty contact list. With the height constraint gone, `overflow-y: auto` on `.msg-area` meant nothing: the page grew instead of the box (3022px document for an 800px viewport), which is what made `#scroll-fab` dead UI and turned every `box.scrollTop = box.scrollHeight` auto-scroll into a silent no-op.
+
+**41 validate.sh checks, 798 unit tests and all 35 E2E tests passed against that build.** Nothing was broken in a way any of them look at: every element still existed, was still visible, and was still clickable — Playwright happily clicks an element below the fold. Only its *position on screen* was wrong, and not one assertion in the repo had ever measured a coordinate.
+
+So both layers get a guard, each teeth-tested against the pre-fix file. `tools/html-balance.mjs` walks the markup with a tag stack and requires every close tag to match the innermost open element — mechanical, no judgement calls, no false positives, since a `</div>` that closes a `<main>` is always a bug (it names the first mismatch as the real one and the cascade after it as noise). `tests/e2e/layout.spec.js` asserts the symptom a user would actually report: the chat column starts at the sidebar's right edge on the same row, fits the viewport, and a long conversation overflows *the box* rather than the document — which would also catch a pure CSS regression that broke the same thing with no markup mistake.
+
+Also deleted `dbg_p.mjs`, a throwaway browser diagnostic accidentally committed in `cfb76ec` and carried since, and added `dbg_*.mjs` to `.gitignore` — a real finding belongs in `tests/e2e/*.spec.js` or `tools/*.mjs`, never in a scratch script.
+
+---
+
 ## @alias release was a fourth unreachable feature, and its command threw on success (branch claude/nice-ride-T6yb0, 2026-09-12)
 
 798 vitest + **34** Playwright E2E (+1, new `tests/e2e/alias.spec.js`); `index.html`, `tools/i18n-check.mjs` (+check 8), `CLAUDE.md`.

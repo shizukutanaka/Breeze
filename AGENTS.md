@@ -233,7 +233,7 @@ const ok = await kvPut(env, key, value, { expirationTtl: 300 }); // returns fals
 | 7. Files | 10 required files exist |
 
 ## PR checklist
-- `./validate.sh` passes 35/35
+- `./validate.sh` prints PASSED (read the live score — the check count grows as gates land)
 - Syntax check green for all edited files
 - i18n keys added for both EN and JA
 - No hardcoded strings, colors, or magic numbers

@@ -138,6 +138,13 @@ else fail "listener(s) wired to missing DOM id(s) (run: node tools/dead-wiring.m
 if node tools/unreachable-branch.mjs >/dev/null 2>&1; then pass "no platform branch nested inside an incompatible one" 3
 else fail "unreachable platform branch (run: node tools/unreachable-branch.mjs)" 3; fi
 
+# HTML tag-balance gate. One duplicated </div> closed .msg-layout early and moved the whole
+# conversation pane out of the two-pane layout — chat below the fold, #msg-messages unable to
+# scroll, #scroll-fab dead. Every element still existed and was still clickable, so 41 checks,
+# 798 unit tests and 35 E2E tests stayed green. See tools/html-balance.mjs.
+if node tools/html-balance.mjs >/dev/null 2>&1; then pass "index.html tags balanced (no re-parented subtree)" 3
+else fail "mismatched HTML tag nesting (run: node tools/html-balance.mjs)" 3; fi
+
 DEADFN=$(node -e '
 const fs=require("fs");const h=fs.readFileSync("index.html","utf8");
 const fns=[...h.matchAll(/^\s*(?:async\s+)?function\s+([A-Za-z_][\w]*)\s*\(/gm)].map(m=>m[1]);
