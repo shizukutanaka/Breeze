@@ -1,5 +1,17 @@
 # Changelog
 
+## Coverage for the scroll-to-bottom FAB badge — the other un-trapped-feature item, confirmed working (branch claude/nice-ride-T6yb0, 2026-09-14)
+
+798 vitest + **52** Playwright E2E (+1, `tests/e2e/layout.spec.js`); no `index.html` change — coverage only.
+
+The previous commit's changelog asserted the unread-while-scrolled-up badge "checked out fine" without showing the check. Asserting a claim about correctness without the measurement that backs it is exactly what this session's own standard argues against, so this closes the gap the same session that opened it, before moving on.
+
+Measured directly, two real browsers: filled a conversation past its own height, scrolled away from the bottom, had a real peer send a message, and confirmed `#scroll-fab` goes from `↓` to `↓ 1` — and, just as importantly, that the arriving message does NOT yank the scroll position back down (the entire point of the FAB is not disturbing a reader mid-scroll). Clicking it returns to the bottom and clears the count. All correct.
+
+Added as a permanent E2E test since the feature — part of the ~190 lines freed from the Electron-only guard earlier this session — had zero coverage despite `tools/closure-boundary.mjs` confirming its reference direction is structurally safe (a hoisted top-level function called from inside `initMessenger`, the opposite direction from the Ctrl+N/Ctrl+F bug): a direction being safe on paper isn't the same as the feature actually firing at runtime, and only running it proves that. Teeth-tested against the pre-un-trapping commit (`32c9a27`), where the feature was still dead code: fails, as expected.
+
+---
+
 ## Disappearing messages set to 1h or 24h were deleted within 1–24 minutes (branch claude/nice-ride-T6yb0, 2026-09-14)
 
 798 vitest + **51** Playwright E2E (+1, new `tests/e2e/disappear.spec.js`); `index.html`, `_headers` (CSP hash).

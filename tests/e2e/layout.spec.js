@@ -267,3 +267,77 @@ test('a contact row released mid-swipe (below the archive threshold) settles bac
   // depending on transition history, and both mean the same thing.
   expect(Math.abs(finalState.x - finalState.origX), 'the row is back at its original position').toBeLessThan(6);
 });
+
+// #scroll-fab and its unread-while-scrolled-up badge were part of the ~190 lines
+// trapped inside the Electron-only guard earlier this session — reachable now, but
+// never actually exercised end to end since. onNewMsgWhileScrolled() is a top-level
+// function (declared after initMessenger closes) called from inside initMessenger at
+// message-render time; tools/closure-boundary.mjs confirms the reference direction is
+// safe (a hoisted top-level function is visible from inside the closure — the OPPOSITE
+// direction from the Ctrl+N/Ctrl+F bug), but a direction being structurally safe isn't
+// the same as the feature actually firing, so this drives it with a real received
+// message rather than trusting the static check alone.
+test('the scroll-to-bottom FAB counts up when a message arrives while scrolled away from the bottom', async ({ browser }) => {
+  const ctxA = await browser.newContext({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.156' } });
+  const ctxB = await browser.newContext({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.157' } });
+  const A = await ctxA.newPage(), B = await ctxB.newPage();
+
+  const identity = async (page, name) => {
+    await page.goto('/');
+    await page.locator('#msg-name').fill(name);
+    await page.locator('#b-msg-setup').click();
+    await expect(page.locator('#msg-main')).toBeVisible();
+    return page.evaluate(() => new Promise((r) => {
+      const q = indexedDB.open('breeze-messenger', 5);
+      q.onsuccess = () => { q.result.transaction('identity', 'readonly').objectStore('identity').get('keys').onsuccess = (e) => r(e.target.result?.pubB64); };
+    }));
+  };
+  const pubA = await identity(A, 'FAB Receiver');
+  const pubB = await identity(B, 'FAB Sender');
+
+  await A.locator('#b-msg-add').click();
+  const dlgA = A.locator('dialog[aria-labelledby]');
+  await dlgA.locator('.modal-input').fill(pubB);
+  await dlgA.locator('[value="ok"]').click();
+  await expect(dlgA).toBeHidden();
+  await A.locator('#msg-contacts .contact').first().click();
+  await expect(A.locator('#msg-input-bar')).toBeVisible();
+
+  // Enough messages that the list actually overflows and scrolling up means something.
+  for (let i = 0; i < 30; i++) {
+    await A.locator('#msg-input').fill('padding ' + i);
+    await A.locator('#b-msg-send').click();
+  }
+  await A.waitForTimeout(300);
+
+  await A.evaluate(() => {
+    const box = document.getElementById('msg-messages');
+    box.scrollTop = 0;
+    box.dispatchEvent(new Event('scroll'));
+  });
+  await expect(A.locator('#scroll-fab')).toBeVisible();
+  await expect(A.locator('#scroll-fab')).toHaveText('↓');
+
+  await B.locator('#b-msg-add').click();
+  const dlgB = B.locator('dialog[aria-labelledby]');
+  await dlgB.locator('.modal-input').fill(pubA);
+  await dlgB.locator('[value="ok"]').click();
+  await expect(dlgB).toBeHidden();
+  await B.locator('#msg-contacts .contact').first().click();
+  await expect(B.locator('#msg-input-bar')).toBeVisible();
+  await B.locator('#msg-input').fill('arrives while you are scrolled up');
+  await B.locator('#b-msg-send').click();
+
+  await expect(A.locator('#scroll-fab')).toHaveText('↓ 1', { timeout: 15000 });
+  // The scroll position itself must not have been disturbed by the arrival — the whole
+  // point of the FAB is that arriving messages do NOT yank the reader back to the
+  // bottom mid-read.
+  expect(await A.evaluate(() => document.getElementById('msg-messages').scrollTop), 'still scrolled away from the bottom').toBeLessThan(100);
+
+  // Clicking it returns to the bottom and clears the count.
+  await A.locator('#scroll-fab').click();
+  await expect(A.locator('#scroll-fab')).toHaveText('↓');
+
+  await ctxA.close();
+  await ctxB.close();
+});
