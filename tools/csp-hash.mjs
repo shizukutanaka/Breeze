@@ -39,6 +39,16 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const HTML = join(ROOT, 'index.html');
 const HEADERS = join(ROOT, '_headers');
+// The Tauri desktop build's CSP is a THIRD copy, in its own static JSON config (unlike
+// Electron's, which reads _headers at runtime — see desktop/csp-guard.js). It had the
+// same drift as Electron's did before that fix: 'unsafe-inline' in place of a hash-
+// pinned script-src, no separate script-src directive at all (falling through to
+// default-src, which also governs unrelated fetch types), and no trusted-types
+// directives. Kept in sync here rather than left to drift a second time — this file
+// (Tauri's frontendDist points straight at the repo's own index.html, unlike the E2E
+// harness's byte-rewritten copy) has none of the reasons _headers' hash-pinning was
+// deliberately kept out of index.html's own <meta> CSP.
+const TAURI_CONF = join(ROOT, 'tauri', 'src-tauri', 'tauri.conf.json');
 
 // Match inline <script> blocks only (those WITHOUT src=). A browser hashes the element's
 // exact text content, so we hash precisely the bytes between the tags.
@@ -76,10 +86,27 @@ function main() {
 
   const wantHeader = rewriteScriptSrc(headerMatch[2], hashes);
 
+  // Tauri's CSP is a JSON string value, not a "directive: value; directive: value" line,
+  // and has no script-src of its own (it falls through to default-src, which also governs
+  // unrelated fetch types) — so rather than a targeted script-src replace, pin the whole
+  // value to the SAME string _headers uses. A surgical regex on the raw text (not a JSON
+  // parse+stringify round-trip, which reformats unrelated parts of the file — e.g.
+  // collapses `{ "x": false }` onto its own multi-line block) keeps every other byte in
+  // the file untouched.
+  const tauriConf = readFileSync(TAURI_CONF, 'utf8');
+  const tauriMatch = tauriConf.match(/("csp":\s*")((?:[^"\\]|\\.)*)(")/);
+
   if (mode === '--write') {
     writeFileSync(HEADERS, headers.replace(headerMatch[2], wantHeader));
     console.log(`csp-hash: wrote ${hashes.length} hash(es) to _headers`);
     for (const h of hashes) console.log(`  ${h}`);
+    if (tauriMatch) {
+      const escaped = wantHeader.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      writeFileSync(TAURI_CONF, tauriConf.replace(tauriMatch[0], `${tauriMatch[1]}${escaped}${tauriMatch[3]}`));
+      console.log('csp-hash: synced tauri.conf.json\'s CSP to match');
+    } else {
+      console.error('csp-hash: WARNING — could not locate "csp" in tauri.conf.json, left unchanged');
+    }
     return;
   }
 
@@ -87,6 +114,11 @@ function main() {
   if (headerMatch[2] !== wantHeader) problems.push('_headers CSP script-src is stale');
   const dir = headerMatch[2].match(/script-src ([^;]+)/);
   if (dir && dir[1].includes("'unsafe-inline'")) problems.push("_headers script-src still allows 'unsafe-inline'");
+  if (!tauriMatch) problems.push('could not locate "csp" in tauri/src-tauri/tauri.conf.json');
+  else {
+    const tauriCsp = tauriMatch[2].replace(/\\"/g, '"');
+    if (tauriCsp !== wantHeader) problems.push("tauri.conf.json's CSP does not match _headers'");
+  }
   if (problems.length) {
     console.error('csp-hash: FAIL');
     for (const p of problems) console.error('  - ' + p);
@@ -94,6 +126,7 @@ function main() {
     process.exit(1);
   }
   console.log(`csp-hash: OK — ${hashes.length} inline script hash(es) pinned, no 'unsafe-inline'`);
+  console.log(`csp-hash: OK — tauri.conf.json's CSP matches _headers'`);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) main();

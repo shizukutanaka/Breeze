@@ -1,5 +1,17 @@
 # Changelog
 
+## Tauri had the same weak CSP Electron did — now synced automatically, not by hand (branch claude/nice-ride-T6yb0, 2026-09-15)
+
+819 vitest unchanged; `tools/csp-hash.mjs` extended; `tauri/src-tauri/tauri.conf.json`.
+
+Checking the third desktop packaging path (Tauri, alongside the just-fixed Electron and the checked-clean Capacitor mobile config) for the same class of issue found the identical bug: `app.security.csp` in `tauri.conf.json` had `'unsafe-inline'` in `default-src` and no separate `script-src` at all (falling through to `default-src`, which also governs unrelated fetch types), plus no `trusted-types` directives — the same gap SECURITY.md's documented, unqualified "hash-pinned script-src, Trusted Types enforced" claim didn't actually hold for.
+
+Electron's fix reads `_headers`' CSP at runtime (`desktop/csp-guard.js`); Tauri's CSP is a static JSON value with no equivalent runtime read available, so instead of leaving a THIRD hand-maintained copy to drift again, extended the existing `tools/csp-hash.mjs` (already the single tool responsible for keeping `_headers`' script hashes correct) to also write the same, exact CSP string into `tauri.conf.json` on `--write`, and verify it matches on `--check` (which `validate.sh` already runs). One canonical CSP string, computed once, now reaches all three surfaces — `_headers` directly, Electron by reading it, Tauri by this tool keeping its static copy pinned to it.
+
+The sync uses a surgical regex on the raw JSON text, not a parse-and-restringify round-trip — confirmed the latter would have reformatted unrelated parts of the file (collapsing single-line objects like `{ "bundleMediaFramework": false }` onto multiple lines) as a side effect of touching one field. Verified: `--write` changes exactly the one CSP line and nothing else (checked via diff), the file stays valid JSON, and `--check` correctly fails when the two drift apart (tested by corrupting a copy) and passes once they agree.
+
+---
+
 ## The billing cleanup missed the mobile Capacitor config and a dead test helper (branch claude/nice-ride-T6yb0, 2026-09-15)
 
 819 vitest unchanged (798 core + 21 desktop/nav/csp — none of these tests touched); `mobile/capacitor.config.json`, `tests/worker.test.js`, `tests/helpers/mockKV.js`.
