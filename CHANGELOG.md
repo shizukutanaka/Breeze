@@ -1,5 +1,19 @@
 # Changelog
 
+## A permanent gate for the Ctrl+N/Ctrl+F bug class: new tools/closure-boundary.mjs (branch claude/nice-ride-T6yb0, 2026-09-14)
+
+798 vitest + 50 Playwright E2E (unchanged); new `tools/closure-boundary.mjs`, `validate.sh` **42 → 43 checks**.
+
+The previous commit's fix was one instance of a bug class, not a one-off: `initMessenger()` is a ~10,000-line closure, and any top-level code placed after its closing brace loses access to everything declared inside it — silently, since the code still parses. A human already had to hand-trace that boundary once to find `dbGetAll`/`activeContact`/`openConversation`/`exitSelectMode` all broken the same way; this makes that trace a repeatable check instead of a one-time audit.
+
+`tools/closure-boundary.mjs` collects every `const`/`let`/named-function declared inside `initMessenger`'s body, then scans everything after its closing brace for a bare reference to one of those names that isn't behind `window.*` (the sanctioned exposure pattern) or a `typeof X !== 'undefined'` guard. It is deliberately not a general JS scope analyzer — no attempt at full parsing — just the one question that actually matters here, with every candidate cross-checked against the tail's own declarations before being reported, so a false positive would mean a real declaration was missed, not a name that merely looks unbound.
+
+Three false-positive classes turned up and got fixed in the tool itself before trusting it: unmasked regex literals (`/(\d+)/` reads as a use of a variable named `d`, one of the commonest short names in this file — `\d` is not `d`, but a naive scanner can't tell); parameter lists captured with `[^)]*` instead of `[^()]*`, which greedily spans an outer call's opening paren when there's no closing paren before an inner arrow function's own `(params) =>`; and a class-method/shorthand-method pattern that also matches `if (activeContact) { ... }`, since a bare identifier followed by `(cond) {` is syntactically identical to `method(params) {` without deeper parsing — control-flow keywords are now excluded from that pattern by name.
+
+Verified: clean (1197 closure-local names checked, 0 unguarded) against the current fixed file; correctly fails, naming all 4 real bugs, against the immediately-preceding commit; correctly fails against three earlier historical states, including independently re-discovering `_intervals` — the exact bug already found and fixed earlier this session when the Electron block was first un-trapped, without being told to look for it by name.
+
+---
+
 ## Ctrl+N and Ctrl+F threw ReferenceError on every press, and half the message menu was unreachable (branch claude/nice-ride-T6yb0, 2026-09-14)
 
 798 vitest + **50** Playwright E2E (+4, new `tests/e2e/msgmenu.spec.js`); `index.html`, `_headers` (CSP hash), all 7 locale files + inline EN (`toastUnpinned` — now-dead key).

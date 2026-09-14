@@ -145,6 +145,15 @@ else fail "unreachable platform branch (run: node tools/unreachable-branch.mjs)"
 if node tools/html-balance.mjs >/dev/null 2>&1; then pass "index.html tags balanced (no re-parented subtree)" 3
 else fail "mismatched HTML tag nesting (run: node tools/html-balance.mjs)" 3; fi
 
+# Closure-boundary gate. A brace-balancing fix once freed code from an Electron guard
+# without checking it against initMessenger()'s OWN closing brace — the freed listener
+# landed past it, at true top level. dbGetAll/activeContact/openConversation are
+# closure-local; referencing them threw a bare ReferenceError on every Ctrl+N/Ctrl+F
+# press, on every platform, and nothing caught it — the code parses fine and every
+# element it touches already exists. See tools/closure-boundary.mjs.
+if node tools/closure-boundary.mjs >/dev/null 2>&1; then pass "no initMessenger-closure-local name referenced outside it" 3
+else fail "closure-local name referenced outside initMessenger() (run: node tools/closure-boundary.mjs)" 3; fi
+
 DEADFN=$(node -e '
 const fs=require("fs");const h=fs.readFileSync("index.html","utf8");
 const fns=[...h.matchAll(/^\s*(?:async\s+)?function\s+([A-Za-z_][\w]*)\s*\(/gm)].map(m=>m[1]);
