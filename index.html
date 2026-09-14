@@ -13848,33 +13848,25 @@ if (PLATFORM === 'electron' && window.breeze) {
     }
   }
 
-  // v3.6: Live countdown for disappearing messages
-  // Page-level interval: created once on load, not per account switch, so it is NOT
-  // tracked in initMessenger's _intervals (that array exists to cancel PER-ACCOUNT
-  // timers on switch, and is out of scope here — referencing it threw a ReferenceError
-  // the moment this block stopped being dead code).
-  setInterval(() => {
-    const badges = document.querySelectorAll('.msg-timer-badge');
-    for (const badge of badges) {
-      const msg = badge.closest('.msg');
-      if (!msg?.dataset.ts) continue;
-      const disappearAt = parseInt(badge.dataset?.disappearAt || 0);
-      if (!disappearAt) {
-        // Parse from title "Disappears in Xm"
-        const match = badge.title?.match(/(\d+)/);
-        if (match) badge.dataset.disappearAt = Date.now() + parseInt(match[1]) * MS.MIN;
-        continue;
-      }
-      const remaining = disappearAt - Date.now();
-      if (remaining <= 0) {
-        msg.classList.add('fade-out');
-        setTimeout(() => msg.remove(), CONFIG.FADE_OUT_MS);
-      } else {
-        const mins = Math.ceil(remaining / MS.MIN);
-        badge.textContent = '⏱' + (mins >= 60 ? Math.floor(mins / 60) + 'h' : mins + 'm');
-      }
-    }
-  }, 30000); // Update every 30s
+  // This block used to hold a second, REDUNDANT disappearing-message countdown: a
+  // 30-second global scanner over every `.msg-timer-badge`, re-deriving a deadline by
+  // regex-matching the badge's translated title ("Disappears in 1h") instead of using
+  // the real timestamp. appendMsg() (the ONE function that renders every message —
+  // fresh, incoming, AND reloaded from IndexedDB history, `disappearAt` passed through
+  // in every call site) ALREADY sets up a precise per-message countdown using the real
+  // `meta.disappearAt` timestamp directly, so this scanner covered zero cases the
+  // precise one didn't.
+  //
+  // It was also actively harmful. Its title-parsing regex, `/(\d+)/`, extracts the
+  // leading digits and always multiplies by MS.MIN — ignoring the unit letter the label
+  // itself carries ('h' vs 'm'). E2E-confirmed against the real generated title
+  // "Disappears in 1h": it computed a 1-MINUTE deadline, 59 minutes short of the real
+  // one hour. For the longest offered TTL, 24h, the error is 23 hours 36 minutes. Any
+  // message set to disappear in 1h or 24h — the two longest, most-trusted options in the
+  // picker — was actually deleted within one to two 30-second scan intervals of being
+  // sent, not after the promised hour or day. Deleted rather than fixed: the correct
+  // implementation already existed right where the message renders, this one had
+  // nothing worth keeping.
 
   // v3.3: Search in chat (Ctrl+Shift+F)
   const _searchBar = _DOM.get('search-bar');

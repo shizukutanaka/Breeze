@@ -1,5 +1,21 @@
 # Changelog
 
+## Disappearing messages set to 1h or 24h were deleted within 1–24 minutes (branch claude/nice-ride-T6yb0, 2026-09-14)
+
+798 vitest + **51** Playwright E2E (+1, new `tests/e2e/disappear.spec.js`); `index.html`, `_headers` (CSP hash).
+
+Verifying the last two un-trapped-feature items from earlier this session (unread badge while scrolled up, disappearing-message countdown), the badge feature checked out — but reading the countdown code turned up a second, independent implementation nobody had noticed conflicted with the first, in the exact shape this session keeps finding: an old, cruder top-level implementation left running alongside a newer, correct one, and the old one actively winning.
+
+`appendMsg()` — the one function that renders every message, fresh or reloaded from IndexedDB history, `disappearAt` passed through in every call site — already sets up a precise per-message countdown using the real timestamp directly. A separate 30-second global scanner also existed, re-deriving a deadline by regex-matching the badge's own *translated, human-readable* title ("Disappears in 1h") instead of using the timestamp it was rendered from. Its regex, `/(\d+)/`, extracts only the leading digits and always multiplies by `MS.MIN` — the unit letter the label itself carries (`m` vs `h`) is never read.
+
+Measured directly against the real generated title: for a message promised to last **1 hour**, the scanner computed a deadline of **1 minute** — 59 minutes short. For **24h**, the longest option in the picker, it computed **24 minutes** — 23 hours 36 minutes short. The two longest, most-trusted disappearing-message durations were the two that failed hardest; a 30-second option would have been off by nothing (extracting "30" from "30s" and reading it as 30 minutes happens to only be wrong in the *safe* direction — longer, not shorter — so the very short options masked how bad the bug was for the long ones).
+
+Deleted the scanner entirely rather than patching its unit parsing: the precise implementation already covers every real case, fresh sends and history reloads alike, so the buggy one had nothing to contribute except deleting people's messages up to 60x sooner than promised — a real, silent data-loss bug in a privacy feature whose whole purpose is a promised retention window.
+
+One new E2E test, real-time-bound (Playwright's `page.clock` does not reliably drive this codebase's countdown, whose first tick is kicked off via `requestAnimationFrame` — confirmed: fast-forwarding virtual time past even a 30s TTL left the message showing as still present, so a real wall-clock wait is the only trustworthy check here): sends a message set to disappear in 1h, waits 90 real seconds — three of the deleted scanner's 30-second cycles, decisively past where the bug fired, and still ~58 minutes short of the message's actual deadline — and asserts it's still there. Fails against the pre-fix build.
+
+---
+
 ## A permanent gate for the Ctrl+N/Ctrl+F bug class: new tools/closure-boundary.mjs (branch claude/nice-ride-T6yb0, 2026-09-14)
 
 798 vitest + 50 Playwright E2E (unchanged); new `tools/closure-boundary.mjs`, `validate.sh` **42 → 43 checks**.
