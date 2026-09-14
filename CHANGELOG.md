@@ -1,5 +1,19 @@
 # Changelog
 
+## Electron shipped its own CSP, strictly weaker than the one SECURITY.md documents (branch claude/nice-ride-T6yb0, 2026-09-15)
+
+812 → **819** vitest (+7, new `tests/csp-guard.test.js`); new `desktop/csp-guard.js`; `desktop/main.js`, `desktop/preload.js`, `desktop/package.json`, `build.sh`.
+
+Continuing the audit of `desktop/main.js` that found the navigation-guard bug: `setupCSP()` set its own hand-written `Content-Security-Policy` — `default-src 'self' 'unsafe-inline'` and no `trusted-types` directive at all. SECURITY.md documents, without qualification, "Hash-pinned `script-src` (no `'unsafe-inline'`)" and `require-trusted-types-for 'script'` as Breeze's CSP. That was only ever true for the web build; the desktop app quietly shipped a strictly weaker policy of its own — allowing inline script execution and dropping the Trusted-Types enforcement layer the web deployment relies on as defense-in-depth against DOM-based XSS, in the very same `index.html` that already sets up the `breeze-sanitizer` Trusted Types policy expecting it to be enforced.
+
+Fixed by having Electron read the SAME `Content-Security-Policy` line the web deployment ships in `_headers` (the file `tools/csp-hash.mjs --write` maintains), instead of duplicating a second, independent policy that had already drifted once and could drift again. This can no longer go stale: there is only ever one CSP string, computed once, read by both deployment targets. `_headers` wasn't previously bundled into desktop resources at all (`build.sh`'s `WEB_FILES`, `desktop/package.json`'s `electron-builder` `extraResources` — the real, authoritative packaging manifest for actual `electron-builder` runs, separate from `build.sh`'s own simpler copy step and easy to miss if only one is checked) — added to both. Falls back to the previous permissive policy if `_headers` is ever missing or unparseable, rather than let a missing file crash the app on a build predating this change.
+
+Verified the parsing logic (extraction regex + fallback behavior) with 7 new unit tests, including one that reads the actual, checked-in `_headers` end to end and confirms `script-src` is hash-pinned with no `unsafe-inline` while `style-src`'s (which is not hash-pinned) still correctly is — a regression check against real content, not just a hand-crafted fixture. Could not empirically verify actual CSP *enforcement* inside a running Electron window: this sandbox has no Electron install and no GUI runtime to launch one. The claim that Chromium enforces this identically inside Electron as in a regular browser rests on Electron's `session.webRequest` CSP mechanism being a standard Chromium feature, not empirical observation — flagging that limitation rather than presenting it as verified.
+
+Also removed `preload.js`'s `onDeepLink` API while auditing the same file: defined once, never called by `main.js` (which never sends the `'deep-link'` IPC event it listens for) and never referenced by `index.html` either — dead on both ends. The actual, working deep-link mechanism reloads the window with the payload as a query string, which `index.html`'s own boot-time URL parsing already handles.
+
+---
+
 ## Electron's navigation guard was bypassable by a suffix trick on the app's own origin (branch claude/nice-ride-T6yb0, 2026-09-15)
 
 798 → **812** vitest (+14, new `tests/nav-guard.test.js`); new `desktop/nav-guard.js`; `desktop/main.js`.

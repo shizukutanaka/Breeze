@@ -20,6 +20,7 @@ const { app, BrowserWindow, Tray, Menu, nativeImage, Notification,
 const path = require('path');
 const fs = require('fs');
 const { isAllowedNavigation } = require('./nav-guard');
+const { readWebCSP } = require('./csp-guard');
 
 // ── Constants ───────────────────────────────────────────────
 const APP_NAME = 'Breeze';
@@ -124,18 +125,17 @@ function loadApp(search) {
 }
 
 // ── CSP ─────────────────────────────────────────────────────
+// See csp-guard.js for why this reads the web deployment's own _headers CSP line
+// instead of a hand-written one, and why the logic lives in its own dependency-free
+// module (this file requires('electron') as its first line, which makes it untestable
+// on its own).
 function setupCSP() {
+  const csp = readWebCSP(WEB_ROOT);
   session.defaultSession.webRequest.onHeadersReceived((details, cb) => {
     cb({
       responseHeaders: {
         ...details.responseHeaders,
-        'Content-Security-Policy': [
-          "default-src 'self' 'unsafe-inline';" +
-          "connect-src 'self' https: wss: stun: turn:;" +
-          "img-src 'self' blob: data: https:;" +
-          "media-src 'self' blob:;" +
-          "worker-src 'self' blob:;"
-        ],
+        'Content-Security-Policy': [csp],
       },
     });
   });

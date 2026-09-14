@@ -29,8 +29,4 @@ contextBridge.exposeInMainWorld('breeze', {
     ipcRenderer.on('update-downloaded', (_, info) => cb(info));
     return () => ipcRenderer.removeAllListeners('update-downloaded');
   },
-  onDeepLink: (cb) => {
-    ipcRenderer.on('deep-link', (_, url) => cb(url));
-    return () => ipcRenderer.removeAllListeners('deep-link');
-  },
 });

@@ -50,6 +50,10 @@
       {
         "from": "../icon-512.png",
         "to": "icon-512.png"
+      },
+      {
+        "from": "../_headers",
+        "to": "_headers"
       }
     ],
     "asar": true,
