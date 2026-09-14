@@ -2537,9 +2537,9 @@ async function handleBackupDownload(body, env, request) {
   // Optional Ed25519 auth: callers may include { ts, sig } to prove ownership before
   // retrieving the backup. Both fields must be present or both absent.
   // Set BACKUP_REQUIRE_AUTH=true to reject unauthenticated requests — recommended once
-  // all clients register an Ed25519 identity key (same pattern as PORTAL_REQUIRE_AUTH /
-  // GROUP_REQUIRE_AUTH). Without it, knowing a userId is enough to download the encrypted
-  // blob and brute-force the passphrase offline.
+  // all clients register an Ed25519 identity key (same pattern as GROUP_REQUIRE_AUTH,
+  // PRESENCE_REQUIRE_AUTH, etc.). Without it, knowing a userId is enough to download the
+  // encrypted blob and brute-force the passphrase offline.
   const hasSig = ts !== undefined || sig !== undefined;
   if (hasSig) {
     if (ts === undefined || sig === undefined)

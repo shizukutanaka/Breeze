@@ -3664,8 +3664,8 @@ describe('backup upload / download', () => {
 // BACKUP_REQUIRE_AUTH enforcement flag (item 54)
 // Without the flag: knowing a userId is enough to download the encrypted blob and
 // brute-force the passphrase offline. With BACKUP_REQUIRE_AUTH=true, both upload
-// and download require a valid Ed25519 signature — same pattern as PORTAL_REQUIRE_AUTH
-// and GROUP_REQUIRE_AUTH.
+// and download require a valid Ed25519 signature — same pattern as GROUP_REQUIRE_AUTH
+// and PRESENCE_REQUIRE_AUTH.
 describe('backup BACKUP_REQUIRE_AUTH enforcement (item 54)', () => {
   const req  = (body) => apiRequest('/api/backup/upload', body);
   const dlReq = (body) => apiRequest('/api/backup/download', body);
