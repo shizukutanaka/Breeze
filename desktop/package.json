@@ -1,6 +1,6 @@
 {
   "name": "breeze-desktop",
-  "version": "3.6.0",
+  "version": "3.6.1",
   "description": "Breeze \u2014 P2P encrypted messenger",
   "main": "main.js",
   "scripts": {

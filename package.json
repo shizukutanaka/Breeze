@@ -1,6 +1,6 @@
 {
   "name": "breeze",
-  "version": "3.6.0",
+  "version": "3.6.1",
   "private": true,
   "description": "Breeze — P2P E2E-encrypted messenger. Test harness for the Cloudflare worker and crypto primitives.",
   "type": "module",

@@ -1,5 +1,19 @@
 # Changelog
 
+## Version string stuck at 3.6.0 across 14 files while CLAUDE.md documented core security features as default-on "since v3.6.1" (branch claude/nice-ride-T6yb0, 2026-09-15)
+
+798 vitest + 52 Playwright E2E (unchanged); version bumped to 3.6.1 across `sw.js`, `index.html` (footer + `CONFIG.VERSION`), `_worker.js` (header comment + `/api/health` + `X-Breeze-Version` header), `manifest.json`, `package.json` + `package-lock.json`, `build.sh`, `build-all.sh`, `desktop/package.json`, `mobile/package.json`, `tauri/package.json`, `tauri/src-tauri/tauri.conf.json`, `tauri/src-tauri/Cargo.toml`.
+
+CLAUDE.md's own architecture table asserts, multiple times, that `GROUP_RATCHET_V5` and the X3DH v5 handshake are "default **ON** since v3.6.1" — describing them as CURRENT deployed behavior. Every literal version string in the repo (excluding `CHANGELOG.md`'s own dated history, correctly untouched) still said `3.6.0`. This wasn't a one-off: `sw.js`, `index.html`'s user-facing footer, `_worker.js`'s `/api/health` response and `X-Breeze-Version` header, both root and platform `package.json`s (desktop/mobile/tauri), `manifest.json`, and both build scripts had all drifted together, never updated when the features they describe went live.
+
+Found the dependency that made this need doing carefully, not just mechanically: `index.html`'s boot sequence compares `CONFIG.VERSION` against the Worker's own `/api/health` `version` field and logs a "Version mismatch" warning on disagreement. Both were stuck at the same stale `3.6.0`, so they silently agreed — bumping only one side would have introduced a spurious mismatch warning on every boot that didn't exist before. Fixed both together in the same change and verified live: booted a real client against a real (freshly-restarted, to avoid Node's own stale ES-module cache serving pre-edit `_worker.js`) server and confirmed zero "version mismatch" console output, footer reads "v3.6.1", `/api/health` reports `{version: "3.6.1", endpoints: 38}`.
+
+Also caught in the same pass: `_worker.js`'s top-of-file comment still claimed "43 API endpoints" — stale since an earlier session's AGENTS.md correction to the real count (37 `case '/api/...'` + `/api/health` = 38); the live `/api/health` response itself already correctly said `endpoints: 38`, so only the comment had drifted. Corrected to match. `package-lock.json` regenerated via `npm install --package-lock-only` rather than hand-edited.
+
+Deliberately did NOT bump further to match SPEC.md's informal "v3.7, first-principles pass" references — those read as a loose session label (no patch number is ever given), not a committed semver target the way v3.6.1 is asserted with a full `X.Y.Z` in CLAUDE.md's own authoritative table. Bumping to 3.6.1 makes the artifact consistent with what the project's own documentation already claims is true; inventing a further number for this session's own extensive additional work would be a version-policy decision, not a consistency fix.
+
+---
+
 ## Coverage for the scroll-to-bottom FAB badge — the other un-trapped-feature item, confirmed working (branch claude/nice-ride-T6yb0, 2026-09-14)
 
 798 vitest + **52** Playwright E2E (+1, `tests/e2e/layout.spec.js`); no `index.html` change — coverage only.

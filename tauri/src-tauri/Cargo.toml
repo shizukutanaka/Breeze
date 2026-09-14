@@ -1,6 +1,6 @@
 [package]
 name = "breeze-desktop"
-version = "3.6.0"
+version = "3.6.1"
 description = "Breeze — P2P encrypted messenger"
 authors = ["Breeze Project"]
 edition = "2021"

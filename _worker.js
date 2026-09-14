@@ -1,6 +1,6 @@
 /**
- * Breeze Worker v3.6.0
- * 43 API endpoints. Cloudflare Pages Functions.
+ * Breeze Worker v3.6.1
+ * 38 API endpoints. Cloudflare Pages Functions.
  *
  * KV schema:
  *   slots:{userId}     → { slots, plan, customerId, updatedAt }
@@ -110,7 +110,7 @@ export default {
       }
       return json({
         ok: kvOk,
-        version: '3.6.0',
+        version: '3.6.1',
         protocol: 4,
         endpoints: 38,
         reqId,
@@ -2648,7 +2648,7 @@ function corsHeaders(request) {
     'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload',
     'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), accelerometer=(), gyroscope=(), magnetometer=(), ambient-light-sensor=()',
-    'X-Breeze-Version': '3.6.0',
+    'X-Breeze-Version': '3.6.1',
   };
   // Only echo the Origin back if it is a real browser origin (not the string "null"
   // produced by sandboxed iframes / file:// which would allow those sources to read

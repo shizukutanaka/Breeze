@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════
-#   Breeze v3.6.0 — Cross-Platform Build Script
+#   Breeze v3.6.1 — Cross-Platform Build Script
 #   Builds for: Web PWA, Electron (Win/Mac/Linux),
 #               Tauri (Win/Mac/Linux), Capacitor (Android/iOS)
 # ═══════════════════════════════════════════════════════════
 set -euo pipefail
 
-VERSION="3.6.0"
+VERSION="3.6.1"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 OUT="${ROOT}/release"
 
