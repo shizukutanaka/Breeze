@@ -7136,14 +7136,35 @@ async function initMessenger(dbName) {
       (!msg.isMine && msg.frankId) ? [t('report'), () => reportMsg(msg), true] : null,
     ].filter(Boolean);
 
+    // Keyboard support (tabIndex, role=menuitem, arrow-key roving focus, Enter/Space to
+    // activate) was never here at all — this menu was mouse-only from the start, unlike
+    // showContextMenu right next to it in this file, which already has all of this. Not
+    // something the earlier fix in this same function (moving the menu to document.body
+    // to stop it being clipped) broke — a separate, pre-existing gap, found by actually
+    // driving the menu with a keyboard instead of assuming the ARIA-shaped code worked
+    // because it looked complete. Mirrors showContextMenu's pattern exactly rather than
+    // inventing a second one.
     for (const item of items) {
       const btn = document.createElement('div');
       btn.textContent = item[0];
       btn.className = 'ctx-item';
       if (item[2]) btn.classList.add('color-r');
+      btn.tabIndex = 0;
+      btn.setAttribute('role', 'menuitem');
       btn.onclick = () => { cleanup(); item[1](); };
+      btn.onkeydown = (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); btn.click(); }
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          const its = [...menu.querySelectorAll('.ctx-item')];
+          const idx = its.indexOf(btn);
+          const next = e.key === 'ArrowDown' ? its[idx + 1] || its[0] : its[idx - 1] || its[its.length - 1];
+          if (next) next.focus();
+        }
+      };
       menu.appendChild(btn);
     }
+    menu.setAttribute('role', 'menu');
 
     // Appended to <body>, positioned in VIEWPORT coordinates — not to `el` with CSS
     // top/right:0, which was silently broken: .msg has `contain: content` (needed for
@@ -7161,6 +7182,10 @@ async function initMessenger(dbName) {
     menu.style.left = Math.max(4, Math.min(left, window.innerWidth - MENU_W - 4)) + 'px';
     menu.style.top = Math.max(4, Math.min(rect.top, window.innerHeight - items.length * 40 - 8)) + 'px';
     document.body.appendChild(menu);
+    // Focus first item for keyboard users — without this, tabIndex/role/onkeydown above
+    // are wired but nothing ever receives them, since the menu opens without moving
+    // focus into it at all.
+    requestAnimationFrame(() => { const first = menu.querySelector('.ctx-item'); if (first) first.focus(); });
     // Closing via an item click (btn.onclick above) used to leave this keydown listener
     // attached to document forever — same leak class fixed in showContextMenu. Route both
     // exit paths through one cleanup so a click also detaches the Escape handler.

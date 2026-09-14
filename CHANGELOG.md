@@ -1,5 +1,17 @@
 # Changelog
 
+## The message menu I fixed earlier today was fully mouse-only — no keyboard access at all (branch claude/nice-ride-T6yb0, 2026-09-15)
+
+819 vitest unchanged; Playwright E2E 53 → **54**; `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation), `tests/e2e/msgmenu.spec.js`.
+
+Prompted to demonstrate the requested thinking method explicitly rather than just apply good engineering silently: Socratic questioning about what's left ("what class of defect can the existing gates structurally not see?") pointed at accessibility — every `aria-live`/`role`/focus-management line read this session so far had been taken on faith, the same trust that was wrong three separate times already this session for "the code parses, so it must work." `announceToSR()` (the screen-reader toast announcer) was checked first and is genuinely correct — confirmed with a live DOM mutation observer, not just reading its source. `showMsgMenu` — the exact function whose visual clipping bug was fixed earlier today — was not: it had `tabIndex`, `role="menuitem"`, arrow-key navigation, and an initial-focus call **nowhere in it at all**, unlike `showContextMenu` right next to it in the same file, which has every one of those. A keyboard-only or screen-reader user had zero way to react, reply, copy, forward, pin, bookmark, select, or report a message — not degraded, completely inaccessible, on the sole surviving path to those actions after this session's own earlier deletion of the duplicate handler.
+
+This was not something today's earlier clipping fix broke — it was there from the start, and survived because every check on this function so far (including the E2E test added a few hours ago) only asked whether the items existed and were mouse-clickable, never whether a keyboard could reach them. Applying Musk's algorithm rather than inventing new patterns: questioned the requirement first (a full WCAG audit would be scope creep; confirming the ARIA-shaped code that's already there actually works is not), then fixed by mirroring `showContextMenu`'s already-correct, already-proven pattern exactly — tabIndex, role, roving arrow-key focus, Enter/Space activation, initial focus-on-open — rather than writing a second, divergent implementation. Checked the adjacent `showReactPicker` for the same gap and found it uses real `<button>` elements, natively focusable and activatable without any extra wiring; Tab-order-only access there is a legitimate, lower-severity design choice, not the same hard blocker, and was left alone rather than "fixed" for its own sake.
+
+Verified live end to end, not from reading the code: opening the menu now moves focus to the first item, ArrowDown/ArrowUp roves through the list, and Enter activates the focused item and closes the menu (confirmed it actually calls Reply's handler, not just that the menu disappeared). New E2E test fails against the pre-fix build.
+
+---
+
 ## Tauri had the same weak CSP Electron did — now synced automatically, not by hand (branch claude/nice-ride-T6yb0, 2026-09-15)
 
 819 vitest unchanged; `tools/csp-hash.mjs` extended; `tauri/src-tauri/tauri.conf.json`.

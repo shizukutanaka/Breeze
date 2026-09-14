@@ -180,3 +180,56 @@ test('entering select mode from the message menu and pressing Escape exits it', 
   await ctxA.close();
   await ctxB.close();
 });
+
+// showMsgMenu never had keyboard support at all — no tabIndex, no role=menuitem, no
+// arrow-key navigation, no initial focus — unlike showContextMenu right next to it in
+// index.html, which has all of it. Not something the earlier fix in this same function
+// (moving the menu to document.body to stop it being clipped by the bubble's own
+// contain:content) broke; a separate, pre-existing gap that survived because every
+// other check in this file only asked whether the menu items existed and were
+// clickable, never whether a keyboard-only or screen-reader user could reach them.
+test('the message menu is fully keyboard-operable: focus, arrow keys, Enter', async ({ browser }) => {
+  const ctxA = await browser.newContext({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.158' } });
+  const ctxB = await browser.newContext({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.159' } });
+  const A = await ctxA.newPage(), B = await ctxB.newPage();
+
+  const pubA = await createIdentity(A, 'Keyboard Tester');
+  const pubB = await createIdentity(B, 'Keyboard Peer');
+  await addAndOpen(A, pubB);
+  await addAndOpen(B, pubA);
+
+  await B.locator('#msg-input').fill('keyboard nav probe');
+  await B.locator('#b-msg-send').click();
+  await expect(A.locator('.msg.them').first()).toBeVisible({ timeout: 15000 });
+
+  await A.locator('.msg.them').first().click({ button: 'right' });
+  const menu = A.locator('.ctx-menu');
+  await expect(menu).toBeVisible();
+  await expect(menu).toHaveAttribute('role', 'menu');
+
+  const focusedLabel = () => A.evaluate(() => {
+    const a = document.activeElement;
+    return a?.classList?.contains('ctx-item') ? a.textContent.trim() : null;
+  });
+
+  // Opening the menu must move focus INTO it — the tabIndex/role/onkeydown wiring on
+  // each item is inert if nothing ever receives it, which is exactly how this shipped:
+  // fully wired, never focused, so a keyboard user's Tab/Enter/Arrow presses all landed
+  // on <body> instead.
+  await expect.poll(focusedLabel, { message: 'opening the menu focuses its first item' }).toBe('React');
+
+  await A.keyboard.press('ArrowDown');
+  expect(await focusedLabel(), 'ArrowDown moves to the next item').toBe('Reply');
+  await A.keyboard.press('ArrowDown');
+  expect(await focusedLabel(), 'ArrowDown again moves to the item after that').toBe('Copy');
+  await A.keyboard.press('ArrowUp');
+  expect(await focusedLabel(), 'ArrowUp moves back').toBe('Reply');
+
+  // Enter activates the focused item (Reply) and closes the menu.
+  await A.keyboard.press('Enter');
+  await expect(menu).not.toBeVisible();
+  await expect(A.locator('.reply-preview')).toBeVisible();
+
+  await ctxA.close();
+  await ctxB.close();
+});
