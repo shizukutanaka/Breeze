@@ -373,6 +373,40 @@ validate.sh 42→43項目)。`initMessenger()` の閉じ括弧より後ろで宣
 残っていないか、次サイクルでバージョンコメント(`v3.x`)の重複や類似機能名を軸に
 横断的に洗う価値がある。
 
+### 2-9. 未監査だった3つのプラットフォームラッパー(desktop/mobile/tauri)で実セキュリティバグ2件
+`index.html`/`_worker.js`/`sw.js`(デプロイ本体)の監査が一巡した後、これまで
+セッション内で一度も触れていなかった`desktop/`(Electron)・`mobile/`(Capacitor)・
+`tauri/`の3経路を横断監査。
+
+1. **Electronのナビゲーションガードが起源サフィックス攻撃で回避可能**: `will-navigate`
+   ハンドラが `url.startsWith(appOrigin)` を「起源チェック」として使っていたが、これは
+   文字列プレフィックス比較に過ぎない。`"https://breeze.pages.dev.attacker.example/…".
+   startsWith("https://breeze.pages.dev")` は `true` になる——`BREEZE_URL` リモートモード
+   (実運用がドキュメントで明示的にサポートされている)で、悪意あるページがアプリ自身の
+   ウィンドウ内でナビゲート可能になり、信頼されたアプリウィンドウの皮を被ったフィッシング
+   経路になり得た。修正中、自分自身の最初の修正案(`path.dirname`+`startsWith`)にも
+   **同一パターンのバグを作り込んでいたことをテスト先行開発で発見**——`/home/user/
+   Breeze-evil` が `/home/user/Breeze` を文字列として前方一致してしまう。`path.relative()`
+   による真の包含判定に修正。`main.js` は `require('electron')` を先頭で呼ぶため単体テスト
+   不能——ロジックを `desktop/nav-guard.js` に分離し14件のテストを追加(元バグに6件、
+   自分の最初の誤修正に1件が正しく失敗することを確認済み)。
+2. **Electron/Tauriが独自の弱いCSPを保持**: SECURITY.mdは無条件に「ハッシュ固定
+   script-src(unsafe-inlineなし)+ Trusted Types強制」をBreezeのCSPとして記載していたが、
+   これはWebデプロイのみに当てはまり、Electron・Tauriの両方が`'unsafe-inline'`を許可し
+   Trusted Types指定を欠いた**独自の弱いCSP**を保持していた。Electronは`_headers`の
+   CSPを実行時に読み込む方式に修正(`desktop/csp-guard.js`、新規7テスト)。Tauriは静的
+   JSON設定のため実行時読み込みが使えず、`tools/csp-hash.mjs`を拡張して`--write`時に
+   同じCSP文字列を`tauri.conf.json`にも書き込み、`--check`(validate.sh経由)で一致を
+   検証するよう自動化——手作業同期に頼らない設計とした。
+
+副次発見: `mobile/capacitor.config.json`の`allowNavigation`に削除済みのbilling機能の
+残滓`checkout.stripe.com`が残存(以前のbilling一掃セッションが見落とし)、および
+`tests/helpers/mockKV.js`の未使用Stripeテストヘルパー——両方削除。
+
+**教訓**: `index.html`/`_worker.js`という「主戦場」を深く監査しても、同じ製品の
+別デリバリー経路(デスクトップ/モバイルラッパー)は別軸で監査しない限り見落とされる。
+実際、今回の2件は本体のロジックとは無関係に、ラッパー固有のコードに独立して存在していた。
+
 ## 3. 改善点(優先度順)
 
 | # | 内容 | 種別 | 状態 |
