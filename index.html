@@ -774,7 +774,19 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 .emoji-picker-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; padding: 6px; overflow-y: auto; flex: 1 }
 .emoji-picker-grid button { background: none; border: none; font-size: 22px; padding: 4px; cursor: pointer; border-radius: 4px; transition: .1s }
 .emoji-picker-grid button:hover { background: var(--s3) }
-@media (max-width: 640px) { .emoji-picker { width: calc(100vw - 16px); right: 8px; left: 8px } }
+/* left+right+an explicit width is over-constrained, and the loser here was correctness:
+   width used 100vw (the whole SCREEN) while left/right resolve against .emoji-picker's
+   actual containing block, #msg-input-bar — which is narrower than and inset from the
+   viewport (it has its own padding and sits inside the chat column). The two disagreed,
+   and per spec 'right' loses that fight, so the picker's right edge landed past the
+   physical screen edge (measured: 3px off-screen at 390px wide; the gap scales with how
+   much narrower the input bar is than the viewport, so a different device or a future
+   layout tweak could make it worse). Forcing width back to `auto` here (overriding the
+   base rule's fixed 320px — CSS does not revert a property just because a later rule
+   omits it) fixes it structurally rather than by picking a better number: with only
+   left/right constrained, the browser solves width FROM the real containing block, so
+   it is always exactly 8px inside both edges of the bar it is actually anchored to. */
+@media (max-width: 640px) { .emoji-picker { width: auto; right: 8px; left: 8px } }
 
 /* ─── Keyboard shortcut overlay ─── */
 .kbd-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.85); z-index: 200; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px) }

@@ -19,6 +19,22 @@ const boot = async (page, name) => {
   await expect(page.locator('#msg-main')).toBeVisible();
 };
 
+// At phone width the sidebar is `position: absolute; inset: 0` — a full-screen overlay
+// over the chat column until a contact is opened, which is what hides it. The emoji
+// tests below need the composer reachable, so they need a contact open first, same as a
+// real phone user would have.
+const openAnyContact = async (page) => {
+  await page.locator('#b-msg-add').click();
+  const dialog = page.locator('dialog[aria-labelledby]');
+  const fakePub = await page.evaluate(() => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''));
+  await dialog.locator('.modal-input').fill(fakePub);
+  await dialog.locator('[value="ok"]').click();
+  await expect(dialog).toBeHidden();
+  await page.locator('#msg-contacts .contact').first().click();
+  await expect(page.locator('#msg-input-bar')).toBeVisible();
+};
+
 test('the desktop chat pane sits beside the sidebar, not below it', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await boot(page, 'Layout Desktop');
@@ -78,6 +94,34 @@ test('the message list scrolls inside its own box instead of growing the page', 
 // With every child out of flow the container measured 0px wide, so `left: 50%` resolved
 // against nothing and the toast collapsed to min-content. Unreadable, and invisible to
 // every test — the text was all there in the DOM, just shaped into a strip.
+// The emoji picker's mobile override mixed a viewport-relative width (100vw) with
+// left/right offsets resolved against its actual containing block, #msg-input-bar —
+// which is narrower than and inset from the viewport (its own padding, sitting inside
+// the chat column). The two disagreed and 'right' lost, so the picker's right edge
+// landed past the physical screen edge. No element was missing or unclickable, so
+// nothing in the existing suite noticed — the same blind spot as the layout and toast
+// bugs above, just on a floating panel instead of the main layout.
+for (const width of [320, 390, 640]) {
+  test(`the emoji picker stays on screen at phone width (${width}px)`, async ({ page }) => {
+    // The consent banner is bottom-fixed and, at phone width, wide enough to intercept
+    // clicks on the controls under test — pre-accept it, same as the other specs that
+    // drive real clicks at narrow viewports (consent UX is not what this test is about).
+    await page.addInitScript(() => { try { localStorage.setItem('brz-consent', String(Date.now())); } catch {} });
+    await page.setViewportSize({ width, height: 800 });
+    await boot(page, 'Layout Emoji');
+    await openAnyContact(page);
+
+    await page.locator('#b-msg-emoji').click();
+    const picker = page.locator('.emoji-picker');
+    await expect(picker).toBeVisible();
+
+    const box = await picker.boundingBox();
+    expect(box.x, 'picker does not start off-screen to the left').toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width, 'picker right edge stays within the viewport').toBeLessThanOrEqual(width + 0.5);
+    expect(await picker.locator('.emoji-picker-grid button').count(), 'the grid still renders emoji').toBeGreaterThan(0);
+  });
+}
+
 for (const width of [1280, 390]) {
   test(`a toast renders as a readable line, not a min-content strip (${width}px)`, async ({ page }) => {
     await page.setViewportSize({ width, height: 800 });

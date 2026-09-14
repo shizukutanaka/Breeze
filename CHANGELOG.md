@@ -1,5 +1,19 @@
 # Changelog
 
+## The emoji picker's mobile width mixed viewport units with its actual containing block (branch claude/nice-ride-T6yb0, 2026-09-14)
+
+798 vitest + **44** Playwright E2E (+3, `tests/e2e/layout.spec.js`); `index.html`, `_headers` (CSP hash).
+
+Extending the same method as the three fixes below it — measure geometry, don't just check existence — into surfaces not yet checked: the context menu, message menu, and emoji picker. The first two held up across desktop, phone-width-from-boot, and a near-composer worst case. The emoji picker didn't.
+
+Its `max-width: 640px` override set `width: calc(100vw - 16px)` alongside `left: 8px; right: 8px`. `100vw` is the whole screen; `left`/`right` resolve against whatever the picker's actual containing block is — here `#msg-input-bar`, which is narrower than and inset from the viewport (it has its own padding and sits inside the chat column, not flush against the screen edge). The two disagreed, three box-position properties were over-constrained, and per spec `right` lost: measured on a real 390px phone, the picker's right edge landed at 393px — 3px past the physical screen edge. The gap isn't a fixed cosmetic amount; it scales with how much narrower the input bar is than the viewport, so a different device or an unrelated layout tweak nearby could widen it well past 3px.
+
+Fixed by forcing `width: auto` in the same media rule (the base rule's `width: 320px` doesn't revert on its own just because the override omits it — that was the first attempt, still off by the same 3px) so only `left`/`right` constrain the box and the browser solves the width from the picker's real containing block instead of the screen. Verified at 320/360/390/480/640/768/1280px: zero overflow at every width, where before only the widths nobody had measured happened to look fine.
+
+Three E2E tests at 320/390/640px, matching the standing convention: the composer requires an open contact on mobile (opening one is what hides the full-screen sidebar overlay), so the tests open one first rather than testing an unreachable button. All three fail against the pre-fix CSS.
+
+---
+
 ## Clicking send on a slash command transmitted it to your contact — including `/drop <secret>` (branch claude/nice-ride-T6yb0, 2026-09-13)
 
 798 vitest + **41** Playwright E2E (+2, new `tests/e2e/commands.spec.js`); `index.html`, `_headers` (CSP hash).
