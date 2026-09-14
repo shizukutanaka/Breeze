@@ -143,9 +143,9 @@ Run `./validate.sh` or `./build.sh validate`:
 - Gate 6: Protocol Spec Compliance (crypto features)
 - Gate 7: Required Files
 
-The gate count grows as new checks land (currently 40 individual checks across
-the 7 gates) — run `./validate.sh` for the live score rather than trust a
-number here, which would only go stale again.
+The gate count grows as new checks land across the 7 gates — run
+`./validate.sh` for the live score rather than trust a number here, which
+would only go stale again.
 
 ## Development & Tests
 
