@@ -436,8 +436,6 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .i-m4 { margin: 4px 0 }
 .i-rel { position: relative }
 .i-abs { position: absolute }
-.i-abs-tl { position: absolute; top: 0; left: 0 }
-.i-abs-tr { position: absolute; top: 0; right: 0 }
 .i-pad8 { padding: 8px }
 .i-w100 { width: 100% }
 .i-flex-col { display: flex; flex-direction: column; gap: 16px }
@@ -1739,7 +1737,6 @@ const _I = {
     toastInstalled: 'Breeze installed!',
     toastWiped: 'Device wiped remotely',
     toastDbConflict: 'Database version conflict. Please reload.',
-    toastUnpinned: 'Message unpinned',
     toastFwdTo: { one: "Forwarded to 1 contact", other: "Forwarded to {0} contacts" },
     toastFwdFail: 'Forward failed',
     toastSendFail: 'Send failed — will retry',
@@ -7125,7 +7122,6 @@ async function initMessenger(dbName) {
     document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
     const menu = document.createElement('div');
     menu.className = 'ctx-menu';
-    menu.classList.add(msg.isMine ? 'i-abs-tr' : 'i-abs-tl');
 
     const items = [
       [t('react'), () => { menu.remove(); showReactPicker(el, msg.msgId); }],
@@ -7149,7 +7145,22 @@ async function initMessenger(dbName) {
       menu.appendChild(btn);
     }
 
-    el.appendChild(menu);
+    // Appended to <body>, positioned in VIEWPORT coordinates — not to `el` with CSS
+    // top/right:0, which was silently broken: .msg has `contain: content` (needed for
+    // its own content-visibility virtualization in long chat histories), and paint
+    // containment clips ALL descendants — fixed-positioned ones included — to the
+    // bubble's own small box. A one-line message bubble is ~50px tall; this menu can
+    // be 7-10 items, ~270px+. Only the first item or two ever rendered or were
+    // clickable; the rest were clipped away by the bubble's own edge (E2E-found: a
+    // real click at the "Select" item's geometric position hit-tested to #msg-messages,
+    // not the menu, because the clipped region does not receive pointer events either).
+    // Same viewport-coordinate technique showContextMenu() already uses successfully.
+    const rect = el.getBoundingClientRect();
+    const MENU_W = 160; // matches .ctx-menu's CSS min-width; a coarse anchor, same precision showContextMenu already uses for its own clamp
+    const left = msg.isMine ? rect.right - MENU_W : rect.left;
+    menu.style.left = Math.max(4, Math.min(left, window.innerWidth - MENU_W - 4)) + 'px';
+    menu.style.top = Math.max(4, Math.min(rect.top, window.innerHeight - items.length * 40 - 8)) + 'px';
+    document.body.appendChild(menu);
     // Closing via an item click (btn.onclick above) used to leave this keydown listener
     // attached to document forever — same leak class fixed in showContextMenu. Route both
     // exit paths through one cleanup so a click also detaches the Escape handler.
@@ -11256,60 +11267,29 @@ async function initMessenger(dbName) {
     }
   });
 
-  // v3.5: Message right-click context menu
-  _DOM.get('msg-messages')?.addEventListener('contextmenu', (e) => {
-    const msg = e.target.closest('.msg[data-msgid]');
-    if (!msg) return;
-    e.preventDefault();
-    const msgId = msg.dataset.msgid;
-    const isMine = msg.classList.contains('me');
-    const text = msg.textContent?.replace(/\d{1,2}:\d{2}.*$/, '').trim() || '';
-    const isPinned = msg.classList.contains('msg-pinned');
-    const items = [
-      { label: t('reply'), action: 'reply' },
-      { label: t('forward'), action: 'forward' },
-      { label: t('copy'), action: 'copy' },
-      '---',
-      { label: isPinned ? t('toastUnpinned') : t('pin'), action: 'pin' },
-    ];
-    if (isMine) {
-      items.push({ label: t('edit'), action: 'edit' });
-      items.push({ label: t('delete'), action: 'delete', danger: true });
-    }
-    showContextMenu(e.clientX, e.clientY, items).then(async (action) => {
-      if (!action) return;
-      if (action === 'reply') {
-        _replyTo = { msgId, text: text.slice(0, 80) };
-        window._breezeReplyTo = _replyTo;
-        const bar = _DOM.get('msg-input-bar');
-        if (bar) {
-          const existing = bar.querySelector('.reply-preview');
-          if (existing) existing.remove();
-          const preview = document.createElement('div');
-          preview.className = 'reply-preview';
-          safeSetHTML(preview, `<span class="i-ellip">${esc(text.slice(0, 60))}</span><span data-action="close-reply" class="i-cur-dim">✕</span>`);
-          bar.insertBefore(preview, bar.firstChild);
-        }
-        _DOM.get('msg-input')?.focus();
-      }
-      if (action === 'copy') navigator.clipboard?.writeText(text);
-      // pinMsg/startEdit/deleteMsg take a MESSAGE OBJECT ({msgId, text, ts}), not a bare id —
-      // this handler passed the raw string, so msg.msgId was undefined inside them and the
-      // edit/delete signal went out with no target (remote mutation silently no-oped;
-      // Socratic-found via the multi-device edit E2E). Hydrate from the stored record.
-      if (action === 'pin' || action === 'edit' || action === 'delete') {
-        const stored = await dbGet('messages', msgId).catch(() => null);
-        const msgObj = { msgId, text: stored?.text ?? text, ts: stored?.ts };
-        if (action === 'pin' && typeof pinMsg === 'function') await pinMsg(msgObj);
-        if (action === 'edit' && typeof startEdit === 'function') await startEdit(msgObj);
-        if (action === 'delete' && typeof deleteMsg === 'function') await deleteMsg(msgObj);
-      }
-      if (action === 'forward') {
-        _DOM.get('msg-input').value = '/reply ' + text.slice(0, 100);
-        _DOM.get('msg-input').focus();
-      }
-    }).catch(err => _dbg(err, 'ctx-action'));
-  });
+  // The v3.5 delegated right-click handler that used to live here is deleted, not fixed
+  // in place. Every `.msg[data-msgid]` already gets its own `oncontextmenu` (above,
+  // `showMsgMenu`) which is a strict superset: react, reply, copy, edit/delete, forward,
+  // pin, bookmark, select, report — vs. this one's reply/forward/copy/pin/edit/delete.
+  // Both fired on the SAME right-click (this one via bubbling from the message up to
+  // #msg-messages), and since showContextMenu() clears any existing `.ctx-menu` before
+  // building its own, whichever ran SECOND won — which was always this one, so
+  // showMsgMenu's menu was created and destroyed in the same synchronous event dispatch,
+  // before a single paint. The user only ever saw THIS menu, and it was strictly worse:
+  // - React, Bookmark, Select (multi-select mode had no other entry point at all) and
+  //   Report (the ONLY way to file an abuse report on desktop) were unreachable — not
+  //   degraded, unreachable, since showMsgMenu's DOM never survived to be clicked.
+  // - Its own "forward" action didn't forward anything — it stuffed
+  //   `/reply <text>` into YOUR OWN composer, unrelated to forwardMsg()'s real
+  //   multi-contact picker that showMsgMenu's "forward" already calls.
+  // - Its pin/edit/delete needed a hand-rolled re-fetch from IndexedDB to work at all
+  //   (a comment here explained a msgId-shape bug an earlier session had to patch).
+  //   showMsgMenu never had that bug: it already builds the full message object once,
+  //   at showMsgMenu(el, msg)'s call site, instead of re-deriving it from a bare id.
+  // - Its reply action duplicated startReply()'s body inline instead of calling it — the
+  //   same function the swipe-to-reply gesture already uses — so this handler's reply UI
+  //   could drift from the gesture's over time even though both claim to do the same thing.
+  // Nothing here was worth carrying forward; showMsgMenu already does all of it, correctly.
 
   // v3.5: Global delegation — overlay close buttons (data-close="overlay")
   document.addEventListener('click', (e) => {
@@ -13558,6 +13538,22 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
   window.restoreCloudBackup = restoreCloudBackup;
   window.showSafetyNumber = showSafetyNumber;
 
+  // Expose for the "all platforms" keydown listener below, which sits OUTSIDE this
+  // closure (initMessenger ends a few lines down) after the Electron un-trapping fix —
+  // that fix balanced the Electron guard's braces but never checked this listener
+  // against initMessenger's OWN closing brace, so it landed past it too. Ctrl+N (next
+  // unread) and Ctrl+F (search in chat) called dbGetAll/openConversation/activeContact
+  // directly and threw a bare ReferenceError on every keypress, on every platform — not
+  // gated behind `typeof`, unlike the _selectMode/togglePicker checks right next to
+  // them, which is exactly why those two still worked and these two didn't.
+  // activeContact is reassigned throughout this closure (contact open/close/switch), so
+  // a getter — not a one-time copy — is what stays correct as it changes.
+  window.dbGetAll = dbGetAll;
+  window.openConversation = openConversation;
+  window.exitSelectMode = exitSelectMode;
+  window._getActiveContact = () => activeContact;
+  window._isSelectMode = () => _selectMode;
+
   // Boot LAST — see the _boot definition for why this line's position is load-bearing.
   await _boot();
 
@@ -13639,7 +13635,10 @@ if (!IS_MOBILE) {
       // v3.6: Priority chain: context menu → dialog → select mode → conversation
       if (ctxMenu) { ctxMenu.remove(); return; }
       if (dlg) return; // Dialog handles its own Escape
-      if (typeof _selectMode !== 'undefined' && _selectMode) { exitSelectMode(); return; }
+      // _selectMode is initMessenger-closure-local (this listener sits outside it), so
+      // `typeof _selectMode` was ALWAYS 'undefined' here — the guard never threw, but it
+      // also meant Escape never exited multi-select mode; only the FAB's ✕ button did.
+      if (window._isSelectMode?.()) { window.exitSelectMode(); return; }
       // Close conversation → show sidebar (mobile + desktop)
       if (sidebar?.classList.contains('hidden')) {
         if (history.state?.conversation) { history.back(); } // triggers popstate
@@ -13787,9 +13786,12 @@ if (PLATFORM === 'electron' && window.breeze) {
     // v3.3: Ctrl+N: jump to next unread contact
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'n') {
       e.preventDefault();
-      dbGetAll('contacts').then(contacts => {
+      // dbGetAll/openConversation are initMessenger-closure-local; this listener sits
+      // outside it. Unguarded, this threw a bare ReferenceError on every Ctrl+N press,
+      // on every platform — see the window._getActiveContact comment near the exposure.
+      window.dbGetAll('contacts').then(contacts => {
         const unread = contacts.filter(c => c.unread > 0 && !c.archived).sort((a, b) => (b.lastMsgAt || 0) - (a.lastMsgAt || 0));
-        if (unread.length > 0) openConversation(unread[0]);
+        if (unread.length > 0) window.openConversation(unread[0]);
         else showToast(t('toastNoUnread'), 'info');
       }).catch(e => _dbg(e, 'ctrl-n'));
     }
@@ -13801,7 +13803,13 @@ if (PLATFORM === 'electron' && window.breeze) {
     // v3.3: Ctrl+F: search in chat (if conv open) or focus contact filter
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'f') {
       e.preventDefault();
-      if (activeContact) { openSearchBar(); }
+      // activeContact is initMessenger-closure-local; read it through the getter (see
+      // window._getActiveContact's exposure comment) rather than referencing it
+      // directly, which threw on every Ctrl+F press regardless of whether a
+      // conversation was open — e.preventDefault() had already run, so this also
+      // silently ate the browser's native Find as a side effect, with nothing to show
+      // for it.
+      if (window._getActiveContact()) { openSearchBar(); }
       else {
         const cf = _DOM.get('contact-filter');
         if (cf) { cf.focus(); cf.select(); }
@@ -13876,7 +13884,9 @@ if (PLATFORM === 'electron' && window.breeze) {
   let _searchIdx = 0;
 
   function openSearchBar() {
-    if (!_searchBar || !activeContact) return;
+    // openSearchBar is itself top-level (outside initMessenger, same as its caller
+    // above), so activeContact needs the same window._getActiveContact() getter.
+    if (!_searchBar || !window._getActiveContact()) return;
     _searchBar.classList.add('show');
     _searchInput.value = '';
     _searchInput.focus();

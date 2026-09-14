@@ -356,7 +356,6 @@
  "toastInstalled": "Breezeがインストールされました！",
  "toastWiped": "リモートでデータが消去されました",
  "toastDbConflict": "DB競合が発生しました。リロードしてください。",
- "toastUnpinned": "ピン留めを解除しました",
  "toastFwdTo": {
   "other": "{0}件のコンタクトに転送しました"
  },

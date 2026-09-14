@@ -335,7 +335,6 @@
  "toastInstalled": "Breeze instalado!",
  "toastWiped": "Dispositivo apagado remotamente",
  "toastDbConflict": "Conflito de versão do banco de dados. Recarregue a página.",
- "toastUnpinned": "Mensagem desafixada",
  "toastFwdTo": {
   "one": "Encaminhada para 1 contato",
   "other": "Encaminhada para {0} contatos"

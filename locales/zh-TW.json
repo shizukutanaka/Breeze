@@ -332,7 +332,6 @@
  "toastInstalled": "Breeze 安裝完成！",
  "toastWiped": "裝置已遠端清除",
  "toastDbConflict": "資料庫版本衝突。請重新載入。",
- "toastUnpinned": "訊息已取消釘選",
  "toastFwdTo": {
   "other": "已轉傳給 {0} 位聯絡人"
  },

@@ -332,7 +332,6 @@
  "toastInstalled": "Breeze terpasang!",
  "toastWiped": "Perangkat dihapus dari jarak jauh",
  "toastDbConflict": "Konflik versi basis data. Muat ulang halaman.",
- "toastUnpinned": "Sematan pesan dilepas",
  "toastFwdTo": {
   "other": "Diteruskan ke {0} kontak"
  },

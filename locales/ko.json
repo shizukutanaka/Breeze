@@ -332,7 +332,6 @@
  "toastInstalled": "Breeze 설치 완료!",
  "toastWiped": "원격으로 기기가 초기화되었습니다",
  "toastDbConflict": "데이터베이스 버전 충돌. 새로고침해 주세요.",
- "toastUnpinned": "메시지 고정 해제됨",
  "toastFwdTo": {
   "other": "연락처 {0}명에게 전달됨"
  },
