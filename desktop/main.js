@@ -19,6 +19,7 @@ const { app, BrowserWindow, Tray, Menu, nativeImage, Notification,
         globalShortcut, shell, ipcMain, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { isAllowedNavigation } = require('./nav-guard');
 
 // ── Constants ───────────────────────────────────────────────
 const APP_NAME = 'Breeze';
@@ -97,10 +98,16 @@ function createWindow() {
     return { action: 'deny' };
   });
 
-  // Block navigation away from app
+  // Block navigation away from app. `url.startsWith(appOrigin)` used to stand in for an
+  // origin check — a raw string-prefix test, not one — bypassed in remote mode
+  // (BREEZE_URL set to a real deployment, a documented, supported way to run this app)
+  // by any URL that merely has the real origin as a text PREFIX of a longer hostname:
+  // "https://breeze.pages.dev.attacker.example/phish".startsWith("https://breeze.pages.dev")
+  // is true, so that page would navigate the window in place instead of being kicked out
+  // to the OS browser. See nav-guard.js for the real check and why it is a separate,
+  // unit-tested module rather than inline here.
   win.webContents.on('will-navigate', (e, url) => {
-    const appOrigin = new URL(win.webContents.getURL()).origin;
-    if (!url.startsWith(appOrigin) && !url.startsWith('file://')) {
+    if (!isAllowedNavigation(win.webContents.getURL(), url)) {
       e.preventDefault();
       shell.openExternal(url);
     }

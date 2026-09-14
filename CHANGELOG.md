@@ -1,5 +1,17 @@
 # Changelog
 
+## Electron's navigation guard was bypassable by a suffix trick on the app's own origin (branch claude/nice-ride-T6yb0, 2026-09-15)
+
+798 → **812** vitest (+14, new `tests/nav-guard.test.js`); new `desktop/nav-guard.js`; `desktop/main.js`.
+
+Auditing `desktop/main.js` (never checked this session — every fix so far was in the web/worker deployment) found `will-navigate`'s guard used `url.startsWith(appOrigin)` as a stand-in for an origin check. It is not one: `"https://breeze.pages.dev.attacker.example/phish".startsWith("https://breeze.pages.dev")` is `true`, since the real origin is merely a text *prefix* of the attacker's longer hostname. `BREEZE_URL` remote mode — pointing the desktop app at a real HTTPS deployment — is documented, supported (`desktop/README.md`), and the exact case this bypasses: a malicious page reachable via any means (a redirect, a compromised ad, a link) could navigate the app's own window to itself instead of being kicked out to the OS browser as intended, opening a phishing vector inside what looks like the trusted app window. Verified the bypass and the fix with a plain Node one-liner before touching anything.
+
+Fixing it surfaced the same bug one layer down, in my own first attempt: the accompanying `file://` case (needed because Node's `URL.origin` serializes *every* `file://` URL to the literal string `"null"`, making an origin comparison meaningless there) used `target.pathname.startsWith(path.dirname(current.pathname))` — which falls for the identical trick: `/home/user/Breeze-evil` textually starts with `/home/user/Breeze`. Caught before shipping by writing out the test cases first. `path.relative()` gives an actual containment check: a path outside the directory comes back starting with `..` or as a second absolute path.
+
+`desktop/main.js` does `require('electron')` as its first line, which throws outside a real Electron process — so the check can't be unit-tested in place. Extracted into `desktop/nav-guard.js` (Node's `path` and `URL` only, no Electron dependency) purely so it could get real coverage. 14 tests cover both protocols and the exact bypasses found along the way; confirmed each one fails against the code state that motivated it — 6 fail against the original `startsWith(appOrigin)` bug, and exactly 1 (the sibling-directory case) fails against the interim `path.dirname` + `startsWith` attempt — before landing on the version that passes all 14.
+
+---
+
 ## Version string stuck at 3.6.0 across 14 files while CLAUDE.md documented core security features as default-on "since v3.6.1" (branch claude/nice-ride-T6yb0, 2026-09-15)
 
 798 vitest + 52 Playwright E2E (unchanged); version bumped to 3.6.1 across `sw.js`, `index.html` (footer + `CONFIG.VERSION`), `_worker.js` (header comment + `/api/health` + `X-Breeze-Version` header), `manifest.json`, `package.json` + `package-lock.json`, `build.sh`, `build-all.sh`, `desktop/package.json`, `mobile/package.json`, `tauri/package.json`, `tauri/src-tauri/tauri.conf.json`, `tauri/src-tauri/Cargo.toml`.
