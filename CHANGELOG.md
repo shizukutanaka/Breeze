@@ -1,5 +1,15 @@
 # Changelog
 
+## The billing cleanup missed the mobile Capacitor config and a dead test helper (branch claude/nice-ride-T6yb0, 2026-09-15)
+
+819 vitest unchanged (798 core + 21 desktop/nav/csp — none of these tests touched); `mobile/capacitor.config.json`, `tests/worker.test.js`, `tests/helpers/mockKV.js`.
+
+Checking `mobile/` for the same class of navigation/origin issue just found and fixed in `desktop/main.js` surfaced a different, older kind of leftover: `capacitor.config.json`'s `server.allowNavigation` — the actual list of external hosts the Capacitor WebView is permitted to navigate to — still whitelisted `checkout.stripe.com`, alongside the real, still-used `*.pages.dev`. Billing was removed from this project entirely (SECURITY.md's "Removed: multi-account billing"); this session's earlier billing-cleanup pass covered `wrangler.toml`, `.env.example`, `README.md`, `index.html`'s Terms/Privacy, and several code comments, but never checked the mobile app's own navigation whitelist. A real config surface, not just a comment: had anything ever tried to navigate the in-app WebView to that domain, it would have been allowed — for a payment flow that does not exist.
+
+Grepping the same theme also turned up `tests/helpers/mockKV.js`'s `stripeSigHeader` — a Stripe-webhook-signature test helper, exported and imported into `tests/worker.test.js`, and called by nothing. Both the definition and the now-pointless import removed.
+
+---
+
 ## Electron shipped its own CSP, strictly weaker than the one SECURITY.md documents (branch claude/nice-ride-T6yb0, 2026-09-15)
 
 812 → **819** vitest (+7, new `tests/csp-guard.test.js`); new `desktop/csp-guard.js`; `desktop/main.js`, `desktop/preload.js`, `desktop/package.json`, `build.sh`.

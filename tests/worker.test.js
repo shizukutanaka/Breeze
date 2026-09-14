@@ -53,7 +53,7 @@ import worker, {
   sendPushToUser,
   capQueueBytes,
 } from '../_worker.js';
-import { makeKV, makeEnv, apiRequest, stripeSigHeader } from './helpers/mockKV.js';
+import { makeKV, makeEnv, apiRequest } from './helpers/mockKV.js';
 import { createFranking } from '../src/crypto/franking.js';
 import { negotiateGroup, CAPS } from '../src/crypto/negotiate.js';
 

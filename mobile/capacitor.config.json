@@ -6,7 +6,7 @@
     "androidScheme": "https",
     "iosScheme": "https",
     "hostname": "app.breeze.local",
-    "allowNavigation": ["*.pages.dev", "checkout.stripe.com"]
+    "allowNavigation": ["*.pages.dev"]
   },
   "plugins": {
     "SplashScreen": {

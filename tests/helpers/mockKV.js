@@ -46,12 +46,3 @@ export function apiRequest(path, body, headers = {}) {
   });
 }
 
-// Compute a valid Stripe-style signature header for a raw payload + secret.
-export async function stripeSigHeader(payload, secret, ts = Math.floor(Date.now() / 1000)) {
-  const key = await crypto.subtle.importKey(
-    'raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
-  );
-  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(ts + '.' + payload));
-  const hex = Array.from(new Uint8Array(mac)).map(b => b.toString(16).padStart(2, '0')).join('');
-  return `t=${ts},v1=${hex}`;
-}
