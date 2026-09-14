@@ -1,5 +1,19 @@
 # Changelog
 
+## A swiped message or contact row visibly animated back, then silently snapped back out (branch claude/nice-ride-T6yb0, 2026-09-14)
+
+798 vitest + **46** Playwright E2E (+2, `tests/e2e/layout.spec.js`); `index.html`, `_headers` (CSP hash).
+
+Continuing the same sweep as the emoji picker fix into the two remaining unmeasured touch surfaces — swipe-to-reply on a message and swipe-left-to-archive on a contact row. Both share one hand-rolled drag implementation: `touchmove` sets `el.style.transform = translateX(dx)px` directly, and `touchend` adds a `.swipe-back` class whose `transform: translateX(0) !important` overrides it — for exactly as long as that class stays on. `!important` in a stylesheet does beat an inline style, which is why the bubble visibly slides back into place during the 200ms transition. Neither handler ever cleared the inline value itself, though. The class comes off `CONFIG.SWIPE_BACK_MS` (250ms) later on a `setTimeout`, the mask disappears with it, and the never-cleared inline `translateX(dx)` reasserts — measured directly: computed transform goes from identity right after release to `matrix(1,0,0,1,70,0)` 400ms later, with the element's real screen position shifted to match. The animation the user watches is the opposite of what actually happens a quarter-second after it finishes.
+
+For the contact row it's worse than for the message, though not because either is "the real bug" — a swipe that *crosses* the archive threshold triggers `renderContacts()`, which rebuilds the row from scratch and happens to erase the stale style as a side effect. A swipe released *below* the threshold (the far more common case — someone starting the gesture and changing their mind) never re-renders anything, so that row is left permanently offset with no other code path in the app that would ever fix it.
+
+Fixed by clearing `style.transform = ''` at the same point `.swipe-back` goes on, in both handlers — there is then nothing left for the class's `!important` to have been hiding once it comes off. Verified directly against the computed style and the element's real bounding-box position, not just the class list, in a real Chromium: an actual received message (rendered through the app's own message-building function, not a fabricated element with none of its listeners) and a real contact row, using synthetic `Touch`/`TouchEvent`s to drive the exact handlers already wired to production markup.
+
+Two E2E tests wait for `.swipe-back` to actually come off (polling the class, not guessing a fixed delay — the bug is specifically about that transition, so racing a timeout would make the test as timing-fragile as the bug itself) and check geometry rather than the transform string's exact serialization (Chromium reports identity as either the keyword `none` or `matrix(1,0,0,1,0,0)` depending on transition history — both are correct, so the assertion targets what actually matters, the element's real position). One of the two teeth-testing runs against the pre-fix build was a spurious pass — re-run 5x to confirm 5/5 real failures before trusting the reproducer; the contact-row test's first draft had exactly the bug this whole session keeps finding: it "passed" against broken code because it swiped a still-hidden, still-transitioning row instead of waiting for the async `history.back()` navigation the back button drives, corrected by waiting for the sidebar to actually reappear.
+
+---
+
 ## The emoji picker's mobile width mixed viewport units with its actual containing block (branch claude/nice-ride-T6yb0, 2026-09-14)
 
 798 vitest + **44** Playwright E2E (+3, `tests/e2e/layout.spec.js`); `index.html`, `_headers` (CSP hash).

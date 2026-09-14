@@ -141,3 +141,129 @@ for (const width of [1280, 390]) {
     expect(Math.abs(box.mid - width / 2), 'toast stays horizontally centred').toBeLessThan(3);
   });
 }
+
+// Swipe-to-reply (message) and swipe-to-archive (contact row) both add a `.swiping`
+// class and set an inline `translateX(dx)` while dragging, then on release swap to
+// `.swipe-back` — whose `transform: translateX(0) !important` overrides the inline
+// value only for as long as that class is present. Neither handler ever cleared the
+// inline value itself, so once the class comes off (CONFIG.SWIPE_BACK_MS later) the
+// mask is gone and the stale offset reasserts: the element visibly animates back to
+// place and then silently snaps right back out. A snapshot taken mid-transition would
+// have shown the fix already "working"; only checking AFTER the transition ends catches
+// it, which is exactly why no existence-based test ever would.
+test('a swiped message bubble does not snap back out after the swipe-back animation ends', async ({ browser }) => {
+  const ctxA = await browser.newContext({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.111' }, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const ctxB = await browser.newContext({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.112' } });
+  const A = await ctxA.newPage(), B = await ctxB.newPage();
+
+  const identity = async (page, name) => {
+    await page.goto('/');
+    await page.locator('#msg-name').fill(name);
+    await page.locator('#b-msg-setup').click();
+    await expect(page.locator('#msg-main')).toBeVisible();
+    return page.evaluate(() => new Promise((r) => {
+      const q = indexedDB.open('breeze-messenger', 5);
+      q.onsuccess = () => { q.result.transaction('identity', 'readonly').objectStore('identity').get('keys').onsuccess = (e) => r(e.target.result?.pubB64); };
+    }));
+  };
+  const pubA = await identity(A, 'Swipe Receiver');
+  const pubB = await identity(B, 'Swipe Sender');
+
+  await A.locator('#b-msg-add').click();
+  const dlgA = A.locator('dialog[aria-labelledby]');
+  await dlgA.locator('.modal-input').fill(pubB);
+  await dlgA.locator('[value="ok"]').click();
+  await expect(dlgA).toBeHidden();
+  await A.locator('#msg-contacts .contact').first().click();
+  await expect(A.locator('#msg-input-bar')).toBeVisible();
+
+  // A real received message so it renders through the app's own message-building
+  // function and gets the actual touchstart/touchmove/touchend listeners wired — a
+  // fabricated element would have none of them and prove nothing.
+  await B.locator('#b-msg-add').click();
+  const dlgB = B.locator('dialog[aria-labelledby]');
+  await dlgB.locator('.modal-input').fill(pubA);
+  await dlgB.locator('[value="ok"]').click();
+  await expect(dlgB).toBeHidden();
+  await B.locator('#msg-contacts .contact').first().click();
+  await expect(B.locator('#msg-input-bar')).toBeVisible();
+  await B.locator('#msg-input').fill('swipe me to test the transform reset');
+  await B.locator('#b-msg-send').click();
+
+  await expect(A.locator('.msg.them').first()).toBeVisible({ timeout: 15000 });
+
+  const finalState = await A.evaluate(async () => {
+    const el = [...document.querySelectorAll('.msg.them')].pop();
+    const origX = el.getBoundingClientRect().x;
+    const rect = el.getBoundingClientRect();
+    const y = rect.y + rect.height / 2;
+    const mkTouch = (x) => new Touch({ identifier: 1, target: el, clientX: x, clientY: y });
+    const fire = (type, x) => el.dispatchEvent(new TouchEvent(type, {
+      bubbles: true, cancelable: true,
+      touches: type === 'touchend' ? [] : [mkTouch(x)], changedTouches: [mkTouch(x)],
+    }));
+    fire('touchstart', rect.x + 10);
+    await new Promise((r) => setTimeout(r, 20));
+    fire('touchmove', rect.x + 80); // > 60px: crosses the reply trigger threshold
+    await new Promise((r) => setTimeout(r, 20));
+    fire('touchend', rect.x + 80);
+    // Poll for the actual moment .swipe-back comes off (CONFIG.SWIPE_BACK_MS later)
+    // rather than guessing a fixed delay — the bug is specifically about what happens
+    // AT that transition, so a race against a timeout would make this test as flaky
+    // as the bug is timing-dependent.
+    const deadline = Date.now() + 2000;
+    while (el.classList.contains('swipe-back') && Date.now() < deadline) await new Promise((r) => setTimeout(r, 10));
+    await new Promise((r) => setTimeout(r, 30)); // let the removal's style recalc settle
+    return { origX, x: el.getBoundingClientRect().x, transform: getComputedStyle(el).transform };
+  });
+
+  // Chromium reports "no transform" as either the keyword `none` or an identity matrix
+  // depending on whether a transition ever touched the property — both mean the same
+  // thing, so check the geometry it actually affects rather than the string shape.
+  expect(Math.abs(finalState.x - finalState.origX), 'the bubble is back at its original position').toBeLessThan(6);
+
+  await ctxA.close();
+  await ctxB.close();
+});
+
+test('a contact row released mid-swipe (below the archive threshold) settles back in place', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await boot(page, 'Layout Swipe Contact');
+  await openAnyContact(page);
+  // openAnyContact opens the conversation, which is the state a real swipe-to-archive
+  // gesture happens FROM (the contact list) — go back to it. The back button drives
+  // history.back(), which resolves the popstate handler asynchronously, so wait for the
+  // sidebar to actually reappear rather than assuming the click alone did it (a `.catch`
+  // swallowing a failed click here previously let the test pass against the very CSS bug
+  // it exists to catch, because it was swiping a still-hidden row from off-screen).
+  await page.locator('#b-msg-back').click();
+  await expect(page.locator('#msg-sidebar')).not.toHaveClass(/hidden/);
+
+  const finalState = await page.evaluate(async () => {
+    const row = document.querySelector('#msg-contacts .contact');
+    const rect = row.getBoundingClientRect();
+    const origX = rect.x;
+    const y = rect.y + rect.height / 2;
+    const mkTouch = (x) => new Touch({ identifier: 1, target: row, clientX: x, clientY: y });
+    const fire = (type, x) => row.dispatchEvent(new TouchEvent(type, {
+      bubbles: true, cancelable: true,
+      touches: type === 'touchend' ? [] : [mkTouch(x)], changedTouches: [mkTouch(x)],
+    }));
+    fire('touchstart', rect.x + rect.width - 10);
+    await new Promise((r) => setTimeout(r, 20));
+    fire('touchmove', rect.x + rect.width - 50); // -40px: BELOW the -60px archive threshold
+    await new Promise((r) => setTimeout(r, 20));
+    fire('touchend', rect.x + rect.width - 50);
+    const deadline = Date.now() + 2000;
+    while (row.classList.contains('swipe-back') && Date.now() < deadline) await new Promise((r) => setTimeout(r, 10));
+    await new Promise((r) => setTimeout(r, 30));
+    return { origX, x: row.getBoundingClientRect().x, transform: getComputedStyle(row).transform };
+  });
+
+  // A swipe that crosses the archive threshold gets papered over by the resulting
+  // renderContacts() call; a partial swipe below it never re-renders, so it is the one
+  // case nothing else in the app would ever fix. Check geometry, not the transform
+  // string's exact shape — Chromium can report identity as `none` or a matrix
+  // depending on transition history, and both mean the same thing.
+  expect(Math.abs(finalState.x - finalState.origX), 'the row is back at its original position').toBeLessThan(6);
+});

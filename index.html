@@ -6211,6 +6211,14 @@ async function initMessenger(dbName) {
           }
           div.classList.remove('swiping');
           div.classList.add('swipe-back');
+          // Same reassert-on-mask-removal bug as the message swipe-to-reply handler
+          // above: .swipe-back's !important only hides the inline translateX(dx) set
+          // during the drag, it never clears it, so the row snaps back OUT once the
+          // class comes off. Worse here than for messages: crossing the archive
+          // threshold re-renders the list (renderContacts()), which happens to paper
+          // over the bug — a swipe released BELOW threshold never re-renders, so that
+          // row is permanently offset with no other code path that would ever fix it.
+          div.style.transform = '';
           setTimeout(() => div.classList.remove('swipe-back'), CONFIG.SWIPE_BACK_MS);
           _cswiping = false;
         }, { passive: true });
@@ -6896,6 +6904,15 @@ async function initMessenger(dbName) {
       }
       d.classList.remove('swiping');
       d.classList.add('swipe-back');
+      // .swipe-back's `transform: translateX(0) !important` only MASKS the inline
+      // translateX(dx) set during the drag — it never clears it. Once the class comes
+      // off below, the mask is gone and the stale inline value reasserts itself, so the
+      // bubble was visibly animating back to 0 and then silently snapping right back out
+      // to the swiped-out position the instant the timeout fired (E2E-found: measured the
+      // computed transform before/after the timeout — before: identity; 400ms later,
+      // after the class was removed: still offset). Clearing it here removes the value
+      // .swipe-back was only ever hiding, so there is nothing left to reassert.
+      d.style.transform = '';
       setTimeout(() => d.classList.remove('swipe-back'), CONFIG.SWIPE_BACK_MS);
       d._swipeTriggered = false;
       _swiping = false;
