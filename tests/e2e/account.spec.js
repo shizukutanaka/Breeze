@@ -66,3 +66,42 @@ test('a second account is reachable, isolated, and switching back restores the f
 
   await ctxA.close(); await ctxB.close();
 });
+
+// .acc-add ("+", add another account) had an aria-label but no tabIndex at all — a
+// keyboard user could never Tab to it, let alone activate it. Found sweeping the whole
+// file mechanically for the same shape as showMsgMenu's keyboard-access bug (a
+// non-native <div>/<span> with an onclick and no tabIndex anywhere), after that fix
+// turned up two more real instances. aria-label without focusability tells a screen
+// reader a labeled control exists while leaving it completely unreachable — arguably
+// worse than no label at all, since it reads as present and simply is not.
+test('the "add account" button is keyboard-reachable and activatable', async ({ browser }) => {
+  test.setTimeout(60_000);
+  const ctx = await browser.newContext(ctxOpts('203.0.113.94'));
+  const page = await ctx.newPage();
+  await createIdentity(page, 'Keyboard A11y');
+
+  await page.locator('#msg-input').fill('/settings');
+  await page.locator('#msg-input').press('Enter');
+  await page.locator('[data-action="add-account"]').click();
+  const namePrompt = page.locator('dialog[aria-labelledby]');
+  await expect(namePrompt).toBeVisible();
+  await namePrompt.locator('.modal-input').fill('Second');
+  await namePrompt.locator('[value="ok"]').click();
+  const avatarPrompt = page.locator('dialog[aria-labelledby]');
+  await expect(avatarPrompt).toBeVisible();
+  await avatarPrompt.locator('[value="ok"]').click();
+  await expect(page.locator('.acc-add')).toBeVisible();
+
+  await expect(page.locator('.acc-add')).toHaveAttribute('tabindex', '0');
+  await expect(page.locator('.acc-add')).toHaveAttribute('role', 'button');
+  await page.locator('.acc-add').focus();
+  await expect(page.locator('.acc-add')).toBeFocused();
+
+  // Enter on the focused element should trigger the same addAccount() flow the click
+  // handler does — a THIRD account-name prompt appears.
+  await page.keyboard.press('Enter');
+  const thirdNamePrompt = page.locator('dialog[aria-labelledby]');
+  await expect(thirdNamePrompt).toBeVisible();
+
+  await ctx.close();
+});

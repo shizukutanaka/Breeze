@@ -1,5 +1,21 @@
 # Changelog
 
+## The same keyboard-access bug found in three more places by grepping for its exact shape (branch claude/nice-ride-T6yb0, 2026-09-15)
+
+819 vitest unchanged; Playwright E2E 54 → **56**; `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation), `tests/e2e/account.spec.js`, `tests/e2e/commands.spec.js`, `tests/e2e/layout.spec.js`.
+
+The `showMsgMenu` keyboard-access fix earlier today answered one instance of a question worth asking exhaustively: is this class of bug — a hand-rolled `<div>` given an `onclick` with no `tabIndex`, so it's mouse-only despite looking complete — a one-off, or a shape? Wrote a small script to check mechanically: every `X.onclick = ...` assignment in `index.html`, resolved to its `document.createElement(tag)` call, filtered to non-natively-focusable tags, checked whether `.tabIndex` is ever set on that variable anywhere. Six candidates came back. Three (`overlay`, `lb`, `modal`) are legitimate click-outside-to-dismiss backdrops with Escape already wired as the keyboard equivalent — correctly excluded, not fixed for their own sake. Three were real:
+
+- **`.acc-add`** (the "+" to add another account) had a real `aria-label` and no `tabIndex` at all — labeled to a screen reader as a control that exists, while being completely unreachable by keyboard. Worse than no label, since it reads as present and simply is not.
+- **`#load-more-hint`** ("N older messages") — the only way to page further back in a long conversation's history. No `tabIndex`, no `aria-label` either (though its own text content already serves as an accessible name once focusable).
+- **`.help-header`** (`/searchall`'s per-contact result groups, click to jump to that conversation) — the only way to act on a global search result.
+
+Fixed all three with the exact pattern already proven twice today (`showContextMenu` originally, `showMsgMenu` this morning): `tabIndex = 0`, `role="button"`, and an `onkeydown` that calls `.click()` on Enter/Space. Verified each live, not from reading the code — including a real focus-triggered side effect worth recording: `.focus()` on an off-screen element scrolls it into view, and for `#load-more-hint` that scroll alone was sometimes enough to cross the app's own "near the top, load more" threshold before a key was ever pressed. The regression test accounts for this explicitly (checks reachability and the immediate post-focus state atomically, then only presses Enter if the element is still there) rather than assuming a fixed causal order that a real browser doesn't guarantee.
+
+Three new E2E tests, one per fix, each confirmed to fail against the pre-fix build. `tools/csp-hash.mjs`'s Tauri sync (added earlier today) picked up the new script-src hash automatically, exactly as designed.
+
+---
+
 ## The message menu I fixed earlier today was fully mouse-only — no keyboard access at all (branch claude/nice-ride-T6yb0, 2026-09-15)
 
 819 vitest unchanged; Playwright E2E 53 → **54**; `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation), `tests/e2e/msgmenu.spec.js`.

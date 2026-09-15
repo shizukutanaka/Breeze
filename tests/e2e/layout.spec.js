@@ -341,3 +341,57 @@ test('the scroll-to-bottom FAB counts up when a message arrives while scrolled a
   await ctxA.close();
   await ctxB.close();
 });
+
+// #load-more-hint ("N older messages") had an onclick and no tabIndex anywhere — found
+// by the same mechanical sweep that caught .acc-add after the showMsgMenu keyboard-
+// access fix. Its own text already serves as an accessible name (no separate aria-label
+// needed), but with no tabIndex it was never reachable by Tab in the first place.
+test('the "load older messages" hint is keyboard-reachable and activatable', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await boot(page, 'Layout LoadOlder');
+  await openAnyContact(page);
+
+  const contactId = await page.evaluate(() => new Promise((r) => {
+    const q = indexedDB.open('breeze-messenger', 5);
+    q.onsuccess = () => { q.result.transaction('contacts', 'readonly').objectStore('contacts').getAll().onsuccess = (e) => r(e.target.result[0].id); };
+  }));
+  // PAGE_SIZE is 50 — seed enough that the "N older" hint renders. Direct IndexedDB
+  // write, not real sends: the point here is the hint's keyboard wiring, not delivery.
+  await page.evaluate((cid) => new Promise((resolve, reject) => {
+    const req = indexedDB.open('breeze-messenger', 5);
+    req.onsuccess = () => {
+      const tx = req.result.transaction('messages', 'readwrite');
+      const store = tx.objectStore('messages');
+      const now = Date.now();
+      for (let i = 0; i < 55; i++) store.put({ msgId: `seed:${i}`, contactId: cid, text: 'seeded ' + i, mine: true, ts: now - (55 - i) * 1000 });
+      tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+    };
+  }), contactId);
+
+  await page.reload();
+  await page.locator('#msg-contacts .contact').first().click();
+  const hint = page.locator('#load-more-hint');
+  await expect(hint).toBeVisible();
+  await expect(hint).toHaveAttribute('tabindex', '0');
+  await expect(hint).toHaveAttribute('role', 'button');
+
+  // .focus() on an element positioned above the fold also scrolls it into view — which
+  // itself can be enough to cross the app's own scroll-triggered "load more" threshold
+  // before a key is ever pressed. Check reachability and the post-focus state in one
+  // atomic evaluate() so there is no gap for a second process to observe a stale locator.
+  const afterFocus = await page.evaluate(() => {
+    const el = document.getElementById('load-more-hint');
+    el?.focus();
+    return { focused: document.activeElement === el, stillPresent: !!document.getElementById('load-more-hint') };
+  });
+  expect(afterFocus.focused || !afterFocus.stillPresent, 'Tab-focusing the hint either lands on it or already triggered its own action').toBe(true);
+
+  // If focus's own scroll didn't already trigger the load, Enter on the focused element
+  // must: the same load-older action the click handler runs (scrolling to the top of
+  // the box, which the app's own scroll listener treats as a request for more — the
+  // hint disappears once older messages are loaded in).
+  if (afterFocus.stillPresent) {
+    await page.keyboard.press('Enter');
+  }
+  await expect(hint).not.toBeVisible({ timeout: 5000 });
+});

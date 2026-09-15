@@ -3587,7 +3587,14 @@ function renderAccountTabs() {
   addBtn.textContent = '+';
   addBtn.title = t('addAccountBtn');
   addBtn.setAttribute('aria-label', t('addAccountBtn'));
+  // Found sweeping for the same "aria-label present, but not actually focusable" gap
+  // showMsgMenu had: a <div> with a real aria-label reads as a labeled control to a
+  // screen reader, but with no tabIndex a keyboard user cannot even Tab to it, let
+  // alone activate it with Enter/Space. Same fix pattern as showContextMenu/showMsgMenu.
+  addBtn.tabIndex = 0;
+  addBtn.setAttribute('role', 'button');
   addBtn.onclick = addAccount;
+  addBtn.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addBtn.click(); } };
   tabs.appendChild(addBtn);
 }
 
@@ -6506,7 +6513,10 @@ async function initMessenger(dbName) {
       hint.className = 'load-older';
       hint.textContent = t('uiOlderMsgs', olderCount);
       hint.id = 'load-more-hint';
+      hint.tabIndex = 0;
+      hint.setAttribute('role', 'button');
       hint.onclick = () => { box.scrollTop = 0; }; // trigger scroll-load
+      hint.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); hint.click(); } };
       box.appendChild(hint);
     }
     renderBatch(0, msgs.length);
@@ -12264,7 +12274,10 @@ async function initMessenger(dbName) {
           const header = document.createElement('div');
           header.className = 'help-header';
           header.textContent = contactMap[cid] || cid;
+          header.tabIndex = 0;
+          header.setAttribute('role', 'button');
           header.onclick = async () => { const c = await dbGet('contacts', cid); if (c) openConversation(c); };
+          header.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); header.click(); } };
           box.appendChild(header);
           for (const m of cmsgs.slice(0, 5)) {
             const d = document.createElement('div');
