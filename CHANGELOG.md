@@ -1,5 +1,17 @@
 # Changelog
 
+## A fifth instance of the per-account timer/listener leak class: /focus mode left a zombie timer running after a switch (branch claude/nice-ride-T6yb0, 2026-09-16)
+
+819 vitest unchanged; Playwright E2E 58 → **59**; `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation), `tests/e2e/account.spec.js`.
+
+After fixing the `_messengerCleanup` listener leak and the `_startLiveSession` maintenance-interval gap, asked the obvious next question rather than declaring the class closed: is `_registerMessengerCleanup()`'s explicit `clearTimeout` list — `_presenceTimer`, `_pollTimer`, `_retryTimer`, `_typingTimeout` — actually complete, or was it built by fixing each leak as it was found rather than by enumerating every candidate? Grepped every `setTimeout`/`setInterval` call in the file not already routed through `_intervals.push(...)` and checked each one's own clear path. Nearly all are short-lived UI feedback (toast fades, copy-button reverts, swipe-back animation resets) that are harmless even if orphaned — no cleanup needed. Two long-lived candidates (`sigPoll`, `pollCallSignals`'s `poll`) turned out to already self-clear correctly on their own natural lifecycle event, one via a stored `peerState._sigPoll` reference plus an `_intervals` safety net, the other by polling `_callState` each tick.
+
+One did not: `_focusTimer`, set by `_updateFocusBanner()` (`_focusTimer = setTimeout(_updateFocusBanner, MS.MIN)`), which self-reschedules every minute for as long as `/focus` mode is active — and unlike its four siblings, was never added to the cleanup closure at all. `#focus-bar` is a static DOM element that survives every account switch (`switchAccount()` only clears `_DOM`'s memoization cache, not the DOM itself), so the function's own early-return guard (`if (!bar) return`) never saves it either — the orphaned chain just keeps running forever, once per switch made while focus mode was on, each copy reading its own now-stale account's `_settings`/`myId` and racing whichever other copies are still alive to overwrite the same banner.
+
+Confirmed live before writing the fix, the same standard held throughout this session: instrumented `window.setTimeout`/`clearTimeout` to track any timer whose callback name contains `updateFocusBanner`. Enabling `/focus 30` on account A left exactly one tracked timer; switching to a freshly-created account B left it uncleared (count stayed 1, expected 0). Fixed by adding `_focusTimer` to the same explicit-clear block as its siblings. Re-ran the same instrumentation after the fix — count drops to 0 immediately after the switch. New E2E test reproduces the live check permanently and fails against the pre-fix build with the same 1-vs-0 symptom.
+
+---
+
 ## A fourth instance of the same duplicate-boot-path pattern: fresh accounts never self-enforced their retention policy (branch claude/nice-ride-T6yb0, 2026-09-16)
 
 819 vitest unchanged; Playwright E2E 57 → **58**; `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation), `tests/e2e/account.spec.js`.

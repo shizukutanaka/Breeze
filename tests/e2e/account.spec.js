@@ -208,3 +208,60 @@ test('a freshly-created identity gets its short-ID display and a "Session starte
   }));
   expect(auditDetails.some((d) => d?.startsWith('Session started:'))).toBe(true);
 });
+
+// A fifth instance of the "orphaned per-account timer survives a switch" class, found by
+// asking the obvious follow-up question after fixing _messengerCleanup and _startLiveSession:
+// is _intervals/the explicit clearTimeout list in _registerMessengerCleanup() actually
+// complete? _updateFocusBanner() self-reschedules every minute via `_focusTimer =
+// setTimeout(_updateFocusBanner, MS.MIN)` for as long as /focus is active, but _focusTimer
+// was never added to the cleanup closure's explicit clearTimeout list (unlike its siblings
+// _presenceTimer/_pollTimer/_retryTimer/_typingTimeout). Since #focus-bar is a static element
+// that survives every account switch (only _DOM's memoization cache is cleared, not the DOM
+// itself), the old timer doesn't even get an early-return excuse to die — it just keeps firing
+// forever under the old account's stale closure, racing the new account's own timer to write
+// the same banner. Confirmed live with setTimeout/clearTimeout instrumentation before writing
+// the fix: enabling /focus then switching accounts left the old timer's id never cleared.
+test('turning off /focus, switching accounts, does not leave the old account\'s focus timer running', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.addInitScript(() => {
+    try { localStorage.setItem('brz-consent', String(Date.now())); } catch {}
+    window.__focusTimers = new Map();
+    const origSet = window.setTimeout.bind(window);
+    const origClear = window.clearTimeout.bind(window);
+    window.setTimeout = function(fn, ms, ...args) {
+      const id = origSet(fn, ms, ...args);
+      const name = typeof fn === 'function' ? (fn.name || fn.toString().slice(0, 40)) : String(fn);
+      if (name.includes('updateFocusBanner')) window.__focusTimers.set(id, name);
+      return id;
+    };
+    window.clearTimeout = function(id) { window.__focusTimers.delete(id); return origClear(id); };
+  });
+  await page.goto('/');
+  await page.locator('#msg-name').fill('Focus A');
+  await page.locator('#b-msg-setup').click();
+  await expect(page.locator('#msg-main')).toBeVisible();
+
+  // Enable focus mode — this is what schedules the recurring self-rescheduling timer.
+  await page.locator('#msg-input').fill('/focus 30');
+  await page.locator('#msg-input').press('Enter');
+  await expect.poll(() => page.evaluate(() => window.__focusTimers.size)).toBe(1);
+
+  // Create and finish setup for a second, fresh account (focus mode off by default there).
+  await page.locator('#msg-input').fill('/settings');
+  await page.locator('#msg-input').press('Enter');
+  await page.locator('[data-action="add-account"]').click();
+  const namePrompt = page.locator('dialog[aria-labelledby]');
+  await namePrompt.locator('.modal-input').fill('Focus B');
+  await namePrompt.locator('[value="ok"]').click();
+  const avatarPrompt = page.locator('dialog[aria-labelledby]');
+  await avatarPrompt.locator('[value="ok"]').click();
+  if (await page.locator('#msg-setup').isVisible().catch(() => false)) {
+    await page.locator('#msg-name').fill('Focus B');
+    await page.locator('#b-msg-setup').click();
+    await expect(page.locator('#msg-main')).toBeVisible();
+  }
+
+  // The switch to account B should have run account A's cleanup, clearing its focus timer.
+  const remaining = await page.evaluate(() => window.__focusTimers.size);
+  expect(remaining, 'the old account\'s focus-banner timer should be cleared, not left running').toBe(0);
+});
