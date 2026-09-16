@@ -5717,31 +5717,21 @@ async function initMessenger(dbName) {
     };
   }
 
-  // ===== Setup or Load =====
-  // DELIBERATELY a function, invoked at the very END of initMessenger (grep "_boot()").
-  // Running this inline here was a Temporal Dead Zone crash: renderContacts() reads
-  // _activeFolder/_activeLabel/_contactSort/_contactFilter/_drafts/activeContact, every one of
-  // them a `let` declared FURTHER DOWN this function. The first access threw ReferenceError,
-  // so on any load with an existing identity boot aborted at its first line and everything
-  // after it — including startPolling() — never ran: a returning user saw an empty contact
-  // list and received no messages at all. It only worked in the session that created the
-  // identity, which is why every E2E passed (they all start from a fresh identity).
-  // This is the SECOND occurrence of this class here; see the _perf note near the top.
-  // Keep boot last, and keep it a function: that is what makes the ordering safe rather than
-  // lucky. tests/e2e/smoke.spec.js guards both symptoms.
-  async function _boot() {
-  const hasId = await loadIdentity();
-  if (hasId) {
-    // Scope the outbox to this account before any peer activity. Without this,
-    // pending messages from account A remain in _outbox when switching to account B
-    // and could be delivered under B's identity to a shared contact.
-    _outboxKey = 'brz-outbox-' + myId;
-    _outbox.clear();
-    _restoreOutbox();
-    _DOM.get('msg-setup').classList.add('hidden');
-    _DOM.get('msg-main').classList.remove('hidden');
-    _DOM.get('msg-input-bar').classList.remove('hidden');
-    _DOM.get('msg-my-name').textContent = myName;
+  // Everything a live session needs regardless of HOW identity became available (an
+  // existing identity loaded by _boot(), or a brand-new one just created by the setup
+  // form) — extracted for the exact same reason as _registerMessengerCleanup() just
+  // above: this is the FOURTH instance this session of the "duplicate boot path, one
+  // copy incomplete" meta-pattern. Before this fix, a freshly-created identity's first
+  // live session never ran loadSettings(), _updateFocusBanner(), _refreshDeviceRole(),
+  // _loadRetryQueue(), stale-session pruning, checkRemoteWipe(), wallpaper restore, or
+  // short-ID display/copy — and, most seriously, never registered the
+  // enforceRetentionPolicy()/pruneAuditLog() maintenance intervals, so a disappearing-
+  // messages retention policy silently did not self-enforce for that account's entire
+  // first session (until the user switched accounts and back, which runs _boot()'s
+  // `if (hasId)` branch and registers them for the first time). Found by diffing _boot()
+  // against the setup-completion handler line-by-line, the same method that found the
+  // cleanup-registration gap.
+  async function _startLiveSession() {
     // v3.3: Show human-readable short ID
     const shortIdEl = _DOM.get('msg-short-id');
     if (shortIdEl) {
@@ -5749,15 +5739,6 @@ async function initMessenger(dbName) {
       shortIdEl.onclick = () => { navigator.clipboard?.writeText(myAlias ? '@' + myAlias : myShortId); showToast(t('toastIdCopied'), 'info'); };
     }
     await renderContacts();
-    startPresence();
-    startPolling();
-    if (Notification && Notification.permission === 'default') {
-      // v3.1: Defer notification permission to first conversation open (better UX)
-      // Don't request on page load — wait until user is engaged
-    }
-    initTurn();
-    initPushNotifications();
-    initSigning(); // v3.3: Ed25519 message signing
     // v3.3: Enterprise features
     await loadSettings();
     _updateFocusBanner(); // focus mode survives a reload — show it, or silence looks like "no messages"
@@ -5843,6 +5824,53 @@ async function initMessenger(dbName) {
     if (savedWallpaper && (/^#[0-9a-fA-F]{3,6}$/.test(savedWallpaper) || /^(?:linear|radial)-gradient\([^"'<>]*\)$/.test(savedWallpaper))) {
       _DOM.get('msg-messages').style.background = savedWallpaper;
     }
+  }
+  // Auto-open settings from URL (?settings — PWA manifest "Settings" shortcut), shared by
+  // both boot paths so it fires regardless of which one is reached. Kept separate from
+  // _startLiveSession() (rather than folded into it) because it must run AFTER add/join
+  // URL-param processing in both callers — same relative order _boot() always used.
+  function _openSettingsFromUrl() {
+    if (P.has('settings')) {
+      const input = _DOM.get('msg-input');
+      if (input) { input.value = '/settings'; input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' })); }
+    }
+  }
+
+  // ===== Setup or Load =====
+  // DELIBERATELY a function, invoked at the very END of initMessenger (grep "_boot()").
+  // Running this inline here was a Temporal Dead Zone crash: renderContacts() reads
+  // _activeFolder/_activeLabel/_contactSort/_contactFilter/_drafts/activeContact, every one of
+  // them a `let` declared FURTHER DOWN this function. The first access threw ReferenceError,
+  // so on any load with an existing identity boot aborted at its first line and everything
+  // after it — including startPolling() — never ran: a returning user saw an empty contact
+  // list and received no messages at all. It only worked in the session that created the
+  // identity, which is why every E2E passed (they all start from a fresh identity).
+  // This is the SECOND occurrence of this class here; see the _perf note near the top.
+  // Keep boot last, and keep it a function: that is what makes the ordering safe rather than
+  // lucky. tests/e2e/smoke.spec.js guards both symptoms.
+  async function _boot() {
+  const hasId = await loadIdentity();
+  if (hasId) {
+    // Scope the outbox to this account before any peer activity. Without this,
+    // pending messages from account A remain in _outbox when switching to account B
+    // and could be delivered under B's identity to a shared contact.
+    _outboxKey = 'brz-outbox-' + myId;
+    _outbox.clear();
+    _restoreOutbox();
+    _DOM.get('msg-setup').classList.add('hidden');
+    _DOM.get('msg-main').classList.remove('hidden');
+    _DOM.get('msg-input-bar').classList.remove('hidden');
+    _DOM.get('msg-my-name').textContent = myName;
+    startPresence();
+    startPolling();
+    if (Notification && Notification.permission === 'default') {
+      // v3.1: Defer notification permission to first conversation open (better UX)
+      // Don't request on page load — wait until user is engaged
+    }
+    initTurn();
+    initPushNotifications();
+    initSigning(); // v3.3: Ed25519 message signing
+    await _startLiveSession();
     renderAccountTabs();
     // Update account name in accounts list
     const accs = getAccounts();
@@ -5870,10 +5898,7 @@ async function initMessenger(dbName) {
     // Auto-open settings from URL (?settings — PWA manifest "Settings" shortcut).
     // manifest.json advertised this shortcut with nothing on the boot path ever reading the
     // param, so long-pressing the installed app icon → Settings silently did nothing.
-    if (P.has('settings')) {
-      const input = _DOM.get('msg-input');
-      if (input) { input.value = '/settings'; input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' })); }
-    }
+    _openSettingsFromUrl();
   } else {
     _DOM.get('msg-setup').classList.remove('hidden');
     _DOM.get('msg-main').classList.add('hidden');
@@ -5894,12 +5919,19 @@ async function initMessenger(dbName) {
     startPolling();
     initTurn();
     initPushNotifications();
+    initSigning(); // fallback for API-less setups; createIdentity() covers the normal case
+    // Same omission class as the cleanup-registration gap below, found by the same
+    // line-by-line diff against _boot()'s `if (hasId)` branch: without this call a
+    // freshly-created identity's first live session never ran loadSettings(),
+    // _refreshDeviceRole(), short-ID display, or — most importantly — ever registered
+    // the enforceRetentionPolicy()/pruneAuditLog() maintenance intervals. See
+    // _startLiveSession()'s own header comment (above _boot()) for the full account.
+    await _startLiveSession();
     // A freshly-created identity's boot never runs _boot()'s `if (hasId)` branch (that
     // check is false for it), so without this call _messengerCleanup stayed null for
     // this account's entire first session: the first switch AWAY from it found nothing
     // to call and left every _ac-scoped listener attached forever.
     _registerMessengerCleanup();
-    initSigning(); // fallback for API-less setups; createIdentity() covers the normal case
     // /keywrap is opt-in and off by default — surface it once, right after setup,
     // instead of relying on the user to discover the command themselves.
     if (!_atRestIsWrapped(await dbGet('identity', 'keys'))) {
@@ -5919,6 +5951,7 @@ async function initMessenger(dbName) {
     }
     // Auto-join group
     if (joinToken) await processJoinToken(joinToken);
+    _openSettingsFromUrl();
   });
   // Enter on name field → move focus to alias (matches enterkeyhint="next")
   _DOM.get('msg-name')?.addEventListener('keydown', (e) => {

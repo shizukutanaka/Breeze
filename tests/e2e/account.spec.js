@@ -175,3 +175,36 @@ test('switching away from a freshly-created account does not leak its event list
       .toBeLessThanOrEqual((before[type] || 0) + 2);
   }
 });
+
+// _boot()'s `if (hasId)` branch and the setup-completion handler are two independent code
+// paths reaching the same "live session" state — the exact duplication that caused the
+// _messengerCleanup leak above. Diffing them line-by-line after that fix turned up a FOURTH
+// instance of the pattern: a brand-new identity's first live session never ran loadSettings(),
+// _refreshDeviceRole(), short-ID display/copy, or — most seriously — ever registered the
+// enforceRetentionPolicy()/pruneAuditLog() maintenance setInterval()s, so a disappearing-
+// messages retention policy silently did not self-enforce until the user switched accounts
+// and back. Both paths now call a shared _startLiveSession(). This test asserts two of the
+// cheapest-to-observe symptoms from outside the closure: the short-ID element (unset before
+// the fix — textContent stayed whatever the static HTML shipped, and onclick was never wired)
+// and the audit log's "Session started" entry (never written on a first session before the fix).
+test('a freshly-created identity gets its short-ID display and a "Session started" audit entry on its first session', async ({ page }) => {
+  await page.addInitScript(() => { try { localStorage.setItem('brz-consent', String(Date.now())); } catch {} });
+  await page.goto('/');
+  await page.locator('#msg-name').fill('Fresh Session Check');
+  await page.locator('#b-msg-setup').click();
+  await expect(page.locator('#msg-main')).toBeVisible();
+
+  const shortId = page.locator('#msg-short-id');
+  await expect(shortId).not.toHaveText('');
+  const hasOnclick = await shortId.evaluate((el) => typeof el.onclick === 'function');
+  expect(hasOnclick, 'short-ID element should have its copy-to-clipboard handler wired').toBe(true);
+
+  const auditDetails = await page.evaluate(() => new Promise((resolve) => {
+    const req = indexedDB.open('breeze-messenger', 5);
+    req.onsuccess = () => {
+      req.result.transaction('audit', 'readonly').objectStore('audit').getAll()
+        .onsuccess = (e) => resolve((e.target.result || []).map((r) => r.detail));
+    };
+  }));
+  expect(auditDetails.some((d) => d?.startsWith('Session started:'))).toBe(true);
+});

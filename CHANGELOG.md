@@ -1,5 +1,23 @@
 # Changelog
 
+## A fourth instance of the same duplicate-boot-path pattern: fresh accounts never self-enforced their retention policy (branch claude/nice-ride-T6yb0, 2026-09-16)
+
+819 vitest unchanged; Playwright E2E 57 → **58**; `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation), `tests/e2e/account.spec.js`.
+
+After fixing the `_messengerCleanup` listener leak (below), the obvious next question — the same one already asked three times this session about this exact shape of bug — was whether `_boot()`'s `if (hasId)` branch and the setup-completion click handler had *any other* divergence beyond the one already found. Diffed both bodies line-by-line rather than trusting that one fix closed the whole class.
+
+It didn't. Eleven more steps existed in `_boot()`'s branch with no counterpart in the setup handler. Most are genuine no-ops for a truly brand-new identity (there is nothing to prune, no scheduled messages to recover, no remote-wipe signal that could exist yet) and were left alone rather than padded in for their own sake. Three are real, user-visible defects:
+
+- **`enforceRetentionPolicy()` / `pruneAuditLog()` and their `setInterval` maintenance registrations were never registered for a freshly-created account's first live session.** A disappearing-messages retention policy — the whole point of setting one — silently did not self-enforce for that account's entire first session, however long it lasted, until the user happened to switch accounts and back (which runs `_boot()`'s `if (hasId)` branch and registers the intervals for the first time). Privacy-relevant and completely silent: nothing errors, nothing logs, the messages that were supposed to disappear simply don't, for as long as the session stays open.
+- **`#msg-short-id` (the human-readable ID with click-to-copy) was never populated or wired with its `onclick` on a fresh account's first session** — visible in the UI as a blank element, and clicking it did nothing, until the same account/switch-and-back workaround.
+- **`auditLog('auth', 'Session started: ...')` was never written** for a first session, leaving a gap in the audit trail exactly where a "how did this account's history begin" review would look first.
+
+(The remaining un-ported steps — `loadSettings()`, `_updateFocusBanner()`, `_refreshDeviceRole()`, `_loadRetryQueue()`, stale Double-Ratchet session pruning, scheduled-message recovery, `checkRemoteWipe()`, wallpaper restore, and the `?settings` URL-shortcut handler — are all genuinely idempotent no-ops on a brand-new identity's first run, but were folded into the same shared function anyway: leaving them duplicated-by-omission is exactly the trap that caused this bug in the first place, and the cost of including them is zero since they no-op safely.)
+
+Fixed the same way as the listener leak: extracted the shared logic into one function, `_startLiveSession()`, called from both `_boot()`'s existing-identity branch and the setup-completion handler, plus a small `_openSettingsFromUrl()` helper kept separate because it must run after URL add/join processing in both callers. Verified live in real Chromium (not from reading the code): before the fix, a fresh account's `#msg-short-id` stayed empty and its audit log held only the "Identity created" entry; after, the short ID displays immediately and a "Session started" entry is written. New E2E test asserts both and fails against the pre-fix build with exactly that empty-string/missing-entry symptom.
+
+---
+
 ## Every freshly-created account leaked its entire listener set on the first switch away from it (branch claude/nice-ride-T6yb0, 2026-09-16)
 
 819 vitest unchanged; Playwright E2E 56 → **57**; `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation), `tests/e2e/account.spec.js`.
