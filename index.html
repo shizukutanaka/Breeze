@@ -5622,6 +5622,101 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'rotateGroupKeyOnKickNotice'); }
   }
 
+  // Extracted to a named function, callable from BOTH boot paths below, rather than an
+  // inline assignment living inside just one of them. It used to be defined only inside
+  // _boot()'s `if (hasId)` branch — which runs on every boot EXCEPT the very first one
+  // for a brand-new identity (that path shows the setup screen and returns instead).
+  // A fresh account's setup completion (the click handler further down) duplicates
+  // _boot()'s startPresence()/startPolling()/etc. calls to reach the same live state,
+  // but never reached this assignment — so _messengerCleanup stayed null for that
+  // account's entire first session. The very first switch AWAY from a just-created
+  // account found it null, skipped calling it entirely, and left every _ac-scoped
+  // listener (wake lock, panic-wipe, idle-lock, presence/poll visibilitychange, the
+  // account-switcher click handler) attached forever — E2E-confirmed via a real CDP
+  // DOMDebugger.getEventListeners() count: document-level listeners for these exact
+  // event types grew with every switch away from a freshly-created account, never
+  // shrinking back down, while switching between accounts that had ALREADY been
+  // through one full "existing identity" boot cleaned up correctly every time.
+  function _registerMessengerCleanup() {
+    _messengerCleanup = () => {
+      _ac.abort(); // Remove all event listeners registered with signal
+      _intervals.forEach(i => clearInterval(i));
+      // These are setTimeout (not setInterval) calls so _intervals doesn't catch them.
+      // Without clearing them, each fires after account switch and spawns a ghost timer
+      // chain in the old context: double-polling the relay, double-writing presence, and
+      // (for _retryTimer) retrying old messages under the new account's identity.
+      if (_presenceTimer) { clearTimeout(_presenceTimer); _presenceTimer = null; }
+      if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null; }
+      if (_retryTimer) { clearTimeout(_retryTimer); _retryTimer = null; }
+      if (_typingTimeout) { clearTimeout(_typingTimeout); _typingTimeout = null; }
+      // Discard this account's in-memory outbox. The Map is module-level and persists
+      // across initMessenger calls; without clearing it here, pending P2P messages from
+      // the old account would be sent under the new account's identity if both accounts
+      // share a contact by public key. Messages were already persisted to _outboxKey.
+      _outbox.clear();
+      Object.values(peers).forEach(p => {
+        if (p._healthTimer) clearInterval(p._healthTimer);
+        // Leak fix: pc.close() does NOT fire connectionstatechange (per spec), so the
+        // state-change handler that normally clears _heartbeat never runs on teardown.
+        // Clear it here too — otherwise every peer's heartbeat interval keeps firing
+        // against a closed channel after an account switch, pinning the old peer object.
+        if (p._heartbeat) clearInterval(p._heartbeat);
+        try { p.pc?.close(); } catch(e) { _dbg(e); }
+      });
+      // Clear stale peer entries: connectPeer guards on peers[pubB64]?.pc to avoid
+      // duplicate connections — keeping closed RTCPeerConnection objects would block
+      // new connections from being established after account switch.
+      for (const key in peers) delete peers[key];
+      // Clear group typing state to prevent memory leak on account switch
+      for (const groupId in _groupTypingState) { delete _groupTypingState[groupId]; }
+      // Stop any in-progress voice recording to release the microphone on account switch.
+      // Null out onstop first: without it the async handler fires with the old account's
+      // activeContact in its closure and attempts to send the aborted recording.
+      // MediaRecorder.stream (standard property) gives direct track access so we can
+      // release the mic without depending on the onstop cleanup path.
+      if (_mediaRecorder && _mediaRecorder.state === 'recording') {
+        try {
+          const mrStream = _mediaRecorder.stream;
+          _mediaRecorder.onstop = null;
+          _mediaRecorder.stop();
+          if (mrStream) mrStream.getTracks().forEach(t => t.stop());
+        } catch(e) { _dbg(e); }
+      }
+      if (_recTimer) { clearInterval(_recTimer); _recTimer = null; }
+      // End any active voice/video call to release camera/mic and close the peer connection
+      if (_callState && _callState !== 'idle') {
+        try { endCall(); } catch(e) { _dbg(e); }
+      }
+      // Unsubscribe push notifications for this account so the next account on this
+      // device does not receive push payloads (which may contain message snippets) for
+      // the previous account's userId. Best-effort: not awaited.
+      if (API && myId) {
+        navigator.serviceWorker?.ready
+          .then(r => r.pushManager?.getSubscription())
+          .then(sub => { if (sub) postAPIRaw('/push/unsubscribe', { userId: myId, endpoint: sub.endpoint }).catch(() => {}); })
+          .catch(() => {});
+      }
+      // Save unread count for cross-account badge
+      try {
+        const activeId = getActiveAccountId();
+        const contacts = document.querySelectorAll('.cbadge');
+        let totalUnread = 0;
+        contacts.forEach(b => { totalUnread += parseInt(b.textContent) || 0; });
+        _crossAccountUnread[activeId] = totalUnread;
+        localStorage.setItem('brz-cross-unread', JSON.stringify(_crossAccountUnread));
+      } catch(e) { _dbg(e); }
+      // Null out cryptographic key material so pending callbacks from this account
+      // cannot sign or decrypt under the old identity after the switch.
+      _signingKey = null; myKeys = null;
+      // Clear the in-memory replay cache: msgId entries from this account's sessions
+      // should not be used to deduplicate incoming messages for the next account.
+      _replayCache._map.clear();
+      // Clear incomplete binary file transfers — their chunk buffers belong to this
+      // account's peer sessions and must not survive into the next account's context.
+      for (const id in _fileChunks) delete _fileChunks[id];
+    };
+  }
+
   // ===== Setup or Load =====
   // DELIBERATELY a function, invoked at the very END of initMessenger (grep "_boot()").
   // Running this inline here was a Temporal Dead Zone crash: renderContacts() reads
@@ -5755,84 +5850,12 @@ async function initMessenger(dbName) {
     if (activeAcc && activeAcc.name !== myName) { activeAcc.name = myName; saveAccounts(accs); renderAccountTabs(); }
     const _initTime = _perf.measure('initMessenger:done', 'initMessenger');
     if (_initTime) _dbg(null, `initMessenger: ${Math.round(_initTime.duration)}ms`);
-    // Register cleanup for account switching
-    _messengerCleanup = () => {
-      _ac.abort(); // Remove all event listeners registered with signal
-      _intervals.forEach(i => clearInterval(i));
-      // These are setTimeout (not setInterval) calls so _intervals doesn't catch them.
-      // Without clearing them, each fires after account switch and spawns a ghost timer
-      // chain in the old context: double-polling the relay, double-writing presence, and
-      // (for _retryTimer) retrying old messages under the new account's identity.
-      if (_presenceTimer) { clearTimeout(_presenceTimer); _presenceTimer = null; }
-      if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null; }
-      if (_retryTimer) { clearTimeout(_retryTimer); _retryTimer = null; }
-      if (_typingTimeout) { clearTimeout(_typingTimeout); _typingTimeout = null; }
-      // Discard this account's in-memory outbox. The Map is module-level and persists
-      // across initMessenger calls; without clearing it here, pending P2P messages from
-      // the old account would be sent under the new account's identity if both accounts
-      // share a contact by public key. Messages were already persisted to _outboxKey.
-      _outbox.clear();
-      Object.values(peers).forEach(p => {
-        if (p._healthTimer) clearInterval(p._healthTimer);
-        // Leak fix: pc.close() does NOT fire connectionstatechange (per spec), so the
-        // state-change handler that normally clears _heartbeat never runs on teardown.
-        // Clear it here too — otherwise every peer's heartbeat interval keeps firing
-        // against a closed channel after an account switch, pinning the old peer object.
-        if (p._heartbeat) clearInterval(p._heartbeat);
-        try { p.pc?.close(); } catch(e) { _dbg(e); }
-      });
-      // Clear stale peer entries: connectPeer guards on peers[pubB64]?.pc to avoid
-      // duplicate connections — keeping closed RTCPeerConnection objects would block
-      // new connections from being established after account switch.
-      for (const key in peers) delete peers[key];
-      // Clear group typing state to prevent memory leak on account switch
-      for (const groupId in _groupTypingState) { delete _groupTypingState[groupId]; }
-      // Stop any in-progress voice recording to release the microphone on account switch.
-      // Null out onstop first: without it the async handler fires with the old account's
-      // activeContact in its closure and attempts to send the aborted recording.
-      // MediaRecorder.stream (standard property) gives direct track access so we can
-      // release the mic without depending on the onstop cleanup path.
-      if (_mediaRecorder && _mediaRecorder.state === 'recording') {
-        try {
-          const mrStream = _mediaRecorder.stream;
-          _mediaRecorder.onstop = null;
-          _mediaRecorder.stop();
-          if (mrStream) mrStream.getTracks().forEach(t => t.stop());
-        } catch(e) { _dbg(e); }
-      }
-      if (_recTimer) { clearInterval(_recTimer); _recTimer = null; }
-      // End any active voice/video call to release camera/mic and close the peer connection
-      if (_callState && _callState !== 'idle') {
-        try { endCall(); } catch(e) { _dbg(e); }
-      }
-      // Unsubscribe push notifications for this account so the next account on this
-      // device does not receive push payloads (which may contain message snippets) for
-      // the previous account's userId. Best-effort: not awaited.
-      if (API && myId) {
-        navigator.serviceWorker?.ready
-          .then(r => r.pushManager?.getSubscription())
-          .then(sub => { if (sub) postAPIRaw('/push/unsubscribe', { userId: myId, endpoint: sub.endpoint }).catch(() => {}); })
-          .catch(() => {});
-      }
-      // Save unread count for cross-account badge
-      try {
-        const activeId = getActiveAccountId();
-        const contacts = document.querySelectorAll('.cbadge');
-        let totalUnread = 0;
-        contacts.forEach(b => { totalUnread += parseInt(b.textContent) || 0; });
-        _crossAccountUnread[activeId] = totalUnread;
-        localStorage.setItem('brz-cross-unread', JSON.stringify(_crossAccountUnread));
-      } catch(e) { _dbg(e); }
-      // Null out cryptographic key material so pending callbacks from this account
-      // cannot sign or decrypt under the old identity after the switch.
-      _signingKey = null; myKeys = null;
-      // Clear the in-memory replay cache: msgId entries from this account's sessions
-      // should not be used to deduplicate incoming messages for the next account.
-      _replayCache._map.clear();
-      // Clear incomplete binary file transfers — their chunk buffers belong to this
-      // account's peer sessions and must not survive into the next account's context.
-      for (const id in _fileChunks) delete _fileChunks[id];
-    };
+    // Register cleanup for account switching — see _registerMessengerCleanup's own
+    // header comment (above _boot()) for why this is a shared call, not an inline
+    // definition: the setup-completion path below duplicates the rest of this branch's
+    // effects but must reach the SAME registration, which it couldn't while this was
+    // only defined here.
+    _registerMessengerCleanup();
     // Auto-add contact from URL (?add=@alias or ?add=pubkey&name=X)
     const addKey = P.get('add');
     if (addKey && addKey !== myPubB64) {
@@ -5871,6 +5894,11 @@ async function initMessenger(dbName) {
     startPolling();
     initTurn();
     initPushNotifications();
+    // A freshly-created identity's boot never runs _boot()'s `if (hasId)` branch (that
+    // check is false for it), so without this call _messengerCleanup stayed null for
+    // this account's entire first session: the first switch AWAY from it found nothing
+    // to call and left every _ac-scoped listener attached forever.
+    _registerMessengerCleanup();
     initSigning(); // fallback for API-less setups; createIdentity() covers the normal case
     // /keywrap is opt-in and off by default — surface it once, right after setup,
     // instead of relying on the user to discover the command themselves.
