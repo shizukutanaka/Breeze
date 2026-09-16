@@ -10549,7 +10549,6 @@ async function initMessenger(dbName) {
       }
 
       showToast(t('toastRestoredReload'), 'success'); setTimeout(() => location.reload(), 1.5 * MS.SEC);
-      location.reload();
     } catch(e) { _dbg(e,'restore'); showToast(t('toastWrongPassphrase'), 'error'); }
   }
 
@@ -10863,7 +10862,7 @@ async function initMessenger(dbName) {
       }
       if (data.messages) for (const m of data.messages) await dbPut('messages', m);
       showToast(t('backupRestored'), 'success');
-      location.reload();
+      setTimeout(() => location.reload(), CONFIG.TOAST_DURATION_MS);
     } catch(e) { _dbg(e, 'restore'); showToast(t('backupWrongPass'), 'error'); }
   }
 

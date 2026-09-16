@@ -1,5 +1,17 @@
 # Changelog
 
+## Restoring a backup reloaded the page before its own confirmation toast could be read (branch claude/nice-ride-T6yb0, 2026-09-16)
+
+819 vitest unchanged; Playwright E2E 59 → **60**; `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation), `tests/e2e/backup.spec.js` (new file).
+
+Continuing the search for the same "two implementations, one stale" shape found five times already this session (each time across two separate functions), checked whether it also occurs *within* a single function — a leftover line from an earlier edit that nobody removed. `restoreBackup()` (the drag-drop / file-picker restore path) had `showToast(t('toastRestoredReload'), 'success'); setTimeout(() => location.reload(), 1.5 * MS.SEC);` immediately followed, on the very next line, by an unconditional `location.reload();` — a duplicate that fires before the delayed one ever gets a chance to. The established, correct pattern for this exact "show a toast, then reload" sequence already exists twice elsewhere in the file (the remote-wipe handler, the IDB-connection-lost handler) as a *single* delayed call — this function alone had grown a second, redundant, immediate one, defeating the delay's entire purpose: the "Restored! Reloading..." toast was on screen for well under half a second, not the intended 1.5 seconds.
+
+`restoreCloudBackup()` (the server-backed cloud restore) had the same user-facing symptom via a different root cause: no delay at all, just `showToast(...); location.reload();` back to back.
+
+Confirmed live before fixing, the same standard held throughout this session: drove the real backup/restore UI end-to-end (download a real encrypted backup via `/backup`, drag-drop it back onto the sidebar, submit the real passphrase prompt) and measured wall-clock time from the restore click to the page's actual navigation event. Pre-fix: 427-469ms. Post-fix: ~1.9s, matching the intended 1.5s delay plus real async decrypt/DB-write work. Fixed both functions to use the single-delayed-call pattern already established elsewhere in the file. New E2E test drives the identical real flow and fails against the pre-fix build with the same near-instant-reload symptom.
+
+---
+
 ## A fifth instance of the per-account timer/listener leak class: /focus mode left a zombie timer running after a switch (branch claude/nice-ride-T6yb0, 2026-09-16)
 
 819 vitest unchanged; Playwright E2E 58 → **59**; `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation), `tests/e2e/account.spec.js`.
