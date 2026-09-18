@@ -1,5 +1,20 @@
 # Changelog
 
+## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
+
+819 vitest unchanged; Playwright E2E 60 unchanged; `docs/ROADMAP.md`, `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation) — dead-code removal only, no runtime behavior change.
+
+CLAUDE.md's own crypto status table (checked into the repo, kept accurate all session) already documents X3DH v5 and key commitment (I16) as deployed with inline mirrors — but `docs/ROADMAP.md`, the security backlog most likely to steer a contributor's next move, still marked I1 (X3DH v5) and I16 (key commitment) "pending: wire into index.html". Checking one obviously-contradicted item against the code turned into checking every item in the P0/P1 security sprint, the same way the earlier billing/AI/translation documentation sweeps grew once the first contradiction was confirmed real.
+
+Verified each claim directly against the deployed code rather than trusting either document: **I1, I2, I3, I4, I15, I16, I17, I11 are all fully deployed** and were marked "pending"/"port pending" in ROADMAP.md regardless — a full P0/P1 security sprint's worth of already-shipped work invisible to anyone reading the roadmap. Two findings stood out:
+
+- **I15 (stop pre-encryption compression)** looked genuinely pending at first — `CONFIG.COMPRESS_MIN_BYTES` and an adaptive `compressMin` override (network-speed-based) are both very much present and referenced by the roadmap's own description. Reading `_encryptForRaw` directly (not just grepping for the config name) showed the real story: it hardcodes `compressed = false` with an explicit `// I15: do NOT compress before encrypting` comment — the fix *is* deployed, and `compressMin`/`COMPRESS_MIN_BYTES` are dead leftovers from before that fix landed, never read anywhere after being written. Removed both (kept `_adaptiveConfig`'s still-used `pollInterval`/`imageQuality` siblings, and the update methods' `compressMin` assignments, untouched otherwise).
+- **I7 (TTL on skipped message keys)** is the one item genuinely still pending, confirmed by the *absence* of a match rather than a positive hit: grepped every `skippedKeys` reference in index.html and found only count-based pruning (`MAX_SKIP`), no timestamp field or age check anywhere. Left this row, and the two sprint-summary sentences referencing it, as the sole accurate "pending" claims remaining in the whole document.
+
+Also corrected I3, I17, and I11's wording where they were half-right (real work done, but the specific "still pending" clause was stale) rather than wholly wrong. `bash validate.sh`, `npm test` (819), and the full Playwright suite (60 tests) all re-confirmed green — this cycle touched documentation plus one dead-config deletion, no wire/handshake logic changed.
+
+---
+
 ## Restoring a backup reloaded the page before its own confirmation toast could be read (branch claude/nice-ride-T6yb0, 2026-09-16)
 
 819 vitest unchanged; Playwright E2E 59 → **60**; `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation), `tests/e2e/backup.spec.js` (new file).

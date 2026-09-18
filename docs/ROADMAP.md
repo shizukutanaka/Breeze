@@ -18,15 +18,17 @@
 
 | ID | Item | Effort | Why now | Dep |
 |----|------|--------|---------|-----|
-| I1 | Authenticated X3DH — sign + verify the pre-key | S | Closes an **active first-contact MITM**; voids the premise every Signal proof needs (ePrint 2016/1013). Wire-versioned (v5) w/ v4 read path. | tests ✅ | ✅ **module + worker done**: `src/crypto/ratchet.js` (Ed25519 sign/verify SPK + x3dhInitiator/Responder DH1-4 + MITM-defense, `tests/x3dh.test.js`); worker `handlePreKeyUpload` verifies sig (G2); **pending**: wire into index.html init (browser-validated) |
-| I16 | Key commitment on AEAD (HKDF commitment tag) | S | AES-GCM isn't committing → "invisible salamanders" in group/sealed/multi-key paths (ePrint 2020/1456). | — | ✅ **done** in `src/crypto/ratchet.js` + `src/crypto/group.js` (cm tag + constant-time verify; also in group messages N2); port to index.html/sealed pending |
-| I15 | Stop pre-encryption compression (1:1 `encryptFor`) | S | CRIME/BREACH-class length leak; partly defeats the 256-B padding. Pure removal. | — | 🔜 module: `ratchet.js` `compressMin:Infinity` default (off); index.html wiring pending (docs/INTEGRATION.md §G4) |
+| I1 | Authenticated X3DH — sign + verify the pre-key | S | Closes an **active first-contact MITM**; voids the premise every Signal proof needs (ePrint 2016/1013). Wire-versioned (v5) w/ v4 read path. | tests ✅ | ✅ **fully deployed**: `src/crypto/ratchet.js` (Ed25519 sign/verify SPK + x3dhInitiator/Responder DH1-4 + MITM-defense, `tests/x3dh.test.js`); worker `handlePreKeyUpload` verifies sig (G2); **index.html**: inline mirror wired in, `CONFIG.X3DH_V5_ENABLED` default ON since v3.6.1, mirror-drift guarded (see `CLAUDE.md`) |
+| I16 | Key commitment on AEAD (HKDF commitment tag) | S | AES-GCM isn't committing → "invisible salamanders" in group/sealed/multi-key paths (ePrint 2020/1456). | — | ✅ **fully deployed** in `src/crypto/ratchet.js` + `src/crypto/group.js` (cm tag + constant-time verify; also in group messages N2); **index.html**: inline `_keyCommit`/`_cmOk` verify-if-present on both 1:1 and group/sealed paths, mirror-drift guarded (see `CLAUDE.md`) |
+| I15 | Stop pre-encryption compression (1:1 `encryptFor`) | S | CRIME/BREACH-class length leak; partly defeats the 256-B padding. Pure removal. | — | ✅ **fully deployed**: module `ratchet.js` (`compressMin: Infinity` default, off); **index.html**: `_encryptForRaw` hardcodes `compressed = false` — new messages always send uncompressed (flags bit0 = 0), 256-byte-boundary padding via `CONFIG.MSG_PAD_BOUNDARY`; the receive path still decompresses legacy flag-set messages for backward compat |
 | I7 | Bound **+ time-expire** skipped-key cache | S | Lingering skipped keys = FS leak + DoS (ePrint 2018/1037). Count bound already exists; add TTL. | — | ✅ **done** in `src/crypto/ratchet.js` (1:1 TTL) + `src/crypto/group.js` (group TTL, both configurable); port to index.html pending |
 | I20 | Known-answer test vectors (RFC/NIST/Wycheproof) | S–M | Catches HKDF-info/nonce/tag glue bugs incl. the I15/I16 class; slots into the new harness. | tests ✅ | ✅ **done** — `tests/kat.test.js` (HKDF RFC 5869, X25519 RFC 7748, AES-256-GCM NIST + tamper-reject) |
 
 **P0 = one focused security sprint.** All S-effort, all unit-testable against
 `src/crypto/ratchet.js` + `tests/`, and I15/I16/I7/I20 don't change the handshake.
-I1 is wire-versioned with a v4 read path, so it's safe to roll out.
+I1, I16, I15, I20 are now deployed (I1 wire-versioned with a v4 read path); **I7 (TTL
+on skipped keys) is the only P0 item still pending an index.html port** — the count
+bound (`MAX_SKIP`) is deployed, but skipped keys never expire by age.
 
 ---
 
@@ -34,9 +36,9 @@ I1 is wire-versioned with a v4 read path, so it's safe to roll out.
 
 | ID | Item | Effort | Why | Dep |
 |----|------|--------|-----|-----|
-| I2 | Group forward secrecy — ratchet chain **+ signing** key | S–M | One leak exposes all group msgs today (arXiv 2301.07045). | I20 | ✅ **done** in `src/crypto/group.js` (chain ratchet + I16 commitment + N2 per-msg Ed25519 auth + I7 TTL, `tests/group.test.js`); signing-key ratchet (auth FS) blocked by WebCrypto Ed25519 key-derivation; index.html port pending |
-| I3 | Group PCS — epoch bump + redistribute on kick/leave | M | Removed members keep decrypting today (ePrint 2017/666). | I2 | ✅ **done** in `src/crypto/group.js` + worker (G3): `rotateEpoch` + epoch gate + `handleGroupKick` bumps epoch; kicked-member-blocked test; index.html client-side redistribution pending |
-| I4 | Encrypt identity/signing keys at rest (app-lock) | M | Plaintext JWK in IndexedDB → XSS/forensics (ePrint 2024/887). | — | ✅ **done** in `src/crypto/atrest.js` (PBKDF2≥600k, btoa/atob browser-compat, wrapJWK/unwrapJWK/migrate/zeroBuffer, +10 tests); index.html loadIdentity port pending |
+| I2 | Group forward secrecy — ratchet chain **+ signing** key | S–M | One leak exposes all group msgs today (arXiv 2301.07045). | I20 | ✅ **chain ratchet fully deployed** in `src/crypto/group.js` + index.html (`CONFIG.GROUP_RATCHET_V5` default ON since v3.6.1: hash ratchet + I16 commitment + I7-style skip bound, N-party AND-rule negotiation holds a group on v3 whenever any member is legacy); signing-key ratchet (auth FS) still blocked by WebCrypto Ed25519 key-derivation, not implemented anywhere |
+| I3 | Group PCS — epoch bump + redistribute on kick/leave | M | Removed members keep decrypting today (ePrint 2017/666). | I2 | ✅ **fully deployed** in `src/crypto/group.js` + worker (G3) + index.html: `rotateEpoch` + epoch gate + `handleGroupKick` bumps epoch; client-side redistribution and epoch-mismatch rejection wired in (`p.ep` check); kicked-member-blocked test |
+| I4 | Encrypt identity/signing keys at rest (app-lock) | M | Plaintext JWK in IndexedDB → XSS/forensics (ePrint 2024/887). | — | ✅ **fully deployed** in `src/crypto/atrest.js` (PBKDF2≥600k, btoa/atob browser-compat, wrapJWK/unwrapJWK/migrate/zeroBuffer, +10 tests); **index.html**: `loadIdentity()`/`_atRestIsWrapped()` wired in, opt-in via `/keywrap` (off by default — surfaced once via the `keywrapSuggestion` toast on first boot) |
 | C8 | Web-app integrity ("Code Verify" / SW hash-pin) | M | Biggest *unaddressed* web-E2EE threat: host can serve malicious JS. SW is the pin point. | — |
 | C13 | QR **scan-to-verify** as default ceremony | S–M | Human out-of-band channel closes the I1 MITM gap *before* key transparency. | — |
 | I19 | WebRTC: relay-only privacy default + STUN self-host | S | srflx still leaks public IP to peer by default (arXiv 2510.16168). | — |
@@ -51,7 +53,7 @@ I1 is wire-versioned with a v4 read path, so it's safe to roll out.
 | I6 | Length-bucketed padding + optional cover traffic | S–M | Flat 256-B pad leaks size buckets (Loopix). | I15 | 🟡 **padding done**: `ratchet.js` already pads to 256-byte-aligned buckets; cover traffic (fake messages) is client-side |
 | C10 | Durable Objects (rate-limit/presence/signaling) + WebSocket push | M–L | Fixes the per-isolate `_rateLimitMap` undercount **and** the KV write-budget ceiling; replaces polling. | — |
 | C12 | Encrypted, preview-less push (RFC 8291) | S–M | Push service sees ciphertext only; no message preview. | — | ✅ **done**: `encryptPushPayload` (RFC 8291 P-256 ECDH + HKDF + AES-128-GCM) + `buildVapidJwt` (ES256) in `_worker.js`; `sendPushToUser` now encrypts; 15 tests in `tests/push.test.js` (round-trip + signature verify) |
-| I17 | Verifiable abuse reporting (Hecate / AMF franking) | M–L | Consensual reporting, no backdoor (USENIX'22). | I16 | ✅ **core + relay done**: `src/crypto/franking.js` + worker `/api/abuse/record`+`/api/abuse/report` (end-to-end test in `tests/worker.test.js`); sealed-sender sender-binding (Hecate asymmetric) + client send/report UI pending |
+| I17 | Verifiable abuse reporting (Hecate / AMF franking) | M–L | Consensual reporting, no backdoor (USENIX'22). | I16 | ✅ **fully deployed** (client + relay): `src/crypto/franking.js` + worker `/api/abuse/record`+`/api/abuse/report` (end-to-end test in `tests/worker.test.js`); **index.html**: inline `_frankKey`/`_frankCommit` + report UI, relay verifies via `hmacVerifyFrank` — deliberately derives `Kf` from `msgKey` (`HKDF(msgKey,0³²,'breeze-frank',32)`) instead of the reference's random draw, so only the opaque `frankId` goes on the wire; **still open**: sealed-sender sender-binding (Hecate asymmetric) — symmetric franking stops forged reports but can't bind a malicious sender, who can just skip the report call |
 | I18 | Anonymous anti-abuse tokens (Privacy Pass/VOPRF) | M–L | Battery-friendly, unlinkable vs PoW. | — |
 | C11 | Background Sync + persistent storage | S | Reliable offline send; no keystore eviction. | — |
 
@@ -63,7 +65,7 @@ I1 is wire-versioned with a v4 read path, so it's safe to roll out.
 |----|------|--------|-----|-----|
 | I8 / I9 | PQXDH handshake → Triple-Ratchet (hybrid PQ) | L | Harvest-now-decrypt-later; recurring-KEM PCS. Needs vetted WASM ML-KEM. | I1 |
 | I10 | Keep PQ auth deniable; soften deniability claims | S(doc)/L | Signature PQ-auth kills deniability (ePrint 2025/1090). | I8 |
-| I11 | Key-transparency log (akd/CONIKS-lite on Worker) | M–L | Automated MITM detection beyond TOFU. | I1 | 🟡 **module done**: worker logs SHA-256 IK history (`ktlog:`), returns on fetch; `src/crypto/ktlog.js` (`hashIK/parseLog/checkRollover/mergeLog`, 25 tests) for client-side rollover detection; full hash-chained log + index.html wiring pending |
+| I11 | Key-transparency log (akd/CONIKS-lite on Worker) | M–L | Automated MITM detection beyond TOFU. | I1 | ✅ **fully deployed**: worker logs SHA-256 IK history (`ktlog:`), returns on fetch; `src/crypto/ktlog.js` (`hashIK/parseLog/checkRollover/mergeLog`, 25 tests); **index.html**: inline `_auditKeyHistory` (full hash-chain `verifyChain` tamper check + `checkRollover`, verdict `tampered`>`rolled`>`new`>`ok`) wired into `initSessionV5Initiator` (warns, doesn't block) and the manual `/verify` KT audit — a tampered chain is never pinned |
 | I12 | Multi-device (Device Group Key + cross-signing) | L | Most-requested; relay never sees DGK. | C9, I4 |
 | C9 | Encrypt message store at rest + CRDT sync | M–L | Extends at-rest beyond keys; enables I12. | I4 |
 | I13 | PIN-based encrypted backup (SVR-lite) | M | Recovery (today: lose device = lose identity). | I4 |
@@ -95,12 +97,12 @@ I18 ──► C16
 **I1 + I16 + I15 + I7 + I20.** All small, all land under the existing test harness,
 and together they close the active MITM (I1), the invisible-salamanders exposure (I16),
 the compression side-channel (I15), and the skipped-key FS leak (I7) — with KAT vectors
-(I20) guarding the lot. I15/I16/I7/I20 are non-wire-breaking; I1 is wire-versioned with
-a v4 read path.
+(I20) guarding the lot. **Status: I1, I16, I15, I20 are deployed; I7 (TTL on skipped
+keys) is the only remaining item**, non-wire-breaking, module-side done.
 
 ## Sprint 2 (groups + at-rest, ~1–2 weeks)
-**I2 + I3 + I4**, then **C13** (QR verify) and **I19** (relay-only default) as quick
-UX/privacy wins.
+**I2 + I3 + I4** — **all three now deployed** (see P1 table above). **C13** (QR verify)
+and **I19** (relay-only default) remain as quick UX/privacy wins, not yet started.
 
 ## Then
 Backend correctness/cost (**C10**), metadata hardening (**I5/I6/C12**), and the

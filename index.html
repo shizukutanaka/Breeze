@@ -1267,8 +1267,6 @@ const CONFIG = {
   RECONNECT_BASE_MS: 1000,          // initial reconnect delay
   RECONNECT_MAX_MS: 60000,          // max reconnect delay
   RECONNECT_MAX_ATTEMPTS: 8,        // max attempts before giving up
-  // v3.5: Spec — Message compression threshold
-  COMPRESS_MIN_BYTES: 256,          // compress messages larger than this
   // Business-grade: block dangerous file types
   BLOCKED_EXTENSIONS: ['.exe', '.bat', '.cmd', '.com', '.msi', '.scr', '.pif', '.vbs', '.vbe', '.js', '.jse', '.wsf', '.wsh', '.ps1', '.reg', '.inf', '.hta', '.cpl', '.msc', '.jar', '.app', '.action', '.command', '.workflow'],
   EMOJI_NAMES: { '👍': 'thumbs up', '❤️': 'heart', '😂': 'laughing', '😮': 'surprised', '😢': 'sad', '🔥': 'fire' },
@@ -2509,22 +2507,18 @@ let _networkType = 'unknown'; // 4g, 3g, wifi, ethernet, etc.
 let _effectiveType = '4g';
 // Adaptive overrides — mutable runtime values that shadow CONFIG defaults
 const _adaptiveConfig = {
-  compressMin: CONFIG.COMPRESS_MIN_BYTES,
   pollInterval: CONFIG.POLL_UNREAD_MS,
   imageQuality: 0.85,
   update(effectiveType, saveData) {
     if (saveData || effectiveType === '2g' || effectiveType === 'slow-2g') {
-      this.compressMin = 64;
       this.pollInterval = 15000;
       this.imageQuality = 0.5;
-      _dbg(null, 'Adaptive: save-data mode (compress=64, poll=15s)');
+      _dbg(null, 'Adaptive: save-data mode (poll=15s)');
     } else if (effectiveType === '3g') {
-      this.compressMin = 128;
       this.pollInterval = 8000;
       this.imageQuality = 0.7;
-      _dbg(null, 'Adaptive: 3g mode (compress=128, poll=8s)');
+      _dbg(null, 'Adaptive: 3g mode (poll=8s)');
     } else {
-      this.compressMin = CONFIG.COMPRESS_MIN_BYTES;
       this.pollInterval = CONFIG.POLL_UNREAD_MS;
       this.imageQuality = 0.85;
     }
@@ -2532,15 +2526,12 @@ const _adaptiveConfig = {
   // v3.6: RTT-based adaptive (feeds from DC heartbeat, overrides network info)
   updateFromRTT(rttMs) {
     if (rttMs > 2000) { // Very poor
-      this.compressMin = 64;
       this.pollInterval = 20000;
       this.imageQuality = 0.4;
     } else if (rttMs > 500) { // Poor
-      this.compressMin = 128;
       this.pollInterval = 10000;
       this.imageQuality = 0.6;
     } else { // Good RTT — restore to network-appropriate defaults
-      this.compressMin = CONFIG.COMPRESS_MIN_BYTES;
       this.pollInterval = CONFIG.POLL_UNREAD_MS;
       this.imageQuality = 0.85;
     }
