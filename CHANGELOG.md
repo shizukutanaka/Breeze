@@ -1,5 +1,6 @@
 # Changelog
 
+<<<<<<< HEAD
 ## QR codes were decorative: encoder rewrite + C13 scan-to-verify (branch devin/c13-qr-verify, 2026-09-20)
 
 vitest 829 → **835** (+6 decode regression tests); `index.html`, `tests/qr.test.js` (new), `locales/ja.json`, `package.json` (+jsqr devDep), `docs/ROADMAP.md`, `CHANGELOG.md`, `_headers`/`tauri/src-tauri/tauri.conf.json` (CSP hash propagation).
@@ -24,6 +25,17 @@ Also fixed the E2E-found STT toast: `recognition.onerror` reported `toastServerE
 
 ---
 
+||||||| parent of 5d4621f (fix: safeSetHTML stripped every <label> — settings option text was unclickable)
+=======
+## Settings labels were dead text — safeSetHTML stripped every <label> (branch devin/fix-label-sanitizer, 2026-09-20)
+
+vitest 822 → **825** (+3 sanitizer tripwire tests); `index.html`, `tests/mirror-drift.test.js`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` CSP-hash propagation.
+
+Found by E2E testing, not by reading code: clicking a settings option's *text* did nothing — only the ~13px checkbox glyph toggled. `safeSetHTML`'s `SAFE_TAGS` allowlist omitted `label`, so the Trusted-Types sanitizer unwrapped every `<label>` it rendered: all 10 `/settings` toggles, the contact-picker rows (`index.html:7433`), and any future label-wrapped control. `SAFE_ATTRS` already allows `class`/`for`, so labels keep their styling and explicit association. `label` is phrasing content with no URL-bearing attributes — safe to allowlist.
+
+---
+
+>>>>>>> 5d4621f (fix: safeSetHTML stripped every <label> — settings option text was unclickable)
 ## I19 landed: relay-only by default when TURN is provisioned + STUN self-hosting (branch devin/i19-relay-only-default, 2026-09-20)
 
 vitest 822 → **825** (+3 worker tests); `index.html`, `_worker.js`, `wrangler.toml`, `.env.example`, `docs/SELF_HOSTING.md`, `docs/ROADMAP.md`, `CHANGELOG.md`, plus `_headers`/`tauri/src-tauri/tauri.conf.json` CSP-hash propagation.

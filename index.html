@@ -2681,7 +2681,7 @@ const _perf = {
 // v3.6: Trusted Types — 'breeze-sanitizer' (named, via safeSetHTML) + 'default' (safety net sanitizing raw innerHTML/outerHTML under require-trusted-types-for 'script'). Fallback: same API, no TT.
 const _ttPolicy = (() => {
   // Sanitizer: strip dangerous tags/attrs while keeping safe markdown output
-  const SAFE_TAGS = /^(p|br|strong|em|b|i|a|code|pre|blockquote|ul|ol|li|span|div|img|del|s|sub|sup|h[1-6]|table|thead|tbody|tr|td|th|mark|button|input)$/i;
+  const SAFE_TAGS = /^(p|br|strong|em|b|i|a|code|pre|blockquote|ul|ol|li|span|div|img|del|s|sub|sup|h[1-6]|table|thead|tbody|tr|td|th|mark|button|input|label)$/i;
   const SAFE_ATTRS = /^(href|target|rel|class|title|data-[a-z-]+|loading|alt|src|id|aria-[a-z]+|role|style|type|checked|placeholder|maxlength|rows|cols|for|name|value|min|max|step|disabled|readonly|autocomplete|enterkeyhint|spellcheck|wrap|tabindex)$/i;
 
   // DOMParser.parseFromString(str,'text/html') is ITSELF TT-guarded: the browser auto-
