@@ -67,3 +67,11 @@ mobile/www/
 mobile/android/
 mobile/ios/
 mobile/node_modules/
+
+# Python tooling
+venv/
+__pycache__/
+*.pyc
+
+# Secrets
+*.secret
