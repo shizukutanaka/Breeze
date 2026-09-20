@@ -930,7 +930,7 @@ function makeSessionDevice(myKeys, myPubB64) {
   const idb = new Map();
   const dbGet = async (store, key) => idb.get(store + ':' + key) ?? null;
   const dbPut = async (store, val, key) => { idb.set(store + ':' + key, val); return true; };
-  const CONFIG = { PREFERRED_CURVE: 'X25519', X3DH_V5_ENABLED: false, IV_BYTES: 12, MSG_PAD_BOUNDARY: 256, REPLAY_CACHE_SIZE: 200, SESSION_RESET_THRESHOLD: 3, HKDF_HASH: 'SHA-256' };
+  const CONFIG = { PREFERRED_CURVE: 'X25519', X3DH_V5_ENABLED: false, IV_BYTES: 12, MSG_PAD_BOUNDARY: 256, REPLAY_CACHE_SIZE: 200, SESSION_RESET_THRESHOLD: 3, HKDF_HASH: 'SHA-256', SKIP_KEY_TTL_MS: 7 * 24 * 60 * 60 * 1000 };
   const factory = new Function(
     'CONFIG', '_hasX25519', 'dbGet', 'dbPut', 'zeroBuffer', 'workerCrypto', 'postAPIRaw', 'API',
     '_signingKey', '_signingPubB64', 'signMessage', 'verifySignature', 'myKeys', 'myPubB64', '_dbg', 'arr', 'u8',
@@ -943,6 +943,7 @@ function makeSessionDevice(myKeys, myPubB64) {
     (a) => Array.from(a), (a) => new Uint8Array(a),
     async (x, y) => x === y,
   );
+  R.idb = idb; // exposed for storage-shape assertions (e.g. skipped-key TTL)
   return R;
 }
 
@@ -1011,6 +1012,63 @@ describe('Bare-IK session bootstrap — inline encryptFor/decryptFrom convergenc
     for (let i = 0; i < 5; i++) {
       expect(await B.decryptFrom(wires[i], alice.pubB64)).toBe('burst ' + i);
     }
+  });
+
+  it('I7: skipped message keys carry a timestamp and expire after SKIP_KEY_TTL_MS', async () => {
+    // Out-of-order delivery caches the skipped counter's key; retention must be
+    // time-bounded (forward secrecy — a stolen device shouldn't hold last month's keys).
+    const alice = await genSessionIdentity();
+    const bob = await genSessionIdentity();
+    const A = makeSessionDevice(alice.keys, alice.pubB64);
+    const B = makeSessionDevice(bob.keys, bob.pubB64);
+    const w1 = await A.encryptFor('m1', bob.pubB64);
+    const w2 = await A.encryptFor('m2', bob.pubB64);
+    const w3 = await A.encryptFor('m3', bob.pubB64);
+    expect(await B.decryptFrom(w1, alice.pubB64)).toBe('m1');
+    expect(await B.decryptFrom(w3, alice.pubB64)).toBe('m3'); // c=2 cached as skipped {k,t}
+    const bSess = B.idb.get('identity:sess:' + alice.pubB64.slice(0, 12));
+    const skEntry = bSess.skippedKeys[alice.pubB64.slice(0, 12) + ':2'];
+    expect(skEntry.t).toBeTypeOf('number'); // TTL timestamp present
+    expect(Array.isArray(skEntry.k)).toBe(true);
+    expect(await B.decryptFrom(w2, alice.pubB64)).toBe('m2'); // fresh skipped key still works
+    expect(bSess.skippedKeys[alice.pubB64.slice(0, 12) + ':2']).toBeUndefined(); // consumed on success
+  });
+
+  it('I7: a skipped key older than the TTL is swept and its message becomes undecryptable', async () => {
+    const carol = await genSessionIdentity();
+    const dave = await genSessionIdentity();
+    const C = makeSessionDevice(carol.keys, carol.pubB64);
+    const D = makeSessionDevice(dave.keys, dave.pubB64);
+    const x1 = await C.encryptFor('x1', dave.pubB64);
+    const x2 = await C.encryptFor('x2', dave.pubB64);
+    const x3 = await C.encryptFor('x3', dave.pubB64);
+    expect(await D.decryptFrom(x1, carol.pubB64)).toBe('x1');
+    expect(await D.decryptFrom(x3, carol.pubB64)).toBe('x3');
+    const peerId = carol.pubB64.slice(0, 12);
+    const dSess = D.idb.get('identity:sess:' + peerId);
+    expect(dSess.skippedKeys[peerId + ':2']).toBeDefined();
+    // Age the entry past the 7-day TTL — the next decrypt sweeps it.
+    dSess.skippedKeys[peerId + ':2'].t = Date.now() - 8 * 24 * 60 * 60 * 1000;
+    expect(await D.decryptFrom(x2, carol.pubB64)).toBeNull();
+    expect(dSess.skippedKeys[peerId + ':2']).toBeUndefined();
+  });
+
+  it('I7: legacy pre-TTL skipped entries (bare arrays, no timestamp) are swept as expired', async () => {
+    const carol = await genSessionIdentity();
+    const dave = await genSessionIdentity();
+    const C = makeSessionDevice(carol.keys, carol.pubB64);
+    const D = makeSessionDevice(dave.keys, dave.pubB64);
+    const x1 = await C.encryptFor('x1', dave.pubB64);
+    const x2 = await C.encryptFor('x2', dave.pubB64);
+    const x3 = await C.encryptFor('x3', dave.pubB64);
+    expect(await D.decryptFrom(x1, carol.pubB64)).toBe('x1');
+    expect(await D.decryptFrom(x3, carol.pubB64)).toBe('x3');
+    const peerId = carol.pubB64.slice(0, 12);
+    const dSess = D.idb.get('identity:sess:' + peerId);
+    // Simulate an entry written by a pre-I7 build: bare key array, no t field.
+    dSess.skippedKeys[peerId + ':2'] = dSess.skippedKeys[peerId + ':2'].k;
+    expect(await D.decryptFrom(x2, carol.pubB64)).toBeNull();
+    expect(dSess.skippedKeys[peerId + ':2']).toBeUndefined();
   });
 
   it('survives several back-and-forth turns after first contact (ratchet keeps converging)', async () => {
