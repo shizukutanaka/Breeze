@@ -75,9 +75,20 @@ wrangler pages secret put VAPID_PRIVATE_KEY
 wrangler pages secret put TURN_KEY_ID
 wrangler pages secret put TURN_KEY_API_TOKEN
 
-# Option B: No config → free Open Relay (20GB/month)
+# Option B: Self-hosted coturn — one listener covers TURN + STUN
+wrangler pages secret put TURN_URL      # turn:your-server:3478 (a stun: entry is auto-derived)
+wrangler pages secret put TURN_SECRET   # HMAC shared secret
+# Optional STUN-only override (replaces the public STUN list):
+# wrangler pages secret put STUN_URL    # stun:your-server:3478
+
+# Option C: No config → free Open Relay (20GB/month)
 # (This is the default — no action needed)
 ```
+
+When TURN is operator-provisioned (any of A/B/C — not the shared Open Relay
+fallback), clients default to **relay-only mode**: ICE `iceTransportPolicy=relay`
+hides both peers' public IPs. Users can still toggle it off in Settings (their
+explicit choice is remembered), and unconfigured deployments see no change.
 
 ### Custom Domain
 

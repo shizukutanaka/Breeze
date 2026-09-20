@@ -1744,11 +1744,24 @@ async function handleTurn(body, env, request) {
   // STUN is always free (Google, Cloudflare)
   // ═══════════════════════════════════════════════════════
 
-  const iceServers = [
-    // Free STUN servers (always included — zero cost)
-    { urls: 'stun:stun.cloudflare.com:3478' },
-    { urls: 'stun:stun.l.google.com:19302' },
-  ];
+  // STUN: free public list by default; STUN_URL overrides for self-hosting
+  // (comma-separated is fine). coturn answers STUN on its TURN listener.
+  const iceServers = env.STUN_URL
+    ? env.STUN_URL.split(',').map(u => u.trim()).filter(Boolean)
+        .map(u => ({ urls: u.startsWith('stun:') ? u : 'stun:' + u }))
+    : [
+        // Free STUN servers (always included — zero cost)
+        { urls: 'stun:stun.cloudflare.com:3478' },
+        { urls: 'stun:stun.l.google.com:19302' },
+      ];
+
+  // I19: a self-hosted coturn serves STUN binding on the same plain-TURN
+  // listener — surface it so a TURN-provisioned deployment can resolve its
+  // own candidates without a third-party STUN dependency.
+  if (!env.STUN_URL && /^turn:/i.test(env.TURN_URL || '')) {
+    const stunUrl = env.TURN_URL.replace(/^turn:/i, 'stun:').split('?')[0];
+    if (stunUrl.length > 'stun:x'.length) iceServers.push({ urls: stunUrl });
+  }
 
   // Option A: Cloudflare Calls TURN (recommended — $0.05/GB, global anycast)
   if (env.TURN_KEY_ID && env.TURN_KEY_API_TOKEN) {
