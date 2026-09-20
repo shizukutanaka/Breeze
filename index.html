@@ -1205,6 +1205,7 @@ const CONFIG = {
   // so a kicked member's stale key can't decrypt new-epoch messages. OFF: byte-identical to v3.
   GROUP_RATCHET_V5: true,
   GROUP_MAX_SKIP: 50, // max tolerated out-of-order gap in the group v5 hash ratchet
+  SKIP_KEY_TTL_MS: 7 * 24 * 60 * 60 * 1000, // I7: retained skipped message keys expire after 7 days — forward-secrecy leak + DoS amplifier if kept forever (mirrors cfg.skippedKeyTTL in src/crypto/ratchet.js + group.js)
   // Authenticated X3DH (I1/G1): default initSession() is a bare unverified DH(IK_A, IK_B) — an
   // undetected MITM risk. ON: verifies the peer's signed pre-key against their Ed25519 key when
   // BOTH sides negotiate it (else falls back byte-identically). Also runs the KT chain+rollover audit.
@@ -4940,6 +4941,14 @@ async function initMessenger(dbName) {
       if (!sess) { sess = await initSessionResponder(peerPubB64); }
       // v3/v4 ratchet message
       if ((p.v === 3 || p.v === 4) && p.rk) {
+        // I7: time-expire stale skipped message keys (mirror of src/crypto/ratchet.js).
+        // Entries without a `t` timestamp are legacy pre-TTL records and count as expired.
+        if (sess.skippedKeys) {
+          const cutoff = Date.now() - CONFIG.SKIP_KEY_TTL_MS;
+          for (const k of Object.keys(sess.skippedKeys)) {
+            if ((sess.skippedKeys[k]?.t ?? 0) < cutoff) delete sess.skippedKeys[k];
+          }
+        }
         const peerRK = new Uint8Array(p.rk);
         if (!sess.peerRatchetPub || JSON.stringify(p.rk) !== JSON.stringify(sess.peerRatchetPub)) {
           if (!sess.ratchetPriv) {
@@ -4954,13 +4963,15 @@ async function initMessenger(dbName) {
           // v3.6: Try skipped message keys (out-of-order delivery)
           const skKey = peerId + ':' + p.c;
           if (sess.skippedKeys?.[skKey]) {
-            const mkData = sess.skippedKeys[skKey];
-            delete sess.skippedKeys[skKey];
+            const mkData = sess.skippedKeys[skKey].k;
             if (!(await _cmOk(p, u8(mkData)))) { _dbg(null, 'key commitment mismatch (skipped key)'); return null; }
             if (frank && p.fi) { frank.frankId = p.fi; frank.opening = bufToB64(await _frankKey(u8(mkData))); }
             const importedKey = await crypto.subtle.importKey('raw', u8(mkData), { name: 'AES-GCM' }, false, ['decrypt']);
             const padded = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, importedKey, u8(p.d)));
             const text = _unpadAndDecompress(padded, p.v);
+            // Consume the skipped key only after successful decrypt — an injected
+            // message that fails AEAD must not burn the real out-of-order key.
+            delete sess.skippedKeys[skKey];
             await saveSession(peerId, sess);
             delete _decryptFailures[peerId];
             return text;
@@ -4984,7 +4995,7 @@ async function initMessenger(dbName) {
             const { msgKey: skMk, nextChain: skNext } = await kdfChain(tmpChain);
             const skIdx = sess.recvCounter + 1 + i;
             // Advance the full gap, but only retain the most recent MAX_SKIP keys.
-            if (gap - i <= MAX_SKIP) sess.skippedKeys[peerId + ':' + skIdx] = arr(skMk);
+            if (gap - i <= MAX_SKIP) sess.skippedKeys[peerId + ':' + skIdx] = { k: arr(skMk), t: Date.now() };
             tmpChain = skNext;
           }
           sess.recvChainKey = tmpChain;
@@ -5518,6 +5529,13 @@ async function initMessenger(dbName) {
         if ((peerSK.epoch | 0) !== (p.ep | 0)) return null; // epoch mismatch — wait for new key
         const targetC = p.c | 0;
         const skipped = { ...(peerSK.skipped || {}) };
+        // I7 (group): time-expire stale skipped message keys (mirror of src/crypto/group.js).
+        {
+          const cutoff = Date.now() - CONFIG.SKIP_KEY_TTL_MS;
+          for (const k of Object.keys(skipped)) {
+            if ((skipped[k]?.t ?? 0) < cutoff) delete skipped[k];
+          }
+        }
         let counter = peerSK.counter | 0;
         let chainKey = new Uint8Array(peerSK.chainKey);
 
@@ -5525,7 +5543,7 @@ async function initMessenger(dbName) {
           // Out-of-order: use cached key from a previous ratchet-forward pass
           const cached = skipped[targetC];
           if (!cached) return null;
-          msgKeyBits = new Uint8Array(cached);
+          msgKeyBits = new Uint8Array(cached.k !== undefined ? cached.k : cached);
           delete skipped[targetC];
           peerSK.skipped = skipped;
           await dbPut('identity', peerSK, skKey);
@@ -5535,7 +5553,7 @@ async function initMessenger(dbName) {
           while (counter < targetC) {
             const skMsgKey = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-msg-v5', 32);
             chainKey = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-chain-v5', 32);
-            skipped[counter] = Array.from(skMsgKey);
+            skipped[counter] = { k: Array.from(skMsgKey), t: Date.now() };
             counter++;
             // Evict oldest when skip cache exceeds GROUP_MAX_SKIP
             const keys = Object.keys(skipped).map(Number).sort((a, b) => a - b);

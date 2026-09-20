@@ -1,5 +1,15 @@
 # Changelog
 
+## I7 landed: skipped message keys now expire by TTL in the deployed client (branch devin/i7-skip-key-ttl, 2026-09-20)
+
+vitest 819 → **822** (+3 guard tests); `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation), `tests/mirror-drift.test.js`, `docs/ROADMAP.md`, `CHANGELOG.md`.
+
+The last pending P0 item. The reference modules (`src/crypto/ratchet.js`, `src/crypto/group.js`) already time-expired retained skipped message keys (7-day `skippedKeyTTL`), but the deployed inline copies in `index.html` kept them forever — an on-device forward-secrecy leak and a slow DoS amplifier (ePrint 2018/1037).
+
+Ported verbatim: `CONFIG.SKIP_KEY_TTL_MS` (7 days); entries now stored as `{k, t}` on both the 1:1 (`sess.skippedKeys`) and group (`peerSK.skipped`) paths; a sweep before each decrypt drops entries older than the cutoff — legacy pre-TTL bare-array entries (no `t`) count as expired, matching the modules' upgrade semantics. Also aligned the 1:1 read path with the reference's consume-on-success ordering — the inline copy deleted the skipped key *before* the AEAD check, so a forged message could burn a real out-of-order key. Three new mirror-drift tests cover the timestamped write shape, TTL expiry, and the legacy-entry sweep.
+
+---
+
 ## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
 
 819 vitest unchanged; Playwright E2E 60 unchanged; `docs/ROADMAP.md`, `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation) — dead-code removal only, no runtime behavior change.
