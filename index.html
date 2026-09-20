@@ -10742,6 +10742,15 @@ async function initMessenger(dbName) {
   // TURN CREDENTIALS — available to all users
   // TURN CREDENTIAL — available to all users for NAT traversal
 
+  // True when the TURN credentials came from operator config (not the shared
+  // 'openrelay' fallback) and include a turn(s): URL — i.e. someone provisioned
+  // real relay capacity.
+  function _turnHasProvisioned(cred) {
+    if (!cred || cred.provider === 'openrelay') return false;
+    const list = cred.iceServers || (cred.urls ? [cred] : []);
+    return list.some(s => (Array.isArray(s.urls) ? s.urls : [s.urls]).some(u => /^turns?:/i.test(u || '')));
+  }
+
   async function fetchTurnCredentials() {
     if (!API) return;
     try {
@@ -10749,6 +10758,14 @@ async function initMessenger(dbName) {
       if (resp.ok) {
         _turnCredential = await resp.json();
         _dbg(null, 'TURN credentials obtained');
+        // I19: relay-only by default when the operator provisioned TURN capacity —
+        // srflx candidates leak the public IP to the peer. The shared openrelay
+        // fallback isn't provisioned capacity, so it doesn't qualify. An explicit
+        // brz-relay-only choice (checkbox, 0 or 1) always wins.
+        if (localStorage.getItem('brz-relay-only') === null && _turnHasProvisioned(_turnCredential)) {
+          _settings.relayOnly = true;
+          _dbg(null, 'TURN: relay-only auto-enabled (provisioned TURN — IP hidden from peers)');
+        }
       }
     } catch(e) { _dbg(e, 'turn'); }
   }

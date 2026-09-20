@@ -29,6 +29,10 @@ id = ""  # ← REQUIRED: paste your KV namespace ID here
 # wrangler pages secret put TURN_CREDENTIAL            # static credential
 # Option D: No config → auto-falls to free Open Relay (20GB/month)
 #
+# --- STUN (optional) ---
+# wrangler pages secret put STUN_URL                   # stun:host:3478 — self-hosted overrides the public list;
+#                                                       # unset + plain turn: TURN_URL auto-derives stun: on the same host
+#
 # --- Moderation (optional) ---
 # wrangler pages secret put ABUSE_WEBHOOK_URL          # Notified on verified abuse reports
 #                                                       # (metadata only — frankId, message
