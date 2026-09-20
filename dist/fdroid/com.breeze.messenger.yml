@@ -1,0 +1,52 @@
+# F-Droid metadata
+# Place in: metadata/com.breeze.messenger.yml
+# Submit: https://gitlab.com/fdroid/fdroiddata
+
+Categories:
+  - Internet
+  - Security
+License: MIT
+AuthorName: Breeze Project
+WebSite: https://github.com/shizukutanaka/breeze
+SourceCode: https://github.com/shizukutanaka/breeze
+IssueTracker: https://github.com/shizukutanaka/breeze/issues
+
+AutoName: Breeze
+Summary: P2P Encrypted Messenger
+Description: |-
+  Peer-to-peer encrypted messenger. No phone number. No registration.
+  Your identity is a cryptographic keypair stored only on your device.
+
+  Messages travel directly between devices via WebRTC DataChannel
+  with ECDH P-256 key exchange and AES-256-GCM encryption.
+
+  When a peer is offline, messages are temporarily stored on an encrypted
+  relay server and deleted immediately upon delivery.
+
+  Also includes:
+  * Dead Drop — self-destructing encrypted secret sharing
+  * Ephemeral Chat — anonymous 24h auto-destructing chat rooms
+  * Breeze ID — short @alias for easy contact sharing
+  * Encrypted backup/restore of identity and contacts
+
+  No tracking. No analytics. No ads. Open source (MIT).
+
+RepoType: git
+Repo: https://github.com/shizukutanaka/breeze.git
+
+Builds:
+  - versionName: 3.5.0
+    versionCode: 1
+    commit: v3.5.0
+    subdir: mobile
+    sudo:
+      - apt-get install -y npm
+    init: npm install
+    prebuild: node prepare.js && npx cap sync android
+    gradle:
+      - yes
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+CurrentVersion: 3.5.0
+CurrentVersionCode: 1

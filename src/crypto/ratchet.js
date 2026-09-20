@@ -1,0 +1,616 @@
+// ============================================================================
+// Breeze — Double Ratchet crypto core (extracted reference module)
+//
+// This is a faithful, dependency-injected extraction of the security-critical
+// ratchet primitives that currently live inline in index.html (the
+// `DOUBLE RATCHET CRYPTO ENGINE` block). It exists so the ratchet math, the
+// v4 message framing, and the out-of-order / replay / large-gap handling can be
+// unit-tested in isolation (see tests/ratchet.test.js).
+//
+// The constructions here mirror index.html exactly:
+//   - hkdf(ikm, salt, info, len)        : HKDF-SHA256
+//   - kdfChain(ck)                      : msgKey=HKDF(ck,0^32,'msg'); next=HKDF(ck,0^32,'chain')
+//   - v4 frame                          : padded=[flags:1][len:2][data...], pad→256, AES-256-GCM
+//   - skipped-key / replay / MAX_GAP    : ported verbatim from decryptFrom
+//
+// NOTE: index.html still contains the canonical inline copy. Wiring index.html
+// to import this module (eliminating the duplication) is a follow-up step that
+// must be validated in a browser; until then, keep changes here in sync with the
+// inline implementation. Phase 2 protocol work (authenticated X3DH, group
+// ratchet) should land in this module first, under test.
+// ============================================================================
+
+const DEFAULTS = {
+  HKDF_HASH: 'SHA-256',
+  PREFERRED_CURVE: 'P-256', // tests default to P-256 (deterministic across Node versions)
+  hasX25519: false,
+  MSG_PAD_BOUNDARY: 256,
+  IV_BYTES: 12,
+  REPLAY_CACHE_SIZE: 2000,
+  MAX_SKIP: 100,
+  MAX_GAP: 2000,
+  GROUP_MAX_SKIP: 50, // max out-of-order gap tolerated in the group hash ratchet
+  skippedKeyTTL: 7 * 24 * 60 * 60 * 1000, // I7: expire retained skipped keys after 7 days (forward secrecy)
+  compressMin: Infinity, // disable compression by default for deterministic tests
+};
+
+import { arr, u8, concatBytes, ctEqual } from './bytes.js';
+
+export function createRatchet(opts = {}) {
+  const cfg = { ...DEFAULTS, ...opts };
+  const subtle = cfg.subtle || globalThis.crypto.subtle;
+  const getRandomValues = cfg.getRandomValues || ((a) => globalThis.crypto.getRandomValues(a));
+  const dbg = cfg.dbg || (() => {});
+  const now = cfg.now || (() => Date.now());
+
+  // --- HKDF (RFC 5869) ---
+  async function hkdf(ikm, salt, info, length) {
+    const key = await subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
+    return new Uint8Array(await subtle.deriveBits(
+      { name: 'HKDF', hash: cfg.HKDF_HASH, salt, info: new TextEncoder().encode(info) }, key, length * 8,
+    ));
+  }
+
+  // --- KDF chain: advance chain key, derive message key ---
+  async function kdfChain(chainKey) {
+    const msgKey = await hkdf(chainKey, new Uint8Array(32), 'msg', 32);
+    const nextChain = await hkdf(chainKey, new Uint8Array(32), 'chain', 32);
+    return { msgKey, nextChain };
+  }
+
+  function curveAlgo() {
+    return cfg.hasX25519 ? { name: 'X25519' } : { name: 'ECDH', namedCurve: 'P-256' };
+  }
+
+  async function genRatchetKey() {
+    const algo = cfg.hasX25519 ? { name: cfg.PREFERRED_CURVE } : { name: 'ECDH', namedCurve: 'P-256' };
+    const usages = cfg.hasX25519 ? ['deriveBits'] : ['deriveKey', 'deriveBits'];
+    const kp = await subtle.generateKey(algo, true, usages);
+    return {
+      pub: new Uint8Array(await subtle.exportKey('raw', kp.publicKey)),
+      privateKey: kp.privateKey,
+      publicKey: kp.publicKey,
+    };
+  }
+
+  async function ecdhBits(privKey, peerPubRaw) {
+    const algo = curveAlgo();
+    const peerPub = await subtle.importKey('raw', peerPubRaw, algo, false, []);
+    const deriveAlgo = cfg.hasX25519 ? { name: 'X25519', public: peerPub } : { name: 'ECDH', public: peerPub };
+    return new Uint8Array(await subtle.deriveBits(deriveAlgo, privKey, 256));
+  }
+
+  // --- DH ratchet step (mirrors dhRatchetStep) ---
+  async function dhRatchetStep(sess, peerPubRaw) {
+    const dh = await ecdhBits(sess.ratchetPriv, peerPubRaw);
+    let derived = await hkdf(dh, sess.rootKey, 'ratchet', 64);
+    sess.rootKey = derived.slice(0, 32);
+    sess.recvChainKey = derived.slice(32, 64);
+    sess.peerRatchetPub = arr(new Uint8Array(peerPubRaw));
+    const newRK = await genRatchetKey();
+    const dh2 = await ecdhBits(newRK.privateKey, peerPubRaw);
+    derived = await hkdf(dh2, sess.rootKey, 'ratchet', 64);
+    sess.rootKey = derived.slice(0, 32);
+    sess.sendChainKey = derived.slice(32, 64);
+    sess.ratchetPub = arr(new Uint8Array(newRK.pub));
+    sess.ratchetPriv = newRK.privateKey;
+    // A DH ratchet step starts BOTH a new sending and a new receiving chain, so
+    // reset both message counters (Signal's Ns=0, Nr=0). Resetting only sendCounter
+    // makes the new receive chain's first message (counter 1) look like a replay.
+    sess.sendCounter = 0;
+    sess.recvCounter = 0;
+  }
+
+  // --- Message framing (v4): [flags:1][len:2][data], pad→boundary, AES-256-GCM ---
+  async function frameEncrypt(msgKey, text) {
+    let raw = new TextEncoder().encode(text);
+    let compressed = false;
+    if (raw.length >= cfg.compressMin && typeof CompressionStream !== 'undefined') {
+      try {
+        const cs = new CompressionStream('deflate-raw');
+        const w = cs.writable.getWriter(); const r = cs.readable.getReader();
+        w.write(raw); w.close();
+        const chunks = []; let done = false;
+        while (!done) { const { value, done: d } = await r.read(); if (value) chunks.push(value); done = d; }
+        const deflated = new Uint8Array(chunks.reduce((s, c) => s + c.length, 0));
+        let off = 0; for (const c of chunks) { deflated.set(c, off); off += c.length; }
+        if (deflated.length < raw.length * 0.9) { raw = deflated; compressed = true; }
+      } catch (e) { dbg(e, 'compress'); }
+    }
+    const padded = new Uint8Array(Math.ceil((raw.length + 3) / cfg.MSG_PAD_BOUNDARY) * cfg.MSG_PAD_BOUNDARY);
+    padded[0] = compressed ? 0x01 : 0x00;
+    new DataView(padded.buffer).setUint16(1, raw.length);
+    padded.set(raw, 3);
+    const iv = getRandomValues(new Uint8Array(cfg.IV_BYTES));
+    const key = await subtle.importKey('raw', msgKey, { name: 'AES-GCM' }, false, ['encrypt']);
+    const ct = new Uint8Array(await subtle.encrypt({ name: 'AES-GCM', iv }, key, padded));
+    return { iv, ct };
+  }
+
+  // AES-GCM decrypt a frame back to the padded plaintext bytes. THROWS on an auth-tag
+  // failure (the caller catches it → returns null without mutating session state).
+  // Mirrors frameEncrypt and group.js's frameDecrypt — both ratchetDecrypt paths
+  // (skipped-key recovery and the main chain) route through here instead of inlining.
+  async function frameDecrypt(msgKey, iv, ct) {
+    const key = await subtle.importKey('raw', u8(msgKey), { name: 'AES-GCM' }, false, ['decrypt']);
+    return new Uint8Array(await subtle.decrypt({ name: 'AES-GCM', iv: u8(iv) }, key, u8(ct)));
+  }
+
+  async function unpadAndDecompress(padded) {
+    const flags = padded[0];
+    const dataLen = new DataView(padded.buffer, padded.byteOffset).getUint16(1);
+    let raw = padded.slice(3, 3 + dataLen);
+    if (flags & 0x01) {
+      const ds = new DecompressionStream('deflate-raw');
+      const w = ds.writable.getWriter(); const r = ds.readable.getReader();
+      w.write(raw); w.close();
+      const chunks = []; let done = false;
+      while (!done) { const { value, done: d } = await r.read(); if (value) chunks.push(value); done = d; }
+      const out = new Uint8Array(chunks.reduce((s, c) => s + c.length, 0));
+      let off = 0; for (const c of chunks) { out.set(c, off); off += c.length; }
+      raw = out;
+    }
+    return new TextDecoder().decode(raw);
+  }
+
+  // --- I16: key commitment (defeats "invisible salamanders" / partitioning) ---
+  // AES-GCM is not key-committing: a single ciphertext can be crafted to open
+  // validly under two different keys. We bind each message to exactly one key by
+  // shipping cm = HKDF(msgKey, 0^32, 'breeze-commit', 32) and verifying it (in
+  // constant time) before trusting the AEAD result. Matters most for the group /
+  // sealed-sender multi-key paths; also the building block for franking (I17).
+  async function keyCommitment(msgKey) {
+    return hkdf(u8(msgKey), new Uint8Array(32), 'breeze-commit', 32);
+  }
+  // ctEqual is the shared constant-time compare (imported from ./bytes.js); still
+  // exposed on the factory return so group.js can use it as R.ctEqual.
+
+  // --- Encrypt one message on the send chain (mirrors encryptFor's ratchet body) ---
+  async function ratchetEncrypt(sess, text) {
+    const { msgKey, nextChain } = await kdfChain(sess.sendChainKey);
+    sess.sendChainKey = nextChain;
+    sess.sendCounter = (sess.sendCounter || 0) + 1;
+    const { iv, ct } = await frameEncrypt(msgKey, text);
+    const cm = await keyCommitment(msgKey);
+    return JSON.stringify({ v: 4, i: arr(iv), d: arr(ct), rk: sess.ratchetPub, c: sess.sendCounter, cm: arr(cm) });
+  }
+
+  // --- Decrypt one message (mirrors decryptFrom's v3/v4 ratchet branch) ---
+  // Returns the plaintext string, or null on replay/duplicate/gap-too-large.
+  async function ratchetDecrypt(sess, payload) {
+    const p = typeof payload === 'string' ? JSON.parse(payload) : payload;
+    if (!((p.v === 3 || p.v === 4) && p.rk)) throw new Error('not a v3/v4 ratchet message');
+    // The counter `c` is not inside the AEAD so a relay can modify it without
+    // breaking the auth tag. NaN / Infinity counters bypass the replay / gap
+    // checks and corrupt sess.recvCounter on successful decrypt, permanently
+    // breaking the session.  Senders always start at c=1 (sendCounter is
+    // incremented before encoding), so c=0 is also illegitimate: it passes
+    // both the replay check (recvCounter>0 exemption) and the gap check, then
+    // advances recvChainKey without advancing recvCounter, desyncing the
+    // session for the real c=1 message.  Reject early.
+    if (!Number.isFinite(p.c) || p.c < 1) return null;
+
+    // I7: time-expire stale skipped message keys. Retaining them indefinitely is
+    // both a forward-secrecy leak (old keys sitting in storage) and a DoS amplifier.
+    if (sess.skippedKeys) {
+      const cutoff = now() - cfg.skippedKeyTTL;
+      for (const k of Object.keys(sess.skippedKeys)) {
+        if ((sess.skippedKeys[k]?.t ?? 0) < cutoff) delete sess.skippedKeys[k];
+      }
+    }
+
+    const peerRK = new Uint8Array(p.rk);
+    if (!sess.peerRatchetPub || JSON.stringify(p.rk) !== JSON.stringify(sess.peerRatchetPub)) {
+      if (!sess.ratchetPriv) {
+        const rk = await genRatchetKey();
+        sess.ratchetPriv = rk.privateKey;
+        sess.ratchetPub = arr(new Uint8Array(rk.pub));
+      }
+      await dhRatchetStep(sess, peerRK);
+    }
+
+    // Replay check (with skipped-key recovery for out-of-order delivery)
+    if (p.c <= sess.recvCounter && sess.recvCounter > 0) {
+      const skKey = 'p:' + p.c;
+      if (sess.skippedKeys?.[skKey]) {
+        const mkData = sess.skippedKeys[skKey].k;
+        if (p.cm && !ctEqual(await keyCommitment(mkData), p.cm)) { dbg(null, 'key commitment mismatch'); return null; }
+        let padded;
+        try { padded = await frameDecrypt(mkData, p.i, p.d); }
+        catch { dbg(null, 'AEAD auth failure (skipped key)'); return null; }
+        // Advance dedup state only after successful decrypt (prevents desync on injected messages).
+        delete sess.skippedKeys[skKey];
+        try { return await unpadAndDecompress(padded); }
+        catch { dbg(null, 'decompress/unpad failure (skipped key)'); return null; }
+      }
+      dbg(null, 'replay rejected');
+      return null;
+    }
+
+    const msgId = arr(u8(p.d).slice(0, 8)).join('');
+    if (sess.seenMsgIds?.includes(msgId)) { dbg(null, 'duplicate rejected'); return null; }
+
+    // Compute skipped message keys for out-of-order delivery (Signal spec §3.4) into
+    // LOCALS. Previously this mutated sess.recvChainKey/skippedKeys here — BEFORE the
+    // AEAD check below — so an injected message with a valid counter GAP but forged
+    // ciphertext advanced the receive chain while recvCounter stayed put, permanently
+    // desyncing the session (a one-packet DoS: the legit gap-filling messages then
+    // derive from the wrong chain position and never decrypt). Mirror the group path:
+    // stage everything and commit only after a successful decrypt.
+    let stagedChain = sess.recvChainKey;  // chain to derive the target message key from
+    let stagedSkipped = null;             // skipped keys to merge into the session on success
+    if (p.c > sess.recvCounter + 1) {
+      const gap = p.c - sess.recvCounter - 1;
+      // Reject absurd gaps rather than desyncing the chain (regression: the advance
+      // was previously capped at MAX_SKIP while recvCounter jumped to p.c, permanently
+      // misaligning the receive chain so every later message failed).
+      if (gap > cfg.MAX_GAP) { dbg(null, 'ratchet gap too large (' + gap + '), rejecting'); return null; }
+      stagedSkipped = {};
+      let tmpChain = sess.recvChainKey;
+      for (let i = 0; i < gap; i++) {
+        const { msgKey: skMk, nextChain: skNext } = await kdfChain(tmpChain);
+        const skIdx = sess.recvCounter + 1 + i;
+        if (gap - i <= cfg.MAX_SKIP) stagedSkipped['p:' + skIdx] = { k: arr(skMk), t: now() };
+        tmpChain = skNext;
+      }
+      stagedChain = tmpChain;
+    }
+
+    const { msgKey, nextChain } = await kdfChain(stagedChain);
+    // I16: verify key commitment before advancing state / trusting the AEAD.
+    if (p.cm && !ctEqual(await keyCommitment(msgKey), p.cm)) { dbg(null, 'key commitment mismatch'); return null; }
+    let padded;
+    try { padded = await frameDecrypt(msgKey, p.i, p.d); }
+    catch { dbg(null, 'AEAD auth failure'); return null; }
+    // Decrypt succeeded — NOW commit all receive state. An injected message whose
+    // ciphertext fails the auth tag (or key-commitment check) returns above without
+    // having mutated the session, so the chain stays aligned for the real next message.
+    if (stagedSkipped) {
+      if (!sess.skippedKeys) sess.skippedKeys = {};
+      Object.assign(sess.skippedKeys, stagedSkipped);
+      const skKeys = Object.keys(sess.skippedKeys);
+      if (skKeys.length > cfg.MAX_SKIP * 2) {
+        for (const k of skKeys.slice(0, skKeys.length - cfg.MAX_SKIP)) delete sess.skippedKeys[k];
+      }
+    }
+    sess.recvChainKey = nextChain;
+    sess.recvCounter = p.c;
+    if (!sess.seenMsgIds) sess.seenMsgIds = [];
+    sess.seenMsgIds.push(msgId);
+    if (sess.seenMsgIds.length > cfg.REPLAY_CACHE_SIZE) sess.seenMsgIds = sess.seenMsgIds.slice(-cfg.REPLAY_CACHE_SIZE);
+    // State committed; now decode. If DecompressionStream rejects corrupted-but-authenticated
+    // deflate data (only possible when sender encrypted malformed compressed bytes), return null
+    // rather than propagating an uncaught exception — chain position is already correct.
+    try { return await unpadAndDecompress(padded); }
+    catch { dbg(null, 'decompress/unpad failure'); return null; }
+  }
+
+  // Test/utility: build a pair of sessions that share an initial symmetric chain,
+  // so the send/receive ratchet can be exercised without the DH bootstrap. The
+  // shared `rk` is fixed so ratchetDecrypt does not trigger a DH ratchet step.
+  function pairFromSharedChain(chainKey, sharedRk = [1, 2, 3]) {
+    const sender = {
+      sendChainKey: u8(chainKey).slice(), sendCounter: 0,
+      ratchetPub: sharedRk, recvCounter: 0,
+    };
+    const receiver = {
+      recvChainKey: u8(chainKey).slice(), recvCounter: 0,
+      peerRatchetPub: sharedRk, seenMsgIds: [], skippedKeys: {},
+    };
+    return { sender, receiver };
+  }
+
+  // ==========================================================================
+  // I1 — Authenticated X3DH (the fix for unverified/unsigned pre-keys).
+  //
+  // Today Breeze ships the signed pre-key WITHOUT a signature and never verifies
+  // it, and initSession does a bare DH(IK_A, IK_B) — so the relay can MITM first
+  // contact. Real X3DH: the responder signs its SPK with its long-term Ed25519
+  // identity key; the initiator VERIFIES that signature before deriving the
+  // session, then combines DH1..DH4 into the root key. Security is conditional on
+  // this verification (Cohn-Gordon et al., ePrint 2016/1013).
+  // ==========================================================================
+  async function genSigningKey() {
+    const kp = await subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    return {
+      pub: new Uint8Array(await subtle.exportKey('raw', kp.publicKey)),
+      privateKey: kp.privateKey, publicKey: kp.publicKey,
+    };
+  }
+  async function signSPK(edPrivateKey, spkPubRaw) {
+    return new Uint8Array(await subtle.sign({ name: 'Ed25519' }, edPrivateKey, u8(spkPubRaw)));
+  }
+  async function verifySPK(edPubRaw, spkPubRaw, sig) {
+    try {
+      const pub = await subtle.importKey('raw', u8(edPubRaw), { name: 'Ed25519' }, false, ['verify']);
+      return await subtle.verify({ name: 'Ed25519' }, pub, u8(sig), u8(spkPubRaw));
+    } catch { return false; }
+  }
+
+  // Initiator (Alice): IK_A×SPK_B, EK_A×IK_B, EK_A×SPK_B, [EK_A×OPK_B] → root key.
+  async function x3dhInitiator({ ikPriv, ekPriv, ikPubPeer, spkPubPeer, opkPubPeer, info = 'breeze-x3dh-v5' }) {
+    const parts = [
+      await ecdhBits(ikPriv, spkPubPeer),
+      await ecdhBits(ekPriv, ikPubPeer),
+      await ecdhBits(ekPriv, spkPubPeer),
+    ];
+    if (opkPubPeer) parts.push(await ecdhBits(ekPriv, opkPubPeer));
+    return hkdf(concatBytes(parts), new Uint8Array(32), info, 32);
+  }
+  // Responder (Bob): the mirror DHs from his SPK/IK/OPK private keys.
+  async function x3dhResponder({ ikPriv, spkPriv, opkPriv, ikPubPeer, ekPubPeer, info = 'breeze-x3dh-v5' }) {
+    const parts = [
+      await ecdhBits(spkPriv, ikPubPeer),
+      await ecdhBits(ikPriv, ekPubPeer),
+      await ecdhBits(spkPriv, ekPubPeer),
+    ];
+    if (opkPriv) parts.push(await ecdhBits(opkPriv, ekPubPeer));
+    return hkdf(concatBytes(parts), new Uint8Array(32), info, 32);
+  }
+
+  // --- Session bootstrap: X3DH shared secret → Double Ratchet session ---
+  // Initiator (Alice) seeds the ratchet using the responder's signed pre-key as the
+  // first DH-ratchet partner (it is the public key she already authenticated in
+  // X3DH). Her first ciphertext carries her ratchet public key (rk), which lets the
+  // responder complete the matching DH ratchet on receipt.
+  async function initiatorSession(rootKey, spkPubPeer) {
+    const rk = await genRatchetKey();
+    const dh = await ecdhBits(rk.privateKey, spkPubPeer);
+    const derived = await hkdf(dh, u8(rootKey), 'ratchet', 64);
+    return {
+      rootKey: derived.slice(0, 32),
+      sendChainKey: derived.slice(32, 64),
+      ratchetPriv: rk.privateKey,
+      ratchetPub: arr(new Uint8Array(rk.pub)),
+      peerRatchetPub: arr(u8(spkPubPeer)),
+      sendCounter: 0, recvCounter: 0, seenMsgIds: [], skippedKeys: {},
+    };
+  }
+  // Responder (Bob) holds the signed pre-key private as his initial ratchet key and
+  // waits for the initiator's first message; ratchetDecrypt then performs the DH
+  // ratchet step that derives his receive chain (matching Alice's send chain).
+  function responderSession(rootKey, spkPrivateKey) {
+    return {
+      rootKey: u8(rootKey),
+      ratchetPriv: spkPrivateKey,
+      ratchetPub: null,
+      peerRatchetPub: null,
+      sendCounter: 0, recvCounter: 0, seenMsgIds: [], skippedKeys: {},
+    };
+  }
+
+  // --- X3DH v5 first-message ("prekey message") envelope ---------------------
+  // The responder cannot derive the shared secret SK until it knows the initiator's
+  // identity key (IK_A) and ephemeral key (EK_A) and which one-time pre-key was
+  // consumed. The initiator therefore wraps its FIRST ratchet message in this
+  // envelope; every subsequent message is a plain ratchet message. Keeping the wire
+  // format in the module (not hand-rolled at the call site) makes it the single
+  // source of truth for the browser port (see docs/INTEGRATION.md §3).
+  //
+  // Shape: { v:5, t:'pkm', ik:[IK_A], ek:[EK_A], opkId:<number|string|null>, msg:<ratchet JSON> }
+  // opkId is the index/identifier of the consumed one-time pre-key, or null when the
+  // responder's OPKs were exhausted (X3DH still completes via SPK, see x3dhResponder).
+  function buildPreKeyMessage({ ikPub, ekPub, opkId = null, ratchetMessage }) {
+    if (ikPub == null || ekPub == null) throw new Error('buildPreKeyMessage: ikPub and ekPub required');
+    if (typeof ratchetMessage !== 'string') throw new Error('buildPreKeyMessage: ratchetMessage must be the ratchetEncrypt() JSON string');
+    return JSON.stringify({
+      v: 5, t: 'pkm',
+      ik: arr(u8(ikPub)),
+      ek: arr(u8(ekPub)),
+      opkId: opkId ?? null,
+      msg: ratchetMessage,
+    });
+  }
+
+  // Parse a prekey-message envelope. Returns { ikPub, ekPub, opkId, ratchetMessage }
+  // or null if the payload is not a well-formed v5 prekey message (so a caller can
+  // fall back to treating it as a plain ratchet message). Never throws on bad input —
+  // the payload arrives over the untrusted relay.
+  function parsePreKeyMessage(payload) {
+    let p;
+    try { p = typeof payload === 'string' ? JSON.parse(payload) : payload; }
+    catch { return null; }
+    if (!p || typeof p !== 'object' || p.v !== 5 || p.t !== 'pkm') return null;
+    if (!Array.isArray(p.ik) || !Array.isArray(p.ek) || typeof p.msg !== 'string') return null;
+    return {
+      ikPub: u8(p.ik),
+      ekPub: u8(p.ek),
+      opkId: p.opkId ?? null,
+      ratchetMessage: p.msg,
+    };
+  }
+
+  // --- One-call X3DH v5 handshake orchestration ------------------------------
+  // These wrap verify → derive → bootstrap → (en|de)crypt so the browser port is a
+  // single call per side AND the MANDATORY signature verification (CRYPTO-SPEC §2.2,
+  // the I1 MITM defense) is unskippable: initiatorHandshake THROWS if the bundle's
+  // signed pre-key signature does not verify, so the MITM-vulnerable "derive without
+  // checking" path is simply not reachable from this API.
+
+  // Initiator (Alice). bundle = { ikPub, edIkPub, spkPub, spkSig, opkPub?, opkId? }.
+  // Returns { session, wire } — send `wire`, then use `session` with ratchetEncrypt/
+  // ratchetDecrypt for every later message.
+  async function initiatorHandshake({ myIdentity, bundle, firstMessage, info = 'breeze-x3dh-v5' }) {
+    if (!bundle || bundle.spkSig == null || bundle.edIkPub == null) {
+      throw new Error('X3DH initiatorHandshake: bundle missing edIkPub/spkSig (cannot authenticate pre-key)');
+    }
+    // MUST verify before deriving — abort on failure (no silent downgrade).
+    if (!(await verifySPK(bundle.edIkPub, bundle.spkPub, bundle.spkSig))) {
+      throw new Error('X3DH: signed pre-key signature INVALID — possible MITM; aborting handshake');
+    }
+    const ek = await genRatchetKey();
+    const sk = await x3dhInitiator({
+      ikPriv: myIdentity.ikPriv, ekPriv: ek.privateKey,
+      ikPubPeer: bundle.ikPub, spkPubPeer: bundle.spkPub, opkPubPeer: bundle.opkPub, info,
+    });
+    const session = await initiatorSession(sk, bundle.spkPub);
+    const inner = await ratchetEncrypt(session, firstMessage);
+    const wire = buildPreKeyMessage({
+      ikPub: myIdentity.ikPub, ekPub: ek.pub, opkId: bundle.opkId ?? null, ratchetMessage: inner,
+    });
+    return { session, wire };
+  }
+
+  // Responder (Bob). myKeys = { ikPriv, spkPriv }. opkResolver(opkId) → the matching
+  // one-time pre-key PRIVATE key (or null/undefined if consumed/unknown — X3DH still
+  // completes via SPK). Returns { session, plaintext, opkId } or null when `wire` is
+  // not a v5 prekey message (so the caller can treat it as a plain ratchet message).
+  // Also returns null if any crypto op throws on relay-supplied data (e.g., a bad `msg`
+  // field that fails JSON.parse in ratchetDecrypt, malformed ik/ek key bytes that fail
+  // importKey in ecdhBits, or ratchetDecrypt's version-check throw on a non-ratchet msg).
+  async function responderHandshake({ myKeys, wire, opkResolver, info = 'breeze-x3dh-v5' }) {
+    const hs = parsePreKeyMessage(wire);
+    if (!hs) return null;
+    try {
+      let opkPriv = null;
+      if (hs.opkId != null && typeof opkResolver === 'function') {
+        opkPriv = await opkResolver(hs.opkId);
+      }
+      const sk = await x3dhResponder({
+        ikPriv: myKeys.ikPriv, spkPriv: myKeys.spkPriv, opkPriv,
+        ikPubPeer: hs.ikPub, ekPubPeer: hs.ekPub, info,
+      });
+      const session = responderSession(sk, myKeys.spkPriv);
+      const plaintext = await ratchetDecrypt(session, hs.ratchetMessage);
+      return { session, plaintext, opkId: hs.opkId };
+    } catch { return null; }
+  }
+
+  // Map a relay prekey-fetch JSON to the initiatorHandshake `bundle` shape. The relay
+  // (_worker.js handlePreKeyFetch) uses verbose names (identityKey, edIdentityKey,
+  // signedPreKey, signedPreKeySig, oneTimePreKey, oneTimePreKeyId); the handshake uses
+  // short ones (ikPub, edIkPub, spkPub, spkSig, opkPub, opkId). Centralizing the rename
+  // here removes the #1 port footgun: a field-name typo that silently drops the signature
+  // material would make initiatorHandshake skip the MITM check — here it's done once and
+  // tested. `decode` (default identity) converts the relay's opaque string encoding to the
+  // byte/key form x3dhInitiator needs; the encoding is the app's concern, not the module's.
+  function bundleFromRelay(fetched, decode = (x) => x) {
+    if (!fetched) return null;
+    const d = (x) => (x == null ? undefined : decode(x));
+    return {
+      ikPub:  d(fetched.identityKey),
+      edIkPub: d(fetched.edIdentityKey),
+      spkPub: d(fetched.signedPreKey),
+      spkSig: d(fetched.signedPreKeySig),
+      opkPub: d(fetched.oneTimePreKey),
+      opkId:  fetched.oneTimePreKeyId ?? null,
+    };
+  }
+
+  // ── Group Sender Key — v5 hash ratchet (Phase 2b) ────────────────────────────
+  //
+  // State: { chainKey: number[], counter: number, epoch: number, v: 5,
+  //          skipped: { [counter]: number[] } }
+  //
+  // Forward secrecy: the chain key is advanced (HKDF one-way) after each message;
+  // the old chain key is replaced and is not retained — knowing the current state
+  // cannot reconstruct past message keys.
+  //
+  // Epoch provides revocation: a kicked member's state is valid only for the old
+  // epoch. The admin generates a fresh random chain key for the new epoch and
+  // distributes it to remaining members only; messages carry `ep` and a mismatch
+  // is rejected without falling back.
+  //
+  // Both functions are pure (no IDB). The caller reads the stored state, passes it
+  // in, and writes back `nextSk` / `nextPeerSk` after success.
+  //
+  // v3 fallback (decryptGroupMsgV3) handles the old static-raw-key messages so
+  // both v3 and v5 messages can be decoded during the rollout epoch.
+
+  async function groupSenderEncrypt(sk, plaintext) {
+    const chainKey = new Uint8Array(sk.chainKey);
+    const msgKeyBits = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-msg-v5', 32);
+    const nextChainRaw = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-chain-v5', 32);
+    // Pad plaintext to a fixed boundary (hides message length)
+    const boundary = cfg.MSG_PAD_BOUNDARY || 256;
+    const raw = new TextEncoder().encode(plaintext);
+    const padded = new Uint8Array(Math.ceil((raw.length + 2) / boundary) * boundary);
+    new DataView(padded.buffer).setUint16(0, raw.length);
+    padded.set(raw, 2);
+    const iv = getRandomValues(new Uint8Array(cfg.IV_BYTES || 12));
+    const importedKey = await subtle.importKey('raw', msgKeyBits, { name: 'AES-GCM' }, false, ['encrypt']);
+    const ct = new Uint8Array(await subtle.encrypt({ name: 'AES-GCM', iv }, importedKey, padded));
+    const ciphertext = JSON.stringify({ v: 5, g: true, i: arr(iv), d: arr(ct), c: sk.counter, ep: sk.epoch });
+    const nextSk = { ...sk, chainKey: Array.from(nextChainRaw), counter: sk.counter + 1 };
+    return { ciphertext, nextSk };
+  }
+
+  async function groupSenderDecrypt(peerSk, ciphertext) {
+    const p = JSON.parse(ciphertext);
+    if (!p.g || p.v !== 5) return null; // wrong version — caller falls back to v3
+    if ((peerSk.epoch | 0) !== (p.ep | 0)) return null; // epoch mismatch; wait for new key
+    const maxSkip = cfg.GROUP_MAX_SKIP || 50;
+    const targetC = p.c | 0;
+    const skipped = { ...(peerSk.skipped || {}) };
+    let msgKeyBits;
+    let chainKey = new Uint8Array(peerSk.chainKey);
+    let counter = peerSk.counter | 0;
+
+    if (targetC < counter) {
+      // Out-of-order (arrived late): look up the cached key derived when we skipped ahead.
+      const cached = skipped[targetC];
+      if (!cached) return null; // key already evicted or never computed
+      msgKeyBits = new Uint8Array(cached);
+      delete skipped[targetC];
+      // chainKey / counter unchanged — only the skip cache entry is consumed.
+      const nextPeerSk = { ...peerSk, skipped };
+      const importedKey = await subtle.importKey('raw', msgKeyBits, { name: 'AES-GCM' }, false, ['decrypt']);
+      const padded = new Uint8Array(await subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, importedKey, u8(p.d)));
+      const textLen = new DataView(padded.buffer).getUint16(0);
+      return { plaintext: new TextDecoder().decode(padded.slice(2, 2 + textLen)), nextPeerSk };
+    }
+
+    // Ratchet forward from `counter` to `targetC`, caching skipped keys.
+    if (targetC - counter > maxSkip) return null; // gap too large — reject
+    while (counter < targetC) {
+      const skMsgKey = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-msg-v5', 32);
+      chainKey = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-chain-v5', 32);
+      skipped[counter] = Array.from(skMsgKey);
+      counter++;
+      // Evict oldest entries when cache exceeds maxSkip
+      const keys = Object.keys(skipped).map(Number).sort((a, b) => a - b);
+      if (keys.length > maxSkip) delete skipped[keys[0]];
+    }
+    // Derive the target message key and advance past it.
+    msgKeyBits = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-msg-v5', 32);
+    chainKey = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-chain-v5', 32);
+    counter++;
+
+    const nextPeerSk = { ...peerSk, chainKey: Array.from(chainKey), counter, skipped };
+    const importedKey = await subtle.importKey('raw', msgKeyBits, { name: 'AES-GCM' }, false, ['decrypt']);
+    const padded = new Uint8Array(await subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, importedKey, u8(p.d)));
+    const textLen = new DataView(padded.buffer).getUint16(0);
+    return { plaintext: new TextDecoder().decode(padded.slice(2, 2 + textLen)), nextPeerSk };
+  }
+
+  // Legacy v3 group decrypt (HKDF with static raw key + counter as salt).
+  // Kept as a named export so tests can verify both code paths still work during rollout.
+  async function groupDecryptV3(peerSk, ciphertext) {
+    const p = JSON.parse(ciphertext);
+    if (!p.g || p.v !== 3) return null;
+    if (!peerSk.raw) return null;
+    const msgKeyBits = await hkdf(
+      new Uint8Array(peerSk.raw),
+      new Uint8Array(new Uint32Array([p.c]).buffer),
+      'group-msg', 32,
+    );
+    const importedKey = await subtle.importKey('raw', msgKeyBits, { name: 'AES-GCM' }, false, ['decrypt']);
+    const padded = new Uint8Array(await subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, importedKey, u8(p.d)));
+    const textLen = new DataView(padded.buffer).getUint16(0);
+    return new TextDecoder().decode(padded.slice(2, 2 + textLen));
+  }
+
+  return {
+    hkdf, kdfChain, genRatchetKey, ecdhBits, dhRatchetStep,
+    frameEncrypt, frameDecrypt, unpadAndDecompress, ratchetEncrypt, ratchetDecrypt,
+    keyCommitment, ctEqual, pairFromSharedChain,
+    genSigningKey, signSPK, verifySPK, x3dhInitiator, x3dhResponder,
+    initiatorSession, responderSession,
+    buildPreKeyMessage, parsePreKeyMessage,
+    initiatorHandshake, responderHandshake, bundleFromRelay,
+    groupSenderEncrypt, groupSenderDecrypt, groupDecryptV3,
+    _cfg: cfg,
+  };
+}
+
+export default createRatchet;

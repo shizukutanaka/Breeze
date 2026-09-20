@@ -1,0 +1,16 @@
+{
+  "name": "breeze",
+  "version": "3.6.1",
+  "private": true,
+  "description": "Breeze — P2P E2E-encrypted messenger. Test harness for the Cloudflare worker and crypto primitives.",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "vitest": "^2.1.9"
+  }
+}

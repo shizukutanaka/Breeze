@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.breeze.Messenger</id>
+  <name>Breeze</name>
+  <summary>P2P Encrypted Messenger</summary>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <description>
+    <p>Breeze is a peer-to-peer encrypted messenger that runs in your browser or as a native app. No phone number. No registration. No server stores your messages.</p>
+    <p>Messages travel directly between devices via WebRTC with ECDH P-256 key exchange and AES-256-GCM encryption. When a peer is offline, encrypted messages are temporarily relayed via server and deleted upon delivery.</p>
+    <p>Also includes Dead Drop (self-destructing secret sharing) and ephemeral encrypted chat rooms.</p>
+  </description>
+  <url type="homepage">https://github.com/shizukutanaka/breeze</url>
+  <url type="bugtracker">https://github.com/shizukutanaka/breeze/issues</url>
+  <categories>
+    <category>Network</category>
+    <category>InstantMessaging</category>
+  </categories>
+  <keywords>
+    <keyword>messenger</keyword>
+    <keyword>encrypted</keyword>
+    <keyword>p2p</keyword>
+    <keyword>privacy</keyword>
+    <keyword>chat</keyword>
+  </keywords>
+  <launchable type="desktop-id">com.breeze.Messenger.desktop</launchable>
+  <content_rating type="oars-1.1">
+    <content_attribute id="social-chat">intense</content_attribute>
+  </content_rating>
+  <releases>
+    <release version="3.5.0" date="2026-03-13">
+      <description><p>Initial release. P2P messenger + Dead Drop + encrypted chat.</p></description>
+    </release>
+  </releases>
+</component>

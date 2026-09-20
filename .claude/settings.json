@@ -1,0 +1,46 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -c \"$CLAUDE_FILE_PATH\" 2>/dev/null || true"
+          }
+        ]
+      }
+    ],
+    "PostSession": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./validate.sh 2>/dev/null | tail -3 || true"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Read",
+      "Grep",
+      "Glob",
+      "bash(node -c *)",
+      "bash(./validate.sh*)",
+      "bash(wc *)",
+      "bash(grep *)",
+      "bash(cat *)",
+      "bash(head *)",
+      "bash(tail *)",
+      "bash(sed -n *)"
+    ],
+    "deny": [
+      "bash(rm -rf /)",
+      "bash(git push*)",
+      "bash(npm install*)",
+      "bash(wrangler secret*)"
+    ]
+  }
+}

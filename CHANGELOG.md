@@ -1,0 +1,3942 @@
+# Changelog
+
+## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
+
+819 vitest unchanged; Playwright E2E 60 unchanged; `docs/ROADMAP.md`, `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation) — dead-code removal only, no runtime behavior change.
+
+CLAUDE.md's own crypto status table (checked into the repo, kept accurate all session) already documents X3DH v5 and key commitment (I16) as deployed with inline mirrors — but `docs/ROADMAP.md`, the security backlog most likely to steer a contributor's next move, still marked I1 (X3DH v5) and I16 (key commitment) "pending: wire into index.html". Checking one obviously-contradicted item against the code turned into checking every item in the P0/P1 security sprint, the same way the earlier billing/AI/translation documentation sweeps grew once the first contradiction was confirmed real.
+
+Verified each claim directly against the deployed code rather than trusting either document: **I1, I2, I3, I4, I15, I16, I17, I11 are all fully deployed** and were marked "pending"/"port pending" in ROADMAP.md regardless — a full P0/P1 security sprint's worth of already-shipped work invisible to anyone reading the roadmap. Two findings stood out:
+
+- **I15 (stop pre-encryption compression)** looked genuinely pending at first — `CONFIG.COMPRESS_MIN_BYTES` and an adaptive `compressMin` override (network-speed-based) are both very much present and referenced by the roadmap's own description. Reading `_encryptForRaw` directly (not just grepping for the config name) showed the real story: it hardcodes `compressed = false` with an explicit `// I15: do NOT compress before encrypting` comment — the fix *is* deployed, and `compressMin`/`COMPRESS_MIN_BYTES` are dead leftovers from before that fix landed, never read anywhere after being written. Removed both (kept `_adaptiveConfig`'s still-used `pollInterval`/`imageQuality` siblings, and the update methods' `compressMin` assignments, untouched otherwise).
+- **I7 (TTL on skipped message keys)** is the one item genuinely still pending, confirmed by the *absence* of a match rather than a positive hit: grepped every `skippedKeys` reference in index.html and found only count-based pruning (`MAX_SKIP`), no timestamp field or age check anywhere. Left this row, and the two sprint-summary sentences referencing it, as the sole accurate "pending" claims remaining in the whole document.
+
+Also corrected I3, I17, and I11's wording where they were half-right (real work done, but the specific "still pending" clause was stale) rather than wholly wrong. `bash validate.sh`, `npm test` (819), and the full Playwright suite (60 tests) all re-confirmed green — this cycle touched documentation plus one dead-config deletion, no wire/handshake logic changed.
+
+---
+
+## Restoring a backup reloaded the page before its own confirmation toast could be read (branch claude/nice-ride-T6yb0, 2026-09-16)
+
+819 vitest unchanged; Playwright E2E 59 → **60**; `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation), `tests/e2e/backup.spec.js` (new file).
+
+Continuing the search for the same "two implementations, one stale" shape found five times already this session (each time across two separate functions), checked whether it also occurs *within* a single function — a leftover line from an earlier edit that nobody removed. `restoreBackup()` (the drag-drop / file-picker restore path) had `showToast(t('toastRestoredReload'), 'success'); setTimeout(() => location.reload(), 1.5 * MS.SEC);` immediately followed, on the very next line, by an unconditional `location.reload();` — a duplicate that fires before the delayed one ever gets a chance to. The established, correct pattern for this exact "show a toast, then reload" sequence already exists twice elsewhere in the file (the remote-wipe handler, the IDB-connection-lost handler) as a *single* delayed call — this function alone had grown a second, redundant, immediate one, defeating the delay's entire purpose: the "Restored! Reloading..." toast was on screen for well under half a second, not the intended 1.5 seconds.
+
+`restoreCloudBackup()` (the server-backed cloud restore) had the same user-facing symptom via a different root cause: no delay at all, just `showToast(...); location.reload();` back to back.
+
+Confirmed live before fixing, the same standard held throughout this session: drove the real backup/restore UI end-to-end (download a real encrypted backup via `/backup`, drag-drop it back onto the sidebar, submit the real passphrase prompt) and measured wall-clock time from the restore click to the page's actual navigation event. Pre-fix: 427-469ms. Post-fix: ~1.9s, matching the intended 1.5s delay plus real async decrypt/DB-write work. Fixed both functions to use the single-delayed-call pattern already established elsewhere in the file. New E2E test drives the identical real flow and fails against the pre-fix build with the same near-instant-reload symptom.
+
+---
+
+## A fifth instance of the per-account timer/listener leak class: /focus mode left a zombie timer running after a switch (branch claude/nice-ride-T6yb0, 2026-09-16)
+
+819 vitest unchanged; Playwright E2E 58 → **59**; `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation), `tests/e2e/account.spec.js`.
+
+After fixing the `_messengerCleanup` listener leak and the `_startLiveSession` maintenance-interval gap, asked the obvious next question rather than declaring the class closed: is `_registerMessengerCleanup()`'s explicit `clearTimeout` list — `_presenceTimer`, `_pollTimer`, `_retryTimer`, `_typingTimeout` — actually complete, or was it built by fixing each leak as it was found rather than by enumerating every candidate? Grepped every `setTimeout`/`setInterval` call in the file not already routed through `_intervals.push(...)` and checked each one's own clear path. Nearly all are short-lived UI feedback (toast fades, copy-button reverts, swipe-back animation resets) that are harmless even if orphaned — no cleanup needed. Two long-lived candidates (`sigPoll`, `pollCallSignals`'s `poll`) turned out to already self-clear correctly on their own natural lifecycle event, one via a stored `peerState._sigPoll` reference plus an `_intervals` safety net, the other by polling `_callState` each tick.
+
+One did not: `_focusTimer`, set by `_updateFocusBanner()` (`_focusTimer = setTimeout(_updateFocusBanner, MS.MIN)`), which self-reschedules every minute for as long as `/focus` mode is active — and unlike its four siblings, was never added to the cleanup closure at all. `#focus-bar` is a static DOM element that survives every account switch (`switchAccount()` only clears `_DOM`'s memoization cache, not the DOM itself), so the function's own early-return guard (`if (!bar) return`) never saves it either — the orphaned chain just keeps running forever, once per switch made while focus mode was on, each copy reading its own now-stale account's `_settings`/`myId` and racing whichever other copies are still alive to overwrite the same banner.
+
+Confirmed live before writing the fix, the same standard held throughout this session: instrumented `window.setTimeout`/`clearTimeout` to track any timer whose callback name contains `updateFocusBanner`. Enabling `/focus 30` on account A left exactly one tracked timer; switching to a freshly-created account B left it uncleared (count stayed 1, expected 0). Fixed by adding `_focusTimer` to the same explicit-clear block as its siblings. Re-ran the same instrumentation after the fix — count drops to 0 immediately after the switch. New E2E test reproduces the live check permanently and fails against the pre-fix build with the same 1-vs-0 symptom.
+
+---
+
+## A fourth instance of the same duplicate-boot-path pattern: fresh accounts never self-enforced their retention policy (branch claude/nice-ride-T6yb0, 2026-09-16)
+
+819 vitest unchanged; Playwright E2E 57 → **58**; `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation), `tests/e2e/account.spec.js`.
+
+After fixing the `_messengerCleanup` listener leak (below), the obvious next question — the same one already asked three times this session about this exact shape of bug — was whether `_boot()`'s `if (hasId)` branch and the setup-completion click handler had *any other* divergence beyond the one already found. Diffed both bodies line-by-line rather than trusting that one fix closed the whole class.
+
+It didn't. Eleven more steps existed in `_boot()`'s branch with no counterpart in the setup handler. Most are genuine no-ops for a truly brand-new identity (there is nothing to prune, no scheduled messages to recover, no remote-wipe signal that could exist yet) and were left alone rather than padded in for their own sake. Three are real, user-visible defects:
+
+- **`enforceRetentionPolicy()` / `pruneAuditLog()` and their `setInterval` maintenance registrations were never registered for a freshly-created account's first live session.** A disappearing-messages retention policy — the whole point of setting one — silently did not self-enforce for that account's entire first session, however long it lasted, until the user happened to switch accounts and back (which runs `_boot()`'s `if (hasId)` branch and registers the intervals for the first time). Privacy-relevant and completely silent: nothing errors, nothing logs, the messages that were supposed to disappear simply don't, for as long as the session stays open.
+- **`#msg-short-id` (the human-readable ID with click-to-copy) was never populated or wired with its `onclick` on a fresh account's first session** — visible in the UI as a blank element, and clicking it did nothing, until the same account/switch-and-back workaround.
+- **`auditLog('auth', 'Session started: ...')` was never written** for a first session, leaving a gap in the audit trail exactly where a "how did this account's history begin" review would look first.
+
+(The remaining un-ported steps — `loadSettings()`, `_updateFocusBanner()`, `_refreshDeviceRole()`, `_loadRetryQueue()`, stale Double-Ratchet session pruning, scheduled-message recovery, `checkRemoteWipe()`, wallpaper restore, and the `?settings` URL-shortcut handler — are all genuinely idempotent no-ops on a brand-new identity's first run, but were folded into the same shared function anyway: leaving them duplicated-by-omission is exactly the trap that caused this bug in the first place, and the cost of including them is zero since they no-op safely.)
+
+Fixed the same way as the listener leak: extracted the shared logic into one function, `_startLiveSession()`, called from both `_boot()`'s existing-identity branch and the setup-completion handler, plus a small `_openSettingsFromUrl()` helper kept separate because it must run after URL add/join processing in both callers. Verified live in real Chromium (not from reading the code): before the fix, a fresh account's `#msg-short-id` stayed empty and its audit log held only the "Identity created" entry; after, the short ID displays immediately and a "Session started" entry is written. New E2E test asserts both and fails against the pre-fix build with exactly that empty-string/missing-entry symptom.
+
+---
+
+## Every freshly-created account leaked its entire listener set on the first switch away from it (branch claude/nice-ride-T6yb0, 2026-09-16)
+
+819 vitest unchanged; Playwright E2E 56 → **57**; `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation), `tests/e2e/account.spec.js`.
+
+Applying the same mechanical-sweep discipline that found the three keyboard-access bugs to a different defect class: does every `document.addEventListener` have a real, working cleanup path? Most do, via the established `{ signal: _ac.signal }` idiom this file already uses consistently. Two showed zero matching `removeEventListener` calls anywhere — `visibilitychange` and `touchstart` — but reading them in context showed both were either a genuine once-per-page-load top-level listener (no cleanup ever needed) or already used the signal idiom my grep's context window was too short to see. A clean sweep, on paper.
+
+Then the harder question, the one the sweep can't answer by reading source: does the cleanup mechanism actually *fire*? Verified with real Chromium via CDP's `DOMDebugger.getEventListeners` — not from reading the code, the same standard this session has held every other "looks correct" claim to. It didn't. Switching between two accounts, `document`-level listener counts for `visibilitychange`/`keydown`/`touchstart`/`click` grew with every switch and never shrank back down — a real, unbounded, silent memory leak reachable by the single most ordinary multi-account action: create a second account, switch to it once.
+
+Isolating it took several dead ends before finding the real cause, each one worth recording since a future engineer will hit the same wrong turns: `AbortController` + `{signal}` itself works correctly in this exact Chromium build (confirmed in a 4-line isolated reproduction); Chrome DevTools Protocol logpoints set via `Debugger.setBreakpointByUrl` gave zero hits at *any* line, including the function's own entry point that unquestionably runs — a broken diagnostic technique, not a broken app; and a `_dbg()`-gated debug log one line before the target similarly gave a false "never reached" signal, because that specific log line sits behind its own unrelated conditional (`if (_initTime)`) that can be false while every line after it still runs. The technique that actually worked: a throwaway, immediately-reverted instrumentation edit — one counter incremented at the function's own entry, another at the exact line in question — read back directly from the page. That is what finally showed `_messengerCleanup` (whose body calls `_ac.abort()`, tearing down every `{signal: _ac.signal}` listener) was registered on some `initMessenger()` runs and not others.
+
+The real cause: `_messengerCleanup`'s assignment sat inside `_boot()`'s `if (hasId) { ... }` branch — which is false on exactly one occasion per account, its very first boot, immediately after identity creation (`loadIdentity()` has nothing to find yet). The setup-completion click handler duplicates the REST of that branch's effects — `startPresence()`, `startPolling()`, hiding the setup screen, showing the main UI — to reach the same live state, registering every one of the listeners that need cleanup, but never reached the cleanup registration itself, because it was a hand-duplicated copy of `_boot()`'s logic rather than a shared call to it. The exact same "two independent implementations of the same initialization, only one of them complete" shape as the `showMsgMenu`/context-menu duplicate handler and the disappearing-message duplicate countdown scanner found earlier this session — the third instance of this meta-pattern in one sitting.
+
+Fixed by extracting the ~80-line cleanup closure into a single named function, `_registerMessengerCleanup()`, called from both `_boot()`'s existing-identity branch and the setup-completion handler — rather than pasting a third copy of the closure into the handler, which would only have re-created the same drift risk under a different name. Verified with the same CDP listener-count technique that found the bug: before the fix, four rounds of switching between two accounts grew `visibilitychange` from 5 to 13 listeners, `keydown` 5 to 9, `touchstart`/`click` 1 to 3 each, never shrinking; after, all four counts stay exactly flat across the same four rounds. New E2E test reproduces this and fails against the pre-fix build with the exact numbers above.
+
+---
+
+## The same keyboard-access bug found in three more places by grepping for its exact shape (branch claude/nice-ride-T6yb0, 2026-09-15)
+
+819 vitest unchanged; Playwright E2E 54 → **56**; `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation), `tests/e2e/account.spec.js`, `tests/e2e/commands.spec.js`, `tests/e2e/layout.spec.js`.
+
+The `showMsgMenu` keyboard-access fix earlier today answered one instance of a question worth asking exhaustively: is this class of bug — a hand-rolled `<div>` given an `onclick` with no `tabIndex`, so it's mouse-only despite looking complete — a one-off, or a shape? Wrote a small script to check mechanically: every `X.onclick = ...` assignment in `index.html`, resolved to its `document.createElement(tag)` call, filtered to non-natively-focusable tags, checked whether `.tabIndex` is ever set on that variable anywhere. Six candidates came back. Three (`overlay`, `lb`, `modal`) are legitimate click-outside-to-dismiss backdrops with Escape already wired as the keyboard equivalent — correctly excluded, not fixed for their own sake. Three were real:
+
+- **`.acc-add`** (the "+" to add another account) had a real `aria-label` and no `tabIndex` at all — labeled to a screen reader as a control that exists, while being completely unreachable by keyboard. Worse than no label, since it reads as present and simply is not.
+- **`#load-more-hint`** ("N older messages") — the only way to page further back in a long conversation's history. No `tabIndex`, no `aria-label` either (though its own text content already serves as an accessible name once focusable).
+- **`.help-header`** (`/searchall`'s per-contact result groups, click to jump to that conversation) — the only way to act on a global search result.
+
+Fixed all three with the exact pattern already proven twice today (`showContextMenu` originally, `showMsgMenu` this morning): `tabIndex = 0`, `role="button"`, and an `onkeydown` that calls `.click()` on Enter/Space. Verified each live, not from reading the code — including a real focus-triggered side effect worth recording: `.focus()` on an off-screen element scrolls it into view, and for `#load-more-hint` that scroll alone was sometimes enough to cross the app's own "near the top, load more" threshold before a key was ever pressed. The regression test accounts for this explicitly (checks reachability and the immediate post-focus state atomically, then only presses Enter if the element is still there) rather than assuming a fixed causal order that a real browser doesn't guarantee.
+
+Three new E2E tests, one per fix, each confirmed to fail against the pre-fix build. `tools/csp-hash.mjs`'s Tauri sync (added earlier today) picked up the new script-src hash automatically, exactly as designed.
+
+---
+
+## The message menu I fixed earlier today was fully mouse-only — no keyboard access at all (branch claude/nice-ride-T6yb0, 2026-09-15)
+
+819 vitest unchanged; Playwright E2E 53 → **54**; `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation), `tests/e2e/msgmenu.spec.js`.
+
+Prompted to demonstrate the requested thinking method explicitly rather than just apply good engineering silently: Socratic questioning about what's left ("what class of defect can the existing gates structurally not see?") pointed at accessibility — every `aria-live`/`role`/focus-management line read this session so far had been taken on faith, the same trust that was wrong three separate times already this session for "the code parses, so it must work." `announceToSR()` (the screen-reader toast announcer) was checked first and is genuinely correct — confirmed with a live DOM mutation observer, not just reading its source. `showMsgMenu` — the exact function whose visual clipping bug was fixed earlier today — was not: it had `tabIndex`, `role="menuitem"`, arrow-key navigation, and an initial-focus call **nowhere in it at all**, unlike `showContextMenu` right next to it in the same file, which has every one of those. A keyboard-only or screen-reader user had zero way to react, reply, copy, forward, pin, bookmark, select, or report a message — not degraded, completely inaccessible, on the sole surviving path to those actions after this session's own earlier deletion of the duplicate handler.
+
+This was not something today's earlier clipping fix broke — it was there from the start, and survived because every check on this function so far (including the E2E test added a few hours ago) only asked whether the items existed and were mouse-clickable, never whether a keyboard could reach them. Applying Musk's algorithm rather than inventing new patterns: questioned the requirement first (a full WCAG audit would be scope creep; confirming the ARIA-shaped code that's already there actually works is not), then fixed by mirroring `showContextMenu`'s already-correct, already-proven pattern exactly — tabIndex, role, roving arrow-key focus, Enter/Space activation, initial focus-on-open — rather than writing a second, divergent implementation. Checked the adjacent `showReactPicker` for the same gap and found it uses real `<button>` elements, natively focusable and activatable without any extra wiring; Tab-order-only access there is a legitimate, lower-severity design choice, not the same hard blocker, and was left alone rather than "fixed" for its own sake.
+
+Verified live end to end, not from reading the code: opening the menu now moves focus to the first item, ArrowDown/ArrowUp roves through the list, and Enter activates the focused item and closes the menu (confirmed it actually calls Reply's handler, not just that the menu disappeared). New E2E test fails against the pre-fix build.
+
+---
+
+## Tauri had the same weak CSP Electron did — now synced automatically, not by hand (branch claude/nice-ride-T6yb0, 2026-09-15)
+
+819 vitest unchanged; `tools/csp-hash.mjs` extended; `tauri/src-tauri/tauri.conf.json`.
+
+Checking the third desktop packaging path (Tauri, alongside the just-fixed Electron and the checked-clean Capacitor mobile config) for the same class of issue found the identical bug: `app.security.csp` in `tauri.conf.json` had `'unsafe-inline'` in `default-src` and no separate `script-src` at all (falling through to `default-src`, which also governs unrelated fetch types), plus no `trusted-types` directives — the same gap SECURITY.md's documented, unqualified "hash-pinned script-src, Trusted Types enforced" claim didn't actually hold for.
+
+Electron's fix reads `_headers`' CSP at runtime (`desktop/csp-guard.js`); Tauri's CSP is a static JSON value with no equivalent runtime read available, so instead of leaving a THIRD hand-maintained copy to drift again, extended the existing `tools/csp-hash.mjs` (already the single tool responsible for keeping `_headers`' script hashes correct) to also write the same, exact CSP string into `tauri.conf.json` on `--write`, and verify it matches on `--check` (which `validate.sh` already runs). One canonical CSP string, computed once, now reaches all three surfaces — `_headers` directly, Electron by reading it, Tauri by this tool keeping its static copy pinned to it.
+
+The sync uses a surgical regex on the raw JSON text, not a parse-and-restringify round-trip — confirmed the latter would have reformatted unrelated parts of the file (collapsing single-line objects like `{ "bundleMediaFramework": false }` onto multiple lines) as a side effect of touching one field. Verified: `--write` changes exactly the one CSP line and nothing else (checked via diff), the file stays valid JSON, and `--check` correctly fails when the two drift apart (tested by corrupting a copy) and passes once they agree.
+
+---
+
+## The billing cleanup missed the mobile Capacitor config and a dead test helper (branch claude/nice-ride-T6yb0, 2026-09-15)
+
+819 vitest unchanged (798 core + 21 desktop/nav/csp — none of these tests touched); `mobile/capacitor.config.json`, `tests/worker.test.js`, `tests/helpers/mockKV.js`.
+
+Checking `mobile/` for the same class of navigation/origin issue just found and fixed in `desktop/main.js` surfaced a different, older kind of leftover: `capacitor.config.json`'s `server.allowNavigation` — the actual list of external hosts the Capacitor WebView is permitted to navigate to — still whitelisted `checkout.stripe.com`, alongside the real, still-used `*.pages.dev`. Billing was removed from this project entirely (SECURITY.md's "Removed: multi-account billing"); this session's earlier billing-cleanup pass covered `wrangler.toml`, `.env.example`, `README.md`, `index.html`'s Terms/Privacy, and several code comments, but never checked the mobile app's own navigation whitelist. A real config surface, not just a comment: had anything ever tried to navigate the in-app WebView to that domain, it would have been allowed — for a payment flow that does not exist.
+
+Grepping the same theme also turned up `tests/helpers/mockKV.js`'s `stripeSigHeader` — a Stripe-webhook-signature test helper, exported and imported into `tests/worker.test.js`, and called by nothing. Both the definition and the now-pointless import removed.
+
+---
+
+## Electron shipped its own CSP, strictly weaker than the one SECURITY.md documents (branch claude/nice-ride-T6yb0, 2026-09-15)
+
+812 → **819** vitest (+7, new `tests/csp-guard.test.js`); new `desktop/csp-guard.js`; `desktop/main.js`, `desktop/preload.js`, `desktop/package.json`, `build.sh`.
+
+Continuing the audit of `desktop/main.js` that found the navigation-guard bug: `setupCSP()` set its own hand-written `Content-Security-Policy` — `default-src 'self' 'unsafe-inline'` and no `trusted-types` directive at all. SECURITY.md documents, without qualification, "Hash-pinned `script-src` (no `'unsafe-inline'`)" and `require-trusted-types-for 'script'` as Breeze's CSP. That was only ever true for the web build; the desktop app quietly shipped a strictly weaker policy of its own — allowing inline script execution and dropping the Trusted-Types enforcement layer the web deployment relies on as defense-in-depth against DOM-based XSS, in the very same `index.html` that already sets up the `breeze-sanitizer` Trusted Types policy expecting it to be enforced.
+
+Fixed by having Electron read the SAME `Content-Security-Policy` line the web deployment ships in `_headers` (the file `tools/csp-hash.mjs --write` maintains), instead of duplicating a second, independent policy that had already drifted once and could drift again. This can no longer go stale: there is only ever one CSP string, computed once, read by both deployment targets. `_headers` wasn't previously bundled into desktop resources at all (`build.sh`'s `WEB_FILES`, `desktop/package.json`'s `electron-builder` `extraResources` — the real, authoritative packaging manifest for actual `electron-builder` runs, separate from `build.sh`'s own simpler copy step and easy to miss if only one is checked) — added to both. Falls back to the previous permissive policy if `_headers` is ever missing or unparseable, rather than let a missing file crash the app on a build predating this change.
+
+Verified the parsing logic (extraction regex + fallback behavior) with 7 new unit tests, including one that reads the actual, checked-in `_headers` end to end and confirms `script-src` is hash-pinned with no `unsafe-inline` while `style-src`'s (which is not hash-pinned) still correctly is — a regression check against real content, not just a hand-crafted fixture. Could not empirically verify actual CSP *enforcement* inside a running Electron window: this sandbox has no Electron install and no GUI runtime to launch one. The claim that Chromium enforces this identically inside Electron as in a regular browser rests on Electron's `session.webRequest` CSP mechanism being a standard Chromium feature, not empirical observation — flagging that limitation rather than presenting it as verified.
+
+Also removed `preload.js`'s `onDeepLink` API while auditing the same file: defined once, never called by `main.js` (which never sends the `'deep-link'` IPC event it listens for) and never referenced by `index.html` either — dead on both ends. The actual, working deep-link mechanism reloads the window with the payload as a query string, which `index.html`'s own boot-time URL parsing already handles.
+
+---
+
+## Electron's navigation guard was bypassable by a suffix trick on the app's own origin (branch claude/nice-ride-T6yb0, 2026-09-15)
+
+798 → **812** vitest (+14, new `tests/nav-guard.test.js`); new `desktop/nav-guard.js`; `desktop/main.js`.
+
+Auditing `desktop/main.js` (never checked this session — every fix so far was in the web/worker deployment) found `will-navigate`'s guard used `url.startsWith(appOrigin)` as a stand-in for an origin check. It is not one: `"https://breeze.pages.dev.attacker.example/phish".startsWith("https://breeze.pages.dev")` is `true`, since the real origin is merely a text *prefix* of the attacker's longer hostname. `BREEZE_URL` remote mode — pointing the desktop app at a real HTTPS deployment — is documented, supported (`desktop/README.md`), and the exact case this bypasses: a malicious page reachable via any means (a redirect, a compromised ad, a link) could navigate the app's own window to itself instead of being kicked out to the OS browser as intended, opening a phishing vector inside what looks like the trusted app window. Verified the bypass and the fix with a plain Node one-liner before touching anything.
+
+Fixing it surfaced the same bug one layer down, in my own first attempt: the accompanying `file://` case (needed because Node's `URL.origin` serializes *every* `file://` URL to the literal string `"null"`, making an origin comparison meaningless there) used `target.pathname.startsWith(path.dirname(current.pathname))` — which falls for the identical trick: `/home/user/Breeze-evil` textually starts with `/home/user/Breeze`. Caught before shipping by writing out the test cases first. `path.relative()` gives an actual containment check: a path outside the directory comes back starting with `..` or as a second absolute path.
+
+`desktop/main.js` does `require('electron')` as its first line, which throws outside a real Electron process — so the check can't be unit-tested in place. Extracted into `desktop/nav-guard.js` (Node's `path` and `URL` only, no Electron dependency) purely so it could get real coverage. 14 tests cover both protocols and the exact bypasses found along the way; confirmed each one fails against the code state that motivated it — 6 fail against the original `startsWith(appOrigin)` bug, and exactly 1 (the sibling-directory case) fails against the interim `path.dirname` + `startsWith` attempt — before landing on the version that passes all 14.
+
+---
+
+## Version string stuck at 3.6.0 across 14 files while CLAUDE.md documented core security features as default-on "since v3.6.1" (branch claude/nice-ride-T6yb0, 2026-09-15)
+
+798 vitest + 52 Playwright E2E (unchanged); version bumped to 3.6.1 across `sw.js`, `index.html` (footer + `CONFIG.VERSION`), `_worker.js` (header comment + `/api/health` + `X-Breeze-Version` header), `manifest.json`, `package.json` + `package-lock.json`, `build.sh`, `build-all.sh`, `desktop/package.json`, `mobile/package.json`, `tauri/package.json`, `tauri/src-tauri/tauri.conf.json`, `tauri/src-tauri/Cargo.toml`.
+
+CLAUDE.md's own architecture table asserts, multiple times, that `GROUP_RATCHET_V5` and the X3DH v5 handshake are "default **ON** since v3.6.1" — describing them as CURRENT deployed behavior. Every literal version string in the repo (excluding `CHANGELOG.md`'s own dated history, correctly untouched) still said `3.6.0`. This wasn't a one-off: `sw.js`, `index.html`'s user-facing footer, `_worker.js`'s `/api/health` response and `X-Breeze-Version` header, both root and platform `package.json`s (desktop/mobile/tauri), `manifest.json`, and both build scripts had all drifted together, never updated when the features they describe went live.
+
+Found the dependency that made this need doing carefully, not just mechanically: `index.html`'s boot sequence compares `CONFIG.VERSION` against the Worker's own `/api/health` `version` field and logs a "Version mismatch" warning on disagreement. Both were stuck at the same stale `3.6.0`, so they silently agreed — bumping only one side would have introduced a spurious mismatch warning on every boot that didn't exist before. Fixed both together in the same change and verified live: booted a real client against a real (freshly-restarted, to avoid Node's own stale ES-module cache serving pre-edit `_worker.js`) server and confirmed zero "version mismatch" console output, footer reads "v3.6.1", `/api/health` reports `{version: "3.6.1", endpoints: 38}`.
+
+Also caught in the same pass: `_worker.js`'s top-of-file comment still claimed "43 API endpoints" — stale since an earlier session's AGENTS.md correction to the real count (37 `case '/api/...'` + `/api/health` = 38); the live `/api/health` response itself already correctly said `endpoints: 38`, so only the comment had drifted. Corrected to match. `package-lock.json` regenerated via `npm install --package-lock-only` rather than hand-edited.
+
+Deliberately did NOT bump further to match SPEC.md's informal "v3.7, first-principles pass" references — those read as a loose session label (no patch number is ever given), not a committed semver target the way v3.6.1 is asserted with a full `X.Y.Z` in CLAUDE.md's own authoritative table. Bumping to 3.6.1 makes the artifact consistent with what the project's own documentation already claims is true; inventing a further number for this session's own extensive additional work would be a version-policy decision, not a consistency fix.
+
+---
+
+## Coverage for the scroll-to-bottom FAB badge — the other un-trapped-feature item, confirmed working (branch claude/nice-ride-T6yb0, 2026-09-14)
+
+798 vitest + **52** Playwright E2E (+1, `tests/e2e/layout.spec.js`); no `index.html` change — coverage only.
+
+The previous commit's changelog asserted the unread-while-scrolled-up badge "checked out fine" without showing the check. Asserting a claim about correctness without the measurement that backs it is exactly what this session's own standard argues against, so this closes the gap the same session that opened it, before moving on.
+
+Measured directly, two real browsers: filled a conversation past its own height, scrolled away from the bottom, had a real peer send a message, and confirmed `#scroll-fab` goes from `↓` to `↓ 1` — and, just as importantly, that the arriving message does NOT yank the scroll position back down (the entire point of the FAB is not disturbing a reader mid-scroll). Clicking it returns to the bottom and clears the count. All correct.
+
+Added as a permanent E2E test since the feature — part of the ~190 lines freed from the Electron-only guard earlier this session — had zero coverage despite `tools/closure-boundary.mjs` confirming its reference direction is structurally safe (a hoisted top-level function called from inside `initMessenger`, the opposite direction from the Ctrl+N/Ctrl+F bug): a direction being safe on paper isn't the same as the feature actually firing at runtime, and only running it proves that. Teeth-tested against the pre-un-trapping commit (`32c9a27`), where the feature was still dead code: fails, as expected.
+
+---
+
+## Disappearing messages set to 1h or 24h were deleted within 1–24 minutes (branch claude/nice-ride-T6yb0, 2026-09-14)
+
+798 vitest + **51** Playwright E2E (+1, new `tests/e2e/disappear.spec.js`); `index.html`, `_headers` (CSP hash).
+
+Verifying the last two un-trapped-feature items from earlier this session (unread badge while scrolled up, disappearing-message countdown), the badge feature checked out — but reading the countdown code turned up a second, independent implementation nobody had noticed conflicted with the first, in the exact shape this session keeps finding: an old, cruder top-level implementation left running alongside a newer, correct one, and the old one actively winning.
+
+`appendMsg()` — the one function that renders every message, fresh or reloaded from IndexedDB history, `disappearAt` passed through in every call site — already sets up a precise per-message countdown using the real timestamp directly. A separate 30-second global scanner also existed, re-deriving a deadline by regex-matching the badge's own *translated, human-readable* title ("Disappears in 1h") instead of using the timestamp it was rendered from. Its regex, `/(\d+)/`, extracts only the leading digits and always multiplies by `MS.MIN` — the unit letter the label itself carries (`m` vs `h`) is never read.
+
+Measured directly against the real generated title: for a message promised to last **1 hour**, the scanner computed a deadline of **1 minute** — 59 minutes short. For **24h**, the longest option in the picker, it computed **24 minutes** — 23 hours 36 minutes short. The two longest, most-trusted disappearing-message durations were the two that failed hardest; a 30-second option would have been off by nothing (extracting "30" from "30s" and reading it as 30 minutes happens to only be wrong in the *safe* direction — longer, not shorter — so the very short options masked how bad the bug was for the long ones).
+
+Deleted the scanner entirely rather than patching its unit parsing: the precise implementation already covers every real case, fresh sends and history reloads alike, so the buggy one had nothing to contribute except deleting people's messages up to 60x sooner than promised — a real, silent data-loss bug in a privacy feature whose whole purpose is a promised retention window.
+
+One new E2E test, real-time-bound (Playwright's `page.clock` does not reliably drive this codebase's countdown, whose first tick is kicked off via `requestAnimationFrame` — confirmed: fast-forwarding virtual time past even a 30s TTL left the message showing as still present, so a real wall-clock wait is the only trustworthy check here): sends a message set to disappear in 1h, waits 90 real seconds — three of the deleted scanner's 30-second cycles, decisively past where the bug fired, and still ~58 minutes short of the message's actual deadline — and asserts it's still there. Fails against the pre-fix build.
+
+---
+
+## A permanent gate for the Ctrl+N/Ctrl+F bug class: new tools/closure-boundary.mjs (branch claude/nice-ride-T6yb0, 2026-09-14)
+
+798 vitest + 50 Playwright E2E (unchanged); new `tools/closure-boundary.mjs`, `validate.sh` **42 → 43 checks**.
+
+The previous commit's fix was one instance of a bug class, not a one-off: `initMessenger()` is a ~10,000-line closure, and any top-level code placed after its closing brace loses access to everything declared inside it — silently, since the code still parses. A human already had to hand-trace that boundary once to find `dbGetAll`/`activeContact`/`openConversation`/`exitSelectMode` all broken the same way; this makes that trace a repeatable check instead of a one-time audit.
+
+`tools/closure-boundary.mjs` collects every `const`/`let`/named-function declared inside `initMessenger`'s body, then scans everything after its closing brace for a bare reference to one of those names that isn't behind `window.*` (the sanctioned exposure pattern) or a `typeof X !== 'undefined'` guard. It is deliberately not a general JS scope analyzer — no attempt at full parsing — just the one question that actually matters here, with every candidate cross-checked against the tail's own declarations before being reported, so a false positive would mean a real declaration was missed, not a name that merely looks unbound.
+
+Three false-positive classes turned up and got fixed in the tool itself before trusting it: unmasked regex literals (`/(\d+)/` reads as a use of a variable named `d`, one of the commonest short names in this file — `\d` is not `d`, but a naive scanner can't tell); parameter lists captured with `[^)]*` instead of `[^()]*`, which greedily spans an outer call's opening paren when there's no closing paren before an inner arrow function's own `(params) =>`; and a class-method/shorthand-method pattern that also matches `if (activeContact) { ... }`, since a bare identifier followed by `(cond) {` is syntactically identical to `method(params) {` without deeper parsing — control-flow keywords are now excluded from that pattern by name.
+
+Verified: clean (1197 closure-local names checked, 0 unguarded) against the current fixed file; correctly fails, naming all 4 real bugs, against the immediately-preceding commit; correctly fails against three earlier historical states, including independently re-discovering `_intervals` — the exact bug already found and fixed earlier this session when the Electron block was first un-trapped, without being told to look for it by name.
+
+---
+
+## Ctrl+N and Ctrl+F threw ReferenceError on every press, and half the message menu was unreachable (branch claude/nice-ride-T6yb0, 2026-09-14)
+
+798 vitest + **50** Playwright E2E (+4, new `tests/e2e/msgmenu.spec.js`); `index.html`, `_headers` (CSP hash), all 7 locale files + inline EN (`toastUnpinned` — now-dead key).
+
+The pending "verify the remaining un-trapped features" item from the Electron-block fix earlier this session turned into a chain of three compounding bugs, each surfaced by fixing the one before it.
+
+**1. Ctrl+N and Ctrl+F threw on every press, on every platform.** The Electron un-trapping fix balanced the braces of `if (PLATFORM === 'electron')`, but never checked the freed code against `initMessenger()`'s OWN closing brace — a plain brace-count exercise misses a boundary belonging to a DIFFERENT enclosing function entirely. The "Global: Escape to close modals + keyboard shortcuts (all platforms)" listener it freed landed several lines PAST where `initMessenger` itself ends, at true top level. `dbGetAll`, `activeContact`, and `openConversation` are declared inside that closure; referencing them from outside threw a bare `ReferenceError` — E2E-confirmed via `page.on('pageerror')`. The `_selectMode`/`togglePicker` checks two lines away used `typeof x !== 'undefined'` guards specifically because whoever wrote them knew this boundary was porous; Ctrl+N and Ctrl+F weren't guarded the same way, so they broke outright — and `e.preventDefault()` had already run, silently eating the browser's native Ctrl+F Find as a side effect, with nothing to show for it. Fixed by exposing the handful of needed internals via `window.*` (the same pattern already used for `togglePicker`/`toggleReaction`/`showLightbox` elsewhere in this file) rather than moving ~300 lines back inside the closure, which the standing no-large-refactor rule rules out for a fix this narrow.
+
+**2. Chasing the same closure-boundary blindness found a second, independent bug**: an older "v3.5" delegated right-click handler on `#msg-messages` was never deleted when the newer per-message `showMsgMenu` (v3.6, comment-dated) was added. Both fire on the same right-click — the message's own `oncontextmenu` first, then the delegated one via bubbling — and since `showContextMenu()` clears any existing `.ctx-menu` before building its own, whichever ran SECOND always won. That was always the older one, so the richer menu was created and destroyed in the same synchronous event dispatch, before a single paint. **React, Bookmark, Select, and Report were completely unreachable, not just relocated** — multi-select mode had no other entry point at all, and Report was the only way to file an abuse report on desktop. The older handler's own forward action didn't forward anything either — it stuffed `/reply <text>` into your own composer, unrelated to the real multi-contact forward picker the newer menu already calls. Deleted the older handler entirely rather than merging the two: the newer one is a strict superset, already correct where the older one needed a hand-patched `msgId` re-fetch (documented in a comment from an earlier session that fixed that bug without realizing the code was dead), and already reuses `startReply()` — the same function the swipe-to-reply gesture calls — instead of a second, driftable copy of the same UI setup.
+
+**3. Deleting the duplicate surfaced a THIRD bug in the surviving one.** With nothing else to override it, `showMsgMenu`'s own menu turned out to be visually broken too: appended as a child of the message bubble, which has `contain: content` for its own `content-visibility` virtualization in long chat histories. Paint containment clips ALL descendants — fixed-positioned ones included — to the bubble's own small box. A one-line bubble is ~50px tall; the menu can be 7-10 items, 270px+. Only the first item or two ever rendered or were clickable — E2E-confirmed: a real click at the "Select" item's geometric position hit-tested to `#msg-messages` underneath, not the menu, because a clipped region doesn't receive pointer events either. Fixed by appending to `document.body` and computing explicit viewport-coordinate `left`/`top` from the bubble's `getBoundingClientRect()`, clamped to the screen — the same technique `showContextMenu()` already uses successfully elsewhere in this file. Verified at 320/390/1280px, own messages at the top and bottom of a scrolled conversation: zero overflow, every item visible and clickable everywhere.
+
+The two now-orphaned `.i-abs-tl`/`.i-abs-tr` CSS rules (only ever used for the old, now-fixed positioning) are deleted, and `toastUnpinned` — a string only the deleted v3.5 handler used, and only as a mislabeled menu-item LABEL rather than an actual toast — is removed from EN and all 7 locale files (`tools/i18n-check.mjs` catches dead keys automatically; it caught this one).
+
+Four new E2E tests, each confirmed to fail against the pre-fix build: Ctrl+N/Ctrl+F throw no errors and do what they claim; right-clicking a message shows all seven base items and every one is actually in the viewport (not just present in the DOM); entering select mode from the menu and pressing Escape actually exits it.
+
+---
+
+## A swiped message or contact row visibly animated back, then silently snapped back out (branch claude/nice-ride-T6yb0, 2026-09-14)
+
+798 vitest + **46** Playwright E2E (+2, `tests/e2e/layout.spec.js`); `index.html`, `_headers` (CSP hash).
+
+Continuing the same sweep as the emoji picker fix into the two remaining unmeasured touch surfaces — swipe-to-reply on a message and swipe-left-to-archive on a contact row. Both share one hand-rolled drag implementation: `touchmove` sets `el.style.transform = translateX(dx)px` directly, and `touchend` adds a `.swipe-back` class whose `transform: translateX(0) !important` overrides it — for exactly as long as that class stays on. `!important` in a stylesheet does beat an inline style, which is why the bubble visibly slides back into place during the 200ms transition. Neither handler ever cleared the inline value itself, though. The class comes off `CONFIG.SWIPE_BACK_MS` (250ms) later on a `setTimeout`, the mask disappears with it, and the never-cleared inline `translateX(dx)` reasserts — measured directly: computed transform goes from identity right after release to `matrix(1,0,0,1,70,0)` 400ms later, with the element's real screen position shifted to match. The animation the user watches is the opposite of what actually happens a quarter-second after it finishes.
+
+For the contact row it's worse than for the message, though not because either is "the real bug" — a swipe that *crosses* the archive threshold triggers `renderContacts()`, which rebuilds the row from scratch and happens to erase the stale style as a side effect. A swipe released *below* the threshold (the far more common case — someone starting the gesture and changing their mind) never re-renders anything, so that row is left permanently offset with no other code path in the app that would ever fix it.
+
+Fixed by clearing `style.transform = ''` at the same point `.swipe-back` goes on, in both handlers — there is then nothing left for the class's `!important` to have been hiding once it comes off. Verified directly against the computed style and the element's real bounding-box position, not just the class list, in a real Chromium: an actual received message (rendered through the app's own message-building function, not a fabricated element with none of its listeners) and a real contact row, using synthetic `Touch`/`TouchEvent`s to drive the exact handlers already wired to production markup.
+
+Two E2E tests wait for `.swipe-back` to actually come off (polling the class, not guessing a fixed delay — the bug is specifically about that transition, so racing a timeout would make the test as timing-fragile as the bug itself) and check geometry rather than the transform string's exact serialization (Chromium reports identity as either the keyword `none` or `matrix(1,0,0,1,0,0)` depending on transition history — both are correct, so the assertion targets what actually matters, the element's real position). One of the two teeth-testing runs against the pre-fix build was a spurious pass — re-run 5x to confirm 5/5 real failures before trusting the reproducer; the contact-row test's first draft had exactly the bug this whole session keeps finding: it "passed" against broken code because it swiped a still-hidden, still-transitioning row instead of waiting for the async `history.back()` navigation the back button drives, corrected by waiting for the sidebar to actually reappear.
+
+---
+
+## The emoji picker's mobile width mixed viewport units with its actual containing block (branch claude/nice-ride-T6yb0, 2026-09-14)
+
+798 vitest + **44** Playwright E2E (+3, `tests/e2e/layout.spec.js`); `index.html`, `_headers` (CSP hash).
+
+Extending the same method as the three fixes below it — measure geometry, don't just check existence — into surfaces not yet checked: the context menu, message menu, and emoji picker. The first two held up across desktop, phone-width-from-boot, and a near-composer worst case. The emoji picker didn't.
+
+Its `max-width: 640px` override set `width: calc(100vw - 16px)` alongside `left: 8px; right: 8px`. `100vw` is the whole screen; `left`/`right` resolve against whatever the picker's actual containing block is — here `#msg-input-bar`, which is narrower than and inset from the viewport (it has its own padding and sits inside the chat column, not flush against the screen edge). The two disagreed, three box-position properties were over-constrained, and per spec `right` lost: measured on a real 390px phone, the picker's right edge landed at 393px — 3px past the physical screen edge. The gap isn't a fixed cosmetic amount; it scales with how much narrower the input bar is than the viewport, so a different device or an unrelated layout tweak nearby could widen it well past 3px.
+
+Fixed by forcing `width: auto` in the same media rule (the base rule's `width: 320px` doesn't revert on its own just because the override omits it — that was the first attempt, still off by the same 3px) so only `left`/`right` constrain the box and the browser solves the width from the picker's real containing block instead of the screen. Verified at 320/360/390/480/640/768/1280px: zero overflow at every width, where before only the widths nobody had measured happened to look fine.
+
+Three E2E tests at 320/390/640px, matching the standing convention: the composer requires an open contact on mobile (opening one is what hides the full-screen sidebar overlay), so the tests open one first rather than testing an unreachable button. All three fail against the pre-fix CSS.
+
+---
+
+## Clicking send on a slash command transmitted it to your contact — including `/drop <secret>` (branch claude/nice-ride-T6yb0, 2026-09-13)
+
+798 vitest + **41** Playwright E2E (+2, new `tests/e2e/commands.spec.js`); `index.html`, `_headers` (CSP hash).
+
+A geometry sweep across four viewports came back clean, so the sweep script's *own* failure became the finding: it drove `/help` by clicking the send button and nothing happened. The app was right and the script was wrong — commands are dispatched by a `keydown` listener on `#msg-input`, so only Enter runs them. But asking the obvious next question turned the script's mistake into a real one: **what does the send button do with a command, then?**
+
+It sends it. `sendMessage()` never looked for a leading `/`, so clicking ↑ encrypted the command and delivered it to the contact as an ordinary chat message — E2E-confirmed from the *peer's* IndexedDB, which held a message whose text was `/help`. The Enter handler beside it already guards exactly this, and carries a comment recording that an earlier E2E caught commands being "sent as literal text first": the fix was applied to Enter only, and the button — the single most obvious affordance, and the only one on a touch keyboard that does not also insert a newline — kept the bug.
+
+The lost command is the mild half. The arguments travel too: `/note <private note about this contact>` delivers that note **to that contact**, `/searchall <query>` ships the query, and `/drop <secret>` — a feature that exists precisely so a secret does not sit in a chat log — puts it straight into one.
+
+Fixed at the button's click handler rather than inside `sendMessage()`: a leading `/` now synthesises the Enter the command listener is already waiting for, so one dispatcher serves both affordances instead of a second copy of the 60-command table. Deliberately *not* inside `sendMessage()` — its other callers (notification quick-reply, and `/reply`, which itself runs inside that listener) must keep calling it directly, or a `/`-leading reply body would re-enter the listener.
+
+Two E2E tests: one asserts the peer's database never receives the command (the sender's own UI cannot show this), the other that a message merely *containing* a slash — `run /help to see the commands` — still sends, so the fix cannot silently eat real messages. Only the first fails against the pre-fix build, which is the correct signature for a bug reproducer plus a non-regression guard.
+
+---
+
+## Every toast in the app rendered as a 143px column of one word per line (branch claude/nice-ride-T6yb0, 2026-09-13)
+
+798 vitest + **39** Playwright E2E (+2, `tests/e2e/layout.spec.js`); `index.html`, `_headers` (CSP hash).
+
+The screenshots taken while verifying the layout fix above showed the boot tip toast as a narrow vertical strip — a detail easy to dismiss as a headless-rendering artifact. Measured instead: **143px wide × 234px tall, 13 lines**, for one sentence. `showToast()` is the app's only feedback channel — 60+ call sites, every error and every confirmation — and it has been unreadable on every screen.
+
+`.toast` carried `position: fixed; top: 16px; left: 50%; transform: translateX(-50%)`, which `.toast-container` already does; the container was added later to stack multiple toasts in a flex column and the child's own positioning was never removed. That redundancy is what broke it: the container's `transform` makes it the containing block for `position: fixed` descendants, and because every one of its children was then out of flow, **the container measured 0px wide**. Each toast resolved `left: 50%` against a zero-width box, got zero available width, and collapsed to its min-content width — the longest single word.
+
+Fixed by deleting the duplicate positioning (and the matching `translateX(-50%)` from the `toastBounce`/`fadeOut` keyframes, which would otherwise have shifted every toast half its own width to the left), and giving the container `width: max-content; max-width: 90vw` so it sizes to its toasts and still fits a phone. Verified in a real Chromium: 826×47 single line at 1280px, 351px (=90vw) wrapped and centred at 390px. Two more `layout.spec.js` tests assert the shape at both widths — teeth-tested, both fail against the old CSS.
+
+Same root pattern as the `</div>` below it, found by the same means: the text was always present and correct in the DOM, only its geometry was wrong, and nothing in the repo measured geometry.
+
+---
+
+## One stray `</div>` deleted the desktop two-pane layout, and 833 green tests never noticed (branch claude/nice-ride-T6yb0, 2026-09-13)
+
+798 vitest + **37** Playwright E2E (+2, new `tests/e2e/layout.spec.js`); `index.html` (−1 line), new `tools/html-balance.mjs`, `validate.sh` **41 → 42 checks**, `.gitignore`, removed `dbg_p.mjs`.
+
+Chasing why the scroll-to-bottom FAB never appeared — one of the features un-trapped from the Electron-only block earlier this session — the measurement came back stranger than a dead button: `#msg-messages` reported `scrollHeight === clientHeight` and fired **zero** scroll events. It was not failing to scroll; it was never overflowing, because nothing bounded its height. Walking its real parent chain in a live browser found `.msg-layout` **missing from it entirely** — `DIV#msg-messages` → `.chat-area` → `#msg-main`, skipping the flex container that gives the whole screen its height.
+
+The cause is one duplicated `</div>` after the sidebar's contact list. HTML has no syntax errors: the parser closed `.msg-layout` ~50 lines early and silently re-parented everything after it, so `.chat-area` stopped being the layout's second column and became a block-level sibling below it. On a 1280×800 desktop the sidebar filled the entire 700px layout box — its right two-thirds blank white — and the conversation pane rendered at **y=781, below the fold**. Reaching your own messages required scrolling past a full-height empty contact list. With the height constraint gone, `overflow-y: auto` on `.msg-area` meant nothing: the page grew instead of the box (3022px document for an 800px viewport), which is what made `#scroll-fab` dead UI and turned every `box.scrollTop = box.scrollHeight` auto-scroll into a silent no-op.
+
+**41 validate.sh checks, 798 unit tests and all 35 E2E tests passed against that build.** Nothing was broken in a way any of them look at: every element still existed, was still visible, and was still clickable — Playwright happily clicks an element below the fold. Only its *position on screen* was wrong, and not one assertion in the repo had ever measured a coordinate.
+
+So both layers get a guard, each teeth-tested against the pre-fix file. `tools/html-balance.mjs` walks the markup with a tag stack and requires every close tag to match the innermost open element — mechanical, no judgement calls, no false positives, since a `</div>` that closes a `<main>` is always a bug (it names the first mismatch as the real one and the cascade after it as noise). `tests/e2e/layout.spec.js` asserts the symptom a user would actually report: the chat column starts at the sidebar's right edge on the same row, fits the viewport, and a long conversation overflows *the box* rather than the document — which would also catch a pure CSS regression that broke the same thing with no markup mistake.
+
+Also deleted `dbg_p.mjs`, a throwaway browser diagnostic accidentally committed in `cfb76ec` and carried since, and added `dbg_*.mjs` to `.gitignore` — a real finding belongs in `tests/e2e/*.spec.js` or `tools/*.mjs`, never in a scratch script.
+
+---
+
+## @alias release was a fourth unreachable feature, and its command threw on success (branch claude/nice-ride-T6yb0, 2026-09-12)
+
+798 vitest + **34** Playwright E2E (+1, new `tests/e2e/alias.spec.js`); `index.html`, `tools/i18n-check.mjs` (+check 8), `CLAUDE.md`.
+
+Continuing the pattern from `/api/alias/delete`'s own header comment down to its Worker tests: complete, correctly authenticated, seven unit tests deep — and never called. `/alias newname` sets a new @handle and never released the old one. Alias records carry no TTL ("aliases are permanent"), so every rename left the previous handle squatting on the relay forever: unreclaimable, still resolving to a now-orphaned identity, with no way back short of `/wipe`-ing the whole account. Wired the client to release the old alias on a successful rename, signing the same `breeze-alias-delete:{alias}:{ts}` challenge the endpoint already verifies.
+
+**Wiring it up surfaced a second, independent bug in the same command.** The success toast was `showToast(t('toastAliasSet')(newAlias), 'success')` — `t()` always returns a string, and calling that string as a function throws a `TypeError`. Grepping the same shape (`t('key')(...)`) found **four** instances: alias-set, `/schedule`, chat import, and GDPR export. Every one completes its real work and then throws immediately on the confirmation toast, which the global `unhandledrejection` handler turns into a raw `t(...) is not a function` error shown in red — the opposite of what happened. `/schedule` was the sharpest case: the throw lands *before* the `setTimeout` that arms same-session delivery, so a scheduled message silently didn't fire until the next reload's boot-time recovery scan picked it up. All four fixed to `t('key', args)`; `tools/i18n-check.mjs` gains check 8, a static scan for the pattern, so a fifth instance fails the build instead of shipping.
+
+The new E2E seeds the pre-existing alias via a Node-side, low-difficulty PoW solve (the harness's `MIN_POW_DIFFICULTY` floor is 8) so only the ONE real client-triggered rename pays the shipped 20-bit solve cost, then asserts the old handle 404s and the new one resolves — proving both bugs fixed at once, since the surviving `t()(args)` typo would have swallowed the success toast the test waits on.
+
+Also: `CLAUDE.md`'s own Validate section had drifted to "39 checks" after `dead-wiring.mjs` shipped at 40 — corrected, a small reminder that documentation is a claim like any other and gets the same scrutiny.
+
+---
+
+## First-principles decomposition and the Socratic record (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+New `docs/FIRST-PRINCIPLES.md` (197 lines); `docs/ASSESSMENT.md` cross-linked. No code change — this is the analysis the engineering was serving, written down so it can be argued with.
+
+`ASSESSMENT.md` answers *what* is good and bad in measured numbers. This answers *why*, as questions and refutations rather than conclusions.
+
+**The decomposition.** Strip every feature and ask what cannot be removed: chat UI, groups, multi-device, notifications, receipts, reactions — all removable. What remains is one sentence: *two people exchange bytes nobody else can read*. Measured, that core is **573 lines, 4.1% of the client**. The other 95.9% is convenience — not a criticism, but it has a consequence: convenience erodes the core silently unless a machine watches. Every defect this session found proves it, and **none of them were crypto errors**. Sealed Sender v1's cryptography was correct; the sender's name simply rode *outside* the envelope. The boot crash delivered nothing to returning users with a perfectly good ratchet. Group sends from a secondary device were dropped in silence while the UI said "sent".
+
+**The moat is not features.** LINE can copy any feature. It cannot copy the absence of ads (its revenue), the refusal to maximise engagement (its metric), or the absence of data collection (its asset). That yields a usable test for every design decision: *could LINE ship this?* If yes, it is not differentiation. Verified rather than asserted — grepping for ad and tracking code returns four hits, all of them privacy-policy prose and variable names.
+
+**The trade-offs, stated as prices paid.** No store distribution buys freedom from review and costs discoverability plus iOS notification limits. Key-as-identity means there is no data to collect and **no account recovery** — backups are the only insurance. A single dependency-free file is auditable and fast, and caps the product at 15,000 lines. A PWA runs everywhere and lags up to 15 s when backgrounded. These are not defects; they are the bill. The document is explicit that an undocumented price is a fraud, which is why SECURITY.md enumerates root-key loss, the 5-minute revocation lag, the 90-day backup expiry, and invite-link-equals-membership.
+
+**And the eighth question, the one most easily skipped: is the improvement itself verified?** It was not. Gating `/group/info` to members was implemented, then reverted on measurement — the same invite token still joins, and joining returns the roster anyway. Thirteen failing tests were the signal that the premise, not the tests, needed re-deriving.
+
+Writing it surfaced two drifted numbers in my own draft (spec-file count, line total). Both were corrected against fresh measurements before commit, which is the document's own standard applied to itself.
+
+---
+
+## Three more listeners wired to nothing — and the gate that finds them (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+798 vitest + 33 Playwright E2E; `index.html`, new `tools/dead-wiring.mjs`, `validate.sh` **39 → 40 checks**, all 7 locales, `docs/ASSESSMENT.md`.
+
+Multi-account being complete-but-unreachable was the second unreachable-feature bug in two rounds, so the question stopped being "is this one broken" and became **"how many other doors are nailed shut?"** `_DOM.get('id')` returns null for an id that does not exist, and the client uses optional chaining nearly everywhere, so a renamed or deleted element leaves its listener attached to nothing — no error, no warning, no failing test. Cross-checking all 77 literal id lookups against every id the app declares (static markup, template strings, runtime assignment) found three orphans.
+
+**One of them lost a capability.** Local encrypted backup-to-file was wired to `#b-msg-backup`, which does not exist. Its *restore* half still worked — drag a backup file onto the sidebar — so the app could restore a file it gave you no way to create. That asymmetry mattered more than it looks: SECURITY.md points at backups as the recovery path for root-key loss, and the cloud copy expires 90 days after upload while a file on your own disk does not. The half that was missing was the durable one. Both now sit in the `/backup` panel next to the cloud pair, with a file picker replacing "somehow know that dragging works".
+
+The other two — `#b-msg-panic` and `#contact-sort` — were handlers that outlived their buttons. Nothing was lost (`/panic`, Ctrl+Shift+Backspace, and `/sort` still reach both features), so the dead registrations were simply deleted.
+
+**`tools/dead-wiring.mjs`** now performs that cross-check on every `validate.sh` run. It resolves ids declared any of the three ways this single-file app uses, and deliberately skips computed lookups like `` _DOM.get(`dur-${id}`) `` — the goal is catching typos and orphans, not proving reachability. First written as a shell one-liner, it produced a screenful of false positives from template literals; that was the signal to make it a real tool alongside `csp-hash.mjs` and `i18n-check.mjs` rather than ship a noisy gate nobody would trust. Teeth-tested by pointing a live lookup at a ghost id and watching the build turn BLOCKED.
+
+---
+
+## Multi-account was complete, and unreachable (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+798 vitest + **33** Playwright E2E (+1, new `tests/e2e/account.spec.js`); `index.html`, `tools/i18n-check.mjs` (+check 7), all 7 locales, `docs/ASSESSMENT.md`.
+
+Improvement #4 on the assessment was "enumerate the untested lifecycle states". Grepping for coverage of account switching returned nothing — no E2E, no unit test — for a subsystem reachable from the UI that calls `initMessenger()` a *second* time, i.e. the path most exposed to the boot reordering shipped hours earlier. Reaching for a test found something better than a regression.
+
+**The feature could not be reached at all.** The "+" that creates a second account lives inside the account tab bar, and `renderAccountTabs()` returned early unless you already had two accounts. You cannot get a second account without the button, and you cannot get the button without a second account. Verified in a browser across three sessions: account `0` present in localStorage, `#acc-tabs` zero, `.acc-add` zero. Switching, per-account databases, cross-account unread badges, Ctrl+1..9, rename/avatar/delete — all complete, all dead behind a door that never opened.
+
+**And the door opened onto a trap.** A brand-new account has no identity, so it lands on the setup screen — which sits outside `#msg-main`, where the tab bar is rendered. Create an account and you were stranded in it, with only the undiscoverable Ctrl+1..9 as an exit. Fixed by mirroring the switcher into the shared parent when setup is showing, and by re-rendering *after* `initMessenger()` — the existing call ran before the app had decided which screen to show, so on its own it always attached the bar to the hidden one.
+
+Deleting the subsystem was the other option and was rejected on the evidence: a complete, coherent feature with a one-condition bug is not dead weight. The entry point went into Settings rather than forcing a tab bar onto every single-account user — the same reasoning that put focus mode there.
+
+**The i18n gate had the mirror hole.** Check 6 finds keys defined but never referenced; nothing found keys *referenced but never defined*, which is the more visible failure because `t()` falls back to its argument and renders the raw key name to the user. `addAccountBtn` had been in exactly that state, invisible because the button was unreachable. Check 7 covers the other direction and immediately found three more: `devUnlinkConfirm`, `p2pDirect`, and `sendImage` — the last hiding behind `t('sendImage') || t('sendImageConfirm')`, a fallback that can never fire because `t()` never returns a falsy value, so the raw key always won. All four defined and translated into all seven locales; the gate teeth-tested with a planted key.
+
+---
+
+## Lost-write recovery on the sealed queue — the textbook fix measured and declined (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+798 vitest (+2) + 32 Playwright E2E; `_worker.js` (+~20), `SECURITY.md`, `docs/ASSESSMENT.md`.
+
+Improvement #3 on the assessment: the sealed queue is one KV value mutated read-modify-write, KV is last-write-wins, so two senders hitting the same recipient in the same instant lose an envelope — and **both are answered 200**. The silence, not the race, is the defect.
+
+**The textbook fix was measured first and declined.** A key per envelope (`sealed:{to}:{ts}:{rand}` + `list`) removes the race outright. It also replaces one `get` per poll with a `list` plus one `get` per pending message, on the single hottest path in the product — 28,800 polls per user per day at the 3 s interval — in a relay that already runs an in-memory rate limiter, in-memory dedup and a 5-minute presence write throttle specifically to survive the free tier's 1,000 writes/day. Paying that on every poll to close a race that requires two *different* senders to target the *same* recipient in the *same* instant is the wrong trade, and the assessment now says so with the numbers instead of listing it as a cheap-sounding to-do.
+
+**What shipped instead:** after the write, the send path reads the key back and re-appends its own envelope if it is missing. One extra read on the cold send path; recovers the common case; cannot make delivery worse (a stale read skips the retry, a duplicate is dropped by the recipient's msgId dedup). Best-effort *with recovery* — still not exactly-once, and SECURITY.md is explicit about which.
+
+**The test caught a design error before it shipped.** The first version identified "my entry" by timestamp, because comparing 256 KB envelope strings looked expensive. The deterministic race test — a mock writer that clobbers the queue at the moment of the put — failed immediately: the racing entry can carry the *same millisecond*, so the check reported "present" in precisely the case it exists to detect. Identity is now the envelope itself, with a length check to short-circuit the compare. Writing the adversarial test first is what made the flaw visible; it would have passed a happy-path test forever.
+
+---
+
+## A security control that looked like security, measured and reverted (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+796 vitest + 32 Playwright E2E — unchanged, because the code change was reverted. `docs/ASSESSMENT.md` and `SECURITY.md` corrected.
+
+The assessment written an hour earlier listed `/group/info` disclosing the group roster to any invite-token holder, and classed it "internal — closable". Leaving that written and unclosed would be the same failure this session has been removing, so it got built: the roster became members-only, gated behind the Ed25519 proof every other group action already uses, with the caller additionally required to appear in the roster. The invite preview kept exactly what an invitee needs to decide (name, who invited them, member count) and nothing more. Four tests pinned the new boundary.
+
+**Then thirteen existing tests failed** — far past the blast radius a privacy patch should have. That was the signal to stop and re-derive the premise instead of mechanically updating them, and the premise did not survive: **`/group/join` accepts the same invite token with no signature and no approval, and its response returns the roster anyway** — along with the ability to read the group's messages. Restricting the weaker read while leaving the stronger write wide open protects nothing; an attacker walks around it in one call, and comes out with more than they started with.
+
+So the change was reverted in full. What replaces it is an accurate statement: **an invite link is effectively group membership**, and should be shared the way you would add someone to the group. Making it genuinely restrictive means gating *join* — admin approval — which is a product decision, not a privacy patch, and is now recorded as such rather than as a to-do that sounds cheap.
+
+The generalisable lesson is added to the assessment's closing section, because it applies to every future entry there: **an improvement is a claim too, and gets tested like one. Before hardening a path, count the shortest route an attacker has around it.** Thirteen red tests were not an obstacle to route around; they were the measurement that showed the control was decorative.
+
+---
+
+## Lifecycle tests, a flake hunted to its cause, and an honest assessment (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+796 vitest + **32** Playwright E2E (+2, new `tests/e2e/lifecycle.spec.js`); new `docs/ASSESSMENT.md`.
+
+**Closing the hole the boot crash came through.** That bug was not an isolated defect but the product of a blind spot: of ten E2E spec files, only three ever call `reload()` — and all three were added in the last hours. The suite tested the first session and nothing else. So the highest-value place to look was not the UI but the CRYPTO state, which no test had ever carried across a reload. Two tests now do, and both pass: a 1:1 Double Ratchet conversation continues in both directions after the sender reloads, and a reloaded group member still decrypts what the owner posts. **Yesterday's conversation still works today** — now asserted rather than assumed.
+
+Writing the group half surfaced a test-setup trap rather than a product bug, and a control run proved it: the same test *without* the reload failed identically, so the reload was innocent. The owner only learns of a joiner through a 5-second member poll, and until it lands her member list is just herself — the exact trap `group.spec.js` already documents.
+
+**A flake, hunted rather than papered over.** Two full-suite runs split 31/32. Standalone the suspect ran 9/9 (30-35 s against a 120 s budget), so the test itself was fine; the failure then *moved* to a different spec on the next run, which is the signature of load, not logic. Preserving the artifact instead of letting the next green run delete it gave the answer: a reloaded page that is not in front polls the relay every `POLL_SLOW_MS` (15 s) instead of `POLL_FAST_MS` (3 s), so a 20 s delivery budget was marginal — and only in the direction that needed the *receiving* page to poll. The direction needing no poll never flaked. Fix: bring the receiving page to the front before delivery assertions (which is also what a real user does — they are looking at the app) and size the budgets to a slow-poll cycle. Three consecutive full runs: **32/32, 32/32, 32/32.**
+
+**`docs/ASSESSMENT.md`** records what this product is good and bad at, in measured numbers with reproduction commands, and sorts every weakness by where the cause lives: waiting on the outside world (CI's OAuth scope, ML-KEM in browsers), a deliberate design limit (group send is primary-only, no history sync), a real remaining weakness (the sealed queue is best-effort under KV last-write-wins; `/group/info` hands the roster to any invite-token holder; a backgrounded PWA can lag 15 s), or **a weakness in how we test** — the last being the most useful finding of the session: green tests mean the tested range is correct and nothing more.
+
+---
+
+## The app did not work for returning users (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+796 vitest + **30** Playwright E2E (+3); `index.html` (boot wrapped in a function — 2 lines of real change), `tests/e2e/smoke.spec.js`, `CLAUDE.md`.
+
+The most severe bug of this session, found while auditing what was left before calling the product finished. It had been in the tree the whole time.
+
+**Symptom:** add a contact, reload the page, and the contact list is empty. **Real severity, measured:** after a reload, `startPolling()` never runs either — a returning user receives *no messages at all*. The app only worked in the session that created the identity.
+
+**Root cause, after a wrong guess.** The first hypothesis was data loss: `dbPut` uses `durability: 'relaxed'` and resolves on `req.onsuccess` rather than `tx.oncomplete`, both of which can drop a write that is followed immediately by a reload. Each was tried on its own; **both failed to fix it**, which killed the hypothesis. Measuring instead of guessing gave the answer immediately:
+
+```
+AFTER reload  rows: 0            ← nothing rendered
+AFTER reload  idb : ["Contact"]  ← but the data is right there
+```
+
+Not data loss — render failure. Boot called `await renderContacts()` at line 5618, and `renderContacts` reads `_activeFolder` (5956), `_activeLabel` (5957), `_contactSort` (5958), `_contactFilter` (6038), `_drafts` (6360) and `activeContact` — every one a `let` declared *further down the same function*. The first access threw `ReferenceError` from the **temporal dead zone**, aborting the entire boot block, which is why everything after that line — polling included — never ran. This is the **second** occurrence of this exact class in this file; the note near the top records the first (`_perf`, which "crashed boot for every real user until found via E2E").
+
+**Fix:** the boot block becomes `async function _boot()` — a hoisted declaration, so not one line of its body moves — and is invoked at the *end* of `initMessenger`, after every declaration it depends on is initialised. Ordering is now safe rather than lucky, and the comment says so.
+
+**Why 29 green tests missed it** is the more useful finding: of nine E2E spec files, **only two ever call `reload()` — and both of those reloads were added in the last hour.** The entire suite tested the first session and nothing else, so the state every user is in from their second visit onward was never exercised. Two guards now cover it: the visible symptom (`the contact list survives a reload`) and the real one (`messages still arrive after a reload (boot runs to completion)`), the latter failing loudly whenever boot stops short.
+
+Also in this pass: a linked **secondary device now refuses to send to a group** instead of pretending. Its messages were dropped by every member's `if (!member) return` — the roster holds the account root's id, not the device's — while the sending device rendered them as sent. Group send is primary-only by design; silently discarding a message the user watched leave is not a design, it is a lie. `CLAUDE.md` also gains two corrections: the deployed safety number is measured at 96 bits (not weak, per `fingerprint.js`'s own arithmetic), and `validate.sh` is 39 checks, not 35.
+
+---
+
+## The algorithm applied to code twenty minutes old (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+796 vitest + 27 Playwright E2E, unchanged; `index.html` net +48 after deletions, EN 660 keys (a menu of options came and went without ever shipping).
+
+The quiet-messenger features had just landed. Rather than move on, the same questions were put to them — because code written twenty minutes ago is exactly the code nobody has audited yet. Three findings, all self-inflicted:
+
+**A preference is not an action.** `/quiet N` set a persistent setting from the command line, alongside `hideReadReceipts` which lives in the settings panel. Two homes for the same kind of thing. `/quiet` is deleted; the read-receipt delay now sits in the privacy panel where the related setting already was. `/focus` stays a command because starting a timer genuinely *is* an action — but it also gained a settings entry.
+
+**A feature nobody can find does not exist.** This is a product whose pitch includes "LINE's UI is too complicated", and its flagship differentiator — the whole reason it claims to be a *quiet* messenger — was reachable only by typing a slash command no ordinary person would ever guess. Both features are now visible in `/settings`, which is where someone fleeing a noisy app would actually look.
+
+**A menu of durations was a requirement nobody asked for.** The first attempt gave each feature a four-option `<select>`. It failed the E2E instantly, because the Trusted-Types sanitizer's tag allowlist does not include `select` — and the reflex is to widen the allowlist. The better question was whether the menu should exist. It should not: each feature got one sensible default (delay 2 minutes, focus 1 hour) as a plain checkbox matching the panel's existing idiom. No allowlist change, no new markup shape, four i18n keys deleted before they ever shipped, and `/focus N` still covers anyone who wants exactly 23 minutes. **The security control was never the obstacle — the invented requirement was.**
+
+The dead-key gate built earlier this session caught the `quiet*` strings the moment `/quiet` was deleted, and again caught the option keys when the menu was dropped. It was built for exactly this and needed no prompting.
+
+---
+
+## 静かなメッセンジャー — the app asks less of you (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+796 vitest + **27** Playwright E2E (+3, new `tests/e2e/quiet.spec.js`); `index.html` 13,621 → **13,736** lines, EN 642 → 660 keys, **all 18 new strings translated into all 7 locales** (no English-only feature in a product that claims to be worldwide).
+
+Checking the LINE-complaints list against the code first: **10 of 14 were already done** — no ads, bloat deleted, E2E, PC/phone parity via multi-device, no account creation at all (the key *is* the identity, so email/QR/Passkey are all unnecessary), single-file speed, original-quality photo send (`_imgCompress` already has `off`/`lossless`), scheduled send, expiring messages, backup/restore. What remained was the part the source document itself calls the concept: **reducing the obligation the app imposes**. That is also the one thing LINE structurally cannot copy, because its business model is engagement.
+
+Four features, all client-side, all invisible to the relay, all backward-compatible:
+
+- **返信不要マーク (no reply needed).** The sender states in the message itself that no answer is owed; the recipient gets it in full but it **raises no unread badge and rings nothing**. The obligation is removed at its source instead of managed afterwards. One-shot by design — it resets after sending, so it can never quietly mute a thread. The flag rides inside the sealed-v2 meta block, so the relay cannot see which messages are low-pressure either.
+- **遅延既読 (`/quiet N`).** Read receipts are held N seconds instead of firing the instant the chat opens — the moment that turns "I saw it" into "why haven't you replied". Walking away during the delay cancels it: you never claim to have read something you didn't. **The UX fix and a privacy fix turned out to be the same change**: instant receipts are a precise timestamp of when a named person picked up their phone, a known de-anonymisation route against sealed-sender systems (NDSS'21), so the ±20% jitter closes a roadmap item that had been open for months.
+- **集中モード (`/focus 60 [all]`).** Time-boxed quiet with a live banner (tap to end, survives reload). Unread counts keep accruing — **focus hides the interruption, never the information**. Without `all`, VIPs and @mentions still get through.
+- **重要度判定 — and it is not AI.** The source document asks for "AIが優先順位を判定". What the job actually needs is a *rule*: an @mention of you, or a contact you marked VIP (the exact inverse of mute, and the only input the rule takes). It runs entirely on-device. This product deleted server-side AI precisely because it sent plaintext off the device; calling a local heuristic "AI" would be the same class of claim as an audit log for a rekey that never ran.
+
+**Deliberately not built**, with reasons rather than silence: a *reply-later list* (bookmarks already are one — a second list would be duplicated machinery); *timezone-aware send* (the recipient's timezone is new metadata about where someone lives, which an E2E messenger should not invent — `/schedule` already lets the sender choose); *cloud AI summaries/minutes/secretary* (incompatible with E2E; on-device browser AI is Chrome-only today, which would make "worldwide" untrue).
+
+Also **not adopted, and why**: the proposed Flutter/Rust/PostgreSQL/Matrix stack is a rewrite that discards a working crypto core, and Flutter's purpose is store distribution — which contradicts the project's own "no store distribution" constraint. A sticker marketplace contradicts "no stickers". And "make chat no longer the centre / Intent Graph / Goal Dashboard" is a new product, not an improvement to this one; the single portable insight from those chapters — *notifications are a design that takes human attention, so only what matters should reach the human* — is exactly what shipped above.
+
+---
+
+## Completion pass — the delete-everything promise the code did not keep (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+796 vitest (+2) + 24 Playwright E2E; `index.html` (+12), `docs/PRODUCT-ANALYSIS.md` corrected against reality.
+
+With the algorithm's five steps run once, the question became: what stops this being a *finished* product rather than a well-audited one? The roadmap's top open item was "client-side wiring" — server endpoints built but never called. Verifying it rather than trusting it found the list two-thirds stale, and the remaining third worse than described.
+
+**Stale:** `/wipe` already called `/api/account/delete` with a signature, and group leave/delete was already wired — invisible to a naive grep only because the client builds the path dynamically (`'/group/' + gAction`). **Not a gap:** `src/crypto/*` "integration" is the architecture, not a TODO — the deployed artifact is single-file and dependency-free by design, with those modules as tested references guarded by mirror-drift.
+
+**Real, and worse than the roadmap said:** the wipe request sent `{ userId, ts, sig }` and nothing else. The relay erases everything keyed by userId, but it has **no reverse index from a user to their @alias or their groups** — so a "full wipe" left the alias squatting on the relay permanently (unreclaimable, still resolving to a dead key) and left the wiped account's id, public key and display name readable in every group roster it had joined, for the full 30-day group TTL. The Worker had built the release path *and written a comment stating this exact dependency*; the client simply never honoured it. A delete-everything button that does not delete everything is the same class of falsehood as the audit entry for a rekey that never ran.
+
+Fixed: the wipe now hands over the alias and every stored group token (capped at 50, matching the server's own bound). Two tests pin the contract — a member group loses the member and bumps its epoch, a group they created is deleted outright, and an alias belonging to *someone else* is refused rather than released (the squat guard, which would otherwise let a wipe free a third party's handle).
+
+The roadmap entry is rewritten to say what is actually true, including the lesson that produced this pass: **building an endpoint is not shipping a feature — the caller has to keep the promise.**
+
+---
+
+## Musk steps 3+4 — simplify, then accelerate (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+794 vitest + 24 Playwright E2E, all green; `index.html` 13,634 → **13,610** lines. Two cycle times cut: the product's and the developer's.
+
+**Simplify — three copies of the fan-out became one.** Multi-device delivery had been written three times: text in `sendMessage`, attachments in `_sendFile`/voice, mutations in `sendSignal`. The bodies were identical apart from which envelope flags they set, which is exactly why attachments were *forgotten* when the feature shipped — the rule lived in three heads at once. Collapsed into a single `_fanOut(contact, plaintext, ts, peerExtra, selfExtra)`; the four call sites now differ only in the flags that genuinely differ. A device rule fixed once is fixed everywhere.
+
+**Accelerate the product — fan-out went from N round-trips to one.** The loops awaited each device sequentially, so an account with three linked devices paid three encrypt-and-send round-trips before the last one saw the message; latency scaled with how many devices you own, which is precisely backwards. Devices are distinct peers and the ratchet lock is per-peer, so nothing but the `await` was serialising them. They now dispatch in parallel via `Promise.all`, and the registry lookups for both sides run concurrently too.
+
+**Accelerate the developer — the test suite is 4.4× faster.** Profiling the suite showed single tests taking 6.8 s, 8.1 s, **16.2 s** — all of them brute-forcing hashcash. Twenty PoW solves at difficulty 16 (~65,000 SHA-256 attempts each) meant over a minute of every run spent proving only that hashing is slow. Every property those tests verify — the challenge embeds the public key, the freshness window, replay rejection, the floor itself — is *independent of the bit count*. The test-only floor drops to 8, and the one test that must prove a too-easy token is rejected now pins its own floor explicitly (solve at 4, floor at 8) so it keeps its teeth regardless of the suite default.
+
+Result: `worker.test.js` 88 s → 24.5 s, the full suite **85 s → 19.3 s**, with all 794 tests still passing. Production difficulty is untouched at 20 bits — this changed what the tests pay, not what an alias-spammer pays.
+
+---
+
+## Musk step 5 — automate: the rot that made step 2 necessary now fails CI (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+794 vitest + 24 Playwright E2E unchanged; `validate.sh` 38 → **39 checks**, `tools/i18n-check.mjs` gains check 6, `index.html` 13,689 → **13,634** lines, EN reference **924 → 642 keys**.
+
+The previous entry deleted 212 dead i18n keys and one unreachable function by hand. The real question is why a human had to find them: nothing in the toolchain could see dead weight, so it accumulated silently for as long as the project has existed. Deleting the rot without automating its detection just resets the clock.
+
+Two gates now do it mechanically:
+- **Dead i18n keys** (`i18n-check` check 6): an English key whose identifier appears only once in `index.html` — its own definition — is referenced by nothing and fails the build. Every form of real use leaves the bare identifier in the source (`t('k')`, `data-i18n="k"`, a computed `cond ? 'a' : 'b'`), so a single occurrence is proof of death, not a heuristic.
+- **Unreachable functions** (`validate.sh`): same test applied to `function` declarations in the deployed client.
+
+Turning them on immediately found **55 more dead keys that predated this session's deletions** — landing-page strings, toast messages, and status labels for UI that had been rewritten out from under them, each one still an obligation in 8 locale files. The English reference is now 642 keys, down from 924: **31% of the translation surface was labelling nothing at all.**
+
+Both gates were teeth-tested rather than assumed: a deliberately-planted unused key and an unreachable function each flip the build to BLOCKED, then the plants were removed. A gate nobody has watched fail is a gate nobody knows works.
+
+---
+
+## Musk step 2 — delete: the developer-diagnostic command cluster is gone (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+794 vitest + 24 Playwright E2E, both unchanged — nothing real was load-bearing on any of it. `index.html` **14,483 → 13,689 lines (−794)**, 69 slash commands → 58, 212 dead i18n keys removed across 8 locales.
+
+Twelve rounds of questioning had been spent on step 1 of the algorithm; step 2 was overdue. First-principles inventory of the client found 2,309 lines — 16% of the whole app — living in slash commands, and asked the only question that matters: *does a person messaging a friend ever type this?*
+
+Deleted outright: `/perf` `/speedtest` `/network` `/peers` `/storage` `/stats` `/uptime` `/status` `/about` `/changelog` `/keyboard`. These dumped ICE candidate types, KV counters, DOM node counts, `performance.memory` readings and an in-app copy of a 3,000-line changelog. The connection quality a user actually needs is already in the conversation header (Direct/STUN/TURN + RTT); the changelog lives in the repo, where it cannot go stale; the rest was a WebRTC debugging console shipped to every phone on earth.
+
+The second-order cost was larger than the first: 212 i18n keys existed only to label those dumps, and every one was a translation obligation across 8 locales forever. Removing them lifted total locale coverage from 65% to 80% **without translating a single new string** — the untranslated tail was mostly diagnostics nobody would ever read. `isSafeMediaUrl` fell out as dead code with them.
+
+What this buys, in the terms that actually constrain this codebase: the 15,000-line `index.html` gate went from ~500 lines of headroom to ~1,300. Deletion is what makes the next feature possible.
+
+Kept deliberately, against the temptation to keep cutting: `/audit`, `/sessions`, `/security`, `/verify` (security transparency a privacy product owes its users), `/migrate` (the LINE on-ramp this product exists for), and `/retry` (the one diagnostic with a user-facing purpose — resending stuck messages).
+
+---
+
+## Socratic rounds 12–14 — a 6-lens parallel audit turns the questioning on itself (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+794 vitest (+5) + 24 Playwright E2E; `index.html` (net +90 after deletions), `_worker.js` (+~45), `SPEC.md`, `SECURITY.md`, `locales/*`, `tests/worker.test.js`, `tests/mirror-drift.test.js`.
+
+My own questions were converging, so this round ran six independent lenses in parallel — state lifecycle, concurrency, residual metadata, worldwide readiness, crypto edge cases, test gaps — each told to report only contradictions between what the project *claims* and what the code *does*. Twelve candidates came back; the ones below survived verification against the cited lines.
+
+**Concurrency — the fan-out could lose its own messages.** The Double Ratchet session is a read-modify-write, and multi-device fan-out fires concurrent `encryptFor` calls at the same peer. Two racers both read chain counter N, both emit under the *same* message key, and the receiver drops the second as a replay. Fixed with a per-peer lock: a promise chain per peer, escalated to `navigator.locks` so the critical section holds across TABS (the session lives in shared IndexedDB, so a per-tab Map was never enough). A regression test bursts five concurrent sends and asserts five distinct counters, all decrypting.
+
+**Lifecycle — three promises quietly dying of old age.** (1) The *device registry* is written only by `/link` and `/unlink`, with a 3-month TTL: an account that merely kept messaging would silently fall back to single-device. (2) `grp:` records are written only by roster mutations, 1-month TTL: a stable group that just chats would evaporate along with its invite links and moderation state. Both now touch-on-read, throttled to once per day per record. (3) Worse, the *prekey record* expiry was unrecoverable: `checkAndReplenishPreKeys` returned on any non-OK response, so a 30-day-quiet identity stayed permanently unreachable to new contacts, forever. It now asks `/prekey/status` and treats a 404 as the trigger to re-register — and as a bonus stops burning its own one-time prekeys, since the old code self-checked with `/prekey/fetch`, whose job is to *consume* one.
+
+**Crypto edge — a security warning anyone could forge.** The identity-clone detector shipped last round derived its alarm from an *unauthenticated* presence write, so a stranger could POST a fake instance id for someone else's account and make that user see "your identity is running on two devices". A spoofable alarm trains people to ignore the real one. The instance id is now Ed25519-signed by the identity; unsigned or badly-signed values are ignored entirely. Two tests pin the spoof and the forgery.
+
+**Metadata — the relay was handing out names.** The unauthenticated single `/presence` check returned the account's chosen *display name* to anyone holding a 12-character id. No client ever consumed it (the app uses the batch path, which never leaked it). Removed; capabilities stay because the negotiation needs them and they describe the protocol, not the person. The pre-existing test that asserted the name came back was itself pinning the leak, and is now corrected.
+
+**Worldwide — the 924-language table never arrived.** `lang.js` loads `async`, but `LANG` was a `const` computed at parse time and `applyI18n()` ran exactly once, so `window._LANG_DATA` was virtually never present in time: every language outside the eight full locales silently fell back to English while the README advertised 924. Detection is now a re-runnable `detectLang()`, re-derived and re-painted when `lang.js` lands. Two more in the same lens: Traditional Chinese was matched by exact string, so the tags browsers actually send (`zh-Hant-TW`, `zh-Hant-HK`) missed and served Simplified — now matched by script/region subtag; and RTL was set only on message bubbles, leaving the entire chrome LTR for Arabic/Hebrew/Persian/Urdu readers — `document.documentElement.dir` now follows the locale, with `dir="auto"` on the composer.
+
+**Test gap — attachments were never in the fan-out.** `sendMessage` learned multi-device fan-out; `_sendFile` and voice notes did not. On a linked account a photo reached only the contact's primary device and never self-synced to your own laptop. Both paths now call a shared `_fanOutAttachment`, and the receive side mirrors the 1:1 file-store shape so a synced attachment renders as a real file bubble.
+
+**Deleted rather than fixed: the "session auto-rekey".** SPEC.md claimed *"✓ Implemented — 500 msgs / 1 hour"*. The code called `dhRatchetStep(activeContact.pubB64)` — a base64 string — where the signature is `(sess, peerPubRaw)`. It threw on every invocation, its own catch swallowed the error, and then it wrote `auditLog('crypto', 'Session rekeyed')`: **a security audit entry asserting something that had never once happened.** A false audit trail is worse than a missing feature. A unilateral sender-side DH step is also not a safe drop-in — it re-derives the receive chain the peer will not mirror — so the block, its now-orphaned counters, the `/network` panel lines reporting the phantom policy, the config constants and three i18n keys are all gone, and SPEC.md states the honest status. Forward secrecy is unaffected: the KDF chain re-keys every message and a real DH step runs whenever the peer's ratchet key changes.
+
+Also disclosed rather than papered over, in SECURITY.md: cloud backups expire 90 days after upload (the upload response now returns `expiresAt` and the client shows the date, because a safety net that stopped existing without saying so is the worst kind); the sealed queue is a bounded last-write-wins KV value and therefore best-effort, not exactly-once; and `/group/info` hands the full roster to any invite-token holder — stated plainly, with members-only gating tracked as future work rather than claimed as done.
+
+---
+
+## Socratic rounds 9–11 — "Does an unlinked device KNOW? How long is the downgrade window? Is DELETE proven?" (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+789 vitest + 24 Playwright E2E (multi-device Test 1 gains a 5th act: delete propagates everywhere); `index.html` (+~25), `locales/ja.json`, `tests/e2e/multidevice.spec.js`.
+
+**Q9: "/unlink removes a device from the registry — does that device ever find out?"** No: its fan-out just stopped and the user would stare at a silently dead account — the worst failure mode (quiet). Now `_myOtherDevices` treats a **verified** registry that no longer lists this device as the answer it is: the user is told once ("this device was removed — it now works standalone"), and the stale account binding is deleted so the install cleanly reverts to a standalone identity (`/link` works again). Deliberately conservative trigger: only a signature-verified, non-empty list may unlink — a failed or unverifiable fetch never can, so a flaky relay cannot kick devices off accounts.
+
+**Q10: "seal-v2 capability is cached 1 h — what happens during a peer's downgrade?"** Sealed envelopes the peer can no longer open are ack+skipped — silently lost — for up to the cache TTL. The TTL *is* the loss window, so it now matches every other cache in the system: 5 minutes, with the trade-off stated in the code comment instead of hidden in a constant.
+
+**Q11: "the E2E proves EDIT syncs — where's DELETE?"** Proven now: act 5 deletes the edited message on the phone and asserts it disappears from the contact *and* the laptop. Getting there surfaced two E2E-environment truths worth recording: the consent banner (bottom-fixed) intercepts context-menu clicks — the spec now pre-accepts it, since consent UX is not what this test interrogates — and backgrounded tabs poll at 15 s, so the delete assertions get a 30 s window with the laptop brought forward. 3/3 green after hardening; a debug run also confirmed reaction/delete share the exact code path the sibling-mutation branch already covers.
+
+---
+
+## Socratic rounds 7+8 — "Offline in Japanese? And what does RESTORE do to multi-device?" (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+789 vitest (+3) + 24 Playwright E2E; `index.html` (+~20), `_worker.js` (+~15), `locales/ja.json`, `tests/worker.test.js`.
+
+**Q7: "locales moved out of index.html — so what does a Japanese PWA user see offline?"** The defense held: sw.js's stale-while-revalidate runtime-caches `locales/ja.json` on the first (necessarily online) boot, so offline launches keep their language. No change needed — recorded as a survived question rather than an invented fix.
+
+**Q8: "restore a backup on a second browser while the first stays open — what happens?"** Nothing stops you, and what happens is the exact catastrophe `/link` was built to prevent: one identity on two installs forks every Double-Ratchet session — both devices advance the same send chain independently, the contact's decrypts start failing, and the session auto-reset loop grinds. The backup feature quietly invites the disaster the multi-device feature exists to avoid.
+
+Fix — an **identity-clone detector** on the existing presence heartbeat (zero new endpoints): each install generates a random instance id, deliberately **excluded from backups** (that exclusion is the mechanism: a restored clone necessarily heartbeats with a fresh id). The relay compares insts within the same identity; two different live insts inside a 90-second window → `conflict: true` on the heartbeat response → the client warns (rate-limited to one toast per 5 min): "retire one install, or link devices with /link". Detection is best-effort by design — the previous record may sit in another isolate's memory or a ≤5-min-stale KV entry — so a miss is possible but a flag is always real; SECURITY.md states it as a safety net, not a lock. Three Worker tests pin it: different-inst flags, same-inst never flags, legacy no-inst clients never flag.
+
+---
+
+## Socratic rounds 5+6 — "Does an EDIT sync? And where does message 101 go?" (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+786 vitest (+2) + 24 Playwright E2E (multi-device Test 1 gains a 4th act: edit on the phone → contact AND laptop update); `index.html` (+~80), `_worker.js` (+~15), `locales/ja.json`, `tests/worker.test.js`.
+
+**Q5: "the send syncs to every device — so what happens when I *edit* it?"** The honest answer was layered, and each layer was its own pre-existing bug:
+1. `sendSignal` sent 1:1 mutations to the contact's primary only — no device fan-out, no self-sync. Your laptop kept showing the old text; deleted messages lived on.
+2. Deeper: the sender stored its own messages under a random `genMsgId()` while every receiver stores `${senderId}:${ts}` — the ids **never matched**, so a relayed 1:1 edit/delete/reaction could not find its target on the other side. Ever.
+3. Deeper still: even with matching ids, the signal envelope's ts made `${from}:${ts}` collide with the original message and the new-message dedup swallowed the signal as "already persisted" — a second, independent total-breakage.
+4. And the UI layer: the delegated context menu (the one that actually wins on right-click) called `startEdit(msgId)` with a bare string where a `{msgId, text, ts}` object is expected, so the signal left the device with **no target id at all**.
+
+Four stacked faults, each alone sufficient to break remote mutations — which is precisely why no one noticed: there was no E2E asking the question. Fixes: outgoing message identity is now the wire-visible `${myId}:${ts}` (with a monotonic +1 ms bump mirroring the Worker's inbox guarantee, so same-ms sends stay unique); receivers key by the *actual sender* (`msg.from`), which also makes device-attributed messages editable; the isSignal branch moved above the dedup; the delegated menu hydrates the stored record before calling; and `sendSignal` fans out exactly like `sendMessage` — contact devices via the registry, own devices with `selfSync` where the `stored.mine` guard is deliberately waived (a registry-verified sibling *is* me; a contact still can't touch my messages). The E2E's 4th act pins the whole chain: right-click → edit on the phone, new text asserted on the contact AND the laptop.
+
+**Q6: "the sealed queue caps at 100 — where does message 101 go while I'm offline?"** It silently evaporated (oldest-first). The relay can't prevent that (bounded storage is real), but it can stop lying by omission: `handleSealedSend` now counts trimmed envelopes per recipient, the next `/sealed/poll` confesses `dropped: n` exactly once, and the client shows "N messages may have been lost while you were offline". Two Worker tests pin the confess-once-then-reset behaviour; the legacy `/msg` inbox keeps its silent cap and is noted as such.
+
+---
+
+## Socratic round 4 — "Sealed Sender: does the relay REALLY not see the sender?" (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+784 vitest (+11: 7 seal reference + 4 mirror-guard) + **24** Playwright E2E (+1 wiretap spec); `index.html` (+~90), new `src/crypto/seal.js` + `tests/seal.test.js` + `tests/e2e/seal.spec.js`, `tests/mirror-drift.test.js`, `SECURITY.md`, `CLAUDE.md`. Zero Worker changes — the sealed path already stores envelopes verbatim.
+
+**Q: SECURITY.md says "Sealed Sender: server cannot identify message sender." Is that true of the bytes?** No. The "sealed" envelope was `JSON.stringify({from, fromPub, fromName, payload, sig, sigPub, ...})` — the sender's id, full public key, display name, and even the **plaintext replyTo preview** (message *content*) sat in the clear inside the string the relay stores. "The Worker doesn't parse it" was an implementation choice, not a guarantee; against an honest-but-curious relay the claim was false.
+
+Fix — **Sealed Sender v2**: everything sender-identifying moves into a block encrypted to the *recipient's identity key* (ephemeral X25519 ECDH → HKDF `breeze-seal-v2` → AES-256-GCM; AAD binds recipient+timestamp so a blob can't be spliced onto another inbox or replayed at a shifted time). The relay now stores `{to, ts, ratchet-ciphertext, sealed blob}`. Capability-negotiated with the existing machinery: recipients advertise `seal-v2` in prekey-bundle caps, senders read caps via `/prekey/status` — which was *already built* to answer capability questions **without consuming a one-time prekey** — cached 1 h, failing closed to legacy (delivery over privacy). All 15 relaySend call sites pass the recipient pub; `/msg` fallback and the offline retry queue stay legacy and are documented as sender-visible.
+
+The new wiretap E2E then asked the question *again* of the actual bytes — and caught a second leak the design review missed: the first message of every session wraps the ratchet ciphertext in a plaintext X3DH header whose `ik` **is the sender's identity key as a raw byte array**, so sealed first-contact messages still identified the sender. v2 now relocates `ik` into the sealed block (`_pkik`) and the recipient re-injects it before decrypting. The E2E asserts the identity key is absent in *both* encodings (base64 and `23,143,…` byte-array text) from every envelope either browser hands the relay — while both directions still deliver.
+
+Discipline kept: reference implementation in `src/crypto/seal.js` (dependency-injected like `pow.js`), 7 reference tests (round-trip, wrong-key, AAD-splice ×2, tamper, wire-leak, b64-input), and a **mirror-drift guard** cross-sealing/unsealing inline↔reference in both directions — a drift in the HKDF label, AAD domain, or wire shape now fails CI instead of silently making new clients' messages vanish. SECURITY.md's claims rewritten to match the bytes, including an honesty note that pre-v2 traffic must be treated as sender-visible.
+
+---
+
+## Socratic round 3 — "How does a fresh laptop learn who I talk to?" (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+773 vitest + 23 Playwright E2E (multi-device Test 1 restructured to model the REAL fresh-laptop flow); `index.html` (+~12), `_worker.js` (+4), `locales/ja.json`.
+
+**Q: self-sync attaches a copy to an existing conversation (`if (!target) return`) — so what does a brand-new linked device do with messages for conversations it has never seen?** Answer: it silently dropped every one of them. A contact only appeared on the laptop once that contact *sent* something (the incoming path auto-adds by `fromPub`), so everything you sent before their first reply was lost on the new device — the exact opposite of what "your messages appear on both devices" promises.
+
+Fix: the self-sync envelope now names the conversation partner (`sfPub`/`sfName`), and the receiving sibling **creates the missing conversation** before attaching the copy. The trust argument is unchanged — the sender was already verified against the signed device registry (it *is* my other device), and `sfPub` must be consistent with the `sfFor` id it claims to name. The E2E was restructured to stop flattering the code: the laptop now adds only the primary's key (the one the user physically carries over — `devLinkHint` updated to say so), and the phone sends *first*, while the laptop has never heard of the contact. The test then asserts a whole new conversation materializes on the laptop carrying the message as *sent*. A second question — "the registry admits ≤10 devices, what does an 11th `/link` do?" — survived: the Worker rejects, the client toasts the failure, no state corrupts.
+
+---
+
+## Socratic round 1 — "Sent from the laptop, who does the recipient see?" (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+773 vitest + **23** Playwright E2E (multi-device Test 1 extended to a third assertion); `index.html` (+~40, 14,186 lines — under gate), `_worker.js` (+3), `SECURITY.md`.
+
+Method for this session: interrogate each shipped claim until it contradicts itself or survives. **Q1: multi-device Phase 1 proved messages *reach* both devices — so what happens when the linked laptop *sends*?** The code's answer was a contradiction: `handleIncoming`'s 1:1 branch looks the sender up by pub, finds nothing, and **auto-creates a stranger contact** — so sending from a second device split the conversation in two on the recipient's side and grew an "Unknown" in their contact list. The one-account-one-conversation promise held in only one direction.
+
+Fix reuses the existing trust machinery, adding none: a secondary device *names* its account root in the envelope (`acctRoot`), and the recipient attributes the message to that account **only after re-verifying the root-signed device registry** (fetched with the root's pinned signing key, cached 5 min) lists the sending device — then decrypts against the *device's* own ratchet while storing under the root's conversation. The claim alone is never trusted: a forged `acctRoot` fails the registry check and falls back to the exact pre-existing stranger path. Attributed senders skip the per-contact Ed25519 TOFU pin — their signing key legitimately differs from the root's, and pinning it would have fired a false MITM banner; identity is carried by the registry, the signature is checked for self-consistency only. The relay change is two lines (ferry `acctRoot` through the `/msg` fallback; the sealed path already passes envelopes verbatim), and primary/legacy sends carry no new field — byte-identical wire.
+
+**Q2 ("the registry is world-readable — what does that leak?")** survived questioning: device count and device pubs are visible to anyone holding the accountId — metadata of the same class as Signal's public prekey bundles, now stated plainly in SECURITY.md rather than left implicit. The E2E now proves all three directions in one run: contact→both devices, phone→contact+laptop-sync, and **laptop→contact lands in the Alice conversation with zero new contacts** (asserted by counting the recipient's contact rows).
+
+---
+
+## Multi-device Phase 1: phone + laptop on one account (branch claude/nice-ride-T6yb0, 2026-08-21)
+
+773 vitest (+8 device-registry) + **23** Playwright E2E (+2 multi-device); `_worker.js` (+~70), `index.html` (+~280, under the 15,000 gate), `locales/ja.json`, `SECURITY.md`, new `tests/e2e/multidevice.spec.js`.
+
+The last big LINE-parity gap: Breeze was strictly single-device — one identity per browser, and reusing a key on two devices forks the Double Ratchet chain and corrupts the conversation. The simplifying decision (question the requirement → delete the complexity): **a device is just another Breeze identity.** Prekeys, inboxes and sessions are already keyed by pubkey, so all of it is reused verbatim. The only genuinely new state is a **root-signed device registry** on the relay, and the only new behaviour is **sender-side fan-out**: the same plaintext is re-encrypted per device (each with its own ratchet — never the same ciphertext or key twice) plus a `selfSync` copy to the sender's own other devices so a message sent from the phone appears as *sent* on the laptop. The wire format is unchanged, so contacts with no registry — and clients that predate the feature — keep working exactly as before (proved by a dedicated backward-compat E2E test).
+
+Trust model: the registry record is signed by the **root device's Ed25519 key** over `breeze-device-set:{accountId}:{ts}:{digest}` and every sender re-verifies it against the *pinned* signing key (TOFU from message signatures; a secondary verifying its own account uses the root key pinned at `/linkto` time). An unverifiable registry is **ignored** — the relay can withhold devices (degrades to single-device, today's behaviour) but cannot inject a listening device. Registry writes are replay-bounded (±5 min ts window) and capped at 10 devices. Self-sync envelopes are accepted only from registry-verified sibling devices, so a stranger cannot plant "sent by me" messages by setting a flag. Scope-outs are documented in SECURITY.md: root loss ends device management, revocation lags the ≤5-min sender cache, and there is no history sync (deliberate — same call Signal made; `/backup` is the migration path). Group send from a secondary is Phase 2.
+
+Link UX is command-MVP: `/link` (show this device's key), `/link <pub>` (primary signs the addition), `/linkto <rootPub>` (secondary binds; the physical carry-over of the root key is the trust anchor), `/devices`, `/unlink <n>`.
+
+The three-browser E2E (primary + linked secondary + contact) earned its keep before it ever passed — it found **two real product bugs**, both now fixed:
+- **Stale-snapshot clobber**: `sendMessage` wrote the render-time `activeContact` object back to IndexedDB on every send, silently erasing any field the receive path had persisted since the snapshot — including the TOFU-pinned `sigPub`, which made registry verification fail closed and killed fan-out. Sends now read-modify-write the stored record.
+- **Draft-restore race**: `openConversation` restores the contact's draft *after* several awaits, so text typed in the gap between clicking a conversation and the restore was silently destroyed. The restore now yields to anything the user typed while the switch was in flight.
+
+---
+
+## Remove `script-src 'unsafe-inline'`: hash-pin the CSP (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+853 vitest + **16** Playwright E2E (+2); `_headers`, `validate.sh`, `SECURITY.md`, new `tools/csp-hash.mjs` + `tests/e2e/csp.spec.js`, and two E2E harness fixes. `index.html` byte-unchanged at 14,999 lines — gate-free.
+
+`script-src 'unsafe-inline'` is the policy that lets an injected `<script>` or `onerror=` payload run, i.e. lets an XSS read the identity private key out of IndexedDB. That is the core web risk SECURITY.md's own threat model names, and the codebase already flagged it inline (see the translate-indicator comment: *"under 'unsafe-inline' CSP an injected onerror= payload would execute"*). It was there only because the single-file architecture puts all JS in an inline `<script>`.
+
+Replaced with a **hash-pinned `script-src`**: the browser runs only the bundle whose SHA-256 was published. Feasible because the app has **zero inline event handlers, zero `javascript:` URLs and no `eval`/`new Function`** — verified before starting. This raises the bar for *injection*; it does not constrain a *compromised server*, which can publish a new hash — the ceiling already documented in the threat model.
+
+The hazard is that the hash covers exact script bytes, so any edit to `index.html` invalidates it and a stale hash blocks the entire app. Three mechanisms make that impossible to ship silently:
+- `tools/csp-hash.mjs --write/--check` computes and verifies the hashes; **`validate.sh` runs `--check`**, so an ordinary edit now *blocks the deploy* until the hash is regenerated (verified by editing the script and watching the gate flip to BLOCKED).
+- `tests/e2e/csp.spec.js` boots the app under the real policy and asserts zero violations, plus a **teeth test** proving a corrupted hash is genuinely fatal — without which the boot test could pass for the wrong reason.
+
+The hash lives **only in `_headers`, not in the `<meta>` CSP**. Browsers enforce the *intersection* of all policies, so the strict header alone makes the hash binding in production, while the permissive meta copy keeps serve-time HTML rewrites working. Pinning both broke all 14 E2E specs on the first attempt.
+
+That failure was worth having: it surfaced that `tests/e2e/server.mjs` already applies the real `_headers` CSP (a good existing design), while also rewriting one line of `index.html` — so the shipped hash could never match what it served. The harness and the two `route.fulfill` config-patching helpers now re-pin the digest for the body they actually serve, preserving the property under test (hash-pinned, no `'unsafe-inline'`) rather than weakening it.
+
+---
+
+## Audit the PoW work factor; pin it independently of the implementation's arithmetic (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+853 vitest (+2); `tests/pow.test.js` only — no production change. `validate.sh` PASSED.
+
+Audited the hashcash verifier in `handleAliasSet` (`_worker.js`) and `src/crypto/pow.js` against hashcash/anti-DoS first principles. **The bit test is exactly correct** — proved empirically by generating digests with precisely 8, 9 and 10 leading zero bits and confirming the verifier accepts at difficulty D and rejects at D+1 in every case. Boundaries are sound too: D=32 requires all top 32 bits zero, and D=0 makes `(2**32) >>> 0` wrap to 0 so the comparison rejects everything (fail-closed, and unreachable anyway since `MIN_POW_DIFFICULTY` defaults to 20).
+
+The gap was in the **test**, not the code: `tests/pow.test.js`'s "top difficulty bits are zero" case restated the implementation's own target arithmetic, `(2 ** (32 - difficulty)) >>> 0`. An off-by-one in that formula — which would silently halve the work factor per bit — would have been mirrored by the test and passed.
+
+This is now the **third** instance of the same systemic pattern in this repo: a test that re-states a production formula instead of deriving it independently. The first instance was not theoretical — it let the RFC 8188 push CEK bug ship, making every push payload undecryptable while the suite stayed green. Two tests added that count the digest's leading zero bits **directly**, pinning the work factor without reference to the target arithmetic, in both directions: the digest must carry at least `difficulty` leading zero bits, and `verify` must reject the same token when the claimed difficulty is raised past the digest's real zero count (so difficulty can't be silently weaker than advertised).
+
+Also confirmed while auditing, and left as-is because it is bounded and already documented in-code: within the 10-minute freshness window one solved token can register several aliases, since the challenge binds the identity key rather than the alias. The far-future-timestamp variant of that replay was already fixed via `MAX_POW_FUTURE_MS`, and the per-IP rate limiter bounds the rest. Tightening it further would mean binding the alias into the challenge, which needs a client change — blocked by the 15,000-line `index.html` gate (currently 14,999).
+
+---
+
+## Spec-conformance audit of the deployed crypto surface; pin the RFC 8291 IKM step (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+851 vitest (+1); `tests/push.test.js` only — no production change. `validate.sh` PASSED.
+
+Audited four deployed surfaces against their published specs, using the method that found the four real bugs earlier this session (shipped code vs authoritative spec, proven empirically rather than by reading). **Three surfaces came back clean, and are recorded as such rather than padded with invented findings:**
+
+- **VAPID / `buildVapidJwt` (RFC 8292, RFC 7515/7518)** — conformant. `aud` is the bare push-service origin with no path (the classic VAPID bug, avoided), `exp` is 12 h against the 24 h cap, `sub` is a valid `mailto:` URI, base64url is unpadded and URL-safe, and the ES256 signature is raw 64-byte r‖s as JWS requires (not DER). Verified by building a real JWT and validating its signature with the `k=` public key exactly as a push service does. Existing tests already pin all of this, including signature verification.
+- **Group v5 sender-key ratchet** — the hypothesis that it lacked the 1:1 path's forged-counter bound was **wrong**: `targetC - counter > GROUP_MAX_SKIP` rejects oversized gaps, and consumed skipped keys are deleted, so a replayed counter fails closed.
+- **Sealed-sender poll/ack** — the same-millisecond high-water-mark race (two envelopes sharing a `ts`, the second deleted unpolled) is **already fixed**: `handleSealedSend` forces strictly-increasing `ts` with a +1 ms bump.
+
+One genuine gap was closed. The RFC 8291 §3.3 IKM step (`key_info = "WebPush: info" ‖ 0x00 ‖ ua_public ‖ as_public`) is correct, but was the last place `tests/push.test.js` still **restated a production info string instead of deriving it** — the exact pattern that let the CEK/nonce bug ship undetected. Appending `\x01` there, the same mistake that was shipped one line below, would have been mirrored by the test decryptor and passed. It is now pinned against the RFC formula computed from raw HMAC, with the counter-appended form asserted *not* to match, plus a source assertion that the worker uses the counter-free string.
+
+---
+
+## Fix: Web Push payloads were undecryptable by every browser (RFC 8188 deviation) (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+850 vitest (+3) + 14 E2E; `_worker.js` + `tests/push.test.js`. `validate.sh` PASSED. **`index.html` untouched** — gate-free.
+
+**Every encrypted push notification Breeze sent was undecryptable by any browser.** RFC 8188 §2.2 defines `CEK = HMAC(PRK, "Content-Encoding: aes128gcm" || 0x00 || 0x01)[0..15]`, where the trailing `0x01` is HKDF-Expand's block counter (RFC 5869 §2.3) — which WebCrypto's `deriveBits({name:'HKDF'})` appends *itself*. `encryptPushPayload` passed that counter explicitly in the `info` string, so the real computation became `… || 0x00 || 0x01 || 0x01`: one byte too many, and a CEK and nonce no user agent agrees with. The same function gets the RFC 8291 `WebPush: info` step right (no trailing counter), which is what marks the two CEK/nonce lines as an oversight rather than intent.
+
+**Why it survived:** `tests/push.test.js`'s `decryptPushPayload` helper hard-coded the *same* two wrong info strings, so the round-trip test validated the implementation against a copy of its own defect and passed while production was broken — the "tests green, production broken" failure mode this repo's mirror-drift discipline exists to prevent, reproduced in a hand-written test.
+
+Proven both directions before and after: running the real `encryptPushPayload` and decrypting as a browser does (RFC-conformant derivation) **failed with `OperationError`** pre-fix and **succeeds** post-fix; an independent raw-HMAC computation of RFC 8188's formula matches the corrected `\x00` form and not the shipped `\x00\x01` form.
+
+The test helper was rewritten to derive CEK/nonce from the RFC formula via **raw HMAC** (`PRK = HMAC(salt, IKM)`, `OKM = HMAC(PRK, info || 0x00 || 0x01)`) instead of re-stating the implementation's info strings, so it now models a browser and structurally cannot re-mirror an info-string drift. Confirmed it has teeth: reverting the two worker strings makes the round-trip tests **fail**. Three conformance tests added pinning the CEK rule, the nonce rule, and that the deployed worker contains the conformant strings.
+
+Everything else in the function was already correct and is unchanged: the RFC 8291 IKM step, the `0x02` last-record padding delimiter, and the RFC 8188 header layout `salt(16) ‖ rs(4,BE) ‖ idlen(1) ‖ as_public(65) ‖ ciphertext`. `buildVapidJwt` (RFC 8292) was not audited — a candidate for the same treatment.
+
+---
+
+## Fix: signed group rename broke on non-ASCII names (btoa is Latin-1, clients sign UTF-8) (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+847 vitest (+5) + 14 E2E; `_worker.js` + `tests/worker.test.js`. `validate.sh` PASSED. **`index.html` untouched** — gate-free.
+
+**A real bug on an ordinary action in a product that ships EN+JA.** The client's `signMessage()` signs `new TextEncoder().encode(text)` — UTF-8 bytes. The Worker rebuilt that same string for verification with `btoa(...)`, and **`btoa()` encodes Latin-1**, so the two disagree for anything above U+007F. Group names are free-form user text, and `sanitizeString()` only strips control characters, so a non-ASCII name reaches the signing string intact. Two distinct failure modes:
+
+- **U+0100 and above (Japanese, emoji)** — `btoa()` throws `InvalidCharacterError`, uncaught, at `_worker.js:1255`. A signing client renaming a group to 日本語グループ got a **500**.
+- **U+0080–U+00FF (e.g. `café`)** — `btoa()` succeeds but encodes the *wrong bytes*, so a perfectly valid signature was rejected with **403 SIG_INVALID**.
+
+Found by auditing the Worker's signature-verification sites for encoding assumptions, then reproduced against the real handler (the first repro returned 403 `NO_IDENTITY_KEY` and hid the fault — the `btoa` line is only reached once an Ed25519 identity is registered, which is what a real signing client has).
+
+Fixed with `utf8ToB64()` (base64 of the UTF-8 bytes), applied at the three verification sites whose signed string embeds input that is *not* regex-validated: group auth (`bind` carries the rename name) and push subscribe/unsubscribe (`endpoint` is an externally-supplied URL). The remaining `btoa` challenge sites are provably ASCII (`validateUserId`, the `[a-z0-9_]` alias filter) and were left alone. **`utf8ToB64` is byte-identical to `btoa` for ASCII**, so already-working signed operations (kick/promote/demote/leave/delete) are unaffected — pinned by a regression control test.
+
+Five tests: ASCII control, Japanese, emoji, Latin-1 accented, and — importantly — that a **forged signature on a non-ASCII name is still rejected 403**, so the fix widened the accepted encoding without weakening authentication.
+
+---
+
+## Fix fingerprint.js to be byte-exact with libsignal; add its published test vectors (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+842 vitest (+5); `src/crypto/fingerprint.js` + `tests/fingerprint.test.js`. `validate.sh` PASSED. **`index.html` untouched** — gate-free.
+
+`fingerprint.js` (the strong Signal-style safety number, reference-only, slated to replace the deployed weak single-SHA-256/30-digit number) claimed to "follow Signal's NumericFingerprintGenerator" but **deviated from it**. libsignal seeds its iteration loop with the *bare* concatenation `version(2, big-endian) ‖ key ‖ identifier` and then runs exactly `iterations` rounds of `SHA-512(hash ‖ key)`. This module hashed the seed first — one extra round, and, far more importantly, an output that diverged from Signal's for identical inputs.
+
+Impact is **conformance, not weakness**: an extra hash round is not cryptographically weaker. But the divergence meant the module could never be checked against Signal's published vectors, so a real error in the iteration, the version prefix, the identifier binding, the 30-byte truncation, the 5-byte→5-digit chunking, or the sorted concatenation would have gone undetected until it shipped as users' displayed safety number.
+
+Fixed to seed from the bare concatenation, and the module is now **verified byte-exact against libsignal's own `NumericFingerprintGeneratorTest` vectors** (Alice/Bob 33-byte identity keys, `+14152222222`/`+14153333333`, 5200 iterations → `300354477692869396892869876765458257569162576843440918079131`). Five new tests pin: the exact vector, symmetry from Bob's perspective, stable-identifier binding, identity-key binding (one flipped bit changes the number — the MITM property the number exists for), and an independent re-implementation of libsignal's loop that must agree byte for byte.
+
+Still reference-only: the deployed `safetyNumber()` remains the legacy weak one, and its tripwire is unchanged. Migrating the client is a coordinated display change that needs `index.html` room (currently 14,999/15,000).
+
+---
+
+## Add PQXDH hybrid key-agreement reference module (R1) (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+837 vitest (+19: 17 new `tests/pq.test.js` + 2 tripwires) + 14 E2E; new `src/crypto/pq.js`, `tests/pq.test.js`, `tests/mirror-drift.test.js`, `CLAUDE.md`. `validate.sh` PASSED. **`index.html` untouched** — gate-free (it sits at 14,999/15,000).
+
+X25519 falls to a CRQC, and a relay holding sealed envelopes today can decrypt them later once one exists ("harvest now, decrypt later"). The industry answer is hybrid key agreement — mix a classical ECDH secret and a post-quantum KEM secret into one KDF so the result survives if *either* primitive does. Signal shipped this as PQXDH (2023) and extended it into the ratchet as SPQR (2025); TLS/IKEv2 use the same concatenate-then-KDF shape.
+
+`pq.js` implements PQXDH as a **minimal extension of the X3DH already in `ratchet.js`**: PQXDH derives `SK = KDF(DH1‖DH2‖DH3‖DH4‖SS)`, and DH1..DH4 are *exactly* the four DHs `x3dhInitiator` already computes. So the PQ upgrade is "append SS, change nothing else" — a test pins that the classical half stays byte-identical.
+
+Two deliberate design decisions:
+- **The KEM is injected, never hand-rolled.** Hand-writing a lattice KEM is a well-known way to ship a broken one, and the repo forbids new runtime deps. A `webCryptoKem()` adapter uses `crypto.subtle`'s ML-KEM once browsers ship it (WICG modern-algos draft; probes both `encapsulateBits` and the older `encapsulateKey` naming via the spec'd `SubtleCrypto.supports()`), and any `{encapsulate, decapsulate}` object works.
+- **Fail-closed: no "PQ if available, classical otherwise" path.** A silent downgrade is indistinguishable from an attacker forcing one, so classical-only stays an explicit caller decision. Tests assert it throws rather than ever returning a classical-only key.
+
+Also adds **transcript binding**: the formal analyses of PQXDH (Bhargavan–Jacomme–Kiefer–Schmidt, USENIX Sec '24; Cryspen's review) stress that the KEM public key and ciphertext must be bound, or peers can disagree about which encapsulation they completed. The combiner folds `SHA-256(pqpk‖ct)` into the HKDF info, and tests confirm a swapped ciphertext or PQ public key changes the SK instead of silently agreeing.
+
+Reference-only, per the repo's established pattern (like `fingerprint.js`/`franking.js`): two tripwires now pin that status, so the day it is deployed the guard fails and forces a real mirror-drift test plus a CLAUDE.md update. The deployed client today only *detects* ML-KEM; it never key-agrees with it.
+
+---
+
+## Deploy key commitment (I16): close the invisible-salamanders gap (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+818 vitest (+7) + 14 Playwright E2E; `index.html` + `tests/mirror-drift.test.js` + `CLAUDE.md`. `validate.sh` PASSED (35/36, 14,999 lines).
+
+**The defense existed in `src/crypto/ratchet.js` but had never been mirrored into the deployed client** — so unlike every other hardening in this codebase, this gap was *not* flag-gated: shipped AES-GCM was non-committing on the default and only path, for every user. AES-GCM is not key-committing, so a single ciphertext can be crafted to open validly under two different keys ("invisible salamanders" / AEAD partitioning, Dodis et al.; cf. Chan–Rogaway CTX and Bellare–Hoang committing-AEAD transforms). Key commitment is also the building block the franking design (I17) needs.
+
+Deployed inline `_keyCommit` = `HKDF(msgKey, 0³², 'breeze-commit', 32)`, byte-identical to the reference, shipped as `cm` on every 1:1 and group frame and verified before the AEAD result is trusted, at all three receive sites (in-order 1:1, skipped-key 1:1, group). **Backward compatible and unflagged**: verification is *verify-if-present*, so frames from un-upgraded senders (no `cm`) still decrypt, and the commitment is derived before `zeroBuffer` wipes the message key.
+
+**Mirror-drift earned its keep here.** A first inline draft shipped `cm` as base64 while the reference ships `cm: arr(cm)` (a byte array) — a silent wire drift that would have made upgraded and un-upgraded clients reject each other's messages in production. The guard failed immediately and the inline was corrected to the reference shape. New tests pin: byte-parity with `ratchet.js keyCommitment`, the `arr()` wire shape, binding/determinism, all three verify sites plus the verify-if-present branch, the derive-before-zeroBuffer ordering, and behaviourally — a tampered `cm` is rejected while a frame with no `cm` still decrypts (together proving the rejection comes from the commitment check, not the AEAD).
+
+Known limit (documented, not closed here): verify-if-present cannot stop a malicious sender from simply omitting `cm`. Full binding needs a `commit` capability negotiation of the same shape as X3DH/group v5 — a deliberate follow-up.
+
+---
+
+## Fix: receiving a message collapsed the compose box to 0px (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+811 vitest + 13 Playwright E2E specs (+2); `index.html` (CSS only) + `tests/e2e/messaging.spec.js`. `validate.sh` PASSED (35/36).
+
+**A real, default-path UX break — no flag, no opt-in, the most common interaction in a messenger.** `.smart-reply-bar` is `width:100%` but sits *inside* the `display:flex` `.input-bar` row, which had no `flex-wrap`. The moment a user received a message that triggers smart replies, the bar became a same-row flex sibling and consumed the whole width, squeezing `#msg-input` from **660px to 0px** — the recipient could no longer type a reply. Measured directly in a real browser before/after (660 -> 0, then 660 with the bar visible after the fix). Fix: `flex-wrap: wrap` on `.input-bar` plus `flex: 0 0 100%` on `.smart-reply-bar`, so the suggestions take a row of their own and the textarea keeps its own.
+
+This was found by first-principles analysis, not a bug report: an X3DH-interop E2E test kept failing on its *reverse* direction and looked like a parallel-run flake. It wasn't — the receiver genuinely could not type. Two E2E tests added:
+- **Smart-reply regression**: asserts the bar is visible AND the textarea keeps real width (>100px) AND — the strongest proof — that the recipient can actually type and send a reply that arrives.
+- **X3DH v5 interop** (the test that surfaced it): a `withConfigFlagPatched` helper text-patches `X3DH_V5_ENABLED: false` -> `true` for one browser context only, so a v5-enabled client talks to a pristine legacy client and messages must still flow **both** directions via capability fallback. This is the safety property that has to hold before `X3DH_V5_ENABLED` could ever default on.
+
+---
+
+## Worker: expose caps from prekey/status (no-OTP capability read) (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+811 vitest tests (+2) + 12 Playwright E2E specs; `_worker.js` + `tests/worker.test.js`. `validate.sh` PASSED (35/36, 1 size warning); `index.html` untouched (gate-free).
+
+`handlePreKeyStatus` now returns the bundle's advertised `caps` array (and the legacy `x3dh` field) in the same shape `parsePeerCaps` consumes. The handler already reads the full prekey bundle and touches no OTP entry, so this is a purely additive, non-destructive read. It gives clients a path to read a peer's capabilities — e.g. the group-v5 negotiation floor — WITHOUT the one-time-prekey consumption that `/prekey/fetch(/batch)` incurs; the group-v5 `_fetchMemberCapsBatch` client path can migrate to it later to stop burning an OTP per member on a caps-only check. Two worker tests: caps/x3dh exposed and non-destructive (OTP count unchanged across repeated reads), and omitted for a legacy bundle that advertised neither.
+
+---
+
+## E2E coverage: /admin demote reflected server-side (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+809 vitest + 12 Playwright E2E specs (+1); test-only, no product-code change. `validate.sh` PASSED (35/36, 1 size warning).
+
+Adds a `group.spec.js` test for the `/admin demote` command wired earlier this session (only `/admin kick` had coverage). The creator promotes Bob, asserts his id appears in the server's `admins` array via `/group/info`, then demotes him and asserts it's gone — while confirming Bob remains a *member* throughout (demote revokes only the admin role, distinct from kick). `handleGroupAdmin` stores the target's id in `group.admins`, so the test resolves Bob's id from the group's member list and checks membership/absence against the server's echoed array with `toPass` polling.
+
+---
+
+## E2E coverage: group member-leave path + harden the /verify test (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+809 vitest + 11 Playwright E2E specs (+1); test-only, no product-code change. `validate.sh` PASSED (35/36, 1 size warning).
+
+- New `group.spec.js` test for the **non-creator member-leave** path (previously only the creator-*delete* path was covered). A non-creator deleting a group from their contact list routes to `/api/group/leave` (not `/delete`); the test asserts the server-side truth that distinguishes the two: the group still EXISTS afterward (the creator didn't delete it) but the leaver is gone from its roster — exercising the PCS-relevant leave endpoint end to end. Targets the group by name since `processJoinToken` also adds the creator as an individual contact.
+- Hardened `verify.spec.js` against a parallel-run flake: it now waits for the compose bar (`#msg-input-bar`, toggled visible by `openConversation`) before issuing `/verify`, since that command only opens the safety-number modal when a 1:1 conversation is actually active — under 2-worker load the contact-open click could otherwise still be in flight, leaving `activeContact` null. Confirmed stable across consecutive full-suite runs.
+
+---
+
+## E2E regression test for the KT /verify audit flow (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+809 vitest + 10 Playwright E2E specs (+1); test-only, no product-code change. `validate.sh` PASSED (35/36, 1 size warning).
+
+The `/verify` key-transparency wiring shipped earlier this session was only ever confirmed by a throwaway manual debug script — a real coverage gap for a security-facing feature. Adds `tests/e2e/verify.spec.js`: two isolated browser contexts sharing one in-memory Worker KV, Bob's identity created first (his prekey upload populates the `ktlog:<id>` log Alice's audit fetches), then Alice runs `/verify` and the test asserts the safety-number modal's live KT status line resolves to the green "verified" outcome — exercising the full `_auditKeyTransparency` -> `/api/ktlog/get` -> `_auditKeyHistory` (verifyChain + rollover) -> UI path — with a page-error guard proving no uncaught exceptions along the way.
+
+---
+
+## Modernize post-quantum detection; document the web-delivery threat model (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+809 vitest + 9 Playwright E2E specs; `index.html` + `SECURITY.md`. `validate.sh` PASSED (35/36, 1 size warning).
+
+Two research-driven improvements (survey of 2024–2026 E2EE deployments), both low-risk:
+
+- **PQ readiness detection** now tracks the WICG "Modern Algorithms in the Web Cryptography API" draft: it checks `SubtleCrypto.supports('encapsulateBits'|'importKey', 'ML-KEM-768')` (the spec'd feature-detection entry point) in addition to the `encapsulateBits`/`encapsulateKey` function names, since the KEM primitive naming shifted across draft revisions. Previously only the older `encapsulateKey` name was checked, so a browser shipping the newer API would have been misreported as "no PQ." Verified it still reports `false` on browsers without ML-KEM (no false positive) and doesn't throw at boot (smoke test: zero console errors). This is detection/reporting only — the industry direction (Signal SPQR's X25519+ML-KEM-768 hybrid) is recorded as roadmap, not deployed.
+
+- **SECURITY.md now has an honest Threat Model & Limitations section.** The headline addition is the structural limit the research literature (WEBCAT / "Trust on Reload") repeatedly flags for *any* browser-delivered E2EE app: the encryption runs in code the server ships on every load, so a compromised/compelled server could serve a targeted key-exfiltrating page with no OS signature check to catch it — a property of web-delivered secure messengers generally, not a Breeze bug. Documents the mitigation ladder (native builds as the high-assurance path, reproducible `breeze.zip` + published SHA-256, SRI, and web-code-transparency/WEBCAT as roadmap) plus the other known limitations already true of the design (metadata exposure under Sealed Sender, symmetric-franking's lack of sender-binding, the opt-in/default-off hardening flags, classical-only key exchange today).
+
+---
+
+## Group-v5 sender-key: real N-party capability negotiation (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+809 vitest tests (+8 negotiation-mirror cases) + 9 Playwright E2E specs (+2 mixed-version cases); `index.html` + `tests/mirror-drift.test.js` + `tests/e2e/group.spec.js` + `CLAUDE.md`. `validate.sh` PASSED (35/36, 1 size warning).
+
+Removes the one technical blocker to ever defaulting `GROUP_RATCHET_V5` on: until now that flag was purely a LOCAL per-client toggle. `getGroupSenderKey` froze a group's wire format (v3 static key vs v5 hash-ratchet) from the raw flag at first send, with no check of what the OTHER members support — so flipping the default would have silently broken group-message delivery for any group containing a not-yet-upgraded member (their client cannot decrypt a v5 `ep`-tagged ratchet ciphertext at all). The 2-party X3DH-v5 feature already solved this shape of problem with an "AND rule" capability negotiation; group needed the N-party generalization (`negotiate.js`'s `negotiateGroup`, previously never inlined).
+
+Pure client-side wiring — the Worker already had every piece (`sanitizeCaps`, group create/join snapshotting a `caps` field per member, `/group/info` returning it, `/prekey/fetch/batch`), so `_worker.js` is untouched.
+
+- Inlined `_negotiateGroupCaps` (exact mirror of `negotiateGroup`) and `_computeGroupV5` (local flag AND every other member's advertised caps), both fail-CLOSED: a member missing `caps` (legacy client or a failed fetch) blocks v5 for the whole group.
+- Clients now advertise `group-v5` in their prekey-upload / group-create / group-join caps; `safeMemberList` stops stripping the `caps` field the server returns.
+- `getGroupSenderKey` negotiates lazily exactly once (at the existing first-send format-freeze moment) from the freshest local membership snapshot, caching the decision on the group record. The kick handler re-negotiates (removing a member can only relax the AND rule, possibly newly enabling v5) and gates its epoch-rotation on the negotiated result rather than the raw flag. Local-members `createGroup` fetches member caps up front via the batch prekey endpoint.
+- Verification: mirror-drift parity against the reference for all-v5 / one-legacy-member / empty / fail-closed / local-off cases, plus `getGroupSenderKey`-freeze tests. Two new E2E tests drive a genuinely mixed-version group (one browser context text-patched to `GROUP_RATCHET_V5: true`, the other left at the pristine default) and assert (a) the legacy peer actually receives the plaintext — the strongest black-box proof the v3 fallback was used, since a real v5 emission would leave it unable to decrypt — and (b) both-supporting contexts upgrade to `v:5`/`chainKey`.
+
+The `GROUP_RATCHET_V5` **default stays off** — this pass proves the negotiation machinery correct; flipping the default is a separate, deliberate follow-up. Also swept ~65 leftover decorative `// ====` divider comment lines (pure ASCII art, no content) to keep the new code under the 15,000-line gate.
+
+---
+
+## Wire /api/ktlog/get into /verify: user-triggered KT audit (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+801 vitest tests + 7 Playwright E2E specs; `index.html` only. `validate.sh` PASSED (35/36, 1 size warning).
+
+Closes the other half of the previous entry's KT gap: `/api/ktlog/get` existed server-side and README already advertised key transparency as a feature, but no client code path ever called it. The full-chain `_auditKeyHistory` audit only ran inside the X3DH-v5 handshake (`CONFIG.X3DH_V5_ENABLED`, default off) — so for the vast majority of users on the default config, key transparency was entirely inert.
+
+- Added `_auditKeyTransparency(contact)`: fetches the peer's server-side append-only key log and runs the same `_auditKeyHistory` audit, independent of `X3DH_V5_ENABLED`. Only pins `contact.pubB64` as the new trust baseline on an `ok`/`new` verdict — never on `rolled`, since pinning there would launder an unconfirmed key change into a trusted baseline.
+- `/verify` (`showSafetyNumber`) now shows a live-updating status line below the safety number: a "checking…" placeholder that resolves to one of four outcomes (automatically verified / key changed since last check / server log looks tampered / check unavailable), matching the industry direction (WhatsApp/Messenger/Signal auto-verification) instead of relying solely on manual safety-number comparison.
+- Verified end-to-end against the real Worker (in-memory KV harness): a fresh contact correctly resolves to the "verified" state with no console errors.
+- Also condensed roughly 40 lines of pure-ASCII-art section-divider comments (`// ====...====` pairs bracketing a title line, collapsed to just the title) and merged several 2-line WHY-comments to one line — no content lost, needed to fit the new code under `validate.sh`'s 15,000-line gate.
+
+---
+
+## Key-transparency audit: port the full hash-chain tamper check inline (branch claude/nice-ride-T6yb0, 2026-07-11)
+
+801 vitest tests (+2 KT parity cases) + 7 Playwright E2E specs; `index.html` + `tests/mirror-drift.test.js` + `CLAUDE.md`. `validate.sh` PASSED (35/36, 1 size warning).
+
+Motivated by a survey of 2024–2026 E2EE research and deployments (WhatsApp's Auditable Key Directory now third-party-audited by Cloudflare, Messenger key transparency shipped 2025-11, Signal auto-verification): the whole industry has moved from manual safety-number comparison to **automatic key-transparency verification**. Breeze already had the server side (`/api/ktlog/get`, `ktlog:<userId>` append-only log) and a full reference audit (`src/crypto/ktlog.js`'s `auditBundle` = `verifyChain` + `checkRollover`), but the deployed inline mirror (`_auditKeyHistory`, in the X3DH-v5 handshake) only ported *rollover detection* — the hash-chain **tamper** check was missing.
+
+That gap meant an incomplete audit that gives false assurance: a hostile relay could serve a forged append-only log presenting its own injected key as if it had always been there, and rollover detection alone would wave it through. Only the chain verification (each entry's `c = SHA-256(prevC ‖ h)`) catches a rewritten log.
+
+- Ported the full `auditBundle` semantics into inline `_auditKeyHistory`: it now runs `verifyChain` (hash-chain integrity, fail-closed on a malformed log) alongside the existing rollover check, returning a 4-way verdict `tampered > rolled > new > ok`.
+- The X3DH-v5 initiator now shows a distinct key-change warning on a `tampered` chain, and — critically — does **not** pin a key vouched for by a broken chain (a tampered log must never silently establish a new trust-on-first-use baseline).
+- Upgraded the mirror-drift test from `checkRollover`-only parity to full `auditBundle` parity across all four verdicts, including a tampered-chain case and a fail-closed (non-empty log that parses to nothing) case; the `appendChainEntry` log-append path stays reference-only (the client verifies, the Worker appends). Updated CLAUDE.md's module status table accordingly.
+
+Note this audit runs inside `initSessionV5Initiator`, still gated behind `CONFIG.X3DH_V5_ENABLED` (default off) — so this hardens the audit *quality* for when v5 is enabled, rather than changing default-user behavior. Remaining KT work from the research survey (deferred): a user-triggered "audit this contact against the server KT log" action wiring `/api/ktlog/get` into `/verify`, and PQ-hybrid (Signal SPQR / ML-KEM) tracking — recorded in the plan file.
+
+---
+
+## Sign backup upload/download; document the *_REQUIRE_AUTH hardening flags (branch claude/nice-ride-T6yb0, 2026-07-10)
+
+799 vitest tests + 7 Playwright E2E specs; `index.html` + `wrangler.toml`. `validate.sh` PASSED (35/36, 1 size warning).
+
+Continues the audit from the previous entry: `_worker.js` has always supported an optional Ed25519 ownership signature on `/api/backup/upload` and `/api/backup/download` (`BACKUP_REQUIRE_AUTH=true` rejects requests without one), but the client never sent one — every backup call went out as `{userId, backup}` / `{userId}` with no `ts`/`sig`, so the flag could never actually be turned on without breaking every client. As the code's own comment put it: "without it, knowing a userId is enough to download the encrypted blob and brute-force the passphrase offline."
+
+- Both calls now sign `breeze-backup-upload:${userId}:${ts}` / `breeze-backup-download:${userId}:${ts}` the same way group actions do, verified against the existing (previously unreachable from the client) `worker.test.js` coverage for this exact message format.
+- Added a `wrangler.toml` section documenting all eight `*_REQUIRE_AUTH` flags (`PRESENCE`, `ALIAS`, `PORTAL`, `GROUP`, `PUSH`, `TURN`, `BACKUP`, `AI`) with what each does and why it's safe to enable — none of the eight were documented anywhere in the repo before this.
+
+Turning any of these on is still an operator decision (`wrangler pages secret put ..._REQUIRE_AUTH true`), not a code default — this only makes doing so possible without breaking clients that were never sending the signature in the first place.
+
+Remaining from the audit, not yet addressed: the other 7 `*_REQUIRE_AUTH` flags' client call sites haven't been audited the same way `BACKUP` was here; `/api/group/transfer` and `/admin unban` have no client UI; `/api/ktlog/get` is never called despite being advertised in README; the franking/abuse-report system has no client UI.
+
+---
+
+## Wire up group leave/delete/demote; dedup postAPI/postAPIRaw (branch claude/nice-ride-T6yb0, 2026-07-10)
+
+799 vitest tests + 7 Playwright E2E specs; `index.html` only. `validate.sh` PASSED (35/36, 1 size warning).
+
+Closes a feature-completeness gap from the codebase audit: `/api/group/leave`, `/api/group/delete`, and the `demote`/`unban` `/api/group/admin` actions were fully implemented server-side (and `leave`/`delete`/`transfer` are advertised in README's feature list) but had zero client call sites — deleting a group locally left every member's id/pub/name sitting in the Worker's KV for the full 30-day TTL, readable by anyone still holding the invite token.
+
+- Deleting a group contact now calls `/api/group/delete` (if the local user is the creator) or `/api/group/leave` (otherwise) before the local IndexedDB cleanup, matching the `handleGroupKick`-style Ed25519 signing convention already used by kick/rename/promote. New E2E test verifies the server-side KV record is actually gone (`/api/group/info` now 404s) after deletion.
+- Added `/admin demote @name`, mirroring the existing `promote` command (unban deferred — the client has no local record of who's banned to select from; would need a UI to list `group.banned`, out of scope for this pass).
+- Removed `postAPI()`, a near-duplicate of `postAPIRaw()` differing only in auto-parsing the response; it had exactly one call site, now inlined as `postAPIRaw(...).then(r => r?.ok ? r.json() : null)`.
+- Condensed a number of pre-existing multi-line banner comments (`// ═══...═══` blocks) that predated this session, to make room under `validate.sh`'s 15,000-line gate for the new group-management code — no logic changes, comments only, verified via `mirror-drift.test.js` (marker-extracted regions untouched) and the full syntax/test suite.
+
+Remaining from the audit, not yet addressed: `/api/group/transfer` (ownership transfer) and `/admin unban` have no client UI; `/api/ktlog/get` (key transparency) is never called despite README advertising it; the franking/abuse-report system (`/api/abuse/record`, `/api/abuse/report`) has no client-side UI at all; eight `_worker.js` `*_REQUIRE_AUTH` flags default to permissive, including `BACKUP_REQUIRE_AUTH` (anyone who knows a userId can currently download that user's encrypted backup blob).
+
+---
+
+## Group kick E2E test uncovers a 5-bug chain, incl. a prekey-signing protocol bug (branch claude/nice-ride-T6yb0, 2026-07-10)
+
+799 vitest tests + 6 Playwright E2E specs; `index.html` + `_worker.js` unchanged (a fix attempted there was reverted — see below). `validate.sh` PASSED (35/36, 1 size warning).
+
+Extended `tests/e2e/group.spec.js` with a second test: the group creator kicks a member via `/admin kick`, verified both client-side (member removed locally) and server-side (a direct `/api/group/info` call confirms the Worker's roster actually changed). Getting this test green surfaced a chain of five real bugs, each masking the next:
+
+**Slash commands were entirely dead:** a generic `keydown` listener on `#msg-input` always ran on Enter and called `sendMessage()` unconditionally; the dedicated slash-command listener (`/admin`, `/help`, `/audit`, `/retention`, ~40 other commands per the in-app `/help` text) is registered later and never got a chance — every command was sent as a literal broadcast message instead of being run (e.g. `/admin kick Bob` posted to the whole group). Fixed by skipping the generic send when the input starts with `/`.
+
+**Group creator never saw new joiners without a reload, and an open group silently excluded them from sends:** same two bugs fixed in the previous entry's E2E work, needed again here since the kick test also creates+joins a group.
+
+**`/admin kick|rename|promote` referenced the wrong field (`groupToken`, never set anywhere — groups only ever store `joinToken`):** every server-side moderation call silently no-op'd before this session; already partially covered in the previous entry, now exercised end-to-end.
+
+**The group creator could never pass their own `/admin` permission check:** `createGroupInviteLink()` never set `createdBy`, which `isGroupAdmin()` requires. Fixed by setting it alongside the other fixes above.
+
+**A brand-new identity's entire first session ran with no Ed25519 signing key (protocol-level):** `initSigning()` was only called on the returning-user boot path; a fresh identity's setup handler never called it. Every signed action in that first session — message-authenticity `sig`, and now `/admin kick|rename|promote` — silently ran unsigned, and the very first prekey upload never included `edIdentityKey`/`signedPreKeySig` at all. Fixed by calling `initSigning()` before the first prekey bundle is built in `createIdentity()`.
+
+**Fixing the above then uncovered a real, previously-invisible protocol bug:** `generatePreKeyBundle()` signs the signed-prekey via the generic `signMessage()` helper, which UTF-8-encodes its input as literal text — but the Worker's own `verifyEd25519` (in `handlePreKeyUpload`, checked against every signed upload since I1/G2) base64-decodes its message argument first. A signature over the UTF-8 bytes of the base64 *string* can never satisfy a check expecting the base64-*decoded* raw bytes, so **every authenticated prekey upload was rejected by the server's own validation** — invisible until now because no brand-new identity ever got far enough (previous bug) to attempt one. `tests/worker.test.js`'s existing signature tests use raw-byte signing and were the tell: they document the *intended* (and reference-`ratchet.js`-matching) convention. Fixed the client to sign raw SPK bytes directly (matching the reference and the Worker's check), and fixed the client-side X3DH v5 peer-bundle verifier (`initSessionV5Initiator`, `CONFIG.X3DH_V5_ENABLED` still default off) to verify the same way instead of via `verifySignature()`'s incompatible string convention. (A same-shape fix was first attempted in `_worker.js`'s `verifyEd25519` call instead — reverted after the existing worker tests showed the *client*, not the Worker, was on the wrong side of the convention.)
+
+---
+
+## Group invite-link E2E + 4 more bugs it found (branch claude/nice-ride-T6yb0, 2026-07-08)
+
+799 vitest tests + 5 Playwright E2E specs; `index.html` + new `tests/e2e/group.spec.js`. `validate.sh` PASSED (35/36, 1 size warning).
+
+New E2E test drives a full group-invite-link flow through the real UI across two browsers (create group → extract invite link → second browser joins → both exchange a Sender-Key group message). Building it surfaced four more real bugs:
+
+**Group creator never saw new joiners without a reload:** `createGroupInviteLink()` never called `startGroupMemberPoll()` (its only other caller, `processJoinToken`, does) — the creator's tab learned of new members only on its next app boot, not during the session they created the group in. Fixed by starting the poll right after the invite link is created.
+
+**A currently-open group silently excluded new joiners from sends:** `startGroupMemberPoll`'s tick updated the group's IndexedDB record but never the live `activeContact` object `sendMessage` actually reads — so a group left open across a join kept sending to a stale, smaller member list (in the minimal case, an empty one) until the conversation was closed and reopened. Fixed by syncing `activeContact.members` too when it's the group being polled.
+
+**First group message after a join could be silently dropped (protocol reliability):** sender-key distribution (`distributeSenderKey`) was fire-and-forget, so the actual message ciphertext could reach the relay before its own key. A receiver polling both then found no Sender Key on `decryptGroupMsg`, fell back to the legacy per-member `decryptFrom` path, which throws on a Sender-Key payload (`DataError`) and drops the message with no retry. Fixed by awaiting distribution before sending content, so key and message reach the relay (and therefore the receiver's poll) in the correct order.
+
+**Full-width messenger layout was crushing the compose box (responsive/UX):** the single page-level `.wrap` (max-width 600px) applies to every view including the messenger's sidebar+chat layout, not just legal/pricing/setup text pages. With a fixed 280px sidebar and every input-bar tool button visible (real Chromium shows a dictate button via the Web Speech API that this max-width was never budgeted for), the compose `<textarea>` (`flex:1 1 0%`) collapsed to a literal 0px width — un-typable, not just cramped. Fixed with `.wrap:has(> #v-msg) { max-width: 1400px }`, leaving legal/pricing/setup at their existing narrower width.
+
+**Bonus fix (found via the same top-level-scope sweep as last session's bugs):** the install-nudge banner's engagement gate (2+ visits or 3+ messages sent, "5-6x conversion vs first-visit") only applied on the `beforeinstallprompt` path; the fallback for browsers that never fire that event (Safari, Firefox) showed the banner to every first-time visitor after 3s regardless of engagement, undermining the reason that gate exists.
+
+---
+
+## E2E harness + critical scope bugs (branch claude/nice-ride-T6yb0, 2026-07-08)
+
+799 vitest tests + 4 Playwright E2E specs; `index.html` + new `tests/e2e/messaging.spec.js`. `validate.sh` PASSED (35/36, 1 size warning).
+
+First real-browser E2E harness for the shipped `index.html` (Playwright driving the actual document + `_worker.js` behind an in-memory KV, not a re-implementation). It immediately found bugs that 799 unit tests never could, because those tests only exercise `src/crypto/*` reference modules and extracted fragments — never the inline, deployed code actually executing in a browser.
+
+**Message sending was completely broken (CRITICAL):**
+- `genMsgId()` was declared at the script's true top level but referenced `myId`, a variable that only exists inside `initMessenger()`'s closure. Every call — i.e. every single message send (text, file, forward, group) — threw `ReferenceError: myId is not defined`, caught silently by `sendMessage`'s try/catch (visible only with `localStorage['brz-debug']='1'`). No message ever actually sent; the sender didn't even see their own message echoed locally. Fix: moved `genMsgId`/`_msgSeq` inside `initMessenger`, next to `myId`.
+
+**Outbox flush-on-reconnect was completely broken:**
+- Same root cause: top-level `flushOutbox()` referenced `peers`/`encryptFor`/`myPubB64`/`myName`, all closure-local to `initMessenger`. Every flush attempt (queued messages for an offline contact, sent once they reconnect) threw and was silently dropped. Fix: moved `flushOutbox` inside `initMessenger`, next to the `peers` map it reads.
+
+**"Add account" silently did nothing at the plan's account-slot limit:**
+- `addAccount()` (top-level) called `showUpgradeNudge()`, which had been declared inside `initMessenger`'s closure though it has no dependency on any identity/session state (DOM + `t()`/`esc()`/`safeSetHTML()` only). Hitting the slot limit threw instead of showing the upgrade modal — a broken upsell path. Fix: moved `showUpgradeNudge` to the top level alongside its only caller.
+
+All three were found by a static sweep for top-level functions referencing `initMessenger`-closure-local identifiers, seeded by the first bug the new E2E test surfaced at runtime. New `tests/e2e/` (Playwright): `smoke.spec.js` (boot, identity creation, IndexedDB persistence) and `messaging.spec.js` (two real browser contexts exchange a 1:1 message over the sealed-sender relay, driven entirely through the real UI — add-contact dialog, contact click, compose, send).
+
+---
+
+## Security hardening session 5 — account-switch leaks, reaction/poll caps (branch claude/nice-ride-T6yb0, 2026-07-01)
+
+777 tests; `index.html` only. `validate.sh` PASSED (35/36, 1 size warning).
+
+**Scheduled-message timer cross-account injection (HIGH):**
+- `setTimeout` handles for future scheduled messages were not tracked in `_intervals` and therefore not cancelled by `_messengerCleanup` on account switch. If an account switch occurred before a scheduled message fired, the callback ran under the new account's globals (`myKeys`, `activeContact`), sending the old account's scheduled message as the new identity. Fix: push the `setTimeout` return value into `_intervals`; `clearInterval` on a `setTimeout` ID is valid in browsers (shared timer pool).
+
+**Interval leak on fast account switch (stale `_defer` timers):**
+- Two `setInterval` registrations for `enforceRetentionPolicy` and `pruneAuditLog` were wrapped in `_defer()` (requestIdleCallback, up to 2 s delay). If `_messengerCleanup` ran before the idle callback fired, the intervals were registered into `_intervals` after it was already cleared — leaking timers that ran indefinitely with no cleanup path. Fix: register directly (no `_defer` wrapper); `setInterval(fn, 3 600 000)` has zero cost at registration time, first tick is 1 hour away.
+
+**Stale peer map blocks reconnection after account switch:**
+- `RTCPeerConnection` objects were closed in `_messengerCleanup` but their entries were not removed from the `peers` map. `connectPeer` guards on `peers[pubB64]?.pc` to skip duplicate connections — the closed (but non-null) `pc` object caused the guard to fire, preventing new connections from being established for any contact shared between the two accounts. Fix: `for (const key in peers) delete peers[key]` after closing connections.
+
+**Reaction emoji uniqueness cap in 1:1 path:**
+- The group reaction path capped unique emojis per message at 20; the 1:1 DataChannel path was missing the same check. A single peer could therefore accumulate unlimited emoji keys in a message's `reactions` object. Fix: same `Object.keys(stored.reactions).length < 20` guard added to the 1:1 path.
+
+**Defense-in-depth per-emoji user array cap:**
+- Added a 100-user cap per emoji slot in both the group and 1:1 reaction paths. The group path is already bounded by the 100-member server-side limit; the cap provides defense in depth against legacy data or future relaxed limits.
+
+**CSP `upgrade-insecure-requests` sync:**
+- `_headers` Content-Security-Policy was missing `upgrade-insecure-requests` that was already present in the `<meta http-equiv>` fallback. Both now match.
+
+---
+
+## Security hardening session 4 — dedup race, DataChannel caps, network quality (branch claude/nice-ride-T6yb0, 2026-07-01)
+
+777 tests; `index.html` only. `validate.sh` PASSED (35/36, 1 size warning).
+
+**Dual-path dedup race fix:**
+- `_replayCache.add(msgId)` moved to before the first `await` in all three `handleIncoming` message paths (group, voice, 1:1 text/file). Previously the mark happened after `dbPut`, leaving a window where relay and P2P DataChannel could both deliver the same message and both pass the `has()` check — causing the same message to be stored and displayed twice. The speculative pre-await mark closes the race with no behaviour change for the common non-duplicate path.
+
+**DataChannel size caps (DoS hardening):**
+- State DataChannel (`onmessage`) rejects non-string or > 4 KB messages; prevents presence/ICE flood from malformed peer.
+- Main DataChannel (`onmessage`) rejects non-string or > 512 KB messages; caps P2P file transfers that bypass the server-side relay limit.
+
+**Network quality abort controller:**
+- `measureNetworkQuality()` now cancels a prior RTT probe before starting a new one via `AbortController`. Previously overlapping probes (triggered by rapid conversation switches) could leave stale `AbortSignal` contexts and cause spurious `fetchT` errors in the console.
+
+**Trailing-slash rate-limit bypass (worker):**
+- `url.pathname` now strips trailing slashes before rate-limit lookup and handler routing. A path like `/api/backup/upload/` previously missed the path-specific 2 rpm limit, falling back to the 30 rpm default.
+
+**Call UI name truncation:**
+- `showCallUI()` now slices the contact name to 64 chars at display time, matching the `addContact()` write-time cap. Prevents layout overflow for pre-cap contacts or P2P-supplied names.
+
+---
+
+## Security hardening session 3 — poll race, SDP guard, field caps, edit cap (branch claude/nice-ride-T6yb0, 2026-07-01)
+
+777 tests; `index.html` only. `validate.sh` PASSED (35/36, 1 size warning).
+
+**Poll cursor race fix:**
+- `_lastPollTs` now advances AFTER `handleIncoming()` completes (previously it advanced before, permanently losing messages on a crash mid-batch). Per-message `try/catch` added so a poison envelope can't halt the entire poll batch.
+
+**WebRTC robustness:**
+- SDP `JSON.parse()` result validated as a non-array object before `setRemoteDescription()`. Previously a non-object parse (array, null, string) yielded `undefined.type` silently.
+- `_unwrapCallSignal()` return value validated as a non-array object. A truthy non-object (e.g. `[]`) passed the old `!parsed` guard, leaving `pending.sdp` as `undefined` at `setRemoteDescription`.
+
+**Input caps:**
+- Message edit (`startEdit`) text capped at `CONFIG.MAX_MSG_LENGTH` (4096). The same cap already existed on the send path; edit signals to peers now carry the truncated text.
+
+**Auth:**
+- `/wipe` now sends Ed25519 ownership proof (`ts` + `sig` over `breeze-account-delete:${userId}:${ts}`); previously the unauthenticated request was rejected with 400 MISSING_FIELDS and the server-side prekey bundle was never deleted.
+
+**Protocol-relative URL fix (Trusted Types href sanitizer):**
+- Regex tightened from `\/` to `\/[^\/]` — previously `//evil.com` matched because `//` starts with `/`; browsers resolve protocol-relative URLs against the page protocol.
+
+**Contact import hardening:**
+- `name` capped 64, `alias` 32, `notes` 1024, `labels` 20×32, `members` capped at `GROUP_MAX`, `addedAt` validated finite number
+- `addContact()` validates and caps `pubB64` (≤200) and `name` (≤64) before IDB write
+- `safeMemberList()` helper centralizes member-array sanitization (capped at `GROUP_MAX`, id ≤128, pub ≤200, name ≤64); applied at `processJoinToken`, `startGroupMemberPoll`, and invite-add loop
+
+**DoS caps:**
+- Scheduled message count capped at 20 per account; new `toastScheduleMax` i18n key (EN+JA)
+- Reaction emoji type count capped at 20 per message (previously unbounded emoji-key map)
+- Import message `text` capped at `MAX_MSG_LENGTH`, `senderName` capped at 64 chars
+
+---
+
+## Security hardening session 2 — handleIncoming guards, AI opt-in, storage caps (branch claude/nice-ride-T6yb0, 2026-07-01)
+
+777 tests; `index.html` only. `validate.sh` PASSED (35/36, 1 size warning).
+
+**Privacy:**
+- AI smart reply (`showSmartReplies`) now gated on explicit user opt-in (`brz-ai-suggest` localStorage flag); previously recent message snippets were sent to the configured AI provider on every received message with no disclosure or consent
+- New toggle in `/settings` panel with EN+JA i18n labels
+- `/wipe` now calls `/api/account/delete` before local wipe to delete server-side prekeys/inbox; previously only local IDB/localStorage was cleared, leaving the prekey bundle on the server
+
+**handleIncoming field validation (P2P path):**
+- `msg.fromName` capped to 64 chars — relay path was already bounded by `sanitizeString(name, 64)`, but P2P group path bypassed it
+- `msg.replyTo.msgId` capped to 64 chars and `msg.replyTo.text` to 80 chars before IDB write (display was already capping at render time)
+- `msg.disappearAt` rejected if non-finite or ≤ 0 (Infinity/NaN would prevent message expiry)
+- Group message text capped at 64 KB (relay enforces 256 KB but P2P group path has no server check)
+- Incoming file name capped to 255 chars before IDB storage
+
+**Peer relay payload guard:**
+- `req.payload` in `handlePeerRelayRequest` rejected if not a string or > 64 KB (a legitimate encrypted 1:1 message is at most ~32 KB)
+
+**Binary file chunk handler:**
+- `nameLen > 255` or `mimeLen > 128` rejected (prevents DoS via oversized metadata field)
+- Voice message `v.data` rejected if > 350 KB (relay effective max is 256 KB)
+
+**Contact import validation:**
+- `/contacts import` validates `pubB64` (string type, non-empty, ≤ 128 chars, base64 charset) and derived `id` (string type, non-empty, ≤ 128 chars) before `dbPut`
+
+**Storage DoS caps:**
+- `/label` entries capped to 20 labels × 32 chars each (previously unbounded)
+- `/note` text capped to 1024 chars (both `/note` and `/notes` paths)
+- Contact rename (context menu) capped to 64 chars
+- `/ai` question capped to 2000 chars before API call
+
+---
+
+## Security hardening — input validation & P2P authentication (branch claude/nice-ride-T6yb0, 2026-07-01)
+
+777 tests; `index.html` + `_worker.js`. `validate.sh` PASSED (35/36, 1 size warning).
+
+**Group trust boundary:**
+- Require known contacts for group invite and sender key distribution — unknown sender's `msg.fromPub` can no longer inject a fake group or poison sender keys
+- Strict group token character validation: only `[a-z0-9]` allowed (matches server-generated token format)
+- Cap group invite `members` array to `CONFIG.GROUP_MAX` (100) and `invite.name`/`groupId` to 64 chars on receipt
+- Cap server-returned `data.members` to `GROUP_MAX` in the group-info poll update path
+
+**Injection / selector attacks:**
+- Sanitize peer-supplied `msgId` via `safeMsgId()` before all `querySelector` calls (group relay, 1:1 relay, P2P DataChannel, reaction handlers)
+- Validate `msg.ts` in `handleIncoming`: non-numeric values now reset to `Date.now()` instead of poisoning `msgId` and breaking attribute selectors
+
+**DoS / storage guards:**
+- Incoming message text capped at 64 KB (relay enforces 256 KB; P2P DataChannel had no server check)
+- Edit signal `signal.text` capped at 64 KB before DB write
+- `sendMessage()` enforces 64 KB cap programmatically (bypasses `maxlength="4096"` on quick-reply, speech-to-text, scheduled-message paths); new i18n keys `toastMsgTooLong` (EN+JA)
+- Reaction `emoji` field capped at 64 chars in all three reaction handlers (group relay, 1:1 relay, P2P DataChannel)
+- `poll.options` array capped at 20 in `renderPollHtml`; `poll.question` and `opt.text` capped at 200 chars; `opt.votes` coerced to array
+- `msg.senderName` in group typing indicator truncated to 64 chars before use as dict key (`_groupTypingState`)
+- Scheduled message `text` capped at 64 KB before IDB write
+
+**Data integrity:**
+- Backup restore validates required contact fields (`id`, `pubB64` type, length, base64 charset) at both restore paths before `dbPut`
+- `pollOptionIndex` must be `Number.isInteger && >= 0` before use as array index
+- `_peerRelayQueue` key validated as non-empty string ≤ 64 chars; `hasOwnProperty` guard prevents `__proto__` prototype pollution
+
+**P2P WebRTC authentication:**
+- `_sendSignedSDP()` helper signs SDP offer/answer with Ed25519 before posting to the unauthenticated `/signal` relay
+- SDP receive path verifies Ed25519 signature; TOFU-pins peer signing key; key mismatch or invalid signature drops the SDP with a debug log; unsigned SDPs accepted for backward compatibility
+
+## NEW FEATURE: idle auto-lock (`/lock idle <min>`) — Socratic-derived — item 107 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+734 tests; `index.html` only. `validate.sh` PASSED (i18n EN/JA parity).
+
+Socratic derivation: *"Breeze's core promise is privacy. The most common
+real-world attack isn't the crypto — it's someone reading an unlocked,
+unattended screen. Breeze has manual `/lock` and `/lock auto`… but `/lock auto`
+only fires on `visibilitychange` (tab hide). If I stay on the Breeze tab and
+walk away from my desk, am I protected? No. What standard control closes exactly
+that gap? An idle timeout lock."*
+
+**Feature — idle auto-lock:**
+
+- **`/lock idle <minutes>`** (1–120) arms an inactivity timer; **`/lock idle off`**
+  (or `0`) disables it. Persisted in `localStorage['brz-idle-lock']`; requires a
+  lock password (guides the user to `/lock` first otherwise).
+- **Detection:** `pointerdown` / `keydown` / `touchstart` / `wheel` / `mousemove`
+  (all `{ passive: true }`, bound to the account-scoped `AbortController` so they
+  clean up on account switch) reset a `_idleLockLast` timestamp; a 15 s interval
+  (tracked in `_intervals`) calls the existing `showLockScreen()` once
+  `now - last ≥ minutes`. No-ops while already locked or when no password is set.
+- Complements `/lock auto` (tab-hide): together they cover both "switched away"
+  and "walked away" exposure.
+- `/lock reset` now also clears the idle setting. Status shown in `/security`
+  ("Idle lock: ✓ 5 min" / "✗ Off"). New i18n keys `toastIdleLockSet/Off/Usage`
+  (EN+JA).
+
+Reuses the hardened lock path (PBKDF2 hash, brute-force backoff, focus trap), so
+the feature is purely the trigger — no new crypto or attack surface.
+
+## localized relative time via Intl.RelativeTimeFormat ("last seen") — Qiita/Zenn-informed — item 106 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+734 tests; `index.html` only. `validate.sh` PASSED (i18n EN/JA parity).
+
+Research lens. Qiita/Zenn `Intl.RelativeTimeFormat` guides (`k8o/bdbf6367…`;
+`CRUD5th/2b366977…` Intl i18n strategy): the standard, locale-complete way to
+render "5 minutes ago" / "5 分前" / "yesterday" / "昨日" — handles plurals and
+natural-language forms per locale, no hand-rolled strings.
+
+Socratic lens: *"The offline chat header builds last-seen as `'5m ago'` / `'3h
+ago'` / `'2d ago'` and the status word `'Offline'` — all hardcoded English. A
+Japanese user sees `⚫ Offline · 5m ago` instead of `⚫ オフライン · 5 分前`."*
+
+- New `relTime(diffMs)` helper using `Intl.RelativeTimeFormat(LANG, { numeric:
+  'auto' })` (cached) — picks minute/hour/day and returns a locale-correct string
+  (`numeric:'auto'` yields "yesterday"/"昨日" for 1-day). Sub-minute → `t('justNow')`.
+- Wired into the conv-header last-seen line; `'⚫ Offline'` → `'⚫ ' +
+  t('statusOffline')`. Added `statusOffline` / `justNow` keys (EN+JA).
+- Left the ultra-compact contact-list stamps (`5m`/`3h`/`2d`, lines ~5715) as-is:
+  they're width-sensitive list glyphs, not sentence text — a separate pass if
+  desired.
+
+## localize dynamic dialog buttons + audit confirms focus-visible is sound — Qiita/Zenn-informed — item 105 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+734 tests; `index.html` only. `validate.sh` PASSED (i18n EN/JA parity).
+
+Research lens. Round began on `:focus-visible` / `outline:none` a11y
+(`kskwtnk/2f7ef9e5…`, `tak_dcxi/f958e968…`). **Audit found Breeze already sound**:
+a global `:focus-visible { outline: 2px solid var(--g); outline-offset: 2px }`
+covers buttons, and every input with `outline:none` is compensated by an
+`input:focus`/`textarea:focus` box-shadow ring — so keyboard focus is never lost.
+No change needed there (recorded as a verified non-issue, not a forced edit).
+
+Instead, applied the round's i18n/a11y theme to a confirmed gap: **hardcoded
+English buttons in dynamically-built dialogs** (these bypass the static
+`data-i18n` pass and were never localized).
+
+Socratic lens: *"The static buttons use `data-i18n`. But the dialogs built at
+runtime via `innerHTML` template literals — forward, paste-image, dead-drop,
+link-open — hardcode `Forward` / `Send` / `Cancel` / `Open`. A JA user sees
+English action buttons."*
+
+- Added `forward` / `open` keys (EN+JA); `send` / `cancel` already existed.
+- Localized 7 dialog buttons via inline `t()`: forward dialog `Forward` +
+  `Forward to:` heading (`forwardTo`); paste-image `Send`/`Cancel`; dead-drop
+  `Send`/`Cancel`; link-open `Open`/`Cancel`.
+
+## localize all title tooltips (new data-i18n-title) + aria-label on icon-only controls — Qiita/Zenn-informed — item 104 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+734 tests; `index.html` only. `validate.sh` PASSED (i18n EN/JA parity).
+
+Research lens. Qiita/Zenn `title`-attribute a11y (`ymrl/fa44f9c7…` "don't solve
+everything with aria-label"; `gilly/2d3401eb…` accessible tooltips; WCAG 2.2):
+**`title` is unreliable as an accessible name** — not all assistive tech exposes
+it, it's keyboard-inaccessible, and HTML-LS discourages it for tooltips. An
+icon-only control that names itself only via `title` is effectively unnamed for
+many AT users. Pair with a real `aria-label`.
+
+Socratic lens: *"Breeze has 8 hardcoded English `title=` tooltips and no
+`data-i18n-title` handler — so JA users get English tooltips. Worse, the 📎-attach
+`<label>` and the 😀-emoji `<button>` are **icon-only**, naming themselves only via
+`title` — unreliable. Do they have a real accessible name?"*
+
+- **New `data-i18n-title` apply handler** (mirrors `data-i18n-ph` / `data-i18n-aria`)
+  + 8 tooltip keys (EN+JA), including a function key `ttDisappearsIn(label)`.
+- **Static tooltips localized:** profile-name `Edit profile`, short-id `Click to
+  copy`, attach `Attach`, emoji `Emoji` → `data-i18n-title`.
+- **Icon-only controls given reliable names:** the 📎-attach file input gets
+  `data-i18n-aria="ttAttach"`; the 😀-emoji button's hardcoded `aria-label="Emoji"`
+  → `data-i18n-aria="ttEmoji"` (was English even for the accessible name).
+- **Dynamic tooltips localized via inline `t()`:** reply-quote `Click to jump`,
+  disappearing-timer `Disappears in <label>`, signature `Ed25519 verified` /
+  `Signature failed!` (all `esc()`'d into the attribute).
+
+## localize input aria-labels (new data-i18n-aria) + revive dead fwd-filter placeholder — Qiita/Zenn-informed — item 103 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+734 tests; `index.html` only. `validate.sh` PASSED (i18n EN/JA parity).
+
+Research lens. Qiita/Zenn form-a11y guides (`wtod/bb37c180…` label benefits;
+`marl0401/008ae90d…` form-accessibility; WCAG 2.2): a control needs a programmatic
+accessible name, and a `placeholder` is **not** one (it disappears and isn't reliably
+exposed). Use `<label>`, else `aria-label`/`aria-labelledby`.
+
+Socratic lens: *"The inputs all have an `aria-label` — good. But they're hardcoded
+English (`Display name`, `Breeze ID`, `Filter contacts`, `Search`, `Message`).
+There's a `data-i18n-ph` mechanism for placeholders but no equivalent for aria. So a
+Japanese screen-reader user hears the field names in English. And the dynamically-built
+forward-dialog filter has `data-i18n-ph` — but does the one-time load handler even reach
+a node created later?"*
+
+- **Localized aria-labels.** Added a `data-i18n-aria` apply handler (mirrors the
+  existing `data-i18n-ph` line) and 5 concise aria keys (EN+JA). Converted the 5 static
+  inputs (`msg-name`, `msg-alias`, `contact-filter`, `search-chat-input`, `msg-input`)
+  from hardcoded `aria-label` → `data-i18n-aria`. Used concise dedicated keys (the
+  placeholder keys like `breezeId: 'Breeze ID (e.g. alice — optional)'` are too verbose
+  for a screen-reader name).
+- **Dead placeholder revived.** The forward-dialog filter (`#fwd-filter`) is built via
+  innerHTML *after* the one-time `data-i18n-ph` pass, so its `data-i18n-ph="searchPh"`
+  never applied — the field had **no placeholder and no accessible name**. Set both
+  inline via `t()` (`placeholder` + `aria-label`, esc'd).
+
+## decoding="async" on all display images + fix hardcoded alt — Qiita/Zenn-informed — item 102 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+734 tests; `index.html` only. `validate.sh` PASSED (i18n EN/JA parity).
+
+Research lens. Zenn `decoding="async"` deep-dives (`ixkaito/deep-dive-into-decoding`,
+`sugamaan/9adab715…`): `loading` controls *when to fetch*, `decoding` controls
+*when to decode*; `decoding="async"` keeps image decode off the main thread (sync
+decode blocks the browser), and it pairs naturally with `loading="lazy"` for
+below-fold images.
+
+Socratic lens: *"Every below-fold `<img>` already has `loading="lazy"`. But does
+any have `decoding="async"`? If not, the browser still decodes each image
+synchronously on the main thread as it scrolls into view — janking the very
+scroll `loading=lazy` was meant to smooth."*
+
+None did. Added `decoding="async"` to every display image:
+
+- Message image (`.msg-img`), OGP card cover + favicon + thumbnail (all already
+  `loading="lazy"`).
+- Compose image preview and the `?...` image previews (first-view → no `lazy`, but
+  `decoding="async"` still avoids a sync-decode hitch).
+- Lightbox full-size image (`createElement` → `img.decoding = 'async'`).
+
+Also fixed a hardcoded English `img.alt = 'Full size image'` on the lightbox image
+(CLAUDE.md `t()` violation) → `t('fullSizeImage')` with new EN/JA keys.
+
+## content-visibility on message rows (render skip for off-screen) — Qiita/Zenn-informed — item 101 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+734 tests (CSS-only — suite imports src/crypto/_worker/sw, never index.html); `index.html`. `validate.sh` PASSED.
+
+Research lens. Qiita's `content-visibility` guides (`nolanlover0527/25dcdc97…`,
+`frosted_bird/004e530c…` CSS Containment): `content-visibility: auto` skips
+rendering (layout + paint) of off-screen elements until they enter the viewport
+— the biggest win on long, scrollable lists; pair with `contain-intrinsic-size`
+to reserve height and avoid scrollbar/layout shift.
+
+Socratic lens: *"The contact list row `.contact` already has
+`content-visibility: auto; contain-intrinsic-size: auto 60px`. The message list
+`.msg` is the LONGER, more-scrolled list (up to MSG_DOM_LIMIT = 200 nodes) — yet
+it only has `contain: content`, not `content-visibility`. Why is the bigger list
+unoptimized?"*
+
+No reason — oversight. The browser was laying out + painting all ~200 message
+rows even when only a handful are on screen.
+
+**Fix:**
+- `.msg`: add `content-visibility: auto; contain-intrinsic-size: auto 44px`
+  (≈ single-row height; the `auto` keyword then remembers each row's real size
+  after first render, so scrollback that's been seen stays jump-free). Mirrors the
+  existing `.contact` rule.
+- **Print guard:** `@media print .msg { content-visibility: visible !important }`.
+  `content-visibility: auto` skips off-screen content during printing, which would
+  have dropped messages from the `/print` chat export — forced visible for print.
+- Find-in-page is unaffected (`content-visibility: auto` keeps content findable by
+  the browser's Ctrl+F by design).
+
+## crash-overlay i18n + fix ghost `uiError` key — Qiita/Zenn-informed — item 100 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+734 tests; `index.html` only. `validate.sh` PASSED (i18n EN/JA parity).
+
+Research lens. Qiita/Zenn global-error-handling guides (`CRUD5th/7121432a…`
+exception/notification design; `window.onerror` + `unhandledrejection` as the
+"last line of defense"). Breeze already has both global handlers (flood limit,
+fatal-error crash overlay, audit log, network-error toast suppression) — mature.
+Auditing the failure-path UI itself surfaced three issues.
+
+Socratic lens: *"The crash overlays are the LAST thing a user sees when the app
+breaks. Are they even translated? And does every `t()` key they use exist?"*
+
+- **Ghost key bug.** The init-failure overlay used `esc(t('uiError') || 'Something
+  went wrong')`. There is no `uiError` key, and `t()` falls back to the **key
+  string**, so `t('uiError')` returned the literal `"uiError"` — truthy — so the
+  `|| 'Something went wrong'` fallback never ran. A crashing app showed the user a
+  title that literally read **"uiError"**. Now uses `t('crashTitle')`.
+- **Hardcoded English.** Both crash overlays had hardcoded `Something went wrong`
+  / `Breeze encountered an error…` / `Clear cache` / `Reload` / `Clearing...` —
+  CLAUDE.md violations a JA user would hit at the worst moment. Added `crashTitle`
+  / `crashBody` / `crashClearCache` keys (EN+JA); reused existing `uiReload` and
+  `clearing`. Both overlays now fully localized.
+- **Duplicate avoided.** Initial fix added a `crashClearing` key; `clearing`
+  already existed (EN+JA) → reused it, dropped the dup.
+
+## passive listeners on every observer-only touch/scroll — Qiita/Zenn-informed — item 99 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+734 tests; `index.html` only. `validate.sh` PASSED.
+
+Research lens. Qiita's "猫でもわかるスクロールイベントパフォーマンス改善" and
+`kyntk/5c16846a…` ("touch/wheel に passive: true を明示する必要があるか") plus
+`nuko-suke` performance-tuning 85選: a touch/scroll listener without
+`{ passive: true }` forces the browser to **block scroll** until the main thread
+returns from the callback (in case it calls `preventDefault()`), causing visible
+scroll jank on mobile. Chrome DevTools logs this as
+"Added non-passive event listener to a scroll-blocking event."
+
+Socratic lens: *"How many of Breeze's touch/scroll listeners are explicitly
+`{ passive: true }`? And of the rest, which actually call `preventDefault()`?"*
+
+Audit: 13 touch/scroll listeners total. 9 already declared `passive` (most
+`true`, two `false` where they legitimately call `preventDefault` — pinch-zoom
+on the image lightbox and the message double-tap reaction picker). **4 sites
+omitted the option entirely** — all pure observers that never call
+`preventDefault`:
+
+- `visualViewport scroll` → `_adjustViewport` (viewport CSS update).
+- Image lightbox `touchend` (swipe-down-to-dismiss + zoom reset).
+- Image lightbox `touchend` (double-tap to zoom).
+- Message-list `scroll` → toggle scroll-to-bottom FAB.
+
+**Fix:** added `{ passive: true }` to all four. No code logic change. Now every
+touch/scroll listener in the app explicitly declares its intent.
+
+## fix peer-heartbeat interval leak on account switch — Qiita/Zenn-informed — item 98 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+734 tests; `index.html` only (inline WebRTC teardown — not harness-testable, like item 90). `validate.sh` PASSED.
+
+Research lens. A Qiita/Zenn memory-leak sweep (`CRUD5th/b37ca6dc…` event/ref
+release; `tkdn` 4 common leaks) reiterates the #1 SPA leak: a `setInterval`
+whose `clearInterval` never runs on teardown keeps its callback closure — and
+everything it captures — alive forever.
+
+Socratic lens: *"`_messengerCleanup` (the account-switch teardown) clears each
+peer's `_healthTimer` and calls `pc.close()`. But `_heartbeat` (a sibling
+`setInterval` on the same peer) is cleared only by the connectionstatechange
+handler — and `pc.close()` does NOT fire connectionstatechange (per spec). So
+after an account switch, does every peer's heartbeat keep firing?"*
+
+Yes. The heartbeat interval kept running against a now-closed DataChannel,
+pinning the old `peerState` (and its `pc`, channels, closures) so GC could never
+reclaim them. Each account switch with N live peers leaked N intervals — they
+accumulate across switches, wasting a timer + CPU per old peer indefinitely.
+
+**Fix:** clear `p._heartbeat` alongside `p._healthTimer` in the teardown loop
+(one line + comment), making the two per-peer timers symmetric. Verified by
+inspection (the inline WebRTC peer path has no unit harness, consistent with the
+call-signaling work in item 90).
+
+## modal a11y accessible names + button i18n — Qiita/Zenn-informed — item 97 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+734 tests; `index.html` only. `validate.sh` PASSED (incl. i18n EN/JA parity).
+
+Research lens. A Qiita/Zenn accessibility sweep (`CRUD5th/a7a578d6…` ARIA/focus
+strategy; ARIA APG dialog pattern; `24motz` live regions) reiterates: a modal
+dialog needs an **accessible name**, and you should not hand-roll what native
+elements give you. Breeze already uses native `<dialog>` + `showModal()` (free
+role=dialog, aria-modal, focus trap, ESC, focus-restore) and a `role=menu`
+context menu with arrow-key nav — but two gaps remained.
+
+Socratic lens: *"`showPrompt`/`showConfirm` build a `<dialog>` whose only naming
+comes from a plain `<div class="modal-title">`. The dialog has **no
+`aria-labelledby`**, so a screen reader announces a nameless dialog; the prompt
+`<input>` has only a placeholder, **no label**. And the Cancel/OK buttons are
+**hardcoded English** ("Cancel", aria-label="Cancel", "OK") — violating the
+project rule that ALL UI text go through `t()`."*
+
+**Fix (33 call sites, both generic modals):**
+
+- **Accessible name.** Each dialog gets a unique `titleId` on the title div and
+  `dlg.setAttribute('aria-labelledby', titleId)`; the prompt input is
+  `aria-labelledby="<titleId>"` so it inherits the prompt text as its label
+  (APG dialog pattern). No redundant ARIA elsewhere — the native `<dialog>`
+  already supplies role/modal/focus semantics.
+- **i18n.** New `cancel` / `ok` keys (EN `Cancel`/`OK`, JA `キャンセル`/`OK`).
+  Cancel button text → `t('cancel')`; OK default → `opts.okText || t('ok')`.
+  Removed the now-redundant hardcoded `aria-label="Cancel"` (the translated
+  button text is the accessible name).
+
+## Service Worker cache hardening — Qiita/Zenn-informed — item 96 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+734 tests (5 new in `tests/sw.test.js`); `sw.js` + `tests/sw.test.js`. `validate.sh` PASSED.
+
+Research lens. A Qiita/Zenn sweep on Cloudflare KV cost, WebRTC reconnection,
+IndexedDB perf, and Service Worker/PWA caching. Most surfaces were already mature
+(worker presence cache + 5-min KV write batching; lossless +1ms poll cursor;
+shell-preserving SW trim; complete PWA manifest). The one concrete gap was a
+documented `Cache.put()` pitfall in the SW fetch handler.
+
+Socratic lens: *"Both `cache.put()` sites guard with `if (resp.ok)`. But `resp.ok`
+is TRUE for a 206 Partial Content response, and `Cache.put()` THROWS on a partial
+response. The put is also unawaited and uncaught, so a 206 (range request) or a
+`QuotaExceededError` (storage full) becomes an unhandled promise rejection."*
+
+**Fix (DRY):**
+
+- New `cachePut(request, response)` helper replaces both inline
+  `if (resp.ok) { … caches.open().then(put) }` blocks. It caches **only**
+  `status === 200 && type === 'basic'` responses — so 206 partials, opaque
+  (cross-origin no-cors, status 0), and CORS (third-party) responses are skipped
+  (we only persist our own shell), and the write is wrapped in `.catch(() => {})`
+  so a `QuotaExceededError` never escapes. The page still receives every response;
+  only the cache write is conditionally skipped.
+- 5 new SW tests via the existing mocked-global harness: 200/basic cached;
+  206 not cached (the trap — asserts `resp.ok` would have passed); opaque not
+  cached; CORS not cached; `QuotaExceededError` swallowed without rejecting
+  `respondWith`.
+
+## Trusted Types enforcement (Phase 2d) — Qiita/Zenn-informed — item 95 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+729 tests; `index.html` + `_headers` + `docs/REVIEW-2026-06.md`. `validate.sh` PASSED.
+
+Research lens. Qiita/Zenn search surfaced Zenn's own production CSP rollout
+(`team_zenn/introduced-csp-to-zenn`) plus multiple Qiita/MDN guides on
+`require-trusted-types-for 'script'`. The pattern they validate — register a
+`default` policy as the safety net for raw HTML sinks, then turn on enforcement —
+is exactly the missing piece for Phase 2d.
+
+Socratic lens: *"`_headers` and the `<meta>` CSP both declare `trusted-types
+breeze-sanitizer`, but neither emits `require-trusted-types-for 'script'`. So
+Trusted Types is **not actually enforced** — the policy is registered for show, and
+the 98 raw `el.innerHTML = …` / `insertAdjacentHTML` / `outerHTML` sites bypass it
+entirely. A single DOM XSS in any of those sites still wins."*
+
+Confirmed by audit: 88 + 6 + 4 = 98 HTML sinks; ZERO script-creating sinks (no
+`eval`, no `new Function`, no `setTimeout(string)`, no dynamic `<script>`, no
+`srcdoc`, no `document.write`) — so a single `createHTML` policy covers the whole
+attack surface.
+
+**Fix:**
+
+- **Register a `default` Trusted Types policy** alongside the named
+  `breeze-sanitizer`. Both call the same `sanitize()` (DOMParser + tag/attr
+  allowlist + `javascript:` href strip). The default is the browser's safety
+  net for any raw `el.innerHTML = stringValue` site — under enforcement, those 98
+  unmigrated sinks become sanitized transparently rather than throwing
+  SecurityError.
+- **Add `require-trusted-types-for 'script'`** to the CSP in both `_headers` and
+  the inline `<meta http-equiv="Content-Security-Policy">`. Add `default` to the
+  `trusted-types` allowlist so the new policy is permitted.
+- **Cross-browser safety.** Browsers without TT support (Firefox, Safari) silently
+  ignore the directive; behavior is unchanged for them. Chromium-based browsers
+  (Chrome, Edge) now enforce — and the default policy ensures no app code breaks.
+- **Hot-path cost.** The sanitizer's fast path (`if (!/</.test(html)) return html`)
+  returns in one regex test for plain text (the common case after `esc()`). Only
+  HTML containing `<` triggers the DOMParser walk.
+
+This closes the last item from the Phase 2 roadmap (`docs/REVIEW-2026-06.md`).
+
+## state review + reconcile at-rest onto canonical atrest.js + N1 ratchet fix — item 93 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+729 tests (removed the 6 redundant ratchet.test.js cases; `atrest.test.js`'s 20 are canonical); `src/crypto/ratchet.js` + `tests/ratchet.test.js` + `index.html` + `docs/REVIEW-2026-06.md`. `validate.sh` PASSED.
+
+Spec: `docs/REVIEW-2026-06.md` — strengths/weaknesses/improvements (長所短所改善点) of the post-Phase-2 state, prioritized. Two HIGH items implemented this pass; W4/W5 (live message-path changes needing a two-device test) tracked for a later pass.
+
+**W2 — Phase 2c at-rest regression (self-inflicted in item 92), fixed.** Item 92 added weaker *duplicate* `wrapKeyAtRest`/`unwrapKeyAtRest` to `ratchet.js` and a divergent inline record format (`{wrapped,salt,iv,kdf:'pbkdf2-v1'}`) — **no AAD binding, no PBKDF2 DoS guard** — instead of mirroring the canonical `src/crypto/atrest.js` (item 78), violating INTEGRATION.md's "modules are the source of truth" principle.
+
+- Reverted the `ratchet.js` additions and the 6 redundant `ratchet.test.js` tests.
+- Rewrote the index.html inline at-rest helpers to **mirror `atrest.js` exactly**: record `{ v:1, kdf:'pbkdf2', hash, iter, salt, iv, ct }`; AES-GCM **AAD = `breeze-atrest-v1:<slot>`** (slot = `keys` / `signing`) so a record relocated to another slot fails to decrypt; **`iter` DoS guard** (reject non-finite / ≤0 / > 10,000,000 before deriving); `_atRestIsWrapped` / `_atRestLoadKey` / `_atRestMigrate` matching the module's `isWrapped`/`loadKey`/`migrate`.
+- `loadIdentity` / `initSigning` now route through `_atRestIsWrapped` + `_atRestLoadKey(record, pass, slot)` (returns null on failure, no throw on wrong pass). `/keywrap` enable uses `_atRestMigrate` (nested `wrapped`, plaintext `priv` removed); disable unwraps with the slot context and restores plaintext.
+- Canonical coverage stays in `atrest.test.js` (20 tests: round-trip, wrong-pass null, tamper null, DoS-guard fast-reject, AAD cross-context fail, migrate+loadKey context threading).
+
+**W3 — N1 `dhRatchetStep` Nr bug (live), fixed.** The inline `dhRatchetStep` reset `sendCounter` but not `recvCounter`; a DH step starts a new receiving chain, so the first inbound message (counter 1) was misread as a replay → silent drop on the 3rd ratchet direction-flip. Added `sess.recvCounter = 0`, matching the tested `src/crypto/ratchet.js` (proof: `tests/x3dh.test.js` "full session establishment").
+
+## at-rest identity key wrapping (Phase 2c, opt-in) — item 92 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+`index.html` integration of at-rest wrapping (crypto core: `src/crypto/atrest.js`, item 78). `validate.sh` PASSED. *(Superseded by item 93 — see above for the reconciliation onto the canonical module; the original commit had introduced a divergent inline format since corrected.)*
+
+Socratic lens: *"In `loadIdentity`, the ECDH private key is read directly as `stored.priv` — a plaintext JWK object from IndexedDB. Same in `initSigning` for the Ed25519 signing key. IDB is accessible to any script running in the same origin (XSS), any browser extension with `webRequest` access, and device forensics tools. Is there any key-at-rest protection?"*
+
+No. Both private keys live as plaintext JWK in IDB. A single reflected XSS or a malicious browser extension suffices to exfiltrate them silently — no wrapping, no passphrase, no KDF.
+
+**Integration (opt-in via `/keywrap`; preserve default no-passphrase path):**
+
+- **`loadIdentity`** branches on a wrapped-record marker — prompts for passphrase via `showPrompt`, unwraps, caches the passphrase in `_atRestPassphrase` (ephemeral) for `initSigning`. Returns `false` (aborts startup) on wrong passphrase.
+- **`initSigning`** reads `_atRestPassphrase` set by `loadIdentity`, unwraps the Ed25519 signing key if wrapped, then clears `_atRestPassphrase`. Single passphrase prompt per startup for both keys.
+- **`/keywrap` command**: enable (prompts passphrase × 2 for confirmation, min 8 chars, wraps both ECDH + Ed25519 keys) / disable (prompts current passphrase to unwrap, restores plaintext).
+- **`CONFIG.PBKDF2_AT_REST_ITERATIONS: 600000`** — new constant, not re-using `PBKDF2_ITERATIONS`.
+
+## group sender-key v5 hash ratchet + epoch revocation (Phase 2b, gated, default OFF) — item 91 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+729 tests (10 new, mutation-verified); `src/crypto/ratchet.js` + `tests/ratchet.test.js` + `index.html`. `validate.sh` PASSED.
+
+Socratic lens: *"In `encryptGroupMsg`, the message key is `HKDF(sk.raw, counter_bytes, 'group-msg')`.
+`sk.raw` never changes — it is the static group sender key. Knowing `sk.raw` and any counter lets
+you compute ALL message keys for ALL past and future messages. Does `sk.raw` ever advance?"*
+
+No. The counter is only an HKDF salt; the key material is static. An attacker who captures the
+sender key (from a compromised device, a leaked IDB backup, or a future sender-key injection) can
+decrypt every group message ever sent. Additionally: `epoch` is bumped on kick/leave by the server
+but the admin client never reads it back or generates a fresh sender key, so a kicked member keeps
+decrypting indefinitely — **epoch was a no-op**.
+
+**Fix (gated by `CONFIG.GROUP_RATCHET_V5`, default OFF; breaking wire change for groups):**
+
+- **Forward secrecy (hash ratchet)**: replace `HKDF(raw, counter, 'group-msg')` with:
+  `msgKey = HKDF(chainKey, Ø, 'breeze-group-msg-v5')` then
+  `chainKey = HKDF(chainKey, Ø, 'breeze-group-chain-v5')` — old chain key evicted after each
+  message. An attacker who captures `chainKey_N` can decrypt messages N, N+1, … but NOT 0 … N-1
+  (one-way ratchet; past keys are gone).
+
+- **Epoch revocation**: on `/group/kick` the server returns the bumped epoch; the admin client
+  generates a **fresh random chainKey** for the new epoch and re-distributes only to **remaining
+  members**. Messages carry `ep`; a mismatch is rejected without fallback. Kicked member's stale
+  key is invalid for the new epoch and cannot decrypt future messages.
+
+- **Out-of-order tolerance**: receiver ratchets forward from `peerSK.counter` to `p.c`, caching
+  intermediate keys in `peerSK.skipped[counter]` (IDB-persistent). Skip cache capped at
+  `GROUP_MAX_SKIP = 50` entries; evicts oldest on overflow.
+
+- **Sender-key distribution payload** changed to `{ type:'sender_key', groupId, chainKey, epoch, v:5 }` when flag is ON; v3 format unchanged for fallback.
+
+- **Backward compat (v3 read path preserved)**: `decryptGroupMsg` dispatches on `p.v` — v3 messages
+  continue to use the old `HKDF(raw, counter)` path during the rollout epoch.
+
+**Tests (10, mutation-verified via `ratchet.js` pure exports):**
+round-trip; multi-message sequential; forward-secrecy (old CK cannot decrypt future msg);
+mutation guard (CK0 ≠ CK1 → different msg keys); out-of-order with skip cache; gap > GROUP_MAX_SKIP
+rejected; epoch mismatch rejected; epoch rotation (kicked peer null, remaining peer succeeds, past
+epoch still decryptable); v3 backward compat (`groupDecryptV3`); skip-cache pruning (two-pass eviction).
+
+## authenticated call signaling — close WebRTC SDP MITM (gated, default OFF) — item 90 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+719 tests (no new — call/WebRTC flow isn't harness-testable); `index.html` only. `validate.sh` PASSED.
+
+Socratic lens: *"`handleSignal` has no authentication: `sender` is a self-declared string, the
+`call:[sorted ids]` room is derivable by anyone who knows two public IDs, and `data` is opaque
+(explicitly not validated). The call SDP offer/answer/ICE travel plaintext through it, and
+receivers `JSON.parse(s.data) → setRemoteDescription/addIceCandidate` with no binding of the DTLS
+fingerprint to the peer's pinned identity. Can an attacker inject a call-answer and MITM the
+media?"*
+
+Yes — the classic "WebRTC over untrusted signaling without fingerprint verification" break. An
+attacker who knows both user IDs posts a `call-answer` carrying their own SDP + DTLS fingerprint
+into the room; the caller's `setRemoteDescription` accepts it, the DTLS-SRTP handshake completes
+with the attacker, and audio/video flows through them. This defeats the E2E guarantee for calls
+(the media keys live in the SDP/DTLS fingerprint, which was never authenticated).
+
+- **Fix (gated by `CONFIG.CALL_E2E_SIGNAL`, default OFF — breaking wire change, needs two-device
+  verification before enabling)**: wrap every call signal (offer/answer/ICE, both the `/signal`
+  room path and the `isCall` msg-relay notify) with `encryptFor()` to the **pinned peer**, and
+  `decryptFrom()` on receipt via new `_wrapCallSignal`/`_unwrapCallSignal` helpers. A forged or
+  relay-injected signal isn't encrypted under the peer's session → `decryptFrom` returns null →
+  the signal is dropped (no `setRemoteDescription`, no fake ring). Decryption *is* the
+  authentication: only the holder of the pinned peer's ratchet session can produce a valid
+  signal, so the DTLS handshake can only complete with the real peer.
+- **Default OFF** = behavior byte-identical to the legacy plaintext path (instant rollback; zero
+  production risk until the operator enables it after a two-device pass). Both peers must run with
+  the flag ON. (Also incidentally fixes a stuck-`ringing` state on a malformed offer.)
+- **Residual (documented)**: `call-end` carries no payload and stays unauthenticated — injecting
+  it only *terminates* a call (minor DoS), it cannot compromise media.
+
+## escape provider-controlled fields in translate/AI/info innerHTML sinks — item 89 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+719 tests (1 new, mutation-verified); `index.html` + `_worker.js` + `tests/worker.test.js`. `validate.sh` PASSED.
+
+Socratic lens: *"The translation indicator builds innerHTML as
+`…${esc(data.translated)}…${data.from} → ${data.to} · ${data.provider}…`. `data.translated` is
+escaped, but the adjacent meta fields are not. Where does `data.from` come from — is any of it
+attacker- or external-service-controlled?"*
+
+`data.from` is the **detected source language echoed straight from the external translation
+provider's response** (`d.detectedLanguage?.language` / `detectedSourceLanguage` /
+`responseData.match.source`) and the worker returned it **unsanitized** (`from: detectedFrom`).
+A malicious or compromised translation provider could return
+`from: 'en"><img src=x onerror=…>'`; interpolated unescaped into innerHTML it executes under the
+`script-src 'unsafe-inline'` CSP. `data.provider` is a worker-side literal (no live vector) but
+sat unescaped in four innerHTML sinks; `c.labels.join(', ')` in `/info` was unescaped while the
+adjacent `c.name`/`c.alias`/`c.notes` in the same array were escaped.
+
+- **Fix (defense in depth, both ends)**:
+  - Worker: strip `detectedFrom` to a short alnum/`-` BCP-47-ish tag (`[^a-zA-Z0-9-]` → '', ≤16)
+    before returning — a misbehaving provider can't smuggle markup to the client.
+  - Client: `esc()` the meta fields at every sink — translate indicator (`data.from`/`data.to`/
+    `data.provider`), AI-context translate (`data.provider`), `/info` labels (`c.labels`), AI
+    summary + AI chat (`data.provider`).
+- **Test (1, mutation-verified)**: mock the provider to return an injection in
+  `responseData.match.source`; assert `j.from` carries no `<>"'`, matches `^[a-zA-Z0-9-]*$`, is
+  ≤16 chars, and `!== injection`. Removing the worker strip flips it red.
+
+## remove unauthenticated plaintext edit/delete/reaction/poll_vote handlers (sealed-envelope tampering) — item 87 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+718 tests (no new — `handleIncoming` lives in `index.html`, outside the harness); `index.html` only. `validate.sh` PASSED.
+
+Socratic lens: *"The sealed-poll path does `handleIncoming(JSON.parse(sealed.envelope))`, and
+`handleSealedSend` stores the `envelope` string verbatim with no schema check — so the envelope is
+opaque, attacker-controlled JSON. `handleIncoming` then dispatches on `msg.type`. The deprecated
+plaintext `type:'edit'` / `'delete'` handlers mutate the stored message DB *without any
+decryption*. Can an arbitrary sender rewrite or delete a message in a victim's DB by posting a
+crafted sealed envelope?"*
+
+Yes. `POST /sealed/send {to:<victim>, envelope:'{"type":"edit","msgId":"<id>","text":"<forged>"}'}`
+reaches the victim's `handleIncoming` and runs `dbPut('messages', {...stored, text: forged})` — full
+message-integrity tampering (silently rewrite "see you at 5" → a scam), or `type:'delete'` to wipe
+a message — with **zero sender authentication and zero decryption**. `msgId` for 1:1 is the
+predictable `senderId:ts`, so an attacker trivially targets their own already-delivered messages
+(retroactive deniability) and can attempt others'. `reaction`/`poll_vote` allowed the same
+unauthenticated state tampering (cosmetic/informal, lower impact).
+
+Why these handlers had **no legitimate relay sender** in v3.6, making removal safe:
+- **edit/delete/reaction** — current clients send these via the **encrypted `isSignal` path**
+  (handled earlier in `handleIncoming`, gated by a successful `decryptFrom` that proves the sender
+  holds the ratchet session key).
+- **poll_vote** — `votePoll` sends only over the **authenticated P2P DataChannel** (`peer.dc.send`),
+  never the relay.
+- The standard `/msg/send` relay **strips** `type`/`text`/`msgId`/`emoji`/`pollId` (the worker only
+  persists whitelisted fields), so a pre-v3.6 plaintext signal can't survive that path either.
+- The P2P DataChannel `onmessage` handler routes edit/delete inline (or drops them) — never to
+  `handleIncoming`.
+
+- **Fix**: remove all four deprecated plaintext handlers outright. The encrypted `isSignal` path is
+  the sole authority for mutating an existing message; an undecryptable mutation is no longer
+  honored. (Also eliminates two raw `el.innerHTML =` sinks, aiding the Phase 2d Trusted-Types goal.)
+
+## handleBinaryChunk: total/seq/buffer bounds + 10-transfer cap — item 86 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+718 tests (no new); `index.html` only. `validate.sh` PASSED.
+
+Socratic lens: *"In `handleBinaryChunk`, the peer controls the `total` and `seq` fields that
+determine `new Array(total)` allocation and array index writes, plus `nameLen`/`mimeLen` that
+control `TextDecoder` slices into the buffer. A malicious peer sends `total = 2^32 - 1` (parsed
+from a `getUint32` at offset 20). Is there an upper-bound check before `new Array(total)`?"*
+
+No. `total` came from `view.getUint32(20)` with no cap — a peer could claim `total = 4294967295`
+and allocate a ~34 GB sparse array per transfer. Similarly `seq >= total` was not checked
+(allowing out-of-bounds writes into the array), and `28 + nameLen + mimeLen > buffer.byteLength`
+was not validated (negative-length slice exposes adjacent memory as the data chunk). The
+`_fileChunks` map was also unbounded, allowing 1000s of half-open transfers to pile up.
+
+- **Fix**: `MAX_CHUNKS = Math.ceil(CONFIG.FILE_MAX / CONFIG.CHUNK_SIZE) + 1 = 3201`.
+  Reject if `total === 0 || total > MAX_CHUNKS || seq >= total`. Reject if
+  `28 + nameLen + mimeLen > buffer.byteLength`. Cap concurrent half-open transfers at
+  `Object.keys(_fileChunks).length >= 10`.
+
+## signing key change: prominent banner + toast (parity with enc key change) — item 85 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+718 tests (no new); `index.html` only. `validate.sh` PASSED.
+
+Socratic lens: *"The encryption-key-change path at ~4752 shows a yellow system-message
+banner AND a showToast. The signing-key TOFU violation (contact.sigPub !== msg.sigPub at ~8569)
+sets meta.tampered=true and logs a debug line, but shows no user-visible warning beyond the
+subtle ⚠sig badge on the individual message. A signing key substitution is a stronger MITM
+indicator — why the asymmetry?"*
+
+No justification found. A substituted signing key lets an attacker forge signatures going
+forward; it deserves the same alerting as a decryption failure.
+
+- **Fix**: On `contact.sigPub !== msg.sigPub`, create a `div.msg.sys` in the chat box with the
+  existing `keyChanged` i18n text and call `showToast(t('keyChanged', …), 'error', 8000)` and
+  `announceToSR(…)` — exactly matching the encryption key-change pattern.
+
+## emoji/title injection in renderReactions (XSS via P2P reaction) — item 84 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+718 tests (no new); `index.html` only. `validate.sh` PASSED.
+
+Socratic lens: *"`renderReactions` builds HTML via template literals. The `emoji` key and the
+`users.join(', ')` title are both peer-supplied values that arrive over the P2P DataChannel.
+Does `renderReactions` escape them before insertion?"*
+
+No. `emoji` went into both `data-emoji="${emoji}"` (attribute injection) and
+`<span class="rc">${emoji}</span>` (HTML injection). Since `script-src 'unsafe-inline'` is in
+the CSP, inline event handlers like `onerror` on an injected `<img>` execute. A malicious peer
+sends `emoji = '<img src=x onerror=evil()>'`; it is stored in IDB and rendered on every
+message-list load.
+
+- **Fix**: `esc(emoji)` for both sinks; `esc(users.join(', '))` for the title; `safeMsgId()`
+  on the reaction span's `data-msgid`. `dataset.emoji` auto-decodes HTML entities so the click
+  handler still receives the original value for IDB lookup.
+
+## i18n: two hardcoded-English Toast strings fixed — item 83 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+718 tests (no new); `index.html` only. `validate.sh` PASSED (137/143, 95%).
+
+Socratic lens: *"`validate.sh` reported 'Toast i18n: 94% (<95%)'. Two showToast calls in
+`index.html` embed English strings directly instead of routing through `t()`. Does `t()` support
+function-valued keys with interpolated arguments?"*
+
+Yes — `t(key, ...args)` already calls `v(...args)` when the key maps to a function. Two gaps:
+
+1. `showToast(\`Update available: v${health.version}\`, ...)` (line ~3901) — hardcoded English
+   with template literal. Added `updateAvailable: (v) => \`...\`` to EN+JA; call site uses
+   `t('updateAvailable', health.version)`.
+
+2. `showToast((t('scheduleCancelled') || 'Cancelled') + ': ' + count, ...)` (line ~10913) —
+   count concatenated outside i18n, with an unnecessary `|| 'Cancelled'` fallback. Changed
+   `scheduleCancelled` to `(n) => \`...\`` in EN+JA; call site simplified to
+   `t('scheduleCancelled', count)`.
+
+Score: 93% → 95%; remaining 2 warnings (`.style.X` count, total lines) are within range.
+
+## ratchetDecrypt fails closed on unpadAndDecompress errors — item 82 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+718 tests (1 new); `src/crypto/ratchet.js` + `tests/ratchet.test.js` only. `validate.sh` PASSED.
+
+Socratic lens: *"`ratchetDecrypt` commits session state (counter, chain key ratchet step) before
+calling `unpadAndDecompress`. `DecompressionStream` can throw on corrupted-but-authenticated
+compressed data. If that exception propagates, the caller sees an exception after state has already
+advanced — breaking all subsequent decryptions. Is either `unpadAndDecompress` call-site in a
+try/catch?"*
+
+No. Both call-sites (skipped-key path and main path) were unguarded.
+
+- **Fix**: wrap both `return await unpadAndDecompress(padded)` calls in `try { ... } catch { return
+  null; }` — matches the fail-closed contract: null = parse failure, never a throw after committed
+  state.
+- **Test (1, mutation-verified)**: mock `DecompressionStream.getReader()` to throw synchronously
+  (avoids the secondary Node.js `InflateRaw` error-event that real invalid deflate bytes emit as an
+  unhandled rejection in Vitest). Genuine-success branch: uncompressed flag=0 path decodes 'hello'.
+
+## worker inline PoW pub-binding: startsWith fix + mutation test — item 81 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+717 tests (1 new); `_worker.js` + `tests/worker.test.js` only. `validate.sh` PASSED.
+
+Socratic lens: *"Item 79 fixed `pow.js`'s `verify()` to use `startsWith(pub + ':')`. The worker
+has its own inline PoW check at line 671 that was NOT updated. Does it still use `.includes(pub)`?"*
+
+Yes. The same substring-pub attack applies to the alias-registration endpoint in the worker:
+an attacker with identity key `XPUBKEY` solves PoW for `XPUBKEY:ts`, then submits it claiming
+to be `PUBKEY`. The hash is valid (it was genuinely solved) and the old `includes` check passes
+(PUBKEY is a suffix of XPUBKEY). The attacker bypasses the per-identity rate-limit at the alias
+endpoint.
+
+- **Fix**: `pow.challenge.includes(pub)` → `pow.challenge.startsWith(pub + ':')` (line 671).
+- **Test (1, mutation-verified)**: solve PoW for `'testPUBKEY:breeze-test'`, submit claiming
+  `pub='PUBKEY'` → `POW_INVALID` (fixed) vs passes the pub check (old). Genuine-success branch
+  verifies the token is still valid for `pub='testPUBKEY'`.
+
+## responderHandshake fails closed on relay-injected bad msg field — item 80 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+716 tests (2 new); `src/crypto/ratchet.js` + `tests/x3dh.test.js` only. `validate.sh` PASSED.
+
+Socratic lens: *"`parsePreKeyMessage` validates that `msg` is a `string` but not that it is valid
+JSON. `ratchetDecrypt` opens with a bare `JSON.parse(payload)` and also throws `'not a v3/v4
+ratchet message'` for non-ratchet content. Neither exception is caught in `responderHandshake`.
+What happens when a relay injects `msg: 'NOT_JSON'` into a legitimate prekey envelope?"*
+
+- **Gap**: `responderHandshake` throws `SyntaxError` (or `'not a v3/v4 ratchet message'`)
+  instead of returning null. A relay can crash the app's prekey-message handler with a single
+  malformed `msg` field — no private key required, no E2E break required. Same for malformed
+  `ik`/`ek` byte arrays that pass `parsePreKeyMessage`'s Array.isArray check but fail
+  `importKey` inside `ecdhBits`.
+- **Fix**: wrap the body of `responderHandshake` (after the `parsePreKeyMessage` null-exit) in
+  try/catch → return null. No change to `ratchetDecrypt`'s existing intentional-throw semantics
+  (used by callers that need to distinguish "not a ratchet message" from "decrypted but replay").
+- **Tests (2, mutation-verified)**: non-JSON `msg` returns null (without fix: SyntaxError);
+  valid-JSON non-ratchet `msg` returns null (without fix: throws 'not a v3/v4'). Each test
+  also verifies the unmodified wire still round-trips to confirm genuine-success isolation.
+
+## PoW pub-binding uses prefix match, not substring — item 79 (branch claude/nice-ride-T6yb0, 2026-06-20)
+
+724 tests (1 new); `src/crypto/pow.js` + `tests/pow.test.js` only. `validate.sh` PASSED.
+
+Socratic lens: *"The `verify` function checks `pow.challenge.includes(pub)` to ensure the challenge
+embeds the identity whose endpoint is being accessed. `makeChallengeString` always produces `${pub}:…`.
+If an attacker's longer pub key contains the victim's shorter pub as a suffix, their validly-solved
+challenge `LONG_PUB:ts` satisfies `.includes(SHORT_PUB)`. Does the attacker's token then also pass
+the SHA-256 hash check and return `{ ok: true }` for the victim's endpoint?"*
+
+- **Gap**: yes — `includes` is a substring match. An attacker with pub key `XY` solves PoW for
+  challenge `XY:ts`. A victim with pub key `Y` (a suffix of `XY`) has their endpoint accept the
+  attacker's token because `'XY:ts'.includes('Y')` is true AND the hash was legitimately solved
+  for `XY:ts`. The PoW rate-limit for the victim's endpoint is bypassed.
+- **Severity**: defense-in-depth (endpoints also verify the identity signature), but the explicit
+  purpose of the pub embedding is to prevent cross-identity replay — that contract was broken.
+- **Fix**: change to `pow.challenge.startsWith(pub + ':')`. This matches how `makeChallengeString`
+  formats challenges and ensures the challenge was issued *for that exact identity*, not merely a
+  superstring. Empty-pub is also tightened (`startsWith(':')` = false for any normal challenge).
+- **Test (1, mutation-verified)**: solved token for `'testpubkey123456789'` is used against
+  a suffix pub `'pubkey123456789'` — the challenge `.includes()` that suffix (demoed in the test),
+  but `.startsWith(suffix + ':')` is false. With the old `includes` check the test returns
+  `{ ok: true }`; the fix makes it `POW_PUB_MISMATCH`. Genuine round-trip for the original pub
+  still passes.
+
+## atrest wrap binds AAD: domain separation + record-context — item 78 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+713 tests (3 new); `src/crypto/atrest.js` + `tests/atrest.test.js` only. `validate.sh` PASSED.
+
+Socratic lens (the items 76/77 binding theme applied to at-rest crypto): *"`atrest` AES-256-GCM
+authenticates the ciphertext, but its encrypt/decrypt pass no `additionalData`. With no AAD, what
+distinguishes an at-rest ciphertext from any other AES-GCM ciphertext, and what stops a wrapped record
+being relocated between keystore slots?"* Nothing did.
+
+- **Gap**: no domain-separation tag (cross-protocol confusion surface) and no context binding — an
+  XSS attacker with IDB write access but *without* the passphrase could swap a wrapped record into a
+  different slot, and the user would silently load the wrong identity on unlock.
+- **Why now**: the module is a pre-wiring reference ("to be migrated onto it"), so there are no persisted
+  records — the canonical wrap format can be fixed before it goes live, with no migration (same reasoning
+  as items 76/77).
+- **Fix**: every wrap/unwrap now sets `additionalData`. A constant `breeze-atrest-v1` domain tag is always
+  applied (backward-compatible: both sides use it, so existing no-context round-trips are unchanged), and
+  an optional caller `context` (e.g. account/record id) extends it. AAD is recomputed from the constant +
+  caller context on unwrap — never read from the attacker-controlled record — so the binding is meaningful.
+  `wrapJWK`/`unwrapJWK`/`migrate`/`loadKey` all thread the optional context.
+- **Tests (3, mutation-verified)**: a record wrapped with one context fails to unwrap under a different
+  context or with the context dropped, while the matching context round-trips; a no-context record won't
+  unwrap once a context is supplied; `migrate`→`loadKey` thread the context end-to-end. Stripping the AAD
+  makes cross-context unwrap wrongly succeed.
+
+## push-subscribe signature now binds the subscription — item 77 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+710 tests (2 new); `_worker.js` + `tests/worker.test.js` only. `validate.sh` PASSED.
+
+Socratic lens (applying item 76's question to the other signed ops): *"Does each signed operation bind
+all its security-relevant parameters? push-subscribe signs `breeze-push-subscribe:${userId}:${ts}` — but
+the thing being registered is the `subscription` (endpoint + keys). Is that bound?"* No. The optional
+Ed25519 ownership auth (item 62) exists specifically to stop an attacker registering *their own* device
+under the victim's `userId` (the Web Push payload is encrypted to the subscriber-supplied p256dh, so the
+attacker would decrypt the notification metadata — sender, type, contactId, timing). But because the
+signature omitted the subscription, a captured/observed push-subscribe signature could be replayed with
+the attacker's own endpoint + p256dh swapped in, defeating the very protection the auth was added for.
+
+- Audited the other signed challenges while here: alias-set binds the alias, alias-delete the alias,
+  portal/account-delete/backup have only `userId` as a parameter, and the backup body is E2E-AEAD
+  (binding redundant — restore fails closed on tampering). push-subscribe was the one gap.
+- **Fix**: the signed challenge is now `breeze-push-subscribe:${userId}:${ts}:${endpoint}:${p256dh}:${auth}`
+  over the raw subscription fields the client sends. Same latent/opt-in status as item 76 (clients don't
+  sign yet), so the canonical format is fixed before signing goes live.
+- **Tests (2, mutation-verified)**: a subscribe whose endpoint — or whose p256dh decryption key — was
+  swapped after signing is rejected `SIG_INVALID` with nothing registered, while the genuinely-signed
+  subscription still registers. Reverting the bind fails them.
+
+## group-auth signature now binds the operation's target — item 76 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+708 tests (4 new); `_worker.js` + `tests/worker.test.js` only. `validate.sh` PASSED.
+
+Socratic lens: *"The group-op signature covers `breeze-group-${action}:${token}:${actorId}:${ts}` — who
+acts, which group, when. But not WHAT: the target. Since the relay is untrusted and sees the request, can
+it swap the target while the signature still verifies?"* Yes — within the 5-min freshness window:
+- **kick**: `kickId` was unsigned → relay swaps which member is removed.
+- **admin**: neither `targetId` nor the sub-action (`promote`/`demote`/`unban`) was signed → relay turns a
+  signed "demote X" into "promote Y" (**privilege escalation**) or "unban Z" (**ban bypass**).
+- **transfer**: `newCreatorId` was unsigned → relay redirects ownership to an attacker-chosen member
+  (**ownership hijack**).
+
+The signature authenticated the actor but not the operation's parameters — a parameter-tampering gap.
+
+- **Latent, fixed before it goes live**: the verify path only runs when a client supplies `{ts,sig}`, and
+  clients don't sign yet ("flip on once clients sign"), so signing currently grants *false* security. No
+  deployed client signs, so the canonical signed format can be fixed now without breaking anyone.
+- **Fix**: `checkGroupAuth` takes a `bind` arg appended to the signed message
+  (`…:${ts}:${bind}`). Callers bind their security-relevant params: kick→`kickId`,
+  admin→`${subAction}:${targetId}`, transfer→`newCreatorId`, rename→sanitized `name`. delete/leave have
+  no extra target (bind=''; the distinct `action` token already separates them). The signature now
+  authenticates what is done, not just who/which-group/when.
+- **Tests (4, mutation-verified)**: a kick with a relay-swapped `kickId`, an admin op with a swapped
+  sub-action (promote↔demote) or `targetId`, and a transfer with a redirected `newCreatorId` are all
+  rejected `SIG_INVALID` with state unchanged — while the correctly-signed target still succeeds.
+  Reverting the bind in the verifier fails all four.
+
+## sw.js contains relay-controlled notification URLs to our origin — item 75 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+704 tests (6 new, first `tests/sw.test.js`); `sw.js` + `tests/sw.test.js` only. `validate.sh` PASSED.
+
+Socratic lens: *"`notificationclick` feeds `data.url` — straight from the server-supplied push payload —
+into `clients.openWindow()`. In Breeze's threat model the relay is untrusted; what stops a malicious
+relay from making a notification tap open an arbitrary external page?"* Nothing did. `clients.openWindow()`
+navigates to any cross-origin `https://` URL, so a compromised/malicious relay could push
+`{url:"https://evil.example/phish"}` and turn a notification tap into a phishing redirect.
+
+- **Confirmation**: the worker's `sendPushToUser` (`_worker.js:501`) only ever sets `title`/`body`/`tag`/
+  `contactId` — it never sets `url`. So a cross-origin `url` can arise *only* outside the legitimate path,
+  i.e. from a hostile relay. The SW must not honor it.
+- **Fix**: new `safeAppUrl()` resolves `data.url` against our own origin and collapses anything that
+  escapes it — cross-origin, protocol-relative (`//evil`), `javascript:` — to the app root before
+  `openWindow()`. Separately, the three `client.url.includes(self.location.origin)` checks (a sloppy
+  substring match that would also match a foreign window carrying our origin in a query param) are
+  replaced with a proper `sameOrigin()` test, so an inline reply / mark-read postMessage can't be routed
+  into an attacker-controlled page.
+- **Tests (6, mutation-verified)**: first SW test harness — evaluates the real classic `sw.js` in a mocked
+  ServiceWorkerGlobalScope and dispatches synthetic `notificationclick` events. Asserts cross-origin /
+  protocol-relative / `javascript:` urls open the app root not the external page; same-origin deep-links
+  (path+hash) are preserved; an existing same-origin window is focused; and a foreign window merely
+  containing our origin in a query param does NOT receive the reply postMessage. Reverting either guard
+  fails 5 of the 6.
+
+## franking verify() fails closed on missing/malformed input — item 74 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+698 tests (2 new); `src/crypto/franking.js` + `tests/franking.test.js` only. `validate.sh` 33/36.
+
+Socratic lens: *"Does franking `verify` follow the file-wide 'never throw on untrusted input' contract
+that ktlog/group/ratchet verify functions all uphold?"* No. `verify(message, commitment, opening)` did
+`u8(opening)` / `toBytes(message)` / `u8(commitment)` with no guard. `u8(null)` is `Uint8Array.from(null)`,
+which **throws** — so a missing `recordedCommitment` (the relay lost/expired the record) or an
+attacker-supplied null on report would propagate an uncaught exception out of `verifyReport` instead of
+returning a clean `false`.
+
+- **Impact**: A crash is fail-closed (no false "authentic" verdict), so not a forgery risk — but the
+  abuse-report path throwing on a missing commitment is an availability defect, and it diverges from the
+  graceful-negative contract every other verify in the module suite holds.
+- **Fix**: `verify` now returns `false` immediately when `message`/`commitment`/`opening` is `null`/`undefined`,
+  and wraps the HMAC + compare in a try/catch returning `false` (belt-and-suspenders for any other
+  malformed byte input). `verifyReport` inherits this via delegation.
+- **Tests (2, mutation-verified)**: `verify` returns `false` (no throw) for null/undefined commitment,
+  opening, or message; `verifyReport` returns `false` when the relay has no `recordedCommitment`.
+  Reverting the guard makes both throw and fail.
+
+## negotiate() normalizes malformed caps and fails closed — item 73 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+696 tests (3 new); `src/crypto/negotiate.js` + `tests/negotiate.test.js` only. `validate.sh` 33/36.
+
+Socratic lens: *"Do the sibling functions `negotiate` (1:1) and `negotiateGroup` (N-party) handle a
+malformed capability value the same way?"* No. `negotiateGroup` defensively coerced each member's caps
+(`Array.isArray(c) ? c : []`), but `negotiate` did `new Set(peerCaps)` directly. `new Set(<non-iterable>)`
+(e.g. `new Set(42)`) **throws** — so a malformed peer caps value, which can arrive over the untrusted
+relay, would crash the session-init path instead of failing closed.
+
+- **Impact**: A crash is fail-closed (no feature wrongly enabled), so not a downgrade/forgery risk — but
+  a relay-supplied non-array `caps` field crashing 1:1 negotiation is an availability defect, and the
+  divergence from `negotiateGroup`'s graceful handling is an inconsistency a future caller could trip on.
+- **Fix**: a shared `norm(c) = Array.isArray(c) ? c.filter(x => typeof x === 'string') : []` is applied to
+  both `localCaps` and `peerCaps` in `negotiate`, and `negotiateGroup` is aligned to use the same helper
+  (also guarding a non-array `memberCapsList`). Non-array → `[]` (all features off, AND-rule fail-closed);
+  non-string elements are dropped so relay-injected junk can never match a capability id.
+- **Tests (3, mutation-verified)**: `negotiate` returns all-false (no throw) for non-array peer caps
+  (42/null/undefined/object/bool) and for a non-array local caps; junk elements in a caps array are
+  dropped while the genuine string cap is still honored. Reverting the coercion makes the non-array test
+  throw and fail.
+
+## ktlog verifyChain fails closed on an all-malformed log — item 72 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+693 tests (3 new); `src/crypto/ktlog.js` + `tests/ktlog.test.js` only. `validate.sh` 33/36.
+
+Socratic lens: *"If a relay sends a key-transparency log whose entries are all malformed, does
+`verifyChain` detect tampering or silently pass?"* It passed. `verifyChain` calls `parseLog`, which
+drops entries failing its `ts`/`h` filter. When EVERY entry is malformed, `parseLog` returns `[]`, the
+verification loop never runs, and the function returned `{ ok: true }` — garbage silently verified as a
+clean log. This is the same fail-open the module already rejects for a non-string `c` field (line 162,
+"tampering, not legacy → fail"), just via a different path.
+
+- **Impact**: A hostile relay could replace a real append-only hash chain with malformed entries and
+  still have `verifyChain` (and therefore `auditBundle`) report success — `auditBundle` would return
+  `verdict: 'ok'` instead of `'tampered'`, defeating the N5 tamper-evidence layer. (This is the tested
+  reference module; index.html does not yet import it, so no production impact — but it is the
+  source-of-truth for the planned browser migration.)
+- **Fix**: fail closed when the raw input is a non-empty array but `parseLog` drops every entry —
+  `if (Array.isArray(log) && log.length > 0 && sorted.length === 0) return { ok: false, invalidIdx: 0 };`.
+  A genuinely empty array (`[]`, nothing to verify) and legacy entries (valid `ts`+`h`, no `c` — they
+  survive `parseLog`) are unaffected; both existing behaviors stay green.
+- **Tests (3, mutation-verified)**: an all-malformed log fails (`ok:false`, `invalidIdx:0`); an empty
+  `[]` still verifies ok (over-reach guard); `auditBundle` reports `verdict:'tampered'` for an
+  all-malformed log. Reverting the one-line guard flips the first test to a failure.
+
+## verifyStripeSignature freshness check fails closed on a non-numeric timestamp — item 71 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+438 worker tests (1 new); `_worker.js` + `tests/worker.test.js` only. `validate.sh` 33/36.
+
+Socratic lens: *"Does the Stripe webhook replay-window check enforce its ±300s tolerance for every
+parseable input?"* No. The check was `if (Math.abs(Date.now()/1000 - parseInt(timestamp)) > 300) return false;`.
+`parseInt('abc')` is `NaN`, and `Math.abs(now - NaN)` is `NaN`, and `NaN > 300` is `false` — so a
+non-numeric (but truthy) timestamp silently SKIPS the staleness check (fail-open). The freshness check
+is the replay-window guard; a guard that no-ops on malformed input is a defense-in-depth defect.
+
+- **Impact**: Not directly exploitable — the HMAC comparison (signed over `timestamp + '.' + payload`)
+  is the primary forgery gate, and a replay of a genuine Stripe event carries a real numeric timestamp
+  that the `> 300` check still catches. But the replay-window check itself failed open: a test that
+  produces a *valid* HMAC over a non-numeric timestamp (only the secret holder can) was accepted (200,
+  slots granted) under the old code, when it should have been rejected by the freshness guard.
+- **Fix**: parse explicitly and fail closed — `const tsNum = parseInt(timestamp, 10); if (!Number.isFinite(tsNum)) return false;`
+  before the tolerance comparison. Mirrors the `Number.isFinite` guards already used for the PoW
+  freshness check (~688), the `/msg/poll` cursor, and `disappearAt` elsewhere in the file.
+- **Test (1, mutation-verified)**: a validly-signed webhook with `t=abc` is now rejected (400) with no
+  billing side effect; reverting the fix flips it to 200 with slots granted (confirmed the guard is
+  what rejects it).
+
+## Group invite token: fixed-length uniform 12-char base-36 generator — item 70 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+437 worker tests (2 new, 1 updated); `_worker.js` + `tests/worker.test.js` only. `validate.sh` 33/36.
+
+Socratic lens: *"Does the group invite token generator always produce a fixed-length, uniformly-distributed
+token?"* No. The old generator did `Array.from(bytes).map(b => b.toString(36)).join('').slice(0,12)` with
+only 8 random bytes. `b.toString(36)` yields 1 char for b ∈ [0,35] and 2 chars for b ∈ [36,255]. When all
+8 bytes happen to be in [0,35] (each contributes 1 char), the joined string is 8 chars and `slice(0,12)`
+returns an 8-char token — not 12. An 8-char base-36 token has only ≈41 bits of entropy instead of the
+expected ≈62 bits. The probability of this worst case is (36/256)^8 ≈ 0.003%, but the partial-coverage
+problem is continuous: any byte in [0,35] reduces the bits contributed by that position.
+
+- **Impact**: Token shorter than 12 chars means the KV key `grp:${token}` is shorter, and an attacker
+  brute-forcing group tokens has a meaningfully smaller search space (2^41 vs. 2^62) for the rare but
+  possible short tokens. Additionally, the distribution of 12-char tokens is non-uniform because the
+  first byte in [0,35] maps to 1 char while bytes in [36,255] map to 2 chars, creating a bias toward
+  tokens starting with digits/letters that correspond to small byte values.
+- **Fix**: Replace with a uniform generator — request exactly 12 random bytes and map each to one of 36
+  chars via `TOKEN_CHARS[b % 36]`. The modulo bias is (256 mod 36)/256 ≈ 1.5%, negligible for an invite
+  token. Output is always exactly 12 base-36 chars with ≈62 bits of entropy.
+- **Tests (2 new)**: 20 generated tokens are all exactly 12 chars matching `/^[0-9a-z]{12}$/` and unique;
+  a mutation-witness test proves the old generator DID produce 8-char tokens for all-small-byte inputs
+  while the new generator produces 12-char tokens for the same input.
+
+## Explicit KV cache size guard for translate + AI handlers — item 69 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+435 worker tests (2 new); `_worker.js` + `tests/worker.test.js` only. `validate.sh` 33/36.
+
+Socratic lens: *"If an AI/translation provider returns a larger-than-expected response, is there an
+explicit guard preventing it from being written to KV at full size?"* No. Both `handleTranslate` and
+`handleAI` cached the raw API response without a size check. Inputs are bounded (2000-char text,
+500-token AI limit), so the implicit bounds are low — but they are not asserted at the write site.
+
+- **Impact**: A provider bug, configuration change, or unexpected behavior (e.g., token limit
+  ignored) could produce a response 10–100× the typical size. With no guard, every such response
+  gets cached for 7 days (`tr:`) or up to 3 days (`ai:`), consuming disproportionate KV storage
+  per key. Accumulated across users this could exhaust the free-tier KV write budget or pollute the
+  cache with oversized stale entries.
+- **Fix (`handleTranslate`)**: cap `translated` to 8000 chars before constructing the cache object
+  (generous 4× the 2000-char input max), then also check `serialized.length <= 64 * 1024` before the
+  KV write — skip caching if the envelope is somehow still too large. The full (possibly uncapped)
+  response is still returned to the caller; only the stored value is guarded.
+- **Fix (`handleAI`)**: same pattern — cap `result` to 8000 chars (4× a 500-token response), then
+  serialized-size check `<= 32 * 1024` before the KV write.
+- **Tests (2)**: a mock provider returning a 20,000-char string produces a 8000-char response and
+  does not store more than 64KB in KV; a mutation-witness test confirms the cap IS what prevents
+  full-length storage.
+
+## handlePreKeyFetch per-IP OTP consumption lock — OTP drain attack prevention — item 68 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+433 worker tests (3 new, 1 updated); `_worker.js` + `tests/worker.test.js` only. `validate.sh` 33/36.
+
+Socratic lens: *"Can an unauthenticated caller drain another user's one-time prekeys?"* Yes.
+`handlePreKeyFetch` required only a valid `userId` — no proof of caller identity. With the rate limit
+at 10 rpm per source IP, a single IP could exhaust all 100 OTPs in 10 minutes. An attacker who drains
+a user's OTPs forces all future X3DH session setups to fall back to the signed pre-key only (no DH4
+component), degrading forward secrecy for every new conversation.
+
+- **Impact**: 100 OTPs × 10 rpm → drained in 10 minutes from one IP. The `replenishOTP` flag would
+  fire, but the owner might be offline; in the window before replenishment every new initiator loses
+  DH4 forward secrecy silently.
+- **Fix**: Before consuming an OTP, hash the source IP (`CF-Connecting-IP` via `sha256Short`) and
+  check `otp_lock:{targetUserId}:{ipHash}` in KV. If the key exists (24 h TTL), skip OTP consumption
+  but still return the SPK-only bundle (200, no `oneTimePreKey`). Write the lock key **after**
+  successful consumption. Result: each source IP can consume at most one OTP per target user per 24 h.
+  Draining all 100 OTPs now requires 100 distinct source IPs.
+- **Reconciliation guard**: the existing stale-count reconciliation (`if (!consumed && count > 0)`)
+  was extended to `if (!consumed && count > 0 && !ipAlreadyConsumed)` — prevents the reconciliation
+  from incorrectly zeroing the stored OTP count when the loop was intentionally skipped due to the
+  IP lock (OTPs still exist in KV; count is accurate).
+- **Batch path**: `handlePreKeyFetchBatch` delegates to `handlePreKeyFetch` with the same `request`
+  object, so the per-IP lock applies to batch fetches automatically with no extra code.
+- **Tests (3 new, 1 updated)**: same-IP double-fetch returns bundle but no OTP; two different IPs each
+  consume one OTP independently; mutation guard (manually clearing lock re-enables consumption,
+  proving the lock is what prevents the drain). The existing "consumes exactly one OTP" test updated
+  to verify the new same-IP blocking behavior and cross-IP consumption separately.
+
+## sha256Short extended from 8 to 16 bytes — KV cache key collision resistance — item 67 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+430 worker tests (0 new, 1 updated); `_worker.js` + `tests/worker.test.js` only. `validate.sh` 33/36.
+
+Socratic lens: *"Does `sha256Short` provide enough collision resistance for KV cache keys?"*  No.
+The function kept only the first 8 bytes (16 hex chars) of SHA-256, giving 2^32 birthday-collision
+resistance. For a cache serving an adversarial mix of user-supplied URLs (`ogp:`), translation payloads
+(`tr:`), and AI summaries (`ai:`), an attacker who can submit ~2^16 distinct inputs has a ~50 % chance
+of a cache-key collision. A collision causes one user's cached OGP card or AI summary to be served in
+place of another's — an information-disclosure side-channel (wrong preview shown) and a cache-poisoning
+vector (bad actor crafts a URL that collides with a legitimate key and poisons its cached value).
+
+- **Impact**: 2^32 birthday bound → ~65,000 unique inputs needed for a 50 % collision probability.
+  The KV namespace is shared across all users and URL inputs; an active attacker can reach that
+  threshold in minutes. Consequence: wrong OGP metadata served to other users, or stale/poisoned AI
+  summaries returned without re-fetching.
+- **Fix**: change `slice(0, 8)` → `slice(0, 16)` in `sha256Short`. Output grows from 16 to 32 hex
+  chars — a no-op from the KV key-limit perspective (16 extra chars vs. a 512-byte limit with
+  prefix lengths of ≤6 chars + separator). Birthday bound rises to 2^64 — computationally infeasible.
+- **Tests (1 updated)**: the OGP cache-hit test recomputes the expected KV key using `slice(0, 16)`
+  to mirror the new output. Mutation-verified (reverting to slice(0,8) causes the key-lookup to miss
+  and the test to fail).
+
+## Monotonic timestamp bump for handleSealedSend — same-millisecond ACK race — item 66 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+430 worker tests (2 new); `_worker.js` only. `validate.sh` 33/36.
+
+Socratic lens: *"Does `handleSealedSend` guarantee strictly-increasing timestamps, as `handleMsgSend`
+does?"* No. `handleSealedSend` pushed `{ envelope, ts: Date.now() }` without bumping on collision.
+`handleSealedAck` keeps survivors with `m.ts > hwm` (strict greater-than). If a new envelope arrives
+after a poll but in the **same millisecond** as the polled batch's max ts (the hwm), the new entry
+shares `ts == hwm` → `m.ts > hwm` is false → the ack deletes it even though it was never polled:
+a silent message loss on the "reliable" sealed path.
+
+- **Impact**: a message in flight at the exact millisecond boundary between poll and ack is silently
+  dropped. The window is sub-millisecond and requires the new KV write to land before the ack, so
+  probability is low — but the sealed path is specifically designed to be the reliable fallback, so
+  any loss violates that contract.
+- **Fix (`handleSealedSend`)**: before pushing, compute `newTs = max(Date.now(), lastEntry.ts + 1)`
+  (exact mirror of the existing fix in `handleMsgSend`). The last element always holds the max ts
+  because appends are sequential; no full-scan needed.
+- **Tests (2)**: two envelopes frozen to the same millisecond get distinct strictly-increasing ts
+  values; the same-millisecond second envelope survives a poll+ack cycle that would have deleted it
+  under the old behavior. Both mutation-verified (old code makes the survival test fail).
+
+## validateUserId upper bound tightened from 512 to 128 — KV key overflow prevention — item 65 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+428 worker tests (7 new, 1 updated); `_worker.js` + `tests/worker.test.js` only. `validate.sh` 33/36.
+
+Socratic lens: *"Can a userId that passes `validateUserId` produce a composite KV key exceeding the
+Cloudflare KV 512-byte key limit?"* Yes. The regex allowed IDs up to **512 chars**; the longest KV
+key prefix is `prekey:otp:...:99` (14 chars), so the composite key could reach **526 bytes** —
+silently causing every `kvGet` to return `null` and every `kvPut` to return `false` (write fails)
+for any user with a long ID.
+
+- **Impact**: Any endpoint that uses such an ID gets silent KV failures: `handleMsgSend` returns
+  `STORE_FAILED`, `handlePreKeyUpload` stores nothing and silently drops the bundle, `handlePresence`
+  batch-check returns `online: false` for the long-ID user. No real-world userId is 512 chars, so
+  this had zero practical effect — but the named-field body guard at line ~266 already caps
+  `userId`/`to`/`from` at 128, making the `validateUserId(512)` bound an inconsistency that could
+  bite array-element paths (e.g., `ids[]` in the presence batch) or direct-call sites.
+- **Fix A (`validateUserId`)**: cap at 128 chars (was 512). 128 + 14 = 142 bytes — well within the
+  512-byte KV limit. Still generous: real IDs are ≤88 chars (P-256 base64).
+- **Fix B (rate-limit map)**: removed duplicate `'/api/group/create': 5` and `'/api/group/join': 10`
+  entries that were left behind when item 55 inserted them before the `/api/portal` entry.
+  JavaScript objects silently keep the last value for duplicate keys; since the values were identical
+  the behavior was unchanged, but the dead entries were misleading to future maintainers.
+- **Tests (7 new, 1 updated)**: 128-char passes; 129-char and 512-char rejected; minimum 8-char
+  still passes; below-minimum 7-char still rejected; `handlePreKeyUpload` rejects a 129-char userId;
+  existing length-bounds test updated from `<= 512` to `<= 128`. Bound guard mutation-verified.
+
+## Durable group kick — banned member cannot rejoin via invite token — item 64 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+422 worker tests (5 new); `_worker.js` only. `validate.sh` 33/36.
+
+Socratic lens on the kick flow: *"what stops a kicked member from immediately rejoining with the
+same invite token?"* Nothing. `handleGroupKick` removed the target from `group.members` but left
+the group's invite token intact; as long as the kicked user still knew the token (they did — it
+never changes) they could call `/api/group/join` again and be re-added with no obstacle.
+
+- **Impact**: kick was cosmetic — the "removed" member rejoined instantly. They could also rejoin
+  mid-epoch and receive the next sender-key distribution, retaining full decrypt capability.
+- **Fix A (`handleGroupKick`)**: write a `group.banned` array (capped at 200 entries, sanitized
+  to strings) alongside the existing member-array removal. Each kick appends the kicked userId;
+  duplicate entries are suppressed.
+- **Fix B (`handleGroupJoin`)**: check `group.banned` before adding the caller to `members`; return
+  `403 BANNED` immediately to a banned member regardless of token validity.
+- **Fix C (`handleGroupAdmin`)**: add an `'unban'` action that lets the creator remove a userId
+  from `group.banned`; idempotent (returns `notBanned: true` if the id wasn't banned). The action
+  validator was expanded to accept `'promote' | 'demote' | 'unban'`. Added `'group-ban'` to the
+  health capabilities list.
+- **Tests (5)**: kicked member gets `403 BANNED` on rejoin; non-kicked member joins normally;
+  creator unbans → member may rejoin; unban is idempotent; non-creator cannot unban. Ban guard
+  and unban guard mutation-verified.
+
+## Stale OTP count outlived its entries → phantom prekeys, suppressed replenish — item 63 (branch claude/nice-ride-T6yb0, 2026-06-16)
+
+417 worker tests (3 new); `_worker.js` only. `validate.sh` 33/36.
+
+Socratic lens on the OTP accounting: *"can `prekey:otp:${userId}:count` and its OTP entries get out
+of sync?"* Yes. Upload writes the entries and `count` with a 30-day TTL; every fetch refreshes the
+**count** key's TTL to a fresh 30 days but never touches the unconsumed entries, which keep their
+**original** upload-time TTL. So after sporadic fetches, the entries can all expire while `count`
+lingers at e.g. 8.
+
+- **Impact**: `handlePreKeyFetch` then scans, finds nothing, but `remainingOTP` stayed at the stale
+  count → `replenishOTP` stayed **false** and no OTP was delivered → new X3DH sessions silently lose
+  the DH4/OTP component (forward-secrecy degradation) with no signal. Worse, `handlePreKeyStatus`
+  (the owner's self-audit) reported `otpCount: 8, replenishOTP: false` — telling the owner they have
+  8 OTPs when they have **zero**, so they never replenish.
+- **Fix A (`handlePreKeyFetch`)**: track whether the scan consumed anything; if `count>0` but nothing
+  was consumed, set `remainingOTP = 0` (honest replenish signal) and, when no entry was found at all,
+  heal the stale count to 0. Don't corrupt the count on transient delete failures.
+- **Fix B (`handlePreKeyStatus`)**: the entry at index `count-1` is always the next to be consumed
+  and all entries from one upload share a TTL, so one extra KV read of the top entry detects full
+  expiry; report `otpCount: 0` + `replenishOTP: true` and heal the count when so.
+- **Tests (3)**: stale-count-with-expired-entries → fetch returns no OTP + replenish + healed count;
+  status reports 0 + replenish + healed count; status still reports the real count when the top
+  entry is present. Both healing paths mutation-verified.
+
+## Optional Ed25519 ownership auth for push subscribe — item 62 (branch claude/nice-ride-T6yb0, 2026-06-15)
+
+414 worker tests (5 new); `_worker.js` only. `validate.sh` 33/36.
+
+Socratic lens: continuing the "knowing a userId shouldn't grant a sensitive action" sweep — does
+`handlePushSubscribe` verify the caller owns the userId? No. It stored any device under
+`push:${userId}` after only an SSRF check on the endpoint.
+
+- **Leak**: the Web Push payload is encrypted to the SUBSCRIBER-supplied `p256dh`/`auth` keys, so an
+  attacker who knows a victim's userId can register their **own** device and decrypt the victim's
+  notification metadata (sender display name, message type, contactId, timing). They could also
+  evict the victim's real devices via the 5-device cap (denial of notification).
+- **Change**: `handlePushSubscribe` now accepts optional `{ ts, sig }` over
+  `breeze-push-subscribe:${userId}:${ts}`, verified against the userId's registered `edIdentityKey`.
+  Enforced when `PUSH_REQUIRE_AUTH=true`; verified-when-present otherwise (unsigned clients keep
+  working). Added `push-auth` to the health capabilities list. This completes the optional-auth
+  sweep across portal / group / backup / alias / push.
+- **Tests (5)**: unsigned works (flag off); flag-on rejects unsigned (`AUTH_REQUIRED`); valid signed
+  succeeds with flag on; tampered sig → `SIG_INVALID`; partial auth (sig without ts) → 400. Flag and
+  signature guards mutation-verified.
+
+## Optional Ed25519 ownership auth for alias registration — item 61 (branch claude/nice-ride-T6yb0, 2026-06-15)
+
+409 worker tests (6 new); `_worker.js` only. `validate.sh` 33/36.
+
+Socratic lens on the alias set/delete asymmetry: alias **delete** requires an Ed25519 ownership
+signature (and checks `aliasRec.pub === bundle.identityKey`), but alias **set** only requires PoW —
+which proves *work*, not *key ownership*. So a first-come registrant could point an unclaimed
+`@handle` at **someone else's** identity key (impersonation) or mass-squat handles; PoW only
+rate-limits this, it doesn't prevent it.
+
+- **Change**: `handleAliasSet` now accepts optional `{ userId, ts, sig }`. When present it requires
+  the signer's registered `edIdentityKey` to validly sign `breeze-alias-set:${alias}:${ts}` **and**
+  that `bundle.identityKey === pub` (you can only alias your own identity key) — binding the @handle
+  to the account that owns the key, exactly as alias-delete already does. Enforced outright when
+  `ALIAS_REQUIRE_AUTH=true`; verified-when-present and skipped when absent otherwise (PoW-only
+  clients keep working). Distinct challenge prefix prevents cross-endpoint replay. Added `alias-auth`
+  to the health capabilities list.
+- **Tests (6)**: legacy PoW-only works (flag off); flag-on rejects unsigned (`AUTH_REQUIRED`); valid
+  signed succeeds with flag on; `PUB_MISMATCH` when the signed pub ≠ account identity key; tampered
+  sig → `SIG_INVALID`; partial auth (ts without sig) → 400. Both core guards mutation-verified.
+
+## Translation cache key collided across distinct inputs — item 60 (branch claude/nice-ride-T6yb0, 2026-06-15)
+
+403 worker tests (2 new); `_worker.js` only. `validate.sh` 33/36.
+
+Socratic lens on the translate cache key: *"does `text + src + tgt` uniquely identify a request?"*
+No — the three fields are concatenated with **no delimiter**, and src/tgt are short, variable-length
+language codes sitting right after free-form text.
+
+- **Bug**: `("test","en","ja")` and `("teste","n","ja")` both hash `"testenja"` → identical cache
+  key. The second requester is served the **first's cached translation** — wrong output, and a
+  cache-poisoning vector (an attacker can pre-seed a key a victim's request will collide with).
+- **Fix**: key on `JSON.stringify([text, src, tgt])`, which quotes/escapes each field so boundaries
+  are unambiguous. (Audited `handleAI`'s `action + userContent + systemPrompt` key — its fixed
+  action prefix and fixed per-action systemPrompt suffix bracket the variable middle, so it's
+  injective and not vulnerable; left unchanged.) One-time effect: existing `tr:` cache entries miss
+  once and re-populate under the new key.
+- **Tests (2)**: a colliding pair now returns each input's own translation with `cached:false`
+  (mutation-verified — the old concat fails this); an identical repeated request still hits the
+  cache exactly once (proves legitimate caching preserved).
+
+## OGP body-read had no time bound (slow-drip tie-up) — item 59 (branch claude/nice-ride-T6yb0, 2026-06-15)
+
+401 worker tests (1 new); `_worker.js` only. `validate.sh` 33/36.
+
+Socratic lens on `fetchWithTimeout`: *"what exactly does the 5s timeout protect?"* It aborts on
+time-to-HEADERS and is cleared the instant headers arrive — so the subsequent 32KB body read in
+`handleOGP` had **no** time bound.
+
+- **Gap**: a slow-drip server (fast headers, then a byte-per-second body, or a chunk that never
+  completes) keeps `reader.read()` trickling and ties up the worker far past the intended budget.
+  The existing memory cap (truncate to 32KB) does nothing against a *time* attack.
+- **Fix**: race each `reader.read()` against a remaining-time deadline so total body-read time is
+  bounded; on timeout, proceed with whatever was parsed (the handler already returns `{}` / partial
+  preview gracefully). Budget is operator-tunable via `OGP_READ_BUDGET_MS` (clamped 200ms–15s,
+  default 5s) for slow-link self-hosters.
+- **Test**: a stream that emits one chunk then never closes; with a 300ms budget the handler returns
+  in ~300ms with the title still parsed from the first chunk. Mutation-verified: removing the
+  deadline makes the read hang until the 5s test-runner timeout.
+
+## Account-delete left the sealed-poll high-water mark behind — item 58 (branch claude/nice-ride-T6yb0, 2026-06-15)
+
+400 worker tests (assertion extended); `_worker.js` only. `validate.sh` 33/36.
+
+Socratic lens on GDPR erasure: *"does the deletion list actually cover every key keyed by this
+userId?"* Enumerating all userId-keyed KV entries against `handleAccountDelete`'s `dels` array found
+one miss: `sealed:${userId}:hwm`, the sealed-poll high-water mark written by `handleSealedPoll`.
+
+- **Gap**: after a validated account deletion, `sealed:${userId}:hwm` lingered for its 300s TTL —
+  residual user-linked data (it reveals the account existed and the timestamp of its last polled
+  sealed message). The handler's own documented intent is to erase residual data *now* rather than
+  wait for TTLs (it already deletes the 6-min-TTL `presence:` key for exactly this reason).
+- **Fix**: add `kvDel(env, \`sealed:${userId}:hwm\`)` to the deletion batch.
+- **Test**: the "erases every userId-keyed store" test now seeds and asserts the hwm key is null
+  after deletion. Mutation-verified: removing the delete fails the test.
+
+## Relay dedup key not released on STORE_FAILED → lost message on retry — item 57 (branch claude/nice-ride-T6yb0, 2026-06-15)
+
+400 worker tests (3 new); `_worker.js` only. `validate.sh` 33/36.
+
+Socratic lens on the dedup/store ordering: both relay paths (`handleMsgSend`, `handleSealedSend`)
+set an in-memory dedup key **before** the KV write. Premise to test: *"what happens to that key when
+the write fails?"* — It stays set.
+
+- **Bug**: on a `STORE_FAILED` (transient KV error), the dedup key remains. The client, seeing a 500,
+  retries the **identical ciphertext** — which now hits the dedup short-circuit and returns
+  `{ok:true, dedup:true}`. The message is silently dropped despite never having been stored. This
+  defeats the at-least-once delivery the 500→retry contract is supposed to provide, on **both** the
+  1:1 inbox and the "reliable" sealed-sender path.
+- **Fix**: on a failed store, `delete(dedupKey)` before returning 500, so the retry actually persists.
+  Genuine duplicates (after a *successful* store) are still deduped — the key is only released on the
+  failure path.
+- **Tests (3)**: failed-store-then-retry persists exactly one message (msg + sealed paths); a genuine
+  duplicate after a successful store is still collapsed to one. Mutation-verified: removing either
+  un-mark fails the corresponding retry test while the duplicate test stays green.
+
+## OGP link-preview corrupted multibyte UTF-8 at chunk boundaries — item 56 (branch claude/nice-ride-T6yb0, 2026-06-15)
+
+397 worker tests (1 new); `_worker.js` only. `validate.sh` 33/36.
+
+長所短所改善点 stocktake: the relay is in good shape — crypto well-tested, KV-failure propagation
+swept, optional-auth pattern now consistent (portal/group/backup), SSRF hardened, rate limits
+complete, all in-memory caches bounded. The remaining gaps are infra-bound (per-user limits and
+one-time-read atomicity need Durable Objects; CI activation needs a maintainer — item 52). Hunting
+for a self-contained server-side win surfaced a real correctness bug in OGP.
+
+- **Bug**: `handleOGP` created a fresh `new TextDecoder()` per body chunk and decoded without
+  `{ stream: true }`. A multibyte UTF-8 sequence (e.g. a 3-byte Japanese character `あ` = E3 81 82)
+  split across a `reader.read()` boundary became two replacement characters (�) — corrupting
+  non-ASCII titles/descriptions. Direct hit for a Japanese-first app's link previews.
+- **Fix**: one streaming `TextDecoder` instance across the whole body (`decode(value, {stream:true})`
+  per chunk + a final flush on natural end), so partial multibyte bytes are held and reassembled.
+- **Test**: splits `あ` so its first two bytes land in chunk 1 and the last in chunk 2; asserts the
+  extracted `<title>` decodes to `あ`. Mutation-verified: the per-chunk decoder yields `�`.
+
+## group/create + group/join missing from rate-limit table — item 55 (branch claude/nice-ride-T6yb0, 2026-06-15)
+
+396 worker tests (3 new); `_worker.js` only. `validate.sh` 33/36.
+
+Socratic lens: *"what does the rate limiter actually receive vs. what it assumes?"* Every path absent
+from the `limits` table defaults to 30 rpm. Both `/api/group/create` and `/api/group/join` write to
+KV on every call and were absent — so the effective limit was 30 rpm instead of the more careful
+rates used for other write-heavy endpoints (`prekey/upload: 5`, `backup/upload: 2`, `drop/create: 10`).
+
+- At 30 rpm, a single IP can exhaust the Cloudflare free-tier KV write budget (1000/day) in ~33
+  minutes, wedging the entire relay (all subsequent KV writes fail until midnight reset).
+- Added `/api/group/create: 5` and `/api/group/join: 10` to the explicit limits table, with a
+  comment explaining why.
+- Tests: pin the 5 rpm create limit (rejects on 6th, passes on 5th) and the 10 rpm join limit
+  (rejects on 11th). Mutation-verified: raising create limit to 60 causes the 429-at-6 test to fail.
+
+## Backup BACKUP_REQUIRE_AUTH enforcement flag — item 54 (branch claude/nice-ride-T6yb0, 2026-06-15)
+
+393 worker tests (5 new); `_worker.js` only. `validate.sh` 33/36.
+
+Socratic lens: the same "optional-auth with enforcement flag" pattern used by `PORTAL_REQUIRE_AUTH`
+and `GROUP_REQUIRE_AUTH` was already in the health endpoint's `capabilities` list as `'backup-auth'`,
+but neither `handleBackupUpload` nor `handleBackupDownload` had a `BACKUP_REQUIRE_AUTH` enforcement
+path. The gap: **knowing a userId is enough to download the encrypted backup blob and brute-force
+the passphrase offline** — whereas the portal and group endpoints can be hardened the same way.
+
+- Added `} else if (env.BACKUP_REQUIRE_AUTH === 'true') { return 403 AUTH_REQUIRED }` to both
+  upload and download, after the `hasSig` branch — exactly the pattern of the other two flags.
+- No behavior change when flag is unset (backward-compat preserved).
+- Added comment to download explaining the security model and recommended activation order.
+- **Tests (5)**: flag-on rejects unsigned upload and download; valid signed upload/download succeed
+  with flag on; backward-compat path (flag unset) stays open. Mutation-verified.
+
+## SSRF guard over-blocked fc*/fd* hostnames — item 53 (branch claude/nice-ride-T6yb0, 2026-06-15)
+
+388 worker tests (2 new); `_worker.js` only, no client change. `validate.sh` 33/36.
+
+A Socratic "verify the premise against real input" pass on the operator-misconfiguration /
+graceful-degradation audit confirmed the env-dependent handlers degrade cleanly (`handleTranslate`
+→ 502 `TRANSLATE_FAILED`, `handleAI` → 503 `NO_AI` / 502 `AI_FAILED`, `handleTurn` ships free
+fallbacks, router has a catch-all 500 with request id, `503 KV_NOT_CONFIGURED`). That audit came
+back clean — but the same "test the guard against actual values" lens on `isSSRFBlocked` surfaced
+a real over-blocking bug.
+
+- **Bug**: the IPv6 ULA/link-local prefix checks (`startsWith('fc')`, `startsWith('fd')`,
+  `startsWith('fe80')`, `startsWith('::ffff:')`) ran against **every** host, including bare DNS
+  hostnames. `'fc2.com'.startsWith('fc')` → `true`, so **FC2** (a major Japanese hosting/blog
+  service) and `fdroid.org` were silently blocked from link previews (`handleOGP` returns `{}`).
+- **Fix**: gate the IPv6-literal-only checks behind `host.startsWith('[')`. Verified via the URL
+  parser that IPv6 literals **always** arrive bracketed (unbracketed `::1` throws) and that
+  decimal/hex/octal IPv4 (`2130706433`, `0x7f000001`, `0177.0.0.1`) normalize to dotted-decimal —
+  so the unconditional IPv4 checks still catch them with no regression.
+- **Tests**: added "does NOT over-block fc/fd/fe80 hostnames" (fc2.com, fdroid.org, feeds.*) and a
+  regression guard "still blocks real IPv6 ULA/link-local/loopback literals" (`[::1]`, `[fc00::1]`,
+  `[fd12:3456::1]`, `[fe80::1]`, `[::ffff:10.0.0.1]`). Mutation-verified: removing the gate fails
+  the over-block test.
+
+## CI not enforced on GitHub — finding + activation runbook — item 52 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+638 tests; docs-only (the actionable fixes — push workflows, merge to main — require
+permissions/PR I don't have).
+
+A Socratic "process" audit verified the assumption every prior item rests on — that the test
+suite gates merges — and found it **false**:
+
+1. The default branch (`main`) root contains **only `breeze.zip`** — no source — so
+   `actions/checkout` sees no code and CI cannot run there (the Phase 0 blocker).
+2. The unpacked source + 638 tests + `src/crypto/` live on the working branch, **not merged**.
+3. `.github/workflows/` is `.gitignore`d on every branch because the automation account lacks
+   GitHub's `workflows` scope, so the CI config exists only in the ephemeral working tree.
+
+Net: `npm test` / `validate.sh` / syntax / zip-build do **not** run on GitHub; all the
+hardening from items 26–51 is locally green but **ungated**, and the CI config itself isn't
+version-controlled.
+
+- **`docs/CI-SETUP.md` (new)**: records the finding, **preserves the canonical `ci.yml` in
+  version control** (it was otherwise only inside the gitignored tree / `breeze.zip`), and
+  gives the maintainer a 3-step activation runbook (merge source to `main`; add the workflow
+  from a `workflows`-scoped account; verify via a no-op PR). Plus Node-version and
+  first-`<script>`-extraction caveats.
+- The branch is merge-ready: 638 tests green, `validate.sh` 33/36.
+
+## Flaky pow.test.js de-flaked (test-integrity) — item 51 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+638 tests; test-only, no production change. Three consecutive full-suite runs now green.
+
+A Socratic "new perspective" pass first audited the cryptographic core (`src/crypto/`) — `group.js`
+(37 tests: forward secrecy, epoch revocation, key-commitment, two-layer signature stripping/
+tampering, legacy fallback) and `franking.js` (9 tests: binding, hiding, forged/tampered
+opening+commitment) are genuinely well-covered, confirmed non-vacuous by mutation-testing the
+worker's X3DH and franking guards. That left the recurring footnote: `pow.test.js` intermittently
+timed out at 30s under parallel load — and an intermittently-red test corrodes trust in the whole
+suite (the foundation item 50 was about).
+
+- **Root cause**: a difficulty-16 solve is ~65k awaited `subtle.digest` calls — the suite's
+  heaviest op — and the file did it twice (the shared token *and* a separate solve in the clamp
+  test). Under CPU contention the 30s budget was marginal.
+- **Fix (test-only — `pow.js` is browser-gated)**: solve once. `getToken()` now requests
+  difficulty 0, which the module clamps up to the 16 minimum, so the single shared token also
+  serves as the clamp test's evidence (its `.difficulty` is 16). Redundant second solve removed;
+  solve-dependent timeouts raised 30s→60s for margin.
+- **Result**: ~halved the suite's heaviest work; 3× full-run green. The "pow occasionally times
+  out" caveat is retired from the docs.
+
+## PoW anti-spam floor + challenge-bound now have negative tests — item 50 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+638 tests (+2); test-only, no production change.
+
+A Socratic "new perspective" turned the lens on the test suite itself — the foundation every
+prior item leaned on. Mutation-testing the pre-existing security guards confirmed the X3DH
+signed-prekey check (MITM protection) and the franking HMAC binding are genuinely tested
+(neutralizing each fails its test). But the alias PoW guard had a coverage hole: of its three
+conditions (`difficulty < 16 || challenge.length > 512 || !challenge.includes(pub)`), only the
+`includes(pub)` branch had a negative test. The **difficulty-16 anti-spam floor** — the core
+cost of registering an alias — was untested, so a regression weakening it (cheap alias spam /
+squatting) would pass the whole suite.
+
+- **Tests (+2)**: a validly-solved but too-easy (difficulty 8) PoW is rejected with
+  `POW_INVALID` (isolating the floor branch); an oversized (>512-char) challenge is rejected.
+  Mutation-verified — lowering the floor to `< 4` lets the difficulty-8 solve through and fails
+  the test.
+
+## Cross-protocol signature-replay invariant pinned — item 49 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+636 tests (+3); test-only, no production change.
+
+A Socratic "new perspective" pass: instead of auditing handlers individually, audit the auth
+system as a whole for a cross-cutting invariant the six signed operation families (account-delete,
+alias-delete, backup-upload, backup-download, portal, group×6) all depend on but which no test
+enforced — **a signature minted for one operation must never authorize another**. Enumerating
+every challenge string confirmed the invariant holds: each uses a distinct namespaced prefix,
+backup up/down use different *verbs* (so a captured upload-auth can't be replayed to *read* the
+backup), and group challenges are per-action (`breeze-group-${action}`). That's a genuine
+strength — but a future endpoint reusing a prefix would silently reintroduce cross-protocol
+replay with nothing to catch it.
+
+- **Tests (+3)**: pin the invariant on the highest-impact pairs — a backup-upload sig is rejected
+  by backup-download (no write-auth→read replay); a portal sig is rejected by account-delete (no
+  billing-auth→delete replay, and nothing is deleted); a group-rename sig is rejected by
+  group-delete (no rename-auth→delete replay, and the group survives). Mutation-verified
+  (colliding the download challenge with upload makes the upload sig replay through, failing the
+  test).
+
+## Relay queues bounded by bytes, not just count — item 48 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+633 tests (+3); server-side only, normal sends unaffected.
+
+The 1:1 inbox and the sealed-sender queue were capped at 100 messages but **not by total
+bytes**. Payloads/envelopes can be up to 256KB, so 100 of them ≈ 25.6MB — past Cloudflare
+KV's **25MB value limit**. Once a queue grew that large, every `kvPut` failed (→ `STORE_FAILED`
+since item 27), **wedging the queue**: an offline recipient with a near-full queue received
+nothing new until they polled, and senders just got 500s.
+
+- **Fix**: new `capQueueBytes(items, sizeOf, maxBytes=16MB)` helper, applied to both queues
+  after the count cap. It evicts oldest-first (FIFO) until the approximate serialized size is
+  under a 16MB budget (wide headroom below the 25MB KV cap), always keeping the newest
+  just-appended message — so a normal send is never blocked; a best-effort relay drops the
+  oldest undelivered instead. O(n), serializes once (size approximated from the dominant
+  payload/envelope field + per-message overhead).
+- **Tests (+3)**: evicts oldest until under budget keeping newest; never drops the sole/newest
+  item even if it alone exceeds budget; leaves an under-budget queue untouched. (Unit-tested on
+  the exported helper with a tiny budget to avoid 16MB test fixtures.)
+
+## Open-redirect in Stripe checkout/portal URLs fixed — item 47 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+630 tests (+2); no behavior change for legitimate single-origin requests.
+
+`handleAccountPurchase` and `handlePortal` built Stripe `success_url`/`cancel_url`/`return_url`
+from `request.headers.get('Origin') || Referer`. The `Origin` header is forgeable by a
+non-browser caller, so an attacker could craft a checkout/portal session whose post-flow
+redirect points at their own domain — the victim completes the trusted `checkout.stripe.com`
+flow and is then bounced to `attacker.com/?billing=account-success`, a credential-harvesting
+phishing page riding the Stripe trust. Stripe does not restrict redirect domains by default.
+
+- **Fix**: derive the redirect origin from `new URL(request.url).origin` — the worker's own
+  served origin — instead of the client-supplied header. Breeze serves the app and the worker
+  from the same origin, so legitimate redirects are unchanged; only forged Origins are
+  neutralized. Applied to both billing handlers.
+- **Tests (+2)**: a request with `Origin: https://attacker.example` produces redirect URLs on
+  the worker's own origin (`breeze.test`) and never `attacker.example` — for both checkout and
+  portal. Mutation-verified (reintroducing the Origin-header source fails the test).
+
+## Complete the STORE_FAILED sweep — franking commit + push subscribe — item 46 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+628 tests (+2); no wire change for the success path.
+
+A fresh sweep for unchecked `kvPut`/`kvDel` (after items 27/33/34/35) confirmed the rest are
+intentionally best-effort (ephemeral signal relay, poll/cleanup, presence heartbeat, caches,
+the process-then-mark webhook dedup) — but two still returned `{ok:true}` while a silent write
+failure broke a real guarantee:
+
+- **`handleAbuseRecord`** (franking commitment): a dropped `frank:${frankId}` write left the
+  sender believing franking was recorded, but a later `handleAbuseReport` would `404`
+  (no commitment) — the message silently became unreportable. (Item 35 had fixed the *report*
+  write but not the *commit* write.) Now returns `500 STORE_FAILED`.
+- **`handlePushSubscribe`**: returned `{ok:true, devices:N}` even when the `push:${userId}`
+  write failed, so the client believed push was registered and silently received none. Now
+  returns `500 STORE_FAILED`.
+- **Tests (+2)**: franking commit write failure → 500; push subscribe write failure → 500.
+
+## Group moderation caller authentication — optional Ed25519 + enforcement flag — item 45 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+626 tests (+4); additive, backward-compatible by default.
+
+Socratic audit of the group moderation endpoints: kick / admin / transfer / rename / leave /
+delete all authorize by comparing a **client-supplied** id (`adminId`/`memberId`) against
+`group.creatorId`/`group.admins` — but `creatorId` is **publicly readable via `/api/group/info`**.
+With no caller signature, any group member (or anyone holding the invite token) could read
+`creatorId`, claim it, and kick members, self-promote, transfer ownership to themselves, rename,
+or delete the group. Unlike message content, these are server-side state changes with no
+client-side crypto recourse, so the E2E model does not cover them — a genuine privilege
+escalation / group-takeover.
+
+- **Fix**: new `checkGroupAuth` helper wired into all six mutation endpoints — optional
+  `{ts, sig}` (Ed25519 over `breeze-group-${action}:${token}:${actorId}:${ts}`, verified
+  against the actor's registered `edIdentityKey`, ±5min). Verified when supplied (forgeries
+  rejected); required when `GROUP_REQUIRE_AUTH` is set — flip that on once clients sign. Default
+  (no sig + flag unset) preserves the legacy flow so current clients keep working until updated
+  (same staged-rollout pattern as the portal fix, item 42). Advertised as `group-auth` in
+  health capabilities.
+- **Tests (+4)**: legacy unauthenticated kick works by default; flag-on rejects unauthenticated
+  kick/transfer/delete with `AUTH_REQUIRED` (and mutates nothing); valid sig → 200, tampered →
+  `SIG_INVALID`; partial auth → `PARTIAL_AUTH`. Mutation-verified (bypassing the sig check fails
+  the tampered-sig test).
+
+## Stripe webhook body-size DoS guard + endpoint-count doc fix — item 44 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+622 tests (+1); no wire change for legitimate traffic.
+
+Socratic trace of the request path: `/api/webhook` is dispatched at the top of `fetch`
+(before JSON parsing, to get the raw body for Stripe signature verification) — which means
+it runs **before** the global `MAX_BODY_BYTES` guard. `handleWebhook` then did
+`await request.text()` with no size limit of its own, so an attacker could POST an
+arbitrarily large body and force the worker to buffer it and run HMAC-SHA256 over the whole
+thing before the signature check rejected it — a resource-exhaustion vector unique to this
+unguarded path.
+
+- **Fix**: `handleWebhook` now caps the body itself — `Content-Length > MAX_BODY_BYTES` →
+  413 (fast path), and `body.length > MAX_BODY_BYTES` → 413 after reading (Content-Length can
+  be omitted/spoofed). Stripe events are far under 512KB, so legitimate webhooks are
+  unaffected; the size check runs ahead of signature verification.
+- **Doc accuracy**: the served endpoint count is 43 (41 switch cases + health + webhook). The
+  file header said "32 API endpoints" and `/api/health` reported `endpoints: 42` — both
+  corrected to 43.
+- **Tests (+1)**: a 600KB webhook body → 413 (before the invalid signature's 400).
+
+## Rate-limit Retry-After correctness + honest "dual layer" comment — item 43 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+621 tests (+1); no wire change.
+
+Socratic read of the rate limiter surfaced two stated-vs-actual gaps:
+
+- **`retryAfter` could be 0**: `60 - (Date.now()/1000 % 60) | 0` truncates, so near a minute
+  boundary it yields `0` — the JSON body then said `retryAfter:0` ("retry now", while the
+  bucket is still full for up to ~1s) while the header said `String(0 || 60)` = `60`. Body and
+  header disagreed and the body was wrong. Fixed to `Math.max(1, Math.ceil(60 - (Date.now()/1000) % 60))`
+  (range [1,60], never 0) with the header using the same value, so the two always agree.
+- **Comment overclaimed "per-IP + per-userId (dual layer)"**: the bucket key is
+  `${ip}:${path}:${minute}` — there is no per-userId layer. Corrected the comment to describe
+  what the code does (single per-IP/path/minute, in-memory per-isolate) and noted that a true
+  cross-isolate per-user limit needs a Durable Object (deferred); the 'unknown'-IP tighter cap
+  (item 31) is also documented there.
+- **Tests (+1)**: `retryAfter` is in [1,60] and the body value equals the `Retry-After` header
+  (no 0-vs-60 split).
+
+## Billing portal IDOR/PII exposure — optional Ed25519 auth + enforcement flag — item 42 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+620 tests (+5); additive, backward-compatible by default.
+
+Socratic audit of `handlePortal`: it took only `{userId}`, looked up `slots:${userId}.customerId`,
+and returned a Stripe **billing-portal session URL** — a bearer link exposing the customer's
+invoices (name/email/address/card last4) and allowing subscription cancellation — with **no
+proof the caller owns the account**. Since userId is publicly discoverable (alias lookup /
+being a contact), anyone who knew a paying user's userId could mint their billing-portal link.
+`handleAccountDelete`/`handleBackupUpload`/`handleAliasDelete` all require Ed25519 ownership
+proof; `handlePortal` did not.
+
+- **Fix (item-26 pattern + enforcement flag)**: `handlePortal` now accepts optional `{ts, sig}`
+  (Ed25519 over `breeze-portal:${userId}:${ts}`, verified against the user's registered
+  `edIdentityKey`, ±5min). When supplied it's verified and forgeries are rejected; when absent
+  it's allowed **only if `PORTAL_REQUIRE_AUTH` is unset** — set that env flag (once clients send
+  the signature) to require auth outright. Default path is byte-for-byte unchanged, so the
+  current client's portal button keeps working until updated (mandatory auth needs the
+  browser-gated client change). Advertised as `portal-auth` in health capabilities.
+- **Tests (+5)**: legacy unauthenticated works by default; flag on + no sig → `AUTH_REQUIRED`;
+  valid sig → 200, tampered → `SIG_INVALID`; partial auth → `PARTIAL_AUTH`, stale ts →
+  `INVALID_TIMESTAMP`; signed but no identity key → `NO_IDENTITY_KEY`. Mutation-verified
+  (bypassing the sig check fails the tampered-sig test).
+
+## Same-millisecond message loss on /msg/poll fixed server-side — item 41 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+615 tests (+2); server-side only, backward-compatible (no client change required).
+
+The implementation plan documented an unfixed bug: the 1:1 poll cursor uses `m.ts > lastTs`,
+so a second message that stores with the *same* millisecond ts as an already-delivered one
+is dropped forever. Loss path: client polls up to `lastTs=T` → a second message stores with
+`ts=T` → next poll's `m.ts > T` excludes it → the 10s cleanup later purges it undelivered.
+The plan's proposed fix required a client cursor change (msgId-exclusive); this lands a
+**fully server-side** fix instead.
+
+- **Fix**: `handleMsgSend` now guarantees strictly-increasing per-inbox timestamps — if an
+  incoming message's ts is `<=` the last stored message's ts, it's bumped to `last + 1`.
+  Appends are sequential so the last element always holds the max ts; the `m.ts > lastTs`
+  cursor becomes lossless with no client change. Display order is preserved, sub-ms drift is
+  invisible, and `msg.id` remains the dedup key so a bumped ts never causes a re-render.
+- **Scope**: only the 1:1 path uses a ts cursor; sealed-sender clears via ACK (item 40), so
+  no change needed there.
+- **Tests (+2)**: a message sharing a ms with an already-polled one is still delivered;
+  three same-ts sends store as strictly-increasing `[T, T+1, T+2]`. Mutation-verified
+  (disabling the bump fails both).
+
+## Sealed-sender ACK no longer drops messages sent in the poll→ack window — item 40 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+613 tests (+4); server-side only, backward-compatible (no client change required).
+
+Socratic read of the sealed-sender flow (the path CLAUDE.md calls "reliable") against
+`handleSealedAck`: the ACK took only `{id}` and blind-deleted the entire `sealed:${id}`
+queue. Trace: client polls `[m1,m2]` (grace TTL set) → a sender's `handleSealedSend`
+appends `m3` → client ACKs → `kvDel` wipes the whole key, so **m3 is destroyed
+undelivered**. Any envelope arriving in the poll→ack window was silently lost.
+
+- **Fix (fully server-side)**: `handleSealedPoll` records a high-water mark
+  (`sealed:${id}:hwm` = max ts of the returned batch, 5-min TTL). `handleSealedAck` keeps
+  any envelope with `ts > hwm` (arrived after the poll) and clears the rest — selective
+  delete instead of blind delete. No high-water mark (client never polled / pre-hwm ACK) →
+  falls back to the original full delete, so existing clients are unaffected and benefit
+  immediately without any change.
+- **KV budget**: the hwm write happens only when a poll actually returns messages; idle
+  polls still do zero KV writes.
+- **Tests (+4)**: envelope sent in the poll→ack window survives (`kept:1`); fully-polled
+  queue deletes (`kept:0`, hwm cleaned up); ack with no prior poll still full-deletes
+  (backward compat); selective-delete KV failure → `ACK_FAILED` 500. Mutation-verified
+  (forcing the blind-delete path fails the window-preservation test).
+
+## Web Push dead-subscription cleanup removes ALL stale subs per cycle — item 39 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+609 tests (+3); additive, no wire change.
+
+Socratic trace of `sendPushToUser`'s "Remove expired subscriptions" comment (plural) against
+its code revealed it removed only **one** when several expired together. The removal ran
+*inside* the per-sub loop as `subs.filter(s => s.endpoint !== sub.endpoint)` recomputed from
+the **original** array each time, so for two stale subs `[A,B]`: the A-pass wrote `[B]`, then
+the B-pass wrote `subs−B = [A]` — resurrecting A. Net: one stale sub lingered every cycle,
+wasting a failed delivery until eventually cleaned.
+
+- **Fix**: accumulate stale endpoints in a `Set` during the loop and prune them in ONE
+  cumulative write after it (`subs.filter(s => !stale.has(s.endpoint))`, or `kvDel` when none
+  remain). Correct for any number of dead subs, and one KV write instead of N.
+- **Also**: treat `404 Not Found` as dead alongside `410 Gone` (standard Web Push cleanup
+  semantics; both mean the subscription no longer exists).
+- **Test seam**: `sendPushToUser` is now exported for unit testing.
+- **Tests (+3)**: both subs 410 → key deleted (no resurrection); one dead + one healthy →
+  only the dead removed; single 404 → removed. Mutation-verified (the old in-loop filter
+  fails the "removes BOTH" test). Tests use real VAPID + ECDH push keys so encryption and
+  delivery reach `fetch`.
+
+## Account deletion erases the cust:{customerId} reverse mapping — item 38 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+606 tests (+2); additive, no wire change for existing clients.
+
+A Socratic re-check of item 36's claim that `handleAccountDelete` "deletes all relevant
+user data": enumerating every userId-keyed KV namespace against the handler showed one miss.
+The handler erases `inbox/sealed/prekey/otp/ktlog/push/backup/presence/slots` (+ optional
+alias/groups), but never the **reverse** `cust:{customerId} → userId` mapping — because it
+deleted `slots:${userId}` without first reading the `customerId` inside it.
+
+- **Gap**: the Stripe payment-identity → userId linkage survived account deletion (residual
+  user-linked data, contra item 1's GDPR Art. 17 intent), and a later subscription webhook
+  lacking `metadata.userId` could resolve the deleted account through it.
+- **Fix**: read `slots:${userId}` before deletion; if it carries a `customerId`, also
+  `kvDel(cust:${customerId})` and report `'cust'` in the `erased` array. Only this account's
+  own mapping is touched (the customerId comes from its own billing record). Documented
+  caveat: Breeze-created subscriptions also carry userId in their metadata, so users should
+  still cancel via the billing portal before deleting — this only removes the relay linkage.
+- **Tests (+2)**: a billing record with a customerId → `cust:` erased and `'cust'` in
+  `erased`; a free-tier account (no customerId) → `'cust'` absent and an unrelated `cust:`
+  mapping left untouched. Mutation-verified (disabling the `cust` delete fails the test).
+
+## Regression test for Stripe webhook replay window (Socratic coverage audit) — item 37 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+604 tests (+3); test-only change, no production code modified.
+
+This round's Socratic pass interrogated four security-critical claims and found the *code*
+sound in every case (Stripe constant-time double-HMAC, disappearing-message purge, OGP
+redirect re-validation, CORS origin reflection — all verified accurate, no fix manufactured).
+The real gap was in *coverage*: `verifyStripeSignature` documents a "5 min tolerance" replay
+window (line 897), but the only test exercising it used `t=1,v1=deadbeef` — which fails on a
+bad signature too, so it could not distinguish a freshness rejection from a signature
+rejection. The replay-window guard had **zero isolated regression coverage**; deleting it
+would have left the whole suite green.
+
+- **Tests (+3)**: a validly-signed webhook with a 10-min-stale timestamp → 400 (no billing
+  side effect); a validly-signed webhook with a far-future timestamp → 400; the *same* event
+  signed with a fresh timestamp → 200 (control isolating the timestamp as the only variable).
+- **Mutation-verified**: with the `> 300` freshness check disabled, the two rejection tests
+  fail and the control still passes — proving they pin the guard, not an incidental path.
+
+## Abuse-report webhook: in-memory dedup closes same-isolate race + honest comment — item 36 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+601 tests (+1); no breaking wire change.
+
+A Socratic follow-up to item 35: item 35's comment claimed the check-before-fire made the
+"idempotent on frankId" guarantee *true* — but KV has no atomic compare-and-swap, so two
+concurrent reports can both read `report:${frankId}` as absent (KV is eventually
+consistent) and both fire the webhook. The item-35 comment overclaimed.
+
+- **Fix (same-isolate race)**: added a synchronous `globalThis._frankWebhookFired`
+  check-and-set — the same in-memory-dedup pattern already used by `_msgDedup`/`_sealedDedup`.
+  With no `await` between `.has()` and `.set()`, concurrent retries hitting one warm isolate
+  (the common duplicate source) are serialized by the event loop and only the first fires.
+- **Honest comment**: the cross-isolate race remains (KV-bound, fixable only with a Durable
+  Object — out of scope). The comment now states exactly what the code guarantees and notes
+  the payload carries `frankId` for operator-side dedup, rather than claiming exactly-once.
+- **Tests (+1)**: two concurrent reports with simulated KV read-lag (both see the record as
+  absent) fire the webhook exactly once — proving the in-memory layer, not the KV check, is
+  what suppresses the duplicate.
+
+> Method note: the Explore agent proposed a "fire-then-check `at === Date.now()`" fix —
+> Socratically rejected (the timestamp always advances between write and readback, so it
+> would never match and wouldn't fix the race). The agent also flagged a non-issue elsewhere;
+> `handleAccountPurchase` (plan whitelist) and `handlePreKeyFetchBatch` (cap 10) were
+> independently re-verified as already-correct.
+
+## Abuse-report webhook idempotency (Socratic audit) — item 35 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+600 tests (+2); no breaking wire change.
+
+Found by interrogating a code comment rather than trusting it: `handleAbuseReport`
+documented the report as *"idempotent on frankId"*, but only the KV write was idempotent —
+the moderation webhook fired on **every** call.
+
+- **Webhook amplification**: the franking opening key `Kf` is delivered to the recipient
+  inside the E2E payload, so a recipient (or a client that retries) can re-POST the same
+  valid `(frankId, message, opening)` tuple. Each repeat re-fired the operator's
+  `ABUSE_WEBHOOK_URL` (up to the 10/min rate limit), flooding the moderation queue with
+  duplicate notifications of a single report.
+- **Fix**: check `report:${frankId}` before firing. The webhook (and report stamp) now fire
+  only on the first report; repeats return `{ verified: true, duplicate: true }` with no new
+  webhook. The documented idempotency now holds for the webhook, not just the KV write.
+- **Bonus**: the previously-unchecked `report:${frankId}` write now returns
+  `500 STORE_FAILED` on KV failure (the one instance missed by the item 33/34 sweep).
+- **Tests (+2)**: three identical reports fire the webhook exactly once (2nd/3rd flagged
+  `duplicate:true`); report write failure returns `STORE_FAILED`.
+
+> Note: this round also Socratically refuted two proposed "client-controlled timestamp"
+> findings (presence `p.at`, signal `ts`) — both are set server-side with `Date.now()`,
+> so the client never controls them and no validation was warranted.
+
+## kvDel failure propagation: group delete, alias delete, drop one-time read — item 34 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+598 tests (+4); no breaking wire change.
+
+- **`handleGroupDelete`**: unchecked `kvDel` — if delete failed, group persisted but
+  client believed it was gone. Now returns `500 STORE_FAILED` on kvDel failure.
+- **`handleAliasDelete`**: unchecked `kvDel` — if delete failed, the alias was never freed
+  but `{ ok: true, removed: true }` was returned. Now returns `500 STORE_FAILED`.
+- **`handleDropRead`**: changed to **delete-before-return** (same pattern as OTP item 28).
+  Previously read → delete → return: if delete failed, the ciphertext was leaked to the
+  caller AND the drop remained in KV (violating one-time semantics). Now delete → return:
+  if delete fails, caller gets `500 DEL_FAILED` and can retry; the drop is preserved in KV.
+  On success, ciphertext is returned only after the delete confirms.
+- **Tests (+4)**: group delete 500 on kvDel throw (group still in KV); drop read 500 on
+  kvDel throw (drop still in KV, ciphertext not leaked); drop read success (delete-first
+  confirmed); alias delete 500 on kvDel throw (alias still in KV).
+
+## Group mutation + prekey + backup STORE_FAILED propagation — item 33 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+594 tests (+8); no breaking wire change.
+
+- **All group state mutations** (`handleGroupCreate`, `handleGroupJoin`, `handleGroupKick`,
+  `handleGroupAdmin`, `handleGroupTransfer`, `handleGroupRename`, `handleGroupLeave`) now
+  check the return value of their terminal `kvPut`. On failure the endpoint returns
+  `500 STORE_FAILED` instead of silently returning success with the change never persisted.
+  The security-critical cases are **kick** and **leave** — if these fail silently, the
+  kicked/leaving member retains their sender-key epoch access despite the client believing
+  the operation succeeded, violating the post-compromise security guarantee.
+- **`handlePreKeyUpload`**: unchecked `kvPut` at `prekey:${userId}` — if it failed, the
+  user's contact card was never stored, making them unreachable, but they got `{ ok: true }`.
+- **`handleBackupUpload`**: unchecked `kvPut` at `backup:${userId}` — backup silently lost.
+- **`handleAliasSet`**: unchecked `kvPut` at `alias:${clean}` — alias not stored but client
+  showed success.
+- **Tests (+8)**: group create/join/kick/leave/rename/transfer each return 500 on KV throw;
+  prekey upload returns 500 on KV throw; backup upload returns 500 on KV throw.
+
+## Webhook billing KV failure propagation — item 32 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+586 tests (+3); no breaking wire change.
+
+- **`handleWebhook`** previously called `kvPut` for billing state changes
+  (`checkout.session.completed`, `subscription.deleted`, `subscription.updated`) without
+  checking the return value. If Cloudflare KV was temporarily unavailable, the event was
+  still marked as processed (line 839), preventing Stripe from retrying — the user's slot
+  assignment was silently lost.
+- **Fix**: each billing `kvPut` result is now checked. On failure the handler returns
+  `500` immediately (before the "mark processed" write), so Stripe retries the webhook on
+  its normal backoff schedule. The idempotency key is never written on 500, so the retry
+  is correctly re-processed.
+- **Tests (+3)**: KV failure on `checkout.session.completed` → 500 + event not marked;
+  KV failure on `subscription.deleted` → 500 + event not marked; KV failure on
+  `subscription.updated` → 500 + event not marked.
+
+## Drop server-side ID generation + unknown IP rate limit cap — item 31 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+583 tests (+8); no breaking wire change.
+
+- **`handleDropCreate`** now supports **server-side ID generation**: when the client omits
+  `id` from the request body, the server generates a UUID-derived 32-char hex ID
+  (`crypto.randomUUID().replace(/-/g,'')`) and returns it as `{ ok: true, id, ttl }`.
+  This completely eliminates the check-then-set collision race (Cloudflare KV has no atomic
+  CAS, so two concurrent requests with the same client-provided ID could both pass the
+  collision check and overwrite each other). Clients that still provide their own `id`
+  continue to work unchanged.
+- **Response now includes `id`** always (even for client-provided IDs), enabling callers to
+  build the drop URL from the response rather than from state — a cleaner API contract.
+- **STORE_FAILED propagation**: `handleDropCreate` now checks the return value of
+  `kvPut` and returns `500 STORE_FAILED` on failure (consistent with items 27).
+- **Health capability** `'drop-server-id'` advertised.
+- **Unknown IP rate limit cap**: requests with no `CF-Connecting-IP` header (all appear as
+  `'unknown'`) are now capped at `min(path_limit, 5)` rpm — previously they all shared one
+  bucket at the full path limit, so a burst from one non-CF source could fill the shared
+  `unknown` bucket and rate-limit all other non-CF requests on the same endpoint.
+- **Tests (+8)**: server-generated ID is 32-char hex; client-provided ID echoed back;
+  legacy short IDs still accepted; server-generated ID readable after create; STORE_FAILED
+  on KV throw; two concurrent server-generated IDs are always distinct; unknown IP rate-
+  limited after 5 rpm; normal IP not rate-limited until 21st request.
+
+## Online counter minute-boundary fallback — item 30 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+575 tests (+3); no breaking wire change.
+
+- **`handleOnlineCount`** previously returned `0` at the start of each minute (before the
+  first heartbeat arrived in the new window), causing a brief "0 online users" spike in
+  every connected client's presence UI.
+- **Fix**: `_onlineCounter` now tracks a `prev` field (the previous minute's count). At a
+  minute boundary, `handleOnlineCount` returns `prev` as a fallback when the new-minute
+  count is 0. `handlePresence` saves the old count into `prev` on rollover.
+- **Tests (+3)**: minute-boundary returns `prev`; current-minute count wins when non-zero;
+  heartbeat rollover correctly sets `prev` and resets `count` to 1.
+
+## Language code sanitization in handleTranslate — item 29 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+572 tests (+3); no breaking wire change.
+
+- **`handleTranslate`** (`from`/`to` language codes) now strips all non-BCP-47 characters
+  (`[^a-zA-Z0-9-]`) before forwarding to DeepL, LibreTranslate, Google Translate, and
+  MyMemory. Previously only `.slice(0, 10)` was applied, which allowed `\r\n` or control
+  characters to pass through and potentially inject into HTTP headers or URL parameters in
+  downstream APIs. `handleAI` already used this pattern (`replace(/[^a-zA-Z0-9-]/g, '')`
+  at line 2451) — `handleTranslate` is now consistent.
+- **If the sanitized target code is empty** (e.g., all special chars), returns
+  `{ error, code: 'INVALID_LANG' }` 400 rather than forwarding an empty string to providers.
+- **Tests (+3)**: fully-special `to` → `INVALID_LANG`; `zh_CN` (underscore stripped) →
+  proceeds; `from` with `\r\n` embedded → strips cleanly and proceeds.
+
+## OTP delete-before-attach safety — item 28 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+569 tests (+1); no breaking wire change.
+
+- **`handlePreKeyFetch`: delete OTP slot BEFORE attaching it to the response bundle.**
+  Previously the OTP value was stored in `bundle.oneTimePreKey` and then `kvDel` was called.
+  If the delete threw (transient KV error), the OTP was returned to the initiator while the
+  slot remained in KV — a subsequent fetch could return the same OTP to another initiator,
+  causing OTP reuse. Reusing an X3DH OTP means the DH4 component is no longer per-session,
+  degrading forward secrecy for both sessions.
+- **Fix**: `kvDel` is now called first; if it returns `false`, the loop `continue`s to the
+  next slot. The OTP value is only attached after a confirmed delete. `replenishOTP` signals
+  the owner to retry if all deletes failed.
+- **Test (+1)**: injected throwing KV.delete verifies the OTP is withheld and the slot
+  remains intact in KV.
+
+## KV write/delete failure propagation — item 27 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+568 tests (+3); no breaking wire change.
+
+- **`handleMsgSend`**: if `kvPut` returns false (KV quota/transient error), now returns
+  `{ error, code: 'STORE_FAILED' }` 500 instead of `{ok: true}`. Client can retry.
+- **`handleSealedSend`**: same fix — `kvPut` failure → `STORE_FAILED` 500.
+- **`handleSealedAck`**: if `kvDel` returns false, now returns `{ error, code: 'ACK_FAILED' }` 500
+  instead of `{ok: true}`. Previously the client would stop polling the sealed queue believing
+  delivery was confirmed, while the server queue remained and expired silently after 7 days.
+- **Tests (+3)**: one per fixed handler — each injects a throwing KV mock and asserts the
+  correct 500 status code.
+
+## Optional Ed25519 auth for backup upload/download — item 26 (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+565 tests (+9); no breaking wire change.
+
+- **`/api/backup/upload` and `/api/backup/download` now accept optional `{ ts, sig }` fields.**
+  When provided, both are required (`PARTIAL_AUTH` 400 if only one), freshness window ±5 min
+  (`INVALID_TIMESTAMP`), and the Ed25519 signature is verified against the user's registered
+  `edIdentityKey` from the prekey bundle (`SIG_INVALID` 403, `NO_IDENTITY_KEY` 403).
+  When omitted, both endpoints behave exactly as before (backward-compat — no wire change).
+- **Response now includes `authenticated: bool`** so clients can confirm whether the operation
+  was authenticated and surface a "protected" indicator in the UI.
+- **`backup-auth` added to `/api/health` capabilities** for client feature-detection during
+  staged rollout.
+- **Tests (+9)**: authenticated upload/download succeed; tampered sig rejected; no identity key
+  on upload/download with sig; partial auth (ts-only, sig-only) rejected; stale ts rejected;
+  unauthenticated path still works.
+
+## Complete error `code` field coverage — 0 bare errors remaining (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+304 tests (0 net new — two existing tests tightened); no breaking wire change.
+
+Every `json({ error: ... })` call in `_worker.js` now includes a `code` field.
+Zero bare errors remain. New codes added:
+- Group handlers: `MISSING_FIELDS`, `INVALID_NAME`, `GROUP_FULL`
+- Push subscribe: `INVALID_ENDPOINT`, `UNTRUSTED_ENDPOINT`
+- Franking: `MISSING_FIELDS`, `INVALID_FIELD`
+- Alias set/delete, prekey upload, sealed send: `MISSING_FIELDS`, `INVALID_ALIAS`
+- Backup, drop: `MISSING_FIELDS`, `INVALID_ID`, `PAYLOAD_TOO_LARGE`
+- Translate, AI: `MISSING_FIELDS`, `PAYLOAD_TOO_LARGE`, `INVALID_FIELD`, `INVALID_ACTION`
+- Generic request guard: `FIELD_TOO_LARGE`, `INVALID_FIELD`, `PAYLOAD_TOO_LARGE`
+- Server-level: `KV_NOT_CONFIGURED`, `PRICE_NOT_CONFIGURED`, `SERVER_ERROR`
+
+## OTP type guard at upload — prevent null entries from consuming prekey slots (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+304 tests (+2); no breaking wire change.
+
+- **OTP non-string entries are now silently skipped at upload** — `JSON.stringify(null)` produces
+  the 4-char string `'null'`, which passed the size guard and was stored. On fetch, `safeJsonParse('null')`
+  returns `null`, which fails the `parsed !== null` guard — the slot is consumed (deleted) without
+  delivering a key. One null entry in the `oneTimePreKeys` array permanently wasted a prekey slot
+  with no error signal. Added `typeof oneTimePreKeys[i] !== 'string'` guard.
+- **Count reflects the highest valid stored index** — Previously `count = Math.min(array.length, 100)`
+  counted all entries including non-strings. Now `count = maxStoredIdx + 1` (only written when at
+  least one key was stored), consistent with how the fetch loop uses count as an upper-bound index.
+- **Tests (+2)**: null/non-string entries skipped and not stored; all-non-string array writes no
+  count key and fetch correctly signals `replenishOTP`.
+
+## Batch presence cache hit + sealed-send dedup key length fix (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+302 tests (+3); no breaking wire change.
+
+- **Batch presence check uses in-memory cache first** — The batch `{ ids: [...], check: true }` path
+  unconditionally read KV for every user ID, costing N KV reads per group presence poll even when all
+  users had heartbeated recently (and their data was already in `_presenceCache`). The single-user check
+  path correctly read the cache first. Now the batch path does the same: cache hit → skip KV, miss →
+  fall through to KV. For a 10-member group polling every 5 s this drops ~120 KV reads/min to ~0 reads/min
+  while the isolate is warm.
+- **Sealed send dedup key now includes envelope length** — Dedup key was `${to}:${envelope.slice(0,32)}`;
+  two envelopes with the same 32-character prefix but different total lengths (distinct messages) would match
+  and the second would be silently dropped as a false duplicate. Key is now
+  `${to}:${envelope.length}:${envelope.slice(0,32)}`, matching the `handleMsgSend` pattern.
+- **Tests (+3)**: batch check serves from in-memory cache even when KV is empty for that user; batch
+  reports stale cached heartbeat as offline; distinct same-prefix envelopes of different lengths both
+  stored (length-keyed dedup regression test).
+
+## Standalone alias delete — release alias without account deletion (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+299 tests (+6); no breaking wire change.
+
+- **`/api/alias/delete`** — Ed25519-authenticated endpoint to release a vanity `@handle`
+  while keeping identity, contacts, messages, and billing record intact. Previously the
+  only way to free an alias was to delete the entire account. Challenge string
+  `breeze-alias-delete:{alias}:{ts}` (distinct from the account-delete challenge) prevents
+  cross-endpoint replay. Ownership double-check: `alias.pub` must equal the requester's
+  `identityKey` from their prekey bundle — no third-party alias squatting. Returns
+  `{ ok, removed }` — idempotent; a missing alias returns `removed: false`, not 404.
+  Rate-limited at 5 req/min. Added `alias-delete` to health capabilities.
+- Endpoint count updated to 43.
+- **Tests (+6)**: valid delete removes KV record; no-op on nonexistent alias; 403 on
+  non-owner pub; 403 on tampered signature; 400 on missing fields; 400 on stale timestamp.
+
+## Abuse report moderation webhook (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+545 tests (+1); no breaking wire change.
+
+- **`ABUSE_WEBHOOK_URL` env var** — when configured, a verified abuse report triggers a
+  non-blocking POST to that URL with `{ type, frankId, messageLen, at }`. The payload
+  contains NO message content — only metadata (frankId + size + timestamp). Previously
+  verified reports sat silently in KV for 90 days with no operator notification, making
+  the abuse system a dead end without a separate dashboard.
+- Fire-and-forget (`catch(() => {})`) — a failed webhook never blocks the reporter.
+- **Test (+1)**: verified report POSTs to the configured webhook URL with correct payload.
+
+## Prekey status endpoint — non-destructive OTP/SPK health check (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+544 tests (+4); no breaking wire change.
+
+- **`/api/prekey/status`** — non-destructive endpoint to check prekey health: returns
+  `{ otpCount, uploadedAt, replenishOTP, replenishSPK }`. Previously the only way to
+  learn `replenishOTP`/`replenishSPK` was through `/api/prekey/fetch`, which consumes an
+  irreversible OTP. This endpoint reads the same KV data without touching OTPs — useful
+  for clients self-auditing after reinstall/IDB loss, or checking state before deciding
+  to replenish. Rate-limited at 20 req/min. Added `prekey-status` to health capabilities.
+- Endpoint count updated to 42.
+- **Tests (+4)**: status does not consume OTP (count same before+after); replenishOTP
+  true when count ≤5; 404 when no prekeys; 400 on missing/invalid userId.
+
+## Batch prekey fetch — one request for N session initiations (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+540 tests (+3); no breaking wire change.
+
+- **`/api/prekey/fetch/batch`** — new endpoint that resolves up to 10 prekey bundles in
+  one round-trip. Useful when joining a group: instead of N serial `/prekey/fetch` calls
+  (each consuming an OTP for that user), one batch call returns `{ results: { userId:
+  bundle | null } }`. OTPs ARE consumed (same as the single-fetch path) — this is a
+  latency optimisation, not an OTP-free path. Deduplicates userIds before processing.
+  Rate-limited at 5 req/min (stricter than single-fetch since each call can consume up
+  to 10 OTPs). Added `prekey-fetch-batch` to health capabilities.
+- **Tests (+3)**: batch resolves multiple bundles + maps misses to null; dedup + 10-cap
+  enforced; 400 on missing/empty/all-invalid userIds.
+
+## Push unsubscribe endpoint + comment/count fixes (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+537 tests (+4); no breaking wire change.
+
+- **`/api/push/unsubscribe`** — new endpoint to explicitly remove a push subscription
+  by endpoint URL. Previously push subscriptions could only be removed by waiting for
+  the 30-day KV TTL, making "disable notifications on this device" impossible without
+  re-registering. Returns `{ ok, removed }` — `removed: 0` when the endpoint wasn't
+  registered (idempotent). Rate-limited at 5 req/min. Added `push-unsubscribe` to
+  health capabilities.
+- **Group full comment fix** — misleading `// Max 50 members` comment corrected to
+  `// Max 100 members` (the enforcement code was already `>= 100`; only the comment
+  was wrong — matches README and UI).
+- **Endpoint count updated** to 40 across `_worker.js`, `CLAUDE.md`, `AGENTS.md`.
+- **Tests (+4)**: removes endpoint + cleans up KV; returns `removed: 0` for unknown
+  endpoint; ok with no subscriptions; 400 on missing fields/invalid userId.
+
+## Key-transparency log public endpoint + OGP HTML cap fix (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+Two robustness improvements. 533 tests (+4).
+
+- **`/api/ktlog/get`** — standalone public endpoint to fetch a user's key-history
+  audit log (`{ log: [{ts,h,c}] }`). Previously the log was only available
+  bundled inside `/api/prekey/fetch`, which irreversibly consumes a one-time prekey.
+  Now any client can audit a peer's identity-key rotation history without side effects.
+  Returns empty log (not 404) for users with no upload history. Rate-limited at 20
+  req/min. Added `ktlog-get` to health capabilities.
+- **OGP HTML read cap enforced per chunk** — the streaming read loop now truncates to
+  32 KB *after each chunk* (`slice(0, 32768)`), so a server that sends one large chunk
+  can no longer buffer beyond the cap. Previously a single oversized chunk would
+  accumulate the full chunk before the loop condition fired.
+- **Tests (+4)**: log empty for new user; log populated after upload; ktlog fetch does
+  not consume OTPs; 400 on missing/invalid userId.
+
+## replenishSPK signal + health capabilities update (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+Two minor but useful server-side improvements. 529 tests (+2).
+
+- **`/api/prekey/fetch` now returns `replenishSPK: true`** when the stored bundle's
+  `uploadedAt` is older than 25 days (KV TTL is 30 days). Symmetric with the existing
+  `replenishOTP` signal — gives clients a 5-day window to re-upload their signed
+  pre-key before becoming unreachable. No breaking change (clients that don't check
+  this field are unaffected).
+- **`/api/health` capabilities** now includes `batch-alias` and `group-caps`, so
+  clients can feature-detect these without probing each endpoint.
+- **Tests (+2)**: stale bundle (>25 days) triggers `replenishSPK`; fresh bundle does not.
+
+## Batch alias resolution — one request for N contacts (branch claude/nice-ride-T6yb0, 2026-06-13)
+
+`/api/alias/get` now accepts a `{ aliases: [...] }` batch payload in addition to
+the existing `{ alias: string }` single-alias form. Resolves up to 50 aliases in
+one round-trip instead of N, eliminating the major KV-read amplification that
+occurred when a client loaded its full contact list. 527 tests (+2).
+
+- **Batch path**: accepts `aliases` array, deduplicates after lowercase+sanitize
+  (`[^a-z0-9_]` stripped), caps at 50, returns `{ results: { alias: data|null } }`.
+  Missing aliases map to `null` (caller can distinguish resolved vs. not-found).
+  Non-string entries are silently skipped.
+- **Single-alias path unchanged** — existing clients unaffected.
+- **Tests (+2)**: batch resolves multiple aliases and maps misses to `null`;
+  dedup + sanitize + 50-cap enforced; both test via the public `SELF.fetch` path.
+
+## Group rejoin refreshes member fields (caps staleness fix) (branch claude/nice-ride-T6yb0, 2026-06-10)
+
+Follow-on to the group capability snapshot: the `handleGroupJoin` "already a
+member" branch was a pure no-op, so the N3 caps recorded at first join stayed
+frozen — a client that upgraded (gaining group-v5/franking) could never raise
+the group floor without leaving and rejoining. 525 tests (+2); no endpoint change.
+
+- The already-member branch now refreshes the member's mutable fields
+  (`pub`/`name`/`caps`) from the rejoin request. Clients already re-call join on
+  reconnect, so a capability upgrade propagates naturally. Persists only when a
+  field actually changed (no wasteful KV write on every reconnect), and a legacy
+  rejoin that advertises no caps does **not** erase a previously-recorded set.
+  Response gains `refreshed` (bool) and now includes `epoch`.
+- **Tests (+2)**: an upgraded rejoin raises the negotiateGroup floor end-to-end;
+  a legacy (capless) rejoin preserves the existing capability set.
+
+## Group member capability negotiation — unblocks negotiate.js (branch claude/nice-ride-T6yb0, 2026-06-10)
+
+Completed the server half of N3 capability negotiation for groups. `negotiate.js`
+`negotiateGroup(localCaps, memberCapsList)` computes the group capability floor
+(a feature is enabled only when *every* member supports it) — but it was
+effectively dead code: the relay never surfaced member capabilities, so a client
+could only obtain them with one presence check per member. 523 tests (+3); no
+endpoint change (enhancement to create/join/info).
+
+- **`/api/group/create` and `/api/group/join` accept an optional `caps` array**,
+  sanitized identically to the presence/bundle path (`sanitizeCaps` — ≤20
+  strings, ≤32 chars, non-strings dropped), stored on the member record. Omitted
+  for legacy clients.
+- **`/api/group/info` surfaces them** (it already returns the member array
+  wholesale), so a client computes the floor from a single call instead of N
+  presence checks.
+- **Tests (+3)**: caps stored on create+join and surfaced via info; the surfaced
+  caps drive `negotiateGroup` end-to-end (group-v5 floor holds when all support
+  it, franking floor drops when one member lacks it); non-string/oversized caps
+  sanitized + field omitted for legacy clients.
+
+## Account deletion now cleans up group memberships (branch claude/nice-ride-T6yb0, 2026-06-10)
+
+Closed a residual-data hole in the account-deletion feature itself: there is no
+reverse index (user → groups), so a deleted account's id/pub/name lingered in
+every group it had joined for the 30-day group TTL — exactly the residual data
+the rest of `/api/account/delete` erases. 508 tests (+2); no endpoint change
+(enhancement to the existing handler).
+
+- **`/api/account/delete` accepts an optional `groups: [token,…]`** (or
+  `[{token},…]`, cap 50). The request is already Ed25519-authenticated over
+  `userId`, so removing *that* user from the groups it names is legitimate
+  self-removal. Per token: **creator** → the whole group is deleted (a
+  creator-less group is unmoderatable; the survival path is
+  `/api/group/transfer` *before* deletion); **member** → removed + epoch bump
+  (PCS — the departed account can't decrypt new traffic), mirroring
+  `handleGroupLeave`. Tokens where the account isn't a member are ignored.
+  Response gains `groupsLeft` / `groupsDeleted` counts.
+- **Tests (+2)**: member-group removal + epoch bump alongside created-group
+  deletion; non-membership tokens ignored + 50-cap doesn't throw.
+
+## Group rename — lifecycle CRUD completion (branch claude/nice-ride-T6yb0, 2026-06-10)
+
+The group name was frozen at `create()` with no way to edit it
+(create/join/info/kick/admin/transfer/leave/delete all existed; "update
+metadata" was the last missing CRUD verb). 37 → 38 API endpoints, 502 → 506 tests.
+
+- **`/api/group/rename` — creator OR any admin renames the group**: same
+  authorization set as kick. Sanitized identically to `create()` (`sanitizeString`,
+  ≤50 chars) so a relay-side push title can't be inflated past the RFC 8030 limit;
+  rejects a name that sanitizes to empty (`INVALID_NAME`), caps oversized names at
+  50 chars rather than rejecting. No epoch bump — the name is plaintext relay
+  metadata (already in info responses + push titles), not key material.
+- **Tests (+4)**: creator rename reflected in info, admin-can/member-cannot,
+  empty-after-sanitization rejected + 50-char cap, missing-group 404.
+
+## Group ownership transfer (branch claude/nice-ride-T6yb0, 2026-06-10)
+
+The companion to multi-admin: `creatorId` was immutable, so if the creator
+deleted their account (now possible via `/api/account/delete`) or went dark,
+the creator-only operations (group delete, admin management) became permanently
+impossible. 36 → 37 API endpoints, 496 → 502 tests.
+
+- **`/api/group/transfer` — creator hands ownership to an existing member**:
+  the `creator*` fields (creatorId/creatorPub/creatorName) follow the new owner,
+  resolved from that member's record so `handleGroupInfo` and the 1:1 sender-key
+  distribution path get the right pub/name. The incoming creator's authority
+  becomes implicit (dropped from `admins`); the **outgoing** creator is retained
+  as an admin so they keep moderation rights. No epoch bump — ownership is an
+  authorization label, not key material (every member's sender key is unchanged).
+  Guards: current-creator-only, target-must-be-member, no-op-on-self.
+- **Tests (+6)**: transfer happy path (creator* fields follow, admins rebuilt),
+  post-transfer authorization flip (new creator can delete, old cannot),
+  transfer-to-existing-admin idempotency, non-creator rejected, non-member
+  rejected, self-transfer no-op. `docs/PRODUCT-ANALYSIS.md` updated (item 7 → done).
+
+## Multi-admin group management (branch claude/nice-ride-T6yb0, 2026-06-10)
+
+Completed a feature that was already half-built: the `group.admins` array was
+*maintained* on member removal (kick/leave filtered departing members out of it)
+but nothing ever **populated** it and `kick` ignored it — so the creator was a
+single point of failure for moderation. 35 → 36 API endpoints, 486 → 496 tests.
+
+- **`/api/group/admin` — creator-only promote/demote** (`action: 'promote'|'demote'`):
+  adds/removes a member to/from `group.admins`. Idempotent (re-promote/re-demote is a
+  no-op). Guards: only the creator manages admins (no escalation chains — the privilege
+  graph stays a flat creator→admins tree); the creator can't be promoted (their
+  authority is implicit and never stored in `admins`); the target must be a member. No
+  epoch bump — admin status is an authorization label, not key material.
+- **`handleGroupKick` now honors `admins`**: the creator OR any promoted admin may kick.
+  A regular admin can kick a regular member but **cannot** kick a fellow admin (only the
+  creator can — prevents admin-vs-admin removal wars); nobody can kick the creator. Was
+  previously creator-only.
+- **`handleGroupInfo` now returns `creatorId` + `admins`** so clients can render
+  moderation badges and gate the kick/admin UI (the server still re-authorizes every
+  action server-side; the response is advisory only).
+- **Tests (+10)**: promote/demote happy paths + idempotency, non-creator escalation
+  blocked, creator-as-target rejected, non-member rejected, unknown action rejected,
+  admin-can-kick-member, admin-cannot-kick-admin (creator can), leave strips admin
+  status. `docs/PRODUCT-ANALYSIS.md` updated (item 6 → done).
+
+## Product gap analysis + missing-feature implementation (branch claude/nice-ride-T6yb0, 2026-06-10)
+
+Full product analysis (strengths / weaknesses / missing features) documented in
+`docs/PRODUCT-ANALYSIS.md`; the top implementable gaps were closed worker-side
+(all additive — zero wire change for current clients). 32 → 35 API endpoints,
+472 → 486 tests.
+
+### New endpoints
+- **`/api/account/delete` — server-side data erasure (GDPR Art. 17)**: the client's
+  `/wipe` deletes local data only, while the privacy policy promises full deletion;
+  server KV retained inbox/sealed (7d), prekeys + push subscriptions (30d), the
+  key-transparency log + encrypted backup (90d), and the billing slots record (no
+  TTL). The new endpoint erases all of them immediately, plus all one-time prekeys,
+  plus an optional alias release (only when the stored alias `pub` matches the
+  account's registered `identityKey` — prevents third-party alias squatting).
+  Auth: Ed25519 signature over `breeze-account-delete:{userId}:{ts}` (±5 min
+  freshness window) verified against the `edIdentityKey` from the user's pre-key
+  bundle; accounts without a registered Ed25519 key get 403 (an unauthenticated
+  delete would let anyone destroy a victim's prekeys/backup). Replay after erasure
+  fails closed (the verification key itself is erased). Rate limit 3/min.
+- **`/api/group/leave` — member self-removal**: only admin `kick` existed; a member
+  who left client-side stayed in the server registry (id/pub/name readable by anyone
+  holding the invite token) for the full 30-day TTL. Leave removes the member and
+  bumps the epoch like kick — PCS applies to voluntary departure too (the departed
+  member must not keep decrypting new traffic). The creator cannot leave
+  (`CREATOR_CANNOT_LEAVE` — a creator-less group could never be kicked/deleted).
+- **`/api/group/delete` — creator-only group deletion**: completes the lifecycle
+  (create/join/info/kick/leave existed; abandoned groups lingered in KV for 30 days).
+
+### Behavior changes
+- **Server-side disappearing-message enforcement (`/api/msg/poll`)**: `disappearAt`
+  (absolute, send-time + timer) was only filtered at client render; an undelivered
+  expired message sat in KV for up to the 7-day inbox TTL. Poll now excludes expired
+  messages from delivery AND from the keep-list, purging the ciphertext on the first
+  poll after expiry. No observable client change (the client already refuses to
+  render expired messages).
+- **Server-assigned message id (`/api/msg/send`)**: each stored message gets a
+  12-hex random `id` — groundwork for an exclusive poll cursor fixing the
+  same-millisecond message-loss window (two messages sharing a `ts` + a poll landing
+  between them drops the second). Current clients ignore unknown fields.
+
+### Tests (+14)
+- Account deletion: full-erasure sweep across all 11 KV keys, invalid-signature
+  rejection (nothing deleted), no-identity-key 403, stale/future timestamp 400,
+  alias release pub-match (own alias deleted / third-party alias blocked), replay
+  after erasure fails closed.
+- Group leave/delete: leave removes + bumps epoch, creator-leave 400, non-member
+  404, missing-group 404, creator delete (KV gone + info 404), non-creator 403.
+- Msg relay: unique 12-hex id on same-ts messages; expired disappearAt purged from
+  both delivery and KV, live + plain messages unaffected.
+
+## Security Hardening Batch 5 — systematic category audit (branch claude/nice-ride-T6yb0, 2026-06-09)
+
+Exhaustive category-by-category audit of the full product (crypto modules, worker
+endpoints, service worker, documentation, test coverage). Findings and fixes:
+
+### Worker (`_worker.js`) — robustness & correctness fixes
+- **Presence heartbeat carries capabilities (`caps`) — N3 negotiation enabler**: the
+  heartbeat stored only `{ pub, name, at }`, so a peer could not negotiate the protocol
+  version (x3dh-v5 / group-v5) without fetching a 1:1 prekey bundle — a problem for
+  groups, where a member would otherwise have to fetch every member's bundle to learn the
+  group's capability floor. `handlePresence` now accepts an `advertise()` `caps` array
+  (sanitized like the bundle: ≤20 string entries, ≤32 chars, non-strings dropped), stores
+  it, and returns it on a single check. Backward-compatible (absent for legacy v4 clients).
+- **Prekey fetch now returns the consumed OTP index (`oneTimePreKeyId`) — X3DH v5 enabler**:
+  `handlePreKeyFetch` consumed the one-time pre-key at index `i` and returned its value
+  but never which index it was. The X3DH v5 handshake needs that index: the initiator
+  echoes it as `opkId` in the prekey message so the responder can select the matching OTP
+  *private* key (`opkResolver`) and complete DH4. Without it the v5 OTP path can't work.
+  Fixed: return `bundle.oneTimePreKeyId = i` alongside the OTP (only when it parsed
+  cleanly; absent when OTPs are exhausted → initiator sends `opkId:null`).
+- **PoW replay via future timestamp (`handleAliasSet`)**: the proof-of-work freshness
+  check bounded only the *past* (`now - ts > 10min` → expired). The challenge string is
+  fully client-controlled, so an attacker could embed a far-future timestamp, making
+  `now - ts` negative — passing the past-only check indefinitely — and replay ONE solved
+  token to register unlimited aliases (the challenge binds `pub`, not the alias). Fixed:
+  also reject `ts - now > 5min` (clock-skew tolerance), keeping the replay window bounded.
+  Mirrored in the `pow.js` reference module's `verify()` (new `futureSkew` option).
+- **SSRF: redirect-following bypass (`handleOGP`)**: the link-preview fetcher validated
+  only the *initial* URL's host against the private-IP/metadata blocklist, then fetched
+  with `redirect: 'follow'`. A public URL could 302-redirect to `http://169.254.169.254/`
+  (cloud metadata) or any internal host and `fetch` would chase it past the guard. Fixed:
+  extracted the blocklist into `isSSRFBlocked(parsed)` and added `ssrfSafeFetch()` which
+  follows redirects MANUALLY (max 3 hops), re-validating each `Location` against the same
+  guard and aborting on a blocked/looping/malformed chain.
+- **SSRF: inert IPv4-mapped-IPv6 guard**: the old `host.startsWith('::ffff:')` check never
+  matched — the URL parser returns IPv6 literals bracketed and compresses the embedded
+  IPv4 to hex (`[::ffff:10.0.0.1]` → `[::ffff:a00:1]`), so `[::1]`/`::ffff:` targets slipped
+  through (the existing tests only "passed" because the outbound fetch failed in the test
+  env and the catch-all returned `{}`). Fixed: strip brackets before the IPv6 prefix
+  checks so `::1`, `::`, `::ffff:*`, `fc`/`fd`/`fe80` literals are actually blocked.
+- **Message timestamp type guard (replay-window bypass)**: `handleMsgSend` accepted a
+  client-supplied `ts` of any type. A non-numeric `ts` (string/object/array/`NaN`/`Infinity`)
+  made `Math.abs(now - ts)` evaluate to `NaN`, which is never `> 300000` — silently
+  bypassing the ±5 min replay guard AND storing a non-numeric `msg.ts` that breaks the
+  numeric poll-cursor comparison in `handleMsgPoll` (message could never be delivered or
+  cleaned up). Fixed: reject a non-finite/non-numeric `ts` with 400 `INVALID_TIMESTAMP`
+  before the window check; an absent `ts` still defaults to `now`.
+- **Group kick TTL regression**: `handleGroupKick` was saving the updated group record
+  without an `expirationTtl`, silently removing the 30-day TTL set on create/join and
+  making kicked groups permanent in KV (unbounded storage growth). Fixed: added
+  `{ expirationTtl: 86400 * 30 }` to the kick kvPut.
+- **Push notification title length cap**: The push title (groupName or senderName) used
+  the raw uncapped request field. An oversized groupName could bloat the encrypted Web
+  Push payload past the RFC 8030 4096-byte per-message limit, causing silent delivery
+  failures. Fixed: cap to 50 chars via sanitizeString (matches stored msg.groupName).
+- **Defensive JSON.parse on KV data (initial)**: Three `JSON.parse()` calls on KV-fetched
+  strings had no try/catch — a corrupt or partially-overwritten KV value would throw and
+  return 500 instead of a graceful failure. Fixed: `handlePreKeyFetch` OTP parse,
+  `handlePreKeyFetch` ktLog parse, `handleOGP` cache parse.
+- **`safeJsonParse` — comprehensive KV hardening**: Systematic audit found ~18 additional
+  unguarded `JSON.parse(kvData)` sites across 15+ handlers: `handleSignal` (poll + store),
+  `handleMsgSend` inbox, `handleMsgPoll`, `handlePresence` (batch + single mem + single KV),
+  `handleAliasSet`, `handleAliasGet`, `handlePortal`, `handleGroupJoin`, `handleGroupInfo`,
+  `handleGroupKick`, `handlePushSubscribe`, `sendPushToUser`, `handleAccountSlots`,
+  `handlePreKeyFetch` bundle, `handlePreKeyUpload` ktlog, `handleSealedSend`, `handleSealedPoll`,
+  `handleDropRead`. All now call `safeJsonParse(raw, fallback)` which returns the fallback
+  instead of throwing; each handler returns the correct 404/200-with-empty response on
+  corrupt data rather than an unhandled 500.
+- **`_presenceCache` in-memory growth cap**: The presence heartbeat handler stored one
+  entry per unique userId with no eviction policy; a long-lived isolate serving many
+  users could grow the map without bound. Added a prune-to-1000 cap when size exceeds
+  2000 (same pattern as `_msgDedup` and `_sealedDedup`).
+- **Backup and AI context type guards**: `handleBackupUpload` rejected non-string values
+  with a misleading size error instead of a type error (a non-string `backup` bypasses
+  the `.length` size check). Now returns 400 `INVALID_FIELD` for non-string inputs.
+  `handleAI reply_suggest` similarly now rejects non-string `context` explicitly.
+- **handleAI error echo cap**: Unknown `action` values were echoed verbatim in the 400
+  error message; capped echoed value to 32 chars to prevent large strings being
+  bounced back in error responses.
+- **API endpoint count**: Health endpoint reported `endpoints: 28`; actual count is 32
+  (30 switch cases + `/api/health` + `/api/webhook`). Fixed in health response, worker
+  header comment, CLAUDE.md, SPEC.md §3.2 (table now lists all 32 endpoints including the
+  7 previously absent: sealed/ack, drop/create, drop/read, ai, translate, abuse/record,
+  abuse/report).
+
+### Crypto Modules (`src/crypto/`) — features & correctness fixes
+- **`ratchet.js` — `bundleFromRelay` worker→handshake bundle adapter**: the relay's
+  prekey-fetch JSON uses verbose field names (`identityKey/edIdentityKey/signedPreKey/
+  signedPreKeySig/oneTimePreKey/oneTimePreKeyId`) while `initiatorHandshake` takes short
+  ones (`ikPub/edIkPub/spkPub/spkSig/opkPub/opkId`). A hand-rolled mapping in the port is
+  the #1 footgun: a field-name typo would drop the signature material and make the
+  handshake skip the MITM check. `bundleFromRelay(fetched, decode?)` does the rename once,
+  in a tested place (`decode` converts the relay's opaque strings to bytes; the encoding
+  stays the app's concern). Added 5 `tests/x3dh.test.js` cases incl. an end-to-end check
+  (mapped relay bundle drives a real handshake) and the safety check (a bundle missing
+  `signedPreKeySig` still aborts — no silent bypass).
+- **`ktlog.js` — combined on-fetch audit (`auditBundle`)**: the runbook (§8) called only
+  `checkRollover` (detects an identity-key swap), missing `verifyChain` (detects a relay
+  that rewrote/forked the append-only log). `auditBundle(subtle, storedIK, keyHistory)`
+  runs BOTH and returns a single `verdict`: `tampered` (chain broken — chain integrity
+  beats everything, so a hostile relay can't hide a swap behind a clean-looking key),
+  `rolled` (key changed), `new` (first contact), or `ok`. Added 5 `tests/ktlog.test.js`
+  cases incl. the key one — a broken chain surfaces as `tampered` even when the stored key
+  matches the latest (rollover alone would have said `ok`).
+- **`negotiate.js` — group capability floor (`negotiateGroup`)**: 1:1 `negotiate()` had no
+  N-party equivalent, but the runbook (§7) requires "group-v5 only when ALL members
+  advertise it." Added `negotiateGroup(localCaps, memberCapsList)` — the N-party AND across
+  every member's caps (now obtainable from each member's presence `caps`). A single legacy
+  member keeps the whole group on the backward-compatible path (no silent split where some
+  members emit v5 the rest can't read); the floor is per-feature; non-array member entries
+  are treated as no-caps. Added 6 `tests/negotiate.test.js` cases.
+- **`atrest.js` — keystore detection + load helpers (G5 port-enabler)**: added
+  `isWrapped(record)` (distinguishes passphrase-wrapped, migrated, and legacy-plaintext
+  records) and `loadKey(record, passphrase?)` (returns the JWK for either form). `loadKey`
+  **throws** when a wrapped record is loaded with no passphrase, so `loadIdentity` knows
+  to prompt rather than silently treating a locked record as empty. Encodes the trickiest
+  part of the at-rest port (INTEGRATION.md §5) as the single source of truth. Added 5
+  `tests/atrest.test.js` cases (detection across forms, plaintext passthrough, unwrap of
+  migrated + bare records, wrong-passphrase→null, prompt-throw).
+- **`group.js` — sender-key distribution envelope (G3 port-enabler)**: added
+  `buildSenderKeyDistribution(senderKey)` / `parseSenderKeyDistribution(wire)` so the
+  module owns the wire format `{ v:5, t:'skd', ep, c, ck, spk }` used to hand a member's
+  RECEIVE half (chain key + counter + epoch + epoch-sign PUBLIC key) to other members
+  over the authenticated 1:1 channel on create/rotate. Only the public epoch-sign key
+  crosses the wire — never the signing private or per-message keys. The `counter` is
+  included so a mid-stream joiner can't read earlier messages (FS); the `epoch` scopes
+  the key to a membership generation. `parse` never throws on the relay-supplied payload.
+  Previously the browser port (INTEGRATION.md §4) would have to hand-roll this. Added 6
+  `tests/group.test.js` cases (round-trip+decrypt, no-private-key-leak, FS-on-join,
+  rotated-epoch scope, malformed→null, build-throws-on-missing-fields).
+- **`ratchet.js` — one-call X3DH handshake; signature verification made unskippable**:
+  added `initiatorHandshake` / `responderHandshake` orchestrators that wrap verify →
+  derive → bootstrap → (en|de)crypt into a single call per side. Critically,
+  `initiatorHandshake` **throws** if the bundle's signed-pre-key signature does not
+  verify (or the signature material is absent), so CRYPTO-SPEC §2 step 2 ("MUST verify …
+  abort on failure", the I1 MITM defense) is unskippable from the public API — the
+  MITM-vulnerable "derive without checking" path is unreachable. The pending browser port
+  calls these two functions instead of re-implementing the 6-step sequence and risking a
+  dropped verify. Added 5 `tests/x3dh.test.js` cases: two-call handshake (±OPK), forged
+  bundle → reject (no session), missing signature material → reject, non-prekey wire → null.
+- **`ratchet.js` — X3DH v5 first-message envelope (I1 port-enabler)**: added
+  `buildPreKeyMessage`/`parsePreKeyMessage` so the module owns the v5 handshake wire
+  format `{ v:5, t:'pkm', ik, ek, opkId, msg }`. The responder needs the initiator's
+  identity key (IK_A), ephemeral key (EK_A), and the consumed one-time-prekey index to
+  derive `SK` before it can decrypt the first ciphertext; previously the module had no
+  helper for this, so the pending browser port (docs/INTEGRATION.md §3) would have to
+  hand-roll the format and risk drift. `parsePreKeyMessage` never throws on the
+  relay-supplied payload (returns null on malformed/non-pkm input so the caller can fall
+  back to a plain ratchet message). Added 5 `tests/x3dh.test.js` cases incl. a full
+  first-contact handshake: Alice wraps → Bob unwraps → derives identical SK → decrypts,
+  then the conversation continues with plain ratchet messages.
+- **`ratchet.js` — one-packet desync DoS in the skip-ahead path**: `ratchetDecrypt`
+  mutated `sess.recvChainKey` and stored skipped keys *before* the AEAD / key-commitment
+  check when a message carried a counter gap (`p.c > recvCounter + 1`). An injected
+  message with a valid gap but forged ciphertext therefore advanced the receive chain
+  while `recvCounter` stayed put — permanently desyncing the session, so every subsequent
+  legitimate message derived from the wrong chain position and failed to decrypt (a
+  one-packet denial-of-service against any 1:1 session). Fixed by mirroring the `group.js`
+  pattern: stage the skipped keys and the advanced chain into locals, committing them to
+  the session only after a successful decrypt. Added a regression test (forged gap message
+  → null, then the real gap-filling messages still decrypt); verified it fails against the
+  pre-fix code ("expected null to be 'three'"). The existing no-gap injection test was
+  insufficient because a same-counter forgery never enters the skip-ahead block.
+- **`atrest.js` — PBKDF2 work-factor DoS**: `unwrapJWK` derived the AES key using
+  `record.iter` read straight from the (XSS-writable / corruptible) IndexedDB record; a
+  value like `1e12` would hang the main thread in PBKDF2. Now rejects a non-finite,
+  non-positive, or above-ceiling (10M) iteration count before deriving.
+- **`pow.js` — future-timestamp replay**: `verify()` bounded only the past; a client-set
+  far-future challenge timestamp passed the freshness check forever. Added a `futureSkew`
+  bound (default 5 min) so the replay window stays finite.
+
+### Refactoring (`src/crypto/`) — DRY the shared primitives
+- **`bytes.js` (new) — one home for the duplicated byte/encoding helpers**: `u8`, `arr`,
+  `toBytes`, `concatBytes`, `b64`, `unb64`, and the constant-time `ctEqual` had been
+  copy-pasted across `ratchet.js` / `group.js` / `franking.js` / `atrest.js` /
+  `fingerprint.js` (4–5 copies each). Extracted to `src/crypto/bytes.js` and imported by
+  all consumers — most importantly a single audited `ctEqual` instead of copies that could
+  silently diverge (the comparison every commitment/signature/tag check depends on).
+  `ratchet.js` still re-exposes `ctEqual` on its factory return for `group.js`'s
+  `R.ctEqual`; `fingerprint.js` imports the shared `unb64`/`b64` under its historical local
+  aliases so call sites are untouched. Pure refactor — no behavior change; all pre-existing
+  suites stay green and a new `tests/bytes.test.js` (12) pins the shared helpers directly.
+
+### Documentation (`CLAUDE.md`, `README.md`, `docs/CRYPTO-SPEC.md`, `SPEC.md`)
+- All stale line/endpoint/test counts corrected:
+  - `CLAUDE.md`: client 12,696→13,116 lines, worker 1,347→1,888, sw 140→145,
+    endpoints 28→32, i18n keys 406→420.
+  - `README.md`: validate score 32/35→33/36.
+  - `CRYPTO-SPEC.md`: 347→364 tests, 32/35→33/36, worker test count 173→182,
+    §7 worker tests 98→182.
+  - `SPEC.md §3.2`: heading 25→32 endpoints; 7 missing endpoints added to table.
+- `validate.sh` SRI gate confirmed correct (sha384 matches lang.js).
+
+### Test Suite (`tests/`)
+- **13 suites, 433 tests** passing (`npm test`); `validate.sh` 33/36 (PASSED).
+- Worker: group kick TTL regression test (1); corrupt KV data resilience via
+  `safeJsonParse` (7); backup type guard (1); AI handler — `reply_suggest` non-string
+  context, missing context, capped error echo, `chat` non-string/oversized text (4);
+  OTP corruption graceful handling (1); msg-send non-numeric `ts` type guard (1);
+  msg-poll non-numeric `lastTs` cursor fallback (1); SSRF redirect-revalidation + IPv4-mapped-IPv6 guard (5); PoW future-ts replay guard (1).
+  Total: 197 worker tests.
+- Franking: empty message commit/verify (zero-length), tampered commitment bytes
+  rejected (binding property), `ctEqual` returns false for different-length inputs
+  without throwing. Total: 9 franking tests.
+- Negotiate: empty caps array → `[]`, non-array caps treated as absent (no crash),
+  `advertise([])` → `x3dh:v4 + caps:[]`. Total: 15 negotiate tests.
+- Ratchet: non-v3/v4 message throws (not returns null), `MAX_SKIP*2` eviction prunes
+  oversized skipped-key map keeping newest `MAX_SKIP` entries; forged gap message does not
+  desync the chain (staged-commit regression). Total: 24 ratchet tests.
+- At-rest: `unwrapJWK` rejects an attacker-set absurd/non-finite/non-positive iteration
+  count (DoS guard — PBKDF2 hang) in <1s; ceiling-boundary record rejected while the
+  legitimate record still round-trips. Total: 12 atrest tests.
+- PoW: `verify()` rejects a far-future timestamp (replay-via-future-ts guard) and
+  tolerates a small future ts within the skew window. Total: 21 pow tests.
+
+---
+
+## Security Hardening Batch 4 — competitive research (branch claude/nice-ride-T6yb0, 2026-06-08)
+
+Surveyed comparable open-source E2E messengers (Signal, Session, SimpleX) and
+WebRTC/Cloudflare security guidance to find concrete gaps. Top finding: Breeze's
+safety-number (the only out-of-band MITM defense) was materially weaker than
+Signal's.
+
+### Crypto Modules (`src/crypto/`)
+- **`fingerprint.js` (new) — Signal-grade safety number**: The legacy
+  `index.html safetyNumber()` did a *single* SHA-256 over only 12 of 32 bytes,
+  showing ~30 digits (~40 bits) — a relay attempting MITM could grind a colliding
+  substitute identity key offline. The new module follows Signal's
+  NumericFingerprintGenerator: **iterated SHA-512 (5200 rounds)** over
+  `version ‖ identityKey ‖ stableId` per party, first 30 bytes → six 5-digit
+  chunks, two fingerprints concatenated in sorted order for symmetry. Result:
+  60 digits (~112 bits shown) and ~5200× higher per-candidate grinding cost.
+  Optional stable-identifier binding ties keys to identities (matches Signal).
+  Dependency-injected/pure; accepts base64 or raw `Uint8Array` keys.
+
+- **`fingerprint.js` — scannable (QR) verification path**: Manual 60-digit
+  comparison is error-prone (users skip digits) and only checks the truncated
+  ~40-bit-per-chunk display. Added `scannable()` (encodes
+  `version(1) ‖ myFp(30) ‖ peerFp(30)` as base64 — a QR payload mirroring
+  Signal's CombinedFingerprints) and `verifyScannable()` which cross-matches a
+  peer's scanned code (`scanned.local == my remote ∧ scanned.remote == my local`)
+  in **constant time** over the full 30-byte fingerprints. Detects MITM key
+  substitution, malformed/wrong-length codes, and version mismatch; binds stable
+  identifiers like the digit path.
+
+### Test Suite (`tests/`)
+- **12 suites, 339 tests** passing (`npm test`); `validate.sh` 32/35 (PASSED).
+- `tests/fingerprint.test.js` (17): format (60 digits / 12 groups), symmetry
+  (swap local/remote), determinism, MITM-substitution visibility, stableId
+  binding, iteration-count binding, base64≡bytes equivalence, full 5200-round run;
+  scannable: encoding length, cross-party match, MITM reject, malformed +
+  version-mismatch reject, stableId binding.
+- Added 30s timeouts to 5 PoW-solving alias tests (the full-strength
+  fingerprint test added CPU contention that pushed them past the 5s default).
+
+### Documentation
+- `docs/CRYPTO-SPEC.md`: new §6b (safety number), test count 322 → 333.
+
+### Follow-up (gated on browser / two-device validation)
+- Migrate index.html `safetyNumber()`/`showSafetyNumber()` onto `fingerprint.js`.
+  Note: this changes the displayed number, so it needs a versioned rollout (both
+  peers must upgrade to see matching numbers) — hence deferred to a browser pass.
+
+## Security Hardening Batch 3 (branch claude/nice-ride-T6yb0, 2026-06-08)
+
+### Worker (`_worker.js`) — security & robustness fixes
+- **OGP hash cache key**: Replaced `url.slice(0, 200)` KV key with
+  `sha256Short(url)` (reuses existing helper). Two URLs sharing a 200-char
+  prefix no longer collide on the same cache entry. Added 2048-char URL
+  length cap; inputs beyond this return 400 `URL_TOO_LONG`.
+- **Abuse report `opening` size guard**: `handleAbuseReport` now rejects
+  `opening` fields longer than 128 chars before crypto processing. An HMAC
+  key is 32 bytes (44 base64 chars); the 128-char cap prevents DoS via large
+  inputs to `hmacVerifyFrank`.
+- **Push subscription sanitization**: `handlePushSubscribe` previously stored
+  the full client-supplied subscription object. Now only `endpoint`, `keys`
+  (`p256dh` ≤100 chars, `auth` ≤50 chars), and `expirationTime` are stored;
+  extra top-level and nested fields are silently stripped.
+- **OTP count fix**: `handlePreKeyUpload` stored the raw `oneTimePreKeys.length`
+  as the count even though only `Math.min(length, 100)` entries are written.
+  If length > 100 the fetch loop started from an over-capped index, wasting up
+  to 100 KV reads. Now stores `Math.min(oneTimePreKeys.length, 100)`.
+- **Webhook robustness**: `handleWebhook` call site wrapped in try/catch (it
+  was the only API path outside the main try/catch at lines 230–270). Also
+  added a try/catch around `JSON.parse(body)` inside the handler; invalid JSON
+  now returns 400 instead of propagating as an uncaught exception.
+
+### Test Suite (`tests/`) — additions
+- **11 suites, 322 tests** passing (`npm test`); `validate.sh` 32/35 (PASSED).
+- Worker: OGP URL length cap + hash key test (2), abuse report oversized-opening
+  test (1), push subscription field-sanitization test (1); expired PoW test
+  timeout raised to 30s. Total: 168 worker tests.
+- `CRYPTO-SPEC.md`: test count updated (319 → 322), security additions updated.
+
+---
+
+## Security Hardening Batch 2 (branch claude/nice-ride-T6yb0, 2026-06-08)
+
+### Crypto Modules (`src/crypto/`)
+- **`group.js` — N2 two-layer group authentication (partial AFKS)**: Each encrypted group
+  message now carries two Ed25519 signatures: `es` (epoch signature, long-lived per-epoch
+  key signs iv‖ct‖cm‖ep‖c‖spk‖nsk) and `s` (per-message signature, fresh keypair discarded
+  after use). Both signatures must verify before any key derivation — forging requires
+  compromising both keys simultaneously. A leaked per-message key cannot forge other messages
+  (epoch sig would fail) and vice versa. The epoch signature authenticates `spk` (per-message
+  public key), enabling out-of-order delivery without tracking a signing-key-ratchet chain.
+  `newSenderKey` / `rotateEpoch` now generate fresh per-message key pairs; `encryptGroupMsg`
+  produces and advances the per-message keypair chain; `decryptGroupMsg` verifies both
+  signatures with a legacy single-sig fallback for pre-N2 messages.
+
+### Worker (`_worker.js`) — security fixes
+- **KV injection guards**: Added `validateUserId()` to `handlePresence` (single-id path and
+  batch-check path using filter), `handleAccountPurchase`, `handleWebhook` (checkout.session
+  .completed, subscription.deleted, subscription.updated — Stripe metadata is user-controlled;
+  invalid IDs silently skipped to prevent Stripe retries).
+- **Public key field size caps**: `handlePreKeyUpload` rejects `identityKey` / `signedPreKey`
+  > 5000 chars and `edIdentityKey` / `signedPreKeySig` > 500 chars (`FIELD_TOO_LARGE`);
+  each OTP entry capped at 5000 chars. `handleAliasSet` rejects `pub` > 2000 chars.
+- **AI prompt injection prevention**: `translate_context` action sanitizes `lang` to BCP-47
+  charset `[a-zA-Z0-9-]`, max 20 chars, rejecting empty after sanitization (`invalid lang`).
+- **AI summarize memory bound**: Per-message `sender` capped at 100 chars and `text` at 500
+  chars before joining, bounding peak memory independent of the 4000-char aggregate truncation.
+- **PoW freshness check**: `handleAliasSet` now rejects tokens with a timestamp embedded in
+  the challenge (makeChallengeString format `${pub}:${ts}`) if older than 10 minutes
+  (POW_EXPIRED). Backward-compatible: old-format challenges (no parseable last segment) skip
+  the freshness check (`Number.isFinite(NaN)` is false).
+- **Group token length cap**: `handleGroupJoin`, `handleGroupInfo`, `handleGroupKick` reject
+  tokens > 128 chars (server tokens are 12 chars; oversized inputs would hit KV's 512-byte
+  key limit).
+- **Translate type guard**: `handleTranslate` rejects non-string `to` field (would throw
+  TypeError on `.slice()`) and normalizes `from` type defensively.
+- **Exported handlers**: `handleAI`, `handleTranslate` added to named exports for testing.
+
+### Test Suite (`tests/`) — additions
+- **11 suites, 319 tests** passing (`npm test`); `validate.sh` 32/35 (PASSED).
+- Group: DoS guards — MAX_GAP reject, MAX_SKIP window semantics (keys beyond MAX_SKIP-1
+  from target are dropped), MAX_GAP boundary acceptance (3 tests). Total: 22 group tests.
+- Worker: prekey field size caps (4), webhook userId KV injection guard (3), AI handler
+  input validation (6), translate input validation (4), alias pub size cap (1), PoW
+  freshness check — expired-reject + fresh-accept (2). Total: 162 worker tests.
+- PoW freshness test: 30s timeout added (probabilistic solve, occasionally slow on cold JIT).
+
+### Documentation
+- `docs/CRYPTO-SPEC.md`: test count updated (316 → 319), security additions list extended
+  with all batch-2 hardening, worker test coverage description expanded.
+
+---
+
+## Security Sprint — continued (branch claude/nice-ride-T6yb0, 2026-06-08)
+
+### Crypto Modules (`src/crypto/`) — additions
+- **`ktlog.js`**: I11 key-transparency client module — `hashIK` (SHA-256 of IK JSON),
+  `parseLog` (filter/sort history), `checkRollover` (compare stored vs incoming IK,
+  returns 'ok'/'new'/'rolled'/'unknown' with `storedSeenInHistory` + `rolloverTs`),
+  `mergeLog` (dedup by hash, keep earliest ts, cap 20). 25 tests.
+- **`pow.js`**: N7 PoW challenge/solve/verify — SHA-256 brute-force, difficulty-16
+  minimum, `makeChallengeString` (pub-bound, timestamp-embedded), `solve` (clamps
+  16–32), `verify` (POW_REQUIRED / POW_TOO_EASY / POW_CHALLENGE_TOO_LONG /
+  POW_PUB_MISMATCH / POW_INVALID). Pure, dependency-injected. 15 tests.
+
+### Worker (`_worker.js`) — additions
+- **C12 (RFC 8291 encrypted push)**: `encryptPushPayload` (P-256 ECDH + HKDF-SHA256 +
+  AES-128-GCM per RFC 8291/8188) + `buildVapidJwt` (ES256 VAPID JWT). `sendPushToUser`
+  now encrypts every push notification; push service sees only aes128gcm ciphertext.
+  Helpers: `b64urlToBytes`, `bytesToB64url`, `concatBytes`.
+- **Dead Drop, Backup, Signal, Presence, TURN, OGP**: exported for testing
+  (`handleDropCreate`, `handleDropRead`, `handleBackupUpload`, `handleBackupDownload`,
+  `handleSignal`, `handlePresence`, `handleOnlineCount`, `handleOGP`, `handleTurn`).
+
+### Security Fixes — `src/crypto/` modules
+- **`ratchet.js` — injected-message chain desync**: `ratchetDecrypt` previously
+  advanced `recvChainKey`, `recvCounter`, and `seenMsgIds` BEFORE calling
+  `subtle.decrypt`. An on-path attacker injecting a message whose ciphertext fails
+  the AES-GCM auth tag would permanently desync the receive chain. Fixed: state
+  advance deferred until after successful decrypt. Same fix applied to the
+  skipped-key recovery path (key was deleted before decrypt). N1 `recvCounter`
+  reset regression test also added.
+- **`group.js` — same injected-message desync**: `decryptGroupMsg` had the same
+  pattern for both the main path and the skipped-key path. Fixed identically.
+
+### Test Suite (`tests/`) — additions
+- **11 suites, 249 tests** passing (`npm test`).
+- New: `ktlog.test.js` (25 tests: hashIK, parseLog, checkRollover, mergeLog);
+  `push.test.js` (15 tests: RFC 8291 round-trip decrypt, VAPID JWT signature verify,
+  format/header checks, b64url helpers); `pow.test.js` (15 tests: challenge format,
+  solve token structure + hash bits, difficulty clamp, verify accept/reject codes).
+- Ratchet extended: N1 Nr-reset regression, AEAD-auth-failure-does-not-desync,
+  MAX_SKIP storage-bound (forward secrecy property of skipped-key store),
+  consumed-skipped-key replay guard (key deleted on first use).
+- Group extended: AEAD-auth-failure-does-not-desync, future-epoch rejection
+  (epoch gate forward direction), consumed-skipped-key replay guard.
+- Worker extended: Dead Drop (6), Backup (4), Signal relay (5 + sanitizeString ctrl
+  chars), Presence (7), OGP SSRF guard (13 + malformed URL), TURN credentials (4),
+  account slots (3), userId validation (length bounds + charset), group
+  create/join/info/kick validation (7 + creator self-kick guard + post-kick join
+  epoch), msg payload-size limit (1), msg poll lastTs cursor (1), msg MISSING_FIELDS
+  (1), prekey 0-OTP replenish hint (1) + caps round-trip (1) + caps sanitization (1),
+  push subscribe 5-device cap (1), sealed sender missing-id (1) + multi-sender (1) +
+  send validation (1).
+
+### Documentation
+- `SECURITY.md` architecture table updated to reflect sprint implementations.
+- `docs/INTEGRATION.md` extended with §7 (N3 negotiate wiring), §8 (I11 ktlog wiring),
+  §9 (C12 push subscription client side).
+- `docs/ROADMAP.md` updated: C12 done, I11 module done, N7 pow done, status notes updated.
+- `docs/CRYPTO-SPEC.md` §4/§5 security fix noted; §7 worker categories expanded;
+  §9 N5/N6/N7 marked done; test counts updated (ratchet 19, group 13, worker 100).
+
+---
+
+## Security Sprint (branch claude/nice-ride-T6yb0, 2026-06-08)
+
+### Crypto Modules (`src/crypto/`)
+- **`ratchet.js`**: Full Double Ratchet reference module — X25519/P-256 DH ratchet,
+  AES-256-GCM, HKDF-SHA256; I7 skipped-key TTL expiry (7-day default); I16 key
+  commitment (HKDF 'breeze-commit', constant-time verify); I1 authenticated X3DH
+  (Ed25519 sign/verify SPK, DH1-4 → HKDF 'breeze-x3dh-v5', initiatorSession/
+  responderSession); Nr reset fix (both Ns and Nr reset on DH ratchet step). Multi-
+  bucket padding (256-byte-aligned). Browser-compatible (no Node-only APIs).
+- **`group.js`**: Group sender-key ratchet — I2 forward secrecy (chain hash-ratchet,
+  consumed keys dropped); I3 PCS via `rotateEpoch` (fresh chain+signing key, epoch+1);
+  N2 per-message Ed25519 signatures (sign on send, verify before ratchet work);
+  I16 key commitment; I7 TTL expiry on group skipped keys.
+- **`atrest.js`**: I4 at-rest key wrapping — PBKDF2 ≥600k SHA-256 + AES-256-GCM;
+  `wrapJWK`/`unwrapJWK`/`migrate` (legacy plaintext→wrapped, idempotent); `zeroBuffer`
+  helper. Fixed browser compat: replaced `Buffer.from` with `btoa`/`atob`.
+- **`franking.js`**: I17 message franking — HMAC-SHA256 commitment/opening; `commit`/
+  `verify`/`verifyReport`; binding + hiding properties.
+- **`negotiate.js`**: N3 version negotiation — `CAPS` constants, `advertise`/
+  `parsePeerCaps`/`negotiate`; backward compat with legacy x3dh:'v5' field; 'AND' rule
+  prevents peer coercion into weaker path.
+
+### Worker (`_worker.js`)
+- **G2 (I1 server half)**: `handlePreKeyUpload` verifies Ed25519 `signedPreKeySig`
+  against `edIdentityKey`; PREKEY_SIG_INVALID on failure; unsigned bundles accepted
+  during v4→v5 transition.
+- **G3 (I3 server signal)**: `handleGroupKick` bumps + returns `epoch`; epoch
+  initialized to 0 on create; `handleGroupInfo`/`handleGroupJoin` surface epoch.
+  Fixed bug: kick of non-member now returns 404 (NOT_MEMBER) without epoch churn.
+- **I17 relay**: `/api/abuse/record` (stores commitment, no-overwrite) + `/api/abuse/report`
+  (HMAC verify, FRANK_MISMATCH on binding fail). frankId and message size limits added.
+- **I11 precursor**: `ktlog:{userId}` audit log — SHA-256 of each IK appended on upload,
+  capped at 10 entries; returned on fetch as `keyHistory`. Clients can detect rollovers.
+- **OTP replenish hint**: `replenishOTP: true` in fetch response when remaining OTP ≤ 5.
+- **Validation improvements**: frankId length limit (128), abuse report message size
+  limit (256 KB), sealed sender handlers exported for testing.
+
+### Test Suite (`tests/`)
+- 8 suites, **110 tests** passing (`npm test`), validate.sh 32/35 (PASSED).
+- New suites: `kat.test.js` (RFC/NIST KATs), `x3dh.test.js` (X3DH+full session),
+  `group.test.js` (FS/PCS/N2), `atrest.test.js` (wrap/unwrap/migrate/zeroBuffer),
+  `franking.test.js`, `negotiate.test.js`.
+- Worker tests extended: G2 signed-prekey, G3 epoch, I17 franking, I11 key-history,
+  sealed sender round-trip/dedup/ack, msg send/poll with timestamp/self-send/dedup.
+
+### Documentation
+- `docs/CRYPTO-SPEC.md`: formal spec of `src/crypto/` modules, wire formats, test status.
+- `docs/IMPROVEMENTS.md`: I1–I20 from peer software + arXiv/ePrint survey.
+- `docs/ROADMAP.md`: prioritized P0–P3 backlog with dependency graph + updated status.
+- `docs/INTEGRATION.md`: turnkey browser-side integration runbook (index.html wiring
+  for N1/G4/G1+G2/G3/G5/I17), with exact line references and two-device test checklists.
+- `docs/CATEGORY-RESEARCH.md` / `docs/CATEGORY-RESEARCH-2.md`: 20 product categories,
+  10 arxiv/GitHub references each.
+
+## v3.6.0 (2026-03-15)
+
+### P2P Core (Session 2)
+- **DC heartbeat**: ping/pong via state channel every 10s, 3 miss → ICE restart
+- **Group P2P direct delivery**: dual-path (P2P instant + sealed reliable) with dedup
+- **Key change warning**: 3 decrypt failures → yellow banner + toast + audit log (Signal-style MITM detection)
+- **P2P-only mode**: server unreachable → yellow banner, P2P connections still work
+- **RTT-based adaptive quality**: heartbeat pong RTT feeds image compression + poll interval
+- **Sealed sender retry**: retry queue uses sealed sender first (privacy-preserving)
+- **File transfer progress bar**: send/receive with % + speed (MB/s) + green bar
+
+### UX Polish (Session 2)
+- **Native `<dialog>` modals**: auto inert background, focus trap, ESC, `::backdrop blur`
+- **Trusted Types policy**: `breeze-sanitizer` — DOMParser sanitization, eliminates DOM XSS
+- **Swipe-to-reply**: right swipe 60px on messages → reply (WhatsApp/Signal gesture)
+- **Swipe-left-to-archive**: contact list left swipe → toggle archive
+- **Message multi-select**: context menu "Select" → floating action bar (batch delete/forward)
+- **Image auto-compress**: OffscreenCanvas → WebP, adaptive quality, 1920px max
+- **Markdown tables**: `| col | col |` + separator → `<table class="md-table">`
+- **Theme smooth transition**: `html.theme-transitioning` CSS class, 400ms
+- **Emoji frequency sort**: usage count tracking, most-used rises to top
+- **OGP favicon + site name**: Google Favicon API + og:site_name in link previews
+- **Disappearing message live countdown**: `⏱5m` → `⏱30s` → fade+remove
+- **Voice message duration**: loadedmetadata → `1:23` display
+- **Contact typing in sidebar**: green "typing..." in preview (5s TTL)
+- **Group member count in header**: `[3人]` badge
+- **Copy in context menu**: clipboard + toast
+- **Scroll to unread on open**: `.unread-sep` scroll target
+- **Pinned message banner**: clickable, latest pin at chat top
+- **PWA engagement-gated install**: visits≥2 or msgs≥3, 7-day cooldown
+- **Proactive storage quota**: 80% warning before IDB fails
+- **getAllRecords direction:prev**: Chrome 141+ reverse-read 68% faster
+- **CSS scroll anchoring**: overflow-anchor for prepend stability
+
+### Reliability & Edge Cases (Session 2 cont.)
+- **Sealed poll crash-safe**: 5-min grace period → client ACK → worker delete
+- **`/api/sealed/ack`**: 28th endpoint; crash-safe message processing confirmation
+- **Clock drift detection**: serverTime in `/api/health` → ±2min drift warning
+- **Worker version mismatch**: client detects server update → "Update available" toast
+- **Notification action buttons**: Reply (inline text) + Mark Read from notification
+- **Quick-reply from notification**: SW → postMessage → openConversation → sendMessage
+- **Browser back button**: `history.pushState` on mobile → popstate → close conversation
+- **IDB upgrade multi-tab**: BroadcastChannel `db-upgrade` → other tabs close DB
+- **Contact context menu enhanced**: Archive + Mark Read added to right-click menu
+- **Signal cleanup on poll**: consumed ICE candidates auto-deleted after 30s
+- **OGP fetch timeout**: 5s AbortController (non-blocking)
+- **Outbox badge**: counts both relay queue + P2P persistent queue
+
+### Export & Sharing (Session 2 cont.)
+- **`/export html`**: human-readable, self-contained HTML chat export (printable)
+- **`/contacts export`/`import`**: JSON backup/restore of all contacts
+- **Web Share Target**: receive shared text/URL from other apps → paste in conversation
+- **QR code camera scan**: BarcodeDetector API (Chrome 83+, Safari 17.2+)
+- **Print CSS enhanced**: break-inside:avoid, branding watermark, non-print elements hidden
+
+### Security Hardening (Session 2 cont.)
+- **🔴 CRITICAL: Signal encryption complete**: edit/delete/reaction ALL encrypted before relay (previously reaction sent plaintext — server could read emoji reactions)
+- **🔴 CRITICAL: Group encrypted signal handler**: `msg.groupId && msg.isSignal` path added — group edit/delete/reaction decrypted and processed correctly
+- **CSP `trusted-types`**: both `<meta>` and `_headers` enforce breeze-sanitizer policy
+- **`safeSetHTML()`**: wired to cmdOutput (all slash command output sanitized)
+- **`downloadBlob()` DRY**: all 7 download sites consolidated, auto revokeObjectURL
+- **Dark/light theme-color meta**: responsive to OS preference for browser chrome
+- **TURN fallback indicator**: 🟢 Direct / 🟢 STUN / 🟡 TURN + RTT + protocol
+- **SR connection announcements**: screen reader notified on P2P state changes
+- **Health check: AI/translate feature flags**: client knows available providers
+- **Aria-labels**: 24 buttons labeled (folder tabs, dialog, select mode)
+- **`.msg.sys` CSS**: centered, dashed-border system messages
+- **Worker `fetchWithTimeout()`**: all external API calls (Stripe, AI, translate) protected with 10s timeout
+- **Clock offset correction**: `correctedNow()` for all outgoing timestamps — anti-replay compliant
+- **Stale DR session pruning**: startup cleanup of orphaned Double Ratchet sessions
+- **toggleReaction → sendSignal**: DRY — reactions use unified encrypted signal path
+
+### Reliability (Session 2 cont.)
+- **Dead letter queue**: 3x failed messages → IDB persist (max 100) + `/retry` command
+- **Retry queue persistence**: IDB primary + localStorage beforeunload fallback
+- **Code block click-to-copy**: `pre.md-pre` click → clipboard
+- **RTL auto-detection**: `dir="auto"` on all message divs (Arabic/Hebrew support)
+
+### AI & Translation Integration
+- `/api/ai` — Multi-provider AI proxy: Anthropic Claude → OpenAI → Groq
+  - Actions: `chat`, `summarize`, `reply_suggest`, `translate_context`
+  - KV cache: chat=1h, summarize/translate=24h
+- `/api/translate` — 4-provider translation: DeepL → Google Cloud → LibreTranslate → MyMemory
+- `/ai <question>` slash command — inline AI chat in conversation
+- `/summarize` upgraded — AI-powered with local extractive fallback
+- Smart replies AI upgrade — local instant → async AI replacement
+- Message translate — 2-tier: translation API → AI context-aware fallback
+- Smart language detection: JA text → EN, EN text → JA (user lang aware)
+
+### WebRTC & P2P Hardening
+- **Perfect Negotiation** (MDN spec): eliminates glare/collision deadlocks
+  - `onnegotiationneeded` handler replaces manual offer creation
+  - Polite/impolite peer roles with automatic rollback on collision
+  - Symmetric code — same logic for both initiator and responder
+  - ICE restart triggers `onnegotiationneeded` automatically
+- DataChannel `negotiated:true` (id:0) — skip DCEP handshake
+- `RTCPeerConnection.generateCertificate()` — fresh ECDSA P-256 per session
+- `bufferedAmountLowThreshold` event-based backpressure (polling eliminated)
+- `CHUNK_SIZE` 64KB → 16KB (safe cross-browser `sctp.maxMessageSize`)
+- `getSafeChunkSize()` — dynamic SCTP detection with 64B margin
+- ICE restart on `disconnected` (avoid full teardown), full reconnect only on `failed`
+- Relay-only mode: `iceTransportPolicy: 'relay'` + srflx/prflx candidate stripping
+- Unified ICE config: `getCallICEConfig()` shared by P2P + calls
+
+### Cryptography & Protocol
+- **Real QR code generator** (ISO 18004): replaced placeholder with fully scannable encoder
+  - Byte mode, EC level L, versions 1-10 (up to 271 chars)
+  - Reed-Solomon GF(256) error correction, proper masking
+  - Pure JS, 0 dependencies, ~100 lines
+- Message compression: CompressionStream `deflate-raw` before encryption (v4 protocol)
+  - Adaptive threshold: 256B default, 128B on 3G, 64B on save-data
+  - Backward-compatible: v3 (uncompressed) still decrypted
+- Skipped message keys (Signal spec §3.4): store up to 100 skipped keys/session
+  - Handles out-of-order message delivery over unreliable transport
+  - Auto-prune oldest keys when buffer exceeds 200
+- New padding format: `[flags:1][length:2][data...]` (v4) vs `[len:1][data]` (v3)
+- Protocol version: v4 (compress+pad) with v3 and v2 backward compatibility
+
+### Critical Bug Fixes
+- **t() TDZ self-reference ×13**: `voiceMsg: t('voiceMsg')` in `const _I` triggered Temporal Dead Zone — all 13 keys silently returned key names instead of values
+- **`const t` shadow in P2P edit handler**: Variable shadowed global `t()` i18n function — all subsequent `t()` calls in that scope were broken
+- **showMsgMenu classList logic error**: `btn.classList.remove(...); btn.classList.add('color-r')` separated by semicolon — applied `color-r` to ALL items instead of danger items only
+- **CONFIG `REPLAY_CACHE_SIZE` duplicate**: Two definitions (2000 and 200) — second silently overwrote first
+- **`uiNoResults` infinite recursion**: `uiNoResults: (q) => t('uiNoResults', q)` — would stack overflow at runtime
+
+### i18n Completeness
+- 60+ hardcoded English strings → `t()` calls
+- showCallUI: calling/incoming/mute/unmute/camOff/camOn
+- Contact menu: Rename/Safety Number/Pin/Mute/Block/Label/Delete
+- /help: 9 section headings
+- /billing: all dashboard strings
+- /info: all field labels + status values
+- /settings: Privacy/Sound section headers + relay-only toggle
+- Message: (edited), ↗ Forwarded, React, Bookmark, Translate
+- EN/JA: 329/329 perfect parity (was 228)
+
+### Settings & Privacy
+- Relay-only mode toggle in `/settings` (localStorage persistent)
+- ICE candidate filter: host + srflx + prflx stripped in relay-only
+- `/security` shows: relay-only status, RTC cert, DataChannel config, AI/translate status
+
+### Worker
+- `/api/ai` endpoint (10 req/min rate limit)
+- `/api/translate` Google Cloud Translation provider added
+- `X-Breeze-Version` header synced to 3.6.0
+- New env vars: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GROQ_API_KEY`, `GOOGLE_TRANSLATE_KEY`
+- Optional model override: `ANTHROPIC_MODEL`, `OPENAI_MODEL`, `GROQ_MODEL`, `OPENAI_BASE_URL`
+
+## v3.5.0 (2026-03-13)
+
+### Critical Fixes (R108-R115)
+- 3× setInterval closure bug: `}, N);` → `}, N));` — half of initMessenger was unparseable
+- Worker orphaned code: 51-line handleCheckout body in global scope → runtime crash
+- Message ID collision: `myId + ':' + ts` → `genMsgId()` with sequence counter
+- Desktop: WEB_ROOT = `__dirname` → `process.resourcesPath` (white screen in packaged app)
+- Desktop/mobile: lang.js missing from builds (924 languages lost)
+- showConfirm 3-arg call for /wipe (opts ignored → no danger styling)
+
+### Security
+- Rate limits: 23/23 endpoints (was 12/23)
+- Worker: POST method enforcement (405 for non-POST API)
+- Worker: Input sanitization on 5 handlers (names in KV)
+- OGP fetch: 5s AbortController timeout + SSRF private IP blocking
+- File type blocking: 24 dangerous extensions (.exe, .bat, .ps1, etc.)
+- CORS: `'*'` fallback → `'null'` (no wildcard API access)
+- Stripe webhook: event.id dedup (24h TTL) + constant-time signature
+- Replay cache: 2,000-entry LRU for message dedup
+- CSP, HSTS preload, Permissions-Policy headers
+- PBKDF2 600K iterations lock screen
+
+### Data Integrity
+- Outbox persistence: localStorage save/restore (survives reload)
+- encryptGroupMsg failure: toast + abort (was silent undefined)
+- /wipe: full local + remote wipe with danger confirm dialog
+- IDB QuotaExceededError: auto-cleanup old messages
+- IDB connection loss: auto-reload recovery
+
+### Performance
+- DOM cache: `_DOM.get()` memoizes getElementById (131 calls)
+- rAF-based render coalescing
+- Adaptive networking: 2g/3g/4g poll/compress adjustment
+- Deferred startup via requestIdleCallback
+
+### UI/UX
+- Landing page: 3 feature tiles (E2E, No registration, Cross-platform)
+- Pricing: CSS Grid responsive 4-card layout with i18n (EN+JA)
+- /help: all 50+ commands in 6 categories (was 15)
+- /about: plan name + CONFIG.VERSION
+- theme-color meta: dynamic on toggle + init + OS change
+- `<noscript>` fallback for JS-disabled browsers
+- twitter:card → summary_large_image
+- Modal focus trap (Tab key containment)
+- Keyboard shortcut overlay (? key)
+
+### i18n
+- 228/228 EN/JA parity (was 215)
+- Pricing cards, wipe dialog, confirm dialogs, search placeholders
+
+### Build System
+- mobile/: Rebuilt from scratch — Capacitor 6.2, prepare.js with SHA256 hashes
+- desktop/: lang.js in extraResources, resourcesPath fix, version 3.5.0
+- deploy.sh: Rewritten for Lite/Plus/Pro pricing (was Monthly/Annual)
+- build.sh: 9 commands, unified WEB_FILES array
+- release.yml: lang.js in all builds, softprops/action-gh-release@v2
+- dist/*: All version 3.5.0, owner shizukutanaka
+
+### Developer Experience
+- AGENTS.md (207L): AI agent rules for all tools
+- CLAUDE.md (34L): Concise rules for Claude Code
+- .claude/settings.json: PostToolUse hooks + permissions
+- .claude/commands/: 4 custom slash commands
+- validate.sh: 35 quality gates (100% pass)
+
+## v3.0.0 – v3.4.0 (2026-02 – 2026-03)
+- E2E encryption: X25519 + AES-256-GCM + Double Ratchet
+- Sealed sender, sender key O(1) for groups
+- WebRTC DataChannel P2P + server relay fallback
+- Voice/video calls, file transfer (64KB chunks)
+- Multi-account (up to 999 with Pro plan)
+- 924 languages (lang.js)
+- PWA + Electron + Capacitor (6 platforms)
+- 36 slash commands
+- Stripe billing (3 tiers)
+
+## v1.0.0 – v2.0.0 (2026-01 – 2026-02)
+- Initial P2P messenger with ECDH P-256
+- Single HTML + Cloudflare Worker architecture
+- Basic chat, contacts, groups

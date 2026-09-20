@@ -1,0 +1,120 @@
+// ============================================================================
+// Breeze — At-rest key protection (roadmap I4)
+//
+// Today identity/signing private keys are stored as PLAINTEXT JWK in IndexedDB
+// (readable by XSS or device forensics). This module wraps a JWK under a key
+// derived from a passphrase via PBKDF2 (>=600k iterations) + AES-256-GCM, and
+// migrates legacy plaintext records. The no-passphrase default path in the app is
+// preserved; this is opt-in app-lock.
+//
+// PBKDF2 chosen over Argon2id to stay dependency-free / no-build (Argon2id would
+// need a WASM blob). 600k SHA-256 iterations is the OWASP 2023 floor.
+//
+// Tested reference; index.html loadIdentity()/key storage to be migrated onto it
+// in a browser-validated pass.
+// ============================================================================
+// Shared byte/encoding helpers (btoa/atob-based, browser + Node ≥16 + Miniflare).
+import { b64, unb64, u8 } from './bytes.js';
+
+// PBKDF2 work-factor ceiling for the UNWRAP path. The iteration count is read
+// from the stored record, which an XSS-planted or corrupted IndexedDB entry
+// controls; an absurd value (e.g. 1e12) would hang the main thread deriving the
+// key. Anything above this generous ceiling (≈16× the 600k default) is rejected
+// rather than executed.
+const MAX_UNWRAP_ITER = 10_000_000;
+
+// AES-GCM additionalData for every wrap. A constant domain-separation tag (so an at-rest
+// ciphertext can never be confused with an AES-GCM ciphertext produced elsewhere in the app)
+// optionally extended with a caller context — e.g. the keystore record / account id. Binding
+// the context means a wrapped record relocated to a DIFFERENT slot (by XSS with IDB write but
+// without the passphrase) fails to decrypt instead of silently loading the wrong identity.
+// AAD is recomputed from these inputs on unwrap, never read from the (attacker-controlled)
+// record, so the binding is meaningful. Constant default keeps no-context callers working.
+const AAD_DOMAIN = 'breeze-atrest-v1';
+const aadBytes = (context) => new TextEncoder().encode(context ? `${AAD_DOMAIN}:${context}` : AAD_DOMAIN);
+
+export function createAtRest(opts = {}) {
+  const subtle = opts.subtle || globalThis.crypto.subtle;
+  const getRandomValues = opts.getRandomValues || ((a) => globalThis.crypto.getRandomValues(a));
+  const cfg = { iterations: 600000, hash: 'SHA-256', ...opts };
+
+  async function deriveWrapKey(passphrase, salt, iterations, hash) {
+    const base = await subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+    return subtle.deriveKey(
+      { name: 'PBKDF2', salt: u8(salt), iterations, hash },
+      base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'],
+    );
+  }
+
+  // Wrap an arbitrary JWK (or any JSON-serializable secret) under a passphrase.
+  // `context` (optional) is bound into the AES-GCM AAD — pass the keystore/account id to
+  // tie the record to its slot; unwrap must supply the same context.
+  async function wrapJWK(jwk, passphrase, context = '') {
+    const salt = getRandomValues(new Uint8Array(16));
+    const iv = getRandomValues(new Uint8Array(12));
+    const key = await deriveWrapKey(passphrase, salt, cfg.iterations, cfg.hash);
+    const pt = new TextEncoder().encode(JSON.stringify(jwk));
+    const ct = new Uint8Array(await subtle.encrypt({ name: 'AES-GCM', iv, additionalData: aadBytes(context) }, key, pt));
+    return { v: 1, kdf: 'pbkdf2', hash: cfg.hash, iter: cfg.iterations, salt: b64(salt), iv: b64(iv), ct: b64(ct) };
+  }
+
+  // Unwrap a record produced by wrapJWK. Returns the JWK, or null on wrong passphrase /
+  // tampering / AAD mismatch (AES-GCM auth failure). `context` must match the one used at
+  // wrap time (default constant domain tag for no-context callers).
+  async function unwrapJWK(record, passphrase, context = '') {
+    try {
+      // Guard the attacker-controllable iteration count: a non-finite, non-positive,
+      // or absurdly large value would otherwise hang the main thread in PBKDF2.
+      const iter = record.iter;
+      if (!Number.isFinite(iter) || iter <= 0 || iter > MAX_UNWRAP_ITER) return null;
+      const key = await deriveWrapKey(passphrase, unb64(record.salt), iter, record.hash);
+      const pt = await subtle.decrypt({ name: 'AES-GCM', iv: unb64(record.iv), additionalData: aadBytes(context) }, key, unb64(record.ct));
+      return JSON.parse(new TextDecoder().decode(new Uint8Array(pt)));
+    } catch { return null; }
+  }
+
+  // Migrate a legacy plaintext keystore record { priv: <jwk>, ... } to a wrapped
+  // form { ..., wrapped: <record> } with the plaintext `priv` removed. Idempotent:
+  // an already-wrapped record is returned unchanged. `context` is bound into the wrap.
+  async function migrate(record, passphrase, context = '') {
+    if (record.wrapped || record.kdf) return record; // already wrapped
+    const wrapped = await wrapJWK(record.priv, passphrase, context);
+    const rest = { ...record };
+    delete rest.priv;
+    return { ...rest, wrapped };
+  }
+
+  // Detect whether a stored keystore record is passphrase-wrapped (a nested
+  // { wrapped: {...} } from migrate(), or a bare wrap record from wrapJWK()) vs.
+  // legacy plaintext ({ priv }). Lets loadIdentity decide whether to prompt for a
+  // passphrase before reading the key (INTEGRATION.md §5). Single source of truth.
+  function isWrapped(record) {
+    return !!(record && (record.wrapped || record.kdf === 'pbkdf2'));
+  }
+
+  // Load the private JWK from a keystore record regardless of form:
+  //   - wrapped ({ wrapped:{...} } or a bare wrap record) → unwrapJWK(passphrase)
+  //   - legacy plaintext ({ priv }) → returns priv directly (passphrase ignored)
+  // Returns the JWK, or null on wrong passphrase / tamper. THROWS if the record is
+  // wrapped but no passphrase was supplied, so the caller knows to prompt rather than
+  // silently treating a locked record as empty.
+  async function loadKey(record, passphrase, context = '') {
+    if (!record) return null;
+    if (isWrapped(record)) {
+      if (passphrase == null) throw new Error('atrest loadKey: passphrase required for a wrapped record');
+      return unwrapJWK(record.wrapped || record, passphrase, context);
+    }
+    return record.priv ?? null;
+  }
+
+  // Best-effort zeroing of plaintext key material after use. JS GC may retain
+  // copies; this limits exposure to memory dumps / heap dumps taken right after use.
+  function zeroBuffer(buf) {
+    if (buf instanceof Uint8Array) buf.fill(0);
+    else if (buf instanceof ArrayBuffer) new Uint8Array(buf).fill(0);
+  }
+
+  return { wrapJWK, unwrapJWK, migrate, isWrapped, loadKey, zeroBuffer, _cfg: cfg };
+}
+
+export default createAtRest;

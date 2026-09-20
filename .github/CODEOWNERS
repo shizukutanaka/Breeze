@@ -1,0 +1,7 @@
+# Default owner for everything
+* @shizukutanaka
+
+# Security-sensitive files require explicit review
+_worker.js @shizukutanaka
+sw.js @shizukutanaka
+_headers @shizukutanaka

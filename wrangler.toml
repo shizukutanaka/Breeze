@@ -1,0 +1,51 @@
+name = "breeze"
+pages_build_output_dir = "."
+compatibility_date = "2024-12-01"
+
+# KV Binding (create via Dashboard or CLI)
+# wrangler kv:namespace create KV
+# Then paste the ID below (or bind via Dashboard: Pages > Settings > Functions > KV)
+[[kv_namespaces]]
+binding = "KV"
+id = ""  # ← REQUIRED: paste your KV namespace ID here
+
+# === SECRETS (set via CLI — never commit values) ===
+#
+# --- Web Push ---
+# npx web-push generate-vapid-keys
+# wrangler pages secret put VAPID_PUBLIC_KEY
+# wrangler pages secret put VAPID_PRIVATE_KEY
+#
+# --- TURN Relay ---
+# Option A (recommended): Cloudflare Calls TURN ($0.05/GB, global anycast)
+# wrangler pages secret put TURN_KEY_ID               # From Dashboard > Calls > TURN App
+# wrangler pages secret put TURN_KEY_API_TOKEN         # From Dashboard > Calls > TURN App
+# Option B: Custom HMAC (Coturn self-hosted)
+# wrangler pages secret put TURN_URL                  # turn:host:3478
+# wrangler pages secret put TURN_SECRET               # HMAC shared secret
+# Option C: Static credentials (metered.ca, twilio, etc.)
+# wrangler pages secret put TURN_URL                  # turn:relay.example:80
+# wrangler pages secret put TURN_USERNAME              # static username
+# wrangler pages secret put TURN_CREDENTIAL            # static credential
+# Option D: No config → auto-falls to free Open Relay (20GB/month)
+#
+# --- Moderation (optional) ---
+# wrangler pages secret put ABUSE_WEBHOOK_URL          # Notified on verified abuse reports
+#                                                       # (metadata only — frankId, message
+#                                                       # length, timestamp; never message content)
+#
+# --- Anti-spam tuning (optional — default 20, matches the client's PoW difficulty) ---
+# wrangler pages secret put MIN_POW_DIFFICULTY         # Server-side PoW acceptance floor for
+#                                                       # @alias registration
+#
+# --- Auth hardening (recommended — off by default for zero-config self-hosting) ---
+# Every registered client already signs the actions below with its Ed25519 identity key;
+# these flags just tell the Worker to REJECT a request that omits/fails that signature
+# instead of silently accepting it. Safe to enable once you're not also serving pre-upgrade
+# clients that predate this signing (check CHANGELOG.md for when each call started signing).
+# wrangler pages secret put PRESENCE_REQUIRE_AUTH      # true — reject unsigned presence writes
+# wrangler pages secret put ALIAS_REQUIRE_AUTH         # true — reject unsigned @alias registration
+# wrangler pages secret put GROUP_REQUIRE_AUTH         # true — reject unsigned group kick/rename/admin/leave/delete/transfer
+# wrangler pages secret put PUSH_REQUIRE_AUTH          # true — reject unsigned push subscribe/unsubscribe
+# wrangler pages secret put TURN_REQUIRE_AUTH          # true — reject unsigned TURN credential requests
+# wrangler pages secret put BACKUP_REQUIRE_AUTH        # true — without this, knowing a userId is enough to download that user's encrypted backup blob

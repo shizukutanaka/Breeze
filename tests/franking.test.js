@@ -1,0 +1,94 @@
+// Message franking core tests (roadmap I17): verifiable abuse reporting.
+import { describe, it, expect } from 'vitest';
+import { createFranking } from '../src/crypto/franking.js';
+
+const F = createFranking();
+
+describe('commit / verify', () => {
+  it('a genuine report verifies (the reported plaintext was really sent)', async () => {
+    const msg = 'abusive message';
+    const { commitment, opening } = await F.commit(msg);
+    expect(await F.verify(msg, commitment, opening)).toBe(true);
+    // Relay-side report flow: relay recorded `commitment` at send time.
+    expect(await F.verifyReport({ message: msg, opening, recordedCommitment: commitment })).toBe(true);
+  });
+
+  it('rejects a report claiming a different message (binding)', async () => {
+    const { commitment, opening } = await F.commit('what was actually sent');
+    expect(await F.verify('a message that was NOT sent', commitment, opening)).toBe(false);
+  });
+
+  it('rejects a wrong / forged opening', async () => {
+    const msg = 'hello';
+    const { commitment } = await F.commit(msg);
+    const wrongOpening = Array.from(crypto.getRandomValues(new Uint8Array(32)));
+    expect(await F.verify(msg, commitment, wrongOpening)).toBe(false);
+  });
+
+  it('a tampered opening fails', async () => {
+    const msg = 'hello';
+    const { commitment, opening } = await F.commit(msg);
+    const bad = opening.slice(); bad[0] ^= 0xff;
+    expect(await F.verify(msg, commitment, bad)).toBe(false);
+  });
+
+  it('fresh randomness per commit (hiding — same message → different commitments)', async () => {
+    const a = await F.commit('same');
+    const b = await F.commit('same');
+    expect(a.commitment).not.toEqual(b.commitment);
+    expect(a.opening).not.toEqual(b.opening);
+    // Each still verifies against its own opening.
+    expect(await F.verify('same', a.commitment, a.opening)).toBe(true);
+    expect(await F.verify('same', b.commitment, b.opening)).toBe(true);
+    // …but not cross-wise.
+    expect(await F.verify('same', a.commitment, b.opening)).toBe(false);
+  });
+
+  it('works on binary messages and unicode', async () => {
+    const bin = crypto.getRandomValues(new Uint8Array(200));
+    const r1 = await F.commit(bin);
+    expect(await F.verify(bin, r1.commitment, r1.opening)).toBe(true);
+    const uni = '通報テスト 🚩';
+    const r2 = await F.commit(uni);
+    expect(await F.verify(uni, r2.commitment, r2.opening)).toBe(true);
+  });
+
+  it('works on an empty message (zero-length content)', async () => {
+    const { commitment, opening } = await F.commit('');
+    expect(await F.verify('', commitment, opening)).toBe(true);
+    expect(await F.verify('not empty', commitment, opening)).toBe(false);
+  });
+
+  it('rejects a tampered commitment (binding — commit flipped)', async () => {
+    const msg = 'tamper test';
+    const { commitment, opening } = await F.commit(msg);
+    const bad = commitment.slice(); bad[0] ^= 0xff;
+    expect(await F.verify(msg, bad, opening)).toBe(false);
+  });
+
+  it('ctEqual returns false for different-length inputs (no throw)', () => {
+    const a = new Uint8Array(32).fill(1);
+    const b = new Uint8Array(16).fill(1);
+    expect(F.ctEqual(a, b)).toBe(false);
+    expect(F.ctEqual(b, a)).toBe(false);
+    expect(F.ctEqual(new Uint8Array(0), new Uint8Array(0))).toBe(true);
+  });
+
+  // Item 74: verify must fail CLOSED (false, no throw) on missing/malformed input. The relay
+  // may lack a recordedCommitment, and a reporter's (message, opening) is attacker-supplied;
+  // u8(null)/toBytes(null) would otherwise throw an uncaught exception out of the handler.
+  it('returns false (does not throw) on null/undefined commitment, opening, or message', async () => {
+    const { commitment, opening } = await F.commit('hello');
+    expect(await F.verify('hello', null, opening)).toBe(false);        // missing commitment
+    expect(await F.verify('hello', undefined, opening)).toBe(false);
+    expect(await F.verify('hello', commitment, null)).toBe(false);     // missing opening
+    expect(await F.verify('hello', commitment, undefined)).toBe(false);
+    expect(await F.verify(null, commitment, opening)).toBe(false);     // missing message
+  });
+
+  it('verifyReport returns false (does not throw) when the relay has no recordedCommitment', async () => {
+    const { opening } = await F.commit('abuse');
+    // Relay lost / never recorded the commitment → undefined. Must be a clean false.
+    expect(await F.verifyReport({ message: 'abuse', opening, recordedCommitment: undefined })).toBe(false);
+  });
+});

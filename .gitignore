@@ -1,16 +1,77 @@
-# OS / editor
+# Dependencies
+node_modules/
+
+# GitHub Actions workflows are intentionally not tracked here: the automation
+# account used for commits lacks the GitHub `workflows` permission, so it cannot
+# push .github/workflows/*. The files exist locally (and inside breeze.zip); add
+# them to the repo from an account that has `workflows` permission. The intended
+# ci.yml runs: npm ci -> syntax check -> npm test -> validate.sh -> build+upload
+# breeze.zip. To track them, remove this rule or `git add -f`.
+.github/workflows/
+
+# Cloudflare
+.wrangler/
+.dev.vars
+
+# Build artifacts
+breeze.zip
+coverage/
+test-results/
+playwright-report/
+*.apk
+*.dmg
+*.exe
+*.AppImage
+*.deb
+*.rpm
+*.snap
+*.flatpak
+
+# Capacitor generated
+android/
+ios/
+
+# Test files
+test.js
+e2e.js
+
+# Throwaway browser diagnostics. These get written constantly while chasing a
+# layout/boot bug in a real Chromium, and one (dbg_p.mjs) was accidentally committed
+# and then carried for several releases. A real finding belongs in tests/e2e/*.spec.js
+# or tools/*.mjs, never in a dbg_ script.
+dbg_*.mjs
+
+# OS files
 .DS_Store
 Thumbs.db
+
+# Editor
 *.swp
+*.swo
 *~
-.idea/
 .vscode/
-# dependencies
-node_modules/
+.idea/
+
+# Env
+.env
+.env.local
+.env.production
+
+# Claude Code project settings (share with team)
+!.claude/
+!.claude/settings.json
+!.claude/commands/
+
+# Mobile build artifacts
+mobile/www/
+mobile/android/
+mobile/ios/
+mobile/node_modules/
+
+# Python tooling
 venv/
 __pycache__/
 *.pyc
-# env / secrets
-.env
-.env.local
+
+# Secrets
 *.secret

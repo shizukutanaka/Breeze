@@ -1,0 +1,42 @@
+name: breeze-messenger
+version: '3.5.0'
+summary: P2P Encrypted Messenger
+description: |
+  Peer-to-peer encrypted messenger. No phone number. No registration.
+  Messages go directly between devices via WebRTC.
+  ECDH P-256 key exchange + AES-256-GCM encryption.
+  Also includes Dead Drop and ephemeral encrypted chat rooms.
+grade: stable
+confinement: strict
+base: core22
+compression: lzo
+
+apps:
+  breeze:
+    command: breeze/breeze-desktop --no-sandbox
+    extensions: [gnome]
+    plugs:
+      - browser-support
+      - network
+      - network-bind
+      - audio-playback
+      - desktop
+      - desktop-legacy
+      - home
+      - removable-media
+    environment:
+      TMPDIR: $XDG_RUNTIME_DIR
+
+parts:
+  breeze:
+    plugin: nil
+    source: .
+    build-packages:
+      - nodejs
+      - npm
+    override-build: |
+      cd desktop
+      npm ci
+      cp ../index.html ../sw.js ../manifest.json .
+      npx electron-builder --linux dir
+      cp -r dist/linux-unpacked $SNAPCRAFT_PART_INSTALL/breeze

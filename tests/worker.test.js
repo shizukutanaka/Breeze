@@ -1,0 +1,5110 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+// Solve a difficulty-N PoW puzzle for testing (brute-force; keep N small — see mockKV).
+// challenge defaults to "${pub}:breeze-test" (no timestamp → freshness check skipped).
+async function solvePoW(pub, difficulty = 8, challenge) {
+  const ch = challenge ?? `${pub}:breeze-test`;
+  const target = (2 ** (32 - difficulty)) >>> 0;
+  for (let nonce = 0; nonce < 10_000_000; nonce++) {
+    const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${ch}:${nonce}`));
+    if (new DataView(d).getUint32(0, false) < target) return { challenge: ch, nonce, difficulty };
+  }
+  throw new Error('PoW unsolved');
+}
+
+import worker, {
+  handlePreKeyUpload,
+  handlePreKeyFetch,
+  handlePushSubscribe,
+  handleGroupCreate,
+  handleGroupJoin,
+  handleGroupInfo,
+  handleGroupKick,
+  handleGroupAdmin,
+  handleGroupTransfer,
+  handleGroupRename,
+  handleGroupLeave,
+  handleGroupDelete,
+  handleAccountDelete,
+  handleAbuseRecord,
+  handleAbuseReport,
+  handleSealedSend,
+  handleSealedPoll,
+  handleSealedAck,
+  handleMsgSend,
+  handleMsgPoll,
+  handleAliasSet,
+  handleAliasGet,
+  handleDeviceSet,
+  handleDeviceList,
+  handleAliasDelete,
+  handleDropCreate,
+  handleDropRead,
+  handleBackupUpload,
+  handleBackupDownload,
+  handleSignal,
+  handlePresence,
+  handleOnlineCount,
+  handleTurn,
+  validateUserId,
+  handleKtLogGet,
+  handlePushUnsubscribe,
+  handlePreKeyFetchBatch,
+  handlePreKeyStatus,
+  sendPushToUser,
+  capQueueBytes,
+} from '../_worker.js';
+import { makeKV, makeEnv, apiRequest } from './helpers/mockKV.js';
+import { createFranking } from '../src/crypto/franking.js';
+import { negotiateGroup, CAPS } from '../src/crypto/negotiate.js';
+
+// base64 helper for building signed prekey bundles in tests.
+const toB64 = (bytes) => Buffer.from(bytes).toString('base64');
+
+// The worker uses several in-memory globals; reset all between tests so they
+// don't bleed across test cases.
+beforeEach(() => {
+  globalThis._rateLimitMap  = new Map();
+  globalThis._presenceCache = new Map();
+  globalThis._onlineCounter = null;
+  globalThis._msgDedup      = new Map();
+  globalThis._sealedDedup   = new Map();
+  globalThis._frankWebhookFired = new Map();
+});
+
+describe('routing & request validation (export default fetch)', () => {
+  it('serves /api/health ok when KV is bound', async () => {
+    const res = await worker.fetch(new Request('https://breeze.test/api/health'), makeEnv());
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.ok).toBe(true);
+    expect(j.kv).toBe(true);
+  });
+
+  it('health advertises an endpoint capabilities array for client feature-detection', async () => {
+    const res = await worker.fetch(new Request('https://breeze.test/api/health'), makeEnv());
+    const j = await res.json();
+    expect(Array.isArray(j.capabilities)).toBe(true);
+    // The lifecycle endpoints added this session must be discoverable.
+    for (const cap of [
+      'account-delete', 'group-leave', 'group-delete', 'group-transfer', 'group-rename',
+      'batch-alias', 'group-caps', 'backup-auth', 'alias-auth', 'drop-server-id', 'group-auth', 'group-ban',
+    ]) {
+      expect(j.capabilities).toContain(cap);
+    }
+  });
+
+  it('rejects non-POST on API routes with 405', async () => {
+    const res = await worker.fetch(new Request('https://breeze.test/api/presence'), makeEnv());
+    expect(res.status).toBe(405);
+  });
+
+  it('returns 400 on invalid JSON body', async () => {
+    const req = new Request('https://breeze.test/api/presence', {
+      method: 'POST', headers: { 'CF-Connecting-IP': '203.0.113.1' }, body: '{not json',
+    });
+    const res = await worker.fetch(req, makeEnv());
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 (not 500) for a body of literal null / primitives / arrays', async () => {
+    // `null` is valid JSON but would throw on body.userId below → 500 without the guard.
+    for (const raw of ['null', '42', '"hello"', '[1,2,3]']) {
+      const req = new Request('https://breeze.test/api/presence', {
+        method: 'POST', headers: { 'CF-Connecting-IP': '203.0.113.9' }, body: raw,
+      });
+      const res = await worker.fetch(req, makeEnv());
+      expect(res.status).toBe(400);
+      expect((await res.json()).code).toBe('INVALID_BODY');
+    }
+  });
+
+  it('returns 400 for malformed userId', async () => {
+    const res = await worker.fetch(apiRequest('/api/presence', { userId: 'bad id!!' }), makeEnv());
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_USER_ID');
+  });
+
+  it('rejects oversized bodies (413) via Content-Length', async () => {
+    const req = new Request('https://breeze.test/api/presence', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '203.0.113.2', 'Content-Length': String(2 * 1024 * 1024) },
+      body: JSON.stringify({ userId: 'abc123' }),
+    });
+    const res = await worker.fetch(req, makeEnv());
+    expect(res.status).toBe(413);
+  });
+
+  it('rejects oversized bodies (413) when Content-Length is spoofed/absent (actual body size check)', async () => {
+    // Attacker sends Content-Length: 0 (or omits it) with a large body.
+    // The actual body size check must catch this even if the header-based check passes.
+    const largeBody = 'x'.repeat(524288 + 1); // MAX_BODY_BYTES + 1
+    const req = new Request('https://breeze.test/api/presence', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '203.0.113.2' },
+      // No Content-Length header — forces the actual-body-size check path.
+      body: `{"pad":"${largeBody}"}`,
+    });
+    const res = await worker.fetch(req, makeEnv());
+    expect(res.status).toBe(413);
+    expect((await res.json()).code).toBe('BODY_TOO_LARGE');
+  });
+
+  it('returns 503 when KV is not bound', async () => {
+    const res = await worker.fetch(apiRequest('/api/presence', { userId: 'abc12345' }), {});
+    expect(res.status).toBe(503);
+  });
+});
+
+describe('rate limiting', () => {
+  it('returns 429 with Retry-After once the per-path limit is exceeded', async () => {
+    const env = makeEnv();
+    const limit = 20; // /api/presence limit
+    let last;
+    for (let i = 0; i < limit + 1; i++) {
+      last = await worker.fetch(apiRequest('/api/presence', { userId: 'abc123' }), env);
+    }
+    expect(last.status).toBe(429);
+    expect(last.headers.get('Retry-After')).toBeTruthy();
+    expect((await last.json()).code).toBe('RATE_LIMITED');
+  });
+
+  // Item 43: Retry-After must never be 0 (which says "retry now" while the bucket is still
+  // full) and the JSON body must agree with the header.
+  it('retryAfter is in [1,60] and the body matches the Retry-After header', async () => {
+    const env = makeEnv();
+    let last;
+    for (let i = 0; i < 21; i++) last = await worker.fetch(apiRequest('/api/presence', { userId: 'abc123' }), env);
+    expect(last.status).toBe(429);
+    const headerVal = parseInt(last.headers.get('Retry-After'));
+    const body = await last.json();
+    expect(headerVal).toBeGreaterThanOrEqual(1);
+    expect(headerVal).toBeLessThanOrEqual(60);
+    expect(body.retryAfter).toBe(headerVal); // body and header agree (no 0-vs-60 split)
+    expect(body.retryAfter).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('userId validation helper', () => {
+  it('accepts plausible ids and rejects junk', () => {
+    expect(validateUserId('abc123DEF')).toBeTruthy();
+    expect(validateUserId('has space')).toBeFalsy();
+    expect(validateUserId('bad!')).toBeFalsy();
+  });
+
+  it('enforces length bounds (>= 8, <= 128)', () => {
+    expect(validateUserId('a'.repeat(7))).toBeFalsy();   // too short
+    expect(validateUserId('a'.repeat(8))).toBeTruthy();  // exactly 8
+    expect(validateUserId('a'.repeat(128))).toBeTruthy(); // exactly 128 (KV-safe upper bound)
+    expect(validateUserId('a'.repeat(129))).toBeFalsy(); // one over
+    expect(validateUserId('a'.repeat(512))).toBeFalsy(); // old permissive bound — must now fail
+  });
+
+  it('accepts the base64url alphabet (+, /, =, _, -) in addition to alphanumeric', () => {
+    expect(validateUserId('aA0+/=_-xx')).toBeTruthy(); // all allowed special chars
+  });
+});
+
+// Item 48: relay queues are bounded by bytes (not just the 100-count cap) so a queue of
+// large messages can't exceed KV's 25MB value limit and wedge delivery with STORE_FAILED.
+describe('capQueueBytes (relay queue byte bound)', () => {
+  it('evicts oldest until under the byte budget, keeping the newest', () => {
+    const items = [{ p: 'a'.repeat(400) }, { p: 'b'.repeat(400) }, { p: 'c'.repeat(400) }];
+    const out = capQueueBytes(items, it => it.p.length, 1000); // 400+400=800<1000; +400=1200>1000
+    expect(out.length).toBe(2);
+    expect(out.map(i => i.p[0])).toEqual(['b', 'c']); // oldest 'a' evicted, newest 'c' kept
+  });
+
+  it('never drops the only/newest item even if it alone exceeds the budget', () => {
+    const items = [{ p: 'x'.repeat(5000) }];
+    const out = capQueueBytes(items, it => it.p.length, 1000);
+    expect(out.length).toBe(1); // a single (newest) message is always kept so a send never blocks
+  });
+
+  it('leaves a queue under budget untouched', () => {
+    const items = [{ p: 'a' }, { p: 'b' }, { p: 'c' }];
+    const out = capQueueBytes(items, it => it.p.length, 1000);
+    expect(out.length).toBe(3);
+  });
+});
+
+describe('prekey upload + fetch (OTP consumption)', () => {
+  it('consumes exactly one one-time prekey per fetch and decrements the count', async () => {
+    const env = makeEnv();
+    const up = await handlePreKeyUpload(
+      { userId: 'alice0001', identityKey: 'alice0001IK', signedPreKey: 'SPK', signedPreKeySig: 'SIG', oneTimePreKeys: ['o0', 'o1', 'o2'] },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    expect(up.status).toBe(200);
+    expect(await env.KV.get('prekey:otp:alice0001:count')).toBe('3');
+
+    const res1 = await handlePreKeyFetch({ userId: 'alice0001' }, env, apiRequest('/api/prekey/fetch', {}));
+    const b1 = await res1.json();
+    expect(b1.identityKey).toBe('alice0001IK');
+    expect(b1.oneTimePreKey).toBeDefined();
+    // The consumed index must be returned so the X3DH v5 initiator can echo it (opkId)
+    // and the responder can select the matching OTP private key.
+    expect(b1.oneTimePreKeyId).toBe(2); // highest index consumed first
+    expect(b1.oneTimePreKey).toBe('o2');
+    expect(await env.KV.get('prekey:otp:alice0001:count')).toBe('2');
+
+    // Second fetch from the SAME IP: per-IP lock prevents re-consumption (item 68).
+    // The bundle is still returned (200) but without an OTP.
+    const res2Same = await handlePreKeyFetch({ userId: 'alice0001' }, env, apiRequest('/api/prekey/fetch', {}));
+    const b2Same = await res2Same.json();
+    expect(b2Same.identityKey).toBe('alice0001IK'); // bundle still returned
+    expect(b2Same.oneTimePreKey).toBeUndefined(); // no OTP consumed (same IP)
+    expect(await env.KV.get('prekey:otp:alice0001:count')).toBe('2'); // unchanged
+
+    // Second fetch from a DIFFERENT IP: consumes the next OTP.
+    const res2 = await handlePreKeyFetch({ userId: 'alice0001' }, env, apiRequest('/api/prekey/fetch', {}, { 'CF-Connecting-IP': '203.0.113.8' }));
+    const b2 = await res2.json();
+    expect(b2.oneTimePreKey).toBeDefined();
+    expect(b2.oneTimePreKey).not.toEqual(b1.oneTimePreKey);
+    expect(b2.oneTimePreKeyId).toBe(1);
+    expect(await env.KV.get('prekey:otp:alice0001:count')).toBe('1');
+  });
+
+  it('404s when no bundle exists', async () => {
+    const res = await handlePreKeyFetch({ userId: 'nobody0001' }, makeEnv(), apiRequest('/api/prekey/fetch', {}));
+    expect(res.status).toBe(404);
+  });
+
+  it('sets replenishOTP when OTP count drops to 5 or below', async () => {
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'low00001', identityKey: 'low00001IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0', 'o1', 'o2', 'o3', 'o4', 'o5'] },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    // Consume down to count=5 (should set replenishOTP flag on the 6th fetch).
+    const r1 = await handlePreKeyFetch({ userId: 'low00001' }, env, apiRequest('/api/prekey/fetch', {}));
+    expect((await r1.json()).replenishOTP).toBe(true); // count was 6 → now 5
+  });
+
+  it('sets replenishOTP when no one-time prekeys were ever uploaded (count = 0)', async () => {
+    // A bundle uploaded with no OTPs must still signal replenishment so the client
+    // knows to generate and upload one-time prekeys on its next connection.
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'noOTP001', identityKey: 'noOTP001IK', signedPreKey: 'SPK' }, // no oneTimePreKeys
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    const res = await handlePreKeyFetch({ userId: 'noOTP001' }, env, apiRequest('/api/prekey/fetch', {}));
+    const b = await res.json();
+    expect(b.replenishOTP).toBe(true);
+    expect(b.oneTimePreKey).toBeUndefined(); // nothing to consume
+  });
+
+  // Item 63: fetch must not trust a count that has outlived its (expired) OTP entries.
+  it('fetch signals replenish and heals the count when a stale count outlives its entries', async () => {
+    const env = makeEnv();
+    const userId = 'stalefetch1';
+    await env.KV.put(`prekey:${userId}`, JSON.stringify({ identityKey: 'IK', signedPreKey: 'SPK', uploadedAt: Date.now() }));
+    await env.KV.put(`prekey:otp:${userId}:count`, '8'); // stale; entries expired/absent
+    const res = await handlePreKeyFetch({ userId }, env, apiRequest('/api/prekey/fetch', {}));
+    const b = await res.json();
+    expect(b.oneTimePreKey).toBeUndefined();   // none available despite count=8
+    expect(b.replenishOTP).toBe(true);          // not phantom-suppressed
+    expect(await env.KV.get(`prekey:otp:${userId}:count`)).toBe('0'); // self-healed
+  });
+
+  it('sets replenishSPK when the signed pre-key bundle is older than 25 days', async () => {
+    // The KV TTL for prekeys is 30 days. Warn at 25 days so there's a 5-day window.
+    const env = makeEnv();
+    // Manually inject a stale bundle (uploadedAt > 25 days ago).
+    const staleTs = Date.now() - 26 * 86400 * 1000;
+    await env.KV.put('prekey:staleusr1', JSON.stringify({ identityKey: 'IK', signedPreKey: 'SPK', uploadedAt: staleTs }));
+    const res = await handlePreKeyFetch({ userId: 'staleusr1' }, env, apiRequest('/api/prekey/fetch', {}));
+    const b = await res.json();
+    expect(b.replenishSPK).toBe(true);
+  });
+
+  it('does not set replenishSPK for a recently uploaded bundle', async () => {
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'freshusr1', identityKey: 'freshusr1IK', signedPreKey: 'SPK' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    const res = await handlePreKeyFetch({ userId: 'freshusr1' }, env, apiRequest('/api/prekey/fetch', {}));
+    const b = await res.json();
+    expect(b.replenishSPK).toBeUndefined();
+  });
+
+  it('upload rejects malformed userId (KV key injection guard)', async () => {
+    const res = await handlePreKeyUpload(
+      { userId: 'bad id!', identityKey: 'IK', signedPreKey: 'SPK' },
+      makeEnv(), apiRequest('/api/prekey/upload', {})
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_USER_ID');
+  });
+
+  it('fetch rejects malformed userId (KV key injection guard)', async () => {
+    const res = await handlePreKeyFetch({ userId: 'bad id!' }, makeEnv(), apiRequest('/api/prekey/fetch', {}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_USER_ID');
+  });
+
+  it('rejects oversized identityKey (KV inflation guard)', async () => {
+    const res = await handlePreKeyUpload(
+      { userId: 'sizetest1', identityKey: 'sizetest1' + 'x'.repeat(4992), signedPreKey: 'SPK' },
+      makeEnv(), apiRequest('/api/prekey/upload', {})
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('FIELD_TOO_LARGE');
+  });
+
+  it('rejects oversized signedPreKey (KV inflation guard)', async () => {
+    const res = await handlePreKeyUpload(
+      { userId: 'sizetest2', identityKey: 'sizetest2IK', signedPreKey: 'x'.repeat(5001) },
+      makeEnv(), apiRequest('/api/prekey/upload', {})
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('FIELD_TOO_LARGE');
+  });
+
+  it('rejects oversized edIdentityKey (KV inflation guard)', async () => {
+    const res = await handlePreKeyUpload(
+      { userId: 'sizetest3', identityKey: 'sizetest3IK', signedPreKey: 'SPK', edIdentityKey: 'x'.repeat(501) },
+      makeEnv(), apiRequest('/api/prekey/upload', {})
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('FIELD_TOO_LARGE');
+  });
+
+  it('rejects oversized signedPreKeySig (KV inflation guard)', async () => {
+    const res = await handlePreKeyUpload(
+      { userId: 'sizetest4', identityKey: 'sizetest4IK', signedPreKey: 'SPK', signedPreKeySig: 'x'.repeat(501) },
+      makeEnv(), apiRequest('/api/prekey/upload', {})
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('FIELD_TOO_LARGE');
+  });
+
+  it('rejects non-string identityKey or signedPreKey (type guard)', async () => {
+    // An object passes the !identityKey presence check but bypasses size guards
+    // and would be stored as a JSON object, breaking every client that decodes it.
+    const e = makeEnv();
+    const r1 = await handlePreKeyUpload(
+      { userId: 'typgrd001', identityKey: { key: 'data' }, signedPreKey: 'SPK' },
+      e, apiRequest('/api/prekey/upload', {}),
+    );
+    expect(r1.status).toBe(400);
+    expect((await r1.json()).code).toBe('INVALID_TYPE');
+
+    const r2 = await handlePreKeyUpload(
+      { userId: 'typgrd002', identityKey: 'typgrd002IK', signedPreKey: ['S', 'P', 'K'] },
+      e, apiRequest('/api/prekey/upload', {}),
+    );
+    expect(r2.status).toBe(400);
+    expect((await r2.json()).code).toBe('INVALID_TYPE');
+  });
+
+  it('rejects non-string edIdentityKey or signedPreKeySig when present (type guard)', async () => {
+    const e = makeEnv();
+    const r1 = await handlePreKeyUpload(
+      { userId: 'typgrd003', identityKey: 'typgrd003IK', signedPreKey: 'SPK', edIdentityKey: 42 },
+      e, apiRequest('/api/prekey/upload', {}),
+    );
+    expect(r1.status).toBe(400);
+    expect((await r1.json()).code).toBe('INVALID_TYPE');
+
+    const r2 = await handlePreKeyUpload(
+      { userId: 'typgrd004', identityKey: 'typgrd004IK', signedPreKey: 'SPK', signedPreKeySig: { sig: 'x' } },
+      e, apiRequest('/api/prekey/upload', {}),
+    );
+    expect(r2.status).toBe(400);
+    expect((await r2.json()).code).toBe('INVALID_TYPE');
+  });
+
+  it('fetch succeeds (200, no oneTimePreKey) when the OTP KV value is corrupt JSON', async () => {
+    const env = makeEnv();
+    const uid = 'corruptotp1'; // ≥8 chars, passes validateUserId
+    // Upload a valid bundle without OTPs.
+    await handlePreKeyUpload({ userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK' }, env, apiRequest('/api/prekey/upload', {}));
+    // Manually plant one corrupt OTP entry (simulates a KV corruption event).
+    await env.KV.put(`prekey:otp:${uid}:0`, '{corrupt json');
+    await env.KV.put(`prekey:otp:${uid}:count`, '1');
+    const res = await handlePreKeyFetch({ userId: uid }, env, apiRequest('/api/prekey/fetch', {}));
+    expect(res.status).toBe(200);
+    const bundle = await res.json();
+    expect(bundle.identityKey).toBe(uid + 'IK');
+    // Corrupt OTP was consumed (deleted) but must not be attached to the bundle.
+    expect(bundle.oneTimePreKey).toBeUndefined();
+  });
+
+  it('OTP type guard: skips null/non-string entries; count reflects highest valid index only', async () => {
+    // Without the type guard, JSON.stringify(null) = 'null' is stored, then
+    // consumed on fetch without delivering a key — silently wasting the slot.
+    const env = makeEnv();
+    const uid = 'otptypgrd1';
+    // Upload array with non-string entries interspersed with valid keys.
+    await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK',
+        oneTimePreKeys: ['key0', null, 'key2', 42, 'key4'] },
+      env, apiRequest('/api/prekey/upload', {})
+    );
+    // Count should reflect the highest valid index + 1 = 4+1 = 5, not array length (5 same here).
+    // The important thing: null at index 1 and 42 at index 3 must NOT be stored.
+    expect(await env.KV.get(`prekey:otp:${uid}:1`)).toBeNull();  // null not stored
+    expect(await env.KV.get(`prekey:otp:${uid}:3`)).toBeNull();  // number not stored
+    // Valid keys are stored
+    expect(await env.KV.get(`prekey:otp:${uid}:0`)).toBe(JSON.stringify('key0'));
+    expect(await env.KV.get(`prekey:otp:${uid}:2`)).toBe(JSON.stringify('key2'));
+    expect(await env.KV.get(`prekey:otp:${uid}:4`)).toBe(JSON.stringify('key4'));
+    // Fetch consumes a valid key, not a null slot
+    const res = await handlePreKeyFetch({ userId: uid }, env, apiRequest('/api/prekey/fetch', {}));
+    const b = await res.json();
+    expect(b.oneTimePreKey).toBe('key4'); // highest valid index
+  });
+
+  it('OTP type guard: count is not written when all entries are non-string', async () => {
+    const env = makeEnv();
+    const uid = 'otptypgrd2';
+    await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK',
+        oneTimePreKeys: [null, 42, { a: 1 }] },
+      env, apiRequest('/api/prekey/upload', {})
+    );
+    // No valid keys → count key must not be written
+    expect(await env.KV.get(`prekey:otp:${uid}:count`)).toBeNull();
+    // Fetch still works (no OTPs to deliver, replenishOTP set)
+    const res = await handlePreKeyFetch({ userId: uid }, env, apiRequest('/api/prekey/fetch', {}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).replenishOTP).toBe(true);
+  });
+
+  // ── OTP delete-failure safety (item 28) ──────────────────────────────────────
+  it('OTP not attached when kvDel fails — prevents OTP reuse / X3DH forward-secrecy degradation', async () => {
+    // If the delete of the OTP KV slot fails, the OTP should NOT be included in the
+    // response. Returning an OTP whose slot wasn't actually consumed would let a second
+    // initiator receive the same OTP → DH4 component shared → X3DH FS degradation.
+    const env = makeEnv();
+    const uid = 'otpdelfail';
+    await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK', oneTimePreKeys: ['otp-secret'] },
+      env, apiRequest('/api/prekey/upload', {})
+    );
+    // Inject a failing delete (simulates transient KV error)
+    const realDelete = env.KV.delete.bind(env.KV);
+    env.KV.delete = async (key) => {
+      if (key.startsWith(`prekey:otp:${uid}`)) throw new Error('KV_TRANSIENT_ERROR');
+      return realDelete(key);
+    };
+    const res = await handlePreKeyFetch({ userId: uid }, env, apiRequest('/api/prekey/fetch', {}));
+    expect(res.status).toBe(200);
+    const b = await res.json();
+    // No OTP should be attached — slot was not consumed
+    expect(b.oneTimePreKey).toBeUndefined();
+    expect(b.oneTimePreKeyId).toBeUndefined();
+    // replenishOTP should be set so the client knows to upload fresh OTPs
+    expect(b.replenishOTP).toBe(true);
+    // The OTP slot should still be in KV (delete failed = slot intact for next fetch)
+    expect(await env.KV.get(`prekey:otp:${uid}:0`)).not.toBeNull();
+  });
+
+  // ── OTP drain protection — per-IP consumption lock (item 68) ─────────────────
+  describe('OTP drain protection — per-IP consumption lock (item 68)', () => {
+    it('same source IP cannot consume a second OTP for the same target within 24 h', async () => {
+      const env = makeEnv();
+      await handlePreKeyUpload(
+        { userId: 'drainusr1', identityKey: 'drainusr1IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0', 'o1'] },
+        env, apiRequest('/api/prekey/upload', {}),
+      );
+      // First fetch from IP A: should consume an OTP.
+      const r1 = await handlePreKeyFetch({ userId: 'drainusr1' }, env, apiRequest('/api/prekey/fetch', {}));
+      expect((await r1.json()).oneTimePreKey).toBeDefined();
+      expect(await env.KV.get('prekey:otp:drainusr1:count')).toBe('1');
+
+      // Second fetch from the SAME IP: lock must prevent OTP consumption.
+      const r2 = await handlePreKeyFetch({ userId: 'drainusr1' }, env, apiRequest('/api/prekey/fetch', {}));
+      const b2 = await r2.json();
+      expect(r2.status).toBe(200);          // bundle still returned (not blocked)
+      expect(b2.oneTimePreKey).toBeUndefined(); // but no OTP attached
+      expect(await env.KV.get('prekey:otp:drainusr1:count')).toBe('1'); // count unchanged
+    });
+
+    it('different source IPs each consume one OTP independently (legitimate multi-user contact)', async () => {
+      const env = makeEnv();
+      await handlePreKeyUpload(
+        { userId: 'drainusr2', identityKey: 'drainusr2IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0', 'o1'] },
+        env, apiRequest('/api/prekey/upload', {}),
+      );
+      const rA = await handlePreKeyFetch(
+        { userId: 'drainusr2' }, env,
+        apiRequest('/api/prekey/fetch', {}, { 'CF-Connecting-IP': '10.0.0.1' }),
+      );
+      expect((await rA.json()).oneTimePreKey).toBeDefined();
+
+      const rB = await handlePreKeyFetch(
+        { userId: 'drainusr2' }, env,
+        apiRequest('/api/prekey/fetch', {}, { 'CF-Connecting-IP': '10.0.0.2' }),
+      );
+      expect((await rB.json()).oneTimePreKey).toBeDefined();
+      expect(await env.KV.get('prekey:otp:drainusr2:count')).toBe('0'); // both consumed
+    });
+
+    it('mutation guard: removing the lock check re-enables same-IP double-consumption', async () => {
+      // Verify the above test would FAIL without the guard (confirming it is effective).
+      // We simulate "no lock" by directly deleting the lock key after the first fetch.
+      const env = makeEnv();
+      await handlePreKeyUpload(
+        { userId: 'drainusr3', identityKey: 'drainusr3IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0', 'o1'] },
+        env, apiRequest('/api/prekey/upload', {}),
+      );
+      const r1 = await handlePreKeyFetch({ userId: 'drainusr3' }, env, apiRequest('/api/prekey/fetch', {}));
+      expect((await r1.json()).oneTimePreKey).toBeDefined(); // first fetch OK
+
+      // Simulate absence of the guard by manually clearing the lock KV entry.
+      // In real production without the fix, the lock would never be written.
+      const lockKeys = [...env.KV.store.keys()].filter(k => k.startsWith('otp_lock:'));
+      for (const k of lockKeys) env.KV.store.delete(k);
+
+      // Without the guard, the same IP can consume a second OTP.
+      const r2 = await handlePreKeyFetch({ userId: 'drainusr3' }, env, apiRequest('/api/prekey/fetch', {}));
+      expect((await r2.json()).oneTimePreKey).toBeDefined(); // consumes second OTP
+      // This test PASSING proves the lock IS what prevents re-consumption above.
+      // If the production code still has the guard: the lock key would be re-set after
+      // r1 but we deleted it above to simulate "no guard" — so r2 can consume freely.
+    });
+  });
+});
+
+describe('prekey key-history audit log (I11 precursor)', () => {
+  it('records an IK hash on first upload and returns it on fetch', async () => {
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'hist0001', identityKey: 'hist0001IK-A', signedPreKey: 'SPK' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    const res = await handlePreKeyFetch({ userId: 'hist0001' }, env, apiRequest('/api/prekey/fetch', {}));
+    const bundle = await res.json();
+    expect(bundle.keyHistory).toBeDefined();
+    expect(bundle.keyHistory.length).toBe(1);
+    expect(bundle.keyHistory[0].h).toBeTruthy();
+  });
+
+  it('appends a new entry when the IK changes (rollover detection)', async () => {
+    const env = makeEnv();
+    const upload = (ik) => handlePreKeyUpload(
+      { userId: 'hist0002', identityKey: ik, signedPreKey: 'SPK' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    await upload('hist0002IK-original');
+    await upload('hist0002IK-changed'); // key rollover
+    const res = await handlePreKeyFetch({ userId: 'hist0002' }, env, apiRequest('/api/prekey/fetch', {}));
+    const bundle = await res.json();
+    expect(bundle.keyHistory.length).toBe(2);
+    // The two entries have different hashes.
+    expect(bundle.keyHistory[0].h).not.toBe(bundle.keyHistory[1].h);
+  });
+
+  it('does not duplicate an entry when uploading the same IK again', async () => {
+    const env = makeEnv();
+    const upload = () => handlePreKeyUpload(
+      { userId: 'hist0003', identityKey: 'hist0003IK-stable', signedPreKey: 'SPK' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    await upload();
+    await upload();
+    await upload();
+    const res = await handlePreKeyFetch({ userId: 'hist0003' }, env, apiRequest('/api/prekey/fetch', {}));
+    expect((await res.json()).keyHistory.length).toBe(1);
+  });
+
+  it('caps the log at 100 entries (raised from 10 to prevent eviction-based hiding of key rollover)', async () => {
+    const env = makeEnv();
+    // Upload 105 distinct keys; only the last 100 should survive.
+    for (let i = 0; i < 105; i++) {
+      await handlePreKeyUpload(
+        { userId: 'hist0004', identityKey: `hist0004IK-${i}`, signedPreKey: 'SPK' },
+        env, apiRequest('/api/prekey/upload', {}),
+      );
+    }
+    const res = await handlePreKeyFetch({ userId: 'hist0004' }, env, apiRequest('/api/prekey/fetch', {}));
+    expect((await res.json()).keyHistory.length).toBe(100);
+  });
+
+  it('N5: each key-history entry carries a chain hash (c field)', async () => {
+    // The worker computes c = SHA-256(prevC ‖ h) and stores it on each entry.
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'chain001', identityKey: 'chain001IK-1', signedPreKey: 'SPK' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    const b1 = await (await handlePreKeyFetch({ userId: 'chain001' }, env, apiRequest('/api/prekey/fetch', {}))).json();
+    expect(typeof b1.keyHistory[0].c).toBe('string');
+    expect(b1.keyHistory[0].c.length).toBeGreaterThan(20);
+  });
+
+  it('N5: chain hash links correctly between two IK rollovers', async () => {
+    // Upload two different IKs. The second entry's c must equal
+    // SHA-256(firstEntry.c ‖ secondEntry.h) — verified via the ktlog module.
+    const { verifyChain } = await import('../src/crypto/ktlog.js');
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'chain002', identityKey: 'chain002IK-A', signedPreKey: 'SPK' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    await handlePreKeyUpload(
+      { userId: 'chain002', identityKey: 'chain002IK-B', signedPreKey: 'SPK' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    const bundle = await (await handlePreKeyFetch({ userId: 'chain002' }, env, apiRequest('/api/prekey/fetch', {}))).json();
+    expect(bundle.keyHistory.length).toBe(2);
+    const result = await verifyChain(crypto.subtle, bundle.keyHistory);
+    expect(result.ok).toBe(true);
+  });
+
+  it('N5: a tampered chain hash is detected by verifyChain', async () => {
+    const { verifyChain } = await import('../src/crypto/ktlog.js');
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'chain003', identityKey: 'chain003IK-X', signedPreKey: 'SPK' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    await handlePreKeyUpload(
+      { userId: 'chain003', identityKey: 'chain003IK-Y', signedPreKey: 'SPK' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    const bundle = await (await handlePreKeyFetch({ userId: 'chain003' }, env, apiRequest('/api/prekey/fetch', {}))).json();
+    const tampered = bundle.keyHistory.map((e, i) =>
+      i === 1 ? { ...e, c: btoa('tampered-chain-hash-value-xxxx') } : e
+    );
+    const result = await verifyChain(crypto.subtle, tampered);
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe('prekey signed-prekey signature verification (I1/G2)', () => {
+  // Build a signed prekey bundle: an Ed25519 identity key signs the (raw) SPK bytes.
+  async function signedBundle(userId) {
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
+    const spk = crypto.getRandomValues(new Uint8Array(32)); // raw SPK public bytes
+    const sig = new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, spk));
+    return {
+      userId, identityKey: userId + 'IKx25519',
+      edIdentityKey: toB64(edPub), signedPreKey: toB64(spk), signedPreKeySig: toB64(sig),
+      ed, spk,
+    };
+  }
+
+  it('accepts a validly signed bundle and returns the ed identity key on fetch', async () => {
+    const env = makeEnv();
+    const b = await signedBundle('signer001');
+    const up = await handlePreKeyUpload(b, env, apiRequest('/api/prekey/upload', {}));
+    expect(up.status).toBe(200);
+    const res = await handlePreKeyFetch({ userId: 'signer001' }, env, apiRequest('/api/prekey/fetch', {}));
+    const bundle = await res.json();
+    expect(bundle.edIdentityKey).toBe(b.edIdentityKey);
+    expect(bundle.signedPreKeySig).toBe(b.signedPreKeySig);
+  });
+
+  it('rejects a bundle whose signature does not match (MITM injection)', async () => {
+    const env = makeEnv();
+    const b = await signedBundle('signer002');
+    // Attacker swaps in a different SPK but cannot forge the Ed25519 signature.
+    b.signedPreKey = toB64(crypto.getRandomValues(new Uint8Array(32)));
+    const up = await handlePreKeyUpload(b, env, apiRequest('/api/prekey/upload', {}));
+    expect(up.status).toBe(400);
+    expect((await up.json()).code).toBe('PREKEY_SIG_INVALID');
+  });
+
+  it('still accepts a legacy unsigned bundle (v4 transition)', async () => {
+    const env = makeEnv();
+    const up = await handlePreKeyUpload(
+      { userId: 'legacy001', identityKey: 'legacy001IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0'] },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    expect(up.status).toBe(200);
+  });
+
+  it('stores and returns caps array so the initiator can call parsePeerCaps (N3)', async () => {
+    // A v5 client includes caps in its prekey upload so peers discover its capabilities
+    // when they fetch the bundle and call parsePeerCaps(bundle) → negotiate().
+    const env = makeEnv();
+    const caps = ['x3dh-v5', 'group-v5', 'franking'];
+    await handlePreKeyUpload(
+      { userId: 'v5user01', identityKey: 'v5user01IK', signedPreKey: 'SPK', caps },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    const res = await handlePreKeyFetch({ userId: 'v5user01' }, env, apiRequest('/api/prekey/fetch', {}));
+    const bundle = await res.json();
+    expect(bundle.caps).toEqual(caps);
+  });
+
+  it('caps array is sanitized on upload (oversized strings and entries are bounded)', async () => {
+    const env = makeEnv();
+    const longCap = 'x'.repeat(100); // exceeds 32-char cap
+    const manyCaps = Array.from({ length: 25 }, (_, i) => `cap-${i}`); // exceeds 20-entry cap
+    await handlePreKeyUpload(
+      { userId: 'v5user02', identityKey: 'v5user02IK', signedPreKey: 'SPK', caps: [longCap, ...manyCaps] },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    const bundle = await (await handlePreKeyFetch({ userId: 'v5user02' }, env, apiRequest('/api/prekey/fetch', {}))).json();
+    expect(bundle.caps.length).toBeLessThanOrEqual(20);
+    expect(bundle.caps[0].length).toBe(32); // truncated to 32 chars
+  });
+
+  it('x3dh legacy compat field is stored and returned alongside caps (N3 advertise() round-trip)', async () => {
+    // advertise() returns both { caps: [...], x3dh: 'v5' }; the worker must preserve
+    // x3dh so parsePeerCaps()'s fallback branch works for transition clients that
+    // understand x3dh but not caps.
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'v5user03', identityKey: 'v5user03IK', signedPreKey: 'SPK', caps: ['x3dh-v5'], x3dh: 'v5' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    const bundle = await (await handlePreKeyFetch({ userId: 'v5user03' }, env, apiRequest('/api/prekey/fetch', {}))).json();
+    expect(bundle.caps).toEqual(['x3dh-v5']);
+    expect(bundle.x3dh).toBe('v5');
+  });
+
+  it('x3dh field is capped at 4 chars to prevent oversized storage', async () => {
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'v5user04', identityKey: 'v5user04IK', signedPreKey: 'SPK', x3dh: 'malicious-extra-long-value' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    const bundle = await (await handlePreKeyFetch({ userId: 'v5user04' }, env, apiRequest('/api/prekey/fetch', {}))).json();
+    expect(bundle.x3dh.length).toBeLessThanOrEqual(4);
+  });
+});
+
+describe('batch prekey fetch (/api/prekey/fetch/batch)', () => {
+  const req = apiRequest('/api/prekey/fetch/batch', {});
+
+  it('resolves multiple bundles in one call; unknown users map to null', async () => {
+    const env = makeEnv();
+    await handlePreKeyUpload({ userId: 'batchpk01', identityKey: 'batchpk01IK1', signedPreKey: 'SPK1' }, env, req);
+    await handlePreKeyUpload({ userId: 'batchpk02', identityKey: 'batchpk02IK2', signedPreKey: 'SPK2' }, env, req);
+    const res = await handlePreKeyFetchBatch({ userIds: ['batchpk01', 'batchpk02', 'nobody001'] }, env, req);
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.results['batchpk01'].identityKey).toBe('batchpk01IK1');
+    expect(j.results['batchpk02'].identityKey).toBe('batchpk02IK2');
+    expect(j.results['nobody001']).toBeNull();
+  });
+
+  it('deduplicates userIds and caps at 10', async () => {
+    const env = makeEnv();
+    // Register 12 distinct users
+    for (let i = 1; i <= 12; i++) {
+      const id = `batchi${String(i).padStart(3, '0')}`;
+      await handlePreKeyUpload({ userId: id, identityKey: `${id}IK${i}`, signedPreKey: `SPK${i}` }, env, req);
+    }
+    const ids = Array.from({ length: 12 }, (_, i) => `batchi${String(i + 1).padStart(3, '0')}`);
+    // Also include a duplicate
+    ids.push(ids[0]);
+    const res = await handlePreKeyFetchBatch({ userIds: ids }, env, req);
+    const j = await res.json();
+    expect(Object.keys(j.results).length).toBe(10); // capped at 10, deduped
+  });
+
+  it('returns 400 when userIds is missing or empty', async () => {
+    const r1 = await handlePreKeyFetchBatch({}, makeEnv(), req);
+    expect(r1.status).toBe(400);
+    const r2 = await handlePreKeyFetchBatch({ userIds: [] }, makeEnv(), req);
+    expect(r2.status).toBe(400);
+    const r3 = await handlePreKeyFetchBatch({ userIds: ['bad id!'] }, makeEnv(), req);
+    expect(r3.status).toBe(400); // all invalid → no valid userIds
+  });
+});
+
+describe('prekey status — non-destructive OTP/SPK health check (/api/prekey/status)', () => {
+  const req = apiRequest('/api/prekey/status', {});
+
+  it('returns otpCount, uploadedAt, and replenish flags without consuming an OTP', async () => {
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'pkstat01', identityKey: 'pkstat01IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0', 'o1', 'o2', 'o3', 'o4', 'o5', 'o6', 'o7'] },
+      env, req,
+    );
+    const res = await handlePreKeyStatus({ userId: 'pkstat01' }, env, req);
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.otpCount).toBe(8);
+    expect(typeof j.uploadedAt).toBe('number');
+    expect(j.replenishOTP).toBe(false); // 8 > 5
+    expect(j.replenishSPK).toBe(false); // just uploaded
+    // OTP count unchanged after status check (non-destructive).
+    const r2 = await handlePreKeyStatus({ userId: 'pkstat01' }, env, req);
+    expect((await r2.json()).otpCount).toBe(8);
+  });
+
+  it('sets replenishOTP: true when OTP count is ≤ 5', async () => {
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'pkstat02', identityKey: 'pkstat02IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0', 'o1', 'o2'] },
+      env, req,
+    );
+    const j = await (await handlePreKeyStatus({ userId: 'pkstat02' }, env, req)).json();
+    expect(j.replenishOTP).toBe(true);
+  });
+
+  // Item 63: the count key can outlive its OTP entries (fetch refreshes count's TTL but the
+  // unconsumed entries keep their original upload-time TTL and expire first). A stale count must
+  // NOT be reported as phantom OTPs — that would suppress replenishOTP and silently degrade X3DH.
+  it('reports 0 OTPs (not a phantom count) when the entries have expired, and heals the count', async () => {
+    const env = makeEnv();
+    const userId = 'pkstale01';
+    await env.KV.put(`prekey:${userId}`, JSON.stringify({ identityKey: 'IK', signedPreKey: 'SPK', uploadedAt: Date.now() }));
+    await env.KV.put(`prekey:otp:${userId}:count`, '8'); // stale count; NO otp entries present
+    const j = await (await handlePreKeyStatus({ userId }, env, req)).json();
+    expect(j.otpCount).toBe(0);          // not the phantom 8
+    expect(j.replenishOTP).toBe(true);   // owner is correctly warned
+    expect(await env.KV.get(`prekey:otp:${userId}:count`)).toBe('0'); // self-healed
+  });
+
+  it('reports the real count when the top OTP entry is still present', async () => {
+    const env = makeEnv();
+    const userId = 'pkstale02';
+    await env.KV.put(`prekey:${userId}`, JSON.stringify({ identityKey: 'IK', signedPreKey: 'SPK', uploadedAt: Date.now() }));
+    await env.KV.put(`prekey:otp:${userId}:count`, '8');
+    await env.KV.put(`prekey:otp:${userId}:7`, JSON.stringify('topotp')); // index count-1 present
+    const j = await (await handlePreKeyStatus({ userId }, env, req)).json();
+    expect(j.otpCount).toBe(8);
+    expect(j.replenishOTP).toBe(false);
+  });
+
+  it('returns 404 for a user with no prekeys', async () => {
+    const res = await handlePreKeyStatus({ userId: 'pkstat03' }, makeEnv(), req);
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 400 for missing or invalid userId', async () => {
+    const r1 = await handlePreKeyStatus({}, makeEnv(), req);
+    expect(r1.status).toBe(400);
+    const r2 = await handlePreKeyStatus({ userId: 'bad id!' }, makeEnv(), req);
+    expect(r2.status).toBe(400);
+  });
+
+  // Caps exposure: a client can read a peer's advertised capabilities (e.g. the group-v5
+  // negotiation floor) from status WITHOUT consuming an OTP the way prekey/fetch does.
+  it('exposes the uploaded caps array (and legacy x3dh field) without consuming an OTP', async () => {
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'pkcaps01', identityKey: 'pkcaps01IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0', 'o1'], caps: ['group-v5', 'x3dh-v5'], x3dh: 'v5' },
+      env, req,
+    );
+    const j = await (await handlePreKeyStatus({ userId: 'pkcaps01' }, env, req)).json();
+    expect(j.caps).toEqual(['group-v5', 'x3dh-v5']);
+    expect(j.x3dh).toBe('v5');
+    // Non-destructive: the OTP count is unchanged by the caps read.
+    expect(j.otpCount).toBe(2);
+    expect((await (await handlePreKeyStatus({ userId: 'pkcaps01' }, env, req)).json()).otpCount).toBe(2);
+  });
+
+  it('omits caps/x3dh for a legacy bundle that advertised neither', async () => {
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'pkcaps02', identityKey: 'pkcaps02IK', signedPreKey: 'SPK', oneTimePreKeys: ['o0'] },
+      env, req,
+    );
+    const j = await (await handlePreKeyStatus({ userId: 'pkcaps02' }, env, req)).json();
+    expect(j.caps).toBeUndefined();
+    expect(j.x3dh).toBeUndefined();
+  });
+});
+
+describe('key-transparency log — standalone get endpoint (/api/ktlog/get)', () => {
+  it('returns an empty log for a user that has never uploaded prekeys', async () => {
+    const res = await handleKtLogGet({ userId: 'nokeys01' }, makeEnv(), apiRequest('/api/ktlog/get', {}));
+    const j = await res.json();
+    expect(res.status).toBe(200);
+    expect(j.log).toEqual([]);
+  });
+
+  it('returns the key history log after a prekey upload', async () => {
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'ktuser01', identityKey: 'ktuser01IK', signedPreKey: 'SPK' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    const res = await handleKtLogGet({ userId: 'ktuser01' }, env, apiRequest('/api/ktlog/get', {}));
+    const j = await res.json();
+    expect(res.status).toBe(200);
+    expect(Array.isArray(j.log)).toBe(true);
+    expect(j.log.length).toBe(1);
+    expect(j.log[0]).toMatchObject({ ts: expect.any(Number), h: expect.any(String), c: expect.any(String) });
+  });
+
+  it('does not consume an OTP (log is readable independently of bundle fetch)', async () => {
+    const env = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'ktuser02', identityKey: 'ktuser02IK', signedPreKey: 'SPK', oneTimePreKeys: ['otp0'] },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    // Fetch log twice — OTP count should stay at 1 (not consumed).
+    await handleKtLogGet({ userId: 'ktuser02' }, env, apiRequest('/api/ktlog/get', {}));
+    await handleKtLogGet({ userId: 'ktuser02' }, env, apiRequest('/api/ktlog/get', {}));
+    // Now fetch the bundle — OTP should still be available.
+    const bundle = await (await handlePreKeyFetch({ userId: 'ktuser02' }, env, apiRequest('/api/prekey/fetch', {}))).json();
+    expect(bundle.oneTimePreKey).toBe('otp0');
+  });
+
+  it('returns 400 for missing or invalid userId', async () => {
+    const r1 = await handleKtLogGet({}, makeEnv(), apiRequest('/api/ktlog/get', {}));
+    expect(r1.status).toBe(400);
+    const r2 = await handleKtLogGet({ userId: 'bad id!' }, makeEnv(), apiRequest('/api/ktlog/get', {}));
+    expect(r2.status).toBe(400);
+  });
+});
+
+describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {
+  const req = (b) => apiRequest('/api/group/x', b);
+  async function setupGroup(env) {
+    const create = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+    const { token } = await create.json();
+    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', memberName: 'B' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
+    return token;
+  }
+
+  it('starts at epoch 0 and bumps on each kick', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const info0 = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info0.epoch).toBe(0);
+
+    const kick = await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
+    const kj = await kick.json();
+    expect(kj.ok).toBe(true);
+    expect(kj.epoch).toBe(1); // bumped → remaining members rotate sender keys
+
+    const info1 = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info1.epoch).toBe(1);
+    expect(info1.members.some((m) => m.id === 'carol001')).toBe(false); // actually removed
+  });
+
+  it('only the creator can kick (no epoch bump otherwise)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupKick({ token, kickId: 'carol001', adminId: 'bob00001' }, env, req({}));
+    expect(res.status).toBe(403);
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.epoch).toBe(0); // unchanged
+  });
+
+  it('kicking a non-member returns 404 without bumping epoch', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupKick({ token, kickId: 'nobody00', adminId: 'creator1' }, env, req({}));
+    expect(res.status).toBe(404);
+    expect((await res.json()).code).toBe('NOT_MEMBER');
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.epoch).toBe(0); // no wasteful epoch churn
+  });
+
+  it('creator cannot kick themselves (self-kick returns 400)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupKick({ token, kickId: 'creator1', adminId: 'creator1' }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('FORBIDDEN');
+    // Epoch must not change.
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.epoch).toBe(0);
+  });
+
+  it('join after kick returns the bumped epoch so new members know which sender key to request', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
+    // Dave joins the group after the kick — should see epoch 1, not 0.
+    const res = await handleGroupJoin({ token, memberId: 'dave0001', memberPub: 'dave0001dpub', memberName: 'D' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).epoch).toBe(1);
+  });
+});
+
+// Item 64 — durable kick: a kicked member is banned from rejoining via the invite token
+// (otherwise kick is undone the moment they re-join + sender keys are redistributed). The
+// creator can lift the ban with group/admin action:'unban'.
+describe('group durable kick + unban (item 64)', () => {
+  const req = (b) => apiRequest('/api/group/x', b);
+  async function setupGroup(env) {
+    const create = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+    const { token } = await create.json();
+    await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
+    return token;
+  }
+
+  it('a kicked member cannot rejoin via the invite token', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
+    const rejoin = await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
+    expect(rejoin.status).toBe(403);
+    expect((await rejoin.json()).code).toBe('BANNED');
+    // and they are not silently re-added
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.members.some(m => m.id === 'carol001')).toBe(false);
+  });
+
+  it('a non-kicked member can still join normally (ban is targeted)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
+    const res = await handleGroupJoin({ token, memberId: 'dave0001', memberPub: 'dave0001dpub', memberName: 'D' }, env, req({}));
+    expect(res.status).toBe(200);
+  });
+
+  it('the creator can unban a kicked member, who may then rejoin', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
+    const unban = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'carol001', action: 'unban' }, env, req({}));
+    expect(unban.status).toBe(200);
+    expect((await unban.json()).banned).not.toContain('carol001');
+    const rejoin = await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
+    expect(rejoin.status).toBe(200);
+  });
+
+  it('unban is idempotent for a non-banned id (no-op success)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'carol001', action: 'unban' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).notBanned).toBe(true);
+  });
+
+  it('only the creator can unban (a regular member cannot)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
+    const res = await handleGroupAdmin({ token, adminId: 'carol001', targetId: 'carol001', action: 'unban' }, env, req({}));
+    expect(res.status).toBe(403);
+  });
+});
+
+describe('group multi-admin management (completes the half-built admins array)', () => {
+  const req = (b) => apiRequest('/api/group/admin', b);
+  async function setupGroup(env) {
+    const create = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+    const { token } = await create.json();
+    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', memberName: 'B' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
+    return token;
+  }
+
+  it('the creator can promote a member to admin, surfaced in group info', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).admins).toEqual(['bob00001']);
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.admins).toEqual(['bob00001']);
+    expect(info.creatorId).toBe('creator1');
+  });
+
+  it('promote is idempotent (re-promoting an admin does not duplicate)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    const j = await res.json();
+    expect(j.alreadyAdmin).toBe(true);
+    expect(j.admins).toEqual(['bob00001']);
+  });
+
+  it('the creator can demote an admin back to a regular member', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'demote' }, env, req({}));
+    expect((await res.json()).admins).toEqual([]);
+  });
+
+  it('a non-creator cannot manage admins (no privilege escalation)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    // bob is an admin but still cannot mint another admin.
+    const res = await handleGroupAdmin({ token, adminId: 'bob00001', targetId: 'carol001', action: 'promote' }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('FORBIDDEN');
+  });
+
+  it('cannot promote the creator (creator authority is implicit)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'creator1', action: 'promote' }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_TARGET');
+  });
+
+  it('cannot promote a non-member', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'nobody00', action: 'promote' }, env, req({}));
+    expect(res.status).toBe(404);
+    expect((await res.json()).code).toBe('NOT_MEMBER');
+  });
+
+  it('rejects an unknown action', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'destroy' }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_ACTION');
+  });
+
+  it('a promoted admin can kick a regular member (authorization honors admins)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    const kick = await handleGroupKick({ token, kickId: 'carol001', adminId: 'bob00001' }, env, req({}));
+    expect(kick.status).toBe(200);
+    expect((await kick.json()).epoch).toBe(1);
+  });
+
+  it('an admin cannot kick a fellow admin — only the creator can', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'carol001', action: 'promote' }, env, req({}));
+    // bob (admin) tries to kick carol (admin) → blocked.
+    const blocked = await handleGroupKick({ token, kickId: 'carol001', adminId: 'bob00001' }, env, req({}));
+    expect(blocked.status).toBe(403);
+    // creator can.
+    const ok = await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
+    expect(ok.status).toBe(200);
+  });
+
+  it('demoting a kicked/removed admin is handled (leave strips admin status)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    await handleGroupLeave({ token, memberId: 'bob00001' }, env, req({}));
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.admins).toEqual([]); // leave filtered bob out of admins
+  });
+});
+
+describe('group ownership transfer (companion to multi-admin)', () => {
+  const req = (b) => apiRequest('/api/group/transfer', b);
+  async function setupGroup(env) {
+    const create = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+    const { token } = await create.json();
+    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', memberName: 'Bob' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
+    return token;
+  }
+
+  it('the creator transfers ownership; creator* fields follow the new owner', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'bob00001' }, env, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.creatorId).toBe('bob00001');
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.creatorId).toBe('bob00001');
+    expect(info.creatorName).toBe('Bob'); // resolved from the member record
+    // Outgoing creator retained as admin so they keep moderation rights.
+    expect(info.admins).toContain('creator1');
+    // Incoming creator's authority is now implicit — not duplicated in admins.
+    expect(info.admins).not.toContain('bob00001');
+  });
+
+  it('after transfer the new creator can perform creator-only actions; the old cannot', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'bob00001' }, env, req({}));
+    // Old creator (now an admin) cannot delete the group.
+    const del1 = await handleGroupDelete({ token, adminId: 'creator1' }, env, req({}));
+    expect(del1.status).toBe(403);
+    // New creator can.
+    const del2 = await handleGroupDelete({ token, adminId: 'bob00001' }, env, req({}));
+    expect(del2.status).toBe(200);
+  });
+
+  it('promoting the new owner out of admins is idempotent (was already an admin)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    // Transfer to bob who is currently an admin → bob's implicit authority, dropped from admins.
+    await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'bob00001' }, env, req({}));
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.admins).not.toContain('bob00001');
+    expect(info.admins).toContain('creator1');
+  });
+
+  it('a non-creator cannot transfer ownership', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupTransfer({ token, adminId: 'bob00001', newCreatorId: 'carol001' }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('FORBIDDEN');
+  });
+
+  it('cannot transfer to a non-member', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'nobody00' }, env, req({}));
+    expect(res.status).toBe(404);
+    expect((await res.json()).code).toBe('NOT_MEMBER');
+  });
+
+  it('transferring to the current creator is a no-op error', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'creator1' }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('NO_OP');
+  });
+});
+
+describe('group rename (lifecycle CRUD — name was frozen at create)', () => {
+  const req = (b) => apiRequest('/api/group/rename', b);
+  async function setupGroup(env) {
+    const create = await handleGroupCreate(
+      { name: 'Old Name', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+    const { token } = await create.json();
+    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', memberName: 'B' }, env, req({}));
+    return token;
+  }
+
+  it('the creator can rename the group, reflected in info', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupRename({ token, adminId: 'creator1', name: 'New Name' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).name).toBe('New Name');
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.name).toBe('New Name');
+  });
+
+  it('a promoted admin can rename; a regular member cannot', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    // Regular member blocked.
+    const blocked = await handleGroupRename({ token, adminId: 'bob00001', name: 'Hijacked' }, env, req({}));
+    expect(blocked.status).toBe(403);
+    // Promote bob → now allowed.
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    const ok = await handleGroupRename({ token, adminId: 'bob00001', name: 'Renamed' }, env, req({}));
+    expect(ok.status).toBe(200);
+    expect((await ok.json()).name).toBe('Renamed');
+  });
+
+  it('rejects an empty name (after sanitization) and caps at 50 chars', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    // Pure control characters sanitize to an empty string (same rule as create()).
+    const empty = await handleGroupRename({ token, adminId: 'creator1', name: '\x00\x01\x02' }, env, req({}));
+    expect(empty.status).toBe(400);
+    expect((await empty.json()).code).toBe('INVALID_NAME');
+    // Oversized name is capped, not rejected.
+    const long = await handleGroupRename({ token, adminId: 'creator1', name: 'x'.repeat(80) }, env, req({}));
+    expect(long.status).toBe(200);
+    expect((await long.json()).name.length).toBe(50);
+  });
+
+  it('rename on a missing group returns 404', async () => {
+    const env = makeEnv();
+    const res = await handleGroupRename({ token: 'nosuchtoken1', adminId: 'creator1', name: 'X' }, env, req({}));
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('group leave / delete (lifecycle completion)', () => {
+  const req = (b) => apiRequest('/api/group/x', b);
+  async function setupGroup(env) {
+    const create = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+    const { token } = await create.json();
+    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', memberName: 'B' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
+    return token;
+  }
+
+  it('a member can leave; they are removed and the epoch bumps (PCS on voluntary leave)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupLeave({ token, memberId: 'bob00001' }, env, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.ok).toBe(true);
+    expect(j.remaining).toBe(2);
+    expect(j.epoch).toBe(1); // departed member must not decrypt the new epoch
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.members.some((m) => m.id === 'bob00001')).toBe(false);
+    expect(info.epoch).toBe(1);
+  });
+
+  it('the creator cannot leave (must delete the group instead)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupLeave({ token, memberId: 'creator1' }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('CREATOR_CANNOT_LEAVE');
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.epoch).toBe(0); // no epoch churn on a rejected leave
+  });
+
+  it('leaving a group you are not in returns 404 without epoch churn', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupLeave({ token, memberId: 'nobody00' }, env, req({}));
+    expect(res.status).toBe(404);
+    expect((await res.json()).code).toBe('NOT_MEMBER');
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.epoch).toBe(0);
+  });
+
+  it('leave on a missing group returns 404', async () => {
+    const env = makeEnv();
+    const res = await handleGroupLeave({ token: 'nosuchtoken1', memberId: 'bob00001' }, env, req({}));
+    expect(res.status).toBe(404);
+  });
+
+  it('the creator can delete the group; it is gone from KV', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupDelete({ token, adminId: 'creator1' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).ok).toBe(true);
+    expect(await env.KV.get(`grp:${token}`)).toBeNull();
+    const info = await handleGroupInfo({ token }, env, req({}));
+    expect(info.status).toBe(404);
+  });
+
+  it('a non-creator cannot delete the group', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const res = await handleGroupDelete({ token, adminId: 'bob00001' }, env, req({}));
+    expect(res.status).toBe(403);
+    expect(await env.KV.get(`grp:${token}`)).not.toBeNull(); // still there
+  });
+});
+
+// Item 45: group moderation ops authorize by a client-supplied id matched against the
+// (publicly-readable) creatorId, so any token-holder could take over/destroy a group.
+// Optional Ed25519 caller auth, verified when supplied, required when GROUP_REQUIRE_AUTH.
+describe('group moderation auth (item 45 — caller identity proof)', () => {
+  const req = (b) => apiRequest('/api/group/x', b);
+
+  async function setup(env, opts = {}) {
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
+    await env.KV.put('prekey:creator1', JSON.stringify({ identityKey: 'IK', edIdentityKey: toB64(edPub), uploadedAt: Date.now() }));
+    const { token } = await (await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
+    return { token, ed };
+  }
+  // bind carries the operation's target(s), matching checkGroupAuth's signed format
+  // `breeze-group-${action}:${token}:${actorId}:${ts}:${bind}` (item 76).
+  const signGroup = async (ed, action, token, actorId, ts, bind = '') =>
+    toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, new TextEncoder().encode(`breeze-group-${action}:${token}:${actorId}:${ts}:${bind}`))));
+
+  it('legacy unauthenticated kick still works when GROUP_REQUIRE_AUTH is unset (backward compat)', async () => {
+    const env = makeEnv();
+    const { token } = await setup(env);
+    const res = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' }, env, req({}));
+    expect(res.status).toBe(200);
+  });
+
+  it('rejects unauthenticated group ops with 403 when GROUP_REQUIRE_AUTH is enabled', async () => {
+    const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
+    const { token } = await setup(env);
+    for (const res of [
+      await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' }, env, req({})),
+      await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'member01' }, env, req({})),
+      await handleGroupDelete({ token, adminId: 'creator1' }, env, req({})),
+    ]) {
+      expect(res.status).toBe(403);
+      expect((await res.json()).code).toBe('AUTH_REQUIRED');
+    }
+    expect(await env.KV.get(`grp:${token}`)).not.toBeNull(); // nothing mutated
+  });
+
+  it('accepts a validly signed op and rejects a tampered signature (flag on)', async () => {
+    const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
+    const { token, ed } = await setup(env);
+    const ts = Date.now();
+    const ok = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1', ts, sig: await signGroup(ed, 'kick', token, 'creator1', ts, 'member01') }, env, req({}));
+    expect(ok.status).toBe(200);
+    // Tampered: signature over a different action than the one being called.
+    const { token: t2 } = await setup(env);
+    const bad = await handleGroupKick({ token: t2, kickId: 'member01', adminId: 'creator1', ts, sig: await signGroup(ed, 'delete', t2, 'creator1', ts, 'member01') }, env, req({}));
+    expect(bad.status).toBe(403);
+    expect((await bad.json()).code).toBe('SIG_INVALID');
+  });
+
+  // Item 76: the signed payload binds the operation's TARGET, so the untrusted relay cannot
+  // swap it while keeping a valid signature. These pin the parameter-tampering protection.
+  it('rejects a kick whose kickId was swapped by the relay (target not the one signed)', async () => {
+    const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
+    const { token, ed } = await setup(env);
+    await handleGroupJoin({ token, memberId: 'member02', memberPub: 'member02mpub2' }, env, req({}));
+    const ts = Date.now();
+    // Creator signs to kick member01, relay rewrites kickId → member02.
+    const sig = await signGroup(ed, 'kick', token, 'creator1', ts, 'member01');
+    const res = await handleGroupKick({ token, kickId: 'member02', adminId: 'creator1', ts, sig }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+    const grp = JSON.parse(await env.KV.get(`grp:${token}`));
+    expect(grp.members.some(m => m.id === 'member02')).toBe(true); // not removed
+    // The genuine target, correctly signed, still works.
+    const ok = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1', ts, sig }, env, req({}));
+    expect(ok.status).toBe(200);
+  });
+
+  it('rejects an admin op whose sub-action was swapped promote→demote, but honors the signed one', async () => {
+    const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
+    const { token, ed } = await setup(env);
+    const ts = Date.now();
+    // Creator signs to PROMOTE member01; relay rewrites action → demote.
+    const sig = await signGroup(ed, 'admin', token, 'creator1', ts, `promote:member01`);
+    const swapped = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'member01', action: 'demote', ts, sig }, env, req({}));
+    expect(swapped.status).toBe(403);
+    expect((await swapped.json()).code).toBe('SIG_INVALID');
+    // The signed sub-action (promote) is accepted, proving the binding is exact, not blanket.
+    const ok = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'member01', action: 'promote', ts, sig }, env, req({}));
+    expect(ok.status).toBe(200);
+    expect(JSON.parse(await env.KV.get(`grp:${token}`)).admins).toContain('member01');
+  });
+
+  it('rejects an admin op whose targetId was swapped by the relay, but honors the signed target', async () => {
+    const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
+    const { token, ed } = await setup(env);
+    await handleGroupJoin({ token, memberId: 'member02', memberPub: 'member02mpub2' }, env, req({}));
+    const ts = Date.now();
+    // Creator signs to promote member01; relay rewrites targetId → member02.
+    const sig = await signGroup(ed, 'admin', token, 'creator1', ts, `promote:member01`);
+    const swapped = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'member02', action: 'promote', ts, sig }, env, req({}));
+    expect(swapped.status).toBe(403);
+    expect((await swapped.json()).code).toBe('SIG_INVALID');
+    expect(JSON.parse(await env.KV.get(`grp:${token}`)).admins || []).not.toContain('member02');
+    // The signed target is accepted.
+    const ok = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'member01', action: 'promote', ts, sig }, env, req({}));
+    expect(ok.status).toBe(200);
+  });
+
+  it('rejects a transfer whose newCreatorId was redirected by the relay (ownership hijack)', async () => {
+    const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
+    const { token, ed } = await setup(env);
+    await handleGroupJoin({ token, memberId: 'member02', memberPub: 'member02mpub2' }, env, req({}));
+    const ts = Date.now();
+    // Creator signs to hand ownership to member01; relay rewrites newCreatorId → member02.
+    const sig = await signGroup(ed, 'transfer', token, 'creator1', ts, 'member01');
+    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'member02', ts, sig }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+    const grp = JSON.parse(await env.KV.get(`grp:${token}`));
+    expect(grp.creatorId).toBe('creator1'); // ownership unchanged
+    // The intended target, correctly signed, still works.
+    const ok = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'member01', ts, sig }, env, req({}));
+    expect(ok.status).toBe(200);
+    expect((await ok.json()).creatorId).toBe('member01');
+  });
+
+  it('rejects partial auth (sig without ts) on a group op', async () => {
+    const env = makeEnv();
+    const { token } = await setup(env);
+    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'member01', sig: 'AA==' }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('PARTIAL_AUTH');
+  });
+});
+
+// Item 49 (Socratic new perspective — system-level auth invariant): every signed operation
+// uses a DISTINCT challenge string, so a signature minted for one operation must never
+// authorize another (no cross-protocol replay). These tests pin that invariant on the
+// highest-impact pairs; a future endpoint that reused a challenge prefix would fail here.
+describe('cross-protocol signature replay rejection (item 49)', () => {
+  const toB64u = (b) => Buffer.from(b).toString('base64');
+  const enc = (s) => new TextEncoder().encode(s);
+
+  // Register a user with an Ed25519 identity key (the verification source for all auth ops).
+  async function registerEd(env, userId) {
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
+    await env.KV.put(`prekey:${userId}`, JSON.stringify({ identityKey: 'IK-' + userId, edIdentityKey: toB64u(edPub), uploadedAt: Date.now() }));
+    return ed;
+  }
+  const sign = async (ed, challenge) => toB64u(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, enc(challenge))));
+
+  it('a backup-UPLOAD signature is rejected by backup-DOWNLOAD (cannot replay write-auth to read)', async () => {
+    const env = makeEnv();
+    const ed = await registerEd(env, 'xproto01');
+    await env.KV.put('backup:xproto01', 'secret-blob');
+    const ts = Date.now();
+    // Sign the UPLOAD challenge, then try to DOWNLOAD (read) with it.
+    const uploadSig = await sign(ed, `breeze-backup-upload:xproto01:${ts}`);
+    const res = await handleBackupDownload({ userId: 'xproto01', ts, sig: uploadSig }, env, apiRequest('/api/backup/download', {}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID'); // download challenge differs → no replay
+  });
+
+  it('a portal signature is rejected by account-delete (cannot replay billing-auth to delete)', async () => {
+    const env = makeEnv({ STRIPE_SECRET_KEY: 'sk_test' });
+    const ed = await registerEd(env, 'xproto02');
+    const ts = Date.now();
+    const portalSig = await sign(ed, `breeze-portal:xproto02:${ts}`);
+    const res = await handleAccountDelete({ userId: 'xproto02', ts, sig: portalSig }, env, apiRequest('/api/account/delete', {}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+    expect(await env.KV.get('prekey:xproto02')).not.toBeNull(); // nothing deleted
+  });
+
+  it('a group-rename signature is rejected by group-delete (cannot replay rename-auth to delete)', async () => {
+    const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
+    const ed = await registerEd(env, 'creator1');
+    const { token } = await (await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, apiRequest('/api/group/create', {}))).json();
+    const ts = Date.now();
+    const renameSig = await sign(ed, `breeze-group-rename:${token}:creator1:${ts}`);
+    const res = await handleGroupDelete({ token, adminId: 'creator1', ts, sig: renameSig }, env, apiRequest('/api/group/delete', {}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+    expect(await env.KV.get(`grp:${token}`)).not.toBeNull(); // group not deleted
+  });
+});
+
+describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
+  const req = (b) => apiRequest('/api/account/delete', b);
+
+  // Register an account with a fully signed prekey bundle, then seed every
+  // userId-keyed store the delete endpoint is responsible for erasing.
+  async function registeredAccount(env, userId) {
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
+    const spk = crypto.getRandomValues(new Uint8Array(32));
+    const spkSig = new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, spk));
+    await handlePreKeyUpload({
+      userId, identityKey: userId + '-IK',
+      edIdentityKey: toB64(edPub), signedPreKey: toB64(spk), signedPreKeySig: toB64(spkSig),
+      oneTimePreKeys: ['otp0', 'otp1'],
+    }, env, apiRequest('/api/prekey/upload', {}));
+    await env.KV.put(`inbox:${userId}`, JSON.stringify([{ from: 'x', payload: 'ct', ts: Date.now() }]));
+    await env.KV.put(`sealed:${userId}`, JSON.stringify([{ envelope: 'ct', ts: Date.now() }]));
+    await env.KV.put(`sealed:${userId}:hwm`, String(Date.now())); // sealed-poll high-water mark
+    await env.KV.put(`push:${userId}`, JSON.stringify([{ endpoint: 'https://fcm.googleapis.com/x' }]));
+    await env.KV.put(`backup:${userId}`, 'encrypted-backup-blob');
+    await env.KV.put(`presence:${userId}`, JSON.stringify({ at: Date.now() }));
+    await env.KV.put(`slots:${userId}`, JSON.stringify({ slots: 4, plan: 'plus' }));
+    return { ed };
+  }
+
+  async function signDelete(ed, userId, ts) {
+    const msg = new TextEncoder().encode(`breeze-account-delete:${userId}:${ts}`);
+    return toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, msg)));
+  }
+
+  it('erases every userId-keyed store on a validly signed request', async () => {
+    const env = makeEnv();
+    const userId = 'deluser01';
+    const { ed } = await registeredAccount(env, userId);
+    const ts = Date.now();
+    const res = await handleAccountDelete({ userId, ts, sig: await signDelete(ed, userId, ts) }, env, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.ok).toBe(true);
+    for (const key of [`inbox:${userId}`, `sealed:${userId}`, `sealed:${userId}:hwm`,
+      `prekey:${userId}`,
+      `ktlog:${userId}`, `push:${userId}`, `backup:${userId}`,
+      `presence:${userId}`, `slots:${userId}`,
+      `prekey:otp:${userId}:0`, `prekey:otp:${userId}:1`, `prekey:otp:${userId}:count`]) {
+      expect(await env.KV.get(key)).toBeNull();
+    }
+    // Prekey fetch after deletion behaves like an unknown user.
+    const fetch2 = await handlePreKeyFetch({ userId }, env, apiRequest('/api/prekey/fetch', {}));
+    expect(fetch2.status).toBe(404);
+  });
+
+  // The relay has no reverse index from a user to their @alias or their groups, so a wipe
+  // that omits them leaves the alias squatting forever and the account readable in every
+  // group roster for the full 30-day TTL. The Worker built the release path and documented
+  // the dependency; the client shipped without honouring it. These pin the contract.
+  it('releases the @alias and leaves every group the wipe request names', async () => {
+    const env = makeEnv();
+    const userId = 'wipefull1';
+    const { ed } = await registeredAccount(env, userId);
+    const bundle = JSON.parse(await env.KV.get(`prekey:${userId}`));
+    await env.KV.put('alias:wipeme', JSON.stringify({ pub: bundle.identityKey }));
+    await env.KV.put('grp:tokmember', JSON.stringify({
+      creatorId: 'someoneelse', epoch: 3,
+      members: [{ id: 'someoneelse', pub: 'x' }, { id: userId, pub: 'y', name: 'Wiped' }],
+    }));
+    await env.KV.put('grp:tokcreator', JSON.stringify({
+      creatorId: userId, epoch: 1, members: [{ id: userId, pub: 'y' }, { id: 'other', pub: 'z' }],
+    }));
+    const ts = Date.now();
+    const res = await handleAccountDelete(
+      { userId, ts, sig: await signDelete(ed, userId, ts), alias: 'wipeme', groups: ['tokmember', 'tokcreator'] },
+      env, req({}));
+    const j = await res.json();
+    expect(j.aliasDeleted).toBe(true);
+    expect(await env.KV.get('alias:wipeme')).toBeNull();
+    // Member group: removed from the roster, epoch bumped so they cannot read new traffic.
+    const left = JSON.parse(await env.KV.get('grp:tokmember'));
+    expect(left.members.some((m) => m.id === userId)).toBe(false);
+    expect(left.epoch).toBe(4);
+    // Group they created: deleted outright — a creator-less group is unmoderatable.
+    expect(await env.KV.get('grp:tokcreator')).toBeNull();
+  });
+
+  it('refuses to release an alias that belongs to someone else (squat guard)', async () => {
+    const env = makeEnv();
+    const userId = 'wipesquat';
+    const { ed } = await registeredAccount(env, userId);
+    await env.KV.put('alias:victim', JSON.stringify({ pub: 'SOMEONE-ELSES-IDENTITY-KEY' }));
+    const ts = Date.now();
+    const res = await handleAccountDelete(
+      { userId, ts, sig: await signDelete(ed, userId, ts), alias: 'victim' }, env, req({}));
+    expect((await res.json()).aliasDeleted).toBe(false);
+    expect(await env.KV.get('alias:victim')).not.toBeNull();
+  });
+
+  // Item 38: the reverse cust:{customerId} -> userId mapping must also be erased, or the
+  // payment-identity linkage (and a webhook resolution path to the deleted account)
+  // survives deletion. The handler reads slots:{userId}.customerId before deleting slots.
+  it('erases the cust:{customerId} reverse mapping when the billing record has a customerId', async () => {
+    const env = makeEnv();
+    const userId = 'delcust01';
+    const { ed } = await registeredAccount(env, userId);
+    // Overwrite the slots record with one carrying a Stripe customerId, and add the
+    // reverse mapping the webhook would have created.
+    await env.KV.put(`slots:${userId}`, JSON.stringify({ slots: 4, plan: 'plus', customerId: 'cus_del38' }));
+    await env.KV.put('cust:cus_del38', userId);
+
+    const ts = Date.now();
+    const res = await handleAccountDelete({ userId, ts, sig: await signDelete(ed, userId, ts) }, env, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.erased).toContain('cust');
+    expect(await env.KV.get('cust:cus_del38')).toBeNull(); // reverse mapping gone
+    expect(await env.KV.get(`slots:${userId}`)).toBeNull();
+  });
+
+  it('omits cust from erased and touches no cust mapping when the account has no customerId (free tier)', async () => {
+    const env = makeEnv();
+    const userId = 'delcust02';
+    const { ed } = await registeredAccount(env, userId); // slots has no customerId
+    // An unrelated cust mapping must NOT be deleted (we only erase this account's own).
+    await env.KV.put('cust:cus_other', 'someoneelse');
+
+    const ts = Date.now();
+    const res = await handleAccountDelete({ userId, ts, sig: await signDelete(ed, userId, ts) }, env, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).erased).not.toContain('cust');
+    expect(await env.KV.get('cust:cus_other')).toBe('someoneelse'); // untouched
+  });
+
+  it('rejects an invalid signature without deleting anything', async () => {
+    const env = makeEnv();
+    const userId = 'deluser02';
+    const { ed } = await registeredAccount(env, userId);
+    const ts = Date.now();
+    // Signature over the wrong ts → must not verify against the claimed ts.
+    const sig = await signDelete(ed, userId, ts - 1234);
+    const res = await handleAccountDelete({ userId, ts, sig }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+    expect(await env.KV.get(`backup:${userId}`)).toBe('encrypted-backup-blob'); // untouched
+  });
+
+  it('rejects when no Ed25519 identity key is registered (cannot authenticate)', async () => {
+    const env = makeEnv();
+    // Legacy v4 upload: no edIdentityKey.
+    await handlePreKeyUpload(
+      { userId: 'legacydel1', identityKey: 'legacydel1IK', signedPreKey: 'SPK' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    const res = await handleAccountDelete(
+      { userId: 'legacydel1', ts: Date.now(), sig: 'AAAA' }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('NO_IDENTITY_KEY');
+  });
+
+  it('rejects a stale or future timestamp (bounded replay window)', async () => {
+    const env = makeEnv();
+    const userId = 'deluser03';
+    const { ed } = await registeredAccount(env, userId);
+    for (const ts of [Date.now() - 6 * 60 * 1000, Date.now() + 6 * 60 * 1000]) {
+      const res = await handleAccountDelete({ userId, ts, sig: await signDelete(ed, userId, ts) }, env, req({}));
+      expect(res.status).toBe(400);
+      expect((await res.json()).code).toBe('INVALID_TIMESTAMP');
+    }
+    expect(await env.KV.get(`backup:${userId}`)).not.toBeNull();
+  });
+
+  it('releases the alias only when its pub matches the registered identity key', async () => {
+    const env = makeEnv();
+    const userId = 'deluser04';
+    const { ed } = await registeredAccount(env, userId);
+    // Alias owned by this account (pub === bundle.identityKey).
+    await env.KV.put('alias:mine', JSON.stringify({ pub: userId + '-IK', name: 'Me', setAt: Date.now() }));
+    // Alias owned by someone else — must NOT be deletable via this request.
+    await env.KV.put('alias:other', JSON.stringify({ pub: 'IK-victim', name: 'V', setAt: Date.now() }));
+
+    const ts1 = Date.now();
+    const res1 = await handleAccountDelete(
+      { userId, ts: ts1, sig: await signDelete(ed, userId, ts1), alias: 'other' }, env, req({}));
+    expect((await res1.json()).aliasDeleted).toBe(false);
+    expect(await env.KV.get('alias:other')).not.toBeNull(); // squat attempt blocked
+
+    // Re-register (prekey bundle was erased by the first call).
+    const { ed: ed2 } = await registeredAccount(env, userId);
+    const ts2 = Date.now();
+    const res2 = await handleAccountDelete(
+      { userId, ts: ts2, sig: await signDelete(ed2, userId, ts2), alias: 'mine' }, env, req({}));
+    expect((await res2.json()).aliasDeleted).toBe(true);
+    expect(await env.KV.get('alias:mine')).toBeNull();
+  });
+
+  it('a replayed delete after erasure fails closed (verification key is gone)', async () => {
+    const env = makeEnv();
+    const userId = 'deluser05';
+    const { ed } = await registeredAccount(env, userId);
+    const ts = Date.now();
+    const sig = await signDelete(ed, userId, ts);
+    const res1 = await handleAccountDelete({ userId, ts, sig }, env, req({}));
+    expect(res1.status).toBe(200);
+    // Replay of the captured request: prekey bundle (the verification key source)
+    // was erased, so the replay cannot authenticate. Idempotent + fail-closed.
+    const res2 = await handleAccountDelete({ userId, ts, sig }, env, req({}));
+    expect(res2.status).toBe(403);
+    expect((await res2.json()).code).toBe('NO_IDENTITY_KEY');
+  });
+
+  it('removes the account from member groups and deletes groups it created', async () => {
+    const env = makeEnv();
+    const gReq = (b) => apiRequest('/api/group/x', b);
+    const userId = 'deluser06';
+    const { ed } = await registeredAccount(env, userId);
+
+    // A group the user only joined (someone else is creator).
+    const created = await handleGroupCreate(
+      { name: 'theirs', creatorId: 'owner001', creatorPub: 'opub', creatorName: 'O' }, env, gReq({}));
+    const memberToken = (await created.json()).token;
+    await handleGroupJoin({ token: memberToken, memberId: userId, memberPub: userId + 'mpub', memberName: 'Me' }, env, gReq({}));
+
+    // A group the user created.
+    const ownCreate = await handleGroupCreate(
+      { name: 'mine', creatorId: userId, creatorPub: 'mpub', creatorName: 'Me' }, env, gReq({}));
+    const ownToken = (await ownCreate.json()).token;
+    await handleGroupJoin({ token: ownToken, memberId: 'friend01', memberPub: 'friend01fpub', memberName: 'F' }, env, gReq({}));
+
+    const ts = Date.now();
+    const res = await handleAccountDelete(
+      { userId, ts, sig: await signDelete(ed, userId, ts), groups: [memberToken, ownToken] }, env, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.groupsLeft).toBe(1);
+    expect(j.groupsDeleted).toBe(1);
+
+    // Member group: still exists, but the deleted user is gone + epoch bumped.
+    const memberGroup = JSON.parse(await env.KV.get(`grp:${memberToken}`));
+    expect(memberGroup.members.some((m) => m.id === userId)).toBe(false);
+    expect(memberGroup.epoch).toBe(1);
+    // Created group: gone entirely (creator-less groups are unmoderatable).
+    expect(await env.KV.get(`grp:${ownToken}`)).toBeNull();
+  });
+
+  it('ignores group tokens where the account is not a member, and caps at 50', async () => {
+    const env = makeEnv();
+    const gReq = (b) => apiRequest('/api/group/x', b);
+    const userId = 'deluser07';
+    const { ed } = await registeredAccount(env, userId);
+    // A group the user is NOT in.
+    const created = await handleGroupCreate(
+      { name: 'other', creatorId: 'owner002', creatorPub: 'opub', creatorName: 'O' }, env, gReq({}));
+    const otherToken = (await created.json()).token;
+
+    const ts = Date.now();
+    // 60 tokens (mostly garbage) — must not throw, must cap, must skip non-membership.
+    const tokens = [otherToken, ...Array.from({ length: 60 }, (_, i) => `tok${i}`)];
+    const res = await handleAccountDelete(
+      { userId, ts, sig: await signDelete(ed, userId, ts), groups: tokens }, env, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.groupsLeft).toBe(0);
+    expect(j.groupsDeleted).toBe(0);
+    // The other user's group is untouched.
+    expect(await env.KV.get(`grp:${otherToken}`)).not.toBeNull();
+  });
+});
+
+describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => {
+  const F = createFranking();
+  const b64 = (a) => Buffer.from(Uint8Array.from(a)).toString('base64');
+  const req = (b) => apiRequest('/api/abuse/x', b);
+
+  it('records a commitment and verifies a genuine report end-to-end', async () => {
+    const env = makeEnv();
+    const message = 'abusive content';
+    const { commitment, opening } = await F.commit(message); // client-side franking
+    const rec = await handleAbuseRecord({ frankId: 'm-001xxx', commitment: b64(commitment) }, env, req({}));
+    expect(rec.status).toBe(200);
+    const rep = await handleAbuseReport({ frankId: 'm-001xxx', message, opening: b64(opening) }, env, req({}));
+    expect(rep.status).toBe(200);
+    expect((await rep.json()).verified).toBe(true);
+    expect(await env.KV.get('report:m-001xxx')).toBeTruthy(); // recorded for moderation
+  });
+
+  // Item 46: a silently-dropped commitment makes the message unreportable later, so the
+  // sender must see the failure rather than a false ok.
+  it('returns 500 STORE_FAILED when the franking commitment KV write fails', async () => {
+    const env = makeEnv();
+    const { commitment } = await F.commit('x');
+    const real = env.KV.put.bind(env.KV);
+    env.KV.put = async (key, ...rest) => { if (key.startsWith('frank:')) throw new Error('KV down'); return real(key, ...rest); };
+    const rec = await handleAbuseRecord({ frankId: 'm-sf-xxx', commitment: b64(commitment) }, env, req({}));
+    expect(rec.status).toBe(500);
+    expect((await rec.json()).code).toBe('STORE_FAILED');
+  });
+
+  it('rejects a report claiming a different message (binding)', async () => {
+    const env = makeEnv();
+    const { commitment, opening } = await F.commit('what was sent');
+    await handleAbuseRecord({ frankId: 'm-002xxx', commitment: b64(commitment) }, env, req({}));
+    const rep = await handleAbuseReport({ frankId: 'm-002xxx', message: 'a lie', opening: b64(opening) }, env, req({}));
+    expect(rep.status).toBe(400);
+    expect((await rep.json()).code).toBe('FRANK_MISMATCH');
+  });
+
+  it('404s a report for an unknown frankId', async () => {
+    const env = makeEnv();
+    const rep = await handleAbuseReport({ frankId: 'nope1234', message: 'x', opening: b64([1, 2, 3]) }, env, req({}));
+    expect(rep.status).toBe(404);
+  });
+
+  it('does not overwrite an existing commitment for a frankId', async () => {
+    const env = makeEnv();
+    const a = await F.commit('first');
+    await handleAbuseRecord({ frankId: 'm-003xxx', commitment: b64(a.commitment) }, env, req({}));
+    const b = await F.commit('second');
+    const rec2 = await handleAbuseRecord({ frankId: 'm-003xxx', commitment: b64(b.commitment) }, env, req({}));
+    expect((await rec2.json()).existing).toBe(true);
+    // The original commitment still stands.
+    const rep = await handleAbuseReport({ frankId: 'm-003xxx', message: 'first', opening: b64(a.opening) }, env, req({}));
+    expect((await rep.json()).verified).toBe(true);
+  });
+
+  it('rejects an oversized frankId on record', async () => {
+    const env = makeEnv();
+    const { commitment } = await F.commit('x');
+    const res = await handleAbuseRecord({ frankId: 'x'.repeat(129), commitment: b64(commitment) }, env, req({}));
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects a frankId shorter than 8 chars on record (entropy floor)', async () => {
+    const env = makeEnv();
+    const { commitment } = await F.commit('x');
+    const res = await handleAbuseRecord({ frankId: 'abc123', commitment: b64(commitment) }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_FIELD');
+  });
+
+  it('rejects a frankId shorter than 8 chars on report (entropy floor)', async () => {
+    const env = makeEnv();
+    const res = await handleAbuseReport({ frankId: 'abc123', message: 'x', opening: b64([0]) }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_FIELD');
+  });
+
+  it('rejects an oversized report message (DoS guard)', async () => {
+    const env = makeEnv();
+    const { commitment } = await F.commit('x');
+    await handleAbuseRecord({ frankId: 'm-dos-xx', commitment: b64(commitment) }, env, req({}));
+    const res = await handleAbuseReport({ frankId: 'm-dos-xx', message: 'x'.repeat(256 * 1024 + 1), opening: b64([0]) }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('MSG_TOO_LARGE');
+  });
+
+  it('rejects an oversized opening field (DoS guard)', async () => {
+    const env = makeEnv();
+    const { commitment } = await F.commit('any message');
+    await handleAbuseRecord({ frankId: 'm-ovr-xx', commitment: b64(commitment) }, env, req({}));
+    const res = await handleAbuseReport({ frankId: 'm-ovr-xx', message: 'any message', opening: 'x'.repeat(129) }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_OPENING');
+  });
+
+  it('returns FRANK_MISMATCH (not 500) for malformed base64 opening (b64ToBytes throw path)', async () => {
+    // atob('!!!notb64') throws; hmacVerifyFrank's try/catch catches it → returns false.
+    const env = makeEnv();
+    const { commitment } = await F.commit('some message');
+    await handleAbuseRecord({ frankId: 'm-b64-xx', commitment: b64(commitment) }, env, req({}));
+    const res = await handleAbuseReport({ frankId: 'm-b64-xx', message: 'some message', opening: '!!!notb64' }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('FRANK_MISMATCH');
+  });
+
+  it('hmacVerifyFrank rejects wrong-length commitment (mac.length !== expected.length guard)', async () => {
+    // HMAC-SHA256 always produces 32 bytes. A commitment decoded to a different
+    // length must return false without throwing.
+    const shortCommitment = b64(Array.from({ length: 16 }, (_, i) => i)); // 16 bytes → wrong length
+    const { opening } = await F.commit('x');
+    const env = makeEnv();
+    await handleAbuseRecord({ frankId: 'm-len-xx', commitment: shortCommitment }, env, req({}));
+    const res = await handleAbuseReport({ frankId: 'm-len-xx', message: 'x', opening: b64(opening) }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('FRANK_MISMATCH');
+  });
+
+  it('POSTs to ABUSE_WEBHOOK_URL when a verified report is recorded', async () => {
+    const calls = [];
+    vi.stubGlobal('fetch', async (url, opts) => {
+      calls.push({ url, body: JSON.parse(opts.body) });
+      return { ok: true };
+    });
+    try {
+      const env = makeEnv({ ABUSE_WEBHOOK_URL: 'https://hooks.example.com/abuse' });
+      const message = 'webhook test message';
+      const { commitment, opening } = await F.commit(message);
+      await handleAbuseRecord({ frankId: 'hook-001', commitment: b64(commitment) }, env, req({}));
+      const rep = await handleAbuseReport({ frankId: 'hook-001', message, opening: b64(opening) }, env, req({}));
+      expect((await rep.json()).verified).toBe(true);
+      // Give the fire-and-forget a tick to run
+      await new Promise(r => setTimeout(r, 10));
+      expect(calls.length).toBeGreaterThanOrEqual(1);
+      const notif = calls.find(c => c.url === 'https://hooks.example.com/abuse');
+      expect(notif).toBeTruthy();
+      expect(notif.body.type).toBe('abuse_report');
+      expect(notif.body.frankId).toBe('hook-001');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  // Item 35: webhook must fire ONCE per frankId. A recipient (or retrying client) can
+  // re-POST the same valid (frankId, message, opening); each repeat previously re-fired
+  // the operator webhook, flooding moderation with duplicates of a single report.
+  it('fires the moderation webhook only on the first report of a frankId (idempotency)', async () => {
+    const calls = [];
+    vi.stubGlobal('fetch', async (url, opts) => {
+      calls.push({ url, body: JSON.parse(opts.body) });
+      return { ok: true };
+    });
+    try {
+      const env = makeEnv({ ABUSE_WEBHOOK_URL: 'https://hooks.example.com/abuse' });
+      const message = 'repeat-report message';
+      const { commitment, opening } = await F.commit(message);
+      await handleAbuseRecord({ frankId: 'dup-001x', commitment: b64(commitment) }, env, req({}));
+
+      // First report → verified, not a duplicate, webhook fires.
+      const rep1 = await handleAbuseReport({ frankId: 'dup-001x', message, opening: b64(opening) }, env, req({}));
+      const j1 = await rep1.json();
+      expect(j1.verified).toBe(true);
+      expect(j1.duplicate).toBe(false);
+
+      // Second + third identical reports → still verified, flagged duplicate, NO new webhook.
+      const rep2 = await handleAbuseReport({ frankId: 'dup-001x', message, opening: b64(opening) }, env, req({}));
+      const j2 = await rep2.json();
+      expect(j2.verified).toBe(true);
+      expect(j2.duplicate).toBe(true);
+      await handleAbuseReport({ frankId: 'dup-001x', message, opening: b64(opening) }, env, req({}));
+
+      await new Promise(r => setTimeout(r, 10));
+      const hookCalls = calls.filter(c => c.url === 'https://hooks.example.com/abuse');
+      expect(hookCalls.length).toBe(1); // fired exactly once despite 3 reports
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('returns 500 STORE_FAILED when the report KV write fails', async () => {
+    const env = makeEnv();
+    const message = 'store-fail message';
+    const { commitment, opening } = await F.commit(message);
+    await handleAbuseRecord({ frankId: 'sf-001xx', commitment: b64(commitment) }, env, req({}));
+    const real = env.KV.put.bind(env.KV);
+    env.KV.put = async (key, ...rest) => {
+      if (key.startsWith('report:')) throw new Error('KV unavailable');
+      return real(key, ...rest);
+    };
+    const res = await handleAbuseReport({ frankId: 'sf-001xx', message, opening: b64(opening) }, env, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+  });
+
+  // Item 36: in-memory dedup closes the same-isolate race the KV check alone leaves open.
+  // Simulate KV read-lag: both concurrent reports see report:* as absent (alreadyReported
+  // null), so only the synchronous globalThis check-and-set can prevent a double webhook.
+  it('fires the webhook once for same-isolate concurrent reports even when KV reads lag', async () => {
+    const calls = [];
+    vi.stubGlobal('fetch', async (url) => { calls.push(url); return { ok: true }; });
+    try {
+      const env = makeEnv({ ABUSE_WEBHOOK_URL: 'https://hooks.example.com/abuse' });
+      const message = 'race message';
+      const { commitment, opening } = await F.commit(message);
+      await handleAbuseRecord({ frankId: 'race-001', commitment: b64(commitment) }, env, req({}));
+      // KV never reflects the report: write to either concurrent request → isolates the
+      // in-memory dedup layer (without it, both would fire).
+      const realGet = env.KV.get.bind(env.KV);
+      env.KV.get = async (key) => (key.startsWith('report:') ? null : realGet(key));
+      const [r1, r2] = await Promise.all([
+        handleAbuseReport({ frankId: 'race-001', message, opening: b64(opening) }, env, req({})),
+        handleAbuseReport({ frankId: 'race-001', message, opening: b64(opening) }, env, req({})),
+      ]);
+      expect((await r1.json()).verified).toBe(true);
+      expect((await r2.json()).verified).toBe(true);
+      await new Promise(r => setTimeout(r, 10));
+      const hookCalls = calls.filter(u => u === 'https://hooks.example.com/abuse');
+      expect(hookCalls.length).toBe(1); // in-memory dedup suppresses the 2nd webhook
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe('sealed sender send / poll / ack', () => {
+  const req = (b) => apiRequest('/api/sealed/x', b);
+
+  it('queues an envelope and returns it on poll', async () => {
+    const env = makeEnv();
+    const send = await handleSealedSend({ to: 'bob00001', envelope: 'ENCRYPTED_PAYLOAD' }, env, req({}));
+    expect(send.status).toBe(200);
+    expect((await send.json()).ok).toBe(true);
+
+    const poll = await handleSealedPoll({ id: 'bob00001' }, env, req({}));
+    expect(poll.status).toBe(200);
+    const { messages } = await poll.json();
+    expect(messages.length).toBe(1);
+    expect(messages[0].envelope).toBe('ENCRYPTED_PAYLOAD');
+  });
+
+  it('returns empty array when no sealed messages exist', async () => {
+    const { messages } = await (await handleSealedPoll({ id: 'nobody001' }, makeEnv(), req({}))).json();
+    expect(messages).toEqual([]);
+  });
+
+  it('ack deletes the sealed queue', async () => {
+    const env = makeEnv();
+    await handleSealedSend({ to: 'charlie1', envelope: 'payload' }, env, req({}));
+    await handleSealedAck({ id: 'charlie1' }, env, req({}));
+    const { messages } = await (await handleSealedPoll({ id: 'charlie1' }, env, req({}))).json();
+    expect(messages).toEqual([]);
+  });
+
+  it('rejects ack with an invalid userId', async () => {
+    const res = await handleSealedAck({ id: 'bad id!' }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+  });
+
+  // Socratic round: "what happens to message 101 while the recipient is offline?" The
+  // queue caps at 100 and silently dropped the oldest. Now the relay counts the drops and
+  // the next poll confesses them — once — so the recipient at least knows.
+  it('reports queue-overflow drops on the next poll, exactly once', async () => {
+    const env = makeEnv();
+    for (let i = 0; i < 103; i++) {
+      await handleSealedSend({ to: 'busybee1', envelope: `E${i}-${'x'.repeat(40)}` }, env, req({}));
+    }
+    const first = await (await handleSealedPoll({ id: 'busybee1' }, env, req({}))).json();
+    expect(first.messages.length).toBe(100);
+    expect(first.dropped).toBe(3); // 103 sent, cap 100 — three oldest were lost
+    const second = await (await handleSealedPoll({ id: 'busybee1' }, env, req({}))).json();
+    expect(second.dropped).toBeUndefined(); // confessed once, counter reset
+  });
+
+  // The sealed queue is a single KV value mutated read-modify-write, and KV is
+  // last-write-wins: two senders hitting the same recipient at once both read the old queue
+  // and one envelope vanishes — with both senders told 200. The send path now reads the key
+  // back and re-appends if its own entry is missing. This simulates the losing race
+  // deterministically by having a "concurrent" writer clobber the queue at the moment of the
+  // put, then asserts the envelope is present anyway.
+  it('recovers an envelope that a concurrent writer clobbered (lost-write recovery)', async () => {
+    const env = makeEnv();
+    const key = 'sealed:racetgt1';
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbered = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true; // the other sender's write lands last and wins — our entry is gone
+        await origPut(k, JSON.stringify([{ envelope: 'THE-OTHER-SENDERS-ENVELOPE', ts: Date.now() }]), o);
+      }
+    };
+    const res = await handleSealedSend({ to: 'racetgt1', envelope: 'MINE-must-survive' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect(clobbered).toBe(true); // the race really happened
+
+    const polled = await (await handleSealedPoll({ id: 'racetgt1' }, env, req({}))).json();
+    const envelopes = polled.messages.map((m) => m.envelope);
+    expect(envelopes).toContain('MINE-must-survive');          // recovered...
+    expect(envelopes).toContain('THE-OTHER-SENDERS-ENVELOPE'); // ...without evicting the winner
+  });
+
+  it('does not re-append when the write landed cleanly (no duplicates in the common case)', async () => {
+    const env = makeEnv();
+    await handleSealedSend({ to: 'noracetgt', envelope: 'only-once' }, env, req({}));
+    const polled = await (await handleSealedPoll({ id: 'noracetgt' }, env, req({}))).json();
+    expect(polled.messages.filter((m) => m.envelope === 'only-once').length).toBe(1);
+  });
+
+  it('a queue that never overflows reports no drops', async () => {
+    const env = makeEnv();
+    await handleSealedSend({ to: 'quietone', envelope: 'just-one' }, env, req({}));
+    const polled = await (await handleSealedPoll({ id: 'quietone' }, env, req({}))).json();
+    expect(polled.messages.length).toBe(1);
+    expect(polled.dropped).toBeUndefined();
+  });
+
+  // Item 40: an envelope that arrives AFTER a poll but BEFORE the ack must survive the ack
+  // (the ack clears only up to the polled high-water mark, not the whole queue).
+  it('preserves an envelope sent in the poll->ack window (no blind full-delete)', async () => {
+    const env = makeEnv();
+    await handleSealedSend({ to: 'window01', envelope: 'm1-polled' }, env, req({}));
+    // Poll returns m1 and records the high-water mark.
+    const polled = await (await handleSealedPoll({ id: 'window01' }, env, req({}))).json();
+    expect(polled.messages.map(m => m.envelope)).toEqual(['m1-polled']);
+    // A new envelope arrives before the client ACKs. (Distinct content + a later ts.)
+    await new Promise(r => setTimeout(r, 2)); // ensure Date.now() advances past the hwm
+    await handleSealedSend({ to: 'window01', envelope: 'm2-after-poll' }, env, req({}));
+    // ACK clears only the polled batch; m2 must remain.
+    const ack = await handleSealedAck({ id: 'window01' }, env, req({}));
+    expect(ack.status).toBe(200);
+    expect((await ack.json()).kept).toBe(1);
+    const after = await (await handleSealedPoll({ id: 'window01' }, env, req({}))).json();
+    expect(after.messages.map(m => m.envelope)).toEqual(['m2-after-poll']);
+  });
+
+  it('full-deletes (kept 0) when every queued envelope was polled', async () => {
+    const env = makeEnv();
+    await handleSealedSend({ to: 'window02', envelope: 'only-msg' }, env, req({}));
+    await handleSealedPoll({ id: 'window02' }, env, req({}));
+    const ack = await handleSealedAck({ id: 'window02' }, env, req({}));
+    expect((await ack.json()).kept).toBe(0);
+    expect((await (await handleSealedPoll({ id: 'window02' }, env, req({}))).json()).messages).toEqual([]);
+    // The high-water-mark marker is cleaned up too.
+    expect(await env.KV.get('sealed:window02:hwm')).toBeNull();
+  });
+
+  it('ack with no prior poll (no high-water mark) still full-deletes (backward compat)', async () => {
+    const env = makeEnv();
+    await handleSealedSend({ to: 'window03', envelope: 'unpolled' }, env, req({}));
+    const ack = await handleSealedAck({ id: 'window03' }, env, req({}));
+    expect(ack.status).toBe(200);
+    expect((await (await handleSealedPoll({ id: 'window03' }, env, req({}))).json()).messages).toEqual([]);
+  });
+
+  it('returns 500 ACK_FAILED when the selective-delete KV write fails', async () => {
+    const env = makeEnv();
+    await handleSealedSend({ to: 'window04', envelope: 'm1' }, env, req({}));
+    await handleSealedPoll({ id: 'window04' }, env, req({}));
+    await new Promise(r => setTimeout(r, 2));
+    await handleSealedSend({ to: 'window04', envelope: 'm2' }, env, req({}));
+    // A survivor exists → ack takes the kvPut path; make that throw.
+    const realPut = env.KV.put.bind(env.KV);
+    env.KV.put = async (key, ...rest) => { if (key === 'sealed:window04') throw new Error('KV down'); return realPut(key, ...rest); };
+    const ack = await handleSealedAck({ id: 'window04' }, env, req({}));
+    expect(ack.status).toBe(500);
+    expect((await ack.json()).code).toBe('ACK_FAILED');
+  });
+
+  it('deduplicates identical envelopes sent twice (replay guard)', async () => {
+    const env = makeEnv();
+    await handleSealedSend({ to: 'dave0001', envelope: 'SAME_PAYLOAD_XYZ' }, env, req({}));
+    await handleSealedSend({ to: 'dave0001', envelope: 'SAME_PAYLOAD_XYZ' }, env, req({}));
+    const { messages } = await (await handleSealedPoll({ id: 'dave0001' }, env, req({}))).json();
+    expect(messages.length).toBe(1);
+  });
+
+  it('does NOT dedup envelopes that share a 32-char prefix but differ in length (length-keyed dedup)', async () => {
+    // Without the length in the dedup key, 'AAAA...32...AAAA' and 'AAAA...32...AAAAextra' would
+    // share the same key and the second message would be silently dropped.
+    const env = makeEnv();
+    globalThis._sealedDedup = new Map(); // reset cross-test dedup state
+    const prefix = 'A'.repeat(32);
+    await handleSealedSend({ to: 'lentest1', envelope: prefix }, env, req({}));
+    await handleSealedSend({ to: 'lentest1', envelope: prefix + 'EXTRA' }, env, req({}));
+    const { messages } = await (await handleSealedPoll({ id: 'lentest1' }, env, req({}))).json();
+    expect(messages.length).toBe(2);
+  });
+
+  it('poll returns 400 when id is missing', async () => {
+    const res = await handleSealedPoll({}, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('MISSING_ID');
+  });
+
+  it('multiple envelopes from different senders all appear on poll', async () => {
+    const env = makeEnv();
+    await handleSealedSend({ to: 'eve00001', envelope: 'from-alice' }, env, req({}));
+    await handleSealedSend({ to: 'eve00001', envelope: 'from-bob' }, env, req({}));
+    const { messages } = await (await handleSealedPoll({ id: 'eve00001' }, env, req({}))).json();
+    expect(messages.length).toBe(2);
+    const envelopes = messages.map(m => m.envelope).sort();
+    expect(envelopes).toEqual(['from-alice', 'from-bob']);
+  });
+
+  it('send returns 400 when to or envelope is missing', async () => {
+    const e = makeEnv();
+    const r1 = await handleSealedSend({ envelope: 'x' }, e, req({}));
+    expect(r1.status).toBe(400);
+    const r2 = await handleSealedSend({ to: 'bob00001' }, e, req({}));
+    expect(r2.status).toBe(400);
+  });
+
+  it('send rejects an envelope larger than 256 KB (DoS guard)', async () => {
+    const e = makeEnv();
+    const res = await handleSealedSend(
+      { to: 'bob00001', envelope: 'x'.repeat(256 * 1024 + 1) }, e, req({})
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('PAYLOAD_TOO_LARGE');
+  });
+
+  it('send rejects a malformed recipient id (KV key injection guard)', async () => {
+    const res = await handleSealedSend({ to: 'bad id!', envelope: 'ENC' }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_USER_ID');
+  });
+
+  it('poll rejects an id that does not match the userId format', async () => {
+    const e = makeEnv();
+    const r1 = await handleSealedPoll({ id: 'bad id!' }, e, req({})); // space + ! not in charset
+    expect(r1.status).toBe(400);
+    expect((await r1.json()).code).toBe('INVALID_ID');
+    const r2 = await handleSealedPoll({ id: 'short' }, e, req({})); // < 8 chars
+    expect(r2.status).toBe(400);
+  });
+
+  // ── KV failure propagation (item 27) ─────────────────────────────────────────
+  it('send returns STORE_FAILED 500 when KV put throws (not false success)', async () => {
+    const e = makeEnv();
+    e.KV.put = async () => { throw new Error('KV_QUOTA_EXCEEDED'); };
+    const res = await handleSealedSend({ to: 'bob00001', envelope: 'ENC' }, e, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+  });
+
+  it('ack returns ACK_FAILED 500 when KV delete throws (not false success)', async () => {
+    const e = makeEnv();
+    await handleSealedSend({ to: 'frank001', envelope: 'ENC' }, e, req({}));
+    e.KV.delete = async () => { throw new Error('KV_TRANSIENT_ERROR'); };
+    const res = await handleSealedAck({ id: 'frank001' }, e, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('ACK_FAILED');
+  });
+
+  // Item 66 — monotonic timestamp bump for handleSealedSend.
+  // handleSealedAck filters with `m.ts > hwm` (strict greater-than). A second envelope
+  // stored with the SAME millisecond ts as the last polled entry would be lost by a
+  // timely ack — it shares ts with the hwm but was never polled. The bump applied
+  // here (mirrors handleMsgSend) gives every appended entry a strictly-larger ts,
+  // making the ack filter lossless.
+  it('two envelopes stored in the same millisecond get distinct, strictly-increasing ts values', async () => {
+    const env = makeEnv();
+    // Freeze Date.now() so both sends definitely share a timestamp
+    const frozenTs = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(frozenTs);
+    try {
+      await handleSealedSend({ to: 'mono0001', envelope: 'env-A' }, env, req({}));
+      await handleSealedSend({ to: 'mono0001', envelope: 'env-B' }, env, req({}));
+    } finally {
+      vi.restoreAllMocks();
+    }
+    const raw = await env.KV.get('sealed:mono0001');
+    const msgs = JSON.parse(raw);
+    expect(msgs.length).toBe(2);
+    expect(msgs[1].ts).toBeGreaterThan(msgs[0].ts); // strictly increasing
+  });
+
+  it('ack preserves a same-millisecond envelope that arrived after the poll (monotonic bump guard)', async () => {
+    // Without the bump, a second envelope stored at ts == hwm would be filtered out by `m.ts > hwm`.
+    const env = makeEnv();
+    const frozenTs = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(frozenTs);
+    try {
+      await handleSealedSend({ to: 'mono0002', envelope: 'm1' }, env, req({}));
+      // Poll records hwm = frozenTs (ts of m1)
+      const polled = await (await handleSealedPoll({ id: 'mono0002' }, env, req({}))).json();
+      expect(polled.messages.length).toBe(1);
+      // Second envelope arrives after poll, still at the same frozen Date.now()
+      await handleSealedSend({ to: 'mono0002', envelope: 'm2-same-ms' }, env, req({}));
+    } finally {
+      vi.restoreAllMocks();
+    }
+    // With the monotonic bump, m2 has ts = frozenTs + 1 > hwm = frozenTs → ack keeps it
+    const ack = await handleSealedAck({ id: 'mono0002' }, env, req({}));
+    expect((await ack.json()).kept).toBe(1);
+    const after = await (await handleSealedPoll({ id: 'mono0002' }, env, req({}))).json();
+    expect(after.messages.map(m => m.envelope)).toEqual(['m2-same-ms']);
+  });
+});
+
+describe('msg send / poll (1:1 relay path)', () => {
+  const ip = '10.0.0.1';
+  const req = (b) => apiRequest('/api/msg/x', b);
+  // Reset per-isolate dedup map between tests.
+  beforeEach(() => { globalThis._msgDedup = new Map(); });
+
+  it('stores a message and returns it on poll', async () => {
+    const env = makeEnv();
+    const send = await handleMsgSend(
+      { to: 'bob00001', from: 'alice001', payload: 'ENCRYPTED', ts: Date.now() },
+      ip, env, req({}),
+    );
+    expect(send.status).toBe(200);
+    expect((await send.json()).ok).toBe(true);
+
+    const poll = await handleMsgPoll({ id: 'bob00001', lastTs: 0 }, env, req({}));
+    const { messages } = await poll.json();
+    expect(messages.length).toBe(1);
+    expect(messages[0].payload).toBe('ENCRYPTED');
+  });
+
+  it('assigns a unique server-side message id (same-millisecond cursor groundwork)', async () => {
+    const env = makeEnv();
+    const ts = Date.now();
+    await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'CT-A', ts }, ip, env, req({}));
+    await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'CT-B', ts }, ip, env, req({}));
+    const stored = JSON.parse(await env.KV.get('inbox:bob00001'));
+    expect(stored.length).toBe(2);
+    for (const m of stored) expect(m.id).toMatch(/^[0-9a-f]{12}$/);
+    expect(stored[0].id).not.toBe(stored[1].id);
+  });
+
+  // Item 41: a message that shares a millisecond with an already-polled one must still be
+  // delivered. The server bumps a colliding ts so the `m.ts > lastTs` cursor stays lossless.
+  it('does not lose a message sharing a ms with an already-polled one (monotonic ts cursor)', async () => {
+    const env = makeEnv();
+    const T = Date.now();
+    await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'FIRST', ts: T }, ip, env, req({}));
+    // First poll delivers FIRST; the client's cursor advances to the max ts it saw.
+    const p1 = await (await handleMsgPoll({ id: 'bob00001', lastTs: 0 }, env, req({}))).json();
+    expect(p1.messages.map(m => m.payload)).toEqual(['FIRST']);
+    const cursor = Math.max(...p1.messages.map(m => m.ts));
+    // A SECOND message arrives in the same millisecond as the first (same client ts).
+    await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'SECOND', ts: T }, ip, env, req({}));
+    // With the advanced cursor, SECOND must still be delivered (not dropped as ts == cursor).
+    const p2 = await (await handleMsgPoll({ id: 'bob00001', lastTs: cursor }, env, req({}))).json();
+    expect(p2.messages.map(m => m.payload)).toEqual(['SECOND']);
+  });
+
+  it('bumps a colliding stored ts by 1ms so inbox timestamps are strictly increasing', async () => {
+    const env = makeEnv();
+    const T = Date.now();
+    await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'A', ts: T }, ip, env, req({}));
+    await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'B', ts: T }, ip, env, req({}));
+    await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'C', ts: T }, ip, env, req({}));
+    const stored = JSON.parse(await env.KV.get('inbox:bob00001'));
+    expect(stored.map(m => m.ts)).toEqual([T, T + 1, T + 2]); // strictly increasing
+  });
+
+  it('purges expired disappearing messages at poll (server-side disappearAt enforcement)', async () => {
+    const env = makeEnv();
+    const now = Date.now();
+    // Seed the inbox directly: one expired, one still-live, one non-disappearing.
+    await env.KV.put('inbox:bob00001', JSON.stringify([
+      { from: 'alice001', payload: 'EXPIRED', ts: now - 5000, disappearAt: now - 1000 },
+      { from: 'alice001', payload: 'LIVE',    ts: now - 4000, disappearAt: now + 60000 },
+      { from: 'alice001', payload: 'PLAIN',   ts: now - 3000 },
+    ]));
+    const poll = await handleMsgPoll({ id: 'bob00001', lastTs: 0 }, env, req({}));
+    const { messages } = await poll.json();
+    // The expired message is neither delivered…
+    expect(messages.map((m) => m.payload).sort()).toEqual(['LIVE', 'PLAIN']);
+    // …nor retained in KV (ciphertext purged on the first poll after expiry,
+    // instead of sitting out the 7-day inbox TTL).
+    const kept = JSON.parse(await env.KV.get('inbox:bob00001'));
+    expect(kept.some((m) => m.payload === 'EXPIRED')).toBe(false);
+  });
+
+  it('rejects a message with a timestamp outside ±5 min (replay guard)', async () => {
+    const env = makeEnv();
+    const stale = Date.now() - 6 * 60 * 1000; // 6 minutes ago
+    const res = await handleMsgSend(
+      { to: 'bob00001', from: 'alice001', payload: 'X', ts: stale },
+      ip, env, req({}),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_TIMESTAMP');
+  });
+
+  it('rejects a non-numeric ts (type guard — prevents replay-window bypass + poisoned msg.ts)', async () => {
+    const env = makeEnv();
+    // A string/object ts makes Math.abs(now - ts) NaN, which is never > 300000, so the
+    // ±5 min replay guard would silently pass and store a non-numeric ts that breaks
+    // the numeric poll cursor. The type guard must reject it before that happens.
+    for (const badTs of ['not-a-number', { evil: 1 }, [123], NaN, Infinity]) {
+      const res = await handleMsgSend(
+        { to: 'bob00001', from: 'alice001', payload: 'X', ts: badTs },
+        ip, env, req({}),
+      );
+      expect(res.status).toBe(400);
+      expect((await res.json()).code).toBe('INVALID_TIMESTAMP');
+    }
+  });
+
+  it('rejects self-send', async () => {
+    const env = makeEnv();
+    const res = await handleMsgSend(
+      { to: 'alice001', from: 'alice001', payload: 'X', ts: Date.now() },
+      ip, env, req({}),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('SELF_SEND');
+  });
+
+  it('deduplicates an immediately repeated send (content-keyed)', async () => {
+    const env = makeEnv();
+    const body = { to: 'carol001', from: 'alice001', payload: 'SAME', ts: Date.now() };
+    await handleMsgSend(body, ip, env, req({}));
+    const r2 = await handleMsgSend(body, ip, env, req({}));
+    expect((await r2.json()).dedup).toBe(true);
+    const { messages } = await (await handleMsgPoll({ id: 'carol001', lastTs: 0 }, env, req({}))).json();
+    expect(messages.length).toBe(1);
+  });
+
+  it('rejects a payload larger than 256 KB (DoS guard)', async () => {
+    const env = makeEnv();
+    const res = await handleMsgSend(
+      { to: 'bob00001', from: 'alice001', payload: 'x'.repeat(256 * 1024 + 1), ts: Date.now() },
+      ip, env, req({}),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('PAYLOAD_TOO_LARGE');
+  });
+
+  it('poll lastTs cursor returns only messages newer than the cursor', async () => {
+    const env = makeEnv();
+    const now = Date.now();
+    // Send two messages with distinct timestamps.
+    await handleMsgSend(
+      { to: 'bob00001', from: 'alice001', payload: 'OLD', ts: now - 5000 }, ip, env, req({}));
+    globalThis._msgDedup = new Map(); // reset dedup so the second send isn't collapsed
+    await handleMsgSend(
+      { to: 'bob00001', from: 'alice001', payload: 'NEW', ts: now }, ip, env, req({}));
+    // Cursor set to after the first message: should return only the second.
+    const poll = await handleMsgPoll({ id: 'bob00001', lastTs: now - 2000 }, env, req({}));
+    const { messages } = await poll.json();
+    expect(messages.length).toBe(1);
+    expect(messages[0].payload).toBe('NEW');
+  });
+
+  it('poll with a non-numeric lastTs falls back to cursor 0 (still delivers, no data loss)', async () => {
+    const env = makeEnv();
+    // A buggy/hostile string lastTs must not make every `m.ts > cutoff` NaN→false,
+    // which would both starve the poller and (via the shared cutoff) delete still-
+    // undelivered messages older than the 10s grace window.
+    await handleMsgSend(
+      { to: 'bob00001', from: 'alice001', payload: 'HELLO', ts: Date.now() }, ip, env, req({}));
+    const poll = await handleMsgPoll({ id: 'bob00001', lastTs: 'not-a-number' }, env, req({}));
+    const { messages } = await poll.json();
+    expect(messages.length).toBe(1);
+    expect(messages[0].payload).toBe('HELLO');
+  });
+
+  it('returns 400 MISSING_FIELDS when to, from, or payload is absent', async () => {
+    const e = makeEnv();
+    const ts = Date.now();
+    const r1 = await handleMsgSend({ from: 'alice001', payload: 'x', ts }, ip, e, req({}));
+    expect(r1.status).toBe(400);
+    expect((await r1.json()).code).toBe('MISSING_FIELDS');
+    const r2 = await handleMsgSend({ to: 'bob00001', payload: 'x', ts }, ip, e, req({}));
+    expect(r2.status).toBe(400);
+    const r3 = await handleMsgSend({ to: 'bob00001', from: 'alice001', ts }, ip, e, req({}));
+    expect(r3.status).toBe(400);
+  });
+
+  it('rejects send with malformed to or from userId (KV key injection guard)', async () => {
+    const e = makeEnv();
+    const ts = Date.now();
+    const r1 = await handleMsgSend({ to: 'bad id!', from: 'alice001', payload: 'x', ts }, ip, e, req({}));
+    expect(r1.status).toBe(400);
+    expect((await r1.json()).code).toBe('INVALID_USER_ID');
+    const r2 = await handleMsgSend({ to: 'bob00001', from: 'bad id!', payload: 'x', ts }, ip, e, req({}));
+    expect(r2.status).toBe(400);
+    expect((await r2.json()).code).toBe('INVALID_USER_ID');
+  });
+
+  it('rejects non-string to/from/payload (INVALID_TYPE type guard)', async () => {
+    const e = makeEnv();
+    const ts = Date.now();
+    // Non-string `to` — would bypass validateUserId and form a bad KV key
+    const r1 = await handleMsgSend({ to: 42, from: 'alice001', payload: 'x', ts }, ip, e, req({}));
+    expect(r1.status).toBe(400);
+    expect((await r1.json()).code).toBe('INVALID_TYPE');
+    // Non-string `payload` — would corrupt the message store
+    const r2 = await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: { secret: 1 }, ts }, ip, e, req({}));
+    expect(r2.status).toBe(400);
+    expect((await r2.json()).code).toBe('INVALID_TYPE');
+    // Array `from` — would also produce a bad KV key
+    const r3 = await handleMsgSend({ to: 'bob00001', from: ['alice001'], payload: 'x', ts }, ip, e, req({}));
+    expect(r3.status).toBe(400);
+    expect((await r3.json()).code).toBe('INVALID_TYPE');
+  });
+
+  it('rejects poll with malformed id (KV key injection guard)', async () => {
+    const res = await handleMsgPoll({ id: 'bad id!' }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_ID');
+  });
+
+  it('drops non-string groupId/replyTo silently (consistent with sig/sigPub guards)', async () => {
+    // String(object) = '[object Object]' — storing this corrupts the groupId that
+    // clients use for group detection.  Like sig/sigPub/fromPub, non-string optional
+    // fields must be treated as absent rather than coerced.
+    const env = makeEnv();
+    const ts = Date.now();
+    await handleMsgSend({
+      to: 'bob00001', from: 'alice001', payload: 'ENC', ts,
+      groupId: { id: 'group1' }, replyTo: ['some-msg-id'],
+    }, ip, env, req({}));
+    const { messages } = await (await handleMsgPoll({ id: 'bob00001', lastTs: 0 }, env, req({}))).json();
+    expect(messages.length).toBe(1);
+    expect(messages[0].groupId).toBeUndefined();
+    expect(messages[0].replyTo).toBeUndefined();
+  });
+
+  it('rejects Infinity disappearAt but stores a valid finite timestamp', async () => {
+    const env = makeEnv();
+    const now = Date.now();
+    // Infinity passes `typeof x === 'number'` so the old guard stored it as-is,
+    // creating a disappearAt that never fires on the client (Infinity > Date.now() always).
+    const bad = await handleMsgSend(
+      { to: 'bob00001', from: 'alice001', payload: 'X', ts: now, disappearAt: Infinity },
+      ip, env, req({}),
+    );
+    expect(bad.status).toBe(200);
+    const { messages: msgs1 } = await (await handleMsgPoll({ id: 'bob00001', lastTs: 0 }, env, req({}))).json();
+    expect(msgs1[0].disappearAt).toBeUndefined();
+
+    globalThis._msgDedup = new Map();
+    const validExpiry = now + 60_000;
+    const good = await handleMsgSend(
+      { to: 'bob00001', from: 'alice001', payload: 'Y', ts: now + 1, disappearAt: validExpiry },
+      ip, env, req({}),
+    );
+    expect(good.status).toBe(200);
+    const { messages: msgs2 } = await (await handleMsgPoll({ id: 'bob00001', lastTs: now }, env, req({}))).json();
+    expect(msgs2[0].disappearAt).toBe(validExpiry);
+  });
+
+  it('poll does not return a zombie message whose stored ts is Infinity (Number.isFinite guard)', async () => {
+    // (m.ts || 0) handles NaN (falsy) but not Infinity (truthy): a stored message
+    // with ts:Infinity would satisfy Infinity > any_cutoff on every poll, being
+    // returned every time and never cleaned from KV.  Number.isFinite coerces
+    // Infinity to 0, so it behaves like an oldest-possible timestamp: NOT returned
+    // when cutoff=0 (0 > 0 is false), and deleted from KV (not kept).
+    const env = makeEnv();
+    const now = Date.now();
+    // Directly write a malformed KV entry with ts:Infinity (bypasses send-side guard
+    // to simulate old data or corrupted KV).
+    await env.KV.put('inbox:dave0001', JSON.stringify([
+      { from: 'alice001', payload: 'zombie', ts: Infinity },
+      { from: 'alice001', payload: 'valid',  ts: now },
+    ]));
+    // With cutoff=0: zombie coerced to ts=0, 0>0 is false — NOT returned.
+    // Only the valid message (ts=now > 0) is returned.
+    const poll1 = await handleMsgPoll({ id: 'dave0001', lastTs: 0 }, env, apiRequest('/api/msg/x', {}));
+    const { messages: m1 } = await poll1.json();
+    expect(m1.length).toBe(1);
+    expect(m1[0].payload).toBe('valid');
+    // Second poll with cutoff=now: valid message also excluded now. Zombie still
+    // excluded (coerced 0 <= now). Zero messages returned — no zombie resurrection.
+    const poll2 = await handleMsgPoll({ id: 'dave0001', lastTs: now }, env, apiRequest('/api/msg/x', {}));
+    const { messages: m2 } = await poll2.json();
+    expect(m2.length).toBe(0);
+  });
+
+  // ── KV failure propagation (item 27) ─────────────────────────────────────────
+  it('send returns STORE_FAILED 500 when KV put throws (not false success)', async () => {
+    const e = makeEnv();
+    e.KV.put = async () => { throw new Error('KV_QUOTA_EXCEEDED'); };
+    const res = await handleMsgSend(
+      { to: 'bob00001', from: 'alice001', payload: 'ENC', ts: Date.now() },
+      ip, e, req({}),
+    );
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+  });
+});
+
+describe('alias set / get (PoW anti-spam)', () => {
+  const req = (b) => apiRequest('/api/alias/x', b);
+
+  it('rejects oversized pub field (KV inflation guard)', async () => {
+    const res = await handleAliasSet({ alias: 'alice', pub: 'x'.repeat(2001) }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('FIELD_TOO_LARGE');
+  });
+
+  it('rejects a request with no PoW token', async () => {
+    const res = await handleAliasSet({ alias: 'alice', pub: 'PUBKEY' }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('POW_REQUIRED');
+  });
+
+  it('rejects a PoW whose challenge does not include the pub key', async () => {
+    const res = await handleAliasSet(
+      { alias: 'alice', pub: 'PUBKEY', pow: { challenge: 'no-pub-here', nonce: 0, difficulty: 16 } },
+      makeEnv(), req({}),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('POW_INVALID');
+  });
+
+  // Item 79 (worker inline): pub-binding must use startsWith(pub+':'), not includes(pub).
+  // An attacker whose identity key is 'testPUBKEY' (a superstring) solves PoW for their
+  // own challenge 'testPUBKEY:breeze-test', then submits it claiming pub='PUBKEY' (whose
+  // pub is a suffix of theirs). With the old includes() check the hash validates (it was
+  // genuinely solved) AND the pub check passes (includes returns true) → proceeds past PoW.
+  // With the fixed startsWith(pub+':') check: 'testPUBKEY:breeze-test'.startsWith('PUBKEY:')
+  // = false → POW_INVALID immediately. Mutation: old code returns a non-POW_INVALID error
+  // (alias name too-long or 400, NOT POW_INVALID) because the PoW is legitimate for
+  // 'testPUBKEY:breeze-test' and the hash check passes.
+  it('rejects a PoW solved for a superstring identity (substring relay-identity swap)', async () => {
+    const SHORT_PUB = 'PUBKEY';
+    const LONG_PUB = 'test' + SHORT_PUB; // SHORT_PUB is a suffix of LONG_PUB
+    // Solve PoW for the longer pub's challenge (this is the "attacker's" real PoW).
+    const pow = await solvePoW(LONG_PUB, 16, `${LONG_PUB}:breeze-test`);
+    expect(pow.challenge.includes(SHORT_PUB)).toBe(true); // demonstrates includes() would pass
+    // Submit claiming to be SHORT_PUB — the challenge embeds LONG_PUB, not SHORT_PUB.
+    const res = await handleAliasSet({ alias: 'relaytest', pub: SHORT_PUB, pow }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('POW_INVALID'); // mutation: old code passes PoW check
+    // Genuine success: the correct pub still passes (challenge starts with LONG_PUB:).
+    const ok = await handleAliasSet({ alias: 'relaytest', pub: LONG_PUB, pow }, makeEnv(), req({}));
+    expect((await ok.json()).code).not.toBe('POW_INVALID'); // hash is valid for LONG_PUB
+  }, 60000);
+
+  // Item 50 (test-integrity perspective): the anti-spam difficulty FLOOR (default 20 bits in
+  // production, overridden to 16 via MIN_POW_DIFFICULTY in tests) had no negative test.
+  // A validly-solved but too-easy puzzle must still be rejected, or a regression weakening
+  // the floor (cheap alias spam) would pass the whole suite.
+  it('rejects a PoW below the difficulty floor even when validly solved (anti-spam)', async () => {
+    const pub = 'LOWDIFF01';
+    const challenge = `${pub}:${Date.now()}`;            // includes pub, fresh, short
+    const pow = await solvePoW(pub, 4, challenge);        // a real difficulty-4 solution
+    expect(pow.difficulty).toBe(4);                       // the only failing condition is the floor
+    // Floor pinned explicitly here so this test keeps its meaning regardless of the suite
+    // default: a genuinely-solved token below the floor must still be refused.
+    const res = await handleAliasSet({ alias: 'lowdiff', pub, pow }, makeEnv({ MIN_POW_DIFFICULTY: '8' }), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('POW_INVALID');
+  });
+
+  it('rejects a PoW with an oversized challenge string (>512 chars)', async () => {
+    const pub = 'BIGCHAL01';
+    const challenge = pub + ':' + 'x'.repeat(520);        // includes pub + difficulty ok, but too long
+    const res = await handleAliasSet(
+      { alias: 'bigchal', pub, pow: { challenge, nonce: 0, difficulty: 16 } }, makeEnv(), req({}),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('POW_INVALID');
+  });
+
+  it('rejects an expired PoW (timestamp > 10 min old) when challenge uses makeChallengeString format', async () => {
+    // Challenge format: "${pub}:${ts}" — expired timestamp should trigger POW_EXPIRED.
+    const pub = 'FRESHPUB01';
+    const staleTs = Date.now() - (11 * 60 * 1000); // 11 minutes ago
+    const staleChallenge = `${pub}:${staleTs}`;
+    // Solve the puzzle with the stale challenge (still valid hash-wise).
+    const pow = await solvePoW(pub, 16, staleChallenge);
+    const res = await handleAliasSet({ alias: 'staleuser', pub, pow }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('POW_EXPIRED');
+  }, 30000); // PoW solve is probabilistic; allow 30s
+
+  it('accepts a fresh timestamp-bearing PoW', async () => {
+    const pub = 'FRESHPUB02';
+    const freshChallenge = `${pub}:${Date.now()}`;
+    const pow = await solvePoW(pub, 16, freshChallenge);
+    const res = await handleAliasSet({ alias: 'freshuser', pub, pow }, makeEnv(), req({}));
+    expect(res.status).toBe(200);
+  }, 30000); // PoW solve is probabilistic; allow 30s
+
+  it('rejects a far-future PoW timestamp (replay-via-future-ts guard)', async () => {
+    // The challenge is fully client-controlled. A far-future ts makes (now - ts)
+    // negative, which a past-only freshness check accepts forever — letting one
+    // solved token register unlimited aliases. The future bound must reject it.
+    const pub = 'FUTUREPUB1';
+    const futureTs = Date.now() + (60 * 60 * 1000); // 1 hour ahead
+    const futureChallenge = `${pub}:${futureTs}`;
+    const pow = await solvePoW(pub, 16, futureChallenge);
+    const res = await handleAliasSet({ alias: 'futureuser', pub, pow }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('POW_EXPIRED');
+  }, 30000); // PoW solve is probabilistic; allow 30s
+
+  it('accepts a validly solved PoW and registers the alias', async () => {
+    const pub = 'TESTPUB123';
+    const pow = await solvePoW(pub);
+    const res = await handleAliasSet({ alias: 'testuser', pub, pow }, makeEnv(), req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).alias).toBe('testuser');
+  });
+
+  it('rejects an alias collision from a different pub key', async () => {
+    const env = makeEnv();
+    const pub1 = 'PUB1'; const pow1 = await solvePoW(pub1);
+    await handleAliasSet({ alias: 'takenname', pub: pub1, pow: pow1 }, env, req({}));
+    const pub2 = 'PUB2'; const pow2 = await solvePoW(pub2);
+    const res = await handleAliasSet({ alias: 'takenname', pub: pub2, pow: pow2 }, env, req({}));
+    expect(res.status).toBe(409);
+    expect((await res.json()).code).toBe('ALIAS_TAKEN');
+  }, 30000);
+
+  it('returns the stored pub and name on alias get', async () => {
+    const env = makeEnv();
+    const pub = 'PUBFORGET'; const pow = await solvePoW(pub);
+    await handleAliasSet({ alias: 'getme', pub, name: 'Alice', pow }, env, req({}));
+    const res = await handleAliasGet({ alias: 'getme' }, env, req({}));
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.pub).toBe(pub);
+  }, 30000);
+
+  it('404s a get for a nonexistent alias', async () => {
+    const res = await handleAliasGet({ alias: 'nobody' }, makeEnv(), req({}));
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 400 (not 500) for a non-string alias on get/set', async () => {
+    // A numeric alias is truthy and passes the global string-only field guard;
+    // without an explicit type check, alias.toLowerCase() would throw → 500.
+    const g = await handleAliasGet({ alias: 12345 }, makeEnv(), req({}));
+    expect(g.status).toBe(400);
+    expect((await g.json()).code).toBe('INVALID_FIELD');
+    // On set the guard fires before PoW, so no puzzle needs solving.
+    const s = await handleAliasSet({ alias: ['arr'], pub: 'PUBX' }, makeEnv(), req({}));
+    expect(s.status).toBe(400);
+    expect((await s.json()).code).toBe('INVALID_FIELD');
+  });
+
+  it('sanitizes alias to lowercase a-z0-9_', async () => {
+    const pub = 'SANITIZEPUB'; const pow = await solvePoW(pub);
+    const res = await handleAliasSet({ alias: 'Hello-World!', pub, pow }, makeEnv(), req({}));
+    expect(res.status).toBe(200);
+    // After sanitization: 'helloworld' (hyphen and ! stripped)
+    expect((await res.json()).alias).toBe('helloworld');
+  }, 30000);
+
+  it('rejects an alias that is too short after sanitization', async () => {
+    const pub = 'SHORTPUB'; const pow = await solvePoW(pub);
+    // '!!' sanitizes to '' (empty → < 3 chars)
+    const res = await handleAliasSet({ alias: '!!', pub, pow }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_ALIAS');
+  }, 30000);
+
+  it('allows the same pub to re-register (update name)', async () => {
+    const env = makeEnv();
+    const pub = 'SAMEPUB123'; const pow = await solvePoW(pub);
+    await handleAliasSet({ alias: 'myalias', pub, name: 'Alice', pow }, env, req({}));
+    const pow2 = await solvePoW(pub);
+    const res = await handleAliasSet({ alias: 'myalias', pub, name: 'Alice Updated', pow: pow2 }, env, req({}));
+    expect(res.status).toBe(200);
+    const got = await (await handleAliasGet({ alias: 'myalias' }, env, req({}))).json();
+    expect(got.pub).toBe(pub);
+  }, 30000);
+
+  it('batch get resolves many aliases in one call; misses map to null', async () => {
+    const env = makeEnv();
+    // Seed directly (avoids N PoW solves in the test).
+    await env.KV.put('alias:alice', JSON.stringify({ pub: 'PUBA', name: 'Alice', setAt: 1 }));
+    await env.KV.put('alias:bob', JSON.stringify({ pub: 'PUBB', name: 'Bob', setAt: 2 }));
+    const res = await handleAliasGet({ aliases: ['alice', 'BOB', 'nobody', 'x'] }, env, req({}));
+    expect(res.status).toBe(200);
+    const { results } = await res.json();
+    expect(results.alice.pub).toBe('PUBA');
+    expect(results.bob.pub).toBe('PUBB');   // case-normalized
+    expect(results.nobody).toBeNull();       // unknown → null, not an error
+    expect('x' in results).toBe(false);      // too short (<3) → filtered out entirely
+  });
+
+  it('batch get dedups, sanitizes and caps at 50 entries', async () => {
+    const env = makeEnv();
+    await env.KV.put('alias:alice', JSON.stringify({ pub: 'PUBA', name: 'Alice', setAt: 1 }));
+    // 60 distinct + duplicates + a non-string; only valid, deduped, capped-50 are read.
+    const many = Array.from({ length: 60 }, (_, i) => `user${i}`);
+    const res = await handleAliasGet({ aliases: ['alice', 'alice', 'ALICE', 42, ...many] }, env, req({}));
+    expect(res.status).toBe(200);
+    const { results } = await res.json();
+    expect(results.alice.pub).toBe('PUBA');
+    expect(Object.keys(results).length).toBeLessThanOrEqual(50);
+  });
+});
+
+// Item 61 — optional Ed25519 ownership binding for alias registration (anti-impersonation).
+// PoW only rate-limits; it never proves the registrant controls `pub`. Signed registration
+// binds the @handle to the account that owns the identity key; ALIAS_REQUIRE_AUTH enforces it.
+describe('alias set — optional Ed25519 ownership auth (item 61)', () => {
+  const req = (b) => apiRequest('/api/alias/set', b);
+
+  // Register a prekey bundle whose identityKey === pub (the alias target), and return a
+  // signer over breeze-alias-set:{alias}:{ts}.
+  async function account(env, userId, pub) {
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
+    await env.KV.put(`prekey:${userId}`, JSON.stringify({ identityKey: pub, edIdentityKey: toB64(edPub), signedPreKey: 'x' }));
+    return {
+      sign: async (alias, ts) => toB64(new Uint8Array(
+        await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, new TextEncoder().encode(`breeze-alias-set:${alias}:${ts}`)))),
+    };
+  }
+
+  it('legacy PoW-only registration still works when the flag is unset', async () => {
+    const env = makeEnv();
+    const pub = 'LEGACYPUB1';
+    const res = await handleAliasSet({ alias: 'legacy', pub, pow: await solvePoW(pub) }, env, req({}));
+    expect(res.status).toBe(200);
+  }, 30000);
+
+  it('rejects unsigned registration when ALIAS_REQUIRE_AUTH=true', async () => {
+    const env = makeEnv({ ALIAS_REQUIRE_AUTH: 'true' });
+    const pub = 'FLAGPUB001';
+    const res = await handleAliasSet({ alias: 'flagged', pub, pow: await solvePoW(pub) }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
+  }, 30000);
+
+  it('accepts a valid signed registration even when ALIAS_REQUIRE_AUTH=true', async () => {
+    const env = makeEnv({ ALIAS_REQUIRE_AUTH: 'true' });
+    const pub = 'SIGNEDPUB1';
+    const acct = await account(env, 'aliasusr1', pub);
+    const ts = Date.now();
+    const res = await handleAliasSet(
+      { alias: 'mine', pub, userId: 'aliasusr1', ts, sig: await acct.sign('mine', ts), pow: await solvePoW(pub) },
+      env, req({}));
+    expect(res.status).toBe(200);
+    expect((await (await handleAliasGet({ alias: 'mine' }, env, req({}))).json()).pub).toBe(pub);
+  }, 30000);
+
+  it('rejects a signed registration whose pub != the account identity key (PUB_MISMATCH)', async () => {
+    const env = makeEnv();
+    await account(env, 'aliasusr2', 'REALPUB123'); // bundle.identityKey = REALPUB123
+    const ts = Date.now();
+    const acct2 = await account(env, 'aliasusr2b', 'REALPUB123');
+    // Attacker tries to alias a DIFFERENT pub while signing with their own key.
+    const res = await handleAliasSet(
+      { alias: 'victim', pub: 'OTHERPUB99', userId: 'aliasusr2b', ts, sig: await acct2.sign('victim', ts), pow: await solvePoW('OTHERPUB99') },
+      env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('PUB_MISMATCH');
+  }, 30000);
+
+  it('rejects a tampered signature (SIG_INVALID)', async () => {
+    const env = makeEnv();
+    const pub = 'TAMPERPUB1';
+    await account(env, 'aliasusr3', pub);
+    const ts = Date.now();
+    const res = await handleAliasSet(
+      { alias: 'tamper', pub, userId: 'aliasusr3', ts, sig: toB64(new Uint8Array(64)), pow: await solvePoW(pub) },
+      env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+  }, 30000);
+
+  it('rejects partial auth (ts without sig)', async () => {
+    const env = makeEnv();
+    const pub = 'PARTIALPUB';
+    const res = await handleAliasSet(
+      { alias: 'partial', pub, userId: 'aliasusr4', ts: Date.now(), pow: await solvePoW(pub) },
+      env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('PARTIAL_AUTH');
+  }, 30000);
+});
+
+describe('alias delete — standalone alias release without account deletion', () => {
+  const req = (b) => apiRequest('/api/alias/delete', b);
+
+  async function registeredWithAlias(env, userId, aliasName) {
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
+    const spk = crypto.getRandomValues(new Uint8Array(32));
+    const spkSig = new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, spk));
+    await handlePreKeyUpload({
+      userId, identityKey: userId + '-IK',
+      edIdentityKey: toB64(edPub), signedPreKey: toB64(spk), signedPreKeySig: toB64(spkSig),
+      oneTimePreKeys: [],
+    }, env, apiRequest('/api/prekey/upload', {}));
+    await env.KV.put(`alias:${aliasName}`, JSON.stringify({ pub: userId + '-IK', name: 'Me', setAt: Date.now() }));
+    return { ed };
+  }
+
+  async function signAliasDel(ed, alias, ts) {
+    const msg = new TextEncoder().encode(`breeze-alias-delete:${alias}:${ts}`);
+    return toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, msg)));
+  }
+
+  it('removes the alias and returns { ok: true, removed: true } for a valid signed request', async () => {
+    const env = makeEnv();
+    const userId = 'alsdel01';
+    const { ed } = await registeredWithAlias(env, userId, 'myhandle');
+    const ts = Date.now();
+    const sig = await signAliasDel(ed, 'myhandle', ts);
+    const res = await handleAliasDelete({ alias: 'myhandle', userId, ts, sig }, env, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).removed).toBe(true);
+    expect(await env.KV.get('alias:myhandle')).toBeNull();
+  });
+
+  it('returns { ok: true, removed: false } for an alias that does not exist', async () => {
+    const env = makeEnv();
+    const userId = 'alsdel02';
+    const { ed } = await registeredWithAlias(env, userId, 'phantom');
+    // Delete the alias from KV so it no longer exists
+    await env.KV.delete('alias:phantom');
+    const ts = Date.now();
+    const sig = await signAliasDel(ed, 'phantom', ts);
+    const res = await handleAliasDelete({ alias: 'phantom', userId, ts, sig }, env, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).removed).toBe(false);
+  });
+
+  it('rejects with 403 when the alias is owned by a different identity', async () => {
+    const env = makeEnv();
+    const userId = 'alsdel03';
+    const { ed } = await registeredWithAlias(env, userId, 'taken');
+    // Overwrite the alias so it belongs to a different pub
+    await env.KV.put('alias:taken', JSON.stringify({ pub: 'IK-someone-else', name: 'Other', setAt: Date.now() }));
+    const ts = Date.now();
+    const sig = await signAliasDel(ed, 'taken', ts);
+    const res = await handleAliasDelete({ alias: 'taken', userId, ts, sig }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('NOT_OWNER');
+    // Alias must still exist
+    expect(await env.KV.get('alias:taken')).not.toBeNull();
+  });
+
+  it('rejects with 403 on a tampered signature', async () => {
+    const env = makeEnv();
+    const userId = 'alsdel04';
+    const { ed } = await registeredWithAlias(env, userId, 'secure');
+    const ts = Date.now();
+    // Sign the wrong challenge
+    const badSig = await signAliasDel(ed, 'wrongalias', ts);
+    const res = await handleAliasDelete({ alias: 'secure', userId, ts, sig: badSig }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+    expect(await env.KV.get('alias:secure')).not.toBeNull();
+  });
+
+  it('rejects missing required fields', async () => {
+    const res = await handleAliasDelete({ alias: 'x', userId: 'alsdel05' }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('MISSING_FIELDS');
+  });
+
+  it('rejects a stale timestamp (±5 min window)', async () => {
+    const env = makeEnv();
+    const userId = 'alsdel06';
+    const { ed } = await registeredWithAlias(env, userId, 'staletest');
+    const oldTs = Date.now() - 10 * 60 * 1000; // 10 minutes ago
+    const sig = await signAliasDel(ed, 'staletest', oldTs);
+    const res = await handleAliasDelete({ alias: 'staletest', userId, ts: oldTs, sig }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_TIMESTAMP');
+  });
+});
+
+describe('push subscribe SSRF guard', () => {
+  const base = (endpoint) => ({ userId: 'bob000001', subscription: { endpoint } });
+
+  it('rejects non-HTTPS endpoints', async () => {
+    const res = await handlePushSubscribe(base('http://fcm.googleapis.com/x'), makeEnv(), apiRequest('/api/push/subscribe', {}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_ENDPOINT');
+  });
+
+  // Item 46: don't report a registered device when the KV write failed.
+  it('returns 500 STORE_FAILED when the subscription KV write fails', async () => {
+    const env = makeEnv();
+    const real = env.KV.put.bind(env.KV);
+    env.KV.put = async (key, ...rest) => { if (key.startsWith('push:')) throw new Error('KV down'); return real(key, ...rest); };
+    const res = await handlePushSubscribe(base('https://fcm.googleapis.com/fcm/send/abc'), env, apiRequest('/api/push/subscribe', {}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+  });
+
+  it('rejects untrusted hosts (SSRF target)', async () => {
+    const res = await handlePushSubscribe(base('https://169.254.169.254/latest/meta-data'), makeEnv(), apiRequest('/api/push/subscribe', {}));
+    expect(res.status).toBe(400);
+    const j = await res.json();
+    expect(j.error).toMatch(/Untrusted/);
+    expect(j.code).toBe('UNTRUSTED_ENDPOINT');
+  });
+
+  it('accepts a trusted FCM endpoint', async () => {
+    const res = await handlePushSubscribe(base('https://fcm.googleapis.com/fcm/send/abc'), makeEnv(), apiRequest('/api/push/subscribe', {}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).ok).toBe(true);
+  });
+
+  it('rejects malformed userId (KV key injection guard)', async () => {
+    const res = await handlePushSubscribe(
+      { userId: 'bad id!', subscription: { endpoint: 'https://fcm.googleapis.com/fcm/send/x' } },
+      makeEnv(), apiRequest('/api/push/subscribe', {})
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_USER_ID');
+  });
+
+  it('caps at 5 subscriptions per user (evicts oldest when 6th device registers)', async () => {
+    const env = makeEnv();
+    const req = apiRequest('/api/push/subscribe', {});
+    for (let i = 1; i <= 6; i++) {
+      const sub = { endpoint: `https://fcm.googleapis.com/fcm/send/device${i}` };
+      await handlePushSubscribe({ userId: 'u0000001', subscription: sub }, env, req);
+    }
+    const stored = JSON.parse(await env.KV.get('push:u0000001'));
+    expect(stored.length).toBe(5);
+    // device1 (oldest) was evicted; device6 (newest) is present.
+    expect(stored.some(s => s.endpoint.includes('device1'))).toBe(false);
+    expect(stored.some(s => s.endpoint.includes('device6'))).toBe(true);
+  });
+
+  it('sanitizes subscription: extra fields stripped, oversized key fields truncated', async () => {
+    const env = makeEnv();
+    const req = apiRequest('/api/push/subscribe', {});
+    const sub = {
+      endpoint: 'https://fcm.googleapis.com/fcm/send/abc',
+      keys: { p256dh: 'p'.repeat(200), auth: 'a'.repeat(100), extra: 'should-not-appear' },
+      expirationTime: 1234567890,
+      injectedField: 'x'.repeat(10000), // extra top-level field — must be dropped
+    };
+    await handlePushSubscribe({ userId: 'u0000002', subscription: sub }, env, req);
+    const stored = JSON.parse(await env.KV.get('push:u0000002'));
+    const saved = stored[0];
+    expect(Object.keys(saved)).toEqual(expect.arrayContaining(['endpoint', 'keys', 'expirationTime']));
+    expect(saved).not.toHaveProperty('injectedField');
+    expect(saved.keys.p256dh.length).toBeLessThanOrEqual(100);
+    expect(saved.keys.auth.length).toBeLessThanOrEqual(50);
+    expect(saved.keys).not.toHaveProperty('extra');
+  });
+});
+
+// Item 62 — optional Ed25519 ownership auth for push subscribe (anti-eavesdrop / anti-evict).
+// Without it, anyone who knows a userId could register their own device under push:${userId}
+// and decrypt the victim's notification metadata, or evict the victim's devices via the cap.
+describe('push subscribe — optional Ed25519 ownership auth (item 62)', () => {
+  const FCM = 'https://fcm.googleapis.com/fcm/send/abc';
+  const req = apiRequest('/api/push/subscribe', {});
+
+  async function account(env, userId) {
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
+    await env.KV.put(`prekey:${userId}`, JSON.stringify({ identityKey: 'IK', edIdentityKey: toB64(edPub), signedPreKey: 'x' }));
+    // Sign userId+ts AND the subscription fields (endpoint+p256dh+auth), matching
+    // checkGroupAuth-style target binding (item 77).
+    return { sign: async (uid, ts, sub = {}) => toB64(new Uint8Array(
+      await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, new TextEncoder().encode(
+        `breeze-push-subscribe:${uid}:${ts}:${sub.endpoint || ''}:${sub.keys?.p256dh || ''}:${sub.keys?.auth || ''}`)))) };
+  }
+
+  it('unsigned subscribe still works when the flag is unset (backward-compat)', async () => {
+    const res = await handlePushSubscribe({ userId: 'pushusr01', subscription: { endpoint: FCM } }, makeEnv(), req);
+    expect(res.status).toBe(200);
+  });
+
+  it('rejects unsigned subscribe when PUSH_REQUIRE_AUTH=true', async () => {
+    const env = makeEnv({ PUSH_REQUIRE_AUTH: 'true' });
+    const res = await handlePushSubscribe({ userId: 'pushusr02', subscription: { endpoint: FCM } }, env, req);
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
+  });
+
+  it('accepts a valid signed subscribe when PUSH_REQUIRE_AUTH=true', async () => {
+    const env = makeEnv({ PUSH_REQUIRE_AUTH: 'true' });
+    const acct = await account(env, 'pushusr03');
+    const ts = Date.now();
+    const sub = { endpoint: FCM, keys: { p256dh: 'PUB', auth: 'SEC' } };
+    const res = await handlePushSubscribe(
+      { userId: 'pushusr03', subscription: sub, ts, sig: await acct.sign('pushusr03', ts, sub) }, env, req);
+    expect(res.status).toBe(200);
+    expect((await res.json()).ok).toBe(true);
+  });
+
+  // Item 77: the signature binds the subscription, so the relay can't swap in its own
+  // endpoint/keys while keeping a valid signature (the "register their own device" attack).
+  it('rejects a subscribe whose endpoint was swapped by the relay after signing', async () => {
+    const env = makeEnv({ PUSH_REQUIRE_AUTH: 'true' });
+    const acct = await account(env, 'pushusr06');
+    const ts = Date.now();
+    const signed = { endpoint: FCM, keys: { p256dh: 'VICTIM', auth: 'VS' } };
+    const sig = await acct.sign('pushusr06', ts, signed);
+    // Relay rewrites the endpoint to its own (still a trusted-domain URL) + its own keys.
+    const swapped = { endpoint: 'https://fcm.googleapis.com/fcm/send/ATTACKER', keys: { p256dh: 'ATTACKER', auth: 'AS' } };
+    const res = await handlePushSubscribe({ userId: 'pushusr06', subscription: swapped, ts, sig }, env, req);
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+    expect(await env.KV.get('push:pushusr06')).toBeNull(); // nothing registered
+    // The genuinely-signed subscription still registers.
+    const ok = await handlePushSubscribe({ userId: 'pushusr06', subscription: signed, ts, sig }, env, req);
+    expect(ok.status).toBe(200);
+  });
+
+  it('rejects a subscribe whose decryption key (p256dh) was swapped after signing', async () => {
+    const env = makeEnv({ PUSH_REQUIRE_AUTH: 'true' });
+    const acct = await account(env, 'pushusr07');
+    const ts = Date.now();
+    const signed = { endpoint: FCM, keys: { p256dh: 'VICTIM', auth: 'VS' } };
+    const sig = await acct.sign('pushusr07', ts, signed);
+    // Same endpoint, but relay swaps p256dh so IT can decrypt the metadata.
+    const swapped = { endpoint: FCM, keys: { p256dh: 'ATTACKER', auth: 'VS' } };
+    const res = await handlePushSubscribe({ userId: 'pushusr07', subscription: swapped, ts, sig }, env, req);
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+    // The genuinely-signed key still registers (binding is exact, not blanket).
+    const ok = await handlePushSubscribe({ userId: 'pushusr07', subscription: signed, ts, sig }, env, req);
+    expect(ok.status).toBe(200);
+  });
+
+  it('rejects a tampered signature (SIG_INVALID)', async () => {
+    const env = makeEnv();
+    await account(env, 'pushusr04');
+    const res = await handlePushSubscribe(
+      { userId: 'pushusr04', subscription: { endpoint: FCM }, ts: Date.now(), sig: toB64(new Uint8Array(64)) }, env, req);
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+  });
+
+  it('rejects partial auth (sig without ts)', async () => {
+    const res = await handlePushSubscribe(
+      { userId: 'pushusr05', subscription: { endpoint: FCM }, sig: toB64(new Uint8Array(64)) }, makeEnv(), req);
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('PARTIAL_AUTH');
+  });
+});
+
+// Item 39: sendPushToUser must remove ALL dead subscriptions in one push cycle. The old
+// in-loop filter recomputed `subs.filter(...)` from the original array each time, so with
+// two stale subs it clobbered the first removal and left one resurrected.
+describe('push delivery dead-subscription cleanup (item 39)', () => {
+  const b64url = (bytes) => Buffer.from(bytes).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+  // Generate a VAPID env (ECDSA P-256) and a valid client push key (ECDH P-256 + auth)
+  // so encryptPushPayload/buildVapidJwt succeed and delivery actually reaches fetch().
+  async function pushEnv() {
+    const vapid = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+    const vapidJwk = await crypto.subtle.exportKey('jwk', vapid.privateKey);
+    const vapidPubRaw = new Uint8Array(await crypto.subtle.exportKey('raw', vapid.publicKey));
+    return makeEnv({ VAPID_PRIVATE_KEY: vapidJwk.d, VAPID_PUBLIC_KEY: b64url(vapidPubRaw) });
+  }
+  async function clientSubKeys() {
+    const kp = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+    const pubRaw = new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey));
+    return { p256dh: b64url(pubRaw), auth: b64url(crypto.getRandomValues(new Uint8Array(16))) };
+  }
+  function sub(endpoint, keys) { return { endpoint, keys }; }
+
+  it('removes BOTH subscriptions when both return 410 (no clobber/resurrection)', async () => {
+    const env = await pushEnv();
+    const keys = await clientSubKeys();
+    const a = sub('https://fcm.googleapis.com/fcm/send/A', keys);
+    const b = sub('https://fcm.googleapis.com/fcm/send/B', keys);
+    await env.KV.put('push:race0001', JSON.stringify([a, b]));
+    vi.stubGlobal('fetch', async () => ({ status: 410 }));
+    try {
+      await sendPushToUser('race0001', { title: 'x', body: 'y' }, env);
+      // Both dead → key deleted entirely. The buggy version left one sub resurrected.
+      expect(await env.KV.get('push:race0001')).toBeNull();
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it('removes only the dead subscription and keeps the healthy one', async () => {
+    const env = await pushEnv();
+    const keys = await clientSubKeys();
+    const good = sub('https://fcm.googleapis.com/fcm/send/GOOD', keys);
+    const dead = sub('https://fcm.googleapis.com/fcm/send/DEAD', keys);
+    await env.KV.put('push:race0002', JSON.stringify([good, dead]));
+    vi.stubGlobal('fetch', async (url) => ({ status: String(url).includes('DEAD') ? 410 : 201 }));
+    try {
+      await sendPushToUser('race0002', { title: 'x', body: 'y' }, env);
+      const remaining = JSON.parse(await env.KV.get('push:race0002'));
+      expect(remaining.map(s => s.endpoint)).toEqual([good.endpoint]);
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it('also removes a subscription on 404 Not Found', async () => {
+    const env = await pushEnv();
+    const keys = await clientSubKeys();
+    await env.KV.put('push:race0003', JSON.stringify([sub('https://fcm.googleapis.com/fcm/send/X', keys)]));
+    vi.stubGlobal('fetch', async () => ({ status: 404 }));
+    try {
+      await sendPushToUser('race0003', { title: 'x', body: 'y' }, env);
+      expect(await env.KV.get('push:race0003')).toBeNull();
+    } finally { vi.unstubAllGlobals(); }
+  });
+});
+
+describe('push unsubscribe', () => {
+  const FCM = 'https://fcm.googleapis.com/fcm/send/device1';
+  const req = apiRequest('/api/push/unsubscribe', {});
+
+  it('removes the matching endpoint and returns removed: 1', async () => {
+    const env = makeEnv();
+    await handlePushSubscribe({ userId: 'unsub001', subscription: { endpoint: FCM } }, env, req);
+    const res = await handlePushUnsubscribe({ userId: 'unsub001', endpoint: FCM }, env, req);
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.ok).toBe(true);
+    expect(j.removed).toBe(1);
+    // KV entry should be gone (no subscriptions left).
+    expect(await env.KV.get('push:unsub001')).toBeNull();
+  });
+
+  it('returns removed: 0 when endpoint is not in the list', async () => {
+    const env = makeEnv();
+    await handlePushSubscribe({ userId: 'unsub002', subscription: { endpoint: FCM } }, env, req);
+    const res = await handlePushUnsubscribe({ userId: 'unsub002', endpoint: 'https://fcm.googleapis.com/other' }, env, req);
+    expect((await res.json()).removed).toBe(0);
+    // Original subscription still present.
+    expect(JSON.parse(await env.KV.get('push:unsub002')).length).toBe(1);
+  });
+
+  it('returns ok: true with removed: 0 when user has no subscriptions', async () => {
+    const res = await handlePushUnsubscribe({ userId: 'unsub003', endpoint: FCM }, makeEnv(), req);
+    expect(res.status).toBe(200);
+    expect((await res.json()).removed).toBe(0);
+  });
+
+  it('returns 400 for missing fields or invalid userId', async () => {
+    const r1 = await handlePushUnsubscribe({ userId: 'unsub004' }, makeEnv(), req);
+    expect(r1.status).toBe(400);
+    const r2 = await handlePushUnsubscribe({ userId: 'bad id!', endpoint: FCM }, makeEnv(), req);
+    expect(r2.status).toBe(400);
+  });
+});
+
+describe('dead drop (create + read)', () => {
+  const req = (body) => apiRequest('/api/drop/create', body);
+  const readReq = (body) => apiRequest('/api/drop/read', body);
+
+  it('creates a drop and returns ok + ttl', async () => {
+    const e = makeEnv();
+    const res = await handleDropCreate({ id: 'abc123abc123abc1', ct: 'ciphertext' }, e, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.ok).toBe(true);
+    expect(typeof j.ttl).toBe('number');
+    expect(j.ttl).toBeGreaterThanOrEqual(300);
+  });
+
+  it('rejects id collision on second create with same id', async () => {
+    const e = makeEnv();
+    await handleDropCreate({ id: 'dup1dup1dup1dup1', ct: 'ct1' }, e, req({}));
+    const res2 = await handleDropCreate({ id: 'dup1dup1dup1dup1', ct: 'ct2' }, e, req({}));
+    expect(res2.status).toBe(409);
+    const j = await res2.json();
+    expect(j.code).toBe('COLLISION');
+  });
+
+  it('rejects id < 16 chars (entropy floor)', async () => {
+    const e = makeEnv();
+    const res = await handleDropCreate({ id: 'short123', ct: 'ct' }, e, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_ID');
+  });
+
+  it('rejects id > 64 chars', async () => {
+    const e = makeEnv();
+    const res = await handleDropCreate({ id: 'x'.repeat(65), ct: 'ct' }, e, req({}));
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects ct > 100KB', async () => {
+    const e = makeEnv();
+    const res = await handleDropCreate({ id: 'bigbigbigbigbig1', ct: 'x'.repeat(100001) }, e, req({}));
+    expect(res.status).toBe(400);
+  });
+
+  it('clamps ttl to [300, 604800]', async () => {
+    const e = makeEnv();
+    const r1 = await (await handleDropCreate({ id: 'ttl1ttl1ttl1ttl1', ct: 'x', ttl: 1 }, e, req({}))).json();
+    expect(r1.ttl).toBe(300);
+    const r2 = await (await handleDropCreate({ id: 'ttl2ttl2ttl2ttl2', ct: 'x', ttl: 9999999 }, e, req({}))).json();
+    expect(r2.ttl).toBe(604800);
+  });
+
+  it('read returns the ciphertext and deletes the drop (one-time)', async () => {
+    const e = makeEnv();
+    await handleDropCreate({ id: 'onetimeXonetimeX', ct: 'sekret' }, e, req({}));
+    const r1 = await handleDropRead({ id: 'onetimeXonetimeX' }, e, readReq({}));
+    expect(r1.status).toBe(200);
+    const j1 = await r1.json();
+    expect(j1.ct).toBe('sekret');
+    // Second read must 404
+    const r2 = await handleDropRead({ id: 'onetimeXonetimeX' }, e, readReq({}));
+    expect(r2.status).toBe(404);
+    expect((await r2.json()).code).toBe('NOT_FOUND');
+  });
+
+  it('read of non-existent id returns 404', async () => {
+    const e = makeEnv();
+    const res = await handleDropRead({ id: 'no-such-drop-id1' }, e, readReq({}));
+    expect(res.status).toBe(404);
+  });
+
+  it('rejects id with characters outside A-Za-z0-9_-. (KV key injection guard)', async () => {
+    const e = makeEnv();
+    const r1 = await handleDropCreate({ id: 'bad id! bad id!!', ct: 'x' }, e, req({}));
+    expect(r1.status).toBe(400);
+    const r2 = await handleDropCreate({ id: '../secret/secret', ct: 'x' }, e, req({}));
+    expect(r2.status).toBe(400);
+    const r3 = await handleDropRead({ id: 'bad id! bad id!!', ct: 'x' }, e, readReq({}));
+    expect(r3.status).toBe(400);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Item 31 — Drop server-side ID generation + unknown IP rate limit
+// ─────────────────────────────────────────────────────────────────────────────
+describe('dead drop — server-side ID generation (item 31)', () => {
+  const req = (body) => apiRequest('/api/drop/create', body);
+
+  it('generates a server-side id and returns it when client omits id', async () => {
+    const e = makeEnv();
+    const res = await handleDropCreate({ ct: 'encrypted-payload' }, e, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.ok).toBe(true);
+    expect(typeof j.id).toBe('string');
+    expect(j.id.length).toBeGreaterThanOrEqual(32);
+    expect(/^[a-f0-9]+$/.test(j.id)).toBe(true); // UUID hex, no dashes
+    expect(typeof j.ttl).toBe('number');
+  });
+
+  it('client-provided id is accepted and echoed back in response', async () => {
+    const e = makeEnv();
+    const res = await handleDropCreate({ id: 'client-chosen-id', ct: 'x' }, e, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).id).toBe('client-chosen-id');
+  });
+
+  it('response always includes id even for client-provided ids', async () => {
+    const e = makeEnv();
+    const j = await (await handleDropCreate({ id: 'abc123abc123abc1', ct: 'x' }, e, req({}))).json();
+    expect(j.id).toBe('abc123abc123abc1');
+    expect(j.ok).toBe(true);
+  });
+
+  it('server-generated id stored in KV can be read back immediately', async () => {
+    const e = makeEnv();
+    const created = await (await handleDropCreate({ ct: 'secret' }, e, req({}))).json();
+    const { handleDropRead: readFn } = await import('../_worker.js');
+    const res = await readFn({ id: created.id }, e, apiRequest('/api/drop/read', {}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).ct).toBe('secret');
+  });
+
+  it('returns 500 STORE_FAILED when KV put throws on drop create', async () => {
+    const e = makeEnv();
+    const realPut = e.KV.put.bind(e.KV);
+    e.KV.put = async (key) => { if (key.startsWith('drop:')) throw new Error('KV unavailable'); return realPut(...arguments); };
+    const res = await handleDropCreate({ ct: 'x' }, e, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+  });
+
+  it('two server-generated ids for concurrent creates are always distinct', async () => {
+    const e = makeEnv();
+    const [r1, r2] = await Promise.all([
+      handleDropCreate({ ct: 'ct1' }, e, req({})),
+      handleDropCreate({ ct: 'ct2' }, e, req({})),
+    ]);
+    const j1 = await r1.json();
+    const j2 = await r2.json();
+    expect(j1.id).not.toBe(j2.id);
+  });
+});
+
+describe('rate limiting — unknown IP gets stricter cap', () => {
+  function noIpRequest(path, body) {
+    return new Request('https://breeze.test' + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it('caps unknown-IP requests at 5 rpm (not the normal path limit)', async () => {
+    const env = makeEnv();
+    let last;
+    for (let i = 0; i < 6; i++) {
+      last = await worker.fetch(noIpRequest('/api/presence', { userId: 'abc123' }), env);
+    }
+    expect(last.status).toBe(429);
+    expect((await last.json()).code).toBe('RATE_LIMITED');
+  });
+
+  it('normal IP is not rate-limited until the full path limit (20 for /api/presence)', async () => {
+    const env = makeEnv();
+    let last;
+    for (let i = 0; i < 20; i++) {
+      last = await worker.fetch(apiRequest('/api/presence', { userId: 'abc123' }), env);
+    }
+    // 20 requests exactly at the limit — the 20th should still pass
+    expect(last.status).not.toBe(429);
+    // 21st exceeds the limit
+    const over = await worker.fetch(apiRequest('/api/presence', { userId: 'abc123' }), env);
+    expect(over.status).toBe(429);
+  });
+});
+
+// Item 55 — group/create and group/join rate-limit registration
+// Both endpoints write to KV on every call; the 30 rpm default would exhaust the
+// Cloudflare free-tier KV write budget (1000/day) in ~33 minutes from a single IP.
+// These tests pin the explicit limits (5 rpm for create, 10 rpm for join) so any
+// accidental removal triggers a test failure.
+describe('rate limiting — group create / join explicit limits (item 55)', () => {
+  it('rejects group/create on the 6th request per minute (limit=5)', async () => {
+    const env = makeEnv();
+    let last;
+    for (let i = 0; i < 6; i++) {
+      last = await worker.fetch(apiRequest('/api/group/create', {
+        name: 'g', creatorId: 'creator1', creatorPub: 'pub',
+      }), env);
+    }
+    expect(last.status).toBe(429);
+    expect((await last.json()).code).toBe('RATE_LIMITED');
+  });
+
+  it('allows exactly 5 group/create requests before hitting the limit', async () => {
+    const env = makeEnv();
+    let last;
+    for (let i = 0; i < 5; i++) {
+      last = await worker.fetch(apiRequest('/api/group/create', {
+        name: `g${i}`, creatorId: 'creator1', creatorPub: 'pub',
+      }), env);
+    }
+    expect(last.status).not.toBe(429);
+  });
+
+  it('rejects group/join on the 11th request per minute (limit=10)', async () => {
+    const env = makeEnv();
+    let last;
+    for (let i = 0; i < 11; i++) {
+      last = await worker.fetch(apiRequest('/api/group/join', {
+        token: 'tok', memberId: 'member01', memberPub: 'member01pub',
+      }), env);
+    }
+    expect(last.status).toBe(429);
+    expect((await last.json()).code).toBe('RATE_LIMITED');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Backup upload + download
+// ─────────────────────────────────────────────────────────────────────────────
+describe('backup upload / download', () => {
+  const req = (body) => apiRequest('/api/backup/upload', body);
+  const dlReq = (body) => apiRequest('/api/backup/download', body);
+
+  it('stores a backup and retrieves it', async () => {
+    const e   = makeEnv();
+    const bak = 'encrypted-backup-data';
+    const up  = await handleBackupUpload({ userId: 'user00001', backup: bak }, e, req({}));
+    expect(up.status).toBe(200);
+    const j = await up.json();
+    expect(j.ok).toBe(true);
+    expect(j.size).toBe(bak.length);
+
+    const dl = await handleBackupDownload({ userId: 'user00001' }, e, dlReq({}));
+    expect(dl.status).toBe(200);
+    const dj = await dl.json();
+    expect(dj.backup).toBe(bak);
+  });
+
+  it('overwrites an existing backup on re-upload', async () => {
+    const e = makeEnv();
+    await handleBackupUpload({ userId: 'user00001', backup: 'v1' }, e, req({}));
+    await handleBackupUpload({ userId: 'user00001', backup: 'v2' }, e, req({}));
+    const dl = await handleBackupDownload({ userId: 'user00001' }, e, dlReq({}));
+    expect((await dl.json()).backup).toBe('v2');
+  });
+
+  it('rejects backup larger than 5MB', async () => {
+    const e   = makeEnv();
+    const big = 'x'.repeat(5 * 1024 * 1024 + 1);
+    const res = await handleBackupUpload({ userId: 'user00001', backup: big }, e, req({}));
+    expect(res.status).toBe(413);
+    expect((await res.json()).code).toBe('PAYLOAD_TOO_LARGE');
+  });
+
+  it('returns 404 for missing backup', async () => {
+    const e   = makeEnv();
+    const res = await handleBackupDownload({ userId: 'nobody001' }, e, dlReq({}));
+    expect(res.status).toBe(404);
+    expect((await res.json()).code).toBe('NOT_FOUND');
+  });
+
+  it('rejects upload with malformed userId (KV key injection guard)', async () => {
+    const res = await handleBackupUpload({ userId: 'bad id!', backup: 'data' }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_USER_ID');
+  });
+
+  it('rejects download with malformed userId (KV key injection guard)', async () => {
+    const res = await handleBackupDownload({ userId: 'bad id!' }, makeEnv(), dlReq({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_USER_ID');
+  });
+
+  it('rejects upload when backup field is not a string (type guard)', async () => {
+    const e = makeEnv();
+    const res = await handleBackupUpload({ userId: 'user00001', backup: { data: 'object' } }, e, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_FIELD');
+  });
+
+  // ── Optional Ed25519 authentication ─────────────────────────────────────────
+  // Helper: register a user with an Ed25519 prekey bundle; returns the key pair.
+  async function registerForBackup(env, userId) {
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
+    const spk = crypto.getRandomValues(new Uint8Array(32));
+    const spkSig = new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, spk));
+    await handlePreKeyUpload({
+      userId, identityKey: userId + '-IK',
+      edIdentityKey: toB64(edPub), signedPreKey: toB64(spk), signedPreKeySig: toB64(spkSig),
+    }, env, apiRequest('/api/prekey/upload', {}));
+    return ed;
+  }
+
+  async function signBackup(ed, action, userId, ts) {
+    const msg = new TextEncoder().encode(`breeze-backup-${action}:${userId}:${ts}`);
+    return toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, msg)));
+  }
+
+  it('authenticated upload succeeds and sets authenticated:true in response', async () => {
+    const e = makeEnv();
+    const userId = 'bakauth01';
+    const ed = await registerForBackup(e, userId);
+    const ts = Date.now();
+    const sig = await signBackup(ed, 'upload', userId, ts);
+    const res = await handleBackupUpload({ userId, backup: 'encrypted-blob', ts, sig }, e, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.ok).toBe(true);
+    expect(j.authenticated).toBe(true);
+  });
+
+  it('authenticated download succeeds and sets authenticated:true in response', async () => {
+    const e = makeEnv();
+    const userId = 'bakauth02';
+    const ed = await registerForBackup(e, userId);
+    await handleBackupUpload({ userId, backup: 'my-backup' }, e, req({}));
+    const ts = Date.now();
+    const sig = await signBackup(ed, 'download', userId, ts);
+    const res = await handleBackupDownload({ userId, ts, sig }, e, dlReq({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.backup).toBe('my-backup');
+    expect(j.authenticated).toBe(true);
+  });
+
+  it('upload with tampered sig is rejected with SIG_INVALID', async () => {
+    const e = makeEnv();
+    const userId = 'bakauth03';
+    await registerForBackup(e, userId);
+    const ts = Date.now();
+    const res = await handleBackupUpload({ userId, backup: 'blob', ts, sig: toB64(new Uint8Array(64)) }, e, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+  });
+
+  it('download with tampered sig is rejected with SIG_INVALID', async () => {
+    const e = makeEnv();
+    const userId = 'bakauth04';
+    await registerForBackup(e, userId);
+    await handleBackupUpload({ userId, backup: 'blob' }, e, req({}));
+    const ts = Date.now();
+    const res = await handleBackupDownload({ userId, ts, sig: toB64(new Uint8Array(64)) }, e, dlReq({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+  });
+
+  it('upload with sig but no registered ed key → NO_IDENTITY_KEY', async () => {
+    const e = makeEnv();
+    const userId = 'bakauth05';
+    const ts = Date.now();
+    const res = await handleBackupUpload({ userId, backup: 'blob', ts, sig: toB64(new Uint8Array(64)) }, e, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('NO_IDENTITY_KEY');
+  });
+
+  it('upload with only ts provided (no sig) → PARTIAL_AUTH', async () => {
+    const e = makeEnv();
+    const res = await handleBackupUpload({ userId: 'user00001', backup: 'blob', ts: Date.now() }, e, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('PARTIAL_AUTH');
+  });
+
+  it('download with only sig provided (no ts) → PARTIAL_AUTH', async () => {
+    const e = makeEnv();
+    const res = await handleBackupDownload({ userId: 'user00001', sig: toB64(new Uint8Array(64)) }, e, dlReq({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('PARTIAL_AUTH');
+  });
+
+  it('unauthenticated upload still works (backward-compat, authenticated:false)', async () => {
+    const e = makeEnv();
+    const res = await handleBackupUpload({ userId: 'user00001', backup: 'legacy-blob' }, e, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).authenticated).toBe(false);
+  });
+
+  it('stale ts (>5 min ago) rejected on upload with INVALID_TIMESTAMP', async () => {
+    const e = makeEnv();
+    const userId = 'bakauth06';
+    const ed = await registerForBackup(e, userId);
+    const ts = Date.now() - 400000; // >5 min
+    const sig = await signBackup(ed, 'upload', userId, ts);
+    const res = await handleBackupUpload({ userId, backup: 'blob', ts, sig }, e, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_TIMESTAMP');
+  });
+});
+
+// BACKUP_REQUIRE_AUTH enforcement flag (item 54)
+// Without the flag: knowing a userId is enough to download the encrypted blob and
+// brute-force the passphrase offline. With BACKUP_REQUIRE_AUTH=true, both upload
+// and download require a valid Ed25519 signature — same pattern as GROUP_REQUIRE_AUTH
+// and PRESENCE_REQUIRE_AUTH.
+describe('backup BACKUP_REQUIRE_AUTH enforcement (item 54)', () => {
+  const req  = (body) => apiRequest('/api/backup/upload', body);
+  const dlReq = (body) => apiRequest('/api/backup/download', body);
+
+  async function registerAndSign(env, userId, action) {
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const pubRaw = await crypto.subtle.exportKey('raw', ed.publicKey);
+    const edIdentityKey = toB64(new Uint8Array(pubRaw));
+    await env.KV.put(`prekey:${userId}`, JSON.stringify({ identityKey: 'x', signedPreKey: 'x', edIdentityKey }));
+    const ts = Date.now();
+    const msg = new TextEncoder().encode(`breeze-backup-${action}:${userId}:${ts}`);
+    const sigBytes = await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, msg);
+    const sig = toB64(new Uint8Array(sigBytes));
+    return { ts, sig };
+  }
+
+  it('unauthenticated upload is rejected when BACKUP_REQUIRE_AUTH=true', async () => {
+    const e = makeEnv({ BACKUP_REQUIRE_AUTH: 'true' });
+    const res = await handleBackupUpload({ userId: 'bakflg01', backup: 'blob' }, e, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
+  });
+
+  it('unauthenticated download is rejected when BACKUP_REQUIRE_AUTH=true', async () => {
+    const e = makeEnv({ BACKUP_REQUIRE_AUTH: 'true' });
+    await e.KV.put('backup:bakflg02', 'encrypted-data');
+    const res = await handleBackupDownload({ userId: 'bakflg02' }, e, dlReq({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
+  });
+
+  it('valid signed upload succeeds even when BACKUP_REQUIRE_AUTH=true', async () => {
+    const e = makeEnv({ BACKUP_REQUIRE_AUTH: 'true' });
+    const { ts, sig } = await registerAndSign(e, 'bakflg03', 'upload');
+    const res = await handleBackupUpload({ userId: 'bakflg03', backup: 'enc-blob', ts, sig }, e, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).authenticated).toBe(true);
+  });
+
+  it('valid signed download succeeds even when BACKUP_REQUIRE_AUTH=true', async () => {
+    const e = makeEnv({ BACKUP_REQUIRE_AUTH: 'true' });
+    await e.KV.put('backup:bakflg04', 'my-enc-backup');
+    const { ts, sig } = await registerAndSign(e, 'bakflg04', 'download');
+    const res = await handleBackupDownload({ userId: 'bakflg04', ts, sig }, e, dlReq({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).backup).toBe('my-enc-backup');
+  });
+
+  it('unauthenticated upload/download still works when flag is unset (backward-compat)', async () => {
+    const e = makeEnv();
+    const up = await handleBackupUpload({ userId: 'bakflg05', backup: 'blob' }, e, req({}));
+    expect(up.status).toBe(200);
+    await e.KV.put('backup:bakflg05', 'blob');
+    const dl = await handleBackupDownload({ userId: 'bakflg05' }, e, dlReq({}));
+    expect(dl.status).toBe(200);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Signal relay (WebRTC signaling)
+// ─────────────────────────────────────────────────────────────────────────────
+describe('signal relay', () => {
+  const req = (body) => apiRequest('/api/signal', body);
+
+  it('stores a signal and returns ok', async () => {
+    const e   = makeEnv();
+    const res = await handleSignal(
+      { room: 'r1', sender: 'alice', type: 'offer', data: 'sdp-blob' },
+      '1.2.3.4', e, req({})
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()).ok).toBe(true);
+  });
+
+  it('poll returns signals from other senders, not own', async () => {
+    const e = makeEnv();
+    // Alice sends an offer
+    await handleSignal({ room: 'r2', sender: 'alice', type: 'offer', data: 'd1' }, '1.2.3.4', e, req({}));
+    // Bob polls — should see Alice's offer
+    const r1 = await handleSignal({ room: 'r2', sender: 'bob', type: 'poll' }, '1.2.3.5', e, req({}));
+    const msgs = (await r1.json()).messages;
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0].sender).toBe('alice');
+    // Alice polls — should NOT see her own offer
+    const r2 = await handleSignal({ room: 'r2', sender: 'alice', type: 'poll' }, '1.2.3.4', e, req({}));
+    const aliceMsgs = (await r2.json()).messages;
+    expect(aliceMsgs.every(m => m.sender !== 'alice')).toBe(true);
+  });
+
+  it('returns empty messages for a room with no signals', async () => {
+    const e   = makeEnv();
+    const res = await handleSignal({ room: 'empty-room', sender: 'x', type: 'poll' }, '1.2.3.4', e, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).messages).toEqual([]);
+  });
+
+  it('rejects missing room / sender / type', async () => {
+    const e = makeEnv();
+    const r1 = await handleSignal({ sender: 'a', type: 'offer' }, '1.2.3.4', e, req({}));
+    expect(r1.status).toBe(400);
+    const r2 = await handleSignal({ room: 'r', type: 'offer' }, '1.2.3.4', e, req({}));
+    expect(r2.status).toBe(400);
+  });
+
+  it('keeps at most 50 signals per room', async () => {
+    const e = makeEnv();
+    for (let i = 0; i < 55; i++) {
+      await handleSignal({ room: 'big', sender: `s${i}`, type: 'offer', data: `d${i}` }, '1.2.3.4', e, req({}));
+    }
+    // Poll as someone not in the room — should see at most 50
+    const r = await handleSignal({ room: 'big', sender: 'observer', type: 'poll' }, '1.2.3.5', e, req({}));
+    const msgs = (await r.json()).messages;
+    expect(msgs.length).toBeLessThanOrEqual(50);
+  });
+
+  it('sanitizeString strips control characters — room with null byte resolves to clean name', async () => {
+    // sanitizeString strips 0x00-0x08, 0x0b, 0x0c, 0x0e-0x1f.
+    // "room\x00safe" becomes "roomsafe" — sender who stores under the tainted name
+    // and a poller using the clean name both land on the same KV key.
+    const e = makeEnv();
+    await handleSignal({ room: 'room\x00safe', sender: 'alice', type: 'offer', data: 'sdp' }, '1.2.3.4', e, req({}));
+    const r = await handleSignal({ room: 'roomsafe', sender: 'bob', type: 'poll' }, '1.2.3.5', e, req({}));
+    const msgs = (await r.json()).messages;
+    expect(msgs.length).toBe(1);
+    expect(msgs[0].sender).toBe('alice');
+  });
+
+  it('rejects a signal with data larger than 64KB (DoS guard)', async () => {
+    const e   = makeEnv();
+    const res = await handleSignal(
+      { room: 'r1', sender: 'alice', type: 'offer', data: 'x'.repeat(64 * 1024 + 1) },
+      '1.2.3.4', e, req({})
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('PAYLOAD_TOO_LARGE');
+  });
+
+  it('signal cleanup drops signals with non-numeric ts (Number.isFinite guard)', async () => {
+    // Old-format signals (stored before the ts field was added) could have
+    // undefined or non-numeric ts. The cleanup filter must not silently retain
+    // them via NaN < 30000 === false. After the explicit guard, they are
+    // dropped immediately on the next poll, so the second poller gets nothing.
+    const e = makeEnv();
+    // Directly inject an old-format signal without ts.
+    await e.KV.put('sig:testroom-nots', JSON.stringify([
+      { sender: 'alice', type: 'offer', data: 'sdp' },           // no ts field
+      { sender: 'alice', type: 'offer', data: 'sdp2', ts: 'x' }, // non-numeric ts
+    ]));
+    // Bob polls — gets both of Alice's signals (neither is from Bob).
+    const r1 = await handleSignal({ room: 'testroom-nots', sender: 'bob', type: 'poll' }, '1.2.3.5', e, req({}));
+    expect((await r1.json()).messages).toHaveLength(2);
+    // After the poll the KV should be cleaned. Carol polls the same room → empty.
+    const r2 = await handleSignal({ room: 'testroom-nots', sender: 'carol', type: 'poll' }, '1.2.3.6', e, req({}));
+    expect((await r2.json()).messages).toHaveLength(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Presence heartbeat + check
+// ─────────────────────────────────────────────────────────────────────────────
+describe('presence heartbeat and check', () => {
+  const req = (body) => apiRequest('/api/presence', body);
+
+  it('stores a heartbeat and returns ok', async () => {
+    const e   = makeEnv();
+    const res = await handlePresence(
+      { id: 'user00001', pub: 'mypub', name: 'Alice' }, e, req({})
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()).ok).toBe(true);
+  });
+
+  it('check returns online=true immediately after heartbeat (in-memory cache)', async () => {
+    const e = makeEnv();
+    await handlePresence({ id: 'user00002', pub: 'p', name: 'Bob' }, e, req({}));
+    const r = await handlePresence({ id: 'user00002', check: true }, e, req({}));
+    expect(r.status).toBe(200);
+    const j = await r.json();
+    expect(j.online).toBe(true);
+    // The display name is deliberately NOT returned (v3.7): this endpoint is unauthenticated,
+    // so returning it handed any holder of a 12-char id the account's real name.
+    expect(j.name).toBeUndefined();
+  });
+
+  // Socratic round: restoring a backup on a second browser while the original stays active
+  // runs ONE identity on TWO installs — a Double-Ratchet-fork hazard. The heartbeat's
+  // per-install `inst` id lets the relay notice and warn. The inst must be SIGNED by the
+  // identity, or anyone could manufacture that warning on a stranger's screen.
+  const b64 = (u8) => Buffer.from(u8).toString('base64');
+  async function instSigner(env, id) {
+    const kp = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const raw = new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey));
+    await env.KV.put(`prekey:${id}`, JSON.stringify({ edIdentityKey: b64(raw) }));
+    return async (inst) => b64(new Uint8Array(await crypto.subtle.sign(
+      { name: 'Ed25519' }, kp.privateKey, new TextEncoder().encode(`breeze-inst:${id}:${inst}`))));
+  }
+  const beat = (e, id, inst, instSig) => handlePresence({ id, pub: 'p', name: 'X', inst, instSig }, e, req({}));
+
+  it('flags a conflict when the SAME identity heartbeats from two different installs', async () => {
+    const e = makeEnv();
+    const sign = await instSigner(e, 'cloneuser1');
+    const first = await (await beat(e, 'cloneuser1', 'aaaa1111', await sign('aaaa1111'))).json();
+    expect(first.conflict).toBeUndefined();
+    const second = await (await beat(e, 'cloneuser1', 'bbbb2222', await sign('bbbb2222'))).json();
+    expect(second.conflict).toBe(true);
+  });
+
+  it('the same install heartbeating repeatedly is never flagged', async () => {
+    const e = makeEnv();
+    const sign = await instSigner(e, 'cloneuser2');
+    const sig = await sign('cccc3333');
+    await beat(e, 'cloneuser2', 'cccc3333', sig);
+    const again = await (await beat(e, 'cloneuser2', 'cccc3333', sig)).json();
+    expect(again.conflict).toBeUndefined();
+  });
+
+  it('legacy clients without inst are never flagged (backward compat)', async () => {
+    const e = makeEnv();
+    const sign = await instSigner(e, 'cloneuser3');
+    await handlePresence({ id: 'cloneuser3', pub: 'p', name: 'C' }, e, req({}));
+    const again = await (await beat(e, 'cloneuser3', 'dddd4444', await sign('dddd4444'))).json();
+    expect(again.conflict).toBeUndefined(); // previous record had no inst — nothing to compare
+  });
+
+  // An UNSIGNED (or wrongly-signed) inst must be ignored outright: presence writes are
+  // unauthenticated by default, so honouring one would let any stranger raise a fake
+  // "your identity is cloned" alarm on someone else's screen — and a spoofable security
+  // warning teaches users to ignore the real one.
+  it('ignores an inst with no signature (no conflict can be manufactured)', async () => {
+    const e = makeEnv();
+    const sign = await instSigner(e, 'clonespoof');
+    await beat(e, 'clonespoof', 'realinst1', await sign('realinst1'));
+    const spoof = await (await handlePresence({ id: 'clonespoof', pub: 'p', name: 'X', inst: 'evilinst9' }, e, req({}))).json();
+    expect(spoof.conflict).toBeUndefined();
+  });
+
+  it('ignores an inst carrying a forged signature', async () => {
+    const e = makeEnv();
+    const sign = await instSigner(e, 'clonefrgd');
+    await beat(e, 'clonefrgd', 'realinst2', await sign('realinst2'));
+    const forged = await (await beat(e, 'clonefrgd', 'evilinstX', b64(new Uint8Array(64)))).json();
+    expect(forged.conflict).toBeUndefined();
+  });
+
+  // Socratic metadata lens: the unauthenticated single-check used to hand the account's
+  // chosen DISPLAY NAME to anyone holding a 12-char id.
+  it('single presence check never discloses the display name', async () => {
+    const e = makeEnv();
+    await handlePresence({ id: 'privacyusr', pub: 'p', name: 'Real Human Name' }, e, req({}));
+    const j = await (await handlePresence({ id: 'privacyusr', check: true }, e, req({}))).json();
+    expect(j.online).toBe(true);
+    expect(j.name).toBeUndefined();
+  });
+
+  it('round-trips advertised capabilities (N3 negotiation before bundle fetch)', async () => {
+    const e = makeEnv();
+    // advertise() output: a heartbeat carrying the supported protocol caps.
+    await handlePresence(
+      { id: 'capsuser1', pub: 'p', name: 'Caro', caps: ['x3dh-v5', 'group-v5', 'franking'] }, e, req({}),
+    );
+    const j = await (await handlePresence({ id: 'capsuser1', check: true }, e, req({}))).json();
+    expect(j.online).toBe(true);
+    expect(j.caps).toEqual(['x3dh-v5', 'group-v5', 'franking']);
+  });
+
+  it('sanitizes advertised caps (≤20 string entries, ≤32 chars; non-strings dropped)', async () => {
+    const e = makeEnv();
+    await handlePresence(
+      { id: 'capsuser2', pub: 'p', name: 'X', caps: ['ok', 123, { a: 1 }, 'y'.repeat(50), ...Array(30).fill('z')] },
+      e, req({}),
+    );
+    const j = await (await handlePresence({ id: 'capsuser2', check: true }, e, req({}))).json();
+    expect(j.caps.length).toBeLessThanOrEqual(20);
+    expect(j.caps).toContain('ok');
+    expect(j.caps.every((c) => typeof c === 'string' && c.length <= 32)).toBe(true);
+    expect(j.caps).not.toContain(123);
+  });
+
+  it('omits caps for a heartbeat that advertised none (legacy v4 client)', async () => {
+    const e = makeEnv();
+    await handlePresence({ id: 'capsuser3', pub: 'p', name: 'Z' }, e, req({}));
+    const j = await (await handlePresence({ id: 'capsuser3', check: true }, e, req({}))).json();
+    expect(j.online).toBe(true);
+    expect(j.caps).toBeUndefined();
+  });
+
+  it('check returns online=false for unknown user', async () => {
+    const e   = makeEnv();
+    const res = await handlePresence({ id: 'nobody001', check: true }, e, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).online).toBe(false);
+  });
+
+  it('batch check: returns map of ids → online status', async () => {
+    const e = makeEnv();
+    // Pre-populate KV for one user (simulates a previous heartbeat written to KV)
+    await e.KV.put('presence:user00001', JSON.stringify({ at: Date.now(), name: 'Alice', pub: 'p1' }));
+    const r = await handlePresence(
+      { ids: ['user00001', 'user99999'], check: true }, e, req({})
+    );
+    expect(r.status).toBe(200);
+    const j = await r.json();
+    expect(j.online['user00001']).toBe(true);
+    expect(j.online['user99999']).toBe(false);
+  });
+
+  it('batch check caps at 50 ids', async () => {
+    const e    = makeEnv();
+    const many = Array.from({ length: 60 }, (_, i) => `user${String(i).padStart(5, '0')}`);
+    const r    = await handlePresence({ ids: many, check: true }, e, req({}));
+    const j    = await r.json();
+    expect(Object.keys(j.online).length).toBeLessThanOrEqual(50);
+  });
+
+  it('requires id for single check', async () => {
+    const e   = makeEnv();
+    const res = await handlePresence({ check: true }, e, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('MISSING_ID');
+  });
+
+  it('increments online counter on each heartbeat', async () => {
+    const e = makeEnv();
+    await handlePresence({ id: 'user00010', pub: 'p1', name: 'A' }, e, req({}));
+    await handlePresence({ id: 'user00011', pub: 'p2', name: 'B' }, e, req({}));
+    const countRes = await handleOnlineCount({}, e, req({}));
+    const j = await countRes.json();
+    expect(j.online).toBe(2);
+  });
+
+  it('rejects malformed id on heartbeat (KV key injection guard)', async () => {
+    const e   = makeEnv();
+    const res = await handlePresence({ id: 'bad id!!' }, e, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_USER_ID');
+  });
+
+  it('rejects malformed id on single check (KV key injection guard)', async () => {
+    const e   = makeEnv();
+    const res = await handlePresence({ id: 'bad id!!', check: true }, e, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_USER_ID');
+  });
+
+  it('batch check silently skips malformed ids (KV key injection guard)', async () => {
+    const e = makeEnv();
+    await e.KV.put('presence:user00001', JSON.stringify({ at: Date.now(), name: 'Alice', pub: 'p' }));
+    const r = await handlePresence(
+      { ids: ['user00001', 'bad id!!', '../etc/passwd'], check: true }, e, req({})
+    );
+    expect(r.status).toBe(200);
+    const j = await r.json();
+    expect(j.online['user00001']).toBe(true);
+    // malformed IDs must not appear in results at all (no KV lookup attempted)
+    expect(j.online['bad id!!']).toBeUndefined();
+    expect(j.online['../etc/passwd']).toBeUndefined();
+  });
+
+  it('batch check serves from in-memory cache when available (no KV reads for cached users)', async () => {
+    const e = makeEnv();
+    // Heartbeat writes to _presenceCache (in-memory) and to KV (after 5-min window).
+    // The test forces the write by resetting _presenceCache so the TTL guard is reset.
+    globalThis._presenceCache = new Map();
+    await handlePresence({ id: 'cacheuser1', pub: 'p', name: 'Alice' }, e, req({}));
+    // Now _presenceCache has the data. Remove the KV entry to prove the batch check
+    // does NOT fall through to KV for this user.
+    await e.KV.delete('presence:cacheuser1');
+    const r = await handlePresence({ ids: ['cacheuser1', 'noexist11'], check: true }, e, req({}));
+    const j = await r.json();
+    // In-memory cache hit → online even though KV is empty.
+    expect(j.online['cacheuser1']).toBe(true);
+    // Unknown user with no cache and no KV → offline.
+    expect(j.online['noexist11']).toBe(false);
+  });
+
+  it('batch check correctly reports offline for users whose cached heartbeat is stale (>60s)', async () => {
+    const e = makeEnv();
+    globalThis._presenceCache = new Map();
+    // Manually seed a stale cache entry (at = 2 minutes ago)
+    globalThis._presenceCache.set('presence:staleuser1:data', JSON.stringify({ at: Date.now() - 120000, name: 'Bob', pub: 'p' }));
+    const r = await handlePresence({ ids: ['staleuser1'], check: true }, e, req({}));
+    const j = await r.json();
+    expect(j.online['staleuser1']).toBe(false);
+  });
+
+  it('PRESENCE_REQUIRE_AUTH: rejects heartbeat from unregistered userId', async () => {
+    globalThis._presenceVerified = new Map(); // fresh cache
+    const e = makeEnv({ PRESENCE_REQUIRE_AUTH: 'true' });
+    const res = await handlePresence({ id: 'unreg00001', pub: 'p', name: 'X' }, e, req({}));
+    expect(res.status).toBe(401);
+    expect((await res.json()).code).toBe('UNREGISTERED');
+  });
+
+  it('PRESENCE_REQUIRE_AUTH: allows heartbeat from registered userId (prekey in KV)', async () => {
+    globalThis._presenceVerified = new Map();
+    const e = makeEnv({ PRESENCE_REQUIRE_AUTH: 'true' });
+    await e.KV.put('prekey:reguser0001', JSON.stringify({ spkPub: 'x' }));
+    const res = await handlePresence({ id: 'reguser0001', pub: 'p', name: 'Reg' }, e, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).ok).toBe(true);
+  });
+
+  it('PRESENCE_REQUIRE_AUTH: check (read) path bypasses auth requirement', async () => {
+    const e = makeEnv({ PRESENCE_REQUIRE_AUTH: 'true' });
+    // Check should work even for an unregistered user (read-only path)
+    const res = await handlePresence({ id: 'unreg00002', check: true }, e, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).online).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Online count
+// ─────────────────────────────────────────────────────────────────────────────
+describe('online count', () => {
+  const req = () => apiRequest('/api/online', {});
+
+  it('returns zero when no heartbeats recorded', async () => {
+    const e   = makeEnv();
+    const res = await handleOnlineCount({}, e, req());
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.online).toBe(0);
+    expect(typeof j.ts).toBe('number');
+  });
+
+  // ── Minute-boundary fallback (item 30) ───────────────────────────────────────
+  it('returns previous minute count at minute boundary instead of 0', async () => {
+    const e = makeEnv();
+    // Simulate 3 heartbeats in minute M
+    globalThis._onlineCounter = { minute: 999, count: 3, prev: 0 };
+    // Advance to minute M+1 — current counter is now for a different minute
+    globalThis._onlineCounter = { minute: 1000, count: 0, prev: 3 };
+    const res = await handleOnlineCount({}, e, req());
+    const j = await res.json();
+    // Current minute count is 0, but prev=3 should be returned as fallback
+    expect(j.online).toBe(3);
+  });
+
+  it('returns current minute count when heartbeats exist in the current minute', async () => {
+    const e = makeEnv();
+    const minuteKey = Math.floor(Date.now() / 60000);
+    globalThis._onlineCounter = { minute: minuteKey, count: 7, prev: 2 };
+    const res = await handleOnlineCount({}, e, req());
+    const j = await res.json();
+    expect(j.online).toBe(7); // current minute wins over prev
+  });
+
+  it('handlePresence records prev count when minute rolls over', async () => {
+    const e = makeEnv();
+    const minuteKey = Math.floor(Date.now() / 60000);
+    // Prime with count=5 in the current minute
+    globalThis._onlineCounter = { minute: minuteKey, count: 5, prev: 0 };
+    // Simulate rollover by resetting to an old minute and calling handlePresence
+    globalThis._onlineCounter.minute = minuteKey - 1; // force rollover on next heartbeat
+    await handlePresence({ id: 'user00001', pub: 'IK' }, e, apiRequest('/api/presence', {}));
+    // After rollover: prev should be the old count (5), new count should be 1
+    expect(globalThis._onlineCounter.prev).toBe(5);
+    expect(globalThis._onlineCounter.count).toBe(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OGP link-preview — SSRF guard (URL validation only; no outbound fetch in tests)
+// ─────────────────────────────────────────────────────────────────────────────
+describe('TURN credentials', () => {
+  const req = (body) => apiRequest('/api/turn', body);
+
+  it('rejects missing userId', async () => {
+    const e   = makeEnv();
+    const res = await handleTurn({}, e, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('MISSING_USER_ID');
+  });
+
+  it('rejects malformed userId (KV key injection / credential injection guard)', async () => {
+    const res = await handleTurn({ userId: 'bad id!' }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_USER_ID');
+  });
+
+  it('falls back to free open-relay when no env vars are set', async () => {
+    const e   = makeEnv(); // no TURN_* vars
+    const res = await handleTurn({ userId: 'user00001' }, e, req({}));
+    expect(res.status).toBe(200);
+    const j   = await res.json();
+    expect(j.provider).toBe('openrelay');
+    expect(Array.isArray(j.iceServers)).toBe(true);
+    // Always includes STUN servers
+    expect(j.iceServers.some(s => s.urls.startsWith('stun:'))).toBe(true);
+    // Includes free relay TURN servers
+    expect(j.iceServers.some(s => s.urls.startsWith('turn:'))).toBe(true);
+  });
+
+  it('uses HMAC custom TURN when TURN_SECRET + TURN_URL are set', async () => {
+    const e = { ...makeEnv(), TURN_SECRET: 'supersecret', TURN_URL: 'turn:turn.example.com:3478' };
+    const res = await handleTurn({ userId: 'user00001' }, e, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.provider).toBe('custom');
+    const turnServer = j.iceServers.find(s => s.urls.startsWith('turn:'));
+    expect(turnServer).toBeDefined();
+    expect(turnServer.credential).toBeTruthy(); // HMAC-SHA1 credential
+    // Username should be "{expiry}:{userId}"
+    const [expiry, uid] = turnServer.username.split(':');
+    expect(uid).toBe('user00001');
+    expect(parseInt(expiry)).toBeGreaterThan(Math.floor(Date.now() / 1000));
+  });
+
+  it('uses static credentials when TURN_URL + TURN_USERNAME + TURN_CREDENTIAL are set', async () => {
+    const e = {
+      ...makeEnv(),
+      TURN_URL:        'turn:static.example.com:3478',
+      TURN_USERNAME:   'staticuser',
+      TURN_CREDENTIAL: 'staticpass',
+    };
+    const res = await handleTurn({ userId: 'user00001' }, e, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.provider).toBe('static');
+    const turnServer = j.iceServers.find(s => s.urls === 'turn:static.example.com:3478');
+    expect(turnServer).toBeDefined();
+    expect(turnServer.username).toBe('staticuser');
+    expect(turnServer.credential).toBe('staticpass');
+  });
+
+  it('TURN_REQUIRE_AUTH: rejects unregistered userId (no prekey)', async () => {
+    const e = makeEnv({ TURN_REQUIRE_AUTH: 'true' });
+    const res = await handleTurn({ userId: 'unreg00001' }, e, req({}));
+    expect(res.status).toBe(401);
+    expect((await res.json()).code).toBe('UNREGISTERED');
+  });
+
+  it('TURN_REQUIRE_AUTH: allows registered userId (prekey in KV)', async () => {
+    const e = makeEnv({ TURN_REQUIRE_AUTH: 'true' });
+    await e.KV.put('prekey:reguser0001', JSON.stringify({ spkPub: 'x' }));
+    const res = await handleTurn({ userId: 'reguser0001' }, e, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).provider).toBe('openrelay');
+  });
+});
+
+describe('group member capability negotiation (N3 — unblocks negotiate.js negotiateGroup)', () => {
+  const req = (b) => apiRequest('/api/group/x', b);
+
+  it('stores creator + member caps and surfaces them via group/info', async () => {
+    const env = makeEnv();
+    const create = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C',
+        caps: ['x3dh-v5', 'group-v5', 'franking'] }, env, req({}));
+    const { token } = await create.json();
+    await handleGroupJoin(
+      { token, memberId: 'bob00001', memberPub: 'bob00001bpub', memberName: 'B',
+        caps: ['x3dh-v5', 'group-v5'] }, env, req({}));
+
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    const creator = info.members.find((m) => m.id === 'creator1');
+    const bob = info.members.find((m) => m.id === 'bob00001');
+    expect(creator.caps).toEqual(['x3dh-v5', 'group-v5', 'franking']);
+    expect(bob.caps).toEqual(['x3dh-v5', 'group-v5']);
+  });
+
+  it('the surfaced caps drive negotiateGroup: group-v5 floor holds, franking floor does not', async () => {
+    const env = makeEnv();
+    const create = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub',
+        caps: ['group-v5', 'franking'] }, env, req({}));
+    const { token } = await create.json();
+    // One member supports group-v5 but NOT franking.
+    await handleGroupJoin(
+      { token, memberId: 'bob00001', memberPub: 'bob00001bpub', caps: ['group-v5'] }, env, req({}));
+
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    // A client computes the floor across every member's caps from the single info call.
+    const memberCapsList = info.members.map((m) => m.caps || []);
+    const result = negotiateGroup([CAPS.GROUP_V5, CAPS.FRANKING], memberCapsList);
+    expect(result.useGroupV5).toBe(true);   // every member supports it
+    expect(result.useFranking).toBe(false); // bob does not → floor excludes it
+  });
+
+  it('drops non-string / oversized caps and omits the field for legacy clients', async () => {
+    const env = makeEnv();
+    const create = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub',
+        caps: ['ok', 42, { x: 1 }, 'y'.repeat(50)] }, env, req({}));
+    const { token } = await create.json();
+    // Legacy member: no caps field at all.
+    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub' }, env, req({}));
+
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    const creator = info.members.find((m) => m.id === 'creator1');
+    const bob = info.members.find((m) => m.id === 'bob00001');
+    expect(creator.caps).toEqual(['ok', 'y'.repeat(32)]); // non-strings dropped, capped at 32
+    expect(bob.caps).toBeUndefined(); // legacy client → field omitted
+  });
+
+  it('a rejoin refreshes a member\'s caps so an upgraded client can raise the floor', async () => {
+    const env = makeEnv();
+    const create = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', caps: ['group-v5'] }, env, req({}));
+    const { token } = await create.json();
+    // Bob first joins as a legacy client (no group-v5).
+    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', caps: [] }, env, req({}));
+    let info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    let floor = negotiateGroup([CAPS.GROUP_V5], info.members.map((m) => m.caps || []));
+    expect(floor.useGroupV5).toBe(false); // bob can't yet
+
+    // Bob upgrades and reconnects (re-calls join) advertising group-v5.
+    const rejoin = await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', caps: ['group-v5'] }, env, req({}));
+    const rj = await rejoin.json();
+    expect(rj.alreadyMember).toBe(true);
+    expect(rj.refreshed).toBe(true);
+    info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    floor = negotiateGroup([CAPS.GROUP_V5], info.members.map((m) => m.caps || []));
+    expect(floor.useGroupV5).toBe(true); // now every member supports it
+  });
+
+  it('a legacy rejoin (no caps) does not erase a previously recorded capability set', async () => {
+    const env = makeEnv();
+    const create = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}));
+    const { token } = await create.json();
+    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', caps: ['group-v5', 'franking'] }, env, req({}));
+    // Reconnect without advertising caps (e.g. an older code path) must not wipe them.
+    const rejoin = await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub' }, env, req({}));
+    expect((await rejoin.json()).refreshed).toBe(false);
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.members.find((m) => m.id === 'bob00001').caps).toEqual(['group-v5', 'franking']);
+  });
+});
+
+describe('group create / join / info validation', () => {
+  const req = (b) => apiRequest('/api/group/x', b);
+
+  it('rejects create with missing required fields', async () => {
+    const env = makeEnv();
+    const res = await handleGroupCreate({ name: 'g' }, env, req({}));
+    expect(res.status).toBe(400);
+  });
+
+  it('create returns a token and memberCount 1', async () => {
+    const env = makeEnv();
+    const res = await handleGroupCreate(
+      { name: 'TestGroup', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'Alice' },
+      env, req({}));
+    expect(res.status).toBe(201);
+    const j = await res.json();
+    expect(typeof j.token).toBe('string');
+    expect(j.memberCount).toBe(1);
+    expect(j.name).toBe('TestGroup');
+  });
+
+  // ── Token generator (item 70) ───────────────────────────────────────────────
+  it('invite token is always exactly 12 base-36 chars (fixed-length uniform generator)', async () => {
+    // The old generator (8 bytes → b.toString(36) → join → slice(12)) produced variable-length
+    // tokens: when all 8 bytes are < 36, the joined string is only 8 chars.
+    const env = makeEnv();
+    const tokens = new Set();
+    // Generate 20 tokens and verify all are exactly 12 chars of [0-9a-z].
+    for (let i = 0; i < 20; i++) {
+      const res = await handleGroupCreate(
+        { name: `G${i}`, creatorId: `cre${String(i).padStart(5,'0')}`, creatorPub: 'p', creatorName: 'C' },
+        makeEnv(), req({}));
+      const { token } = await res.json();
+      expect(token).toMatch(/^[0-9a-z]{12}$/); // exactly 12 base-36 chars
+      tokens.add(token);
+    }
+    expect(tokens.size).toBe(20); // all unique (collision probability negligible)
+  });
+
+  it('mutation guard: old 8-byte toString(36)+slice(12) generator can produce short tokens', () => {
+    // Verify that the bug we fixed IS a real bug: 8 bytes all < 36 → 8-char token.
+    // This test proves the old code was broken, and that the fix resolves it.
+    const smallBytes = new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]); // all < 36
+    const oldToken = Array.from(smallBytes).map(b => b.toString(36)).join('').slice(0, 12);
+    expect(oldToken.length).toBe(8); // OLD: 8 chars (bug)
+    // NEW: always 12 chars regardless of byte values
+    const TOKEN_CHARS = '0123456789abcdefghijklmnopqrstuvwxyz';
+    const newToken = Array.from(smallBytes.slice(0,12).length < 12
+      ? new Uint8Array(12).fill(0)  // simulate all-zero 12 bytes
+      : smallBytes, b => TOKEN_CHARS[b % 36]).join('');
+    // The new generator always produces exactly 12 chars even for all-zero bytes.
+    const zeroToken = Array.from(new Uint8Array(12).fill(0), b => TOKEN_CHARS[b % 36]).join('');
+    expect(zeroToken.length).toBe(12); // NEW: always 12 (fixed)
+    expect(zeroToken).toBe('000000000000'); // '0' is TOKEN_CHARS[0 % 36]
+  });
+
+  it('join 404s on an unknown/expired token', async () => {
+    const env = makeEnv();
+    const res = await handleGroupJoin(
+      { token: 'nosuchtoken', memberId: 'bob00001', memberPub: 'bob00001bpub' }, env, req({}));
+    expect(res.status).toBe(404);
+    expect((await res.json()).code).toBe('EXPIRED');
+  });
+
+  it('join returns alreadyMember:true for duplicate join without adding again', async () => {
+    const env = makeEnv();
+    const { token } = await (await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    // creator1 joins again
+    const res = await handleGroupJoin(
+      { token, memberId: 'creator1', memberPub: 'creator1cpub' }, env, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.alreadyMember).toBe(true);
+    // member list should still have exactly 1 entry
+    expect(j.members.filter(m => m.id === 'creator1').length).toBe(1);
+  });
+
+  it('info returns epoch 0 on a freshly created group', async () => {
+    const env = makeEnv();
+    const { token } = await (await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    const res = await handleGroupInfo({ token }, env, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.epoch).toBe(0);
+    expect(j.members.length).toBe(1);
+  });
+
+  it('info 404s for unknown token', async () => {
+    const env = makeEnv();
+    const res = await handleGroupInfo({ token: 'ghost' }, env, req({}));
+    expect(res.status).toBe(404);
+  });
+
+  it('info 400s when token is missing', async () => {
+    const env = makeEnv();
+    const res = await handleGroupInfo({}, env, req({}));
+    expect(res.status).toBe(400);
+  });
+
+  it('join rejects when group is full (100 members)', async () => {
+    const env = makeEnv();
+    const { token } = await (await handleGroupCreate(
+      { name: 'big', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    // Fill to 100 members (creator is already 1, add 99 more).
+    for (let i = 0; i < 99; i++) {
+      await handleGroupJoin(
+        { token, memberId: `member${String(i).padStart(3,'0')}`, memberPub: `member${String(i).padStart(3,'0')}pub` }, env, req({}));
+    }
+    // 101st join must fail.
+    const res = await handleGroupJoin(
+      { token, memberId: 'overflow1', memberPub: 'overflow1opub' }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('GROUP_FULL');
+  });
+
+  it('create rejects array members with more than 100 entries', async () => {
+    const res = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', members: new Array(101).fill({ id: 'x', pub: 'p' }) },
+      makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/Max 100/);
+  });
+
+  it('create accepts a non-array members field without false rejection (Array.isArray guard)', async () => {
+    // Before the Array.isArray fix, a string members value with length > 100 would
+    // have triggered the "Max 100 members" guard (falsy .length property match on
+    // a string). After the fix, only genuine arrays are checked.
+    const res = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', members: 'x'.repeat(200) },
+      makeEnv(), req({}));
+    expect(res.status).toBe(201);
+  });
+
+  it('create rejects malformed creatorId (KV member injection guard)', async () => {
+    const res = await handleGroupCreate(
+      { name: 'g', creatorId: 'bad id!', creatorPub: 'cpub' }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_USER_ID');
+  });
+
+  it('create rejects non-string creatorPub (type guard)', async () => {
+    // An object passes !creatorPub but bypasses the string size cap and gets
+    // stored as a JSON object in the member record, breaking key import on fetch.
+    const r1 = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: { key: 'data' } }, makeEnv(), req({}));
+    expect(r1.status).toBe(400);
+    expect((await r1.json()).code).toBe('INVALID_TYPE');
+    const r2 = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: ['cpub'] }, makeEnv(), req({}));
+    expect(r2.status).toBe(400);
+  });
+
+  it('join rejects malformed memberId (KV member injection guard)', async () => {
+    const env = makeEnv();
+    const { token } = await (await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    const res = await handleGroupJoin({ token, memberId: 'bad id!', memberPub: 'mpub' }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_USER_ID');
+  });
+
+  it('join rejects non-string memberPub (type guard)', async () => {
+    const env = makeEnv();
+    const { token } = await (await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    const r1 = await handleGroupJoin({ token, memberId: 'member01', memberPub: { key: 'x' } }, env, req({}));
+    expect(r1.status).toBe(400);
+    expect((await r1.json()).code).toBe('INVALID_TYPE');
+  });
+
+  it('kick returns 404 when the group token does not exist', async () => {
+    const res = await handleGroupKick({ token: 'nosuchtoken', kickId: 'member01', adminId: 'creator1' }, makeEnv(), req({}));
+    expect(res.status).toBe(404);
+    expect((await res.json()).code).toBe('NOT_FOUND');
+  });
+
+  it('kick returns 403 when the adminId is not the group creator', async () => {
+    const env = makeEnv();
+    const { token } = await (await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
+    const res = await handleGroupKick({ token, kickId: 'member01', adminId: 'member01' }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('FORBIDDEN');
+  });
+
+  it('kick returns 400 when adminId tries to kick the creator (self-kick guard)', async () => {
+    const env = makeEnv();
+    const { token } = await (await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
+    const res = await handleGroupKick({ token, kickId: 'creator1', adminId: 'creator1' }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('FORBIDDEN');
+  });
+
+  it('kick returns 404 when kickId is not a member of the group', async () => {
+    const env = makeEnv();
+    const { token } = await (await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    const res = await handleGroupKick({ token, kickId: 'notamember', adminId: 'creator1' }, env, req({}));
+    expect(res.status).toBe(404);
+    expect((await res.json()).code).toBe('NOT_MEMBER');
+  });
+
+  it('kick rejects malformed adminId or kickId (member injection guard)', async () => {
+    const env = makeEnv();
+    const { token } = await (await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
+    const r1 = await handleGroupKick({ token, kickId: 'bad id!', adminId: 'creator1' }, env, req({}));
+    expect(r1.status).toBe(400);
+    expect((await r1.json()).code).toBe('INVALID_USER_ID');
+    const r2 = await handleGroupKick({ token, kickId: 'member01', adminId: 'bad id!' }, env, req({}));
+    expect(r2.status).toBe(400);
+    expect((await r2.json()).code).toBe('INVALID_USER_ID');
+  });
+
+  it('kick preserves group record (TTL regression — kick must not make group permanent)', async () => {
+    // A missing expirationTtl on the kick kvPut would silently remove the
+    // 30-day TTL set on create, causing groups to live forever in KV.
+    // This test verifies the group is still retrievable after a kick (not
+    // corrupted) and that the returned epoch is incremented.
+    const env = makeEnv();
+    const { token } = await (await handleGroupCreate(
+      { name: 'ratchet-group', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
+    const kick = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' }, env, req({}));
+    expect(kick.status).toBe(200);
+    const kj = await kick.json();
+    expect(kj.ok).toBe(true);
+    expect(kj.epoch).toBe(1);
+    expect(kj.remaining).toBe(1); // only creator left
+    // Group is still readable after kick
+    const info = await handleGroupInfo({ token }, env, req({}));
+    expect(info.status).toBe(200);
+    const ij = await info.json();
+    expect(ij.epoch).toBe(1);
+    expect(ij.members.length).toBe(1);
+    expect(ij.members[0].id).toBe('creator1');
+  });
+
+  it('kick epoch arithmetic uses integer coercion (prevents string-concat on corrupted KV epoch)', async () => {
+    // If group.epoch is stored as the string '5' (corrupted KV), the old
+    // (group.epoch || 0) + 1 produced '5' + 1 = '51' (string concatenation)
+    // instead of 6.  The epoch gate uses ===, so '51' !== 51 breaks decryption.
+    // The fix uses (group.epoch | 0) + 1 which coerces strings to integers.
+    const env = makeEnv();
+    const { token } = await (await handleGroupCreate(
+      { name: 'ep-test', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
+    // Corrupt the epoch: write '5' (a string) into the stored group record.
+    const raw = await env.KV.get(`grp:${token}`);
+    const g = JSON.parse(raw);
+    g.epoch = '5'; // string, not number
+    await env.KV.put(`grp:${token}`, JSON.stringify(g));
+    // Kick should produce epoch 6 (integer), not '51' (string).
+    const kick = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' }, env, req({}));
+    const kj = await kick.json();
+    expect(kj.epoch).toBe(6);
+    expect(typeof kj.epoch).toBe('number');
+    // Info must also return a number epoch.
+    const info = await handleGroupInfo({ token }, env, req({}));
+    expect((await info.json()).epoch).toBe(6);
+  });
+});
+
+describe('corrupted KV data resilience (safeJsonParse guard)', () => {
+  const req = (b) => apiRequest('/api/x', b);
+
+  it('groupInfo returns 404 (not 500) when group KV value is corrupt JSON', async () => {
+    const env = makeEnv();
+    const kv  = makeKV({ 'grp:badtoken': '{not valid json' });
+    env.KV = kv;
+    const res = await handleGroupInfo({ token: 'badtoken' }, env, req({}));
+    expect(res.status).toBe(404);
+    expect((await res.json()).code).toBe('NOT_FOUND');
+  });
+
+  it('groupJoin returns 404 (not 500) when group KV value is corrupt JSON', async () => {
+    const env = makeEnv();
+    env.KV = makeKV({ 'grp:badtoken': '!!!notjson' });
+    const res = await handleGroupJoin({ token: 'badtoken', memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
+    expect(res.status).toBe(404);
+  });
+
+  it('groupKick returns 404 (not 500) when group KV value is corrupt JSON', async () => {
+    const env = makeEnv();
+    env.KV = makeKV({ 'grp:badtoken': 'null' });
+    const res = await handleGroupKick({ token: 'badtoken', kickId: 'member01', adminId: 'creator1' }, env, req({}));
+    expect(res.status).toBe(404);
+  });
+
+  it('msgPoll returns empty messages (not 500) when inbox KV value is corrupt JSON', async () => {
+    const env = makeEnv();
+    env.KV = makeKV({ 'inbox:alice123x': '{corrupted' });
+    const res = await handleMsgPoll({ id: 'alice123x' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).messages).toEqual([]);
+  });
+
+  it('sealedPoll returns empty messages (not 500) when sealed KV value is corrupt JSON', async () => {
+    const env = makeEnv();
+    env.KV = makeKV({ 'sealed:alice123x': '[not json' });
+    const res = await handleSealedPoll({ id: 'alice123x' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).messages).toEqual([]);
+  });
+
+
+  it('preKeyFetch returns 404 (not 500) when prekey bundle KV value is corrupt JSON', async () => {
+    const env = makeEnv();
+    env.KV = makeKV({ 'prekey:alice123x': '{bad bundle json' });
+    const res = await handlePreKeyFetch({ userId: 'alice123x' }, env, req({}));
+    expect(res.status).toBe(404);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Item 33 — group mutation + prekey + backup STORE_FAILED propagation
+// ─────────────────────────────────────────────────────────────────────────────
+describe('group mutation KV failure propagation (item 33)', () => {
+  const req = (b) => apiRequest('/api/x', b);
+
+  async function makeGroup(env) {
+    const r = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}));
+    const { token } = await r.json();
+    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
+    return token;
+  }
+
+  function failOnGroupPut(env) {
+    const real = env.KV.put.bind(env.KV);
+    env.KV.put = async (key, ...rest) => {
+      if (key.startsWith('grp:')) throw new Error('KV unavailable');
+      return real(key, ...rest);
+    };
+  }
+
+  it('handleGroupCreate returns 500 STORE_FAILED when KV put throws', async () => {
+    const env = makeEnv();
+    failOnGroupPut(env);
+    const res = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+  });
+
+  it('handleGroupJoin returns 500 STORE_FAILED when KV put throws', async () => {
+    const env = makeEnv();
+    const { token } = await (await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    failOnGroupPut(env);
+    const res = await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+  });
+
+  it('handleGroupKick returns 500 STORE_FAILED when KV put throws (security: kick must persist)', async () => {
+    const env = makeEnv();
+    const token = await makeGroup(env);
+    failOnGroupPut(env);
+    const res = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' }, env, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+  });
+
+  it('handleGroupLeave returns 500 STORE_FAILED when KV put throws (security: leave must persist)', async () => {
+    const env = makeEnv();
+    const token = await makeGroup(env);
+    failOnGroupPut(env);
+    const res = await handleGroupLeave({ token, memberId: 'member01' }, env, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+  });
+
+  it('handleGroupRename returns 500 STORE_FAILED when KV put throws', async () => {
+    const env = makeEnv();
+    const token = await makeGroup(env);
+    failOnGroupPut(env);
+    const res = await handleGroupRename({ token, adminId: 'creator1', name: 'NewName' }, env, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+  });
+
+  it('handleGroupTransfer returns 500 STORE_FAILED when KV put throws', async () => {
+    const env = makeEnv();
+    const token = await makeGroup(env);
+    failOnGroupPut(env);
+    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'member01' }, env, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+  });
+});
+
+// Item 57 — dedup key must be released on STORE_FAILED so a client retry is not swallowed.
+// Both relay paths set an in-memory dedup key BEFORE the KV write. If the write fails, a
+// leftover key would make the client's retry of the identical ciphertext short-circuit as a
+// duplicate (ok:true, dedup:true) — a message silently lost despite never being stored.
+describe('relay dedup released on STORE_FAILED so retry persists (item 57)', () => {
+  const req = (b) => apiRequest('/api/x', b);
+
+  it('handleMsgSend: failed store un-marks dedup; identical retry then persists', async () => {
+    const env = makeEnv();
+    globalThis._msgDedup = new Map();
+    const real = env.KV.put.bind(env.KV);
+    let failInbox = true;
+    env.KV.put = async (key, ...rest) => {
+      if (failInbox && key.startsWith('inbox:')) throw new Error('KV unavailable');
+      return real(key, ...rest);
+    };
+    const body = { to: 'user00099', from: 'sender01', payload: 'ciphertext-abc' };
+    const r1 = await handleMsgSend(body, 'ip', env, req({}));
+    expect(r1.status).toBe(500);
+    expect((await r1.json()).code).toBe('STORE_FAILED');
+
+    // KV recovers; the SAME payload retried must actually store (not be deduped away).
+    failInbox = false;
+    const r2 = await handleMsgSend(body, 'ip', env, req({}));
+    expect(r2.status).toBe(200);
+    expect((await r2.json()).dedup).toBeUndefined(); // not swallowed as a duplicate
+    const inbox = JSON.parse(await env.KV.get('inbox:user00099'));
+    expect(inbox.length).toBe(1);
+    expect(inbox[0].payload).toBe('ciphertext-abc');
+  });
+
+  it('handleMsgSend: a genuine duplicate IS still deduped after a successful store', async () => {
+    const env = makeEnv();
+    globalThis._msgDedup = new Map();
+    const body = { to: 'user00098', from: 'sender01', payload: 'ciphertext-dup' };
+    const r1 = await handleMsgSend(body, 'ip', env, req({}));
+    expect(r1.status).toBe(200);
+    const r2 = await handleMsgSend(body, 'ip', env, req({}));
+    expect((await r2.json()).dedup).toBe(true); // second identical send is a duplicate
+    const inbox = JSON.parse(await env.KV.get('inbox:user00098'));
+    expect(inbox.length).toBe(1); // stored exactly once
+  });
+
+  it('handleSealedSend: failed store un-marks dedup; identical retry then persists', async () => {
+    const env = makeEnv();
+    globalThis._sealedDedup = new Map();
+    const real = env.KV.put.bind(env.KV);
+    let failSealed = true;
+    env.KV.put = async (key, ...rest) => {
+      if (failSealed && key.startsWith('sealed:')) throw new Error('KV unavailable');
+      return real(key, ...rest);
+    };
+    const body = { to: 'user00097', envelope: 'sealed-envelope-xyz' };
+    const r1 = await handleSealedSend(body, env, req({}));
+    expect(r1.status).toBe(500);
+    expect((await r1.json()).code).toBe('STORE_FAILED');
+
+    failSealed = false;
+    const r2 = await handleSealedSend(body, env, req({}));
+    expect(r2.status).toBe(200);
+    expect((await r2.json()).dedup).toBeUndefined();
+    const queue = JSON.parse(await env.KV.get('sealed:user00097'));
+    expect(queue.length).toBe(1);
+    expect(queue[0].envelope).toBe('sealed-envelope-xyz');
+  });
+});
+
+describe('prekey upload + backup STORE_FAILED propagation (item 33)', () => {
+  const req = (b) => apiRequest('/api/x', b);
+
+  it('handlePreKeyUpload returns 500 STORE_FAILED when prekey KV put throws', async () => {
+    const env = makeEnv();
+    const real = env.KV.put.bind(env.KV);
+    env.KV.put = async (key, ...rest) => {
+      if (key.startsWith('prekey:user')) throw new Error('KV unavailable');
+      return real(key, ...rest);
+    };
+    const res = await handlePreKeyUpload(
+      { userId: 'user00020', identityKey: 'user00020IK', signedPreKey: 'SPK' },
+      env, req({}),
+    );
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+  });
+
+  it('handleBackupUpload returns 500 STORE_FAILED when backup KV put throws', async () => {
+    const env = makeEnv();
+    const real = env.KV.put.bind(env.KV);
+    env.KV.put = async (key, ...rest) => {
+      if (key.startsWith('backup:')) throw new Error('KV unavailable');
+      return real(key, ...rest);
+    };
+    const res = await handleBackupUpload(
+      { userId: 'user00021', backup: 'encrypted-data' },
+      env, req({}),
+    );
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Item 34 — kvDel failure propagation: group delete, alias delete, drop read
+// ─────────────────────────────────────────────────────────────────────────────
+describe('kvDel failure propagation (item 34)', () => {
+  const req = (b) => apiRequest('/api/x', b);
+
+  function failOnDelete(env, keyPrefix) {
+    const real = env.KV.delete.bind(env.KV);
+    env.KV.delete = async (key, ...rest) => {
+      if (key.startsWith(keyPrefix)) throw new Error('KV unavailable');
+      return real(key, ...rest);
+    };
+  }
+
+  it('handleGroupDelete returns 500 STORE_FAILED when kvDel throws', async () => {
+    const env = makeEnv();
+    const { token } = await (await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    failOnDelete(env, 'grp:');
+    const res = await handleGroupDelete({ token, adminId: 'creator1' }, env, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+    // Group must still exist in KV (delete didn't go through)
+    expect(await env.KV.get('grp:' + token)).not.toBeNull();
+  });
+
+  it('handleDropRead returns 500 DEL_FAILED when kvDel throws (one-time property preserved)', async () => {
+    const env = makeEnv();
+    const { id } = await (await handleDropCreate({ ct: 'secret' }, env, req({}))).json();
+    failOnDelete(env, 'drop:');
+    const res = await handleDropRead({ id }, env, apiRequest('/api/drop/read', {}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('DEL_FAILED');
+    // Drop must still be in KV (ciphertext not leaked + not consumed)
+    expect(await env.KV.get('drop:' + id)).not.toBeNull();
+  });
+
+  it('handleDropRead with successful delete returns the ciphertext (delete-first order)', async () => {
+    const env = makeEnv();
+    const { id } = await (await handleDropCreate({ ct: 'my-secret' }, env, req({}))).json();
+    const res = await handleDropRead({ id }, env, apiRequest('/api/drop/read', {}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).ct).toBe('my-secret');
+    // Drop must be gone after successful read
+    expect(await env.KV.get('drop:' + id)).toBeNull();
+  });
+
+  it('handleAliasDelete returns 500 STORE_FAILED when kvDel throws', async () => {
+    const env = makeEnv();
+    // Set up a registered user with an alias manually (bypasses PoW for this unit test).
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const edPub = toB64(new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey)));
+    const spk = crypto.getRandomValues(new Uint8Array(32));
+    const spkSig = new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, spk));
+    await handlePreKeyUpload({
+      userId: 'alsdel99', identityKey: 'alsdel99-IK',
+      edIdentityKey: edPub, signedPreKey: toB64(spk), signedPreKeySig: toB64(spkSig),
+    }, env, apiRequest('/api/prekey/upload', {}));
+    await env.KV.put('alias:deltest99', JSON.stringify({ pub: 'alsdel99-IK', name: 'Me', setAt: Date.now() }));
+
+    const ts = Date.now();
+    const msg = new TextEncoder().encode(`breeze-alias-delete:deltest99:${ts}`);
+    const sig = toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, msg)));
+
+    failOnDelete(env, 'alias:');
+    const res = await handleAliasDelete({ alias: 'deltest99', userId: 'alsdel99', ts, sig }, env, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+    // Alias must still exist
+    expect(await env.KV.get('alias:deltest99')).not.toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// validateUserId upper-bound tightened (item 65)
+//
+// Composite KV keys like `prekey:otp:${userId}:99` add up to 14 chars of prefix
+// to the userId. The Cloudflare KV key limit is 512 bytes; a 512-char userId would
+// produce a 526-byte key, causing silent kvGet→null / kvPut→false. The generic body
+// guard at line ~266 caps named fields at 128 chars; validateUserId is now capped at
+// 128 too so array-element IDs (e.g. ids[] in presence batch) are consistently safe.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('validateUserId upper-bound (item 65)', () => {
+  it('accepts a 128-char userId (exact upper bound)', () => {
+    const uid128 = 'A'.repeat(120) + 'BBBBBBBB'; // 128 chars, all valid chars
+    expect(validateUserId(uid128)).toBe(true);
+  });
+
+  it('rejects a 129-char userId (one over the upper bound)', () => {
+    // Mutation guard: if the bound is accidentally raised back to 512 this test fails.
+    const uid129 = 'A'.repeat(129);
+    expect(validateUserId(uid129)).toBe(false);
+  });
+
+  it('rejects a 512-char userId (old permissive upper bound)', () => {
+    // A 512-char userId + 'prekey:otp::99' prefix = 526 bytes → exceeds KV 512-byte key limit.
+    const uid512 = 'A'.repeat(512);
+    expect(validateUserId(uid512)).toBe(false);
+  });
+
+  it('still accepts the minimum 8-char userId', () => {
+    expect(validateUserId('abcdefgh')).toBe(true);
+  });
+
+  it('still rejects a 7-char userId (below minimum)', () => {
+    expect(validateUserId('abcdefg')).toBe(false);
+  });
+
+  it('handlePreKeyUpload rejects a 129-char userId (KV key overflow guard)', async () => {
+    const e = makeEnv();
+    const uid129 = 'A'.repeat(129);
+    const res = await handlePreKeyUpload(
+      { userId: uid129, identityKey: 'IK', signedPreKey: 'SPK' },
+      e, apiRequest('/api/prekey/upload', {}),
+    );
+    // Either the generic body guard (FIELD_TOO_LARGE) or validateUserId (INVALID_USER_ID) rejects it.
+    expect([400, 413]).toContain(res.status);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// UTF-8 SIGNING CONTRACT (E2E-found). The client's signMessage() signs
+// `new TextEncoder().encode(text)` — UTF-8 bytes. The worker used btoa() to rebuild the
+// signed string, and btoa() encodes LATIN-1, so the two disagree above U+007F:
+//   - U+0100+ (Japanese, emoji): btoa() THREW InvalidCharacterError -> uncaught 500.
+//   - U+0080..U+00FF ("café"): btoa() succeeded but produced the WRONG bytes -> a valid
+//     signature was rejected 403.
+// Group names are free-form user text and Breeze ships EN+JA, so a signed rename to a
+// Japanese name — an entirely ordinary action — was broken. utf8ToB64() fixes it and is
+// byte-identical to btoa() for ASCII, so previously-working signed ops are unaffected.
+// ---------------------------------------------------------------------------
+describe('signed group rename — UTF-8 signing contract', () => {
+  const rq = () => apiRequest('/api/group/rename', {});
+  const tb64 = (b) => Buffer.from(b).toString('base64');
+
+  async function registerSigner(env, id) {
+    const kp = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const raw = new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey));
+    await env.KV.put(`prekey:${id}`, JSON.stringify({ edIdentityKey: tb64(raw) }));
+    // Mirrors the client's signMessage(): sign the UTF-8 bytes of the string.
+    return async (text) => tb64(new Uint8Array(
+      await crypto.subtle.sign({ name: 'Ed25519' }, kp.privateKey, new TextEncoder().encode(text)),
+    ));
+  }
+
+  async function signedRename(name) {
+    const env = makeEnv();
+    const created = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, rq());
+    const { token } = await created.json();
+    const sign = await registerSigner(env, 'creator1');
+    const ts = Date.now();
+    const sig = await sign(`breeze-group-rename:${token}:creator1:${ts}:${name}`);
+    const res = await handleGroupRename({ token, adminId: 'creator1', name, ts, sig }, env, rq());
+    const info = await (await handleGroupInfo({ token }, env, rq())).json();
+    return { status: res.status, name: info.name };
+  }
+
+  it('accepts an ASCII name (regression control — must stay byte-identical to btoa)', async () => {
+    const r = await signedRename('My Group');
+    expect(r.status).toBe(200);
+    expect(r.name).toBe('My Group');
+  });
+
+  it('accepts a Japanese name instead of throwing an uncaught 500', async () => {
+    const r = await signedRename('日本語グループ');
+    expect(r.status).toBe(200);
+    expect(r.name).toBe('日本語グループ');
+  });
+
+  it('accepts an emoji name', async () => {
+    expect((await signedRename('team 🎉')).status).toBe(200);
+  });
+
+  it('accepts a Latin-1 accented name (btoa silently signed the wrong bytes before)', async () => {
+    const r = await signedRename('café crew');
+    expect(r.status).toBe(200);
+    expect(r.name).toBe('café crew');
+  });
+
+  it('still rejects a forged signature on a non-ASCII name', async () => {
+    const env = makeEnv();
+    const created = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, rq());
+    const { token } = await created.json();
+    await registerSigner(env, 'creator1');
+    const res = await handleGroupRename(
+      { token, adminId: 'creator1', name: '日本語', ts: Date.now(), sig: tb64(new Uint8Array(64)) }, env, rq());
+    expect(res.status).toBe(403);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DEVICE REGISTRY (multi-device Phase 1). The registry is the only new primitive
+// multi-device adds: a root-signed device list. These pin the trust model — only the
+// registered root Ed25519 key can write, the record round-trips verbatim so clients can
+// re-verify, and every malformed/forged/replayed variant is rejected.
+// ---------------------------------------------------------------------------
+describe('device registry (/api/device/set + /api/device/list)', () => {
+  const rq = () => apiRequest('/api/device/x', {});
+  const db64 = (b) => Buffer.from(b).toString('base64');
+
+  // A root identity: prekey bundle with a REAL Ed25519 key registered, like a live client has.
+  async function makeRoot(env, accountId, rootPub) {
+    const kp = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const raw = new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey));
+    await env.KV.put(`prekey:${accountId}`, JSON.stringify({ edIdentityKey: db64(raw) }));
+    return async (text) => db64(new Uint8Array(
+      await crypto.subtle.sign({ name: 'Ed25519' }, kp.privateKey, new TextEncoder().encode(text))));
+  }
+  const digestOf = async (devices) => {
+    const buf = await crypto.subtle.digest('SHA-256',
+      new TextEncoder().encode(JSON.stringify(devices.map((d) => d.pub))));
+    return Array.from(new Uint8Array(buf)).slice(0, 16).map((b) => b.toString(16).padStart(2, '0')).join('');
+  };
+
+  const ROOT_PUB = 'rootpubkey01' + 'A'.repeat(30);
+  const ACCT = ROOT_PUB.slice(0, 12);
+  const DEV2 = 'seconddevice' + 'B'.repeat(30);
+
+  async function setList(env, sign, devices, tsOverride, sigOverride) {
+    const ts = tsOverride ?? Date.now();
+    const digest = await digestOf(devices);
+    const sig = sigOverride ?? await sign(`breeze-device-set:${ACCT}:${ts}:${digest}`);
+    return handleDeviceSet({ accountId: ACCT, root: ROOT_PUB, devices, ts, sig }, env, rq());
+  }
+
+  it('accepts a genuinely signed device list and lists it back verbatim', async () => {
+    const env = makeEnv();
+    const sign = await makeRoot(env, ACCT, ROOT_PUB);
+    const devices = [{ pub: ROOT_PUB, name: 'Phone' }, { pub: DEV2, name: 'Laptop' }];
+    const res = await setList(env, sign, devices);
+    expect(res.status).toBe(200);
+    expect((await res.json()).count).toBe(2);
+
+    const list = await handleDeviceList({ accountId: ACCT }, env, rq());
+    const rec = await list.json();
+    expect(rec.root).toBe(ROOT_PUB);
+    expect(rec.devices.map((d) => d.pub)).toEqual([ROOT_PUB, DEV2]);
+    expect(typeof rec.sig).toBe('string'); // verbatim signed record — client can re-verify
+  });
+
+  it('rejects a forged signature', async () => {
+    const env = makeEnv();
+    await makeRoot(env, ACCT, ROOT_PUB);
+    const res = await setList(env, null, [{ pub: ROOT_PUB, name: 'x' }], undefined, db64(new Uint8Array(64)));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+  });
+
+  it('rejects a signature over a DIFFERENT device list (digest binding)', async () => {
+    const env = makeEnv();
+    const sign = await makeRoot(env, ACCT, ROOT_PUB);
+    const ts = Date.now();
+    const goodDigest = await digestOf([{ pub: ROOT_PUB }]);
+    const sig = await sign(`breeze-device-set:${ACCT}:${ts}:${goodDigest}`);
+    // submit a list that ADDS a device the signature never covered
+    const res = await handleDeviceSet({ accountId: ACCT, root: ROOT_PUB,
+      devices: [{ pub: ROOT_PUB, name: 'x' }, { pub: DEV2, name: 'evil' }], ts, sig }, env, rq());
+    expect(res.status).toBe(403);
+  });
+
+  it('rejects a stale timestamp (replay window)', async () => {
+    const env = makeEnv();
+    const sign = await makeRoot(env, ACCT, ROOT_PUB);
+    const res = await setList(env, sign, [{ pub: ROOT_PUB, name: 'x' }], Date.now() - 10 * 60 * 1000);
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_TIMESTAMP');
+  });
+
+  it('rejects an accountId that does not match the root pub', async () => {
+    const env = makeEnv();
+    const sign = await makeRoot(env, ACCT, ROOT_PUB);
+    const ts = Date.now();
+    const devices = [{ pub: ROOT_PUB, name: 'x' }];
+    const sig = await sign(`breeze-device-set:otherAccount:${ts}:${await digestOf(devices)}`);
+    const res = await handleDeviceSet({ accountId: 'otherAcct001', root: ROOT_PUB, devices, ts, sig }, env, rq());
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects a list that drops the root device (would orphan the registry)', async () => {
+    const env = makeEnv();
+    const sign = await makeRoot(env, ACCT, ROOT_PUB);
+    const res = await setList(env, sign, [{ pub: DEV2, name: 'only-secondary' }]);
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('ROOT_NOT_DEVICE');
+  });
+
+  it('rejects when the root has no registered identity key', async () => {
+    const env = makeEnv(); // no prekey bundle written
+    const res = await setList(env, async () => 'AAAA', [{ pub: ROOT_PUB, name: 'x' }]);
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('NO_IDENTITY_KEY');
+  });
+
+  it('list returns { devices: null } for an unregistered account (fail-open to single-device)', async () => {
+    const res = await handleDeviceList({ accountId: 'nosuchacct01' }, makeEnv(), rq());
+    expect((await res.json()).devices).toBeNull();
+  });
+
+  // Socratic lifecycle round: the registry KV entry has a 3-month TTL and only /link and
+  // /unlink ever wrote it — an account that just kept MESSAGING would silently lose
+  // multi-device at the TTL. Reads must refresh the TTL (throttled to one rewrite per day).
+  it('list TOUCHES the registry TTL on read, throttled to once per day', async () => {
+    const env = makeEnv();
+    globalThis._devTouch = new Map(); // isolate throttle state from other tests
+    env.KV.store.set('devices:touchacct01', JSON.stringify({ root: 'R', devices: [{ pub: 'R' }], ts: 1, sig: 's' }));
+    let puts = 0;
+    const origPut = env.KV.put.bind(env.KV);
+    env.KV.put = async (k, v, o) => { if (k === 'devices:touchacct01') puts++; return origPut(k, v, o); };
+    await handleDeviceList({ accountId: 'touchacct01' }, env, rq());
+    expect(puts).toBe(1); // first read refreshes the TTL...
+    await handleDeviceList({ accountId: 'touchacct01' }, env, rq());
+    expect(puts).toBe(1); // ...and the next read inside the throttle window does not
+  });
+});

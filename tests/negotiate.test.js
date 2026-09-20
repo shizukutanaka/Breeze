@@ -1,0 +1,168 @@
+// Protocol version negotiation tests (N3)
+import { describe, it, expect } from 'vitest';
+import { CAPS, ALL_V5, advertise, parsePeerCaps, negotiate, negotiateGroup } from '../src/crypto/negotiate.js';
+
+describe('advertise', () => {
+  it('includes all v5 caps and the x3dh:v5 compat field by default', () => {
+    const ad = advertise();
+    expect(ad.caps).toEqual(expect.arrayContaining(Object.values(CAPS)));
+    expect(ad.x3dh).toBe('v5');
+  });
+
+  it('sets x3dh:v4 when X3DH_V5 is not in the local cap set', () => {
+    const ad = advertise([CAPS.GROUP_V5]);
+    expect(ad.x3dh).toBe('v4');
+    expect(ad.caps).not.toContain(CAPS.X3DH_V5);
+  });
+
+  it('includes custom subset of caps', () => {
+    const ad = advertise([CAPS.FRANKING]);
+    expect(ad.caps).toContain(CAPS.FRANKING);
+    expect(ad.caps).not.toContain(CAPS.GROUP_V5);
+  });
+
+  it('advertise([]) emits x3dh:v4 and an empty caps array', () => {
+    const ad = advertise([]);
+    expect(ad.x3dh).toBe('v4');
+    expect(ad.caps).toEqual([]);
+  });
+});
+
+describe('parsePeerCaps', () => {
+  it('returns empty array for a null/undefined peer', () => {
+    expect(parsePeerCaps(null)).toEqual([]);
+    expect(parsePeerCaps(undefined)).toEqual([]);
+  });
+
+  it('returns the caps array when present', () => {
+    expect(parsePeerCaps({ caps: ALL_V5 })).toEqual(ALL_V5);
+  });
+
+  it('falls back to inferring X3DH_V5 from legacy x3dh field', () => {
+    expect(parsePeerCaps({ x3dh: 'v5' })).toContain(CAPS.X3DH_V5);
+  });
+
+  it('returns empty array for a legacy v4 peer with no caps', () => {
+    expect(parsePeerCaps({ identityKey: 'IK', signedPreKey: 'SPK' })).toEqual([]);
+  });
+
+  it('returns empty array when caps is an empty array', () => {
+    expect(parsePeerCaps({ caps: [] })).toEqual([]);
+  });
+
+  it('returns empty array when caps is a non-array (malformed bundle)', () => {
+    // A non-array caps field is treated as absent; no crash.
+    expect(parsePeerCaps({ caps: 'x3dh-v5' })).toEqual([]);
+    expect(parsePeerCaps({ caps: 42 })).toEqual([]);
+  });
+
+  it('filters non-string entries out of caps (adversarial mixed-type array)', () => {
+    // parsePeerCaps must return only strings so negotiate()'s Set intersection
+    // never includes non-capability objects that could coerce to valid strings.
+    const r = parsePeerCaps({ caps: ['x3dh-v5', 42, null, undefined, {}, 'group-v5'] });
+    expect(r).toEqual(['x3dh-v5', 'group-v5']);
+  });
+});
+
+describe('negotiate', () => {
+  it('enables a feature when both sides support it', () => {
+    const res = negotiate(ALL_V5, ALL_V5);
+    expect(res.useX3dhV5).toBe(true);
+    expect(res.useGroupV5).toBe(true);
+    expect(res.useFranking).toBe(true);
+  });
+
+  it('disables X3DH v5 when the peer does not support it', () => {
+    const res = negotiate(ALL_V5, [CAPS.GROUP_V5]);
+    expect(res.useX3dhV5).toBe(false);
+    expect(res.useGroupV5).toBe(true);
+  });
+
+  it('all features off for a legacy peer (empty caps)', () => {
+    const res = negotiate(ALL_V5, []);
+    expect(res.useX3dhV5).toBe(false);
+    expect(res.useGroupV5).toBe(false);
+    expect(res.useFranking).toBe(false);
+  });
+
+  it('all features off for a legacy local client (no v5 caps emitted)', () => {
+    const res = negotiate([], ALL_V5);
+    expect(res.useX3dhV5).toBe(false);
+    expect(res.useGroupV5).toBe(false);
+  });
+
+  it('round-trip: advertise → parsePeerCaps → negotiate', () => {
+    const localAd = advertise(ALL_V5);
+    const peerAd  = advertise([CAPS.X3DH_V5]); // peer only supports X3DH
+    const res = negotiate(parsePeerCaps(localAd), parsePeerCaps(peerAd));
+    expect(res.useX3dhV5).toBe(true);
+    expect(res.useGroupV5).toBe(false); // peer doesn't support it
+    expect(res.useFranking).toBe(false);
+  });
+
+  // Item 73: negotiate must fail CLOSED (no crash, all features off) on a malformed peer
+  // caps value — these arrive over the untrusted relay. Without the defensive coercion,
+  // `new Set(42)` throws on a non-iterable; matches negotiateGroup's existing tolerance.
+  it('does not throw and disables all features on a non-array peer caps value', () => {
+    for (const bad of [42, null, undefined, { x3dh: true }, true]) {
+      const res = negotiate(ALL_V5, bad);
+      expect(res.useX3dhV5).toBe(false);
+      expect(res.useGroupV5).toBe(false);
+      expect(res.useFranking).toBe(false);
+    }
+  });
+
+  it('drops non-string elements in a peer caps array (no junk matches)', () => {
+    // A relay-injected array with junk entries must not enable any feature beyond the
+    // genuine string caps, and must not throw.
+    const res = negotiate(ALL_V5, [CAPS.X3DH_V5, 42, { group: true }, null]);
+    expect(res.useX3dhV5).toBe(true);   // the one valid string cap is honored
+    expect(res.useGroupV5).toBe(false); // junk does not enable anything
+    expect(res.useFranking).toBe(false);
+  });
+
+  it('tolerates a non-array local caps value (fails closed, no throw)', () => {
+    const res = negotiate(99, ALL_V5);
+    expect(res.useX3dhV5).toBe(false);
+    expect(res.useGroupV5).toBe(false);
+    expect(res.useFranking).toBe(false);
+  });
+});
+
+describe('negotiateGroup (group capability floor — N-party AND)', () => {
+  it('enables group-v5 only when every member advertises it', () => {
+    const res = negotiateGroup(ALL_V5, [[CAPS.GROUP_V5, CAPS.FRANKING], [CAPS.GROUP_V5, CAPS.FRANKING]]);
+    expect(res.useGroupV5).toBe(true);
+    expect(res.useFranking).toBe(true);
+  });
+
+  it('one legacy member keeps the whole group on the compatible path', () => {
+    const res = negotiateGroup(ALL_V5, [[CAPS.GROUP_V5], []]); // 2nd member has no caps
+    expect(res.useGroupV5).toBe(false);
+    expect(res.useFranking).toBe(false);
+  });
+
+  it('a member missing only franking still allows group-v5 (per-feature floor)', () => {
+    const res = negotiateGroup(ALL_V5, [[CAPS.GROUP_V5, CAPS.FRANKING], [CAPS.GROUP_V5]]);
+    expect(res.useGroupV5).toBe(true);
+    expect(res.useFranking).toBe(false);
+  });
+
+  it('empty member list means "just us" (uses our own caps)', () => {
+    expect(negotiateGroup(ALL_V5).useGroupV5).toBe(true);
+    expect(negotiateGroup([CAPS.X3DH_V5]).useGroupV5).toBe(false); // we don't advertise group-v5
+  });
+
+  it('tolerates non-array member entries (treated as no caps)', () => {
+    const res = negotiateGroup(ALL_V5, [null, undefined, 'x3dh-v5', { group: true }]);
+    expect(res.useGroupV5).toBe(false);
+  });
+
+  it('round-trips through presence-style caps arrays', () => {
+    // Each member's `caps` as it would arrive from a presence check.
+    const members = [parsePeerCaps({ caps: ALL_V5 }), parsePeerCaps({ caps: [CAPS.GROUP_V5] })];
+    const res = negotiateGroup(ALL_V5, members);
+    expect(res.useGroupV5).toBe(true);
+    expect(res.useFranking).toBe(false); // 2nd member lacks franking
+  });
+});
