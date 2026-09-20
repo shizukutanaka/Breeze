@@ -1,5 +1,11 @@
 # Changelog
 
+## Settings labels were dead text — safeSetHTML stripped every <label> (branch devin/fix-label-sanitizer, 2026-09-20)
+
+vitest 819 → **822** (+3 sanitizer tripwire tests); `index.html`, `tests/mirror-drift.test.js`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` CSP-hash propagation.
+
+Found by E2E testing, not by reading code: clicking a settings option's *text* did nothing — only the ~13px checkbox glyph toggled. `safeSetHTML`'s `SAFE_TAGS` allowlist omitted `label`, so the Trusted-Types sanitizer unwrapped every `<label>` it rendered: all 10 `/settings` toggles, the contact-picker rows (`index.html:7433`), and any future label-wrapped control. `SAFE_ATTRS` already allows `class`/`for`, so labels keep their styling and explicit association. `label` is phrasing content with no URL-bearing attributes — safe to allowlist.
+
 ## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
 
 819 vitest unchanged; Playwright E2E 60 unchanged; `docs/ROADMAP.md`, `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation) — dead-code removal only, no runtime behavior change.
