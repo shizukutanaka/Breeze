@@ -1,5 +1,13 @@
 # Changelog
 
+## Group-create creator key ownership proof (branch devin/consolidate-groups, 2026-09-20)
+
+- **`handleGroupCreate` accepted `creatorPub` ≠ `creatorId`** — while `handleGroupJoin` has always enforced `memberPub.startsWith(memberId)`, create never bound the creator's claimed id to their key: `creatorId: <victim>` + `creatorPub: <attacker>` produced a roster record that binds the victim's id/name to the attacker's key, so every joiner encrypts sender keys to the wrong key under the victim's identity. Now rejects with `KEY_MISMATCH` (same as join). Tripwire test added; existing fixtures updated to satisfy the real invariant (`creatorId = creatorPub.slice(0,12)`, which every legit client already satisfies).
+
+---
+
+
+
 ## SDP signature verification was dead — wrong function name silently dropped every signed SDP (branch devin/consolidate-groups, 2026-09-21)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
