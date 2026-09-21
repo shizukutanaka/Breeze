@@ -1155,6 +1155,134 @@ describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {
     expect(ids).toContain('dave0001');  // recovered
     expect(ids).toContain('creator1');  // winner's roster preserved
   });
+
+  // The removal direction of the same race: a concurrent join/mutation that lands
+  // after the kick's put erases the removal — the "kicked" member keeps their roster
+  // slot and the lost epoch bump means remaining members never rotate sender keys.
+  // grpMutateRecover replays removal + ban record + epoch bump onto the winner's copy.
+  it('recovers a kick that a concurrent mutation clobbered', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const key = `grp:${token}`;
+    const preKick = await env.KV.get(key); // winner: pre-kick snapshot (carol001 still a member)
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbered = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true;
+        await origPut(k, preKick, o);
+      }
+    };
+    const res = await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1', ...(await gA(env,'kick',token,'creator1','carol001')) }, env, req({}));
+    expect(res.status).toBe(200);
+    expect(clobbered).toBe(true);
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.members.some((m) => m.id === 'carol001')).toBe(false); // removal recovered
+    const raw = JSON.parse(await env.KV.get(key));
+    expect(raw.banned).toContain('carol001');                         // ban record recovered too
+    expect(info.epoch).toBe(1);                                       // epoch bump replayed once
+  });
+
+  // A racing self-leave removes the member WITHOUT a ban record; when it wins over
+  // our kick the kick's durable ban must still land — recovery treats "member gone
+  // but not banned" as unsatisfied and replays the ban (and the epoch bump).
+  it('kick recovery also restores the ban when a racing leave won', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const key = `grp:${token}`;
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbered = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true;
+        // winner: a leave-shaped copy — member gone, NO ban, epoch bumped by the leave
+        const w = JSON.parse(v);
+        w.banned = [];
+        await origPut(k, JSON.stringify(w), o);
+      }
+    };
+    const res = await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1', ...(await gA(env,'kick',token,'creator1','carol001')) }, env, req({}));
+    expect(res.status).toBe(200);
+    const raw = JSON.parse(await env.KV.get(key));
+    expect(raw.banned).toContain('carol001');
+    expect(raw.members.some((m) => m.id === 'carol001')).toBe(false);
+  });
+
+  // Join recovery must honour the ban list on the winner's copy: when a kick of the
+  // joining member wins the race, re-appending them would silently undo the ban.
+  it('join recovery does not resurrect a member the winning kick banned', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const key = `grp:${token}`;
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbered = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true;
+        // winner: a kick of the joiner — they're banned and absent from members
+        const g = JSON.parse(v);
+        g.members = g.members.filter((m) => m.id !== 'dave0001');
+        g.banned = ['dave0001'];
+        await origPut(k, JSON.stringify(g), o);
+      }
+    };
+    const res = await handleGroupJoin({ token, memberId: 'dave0001', memberPub: 'dave0001dpub', memberName: 'D' }, env, req({}));
+    expect(res.status).toBe(200);
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.members.some((m) => m.id === 'dave0001')).toBe(false); // not resurrected
+    const raw = JSON.parse(await env.KV.get(key));
+    expect(raw.banned).toContain('dave0001');
+  });
+
+  // Same class for leave: a lost leave keeps the departed member on the roster at
+  // the old epoch — they keep receiving (and can keep decrypting) new traffic.
+  it('recovers a leave that a concurrent mutation clobbered', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const key = `grp:${token}`;
+    const preLeave = await env.KV.get(key);
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbered = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true;
+        await origPut(k, preLeave, o);
+      }
+    };
+    const res = await handleGroupLeave({ token, memberId: 'bob00001', ...(await gA(env,'leave',token,'bob00001')) }, env, req({}));
+    expect(res.status).toBe(200);
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.members.some((m) => m.id === 'bob00001')).toBe(false);
+    expect(info.epoch).toBe(1);
+  });
+
+  // kvDel loses the race the other way: a mutation that read before our delete and
+  // puts after it resurrects the roster for the full TTL. The post-delete verify
+  // re-reads and deletes again.
+  it('re-deletes a group resurrected by a concurrent mutation landing after the delete', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const key = `grp:${token}`;
+    const snapshot = await env.KV.get(key); // the racing writer's stale copy
+    const origDel = env.KV.delete.bind(env.KV);
+    const origPut = env.KV.put.bind(env.KV);
+    let resurrected = false;
+    env.KV.delete = async (k) => {
+      await origDel(k);
+      if (k === key && !resurrected) {
+        resurrected = true; // the racing writer's put lands after our delete
+        await origPut(k, snapshot, {});
+      }
+    };
+    const res = await handleGroupDelete({ token, adminId: 'creator1', ...(await gA(env,'delete',token,'creator1')) }, env, req({}));
+    expect(res.status).toBe(200);
+    expect(resurrected).toBe(true);
+    expect(await env.KV.get(key)).toBeNull(); // verify-and-retry removed the resurrected copy
+  });
 });
 
 // Item 64 — durable kick: a kicked member is banned from rejoining via the invite token
@@ -1756,6 +1884,25 @@ describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
     // Prekey fetch after deletion behaves like an unknown user.
     const fetch2 = await handlePreKeyFetch({ userId }, env, apiRequest('/api/prekey/fetch', {}));
     expect(fetch2.status).toBe(404);
+  });
+
+  // devices:{userId} carries the multi-device registry (linked members' ids + pubs)
+  // on a 3-month TTL and sealed:{userId}:dropped is the refuse-when-full counter —
+  // both are userId-keyed residual data that outlived the delete for months/days.
+  // The registry surviving also means senders kept fanning out to dead devices.
+  it('also erases the device registry and sealed drop counter', async () => {
+    const env = makeEnv();
+    const userId = 'deldev01';
+    const { ed } = await registeredAccount(env, userId);
+    await env.KV.put(`devices:${userId}`, JSON.stringify({ devices: [{ id: 'dev2xx', pub: 'dev2pub' }] }));
+    await env.KV.put(`sealed:${userId}:dropped`, '3');
+    const ts = Date.now();
+    const res = await handleAccountDelete({ userId, ts, sig: await signDelete(ed, userId, ts) }, env, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.erased).toContain('devices');
+    expect(await env.KV.get(`devices:${userId}`)).toBeNull();
+    expect(await env.KV.get(`sealed:${userId}:dropped`)).toBeNull();
   });
 
   // The relay has no reverse index from a user to their @alias or their groups, so a wipe
