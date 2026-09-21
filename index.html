@@ -13245,8 +13245,12 @@ async function initMessenger(dbName) {
         if (!activeContact) { showToast(t('toastOpenChat'), 'error'); return; }
         const msgs = (await dbGetByIndex('messages', 'contact', activeContact.id)).sort((a, b) => a.ts - b.ts);
         const rows = [t('csvHeader')];
-        for (const m of msgs) { if (!m.deleted) rows.push('"' + new Date(m.ts).toISOString() + '","' + (m.mine ? myName : activeContact.name).replace(/"/g, '""') + '","' + (m.text||'').replace(/"/g,'""').replace(/\n/g,' ') + '"'); }
-        const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+        // RFC4180 escaping alone isn't enough: cells starting with = + - @ (or tab/CR)
+        // are evaluated as formulas by Excel/Sheets — a peer's message text could run
+        // DDE/HYPERLINK payloads in the opener's spreadsheet. Prefix with a literal '.
+        const csvCell = s => { s = String(s ?? '').replace(/"/g, '""').replace(/[\n\r]/g, ' '); return /^[=+\-@\t]/.test(s) ? "'" + s : s; };
+        for (const m of msgs) { if (!m.deleted) rows.push('"' + new Date(m.ts).toISOString() + '","' + csvCell(m.mine ? myName : activeContact.name) + '","' + csvCell(m.text) + '"'); }
+        const blob = new Blob(['\uFEFF' + rows.join('\n')], { type: 'text/csv' }); // BOM so Excel reads UTF-8 instead of mojibake
         downloadBlob(blob, 'breeze-' + activeContact.name.replace(/\s+/g,'-') + '-' + new Date().toISOString().slice(0,10) + '.csv');
         showToast(t('toastExportedMessagesCSV', msgs.length), 'success');
       } else if (sub === 'html') {

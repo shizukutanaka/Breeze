@@ -1,3 +1,13 @@
+## CSV export: formula-injection guard + UTF-8 BOM (branch devin/csv-formula-guard, 2026-09-21)
+
+/export csv quote-escaped cells but left message text and sender names formula-raw:
+a peer's message starting with = + - @ (or a tab) is evaluated as a formula when the
+export is opened in Excel/Sheets — the classic CSV-injection class (DDE/HYPERLINK
+payloads, cell exfiltration). Cells are now prefixed with ' when their first char is
+in that set, and  is stripped alongside 
+ so a lone CR can't split a row. Also
+prepends a BOM so Excel decodes the UTF-8 file correctly instead of mojibake.
+
 ## Relay-rollback hardening on signed stored state (branch devin/signed-state-monotonic, 2026-09-21)
 
 Every signed-state endpoint checked the signature's freshness (±5min `REQ_TS`) but nothing ordered two *in-window* writes — a relay that captures a signed request can replay it moments after a newer one lands and silently roll the state back. KV has no compare-and-swap, so the stored signed timestamp is now the high-water mark on both write paths:
