@@ -1,5 +1,15 @@
 # Changelog
 
+## Push payloads no longer hand the sender's userId to APNs/FCM (branch devin/consolidate-groups, 2026-09-20)
+
+sendPushToUser's tag ('breeze-<from|groupId>') and contactId carried the raw
+sender/recipient userId — the push provider is a third-party relay, so sealed
+sender hid the sender from OUR relay while handing it to Apple/Google. Both
+fields now carry sha256Short(id): tag-collapse unchanged, and the client resolves
+the pseudonym by hashing its own contact ids (raw-id payloads still work via the
+raw fallback; unresolvable hashes no-op harmlessly).
+
+
 ## Backup blobs are incumbent-endorsed (overwrite clobber closed) (branch devin/consolidate-groups, 2026-09-20)
 
 /backup/upload accepted unsigned overwrites of an existing backup — anyone who

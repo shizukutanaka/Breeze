@@ -530,7 +530,15 @@ async function handleMsgSend(body, ip, env, request) {
   const rawTitle = groupName ? String(groupName).slice(0, 50) : (fromName || 'Breeze');
   const pushTitle = sanitizeString(rawTitle, 50);
   const pushBody = isCall ? (isVideoCall ? 'Video call' : 'Voice call') : isFile ? '📎 File' : isVoice ? '🎤 Voice' : 'New message';
-  sendPushToUser(to, { title: pushTitle, body: pushBody, tag: 'breeze-' + (groupId || from), contactId: from }, env).catch(() => {});
+  // The push service (APNs/FCM) is a third-party intermediary — hand it a stable
+  // pseudonym, not the sender's userId. sha256Short preserves tag-collapse and the
+  // client's contactId lookup resolves it by hashing its own contact ids; a raw-id
+  // payload from an older worker still works via the client's raw fallback.
+  sendPushToUser(to, {
+    title: pushTitle, body: pushBody,
+    tag: 'breeze-' + await sha256Short(String(groupId || from)),
+    contactId: await sha256Short(from),
+  }, env).catch(() => {});
 
   return json({ ok: true, ack: Date.now() }, 200, request);
 }
@@ -2540,7 +2548,7 @@ async function handleSealedSend(body, env, request) {
     seen.push({ envelope, ts: newTs });
     await kvPut(env, key, JSON.stringify(seen), { expirationTtl: TTL.WEEK });
   }
-  sendPushToUser(to, { title: 'Breeze', body: 'New message', tag: 'breeze-sealed', contactId: to }, env).catch(() => {});
+  sendPushToUser(to, { title: 'Breeze', body: 'New message', tag: 'breeze-sealed', contactId: await sha256Short(to) }, env).catch(() => {});
   return json({ ok: true, ack: Date.now() }, 200, request);
 }
 

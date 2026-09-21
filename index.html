@@ -5206,14 +5206,10 @@ async function initMessenger(dbName) {
   }
 
   // ---- Multi-device (Phase 1) ----
-  // A "device" is just another Breeze identity; this account's devices are bound by a
-  // root-signed registry on the relay (see _worker.js handleDeviceSet). The registry is
-  // client-verified: we check the root's Ed25519 signature ourselves, so the relay can
-  // withhold the list (degrades to single-device) but cannot forge devices into it.
-  // Monotonic floor: a signed blob's ts is attacker-consistent on replay, so a hostile
-  // relay could serve a stale record forever and resurrect an unlinked device into every
-  // fan-out. Persist the max verified ts per account; reject older records (degrades to
-  // single-device instead of silently restoring the removed key).
+  // Devices are bound by a root-signed registry on the relay (handleDeviceSet), verified
+  // client-side: the relay can withhold the list but not forge it. Monotonic floor: a
+  // signed blob's ts is attacker-consistent on replay — persist max verified ts per
+  // account and reject older records (a stale replay can't resurrect an unlinked device).
   let _devFloor = null;
   async function _devFloorGet(accountId) {
     if (!_devFloor) _devFloor = (await dbGet('settings', 'devFloor').catch(() => null)) || {};
@@ -5239,10 +5235,8 @@ async function initMessenger(dbName) {
       const digest = Array.from(new Uint8Array(digestBuf)).slice(0, 16)
         .map(b => b.toString(16).padStart(2, '0')).join('');
       if (!rec.devices.some(d => d.pub === rec.root)) return null;
-      // Verify under the account's PINNED signing key (TOFU pin from message signatures), or my
-      // own signing key when the registry is mine. No pinned key -> DO NOT trust extra devices:
-      // an unverifiable registry falls back to single-device rather than letting the relay
-      // inject a listening device. (Withholding degrades to today's behaviour either way.)
+      // Verify under the account's PINNED signing key (TOFU from message sigs) or my own
+      // key when the registry is mine. Unverifiable -> single-device, never an injected one.
       let sigPub = null;
       if (accountId === myId) sigPub = _signingPubB64;
       if (!sigPub) sigPub = (await dbGet('contacts', accountId).catch(() => null))?.sigPub || null;
@@ -5255,9 +5249,7 @@ async function initMessenger(dbName) {
       if (!sigPub) { _dbg(null, 'device list: no pinned signing key for ' + accountId + ' — staying single-device'); return null; }
       const okSig = await verifySignature(`breeze-device-set:${accountId}:${rec.ts}:${digest}`, rec.sig, sigPub);
       if (okSig !== true) { _dbg(null, 'device list signature not verified — ignoring registry'); return null; }
-      // Rollback guard (see _devFloor*): reject a verified record that is older than the
-      // newest one we've already accepted — the relay can replay a stale signed blob to
-      // resurrect a removed device otherwise.
+      // Rollback guard: reject a verified record older than the newest already accepted.
       const floor = await _devFloorGet(accountId);
       if (typeof rec.ts === 'number' && rec.ts < floor) { _dbg(null, 'device list is stale (rollback) — ignoring'); return null; }
       await _devFloorBump(accountId, rec.ts);
@@ -5410,10 +5402,8 @@ async function initMessenger(dbName) {
     let wire = payload;
     if (sealPub && CONFIG.SEAL_V2_ENABLED && await _peerSealV2(to)) {
       const { to: _t, ts: _ts, payload: _p, ...meta } = payload;
-      // Session-bootstrap leak: the first message of a session wraps the ratchet ciphertext
-      // in a plaintext X3DH header whose `ik` IS the sender's identity key — so a sealed
-      // envelope would still identify the sender on first contact (wiretap-E2E-found).
-      // Relocate ik into the sealed block; the recipient re-injects it before decrypting.
+      // Bootstrap leak: a first-message pkm header's `ik` is the sender's identity key —
+      // relocate it into the sealed block or the envelope still names the sender.
       let wirePayload = payload.payload;
       try {
         const pkm = JSON.parse(wirePayload);
@@ -5523,9 +5513,8 @@ async function initMessenger(dbName) {
       _dbg(null, 'Background sync: flushing ' + _retryQueue.length + ' messages');
       scheduleRetry();
     }
-    // v3.6: Handle notification quick-reply action
     if (e.data?.type === 'quick-reply' && e.data.contactId && e.data.text) {
-      dbGet('contacts', e.data.contactId).then(contact => {
+      _pushContactId(e.data.contactId).then(cid => dbGet('contacts', cid)).then(contact => {
         if (contact && e.data.text.trim()) {
           openConversation(contact).then(() => {
             _DOM.get('msg-input').value = e.data.text;
@@ -5534,13 +5523,32 @@ async function initMessenger(dbName) {
         }
       }).catch(err => _dbg(err, 'quick-reply'));
     }
-    // v3.6: Handle notification mark-read action
     if (e.data?.type === 'mark-read' && e.data.contactId) {
-      dbGet('contacts', e.data.contactId).then(c => {
+      _pushContactId(e.data.contactId).then(cid => dbGet('contacts', cid)).then(c => {
         if (c) { c.unread = 0; dbPut('contacts', c).then(() => renderContacts()).catch(err => _dbg(err, 'mark-read-put')); }
       }).catch(err => _dbg(err, 'mark-read'));
     }
   });
+
+  // Push contactId is a sha256 pseudonym (push service can't read who's writing);
+  // resolve by hashing our own contact ids — a raw-id payload falls through unchanged.
+  let _contactHashCache = null;
+  async function _pushContactId(raw) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (!_contactHashCache) {
+        _contactHashCache = new Map();
+        for (const c of (await dbGetAll('contacts').catch(() => [])) || [])
+          _contactHashCache.set(await _sha256hex(c.id), c.id);
+      }
+      if (_contactHashCache.has(raw)) return _contactHashCache.get(raw);
+      _contactHashCache = null; // contact added since the cache — rebuild once
+    }
+    return raw;
+  }
+  async function _sha256hex(s) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+    return Array.from(new Uint8Array(buf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
 
   // SENDER KEY — Group Encryption
   //
@@ -6250,11 +6258,9 @@ async function initMessenger(dbName) {
   // DRY: DM room key
   function _dmRoom(peerId) { return 'dm:' + [myId, peerId].sort().join(':'); }
 
-  // Sign and send a WebRTC SDP offer or answer. The /signal relay is unauthenticated
-  // (anyone who knows two user IDs can post), so a malicious third party could inject a
-  // crafted SDP and MITM the DTLS layer. Wrapping the SDP in an Ed25519 signature bound
-  // to our signing identity lets the peer verify provenance before calling setRemoteDescription.
-  // Backward-compat: if signing is unavailable (old browser, key not loaded), emits plain JSON.
+  // SDP offer/answer is Ed25519-signed — the /signal relay is unauthenticated, so a
+  // signed SDP lets the peer verify provenance before setRemoteDescription (MITM
+  // defense). If signing is unavailable, emits plain JSON (backward-compat).
   async function _sendSignedSDP(room, type, sdpObj) {
     const sdpJson = JSON.stringify(sdpObj);
     const sig = await signMessage(sdpJson);
@@ -6262,19 +6268,16 @@ async function initMessenger(dbName) {
     return _signal(room, type, data);
   }
 
-  // v3.6 SECURITY: call-signaling authentication (gated by CONFIG.CALL_E2E_SIGNAL).
-  // Wrap: when the flag is ON, encrypt the signal object to the pinned peer via the 1:1
-  // ratchet (the resulting ciphertext is opaque to the unauthenticated /signal relay and
-  // can only be produced by the holder of the peer's session); when OFF, emit the legacy
-  // plaintext JSON so behavior is unchanged. Returns null only if encryption fails (ON path).
+  // CALL_E2E_SIGNAL: ON encrypts the call signal to the pinned peer via the 1:1 ratchet
+  // (opaque to the /signal relay, unforgeable without the session); OFF emits legacy
+  // plaintext. Returns null only if encryption fails (ON path).
   async function _wrapCallSignal(peerPub, obj) {
     if (!CONFIG.CALL_E2E_SIGNAL) return JSON.stringify(obj);
     if (!peerPub) return null;
     return await encryptFor(JSON.stringify(obj), peerPub);
   }
-  // Unwrap: when ON, decrypt+authenticate — a forged signal (not from the pinned peer, or a
-  // relay-injected substitute) fails to decrypt and yields null, so the caller drops it,
-  // closing the call-MITM. When OFF, parse the legacy plaintext. Returns null on any failure.
+  // Unwrap: ON decrypts+authenticates — forged/relay-injected signals fail → null →
+  // dropped. OFF parses legacy plaintext. Null on any failure.
   async function _unwrapCallSignal(peerPub, data) {
     try {
       if (!CONFIG.CALL_E2E_SIGNAL) return JSON.parse(data);
