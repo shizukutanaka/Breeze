@@ -86,6 +86,14 @@ describe('dm-sig-v1 sealed signaling (dm: room confidentiality)', () => {
     expect(html).toContain('_unsealDmSignal(sigRoom, s.data)');
     expect(html).toContain("w.enc !== 'dm-sig-v1'");
   });
+  it('unsigned-type plaintexts are rejected once the peer is known-capable', () => {
+    // typing/read + call-end carry no inner auth — a capable peer's real traffic is
+    // sealed, so plaintext copies are forged. `wasSealed` must gate them or sealed
+    // envelopes get dropped after restore.
+    expect(html).toContain("!wasSealed && (s.type === 'typing' || s.type === 'read')");
+    expect(html).toContain("!wasSealed && s.type === 'call-end'");
+    expect(html).toContain('wasSealed = true');
+  });
   it('seal is sign-then-seal: SDP signature rides INSIDE the ciphertext', () => {
     // The {sdp,sig,sigPub} wrapper is produced before _signal seals the payload —
     // verify the receiver unseals BEFORE the signature check runs.

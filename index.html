@@ -9237,11 +9237,18 @@ async function initMessenger(dbName) {
           if (s.sender !== contact.id) continue;
           // dm-sig-v1: unseal {type:'enc'} envelopes (same sealing as dm: rooms) —
           // fails closed, a forged or malformed envelope is dropped not downgraded.
+          let wasSealed = false;
           if (s.type === 'enc') {
             const inner = await _unsealDmSignal(room, s.data);
             if (!inner) continue;
-            s.type = inner.t; s.data = inner.d;
+            s.type = inner.t; s.data = inner.d; wasSealed = true;
           }
+          // call-end carries no inner auth when CALL_E2E_SIGNAL is off — a forged plaintext
+          // one is a remote hang-up. Once the peer advertises dm-sig-v1 their real traffic
+          // is sealed, so a plaintext call-end claiming this sender is a fake. Bounded by
+          // the caps cache window (a capable peer's plaintext still lands while their view
+          // of MY caps is stale — rollout race, ≤5min).
+          if (!wasSealed && s.type === 'call-end' && !CONFIG.CALL_E2E_SIGNAL && (await _peerCaps(contact.id)).includes(CAPS_DM_SIG)) continue;
           if (s.type === 'call-answer' && _callPC && _callPC.signalingState === 'have-local-offer') {
             // Authenticate before setRemoteDescription: a forged answer (relay-injected,
             // carrying the attacker's DTLS fingerprint) fails to decrypt → null → dropped,
@@ -10810,11 +10817,20 @@ async function initMessenger(dbName) {
             // dm-sig-v1: sealed envelopes ride as {type:'enc', data:'{enc,ts,se}'} —
             // unseal to recover the real {type,data}. Fails closed: a sealed envelope
             // that doesn't verify is dropped, never processed as plaintext.
+            let wasSealed = false;
             if (s.type === 'enc') {
               const inner = await _unsealDmSignal(sigRoom, s.data);
               if (!inner) continue;
-              s.type = inner.t; s.data = inner.d;
+              s.type = inner.t; s.data = inner.d; wasSealed = true;
             }
+            // Typing/read carry no inner signature, so a forged PLAINTEXT one is trivially
+            // injectable by anyone who knows the room pair. Once the peer advertises
+            // dm-sig-v1 their real traffic is sealed — a plaintext typing/read claiming
+            // this sender is a fake (fake "typing…" and fake read receipts are a social-
+            // engineering surface). Rollout race stays open: the check only fires when
+            // the peer's caps are KNOWN, so a capable peer's plaintext still lands while
+            // their view of MY caps is stale (≤5min cache window).
+            if (!wasSealed && (s.type === 'typing' || s.type === 'read') && (await _peerCaps(contact.id)).includes(CAPS_DM_SIG)) continue;
             // Typing/read indicators (works both pre- and post-P2P connection)
             if (s.type === 'typing') { showTyping(contact.id, s.senderName || contact.name); continue; }
             if (s.type === 'read') { showReadReceipt(contact.id, parseInt(s.data) || Date.now()); continue; }

@@ -1,5 +1,13 @@
 # Changelog
 
+## Plaintext-signal forgery closed on upgraded peers (branch devin/consolidate-groups, 2026-09-20)
+
+typing/read and call-end carry no inner auth — anyone knowing a room pair could
+forge them. Once the peer's advertised caps include dm-sig-v1, plaintext copies
+claiming that sender are dropped (wasSealed-gated so sealed envelopes restore
+correctly). Bounded by the caps-cache window so the rollout race still works.
+
+
 ## dm-sig-v1 covers call: rooms too (branch devin/consolidate-groups, 2026-09-20)
 
 `call:<idA>:<idB>` rooms use the same sorted-id derivation as dm: rooms, so the
