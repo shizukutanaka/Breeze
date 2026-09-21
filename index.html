@@ -7682,7 +7682,9 @@ async function initMessenger(dbName) {
     // v3.2: Multi-select contact picker
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
-    const list = contacts.filter(c => !c.blocked).map(c =>
+    // Exclude targets where the send would void: blocked contacts, groups I'm
+    // kicked from, and announce-only groups where I'm not privileged.
+    const list = contacts.filter(c => !c.blocked && !(c.isGroup && (c.kicked || (c.announceOnly && !isGroupAdmin(c))))).map(c =>
       `<label class="contact i-ctx-item" data-cid="${c.id}"><input type="checkbox" class="i-accent-g"><div class="cname">${c.pinned ? '📌 ' : ''}${esc(c.name)}</div></label>`
     ).join('');
     safeSetHTML(overlay, `<div class="modal i-max-popup">

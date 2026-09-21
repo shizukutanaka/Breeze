@@ -1,10 +1,10 @@
 # Changelog
 
-## Announce-only gate only covered the text path (branch devin/consolidate-groups, 2026-09-20)
+## Send-side gates only covered the text path (branch devin/consolidate-groups, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
 
-`sendMessage` gates announce-only groups on the send side — but `createPoll`, `_sendFile`, and voice memos never checked. A non-admin tapping 📊/📎/🎤 in an announce-only group got a locally-stored message fanned out through the sender-key channel that every receiver then dropped (`group.announceOnly && !privileged → return`) — the send-into-the-void shape: your client shows it, nobody ever sees it. Same for the `kicked` flag (receivers now drop non-roster senders) and `blocked`. All three paths now mirror sendMessage's full entry gates (kicked → announceOnly → blocked; voice at record-start, since `_recContact` pins the target there).
+`sendMessage` gates announce-only groups on the send side — but `createPoll`, `_sendFile`, and voice memos never checked. A non-admin tapping 📊/📎/🎤 in an announce-only group got a locally-stored message fanned out through the sender-key channel that every receiver then dropped (`group.announceOnly && !privileged → return`) — the send-into-the-void shape: your client shows it, nobody ever sees it. Same for the `kicked` flag (receivers now drop non-roster senders) and `blocked`. All three paths now mirror sendMessage's full entry gates (kicked → announceOnly → blocked; voice at record-start, since `_recContact` pins the target there). `forwardMsg` had the same hole in picker form — it filtered blocked contacts but listed kicked and non-admin announce-only groups as forward targets; those are excluded from the picker now.
 
 ---
 
