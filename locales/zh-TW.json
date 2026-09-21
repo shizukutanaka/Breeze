@@ -281,6 +281,7 @@
  "scanQR": "掃描 QR Code",
  "scanning": "掃描中...",
  "toastInvalidQR": "這不是 Breeze 邀請 QR Code",
+ "toastInvalidContact": "這不是有效的 Breeze 聯絡人金鑰",
  "toastCameraFail": "相機存取遭拒",
  "compressMode": "圖片壓縮",
  "compressOff": "關閉（原始畫質）",
