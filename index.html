@@ -3228,12 +3228,15 @@ function safeOpen(url) {
 
 // v3.5: DRY helpers for slash command output (52x→1x dedup)
 function clearInput() { _DOM.get('msg-input').value = ''; }
-function cmdOutput(className, html) {
+function cmdOutput(className, html, plain) {
   const box = _DOM.get('msg-messages');
   const d = document.createElement('div');
   d.className = className || 'cmd-panel';
-  if (typeof html === 'string') safeSetHTML(d, html); else d.textContent = html;
-  box.appendChild(d); box.scrollTop = box.scrollHeight;
+  if (html != null) { if (!plain && typeof html === 'string') safeSetHTML(d, html); else d.textContent = html; }
+  box.appendChild(d);
+  // Scroll deferred one frame — callers that fill the div synchronously right after
+  // creation (the common shape) still land scrolled to the bottom.
+  requestAnimationFrame(() => { box.scrollTop = box.scrollHeight; });
   return d;
 }
 
@@ -8986,6 +8989,15 @@ async function initMessenger(dbName) {
   let _callContact = null;
   let _callStartTime = 0;
   let _callTimerInterval = null;
+  let _callOfferer = false;  // this side offered — only the offerer can drive an ICE-restart re-offer
+  let _callCid = null;       // per-call session id — drops stale offers/answers from a dead attempt
+  let _callVideo = false;
+  let _callOfferSentAt = 0;  // glare staleness bound for an incoming offer's relay ts
+  let _callAnsweredSdp = null; // SDP string of the offer we answered — the relay redelivers <30s signals
+  let _callIceBuf = [];      // trickle candidates buffered until remoteDescription exists
+  let _callDiscTimer = null; // disconnect grace — 'disconnected' is transient, not fatal
+  let _callPollTimer = null; // the call-room signal poll (cleared on teardown)
+  const CALL_DISC_GRACE_MS = 8 * MS.SEC;
 
   function getCallICEConfig() {
     const cfg = {
@@ -9045,80 +9057,129 @@ async function initMessenger(dbName) {
     if (!document.hidden && _callState !== 'idle') acquireWakeLock();
   }, { signal: _ac.signal });
 
+  // Shared call connection-state handler. 'disconnected' is transient per spec
+  // (an ICE transport can recover) and even 'failed' can heal via an ICE-restart
+  // re-offer — the old code called endCall() on the first 'disconnected', so any
+  // network blip killed the call. Now: 'connecting' UI, a grace window, offerer
+  // re-offers fresh creds; still-dead at the end of the window ends the call.
+  function _onCallConnState() {
+    const st = _callPC?.connectionState;
+    if (st === 'connected') {
+      if (_callDiscTimer) { clearTimeout(_callDiscTimer); _callDiscTimer = null; }
+      if (_callState !== 'connected') {
+        _callState = 'connected';
+        _callStartTime = Date.now();
+        clearInterval(_callTimerInterval);
+        _callTimerInterval = setInterval(updateCallTimer, MS.SEC);
+      }
+      updateCallUI('connected'); // also restores the label after a 'connecting' grace window
+      return;
+    }
+    if (st === 'disconnected' || st === 'failed') {
+      if (_callDiscTimer) return; // already inside a grace window
+      updateCallUI('connecting');
+      _callDiscTimer = setTimeout(() => {
+        _callDiscTimer = null;
+        if (_callPC && _callPC.connectionState !== 'connected') endCall();
+      }, CALL_DISC_GRACE_MS);
+      if (_callOfferer && _callState === 'connected') _callReOffer();
+    }
+  }
+
+  // An ICE restart rides a NEW offer (fresh ufrag/pwd) — restartIce() alone only
+  // arms the flag and the call pc has no onnegotiationneeded handler. The answerer
+  // replies in the 'call-offer' branch of pollCallSignals — same wire types, so a
+  // legacy peer just drops it (its call still ends via the grace timer).
+  async function _callReOffer() {
+    if (!_callPC || !_callContact || !API) return;
+    try {
+      _callPC.restartIce?.();
+      const offer = await _callPC.createOffer();
+      await _callPC.setLocalDescription(offer);
+      const room = 'call:' + [myId, _callContact.id].sort().join(':');
+      const sig = await _wrapCallSignal(_callContact.pubB64, { sdp: offer, video: _callVideo, cid: _callCid });
+      if (sig != null) await _signal(room, 'call-offer', sig);
+    } catch(e) { _dbg(e, 'call-reoffer'); }
+  }
+
+  // Trickle ICE racing ahead of setRemoteDescription throws InvalidStateError —
+  // candidates that beat the answer used to hit the catch and be lost. Buffer and
+  // flush once the remote description lands.
+  async function _flushCallIce() {
+    while (_callIceBuf.length && _callPC?.remoteDescription) {
+      await _callPC.addIceCandidate(_callIceBuf.shift()).catch(e => _dbg(e, 'call-ICE'));
+    }
+  }
+
+  // Shared getUserMedia + pc + wiring for caller (withVideo) and callee (offer flag).
+  async function _setupCallMedia(contact, withVideo) {
+    _callStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: withVideo });
+    _callPC = new RTCPeerConnection(getCallICEConfig());
+    _callStream.getTracks().forEach(t => _callPC.addTrack(t, _callStream));
+    // Prefer Opus audio / VP9+VP8 video — better quality at lower bitrate. Setting it
+    // on the answerer too matters: the offerer's ordering wins ties, not conflicts.
+    try {
+      for (const transceiver of _callPC.getTransceivers()) {
+        const kind = transceiver.sender.track?.kind;
+        if (kind === 'audio') {
+          const codecs = RTCRtpReceiver.getCapabilities?.('audio')?.codecs || [];
+          const opus = codecs.filter(c => c.mimeType === 'audio/opus');
+          const rest = codecs.filter(c => c.mimeType !== 'audio/opus');
+          if (opus.length && transceiver.setCodecPreferences) transceiver.setCodecPreferences([...opus, ...rest]);
+        }
+        if (kind === 'video') {
+          const codecs = RTCRtpReceiver.getCapabilities?.('video')?.codecs || [];
+          const vp9 = codecs.filter(c => c.mimeType === 'video/VP9');
+          const vp8 = codecs.filter(c => c.mimeType === 'video/VP8');
+          const rest = codecs.filter(c => !['video/VP9','video/VP8'].includes(c.mimeType));
+          if ((vp9.length || vp8.length) && transceiver.setCodecPreferences) transceiver.setCodecPreferences([...vp9, ...vp8, ...rest]);
+        }
+      }
+    } catch(e) { _dbg(e, 'codec-pref'); }
+    _callRemoteStream = new MediaStream();
+    _callPC.ontrack = (e) => {
+      e.streams[0].getTracks().forEach(t => _callRemoteStream.addTrack(t));
+      const remoteAudio = _DOM.get('call-remote-audio');
+      const remoteVideo = _DOM.get('call-remote-video');
+      if (remoteVideo && withVideo) { remoteVideo.srcObject = _callRemoteStream; remoteVideo.classList.remove('hidden'); }
+      else if (remoteAudio) remoteAudio.srcObject = _callRemoteStream;
+    };
+    _callPC.onicecandidate = (e) => {
+      if (e.candidate && API) {
+        // v3.6: IP privacy — filter host + srflx in relay-only mode
+        if (e.candidate.type === 'host' && e.candidate.address && !e.candidate.address.includes('.local')) return;
+        if (_settings.relayOnly && (e.candidate.type === 'srflx' || e.candidate.type === 'prflx')) return;
+        const room = 'call:' + [myId, contact.id].sort().join(':');
+        _wrapCallSignal(contact.pubB64, e.candidate).then(d => { if (d != null) _signal(room, 'call-ice', d); }).catch(err => _dbg(null, 'ICE signal wrap failed:', err?.message));
+      }
+    };
+    _callPC.onconnectionstatechange = _onCallConnState;
+  }
+
   async function startCall(contact, withVideo) {
     if (_callState !== 'idle' || !contact || contact.isGroup || contact.blocked) return;
     _callContact = contact;
     _callState = 'calling';
+    _callOfferer = true;
+    _callVideo = !!withVideo;
+    _callCid = Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
     showCallUI('calling', contact.name, withVideo);
     await acquireWakeLock();
 
     try {
-      _callStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: withVideo });
-      _callPC = new RTCPeerConnection(getCallICEConfig());
-
-      _callStream.getTracks().forEach(t => _callPC.addTrack(t, _callStream));
-
-      // v3: Prefer Opus for audio, VP9 for video (better quality at lower bitrate)
-      try {
-        for (const transceiver of _callPC.getTransceivers()) {
-          const kind = transceiver.sender.track?.kind;
-          if (kind === 'audio') {
-            const codecs = RTCRtpReceiver.getCapabilities?.('audio')?.codecs || [];
-            const opus = codecs.filter(c => c.mimeType === 'audio/opus');
-            const rest = codecs.filter(c => c.mimeType !== 'audio/opus');
-            if (opus.length && transceiver.setCodecPreferences) transceiver.setCodecPreferences([...opus, ...rest]);
-          }
-          if (kind === 'video') {
-            const codecs = RTCRtpReceiver.getCapabilities?.('video')?.codecs || [];
-            const vp9 = codecs.filter(c => c.mimeType === 'video/VP9');
-            const vp8 = codecs.filter(c => c.mimeType === 'video/VP8');
-            const rest = codecs.filter(c => !['video/VP9','video/VP8'].includes(c.mimeType));
-            if ((vp9.length || vp8.length) && transceiver.setCodecPreferences) transceiver.setCodecPreferences([...vp9, ...vp8, ...rest]);
-          }
-        }
-      } catch(e) { _dbg(e, 'codec-pref'); }
-
-      _callRemoteStream = new MediaStream();
-      _callPC.ontrack = (e) => {
-        e.streams[0].getTracks().forEach(t => _callRemoteStream.addTrack(t));
-        const remoteAudio = _DOM.get('call-remote-audio');
-        const remoteVideo = _DOM.get('call-remote-video');
-        if (remoteVideo && withVideo) { remoteVideo.srcObject = _callRemoteStream; remoteVideo.classList.remove('hidden'); }
-        else if (remoteAudio) remoteAudio.srcObject = _callRemoteStream;
-      };
-
-      _callPC.onicecandidate = (e) => {
-        if (e.candidate && API) {
-          // v3.6: IP privacy — filter host + srflx in relay-only mode
-          if (e.candidate.type === 'host' && e.candidate.address && !e.candidate.address.includes('.local')) return;
-          if (_settings.relayOnly && (e.candidate.type === 'srflx' || e.candidate.type === 'prflx')) return;
-          const room = 'call:' + [myId, contact.id].sort().join(':');
-          _wrapCallSignal(contact.pubB64, e.candidate).then(d => { if (d != null) _signal(room, 'call-ice', d); }).catch(err => _dbg(null, 'ICE signal wrap failed:', err?.message));
-        }
-      };
-
-      _callPC.onconnectionstatechange = () => {
-        if (_callPC.connectionState === 'connected' && _callState === 'calling') {
-          _callState = 'connected';
-          _callStartTime = Date.now();
-          updateCallUI('connected');
-          _callTimerInterval = setInterval(updateCallTimer, MS.SEC);
-        }
-        if (_callPC.connectionState === 'disconnected' || _callPC.connectionState === 'failed') {
-          endCall();
-        }
-      };
+      await _setupCallMedia(contact, withVideo);
 
       const offer = await _callPC.createOffer();
       await _callPC.setLocalDescription(offer);
 
       const room = 'call:' + [myId, contact.id].sort().join(':');
-      const offerSignal = await _wrapCallSignal(contact.pubB64, { sdp: offer, video: withVideo });
+      const offerSignal = await _wrapCallSignal(contact.pubB64, { sdp: offer, video: withVideo, cid: _callCid });
       if (offerSignal == null) { _dbg(null, 'call-offer encrypt failed'); endCall(); return; }
       await _signal(room, 'call-offer', offerSignal);
+      _callOfferSentAt = Date.now();
 
       // Also notify via msg relay (so recipient's poll detects the call)
-      const callNotif = await _wrapCallSignal(contact.pubB64, { sdp: offer, video: withVideo });
+      const callNotif = await _wrapCallSignal(contact.pubB64, { sdp: offer, video: withVideo, cid: _callCid });
       if (callNotif != null) await relaySend(contact.id, { to: contact.id, from: myId, fromPub: myPubB64, fromName: myName,
         payload: callNotif, ts: Date.now(), isCall: true, isVideoCall: withVideo }, contact.pubB64);
 
@@ -9143,7 +9204,7 @@ async function initMessenger(dbName) {
       _callState = 'ringing';
       showCallUI('ringing', contact.name, parsed.video);
       // Store offer for when user accepts
-      window._pendingCallOffer = { contact, sdp: parsed.sdp, video: parsed.video };
+      window._pendingCallOffer = { contact, sdp: parsed.sdp, video: parsed.video, cid: parsed.cid || null };
     } catch(_e) { _dbg(_e, 'handleCallOffer'); }
   }
 
@@ -9151,49 +9212,22 @@ async function initMessenger(dbName) {
     const pending = window._pendingCallOffer;
     if (!pending || _callState !== 'ringing') return;
     _callState = 'calling';
+    _callOfferer = false;
+    _callVideo = !!pending.video;
+    _callCid = pending.cid || null;
+    _callAnsweredSdp = pending.sdp?.sdp || null; // redelivery dedup for this exact offer
     updateCallUI('connecting');
 
     try {
-      _callStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: pending.video });
-      _callPC = new RTCPeerConnection(getCallICEConfig());
-
-      _callStream.getTracks().forEach(t => _callPC.addTrack(t, _callStream));
-
-      _callRemoteStream = new MediaStream();
-      _callPC.ontrack = (e) => {
-        e.streams[0].getTracks().forEach(t => _callRemoteStream.addTrack(t));
-        const remoteAudio = _DOM.get('call-remote-audio');
-        const remoteVideo = _DOM.get('call-remote-video');
-        if (remoteVideo && pending.video) { remoteVideo.srcObject = _callRemoteStream; remoteVideo.classList.remove('hidden'); }
-        else if (remoteAudio) remoteAudio.srcObject = _callRemoteStream;
-      };
-
-      _callPC.onicecandidate = (e) => {
-        if (e.candidate && API) {
-          // v3.6: IP privacy — filter host + srflx in relay-only mode
-          if (e.candidate.type === 'host' && e.candidate.address && !e.candidate.address.includes('.local')) return;
-          if (_settings.relayOnly && (e.candidate.type === 'srflx' || e.candidate.type === 'prflx')) return;
-          const room = 'call:' + [myId, pending.contact.id].sort().join(':');
-          _wrapCallSignal(pending.contact.pubB64, e.candidate).then(d => { if (d != null) _signal(room, 'call-ice', d); }).catch(err => _dbg(null, 'ICE signal wrap failed (incoming):', err?.message));
-        }
-      };
-
-      _callPC.onconnectionstatechange = () => {
-        if (_callPC.connectionState === 'connected') {
-          _callState = 'connected';
-          _callStartTime = Date.now();
-          updateCallUI('connected');
-          _callTimerInterval = setInterval(updateCallTimer, MS.SEC);
-        }
-        if (_callPC.connectionState === 'disconnected' || _callPC.connectionState === 'failed') endCall();
-      };
+      await _setupCallMedia(pending.contact, pending.video);
 
       await _callPC.setRemoteDescription(new RTCSessionDescription(pending.sdp));
+      await _flushCallIce();
       const answer = await _callPC.createAnswer();
       await _callPC.setLocalDescription(answer);
 
       const room = 'call:' + [myId, pending.contact.id].sort().join(':');
-      const answerSignal = await _wrapCallSignal(pending.contact.pubB64, answer);
+      const answerSignal = await _wrapCallSignal(pending.contact.pubB64, { type: answer.type, sdp: answer.sdp, cid: _callCid });
       if (answerSignal == null) { _dbg(null, 'call-answer encrypt failed'); endCall(); return; }
       await _signal(room, 'call-answer', answerSignal);
 
@@ -9205,7 +9239,7 @@ async function initMessenger(dbName) {
     window._pendingCallOffer = null;
   }
 
-  function endCall() {
+  function endCall(noSignal) {
     if (_callState === 'idle') return; // guard double-call
     if (_callStream) { _callStream.getTracks().forEach(t => t.stop()); _callStream = null; }
     if (_callPC) { try { _callPC.close(); } catch(e) { _dbg(e); } _callPC = null; }
@@ -9217,10 +9251,15 @@ async function initMessenger(dbName) {
     if (remAudio) remAudio.srcObject = null;
     if (remVideo) remVideo.srcObject = null;
     _callRemoteStream = null;
-    clearInterval(_callTimerInterval);
+    clearInterval(_callTimerInterval); _callTimerInterval = null;
+    clearTimeout(_callDiscTimer); _callDiscTimer = null;
+    clearInterval(_callPollTimer); _callPollTimer = null;
+    _callIceBuf = [];
+    _callOfferer = false; _callCid = null; _callVideo = false;
+    _callOfferSentAt = 0; _callAnsweredSdp = null;
     releaseWakeLock();
-    // Signal end
-    if (_callContact && API) {
+    // Signal end (skipped on glare rollback — a call-end would tear down the surviving side)
+    if (!noSignal && _callContact && API) {
       const room = 'call:' + [myId, _callContact.id].sort().join(':');
       _wrapCallSignal(_callContact.pubB64, { end: true }).then(d => { if (d != null) _signal(room, 'call-end', d); }).catch(() => { _signal(room, 'call-end'); });
     }
@@ -9231,8 +9270,11 @@ async function initMessenger(dbName) {
   }
 
   function pollCallSignals(contact, room) {
+    // Only one call-room poller — the incoming-call path starts one at ring time and
+    // acceptCall starts another; without dedup both tick for the whole call.
+    if (_callPollTimer) { clearInterval(_callPollTimer); _callPollTimer = null; }
     const poll = setInterval(async () => {
-      if (_callState === 'idle') { clearInterval(poll); return; }
+      if (_callState === 'idle') { clearInterval(poll); if (_callPollTimer === poll) _callPollTimer = null; return; }
       try {
         const resp = await _signalAwait(room, 'poll');
         if (!resp.ok) return;
@@ -9263,11 +9305,20 @@ async function initMessenger(dbName) {
             // carrying the attacker's DTLS fingerprint) fails to decrypt → null → dropped,
             // so the DTLS handshake can only complete with the pinned peer (closes call MITM).
             const ans = await _unwrapCallSignal(contact.pubB64, s.data);
-            if (ans && typeof ans === 'object' && !Array.isArray(ans)) await _callPC.setRemoteDescription(new RTCSessionDescription(ans));
+            if (ans && typeof ans === 'object' && !Array.isArray(ans)) {
+              // A stale answer to a rolled-back/previous call's offer is bound to that
+              // dead attempt by cid — drop it before it can clobber the live remote desc.
+              if (ans.cid && _callCid && ans.cid !== _callCid) continue;
+              await _callPC.setRemoteDescription(new RTCSessionDescription(ans));
+              await _flushCallIce();
+            }
           }
           if (s.type === 'call-ice' && _callPC) {
             const cand = await _unwrapCallSignal(contact.pubB64, s.data);
-            if (cand && typeof cand === 'object' && !Array.isArray(cand)) await _callPC.addIceCandidate(cand).catch(e => _dbg(e, 'call-ICE'));
+            if (cand && typeof cand === 'object' && !Array.isArray(cand)) {
+              if (_callPC.remoteDescription) await _callPC.addIceCandidate(cand).catch(e => _dbg(e, 'call-ICE'));
+              else if (_callIceBuf.length < 64) _callIceBuf.push(cand); // raced the answer — buffer it
+            }
           }
           if (s.type === 'call-end') {
             // Strict mode requires the decryptable wrap — a bare call-end (forged or from a
@@ -9279,13 +9330,60 @@ async function initMessenger(dbName) {
             }
             endCall(); clearInterval(poll); return;
           }
-          if (s.type === 'call-offer' && _callState === 'idle') { handleCallOffer(contact, s.data); }
+          if (s.type === 'call-offer') {
+            if (_callState === 'idle') { handleCallOffer(contact, s.data); continue; }
+            // Glare — both peers called at once. The call path never implemented
+            // perfect negotiation, so colliding offers were mutually dropped and both
+            // sides timed out at CALL_TIMEOUT_MS. Deterministic tie-break (lower userId
+            // is polite): the polite side rolls back its outgoing call and answers the
+            // peer's offer; the impolite side ignores the collision and completes on
+            // the incoming answer.
+            if (_callState === 'calling' && _callOfferer && myId < contact.id) {
+              const glareOffer = await _unwrapCallSignal(contact.pubB64, s.data);
+              const stale = typeof s.ts === 'number' && _callOfferSentAt && s.ts < _callOfferSentAt - 15000;
+              if (glareOffer?.sdp && glareOffer.cid && !stale) {
+                _dbg(null, 'call glare: polite rollback, answering peer offer');
+                const cid = glareOffer.cid;
+                endCall(true); // silent — a call-end would kill the surviving side too
+                _callContact = contact;
+                _callState = 'ringing';
+                // 'calling' UI (not 'ringing'): we auto-accept, so no 📞 accept button.
+                showCallUI('calling', contact.name, !!glareOffer.video);
+                window._pendingCallOffer = { contact, sdp: glareOffer.sdp, video: !!glareOffer.video, cid };
+                await acquireWakeLock();
+                await acceptCall(); // user already chose to call — auto-accept the collision winner
+                return; // acceptCall opened a fresh poll; this one was cleared by endCall
+              }
+            }
+            // Re-offer (ICE restart) on the established call — only for THIS session's
+            // cid. A stale glare offer from the peer's rolled-back attempt carries a
+            // different cid; without the gate it would rebind remote DTLS creds to a pc
+            // the peer already closed, silently killing the live call's media path.
+            if (_callState === 'connected' && _callPC) {
+              const re = await _unwrapCallSignal(contact.pubB64, s.data);
+              if (re?.sdp && re.cid && re.cid === _callCid && re.sdp.sdp !== _callAnsweredSdp) {
+                try {
+                  await _callPC.setRemoteDescription(new RTCSessionDescription(re.sdp));
+                  await _flushCallIce();
+                  const ans = await _callPC.createAnswer();
+                  await _callPC.setLocalDescription(ans);
+                  const ansSig = await _wrapCallSignal(contact.pubB64, { type: ans.type, sdp: ans.sdp, cid: _callCid });
+                  if (ansSig != null) await _signal(room, 'call-answer', ansSig);
+                  _callAnsweredSdp = re.sdp.sdp;
+                } catch(e) { _dbg(e, 'call-reoffer-ans'); }
+              }
+            }
+            continue;
+          }
         }
       } catch(e) { _dbg(e); }
     }, 1000);
+    _callPollTimer = poll;
     _intervals.push(poll);
-    // Timeout: end call after 60s if not connected
-    setTimeout(() => { if (_callState === 'calling' || _callState === 'ringing') endCall(); }, CONFIG.CALL_TIMEOUT_MS);
+    // Timeout: end call after 60s if not connected — bound to THIS attempt's cid so a
+    // superseded poller's timer can't kill the fresh attempt that replaced it.
+    const cidAtStart = _callCid;
+    setTimeout(() => { if ((_callState === 'calling' || _callState === 'ringing') && _callCid === cidAtStart) endCall(); }, CONFIG.CALL_TIMEOUT_MS);
   }
 
   // Call UI
@@ -9517,14 +9615,12 @@ async function initMessenger(dbName) {
       navigator.clipboard?.writeText(joinUrl);
 
       const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'import-result';
+      const d = cmdOutput('import-result');
       safeSetHTML(d, `<div class="i-title-g">${t('groupCreated', esc(name))}</div>
          <div class="i-mb12">${t('shareInvite')}</div>
          <div class="i-mono-box">${esc(joinUrl)}</div>
          <div class="i-g12">${t('clipboardCopied')}</div>`);
       box.replaceChildren();
-      box.appendChild(d);
 
       if (navigator.share) {
         try { await navigator.share({ title: t('groupInviteShareTitle', name), url: joinUrl }); } catch(e) { _dbg(e); }
@@ -12573,9 +12669,7 @@ async function initMessenger(dbName) {
     if (val === '/audit') {
       e.preventDefault();
       clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel-mono i-scroll-300';
+      const d = cmdOutput('cmd-panel-mono i-scroll-300');
       try {
         const all = await dbGetAll('audit');
         const recent = all.sort((a, b) => b.ts - a.ts).slice(0, 50);
@@ -12589,7 +12683,7 @@ async function initMessenger(dbName) {
             }).join('<br>'));
         }
       } catch(err) { d.textContent = t('uiAuditUnavail'); }
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
+      d.scrollIntoView({ block: 'end' });
     }
 
     // v3.3: ENTERPRISE — /retention — Set message retention policy
@@ -12598,12 +12692,9 @@ async function initMessenger(dbName) {
       clearInput();
       const arg = val.slice(10).trim();
       if (!arg) {
-        const box = _DOM.get('msg-messages');
-        const d = document.createElement('div');
-        d.className = 'chat-empty';
+        const d = cmdOutput('chat-empty');
         d.textContent = t('uiRetention', (_settings.retentionDays > 0 ? t('uiRetentionDays', _settings.retentionDays) : t('uiRetentionForever'))) +
           '. ' + t('uiUsageRetention');
-        box.appendChild(d); box.scrollTop = box.scrollHeight;
       } else if (arg === 'off' || arg === '0') {
         _settings.retentionDays = 0;
         await saveSettings();
@@ -12630,9 +12721,7 @@ async function initMessenger(dbName) {
       if (!activeContact?.isGroup) { showToast(t('toastGroupOnly'), 'error'); return; }
       if (!isGroupAdmin(activeContact)) { showToast(t('toastAdminRequired'), 'error'); return; }
       const sub = val.slice(7).trim();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'chat-empty';
+      const d = cmdOutput('chat-empty');
 
       if (sub === 'help') {
         safeSetHTML(d, [
@@ -12679,7 +12768,7 @@ async function initMessenger(dbName) {
               renamed = (await postAPIRaw('/group/rename', renBody)).ok;
             } catch(e) { _dbg(e, 'server-rename'); }
           }
-          if (!renamed) { d.textContent = t('uiRenameFail'); box.appendChild(d); box.scrollTop = box.scrollHeight; return; }
+          if (!renamed) { d.textContent = t('uiRenameFail'); return; }
           activeContact.name = newName;
           await dbPut('contacts', activeContact);
           _DOM.get('msg-conv-name').textContent = newName;
@@ -12711,7 +12800,7 @@ async function initMessenger(dbName) {
             // A rejected kick must not drop the member locally — the server roster still
             // lists them, so my roster would silently diverge (I'd stop sending to them
             // while everyone else still does).
-            if (!kicked) { d.textContent = t('toastGroupKickFail'); box.appendChild(d); box.scrollTop = box.scrollHeight; return; }
+            if (!kicked) { d.textContent = t('toastGroupKickFail'); return; }
             // Kick is a durable ban server-side — remember it locally so /admin unban
             // can resolve a name → id and the member can actually be let back in.
             if (!Array.isArray(activeContact.bannedIds)) activeContact.bannedIds = [];
@@ -12757,7 +12846,7 @@ async function initMessenger(dbName) {
                 promoted = (await postAPIRaw('/group/admin', proBody)).ok;
               } catch(e) { _dbg(e, 'server-promote'); }
             }
-            if (!promoted) { d.textContent = t('toastCreatorOnly'); box.appendChild(d); box.scrollTop = box.scrollHeight; return; }
+            if (!promoted) { d.textContent = t('toastCreatorOnly'); return; }
             if (!activeContact.admins) activeContact.admins = [];
             if (!activeContact.admins.includes(member.id)) activeContact.admins.push(member.id);
             await dbPut('contacts', activeContact);
@@ -12781,7 +12870,7 @@ async function initMessenger(dbName) {
                 demoted = (await postAPIRaw('/group/admin', demBody)).ok;
               } catch(e) { _dbg(e, 'server-demote'); }
             }
-            if (!demoted) { d.textContent = t('toastCreatorOnly'); box.appendChild(d); box.scrollTop = box.scrollHeight; return; }
+            if (!demoted) { d.textContent = t('toastCreatorOnly'); return; }
             if (activeContact.admins) activeContact.admins = activeContact.admins.filter(id => id !== member.id);
             await dbPut('contacts', activeContact);
             auditLog('group', 'Demoted ' + member.name + ' in ' + activeContact.name);
@@ -12796,7 +12885,7 @@ async function initMessenger(dbName) {
         const bannedIds = activeContact.bannedIds || [];
         const bannedNames = activeContact.bannedNames || {};
         const bannedId = bannedIds.find(id => id === target || (bannedNames[id] || '').toLowerCase() === target.toLowerCase());
-        if (!bannedId) { d.textContent = t('uiNotBanned', target); box.appendChild(d); box.scrollTop = box.scrollHeight; return; }
+        if (!bannedId) { d.textContent = t('uiNotBanned', target); return; }
         let unbanned = !(API && activeContact.joinToken);
         if (API && activeContact.joinToken) {
           try {
@@ -12810,7 +12899,7 @@ async function initMessenger(dbName) {
         // Same response gate as promote/demote — a rejected unban must not desync the
         // local ban list (server state is authoritative; a ghost-lifted entry would
         // claim the member can rejoin when the server would still reject them).
-        if (!unbanned) { d.textContent = t('toastCreatorOnly'); box.appendChild(d); box.scrollTop = box.scrollHeight; return; }
+        if (!unbanned) { d.textContent = t('toastCreatorOnly'); return; }
         activeContact.bannedIds = bannedIds.filter(id => id !== bannedId);
         if (activeContact.bannedNames) delete activeContact.bannedNames[bannedId];
         await dbPut('contacts', activeContact);
@@ -12820,7 +12909,7 @@ async function initMessenger(dbName) {
         // Ownership transfer — the Worker endpoint existed but no client path did, so a
         // group whose creator went dark had permanently unmanageable admin surface.
         const target = sub.slice(9).trim().replace('@', '');
-        if (activeContact.createdBy !== myId) { d.textContent = t('toastCreatorOnly'); box.appendChild(d); box.scrollTop = box.scrollHeight; return; }
+        if (activeContact.createdBy !== myId) { d.textContent = t('toastCreatorOnly'); return; }
         if (activeContact.members) {
           const member = activeContact.members.find(m => m.name?.toLowerCase() === target.toLowerCase());
           if (member && member.id !== myId) {
@@ -12850,7 +12939,7 @@ async function initMessenger(dbName) {
       } else {
         d.textContent = t('uiUnknownAdmin');
       }
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
+      d.scrollIntoView({ block: 'end' });
     }
 
     if (val === '/panic') { e.preventDefault(); clearInput(); executePanic(); return; }
@@ -12864,9 +12953,7 @@ async function initMessenger(dbName) {
 
     if (val === '/help') {
       e.preventDefault(); clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel';
+      const d = cmdOutput('cmd-panel');
       safeSetHTML(d, [
         '<b class="i-g13">' + t('helpTitle') + '</b>',
         '',
@@ -12904,7 +12991,6 @@ async function initMessenger(dbName) {
         '<b>' + t('helpKeys') + '</b>',
         t('helpKeysHint'),
       ].join('<br>'));
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
       return;
     }
 
@@ -12997,11 +13083,8 @@ async function initMessenger(dbName) {
       e.preventDefault(); clearInput();
       const { msg } = generateInviteMessage();
       navigator.clipboard?.writeText(msg);
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-center';
-      d.textContent = t('uiInviteCopied');
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
+      const d = cmdOutput('cmd-center', t('uiInviteCopied'), true);
+       d.scrollIntoView({ block: 'end' });
 
       // Also try native share API
       if (navigator.share) {
@@ -13020,11 +13103,7 @@ async function initMessenger(dbName) {
 
     if (val === '/migrate') {
       e.preventDefault(); clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-section';
-      safeSetHTML(d, t('migrateHtml'));
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
+      const d = cmdOutput('cmd-section', t('migrateHtml'));
       return;
     }
 
@@ -13295,15 +13374,10 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       if (!activeContact) { showToast(t('toastOpenChat'), 'error'); return; }
       const msgs = await dbGetByIndex('messages', 'contact', activeContact.id);
       const recent = msgs.sort((a, b) => b.ts - a.ts).slice(0, 50).reverse();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel';
-      safeSetHTML(d, '<b class="i-g">' + t('aiSummarizing') + '</b>');
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
+      const d = cmdOutput('cmd-panel', '<b class="i-g">' + t('aiSummarizing') + '</b>');
       // Fallback: local summarize
       const summary = summarizeMessages(recent);
       safeSetHTML(d, '<b class="i-g">' + t('aiSummaryLocal') + '</b><br>' + esc(summary));
-      box.scrollTop = box.scrollHeight;
       return;
     }
 
@@ -13312,9 +13386,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       e.preventDefault();
       clearInput();
       const files = await getFileList();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel';
+      const d = cmdOutput('cmd-panel');
       if (files.length === 0) {
         d.textContent = t('uiNoFiles');
       } else {
@@ -13327,7 +13399,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
             return `${esc(f.name)} · ${fmtSize(f.size)} · ${esc(who)} · ${date}`;
           }).join('<br>') + (files.length > 30 ? '<br>... ' + t('uiMoreCount', files.length - 30) : ''));
       }
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
+      d.scrollIntoView({ block: 'end' });
     }
 
     // v3.3: ENTERPRISE — /gdpr — GDPR data export (Art. 15/20)
@@ -13399,9 +13471,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     if (val === '/sessions') {
       e.preventDefault();
       clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel-mono';
+      const d = cmdOutput('cmd-panel-mono');
       const upMs = Date.now() - _appStartTime;
       const h = Math.floor(upMs / MS.HOUR);
       const m = Math.floor((upMs % MS.HOUR) / MS.MIN);
@@ -13426,7 +13496,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         const est = await navigator.storage.estimate();
         d.insertAdjacentText('beforeend', (est.usage / 1048576).toFixed(1) + ' MB / ' + (est.quota / 1048576).toFixed(0) + ' MB (' + Math.round(est.usage / est.quota * 100) + '%)');
       }
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
+      d.scrollIntoView({ block: 'end' });
     }
 
     // v3: /status — Show connection and crypto info
@@ -13466,14 +13536,11 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         // Copy to clipboard
         try { await navigator.clipboard.writeText(dropUrl); } catch { /* fallback below */ }
         // Show result in chat
-        const box = _DOM.get('msg-messages');
-        const d = document.createElement('div');
-        d.className = 'chat-empty';
+        const d = cmdOutput('chat-empty');
         safeSetHTML(d, `<div class="i-icon48">🔐</div><b>${t('dropCreated')}</b><br>
           <span class="text-xs color-t3">${t('dropDesc')}</span><br>
           <code class="text-xs i-mono-box" style="word-break:break-all;cursor:pointer" id="drop-url-copy">${esc(dropUrl)}</code><br>
           <span class="text-xs color-t3">${t('dropExpires')}</span>`);
-        box.appendChild(d);
         const _copyUrl = dropUrl;
         d.querySelector('#drop-url-copy')?.addEventListener('click', () => {
           navigator.clipboard.writeText(_copyUrl).then(() => showToast(t('copiedClipboard'), 'success')).catch(() => showToast(t('toastCopyFail'), 'error'));
@@ -13496,18 +13563,13 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     if (val === '/backup') {
       e.preventDefault();
       clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'chat-empty';
-      d.className = 'cmd-panel-mono';
+      const d = cmdOutput('cmd-panel-mono');
       safeSetHTML(d, `<b class="i-g">${t('cmdBackupTitle')}</b><br>
         <button data-action="backup" class="btn btn-g btn-sm i-m4">${t('backupBtn')}</button>
         <button data-action="restore" class="btn btn-o btn-sm i-m4">${t('restoreBtn')}</button><br>
         <button data-action="backup-file" class="btn btn-o btn-sm i-m4">${t('backupFileBtn')}</button>
         <button data-action="restore-file" class="btn btn-o btn-sm i-m4">${t('restoreFileBtn')}</button><br>
         <span class="text-xs color-t3">${t('backupNote')}</span>`);
-      box.appendChild(d);
-      box.scrollTop = box.scrollHeight;
     }
 
     // v3.1: /poll — Create a poll
@@ -13518,11 +13580,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       // Parse: /poll Question? | Option1 | Option2 | Option3
       const parts = val.slice(6).split('|').map(s => s.trim()).filter(Boolean);
       if (parts.length < 2) {
-        const box = _DOM.get('msg-messages');
-        const d = document.createElement('div');
-        d.className = 'chat-empty';
-        d.textContent = t('uiUsagePoll');
-        box.appendChild(d); box.scrollTop = box.scrollHeight;
+        const d = cmdOutput('chat-empty', t('uiUsagePoll'), true);
         return;
       }
       const question = parts[0];
@@ -13534,9 +13592,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     if (val === '/who') {
       e.preventDefault();
       clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel-mono';
+      const d = cmdOutput('cmd-panel-mono');
       const addUrl = SHARE_BASE + '?add=' + myPubB64 + '&name=' + encodeURIComponent(myName);
       const aliasUrl = myAlias ? SHARE_BASE + '?add=' + myAlias : '';
       safeSetHTML(d, [
@@ -13557,16 +13613,13 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       copyBtn.onclick = () => { navigator.clipboard?.writeText(addUrl); copyBtn.textContent = t('uiCopied'); setTimeout(() => copyBtn.textContent = t('uiCopyAddLink'), CONFIG.TOAST_DURATION_MS); };
       d.appendChild(document.createElement('br'));
       d.appendChild(copyBtn);
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
     }
 
     // v3.1: /whoami — Show own identity info
     if (val === '/whoami') {
       e.preventDefault();
       clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel-mono';
+      const d = cmdOutput('cmd-panel-mono');
       const shareLink = SHARE_BASE + '?add=' + (myAlias ? '@' + myAlias : myPubB64);
       safeSetHTML(d, [
         '<b class="i-green14">' + esc(myName) + '</b>',
@@ -13578,7 +13631,6 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         '',
         '<span class="i-break-sm">' + shareLink + '</span>',
       ].join('<br>'));
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
     }
 
     // v3.1: /theme — Toggle dark/light theme
@@ -13609,9 +13661,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     if (val === '/security') {
       e.preventDefault();
       clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel-mono';
+      const d = cmdOutput('cmd-panel-mono');
       const cs = _cryptoStack;
       const sess = activeContact ? await getSession(activeContact.pubB64?.slice(0, 12)) : null;
       // Honest runtime state of opt-in/flag-gated protections — list what is ACTUALLY
@@ -13685,7 +13735,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         t('secKeyStorage'),
         t('secAntiReplay'),
       ].join('<br>'));
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
+       d.scrollIntoView({ block: 'end' });
     }
 
     // C8: /codeverify — the honest kernel of "web-app integrity": the only trust
@@ -13695,11 +13745,8 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     if (val === '/codeverify') {
       e.preventDefault();
       clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel-mono';
-      safeSetHTML(d, esc(t('cvChecking')));
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
+      const d = cmdOutput('cmd-panel-mono', esc(t('cvChecking')));
+       d.scrollIntoView({ block: 'end' });
       try {
         const sha = async (txt) => {
           const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(txt));
@@ -13762,11 +13809,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       clearInput();
       const current = localStorage.getItem('brz-debug') === '1';
       localStorage.setItem('brz-debug', current ? '0' : '1');
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'chat-empty';
-      d.textContent = current ? t('debugOff') : t('debugOn');
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
+      const d = cmdOutput('chat-empty', current ? t('debugOff') : t('debugOn'), true);
     }
 
     // v3.1: /share — Share contact link via native share dialog
@@ -13838,9 +13881,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     if (val === '/online') {
       e.preventDefault();
       clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'chat-empty';
+      const d = cmdOutput('chat-empty');
       if (API) {
         try {
           const resp = await postAPIRaw('/online', {});
@@ -13851,7 +13892,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
           } else { d.textContent = t('uiFetchOnlineFail'); }
         } catch(e) { d.textContent = t('uiServerUnavail'); _dbg(e); }
       } else { d.textContent = t('uiNoServer'); }
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
+      d.scrollIntoView({ block: 'end' });
     }
 
     // v3.6: /wallpaper — Set chat background (color, gradient, or preset)
@@ -13878,11 +13919,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         localStorage.setItem('brz-wallpaper', color);
         showToast(t('toastWallpaperSet', color), 'success');
       } else if (color === 'list') {
-        const box = _DOM.get('msg-messages');
-        const d = document.createElement('div');
-        d.className = 'chat-empty';
-        safeSetHTML(d, '<b class="i-g">' + t('cmdWallpaperTitle') + '</b><br><span class="text-xs color-t3">' + t('cmdWallpaperHelp') + '</span>');
-        box.appendChild(d); box.scrollTop = box.scrollHeight;
+        const d = cmdOutput('chat-empty', '<b class="i-g">' + t('cmdWallpaperTitle') + '</b><br><span class="text-xs color-t3">' + t('cmdWallpaperHelp') + '</span>');
       } else {
         showToast(t('toastWallpaperUsage'), 'error');
       }
@@ -13964,11 +14001,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         await dbPut('contacts', activeContact);
         showToast(t(arg === 'clear' ? 'toastNoteActionOn' : 'toastNoteActionOff'), 'success');
       } else {
-        const box = _DOM.get('msg-messages');
-        const d = document.createElement('div');
-        d.className = 'chat-empty';
-        d.textContent = activeContact.notes ? t('noteLabel') + ': ' + activeContact.notes : t('noteEmpty');
-        box.appendChild(d); box.scrollTop = box.scrollHeight;
+        const d = cmdOutput('chat-empty', activeContact.notes ? t('noteLabel') + ': ' + activeContact.notes : t('noteEmpty'), true);
       }
     }
 
@@ -13982,11 +14015,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         renderContacts();
         showToast(t('toastSortChanged', arg), 'info');
       } else {
-        const box = _DOM.get('msg-messages');
-        const d = document.createElement('div');
-        d.className = 'chat-empty';
-        d.textContent = t('uiCurrentSort', _contactSort) + '. ' + t('uiSortOptions');
-        box.appendChild(d); box.scrollTop = box.scrollHeight;
+        const d = cmdOutput('chat-empty', t('uiCurrentSort', _contactSort) + '. ' + t('uiSortOptions'), true);
       }
     }
 
@@ -14000,11 +14029,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       if (!arg) {
         // Show current labels
         const labels = (c.labels || []);
-        const box = _DOM.get('msg-messages');
-        const d = document.createElement('div');
-        d.className = 'chat-empty';
-        d.textContent = labels.length > 0 ? t('infoLabels') + ': ' + labels.join(', ') : t('labelNoneCmd');
-        box.appendChild(d); box.scrollTop = box.scrollHeight;
+        const d = cmdOutput('chat-empty', labels.length > 0 ? t('infoLabels') + ': ' + labels.join(', ') : t('labelNoneCmd'), true);
       } else if (arg === 'clear') {
         c.labels = [];
         await dbPut('contacts', c);
@@ -14031,9 +14056,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const theirMsgs = msgs.length - myMsgs;
       const firstMsg = msgs.length > 0 ? new Date(msgs.reduce((a, b) => a.ts < b.ts ? a : b).ts).toLocaleDateString() : 'N/A';
       const peer = peers[c.pubB64];
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel-mono';
+      const d = cmdOutput('cmd-panel-mono');
       const contactShortId = c.pubB64 ? await generateShortId(c.pubB64) : c.id.slice(0, 12);
       safeSetHTML(d, [
         '<b class="i-g13">' + esc(c.name) + '</b>',
@@ -14057,7 +14080,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         '<b>' + t('infoConnection') + '</b>',
         (peer?.connected ? '<span class="i-g">' + t('infoP2P') + '</span>' + (peer._lastRtt ? ' · ' + peer._lastRtt + 'ms' : '') + (peer._bytesSent ? ' · ↑' + fmtSize(peer._bytesSent) + ' ↓' + fmtSize(peer._bytesRecv || 0) : '') : t('infoRelay')),
       ].filter(Boolean).join('<br>'));
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
+       d.scrollIntoView({ block: 'end' });
     }
 
     // v3.2: /lock — Password lock screen
@@ -14211,9 +14234,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
           stats[emoji] = (stats[emoji] || 0) + users.length;
         }
       }
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel';
+      const d = cmdOutput('cmd-panel');
       const sorted = Object.entries(stats).sort((a, b) => b[1] - a[1]);
       if (sorted.length === 0) {
         d.textContent = t('uiNoReactions');
@@ -14222,7 +14243,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
           sorted.map(([emoji, count]) => `${emoji} × ${count}`).join('<br>') +
           '<br><br><span class="i-t3-10">' + t('cmdReactionTotal').replace('%d', sorted.reduce((s, [, c]) => s + c, 0)) + '</span>');
       }
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
+      d.scrollIntoView({ block: 'end' });
     }
 
     // v3.1: /compact — Toggle compact UI mode
@@ -14230,11 +14251,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       e.preventDefault();
       clearInput();
       toggleCompact();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'chat-empty';
-      d.textContent = document.body.classList.contains('compact') ? (t('compactOn')) : (t('compactOff'));
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
+      const d = cmdOutput('chat-empty', document.body.classList.contains('compact') ? (t('compactOn')) : (t('compactOff')), true);
     }
     // v3.1: /alias — Set or change Breeze ID
     // ---- Multi-device commands (Phase 1) ----
@@ -14247,10 +14264,8 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       if (!API) { showToast(t('uiNoServer'), 'error'); return; }
       if (!arg) {
         // Secondary-device side: expose my pub for the primary to add, then poll for inclusion.
-        const box = _DOM.get('msg-messages');
-        const d = document.createElement('div'); d.className = 'cmd-panel';
-        safeSetHTML(d, '<b class="i-g">' + t('devLinkTitle') + '</b><br>' + t('devLinkHint') + '<br><code class="i-select-all">' + esc(myPubB64) + '</code>');
-        box.appendChild(d); box.scrollTop = box.scrollHeight;
+        const d = cmdOutput('cmd-panel', '<b class="i-g">' + t('devLinkTitle') + '</b><br>' + t('devLinkHint') + '<br><code class="i-select-all">' + esc(myPubB64) + '</code>');
+         d.scrollIntoView({ block: 'end' });
         try { await navigator.clipboard.writeText(myPubB64); showToast(t('toastCopied'), 'success'); } catch {}
         return;
       }
@@ -14311,15 +14326,14 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     }
     if (val === '/devices') {
       e.preventDefault(); clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div'); d.className = 'cmd-panel';
+      const d = cmdOutput('cmd-panel');
       const acct = await dbGet('identity', 'account');
       const rootPub = acct?.root || myPubB64;
       const list = await _fetchDeviceList(rootPub.slice(0, 12), rootPub);
       const rows = (list || [myPubB64]).map((p, i) =>
         `${i + 1}. <code>${esc(p.slice(0, 20))}…</code>${p === myPubB64 ? ' ← ' + t('devThis') : ''}`);
       safeSetHTML(d, '<b class="i-g">' + t('devListTitle') + '</b><br>' + rows.join('<br>'));
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
+       d.scrollIntoView({ block: 'end' });
       return;
     }
     if (val.startsWith('/unlink ')) {
@@ -14349,11 +14363,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       clearInput();
       const newAlias = val.slice(7).trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
       if (!newAlias || newAlias.length < 3 || newAlias.length > 20) {
-        const box = _DOM.get('msg-messages');
-        const d = document.createElement('div');
-        d.className = 'chat-empty';
-        d.textContent = t('uiUsageAlias');
-        box.appendChild(d); box.scrollTop = box.scrollHeight;
+        const d = cmdOutput('chat-empty', t('uiUsageAlias'), true);
         return;
       }
       if (API) {
@@ -14394,20 +14404,15 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       e.preventDefault();
       clearInput();
       if (!activeContact?.isGroup) {
-        const box = _DOM.get('msg-messages');
-        const d = document.createElement('div'); d.className = 'chat-empty'; d.textContent = t('uiUseInGroup');
-        box.appendChild(d); box.scrollTop = box.scrollHeight; return;
+        const d = cmdOutput('chat-empty'); d.textContent = t('uiUseInGroup');
       }
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel-mono';
+      const d = cmdOutput('cmd-panel-mono');
       const members = activeContact.members || [];
       safeSetHTML(d, '<b class="i-g">' + esc(activeContact.name) + ' — ' + members.length + ' ' + t('cmdMembersLabel') + '</b><br>' +
         members.map(m => {
           const isOn = peers[m.pubB64]?.connected || _presenceCache[m.id];
           return (isOn ? '🟢' : '⚫') + ' ' + esc(m.name || m.id) + (m.id === myId ? ' ' + t('cmdMemberYou') : '');
         }).join('<br>'));
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
     }
 
     // v3.1: /archive — Toggle archive for active contact
@@ -14417,10 +14422,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       if (!activeContact) return;
       activeContact.archived = !activeContact.archived;
       await dbPut('contacts', activeContact);
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div'); d.className = 'chat-empty';
-      d.textContent = '📦 ' + (activeContact.archived ? t('toastArchived') : t('toastUnarchived'));
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
+      const d = cmdOutput('chat-empty', '📦 ' + (activeContact.archived ? t('toastArchived') : t('toastUnarchived')), true);
       renderContacts();
     }
 
@@ -14431,11 +14433,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       if (!activeContact) return;
       activeContact.muted = !activeContact.muted;
       await dbPut('contacts', activeContact);
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'chat-empty';
-      d.textContent = activeContact.muted ? (t('mutedNotif')) : (t('unmutedNotif'));
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
+      const d = cmdOutput('chat-empty', activeContact.muted ? (t('mutedNotif')) : (t('unmutedNotif')), true);
       renderContacts();
     }
 
@@ -14443,9 +14441,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     if (val === '/settings') {
       e.preventDefault();
       clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel-mono';
+      const d = cmdOutput('cmd-panel-mono');
       const _sendSoundEnabled = localStorage.getItem('brz-send-sound') !== '0';
       const _notifSoundEnabled = localStorage.getItem('brz-notif-sound') !== '0';
       safeSetHTML(d, `<b class="i-g">${t('settingsPrivacy')}</b><br>
@@ -14501,7 +14497,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         else if (s === 'notif-perm') { if (cb.checked) Notification?.requestPermission().then(p => { if (p !== 'granted') cb.checked = false; }).catch(() => { cb.checked = false; }); }
         else if (s === 'auto-lock') { localStorage.setItem('brz-autolock', cb.checked ? '1' : '0'); }
       });
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
+      d.scrollIntoView({ block: 'end' });
     }
 
     // v3.1: /clear — Clear chat history with active contact
