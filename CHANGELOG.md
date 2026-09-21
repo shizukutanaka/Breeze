@@ -1,5 +1,13 @@
 # Changelog
 
+## Reply quotes vanished on the relay path; reply msgId never shipped (branch devin/replyto-wire, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The 1:1 + group send paths put `replyTo` on the wire as an OBJECT — but the Worker's `/msg` allowlist only forwards it when `typeof === 'string'`, so every relay-delivered reply silently lost its quote. And even when a quote did arrive (sealed path, which stores the envelope verbatim), the sender dropped `msgId` — so the recipient's click-to-jump was dead. `envelopeReplyTo()` now serializes `{i,t,s}` as a compact JSON string sized to fit the Worker's 128-char slice; `handleIncoming` normalizes the string form back to `{msgId,text,sender}` and keeps accepting the legacy object form from P2P/older clients.
+
+---
+
 ## tests/invariants.test.js — tripwires for the receive-path guards (branch devin/invariant-tripwires, 2026-09-20)
 
 `tests/invariants.test.js`, `CHANGELOG.md`.
