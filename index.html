@@ -11132,7 +11132,12 @@ async function initMessenger(dbName) {
         if (typeof c?.id !== 'string' || !c.id || c.id.length > 64 ||
             typeof c?.pubB64 !== 'string' || !c.pubB64 || c.pubB64.length > 128 ||
             !_isValidPubB64(c.pubB64)) continue;
-        await dbPut('contacts', c);
+        // Bound fields the add/import paths cap — a malformed backup entry must
+        // not plant an unbounded name or member list that renders every list pass.
+        const clean = { ...c,
+          name: typeof c.name === 'string' ? c.name.slice(0, 64) : 'Contact',
+          members: Array.isArray(c.members) ? safeMemberList(c.members) : c.members };
+        await dbPut('contacts', clean);
       }
 
       showToast(t('toastRestoredReload'), 'success'); setTimeout(() => location.reload(), 1.5 * MS.SEC);

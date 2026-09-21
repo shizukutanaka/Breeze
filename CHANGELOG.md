@@ -1,5 +1,13 @@
 # Changelog
 
+## Restore path stored contact fields verbatim — unbounded name/members (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`restoreBackup` validated `id`/`pubB64` shape but stored every other field verbatim — a malformed backup entry could plant an unbounded `name` (renders on every contact-list pass) or an oversized/unshaped `members` array that bypasses `safeMemberList`. Restored contacts now re-run the same caps as the add/import paths (name ≤64, members through `safeMemberList`).
+
+---
+
 ## P2P acks could stamp delivery state on the open chat regardless of sender (branch devin/consolidate-groups, 2026-09-21)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
