@@ -1,5 +1,9 @@
 # Changelog
 
+## Cold isolate where /api/online beat the first heartbeat 500'd presence for ~60s (branch devin/consolidate-groups, 2026-09-20)
+
+`_onlineCounter` had two lazy initializers with DIFFERENT shapes: `handlePresence` creates `{minute, ids:Set, prev}` while `handleOnlineCount` created `{minute, count, prev}` — no `ids` Set. In a cold isolate where the online-count endpoint ran first, every subsequent heartbeat threw `TypeError: ids.add is not a function` → presence 500'd until the minute rollover re-initialized the object. Both initializers now merge-heal on `?.ids` (add the Set, keep minute/prev/count), and a test pins the ordering.
+
 ## Push payloads no longer hand the sender's userId to APNs/FCM (branch devin/consolidate-groups, 2026-09-20)
 
 sendPushToUser's tag ('breeze-<from|groupId>') and contactId carried the raw

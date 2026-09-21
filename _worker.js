@@ -726,7 +726,15 @@ async function handlePresence(body, env, request) {
   // v3.6: In-memory online counter (saves 1 KV read + 1 KV write per heartbeat).
   // Count UNIQUE users, not heartbeats: a Set of ids this minute — the old counter
   // incremented per heartbeat, inflating ~2× at the 30 s client interval.
-  if (!globalThis._onlineCounter) globalThis._onlineCounter = { minute: 0, ids: new Set(), prev: 0 };
+  // Guard on .ids, not the object: handleOnlineCount's lazy init creates the same key
+  // WITHOUT the Set, and in an isolate where /api/online beats the first heartbeat the
+  // object exists but ids.add() would TypeError — every heartbeat 500s until the minute
+  // rollover re-inits. Merge-heal instead of overwrite so a partial object keeps its
+  // minute/prev/count fields.
+  if (!globalThis._onlineCounter?.ids) {
+    const _oc = globalThis._onlineCounter || {};
+    globalThis._onlineCounter = { minute: _oc.minute || 0, ids: new Set(), prev: _oc.prev || 0, count: _oc.count || 0 };
+  }
   const currentMinute = Math.floor(Date.now() / 60000);
   if (globalThis._onlineCounter.minute !== currentMinute) {
     // Preserve the previous minute's count as a fallback so handleOnlineCount does not
@@ -741,7 +749,10 @@ async function handlePresence(body, env, request) {
 // v3.3: Online user count (approximate)
 async function handleOnlineCount(body, env, request) {
   // v3.6: In-memory counter (no KV read needed)
-  if (!globalThis._onlineCounter) globalThis._onlineCounter = { minute: 0, count: 0, prev: 0 };
+  if (!globalThis._onlineCounter?.ids) {
+    const _oc = globalThis._onlineCounter || {};
+    globalThis._onlineCounter = { minute: _oc.minute || 0, ids: new Set(), count: _oc.count || 0, prev: _oc.prev || 0 };
+  }
   const minuteKey = Math.floor(Date.now() / 60000);
   // At a minute boundary the new minute's count is 0 until the first heartbeat. Return
   // the previous minute's count as a fallback to avoid a false "0 online" spike.

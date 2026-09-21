@@ -4093,6 +4093,22 @@ describe('presence heartbeat and check', () => {
     expect((await res.json()).ok).toBe(true);
   });
 
+  it('heartbeat survives when /online ran first (lazy-init shape collision)', async () => {
+    // handleOnlineCount's lazy init used to create _onlineCounter WITHOUT the `ids` Set;
+    // in an isolate where the count endpoint beats the first heartbeat, ids.add() threw
+    // TypeError → every heartbeat 500'd until the minute rollover re-initialized.
+    const saved = globalThis._onlineCounter;
+    globalThis._onlineCounter = undefined;
+    try {
+      await handleOnlineCount({}, makeEnv(), apiRequest('/api/online', {}));
+      const e = makeEnv();
+      const res = await handlePresence({ id: 'colduser1' }, e, req({}));
+      expect(res.status).toBe(200);
+      const cnt = await (await handleOnlineCount({}, e, apiRequest('/api/online', {}))).json();
+      expect(cnt.online).toBe(1);
+    } finally { globalThis._onlineCounter = saved; }
+  });
+
   it('check returns online=true immediately after heartbeat (in-memory cache)', async () => {
     const e = makeEnv();
     await handlePresence({ id: 'user00002', pub: 'p', name: 'Bob' }, e, req({}));
@@ -4408,8 +4424,9 @@ describe('online count', () => {
   it('handlePresence records prev count when minute rolls over', async () => {
     const e = makeEnv();
     const minuteKey = Math.floor(Date.now() / 60000);
-    // Prime with count=5 in the current minute
-    globalThis._onlineCounter = { minute: minuteKey, count: 5, prev: 0 };
+    // Prime with count=5 in the current minute — the real shape carries `ids` too
+    // (the Set is the source of truth; count is derived from it).
+    globalThis._onlineCounter = { minute: minuteKey, count: 5, prev: 0, ids: new Set(['a1','a2','a3','a4','a5']) };
     // Simulate rollover by resetting to an old minute and calling handlePresence
     globalThis._onlineCounter.minute = minuteKey - 1; // force rollover on next heartbeat
     await handlePresence({ id: 'user00001', pub: 'IK' }, e, apiRequest('/api/presence', {}));
