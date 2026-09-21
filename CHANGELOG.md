@@ -1,3 +1,13 @@
+## Outbox flush re-queues messages that didn't send (branch devin/outbox-requeue, 2026-09-21)
+
+flushOutbox emptied the peer's IDB queue BEFORE sending and treated each dc.send
+as fire-and-forget: a readyState-check/send race, a bufferedAmount overflow, or
+the channel closing mid-flush dropped every unsent envelope with only a _dbg
+line — no requeue, no retry, no signal. Items that fail to send now go back into
+the queue ahead of anything appended meanwhile, and _persistOutbox runs after the
+loop so the survivors actually persist. Expired (>7d) and env-less entries still
+drop intentionally.
+
 ## 1:1 relayed reactions get the same caps the group path already had (branch devin/reaction-caps-1to1, 2026-09-21)
 
 The encrypted `isSignal` reaction handler on the 1:1 path created `reactions[emoji]`

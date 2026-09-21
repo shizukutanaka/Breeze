@@ -6174,20 +6174,24 @@ async function initMessenger(dbName) {
     if (!peer?.connected || peer.dc?.readyState !== 'open') return;
     const toSend = [...queue];
     _outbox.set(peerId, []);
-    _persistOutbox();
     let sent = 0;
+    const kept = [];
     for (const item of toSend) {
-      if (Date.now() - item.ts > 7 * MS.DAY) continue; // Skip messages older than 7 days
+      if (Date.now() - item.ts > 7 * MS.DAY || !item.env) continue; // too old / malformed — drop
       try {
         // The stored envelope already carries ciphertext (re-encrypting here would burn a
         // second ratchet step for identical content — and dedup already collapses the copy
         // the sealed relay carried).
-        if (item.env && peer.dc?.readyState === 'open') {
-          peer.dc.send(JSON.stringify(item.env));
-          sent++;
-        }
-      } catch(e) { _dbg(e, 'outbox-flush'); }
+        if (peer.dc?.readyState !== 'open') { kept.push(item); continue; }
+        peer.dc.send(JSON.stringify(item.env));
+        sent++;
+      } catch(e) { _dbg(e, 'outbox-flush'); kept.push(item); } // send() throwing after the
+      // readyState check (close race, bufferedAmount overflow) must not drop the message
     }
+    // Items that didn't send go back ahead of anything queued meanwhile — the queue was
+    // emptied up front, so without this a mid-flush disconnect silently lost them.
+    if (kept.length) _outbox.set(peerId, kept.concat(_outbox.get(peerId) || []));
+    _persistOutbox();
     if (sent > 0) {
       _dbg(null, `Outbox: flushed ${sent} messages to ${peerId.slice(0, 8)}`);
       auditLog('msg', `Outbox flushed: ${sent} msgs`);
