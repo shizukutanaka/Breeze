@@ -1,5 +1,13 @@
 # Changelog
 
+## /import had no file-size cap — a multi-GB export froze the tab (branch devin/import-size-cap, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`importChat` called `file.text()` unconditionally — unlike every attachment path, nothing bounded the read, so a huge chat export (or a user picking the wrong file) loaded unbounded memory and froze the tab before any parser ran. Capped at `CONFIG.FILE_MAX` (50 MB — about a decade of dense history) with the existing `toastMax50MB` toast.
+
+---
+
 ## File-type guard had a side door: drag-drop and paste skipped the magic-bytes check (branch devin/magic-bytes-coverage, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
