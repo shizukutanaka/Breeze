@@ -1,5 +1,13 @@
 # Changelog
 
+## Blocking a contact never actually severed the link (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The block toggle closed the current peer connection — then everything let it come back or went around it: the presence poll and network-recovery loops re-dialed blocked contacts, `connectPeer` never checked the flag, and (previous commit) both datachannel handlers processed a re-connected blocked peer's frames unconditionally. Blocking also only hid the input bar — `sendSignal` mutations, read receipts, and call offers still had a relay leg that fired regardless (previous commits). The severance is now complete: `connectPeer` refuses blocked contacts (one choke point covering open-chat dial, send-path dial, presence reconnect, and network recovery), both reconnect loops skip them, and no outbound signal leg fires for a blocked target.
+
+---
+
 ## P2P traffic from blocked peers was never dropped (branch devin/consolidate-groups, 2026-09-21)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).

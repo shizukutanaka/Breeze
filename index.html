@@ -10348,7 +10348,7 @@ async function initMessenger(dbName) {
 
   // ===== P2P connection per contact =====
   async function connectPeer(contact) {
-    if (!contact.pubB64 || peers[contact.pubB64]?.pc) return;
+    if (!contact.pubB64 || peers[contact.pubB64]?.pc || contact.blocked) return;
     const isInit = myPubB64 > contact.pubB64;
 
     // v3.6: Unified ICE config (relay-only mode, TURN, candidate pool)
@@ -11194,6 +11194,7 @@ async function initMessenger(dbName) {
       for (const id in _lastSeenCache) { if (!liveIds.has(id)) delete _lastSeenCache[id]; }
       // v3: Auto-reconnect disconnected peers that are now online
       for (const c of contacts) {
+        if (c.blocked) continue; // don't re-dial someone we severed
         if (!c.isGroup && _presenceCache[c.id] && !peers[c.pubB64]?.connected) {
           const peer = peers[c.pubB64];
           if (peer?.pc?.iceConnectionState === 'failed' || peer?.pc?.iceConnectionState === 'disconnected') {
@@ -11220,7 +11221,7 @@ async function initMessenger(dbName) {
       const contacts = await dbGetAll('contacts');
       let restarted = 0, reconnected = 0;
       for (const c of contacts) {
-        if (c.isGroup || !c.pubB64) continue;
+        if (c.isGroup || !c.pubB64 || c.blocked) continue;
         const peer = peers[c.pubB64];
         if (peer?.pc) {
           const state = peer.pc.iceConnectionState;
