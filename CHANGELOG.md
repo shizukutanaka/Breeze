@@ -10,6 +10,8 @@ Same class swept everywhere else it existed: `sendSignal`'s group fan-out IIFE r
 
 `importChat` had it too — a 50 MB export spends seconds in `file.text()`/parse and the message loop awaited `dbGet`/`dbPut` per row; every write went to live `activeContact.id`, so switching chats mid-import scattered imported history across conversations and rewrote the *other* chat's lastMsg. Now bound to the entry snapshot; the list refresh only fires when the user is still on that conversation.
 
+The mutation signals were the last, subtler leg: `toggleReaction`, `votePoll`, `startEdit`, `deleteMsg` all write the change to the message's own `stored.contactId` conversation — then called `sendSignal`, which targeted live `activeContact`. A reaction toggled from a message's picker while the user had already switched chats stored in convo A but signaled convo B: the peer got a `reaction`/`edit`/`delete` for a msgId that doesn't exist in the conversation they received it in (silently dropped on their side after the conversation-binding checks landed this round — so locally applied, never delivered). `sendSignal(data, snapContact)` now accepts the resolved conversation; all four callers resolve `dbGet('contacts', stored.contactId)` and signal the message's own chat.
+
 ---
 
 ## /api/online counted heartbeats, not users (branch devin/consolidate-groups, 2026-09-20)

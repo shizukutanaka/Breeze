@@ -7355,10 +7355,10 @@ async function initMessenger(dbName) {
       if (existing) _safeReplace(existing, renderReactions(stored.reactions, msgId));
       else _safeAppend(el, renderReactions(stored.reactions, msgId));
     }
-    // Notify peer(s) via sendSignal (handles 1:1 + group fan-out)
-    if (activeContact) {
-      sendSignal({ type: 'reaction', msgId, emoji, add: idx < 0, userId: myId });
-    }
+    // Notify the message's own conversation (not live activeContact — the user may
+    // have switched chats between opening the picker and this write landing).
+    const convContact = stored.contactId ? await dbGet('contacts', stored.contactId) : activeContact;
+    if (convContact) sendSignal({ type: 'reaction', msgId, emoji, add: idx < 0, userId: myId }, convContact);
   };
 
   // v3.1: POLLS
@@ -7423,11 +7423,11 @@ async function initMessenger(dbName) {
     // Re-render poll
     const el = document.querySelector(`[data-msgid="${msgId}"]`);
     if (el) safeSetHTML(el, renderPollHtml(poll, msgId));
-    // Notify peer(s) via sendSignal — handles 1:1 and group fan-out (the old path
-    // used peers[activeContact.pubB64] which is '' for groups: votes went nowhere).
-    if (activeContact) {
-      sendSignal({ type: 'poll_vote', pollId: poll.pollId, optionIndex, userId: myId });
-    }
+    // Notify the message's own conversation via sendSignal — handles 1:1 and group
+    // fan-out (the old path used peers[activeContact.pubB64] which is '' for groups:
+    // votes went nowhere).
+    const convContact = stored.contactId ? await dbGet('contacts', stored.contactId) : activeContact;
+    if (convContact) sendSignal({ type: 'poll_vote', pollId: poll.pollId, optionIndex, userId: myId }, convContact);
   };
 
   function renderPollHtml(poll, msgId) {
@@ -7647,8 +7647,9 @@ async function initMessenger(dbName) {
         const time = new Date(msg.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         safeSetHTML(el, renderLinks(renderMarkdown(esc(editText))) + ' <span class="i-edited">' + t('edited') + '</span><span class="ts">' + time + '</span>');
       }
-      // Notify peer
-      sendSignal({ type: 'edit', msgId: msg.msgId, text: editText, ts: msg.ts });
+      // Notify the message's own conversation
+      const convContact = stored?.contactId ? await dbGet('contacts', stored.contactId) : activeContact;
+      if (convContact) sendSignal({ type: 'edit', msgId: msg.msgId, text: editText, ts: msg.ts }, convContact);
     
     } catch(_e) { _dbg(_e, 'startEdit'); }
   }
@@ -7662,7 +7663,8 @@ async function initMessenger(dbName) {
       auditLog('message', 'Deleted message ' + msg.msgId.slice(0, 12));
       const el = document.querySelector(`[data-msgid="${msg.msgId}"]`);
       if (el) safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>');
-      sendSignal({ type: 'delete', msgId: msg.msgId });
+      const convContact = stored?.contactId ? await dbGet('contacts', stored.contactId) : activeContact;
+      if (convContact) sendSignal({ type: 'delete', msgId: msg.msgId }, convContact);
     
     } catch(_e) { _dbg(_e, 'deleteMsg'); }
   }
@@ -7760,11 +7762,13 @@ async function initMessenger(dbName) {
 
   // v3.6: Translate message inline (DeepL → LibreTranslate → MyMemory)
   // Signal helper for edit/delete/reaction sync (1:1 + group)
-  function sendSignal(data) {
-    if (!activeContact) return;
+  function sendSignal(data, snapContact) {
     // Snapshot before any await — the async fan-out below must not re-read live
     // activeContact (a contact switch mid-flight would fan out to the wrong group).
-    const contact = activeContact;
+    // Callers acting on a stored message pass its conversation via snapContact so a
+    // reaction/edit/delete lands in the message's own chat, not whatever is open.
+    const contact = snapContact || activeContact;
+    if (!contact) return;
     // v3.6: Group signal fan-out — send encrypted signal to each member
     if (contact.isGroup && contact.members?.length > 0) {
       const signalPayload = JSON.stringify(data);
