@@ -1,5 +1,13 @@
 # Changelog
 
+## /admin transfer — ownership handoff for the dead /group/transfer endpoint (branch devin/group-transfer, 2026-09-20)
+
+`index.html`, `locales/ja.json`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The Worker shipped `/api/group/transfer` (creator-only ownership handoff, signature-bound to the new creator) but no client path ever called it — a group whose creator deleted their account or went dark had permanently unmanageable admin surface. Added `/admin transfer @name`: creator-gated client-side, signs `breeze-group-transfer:token:adminId:ts:newCreatorId` per checkGroupAuth, and mirrors the server's admin rebuild on success (new creator's authority implicit; outgoing creator retained as admin). Wired into `/admin help`; EN+JA keys.
+
+---
+
 ## /schedule timer escaped account-switch cleanup and could clobber a draft (branch devin/sched-create-timer, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
