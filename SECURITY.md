@@ -115,6 +115,17 @@ accounts today with no plan enforcement. Documentation and in-app legal text hav
 to stop advertising this as available rather than rebuilding it retroactively; that remains
 separate, explicitly-scoped future work if it's wanted.
 
+### Removed: peer-relay hold/deliver
+
+When a direct DataChannel send failed, the client used to ask an arbitrary *other connected
+contact* to hold the encrypted envelope and deliver it when the recipient connected to them.
+The payload stayed E2E — but the holder learned the social graph (`sender → targetId`, time,
+size), which is exactly the metadata Sealed Sender v2 exists to hide from the relay. And it
+was redundant: the sealed-sender POST ran unconditionally on the same code path, so the peer
+detour could only beat it when the recipient was reachable by a mutual peer but unreachable
+by the relay. Deleted outright (hold request send, hold/deliver handlers, the `_peerRelayQueue`
+store) rather than gated — an opt-in toggle leaves the contradiction one peer away.
+
 ### Other known limitations
 
 - **Relay state has TTLs, and TTLs are a liveness property.** Device registries and group

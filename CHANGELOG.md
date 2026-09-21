@@ -1,5 +1,13 @@
 # Changelog
 
+## Peer-relay hold/deliver removed — it leaked the social graph it claimed to protect (branch devin/remove-peer-relay, 2026-09-20)
+
+`index.html`, `SECURITY.md`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Musk "delete the part" on a v3 feature never documented in SECURITY.md: when a direct DataChannel send failed, the client sent `peer_relay_request` to an arbitrary OTHER connected contact asking them to hold the encrypted envelope for `targetId`. The payload stayed E2E — but the holder learned {sender → target, time, size}, i.e. the social graph that Sealed Sender v2 exists to hide even from the relay. And it was redundant: `relaySend` (sealed sender) ran unconditionally on the same path, so the peer detour only won when the recipient was reachable via a mutual peer but unreachable via the relay — narrow payoff for a metadata leak plus a "hold arbitrary payloads for arbitrary ids" surface on every client. Deleted: request send, both handlers, `_peerRelayQueue`, the three call sites (connect, presence, contact-delete), ~60 lines. SECURITY.md gains a "Removed: peer-relay hold/deliver" entry explaining the trade.
+
+---
+
 ## ?add= planted dead contacts from malformed keys (branch devin/add-key-validation, 2026-09-20)
 
 `index.html`, `locales/*.json`, `tests/e2e/deeplink.spec.js`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
