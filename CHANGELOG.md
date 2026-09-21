@@ -1,5 +1,13 @@
 # Changelog
 
+## File receive: per-chunk size was unbounded (branch devin/chunk-cap, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`handleBinaryChunk` bounded the chunk COUNT (`total`/`seq` vs `FILE_MAX`/`CHUNK_SIZE`) but not the BYTES in each chunk. The sender always emits ≤16 KiB chunks, so a receiving cap of `CHUNK_SIZE` is a pure validity check — without it a peer could declare `total = MAX_CHUNKS` and put megabytes in each chunk, accumulating far past `FILE_MAX` in memory.
+
+---
+
 ## Debug log printed a scheduled message's text snippet to console (branch devin/dbg-snippet, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
