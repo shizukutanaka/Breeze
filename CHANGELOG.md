@@ -1,5 +1,13 @@
 # Changelog
 
+## Chat import silently dropped same-minute messages (branch devin/import-dedup, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`importChat` keyed imported messages as `import:<ts>:<mine>` — but LINE and WhatsApp exports only carry minute-precision timestamps, so every burst of messages sent inside the same minute by the same side collided on one IDB key and all but the first were silently skipped. The index now joins the key (`import:<ts>:<mine>:<i>`), keeping messages distinct while staying deterministic so re-importing the same file still dedups.
+
+---
+
 ## Reply quotes vanished on the relay path; reply msgId never shipped (branch devin/replyto-wire, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
