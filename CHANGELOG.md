@@ -1,5 +1,13 @@
 # Changelog
 
+## group_kick notices had no privilege check — any contact could "kick" members locally (branch devin/group-kick-auth, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`rotateGroupKeyOnKickNotice` applied `group_kick` notices from any E2E-capable sender — the server-side kick requires creator/admin + signature, but the notice path checked nothing. Any member (or any contact who could encrypt to me) could send `{groupId, kickedId: <victim>, epoch: 9999}`: my client dropped the victim from my roster, rotated my chain key to the fake high epoch, and the `current.epoch >= epoch` guard then rejected every legitimate rotation notice forever — permanent desync. The notice now requires the sender to be the group's creator or a listed admin; roster sync (previous commit) keeps that list fresh enough to fail closed correctly.
+
+---
+
 ## Group roster only synced on growth — kicks/leaves never propagated (branch devin/group-roster-sync, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
