@@ -3,9 +3,20 @@
 // an in-memory KV — not a re-implementation. Complements tests/*.test.js (vitest),
 // which verify extracted function fragments in Node but never load index.html as an
 // actual document in an actual browser.
+import { existsSync } from 'node:fs';
 import { defineConfig, devices } from '@playwright/test';
 
 const PORT = process.env.E2E_PORT || 8787;
+
+// Some environments preinstall a browser outside Playwright's managed cache —
+// honour E2E_BROWSER_PATH or the historical /opt/pw-browsers/chromium when they
+// actually exist; otherwise fall back to `npx playwright install chromium`'s
+// managed download. A hardcoded path that doesn't exist fails every spec at
+// launch, silently keeping the suite runnable only on the author's machine.
+const PREINSTALLED = ['/opt/pw-browsers/chromium'];
+const executablePath =
+  process.env.E2E_BROWSER_PATH ||
+  PREINSTALLED.find((p) => existsSync(p));
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -40,9 +51,7 @@ export default defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-        // This environment preinstalls Chromium outside Playwright's managed cache
-        // (PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 is set so npm install doesn't refetch it).
-        launchOptions: { executablePath: '/opt/pw-browsers/chromium' },
+        ...(executablePath ? { launchOptions: { executablePath } } : {}),
       },
     },
   ],

@@ -40,9 +40,11 @@ Every change should align with our three principles:
 ### Before Submitting
 
 1. Run `./validate.sh` — must print `PASSED` (the check count grows over time; don't hardcode a score, the tool always reports the live one)
-2. Test in Chrome, Firefox, and Safari
-3. Check browser DevTools console for errors
-4. Add i18n keys for both EN and JA if adding UI text
+2. Run `npm test` — vitest unit suite (crypto primitives + worker)
+3. Run `npm run test:e2e` — Playwright suite drives the real `index.html` against the real `_worker.js` (in-memory KV). First run needs `npx playwright install chromium`
+4. Test in Chrome, Firefox, and Safari
+5. Check browser DevTools console for errors
+6. Add i18n keys for both EN and JA if adding UI text
 
 ### File Structure
 
