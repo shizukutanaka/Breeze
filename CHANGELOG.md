@@ -10,6 +10,14 @@ Socratic check on the "8 languages" claim, this time per-platform: `index.html` 
 
 ---
 
+## /room emitted links that could never join — dead on arrival (branch devin/room-honest, 2026-09-20)
+
+`index.html`, `tests/e2e/deeplink.spec.js`, `playwright.config.js`, `locales/*.json`, `_headers`/`tauri.conf.json` (CSP hash), `CHANGELOG.md`.
+
+Socratic trace of the `/room` claim ("ephemeral room, share via link"): `createEphemeralRoom` put a client-generated `room:<random>` id into `?join=` while the Worker indexes groups by the SERVER token returned from `/group/create` (`grp:<token>`). The response was discarded, so every `/room` link 404'd at `/group/join` — the feature never worked, and the creator didn't even get a local contact. Its 1h/24h/7d/permanent TTL picker was decorative too: the Worker accepts `ttl` but ignores it (all invites are 30-day, refreshed on read). Deleted the duplicate (`createEphemeralRoom`, 4 dead i18n keys) — `/room` now delegates to `createGroupInviteLink`. New e2e spec drives create → link → fresh-context join end-to-end.
+
+---
+
 ## File backups stored no iteration count — a future KDF bump would silently orphan them (branch devin/backup-iter, 2026-09-20)
 
 `index.html`, `_headers`/`tauri.conf.json` (CSP hash), `CHANGELOG.md`.

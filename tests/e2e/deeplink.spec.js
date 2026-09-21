@@ -89,3 +89,30 @@ test('/drop <secret> produces a link that a fresh context opens exactly once', a
   await carol.goto(url);
   await expect(carol.locator('#drop-status')).toContainText(/expired|already|failed|invalid/i, { timeout: 10_000 });
 });
+
+// /room regression: the old private implementation put a client-generated 'room:<id>'
+// in ?join= while the Worker indexes groups by the SERVER token — every link 404'd.
+// This spec drives the full loop: create → link → fresh context joins and lands in the
+// group conversation.
+test('/room produces a join link a fresh context can actually join', async ({ browser }) => {
+  const alice = await (await browser.newContext({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.91' } })).newPage();
+  await alice.goto('/');
+  await createIdentity(alice, 'Roomer');
+  await expect(async () => {
+    await alice.locator('#msg-input').fill('/room e2e-room');
+    await alice.locator('#msg-input').press('Enter');
+    await expect(alice.locator('.i-mono-box').last()).toBeVisible({ timeout: 3_000 });
+  }).toPass({ timeout: 20_000 });
+  const url = await alice.locator('.i-mono-box').last().textContent();
+  expect(url).toMatch(/\?join=[a-z0-9]+$/);
+  // Creator must have a local contact for the room (the old path never made one).
+  await expect(alice.locator('#msg-contacts .contact').first()).toBeVisible();
+
+  const bob = await (await browser.newContext()).newPage();
+  await bob.goto(url);
+  // Setup screen personalizes to the group; completing onboarding joins it.
+  await bob.locator('#msg-name').fill('Joiner');
+  await bob.locator('#b-msg-setup').click();
+  await expect(bob.locator('#msg-main')).toBeVisible({ timeout: 15_000 });
+  await expect(bob.locator('#msg-contacts .contact').first()).toBeVisible({ timeout: 15_000 });
+});
