@@ -4518,25 +4518,11 @@ async function initMessenger(dbName) {
     const privJwk = await crypto.subtle.exportKey('jwk', keys.privateKey);
     const pubB64 = btoa(String.fromCharCode(...new Uint8Array(pubRaw)));
 
-    // Register alias on server — REQUIRES a PoW token: /alias/set 400s with POW_REQUIRED
-    // without one, so the onboarding field silently never registered (resp.ok was false and
-    // the code swallowed it). Same challenge shape as the /alias command: pub:alias:ts.
-    let registeredAlias = '';
-    if (alias && API) {
-      try {
-        const powToken = await generatePoW(pubB64 + ':' + alias + ':' + Date.now(), CONFIG.POW_DIFFICULTY);
-        const resp = await postAPIRaw('/alias/set', { alias, pub: pubB64, name, pow: powToken });
-        if (resp.ok) registeredAlias = alias;
-        else { const d = await resp.json().catch(() => ({})); showToast(d.error || t('toastAliasTaken'), 'error'); }
-      } catch(e) { _dbg(e); }
-    }
-
-    await dbPut('identity', { pub: arr(new Uint8Array(pubRaw)), priv: privJwk, pubB64, name, alias: registeredAlias }, 'keys');
-    myKeys = keys; myPubB64 = pubB64; myName = name; myAlias = registeredAlias; myId = pubB64.slice(0, 12);
+    await dbPut('identity', { pub: arr(new Uint8Array(pubRaw)), priv: privJwk, pubB64, name, alias: '' }, 'keys');
+    myKeys = keys; myPubB64 = pubB64; myName = name; myId = pubB64.slice(0, 12);
     myShortId = await generateShortId(pubB64);
     try { localStorage.setItem('brz-uid', myId); } catch(e) { _dbg(e); }
     _userId = myId;
-    auditLog('auth', 'Identity created: ' + myShortId + (registeredAlias ? ' @' + registeredAlias : ''));
     if (API) { // v3: Generate and upload PreKeys for X3DH
       try {
         await initSigning(); // must precede generatePreKeyBundle() or edIdentityKey/signedPreKeySig get omitted (E2E-found)
@@ -4548,6 +4534,29 @@ async function initMessenger(dbName) {
         _dbg(null, 'PreKeys uploaded: 1 SPK + ' + bundle.oneTimePreKeys.length + ' OTP');
       } catch(e) { _dbg(e, 'prekey-upload'); }
     }
+
+    // Alias registration runs AFTER the bundle upload so the Worker's ownership check can
+    // verify our Ed25519 sig (identityKey === pub). Unsigned requests still accepted.
+    let registeredAlias = '';
+    if (alias && API) {
+      try {
+        const powToken = await generatePoW(pubB64 + ':' + alias + ':' + Date.now(), CONFIG.POW_DIFFICULTY);
+        const clean = alias.toLowerCase().replace(/[^a-z0-9_]/g, '');
+        const aliasTs = Date.now();
+        const aliasSig = await signMessage(`breeze-alias-set:${clean}:${aliasTs}`);
+        const body = { alias, pub: pubB64, name, pow: powToken };
+        if (aliasSig) { body.userId = myId; body.ts = aliasTs; body.sig = aliasSig; }
+        const resp = await postAPIRaw('/alias/set', body);
+        if (resp.ok) registeredAlias = alias;
+        else { const d = await resp.json().catch(() => ({})); showToast(d.error || t('toastAliasTaken'), 'error'); }
+      } catch(e) { _dbg(e); }
+      if (registeredAlias) {
+        myAlias = registeredAlias;
+        const k = await dbGet('identity', 'keys').catch(() => null);
+        if (k) { k.alias = registeredAlias; await dbPut('identity', k, 'keys'); }
+      }
+    }
+    auditLog('auth', 'Identity created: ' + myShortId + (registeredAlias ? ' @' + registeredAlias : ''));
   }
 
   // DOUBLE RATCHET CRYPTO ENGINE (v3)
@@ -5814,21 +5823,9 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'notifyGroupLeave'); }
   }
 
-  // Extracted to a named function, callable from BOTH boot paths below, rather than an
-  // inline assignment living inside just one of them. It used to be defined only inside
-  // _boot()'s `if (hasId)` branch — which runs on every boot EXCEPT the very first one
-  // for a brand-new identity (that path shows the setup screen and returns instead).
-  // A fresh account's setup completion (the click handler further down) duplicates
-  // _boot()'s startPresence()/startPolling()/etc. calls to reach the same live state,
-  // but never reached this assignment — so _messengerCleanup stayed null for that
-  // account's entire first session. The very first switch AWAY from a just-created
-  // account found it null, skipped calling it entirely, and left every _ac-scoped
-  // listener (wake lock, panic-wipe, idle-lock, presence/poll visibilitychange, the
-  // account-switcher click handler) attached forever — E2E-confirmed via a real CDP
-  // DOMDebugger.getEventListeners() count: document-level listeners for these exact
-  // event types grew with every switch away from a freshly-created account, never
-  // shrinking back down, while switching between accounts that had ALREADY been
-  // through one full "existing identity" boot cleaned up correctly every time.
+  // Callable from BOTH boot paths — it used to live only inside _boot()'s `if (hasId)`
+  // branch, so a freshly-created account's first session had _messengerCleanup === null
+  // and every _ac-scoped listener leaked on the first switch away (E2E-confirmed).
   function _registerMessengerCleanup() {
     _messengerCleanup = () => {
       _ac.abort(); // Remove all event listeners registered with signal
@@ -5918,20 +5915,9 @@ async function initMessenger(dbName) {
     };
   }
 
-  // Everything a live session needs regardless of HOW identity became available (an
-  // existing identity loaded by _boot(), or a brand-new one just created by the setup
-  // form) — extracted for the exact same reason as _registerMessengerCleanup() just
-  // above: this is the FOURTH instance this session of the "duplicate boot path, one
-  // copy incomplete" meta-pattern. Before this fix, a freshly-created identity's first
-  // live session never ran loadSettings(), _updateFocusBanner(), _refreshDeviceRole(),
-  // _loadRetryQueue(), stale-session pruning, checkRemoteWipe(), wallpaper restore, or
-  // short-ID display/copy — and, most seriously, never registered the
-  // enforceRetentionPolicy()/pruneAuditLog() maintenance intervals, so a disappearing-
-  // messages retention policy silently did not self-enforce for that account's entire
-  // first session (until the user switched accounts and back, which runs _boot()'s
-  // `if (hasId)` branch and registers them for the first time). Found by diffing _boot()
-  // against the setup-completion handler line-by-line, the same method that found the
-  // cleanup-registration gap.
+  // Everything a live session needs regardless of HOW identity became available (_boot()
+  // or the setup form) — the fresh-identity path used to skip retention/prune intervals,
+  // settings load, remote-wipe check, and wallpaper restore for its entire first session.
   async function _startLiveSession() {
     // v3.3: Show human-readable short ID
     const shortIdEl = _DOM.get('msg-short-id');
@@ -14364,7 +14350,12 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
           // v3.5 SPEC: Proof-of-Work required for alias registration (anti-spam)
           showToast(t('toastPoW'), 'info');
           const powToken = await generatePoW(myPubB64 + ':' + newAlias + ':' + Date.now(), CONFIG.POW_DIFFICULTY);
-          const resp = await postAPIRaw('/alias/set', { alias: newAlias, pub: myPubB64, name: myName, pow: powToken });
+          const cleanAlias = newAlias.toLowerCase().replace(/[^a-z0-9_]/g, '');
+          const aTs = Date.now();
+          const aSig = await signMessage(`breeze-alias-set:${cleanAlias}:${aTs}`);
+          const aBody = { alias: newAlias, pub: myPubB64, name: myName, pow: powToken };
+          if (aSig) { aBody.userId = myId; aBody.ts = aTs; aBody.sig = aSig; }
+          const resp = await postAPIRaw('/alias/set', aBody);
           if (resp.ok) {
             myAlias = newAlias;
             const id = await dbGet('identity', 'keys');
