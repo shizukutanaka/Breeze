@@ -182,6 +182,20 @@ separate, explicitly-scoped future work if it's wanted.
   (removed v3.7): the endpoint is unauthenticated, so anyone holding a 12-character user id
   could read the chosen name of the person behind it. Online-status itself remains visible to
   anyone who knows an id — reduce exposure by not sharing your id publicly.
+- **Id-keyed queues are owner-signable, not owner-enforced by default.** `/msg/poll`,
+  `/sealed/poll` and `/sealed/ack` accept a bare `userId` — and a poll is *destructive*
+  (a future `lastTs` purges an inbox older than the multi-tab grace; an ack blind-deletes
+  the sealed queue). Unsigned, a known userId was enough to read queue metadata or wipe a
+  stranger's pending mail. The client now attaches an Ed25519 ownership signature
+  (`breeze-<op>:<id>:<ts>`, verified-when-present — same pattern as group ops), and an
+  operator can enforce it with `SEALED_REQUIRE_AUTH` / `MSG_REQUIRE_AUTH` once deployed
+  clients all sign. Until the flags are on, treat this surface as the presence caveat
+  above: known-id readable, and destructive-without-auth by design pending rollout.
+- **A sealed queue's retention is not shortened by polling.** Polls used to rewrite the
+  queue with a 5-minute "grace" TTL — a week of retention collapsed to 5 minutes on every
+  poll, so going offline >5 min right after polling silently expired unprocessed mail.
+  Polls no longer rewrite the queue; crash-recovery relies on the original TTL plus the
+  high-water-mark + client dedup instead.
 - **An invite token is effectively group membership.** `/group/info` returns the full member
   list (ids, public keys, names) to any token holder without joining — but restricting that
   read would not help: `/group/join` accepts the same token with no signature and no approval,
