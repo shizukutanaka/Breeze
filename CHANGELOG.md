@@ -1,5 +1,13 @@
 # Changelog
 
+## Group edit/delete/reaction lacked conversation + author binding (branch devin/group-mutation-binding, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Same class as the 1:1 mutation-binding fix, second location: the group `isSignal` path resolved its target by msgId alone. A group member could edit/delete/react to messages in ANOTHER conversation — and worse, edit/delete ANOTHER member's messages in the same group (nothing checked authorship). Now: edit/delete require `contactId === groupId` AND `msgId.startsWith(msg.from + ':')` (msgId embeds the author id, so members may only touch their own messages); reactions require `contactId === groupId`. Multi-device caveat: a linked device can only mutate messages that same device authored — failing closed.
+
+---
+
 ## Binary file receive was silently broken — and an unverified blobUrl href vector (branch devin/binary-file-fix, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).

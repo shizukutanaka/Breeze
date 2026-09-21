@@ -9599,23 +9599,27 @@ async function initMessenger(dbName) {
           // containing CSS selector metacharacters (e.g. "] .other [") would break the
           // attribute selector and potentially match unintended DOM elements.
           const targetMsgId = safeMsgId(signal.msgId || '');
+          // msgId embeds the author's id (`${from}:${ts}`) — so `targetMsgId.startsWith(
+          // msg.from + ':')` enforces author-only edit/delete, and `stored.contactId ===
+          // msg.groupId` binds the target to THIS group (otherwise a member could mutate
+          // messages in another conversation by guessing msgIds).
+          const _ownGroupMsg = (m) => m && !m.mine && m.contactId === msg.groupId && targetMsgId.startsWith(msg.from + ':');
           if (signal.type === 'edit') {
             const stored = await dbGet('messages', targetMsgId);
-            // Only allow editing messages not authored by us — peers cannot remote-edit our outgoing messages.
             // Cap edit text to 64 KB to prevent storage DoS via the P2P signal path (no server-side check).
-            if (stored && !stored.mine && typeof signal.text === 'string') { stored.text = signal.text.slice(0, 65536); stored.edited = true; await dbPut('messages', stored); }
+            if (_ownGroupMsg(stored) && typeof signal.text === 'string') { stored.text = signal.text.slice(0, 65536); stored.edited = true; await dbPut('messages', stored); }
             const el = document.querySelector(`[data-msgid="${targetMsgId}"]`);
             if (el) { const tm = new Date(signal.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); safeSetHTML(el, renderLinks(renderMarkdown(esc(signal.text))) + ' <span class="i-edited">' + t('edited') + '</span><span class="ts">'+tm+'</span>'); }
           } else if (signal.type === 'delete') {
             const stored = await dbGet('messages', targetMsgId);
-            // Only allow deleting messages not authored by us — peers cannot remote-delete our outgoing messages
-            if (stored && !stored.mine) { stored.deleted = true; stored.text = ''; await dbPut('messages', stored); }
+            if (_ownGroupMsg(stored)) { stored.deleted = true; stored.text = ''; await dbPut('messages', stored); }
             const el = document.querySelector(`[data-msgid="${targetMsgId}"]`);
             if (el) safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>');
           } else if (signal.type === 'reaction') {
             const stored = await dbGet('messages', targetMsgId);
+            // Any member may react — but only to a message inside THIS group.
             // Reject oversized emoji strings (DoS/storage guard — legitimate emoji ≤ ~30 UTF-16 chars)
-            if (stored && typeof signal.emoji === 'string' && signal.emoji.length <= 64) {
+            if (stored && stored.contactId === msg.groupId && typeof signal.emoji === 'string' && signal.emoji.length <= 64) {
               if (!stored.reactions) stored.reactions = {};
               // Initialize reaction list for new emoji; cap unique emoji per message at 20
               if (!stored.reactions[signal.emoji]) {
