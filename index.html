@@ -2928,19 +2928,28 @@ async function deriveKey(passphrase, salt, usage) {
   }
 
 async function encrypt(passphrase, plaintext) {
-    try {  
+    try {
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const iv = crypto.getRandomValues(new Uint8Array(CONFIG.IV_BYTES));
     const key = await deriveKey(passphrase, salt, 'encrypt');
     const ct = await crypto.subtle.encrypt({name:'AES-GCM',iv}, key, new TextEncoder().encode(plaintext));
-    return { s: arr(salt), i: arr(iv), d: arr(new Uint8Array(ct)) };
-  
+    // `iter` makes the file self-describing like a cloud backup: decrypt() reads it
+    // instead of the live constant, so raising PBKDF2_ITERATIONS later never silently
+    // orphans existing backup files with a misleading "wrong passphrase".
+    return { s: arr(salt), i: arr(iv), d: arr(new Uint8Array(ct)), iter: CONFIG.PBKDF2_ITERATIONS };
+
     } catch(_e) { _dbg(_e, 'encrypt'); }
   }
 
 async function decrypt(passphrase, payload) {
     try {
-    const key = await deriveKey(passphrase, u8(payload.s), 'decrypt');
+    // Old files carry no iter — fall back to the constant they were written with.
+    // Same floor as cloud restore: a hostile payload can't inject iter:1 to make
+    // offline brute-force nearly free, and 10M caps the DoS ceiling.
+    const iter = (typeof payload?.iter === 'number' && payload.iter >= CONFIG.PBKDF2_ITERATIONS && payload.iter <= _AT_REST_MAX_ITER)
+      ? payload.iter : CONFIG.PBKDF2_ITERATIONS;
+    const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+    const key = await crypto.subtle.deriveKey({name:'PBKDF2', salt:u8(payload.s), iterations:iter, hash:'SHA-256'}, km, {name:'AES-GCM',length:CONFIG.AES_KEY_BITS}, false, ['decrypt']);
     const pt = await crypto.subtle.decrypt({name:'AES-GCM',iv:u8(payload.i)}, key, u8(payload.d));
     return new TextDecoder().decode(pt);
 

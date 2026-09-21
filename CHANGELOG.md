@@ -10,6 +10,14 @@ Socratic check on the "8 languages" claim, this time per-platform: `index.html` 
 
 ---
 
+## File backups stored no iteration count — a future KDF bump would silently orphan them (branch devin/backup-iter, 2026-09-20)
+
+`index.html`, `_headers`/`tauri.conf.json` (CSP hash), `CHANGELOG.md`.
+
+Socratic asymmetry inside one feature: the cloud-backup path stores `iter` in the blob and enforces a floor on restore ("a compromised server cannot inject iter:1") — but the file-backup path's `encrypt()`/`decrypt()` pair hardcoded the live `CONFIG.PBKDF2_ITERATIONS` and wrote no `iter` field. Raise the constant later and every existing backup file fails to decrypt with a misleading "wrong passphrase". `encrypt()` now writes `iter` into the record and `decrypt()` reads it with the same floor+cap as cloud restore (`_AT_REST_MAX_ITER`); files without the field fall back to the constant they were written with.
+
+---
+
 ## Dead ?pricing links in FUNDING.yml/README + SELF_HOSTING "full locales" claim (branch devin/dead-links, 2026-09-20)
 
 `FUNDING.yml`, `README.md`, `docs/SELF_HOSTING.md`, `CHANGELOG.md`.
