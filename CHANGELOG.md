@@ -1,5 +1,13 @@
 # Changelog
 
+## /contacts import bounded member count but not member shape (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The import loop ran `c.members.slice(0, GROUP_MAX)` — bounding how many members, not their shape. Member objects flow into `peers[m.pubB64]` lookups and `distributeSenderKey` encryption, so a crafted entry with a huge or non-string `pubB64`/`id` rode through. Now routes through `safeMemberList`, same as the group-invite and ?join paths.
+
+---
+
 ## Restore path stored contact fields verbatim — unbounded name/members (branch devin/consolidate-groups, 2026-09-21)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).

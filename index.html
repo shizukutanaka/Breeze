@@ -12830,7 +12830,9 @@ async function initMessenger(dbName) {
             const safeNotes = typeof c.notes === 'string' ? c.notes.slice(0, 1024) : null;
             const safeLabels = Array.isArray(c.labels)
               ? c.labels.filter(l => typeof l === 'string').map(l => l.slice(0, 32)).slice(0, 20) : [];
-            const safeMembers = Array.isArray(c.members) ? c.members.slice(0, CONFIG.GROUP_MAX) : [];
+            // safeMemberList, not a bare slice: members' inner fields (id/pubB64/name)
+            // also need shape-validation — they flow into peer lookups + key distribution.
+            const safeMembers = safeMemberList(c.members);
             const safeAddedAt = (typeof c.addedAt === 'number' && Number.isFinite(c.addedAt)) ? c.addedAt : Date.now();
             await dbPut('contacts', { id: contactId, pubB64: c.pubB64, name: safeName,
               alias: safeAlias, isGroup: !!c.isGroup, members: safeMembers,
