@@ -470,6 +470,7 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .i-title-g { font-weight: 700; color: var(--g); font-size: 15px; margin-bottom: 8px }
 .i-fullscreen { position: fixed; inset: 0; background: #000; z-index: 999999 }
 .i-small-muted { font-size: 11px; color: var(--t3); margin-bottom: 12px }
+.i-tac { text-align: center }
 .i-desc12 { font-size: 12px; color: var(--t2); margin-bottom: 12px }
 .i-max-popup { max-width: 320px; max-height: 80vh; overflow-y: auto }
 .i-title16 { color: var(--t1); font-weight: 700; font-size: 16px }
@@ -1671,6 +1672,11 @@ const _I = {
     scanQR: 'Scan QR Code',
     scanning: 'Scanning...',
     toastInvalidQR: 'Not a Breeze invite QR code',
+    scanToVerify: 'Scan to verify',
+    toastInvalidVerifyQR: 'Not a Breeze verification QR code',
+    toastVerified: 'Safety number verified',
+    toastVerifyMismatch: 'Safety numbers do NOT match — possible interception',
+    verifiedMark: '✓ Verified',
     toastCameraFail: 'Camera access denied',
     compressMode: 'Image compression',
     compressOff: 'Off (original quality)',
@@ -5357,7 +5363,7 @@ async function initMessenger(dbName) {
       throw new Error('relay-' + resp.status);
     } catch(e) {
       _dbg(e, 'relay-fail');
-      if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, attempts: 0 }); _saveRetryQueue(); }
+      if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, attempts: 0 }); _saveRetryQueue(); registerBackgroundSync(); }
       scheduleRetry();
     }
   }
@@ -5426,7 +5432,10 @@ async function initMessenger(dbName) {
 
   // v3.3: SW message handler — flush outbox on sync event
   navigator.serviceWorker?.addEventListener('message', (e) => {
-    if (e.data?.type === 'sync-outbox' && _retryQueue.length > 0) {
+    // Every open window receives sync-outbox — only the leader tab may drain, or N
+    // tabs would each re-POST the same persisted queue (double-send). Followers that
+    // queued items themselves still flush via their own 'online' listener.
+    if (e.data?.type === 'sync-outbox' && _isLeaderTab && _retryQueue.length > 0) {
       _dbg(null, 'Background sync: flushing ' + _retryQueue.length + ' messages');
       scheduleRetry();
     }
@@ -8364,7 +8373,7 @@ async function initMessenger(dbName) {
       _autoHeight(input);
     };
     recognition.onend = () => { _sttActive = false; sttBtn.classList.remove('color-g','color-r'); sttBtn.classList.add('color-t3'); sttBtn.textContent = '🗣'; sttBtn.setAttribute('aria-pressed', 'false'); };
-    recognition.onerror = (e) => { _sttActive = false; sttBtn.classList.remove('color-g','color-r'); sttBtn.classList.add('color-t3'); if (e.error !== 'no-speech') showToast(t('toastServerError') + ': ' + e.error, 'error'); };
+    recognition.onerror = (e) => { _sttActive = false; sttBtn.classList.remove('color-g','color-r'); sttBtn.classList.add('color-t3'); if (e.error === 'not-allowed' || e.error === 'service-not-allowed' || e.error === 'audio-capture') showToast(t('toastMicDenied'), 'error'); else if (e.error !== 'no-speech' && e.error !== 'aborted') showToast(t('toastServerError') + ': ' + e.error, 'error'); };
     sttBtn.addEventListener('click', () => {
       if (_sttActive) { recognition.stop(); _sttActive = false; return; }
       _sttActive = true;
@@ -11174,13 +11183,36 @@ async function initMessenger(dbName) {
       safeSetHTML(overlay, `<div class="modal">
         <div class="i-emoji-lg">🔐</div>
         <div class="fw-700 text-sm mb-2">${t('safetyNumber')}</div>
+        ${contact.verified ? `<div class="text-xs color-g mb-2">${t('verifiedMark')}</div>` : ''}
         <div class="i-safety-num">${num}</div>
         <div class="text-xs color-t3 mb-3">${t('safetyDesc')}</div>
+        <div class="i-tac i-mb8" id="safety-qr"></div>
         <div class="text-xs mb-3" id="kt-audit-status">${esc(t('ktChecking'))}</div>
+        <button class="btn btn-o btn-sm i-w100 i-mb8" id="safety-scan"${typeof BarcodeDetector === 'undefined' ? ' hidden' : ''}>📷 ${t('scanToVerify')}</button>
         <button class="btn btn-o btn-sm" data-close="overlay">${t('close')}</button>
       </div>`);
       overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
       document.body.appendChild(overlay);
+      // C13: scan-to-verify — the QR encodes THIS pair's safety number (symmetric:
+      // both sides compute the same digits), so the peer scans it and compares
+      // against their own computation. Match → contact marked verified in IDB.
+      const qrCanvas = generateQR('breeze-verify:v1:' + num.replace(/\s/g, ''));
+      qrCanvas.className = 'upgrade-img';
+      overlay.querySelector('#safety-qr').appendChild(qrCanvas);
+      overlay.querySelector('#safety-scan')?.addEventListener('click', async (ev) => {
+        const scanned = await qrScanOnce(overlay.querySelector('#kt-audit-status'), ev.currentTarget);
+        if (!scanned) return;
+        const m = scanned.match(/^breeze-verify:v1:(\d{30})$/);
+        if (!m) { showToast(t('toastInvalidVerifyQR'), 'error'); return; }
+        if (m[1] === num.replace(/\s/g, '')) {
+          contact.verified = true;
+          await dbPut('contacts', contact).catch(e => _dbg(e, 'verify-put'));
+          showToast(t('toastVerified'), 'success');
+          overlay.remove();
+        } else {
+          showToast(t('toastVerifyMismatch'), 'error');
+        }
+      });
       _auditKeyTransparency(contact).then(audit => {
         const el = overlay.querySelector('#kt-audit-status');
         if (!el) return; // modal already closed
@@ -11573,144 +11605,158 @@ async function initMessenger(dbName) {
   // QR CODE: Real ISO 18004 encoder (0 dependencies, byte mode, EC level L)
   // Supports URLs up to ~270 chars (Version 1-10). Fully scannable.
   function generateQR(text) {
-    const data = new TextEncoder().encode(text);
-    // Version selection (byte mode, EC level L)
-    const caps = [0,17,32,53,78,106,134,154,192,230,271]; // max bytes per version, EC-L
+    // Byte mode, EC level L, versions 1–10, fixed mask 0.
+    // tests/qr.test.js rasterizes this function's canvas and decodes it with jsQR.
+    // (The previous encoder drew a hollow finder core, transposed format info,
+    // masked reserved cells, and used an EC table inconsistent with its own
+    // capacity table — every code it produced was decorative.)
+    const data = new TextEncoder().encode(text).slice(0, 271);
+    const caps = [0, 17, 32, 53, 78, 106, 134, 154, 192, 230, 271]; // EC-L byte caps
     let ver = 1;
     while (ver <= 10 && data.length > caps[ver]) ver++;
-    if (ver > 10) ver = 10; // truncate silently
+    if (ver > 10) ver = 10;
     const size = 17 + ver * 4;
-    const grid = Array.from({length: size}, () => new Uint8Array(size));
-    const used = Array.from({length: size}, () => new Uint8Array(size));
+    const grid = Array.from({ length: size }, () => new Uint8Array(size));
+    const used = Array.from({ length: size }, () => new Uint8Array(size));
+    const set = (x, y, v) => { grid[y][x] = v; used[y][x] = 1; };
 
-    // ── Finder patterns ──
+    // Finder (7×7: dark border, white ring, dark 3×3 core) + separator ring
     function putFinder(cx, cy) {
-      for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
+      for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
         const x = cx + dx, y = cy + dy;
         if (x < 0 || x >= size || y < 0 || y >= size) continue;
         const ring = Math.max(Math.abs(dx), Math.abs(dy));
-        grid[y][x] = ring === 1 ? 0 : 1;
-        used[y][x] = 1;
-      }
-      // Separators
-      for (let i = -4; i <= 4; i++) {
-        for (const [dx, dy] of [[i, -4],[-4, i],[i, 4],[4, i]]) {
-          const x = cx + dx, y = cy + dy;
-          if (x >= 0 && x < size && y >= 0 && y < size) used[y][x] = 1;
-        }
+        set(x, y, ring <= 3 && ring !== 2 ? 1 : 0);
       }
     }
     putFinder(3, 3); putFinder(size - 4, 3); putFinder(3, size - 4);
 
-    // ── Alignment pattern (ver >= 2) ──
+    // Alignment bullseyes (v≥2) — position count/pitch per the spec table;
+    // centers overlapping a finder are skipped
+    const numAlign = Math.floor(ver / 7) + 2;
     if (ver >= 2) {
-      const pos = [6, size - 7]; // simplified for v2-10
-      for (const ay of pos) for (const ax of pos) {
-        if (used[ay]?.[ax]) continue;
-        for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
-          const ring = Math.max(Math.abs(dx), Math.abs(dy));
-          grid[ay + dy][ax + dx] = ring === 1 ? 0 : 1;
-          used[ay + dy][ax + dx] = 1;
-        }
+      const step = Math.ceil((size - 13) / (numAlign * 2 - 2)) * 2;
+      const aPos = [6];
+      for (let i = 1, pos = size - 7; i < numAlign; i++, pos -= step) aPos.push(pos);
+      aPos.sort((a, b) => a - b);
+      for (const ay of aPos) for (const ax of aPos) {
+        if (used[ay][ax]) continue;
+        for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++)
+          set(ax + dx, ay + dy, Math.max(Math.abs(dx), Math.abs(dy)) === 1 ? 0 : 1);
       }
     }
 
-    // ── Timing patterns ──
-    for (let i = 8; i < size - 8; i++) {
-      if (!used[6][i]) { grid[6][i] = i % 2 === 0 ? 1 : 0; used[6][i] = 1; }
-      if (!used[i][6]) { grid[i][6] = i % 2 === 0 ? 1 : 0; used[i][6] = 1; }
+    // Timing + dark module + format-strip reservation (values written post-mask)
+    for (let i = 8; i < size - 8; i++) { set(i, 6, i % 2 === 0 ? 1 : 0); set(6, i, i % 2 === 0 ? 1 : 0); }
+    set(8, size - 8, 1);
+    for (let i = 0; i < 8; i++) {
+      used[8][i] = 1; used[8][size - 1 - i] = 1;
+      used[i][8] = 1; used[size - 1 - i][8] = 1;
     }
-    // Dark module
-    grid[ver * 4 + 9][8] = 1; used[ver * 4 + 9][8] = 1;
-
-    // ── Reserve format info areas ──
-    for (let i = 0; i < 8; i++) { used[8][i] = 1; used[8][size - 1 - i] = 1; used[i][8] = 1; used[size - 1 - i][8] = 1; }
     used[8][8] = 1;
 
-    // ── Data encoding (byte mode) ──
-    const ecL = [[0],[7,10],[10,16],[15,26],[20,36],[26,46],[36,60],[40,66],[48,86],[60,100],[72,122]]; // [numEC, totalCW] per version
-    const numEC = ecL[ver][0], totalCW = ecL[ver][1];
-    const numData = totalCW - numEC;
-    const bits = [];
-    const pushBits = (val, len) => { for (let i = len - 1; i >= 0; i--) bits.push((val >> i) & 1); };
-    pushBits(0b0100, 4); // byte mode indicator
-    pushBits(data.length, ver <= 9 ? 8 : 16); // char count
-    for (const b of data) pushBits(b, 8);
-    pushBits(0, 4); // terminator
-    while (bits.length % 8) bits.push(0);
-    while (bits.length < numData * 8) {
-      pushBits(0xEC, 8);
-      if (bits.length < numData * 8) pushBits(0x11, 8);
-    }
-    const codewords = [];
-    for (let i = 0; i < bits.length; i += 8) {
-      codewords.push(bits.slice(i, i + 8).reduce((a, b) => (a << 1) | b, 0));
+    // Version info (v≥7): two 3×6 BCH blocks at top-right and bottom-left
+    if (ver >= 7) {
+      let rem = ver;
+      for (let i = 0; i < 12; i++) rem = (rem << 1) ^ ((rem >> 11) * 0x1F25);
+      const vbits = ((ver << 12) | rem) & 0x3FFFF;
+      for (let i = 0; i < 18; i++) {
+        const bit = (vbits >>> i) & 1;
+        const a = size - 11 + (i % 3), b = Math.floor(i / 3);
+        set(a, b, bit); set(b, a, bit);
+      }
     }
 
-    // ── Reed-Solomon EC (GF(256), primitive 0x11D) ──
+    // ── Data codewords ──
+    const totalCW = Math.floor(((16 * ver + 128) * ver + 64
+      - (ver >= 2 ? (25 * numAlign - 10) * numAlign - 55 : 0)
+      - (ver >= 7 ? 36 : 0)) / 8);
+    const EC_PER_BLOCK = [0, 7, 10, 15, 20, 26, 18, 20, 24, 30, 18]; // EC-L, v1–10
+    const NUM_BLOCKS =   [0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 4];
+    const numBlocks = NUM_BLOCKS[ver], ecLen = EC_PER_BLOCK[ver];
+    const dataCW = totalCW - numBlocks * ecLen;
+
+    const bits = [];
+    const push = (v, n) => { for (let i = n - 1; i >= 0; i--) bits.push((v >>> i) & 1); };
+    push(0b0100, 4);                                   // byte mode
+    push(data.length, ver <= 9 ? 8 : 16);              // count field
+    for (const b of data) push(b, 8);
+    push(0, Math.min(4, dataCW * 8 - bits.length));    // terminator
+    while (bits.length % 8) bits.push(0);
+    for (let p = 0; bits.length < dataCW * 8; p++) push(p % 2 === 0 ? 0xEC : 0x11, 8);
+    const dataWords = [];
+    for (let i = 0; i < bits.length; i += 8)
+      dataWords.push(bits.slice(i, i + 8).reduce((a, b) => (a << 1) | b, 0));
+
+    // ── Reed–Solomon EC (GF(256), primitive 0x11D) + interleaving ──
     const gfExp = new Uint8Array(512), gfLog = new Uint8Array(256);
-    let val = 1;
-    for (let i = 0; i < 255; i++) { gfExp[i] = val; gfLog[val] = i; val = (val << 1) ^ (val >= 128 ? 0x11D : 0); }
+    let gv = 1;
+    for (let i = 0; i < 255; i++) { gfExp[i] = gv; gfLog[gv] = i; gv = (gv << 1) ^ (gv >= 128 ? 0x11D : 0); }
     for (let i = 255; i < 512; i++) gfExp[i] = gfExp[i - 255];
     const gfMul = (a, b) => a === 0 || b === 0 ? 0 : gfExp[gfLog[a] + gfLog[b]];
-    // Generator polynomial
     let gen = [1];
-    for (let i = 0; i < numEC; i++) {
+    for (let i = 0; i < ecLen; i++) {
       const ng = new Array(gen.length + 1).fill(0);
       for (let j = 0; j < gen.length; j++) { ng[j] ^= gen[j]; ng[j + 1] ^= gfMul(gen[j], gfExp[i]); }
       gen = ng;
     }
-    const ecCW = new Array(numEC).fill(0);
-    const msg = [...codewords.slice(0, numData), ...ecCW];
-    for (let i = 0; i < numData; i++) {
-      const coef = msg[i]; if (coef === 0) continue;
-      for (let j = 0; j < gen.length; j++) msg[i + j] ^= gfMul(gen[j], coef);
+    function rsRemainder(block) {
+      const res = new Array(ecLen).fill(0);
+      for (const d of block) {
+        const factor = d ^ res.shift();
+        res.push(0);
+        if (factor !== 0) for (let j = 0; j < ecLen; j++) res[j] ^= gfMul(gen[j + 1], factor);
+      }
+      return res;
     }
-    const allCW = [...codewords.slice(0, numData), ...msg.slice(numData)];
+    const numShort = numBlocks - totalCW % numBlocks;
+    const shortData = Math.floor(totalCW / numBlocks) - ecLen;
+    const blocks = [];
+    let off = 0;
+    for (let i = 0; i < numBlocks; i++) {
+      const dl = shortData + (i < numShort ? 0 : 1);
+      const d = dataWords.slice(off, off + dl); off += dl;
+      blocks.push({ d, ec: rsRemainder(d) });
+    }
+    const out = [];
+    for (let i = 0; i <= shortData; i++)
+      for (const b of blocks) if (i < b.d.length) out.push(b.d[i]);
+    for (let i = 0; i < ecLen; i++)
+      for (const b of blocks) out.push(b.ec[i]);
 
-    // ── Place data bits ──
-    const allBits = [];
-    for (const cw of allCW) for (let i = 7; i >= 0; i--) allBits.push((cw >> i) & 1);
-    let bi = 0;
+    // ── Zigzag placement into unreserved cells ──
+    const stream = [];
+    for (const cw of out) for (let i = 7; i >= 0; i--) stream.push((cw >>> i) & 1);
+    let bi = 0, upward = true;
     for (let right = size - 1; right >= 1; right -= 2) {
       if (right === 6) right = 5;
-      for (let vert = 0; vert < size; vert++) {
-        const y = ((Math.floor((size - 1 - right) / 2)) % 2 === 0) ? size - 1 - vert : vert;
+      for (let v = 0; v < size; v++) {
+        const y = upward ? size - 1 - v : v;
         for (const dx of [0, -1]) {
           const x = right + dx;
-          if (x < 0 || x >= size || used[y][x]) continue;
-          grid[y][x] = bi < allBits.length ? allBits[bi++] : 0;
-          used[y][x] = 1;
+          if (used[y][x]) continue;
+          grid[y][x] = bi < stream.length ? stream[bi++] : 0;
         }
       }
+      upward = !upward;
     }
 
-    // ── Mask (pattern 0: (y+x)%2==0) ──
+    // ── Mask 0 ((x+y) even) applied to data cells only ──
     for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-      if (used[y][x] && !(x <= 8 && y === 8) && !(y <= 8 && x === 8) && !(x >= size - 8 && y === 8) && !(y >= size - 8 && x === 8)) continue;
-      // Only mask data/EC modules
-    }
-    // Apply mask to data area
-    const masked = grid.map(r => new Uint8Array(r));
-    const isData = (x, y) => {
-      if (x < 0 || x >= size || y < 0 || y >= size) return false;
-      // Check if this is a data module (not finder, timing, alignment, format)
-      if (x <= 8 && y <= 8) return false; if (x >= size - 8 && y <= 8) return false; if (x <= 8 && y >= size - 8) return false;
-      if (x === 6 || y === 6) return false;
-      if (y === ver * 4 + 9 && x === 8) return false;
-      return true;
-    };
-    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-      if (isData(x, y) && (y + x) % 2 === 0) masked[y][x] ^= 1;
+      if (!used[y][x] && (x + y) % 2 === 0) grid[y][x] ^= 1;
     }
 
-    // ── Format info (EC-L=01, mask 0=000 → 01000 → BCH) ──
-    const fmtBits = [1,1,1,0,1,1,1,1,1,0,0,0,1,0,0]; // pre-computed for L + mask0
-    const putFmt = (i, val) => {
-      if (i < 8) { masked[8][i < 6 ? i : i + 1] = val; masked[size - 1 - i][8] = val; }
-      else { masked[i < 9 ? 15 - i : 14 - i + 1][8] = val; masked[8][size - 15 + i] = val; }
-    };
-    for (let i = 0; i < 15; i++) putFmt(i, fmtBits[i]);
+    // ── Format info — EC-L mask0 = 0x77C4 (BCH + mask pattern applied) ──
+    const FMT = 0x77C4;
+    for (let i = 0; i < 15; i++) {
+      const bit = (FMT >>> i) & 1;
+      if (i < 6) grid[i][8] = bit;
+      else if (i < 8) grid[i + 1][8] = bit;
+      else grid[size - 15 + i][8] = bit;
+      if (i < 8) grid[8][size - 1 - i] = bit;
+      else if (i < 9) grid[8][7] = bit;
+      else grid[8][14 - i] = bit;
+    }
 
     // ── Render to canvas ──
     const canvas = document.createElement('canvas');
@@ -11722,9 +11768,39 @@ async function initMessenger(dbName) {
     ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, total, total);
     ctx.fillStyle = '#000000';
     for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-      if (masked[y][x]) ctx.fillRect((x + margin) * scale, (y + margin) * scale, scale, scale);
+      if (grid[y][x]) ctx.fillRect((x + margin) * scale, (y + margin) * scale, scale, scale);
     }
     return canvas;
+  }
+
+  // Scan the camera for one QR value. `anchor` is the element the live <video> preview
+  // is inserted before. Resolves with the decoded string, null on camera denial, and
+  // never resolves if the enclosing UI closes first — a detached <video> ends the loop,
+  // which ALWAYS releases the camera tracks (the old inline scanner leaked them when a
+  // modal was closed mid-scan).
+  function qrScanOnce(anchor, btn) {
+    return new Promise(async (resolve) => {
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      } catch(e) { _dbg(e, 'qr-scan'); showToast(t('toastCameraFail'), 'error'); resolve(null); return; }
+      const video = document.createElement('video');
+      video.srcObject = stream; video.autoplay = true; video.playsInline = true;
+      video.className = 'scan-video';
+      anchor.parentNode.insertBefore(video, anchor);
+      if (btn) { btn.textContent = '⏳ ' + t('scanning'); btn.disabled = true; }
+      const detector = new BarcodeDetector({ formats: ['qr_code'] });
+      const cleanup = () => { stream.getTracks().forEach(tr => tr.stop()); };
+      const loop = async () => {
+        if (!video.parentNode) { cleanup(); return; }
+        try {
+          const codes = await detector.detect(video);
+          if (codes.length > 0) { cleanup(); video.remove(); resolve(codes[0].rawValue); return; }
+        } catch {}
+        requestAnimationFrame(loop);
+      };
+      video.onloadedmetadata = () => loop();
+    });
   }
 
   function showQRModal(url) {
@@ -11774,38 +11850,13 @@ async function initMessenger(dbName) {
       scanBtn.textContent = '📷 ' + (t('scanQR'));
       scanBtn.setAttribute('aria-label', t('scanQR'));
       scanBtn.onclick = async () => {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-          const video = document.createElement('video');
-          video.srcObject = stream;
-          video.autoplay = true; video.playsInline = true;
-          video.className = 'scan-video';
-          card.insertBefore(video, closeBtn);
-          scanBtn.textContent = '⏳ ' + (t('scanning'));
-          scanBtn.disabled = true;
-          const detector = new BarcodeDetector({ formats: ['qr_code'] });
-          const scanLoop = async () => {
-            try {
-              const barcodes = await detector.detect(video);
-              if (barcodes.length > 0) {
-                const value = barcodes[0].rawValue;
-                stream.getTracks().forEach(t => t.stop());
-                video.remove();
-                modal.remove();
-                if (value.includes('?add=')) {
-                  window.location.href = value;
-                } else {
-                  showToast(t('toastInvalidQR'), 'error');
-                }
-                return;
-              }
-            } catch {}
-            if (video.parentNode) requestAnimationFrame(scanLoop);
-          };
-          video.onloadedmetadata = () => scanLoop();
-        } catch(e) {
-          _dbg(e, 'qr-scan');
-          showToast(t('toastCameraFail'), 'error');
+        const value = await qrScanOnce(closeBtn, scanBtn);
+        if (!value) return;
+        modal.remove();
+        if (value.includes('?add=')) {
+          window.location.href = value;
+        } else {
+          showToast(t('toastInvalidQR'), 'error');
         }
       };
       card.append(title, qr, urlDiv, copyBtn, scanBtn, closeBtn);

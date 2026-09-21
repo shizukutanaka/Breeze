@@ -1,5 +1,29 @@
 # Changelog
 
+## QR codes were decorative: encoder rewrite + C13 scan-to-verify (branch devin/c13-qr-verify, 2026-09-20)
+
+vitest 829 → **835** (+6 decode regression tests); `index.html`, `tests/qr.test.js` (new), `locales/ja.json`, `package.json` (+jsqr devDep), `docs/ROADMAP.md`, `CHANGELOG.md`, `_headers`/`tauri/src-tauri/tauri.conf.json` (CSP hash propagation).
+
+Socratic check of the `/qr` claim ("show a QR code → let them scan it") against reality: the hand-rolled `generateQR` produced **unscannable** output on every version — verified by decoding its raster with jsQR. At least four independent spec violations, any one fatal: the finder core drew a white ring inside the 3×3 black center; format-info bits were written transposed (row↔col swapped) and landed on a timing cell; the mask flipped reserved cells including the format strips and alignment patterns; the EC table contradicted the encoder's own capacity table (e.g. v2 declared 16 total codewords while claiming 32-byte capacity), with no block interleaving for v6+ and no version info for v7+. The whole QR invite path — `/qr`, share-ID, the LINE/WhatsApp migration flow that tells users to "let them scan it" — was decorative.
+
+`generateQR` is rewritten to spec (byte mode, EC-L, v1–v10, real RS block table + interleaving, mask 0 restricted to unreserved cells, correct format placement, version info for v7+) with the same signature, and `tests/qr.test.js` rasterizes the inline function and decodes it with jsQR across six payload sizes so this can't silently regress.
+
+**C13 (scan-to-verify) on top**: the safety-number modal now renders the pair's safety number as a `breeze-verify:v1:<digits>` QR — symmetric, both sides compute the same digits — plus a "Scan to verify" camera flow (BarcodeDetector). A match persists `contact.verified` and shows a ✓ badge; a mismatch warns of possible interception. The camera scanner was also extracted into `qrScanOnce()` shared with `/qr`, fixing a real leak: closing the QR modal mid-scan used to leave the camera running.
+
+---
+
+## C11 finished: closed-app outbox drain in sw.js + two small reliability fixes (branch devin/c11-sw-outbox-drain, 2026-09-20)
+
+vitest 822 → **829** (+7 sw.test.js cases); `sw.js`, `index.html`, `tests/sw.test.js`, `docs/ROADMAP.md`, `CHANGELOG.md`, `_headers`/`tauri/src-tauri/tauri.conf.json` (CSP hash propagation).
+
+The C11 roadmap row ("Background Sync + persistent storage — reliable offline send; no keystore eviction") looked done: `navigator.storage.persist()` and `registerBackgroundSync()` have shipped since v3.3/v3.4. Reading the `sync` handler showed the actual gap — it only `postMessage`d `sync-outbox` to open windows, so with the app fully closed the persisted `retryQueue` sat in IndexedDB until the next launch. "Reliable offline send" quietly meant "reliable while a tab is open."
+
+`sw.js` now drains the queue itself when `clients.matchAll` returns zero windows: it reads `settings/retryQueue` (already-E2E envelopes, so no keys needed), re-POSTs each item sealed-first then `/api/msg/send` — the same order the page uses — and writes back only the failures (queue still capped at 50). Multi-account `breeze-acc-*` DBs are covered via `indexedDB.databases()` where it exists; `idbOpenExisting` aborts the upgrade transaction so the drain can never create an empty store-less DB that would poison the page's own `open()`. Page side: the `sync-outbox` handler is now gated on `_isLeaderTab` (the SW pings *every* window — before, N open tabs each re-POSTed the same queue), and the relay-failure catch registers a sync tag too, not just the offline path.
+
+Also fixed the E2E-found STT toast: `recognition.onerror` reported `toastServerError + ': not-allowed'` on mic-permission denial — a permission refusal labeled as a server failure. `not-allowed`/`service-not-allowed`/`audio-capture` now show the existing `toastMicDenied`; `no-speech`/`aborted` stay silent.
+
+---
+
 ## I19 landed: relay-only by default when TURN is provisioned + STUN self-hosting (branch devin/i19-relay-only-default, 2026-09-20)
 
 vitest 822 → **825** (+3 worker tests); `index.html`, `_worker.js`, `wrangler.toml`, `.env.example`, `docs/SELF_HOSTING.md`, `docs/ROADMAP.md`, `CHANGELOG.md`, plus `_headers`/`tauri/src-tauri/tauri.conf.json` CSP-hash propagation.

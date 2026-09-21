@@ -16,7 +16,9 @@ const swSource = readFileSync(
 const ORIGIN = 'https://breeze.app';
 
 // Load sw.js against a fresh mock global and return the captured event handlers.
-function loadSW() {
+// `indexedDB`/`fetchImpl` are injectable for the closed-page outbox drain; callers
+// that never hit that path get a throwing stub / the real global fetch.
+function loadSW({ indexedDB, fetchImpl } = {}) {
   const handlers = {};
   const self = {
     location: { origin: ORIGIN },
@@ -49,7 +51,11 @@ function loadSW() {
     match: () => Promise.resolve(undefined),
   };
   // eslint-disable-next-line no-new-func
-  new Function('self', 'clients', 'caches', swSource)(self, clients, caches);
+  new Function('self', 'clients', 'caches', 'indexedDB', 'fetch', swSource)(
+    self, clients, caches,
+    indexedDB || { open: () => { throw new Error('no idb in test'); } },
+    fetchImpl || globalThis.fetch,
+  );
   return { handlers, self, clients, openWindowCalls, postMessageCalls, putCalls, state };
 }
 
@@ -203,6 +209,147 @@ describe('sw.js cachePut — guards the Cache.put() pitfalls', () => {
     const out = await fireNavigate(ctx, { preloadResponse: resp });
     expect(out).toBe(resp);
     expect(ctx.putCalls.length).toBe(1); // no-cache does not prohibit storage
+  });
+});
+
+// ─── C11 closed-page outbox drain ────────────────────────────────────────────
+// In-memory IndexedDB stand-in. `stores` maps dbName → { retryQueue: [...] }.
+// A name NOT in `stores` behaves like a DB that does not exist yet: the real
+// open() would create it, so idbOpenExisting's upgradeneeded-abort path fires
+// (we emulate: fire onupgradeneeded, then AbortError) and nothing is created.
+function makeIDB(stores = {}, knownNames = null) {
+  return {
+    databases: knownNames === null
+      ? undefined // Firefox/Safari path — no enumeration
+      : () => Promise.resolve(knownNames.map(name => ({ name }))),
+    open: (name) => {
+      const req = {};
+      setTimeout(() => {
+        if (!(name in stores)) {
+          req.transaction = { abort: () => {} };
+          req.onupgradeneeded?.();
+          req.onerror?.(new Error('AbortError'));
+          return;
+        }
+        const data = stores[name];
+        req.result = {
+          close: () => {},
+          transaction: (store, mode) => {
+            const tx = { oncomplete: null, onerror: null };
+            tx.objectStore = () => ({
+              get: (key) => {
+                const g = {};
+                setTimeout(() => { g.result = data[key]; g.onsuccess?.({ target: g }); }, 0);
+                return g;
+              },
+              put: (val, key) => {
+                const p = {};
+                setTimeout(() => { data[key] = val; p.onsuccess?.({ target: p }); tx.oncomplete?.(); }, 0);
+                return p;
+              },
+            });
+            return tx;
+          },
+        };
+        req.onsuccess?.();
+      }, 0);
+      return req;
+    },
+  };
+}
+
+async function fireSync(ctx, { tag = 'breeze-outbox', windows = [] } = {}) {
+  ctx.clients.matchAll = () => Promise.resolve(windows);
+  let waited;
+  ctx.handlers.sync({ tag, waitUntil: (p) => { waited = p; } });
+  await waited;
+}
+
+const okResp = { ok: true };
+const badResp = { ok: false, status: 500 };
+
+describe('sw.js sync — outbox drain when the app is closed', () => {
+  it('posts sync-outbox to open windows and does NOT drain itself', async () => {
+    const postMessageCalls = [];
+    const ctx = loadSW({
+      indexedDB: makeIDB({ 'breeze-messenger': { retryQueue: [{ to: 'x', payload: {} }] } }),
+      fetchImpl: async () => { throw new Error('must not fetch while a window is open'); },
+    });
+    const win = { postMessage: (m) => postMessageCalls.push(m) };
+    await fireSync(ctx, { windows: [win] });
+    expect(postMessageCalls).toEqual([{ type: 'sync-outbox' }]);
+  });
+
+  it('drains the persisted queue via sealed-send when no window is open', async () => {
+    const stores = { 'breeze-messenger': { retryQueue: [{ to: 'alice', payload: { to: 'alice', payload: 'enc' } }] } };
+    const calls = [];
+    const ctx = loadSW({
+      indexedDB: makeIDB(stores),
+      fetchImpl: async (url, opts) => { calls.push({ url, body: JSON.parse(opts.body) }); return okResp; },
+    });
+    await fireSync(ctx, { windows: [] });
+    expect(calls.length).toBe(1);
+    expect(calls[0].url).toBe('/api/sealed/send');
+    expect(calls[0].body.to).toBe('alice');
+    expect(JSON.parse(calls[0].body.envelope)).toEqual({ to: 'alice', payload: 'enc' });
+    expect(stores['breeze-messenger'].retryQueue).toEqual([]); // written back empty
+  });
+
+  it('falls back to /api/msg/send when the sealed endpoint rejects', async () => {
+    const stores = { 'breeze-messenger': { retryQueue: [{ to: 'bob', payload: { to: 'bob', payload: 'enc' } }] } };
+    const urls = [];
+    const ctx = loadSW({
+      indexedDB: makeIDB(stores),
+      fetchImpl: async (url) => { urls.push(url); return url.includes('/sealed/') ? badResp : okResp; },
+    });
+    await fireSync(ctx, { windows: [] });
+    expect(urls).toEqual(['/api/sealed/send', '/api/msg/send']);
+    expect(stores['breeze-messenger'].retryQueue).toEqual([]);
+  });
+
+  it('keeps undelivered items in the queue for the next sync', async () => {
+    const item = { to: 'carol', payload: { to: 'carol', payload: 'enc' } };
+    const stores = { 'breeze-messenger': { retryQueue: [item] } };
+    const ctx = loadSW({
+      indexedDB: makeIDB(stores),
+      fetchImpl: async () => { throw new Error('offline'); },
+    });
+    await fireSync(ctx, { windows: [] });
+    expect(stores['breeze-messenger'].retryQueue).toEqual([item]);
+  });
+
+  it('drains breeze-acc-* databases discovered via indexedDB.databases()', async () => {
+    const stores = {
+      'breeze-messenger': { retryQueue: [] },
+      'breeze-acc-2': { retryQueue: [{ to: 'dave', payload: { to: 'dave', payload: 'enc' } }] },
+    };
+    const calls = [];
+    const ctx = loadSW({
+      indexedDB: makeIDB(stores, ['breeze-messenger', 'breeze-acc-2']),
+      fetchImpl: async (url, opts) => { calls.push(JSON.parse(opts.body).to); return okResp; },
+    });
+    await fireSync(ctx, { windows: [] });
+    expect(calls).toEqual(['dave']);
+    expect(stores['breeze-acc-2'].retryQueue).toEqual([]);
+  });
+
+  it('does not create the DB on a device where the app never ran', async () => {
+    const stores = {}; // nothing exists
+    let fetched = false;
+    const ctx = loadSW({
+      indexedDB: makeIDB(stores, []),
+      fetchImpl: async () => { fetched = true; return okResp; },
+    });
+    await fireSync(ctx, { windows: [] });
+    expect(fetched).toBe(false);
+    expect(stores).toEqual({}); // the aborted upgrade left no empty DB behind
+  });
+
+  it('ignores sync events for other tags', async () => {
+    const ctx = loadSW();
+    let ran = false;
+    ctx.handlers.sync({ tag: 'something-else', waitUntil: () => { ran = true; } });
+    expect(ran).toBe(false);
   });
 });
 

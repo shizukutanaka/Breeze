@@ -40,7 +40,7 @@ since skipped keys are receiver-side state).
 | I3 | Group PCS — epoch bump + redistribute on kick/leave | M | Removed members keep decrypting today (ePrint 2017/666). | I2 | ✅ **fully deployed** in `src/crypto/group.js` + worker (G3) + index.html: `rotateEpoch` + epoch gate + `handleGroupKick` bumps epoch; client-side redistribution and epoch-mismatch rejection wired in (`p.ep` check); kicked-member-blocked test |
 | I4 | Encrypt identity/signing keys at rest (app-lock) | M | Plaintext JWK in IndexedDB → XSS/forensics (ePrint 2024/887). | — | ✅ **fully deployed** in `src/crypto/atrest.js` (PBKDF2≥600k, btoa/atob browser-compat, wrapJWK/unwrapJWK/migrate/zeroBuffer, +10 tests); **index.html**: `loadIdentity()`/`_atRestIsWrapped()` wired in, opt-in via `/keywrap` (off by default — surfaced once via the `keywrapSuggestion` toast on first boot) |
 | C8 | Web-app integrity ("Code Verify" / SW hash-pin) | M | Biggest *unaddressed* web-E2EE threat: host can serve malicious JS. SW is the pin point. | — |
-| C13 | QR **scan-to-verify** as default ceremony | S–M | Human out-of-band channel closes the I1 MITM gap *before* key transparency. | — |
+| C13 | QR **scan-to-verify** as default ceremony | S–M | Human out-of-band channel closes the I1 MITM gap *before* key transparency. | — | ✅ **done**: safety-number modal now renders `breeze-verify:v1:<digits>` QR (the pair's number is symmetric) + "Scan to verify" camera flow (BarcodeDetector); match → `contact.verified` persisted + badge. **Blocked bug fix included**: the shipped `generateQR` produced *unscannable* codes on every version — hollow finder core, transposed format info, mask applied to reserved cells, EC block table inconsistent with its own capacity table, no interleaving — so the entire QR invite path was decorative. Rewritten to spec; `tests/qr.test.js` decodes the raster with jsQR across v1–v10 |
 | I19 | WebRTC: relay-only privacy default + STUN self-host | S | srflx still leaks public IP to peer by default (arXiv 2510.16168). | — | ✅ **deployed**: clients default to `relayOnly` (`iceTransportPolicy=relay` + srflx/prflx filtering already wired) when `/api/turn` returns operator-provisioned TURN (`provider` ∈ cloudflare/custom/static — the shared openrelay fallback is excluded so the free metered quota isn't drained for unconfigured deploys); explicit `brz-relay-only` choice always wins. Worker: `STUN_URL` overrides the public STUN list and a `stun:` entry is auto-derived from a plain `turn:` TURN_URL (coturn dual-role); 3 new worker tests |
 
 ---
@@ -49,13 +49,13 @@ since skipped keys are receiver-side state).
 
 | ID | Item | Effort | Why | Dep |
 |----|------|--------|-----|-----|
-| I5 | Optional + jittered receipts; relay batching | S–M | Sealed-sender deanonymization via receipt timing (NDSS'21). | — |
+| I5 | Optional + jittered receipts; relay batching | S–M | Sealed-sender deanonymization via receipt timing (NDSS'21). | — | 🟡 **client side done**: `hideReadReceipts` opt-out + `readReceiptDelay` with ±20% jitter already deployed; **remaining**: relay-side receipt batching (Worker change) |
 | I6 | Length-bucketed padding + optional cover traffic | S–M | Flat 256-B pad leaks size buckets (Loopix). | I15 | 🟡 **padding done**: `ratchet.js` already pads to 256-byte-aligned buckets; cover traffic (fake messages) is client-side |
 | C10 | Durable Objects (rate-limit/presence/signaling) + WebSocket push | M–L | Fixes the per-isolate `_rateLimitMap` undercount **and** the KV write-budget ceiling; replaces polling. | — |
 | C12 | Encrypted, preview-less push (RFC 8291) | S–M | Push service sees ciphertext only; no message preview. | — | ✅ **done**: `encryptPushPayload` (RFC 8291 P-256 ECDH + HKDF + AES-128-GCM) + `buildVapidJwt` (ES256) in `_worker.js`; `sendPushToUser` now encrypts; 15 tests in `tests/push.test.js` (round-trip + signature verify) |
 | I17 | Verifiable abuse reporting (Hecate / AMF franking) | M–L | Consensual reporting, no backdoor (USENIX'22). | I16 | ✅ **fully deployed** (client + relay): `src/crypto/franking.js` + worker `/api/abuse/record`+`/api/abuse/report` (end-to-end test in `tests/worker.test.js`); **index.html**: inline `_frankKey`/`_frankCommit` + report UI, relay verifies via `hmacVerifyFrank` — deliberately derives `Kf` from `msgKey` (`HKDF(msgKey,0³²,'breeze-frank',32)`) instead of the reference's random draw, so only the opaque `frankId` goes on the wire; **still open**: sealed-sender sender-binding (Hecate asymmetric) — symmetric franking stops forged reports but can't bind a malicious sender, who can just skip the report call |
 | I18 | Anonymous anti-abuse tokens (Privacy Pass/VOPRF) | M–L | Battery-friendly, unlinkable vs PoW. | — |
-| C11 | Background Sync + persistent storage | S | Reliable offline send; no keystore eviction. | — |
+| C11 | Background Sync + persistent storage | S | Reliable offline send; no keystore eviction. | — | ✅ **done**: `navigator.storage.persist()` + `registerBackgroundSync()` (v3.3/v3.4) were already in; the missing piece was the **closed-app** path — sw.js's `sync` handler only pinged open windows. Now `drainOutbox()` in `sw.js` re-POSTs the persisted `retryQueue` itself when no window exists (payloads are already E2E envelopes; sealed-first then `/api/msg/send`, multi-account `breeze-acc-*` DBs included). Page-side drain gated to the leader tab — before, every open window would re-POST the same queue |
 
 ---
 
@@ -103,7 +103,8 @@ three mirror-drift tests.
 
 ## Sprint 2 (groups + at-rest, ~1–2 weeks)
 **I2 + I3 + I4** — **all three now deployed** (see P1 table above). **C13** (QR verify)
-and **I19** (relay-only default) remain as quick UX/privacy wins, not yet started.
+and **I19** (relay-only default) are now deployed as well — the P2 table above is the
+live edge.
 
 ## Then
 Backend correctness/cost (**C10**), metadata hardening (**I5/I6/C12**), and the

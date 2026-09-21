@@ -178,10 +178,100 @@ self.addEventListener('sync', (e) => {
     e.waitUntil(
       clients.matchAll({ type: 'window' }).then(all => {
         for (const client of all) client.postMessage({ type: 'sync-outbox' });
+        // C11: with no app window open there is no one to receive sync-outbox, so the
+        // persisted outbox would sit in IDB until the next launch. Drain it here — the
+        // queued payloads are already E2E-encrypted envelopes, so the worker needs no
+        // keys; it re-POSTs them to the same endpoints the page would have used.
+        if (all.length === 0) return drainOutbox();
       })
     );
   }
 });
+
+// Open an existing app DB without ever creating one: no version is passed, and if the
+// open would trigger an upgrade (i.e. the DB does not exist yet — fresh device, never
+// onboarded) the transaction is aborted, which discards the would-be empty database
+// instead of leaving a store-less husk that would poison the page's own open() later.
+function idbOpenExisting(name) {
+  return new Promise((resolve) => {
+    let req;
+    try { req = indexedDB.open(name); } catch { resolve(null); return; }
+    req.onupgradeneeded = () => { try { req.transaction.abort(); } catch {} };
+    req.onerror = () => resolve(null);
+    req.onblocked = () => resolve(null);
+    req.onsuccess = () => resolve(req.result);
+  });
+}
+
+function idbGet(db, store, key) {
+  return new Promise((resolve) => {
+    try {
+      const req = db.transaction(store, 'readonly').objectStore(store).get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(undefined);
+    } catch { resolve(undefined); }
+  });
+}
+
+function idbPut(db, store, key, val) {
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(store, 'readwrite');
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+      tx.objectStore(store).put(val, key);
+    } catch { resolve(false); }
+  });
+}
+
+async function drainOutbox() {
+  // Multi-account: the first identity lives in 'breeze-messenger', extra accounts in
+  // 'breeze-acc-*' (each has its own retryQueue). databases() is Chromium-only; where
+  // it is absent we still drain the default DB, which covers single-account users.
+  const names = ['breeze-messenger'];
+  try {
+    const dbs = await indexedDB.databases?.();
+    if (dbs) for (const d of dbs) {
+      if (d.name && d.name.startsWith('breeze-acc-') && !names.includes(d.name)) names.push(d.name);
+    }
+  } catch {}
+  for (const name of names) {
+    const db = await idbOpenExisting(name);
+    if (!db) continue;
+    try {
+      const queue = await idbGet(db, 'settings', 'retryQueue');
+      if (!Array.isArray(queue) || !queue.length) continue;
+      const remaining = [];
+      for (const item of queue) {
+        if (!item || !item.to || !item.payload) continue;
+        let sent = false;
+        // Same order as the page: sealed sender first (metadata-hiding), then the
+        // standard relay. Rate-limit/5xx responses keep the item for the next sync.
+        try {
+          const r = await fetch('/api/sealed/send', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to: item.to, envelope: JSON.stringify(item.payload) }),
+          });
+          sent = r.ok;
+        } catch {}
+        if (!sent) {
+          try {
+            const r = await fetch('/api/msg/send', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(item.payload),
+            });
+            sent = r.ok;
+          } catch {}
+        }
+        if (!sent) remaining.push(item);
+      }
+      // Persist only the survivors (the page caps the queue at 50 — keep that bound).
+      if (remaining.length !== queue.length) {
+        await idbPut(db, 'settings', 'retryQueue', remaining.slice(0, 50));
+      }
+    } finally { db.close(); }
+  }
+}
 
 // v3.6: SKIP_WAITING message from client → activate new SW immediately
 self.addEventListener('message', (e) => {
