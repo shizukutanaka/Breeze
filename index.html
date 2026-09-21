@@ -9740,10 +9740,14 @@ async function initMessenger(dbName) {
             // Honesty over silence: the relay counts envelopes its queue caps forced it to
             // drop while we were offline — tell the user instead of losing them wordlessly.
             if (Number.isInteger(sData.dropped) && sData.dropped > 0) showToast(t('toastMsgsDropped', sData.dropped), 'error');
+            const sealedList = Array.isArray(sData.messages) ? sData.messages : [];
             let sealedProcessed = 0;
-            for (const sealed of (sData.messages || [])) {
+            for (const sealed of sealedList) {
               try {
-                let env = JSON.parse(sealed.envelope);
+                let env;
+                // Malformed wire JSON can't reach the terminal branch below — count it toward
+                // the ack deliberately or one poisoned envelope would block queue-clearing forever.
+                try { env = JSON.parse(sealed.envelope); } catch { sealedProcessed++; continue; }
                 if (!env || typeof env !== 'object') { sealedProcessed++; continue; } // malformed: ACK+skip to avoid infinite retry
                 if (env.sv === 2 && env.se) {
                   // Sealed Sender v2: sender metadata is encrypted to OUR identity key.
@@ -9761,8 +9765,14 @@ async function initMessenger(dbName) {
                 sealedProcessed++;
               } catch(e) { _dbg(e, 'sealed-parse'); }
             }
-            // v3.6: ACK after successful processing (crash-safe: server keeps 5min grace)
-            if (sealedProcessed > 0) _ownerAuth('sealed-ack').then(a => postAPIRaw('/sealed/ack', { id: myId, ...a })).catch(e => _dbg(e, 'sealed-ack'));
+            // v3.6: ACK after successful processing (crash-safe: server keeps 5min grace).
+            // The worker's ack clears EVERYTHING ≤ hwm — so ack only when every envelope
+            // reached a terminal state (stored, or deterministically skipped as malformed).
+            // An envelope whose handleIncoming threw would otherwise be deleted unseen;
+            // leaving it un-acked just redelivers it next poll, and IDB dedup collapses the
+            // already-stored siblings. A permanently-crashing one is the honest failure mode.
+            if (sealedProcessed > 0 && sealedProcessed === sealedList.length)
+              _ownerAuth('sealed-ack').then(a => postAPIRaw('/sealed/ack', { id: myId, ...a })).catch(e => _dbg(e, 'sealed-ack'));
           }
           checkAndReplenishPreKeys();
         } catch(e) { _dbg(e); }

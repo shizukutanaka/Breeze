@@ -1,3 +1,14 @@
+## Sealed-ack only fires when the whole polled batch reached a terminal state (branch devin/sealed-ack-all-or-none, 2026-09-21)
+
+`handleSealedAck` clears every envelope `ts <= hwm` — i.e. the entire polled batch —
+but the client fired it whenever `sealedProcessed > 0`. An envelope whose
+`handleIncoming` threw mid-loop was deleted by the ack it never reached: silent loss
+on the reliable path. Two-part fix: (a) `JSON.parse(sealed.envelope)` throws now count
+as processed — malformed wire JSON previously fell into the catch uncounted, and a
+permanently-poisoned envelope must not wedge the ack forever; (b) the ack fires only
+when `sealedProcessed === sealedList.length`, so a transient mid-loop failure simply
+redelivers next poll (IDB dedup collapses the already-stored siblings).
+
 ## Relay-rollback hardening on signed stored state (branch devin/signed-state-monotonic, 2026-09-21)
 
 Every signed-state endpoint checked the signature's freshness (±5min `REQ_TS`) but nothing ordered two *in-window* writes — a relay that captures a signed request can replay it moments after a newer one lands and silently roll the state back. KV has no compare-and-swap, so the stored signed timestamp is now the high-water mark on both write paths:
