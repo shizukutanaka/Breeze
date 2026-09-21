@@ -1734,6 +1734,7 @@ const _I = {
     shareInvite: 'Share this link to invite members:',
     clipboardCopied: 'Copied to clipboard',
     joinGroup: "Join \"{0}\"",
+    joinShareInfo: 'Joining shares your id and display name with the group.',
     invitedBy: "{0} invited you. Enter your name to join. ({1} members)",
     joinBtn: 'Join Group',
     rename: 'Rename',
@@ -6085,8 +6086,13 @@ async function initMessenger(dbName) {
         await addContact(addKey, P.get('name') || t('newContact'));
       }
     }
-    // Auto-join group from URL (?join=token)
-    if (joinToken) await processJoinToken(joinToken);
+    // Auto-join group from URL (?join=token) — but ASK first: a shared link must not
+    // silently enroll this account into an attacker's group. Joining publishes my
+    // id/pub/name to the roster and the relay before I ever see the conversation.
+    if (joinToken) {
+      const gi = await postAPIRaw('/group/info', { token: joinToken }).then(r => (r && r.ok) ? r.json() : null).catch(() => null);
+      if (await showConfirm(t('joinGroup', gi?.name || '…'), { desc: t('joinShareInfo'), okText: t('joinBtn') })) await processJoinToken(joinToken);
+    }
     // Auto-open settings from URL (?settings — PWA manifest "Settings" shortcut).
     // manifest.json advertised this shortcut with nothing on the boot path ever reading the
     // param, so long-pressing the installed app icon → Settings silently did nothing.

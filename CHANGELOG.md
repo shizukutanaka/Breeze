@@ -1,3 +1,12 @@
+## ?join= links silently joined groups on existing accounts — now asks first (branch devin/join-confirm, 2026-09-21)
+
+processJoinToken ran unconditionally at boot for logged-in accounts: clicking a shared
+?join= link instantly enrolled the account into the group — publishing my id/pub/name
+to the roster and the relay — with zero consent UI (the name prompt only exists on the
+fresh-setup path, where the Join button IS the consent). Now fetches /group/info and
+shows a confirm dialog ("Join \"name\"?" + what joining shares) before enrolling;
+cancel/deny leaves the account untouched. New joinShareInfo i18n key in all 7 locales.
+
 ## 1:1 relayed reactions get the same caps the group path already had (branch devin/reaction-caps-1to1, 2026-09-21)
 
 The encrypted `isSignal` reaction handler on the 1:1 path created `reactions[emoji]`

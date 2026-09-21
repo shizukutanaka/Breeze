@@ -334,6 +334,7 @@
  "shareInvite": "Comparte este enlace para invitar miembros:",
  "clipboardCopied": "Copiado al portapapeles",
  "joinGroup": "Unirse a \"{0}\"",
+ "joinShareInfo": "Al unirte, tu id y nombre visible se comparten con el grupo.",
  "invitedBy": "{0} te ha invitado. Escribe tu nombre para unirte. ({1} miembros)",
  "joinBtn": "Unirse al grupo",
  "rename": "Renombrar",

@@ -331,6 +331,7 @@
  "shareInvite": "Bagikan tautan ini untuk mengundang anggota:",
  "clipboardCopied": "Disalin ke papan klip",
  "joinGroup": "Gabung \"{0}\"",
+ "joinShareInfo": "Bergabung akan membagikan id dan nama tampilan Anda ke grup.",
  "invitedBy": "{0} mengundang Anda. Masukkan nama untuk bergabung. ({1} anggota)",
  "joinBtn": "Gabung Grup",
  "rename": "Ganti nama",
