@@ -4372,7 +4372,13 @@ async function initMessenger(dbName) {
       if (!resp.ok) return;
       const data = await resp.json();
       for (const msg of (data.messages || [])) {
-        if (msg.type === 'remote_wipe' && msg.from === myId) {
+        // Signature-gated: `from` is self-asserted on the relay, so a bare remote_wipe
+        // is forgeable by anyone who knows your userId — a remote data-destruction
+        // primitive. Only a valid Ed25519 sig over 'breeze-remote-wipe:<from>:<ts>' by
+        // THIS account's signing key is honoured. (Today /msg/send drops `type`, so no
+        // code path can produce this — the gate stands ready for a future signed send.)
+        if (msg.type === 'remote_wipe' && msg.from === myId && typeof msg.sig === 'string'
+            && (await verifySignature('breeze-remote-wipe:' + msg.from + ':' + msg.ts, msg.sig, _signingPubB64)) === true) {
           auditLog('security', 'Remote wipe signal received', 'critical');
           // Destroy all data
           const stores = [...db.objectStoreNames];
@@ -12569,9 +12575,15 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       clearInput();
       const choice = await showConfirm(t('wipeTitle'), { okText: t('wipeBtn'), danger: true, desc: t('wipeDesc') });
       if (!choice) { showToast(t('toastCancelled'), 'info'); return; }
-      // Send remote wipe signal to own inbox (wakes other devices)
+      // REMOVED: the remote-wipe relay signal was doubly dead — the Worker rejects empty
+      // payloads (400 MISSING_FIELDS) AND never stores `type` on the message, so
+      // msg.type==='remote_wipe' could never be observed. Worse, if the relay ever did
+      // ferry it, `from === myId` is self-asserted: anyone who knows your userId could
+      // wipe every device you own. The receiver below now requires an Ed25519 signature
+      // by this account's signing key; a real multi-device wipe needs the signed device
+      // registry as the trust anchor (Worker change — deferred until approved). The
+      // account delete + push unsubscribe + local wipe below still do the real work.
       if (API && myId) {
-        try { await postAPIRaw('/msg/send', { to: myId, from: myId, payload: '', ts: Date.now(), type: 'remote_wipe' }); } catch(e) { _dbg(e); }
         // Delete server-side account data: prekeys, inbox, presence, push subscriptions.
         // Requires Ed25519 ownership proof matching the stored edIdentityKey.
         // Best-effort: local wipe proceeds regardless of server response.
