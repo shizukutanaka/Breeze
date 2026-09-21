@@ -5471,7 +5471,10 @@ async function initMessenger(dbName) {
           const resp = await postAPIRaw('/sealed/send', { to: item.to, envelope: JSON.stringify(item.payload) });
           if (resp.ok) sent = true;
         } catch {}
-        if (!sent) await postAPIRaw('/msg/send', item.payload);
+        // A non-OK HTTP response must be treated like a network failure — otherwise the
+        // message vanishes from the queue with no retry and no dead-letter record.
+        if (!sent) sent = (await postAPIRaw('/msg/send', item.payload)).ok;
+        if (!sent) throw new Error('relay-not-ok');
       } catch(e) { _retryQueue.push(item); _saveRetryQueue(); }
       _updateOutboxBadge(); _saveRetryQueue();
       if (_retryQueue.length > 0) scheduleRetry();

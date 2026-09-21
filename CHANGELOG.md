@@ -1,3 +1,12 @@
+## Retry-queue fallback no longer drops a message on a non-OK relay response (branch devin/retry-fallback-drop, 2026-09-21)
+
+`scheduleRetry` tried `/sealed/send` first (checking `resp.ok`), then fell back to
+`/msg/send` — but never inspected that response. A relay answering 429/4xx/5xx meant the
+queued message was discarded instantly: already shifted off `_retryQueue`, no requeue, no
+dead-letter record, no toast. The same fallback in sw.js (`r.ok` checked on both paths)
+shows this was drift, not intent. A non-OK response now throws into the existing catch —
+same treatment as a network failure: requeue → bounded attempts → dead-letter + toast.
+
 ## Alias registrations now carry the ownership signature the worker already checked (branch devin/consolidate-groups, 2026-09-20)
 
 `/alias/set` has supported an Ed25519 ownership binding (`userId` + `ts` + `sig` over `breeze-alias-set:{alias}:{ts}`, verified against the registrant's prekey bundle with `identityKey === pub`) since the worker shipped it — but no client ever sent it, so a PoW-only request could point any unclaimed `@handle` at any public key. Both registration sites now sign: onboarding moved alias registration after `initSigning()` + `/prekey/upload` (the worker verifies against the just-registered bundle), and `/alias` rename does the same. Unsigned requests stay accepted (verify-when-present unless `ALIAS_REQUIRE_AUTH`), so the change is wire-additive.
