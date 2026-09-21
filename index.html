@@ -242,7 +242,6 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .msg-bookmarked { border-left: 2px solid var(--g); background: var(--gl) }
 .msg-deleted { opacity: .4; font-style: italic; font-size: 12px }
 .msg-sender { font-size: 11px; font-weight: 700; color: var(--g); margin-bottom: 2px }
-
 .msg-quote { border-left: 3px solid var(--g); padding: 4px 10px; margin-bottom: 6px; font-size: 12px; opacity: .7; max-height: 44px; overflow: hidden; cursor: pointer; border-radius: 0 6px 6px 0; background: rgba(52,211,153,.04); transition: opacity .15s ease }
 .msg-quote:hover { opacity: 1 }
 /* v3.6: Reply-jump highlight flash */
@@ -2935,7 +2934,6 @@ async function encrypt(passphrase, plaintext) {
     // instead of the live constant, so raising PBKDF2_ITERATIONS later never silently
     // orphans existing backup files with a misleading "wrong passphrase".
     return { s: arr(salt), i: arr(iv), d: arr(new Uint8Array(ct)), iter: CONFIG.PBKDF2_ITERATIONS };
-
     } catch(_e) { _dbg(_e, 'encrypt'); }
   }
 
@@ -2950,7 +2948,6 @@ async function decrypt(passphrase, payload) {
     const key = await crypto.subtle.deriveKey({name:'PBKDF2', salt:u8(payload.s), iterations:iter, hash:'SHA-256'}, km, {name:'AES-GCM',length:CONFIG.AES_KEY_BITS}, false, ['decrypt']);
     const pt = await crypto.subtle.decrypt({name:'AES-GCM',iv:u8(payload.i)}, key, u8(payload.d));
     return new TextDecoder().decode(pt);
-
     } catch(_e) { _dbg(_e, 'decrypt'); }
   }
 
@@ -4670,7 +4667,6 @@ async function initMessenger(dbName) {
       sess.recvCounter = 0; // N1: a DH step starts a NEW receiving chain — reset Nr so the
                             // first inbound message (counter 1) is not misread as a replay
                             // (CRYPTO-SPEC §9 N1; mirrors src/crypto/ratchet.js dhRatchetStep)
-
     } catch(_e) { _dbg(_e, 'dhRatchetStep'); }
   }
 
@@ -4975,7 +4971,6 @@ async function initMessenger(dbName) {
       }
       await saveSession(peerId, sess);
       return outMsg;
-
     } catch(_e) { _dbg(_e, 'encryptFor'); }
   }
 
@@ -5550,21 +5545,12 @@ async function initMessenger(dbName) {
   }
 
   // SENDER KEY — Group Encryption
-  //
-  // v3 (GROUP_RATCHET_V5=false, default):
-  //   Static raw key; message key = HKDF(raw, counter_bytes, 'group-msg').
-  //   No forward secrecy — knowing the raw key decrypts all messages.
-  //
-  // v5 (GROUP_RATCHET_V5=true, opt-in after coordinated rollout):
-  //   Hash ratchet — each message advances the chain key (one-way HKDF),
-  //   old chain keys are evicted, providing forward secrecy. Epoch revocation:
-  //   on kick/leave admin generates a fresh random chainKey for the bumped
-  //   epoch and re-distributes to remaining members only; a kicked member's
-  //   stale key is invalid for the new epoch.
-  //
-  // Wire format: { v:3|5, g:true, i:[iv], d:[ct], c:counter, ep:epoch }
-  //   v3 receivers HKDF with p.c as the salt.
-  //   v5 receivers ratchet forward to p.c, caching skipped keys.
+  // v3 (GROUP_RATCHET_V5=false, legacy): static raw key; msgKey = HKDF(raw, counter,
+  //   'group-msg') — no forward secrecy. v5 (default): hash ratchet — each message
+  //   advances the chain key (one-way HKDF), old chain keys evicted; kick/leave bumps
+  //   epoch and re-distributes a fresh chainKey to remaining members only.
+  // Wire: {v:3|5, g:true, i:[iv], d:[ct], c:counter, ep:epoch, cm, sg?} — cm = key
+  //   commitment, sg = per-sender Ed25519 signature (both verify-if-present).
 
   // Negotiates lazily, once, when a group's sender key doesn't exist yet (the existing
   // "first-send freezes the format" moment), using the freshest local membership snapshot.
@@ -5619,7 +5605,13 @@ async function initMessenger(dbName) {
       const iv = crypto.getRandomValues(new Uint8Array(CONFIG.IV_BYTES));
       const importedKey = await crypto.subtle.importKey('raw', msgKeyBits, { name: 'AES-GCM' }, false, ['encrypt']);
       const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, importedKey, padded);
-      return JSON.stringify({ v: version, g: true, i: arr(iv), d: arr(new Uint8Array(ct)), c: sk.counter - 1, ep: sk.epoch, cm: await _keyCommit(msgKeyBits) });
+      const out = { v: version, g: true, i: arr(iv), d: arr(new Uint8Array(ct)), c: sk.counter - 1, ep: sk.epoch, cm: await _keyCommit(msgKeyBits) };
+      // Per-sender sig (eprint 2025/554): members hold each other's chain keys, so
+      // unsigned msgs are member-forgeable. sigPub rides the sender-key distribution;
+      // legacy senders (no sigPub on record) stay decryptable — same rollout as `cm`.
+      const sg = _signingKey?.privateKey && await signMessage(`breeze-group-msg:${groupId}:${out.ep | 0}:${out.c}:${JSON.stringify(out.i)}:${JSON.stringify(out.d)}`);
+      if (sg) out.sg = sg;
+      return JSON.stringify(out);
     } catch(_e) { _dbg(_e, 'encryptGroupMsg'); }
   }
 
@@ -5630,6 +5622,12 @@ async function initMessenger(dbName) {
       const skKey = 'gsk-peer:' + groupId + ':' + senderId;
       const peerSK = await dbGet('identity', skKey);
       if (!peerSK) return null;
+
+      // sigPub on record = signing sender → an unsigned/bad-sig envelope is forged; drop it.
+      if (peerSK.sigPub) {
+        const sgOk = typeof p.sg === 'string' && p.sg && await verifySignature(`breeze-group-msg:${groupId}:${p.ep | 0}:${p.c | 0}:${JSON.stringify(p.i)}:${JSON.stringify(p.d)}`, p.sg, peerSK.sigPub);
+        if (sgOk !== true) return null;
+      }
 
       let msgKeyBits;
       if (p.v === 5 && peerSK.v === 5) {
@@ -5695,8 +5693,8 @@ async function initMessenger(dbName) {
     try {
       const sk = await getGroupSenderKey(groupId);
       const skPayload = (CONFIG.GROUP_RATCHET_V5 && sk.v === 5)
-        ? { type: 'sender_key', groupId, chainKey: sk.chainKey, epoch: sk.epoch, v: 5 }
-        : { type: 'sender_key', groupId, key: sk.raw, epoch: sk.epoch };
+        ? { type: 'sender_key', groupId, chainKey: sk.chainKey, epoch: sk.epoch, v: 5, sigPub: _signingPubB64 || undefined }
+        : { type: 'sender_key', groupId, key: sk.raw, epoch: sk.epoch, sigPub: _signingPubB64 || undefined };
       const encrypted = await encryptFor(JSON.stringify(skPayload), memberPubB64);
       if (!encrypted) { _dbg(null, 'encrypt failed'); return; }
       const memberId = memberPubB64.slice(0, 12);
@@ -9124,7 +9122,6 @@ async function initMessenger(dbName) {
 
       // Poll for answer
       pollCallSignals(contact, room);
-
     } catch(e) {
       _dbg(e, 'call');
       showToast(t('micDenied'), 'error');
@@ -9963,6 +9960,8 @@ async function initMessenger(dbName) {
           const skEntry = (skMsg.v === 5 && skMsg.chainKey)
             ? { chainKey: skMsg.chainKey, counter: 0, epoch: skMsg.epoch || 0, v: 5, skipped: {} }
             : { raw: skMsg.key, counter: 0, epoch: skMsg.epoch || 0 };
+          // Signing-capable senders ship sigPub on this channel; unsigned envelopes drop after.
+          if (typeof skMsg.sigPub === 'string' && skMsg.sigPub.length > 0 && skMsg.sigPub.length < 200) skEntry.sigPub = skMsg.sigPub;
           await dbPut('identity', skEntry, peerKey);
           _dbg(null, 'Received sender key for group ' + skMsg.groupId);
         }

@@ -404,14 +404,16 @@ function makeGroupInline(config) {
   const { _computeGroupV5 } = makeX3dhInline(null, config, 'me');
   const factory = new Function(
     'crypto', 'CONFIG', 'dbGet', 'dbPut', 'hkdf', 'arr', 'u8', '_dbg', 'TextEncoder', 'TextDecoder', '_computeGroupV5',
-    '_keyCommit', '_cmOk',
+    '_keyCommit', '_cmOk', '_signingKey', 'signMessage', 'verifySignature',
     html.slice(gs, ge) +
       '\nreturn { getGroupSenderKey, encryptGroupMsg, decryptGroupMsg };',
   );
+  // Signing stubs: the reference has no per-sender `sg`, so injecting "no signing key"
+  // keeps the wire shape identical for parity — the sg field is additive on top.
   const api = factory(
     globalThis.crypto, config, dbGet, dbPut, inlineKdf.hkdf,
     (a) => Array.from(a), (a) => new Uint8Array(a), () => {}, TextEncoder, TextDecoder, _computeGroupV5,
-    _injKeyCommit, _injCmOk,
+    _injKeyCommit, _injCmOk, null, async () => null, async () => null,
   );
   return { ...api, store };
 }
