@@ -1,5 +1,13 @@
 # Changelog
 
+## Kicked member was never told — sends kept going into the void (branch devin/kicked-member-ux, 2026-09-20)
+
+`index.html`, `locales/ja.json`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+When `group_kick` arrives with `kickedId === myId`, the old path deleted me from my own member list and rotated a key for a group I was no longer in — no toast, no exit, and the composer stayed live so my sends encrypted for a roster I'm off of vanished silently. Now: mark `group.kicked`, toast `toastKickedFromGroup`, exit the conversation, and block further sends (`toastNoLongerMember`). History stays readable; the roster poll already removes me from members.
+
+---
+
 ## Panic wipe could leave IndexedDB behind — open connection blocks deleteDatabase (branch devin/panic-db-close, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
