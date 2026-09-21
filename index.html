@@ -1231,7 +1231,6 @@ const CONFIG = {
   DC_BUFFER_LOW: 65536,             // 64 KiB low-water mark for resume
   HEALTH_CHECK_MS: 15000,           // Connection health monitor interval
   REPLAY_CACHE_SIZE: 2000,          // In-memory LRU for message dedup (Spec v7 §9)
-  OGP_CACHE_MAX: 100,               // Max Open Graph preview entries
   MSG_DOM_LIMIT: 200,               // Max DOM messages before pruning (Spec v6 §10)
   MSG_PAD_BOUNDARY: 256,
   PREKEY_OTP_COUNT: 20,
@@ -7149,7 +7148,6 @@ async function initMessenger(dbName) {
     // Text message with markdown + links
     else {
       content += renderLinks(renderMarkdown(esc(text)));
-      // v3.1: Render sender-side OGP preview if attached
     }
 
     // v3.1: Render reactions below message

@@ -1,5 +1,13 @@
 # Changelog
 
+## Dead OGP feature removed — config + stale comments (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `_worker.js`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The OGP link-preview feature was fully dead: `CONFIG.OGP_CACHE_MAX` had zero references, no `fetchOGP`/`.ogp` producer or consumer existed, and a v3.1 comment claimed a "sender-side OGP preview" rendered where nothing did. The Worker's `sha256Short` comment likewise claimed its keys were `ogp:`-prefixed — they aren't (it serves device-list digests and IP hashes). Removed the dead config and corrected both comments.
+
+---
+
 ## /contacts import bounded member count but not member shape (branch devin/consolidate-groups, 2026-09-21)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
