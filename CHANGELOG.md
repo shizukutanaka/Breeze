@@ -1,5 +1,13 @@
 # Changelog
 
+## Group join never stored creatorId/admins — /admin dead until a server-side mutation (branch devin/group-join-meta, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`processJoinToken` stored members but dropped `creatorId`/`admins` from the `/group/join` response — and the roster poll only patches them on *change*, so in a group that never mutates post-join, `isGroupAdmin()` stayed false for the creator and every `/admin` command was dead. The join path now seeds `createdBy`, `admins`, and re-syncs `name` on re-join.
+
+---
+
 ## Group invites stored unsanitized member objects (branch devin/invite-member-sanitize, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).

@@ -9218,14 +9218,22 @@ async function initMessenger(dbName) {
       const groupId = 'g_' + token;
       const existing = await dbGet('contacts', groupId);
       if (existing) {
-        // Update members list
+        // Update members list + moderation metadata
         existing.members = safeMemberList(data.members);
+        if (typeof data.creatorId === 'string' && data.creatorId) existing.createdBy = data.creatorId;
+        if (Array.isArray(data.admins)) existing.admins = data.admins.filter(id => typeof id === 'string' && id.length <= 64).slice(0, CONFIG.GROUP_MAX);
+        if (typeof data.name === 'string' && data.name) existing.name = data.name.slice(0, 64);
         await dbPut('contacts', existing);
       } else {
         await dbPut('contacts', {
           id: groupId, name: typeof data.name === 'string' ? data.name.slice(0, 64) : 'Group',
           isGroup: true, joinToken: token,
           members: safeMemberList(data.members),
+          // Seed moderation metadata — isGroupAdmin() reads createdBy/admins and the
+          // roster poll only patches them on change, so a group that never mutates
+          // post-join would leave the creator unable to run /admin.
+          createdBy: typeof data.creatorId === 'string' ? data.creatorId : undefined,
+          admins: Array.isArray(data.admins) ? data.admins.filter(id => typeof id === 'string' && id.length <= 64).slice(0, CONFIG.GROUP_MAX) : [],
           addedAt: Date.now(), unread: 0, pubB64: ''
         });
       }
