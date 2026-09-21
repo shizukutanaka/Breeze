@@ -334,6 +334,7 @@
  "shareInvite": "Compartilhe este link para convidar membros:",
  "clipboardCopied": "Copiado para a área de transferência",
  "joinGroup": "Entrar em \"{0}\"",
+ "joinShareInfo": "Ao entrar, seu id e nome de exibição são compartilhados com o grupo.",
  "invitedBy": "{0} convidou você. Digite seu nome para entrar. ({1} membros)",
  "joinBtn": "Entrar no grupo",
  "rename": "Renomear",

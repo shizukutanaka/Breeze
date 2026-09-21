@@ -331,6 +331,7 @@
  "shareInvite": "分享此連結以邀請成員：",
  "clipboardCopied": "已複製到剪貼簿",
  "joinGroup": "加入「{0}」",
+ "joinShareInfo": "加入後，您的 ID 與顯示名稱會對群組成員可見。",
  "invitedBy": "{0} 邀請了你。輸入名字即可加入。（{1} 位成員）",
  "joinBtn": "加入群組",
  "rename": "重新命名",
