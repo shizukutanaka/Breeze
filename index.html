@@ -10618,7 +10618,7 @@ async function initMessenger(dbName) {
               // Use contact.id (authenticated sender) — not msg.userId (peer-claimed, unverified)
               const reactorId = contact.id;
               if (msg.add) { if (!stored.reactions[msg.emoji]?.includes(reactorId) && (stored.reactions[msg.emoji]?.length ?? 100) < 100) stored.reactions[msg.emoji].push(reactorId); }
-              else { stored.reactions[msg.emoji] = stored.reactions[msg.emoji].filter(u => u !== reactorId); if (stored.reactions[msg.emoji].length === 0) delete stored.reactions[msg.emoji]; }
+              else if (stored.reactions[msg.emoji]) { stored.reactions[msg.emoji] = stored.reactions[msg.emoji].filter(u => u !== reactorId); if (stored.reactions[msg.emoji].length === 0) delete stored.reactions[msg.emoji]; }
               await dbPut('messages', stored);
               const el = document.querySelector(`[data-msgid="${_rmId}"]`);
               if (el) { const r = el.querySelector('.msg-reactions'); if (r) _safeReplace(r, renderReactions(stored.reactions, _rmId)); else _safeAppend(el, renderReactions(stored.reactions, _rmId)); }
@@ -10628,16 +10628,18 @@ async function initMessenger(dbName) {
           // v3.1: Poll vote
           if (msg.type === 'poll_vote') {
             const allMsgs = await dbGetAll('messages');
-            const pollMsg = allMsgs.find(m => m.isPoll && JSON.parse(m.text).pollId === msg.pollId);
-            // Same conversation binding as reactions — a peer must not vote on a poll
-            // that lives in a different conversation (pollId is self-reported).
-            if (pollMsg && pollMsg.contactId === contact.id) {
-              const poll = JSON.parse(pollMsg.text);
+            // Fold the conversation binding into the predicate: a corrupt poll in an
+            // unrelated chat would otherwise throw inside find() before ours is reached.
+            // (pollId is self-reported — the binding is what stops cross-chat voting.)
+            const pollMsg = allMsgs.find(m => m.isPoll && m.contactId === contact.id && (() => { try { return JSON.parse(m.text).pollId === msg.pollId; } catch { return false; } })());
+            let poll = null;
+            try { poll = pollMsg && JSON.parse(pollMsg.text); } catch {}
+            if (poll && Array.isArray(poll.options)) {
               // Use contact.id (authenticated sender) — not msg.userId (peer-claimed, unverified)
               const voterId = contact.id;
-              for (const opt of poll.options) opt.votes = opt.votes.filter(v => v !== voterId);
+              for (const opt of poll.options) if (Array.isArray(opt?.votes)) opt.votes = opt.votes.filter(v => v !== voterId);
               // Validate optionIndex: must be a non-negative integer (guards non-integer/symbol keys that could access array properties)
-              if (Number.isInteger(msg.optionIndex) && msg.optionIndex >= 0 && poll.options[msg.optionIndex]) poll.options[msg.optionIndex].votes.push(voterId);
+              if (Number.isInteger(msg.optionIndex) && msg.optionIndex >= 0 && Array.isArray(poll.options[msg.optionIndex]?.votes)) poll.options[msg.optionIndex].votes.push(voterId);
               pollMsg.text = JSON.stringify(poll);
               await dbPut('messages', pollMsg);
               const el = document.querySelector(`[data-msgid="${pollMsg.msgId}"]`);

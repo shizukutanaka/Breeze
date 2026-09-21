@@ -1,3 +1,13 @@
+## P2P poll_vote/reaction handlers can't be crashed by corrupt stored records (branch devin/p2p-poll-vote-guards, 2026-09-21)
+
+Three drift fixes in `dc.onmessage`: (1) reaction-remove indexed a possibly-absent
+emoji key (`undefined.filter` → throw kills the handler); (2) `poll_vote` ran
+`JSON.parse(m.text)` unguarded inside `find()` — one corrupt isPoll record in ANY
+conversation (pre-#93 restores/imports can carry them) made every later vote from
+that peer throw before reaching ours — the conversation binding is now folded into
+the predicate so foreign corrupt polls can't break it; (3) the applied poll's
+`options`/`opt.votes` shapes are validated before iterating.
+
 ## Relay-rollback hardening on signed stored state (branch devin/signed-state-monotonic, 2026-09-21)
 
 Every signed-state endpoint checked the signature's freshness (±5min `REQ_TS`) but nothing ordered two *in-window* writes — a relay that captures a signed request can replay it moments after a newer one lands and silently roll the state back. KV has no compare-and-swap, so the stored signed timestamp is now the high-water mark on both write paths:
