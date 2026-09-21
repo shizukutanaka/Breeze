@@ -1,3 +1,13 @@
+## Blocked contacts can't push P2P file chunks (branch devin/blocked-chunks, 2026-09-21)
+
+The main DataChannel's JSON path and the state channel both drop frames from
+blocked contacts, but the ArrayBuffer branch returned early into handleBinaryChunk
+before that gate ran. A blocked peer who re-signaled a channel could still spend
+the receiver's resources mid-transfer: up to FILE_MAX bytes in _fileChunks plus a
+live progress bubble — the completed file was only dropped at handleIncoming after
+all of it arrived. handleBinaryChunk now returns immediately for blocked contacts,
+before any allocation, matching the other two receive gates.
+
 ## 1:1 relayed reactions get the same caps the group path already had (branch devin/reaction-caps-1to1, 2026-09-21)
 
 The encrypted `isSignal` reaction handler on the 1:1 path created `reactions[emoji]`

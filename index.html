@@ -11671,6 +11671,10 @@ async function initMessenger(dbName) {
   const _fileChunks = {}; // { fileId: { total, received: Set, chunks: [], name, mime } }
 
   function handleBinaryChunk(contact, buffer) {
+    // Blocked peers get nothing — chunk buffers arrive before the JSON frame the main
+    // channel's blocked gate filters, and the completion path's handleIncoming drop only
+    // fires AFTER up to FILE_MAX bytes and a progress bubble were spent on the transfer.
+    if (contact.blocked) return;
     // Minimum valid header is 28 bytes (16 fileId + 4 seq + 4 total + 2 nameLen + 2 mimeLen).
     if (buffer.byteLength < 28) return;
     const view = new DataView(buffer);
