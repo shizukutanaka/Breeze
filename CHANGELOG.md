@@ -1,5 +1,13 @@
 # Changelog
 
+## Group sends never reached my other devices — self-sync fan-out (branch devin/group-selfsync, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`_fanOut` returned early on `!snapContact.pubB64`, so every group send (text, poll, file, voice) synced to members but never to MY OWN linked devices — my group messages existed only on the sending device. The guard now allows group contacts (peer device list is naturally empty for groups; only my siblings get the copy), each group branch calls `_fanOut`, and the selfSync store path understands `isPoll` so a synced group poll renders as a poll, not raw JSON.
+
+---
+
 ## Group voice messages and retries hit the same pubB64='' dead-end (branch devin/group-voice-retry, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
