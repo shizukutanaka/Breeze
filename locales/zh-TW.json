@@ -249,6 +249,7 @@
  "installPlatformDevice": "裝置",
  "typing": "輸入中...",
  "newMessages": "新訊息",
+ "notifNewMessage": "新訊息",
  "draftLabel": "草稿",
  "dropUsage": "用法：/drop <祕密訊息>",
  "dropTooLong": "祕密太長（上限 50,000 字元）",

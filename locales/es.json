@@ -251,6 +251,7 @@
  "installPlatformDevice": "dispositivo",
  "typing": "escribiendo...",
  "newMessages": "Mensajes nuevos",
+ "notifNewMessage": "Nuevo mensaje",
  "draftLabel": "Borrador",
  "dropUsage": "Uso: /drop <mensaje secreto>",
  "dropTooLong": "Secreto demasiado largo (máx. 50.000 caracteres)",

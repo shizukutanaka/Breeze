@@ -1607,6 +1607,7 @@ const _I = {
     read: 'Read',
     typing: 'typing...',
     newMessages: 'New Messages',
+    notifNewMessage: 'New message',
     draftLabel: 'Draft',
     dropUsage: 'Usage: /drop <secret message>',
     dropTooLong: 'Secret too long (max 50,000 characters)',
@@ -9472,7 +9473,10 @@ async function initMessenger(dbName) {
       // A ringing call is inherently important; only strict focus ("/focus N all") silences it.
       if (!(_focusActive() && _settings.focusStrict)) playNotif();
       if (Notification?.permission === 'granted') {
-        new Notification(contact.name, { body: msg.isVideoCall ? t('videoCall') : t('voiceCall'), tag: 'breeze-call' });
+        // Locked: a caller's name in an OS notification leaks who is calling while the UI
+        // is supposed to be hidden — degrade to a generic body.
+        const locked = !!_DOM.get('lock-screen');
+        new Notification(locked ? 'Breeze' : contact.name, { body: msg.isVideoCall ? t('videoCall') : t('voiceCall'), tag: 'breeze-call' });
       }
       return;
     }
@@ -9634,7 +9638,11 @@ async function initMessenger(dbName) {
         // mention (or a VIP group) gets through, and never in strict mode.
         if (_shouldAlert(group, mentionsMe ? '@' + myName : text)) playNotif();
         if (mentionsMe && _shouldAlert(group, '@' + myName) && Notification?.permission === 'granted') {
-          new Notification(group.name, { body: `@${msg.fromName}: ${text.slice(0, 80)}`, tag: 'breeze-' + msg.groupId });
+          // Locked: suppress the mention preview — the lock overlay hiding the UI is
+          // pointless if OS notifications still leak sender + message text.
+          if (!_DOM.get('lock-screen')) {
+            new Notification(group.name, { body: `@${msg.fromName}: ${text.slice(0, 80)}`, tag: 'breeze-' + msg.groupId });
+          }
         }
       }
       await dbPut('contacts', group);
@@ -9843,10 +9851,13 @@ async function initMessenger(dbName) {
       if (!meta.nrn && _shouldAlert(contact, text)) { playNotif();
         if (Notification?.permission === 'granted') {
           const unread = contact.unread || 1;
-          const body = unread > 1
+          // Locked: the overlay hides the UI but the OS would still show sender + message
+          // text — degrade to a generic "new message" body and drop the deep-link data.
+          const locked = !!_DOM.get('lock-screen');
+          const body = locked ? t('notifNewMessage') : (unread > 1
             ? `(${unread}) ${text.slice(0, 60)}`
-            : text.slice(0, 80);
-          new Notification(contact.name, {
+            : text.slice(0, 80));
+          new Notification(locked ? 'Breeze' : contact.name, {
             body, tag: 'breeze-' + contactId, renotify: true, silent: false,
             data: { contactId, url: '/?open=' + contactId }
           });
