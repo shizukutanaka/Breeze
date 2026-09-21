@@ -1,5 +1,13 @@
 # Changelog
 
+## P2P acks could stamp delivery state on the open chat regardless of sender (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Same DOM-outside-predicate class as the edit/delete fix: `updateDeliveryState` bound its IDB write to `fromContactId`, but the DOM stamp (`[data-msgid] .ts` in the open box) ran unconditionally — an ack arriving while a different conversation was open could mark bubbles there. The DOM pass now only runs when the ack's conversation is the one on screen; the bound IDB write still happens either way.
+
+---
+
 ## Edit/delete signals could repaint MY bubble despite failing authorization (branch devin/consolidate-groups, 2026-09-21)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).

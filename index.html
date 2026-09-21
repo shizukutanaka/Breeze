@@ -11543,8 +11543,17 @@ async function initMessenger(dbName) {
   // v3: DELIVERY STATE (ACK)
   function updateDeliveryState(msgId, state, fromContactId) {
     // state: 0=delivered, 1=read, 2=deleted
-    const el = document.querySelector(`[data-msgid="${msgId}"] .ts`);
-    if (!el) return;
+    // DOM pass only makes sense when the ack's conversation is the open one —
+    // otherwise a peer could stamp state onto bubbles of whatever chat I happen
+    // to be viewing (IDB write below is already bound to fromContactId).
+    const el = (fromContactId && activeContact?.id !== fromContactId) ? null
+      : document.querySelector(`[data-msgid="${msgId}"] .ts`);
+    if (!el) {
+      dbGet('messages', msgId).then(stored => {
+        if (stored && (!fromContactId || stored.contactId === fromContactId)) { stored.ack = state; dbPut('messages', stored); }
+      }).catch(e => _dbg(e, 'ack-persist'));
+      return;
+    }
     const existing = el.querySelector('.delivery-state');
     if (existing) existing.remove();
     const span = document.createElement('span');
