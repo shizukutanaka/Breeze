@@ -103,4 +103,12 @@ describe('wire + storage invariants', () => {
     expect(html).toContain('if (kickedId === myId)');
     expect(html).toContain('activeContact.kicked');
   });
+  it('sw.js VERSION matches CONFIG.VERSION (hand-maintained duplicates drift)', () => {
+    const sw = readFileSync(join(HERE, '..', 'sw.js'), 'utf8');
+    const swV = sw.match(/const VERSION = '([^']+)'/)?.[1];
+    const cfgV = html.match(/VERSION: '([^']+)'/)?.[1];
+    expect(swV).toBeTruthy();
+    expect(cfgV).toBeTruthy();
+    expect(swV).toBe(cfgV);
+  });
 });
