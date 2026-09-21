@@ -1208,9 +1208,10 @@ async function handleGroupInfo(body, env, request) {
 // ownership, rename, or delete the group. These are server-side state changes with no
 // client-side crypto recourse, so the E2E model does not cover them.
 //
-// Verified whenever {ts,sig} are supplied (forgeries rejected); required outright when
-// GROUP_REQUIRE_AUTH is set — flip that on once clients sign. Default (no sig + flag unset)
-// preserves the legacy flow so current clients keep working until updated. sig is Ed25519
+// Verified whenever {ts,sig} are supplied (forgeries rejected); REQUIRED by default
+// — every deployed client signs all six mutations (kick/admin/transfer/rename/
+// leave/delete), so an unsigned mutation is a forgery attempt, not a legacy flow.
+// GROUP_REQUIRE_AUTH='false' is the explicit opt-out. sig is Ed25519
 // over `breeze-group-${action}:${token}:${actorId}:${ts}:${bind}`, verified against the
 // actor's registered edIdentityKey.
 //
@@ -1235,7 +1236,7 @@ async function checkGroupAuth(env, request, action, token, actorId, ts, sig, bin
     if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
     return null;
   }
-  if (env.GROUP_REQUIRE_AUTH === 'true') return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+  if (env.GROUP_REQUIRE_AUTH !== 'false') return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
   return null;
 }
 

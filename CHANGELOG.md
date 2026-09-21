@@ -1,5 +1,9 @@
 # Changelog
 
+## Unsigned group mutations refused by default (branch devin/consolidate-groups, 2026-09-20)
+
+`checkGroupAuth` verified a caller signature when present but accepted unsigned requests unless `GROUP_REQUIRE_AUTH=true` was set — the comment said "flip that on once clients sign", and every deployed client has signed kick/admin/transfer/rename/leave/delete all along (`breeze-group-{action}:{token}:{actor}:{ts}:{bind}`, bound to the operation's target). Unsigned is now `403 AUTH_REQUIRED`; `GROUP_REQUIRE_AUTH=false` is the opt-out. The test suite now signs through a shared `gA` helper (lazily mints+registers an Ed key per actor); the rename test pins that the sig binds the SANITIZED name, matching both worker and client.
+
 ## Signal rooms no longer evict in-flight call handshakes; configured TURN mints register-gated (branch devin/consolidate-groups, 2026-09-20)
 
 Same refuse-when-full class as the mail queues: `sig:{room}` drop-oldest on its 50-entry cap let anyone who could derive a room name (`dm:{a}:{b}` from two public ids, `call:{id}` from one) destroy an active call's pending offer/answer/ICE. Now `429 QUEUE_FULL` — accepted signals survive to be polled; `_signal` retries once within the drain window. Separately, `/api/turn` used to mint credentials for anyone unless `TURN_REQUIRE_AUTH=true` was set — a configured Cloudflare Calls key bills $0.05/GB to whoever asks. A configured provider (CF Calls, coturn secret, static creds) now requires a registered `prekey:{userId}` by default; `TURN_REQUIRE_AUTH=false` opts out. The openrelay fallback stays open — its creds are public in the source.

@@ -168,6 +168,12 @@ store) rather than gated — an opt-in toggle leaves the contradiction one peer 
   registered `prekey:{userId}` unless `TURN_REQUIRE_AUTH=false` opts out. The
   public openrelay fallback stays open — its credentials are already printed in
   `_worker.js`, so gating only that path would be theater.
+- **Group mutations require the caller's signature by default.** Kick, admin
+  (promote/demote/unban), transfer, rename, leave and delete used to verify a
+  signature *when present* but accept unsigned requests unless
+  `GROUP_REQUIRE_AUTH=true` was set — and every deployed client has signed them
+  all along (`breeze-group-{action}:{token}:{actor}:{ts}:{bind}`). Unsigned is
+  now refused `403 AUTH_REQUIRED`; `GROUP_REQUIRE_AUTH=false` opts out.
 - **Metadata**: Sealed Sender **v2** hides the sender from the relay *cryptographically*:
   all sender-identifying fields (id, public key, display name, signature keys, the reply
   preview, multi-device markers — and the X3DH bootstrap header's initiator identity key,
