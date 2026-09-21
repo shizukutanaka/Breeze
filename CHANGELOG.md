@@ -1,5 +1,13 @@
 # Changelog
 
+## /poll in groups was fully dead — encryptFor('') silently dropped every poll (branch devin/group-polls, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`/poll` in a group chat encrypted for `activeContact.pubB64` (empty for groups) — the poll stored locally and rendered for me, but reached no member. And even if it had, votes went nowhere: the vote notify used `peers['']` and the group signal handler had no `poll_vote` case. Now: creation rides the sender-key channel (encrypt once, relay/P2P per member) and the group receive path detects `type:'poll'` JSON like 1:1 does; votes go through `sendSignal` (1:1 + group fan-out, relay-persisted), and the group signal handler applies `poll_vote` with the same conversation-binding + verified-sender rules as reactions.
+
+---
+
 ## Account delete requested the IDB drop before closing the open connection (branch devin/account-delete-order, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
