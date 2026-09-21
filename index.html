@@ -2625,10 +2625,8 @@ window.addEventListener('offline', () => {
     banner.classList.remove('hidden');
   }
 });
-// v3.1: Notify server when page closes — the old sendBeacon posted {ids, offline} but
-// the Worker never implemented an offline path (400 at !id), so the beacon was a no-op.
-// Presence self-corrects within ~60s via at-staleness; a real offline signal would need
-// a signed non-beacon write (sendBeacon can't await signMessage).
+// The {ids, offline} sendBeacon was removed: no offline path exists on the Worker (400
+// at !id) — the beacon was a no-op. Presence self-corrects via ~60s at-staleness.
 window.addEventListener('beforeunload', () => {
   // v3.6: Emergency save retry queue (sync — beforeunload can't await)
   try {
@@ -2639,9 +2637,7 @@ window.addEventListener('beforeunload', () => {
     }
   } catch {}
 });
-// The dead {ids, offline} visibilitychange beacon was removed — the Worker never had an
-// offline path (400 at !id). Presence staleness handles backgrounded tabs; the real
-// battery saver is the PRESENCE_BG_INTERVAL_MS heartbeat switch.
+// (The dead {ids, offline} visibilitychange beacon was removed — see beforeunload note.)
 
 // Theme: auto-detect or restore preference
 (() => {
@@ -5211,11 +5207,10 @@ async function initMessenger(dbName) {
   // root-signed registry on the relay (see _worker.js handleDeviceSet). The registry is
   // client-verified: we check the root's Ed25519 signature ourselves, so the relay can
   // withhold the list (degrades to single-device) but cannot forge devices into it.
-  // Monotonic floor for device registries: the signed blob's ts is attacker-consistent
-  // on replay, so a hostile relay can serve an OLD signed record forever and resurrect a
-  // device the user already unlinked (every fan-out encrypts to it again). Keep the max
-  // verified ts per account in IDB and reject older records — a stale replay degrades to
-  // single-device instead of silently restoring the removed key.
+  // Monotonic floor: a signed blob's ts is attacker-consistent on replay, so a hostile
+  // relay could serve a stale record forever and resurrect an unlinked device into every
+  // fan-out. Persist the max verified ts per account; reject older records (degrades to
+  // single-device instead of silently restoring the removed key).
   let _devFloor = null;
   async function _devFloorGet(accountId) {
     if (!_devFloor) _devFloor = (await dbGet('settings', 'devFloor').catch(() => null)) || {};
@@ -10837,13 +10832,11 @@ async function initMessenger(dbName) {
               if (!inner) continue;
               s.type = inner.t; s.data = inner.d; wasSealed = true;
             }
-            // Typing/read carry no inner signature, so a forged PLAINTEXT one is trivially
-            // injectable by anyone who knows the room pair. Once the peer advertises
-            // dm-sig-v1 their real traffic is sealed — a plaintext typing/read claiming
-            // this sender is a fake (fake "typing…" and fake read receipts are a social-
-            // engineering surface). Rollout race stays open: the check only fires when
-            // the peer's caps are KNOWN, so a capable peer's plaintext still lands while
-            // their view of MY caps is stale (≤5min cache window).
+            // typing/read carry no inner signature — a forged PLAINTEXT one is injectable
+            // by anyone who knows the room pair. Once the peer advertises dm-sig-v1 their
+            // real traffic is sealed, so a plaintext copy claiming this sender is a fake.
+            // Rollout race stays open: only fires when the peer's caps are KNOWN (≤5min
+            // stale-view window where a capable peer may still legitimately send plaintext).
             if (!wasSealed && (s.type === 'typing' || s.type === 'read') && (await _peerCaps(contact.id)).includes(CAPS_DM_SIG)) continue;
             // Typing/read indicators (works both pre- and post-P2P connection)
             if (s.type === 'typing') { showTyping(contact.id, s.senderName || contact.name); continue; }
@@ -14295,12 +14288,10 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         const rec = resp?.ok ? await resp.json() : null;
         if (!rec?.devices || rec.root !== rootPub) { showToast(t('devNotListed'), 'error'); return; }
         if (!rec.devices.some(d => d.pub === myPubB64)) { showToast(t('devNotListed'), 'error'); return; }
-        // Bind rootEd to the record before pinning it: rootEd rides the response
-        // OUTSIDE the signed blob, so a relay could substitute its own Ed key and
-        // make every future registry read "verify" under the attacker's key (forge
-        // device lists → inject a listening device → self-sync leak). The record's
-        // own sig was made by the real root key — verifying it under the candidate
-        // rootEd rejects a substitution.
+        // rootEd rides OUTSIDE the signed blob — a relay could swap in its own Ed key and
+        // make every future registry read "verify" under the attacker (forged device lists
+        // → injected listener → self-sync leak). The record's own sig was made by the real
+        // root key: pin rootEd only if it verifies that sig.
         let rootEd = null;
         if (rec.rootEd && rec.sig) {
           const digestBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(rec.devices.map(d => d.pub))));
