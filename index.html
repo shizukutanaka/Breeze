@@ -9852,6 +9852,13 @@ async function initMessenger(dbName) {
       // Reject oversized text: the relay caps payloads at 256 KB but the P2P DataChannel has no server check.
       // 64 KB is generous for chat text while preventing memory/render DoS from a malicious peer.
       if (text.length > 65536) return;
+      // Poll payloads arrive as plain JSON text — only the sender's record ever had
+      // isPoll, so recipients saw raw JSON and could never vote. Detect + tag here so
+      // the card renders; renderPollHtml's own caps bound the peer-controlled fields.
+      try {
+        const _p = JSON.parse(text);
+        if (_p && _p.type === 'poll' && typeof _p.pollId === 'string' && Array.isArray(_p.options)) { meta.isPoll = true; meta.poll = _p; }
+      } catch {}
       // v3.3: Verify Ed25519 signature if present.
       // TOFU: a contact's signing key must stay stable. Verifying a signature
       // against the sigPub carried in the same message proves only that the

@@ -1,5 +1,13 @@
 # Changelog
 
+## Received /poll rendered as raw JSON — recipients could never vote (branch devin/poll-receive, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`/poll` was send-only: `isPoll` was only ever set on the creator's own record. A received poll decrypted to `{"type":"poll",...}` plain text — stored and rendered as a raw JSON blob, with no card and no way to vote (the voter side looks up `m.isPoll` records, which never existed for recipients). The receive path now detects the `type:'poll'` shape and tags the record (`isPoll` + `meta.poll` for the live render); `renderPollHtml`'s own caps bound the peer-controlled fields.
+
+---
+
 ## Group edit/delete/reaction lacked conversation + author binding (branch devin/group-mutation-binding, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
