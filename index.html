@@ -9537,6 +9537,12 @@ async function initMessenger(dbName) {
   function safeMemberList(raw) {
     return (Array.isArray(raw) ? raw : []).slice(0, CONFIG.GROUP_MAX)
       .filter(m => typeof m.id === 'string' && m.id && m.id.length <= 128)
+      // Bind id ↔ pubB64: the roster is relay-controlled, and an id with a mismatched
+      // pub is a swapped key (silently MITMs that member) — not a valid member.
+      .filter(m => {
+        const pub = typeof m.pub === 'string' ? m.pub : (typeof m.pubB64 === 'string' ? m.pubB64 : '');
+        return pub.startsWith(m.id);
+      })
       .map(m => ({
         id: m.id,
         pubB64: typeof m.pub === 'string' ? m.pub.slice(0, 200) : (typeof m.pubB64 === 'string' ? m.pubB64.slice(0, 200) : ''),

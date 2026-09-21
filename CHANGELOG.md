@@ -1,3 +1,7 @@
+## Roster member id↔key binding enforced client-side (branch devin/consolidate-groups, 2026-09-20)
+
+`safeMemberList` accepted a member's `id` and `pubB64` without checking they correspond. The server binds them at join (`memberPub.startsWith(memberId)`), but `/group/info` is relay-controlled — a hostile relay could keep a member's id and swap in an attacker's key, silently MITMing sends to that member (invisible, unlike a fake member which shows in the roster). `safeMemberList` now drops any member whose `pub`/`pubB64` does not start with their `id`.
+
 ## Group v5 negotiation is pinned once true — relay cap-stripping can't downgrade (branch devin/consolidate-groups, 2026-09-20)
 
 `_computeGroupV5` decided v5-vs-v3 from `members[].caps` — which arrive via `/group/info`, a server-controlled roster. A hostile (or compromised) relay stripping the `caps` field makes every member look legacy, so the lazy negotiation at first send silently chose v3 static keys — no forward secrecy, nothing logged. `groupV5` is now pinned `true` as soon as negotiation succeeds (group create, join, and every roster-poll sync — caps can flip without membership churn), and `getGroupSenderKey` honors the pin over a fresh computation, logging a security audit entry if caps ever vanish after the pin. Only the never-sent window was exploitable: an existing `gsk:` record already freezes the format.
