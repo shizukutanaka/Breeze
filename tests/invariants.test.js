@@ -73,10 +73,13 @@ describe('dm-sig-v1 sealed signaling (dm: room confidentiality)', () => {
     expect(html).toContain("CAPS_DM_SIG = 'dm-sig-v1'");
     expect(html).toContain('caps.push(CAPS_DM_SIG)');
   });
-  it('_signal seals dm: rooms only — other rooms stay plaintext', () => {
-    expect(html).toContain("room.startsWith('dm:')");
+  it('_signal seals dm: and call: rooms — other rooms stay plaintext', () => {
+    expect(html).toContain("room.startsWith('dm:') || room.startsWith('call:')");
     expect(html).toContain('_sealDmSignal(room, { type, data: wireData })');
     expect(html).toContain("wireType = 'enc'");
+    // Both receive loops unseal enc envelopes — dm signals in the P2P poll, call signals in pollCallSignals
+    expect(html).toContain('_unsealDmSignal(sigRoom, s.data)');
+    expect(html).toContain('_unsealDmSignal(room, s.data)');
   });
   it('sender gates on the PEER caps and fails to plaintext, receiver fails closed', () => {
     expect(html).toContain('(await _peerCaps(peerId)).includes(CAPS_DM_SIG)');

@@ -6191,7 +6191,7 @@ async function initMessenger(dbName) {
   // is {t: type, d: data}, so even the signal TYPE is hidden from the relay.
   async function _sealDmSignal(room, msg) {
     try {
-      const peerId = room.slice(3).split(':').find(id => id !== myId);
+      const peerId = room.replace(/^(?:dm|call):/, '').split(':').find(id => id !== myId);
       if (!peerId) return null;
       if (!(await _peerCaps(peerId)).includes(CAPS_DM_SIG)) return null;
       const c = await dbGet('contacts', peerId).catch(() => null);
@@ -6213,12 +6213,12 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'dm-sig-unseal'); return null; }
   }
 
-  // _signal(room, type, data) — fire-and-forget POST to /signal. dm: rooms are sealed
-  // when the peer advertises dm-sig-v1 (see _sealDmSignal); other rooms and legacy
-  // peers stay plaintext.
+  // _signal(room, type, data) — fire-and-forget POST to /signal. dm: and call: rooms
+  // are sealed when the peer advertises dm-sig-v1 (see _sealDmSignal); other rooms
+  // and legacy peers stay plaintext.
   async function _signal(room, type, data) {
     let wireType = type, wireData = data || '';
-    if (room.startsWith('dm:')) {
+    if (room.startsWith('dm:') || room.startsWith('call:')) {
       const sealed = await _sealDmSignal(room, { type, data: wireData });
       if (sealed) { wireType = 'enc'; wireData = sealed; }
     }
@@ -9235,6 +9235,13 @@ async function initMessenger(dbName) {
           // Defense-in-depth only: `sender` is attacker-controlled, so the real auth for
           // call-end comes from the decryptable wrap below when CALL_E2E_SIGNAL is on.
           if (s.sender !== contact.id) continue;
+          // dm-sig-v1: unseal {type:'enc'} envelopes (same sealing as dm: rooms) —
+          // fails closed, a forged or malformed envelope is dropped not downgraded.
+          if (s.type === 'enc') {
+            const inner = await _unsealDmSignal(room, s.data);
+            if (!inner) continue;
+            s.type = inner.t; s.data = inner.d;
+          }
           if (s.type === 'call-answer' && _callPC && _callPC.signalingState === 'have-local-offer') {
             // Authenticate before setRemoteDescription: a forged answer (relay-injected,
             // carrying the attacker's DTLS fingerprint) fails to decrypt → null → dropped,

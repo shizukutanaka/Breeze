@@ -1,5 +1,16 @@
 # Changelog
 
+## dm-sig-v1 covers call: rooms too (branch devin/consolidate-groups, 2026-09-20)
+
+`call:<idA>:<idB>` rooms use the same sorted-id derivation as dm: rooms, so the
+dm-sig-v1 seal extends to call-offer/answer/ice/end with no new machinery —
+call-ICE candidates (IP disclosure) and call activity are now hidden when both
+ends upgrade. pollCallSignals unseals `type:'enc'` envelopes with the same
+fail-closed rule. Note the layer split: sealing is confidentiality-only (anyone
+can encrypt to a public key); `_wrapCallSignal`'s ratchet wrap remains the
+authenticity layer (still CONFIG.CALL_E2E_SIGNAL-gated — needs a session).
+
+
 ## dm-sig-v1: sealed data-channel signaling (branch devin/consolidate-groups, 2026-09-20)
 
 Delegated wire-compat decision (おまかせ): `dm:<idA>:<idB>` rooms carried SDP/ICE/

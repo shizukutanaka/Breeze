@@ -220,11 +220,16 @@ store) rather than gated — an opt-in toggle leaves the contradiction one peer 
   Authenticity is layered the same as before: the Ed25519 SDP signature is produced
   first and rides inside the sealed envelope (sign-then-seal), so the MITM-injection
   defense is unchanged. A peer without the cap still gets legacy plaintext —
-  delivery over privacy, matching the seal-v2 trade-off. Calls: `call-*` signals go
-  through `_wrapCallSignal` ECIES when `CALL_E2E_SIGNAL` is enabled — that flag is
-  still OFF by default with no capability negotiation, so shipped builds send call
-  signaling in cleartext (unlike dm: rooms, a `call:` room has no stable second
-  party to derive the peer from — the room is one user's, any contact can answer).
+  delivery over privacy, matching the seal-v2 trade-off. `call:` rooms are sorted-id
+  pairs like `dm:` rooms, so the same sealing covers call-offer/answer/ice/end —
+  call signaling (incl. call-ICE candidates) is confidential whenever both ends
+  upgrade. Two layers remain distinct: dm-sig seals *confidentiality* (anyone can
+  encrypt to a public key, so it does not authenticate the sender), while
+  `_wrapCallSignal`'s ratchet wrap is the *authenticity* layer — still gated by
+  `CALL_E2E_SIGNAL` (off by default: it needs an established ratchet session).
+  Without that flag a sealed call-end is still forgeable by anyone who knows the
+  pair and the callee's public key — same injection surface as before sealing
+  landed, now minus the metadata leak.
 - **An invite token is effectively group membership.** `/group/info` returns the full member
   list (ids, public keys, names) to any token holder without joining — but restricting that
   read would not help: `/group/join` accepts the same token with no signature and no approval,
