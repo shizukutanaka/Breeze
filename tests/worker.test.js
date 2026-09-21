@@ -4025,15 +4025,23 @@ describe('signal relay', () => {
     expect(r2.status).toBe(400);
   });
 
-  it('keeps at most 50 signals per room', async () => {
+  it('refuses overflow with QUEUE_FULL instead of evicting the in-flight handshake', async () => {
+    // Same invariant as the mail queues: drop-oldest on the 50-cap let anyone who
+    // derives a room name destroy an active call's pending offer/answer/ICE.
     const e = makeEnv();
-    for (let i = 0; i < 55; i++) {
-      await handleSignal({ room: 'big', sender: `s${i}`, type: 'offer', data: `d${i}` }, '1.2.3.4', e, req({}));
+    for (let i = 0; i < 50; i++) {
+      const r = await handleSignal({ room: 'big', sender: `s${i}`, type: 'offer', data: `d${i}` }, '1.2.3.4', e, req({}));
+      expect(r.status).toBe(200);
     }
-    // Poll as someone not in the room — should see at most 50
-    const r = await handleSignal({ room: 'big', sender: 'observer', type: 'poll' }, '1.2.3.5', e, req({}));
-    const msgs = (await r.json()).messages;
-    expect(msgs.length).toBeLessThanOrEqual(50);
+    const r51 = await handleSignal({ room: 'big', sender: 's51', type: 'offer', data: 'd51' }, '1.2.3.4', e, req({}));
+    expect(r51.status).toBe(429);
+    expect((await r51.json()).code).toBe('QUEUE_FULL');
+    expect(r51.headers.get('Retry-After')).toBe('10');
+    // Nothing evicted — the very first accepted signal is still deliverable.
+    const poll = await handleSignal({ room: 'big', sender: 'observer', type: 'poll' }, '1.2.3.5', e, req({}));
+    const msgs = (await poll.json()).messages;
+    expect(msgs).toHaveLength(50);
+    expect(msgs[0].data).toBe('d0');
   });
 
   it('sanitizeString strips control characters — room with null byte resolves to clean name', async () => {
@@ -4470,6 +4478,7 @@ describe('TURN credentials', () => {
 
   it('uses HMAC custom TURN when TURN_SECRET + TURN_URL are set', async () => {
     const e = { ...makeEnv(), TURN_SECRET: 'supersecret', TURN_URL: 'turn:turn.example.com:3478' };
+    await e.KV.put('prekey:user00001', JSON.stringify({ spkPub: 'x' })); // configured provider → registered-only by default
     const res = await handleTurn({ userId: 'user00001' }, e, req({}));
     expect(res.status).toBe(200);
     const j = await res.json();
@@ -4490,6 +4499,7 @@ describe('TURN credentials', () => {
       TURN_USERNAME:   'staticuser',
       TURN_CREDENTIAL: 'staticpass',
     };
+    await e.KV.put('prekey:user00001', JSON.stringify({ spkPub: 'x' }));
     const res = await handleTurn({ userId: 'user00001' }, e, req({}));
     expect(res.status).toBe(200);
     const j = await res.json();
@@ -4510,6 +4520,7 @@ describe('TURN credentials', () => {
 
   it('derives a self-hosted stun: entry from a plain turn: TURN_URL (coturn dual-role)', async () => {
     const e = { ...makeEnv(), TURN_SECRET: 'supersecret', TURN_URL: 'turn:turn.example.com:3478' };
+    await e.KV.put('prekey:user00001', JSON.stringify({ spkPub: 'x' }));
     const res = await handleTurn({ userId: 'user00001' }, e, req({}));
     const j = await res.json();
     expect(j.iceServers.some(s => s.urls === 'stun:turn.example.com:3478')).toBe(true);
@@ -4519,6 +4530,7 @@ describe('TURN credentials', () => {
 
   it('does NOT derive stun from turns: or strip-transport weirdly (TLS listener is not plain STUN)', async () => {
     const e = { ...makeEnv(), TURN_URL: 'turns:t.example.com:443?transport=tcp', TURN_USERNAME: 'u', TURN_CREDENTIAL: 'c' };
+    await e.KV.put('prekey:user00001', JSON.stringify({ spkPub: 'x' }));
     const res = await handleTurn({ userId: 'user00001' }, e, req({}));
     const j = await res.json();
     expect(j.iceServers.some(s => typeof s.urls === 'string' && s.urls.includes('t.example.com') && s.urls.startsWith('stun:'))).toBe(false);
@@ -4537,6 +4549,22 @@ describe('TURN credentials', () => {
     const res = await handleTurn({ userId: 'reguser0001' }, e, req({}));
     expect(res.status).toBe(200);
     expect((await res.json()).provider).toBe('openrelay');
+  });
+
+  it('a CONFIGURED TURN provider gates minting to registered users by default', async () => {
+    // Paid/private creds behind an open mint = quota drain. The openrelay fallback
+    // stays open — its credentials are public in _worker.js anyway.
+    const e = { ...makeEnv(), TURN_URL: 'turn:x.example.com:3478', TURN_USERNAME: 'u', TURN_CREDENTIAL: 'c' };
+    const res = await handleTurn({ userId: 'unreg00001' }, e, req({}));
+    expect(res.status).toBe(401);
+    expect((await res.json()).code).toBe('UNREGISTERED');
+  });
+
+  it('TURN_REQUIRE_AUTH=false opts a configured provider back out', async () => {
+    const e = { ...makeEnv(), TURN_URL: 'turn:x.example.com:3478', TURN_USERNAME: 'u', TURN_CREDENTIAL: 'c', TURN_REQUIRE_AUTH: 'false' };
+    const res = await handleTurn({ userId: 'unreg00001' }, e, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).provider).toBe('static');
   });
 });
 

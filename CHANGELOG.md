@@ -1,5 +1,9 @@
 # Changelog
 
+## Signal rooms no longer evict in-flight call handshakes; configured TURN mints register-gated (branch devin/consolidate-groups, 2026-09-20)
+
+Same refuse-when-full class as the mail queues: `sig:{room}` drop-oldest on its 50-entry cap let anyone who could derive a room name (`dm:{a}:{b}` from two public ids, `call:{id}` from one) destroy an active call's pending offer/answer/ICE. Now `429 QUEUE_FULL` — accepted signals survive to be polled; `_signal` retries once within the drain window. Separately, `/api/turn` used to mint credentials for anyone unless `TURN_REQUIRE_AUTH=true` was set — a configured Cloudflare Calls key bills $0.05/GB to whoever asks. A configured provider (CF Calls, coturn secret, static creds) now requires a registered `prekey:{userId}` by default; `TURN_REQUIRE_AUTH=false` opts out. The openrelay fallback stays open — its creds are public in the source.
+
 ## Cold isolate where /api/online beat the first heartbeat 500'd presence for ~60s (branch devin/consolidate-groups, 2026-09-20)
 
 `_onlineCounter` had two lazy initializers with DIFFERENT shapes: `handlePresence` creates `{minute, ids:Set, prev}` while `handleOnlineCount` created `{minute, count, prev}` — no `ids` Set. In a cold isolate where the online-count endpoint ran first, every subsequent heartbeat threw `TypeError: ids.add is not a function` → presence 500'd until the minute rollover re-initialized the object. Both initializers now merge-heal on `?.ids` (add the Set, keep minute/prev/count), and a test pins the ordering.

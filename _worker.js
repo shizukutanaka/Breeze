@@ -377,10 +377,17 @@ async function handleSignal(body, ip, env, request) {
   const raw = await kvGet(env, `sig:${room}`);
   const parsed = safeJsonParse(raw, []);
   const signals = Array.isArray(parsed) ? parsed : [];
+  // Refuse-when-full, never evict (same invariant as the mail queues): slice(-50)
+  // drop-oldest let anyone who can derive a room name (dm:{a}:{b} from two public
+  // ids, call:{id} from one) destroy an in-flight call handshake by flooding 51
+  // signals. Refusing preserves the already-accepted offer/answer/ICE so the
+  // current handshake completes; the client relays retry on 429.
+  if (signals.length >= 50) {
+    return new Response(JSON.stringify({ error: 'Signal room full', code: 'QUEUE_FULL', retryAfter: 10 }), {
+      status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '10', ...corsHeaders(request) } });
+  }
   signals.push({ sender, type, data, ts: Date.now() });
-  // Keep last 50 signals, expire in 5 min (allow slow NAT traversal)
-  const trimmed = signals.slice(-50);
-  await kvPut(env, `sig:${room}`, JSON.stringify(trimmed), { expirationTtl: TTL.MIN * 5 });
+  await kvPut(env, `sig:${room}`, JSON.stringify(signals), { expirationTtl: TTL.MIN * 5 });
 
   return json({ ok: true }, 200, request);
 }
@@ -1811,11 +1818,16 @@ async function handleTurn(body, env, request) {
   const { userId } = body;
   if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
-  // When TURN_REQUIRE_AUTH=true, only registered users (completed PoW + prekey upload) receive
-  // TURN credentials. Prevents unauthenticated bots from draining paid TURN quota
-  // (Cloudflare Calls TURN: $0.05/GB). Rate-limit alone (10 rpm) does not eliminate
-  // the risk when TURN_KEY_ID is configured.
-  if (env.TURN_REQUIRE_AUTH === 'true') {
+  // A configured private/paid TURN provider gates credential minting to registered
+  // users BY DEFAULT (TURN_REQUIRE_AUTH=false opts out): CF Calls bills $0.05/GB and
+  // coturn burns the operator's bandwidth, so open minting lets any bot drain the
+  // quota — the 10rpm per-IP limit does not stop multi-IP. The public openrelay
+  // fallback stays open: its credentials are already printed in this file, so
+  // gating only that path would be theater. TURN_REQUIRE_AUTH=true also gates it.
+  const _turnConfigured = !!(env.TURN_KEY_ID && env.TURN_KEY_API_TOKEN)
+    || !!(env.TURN_SECRET && env.TURN_URL)
+    || !!(env.TURN_URL && env.TURN_USERNAME && env.TURN_CREDENTIAL);
+  if (env.TURN_REQUIRE_AUTH === 'true' || (env.TURN_REQUIRE_AUTH !== 'false' && _turnConfigured)) {
     if (!(await kvGet(env, `prekey:${userId}`))) return json({ error: 'User not registered', code: 'UNREGISTERED' }, 401, request);
   }
 

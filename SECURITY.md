@@ -154,7 +154,20 @@ store) rather than gated — an opt-in toggle leaves the contradiction one peer 
   Trade-off is honest — the flood can block *new* arrivals while it sustains a full
   queue, but it can never destroy mail the relay already accepted. The lost-write
   recovery re-append honors the same bound (it skips rather than evict onto a full
-  queue).
+  queue). The **signal room** (`sig:{room}`) follows the same invariant: the 50-entry
+  cap used to drop-oldest, letting anyone who could derive a room name
+  (`dm:{a}:{b}` from two public ids, `call:{id}` from one) destroy an in-flight
+  call handshake by flooding 51 entries. It now refuses with `429 QUEUE_FULL` —
+  accepted offer/answer/ICE survive to be polled, and the client retries once
+  within the drain window.
+- **Configured TURN providers gate credential minting by default.** `/api/turn`
+  used to mint credentials for anyone unless `TURN_REQUIRE_AUTH=true` was set —
+  an opt-in nobody knew about while a configured Cloudflare Calls key bills
+  $0.05/GB (and self-hosted coturn burns operator bandwidth). Now a configured
+  provider (CF Calls key pair, coturn HMAC secret, or static creds) requires a
+  registered `prekey:{userId}` unless `TURN_REQUIRE_AUTH=false` opts out. The
+  public openrelay fallback stays open — its credentials are already printed in
+  `_worker.js`, so gating only that path would be theater.
 - **Metadata**: Sealed Sender **v2** hides the sender from the relay *cryptographically*:
   all sender-identifying fields (id, public key, display name, signature keys, the reply
   preview, multi-device markers — and the X3DH bootstrap header's initiator identity key,
