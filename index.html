@@ -9547,12 +9547,12 @@ async function initMessenger(dbName) {
         const membersChanged = newMembers.length !== oldMembers.length ||
           newMembers.some(m => !oldMembers.some(o => o.id === m.id)) ||
           oldMembers.some(o => !newMembers.some(m => m.id === o.id));
-        const metaChanged = group.creatorId !== data.creatorId ||
+        const metaChanged = group.createdBy !== data.creatorId ||
           JSON.stringify(group.admins || []) !== JSON.stringify(data.admins || []) ||
           (typeof data.name === 'string' && data.name && group.name !== data.name);
         if (membersChanged || metaChanged) {
           if (membersChanged) group.members = newMembers;
-          if (typeof data.creatorId === 'string' && data.creatorId) group.creatorId = data.creatorId;
+          if (typeof data.creatorId === 'string' && data.creatorId) group.createdBy = data.creatorId;
           if (Array.isArray(data.admins)) group.admins = data.admins.filter(id => typeof id === 'string' && id.length <= 64).slice(0, CONFIG.GROUP_MAX);
           if (typeof data.name === 'string' && data.name) group.name = data.name.slice(0, 50);
           await dbPut('contacts', group);

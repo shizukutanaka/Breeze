@@ -61,8 +61,12 @@ describe('group trust boundaries', () => {
   it('roster poll applies member removals, not just growth', () => {
     expect(html).toContain('oldMembers.some(o => !newMembers.some(m => m.id === o.id))');
   });
-  it('roster poll syncs creatorId/admins/name (transfer + rename visibility)', () => {
-    expect(html).toContain('group.creatorId !== data.creatorId');
+  it('roster poll syncs createdBy/admins/name (transfer + rename visibility)', () => {
+    // The local field is `createdBy` — every privilege gate reads it. Writing the
+    // wire name `creatorId` to a `group.creatorId` property synced nothing.
+    expect(html).toContain('group.createdBy !== data.creatorId');
+    expect(html).toContain('group.createdBy = data.creatorId');
+    expect(html).not.toContain('group.creatorId');
   });
   it('group invites run members through safeMemberList', () => {
     expect(html).toContain('safeMemberList(invite.members)');

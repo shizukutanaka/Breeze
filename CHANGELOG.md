@@ -1,5 +1,13 @@
 # Changelog
 
+## Roster poll synced `creatorId` — but the gates read `createdBy` (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `tests/invariants.test.js`, `CHANGELOG.md`.
+
+`startGroupMemberPoll` wrote `group.creatorId` while every privilege check (`isGroupAdmin`, kick/leave/meta gates, `/admin` creator-only checks) reads `group.createdBy`. A server-side ownership transfer therefore never propagated — the old creator stayed privileged locally and the new one stayed a stranger. The poll now writes the field the gates read; the tripwire pins the binding both directions.
+
+---
+
 ## Invited groups never recorded the creator — admin actions silently dropped (branch devin/consolidate-groups, 2026-09-21)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
