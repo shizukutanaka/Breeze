@@ -398,6 +398,8 @@
   "toastGroupDeleteFail": "サーバーでの削除処理に失敗しました(ローカルでは削除済み)",
   "demotedAdmin": "{0} の管理者権限を解除しました",
   "transferredOwnership": "{0} がグループの作成者になりました",
+  "toastKickedFromGroup": "{0} から退出させられました",
+  "toastNoLongerMember": "このグループのメンバーではなくなりました",
   "toastCreatorOnly": "グループ作成者のみ所有権を譲渡できます",
   "toastTransferFail": "所有権の譲渡に失敗しました",
   "toastNoIdentityBackup": "バックアップするIDがありません",

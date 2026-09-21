@@ -1776,6 +1776,8 @@ const _I = {
     toastGroupDeleteFail: 'Failed to delete group on server (removed locally)',
     demotedAdmin: "{0} is no longer a group admin",
     transferredOwnership: "{0} is now the group creator",
+    toastKickedFromGroup: "You were removed from {0}",
+    toastNoLongerMember: "You are no longer a member of this group",
     toastCreatorOnly: 'Only the group creator can transfer ownership',
     toastTransferFail: 'Ownership transfer failed',
     toastNoIdentityBackup: 'No identity to backup',
@@ -5682,6 +5684,15 @@ async function initMessenger(dbName) {
       if (!group) return;
       const isPrivileged = group.createdBy === senderId || (group.admins || []).includes(senderId);
       if (!isPrivileged) { _dbg(null, 'group-kick notice from non-admin — ignored'); return; }
+      // I'm the one kicked: don't rotate a key for a group I'm out of — mark it,
+      // leave the conversation, and block further sends into the void.
+      if (kickedId === myId) {
+        group.kicked = true;
+        await dbPut('contacts', group);
+        showToast(t('toastKickedFromGroup', group.name || ''), 'info');
+        if (activeContact?.id === groupId) { activeContact = null; renderContacts(); }
+        return;
+      }
       const current = await dbGet('identity', 'gsk:' + groupId);
       if (current && (current.epoch || 0) >= epoch) return;
       group.members = (group.members || []).filter(m => m.id !== kickedId);
@@ -7768,6 +7779,10 @@ async function initMessenger(dbName) {
   async function sendMessage() {
     if (!activeContact) return;
     if (activeContact.blocked) return;
+    if (activeContact.isGroup && activeContact.kicked) {
+      showToast(t('toastNoLongerMember'), 'error');
+      return;
+    }
     // v3.3: Announce-only groups — only admins can send
     if (activeContact.isGroup && activeContact.announceOnly && !isGroupAdmin(activeContact)) {
       showToast(t('toastAnnounceOnlySend'), 'error');
