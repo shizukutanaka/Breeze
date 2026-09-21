@@ -1,3 +1,18 @@
+## grp:* mutation recovery + account-delete residual erasure (branch devin/grp-mutate-recovery, 2026-09-21)
+
+The previous session's `kvRecoverAppend` covered the append-queue keys and `grp:{token}` join, but the group's *mutation* surface was left as the documented residual — every one of them is the same read-modify-write on a single KV object, so a concurrent writer landing after the put silently erases the operation while both callers get 200. New shared `grpMutateRecover` (post-write read-back, conditional replay of just our mutation onto the winner's copy, best-effort) now covers the remaining sites:
+
+- **kick** — a clobbered kick leaves the member on the roster AND drops the ban record AND loses the epoch bump (sender keys never rotate). The removal+ban+epoch is extracted into a shared `applyKick` so recovery replays the identical operation; a winner that removed the member via a racing self-leave still gets the ban replayed.
+- **leave** — the PCS half of a lost leave is worse than the roster half: the epoch bump evaporates, so a departed member keeps decrypting new traffic indefinitely.
+- **admin promote/demote/unban** — a lost promote silently withholds the granted rights; a lost demote silently preserves revoked ones; a lost unban keeps a lifted ban in force. Replay re-derives the member-existence guard so a racing kick can't be undone into a phantom admin.
+- **transfer** — a clobbered hand-off leaves the old creator in charge while the new one believes they own the group.
+- **rename** — metadata-only, recovered for completeness.
+- **delete** — the race runs the other way here: a mutation that read before our `kvDel` and puts after it resurrects the whole roster for the full 30-day TTL. Post-delete verify re-reads and deletes once more.
+- **join recovery hardened** — the previous join recovery could re-add a member that a *winning* concurrent kick had just banned; the satisfied predicate now treats `banned` as a deny-guard instead of re-joining through recovery.
+- **account/delete cleanup path** — the per-group member removal inside account erasure gets the same recovery.
+
+Two erasure gaps closed in `handleAccountDelete` (GDPR Art. 17): `devices:{userId}` (the multi-device registry — linked devices' ids+pubs survived for its 3-month TTL, and senders kept fanning out to dead devices) and `sealed:{userId}:dropped` (the refuse-when-full counter, ~7d residual). New race tests pin kick/leave/delete/join-vs-ban recovery and the device-registry erasure.
+
 ## Lost-write recovery extended to every remaining shared KV queue (branch devin/worker-lost-write-recovery, 2026-09-21)
 
 The sealed queue already patched KV's last-write-wins race (read-back + conditional re-append), but the same read-modify-write defect sat unpatched on every other shared key — and at least two of them lose louder than a chat message. New shared `kvRecoverAppend` helper (content-identity match, caller's refuse-when-full bounds, best-effort so a verify failure never flips a stored send to 500) now covers:

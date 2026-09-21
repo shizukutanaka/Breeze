@@ -460,6 +460,27 @@ async function kvRecoverAppend(env, key, entry, isMine, { maxItems, sizeOf = () 
   }
 }
 
+// Lost-write recovery for grp:{token} mutations — the same last-write-wins race as
+// kvRecoverAppend, but grp: is a single object rather than an append queue, so the
+// "re-append" is a conditional replay: re-read the WINNER's copy and, when our
+// mutation's effect is absent, re-run just that mutation on it (preserving the
+// winner's concurrent changes) and re-put once. `satisfied(group)` must return true
+// not only when the effect is present but whenever the operation was *intentionally*
+// denied (a banned id rejoining, a roster already full, the target no longer a
+// member) — otherwise recovery would re-apply an outcome the guard rejected.
+// Best-effort like the mail queues: one retry bounds the loss window to a single
+// overlapping race, and a stale read just skips the replay.
+async function grpMutateRecover(env, token, satisfied, apply) {
+  try {
+    const raw = await kvGet(env, `grp:${token}`);
+    const seen = raw ? safeJsonParse(raw, null) : null;
+    if (!seen || !Array.isArray(seen.members)) return;
+    if (satisfied(seen)) return;
+    apply(seen);
+    await kvPut(env, `grp:${token}`, JSON.stringify(seen), { expirationTtl: TTL.MONTH });
+  } catch (e) { console.error('[grp-recover]', e?.message || e); }
+}
+
 async function handleMsgSend(body, ip, env, request) {
   const { to, from, fromPub, fromName, payload, ts, isFile, isGroupInvite, isVoice, isCall, isVideoCall, isSenderKey, isGroupSK, isGroupKick, groupId, groupName, replyTo, disappearAt, sig, sigPub } = body;
   if (!to || !from || !payload) return json({ error: 'to, from, payload required', code: 'MISSING_FIELDS' }, 400, request);
@@ -1223,19 +1244,16 @@ async function handleGroupJoin(body, env, request) {
   // kvRecoverAppend), worse here: a concurrent join/mutation that lands after our put
   // erases this member from the stored roster, but the joiner was answered 200 with a
   // members list containing themselves — they render "joined" while invisible to every
-  // sender fanning out to group.members. grp: is a single object, not an append queue,
-  // so this re-reads and re-appends just the member row, preserving the winner's
-  // concurrent field changes. Honour the same 100-member cap as the join gate.
-  try {
-    const verifyRaw = await kvGet(env, `grp:${token}`);
-    const seen = verifyRaw ? safeJsonParse(verifyRaw, null) : null;
-    if (seen && Array.isArray(seen.members)
-        && !seen.members.some(m => m && m.id === memberId)
-        && seen.members.length < 100) {
-      seen.members.push(memberRecord);
-      await kvPut(env, `grp:${token}`, JSON.stringify(seen), { expirationTtl: TTL.MONTH });
-    }
-  } catch (e) { console.error('[grp-join-recover]', e?.message || e); }
+  // sender fanning out to group.members. grpMutateRecover replays just the member row
+  // onto the winner's copy, preserving its concurrent field changes. The satisfied
+  // predicate doubles as the deny-guard: a winner's copy that has this id on `banned`
+  // (a kick raced us and WON) or a full roster must NOT re-add — re-joining through
+  // recovery would silently undo a durable ban.
+  await grpMutateRecover(env, token,
+    g => g.members.some(m => m && m.id === memberId)
+         || (Array.isArray(g.banned) && g.banned.includes(memberId))
+         || g.members.length >= 100,
+    g => { g.members.push(memberRecord); });
 
   return json({ ok: true, name: group.name, members: group.members, epoch: group.epoch | 0 }, 200, request);
 }
@@ -1381,24 +1399,38 @@ async function handleGroupKick(body, env, request) {
     return json({ error: 'Member not found', code: 'NOT_MEMBER' }, 404, request);
   }
 
-  group.members = group.members.filter(m => m.id !== kickId);
-  if (group.admins) group.admins = group.admins.filter(id => id !== kickId);
-  // Durable removal: record the kick in a bounded ban list. Without it, the kicked member can
-  // simply rejoin via the still-valid invite token (handleGroupJoin re-adds them and, after the
-  // remaining members redistribute sender keys, restores their access) — so kick alone causes
-  // only a momentary disruption. The creator can lift a ban via group/admin action:'unban'.
-  // Bounded to the 200 most-recent banned ids to cap KV growth.
-  const banned = Array.isArray(group.banned) ? group.banned.filter(id => typeof id === 'string') : [];
-  if (!banned.includes(kickId)) banned.push(kickId);
-  group.banned = banned.slice(-200);
-  // I3: post-compromise removal. Bump the epoch so remaining members generate and
-  // redistribute fresh sender keys (kicked member can't decrypt the new epoch).
-  // Coerce to integer first: a corrupted KV entry with epoch stored as a string
-  // would make '5' + 1 = '51' (concatenation), which the epoch gate '===' never
-  // matches against a numeric p.ep, permanently breaking the group.
-  group.epoch = (group.epoch | 0) + 1;
+  // The removal is extracted so grpMutateRecover can replay the identical operation
+  // onto a concurrent winner's copy (a join/leave that lands after our put erases the
+  // kick — the "removed" member keeps their roster slot and stays in every sender's
+  // fanout). Replaying also restores the ban record and contributes our epoch bump,
+  // so a lost kick still rotates the sender keys.
+  const applyKick = (g) => {
+    g.members = g.members.filter(m => m.id !== kickId);
+    if (g.admins) g.admins = g.admins.filter(id => id !== kickId);
+    // Durable removal: record the kick in a bounded ban list. Without it, the kicked member can
+    // simply rejoin via the still-valid invite token (handleGroupJoin re-adds them and, after the
+    // remaining members redistribute sender keys, restores their access) — so kick alone causes
+    // only a momentary disruption. The creator can lift a ban via group/admin action:'unban'.
+    // Bounded to the 200 most-recent banned ids to cap KV growth.
+    const banned = Array.isArray(g.banned) ? g.banned.filter(id => typeof id === 'string') : [];
+    if (!banned.includes(kickId)) banned.push(kickId);
+    g.banned = banned.slice(-200);
+    // I3: post-compromise removal. Bump the epoch so remaining members generate and
+    // redistribute fresh sender keys (kicked member can't decrypt the new epoch).
+    // Coerce to integer first: a corrupted KV entry with epoch stored as a string
+    // would make '5' + 1 = '51' (concatenation), which the epoch gate '===' never
+    // matches against a numeric p.ep, permanently breaking the group.
+    g.epoch = (g.epoch | 0) + 1;
+  };
+  applyKick(group);
   const kicked = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
   if (!kicked) return json({ error: 'Failed to save group state', code: 'STORE_FAILED' }, 500, request);
+  // A winner whose copy removed the member WITHOUT the ban record (a racing self-leave)
+  // still gets the ban replayed — durable removal must survive the race either way.
+  await grpMutateRecover(env, token,
+    g => !g.members.some(m => m && m.id === kickId)
+         && Array.isArray(g.banned) && g.banned.includes(kickId),
+    applyKick);
 
   return json({ ok: true, remaining: group.members.length, epoch: group.epoch }, 200, request);
 }
@@ -1435,11 +1467,16 @@ async function handleGroupAdmin(body, env, request) {
     const banned = Array.isArray(group.banned) ? group.banned.filter(id => typeof id === 'string') : [];
     const bi = banned.indexOf(targetId);
     if (bi < 0) return json({ ok: true, banned, notBanned: true }, 200, request);
-    banned.splice(bi, 1);
-    group.banned = banned;
+    const applyUnban = (g) => { g.banned = (Array.isArray(g.banned) ? g.banned : []).filter(id => id !== targetId); };
+    applyUnban(group);
     const unbanSaved = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
     if (!unbanSaved) return json({ error: 'Failed to save unban', code: 'STORE_FAILED' }, 500, request);
-    return json({ ok: true, banned }, 200, request);
+    // A winner that still carries targetId on banned (a racing kick) gets the unban
+    // replayed; a winner that never had it is already satisfied.
+    await grpMutateRecover(env, token,
+      g => !(Array.isArray(g.banned) && g.banned.includes(targetId)),
+      applyUnban);
+    return json({ ok: true, banned: Array.isArray(group.banned) ? group.banned : [] }, 200, request);
   }
 
   // The creator's authority is implicit and immutable; it is never stored in `admins`.
@@ -1448,18 +1485,33 @@ async function handleGroupAdmin(body, env, request) {
 
   const admins = Array.isArray(group.admins) ? group.admins.filter(id => typeof id === 'string') : [];
   const isAdmin = admins.includes(targetId);
+  const applyAdmin = (g) => {
+    const a = Array.isArray(g.admins) ? g.admins.filter(id => typeof id === 'string' && id !== targetId) : [];
+    if (action === 'promote' && g.members.some(m => m && m.id === targetId)) a.push(targetId);
+    g.admins = a;
+  };
   if (action === 'promote') {
     if (isAdmin) return json({ ok: true, admins, alreadyAdmin: true }, 200, request);
-    admins.push(targetId);
   } else { // demote
     if (!isAdmin) return json({ ok: true, admins, notAdmin: true }, 200, request);
-    const i = admins.indexOf(targetId);
-    admins.splice(i, 1);
   }
-  group.admins = admins;
+  applyAdmin(group);
   const adminSaved = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
   if (!adminSaved) return json({ error: 'Failed to save admin changes', code: 'STORE_FAILED' }, 500, request);
-  return json({ ok: true, admins }, 200, request);
+  // Lost-write recovery: a promote erased by a racing mutation would leave the new
+  // admin without the rights the 200 promised. A demote erased leaves the old admin
+  // with powers that were just revoked — replaying onto the winner restores it. The
+  // member-existence test inside applyAdmin re-derives the NOT_MEMBER guard so a
+  // racing kick of the same target can't be undone into a phantom admin.
+  await grpMutateRecover(env, token,
+    g => {
+      const a = Array.isArray(g.admins) ? g.admins : [];
+      return action === 'promote'
+        ? (a.includes(targetId) || !g.members.some(m => m && m.id === targetId))
+        : !a.includes(targetId);
+    },
+    applyAdmin);
+  return json({ ok: true, admins: group.admins }, 200, request);
 }
 
 // Ownership transfer — the companion to multi-admin. `creatorId` was immutable, so if
@@ -1487,22 +1539,32 @@ async function handleGroupTransfer(body, env, request) {
   const newCreator = group.members.find(m => m.id === newCreatorId);
   if (!newCreator) return json({ error: 'Member not found', code: 'NOT_MEMBER' }, 404, request);
 
-  const oldCreatorId = group.creatorId;
-  // Reflect the new creator's identity in the creator* fields so handleGroupInfo and the
-  // 1:1 sender-key distribution path resolve the right pub/name.
-  group.creatorId = newCreatorId;
-  group.creatorPub = typeof newCreator.pub === 'string' ? newCreator.pub : group.creatorPub;
-  group.creatorName = (typeof newCreator.name === 'string' && newCreator.name) ? newCreator.name.slice(0, 30) : 'Creator';
-
-  // Rebuild admins: the incoming creator's authority is now implicit (drop them from the
-  // list), and the outgoing creator is retained as an admin so they keep moderation rights.
-  const admins = Array.isArray(group.admins) ? group.admins.filter(id => typeof id === 'string' && id !== newCreatorId) : [];
-  if (!admins.includes(oldCreatorId)) admins.push(oldCreatorId);
-  group.admins = admins;
+  // Extracted for grpMutateRecover replay. The member lookup is re-run inside so a
+  // winner's copy where newCreatorId was concurrently kicked leaves the transfer
+  // unreplayed (the NOT_MEMBER answer was still correct at response time).
+  const applyTransfer = (g) => {
+    const nc = g.members.find(m => m && m.id === newCreatorId);
+    if (!nc) return;
+    const oldCreator = g.creatorId;
+    // Reflect the new creator's identity in the creator* fields so handleGroupInfo and the
+    // 1:1 sender-key distribution path resolve the right pub/name.
+    g.creatorId = newCreatorId;
+    g.creatorPub = typeof nc.pub === 'string' ? nc.pub : g.creatorPub;
+    g.creatorName = (typeof nc.name === 'string' && nc.name) ? nc.name.slice(0, 30) : 'Creator';
+    // Rebuild admins: the incoming creator's authority is now implicit (drop them from the
+    // list), and the outgoing creator is retained as an admin so they keep moderation rights.
+    const a = Array.isArray(g.admins) ? g.admins.filter(id => typeof id === 'string' && id !== newCreatorId) : [];
+    if (!a.includes(oldCreator)) a.push(oldCreator);
+    g.admins = a;
+  };
+  applyTransfer(group);
 
   const transferred = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
   if (!transferred) return json({ error: 'Failed to save ownership transfer', code: 'STORE_FAILED' }, 500, request);
-  return json({ ok: true, creatorId: newCreatorId, admins }, 200, request);
+  await grpMutateRecover(env, token,
+    g => g.creatorId === newCreatorId,
+    applyTransfer);
+  return json({ ok: true, creatorId: newCreatorId, admins: group.admins }, 200, request);
 }
 
 // Group rename — completes the lifecycle CRUD. The name was frozen at create() with
@@ -1537,6 +1599,10 @@ async function handleGroupRename(body, env, request) {
   group.name = name.slice(0, 50);
   const renamed = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
   if (!renamed) return json({ error: 'Failed to save group name', code: 'STORE_FAILED' }, 500, request);
+  // A racing join/mutation that overwrites our put keeps the old name — replay it.
+  await grpMutateRecover(env, token,
+    g => g.name === group.name,
+    g => { g.name = group.name; });
   return json({ ok: true, name: group.name }, 200, request);
 }
 
@@ -1563,12 +1629,22 @@ async function handleGroupLeave(body, env, request) {
   if (memberId === group.creatorId) return json({ error: 'Creator cannot leave; delete the group instead', code: 'CREATOR_CANNOT_LEAVE' }, 400, request);
   if (!group.members.some(m => m.id === memberId)) return json({ error: 'Member not found', code: 'NOT_MEMBER' }, 404, request);
 
-  group.members = group.members.filter(m => m.id !== memberId);
-  if (group.admins) group.admins = group.admins.filter(id => id !== memberId);
-  // Same PCS epoch bump + integer coercion as handleGroupKick (see comment there).
-  group.epoch = (group.epoch | 0) + 1;
+  // Extracted for grpMutateRecover replay — a concurrent mutation that lands after
+  // our put erases the leave: the departed member keeps their roster slot and (the
+  // worse half) the epoch bump is lost, so remaining members never rotate sender
+  // keys and the departed member keeps decrypting new traffic.
+  const applyLeave = (g) => {
+    g.members = g.members.filter(m => m.id !== memberId);
+    if (g.admins) g.admins = g.admins.filter(id => id !== memberId);
+    // Same PCS epoch bump + integer coercion as handleGroupKick (see comment there).
+    g.epoch = (g.epoch | 0) + 1;
+  };
+  applyLeave(group);
   const left = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
   if (!left) return json({ error: 'Failed to save group state', code: 'STORE_FAILED' }, 500, request);
+  await grpMutateRecover(env, token,
+    g => !g.members.some(m => m && m.id === memberId),
+    applyLeave);
 
   return json({ ok: true, remaining: group.members.length, epoch: group.epoch }, 200, request);
 }
@@ -1593,6 +1669,14 @@ async function handleGroupDelete(body, env, request) {
 
   const groupDeleted = await kvDel(env, `grp:${token}`);
   if (!groupDeleted) return json({ error: 'Failed to delete group', code: 'STORE_FAILED' }, 500, request);
+  // kvDel loses the same last-write-wins race in the OTHER direction: a mutation
+  // that read the group before our delete and puts after it resurrects the whole
+  // roster (id/pub/name readable by token holders again, for the full TTL). Tokens
+  // are server-generated and never reused, so a key that still exists here is by
+  // definition a resurrected copy of the group we just deleted — re-delete once.
+  try {
+    if (await kvGet(env, `grp:${token}`)) await kvDel(env, `grp:${token}`);
+  } catch (e) { console.error('[grp-delete-verify]', e?.message || e); }
   return json({ ok: true }, 200, request);
 }
 
@@ -2077,11 +2161,13 @@ async function handleAccountDelete(body, env, request) {
     kvDel(env, `inbox:${userId}`),
     kvDel(env, `sealed:${userId}`),
     kvDel(env, `sealed:${userId}:hwm`), // sealed-poll high-water mark (else lingers ~5min, leaking last-delivery ts)
+    kvDel(env, `sealed:${userId}:dropped`), // refuse-when-full drop counter (else lingers ~7d)
     kvDel(env, `prekey:${userId}`),
     kvDel(env, `ktlog:${userId}`),
     kvDel(env, `push:${userId}`),
     kvDel(env, `backup:${userId}`),
     kvDel(env, `presence:${userId}`),
+    kvDel(env, `devices:${userId}`), // multi-device registry (else survives its 3-month TTL: member ids/pubs of linked devices stay readable and senders keep fanning out to them)
     kvDel(env, `slots:${userId}`),
   ];
   if (customerId) dels.push(kvDel(env, `cust:${customerId}`));
@@ -2119,16 +2205,24 @@ async function handleAccountDelete(body, env, request) {
         await kvDel(env, `grp:${tok}`);
         groupsDeleted.push(tok);
       } else {
-        group.members = group.members.filter(m => m.id !== userId);
-        if (Array.isArray(group.admins)) group.admins = group.admins.filter(id => id !== userId);
-        group.epoch = (group.epoch | 0) + 1;
+        const applySelfRemove = (g) => {
+          g.members = g.members.filter(m => m.id !== userId);
+          if (Array.isArray(g.admins)) g.admins = g.admins.filter(id => id !== userId);
+          g.epoch = (g.epoch | 0) + 1;
+        };
+        applySelfRemove(group);
         await kvPut(env, `grp:${tok}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
+        // Same clobber class as group/leave: a concurrent mutation erasing this removal
+        // leaves the deleted account on the roster and skips the epoch bump.
+        await grpMutateRecover(env, tok,
+          g => !g.members.some(m => m && m.id === userId),
+          applySelfRemove);
         groupsLeft.push(tok);
       }
     }
   }
 
-  const erased = ['inbox', 'sealed', 'prekeys', 'ktlog', 'push', 'backup', 'presence', 'slots'];
+  const erased = ['inbox', 'sealed', 'prekeys', 'ktlog', 'push', 'backup', 'presence', 'devices', 'slots'];
   if (customerId) erased.push('cust');
   return json({
     ok: true,
