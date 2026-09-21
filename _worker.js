@@ -494,7 +494,24 @@ async function handleMsgSend(body, ip, env, request) {
     const lastStoredTs = inbox[inbox.length - 1].ts;
     if (Number.isFinite(lastStoredTs) && msg.ts <= lastStoredTs) msg.ts = lastStoredTs + 1;
   }
+  // Refuse-when-full, never evict. This queue holds ACCEPTED mail — drop-oldest would let
+  // any unauthenticated sender purge the recipient's pending inbox by flooding it (~4 min
+  // single-IP at 30/min for the count cap, ~2 for the byte cap): the victim's stored mail
+  // was destroyed while the flooder's junk took its place. A 429 instead tells the sender
+  // to retry — the client's existing 429 handler re-queues and drains free capacity on
+  // the recipient's next poll. Pending mail is immutable once stored.
+  let inboxBytes = 0;
+  for (const m of inbox) inboxBytes += (typeof m.payload === 'string' ? m.payload.length : 0) + 1024;
+  if (inbox.length >= 100 || inboxBytes + payload.length + 1024 > 16 * 1024 * 1024) {
+    globalThis._msgDedup.delete(dedupKey); // un-mark — a refused send must stay retryable
+    return new Response(JSON.stringify({ error: 'Recipient queue full', code: 'QUEUE_FULL', retryAfter: 30 }), {
+      status: 429,
+      headers: { 'Content-Type': 'application/json', 'Retry-After': '30', ...corsHeaders(request) },
+    });
+  }
   inbox.push(msg);
+  // Gate above bounds the value; capQueueBytes stays as defense against a pre-existing
+  // oversized record (legacy data or a corrupted write).
   const trimmed = capQueueBytes(inbox.slice(-100), m => (typeof m.payload === 'string' ? m.payload.length : 0) + 1024);
   const stored = await kvPut(env, key, JSON.stringify(trimmed), { expirationTtl: TTL.WEEK });
   if (!stored) {
@@ -2457,6 +2474,19 @@ async function handleSealedSend(body, env, request) {
   const newTs = queue.length > 0 && Number.isFinite(queue[queue.length - 1].ts)
     ? Math.max(Date.now(), queue[queue.length - 1].ts + 1)
     : Date.now();
+  // Same refuse-when-full policy as /msg/send: a sealed queue is also accepted mail, so a
+  // flood must fill free slots but can never evict already-pending envelopes. Envelopes
+  // are anonymous (no `from`), so any refusal is global — the sender retries after the
+  // recipient drains. 429 keeps the client's retry path identical to rate limiting.
+  let queueBytes = 0;
+  for (const m of queue) queueBytes += (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128;
+  if (queue.length >= 100 || queueBytes + envelope.length + 128 > 16 * 1024 * 1024) {
+    globalThis._sealedDedup.delete(dedupKey); // un-mark — refused send stays retryable
+    return new Response(JSON.stringify({ error: 'Recipient queue full', code: 'QUEUE_FULL', retryAfter: 30 }), {
+      status: 429,
+      headers: { 'Content-Type': 'application/json', 'Retry-After': '30', ...corsHeaders(request) },
+    });
+  }
   queue.push({ envelope, ts: newTs });
   const trimmed = capQueueBytes(queue.slice(-100), m => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
   // Queue overflow drops the OLDEST envelopes. Don't do it silently (Socratic round —
@@ -2499,10 +2529,16 @@ async function handleSealedSend(body, env, request) {
   const seen = verifyRaw ? safeJsonParse(verifyRaw, []) : [];
   const mine = (m) => m && typeof m.envelope === 'string'
     && m.envelope.length === envelope.length && m.envelope === envelope;
-  if (Array.isArray(seen) && !seen.some(mine)) {
+  // Recovery respects the refuse-when-full invariant too: if the winning write already
+  // filled the queue, re-appending would evict another accepted envelope — the same
+  // promise-breaking this handler's gate exists to stop. Under capacity the re-append
+  // can't overflow (same bounds the send gate enforces), so no trim is needed.
+  let seenBytes = 0;
+  if (Array.isArray(seen)) for (const m of seen) seenBytes += (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128;
+  if (Array.isArray(seen) && !seen.some(mine)
+      && seen.length < 100 && seenBytes + envelope.length + 128 <= 16 * 1024 * 1024) {
     seen.push({ envelope, ts: newTs });
-    const requeued = capQueueBytes(seen.slice(-100), (m) => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
-    await kvPut(env, key, JSON.stringify(requeued), { expirationTtl: TTL.WEEK });
+    await kvPut(env, key, JSON.stringify(seen), { expirationTtl: TTL.WEEK });
   }
   sendPushToUser(to, { title: 'Breeze', body: 'New message', tag: 'breeze-sealed', contactId: to }, env).catch(() => {});
   return json({ ok: true, ack: Date.now() }, 200, request);

@@ -145,6 +145,16 @@ store) rather than gated — an opt-in toggle leaves the contradiction one peer 
   So the sealed path remains **best-effort with recovery, not exactly-once**; content-keyed
   dedup, the client retry queue and the overflow confession (`dropped: n`) still back it, and
   P2P delivery plus re-send remain the ultimate recovery paths.
+- **Accepted mail is immutable.** Both queues (`inbox:{id}`, `sealed:{id}`) used to evict
+  the OLDEST pending entry on overflow — since send endpoints are unauthenticated (the
+  relay can't distinguish a flooder from a contact), anyone could purge a victim's
+  undelivered mail in ~4 min single-IP (30/min vs the 100-entry cap). Now a full queue
+  answers `429 QUEUE_FULL` and refuses the write: stored entries can never be evicted by
+  a flood, and the sender's existing retry path re-sends once the recipient drains.
+  Trade-off is honest — the flood can block *new* arrivals while it sustains a full
+  queue, but it can never destroy mail the relay already accepted. The lost-write
+  recovery re-append honors the same bound (it skips rather than evict onto a full
+  queue).
 - **Metadata**: Sealed Sender **v2** hides the sender from the relay *cryptographically*:
   all sender-identifying fields (id, public key, display name, signature keys, the reply
   preview, multi-device markers — and the X3DH bootstrap header's initiator identity key,
