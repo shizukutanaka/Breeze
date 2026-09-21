@@ -2684,7 +2684,7 @@ async function handleSealedAck(body, env, request) {
   if (!id || typeof id !== 'string') return json({ error: 'id required', code: 'MISSING_ID' }, 400, request);
   if (!validateUserId(id)) return json({ error: 'invalid id', code: 'INVALID_ID' }, 400, request);
   // Destructive: deletes queue entries. Unsigned, a public userId is enough to wipe a
-  // stranger's pending sealed mail — the no-hwm fallback blind-deletes the whole queue.
+  // stranger's pending sealed mail up to the last polled high-water mark.
   const authErr = await checkOwnerAuth(env, request, 'sealed-ack', id, ts, sig, 'SEALED_REQUIRE_AUTH');
   if (authErr) return authErr;
   // Clear only what the client actually polled. handleSealedPoll records a high-water mark
@@ -2706,10 +2706,14 @@ async function handleSealedAck(body, env, request) {
     await kvDel(env, hwmKey); // best-effort marker cleanup (also expires via its own TTL)
     return json({ ok: true, kept: remaining.length }, 200, request);
   }
-  // No high-water mark (client never polled, or a pre-hwm ACK): fall back to full delete.
-  const deleted = await kvDel(env, `sealed:${id}`);
-  if (!deleted) return json({ error: 'Failed to confirm delivery', code: 'ACK_FAILED' }, 500, request);
-  return json({ ok: true }, 200, request);
+  // No high-water mark: delete NOTHING. The only legitimate ACK follows a poll, and a
+  // poll that returned messages always wrote an hwm — so a missing hwm means either the
+  // client never polled (nothing to clear) or the 5-min hwm TTL expired while a suspended
+  // tab held the batch (sleep → wake → ACK). Blind-deleting in that state wipes envelopes
+  // that arrived during the suspension, undelivered. Leaving them is self-healing: the
+  // next poll re-delivers (client dedupes via _replayCache + IDB), writes a fresh hwm,
+  // and that ACK clears the stale remainder bounded by the new mark.
+  return json({ ok: true, kept: 'unbounded' }, 200, request);
 }
 
 // ============================================================

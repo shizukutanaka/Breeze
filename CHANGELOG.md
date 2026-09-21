@@ -1,3 +1,16 @@
+## Sealed ACK no-hwm fallback no longer blind-deletes the queue (branch devin/sealed-ack-nohwm, 2026-09-21)
+
+handleSealedAck deleted the WHOLE sealed queue whenever no high-water mark existed.
+But the only caller ever ACKs right after a poll, and a poll that returned
+envelopes always wrote the hwm — so a missing hwm means either nothing was ever
+polled (nothing to clear) or the 5-min hwm TTL expired while a suspended tab held
+an unprocessed batch (sleep → wake → delayed ACK). In both cases the blind delete
+only destroyed mail the client never saw — envelopes arriving in the poll→ack
+window gone undelivered. Now the no-hwm path deletes nothing and reports ok; a
+stale remainder self-heals (next poll re-delivers, dedup drops, fresh hwm lets
+the following ack clear it bounded). Tests updated to the new contract plus a
+poll→ack→clear regression test.
+
 ## 1:1 relayed reactions get the same caps the group path already had (branch devin/reaction-caps-1to1, 2026-09-21)
 
 The encrypted `isSignal` reaction handler on the 1:1 path created `reactions[emoji]`

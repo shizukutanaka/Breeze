@@ -2248,9 +2248,11 @@ describe('sealed sender send / poll / ack', () => {
     expect(messages).toEqual([]);
   });
 
-  it('ack deletes the sealed queue', async () => {
+  it('ack deletes the sealed queue (poll → ack, the real client flow)', async () => {
     const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     await handleSealedSend({ to: 'charlie1', envelope: 'payload' }, env, req({}));
+    // Clients only ack after polling — that poll is what writes the hwm the ack clears by.
+    await handleSealedPoll({ id: 'charlie1' }, env, req({}));
     await handleSealedAck({ id: 'charlie1' }, env, req({}));
     const { messages } = await (await handleSealedPoll({ id: 'charlie1' }, env, req({}))).json();
     expect(messages).toEqual([]);
@@ -2390,11 +2392,18 @@ describe('sealed sender send / poll / ack', () => {
     expect(await env.KV.get('sealed:window02:hwm')).toBeNull();
   });
 
-  it('ack with no prior poll (no high-water mark) still full-deletes (backward compat)', async () => {
+  it('ack with no high-water mark deletes NOTHING (expired-hwm sleep/wake safety)', async () => {
     const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     await handleSealedSend({ to: 'window03', envelope: 'unpolled' }, env, req({}));
     const ack = await handleSealedAck({ id: 'window03' }, env, req({}));
     expect(ack.status).toBe(200);
+    // The unpolled envelope must survive — the client only ACKs what a poll delivered,
+    // and a missing hwm means it saw nothing. The next poll still delivers it.
+    const polled = await (await handleSealedPoll({ id: 'window03' }, env, req({}))).json();
+    expect(polled.messages.length).toBe(1);
+    expect(polled.messages[0].envelope).toBe('unpolled');
+    // …and that poll's fresh hwm lets the next ack clear it normally.
+    await handleSealedAck({ id: 'window03' }, env, req({}));
     expect((await (await handleSealedPoll({ id: 'window03' }, env, req({}))).json()).messages).toEqual([]);
   });
 
@@ -2568,6 +2577,9 @@ describe('sealed sender send / poll / ack', () => {
   it('ack returns ACK_FAILED 500 when KV delete throws (not false success)', async () => {
     const e = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     await handleSealedSend({ to: 'frank001', envelope: 'ENC' }, e, req({}));
+    // Poll first so the hwm exists — the ack then takes the bounded-delete path that
+    // actually touches KV (a no-hwm ack deletes nothing by design).
+    await handleSealedPoll({ id: 'frank001' }, e, req({}));
     e.KV.delete = async () => { throw new Error('KV_TRANSIENT_ERROR'); };
     const res = await handleSealedAck({ id: 'frank001' }, e, req({}));
     expect(res.status).toBe(500);
