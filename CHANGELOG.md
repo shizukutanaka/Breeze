@@ -1,5 +1,15 @@
 # Changelog
 
+## Mobile package silently dropped every non-English locale + webview navigable to any *.pages.dev (branch devin/mobile-fixes, 2026-09-20)
+
+`mobile/prepare.js`, `mobile/capacitor.config.json`, `CHANGELOG.md`.
+
+Socratic check on the "8 languages" claim, this time per-platform: `index.html` fetches `locales/<lang>.json` at boot — but `prepare.js` never copied `locales/` into the Capacitor `www/` bundle, so on Android/iOS every non-English fetch 404s and the app silently falls back to English. The "8 languages" claim held on web/desktop only. `prepare.js` now enumerates `locales/*.json` into the asset list (so a new locale file never needs a second edit) and treats them as required — a missing locale dir fails loudly instead of shipping an English-only build. Verified: `node mobile/prepare.js` now bundles all 7 locales.
+
+`capacitor.config.json` `allowNavigation: ["*.pages.dev"]` let the app webview navigate in-place to **any** Cloudflare Pages hostname — attacker-controlled pages.dev sites render inside the trusted app shell instead of being kicked to the system browser. Pinned to the canonical `breeze.pages.dev` (self-hosters already edit this file when building their own app).
+
+---
+
 ## /security panel displayed a stale CSP claim (branch devin/csp-display-truth, 2026-09-20)
 
 `index.html`, `locales/ja.json`, `CHANGELOG.md`, `_headers`/`tauri/src-tauri/tauri.conf.json` (CSP hash).
