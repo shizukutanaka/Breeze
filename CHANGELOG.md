@@ -1,5 +1,14 @@
 # Changelog
 
+## Backup blobs are incumbent-endorsed (overwrite clobber closed) (branch devin/consolidate-groups, 2026-09-20)
+
+/backup/upload accepted unsigned overwrites of an existing backup — anyone who
+knew a userId could replace that user's recovery blob with attacker ciphertext.
+Once a backup exists, overwrite now requires the account's Ed25519 signature
+(breeze-backup-upload:{id}:{ts}). First writes stay open; every deployed client
+already signs both calls, so no legitimate path changes.
+
+
 ## Relay queues are refuse-when-full — accepted mail can't be evicted by a flood (branch devin/consolidate-groups, 2026-09-20)
 
 inbox:{id} and sealed:{id} dropped the OLDEST pending entry on overflow. Send

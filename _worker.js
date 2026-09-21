@@ -2625,9 +2625,17 @@ async function handleBackupUpload(body, env, request) {
   if (typeof backup !== 'string') return json({ error: 'backup must be a string', code: 'INVALID_FIELD' }, 400, request);
 
   // Optional Ed25519 auth: callers may include { ts, sig } to prove ownership of the
-  // account's identity key before overwriting the backup. When omitted the upload is
-  // unauthenticated (backward-compat). Both fields must be present or both absent.
+  // account's identity key before overwriting the backup. Both fields must be present or
+  // both absent. An UNSIGNED overwrite is refused only when a backup already exists —
+  // incumbent endorsement: a stored backup is accepted data, so letting any anonymous
+  // caller replace it (clobber — the victim's recovery path silently becomes attacker
+  // ciphertext) is strictly worse than keeping first writes open. Every current client
+  // already signs, so no legitimate overwrite is affected.
   const hasSig = ts !== undefined || sig !== undefined;
+  if (!hasSig && env.BACKUP_REQUIRE_AUTH !== 'true'
+      && (await kvGet(env, `backup:${userId}`)) !== null) {
+    return json({ error: 'Signature required to overwrite an existing backup', code: 'AUTH_REQUIRED' }, 403, request);
+  }
   if (hasSig) {
     if (ts === undefined || sig === undefined)
       return json({ error: 'ts and sig must both be provided together', code: 'PARTIAL_AUTH' }, 400, request);

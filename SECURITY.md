@@ -283,6 +283,12 @@ store) rather than gated — an opt-in toggle leaves the contradiction one peer 
   - **Secondary-device trust is anchored at link time**: `/linkto` pins the root's signing key
     obtained while physically holding both devices (same TOFU gesture as adding a contact by
     raw key), and the registry must already list the new device before it binds.
+  - **Cloud backups are incumbent-endorsed.** Once a backup exists for an account,
+    overwriting it requires the account's Ed25519 signature (`breeze-backup-upload:<id>:<ts>`)
+    — otherwise anyone who knew a userId could replace that user's recovery blob with
+    attacker ciphertext. First writes stay open (nothing stored to protect); all current
+    clients already sign, so no legitimate overwrite is affected. `BACKUP_REQUIRE_AUTH=true`
+    still makes even first writes signed.
   - **Cloud backups expire.** The relay keeps an uploaded backup for 90 days after its last
     upload and nothing renews it. The upload response now carries `expiresAt` and the client
     shows the date, because a safety net that quietly stopped existing is worse than no

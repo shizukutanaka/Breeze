@@ -3749,12 +3749,15 @@ describe('backup upload / download', () => {
     expect(dj.backup).toBe(bak);
   });
 
-  it('overwrites an existing backup on re-upload', async () => {
+  it('refuses an UNSIGNED overwrite of an existing backup (incumbent endorsement)', async () => {
     const e = makeEnv();
     await handleBackupUpload({ userId: 'user00001', backup: 'v1' }, e, req({}));
-    await handleBackupUpload({ userId: 'user00001', backup: 'v2' }, e, req({}));
+    // Anyone could previously replace the victim's recovery blob with attacker ciphertext.
+    const res = await handleBackupUpload({ userId: 'user00001', backup: 'v2-clobber' }, e, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
     const dl = await handleBackupDownload({ userId: 'user00001' }, e, dlReq({}));
-    expect((await dl.json()).backup).toBe('v2');
+    expect((await dl.json()).backup).toBe('v1'); // untouched
   });
 
   it('rejects backup larger than 5MB', async () => {
@@ -3821,6 +3824,19 @@ describe('backup upload / download', () => {
     const j = await res.json();
     expect(j.ok).toBe(true);
     expect(j.authenticated).toBe(true);
+  });
+
+  it('signed overwrite of an existing backup succeeds (owner rotation path)', async () => {
+    const e = makeEnv();
+    const userId = 'bakauth09';
+    const ed = await registerForBackup(e, userId);
+    await handleBackupUpload({ userId, backup: 'v1' }, e, req({}));
+    const ts = Date.now();
+    const sig = await signBackup(ed, 'upload', userId, ts);
+    const res = await handleBackupUpload({ userId, backup: 'v2-signed', ts, sig }, e, req({}));
+    expect(res.status).toBe(200);
+    const dl = await handleBackupDownload({ userId }, e, dlReq({}));
+    expect((await dl.json()).backup).toBe('v2-signed');
   });
 
   it('authenticated download succeeds and sets authenticated:true in response', async () => {
