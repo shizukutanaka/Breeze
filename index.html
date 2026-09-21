@@ -5887,7 +5887,8 @@ async function initMessenger(dbName) {
                 }
               } catch(e) { _dbg(e, 'schedule-recover'); }
             }, delay));
-            _dbg(null, 'Recovered scheduled message: ' + item.text?.slice(0, 30) + ' in ' + Math.round(delay / MS.MIN) + 'm');
+            // No text snippet: even opt-in debug logs end up in screenshots/log collectors.
+            _dbg(null, 'Recovered scheduled message in ' + Math.round(delay / MS.MIN) + 'm');
           }
         }
       }
