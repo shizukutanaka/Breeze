@@ -11451,7 +11451,7 @@ async function initMessenger(dbName) {
   async function fetchTurnCredentials() {
     if (!API) return;
     try {
-      const resp = await postAPIRaw('/turn', { userId: myId });
+      const resp = await postAPIRaw('/turn', { userId: myId, ...(await _ownerAuth('turn')) });
       if (resp.ok) {
         _turnCredential = await resp.json();
         _dbg(null, 'TURN credentials obtained');

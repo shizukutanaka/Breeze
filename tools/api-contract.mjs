@@ -49,6 +49,11 @@ for (const [route, fn] of Object.entries(routeToHandler)) {
   // `if (!x) return` where the message literally names the field as required.
   for (const m of body.matchAll(/if\s*\(!(\w+)\)\s*return json\([^)]*'(\w+) required'[^)]*400/g))
     if (m[2] === m[1]) req.add(m[1]);
+  // Default-on ownership auth: a handler whose `*_REQUIRE_AUTH !== 'false'` branch
+  // 403s unsigned calls makes {ts, sig} required fields even though no `!field` guard
+  // names them. (Only the !== 'false' default-enforced form; the opt-in === 'true'
+  // form stays advisory since unsigned still works without the flag.)
+  if (/env\.\w+_REQUIRE_AUTH\s*!==\s*'false'/.test(body)) { req.add('ts'); req.add('sig'); }
   if (req.size) required[route] = [...req];
 }
 

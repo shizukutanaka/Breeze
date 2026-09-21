@@ -1819,17 +1819,32 @@ async function handleTurn(body, env, request) {
   const { userId } = body;
   if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
-  // A configured private/paid TURN provider gates credential minting to registered
-  // users BY DEFAULT (TURN_REQUIRE_AUTH=false opts out): CF Calls bills $0.05/GB and
-  // coturn burns the operator's bandwidth, so open minting lets any bot drain the
-  // quota — the 10rpm per-IP limit does not stop multi-IP. The public openrelay
-  // fallback stays open: its credentials are already printed in this file, so
-  // gating only that path would be theater. TURN_REQUIRE_AUTH=true also gates it.
+  // A configured private/paid TURN provider gates credential minting to the caller's
+  // Ed25519 signature BY DEFAULT (TURN_REQUIRE_AUTH=false opts out): CF Calls bills
+  // $0.05/GB and coturn burns the operator's bandwidth. A mere "registered userId"
+  // check would be theater — registered ids are public knowledge, so one known id
+  // still drains the quota. `breeze-turn:{userId}:{ts}` is verified against the
+  // caller's prekey bundle (same pattern as group/push auth). The public openrelay
+  // fallback stays open: its credentials are already printed in this file.
   const _turnConfigured = !!(env.TURN_KEY_ID && env.TURN_KEY_API_TOKEN)
     || !!(env.TURN_SECRET && env.TURN_URL)
     || !!(env.TURN_URL && env.TURN_USERNAME && env.TURN_CREDENTIAL);
-  if (env.TURN_REQUIRE_AUTH === 'true' || (env.TURN_REQUIRE_AUTH !== 'false' && _turnConfigured)) {
-    if (!(await kvGet(env, `prekey:${userId}`))) return json({ error: 'User not registered', code: 'UNREGISTERED' }, 401, request);
+  if (env.TURN_REQUIRE_AUTH === 'true' || (_turnConfigured && env.TURN_REQUIRE_AUTH !== 'false')) {
+    const { ts, sig } = body;
+    if (ts === undefined || sig === undefined)
+      return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+    if (typeof sig !== 'string' || sig.length > 500)
+      return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
+    if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS)
+      return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
+    const pkRaw = await kvGet(env, `prekey:${userId}`);
+    const bundle = pkRaw ? safeJsonParse(pkRaw) : null;
+    // Uniform 403 whether the account is unregistered or the signature is wrong —
+    // distinguishing them would leak which userIds own provisioned TURN capacity.
+    if (!bundle || typeof bundle.edIdentityKey !== 'string' || !bundle.edIdentityKey)
+      return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+    const ok = await verifyEd25519(bundle.edIdentityKey, utf8ToB64(`breeze-turn:${userId}:${ts}`), sig);
+    if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
   }
 
   // ═══════════════════════════════════════════════════════

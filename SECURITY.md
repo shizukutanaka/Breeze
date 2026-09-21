@@ -160,14 +160,18 @@ store) rather than gated — an opt-in toggle leaves the contradiction one peer 
   call handshake by flooding 51 entries. It now refuses with `429 QUEUE_FULL` —
   accepted offer/answer/ICE survive to be polled, and the client retries once
   within the drain window.
-- **Configured TURN providers gate credential minting by default.** `/api/turn`
-  used to mint credentials for anyone unless `TURN_REQUIRE_AUTH=true` was set —
-  an opt-in nobody knew about while a configured Cloudflare Calls key bills
-  $0.05/GB (and self-hosted coturn burns operator bandwidth). Now a configured
-  provider (CF Calls key pair, coturn HMAC secret, or static creds) requires a
-  registered `prekey:{userId}` unless `TURN_REQUIRE_AUTH=false` opts out. The
-  public openrelay fallback stays open — its credentials are already printed in
-  `_worker.js`, so gating only that path would be theater.
+- **Configured TURN providers require the caller's signature by default.**
+  `/api/turn` used to mint credentials for anyone unless `TURN_REQUIRE_AUTH=true`
+  was set — an opt-in nobody knew about while a configured Cloudflare Calls key
+  bills $0.05/GB (and self-hosted coturn burns operator bandwidth). An earlier
+  "registered `prekey:{userId}`" gate would have been theater — registered ids
+  are public, so one known id still drains the quota. A configured provider (CF
+  Calls key pair, coturn HMAC secret, or static creds) now requires an Ed25519
+  signature (`breeze-turn:{id}:{ts}`, verified against `prekey:{id}`) by default;
+  `TURN_REQUIRE_AUTH=false` opts out, and `=true` still forces the gate even on
+  the openrelay path. The openrelay fallback stays open by default — its
+  credentials are already printed in `_worker.js`, so gating only that path
+  would be theater.
 - **Group mutations require the caller's signature by default.** Kick, admin
   (promote/demote/unban), transfer, rename, leave and delete used to verify a
   signature *when present* but accept unsigned requests unless
