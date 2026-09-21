@@ -1,5 +1,13 @@
 # Changelog
 
+## /admin promote/demote/rename mutated the local roster on server rejection (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `locales/ja.json`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The kick and transfer handlers checked `resp.ok` — promote, demote and rename did not: they fired the API call and applied the local change unconditionally. An admin running `/admin promote @x` gets the server's 403 (creator-only), but their local roster still recorded the promotion — and every privileged-notice check (`group_meta`, `group_kick`, announce-only) consults that local `admins` list. A rejected command silently made a member privileged *in my client's eyes only*, desyncing trust state from the rest of the group. All three now gate the local mutation on the server response.
+
+---
+
 ## Leaving a group kept every member's sender keys resident (branch devin/consolidate-groups, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).

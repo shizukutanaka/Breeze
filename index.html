@@ -1960,6 +1960,7 @@ const _I = {
     uiNameLength: 'Name must be 1-50 characters',
     uiMemberNotFound: "Member not found: {0}",
     uiGroupRenamed: "Group renamed to {0}",
+    uiRenameFail: 'Rename failed (server rejected)',
     uiUseInGroup: 'Use in a group chat',
     uiOlderMsgs: "↑ {0} older messages",
     uiAnnounceOnly: 'Announce-only:',
@@ -12415,18 +12416,22 @@ async function initMessenger(dbName) {
       } else if (sub.startsWith('rename ')) {
         const newName = sub.slice(7).trim();
         if (newName && newName.length <= 50) {
-          activeContact.name = newName;
-          await dbPut('contacts', activeContact);
-          _DOM.get('msg-conv-name').textContent = newName;
+          // Gate the local mutation on the server response — a rejected rename used to
+          // still apply locally, desyncing my roster from the rest of the group.
+          let renamed = !(API && activeContact.joinToken);
           if (API && activeContact.joinToken) {
             try {
               const renTs = Date.now();
               const renSig = await signMessage(`breeze-group-rename:${activeContact.joinToken}:${myId}:${renTs}:${newName}`);
               const renBody = { token: activeContact.joinToken, adminId: myId, name: newName, ts: renTs };
               if (renSig) renBody.sig = renSig;
-              await postAPIRaw('/group/rename', renBody);
+              renamed = (await postAPIRaw('/group/rename', renBody)).ok;
             } catch(e) { _dbg(e, 'server-rename'); }
           }
+          if (!renamed) { d.textContent = t('uiRenameFail'); box.appendChild(d); box.scrollTop = box.scrollHeight; return; }
+          activeContact.name = newName;
+          await dbPut('contacts', activeContact);
+          _DOM.get('msg-conv-name').textContent = newName;
           auditLog('group', 'Renamed group to ' + newName);
           d.textContent = t('uiGroupRenamed', newName);
           renderContacts();
@@ -12475,18 +12480,24 @@ async function initMessenger(dbName) {
         if (activeContact.members) {
           const member = activeContact.members.find(m => m.name?.toLowerCase() === target.toLowerCase());
           if (member) {
-            if (!activeContact.admins) activeContact.admins = [];
-            if (!activeContact.admins.includes(member.id)) activeContact.admins.push(member.id);
-            await dbPut('contacts', activeContact);
+            // Gate the local mutation on the server response — only the creator can
+            // promote, so an admin's promote gets a 403 and must NOT update the local
+            // roster (my client would then treat that member as privileged: group_meta,
+            // kick notices, announce-only).
+            let promoted = !(API && activeContact.joinToken);
             if (API && activeContact.joinToken) {
               try {
                 const proTs = Date.now();
                 const proSig = await signMessage(`breeze-group-admin:${activeContact.joinToken}:${myId}:${proTs}:promote:${member.id}`);
                 const proBody = { token: activeContact.joinToken, adminId: myId, targetId: member.id, action: 'promote', ts: proTs };
                 if (proSig) proBody.sig = proSig;
-                await postAPIRaw('/group/admin', proBody);
+                promoted = (await postAPIRaw('/group/admin', proBody)).ok;
               } catch(e) { _dbg(e, 'server-promote'); }
             }
+            if (!promoted) { d.textContent = t('toastCreatorOnly'); box.appendChild(d); box.scrollTop = box.scrollHeight; return; }
+            if (!activeContact.admins) activeContact.admins = [];
+            if (!activeContact.admins.includes(member.id)) activeContact.admins.push(member.id);
+            await dbPut('contacts', activeContact);
             auditLog('group', 'Promoted ' + member.name + ' to admin in ' + activeContact.name);
             d.textContent = t('promotedAdmin', member.name);
           } else { d.textContent = t('uiMemberNotFound', target); }
@@ -12496,17 +12507,20 @@ async function initMessenger(dbName) {
         if (activeContact.members) {
           const member = activeContact.members.find(m => m.name?.toLowerCase() === target.toLowerCase());
           if (member) {
-            if (activeContact.admins) activeContact.admins = activeContact.admins.filter(id => id !== member.id);
-            await dbPut('contacts', activeContact);
+            // Same response gate as promote — a rejected demote must not desync the local roster.
+            let demoted = !(API && activeContact.joinToken);
             if (API && activeContact.joinToken) {
               try {
                 const demTs = Date.now();
                 const demSig = await signMessage(`breeze-group-admin:${activeContact.joinToken}:${myId}:${demTs}:demote:${member.id}`);
                 const demBody = { token: activeContact.joinToken, adminId: myId, targetId: member.id, action: 'demote', ts: demTs };
                 if (demSig) demBody.sig = demSig;
-                await postAPIRaw('/group/admin', demBody);
+                demoted = (await postAPIRaw('/group/admin', demBody)).ok;
               } catch(e) { _dbg(e, 'server-demote'); }
             }
+            if (!demoted) { d.textContent = t('toastCreatorOnly'); box.appendChild(d); box.scrollTop = box.scrollHeight; return; }
+            if (activeContact.admins) activeContact.admins = activeContact.admins.filter(id => id !== member.id);
+            await dbPut('contacts', activeContact);
             auditLog('group', 'Demoted ' + member.name + ' in ' + activeContact.name);
             d.textContent = t('demotedAdmin', member.name);
           } else { d.textContent = t('uiMemberNotFound', target); }

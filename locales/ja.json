@@ -584,6 +584,7 @@
   "uiNameLength": "名前は1〜50文字で入力してください",
   "uiMemberNotFound": "メンバーが見つかりません: {0}",
   "uiGroupRenamed": "グループ名を変更: {0}",
+  "uiRenameFail": "名前の変更に失敗しました（サーバ拒否）",
   "uiUseInGroup": "グループチャットで使用してください",
   "uiOlderMsgs": "↑ {0} 件の古いメッセージ",
   "uiAnnounceOnly": "アナウンス専用:",
