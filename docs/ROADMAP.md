@@ -40,7 +40,7 @@ since skipped keys are receiver-side state).
 | I3 | Group PCS — epoch bump + redistribute on kick/leave | M | Removed members keep decrypting today (ePrint 2017/666). | I2 | ✅ **fully deployed** in `src/crypto/group.js` + worker (G3) + index.html: `rotateEpoch` + epoch gate + `handleGroupKick` bumps epoch; client-side redistribution and epoch-mismatch rejection wired in (`p.ep` check); kicked-member-blocked test |
 | I4 | Encrypt identity/signing keys at rest (app-lock) | M | Plaintext JWK in IndexedDB → XSS/forensics (ePrint 2024/887). | — | ✅ **fully deployed** in `src/crypto/atrest.js` (PBKDF2≥600k, btoa/atob browser-compat, wrapJWK/unwrapJWK/migrate/zeroBuffer, +10 tests); **index.html**: `loadIdentity()`/`_atRestIsWrapped()` wired in, opt-in via `/keywrap` (off by default — surfaced once via the `keywrapSuggestion` toast on first boot) |
 | C8 | Web-app integrity ("Code Verify" / SW hash-pin) | M | Biggest *unaddressed* web-E2EE threat: host can serve malicious JS. SW is the pin point. | — |
-| C13 | QR **scan-to-verify** as default ceremony | S–M | Human out-of-band channel closes the I1 MITM gap *before* key transparency. | — |
+| C13 | QR **scan-to-verify** as default ceremony | S–M | Human out-of-band channel closes the I1 MITM gap *before* key transparency. | — | ✅ **done**: safety-number modal now renders `breeze-verify:v1:<digits>` QR (the pair's number is symmetric) + "Scan to verify" camera flow (BarcodeDetector); match → `contact.verified` persisted + badge. **Blocked bug fix included**: the shipped `generateQR` produced *unscannable* codes on every version — hollow finder core, transposed format info, mask applied to reserved cells, EC block table inconsistent with its own capacity table, no interleaving — so the entire QR invite path was decorative. Rewritten to spec; `tests/qr.test.js` decodes the raster with jsQR across v1–v10 |
 | I19 | WebRTC: relay-only privacy default + STUN self-host | S | srflx still leaks public IP to peer by default (arXiv 2510.16168). | — |
 
 ---
@@ -103,7 +103,8 @@ three mirror-drift tests.
 
 ## Sprint 2 (groups + at-rest, ~1–2 weeks)
 **I2 + I3 + I4** — **all three now deployed** (see P1 table above). **C13** (QR verify)
-and **I19** (relay-only default) remain as quick UX/privacy wins, not yet started.
+and **I19** (relay-only default) are now deployed as well — the P2 table above is the
+live edge.
 
 ## Then
 Backend correctness/cost (**C10**), metadata hardening (**I5/I6/C12**), and the
