@@ -901,6 +901,34 @@ describe('Unpad mirror — inline _unpadAndDecompress (index.html) vs reference 
 });
 
 // ---------------------------------------------------------------------------
+// Sanitizer tripwire — the TT 'breeze-sanitizer' allowlist must keep <label>:
+// the settings toggles, contact picker, and attach button all wrap their input
+// in a <label> so clicking the text toggles it. When `label` is missing from
+// SAFE_TAGS the sanitizer unwraps it and only the ~13px checkbox glyph stays
+// clickable — found via E2E (clickable text was dead).
+// ---------------------------------------------------------------------------
+describe('safeSetHTML sanitizer allowlist (index.html)', () => {
+  const m = html.match(/SAFE_TAGS = (\/.+\/i)/);
+  const SAFE_TAGS = new Function('return ' + (m ? m[1] : 'null'))();
+
+  it('extracts the SAFE_TAGS literal from index.html', () => {
+    expect(SAFE_TAGS instanceof RegExp).toBe(true);
+  });
+
+  it('keeps <label> (and the other UI tags the app renders through safeSetHTML)', () => {
+    for (const tag of ['label', 'input', 'button', 'span', 'div', 'a', 'img', 'table', 'mark']) {
+      expect(SAFE_TAGS.test(tag)).toBe(true);
+    }
+  });
+
+  it('still blocks the dangerous tags', () => {
+    for (const tag of ['script', 'iframe', 'object', 'embed', 'svg', 'math', 'form', 'style', 'link', 'meta']) {
+      expect(SAFE_TAGS.test(tag)).toBe(false);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Bare-IK session bootstrap — first-contact convergence guard.
 //
 // initSession() treats a fresh LOCAL ephemeral ratchet key as "our current ratchet

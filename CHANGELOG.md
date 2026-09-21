@@ -1,5 +1,13 @@
 # Changelog
 
+## /security panel displayed a stale CSP claim (branch devin/csp-display-truth, 2026-09-20)
+
+`index.html`, `locales/ja.json`, `CHANGELOG.md`, `_headers`/`tauri/src-tauri/tauri.conf.json` (CSP hash).
+
+The security panel's CSP line was a hardcoded string describing the `<meta>` fallback (`script-src self unsafe-inline`) — for the actual deployed policy it *understated* protection: the real enforcement is the `_headers` hash-pinned `script-src` (no unsafe-inline). Now shows both layers truthfully: header = hash-pinned sha256, `<meta>` = fallback baseline read live from the DOM (so it can never drift again). Neighboring claims re-verified while here: `negotiated:true` DCEP, `bufferedAmountLowThreshold`, 256-B pad boundary, double-HMAC timing compare, ±5min anti-replay — all real.
+
+---
+
 ## QR codes were decorative: encoder rewrite + C13 scan-to-verify (branch devin/c13-qr-verify, 2026-09-20)
 
 vitest 829 → **835** (+6 decode regression tests); `index.html`, `tests/qr.test.js` (new), `locales/ja.json`, `package.json` (+jsqr devDep), `docs/ROADMAP.md`, `CHANGELOG.md`, `_headers`/`tauri/src-tauri/tauri.conf.json` (CSP hash propagation).
