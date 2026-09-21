@@ -1,5 +1,13 @@
 # Changelog
 
+## Incoming far-future timestamps pinned a conversation to the top of the list (branch devin/ts-clamp, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`handleIncoming` normalized `msg.ts` for finiteness only; the relay validates ±5 min but the P2P DataChannel path has no bound. A peer sending `ts = year 3000` would pin their conversation to the top of the contact list forever (`lastMsgAt`) and keep their message sorted newest in-conversation. Incoming ts is now clamped to `now + 5 min` — the same skew window the relay enforces. Past timestamps stay untouched (queued relay delivery is legitimate).
+
+---
+
 ## Message mutations were not bound to the sender's conversation (branch devin/mutation-binding, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
