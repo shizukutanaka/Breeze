@@ -35,7 +35,7 @@ wrangler kv:namespace create KV
 | TURN relay | ✓ | Open Relay (20GB/month free) |
 | Groups (100 members) | ✓ | Sender Key O(1) |
 | File transfer | ✓ | Up to 50MB via P2P |
-| 8 languages | ✓ | EN + 7 full locales, auto-detected |
+| 8 languages | ✓ | EN + 7 locales (ja complete, others core UI), auto-detected |
 | Offline/PWA | ✓ | Service Worker |
 | Push notifications | ✗ | Needs VAPID keys |
 
