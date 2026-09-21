@@ -1,5 +1,13 @@
 # Changelog
 
+## Documented: data-channel signaling is authenticated, not confidential (branch devin/sig-metadata-doc, 2026-09-20)
+
+`SECURITY.md`, `CHANGELOG.md`.
+
+SECURITY.md already said call-signaling E2E (`CALL_E2E_SIGNAL`) is opt-in — but never said the 1:1 data-channel `offer`/`answer`/`ice` ride the unauthenticated `dm:<idA>:<idB>` room as signed-but-plaintext JSON. Anyone who knows both ids (e.g. a shared group co-member) can poll the room and read ICE candidates — both parties' IPs — plus `typing`/`read` activity. Documented alongside the existing owner-signable-queue caveat; encrypting it reuses `_wrapCallSignal` but is a wire decision pending a capability bit.
+
+---
+
 ## Chat import silently dropped same-minute messages (branch devin/import-dedup, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).

@@ -207,6 +207,16 @@ store) rather than gated — an opt-in toggle leaves the contradiction one peer 
   poll, so going offline >5 min right after polling silently expired unprocessed mail.
   Polls no longer rewrite the queue; crash-recovery relies on the original TTL plus the
   high-water-mark + client dedup instead.
+- **Data-channel signaling is authenticated, not confidential.** 1:1 P2P negotiation posts
+  `offer`/`answer`/`ice` to the unauthenticated `dm:<idA>:<idB>` room as signed-but-plaintext
+  JSON — anyone who knows both ids (e.g. a shared group co-member) can poll the room and
+  read ICE candidates, which disclose both parties' IP addresses, plus `typing`/`read`
+  activity. Authenticity is enforced (Ed25519-signed SDP, see `_sendSignedSDP`), so injection
+  is covered; the leak is metadata, not integrity. Calls are better: `call-*` signals go
+  through `_wrapCallSignal` ECIES when `CALL_E2E_SIGNAL` is enabled — but that flag is OFF by
+  default with no capability negotiation, so shipped builds send call signaling in cleartext
+  too. Encrypting data-channel signaling the same way breaks old clients' P2P setup (they
+  cannot parse a wrapped offer) and is a wire decision pending a capability bit.
 - **An invite token is effectively group membership.** `/group/info` returns the full member
   list (ids, public keys, names) to any token holder without joining — but restricting that
   read would not help: `/group/join` accepts the same token with no signature and no approval,
