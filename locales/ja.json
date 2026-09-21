@@ -395,6 +395,7 @@
   "toastGroupLeft": "グループを退出しました",
   "toastGroupDeleted": "グループを削除しました",
   "toastGroupLeaveFail": "サーバーでの退出処理に失敗しました(ローカルでは削除済み)",
+  "toastGroupKickFail": "キックに失敗しました（サーバ拒否）",
   "toastGroupDeleteFail": "サーバーでの削除処理に失敗しました(ローカルでは削除済み)",
   "demotedAdmin": "{0} の管理者権限を解除しました",
   "transferredOwnership": "{0} がグループの作成者になりました",

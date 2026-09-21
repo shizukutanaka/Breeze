@@ -1,10 +1,10 @@
 # Changelog
 
-## /admin promote/demote/rename mutated the local roster on server rejection (branch devin/consolidate-groups, 2026-09-20)
+## /admin mutations applied locally on server rejection (branch devin/consolidate-groups, 2026-09-20)
 
-`index.html`, `locales/ja.json`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+`index.html`, `locales/*.json`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
 
-The kick and transfer handlers checked `resp.ok` — promote, demote and rename did not: they fired the API call and applied the local change unconditionally. An admin running `/admin promote @x` gets the server's 403 (creator-only), but their local roster still recorded the promotion — and every privileged-notice check (`group_meta`, `group_kick`, announce-only) consults that local `admins` list. A rejected command silently made a member privileged *in my client's eyes only*, desyncing trust state from the rest of the group. All three now gate the local mutation on the server response.
+Only transfer checked `resp.ok` — kick, promote, demote and rename fired the API call and applied the local change unconditionally. An admin running `/admin promote @x` gets the server's 403 (creator-only), but their local roster still recorded the promotion — and every privileged-notice check (`group_meta`, `group_kick`, announce-only) consults that local `admins` list. A rejected kick silently removed the member from my roster while the server roster kept them (I'd stop sending to someone everyone else still sees). All four now gate the local mutation on the server response (offline groups keep local-only behavior). New i18n keys added to all 8 locales to keep the 95% coverage floor.
 
 ---
 

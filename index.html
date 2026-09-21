@@ -1774,6 +1774,7 @@ const _I = {
     toastGroupDeleted: 'Group deleted',
     toastGroupLeaveFail: 'Failed to leave group on server (removed locally)',
     toastGroupDeleteFail: 'Failed to delete group on server (removed locally)',
+    toastGroupKickFail: 'Kick failed (server rejected)',
     demotedAdmin: "{0} is no longer a group admin",
     transferredOwnership: "{0} is now the group creator",
     toastKickedFromGroup: "You were removed from {0}",
@@ -12442,6 +12443,7 @@ async function initMessenger(dbName) {
           const member = activeContact.members.find(m => m.name?.toLowerCase() === target.toLowerCase());
           if (member) {
             let newEpoch = null; // v3.3: server-side kick (was `groupToken`, never set; groups store `joinToken` — E2E-found)
+            let kicked = !(API && activeContact.joinToken); // offline groups: local removal IS the action
             if (API && activeContact.joinToken) {
               try {
                 const kickTs = Date.now();
@@ -12449,12 +12451,17 @@ async function initMessenger(dbName) {
                 const kickBody = { token: activeContact.joinToken, kickId: member.id, adminId: myId, ts: kickTs };
                 if (kickSig) kickBody.sig = kickSig;
                 const kickResp = await postAPIRaw('/group/kick', kickBody);
+                kicked = kickResp.ok;
                 if (kickResp.ok) {
                   const kickData = await kickResp.json().catch(() => ({}));
                   newEpoch = (typeof kickData.epoch === 'number') ? kickData.epoch : null;
                 }
               } catch(e) { _dbg(e, 'server-kick'); }
             }
+            // A rejected kick must not drop the member locally — the server roster still
+            // lists them, so my roster would silently diverge (I'd stop sending to them
+            // while everyone else still does).
+            if (!kicked) { d.textContent = t('toastGroupKickFail'); box.appendChild(d); box.scrollTop = box.scrollHeight; return; }
             activeContact.members = activeContact.members.filter(m => m.id !== member.id);
             if (activeContact.admins) activeContact.admins = activeContact.admins.filter(id => id !== member.id);
             activeContact.groupV5 = _computeGroupV5(activeContact); // re-negotiate: kick can only relax the AND rule (fewer members), may newly enable v5
