@@ -1,5 +1,13 @@
 # Changelog
 
+## openConversation race — a stale async render overwrote the newer chat's view (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`openConversation` sets `activeContact` synchronously, then awaits `dbCountMsgs`/`dbGetRecentMsgs` before rendering. Two rapid opens interleave: open A starts loading, open B starts loading, A's messages resolve and render into `box` — now displaying under B's header, B's draft, B's input. The displayed history says A, everything else says B: a wrong-window confidentiality bug (read a conversation believing it's another), not just cosmetic. A generation counter (`_openGen`) now marks each open; a superseded render drops itself before touching the DOM.
+
+---
+
 ## Send-side gates only covered the text path (branch devin/consolidate-groups, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).

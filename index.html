@@ -4266,6 +4266,7 @@ async function initMessenger(dbName) {
   // it will read silence as "nobody messaged me". Clicking it ends focus immediately.
   let _focusTimer = null;
   let _readTimer = null; // pending delayed read receipt (see openConversation)
+  let _openGen = 0; // openConversation generation — stale async renders drop themselves
   let _noReplyNeeded = false; // one-shot: marks the NEXT message as needing no reply
   // True when this install is a LINKED secondary (see /linkto). Group sending is primary-only
   // by design; resolved at boot and refreshed by /link, /linkto and /unlink.
@@ -6715,6 +6716,10 @@ async function initMessenger(dbName) {
     }
     activeContact = contact;
     contact.unread = 0;
+    // Generation guard: the message load below awaits; a second open during that
+    // window must win — otherwise the stale render lands in the newer conversation's
+    // view (rapid A→B click shows A's history under B's header).
+    const openGen = ++_openGen;
     await dbPut('contacts', contact);
     const nameEl = _DOM.get('msg-conv-name');
     // v3.6: Show member count for groups in header
@@ -6745,6 +6750,7 @@ async function initMessenger(dbName) {
     const PAGE_SIZE = 50;
     const totalMsgCount = await dbCountMsgs(contact.id);
     const recentMsgs = await dbGetRecentMsgs(contact.id, PAGE_SIZE);
+    if (openGen !== _openGen) return; // superseded by a newer open — don't render stale history
     const box = _DOM.get('msg-messages');
     // v3.4: Revoke all blob URLs from previous conversation to prevent memory leaks
     _blobUrls.forEach(url => URL.revokeObjectURL(url));
