@@ -1221,9 +1221,7 @@ const CONFIG = {
   VOICE_MAX_MS: 120000,               // Max voice note duration: 2 minutes
   // Limits
   FILE_MAX: 50 * 1024 * 1024, // All users: 50MB
-  
   GROUP_MAX: 100, // All users: 100 members
-  
   MAX_MSG_LENGTH: 4096,
   CHUNK_SIZE: 16 * 1024,           // Safe cross-browser DataChannel max (16 KiB)
   DC_BUFFER_MAX: 262144,            // 256 KiB backpressure threshold
@@ -2924,7 +2922,6 @@ async function deriveKey(passphrase, salt, usage) {
     try {  
     const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
     return crypto.subtle.deriveKey({name:'PBKDF2', salt, iterations:CONFIG.PBKDF2_ITERATIONS, hash:'SHA-256'}, km, {name:'AES-GCM',length:CONFIG.AES_KEY_BITS}, false, [usage]);
-  
     } catch(_e) { _dbg(_e, 'deriveKey'); }
   }
 
@@ -3466,22 +3463,18 @@ async function switchAccount(accountId) {
     if (_messengerCleanup) { _messengerCleanup(); _messengerCleanup = null; }
     if (_currentAccountDb) { try { _currentAccountDb.close(); } catch(e) { _dbg(e); } }
     _DOM.clear(); // Invalidate memoized DOM cache
-  
     setActiveAccountId(accountId);
     // Clear unread badge for the account we're switching to
     delete _crossAccountUnread[accountId];
     try { localStorage.setItem('brz-cross-unread', JSON.stringify(_crossAccountUnread)); } catch(e) {}
     renderAccountTabs();
-  
     // Re-initialize messenger with new account
     const accs = getAccounts();
     const acc = accs.find(a => a.id === accountId);
     if (!acc) { switchAccount._switching = false; overlay?.remove(); return; }
-  
     // Reset messenger UI
     _DOM.get('msg-main')?.classList.add('hidden');
     _DOM.get('msg-setup')?.classList.add('hidden');
-  
     await initMessenger(acc.dbName || 'breeze-acc-' + accountId);
     // Re-render AFTER init: only now is it known whether this account landed on the setup
     // screen (a brand-new account, whose database has no identity) or the main UI, and the
@@ -3494,7 +3487,6 @@ async function switchAccount(accountId) {
     switchAccount._switching = false;
     const _switchTime = _perf.measure('switchAccount:done', 'switchAccount');
     if (_switchTime) _dbg(null, `switchAccount: ${Math.round(_switchTime.duration)}ms`);
-  
     } catch(_e) { 
       _dbg(_e, 'switchAccount'); 
       document.querySelector('.acc-switch-overlay')?.remove();
@@ -3777,7 +3769,6 @@ async function initMessenger(dbName) {
         return await crypto.subtle.generateKey({ name: CONFIG.PREFERRED_CURVE }, true, ['deriveBits']);
       }
       return await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey', 'deriveBits']);
-    
     } catch(_e) { _dbg(_e, 'genIdentityKey'); }
   }
 
@@ -4089,7 +4080,6 @@ async function initMessenger(dbName) {
   async function dbGetAll(store) {
     try {  
       return new Promise(r => { const tx = db.transaction(store); const req = tx.objectStore(store).getAll(); req.onsuccess = () => r(req.result || []); req.onerror = () => r([]); });
-    
     } catch(_e) { _dbg(_e, 'dbGetAll'); }
   }
   async function dbGetByIndex(store, idx, key) {
@@ -4157,7 +4147,6 @@ async function initMessenger(dbName) {
         req.onsuccess = () => resolve();
         req.onerror = () => { _dbg(req.error, 'dbDel'); reject(req.error); };
       });
-    
     } catch(_e) { _dbg(_e, 'dbDel'); }
   }
 
@@ -4384,7 +4373,6 @@ async function initMessenger(dbName) {
         totalContacts: contacts.length,
         totalFiles: messages.filter(m => m.fileData || m.voice).length,
       };
-    
     } catch(_e) { _dbg(_e, 'gdprExport'); }
   }
 
@@ -4459,7 +4447,6 @@ async function initMessenger(dbName) {
       const hash = await crypto.subtle.digest('SHA-256', data);
       const hex = [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2, '0')).join('');
       return 'breeze-' + hex.slice(0, 4) + '-' + hex.slice(4, 8);
-    
     } catch(_e) { _dbg(_e, 'generateShortId'); }
   }
 
@@ -4577,7 +4564,6 @@ async function initMessenger(dbName) {
     try {  
       const key = await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
       return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: CONFIG.HKDF_HASH, salt, info: new TextEncoder().encode(info) }, key, length * 8));
-    
     } catch(_e) { _dbg(_e, 'hkdf'); }
   }
 
@@ -4635,7 +4621,6 @@ async function initMessenger(dbName) {
       }
       const kp = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey', 'deriveBits']);
       return { pub: await crypto.subtle.exportKey('raw', kp.publicKey), priv: await crypto.subtle.exportKey('jwk', kp.privateKey), publicKey: kp.publicKey, privateKey: kp.privateKey };
-    
     } catch(_e) { _dbg(_e, 'genRatchetKey'); }
   }
 
@@ -4644,11 +4629,14 @@ async function initMessenger(dbName) {
     try {  
       if (_hasX25519) {
         const peerPub = await crypto.subtle.importKey('raw', peerPubRaw, { name: 'X25519' }, false, []);
-        return new Uint8Array(await crypto.subtle.deriveBits({ name: 'X25519', public: peerPub }, privKey, 256));
+        const bits = new Uint8Array(await crypto.subtle.deriveBits({ name: 'X25519', public: peerPub }, privKey, 256));
+        // Reject low-order (torsion) peer keys: X25519 accepts any 32-byte string and a
+        // low-order point yields an all-zero secret the attacker knows (eprint 2026/727).
+        if (!bits.some(b => b !== 0)) throw new Error('non-contributory X25519 DH');
+        return bits;
       }
       const peerPub = await crypto.subtle.importKey('raw', peerPubRaw, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
       return new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: peerPub }, privKey, 256));
-    
     } catch(_e) { _dbg(_e, 'ecdhBits'); }
   }
 
@@ -4658,7 +4646,6 @@ async function initMessenger(dbName) {
       const msgKey = await hkdf(chainKey, new Uint8Array(32), 'msg', 32);
       const nextChain = await hkdf(chainKey, new Uint8Array(32), 'chain', 32);
       return { msgKey, nextChain };
-    
     } catch(_e) { _dbg(_e, 'kdfChain'); }
   }
 
@@ -4842,6 +4829,15 @@ async function initMessenger(dbName) {
         ikPriv: myKeys.privateKey, spkPriv, opkPriv,
         ikPubPeer: u8(p.ik), ekPubPeer: u8(p.ek),
       });
+      // One-time means one-time: burn the consumed OTP private key — a lingering
+      // copy would let a later IDB compromise decrypt every bootstrap it sealed.
+      if (typeof p.opkId === 'number') {
+        const otpStore = await dbGet('identity', 'otp-priv');
+        if (otpStore?.keys && p.opkId in otpStore.keys) {
+          delete otpStore.keys[p.opkId];
+          await dbPut('identity', otpStore, 'otp-priv');
+        }
+      }
       return { rootKey: sk, ratchetPriv: spkPriv, ratchetPub: null, peerRatchetPub: null, sendCounter: 0, recvCounter: 0, seenMsgIds: [] };
     } catch(_e) { _dbg(_e, 'bootstrapResponderSessionV5'); return null; }
   }
@@ -4881,7 +4877,6 @@ async function initMessenger(dbName) {
         sendCounter: 0, recvCounter: 0,
         seenMsgIds: [],
       };
-    
     } catch(_e) { _dbg(_e, 'initSession'); }
   }
 
@@ -5109,9 +5104,11 @@ async function initMessenger(dbName) {
       }
       if (_decryptFailures[peerId] >= CONFIG.SESSION_RESET_THRESHOLD) {
         _dbg(null, 'Session reset for ' + peerId + ' after 3 decrypt failures');
-        // Responder bootstrap — a plain initSession() reset would recreate the same mismatch.
-        const newSess = await initSessionResponder(peerPubB64);
-        await saveSession(peerId, newSess);
+        // Drop the session rather than persisting a fresh initSessionResponder()
+        // state — its ratchetPriv is our identity private key, and persisting it is
+        // forcible by any peer via 3 garbage ciphertexts (DR weak-state attack,
+        // eprint 2026/727). Next inbound re-bootstraps lazily (and v5 pkm requires !sess).
+        await dbDel('identity', 'sess:' + peerId);
         _decryptFailures[peerId] = 0;
         await showKeyChangeWarning(peerId, peerPubB64, 'Session reset.');
       }
@@ -5167,7 +5164,6 @@ async function initMessenger(dbName) {
       let num = '';
       for (let i = 0; i < 6; i++) { num += String((bytes[i*2] << 8 | bytes[i*2+1]) % 100000).padStart(5, '0') + ' '; }
       return num.trim();
-    
     } catch(_e) { _dbg(_e, 'safetyNumber'); }
   }
 
@@ -5177,7 +5173,6 @@ async function initMessenger(dbName) {
       const raw = Uint8Array.from(atob(peerPubB64), c => c.charCodeAt(0));
       const peerPub = await crypto.subtle.importKey('raw', raw, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
       return crypto.subtle.deriveKey({ name: 'ECDH', public: peerPub }, myKeys.privateKey, { name: 'AES-GCM', length: CONFIG.AES_KEY_BITS }, false, ['encrypt', 'decrypt']);
-    
     } catch(_e) { _dbg(_e, 'deriveKeyWith'); }
   }
 
@@ -5579,7 +5574,15 @@ async function initMessenger(dbName) {
       const stored = await dbGet('identity', 'gsk:' + groupId);
       if (stored) return stored;
       const group = await dbGet('contacts', groupId);
-      const useV5 = _computeGroupV5(group || {});
+      const freshV5 = _computeGroupV5(group || {});
+      // Pin once negotiated: a relay that strips member caps in /group/info could
+      // otherwise force my first send onto a static v3 key — losing forward secrecy
+      // silently. If v5 was ever negotiated, keep it and flag the downgrade attempt.
+      const useV5 = group?.groupV5 === true || freshV5;
+      if (group?.groupV5 === true && !freshV5) {
+        _dbg(null, 'group caps vanished after v5 pin — staying on v5 (tampered roster?)');
+        auditLog('security', `Group ${groupId} member caps disappeared after v5 was negotiated — staying on v5 (possible relay tampering)`);
+      }
       if (group && group.groupV5 !== useV5) { group.groupV5 = useV5; await dbPut('contacts', group); }
       const rawBytes = crypto.getRandomValues(new Uint8Array(32));
       const key = useV5
@@ -6315,7 +6318,6 @@ async function initMessenger(dbName) {
       await dbPut('contacts', { id, pubB64: safePub, name: safeName, addedAt: Date.now(), unread: 0 });
       auditLog('contact', 'Added: ' + name + ' (' + id + ')');
       await renderContacts();
-    
     } catch(_e) { _dbg(_e, 'addContact'); }
   }
 
@@ -6332,7 +6334,6 @@ async function initMessenger(dbName) {
       const labels = new Set();
       contacts.forEach(c => (c.labels || []).forEach(l => labels.add(l)));
       return [...labels].sort();
-    
     } catch(_e) { _dbg(_e, 'getAllLabels'); }
   }
 
@@ -6359,7 +6360,6 @@ async function initMessenger(dbName) {
         chip.onclick = () => { _activeLabel = (_activeLabel === label) ? null : label; renderLabelFilter(); renderContacts(); };
         bar.appendChild(chip);
       });
-    
     } catch(_e) { _dbg(_e, 'renderLabelFilter'); }
   }
 
@@ -7495,7 +7495,6 @@ async function initMessenger(dbName) {
         await relaySend(contact.id, { to: contact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts }, contact.pubB64);
       }
       renderContacts();
-    
     } catch(_e) { _dbg(_e, 'createPoll'); }
   }
 
@@ -7741,7 +7740,6 @@ async function initMessenger(dbName) {
       // Notify the message's own conversation
       const convContact = stored?.contactId ? await dbGet('contacts', stored.contactId) : activeContact;
       if (convContact) sendSignal({ type: 'edit', msgId: msg.msgId, text: editText, ts: msg.ts }, convContact);
-    
     } catch(_e) { _dbg(_e, 'startEdit'); }
   }
 
@@ -7756,7 +7754,6 @@ async function initMessenger(dbName) {
       if (el) safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>');
       const convContact = stored?.contactId ? await dbGet('contacts', stored.contactId) : activeContact;
       if (convContact) sendSignal({ type: 'delete', msgId: msg.msgId }, convContact);
-    
     } catch(_e) { _dbg(_e, 'deleteMsg'); }
   }
 
@@ -7839,7 +7836,6 @@ async function initMessenger(dbName) {
       if (stored) { stored.pinned = !stored.pinned; await dbPut('messages', stored); }
       const el = document.querySelector(`[data-msgid="${msg.msgId}"]`);
       if (el) if (stored?.pinned) el.classList.add('msg-pinned'); else el.classList.remove('msg-pinned');
-    
     } catch(_e) { _dbg(_e, 'pinMsg'); }
   }
 
@@ -7853,7 +7849,6 @@ async function initMessenger(dbName) {
         const el = document.querySelector(`[data-msgid="${msg.msgId}"]`);
         if (el) el.classList.toggle('msg-bookmarked', stored.bookmarked);
       }
-    
     } catch(_e) { _dbg(_e, 'bookmarkMsg'); }
   }
 
@@ -8401,7 +8396,6 @@ async function initMessenger(dbName) {
       await relaySend(contact.id, { to: contact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts, isFile: true }, contact.pubB64);
       _fanOut(contact, fileMsg, ts, { isFile: true },
         { isFile: true, sfFor: contact.id, sfPub: contact.pubB64, sfName: contact.name });
-    
     } catch(_e) { _dbg(_e, '_sendFile'); }
   }
 
@@ -9148,10 +9142,8 @@ async function initMessenger(dbName) {
       _callContact = contact;
       _callState = 'ringing';
       showCallUI('ringing', contact.name, parsed.video);
-  
       // Store offer for when user accepts
       window._pendingCallOffer = { contact, sdp: parsed.sdp, video: parsed.video };
-    
     } catch(_e) { _dbg(_e, 'handleCallOffer'); }
   }
 
@@ -9469,13 +9461,11 @@ async function initMessenger(dbName) {
       const contacts = await dbGetAll('contacts');
       const list = contacts.filter(c => !c.isGroup).map((c, i) => `${i + 1}. ${c.name}`).join('\n');
       const sel = await showPrompt(t('addMembersPrompt') + '\n' + list, '', { placeholder: '1,2,3' });
-  
       if (!sel || !sel.trim()) {
         // No members selected → create server-backed invite link
         await createGroupInviteLink(name);
         return;
       }
-  
       const indices = sel.split(',').map(s => parseInt(s.trim()) - 1).filter(i => !isNaN(i));
       const members = indices.map(i => contacts[i]).filter(Boolean).map(c => ({ id: c.id, pubB64: c.pubB64, name: c.name }));
       if (members.length === 0) { await createGroupInviteLink(name); return; }
@@ -9484,14 +9474,12 @@ async function initMessenger(dbName) {
         for (const m of members) m.caps = capsById[m.id] || [];
       }
       members.push({ id: myId, pubB64: myPubB64, name: myName });
-  
       // A3: Group member limit
       const maxMembers = CONFIG.GROUP_MAX;
       if (members.length > maxMembers) {
         showToast(t('upgGroup', maxMembers), 'error');
         return;
       }
-  
       const groupId = 'g_' + uid();
       await dbPut('contacts', {
         id: groupId, name, isGroup: true, members,
@@ -9499,14 +9487,12 @@ async function initMessenger(dbName) {
       });
       auditLog('group', 'Created group: ' + name + ' (' + members.length + ' members)');
       await renderContacts();
-  
       for (const m of members) {
         if (m.id === myId) continue;
         const encrypted = await encryptFor(JSON.stringify({ type: 'group_invite', groupId, name, members }), m.pubB64);
         if (!encrypted) { _dbg(null, 'encrypt failed for invite to ' + m.id?.slice(0,8)); continue; }
         await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: Date.now(), isGroupInvite: true }, m.pubB64);
       }
-    
     } catch(_e) { _dbg(_e, 'createGroup'); }
   }
 
@@ -9521,6 +9507,7 @@ async function initMessenger(dbName) {
       await dbPut('contacts', {
         id: groupId, name, isGroup: true, joinToken: data.token, createdBy: myId, // isGroupAdmin() needs createdBy or the creator fails their own /admin checks (E2E-found)
         members: [{ id: myId, pubB64: myPubB64, name: myName }],
+        groupV5: CONFIG.GROUP_RATCHET_V5 || undefined, // pin — see getGroupSenderKey (no other members yet)
         addedAt: Date.now(), unread: 0, pubB64: ''
       });
       await renderContacts();
@@ -9550,6 +9537,12 @@ async function initMessenger(dbName) {
   function safeMemberList(raw) {
     return (Array.isArray(raw) ? raw : []).slice(0, CONFIG.GROUP_MAX)
       .filter(m => typeof m.id === 'string' && m.id && m.id.length <= 128)
+      // Bind id ↔ pubB64: the roster is relay-controlled, and an id with a mismatched
+      // pub is a swapped key (silently MITMs that member) — not a valid member.
+      .filter(m => {
+        const pub = typeof m.pub === 'string' ? m.pub : (typeof m.pubB64 === 'string' ? m.pubB64 : '');
+        return pub.startsWith(m.id);
+      })
       .map(m => ({
         id: m.id,
         pubB64: typeof m.pub === 'string' ? m.pub.slice(0, 200) : (typeof m.pubB64 === 'string' ? m.pubB64.slice(0, 200) : ''),
@@ -9580,12 +9573,14 @@ async function initMessenger(dbName) {
         if (typeof data.creatorId === 'string' && data.creatorId) existing.createdBy = data.creatorId;
         if (Array.isArray(data.admins)) existing.admins = data.admins.filter(id => typeof id === 'string' && id.length <= 64).slice(0, CONFIG.GROUP_MAX);
         if (typeof data.name === 'string' && data.name) existing.name = data.name.slice(0, 64);
+        if (existing.groupV5 !== true && _computeGroupV5(existing)) existing.groupV5 = true; // pin (see getGroupSenderKey)
         await dbPut('contacts', existing);
       } else {
         await dbPut('contacts', {
           id: groupId, name: typeof data.name === 'string' ? data.name.slice(0, 64) : 'Group',
           isGroup: true, joinToken: token,
           members: safeMemberList(data.members),
+          groupV5: _computeGroupV5({ members: safeMemberList(data.members) }) || undefined,
           // Seed moderation metadata — isGroupAdmin() reads createdBy/admins and the
           // roster poll only patches them on change, so a group that never mutates
           // post-join would leave the creator unable to run /admin.
@@ -9663,6 +9658,13 @@ async function initMessenger(dbName) {
             if (!(await dbGet('contacts', m.id))) await addContact(m.pubB64, m.name);
           }
           renderContacts();
+        }
+        // Pin the negotiated group format as soon as the roster says all-v5 — caps can
+        // appear/disappear without membership churn (join-time refresh), and pinning
+        // pre-first-send closes the relay strip-caps → silent v3 downgrade window.
+        if (group.groupV5 !== true && _computeGroupV5(group)) {
+          group.groupV5 = true;
+          await dbPut('contacts', group);
         }
       } catch(e) { _dbg(e); }
     }, 5000);
@@ -9790,7 +9792,6 @@ async function initMessenger(dbName) {
       schedulePoll();
       // Re-schedule on visibility change (fast poll when tab becomes active)
       document.addEventListener('visibilitychange', () => { if (!document.hidden) schedulePoll(); }, { signal: _ac.signal });
-    
     } catch(_e) { _dbg(_e, 'startPolling'); }
   }
 
@@ -12250,7 +12251,6 @@ async function initMessenger(dbName) {
       const text = await file.text();
       const { source, msgs } = detectAndParse(text);
       if (msgs.length === 0) { showToast(t('toastNoImportMsgs'), 'error'); return; }
-  
       const myNames = [myName.toLowerCase(), myAlias?.toLowerCase(), 'you', 'me', 'self'].filter(Boolean);
       let imported = 0;
       for (let i = 0; i < msgs.length; i++) {
@@ -12272,16 +12272,13 @@ async function initMessenger(dbName) {
         });
         imported++;
       }
-  
       contact.lastMsg = msgs[msgs.length - 1]?.text?.slice(0, 40) || '';
       contact.lastMsgAt = msgs[msgs.length - 1]?.ts || Date.now();
       await dbPut('contacts', contact);
-  
       // Refresh conversation — only if the user is still on it (they may have switched
       // away mid-import; the messages landed in the right chat either way).
       if (activeContact?.id === contact.id) await openConversation(contact);
       showToast(t('toastImported', imported, source), "success");
-    
     } catch(_e) { _dbg(_e, 'importChat'); }
   }
 

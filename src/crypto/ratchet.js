@@ -77,7 +77,12 @@ export function createRatchet(opts = {}) {
     const algo = curveAlgo();
     const peerPub = await subtle.importKey('raw', peerPubRaw, algo, false, []);
     const deriveAlgo = cfg.hasX25519 ? { name: 'X25519', public: peerPub } : { name: 'ECDH', public: peerPub };
-    return new Uint8Array(await subtle.deriveBits(deriveAlgo, privKey, 256));
+    const bits = new Uint8Array(await subtle.deriveBits(deriveAlgo, privKey, 256));
+    // X25519 accepts any 32-byte string as a public key — a low-order (torsion)
+    // point yields an all-zero shared secret the attacker already knows (mirror of
+    // the inline index.html ecdhBits guard).
+    if (cfg.hasX25519 && !bits.some(b => b !== 0)) throw new Error('non-contributory X25519 DH');
+    return bits;
   }
 
   // --- DH ratchet step (mirrors dhRatchetStep) ---

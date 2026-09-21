@@ -64,6 +64,30 @@ describe('SDP signature verification', () => {
   });
 });
 
+describe('DH contributory checks (low-order/torsion key attacks)', () => {
+  // eprint 2026/727: a low-order X25519 peer key makes deriveBits return an all-zero
+  // shared secret the attacker knows — forged ratchet headers (p.rk) or bundle keys
+  // would pin a poisoned chain. The single ecdhBits chokepoint must reject it, in
+  // BOTH the deployed inline copy and the tested reference (mirror-drift hazard).
+  it('inline ecdhBits rejects all-zero X25519 output', () => {
+    expect(html).toContain("throw new Error('non-contributory X25519 DH')");
+    expect(html).toContain('!bits.some(b => b !== 0)');
+  });
+  it('reference ecdhBits (src/crypto/ratchet.js) has the same guard', () => {
+    const ref = readFileSync(join(HERE, '..', 'src/crypto/ratchet.js'), 'utf8');
+    expect(ref).toContain("'non-contributory X25519 DH'");
+  });
+  it('session reset must NOT persist a key-bearing responder state at rest', () => {
+    // initSessionResponder stores ratchetPriv = identity private key (exported to
+    // plaintext JWK by saveSession). Persisting it on reset — forcible by any peer
+    // with 3 garbage ciphertexts — is the DR paper's forced weak-state attack.
+    const resetAt = html.indexOf('>= CONFIG.SESSION_RESET_THRESHOLD');
+    const resetBlock = html.slice(resetAt, resetAt + 1200);
+    expect(resetBlock).toContain("dbDel('identity', 'sess:' + peerId)");
+    expect(resetBlock).not.toContain('initSessionResponder(peerPubB64)');
+  });
+});
+
 describe('dm-sig-v1 sealed signaling (dm: room confidentiality)', () => {
   // The /signal relay is unauthenticated and rooms are named dm:<idA>:<idB> — anyone
   // knowing both ids could read ICE candidates (both parties' IPs) and typing/read

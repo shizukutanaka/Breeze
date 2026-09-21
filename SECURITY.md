@@ -191,7 +191,10 @@ store) rather than gated — an opt-in toggle leaves the contradiction one peer 
   which consumes no one-time prekey): messages to un-upgraded peers, the `/msg` fallback
   path, and the offline retry queue still use legacy envelopes and remain sender-visible.
   The relay still sees recipient, timing, and message size (padded to 256 B boundaries);
-  cover traffic / onion routing are deferred (see SPEC §12).
+  and because group sends fan out as one envelope per member, an observer (or the relay)
+  can link the recipients of a simultaneous burst — recipient-side metadata survives
+  sealed sender entirely (PETS'25 "No Safety in Numbers"). Cover traffic / onion routing
+  are deferred (see SPEC §12).
 - **Read-receipt timing.** A receipt fired the instant a conversation opens is a precise
   timestamp of when a specific person looked at their phone, and correlating those against
   sends is a known de-anonymisation route against sealed-sender systems (NDSS'21). `/quiet N`

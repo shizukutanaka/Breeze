@@ -1,3 +1,19 @@
+## Roster member id↔key binding enforced client-side (branch devin/consolidate-groups, 2026-09-20)
+
+`safeMemberList` accepted a member's `id` and `pubB64` without checking they correspond. The server binds them at join (`memberPub.startsWith(memberId)`), but `/group/info` is relay-controlled — a hostile relay could keep a member's id and swap in an attacker's key, silently MITMing sends to that member (invisible, unlike a fake member which shows in the roster). `safeMemberList` now drops any member whose `pub`/`pubB64` does not start with their `id`.
+
+## Group v5 negotiation is pinned once true — relay cap-stripping can't downgrade (branch devin/consolidate-groups, 2026-09-20)
+
+`_computeGroupV5` decided v5-vs-v3 from `members[].caps` — which arrive via `/group/info`, a server-controlled roster. A hostile (or compromised) relay stripping the `caps` field makes every member look legacy, so the lazy negotiation at first send silently chose v3 static keys — no forward secrecy, nothing logged. `groupV5` is now pinned `true` as soon as negotiation succeeds (group create, join, and every roster-poll sync — caps can flip without membership churn), and `getGroupSenderKey` honors the pin over a fresh computation, logging a security audit entry if caps ever vanish after the pin. Only the never-sent window was exploitable: an existing `gsk:` record already freezes the format.
+
+## One-time prekeys were never consumed client-side (branch devin/consolidate-groups, 2026-09-20)
+
+The X3DH responder burned the OTP *record* on the Worker but `_resolveOtpPriv` returned the private half without deleting it — every OTP private key lived in `otp-priv` forever, so a later IDB compromise could decrypt every OTP-sealed bootstrap they existed to forward-seal. `_bootstrapResponderSessionV5` now deletes `otp-priv.keys[opkId]` right after a successful `_x3dhResponder`, before the session is stored.
+
+## Low-order X25519 keys + forced weak-state session storage (branch devin/consolidate-groups, 2026-09-20)
+
+Two fixes from mapping the Signal Double-Ratchet ProVerif analysis (eprint 2026/727) onto the deployed ratchet/X3DH path. (1) `ecdhBits` — the single DH chokepoint for every ratchet step, X3DH, and session init — now rejects an all-zero shared secret: X25519 accepts any 32-byte string as a public key and a low-order (torsion) point in `p.rk` or a prekey bundle yields a shared secret the attacker already knows, enabling ciphertext forgery and a pinned poisoned chain on WebKit/Firefox (Chrome alone rejects it). (2) Session reset after `SESSION_RESET_THRESHOLD` decrypt failures no longer persists a fresh `initSessionResponder` state — that record's `ratchetPriv` is the *identity* private key, exported to plaintext JWK at rest, and any peer could force the storage with 3 garbage ciphertexts (the paper's forced weak-state class, worse: IK not SPK). The session is deleted instead; the next inbound message re-bootstraps lazily, which additionally unblocks v5 pkm re-handshake (requires `!sess`). Tripwires pin both.
+
 ## Configured TURN mint requires the caller's signature (not just a known id) (branch devin/consolidate-groups, 2026-09-20)
 
 The registration gate on `/api/turn` was one step short: "userId has a prekey bundle" is public knowledge, so any caller holding one registered id could still mint $0.05/GB Cloudflare Calls credentials. A configured provider now verifies `breeze-turn:{id}:{ts}` against `prekey:{id}.edIdentityKey` by default (uniform 403 — no registration oracle); the client signs via `_ownerAuth('turn')`. `=false` opts out, `=true` still gates the openrelay path explicitly. The api-contract gate now treats `*_REQUIRE_AUTH !== 'false'` handlers as requiring `{ts, sig}` in static call bodies — it caught this very callsite.
