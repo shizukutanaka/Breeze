@@ -5574,7 +5574,15 @@ async function initMessenger(dbName) {
       const stored = await dbGet('identity', 'gsk:' + groupId);
       if (stored) return stored;
       const group = await dbGet('contacts', groupId);
-      const useV5 = _computeGroupV5(group || {});
+      const freshV5 = _computeGroupV5(group || {});
+      // Pin once negotiated: a relay that strips member caps in /group/info could
+      // otherwise force my first send onto a static v3 key — losing forward secrecy
+      // silently. If v5 was ever negotiated, keep it and flag the downgrade attempt.
+      const useV5 = group?.groupV5 === true || freshV5;
+      if (group?.groupV5 === true && !freshV5) {
+        _dbg(null, 'group caps vanished after v5 pin — staying on v5 (tampered roster?)');
+        auditLog('security', `Group ${groupId} member caps disappeared after v5 was negotiated — staying on v5 (possible relay tampering)`);
+      }
       if (group && group.groupV5 !== useV5) { group.groupV5 = useV5; await dbPut('contacts', group); }
       const rawBytes = crypto.getRandomValues(new Uint8Array(32));
       const key = useV5
@@ -7732,7 +7740,6 @@ async function initMessenger(dbName) {
       // Notify the message's own conversation
       const convContact = stored?.contactId ? await dbGet('contacts', stored.contactId) : activeContact;
       if (convContact) sendSignal({ type: 'edit', msgId: msg.msgId, text: editText, ts: msg.ts }, convContact);
-    
     } catch(_e) { _dbg(_e, 'startEdit'); }
   }
 
@@ -7747,7 +7754,6 @@ async function initMessenger(dbName) {
       if (el) safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>');
       const convContact = stored?.contactId ? await dbGet('contacts', stored.contactId) : activeContact;
       if (convContact) sendSignal({ type: 'delete', msgId: msg.msgId }, convContact);
-    
     } catch(_e) { _dbg(_e, 'deleteMsg'); }
   }
 
@@ -7830,7 +7836,6 @@ async function initMessenger(dbName) {
       if (stored) { stored.pinned = !stored.pinned; await dbPut('messages', stored); }
       const el = document.querySelector(`[data-msgid="${msg.msgId}"]`);
       if (el) if (stored?.pinned) el.classList.add('msg-pinned'); else el.classList.remove('msg-pinned');
-    
     } catch(_e) { _dbg(_e, 'pinMsg'); }
   }
 
@@ -7844,7 +7849,6 @@ async function initMessenger(dbName) {
         const el = document.querySelector(`[data-msgid="${msg.msgId}"]`);
         if (el) el.classList.toggle('msg-bookmarked', stored.bookmarked);
       }
-    
     } catch(_e) { _dbg(_e, 'bookmarkMsg'); }
   }
 
@@ -8392,7 +8396,6 @@ async function initMessenger(dbName) {
       await relaySend(contact.id, { to: contact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts, isFile: true }, contact.pubB64);
       _fanOut(contact, fileMsg, ts, { isFile: true },
         { isFile: true, sfFor: contact.id, sfPub: contact.pubB64, sfName: contact.name });
-    
     } catch(_e) { _dbg(_e, '_sendFile'); }
   }
 
@@ -9139,10 +9142,8 @@ async function initMessenger(dbName) {
       _callContact = contact;
       _callState = 'ringing';
       showCallUI('ringing', contact.name, parsed.video);
-  
       // Store offer for when user accepts
       window._pendingCallOffer = { contact, sdp: parsed.sdp, video: parsed.video };
-    
     } catch(_e) { _dbg(_e, 'handleCallOffer'); }
   }
 
@@ -9460,13 +9461,11 @@ async function initMessenger(dbName) {
       const contacts = await dbGetAll('contacts');
       const list = contacts.filter(c => !c.isGroup).map((c, i) => `${i + 1}. ${c.name}`).join('\n');
       const sel = await showPrompt(t('addMembersPrompt') + '\n' + list, '', { placeholder: '1,2,3' });
-  
       if (!sel || !sel.trim()) {
         // No members selected → create server-backed invite link
         await createGroupInviteLink(name);
         return;
       }
-  
       const indices = sel.split(',').map(s => parseInt(s.trim()) - 1).filter(i => !isNaN(i));
       const members = indices.map(i => contacts[i]).filter(Boolean).map(c => ({ id: c.id, pubB64: c.pubB64, name: c.name }));
       if (members.length === 0) { await createGroupInviteLink(name); return; }
@@ -9475,14 +9474,12 @@ async function initMessenger(dbName) {
         for (const m of members) m.caps = capsById[m.id] || [];
       }
       members.push({ id: myId, pubB64: myPubB64, name: myName });
-  
       // A3: Group member limit
       const maxMembers = CONFIG.GROUP_MAX;
       if (members.length > maxMembers) {
         showToast(t('upgGroup', maxMembers), 'error');
         return;
       }
-  
       const groupId = 'g_' + uid();
       await dbPut('contacts', {
         id: groupId, name, isGroup: true, members,
@@ -9490,14 +9487,12 @@ async function initMessenger(dbName) {
       });
       auditLog('group', 'Created group: ' + name + ' (' + members.length + ' members)');
       await renderContacts();
-  
       for (const m of members) {
         if (m.id === myId) continue;
         const encrypted = await encryptFor(JSON.stringify({ type: 'group_invite', groupId, name, members }), m.pubB64);
         if (!encrypted) { _dbg(null, 'encrypt failed for invite to ' + m.id?.slice(0,8)); continue; }
         await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: Date.now(), isGroupInvite: true }, m.pubB64);
       }
-    
     } catch(_e) { _dbg(_e, 'createGroup'); }
   }
 
@@ -9512,6 +9507,7 @@ async function initMessenger(dbName) {
       await dbPut('contacts', {
         id: groupId, name, isGroup: true, joinToken: data.token, createdBy: myId, // isGroupAdmin() needs createdBy or the creator fails their own /admin checks (E2E-found)
         members: [{ id: myId, pubB64: myPubB64, name: myName }],
+        groupV5: CONFIG.GROUP_RATCHET_V5 || undefined, // pin — see getGroupSenderKey (no other members yet)
         addedAt: Date.now(), unread: 0, pubB64: ''
       });
       await renderContacts();
@@ -9571,12 +9567,14 @@ async function initMessenger(dbName) {
         if (typeof data.creatorId === 'string' && data.creatorId) existing.createdBy = data.creatorId;
         if (Array.isArray(data.admins)) existing.admins = data.admins.filter(id => typeof id === 'string' && id.length <= 64).slice(0, CONFIG.GROUP_MAX);
         if (typeof data.name === 'string' && data.name) existing.name = data.name.slice(0, 64);
+        if (existing.groupV5 !== true && _computeGroupV5(existing)) existing.groupV5 = true; // pin (see getGroupSenderKey)
         await dbPut('contacts', existing);
       } else {
         await dbPut('contacts', {
           id: groupId, name: typeof data.name === 'string' ? data.name.slice(0, 64) : 'Group',
           isGroup: true, joinToken: token,
           members: safeMemberList(data.members),
+          groupV5: _computeGroupV5({ members: safeMemberList(data.members) }) || undefined,
           // Seed moderation metadata — isGroupAdmin() reads createdBy/admins and the
           // roster poll only patches them on change, so a group that never mutates
           // post-join would leave the creator unable to run /admin.
@@ -9654,6 +9652,13 @@ async function initMessenger(dbName) {
             if (!(await dbGet('contacts', m.id))) await addContact(m.pubB64, m.name);
           }
           renderContacts();
+        }
+        // Pin the negotiated group format as soon as the roster says all-v5 — caps can
+        // appear/disappear without membership churn (join-time refresh), and pinning
+        // pre-first-send closes the relay strip-caps → silent v3 downgrade window.
+        if (group.groupV5 !== true && _computeGroupV5(group)) {
+          group.groupV5 = true;
+          await dbPut('contacts', group);
         }
       } catch(e) { _dbg(e); }
     }, 5000);
@@ -9781,7 +9786,6 @@ async function initMessenger(dbName) {
       schedulePoll();
       // Re-schedule on visibility change (fast poll when tab becomes active)
       document.addEventListener('visibilitychange', () => { if (!document.hidden) schedulePoll(); }, { signal: _ac.signal });
-    
     } catch(_e) { _dbg(_e, 'startPolling'); }
   }
 
@@ -12241,7 +12245,6 @@ async function initMessenger(dbName) {
       const text = await file.text();
       const { source, msgs } = detectAndParse(text);
       if (msgs.length === 0) { showToast(t('toastNoImportMsgs'), 'error'); return; }
-  
       const myNames = [myName.toLowerCase(), myAlias?.toLowerCase(), 'you', 'me', 'self'].filter(Boolean);
       let imported = 0;
       for (let i = 0; i < msgs.length; i++) {
@@ -12263,16 +12266,13 @@ async function initMessenger(dbName) {
         });
         imported++;
       }
-  
       contact.lastMsg = msgs[msgs.length - 1]?.text?.slice(0, 40) || '';
       contact.lastMsgAt = msgs[msgs.length - 1]?.ts || Date.now();
       await dbPut('contacts', contact);
-  
       // Refresh conversation — only if the user is still on it (they may have switched
       // away mid-import; the messages landed in the right chat either way).
       if (activeContact?.id === contact.id) await openConversation(contact);
       showToast(t('toastImported', imported, source), "success");
-    
     } catch(_e) { _dbg(_e, 'importChat'); }
   }
 

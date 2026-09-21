@@ -1,3 +1,7 @@
+## Group v5 negotiation is pinned once true — relay cap-stripping can't downgrade (branch devin/consolidate-groups, 2026-09-20)
+
+`_computeGroupV5` decided v5-vs-v3 from `members[].caps` — which arrive via `/group/info`, a server-controlled roster. A hostile (or compromised) relay stripping the `caps` field makes every member look legacy, so the lazy negotiation at first send silently chose v3 static keys — no forward secrecy, nothing logged. `groupV5` is now pinned `true` as soon as negotiation succeeds (group create, join, and every roster-poll sync — caps can flip without membership churn), and `getGroupSenderKey` honors the pin over a fresh computation, logging a security audit entry if caps ever vanish after the pin. Only the never-sent window was exploitable: an existing `gsk:` record already freezes the format.
+
 ## One-time prekeys were never consumed client-side (branch devin/consolidate-groups, 2026-09-20)
 
 The X3DH responder burned the OTP *record* on the Worker but `_resolveOtpPriv` returned the private half without deleting it — every OTP private key lived in `otp-priv` forever, so a later IDB compromise could decrypt every OTP-sealed bootstrap they existed to forward-seal. `_bootstrapResponderSessionV5` now deletes `otp-priv.keys[opkId]` right after a successful `_x3dhResponder`, before the session is stored.
