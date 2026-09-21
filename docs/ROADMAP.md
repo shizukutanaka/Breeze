@@ -49,13 +49,13 @@ since skipped keys are receiver-side state).
 
 | ID | Item | Effort | Why | Dep |
 |----|------|--------|-----|-----|
-| I5 | Optional + jittered receipts; relay batching | S–M | Sealed-sender deanonymization via receipt timing (NDSS'21). | — |
+| I5 | Optional + jittered receipts; relay batching | S–M | Sealed-sender deanonymization via receipt timing (NDSS'21). | — | 🟡 **client side done**: `hideReadReceipts` opt-out + `readReceiptDelay` with ±20% jitter already deployed; **remaining**: relay-side receipt batching (Worker change) |
 | I6 | Length-bucketed padding + optional cover traffic | S–M | Flat 256-B pad leaks size buckets (Loopix). | I15 | 🟡 **padding done**: `ratchet.js` already pads to 256-byte-aligned buckets; cover traffic (fake messages) is client-side |
 | C10 | Durable Objects (rate-limit/presence/signaling) + WebSocket push | M–L | Fixes the per-isolate `_rateLimitMap` undercount **and** the KV write-budget ceiling; replaces polling. | — |
 | C12 | Encrypted, preview-less push (RFC 8291) | S–M | Push service sees ciphertext only; no message preview. | — | ✅ **done**: `encryptPushPayload` (RFC 8291 P-256 ECDH + HKDF + AES-128-GCM) + `buildVapidJwt` (ES256) in `_worker.js`; `sendPushToUser` now encrypts; 15 tests in `tests/push.test.js` (round-trip + signature verify) |
 | I17 | Verifiable abuse reporting (Hecate / AMF franking) | M–L | Consensual reporting, no backdoor (USENIX'22). | I16 | ✅ **fully deployed** (client + relay): `src/crypto/franking.js` + worker `/api/abuse/record`+`/api/abuse/report` (end-to-end test in `tests/worker.test.js`); **index.html**: inline `_frankKey`/`_frankCommit` + report UI, relay verifies via `hmacVerifyFrank` — deliberately derives `Kf` from `msgKey` (`HKDF(msgKey,0³²,'breeze-frank',32)`) instead of the reference's random draw, so only the opaque `frankId` goes on the wire; **still open**: sealed-sender sender-binding (Hecate asymmetric) — symmetric franking stops forged reports but can't bind a malicious sender, who can just skip the report call |
 | I18 | Anonymous anti-abuse tokens (Privacy Pass/VOPRF) | M–L | Battery-friendly, unlinkable vs PoW. | — |
-| C11 | Background Sync + persistent storage | S | Reliable offline send; no keystore eviction. | — |
+| C11 | Background Sync + persistent storage | S | Reliable offline send; no keystore eviction. | — | ✅ **done**: `navigator.storage.persist()` + `registerBackgroundSync()` (v3.3/v3.4) were already in; the missing piece was the **closed-app** path — sw.js's `sync` handler only pinged open windows. Now `drainOutbox()` in `sw.js` re-POSTs the persisted `retryQueue` itself when no window exists (payloads are already E2E envelopes; sealed-first then `/api/msg/send`, multi-account `breeze-acc-*` DBs included). Page-side drain gated to the leader tab — before, every open window would re-POST the same queue |
 
 ---
 

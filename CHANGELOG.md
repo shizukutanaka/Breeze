@@ -1,5 +1,17 @@
 # Changelog
 
+## C11 finished: closed-app outbox drain in sw.js + two small reliability fixes (branch devin/c11-sw-outbox-drain, 2026-09-20)
+
+vitest 822 → **829** (+7 sw.test.js cases); `sw.js`, `index.html`, `tests/sw.test.js`, `docs/ROADMAP.md`, `CHANGELOG.md`, `_headers`/`tauri/src-tauri/tauri.conf.json` (CSP hash propagation).
+
+The C11 roadmap row ("Background Sync + persistent storage — reliable offline send; no keystore eviction") looked done: `navigator.storage.persist()` and `registerBackgroundSync()` have shipped since v3.3/v3.4. Reading the `sync` handler showed the actual gap — it only `postMessage`d `sync-outbox` to open windows, so with the app fully closed the persisted `retryQueue` sat in IndexedDB until the next launch. "Reliable offline send" quietly meant "reliable while a tab is open."
+
+`sw.js` now drains the queue itself when `clients.matchAll` returns zero windows: it reads `settings/retryQueue` (already-E2E envelopes, so no keys needed), re-POSTs each item sealed-first then `/api/msg/send` — the same order the page uses — and writes back only the failures (queue still capped at 50). Multi-account `breeze-acc-*` DBs are covered via `indexedDB.databases()` where it exists; `idbOpenExisting` aborts the upgrade transaction so the drain can never create an empty store-less DB that would poison the page's own `open()`. Page side: the `sync-outbox` handler is now gated on `_isLeaderTab` (the SW pings *every* window — before, N open tabs each re-POSTed the same queue), and the relay-failure catch registers a sync tag too, not just the offline path.
+
+Also fixed the E2E-found STT toast: `recognition.onerror` reported `toastServerError + ': not-allowed'` on mic-permission denial — a permission refusal labeled as a server failure. `not-allowed`/`service-not-allowed`/`audio-capture` now show the existing `toastMicDenied`; `no-speech`/`aborted` stay silent.
+
+---
+
 ## I7 landed: skipped message keys now expire by TTL in the deployed client (branch devin/i7-skip-key-ttl, 2026-09-20)
 
 vitest 819 → **822** (+3 guard tests); `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation), `tests/mirror-drift.test.js`, `docs/ROADMAP.md`, `CHANGELOG.md`.

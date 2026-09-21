@@ -5357,7 +5357,7 @@ async function initMessenger(dbName) {
       throw new Error('relay-' + resp.status);
     } catch(e) {
       _dbg(e, 'relay-fail');
-      if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, attempts: 0 }); _saveRetryQueue(); }
+      if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, attempts: 0 }); _saveRetryQueue(); registerBackgroundSync(); }
       scheduleRetry();
     }
   }
@@ -5426,7 +5426,10 @@ async function initMessenger(dbName) {
 
   // v3.3: SW message handler — flush outbox on sync event
   navigator.serviceWorker?.addEventListener('message', (e) => {
-    if (e.data?.type === 'sync-outbox' && _retryQueue.length > 0) {
+    // Every open window receives sync-outbox — only the leader tab may drain, or N
+    // tabs would each re-POST the same persisted queue (double-send). Followers that
+    // queued items themselves still flush via their own 'online' listener.
+    if (e.data?.type === 'sync-outbox' && _isLeaderTab && _retryQueue.length > 0) {
       _dbg(null, 'Background sync: flushing ' + _retryQueue.length + ' messages');
       scheduleRetry();
     }
@@ -8364,7 +8367,7 @@ async function initMessenger(dbName) {
       _autoHeight(input);
     };
     recognition.onend = () => { _sttActive = false; sttBtn.classList.remove('color-g','color-r'); sttBtn.classList.add('color-t3'); sttBtn.textContent = '🗣'; sttBtn.setAttribute('aria-pressed', 'false'); };
-    recognition.onerror = (e) => { _sttActive = false; sttBtn.classList.remove('color-g','color-r'); sttBtn.classList.add('color-t3'); if (e.error !== 'no-speech') showToast(t('toastServerError') + ': ' + e.error, 'error'); };
+    recognition.onerror = (e) => { _sttActive = false; sttBtn.classList.remove('color-g','color-r'); sttBtn.classList.add('color-t3'); if (e.error === 'not-allowed' || e.error === 'service-not-allowed' || e.error === 'audio-capture') showToast(t('toastMicDenied'), 'error'); else if (e.error !== 'no-speech' && e.error !== 'aborted') showToast(t('toastServerError') + ': ' + e.error, 'error'); };
     sttBtn.addEventListener('click', () => {
       if (_sttActive) { recognition.stop(); _sttActive = false; return; }
       _sttActive = true;
