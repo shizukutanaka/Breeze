@@ -6963,7 +6963,7 @@ async function initMessenger(dbName) {
         // Group contacts have no meaningful read-receipt target — the dm: room
         // for a group id is a phantom room nobody polls, pure metadata noise.
         if (API && !snap.isGroup) {
-          _signal(_dmRoom(snap.id), 'read', String(Date.now()));
+          _signal(_dmRoom(snap.id), 'read', String(correctedNow()));
         }
       };
       const base = (_settings.readReceiptDelay || 0) * MS.SEC;
@@ -11361,6 +11361,11 @@ async function initMessenger(dbName) {
   })();
 
   function showReadReceipt(contactId, ts) {
+    // The watermark is peer-asserted: clamp it at now(+1min skew) so a far-future ts
+    // can't mark not-yet-sent messages read on every future reconnect — _lastReadTs
+    // persists to IDB and replays on connect. Malformed → 0 → no-op.
+    ts = Math.min(Number(ts) || 0, correctedNow() + MS.MIN);
+    if (!ts) return;
     _lastReadTs[contactId] = ts;
     clearTimeout(showReadReceipt._saveTimer);
     showReadReceipt._saveTimer = setTimeout(() => dbPut('identity', _lastReadTs, 'readTs'), MS.SEC);

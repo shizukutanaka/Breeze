@@ -1,3 +1,13 @@
+## Read receipts: clamp peer watermark + send clock-corrected ts (branch devin/read-receipt-clamp, 2026-09-21)
+
+`showReadReceipt(contactId, ts)` persisted the peer-supplied watermark raw into
+`_lastReadTs` (IDB) and replayed it on every reconnect — a malicious/buggy peer
+sending a far-future ts would mark every future message in that conversation as
+read, forever, on both live render and every reload. Now clamps to
+`correctedNow() + 1min` (skew tolerance) and treats non-numeric input as a no-op.
+Sender side also switched `Date.now()` → `correctedNow()` so the watermark is on
+the same clock the rest of the protocol uses.
+
 ## Relay-rollback hardening on signed stored state (branch devin/signed-state-monotonic, 2026-09-21)
 
 Every signed-state endpoint checked the signature's freshness (±5min `REQ_TS`) but nothing ordered two *in-window* writes — a relay that captures a signed request can replay it moments after a newer one lands and silently roll the state back. KV has no compare-and-swap, so the stored signed timestamp is now the high-water mark on both write paths:
