@@ -6444,7 +6444,6 @@ async function initMessenger(dbName) {
             _DOM.get('msg-input-bar').classList.add('hidden');
           }
           if (peers[c.pubB64]) { if (peers[c.pubB64]._healthTimer) clearInterval(peers[c.pubB64]._healthTimer); peers[c.pubB64].pc?.close(); delete peers[c.pubB64]; }
-          delete _peerRelayQueue[c.id]; // Remove orphaned relay queue entries for deleted contact
           renderContacts();
         } else if (action === 'safety') {
           showSafetyNumber(c);
@@ -7883,16 +7882,6 @@ async function initMessenger(dbName) {
         // v3.5 SPEC: Queue to outbox for later delivery when peer reconnects
         if (activeContact.pubB64) {
           queueOutbox(activeContact.pubB64, text, meta);
-        }
-        // Peer relay: try relaying via connected peers
-        for (const [pubB64, p] of Object.entries(peers)) {
-          if (p.connected && p.dc?.readyState === 'open' && pubB64 !== activeContact.pubB64) {
-            try {
-              p.dc.send(JSON.stringify({ type: 'peer_relay_request', targetId: activeContact.id, payload: encrypted, ts }));
-              _dbg(null, 'Peer relay request sent via ' + pubB64.slice(0, 8));
-              break;
-            } catch(e) { _dbg(e); }
-          }
         }
       }
       // Relay: Sealed Sender (Worker doesn't see sender)
@@ -10053,13 +10042,6 @@ async function initMessenger(dbName) {
             }
             return;
           }
-          // v3 Peer Relay: request to hold message for offline peer
-          if (msg.type === 'peer_relay_request') { handlePeerRelayRequest(contact, e.data); return; }
-          // v3 Peer Relay: delivery of held message
-          if (msg.type === 'peer_relay_deliver') {
-            try { await handleIncoming({ from: msg.from, fromPub: '', fromName: '', payload: msg.payload, ts: msg.ts }); } catch(err) { _dbg(err); }
-            return;
-          }
           if (msg.type === 'msg') {
             await handleIncoming({ from: contact.id, fromPub: contact.pubB64, fromName: contact.name, payload: msg.payload, ts: msg.ts, sig: msg.sig, sigPub: msg.sigPub });
             // Send ACK back
@@ -10089,13 +10071,12 @@ async function initMessenger(dbName) {
       };
     }
 
-    // Connection open → deliver peer relay queue
+    // Connection open → flush outbox + mark UI state
     function onPeerConnected() {
       peerState.connected = true;
       peerState.transition('CONNECTED');
       updateConvStatus();
       renderContacts();
-      deliverPeerRelayQueue(contact.id);
       if (contact.pubB64) {
         setTimeout(async () => {
           const ct = await dbGet('contacts', contact.id).catch(() => null);
@@ -10673,10 +10654,9 @@ async function initMessenger(dbName) {
             _presenceCache[id] = d.online?.[id] || false;
             // v3.2: Track last seen timestamp
             if (_presenceCache[id]) _lastSeenCache[id] = Date.now();
-            // v3: Peer Relay — deliver held messages when peer comes online
-            if (wasOffline && _presenceCache[id]) {
-              deliverPeerRelayQueue(id);
-            }
+            // Peer-relay hold/deliver path removed — it leaked {sender→target, ts, size}
+            // to an arbitrary connected peer, and sealed-sender relay already carries the
+            // same offline delivery unconditionally.
           }
         }
       } catch(e) { _dbg(e); }
@@ -10826,48 +10806,9 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'turn'); }
   }
 
-  // v3: PEER RELAY — All users relay for each other
-  //
-  // When a user receives a message for an offline contact,
-  // they hold it and deliver when the contact comes online.
-  // No central server needed. Network gets stronger with more users.
-  const _peerRelayQueue = {}; // { recipientId: [{ payload, ts }] }
-
-  function handlePeerRelayRequest(contact, data) {
-    // All users can relay messages for peers
-    try {
-      const req = JSON.parse(data);
-      if (req.type !== 'peer_relay_request') return;
-      const targetId = req.targetId;
-      // Guard against prototype-polluting keys and non-string values
-      if (typeof targetId !== 'string' || !targetId || targetId.length > 64) return;
-      // Cap payload size — an encrypted 1:1 message is ≤32 KB including overhead; anything
-      // larger is malformed and would waste memory in the relay queue.
-      if (typeof req.payload !== 'string' || req.payload.length > 65536) return;
-      if (!Object.prototype.hasOwnProperty.call(_peerRelayQueue, targetId)) _peerRelayQueue[targetId] = [];
-      _peerRelayQueue[targetId].push({ payload: req.payload, ts: Date.now(), from: contact.id });
-      // Limit: 20 messages per target, 1 hour TTL
-      _peerRelayQueue[targetId] = _peerRelayQueue[targetId]
-        .filter(m => Date.now() - m.ts < MS.HOUR)
-        .slice(-20);
-      _dbg(null, 'Peer relay: holding msg for ' + targetId);
-    } catch(e) { _dbg(e, 'peer-relay'); }
-  }
-
-  // Deliver held messages when target comes online
-  function deliverPeerRelayQueue(targetId) {
-    const queue = _peerRelayQueue[targetId];
-    if (!queue || queue.length === 0) return;
-    const peer = peers[Object.keys(peers).find(k => k.startsWith(targetId))];
-    if (!peer?.connected || peer.dc?.readyState !== 'open') return;
-    for (const msg of queue) {
-      try {
-        peer.dc.send(JSON.stringify({ type: 'peer_relay_deliver', payload: msg.payload, from: msg.from, ts: msg.ts }));
-      } catch(e) { _dbg(e); }
-    }
-    delete _peerRelayQueue[targetId];
-    _dbg(null, 'Peer relay: delivered ' + queue.length + ' msgs to ' + targetId);
-  }
+  // Peer-relay hold/deliver removed: it disclosed {sender→targetId, ts, size} to an
+  // arbitrary connected peer — contradicting the sealed-sender metadata posture — while
+  // the sealed relay already carried the same payload unconditionally.
 
   // v3 PRO: ENCRYPTED CLOUD BACKUP
   //
