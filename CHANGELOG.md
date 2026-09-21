@@ -1,5 +1,13 @@
 # Changelog
 
+## sw.js VERSION / CONFIG.VERSION drift tripwire (branch devin/version-sync-tripwire, 2026-09-20)
+
+`tests/invariants.test.js`, `CHANGELOG.md`.
+
+The service-worker's `VERSION` (cache namespace) and the app's `CONFIG.VERSION` (health checks, /security display) are two hand-maintained strings with no gate keeping them equal — the exact mirror-drift shape the codebase fights elsewhere. One regex tripwire asserts they match; 22 invariants total.
+
+---
+
 ## Poll option rows skipped safeMsgId on data-msgid (branch devin/poll-msgid-escape, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
