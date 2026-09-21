@@ -2061,7 +2061,7 @@ describe('sealed sender send / poll / ack', () => {
   const req = (b) => apiRequest('/api/sealed/x', b);
 
   it('queues an envelope and returns it on poll', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     const send = await handleSealedSend({ to: 'bob00001', envelope: 'ENCRYPTED_PAYLOAD' }, env, req({}));
     expect(send.status).toBe(200);
     expect((await send.json()).ok).toBe(true);
@@ -2074,12 +2074,12 @@ describe('sealed sender send / poll / ack', () => {
   });
 
   it('returns empty array when no sealed messages exist', async () => {
-    const { messages } = await (await handleSealedPoll({ id: 'nobody001' }, makeEnv(), req({}))).json();
+    const { messages } = await (await handleSealedPoll({ id: 'nobody001' }, makeEnv({ SEALED_REQUIRE_AUTH: 'false' }), req({}))).json();
     expect(messages).toEqual([]);
   });
 
   it('ack deletes the sealed queue', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     await handleSealedSend({ to: 'charlie1', envelope: 'payload' }, env, req({}));
     await handleSealedAck({ id: 'charlie1' }, env, req({}));
     const { messages } = await (await handleSealedPoll({ id: 'charlie1' }, env, req({}))).json();
@@ -2087,7 +2087,7 @@ describe('sealed sender send / poll / ack', () => {
   });
 
   it('rejects ack with an invalid userId', async () => {
-    const res = await handleSealedAck({ id: 'bad id!' }, makeEnv(), req({}));
+    const res = await handleSealedAck({ id: 'bad id!' }, makeEnv({ SEALED_REQUIRE_AUTH: 'false' }), req({}));
     expect(res.status).toBe(400);
   });
 
@@ -2095,7 +2095,7 @@ describe('sealed sender send / poll / ack', () => {
   // queue caps at 100 and silently dropped the oldest. Now the relay counts the drops and
   // the next poll confesses them — once — so the recipient at least knows.
   it('reports queue-overflow drops on the next poll, exactly once', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     for (let i = 0; i < 103; i++) {
       await handleSealedSend({ to: 'busybee1', envelope: `E${i}-${'x'.repeat(40)}` }, env, req({}));
     }
@@ -2113,7 +2113,7 @@ describe('sealed sender send / poll / ack', () => {
   // deterministically by having a "concurrent" writer clobber the queue at the moment of the
   // put, then asserts the envelope is present anyway.
   it('recovers an envelope that a concurrent writer clobbered (lost-write recovery)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     const key = 'sealed:racetgt1';
     const origPut = env.KV.put.bind(env.KV);
     let clobbered = false;
@@ -2135,14 +2135,14 @@ describe('sealed sender send / poll / ack', () => {
   });
 
   it('does not re-append when the write landed cleanly (no duplicates in the common case)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     await handleSealedSend({ to: 'noracetgt', envelope: 'only-once' }, env, req({}));
     const polled = await (await handleSealedPoll({ id: 'noracetgt' }, env, req({}))).json();
     expect(polled.messages.filter((m) => m.envelope === 'only-once').length).toBe(1);
   });
 
   it('a queue that never overflows reports no drops', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     await handleSealedSend({ to: 'quietone', envelope: 'just-one' }, env, req({}));
     const polled = await (await handleSealedPoll({ id: 'quietone' }, env, req({}))).json();
     expect(polled.messages.length).toBe(1);
@@ -2152,7 +2152,7 @@ describe('sealed sender send / poll / ack', () => {
   // Item 40: an envelope that arrives AFTER a poll but BEFORE the ack must survive the ack
   // (the ack clears only up to the polled high-water mark, not the whole queue).
   it('preserves an envelope sent in the poll->ack window (no blind full-delete)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     await handleSealedSend({ to: 'window01', envelope: 'm1-polled' }, env, req({}));
     // Poll returns m1 and records the high-water mark.
     const polled = await (await handleSealedPoll({ id: 'window01' }, env, req({}))).json();
@@ -2169,7 +2169,7 @@ describe('sealed sender send / poll / ack', () => {
   });
 
   it('full-deletes (kept 0) when every queued envelope was polled', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     await handleSealedSend({ to: 'window02', envelope: 'only-msg' }, env, req({}));
     await handleSealedPoll({ id: 'window02' }, env, req({}));
     const ack = await handleSealedAck({ id: 'window02' }, env, req({}));
@@ -2180,7 +2180,7 @@ describe('sealed sender send / poll / ack', () => {
   });
 
   it('ack with no prior poll (no high-water mark) still full-deletes (backward compat)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     await handleSealedSend({ to: 'window03', envelope: 'unpolled' }, env, req({}));
     const ack = await handleSealedAck({ id: 'window03' }, env, req({}));
     expect(ack.status).toBe(200);
@@ -2191,7 +2191,7 @@ describe('sealed sender send / poll / ack', () => {
   // 5 minutes, so >5min offline after a poll = silent loss. Now a poll writes only the
   // hwm marker; the queue key itself is never rewritten and keeps its original lifetime.
   it('poll does not rewrite the queue (retention is not collapsed to 5 minutes)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     await handleSealedSend({ to: 'ttlcheck1', envelope: 'keep-me-a-week' }, env, req({}));
     const puts = [];
     const realPut = env.KV.put.bind(env.KV);
@@ -2213,8 +2213,21 @@ describe('sealed sender send / poll / ack', () => {
       return { sign };
     };
 
-    it('flag off: unsigned poll+ack still work (backward compat)', async () => {
-      const env = makeEnv();
+    it('flag unset: unsigned poll+ack are rejected 403 AUTH_REQUIRED (default-enforced)', async () => {
+      const env = makeEnv(); // no flag — default is ON since the delegated wire-compat decision
+      await handleSealedSend({ to: 'deflt001', envelope: 'e' }, env, req({}));
+      for (const res of [
+        await handleSealedPoll({ id: 'deflt001' }, env, req({})),
+        await handleSealedAck({ id: 'deflt001' }, env, req({})),
+      ]) {
+        expect(res.status).toBe(403);
+        expect((await res.json()).code).toBe('AUTH_REQUIRED');
+      }
+      expect(JSON.parse(await env.KV.get('sealed:deflt001')).length).toBe(1); // queue intact
+    });
+
+    it('flag explicitly false: unsigned poll+ack still work (operator opt-out)', async () => {
+      const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
       await handleSealedSend({ to: 'compat01', envelope: 'e' }, env, req({}));
       expect((await handleSealedPoll({ id: 'compat01' }, env, req({}))).status).toBe(200);
       expect((await handleSealedAck({ id: 'compat01' }, env, req({}))).status).toBe(200);
@@ -2251,7 +2264,7 @@ describe('sealed sender send / poll / ack', () => {
   });
 
   it('returns 500 ACK_FAILED when the selective-delete KV write fails', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     await handleSealedSend({ to: 'window04', envelope: 'm1' }, env, req({}));
     await handleSealedPoll({ id: 'window04' }, env, req({}));
     await new Promise(r => setTimeout(r, 2));
@@ -2265,7 +2278,7 @@ describe('sealed sender send / poll / ack', () => {
   });
 
   it('deduplicates identical envelopes sent twice (replay guard)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     await handleSealedSend({ to: 'dave0001', envelope: 'SAME_PAYLOAD_XYZ' }, env, req({}));
     await handleSealedSend({ to: 'dave0001', envelope: 'SAME_PAYLOAD_XYZ' }, env, req({}));
     const { messages } = await (await handleSealedPoll({ id: 'dave0001' }, env, req({}))).json();
@@ -2275,7 +2288,7 @@ describe('sealed sender send / poll / ack', () => {
   it('does NOT dedup envelopes that share a 32-char prefix but differ in length (length-keyed dedup)', async () => {
     // Without the length in the dedup key, 'AAAA...32...AAAA' and 'AAAA...32...AAAAextra' would
     // share the same key and the second message would be silently dropped.
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     globalThis._sealedDedup = new Map(); // reset cross-test dedup state
     const prefix = 'A'.repeat(32);
     await handleSealedSend({ to: 'lentest1', envelope: prefix }, env, req({}));
@@ -2285,13 +2298,13 @@ describe('sealed sender send / poll / ack', () => {
   });
 
   it('poll returns 400 when id is missing', async () => {
-    const res = await handleSealedPoll({}, makeEnv(), req({}));
+    const res = await handleSealedPoll({}, makeEnv({ SEALED_REQUIRE_AUTH: 'false' }), req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('MISSING_ID');
   });
 
   it('multiple envelopes from different senders all appear on poll', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     await handleSealedSend({ to: 'eve00001', envelope: 'from-alice' }, env, req({}));
     await handleSealedSend({ to: 'eve00001', envelope: 'from-bob' }, env, req({}));
     const { messages } = await (await handleSealedPoll({ id: 'eve00001' }, env, req({}))).json();
@@ -2301,7 +2314,7 @@ describe('sealed sender send / poll / ack', () => {
   });
 
   it('send returns 400 when to or envelope is missing', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     const r1 = await handleSealedSend({ envelope: 'x' }, e, req({}));
     expect(r1.status).toBe(400);
     const r2 = await handleSealedSend({ to: 'bob00001' }, e, req({}));
@@ -2309,7 +2322,7 @@ describe('sealed sender send / poll / ack', () => {
   });
 
   it('send rejects an envelope larger than 256 KB (DoS guard)', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     const res = await handleSealedSend(
       { to: 'bob00001', envelope: 'x'.repeat(256 * 1024 + 1) }, e, req({})
     );
@@ -2318,13 +2331,13 @@ describe('sealed sender send / poll / ack', () => {
   });
 
   it('send rejects a malformed recipient id (KV key injection guard)', async () => {
-    const res = await handleSealedSend({ to: 'bad id!', envelope: 'ENC' }, makeEnv(), req({}));
+    const res = await handleSealedSend({ to: 'bad id!', envelope: 'ENC' }, makeEnv({ SEALED_REQUIRE_AUTH: 'false' }), req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_USER_ID');
   });
 
   it('poll rejects an id that does not match the userId format', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     const r1 = await handleSealedPoll({ id: 'bad id!' }, e, req({})); // space + ! not in charset
     expect(r1.status).toBe(400);
     expect((await r1.json()).code).toBe('INVALID_ID');
@@ -2334,7 +2347,7 @@ describe('sealed sender send / poll / ack', () => {
 
   // ── KV failure propagation (item 27) ─────────────────────────────────────────
   it('send returns STORE_FAILED 500 when KV put throws (not false success)', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     e.KV.put = async () => { throw new Error('KV_QUOTA_EXCEEDED'); };
     const res = await handleSealedSend({ to: 'bob00001', envelope: 'ENC' }, e, req({}));
     expect(res.status).toBe(500);
@@ -2342,7 +2355,7 @@ describe('sealed sender send / poll / ack', () => {
   });
 
   it('ack returns ACK_FAILED 500 when KV delete throws (not false success)', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     await handleSealedSend({ to: 'frank001', envelope: 'ENC' }, e, req({}));
     e.KV.delete = async () => { throw new Error('KV_TRANSIENT_ERROR'); };
     const res = await handleSealedAck({ id: 'frank001' }, e, req({}));
@@ -2357,7 +2370,7 @@ describe('sealed sender send / poll / ack', () => {
   // here (mirrors handleMsgSend) gives every appended entry a strictly-larger ts,
   // making the ack filter lossless.
   it('two envelopes stored in the same millisecond get distinct, strictly-increasing ts values', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     // Freeze Date.now() so both sends definitely share a timestamp
     const frozenTs = Date.now();
     vi.spyOn(Date, 'now').mockReturnValue(frozenTs);
@@ -2375,7 +2388,7 @@ describe('sealed sender send / poll / ack', () => {
 
   it('ack preserves a same-millisecond envelope that arrived after the poll (monotonic bump guard)', async () => {
     // Without the bump, a second envelope stored at ts == hwm would be filtered out by `m.ts > hwm`.
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     const frozenTs = Date.now();
     vi.spyOn(Date, 'now').mockReturnValue(frozenTs);
     try {
@@ -2403,7 +2416,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   beforeEach(() => { globalThis._msgDedup = new Map(); });
 
   it('stores a message and returns it on poll', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const send = await handleMsgSend(
       { to: 'bob00001', from: 'alice001', payload: 'ENCRYPTED', ts: Date.now() },
       ip, env, req({}),
@@ -2418,7 +2431,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('assigns a unique server-side message id (same-millisecond cursor groundwork)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const ts = Date.now();
     await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'CT-A', ts }, ip, env, req({}));
     await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'CT-B', ts }, ip, env, req({}));
@@ -2431,7 +2444,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   // Item 41: a message that shares a millisecond with an already-polled one must still be
   // delivered. The server bumps a colliding ts so the `m.ts > lastTs` cursor stays lossless.
   it('does not lose a message sharing a ms with an already-polled one (monotonic ts cursor)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const T = Date.now();
     await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'FIRST', ts: T }, ip, env, req({}));
     // First poll delivers FIRST; the client's cursor advances to the max ts it saw.
@@ -2446,7 +2459,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('bumps a colliding stored ts by 1ms so inbox timestamps are strictly increasing', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const T = Date.now();
     await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'A', ts: T }, ip, env, req({}));
     await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'B', ts: T }, ip, env, req({}));
@@ -2456,7 +2469,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('purges expired disappearing messages at poll (server-side disappearAt enforcement)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const now = Date.now();
     // Seed the inbox directly: one expired, one still-live, one non-disappearing.
     await env.KV.put('inbox:bob00001', JSON.stringify([
@@ -2475,7 +2488,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('rejects a message with a timestamp outside ±5 min (replay guard)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const stale = Date.now() - 6 * 60 * 1000; // 6 minutes ago
     const res = await handleMsgSend(
       { to: 'bob00001', from: 'alice001', payload: 'X', ts: stale },
@@ -2486,7 +2499,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('rejects a non-numeric ts (type guard — prevents replay-window bypass + poisoned msg.ts)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     // A string/object ts makes Math.abs(now - ts) NaN, which is never > 300000, so the
     // ±5 min replay guard would silently pass and store a non-numeric ts that breaks
     // the numeric poll cursor. The type guard must reject it before that happens.
@@ -2501,7 +2514,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('rejects self-send', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const res = await handleMsgSend(
       { to: 'alice001', from: 'alice001', payload: 'X', ts: Date.now() },
       ip, env, req({}),
@@ -2511,7 +2524,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('deduplicates an immediately repeated send (content-keyed)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const body = { to: 'carol001', from: 'alice001', payload: 'SAME', ts: Date.now() };
     await handleMsgSend(body, ip, env, req({}));
     const r2 = await handleMsgSend(body, ip, env, req({}));
@@ -2521,7 +2534,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('rejects a payload larger than 256 KB (DoS guard)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const res = await handleMsgSend(
       { to: 'bob00001', from: 'alice001', payload: 'x'.repeat(256 * 1024 + 1), ts: Date.now() },
       ip, env, req({}),
@@ -2531,7 +2544,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('poll lastTs cursor returns only messages newer than the cursor', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const now = Date.now();
     // Send two messages with distinct timestamps.
     await handleMsgSend(
@@ -2547,7 +2560,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('poll with a non-numeric lastTs falls back to cursor 0 (still delivers, no data loss)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     // A buggy/hostile string lastTs must not make every `m.ts > cutoff` NaN→false,
     // which would both starve the poller and (via the shared cutoff) delete still-
     // undelivered messages older than the 10s grace window.
@@ -2560,7 +2573,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('returns 400 MISSING_FIELDS when to, from, or payload is absent', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const ts = Date.now();
     const r1 = await handleMsgSend({ from: 'alice001', payload: 'x', ts }, ip, e, req({}));
     expect(r1.status).toBe(400);
@@ -2572,7 +2585,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('rejects send with malformed to or from userId (KV key injection guard)', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const ts = Date.now();
     const r1 = await handleMsgSend({ to: 'bad id!', from: 'alice001', payload: 'x', ts }, ip, e, req({}));
     expect(r1.status).toBe(400);
@@ -2583,7 +2596,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('rejects non-string to/from/payload (INVALID_TYPE type guard)', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const ts = Date.now();
     // Non-string `to` — would bypass validateUserId and form a bad KV key
     const r1 = await handleMsgSend({ to: 42, from: 'alice001', payload: 'x', ts }, ip, e, req({}));
@@ -2600,16 +2613,20 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('rejects poll with malformed id (KV key injection guard)', async () => {
-    const res = await handleMsgPoll({ id: 'bad id!' }, makeEnv(), req({}));
+    const res = await handleMsgPoll({ id: 'bad id!' }, makeEnv({ MSG_REQUIRE_AUTH: 'false' }), req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_ID');
   });
 
   // Unsigned /msg/poll is destructive: a future lastTs makes the keep-filter delete every
   // message older than MULTITAB_GRACE — knowing a victim's (public) userId was enough to
-  // purge their undelivered inbox. MSG_REQUIRE_AUTH gates it behind an owner signature.
+  // purge their undelivered inbox. MSG_REQUIRE_AUTH gates it behind an owner signature;
+  // default-on since the delegated wire-compat decision (explicit 'false' opts out).
   it('MSG_REQUIRE_AUTH: unsigned poll 403s and purges nothing; owner-signed poll works', async () => {
-    const env = makeEnv({ MSG_REQUIRE_AUTH: 'true' });
+    const env = makeEnv(); // flag unset — exercises the enforced default
+    await handleMsgSend({ to: 'msgvictim0', from: 'alice001', payload: 'X', ts: Date.now() - 60000 }, ip, env, req({}));
+    expect((await handleMsgPoll({ id: 'msgvictim0', lastTs: 0 }, env, req({}))).status).toBe(403);
+    env.MSG_REQUIRE_AUTH = 'true';
     const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
     const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
     await env.KV.put('prekey:msgvictim', JSON.stringify({ identityKey: 'IK', edIdentityKey: Buffer.from(edPub).toString('base64'), uploadedAt: Date.now() }));
@@ -2630,7 +2647,7 @@ describe('msg send / poll (1:1 relay path)', () => {
     // String(object) = '[object Object]' — storing this corrupts the groupId that
     // clients use for group detection.  Like sig/sigPub/fromPub, non-string optional
     // fields must be treated as absent rather than coerced.
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const ts = Date.now();
     await handleMsgSend({
       to: 'bob00001', from: 'alice001', payload: 'ENC', ts,
@@ -2643,7 +2660,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('rejects Infinity disappearAt but stores a valid finite timestamp', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const now = Date.now();
     // Infinity passes `typeof x === 'number'` so the old guard stored it as-is,
     // creating a disappearAt that never fires on the client (Infinity > Date.now() always).
@@ -2672,7 +2689,7 @@ describe('msg send / poll (1:1 relay path)', () => {
     // returned every time and never cleaned from KV.  Number.isFinite coerces
     // Infinity to 0, so it behaves like an oldest-possible timestamp: NOT returned
     // when cutoff=0 (0 > 0 is false), and deleted from KV (not kept).
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const now = Date.now();
     // Directly write a malformed KV entry with ts:Infinity (bypasses send-side guard
     // to simulate old data or corrupted KV).
@@ -2695,7 +2712,7 @@ describe('msg send / poll (1:1 relay path)', () => {
 
   // ── KV failure propagation (item 27) ─────────────────────────────────────────
   it('send returns STORE_FAILED 500 when KV put throws (not false success)', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     e.KV.put = async () => { throw new Error('KV_QUOTA_EXCEEDED'); };
     const res = await handleMsgSend(
       { to: 'bob00001', from: 'alice001', payload: 'ENC', ts: Date.now() },
@@ -4720,7 +4737,7 @@ describe('corrupted KV data resilience (safeJsonParse guard)', () => {
   });
 
   it('msgPoll returns empty messages (not 500) when inbox KV value is corrupt JSON', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     env.KV = makeKV({ 'inbox:alice123x': '{corrupted' });
     const res = await handleMsgPoll({ id: 'alice123x' }, env, req({}));
     expect(res.status).toBe(200);
@@ -4728,7 +4745,7 @@ describe('corrupted KV data resilience (safeJsonParse guard)', () => {
   });
 
   it('sealedPoll returns empty messages (not 500) when sealed KV value is corrupt JSON', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     env.KV = makeKV({ 'sealed:alice123x': '[not json' });
     const res = await handleSealedPoll({ id: 'alice123x' }, env, req({}));
     expect(res.status).toBe(200);

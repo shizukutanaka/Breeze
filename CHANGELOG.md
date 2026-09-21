@@ -1,5 +1,17 @@
 # Changelog
 
+## Owner-enforced relay queues by default (branch devin/consolidate-groups, 2026-09-20)
+
+Delegated wire-compat decision (user chose おまかせ): unsigned `/msg/poll` was
+destructive — a future `lastTs` purges a victim's undelivered inbox — and unsigned
+`/sealed/ack` blind-deletes a sealed queue. Every current client already attaches
+the `breeze-<op>:<id>:<ts>` Ed25519 signature via `_ownerAuth`, so `checkOwnerAuth`
+now enforces unless `MSG_REQUIRE_AUTH` / `SEALED_REQUIRE_AUTH` are explicitly set
+to `"false"` (opt-out for operators serving pre-signing clients). Docs updated
+(wrangler.toml, .env.example, SECURITY.md); tests pin flag-unset → 403 and
+explicit-false → compat.
+
+
 ## /admin unban — kicks were permanent bans with no way back (branch devin/consolidate-groups, 2026-09-20)
 
 Kick records a durable ban server-side (banned[] survives rejoin attempts) — but the

@@ -174,8 +174,9 @@ store) rather than gated — an opt-in toggle leaves the contradiction one peer 
   whenever any peer/member is un-upgraded, so first contact is authenticated and group messages
   are forward-secret without breaking older clients. Still opt-in: at-rest key wrapping (needs a
   user passphrase, `/keywrap`) and call-signaling E2E (`CALL_E2E_SIGNAL` has no capability
-  negotiation yet, so enabling it requires both ends). Worker-side `*_REQUIRE_AUTH` flags remain
-  operator choices — see `wrangler.toml`.
+  negotiation yet, so enabling it requires both ends). Of the Worker-side `*_REQUIRE_AUTH`
+  flags, `MSG_REQUIRE_AUTH`/`SEALED_REQUIRE_AUTH` are on by default (opt out with `=false`);
+  the rest remain operator choices — see `wrangler.toml`.
 - **@alias resolution** is answered by the relay, which returns an unsigned `{pub}`. Since
   v3.6.1 an alias add runs the key-transparency audit first: a **tampered** hash chain blocks the
   add outright, a **rolled** key warns. This detects a relay rewriting key *history*; it cannot
@@ -193,15 +194,16 @@ store) rather than gated — an opt-in toggle leaves the contradiction one peer 
   (removed v3.7): the endpoint is unauthenticated, so anyone holding a 12-character user id
   could read the chosen name of the person behind it. Online-status itself remains visible to
   anyone who knows an id — reduce exposure by not sharing your id publicly.
-- **Id-keyed queues are owner-signable, not owner-enforced by default.** `/msg/poll`,
-  `/sealed/poll` and `/sealed/ack` accept a bare `userId` — and a poll is *destructive*
-  (a future `lastTs` purges an inbox older than the multi-tab grace; an ack blind-deletes
-  the sealed queue). Unsigned, a known userId was enough to read queue metadata or wipe a
-  stranger's pending mail. The client now attaches an Ed25519 ownership signature
-  (`breeze-<op>:<id>:<ts>`, verified-when-present — same pattern as group ops), and an
-  operator can enforce it with `SEALED_REQUIRE_AUTH` / `MSG_REQUIRE_AUTH` once deployed
-  clients all sign. Until the flags are on, treat this surface as the presence caveat
-  above: known-id readable, and destructive-without-auth by design pending rollout.
+- **Id-keyed queues are owner-enforced by default.** `/msg/poll`, `/sealed/poll` and
+  `/sealed/ack` require an Ed25519 ownership signature (`breeze-<op>:<id>:<ts>`,
+  verified against the registered `prekey:{id}` bundle — same pattern as group ops)
+  because an unsigned call is *destructive*: a future `lastTs` purges an inbox older
+  than the multi-tab grace, and an ack blind-deletes the sealed queue. Every current
+  client already signs, so enforcement is on unless an operator explicitly sets
+  `SEALED_REQUIRE_AUTH=false` / `MSG_REQUIRE_AUTH=false` to keep serving pre-signing
+  clients. An account that has not yet uploaded a prekey bundle has no key to verify
+  against and is treated as unsigned — polls then fail-closed until onboarding
+  completes its bundle upload (self-healing on the next retry).
 - **A sealed queue's retention is not shortened by polling.** Polls used to rewrite the
   queue with a 5-minute "grace" TTL — a week of retention collapsed to 5 minutes on every
   poll, so going offline >5 min right after polling silently expired unprocessed mail.

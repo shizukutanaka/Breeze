@@ -1215,7 +1215,12 @@ async function checkOwnerAuth(env, request, op, id, ts, sig, flagName) {
       return null;
     }
   }
-  if (env[flagName] === 'true') return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+  // Default-ON for the queue endpoints this guards (msg-poll / sealed-poll / sealed-ack):
+  // unsigned, a known userId is enough to purge an inbox (future lastTs) or blind-wipe a
+  // sealed queue — and every current client already signs via _ownerAuth, so enforcement
+  // costs nothing but the hole. Operators serving pre-signing clients can explicitly opt
+  // out by setting the flag to "false" (legacy compat; docs in wrangler.toml/.env.example).
+  if (env[flagName] !== 'false') return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
   return null;
 }
 
