@@ -1,3 +1,13 @@
+## Relay-rollback hardening on signed stored state (branch devin/signed-state-monotonic, 2026-09-21)
+
+Every signed-state endpoint checked the signature's freshness (±5min `REQ_TS`) but nothing ordered two *in-window* writes — a relay that captures a signed request can replay it moments after a newer one lands and silently roll the state back. KV has no compare-and-swap, so the stored signed timestamp is now the high-water mark on both write paths:
+
+- **`/api/device/set`** — replaying a captured pre-link registry rolls a freshly-linked device out of every sender's fanout while its client keeps believing it's linked. Rejects `ts < stored.ts` (409 STALE_UPDATE); equal ts is accepted only when the device-list digest is identical (idempotent re-send of the same signed request, refused when conflicting).
+- **`/api/prekey/upload`** — same replay rolls a rotated bundle back: stale SPK, and (since caps ride the bundle) a downgraded capability advertisement e.g. undoing seal-v2. The verified incumbent-signature ts is now persisted as `signedTs` on the bundle (seeded from the first signed upload's fresh in-window ts so the second write has something to compare); strictly-older is rejected, equal ts requires the identical signedPreKey.
+- **`/api/alias/set`** — check-then-set on a *permanent* key: two registrants both see the alias free, the later put wins, and the loser was answered `ok:true` for a handle it doesn't own. Post-write re-read now reports ALIAS_TAKEN (409) to the loser instead of letting them publish a dead handle.
+
+New tests pin: older-ts registry replay rejected (new link survives), same-ts conflict vs idempotent re-send, signedTs monotonic on prekey upload incl. the seeded-first-upload path, and the alias-race loser's 409.
+
 ## Alias registrations now carry the ownership signature the worker already checked (branch devin/consolidate-groups, 2026-09-20)
 
 `/alias/set` has supported an Ed25519 ownership binding (`userId` + `ts` + `sig` over `breeze-alias-set:{alias}:{ts}`, verified against the registrant's prekey bundle with `identityKey === pub`) since the worker shipped it — but no client ever sent it, so a PoW-only request could point any unclaimed `@handle` at any public key. Both registration sites now sign: onboarding moved alias registration after `initSigning()` + `/prekey/upload` (the worker verifies against the just-registered bundle), and `/alias` rename does the same. Unsigned requests stay accepted (verify-when-present unless `ALIAS_REQUIRE_AUTH`), so the change is wire-additive.
