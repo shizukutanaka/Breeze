@@ -1,5 +1,13 @@
 # Changelog
 
+## tests/invariants.test.js — tripwires for the receive-path guards (branch devin/invariant-tripwires, 2026-09-20)
+
+`tests/invariants.test.js`, `CHANGELOG.md`.
+
+The guards landed this session (conversation-binding on every mutation path, per-chunk byte cap, timestamp clamp, fileData-bytes persistence, poll receive tagging) live inline in index.html where no importable unit test can reach them. A refactor that silently drops one would ship a regression with green tests — so grep-style source assertions pin each guard, mirroring the repo's existing mirror-drift convention.
+
+---
+
 ## Received /poll rendered as raw JSON — recipients could never vote (branch devin/poll-receive, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
