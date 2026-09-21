@@ -6552,6 +6552,22 @@ async function initMessenger(dbName) {
           // Clean up the ratchet session key material stored in the identity store — the
           // session is no longer needed and leaving it orphaned wastes IDB space.
           dbDel('identity', 'sess:' + c.id).catch(() => {});
+          // Group sender keys too — mine (`gsk:`) plus every member's (`gsk-peer:`).
+          // Leaving them behind keeps the whole group's message keys resident after
+          // I've "left": stale decrypt capability and unbounded IDB growth.
+          if (c.isGroup) {
+            dbDel('identity', 'gsk:' + c.id).catch(() => {});
+            // identity store uses out-of-line keys (no keyPath) — enumerate keys, not values
+            try {
+              const tx = db.transaction('identity');
+              const req = tx.objectStore('identity').getAllKeys();
+              req.onsuccess = () => {
+                for (const k of req.result || []) {
+                  if (typeof k === 'string' && k.startsWith('gsk-peer:' + c.id + ':')) dbDel('identity', k).catch(() => {});
+                }
+              };
+            } catch(_e) { _dbg(_e, 'gsk-purge'); }
+          }
           auditLog('contact', 'Deleted contact: ' + c.name + ' (' + msgs.length + ' messages removed)', 'warn');
           if (activeContact?.id === c.id) {
             activeContact = null;

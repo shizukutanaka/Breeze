@@ -1,5 +1,13 @@
 # Changelog
 
+## Leaving a group kept every member's sender keys resident (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Group delete purged the contact, messages, and the `sess:` ratchet — but left `gsk:{id}` (my sender key) and every `gsk-peer:{id}:*` (each member's chain) in the identity store. "Leaving" kept full decrypt capability for the group's history resident on disk. Delete now purges the whole gsk namespace for the group (identity store has no keyPath — keys are enumerated via getAllKeys).
+
+---
+
 ## Sender-key channel skipped the roster check — non-members could inject group messages (branch devin/consolidate-groups, 2026-09-20)
 
 `index.html`, `tests/invariants.test.js`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
