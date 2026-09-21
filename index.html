@@ -6732,9 +6732,11 @@ async function initMessenger(dbName) {
     // Per-conversation disappear timer — restore this contact's setting on open.
     _disappearTimer = contact.disappearSec || 0;
     _applyTimerBtn();
-    // Call buttons (1:1 only, not groups)
-    contact.isGroup ? _DOM.get('b-msg-call').classList.add('hidden') : _DOM.get('b-msg-call').classList.remove('hidden');
-    contact.isGroup ? _DOM.get('b-msg-video').classList.add('hidden') : _DOM.get('b-msg-video').classList.remove('hidden');
+    // Call buttons (1:1 only, not groups, not blocked — calling a blocked
+    // contact would leak signaling to them through the call: relay room)
+    const callable = !contact.isGroup && !contact.blocked;
+    callable ? _DOM.get('b-msg-call').classList.remove('hidden') : _DOM.get('b-msg-call').classList.add('hidden');
+    callable ? _DOM.get('b-msg-video').classList.remove('hidden') : _DOM.get('b-msg-video').classList.add('hidden');
 
     // Mobile: hide sidebar, show back button
     if (window.innerWidth <= 640) {
@@ -8973,7 +8975,7 @@ async function initMessenger(dbName) {
   }, { signal: _ac.signal });
 
   async function startCall(contact, withVideo) {
-    if (_callState !== 'idle' || !contact || contact.isGroup) return;
+    if (_callState !== 'idle' || !contact || contact.isGroup || contact.blocked) return;
     _callContact = contact;
     _callState = 'calling';
     showCallUI('calling', contact.name, withVideo);

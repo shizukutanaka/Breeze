@@ -1,5 +1,13 @@
 # Changelog
 
+## Blocked contacts could still be called (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Same severance class as the relayed-signal fix: the call buttons only hid for groups, and `startCall` never checked `contact.blocked` — a blocked contact could still be voice/video called, posting `call-offer` into the `call:` relay room they poll. Call buttons now hide for blocked contacts and `startCall` early-returns on `blocked` too. (Inbound was already covered — the blocked-sender drop in `handleIncoming` runs before `isCall` handling.)
+
+---
+
 ## Blocked contacts still received relayed signals (branch devin/consolidate-groups, 2026-09-21)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
