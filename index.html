@@ -11023,6 +11023,8 @@ async function initMessenger(dbName) {
     const pass = await showPrompt(t('backupPassEnter'), '', { type: 'password', okText: t('decrypt'), autocomplete: 'current-password' });
     if (!pass) return;
     try {
+      // file.text() loads the whole backup before decrypt — cap like /import.
+      if (file.size > CONFIG.FILE_MAX) { showToast(t('toastMax50MB'), 'error'); return; }
       const text = await file.text();
       const enc = JSON.parse(text);
       const decrypted = await decrypt(pass, enc);
@@ -11031,10 +11033,12 @@ async function initMessenger(dbName) {
 
       await dbPut('identity', data.identity, 'keys');
       for (const c of (data.contacts || [])) {
-        // Validate required fields before storing — a malformed backup entry could corrupt the DB
+        // Validate required fields before storing — a malformed backup entry could corrupt the DB.
+        // _isValidPubB64 enforces the real key shape (32 or 65 decoded bytes), same as
+        // addContact and /contacts import — a wrong-length key makes a dead contact.
         if (typeof c?.id !== 'string' || !c.id || c.id.length > 64 ||
             typeof c?.pubB64 !== 'string' || !c.pubB64 || c.pubB64.length > 128 ||
-            !/^[A-Za-z0-9+/=]+$/.test(c.pubB64)) continue;
+            !_isValidPubB64(c.pubB64)) continue;
         await dbPut('contacts', c);
       }
 
