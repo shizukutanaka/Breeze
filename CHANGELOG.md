@@ -1,5 +1,13 @@
 # Changelog
 
+## Leaving a group told nobody — roster + sender key stayed live (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`/group/leave` removed me from the server roster and local list, but every remaining member kept me in their roster forever — and my copy of the sender key kept decrypting future traffic until someone kicked me. Now the leaver broadcasts an E2E `group_leave` notice (self-authenticating: `leftId` must equal the verified sender, so it can't be forged to remove others). Receivers drop the member; a privileged member who sees the leave re-keys the group — fresh epoch chain + redistribute + re-broadcast with the new epoch, mirroring the kick machinery.
+
+---
+
 ## Group fan-out paid one relay round-trip per member (branch devin/consolidate-groups, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).

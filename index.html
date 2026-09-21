@@ -5711,6 +5711,66 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'rotateGroupKeyOnKickNotice'); }
   }
 
+  // The leaver announces their own departure E2E (self-authenticating — leftId must equal
+  // the verified sender, so nobody can forge a leave for someone else). A privileged member
+  // who sees a leave re-keys the group (fresh epoch chain + redistribute + re-broadcast with
+  // the new epoch), so the departed member loses future traffic without waiting for a kick.
+  async function handleGroupLeaveNotice(groupId, leftId, epoch, senderId) {
+    if (!CONFIG.GROUP_RATCHET_V5) return;
+    try {
+      const group = await dbGet('contacts', groupId);
+      if (!group?.isGroup) return;
+      const privileged = group.createdBy === senderId || (group.admins || []).includes(senderId);
+      const selfNotice = leftId === senderId;
+      if (!selfNotice && !privileged) { _dbg(null, 'group-leave notice unauthorized — ignored'); return; }
+      if (!(group.members || []).some(m => m.id === leftId)) return;
+      group.members = group.members.filter(m => m.id !== leftId);
+      await dbPut('contacts', group);
+      if (activeContact?.id === groupId) renderContacts();
+      // Privileged + epoch-bearing notice: adopt the announced epoch (admin re-keyed).
+      if (typeof epoch === 'number' && privileged) {
+        const current = await dbGet('identity', 'gsk:' + groupId);
+        if (!current || (current.epoch || 0) < epoch) {
+          const freshChain = Array.from(crypto.getRandomValues(new Uint8Array(32)));
+          await dbPut('identity', { chainKey: freshChain, counter: 0, epoch, v: 5, skipped: {} }, 'gsk:' + groupId);
+          for (const m of group.members.filter(m => m.id !== myId && m.pubB64)) {
+            distributeSenderKey(groupId, m.pubB64).catch(e => _dbg(e, 'leave-sk-redist'));
+          }
+        }
+        return;
+      }
+      // Bare self-leave and I'm privileged: re-key so the departed member loses future msgs.
+      if (selfNotice && (group.createdBy === myId || (group.admins || []).includes(myId))) {
+        const current = await dbGet('identity', 'gsk:' + groupId);
+        const newEpoch = ((current?.epoch) || 0) + 1;
+        const freshChain = Array.from(crypto.getRandomValues(new Uint8Array(32)));
+        await dbPut('identity', { chainKey: freshChain, counter: 0, epoch: newEpoch, v: 5, skipped: {} }, 'gsk:' + groupId);
+        const targets = group.members.filter(m => m.id !== myId && m.pubB64);
+        await Promise.allSettled(targets.map(async (m) => {
+          try {
+            await distributeSenderKey(groupId, m.pubB64);
+            const enc = await encryptFor(JSON.stringify({ type: 'group_leave', groupId, leftId, epoch: newEpoch }), m.pubB64);
+            if (enc) await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: enc, ts: Date.now(), isGroupLeave: true }, m.pubB64);
+          } catch(e) { _dbg(e, 'leave-rekey'); }
+        }));
+      }
+    } catch(_e) { _dbg(_e, 'handleGroupLeaveNotice'); }
+  }
+
+  async function notifyGroupLeave(groupId) {
+    if (!CONFIG.GROUP_RATCHET_V5) return;
+    try {
+      const group = await dbGet('contacts', groupId);
+      const targets = (group?.members || []).filter(m => m.id !== myId && m.pubB64);
+      await Promise.allSettled(targets.map(async (m) => {
+        try {
+          const enc = await encryptFor(JSON.stringify({ type: 'group_leave', groupId, leftId: myId }), m.pubB64);
+          if (enc) await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: enc, ts: Date.now(), isGroupLeave: true }, m.pubB64);
+        } catch(e) { _dbg(e, 'group-leave-send'); }
+      }));
+    } catch(_e) { _dbg(_e, 'notifyGroupLeave'); }
+  }
+
   // Extracted to a named function, callable from BOTH boot paths below, rather than an
   // inline assignment living inside just one of them. It used to be defined only inside
   // _boot()'s `if (hasId)` branch — which runs on every boot EXCEPT the very first one
@@ -6479,6 +6539,9 @@ async function initMessenger(dbName) {
               if (gSig) gBody.sig = gSig;
               const gResp = await postAPIRaw('/group/' + gAction, gBody);
               showToast(t(gResp.ok ? (isCreator ? 'toastGroupDeleted' : 'toastGroupLeft') : (isCreator ? 'toastGroupDeleteFail' : 'toastGroupLeaveFail')), gResp.ok ? 'info' : 'error');
+              // Tell the remaining members I'm gone — otherwise their rosters keep me
+              // forever and my old sender key keeps decrypting until someone kicks me.
+              if (gResp.ok) notifyGroupLeave(c.id).catch(e => _dbg(e, 'group-leave'));
             } catch(e) { _dbg(e, 'group-leave-delete'); showToast(t(c.createdBy === myId ? 'toastGroupDeleteFail' : 'toastGroupLeaveFail'), 'error'); }
           }
           const msgs = await dbGetByIndex('messages', 'contact', c.id);
@@ -9691,6 +9754,21 @@ async function initMessenger(dbName) {
           await rotateGroupKeyOnKickNotice(kickMsg.groupId, kickMsg.kickedId, kickMsg.epoch, c.id);
         }
       } catch(e) { _dbg(e, 'group-kick-notice'); }
+      return;
+    }
+
+    // === Group leave notice (a leaver removes themselves from everyone's roster) ===
+    if (msg.isGroupLeave) {
+      try {
+        const c = await dbGet('contacts', (msg.from || '').slice?.(0, 12) || msg.from);
+        if (!c) return;
+        const decrypted = await decryptFrom(msg.payload, c.pubB64);
+        if (!decrypted) return;
+        const lv = JSON.parse(decrypted);
+        if (lv.type === 'group_leave' && lv.groupId) {
+          await handleGroupLeaveNotice(lv.groupId, lv.leftId, lv.epoch, c.id);
+        }
+      } catch(e) { _dbg(e, 'group-leave-notice'); }
       return;
     }
 
