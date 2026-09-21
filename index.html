@@ -8698,6 +8698,10 @@ async function initMessenger(dbName) {
             const bars = ind.querySelectorAll('.rec-wave span');
             const dataArray = new Uint8Array(_analyser.frequencyBinCount);
             const updateWave = () => {
+              // Self-terminate when recording ends via ANY path — onstop cancels
+              // _waveRaf, but account-switch nulls onstop before stop(), leaving this
+              // chain running forever on the closed context.
+              if (!_mediaRecorder || _mediaRecorder.state !== 'recording') { _waveRaf = null; return; }
               _analyser.getByteFrequencyData(dataArray);
               for (let i = 0; i < bars.length; i++) {
                 const val = dataArray[i * 2 + 2] || 0; // Sample spread across spectrum
