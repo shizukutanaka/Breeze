@@ -8,6 +8,8 @@
 
 Same class swept everywhere else it existed: `sendSignal`'s group fan-out IIFE re-read `activeContact.members`/`id` inside awaits; `createPoll` and `_sendFile` re-read it after `dbPut`/`_compressImage`/`sendBinaryFile`; and the voice-memo `reader.onload` re-read it after an entire *recording* — the widest window of the class (seconds, not ms), so a chat switch during recording would deliver the voice note to the newly-opened conversation. Voice now pins the recipient at record-start (`_recContact`); the other three snapshot at entry.
 
+`importChat` had it too — a 50 MB export spends seconds in `file.text()`/parse and the message loop awaited `dbGet`/`dbPut` per row; every write went to live `activeContact.id`, so switching chats mid-import scattered imported history across conversations and rewrote the *other* chat's lastMsg. Now bound to the entry snapshot; the list refresh only fires when the user is still on that conversation.
+
 ---
 
 ## /api/online counted heartbeats, not users (branch devin/consolidate-groups, 2026-09-20)
