@@ -5378,8 +5378,11 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'fanout'); }
   }
 
-  async function relaySend(to, payload, sealPub) {
+  // convId = conversation that owns the sent bubble (group.id for fan-out,
+  // `to` for DMs); delivery acks get stamped there, not on whatever's open.
+  async function relaySend(to, payload, sealPub, convId) {
     if (!API) return;
+    const _conv = convId || to;
     if (_isOffline) { if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, attempts: 0 }); _saveRetryQueue(); scheduleRetry(); } registerBackgroundSync(); return; }
     const msgTs = payload.ts;
     // Sealed Sender (preferred — and with v2, actually sealed: see sealMeta above)
@@ -5402,7 +5405,7 @@ async function initMessenger(dbName) {
       const resp = await postAPIRaw('/sealed/send', { to, envelope: JSON.stringify(wire) });
       if (resp.ok) {
         const data = await resp.json().catch(() => ({}));
-        if (data.ack && msgTs) updateMsgStatus(msgTs, 'delivered');
+        if (data.ack && msgTs) updateMsgStatus(msgTs, 'delivered', _conv);
         return;
       }
     } catch(e) { _dbg(e, 'sealed'); }
@@ -5411,7 +5414,7 @@ async function initMessenger(dbName) {
       const resp = await postAPIRaw('/msg/send', payload);
       if (resp.ok) {
         const data = await resp.json().catch(() => ({}));
-        if (data.ack && msgTs) updateMsgStatus(msgTs, 'delivered');
+        if (data.ack && msgTs) updateMsgStatus(msgTs, 'delivered', _conv);
         return;
       }
       if (resp.status === 429) {
@@ -7268,14 +7271,19 @@ async function initMessenger(dbName) {
   // v3.1: EMOJI REACTIONS
 
   // v3.5: Update message delivery status in DOM (sent → delivered → read)
-  function updateMsgStatus(ts, status) {
+  function updateMsgStatus(ts, status, contactId) {
     try {
+      // The DOM box only ever shows the open conversation — don't stamp acks
+      // meant for a different chat onto it after a mid-send switch.
+      if (contactId && activeContact?.id !== contactId) {
+        // still persist below; skip the DOM pass
+      }
       const box = _DOM.get('msg-messages');
       if (!box) return;
       // Find message by timestamp (own messages). The DOM walk must actually compare —
       // iterating to the first .msg.me and breaking unconditionally landed every ack on
       // the OLDEST pending message instead of the one that was acked.
-      const msgs = box.querySelectorAll('.msg.me');
+      const msgs = (contactId && activeContact?.id !== contactId) ? [] : box.querySelectorAll('.msg.me');
       for (const msg of msgs) {
         const statusEl = msg.querySelector('.msg-status');
         if (!statusEl) continue;
@@ -7296,9 +7304,11 @@ async function initMessenger(dbName) {
         }
         break; // Only update the most recent matching message
       }
-      // Also update in IDB
-      if (activeContact && typeof dbGetByIndex === 'function') {
-        dbGetByIndex('messages', 'contact', activeContact.id).then(msgs => {
+      // Also update in IDB — bound to the ack's conversation, not whatever
+      // happens to be open when the relay response lands.
+      const cid = contactId || activeContact?.id;
+      if (cid && typeof dbGetByIndex === 'function') {
+        dbGetByIndex('messages', 'contact', cid).then(msgs => {
           const m = msgs.find(x => x.mine && Math.abs((x.ts || 0) - ts) < 5 * MS.SEC);
           if (m) { m.ack = true; dbPut('messages', m); }
         }).catch(e => _dbg(e, 'status-update'));
@@ -7406,7 +7416,7 @@ async function initMessenger(dbName) {
             if (peer?.connected && peer.dc?.readyState === 'open') {
               try { peer.dc.send(JSON.stringify({ v: CONFIG.PROTOCOL_VERSION, type: 'group_msg', msgId, payload: groupCt, ts, groupId, groupName: contact.name, sender: myPubB64, name: myName, isGroupSK: true })); } catch(e) { _dbg(e, 'group-p2p-send'); }
             }
-            try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId, groupName: contact.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
+            try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId, groupName: contact.name, isGroupSK: true }, m.pubB64, groupId); } catch(e) { _dbg(e); }
           }));
           _fanOut(contact, JSON.stringify(pollData), ts, {}, { isPoll: true, sfFor: contact.id, sfName: contact.name });
         }
@@ -7734,7 +7744,7 @@ async function initMessenger(dbName) {
             target.lastMsgAt = ts;
             await dbPut('contacts', target);
             await Promise.allSettled(members.map(async (m) => {
-              try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId: target.id, groupName: target.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
+              try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId: target.id, groupName: target.name, isGroupSK: true }, m.pubB64, target.id); } catch(e) { _dbg(e); }
             }));
             _fanOut(target, msg.text, ts, {}, { sfFor: target.id, sfName: target.name });
             sent++;
@@ -8083,7 +8093,7 @@ async function initMessenger(dbName) {
         try {
           await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName,
             payload: groupCiphertext, ts, groupId, groupName: contact.name,
-            replyTo: envelopeReplyTo(meta.replyTo), disappearAt: meta.disappearAt, isGroupSK: true }, m.pubB64);
+            replyTo: envelopeReplyTo(meta.replyTo), disappearAt: meta.disappearAt, isGroupSK: true }, m.pubB64, groupId);
         } catch(e) { _dbg(e); }
       }));
       // Self-sync: my other devices need the copy too (they're members of the same group).
@@ -8317,7 +8327,7 @@ async function initMessenger(dbName) {
         const groupCt = await encryptGroupMsg(groupId, fileMsg);
         if (groupCt) {
           await Promise.allSettled(members.map(async (m) => {
-            try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId, groupName: contact.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
+            try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId, groupName: contact.name, isGroupSK: true }, m.pubB64, groupId); } catch(e) { _dbg(e); }
           }));
           _fanOut(contact, fileMsg, ts, {}, { isFile: true, sfFor: contact.id, sfName: contact.name });
         }
@@ -8644,7 +8654,7 @@ async function initMessenger(dbName) {
                 const groupCt = await encryptGroupMsg(contact.id, gPayload);
                 if (groupCt) {
                   await Promise.allSettled(members.map(async (m) => {
-                    try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId: contact.id, groupName: contact.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
+                    try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId: contact.id, groupName: contact.name, isGroupSK: true }, m.pubB64, contact.id); } catch(e) { _dbg(e); }
                   }));
                   _fanOut(contact, gPayload, ts, {}, { isFile: true, sfFor: contact.id, sfName: contact.name });
                 }
@@ -12001,7 +12011,7 @@ async function initMessenger(dbName) {
                 const groupCt = await encryptGroupMsg(activeContact.id, stored.text);
                 if (groupCt) {
                   await Promise.allSettled(members.map(async (m) => {
-                    try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts: stored.ts, groupId: activeContact.id, groupName: activeContact.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
+                    try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts: stored.ts, groupId: activeContact.id, groupName: activeContact.name, isGroupSK: true }, m.pubB64, activeContact.id); } catch(e) { _dbg(e); }
                   }));
                   sent = true;
                 }

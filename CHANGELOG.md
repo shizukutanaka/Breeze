@@ -1,5 +1,13 @@
 # Changelog
 
+## Delivery acks resolved against the open conversation, not the sent one (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`updateMsgStatus` looked up the DOM box and the IDB 'contact' index via live `activeContact` inside a `.then()` — a relay ack resolving after a conversation switch could stamp 'delivered' on a wrong-conversation message whose ts collided within the 5s match window. `relaySend` now takes a `convId` (the conversation owning the bubble: `to` for DMs, `groupId` for group fan-out) and the IDB write + DOM pass are bound to it. Bonus fix in the same pass: group fan-out acks previously fell through to `activeContact` too — now they land on the group.
+
+---
+
 ## Read receipts marked every sent bubble read + readAt was never persisted (branch devin/consolidate-groups, 2026-09-21)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
