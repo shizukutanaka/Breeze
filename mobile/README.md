@@ -31,18 +31,18 @@ mobile/
 ├── prepare.js              — Web asset copier (validates + hashes)
 ├── scripts/
 │   └── build-mobile.sh     — CI/local build script (Android/iOS)
-├── res/
-│   ├── android/
-│   │   ├── values/strings.xml
-│   │   └── xml/network_security_config.xml
-│   └── ios/
-│       └── Info.plist.additions
 └── www/                    — (generated) Web assets for Capacitor
+
+Optional resource overlays can be placed under `res/` — `res/android/*` is copied
+over `android/app/src/main/res/` at build time (guarded; absent = no-op).
 ```
 
 ## CI/CD
 
-GitHub Actions `release.yml` builds APK on tag push. Required secrets:
+A release workflow (APK on tag push) is planned — `.github/workflows/` is not yet
+active on GitHub (see `docs/CI-SETUP.md` for the blocker + activation runbook).
+Until then build locally with `./scripts/build-mobile.sh android release`.
+Required secrets when a workflow does land:
 
 | Secret | Description |
 |--------|-------------|

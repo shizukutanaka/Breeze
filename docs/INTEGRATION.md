@@ -37,7 +37,8 @@ Two options (pick one):
   "no build"). Prefer (A) unless single-file is a hard requirement.
 
 Update `validate.sh`/CI extractor if a second `<script>` tag is added (it greps the
-first literal `<script>` — keep app logic there; see `.github/workflows/ci.yml`).
+first literal `<script>` — keep app logic there; the CI workflow is preserved in
+`docs/CI-SETUP.md` pending activation — `.github/workflows/` is not yet tracked).
 
 ## 1. N1 — fix the DH-ratchet `Nr` bug (do first; tiny, high-value)
 
