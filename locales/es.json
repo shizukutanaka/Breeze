@@ -373,6 +373,8 @@
  "toastGroupKickFail": "Falló la expulsión (rechazado por el servidor)",
  "toastGroupDeleteFail": "No se pudo eliminar el grupo en el servidor (eliminado localmente)",
  "demotedAdmin": "{0} ya no es administrador del grupo",
+ "unbannedMember": "{0} puede volver a unirse al grupo",
+ "uiNotBanned": "No vetado: {0}",
  "toastNoIdentityBackup": "No hay identidad que respaldar",
  "toastInvalidBackup": "Archivo de copia no válido",
  "toastMsgTooLong": "Mensaje demasiado largo (máx. 64 KB)",

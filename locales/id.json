@@ -369,6 +369,8 @@
  "toastGroupKickFail": "Kick gagal (ditolak server)",
  "toastGroupDeleteFail": "Gagal menghapus grup di server (dihapus secara lokal)",
  "demotedAdmin": "{0} bukan lagi admin grup",
+ "unbannedMember": "{0} dapat bergabung kembali ke grup",
+ "uiNotBanned": "Tidak diblokir: {0}",
  "toastNoIdentityBackup": "Tidak ada identitas untuk dicadangkan",
  "toastInvalidBackup": "Berkas cadangan tidak valid",
  "toastMsgTooLong": "Pesan terlalu panjang (maks. 64 KB)",

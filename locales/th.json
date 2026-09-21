@@ -369,6 +369,8 @@
  "toastGroupKickFail": "เตะไม่สำเร็จ (เซิร์ฟเวอร์ปฏิเสธ)",
  "toastGroupDeleteFail": "ลบกลุ่มบนเซิร์ฟเวอร์ไม่สำเร็จ (ลบในเครื่องแล้ว)",
  "demotedAdmin": "{0} ไม่ได้เป็นผู้ดูแลกลุ่มแล้ว",
+ "unbannedMember": "{0} สามารถเข้าร่วมกลุ่มอีกครั้งได้",
+ "uiNotBanned": "ไม่ได้ถูกแบน: {0}",
  "toastNoIdentityBackup": "ไม่มีตัวตนให้สำรอง",
  "toastInvalidBackup": "ไฟล์สำรองไม่ถูกต้อง",
  "toastMsgTooLong": "ข้อความยาวเกินไป (สูงสุด 64 KB)",

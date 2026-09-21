@@ -1774,6 +1774,8 @@ const _I = {
     toastGroupDeleteFail: 'Failed to delete group on server (removed locally)',
     toastGroupKickFail: 'Kick failed (server rejected)',
     demotedAdmin: "{0} is no longer a group admin",
+    unbannedMember: "{0} can rejoin the group",
+    uiNotBanned: "Not banned: {0}",
     transferredOwnership: "{0} is now the group creator",
     toastKickedFromGroup: "You were removed from {0}",
     toastNoLongerMember: "You are no longer a member of this group",
@@ -1979,6 +1981,7 @@ const _I = {
     cmdAdminKick: '/admin kick @name — Remove member',
     cmdAdminPromote: '/admin promote @name — Make admin',
     cmdAdminDemote: '/admin demote @name — Remove admin',
+    cmdAdminUnban: '/admin unban @name — Lift a kick ban (creator only)',
     cmdAdminTransfer: '/admin transfer @name — Transfer ownership (creator only)',
     cmdAdminRename: '/admin rename New Name — Rename group',
     cmdAdminHelpLine: '/admin help — Show this help',
@@ -9559,17 +9562,20 @@ async function initMessenger(dbName) {
           oldMembers.some(o => !newMembers.some(m => m.id === o.id));
         const metaChanged = group.createdBy !== data.creatorId ||
           JSON.stringify(group.admins || []) !== JSON.stringify(data.admins || []) ||
+          JSON.stringify(group.bannedIds || []) !== JSON.stringify(data.banned || []) ||
           (typeof data.name === 'string' && data.name && group.name !== data.name);
         if (membersChanged || metaChanged) {
           if (membersChanged) group.members = newMembers;
           if (typeof data.creatorId === 'string' && data.creatorId) group.createdBy = data.creatorId;
           if (Array.isArray(data.admins)) group.admins = data.admins.filter(id => typeof id === 'string' && id.length <= 64).slice(0, CONFIG.GROUP_MAX);
+          if (Array.isArray(data.banned)) group.bannedIds = data.banned.filter(id => typeof id === 'string' && id.length <= 64).slice(0, CONFIG.GROUP_MAX);
           if (typeof data.name === 'string' && data.name) group.name = data.name.slice(0, 50);
           await dbPut('contacts', group);
           // sendMessage reads activeContact.members (separate object) — without this an open group silently excludes new joiners until reopened.
           if (activeContact?.id === groupId) {
             activeContact.members = group.members;
             activeContact.admins = group.admins;
+            activeContact.bannedIds = group.bannedIds;
             activeContact.createdBy = group.createdBy;
             if (activeContact.name !== group.name) { activeContact.name = group.name; _DOM.get('msg-conv-name').textContent = group.name; }
           }
@@ -12542,6 +12548,7 @@ async function initMessenger(dbName) {
           t('cmdAdminKick'),
           t('cmdAdminPromote'),
           t('cmdAdminDemote'),
+          t('cmdAdminUnban'),
           t('cmdAdminTransfer'),
           t('cmdAdminRename'),
           t('cmdAdminHelpLine'),
@@ -12612,6 +12619,12 @@ async function initMessenger(dbName) {
             // lists them, so my roster would silently diverge (I'd stop sending to them
             // while everyone else still does).
             if (!kicked) { d.textContent = t('toastGroupKickFail'); box.appendChild(d); box.scrollTop = box.scrollHeight; return; }
+            // Kick is a durable ban server-side — remember it locally so /admin unban
+            // can resolve a name → id and the member can actually be let back in.
+            if (!Array.isArray(activeContact.bannedIds)) activeContact.bannedIds = [];
+            if (!activeContact.bannedIds.includes(member.id)) activeContact.bannedIds.push(member.id);
+            if (!activeContact.bannedNames) activeContact.bannedNames = {};
+            activeContact.bannedNames[member.id] = member.name;
             activeContact.members = activeContact.members.filter(m => m.id !== member.id);
             if (activeContact.admins) activeContact.admins = activeContact.admins.filter(id => id !== member.id);
             activeContact.groupV5 = _computeGroupV5(activeContact); // re-negotiate: kick can only relax the AND rule (fewer members), may newly enable v5
@@ -12682,6 +12695,34 @@ async function initMessenger(dbName) {
             d.textContent = t('demotedAdmin', member.name);
           } else { d.textContent = t('uiMemberNotFound', target); }
         }
+      } else if (sub.startsWith('unban ')) {
+        // Lift a kick ban so the id can rejoin via the invite token. Kick removes the
+        // member from the roster, so resolve against bannedIds (server-synced) with a
+        // bannedNames fallback for the human-readable name → id lookup.
+        const target = sub.slice(6).trim().replace('@', '');
+        const bannedIds = activeContact.bannedIds || [];
+        const bannedNames = activeContact.bannedNames || {};
+        const bannedId = bannedIds.find(id => id === target || (bannedNames[id] || '').toLowerCase() === target.toLowerCase());
+        if (!bannedId) { d.textContent = t('uiNotBanned', target); box.appendChild(d); box.scrollTop = box.scrollHeight; return; }
+        let unbanned = !(API && activeContact.joinToken);
+        if (API && activeContact.joinToken) {
+          try {
+            const unTs = Date.now();
+            const unSig = await signMessage(`breeze-group-admin:${activeContact.joinToken}:${myId}:${unTs}:unban:${bannedId}`);
+            const unBody = { token: activeContact.joinToken, adminId: myId, targetId: bannedId, action: 'unban', ts: unTs };
+            if (unSig) unBody.sig = unSig;
+            unbanned = (await postAPIRaw('/group/admin', unBody)).ok;
+          } catch(e) { _dbg(e, 'server-unban'); }
+        }
+        // Same response gate as promote/demote — a rejected unban must not desync the
+        // local ban list (server state is authoritative; a ghost-lifted entry would
+        // claim the member can rejoin when the server would still reject them).
+        if (!unbanned) { d.textContent = t('toastCreatorOnly'); box.appendChild(d); box.scrollTop = box.scrollHeight; return; }
+        activeContact.bannedIds = bannedIds.filter(id => id !== bannedId);
+        if (activeContact.bannedNames) delete activeContact.bannedNames[bannedId];
+        await dbPut('contacts', activeContact);
+        auditLog('group', 'Unbanned ' + (bannedNames[bannedId] || bannedId) + ' in ' + activeContact.name);
+        d.textContent = t('unbannedMember', bannedNames[bannedId] || bannedId);
       } else if (sub.startsWith('transfer ')) {
         // Ownership transfer — the Worker endpoint existed but no client path did, so a
         // group whose creator went dark had permanently unmanageable admin surface.
