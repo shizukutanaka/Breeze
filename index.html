@@ -8139,6 +8139,21 @@ async function initMessenger(dbName) {
       const fileMsg = JSON.stringify({ type: 'file', name: file.name, mime: file.type, data: b64 });
       appendMsg(text, true, ts, null, fileMsg);
       await dbPut('messages', { msgId: genMsgId(), contactId: activeContact.id, text, mine: true, ts, fileData: fileMsg });
+      if (activeContact.isGroup) {
+        // Same dead-end as polls: peers['']/encryptFor('') silently dropped group files.
+        // Route via the sender-key channel; receivers detect {type:'file'} in the text.
+        // P2P binary chunks carry no groupId, so group files are relay-only for now.
+        const groupId = activeContact.id;
+        const members = (activeContact.members || []).filter(m => m.id !== myId);
+        for (const m of members) await distributeSenderKey(groupId, m.pubB64).catch(e => _dbg(e, 'sk-dist'));
+        const groupCt = await encryptGroupMsg(groupId, fileMsg);
+        if (groupCt) {
+          for (const m of members) {
+            try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId, groupName: activeContact.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
+          }
+        }
+        return;
+      }
       const encrypted = await encryptFor(fileMsg, activeContact.pubB64);
       if (!encrypted) { _dbg(null, 'encrypt failed'); return; }
       await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts, isFile: true }, activeContact.pubB64);
@@ -9806,13 +9821,15 @@ async function initMessenger(dbName) {
       _replayCache.add(msgId); // Speculative mark before first await — blocks concurrent-path duplicates
       if (await dbGet('messages', msgId)) return; // Already persisted
       const meta = { msgId, senderName: msg.fromName, replyTo: msg.replyTo, disappearAt: msg.disappearAt };
-      // Same poll detection as the 1:1 path — group polls now ride the sender-key
-      // channel, so the JSON text needs the same type tag for the card to render.
+      // Same typed-payload detection as the 1:1 path — group polls/files now ride the
+      // sender-key channel, so the JSON text needs the type tag for the card to render.
+      let fileDataG;
       try {
         const _p = JSON.parse(text);
         if (_p && _p.type === 'poll' && typeof _p.pollId === 'string' && Array.isArray(_p.options)) { meta.isPoll = true; meta.poll = _p; }
+        else if (_p && _p.type === 'file' && typeof _p.name === 'string' && typeof _p.data === 'string') { fileDataG = _p; text = `📎 ${String(_p.name).slice(0, 128)}`; }
       } catch {}
-      await dbPut('messages', { msgId, contactId: msg.groupId, text, mine: false, ts: msg.ts, isPoll: meta.isPoll || undefined, ...meta });
+      await dbPut('messages', { msgId, contactId: msg.groupId, text, mine: false, ts: msg.ts, isPoll: meta.isPoll || undefined, fileData: fileDataG, ...meta });
       group.lastMsg = text.slice(0, 30);
       group.lastMsgSender = msg.fromName;
       group.lastMsgAt = msg.ts;

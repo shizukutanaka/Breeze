@@ -1,5 +1,13 @@
 # Changelog
 
+## Group file send was dead — encryptFor('') dropped every attachment (branch devin/group-files, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`_sendFile` in a group hit the same dead-end as polls: `peers['']` skips P2P, `encryptFor('')` fails, the file stored locally and silently reached nobody. Now the group branch encrypts once with the sender key and relays to every member (`isGroupSK`), and the group receive path detects `{type:'file'}` JSON, stores it as `fileData`, and shows `📎 name` — the existing `f.data` (base64) render/download path works unchanged. P2P binary chunks carry no groupId, so group files are relay-only (≤192 KB) for now.
+
+---
+
 ## 1:1 poll votes never persisted to the relay — offline peers missed them (branch devin/poll-vote-relay, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
