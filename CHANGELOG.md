@@ -1,5 +1,13 @@
 # Changelog
 
+## Group fan-out paid one relay round-trip per member (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Every group send path (text, poll, file, voice, retry) looped `await relaySend(member)` serially — a 20-member group paid twenty sequential round-trips before the send resolved. Members are independent recipients, so the loops now run `Promise.allSettled` in parallel (same pattern `_fanOut` already used for device dispatch).
+
+---
+
 ## Group typing/read receipts leaked signals to a phantom dm: room (branch devin/group-phantom-signals, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).

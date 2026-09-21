@@ -7296,13 +7296,13 @@ async function initMessenger(dbName) {
         for (const m of members) await distributeSenderKey(groupId, m.pubB64).catch(e => _dbg(e, 'sk-dist'));
         const groupCt = await encryptGroupMsg(groupId, JSON.stringify(pollData));
         if (groupCt) {
-          for (const m of members) {
+          await Promise.allSettled(members.map(async (m) => {
             const peer = peers[m.pubB64];
             if (peer?.connected && peer.dc?.readyState === 'open') {
               try { peer.dc.send(JSON.stringify({ v: CONFIG.PROTOCOL_VERSION, type: 'group_msg', msgId, payload: groupCt, ts, groupId, groupName: activeContact.name, sender: myPubB64, name: myName, isGroupSK: true })); } catch(e) { _dbg(e, 'group-p2p-send'); }
             }
             try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId, groupName: activeContact.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
-          }
+          }));
           _fanOut(activeContact, JSON.stringify(pollData), ts, {}, { isPoll: true, sfFor: activeContact.id, sfName: activeContact.name });
         }
       } else {
@@ -7911,7 +7911,9 @@ async function initMessenger(dbName) {
       const groupCiphertext = await encryptGroupMsg(groupId, text);
         if (!groupCiphertext) { showToast(t('toastSendFail'), 'error'); _isSending = false; return; }
       // Send same ciphertext to all members (no per-member re-encryption)
-      for (const m of members) {
+      // Fan out in parallel — members are independent recipients; a serial loop paid
+      // one relay round-trip per member.
+      await Promise.allSettled(members.map(async (m) => {
         // v3.6: Dual-path delivery: P2P direct (fast) + sealed sender (reliable)
         // P2P direct to connected members (instant, zero server dependency)
         const peer = peers[m.pubB64];
@@ -7929,7 +7931,7 @@ async function initMessenger(dbName) {
             payload: groupCiphertext, ts, groupId, groupName: activeContact.name,
             replyTo: envelopeReplyTo(meta.replyTo), disappearAt: meta.disappearAt, isGroupSK: true }, m.pubB64);
         } catch(e) { _dbg(e); }
-      }
+      }));
       // Self-sync: my other devices need the copy too (they're members of the same group).
       _fanOut(activeContact, text, ts, {}, { sfFor: activeContact.id, sfName: activeContact.name });
     } else {
@@ -8154,9 +8156,9 @@ async function initMessenger(dbName) {
         for (const m of members) await distributeSenderKey(groupId, m.pubB64).catch(e => _dbg(e, 'sk-dist'));
         const groupCt = await encryptGroupMsg(groupId, fileMsg);
         if (groupCt) {
-          for (const m of members) {
+          await Promise.allSettled(members.map(async (m) => {
             try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId, groupName: activeContact.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
-          }
+          }));
           _fanOut(activeContact, fileMsg, ts, {}, { isFile: true, sfFor: activeContact.id, sfName: activeContact.name });
         }
         return;
@@ -8471,9 +8473,9 @@ async function initMessenger(dbName) {
                 for (const m of members) await distributeSenderKey(activeContact.id, m.pubB64).catch(e => _dbg(e, 'sk-dist'));
                 const groupCt = await encryptGroupMsg(activeContact.id, gPayload);
                 if (groupCt) {
-                  for (const m of members) {
+                  await Promise.allSettled(members.map(async (m) => {
                     try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId: activeContact.id, groupName: activeContact.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
-                  }
+                  }));
                   _fanOut(activeContact, gPayload, ts, {}, { isFile: true, sfFor: activeContact.id, sfName: activeContact.name });
                 }
                 appendMsg(text, true, ts, null, gPayload, { msgId: genMsgId() });
@@ -11746,9 +11748,9 @@ async function initMessenger(dbName) {
                 const members = (activeContact.members || []).filter(m => m.id !== myId);
                 const groupCt = await encryptGroupMsg(activeContact.id, stored.text);
                 if (groupCt) {
-                  for (const m of members) {
+                  await Promise.allSettled(members.map(async (m) => {
                     try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts: stored.ts, groupId: activeContact.id, groupName: activeContact.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
-                  }
+                  }));
                   sent = true;
                 }
               } else {
