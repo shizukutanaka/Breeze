@@ -1,3 +1,16 @@
+## Relayed 1:1 poll votes were delivered then silently dropped (branch devin/relay-poll-vote, 2026-09-21)
+
+`sendSignal` relays `poll_vote` as a persistent type (edit/delete/reaction/poll_vote),
+but the 1:1 relayed-signal handler only had cases for edit/delete/reaction — a vote
+cast while the peer was offline arrived over the sealed relay, decrypted fine, and fell
+through the dispatch with no case: the voter's tally counted it, the recipient's never
+did, permanently. Added the missing `poll_vote` case mirroring the group handler
+(conversation-bound poll lookup, verified-sender voter id, options/votes shape guards).
+While there: both poll_vote lookups scanned `dbGetAll('messages')` per vote — switched
+the group handler to the `contact` index so votes cost O(conversation) not O(history).
+Also compressed the adjacent plaintext-handler-removed comment (it claimed poll_vote
+was P2P-only — stale after this change).
+
 ## Relay-rollback hardening on signed stored state (branch devin/signed-state-monotonic, 2026-09-21)
 
 Every signed-state endpoint checked the signature's freshness (±5min `REQ_TS`) but nothing ordered two *in-window* writes — a relay that captures a signed request can replay it moments after a newer one lands and silently roll the state back. KV has no compare-and-swap, so the stored signed timestamp is now the high-water mark on both write paths:

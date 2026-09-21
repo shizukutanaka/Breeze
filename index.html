@@ -10108,10 +10108,10 @@ async function initMessenger(dbName) {
               if (el) { const existing = el.querySelector('.msg-reactions'); if (existing) _safeReplace(existing, renderReactions(stored.reactions, targetMsgId)); else _safeAppend(el, renderReactions(stored.reactions, targetMsgId)); }
             }
           } else if (signal.type === 'poll_vote') {
-            // Same binding as the 1:1 path: the poll must live in THIS group, and the
-            // voter id comes from the verified sender, not the self-reported userId.
-            const allMsgs = await dbGetAll('messages');
-            const pollMsg = allMsgs.find(m => m.isPoll && m.contactId === msg.groupId && (() => { try { return JSON.parse(m.text).pollId === signal.pollId; } catch { return false; } })());
+            // Same binding as 1:1: the poll must live in THIS group and the voter id is
+            // the verified sender. Scoped index — dbGetAll scaled every vote by total history.
+            const allMsgs = await dbGetByIndex('messages', 'contact', msg.groupId);
+            const pollMsg = allMsgs.find(m => m.isPoll && (() => { try { return JSON.parse(m.text).pollId === signal.pollId; } catch { return false; } })());
             if (pollMsg) {
               const poll = JSON.parse(pollMsg.text);
               const voterId = (senderPub || '').slice(0, 12);
@@ -10251,11 +10251,9 @@ async function initMessenger(dbName) {
     // Session peer key: the attributed device's own pub, else the contact's.
     const _peerPub = _attribPub || contact.pubB64;
 
-    // Mutation signals are handled BEFORE the new-message dedup below: a signal envelope
-    // carries the ORIGINAL message's ts, so `${from}:${ts}` collides with the stored message
-    // and 'Already persisted' silently swallowed every relayed 1:1 edit/delete/reaction
-    // (Socratic-found — with the msgId mismatch fixed, this was the second independent
-    // reason remote mutations never worked over the relay).
+    // Mutation signals run BEFORE the new-message dedup: a signal envelope carries the
+    // ORIGINAL message's ts, so `${from}:${ts}` collides with the stored copy — the dedup
+    // used to swallow every relayed 1:1 edit/delete/reaction.
     // v3.6: Encrypted signal (edit/delete) — decrypt and process
     if (msg.isSignal && msg.payload) {
       try {
@@ -10303,23 +10301,36 @@ async function initMessenger(dbName) {
               else _safeAppend(el, renderReactions(stored.reactions, _smId));
             }
           }
+        } else if (signal.type === 'poll_vote') {
+          // sendSignal relays poll_vote as persistent — without this case a relayed vote fell through silently.
+          const pMsgs = await dbGetByIndex('messages', 'contact', contactId);
+          const pollMsg = pMsgs.find(m => m.isPoll && (() => { try { return JSON.parse(m.text).pollId === signal.pollId; } catch { return false; } })());
+          let poll = null;
+          try { poll = pollMsg && JSON.parse(pollMsg.text); } catch {}
+          if (poll && Array.isArray(poll.options)) {
+            const voterId = contact.id; // verified sender, not self-reported signal.userId
+            for (const opt of poll.options) if (Array.isArray(opt?.votes)) opt.votes = opt.votes.filter(v => v !== voterId);
+            if (Number.isInteger(signal.optionIndex) && signal.optionIndex >= 0 && Array.isArray(poll.options[signal.optionIndex]?.votes)) {
+              poll.options[signal.optionIndex].votes.push(voterId);
+              pollMsg.text = JSON.stringify(poll);
+              await dbPut('messages', pollMsg);
+              const el = document.querySelector(`[data-msgid="${safeMsgId(pollMsg.msgId)}"]`);
+              if (el) safeSetHTML(el, renderPollHtml(poll, pollMsg.msgId));
+            }
+          }
         }
       } catch(e) { _dbg(e, 'decrypt-signal'); }
       return;
     }
 
-    // SECURITY (removed): the deprecated PLAINTEXT signal handlers (type 'edit' /
-    // 'delete' / 'reaction' / 'poll_vote') were processed here with NO decryption and
-    // NO sender authentication. A sealed envelope is opaque attacker-controlled JSON
-    // (handleSealedSend stores `envelope` verbatim; /sealed/poll → handleIncoming(JSON.parse(envelope))),
-    // so any sender could POST {type:'edit', msgId, text} for any recipient and silently
-    // rewrite/delete a stored message in the victim's DB — message-integrity tampering
-    // with zero compensating control. The standard /msg relay strips these fields and the
-    // P2P DataChannel routes them inline, so these handlers had no legitimate relay sender:
-    // current clients send edit/delete/reaction via the ENCRYPTED isSignal path (handled
-    // above, gated by a successful decryptFrom that proves session-key possession) and
-    // poll_vote over the authenticated P2P DataChannel only. Removed outright — the
-    // encrypted path is the sole authority for mutating an existing message.
+    // SECURITY (removed): the deprecated PLAINTEXT signal handlers (edit/delete/reaction/
+    // poll_vote) ran here with NO decryption or sender authentication — a sealed envelope
+    // is opaque attacker-controlled JSON
+    // any sender could POST {type:'edit', msgId, text} for any recipient and silently
+    // rewrite a stored message — tampering with zero compensating control. Mutations now
+    // ride the ENCRYPTED isSignal path above (decryptFrom proves session-key possession);
+    // the P2P DataChannel routes them inline too. The encrypted path is the sole relay
+    // authority for mutating an existing message.
 
     // New message (text or file)
     // Identity by the ACTUAL sender (msg.from), not the conversation id: for device-
