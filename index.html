@@ -10627,11 +10627,12 @@ async function initMessenger(dbName) {
           }
           // v3.1: Poll vote
           if (msg.type === 'poll_vote') {
-            const allMsgs = await dbGetAll('messages');
-            // Fold the conversation binding into the predicate: a corrupt poll in an
-            // unrelated chat would otherwise throw inside find() before ours is reached.
-            // (pollId is self-reported — the binding is what stops cross-chat voting.)
-            const pollMsg = allMsgs.find(m => m.isPoll && m.contactId === contact.id && (() => { try { return JSON.parse(m.text).pollId === msg.pollId; } catch { return false; } })());
+            // Conversation-scoped via the contact index — per-vote cost is O(messages
+            // in this chat), not O(total history), and the binding (pollId is
+            // self-reported) is folded into the predicate so a corrupt poll in an
+            // unrelated chat can't throw inside find() before ours is reached.
+            const pollMsg = (await dbGetByIndex('messages', 'contact', contact.id))
+              .find(m => m.isPoll && (() => { try { return JSON.parse(m.text).pollId === msg.pollId; } catch { return false; } })());
             let poll = null;
             try { poll = pollMsg && JSON.parse(pollMsg.text); } catch {}
             if (poll && Array.isArray(poll.options)) {
