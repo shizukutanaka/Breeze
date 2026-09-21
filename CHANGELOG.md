@@ -1,5 +1,13 @@
 # Changelog
 
+## Debug log printed a scheduled message's text snippet to console (branch devin/dbg-snippet, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`_dbg` is opt-in via `brz-debug`, but the schedule-recovery line logged `item.text.slice(0,30)` — message content into the browser console, where it survives in screenshots, screen shares, and devtools sessions. Debug lines now carry metadata only (delay, ids, counts) — the snippet is dropped.
+
+---
+
 ## ?open=<contactId> was a dead deep-link — notification taps landed on the contact list (branch devin/open-deeplink, 2026-09-20)
 
 `index.html`, `tests/e2e/deeplink.spec.js`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
