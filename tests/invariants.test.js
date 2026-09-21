@@ -163,7 +163,7 @@ describe('group trust boundaries', () => {
     // sig over the canonical context; legacy senders (no sigPub on record) stay accepted.
     expect(html).toContain('sigPub: _signingPubB64 || undefined');
     expect(html).toContain('skEntry.sigPub = skMsg.sigPub');
-    expect(html).toContain("breeze-group-msg:${groupId}:${out.ep | 0}:${out.c}:");
+    expect(html).toContain("breeze-group-msg:${groupId}:${out.ep | 0}:${out.c | 0}:");
     expect(html).toContain("breeze-group-msg:${groupId}:${p.ep | 0}:${p.c | 0}:");
     expect(html).toContain('if (peerSK.sigPub)');
     expect(html).toContain("typeof p.sg === 'string' && p.sg && await verifySignature");

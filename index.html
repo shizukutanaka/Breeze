@@ -5609,7 +5609,7 @@ async function initMessenger(dbName) {
       // Per-sender sig (eprint 2025/554): members hold each other's chain keys, so
       // unsigned msgs are member-forgeable. sigPub rides the sender-key distribution;
       // legacy senders (no sigPub on record) stay decryptable — same rollout as `cm`.
-      const sg = _signingKey?.privateKey && await signMessage(`breeze-group-msg:${groupId}:${out.ep | 0}:${out.c}:${JSON.stringify(out.i)}:${JSON.stringify(out.d)}`);
+      const sg = _signingKey?.privateKey && await signMessage(`breeze-group-msg:${groupId}:${out.ep | 0}:${out.c | 0}:${JSON.stringify(out.i)}:${JSON.stringify(out.d)}`);
       if (sg) out.sg = sg;
       return JSON.stringify(out);
     } catch(_e) { _dbg(_e, 'encryptGroupMsg'); }
