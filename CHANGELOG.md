@@ -1,3 +1,17 @@
+## Peer capability lists are unsigned — relay strip = silent plaintext downgrade (branch devin/caps-pin, 2026-09-21)
+
+/prekey/status answers carry a peer's advertised caps (seal-v2, dm-sig-v1, …)
+UNSIGNED — the relay can strip dm-sig-v1 from the response and the sender falls
+back to plaintext dm:-room signaling (SDP/ICE/typing/read) the relay can read.
+That's a zero-effort, selective (per-call, stealthy) downgrade against the exact
+metadata sealed signaling exists to protect. Fix: pin-once-seen — the union of
+every cap a peer ever honestly advertised is persisted (identity store,
+'caps-pin:<peerId>'); once seen, a cap can't be un-seen. Same rule as the existing
+groupV5 pin. Side benefit: a transient fetch failure now yields the pinned set
+instead of [] (which read as "peer supports nothing" → plaintext). Residual:
+same-identity version rollback keeps getting sealed envelopes (identity regen ⇒
+new peerId ⇒ fresh pin) — extending an already-accepted 5-min cache window cost.
+
 ## 1:1 relayed reactions get the same caps the group path already had (branch devin/reaction-caps-1to1, 2026-09-21)
 
 The encrypted `isSignal` reaction handler on the 1:1 path created `reactions[emoji]`

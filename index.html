@@ -5342,10 +5342,9 @@ async function initMessenger(dbName) {
   }
   // ═══ end inline mirror of src/crypto/seal.js ═══
   // Does this peer understand sealed-v2 envelopes? Read from /prekey/status (no OTP cost),
-  // cached 5 min — the cache TTL IS the downgrade window: a peer that stops advertising
-  // seal-v2 (version rollback, identity re-registration) receives sealed envelopes it
-  // ack+skips until the cache expires, so keep the window as short as the other caches.
-  // Any failure answers "no" — the message still delivers, just legacy-shaped.
+  // cached 5 min — the advertised set is pinned union-wise (below): a relay can strip
+  // a cap from an unsigned /prekey/status answer to force readable plaintext signaling,
+  // so once honestly seen it stays (identity regen ⇒ new peerId ⇒ fresh pin).
   const _peerCapsCache = new Map();
   async function _peerCaps(peerId) {
     try {
@@ -5353,7 +5352,15 @@ async function initMessenger(dbName) {
       if (c && Date.now() - c.ts < 5 * MS.MIN) return c.caps;
       const resp = await postAPIRaw('/prekey/status', { userId: peerId });
       const data = resp?.ok ? await resp.json() : null;
-      const caps = Array.isArray(data?.caps) ? data.caps.filter(x => typeof x === 'string') : [];
+      const fetched = Array.isArray(data?.caps) ? data.caps.filter(x => typeof x === 'string').slice(0, 64) : [];
+      // Pin the union once seen (comment above) — same rule as the groupV5 pin.
+      // Bonus: a transient fetch failure now yields the pinned set instead of []
+      // (= "no caps" = plaintext fallback).
+      const pinKey = 'caps-pin:' + peerId;
+      const pinned = (await dbGet('identity', pinKey).catch(() => null))?.caps;
+      const prior = Array.isArray(pinned) ? pinned : [];
+      const caps = prior.length >= fetched.length ? prior : [...new Set([...prior, ...fetched])].slice(0, 64);
+      if (caps.length !== prior.length) await dbPut('identity', { caps }, pinKey).catch(() => {});
       _peerCapsCache.set(peerId, { caps, ts: Date.now() });
       return caps;
     } catch { return []; }
