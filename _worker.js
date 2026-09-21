@@ -2067,6 +2067,27 @@ async function handlePreKeyUpload(body, env, request) {
     const ok = await verifyEd25519(edIdentityKey, signedPreKey, signedPreKeySig);
     if (!ok) return json({ error: 'Invalid signed pre-key signature', code: 'PREKEY_SIG_INVALID' }, 400, request);
   }
+  // Incumbent endorsement: the KEY_MISMATCH gate only binds userId to identityKey's
+  // prefix — a caller can still present the VICTIM's real identityKey with the
+  // attacker's SPK + edIdentityKey (self-signed, passes the check above) and clobber
+  // the registered bundle: a mixed-key poison that breaks every new session to the
+  // victim AND swaps the Ed key fresh contacts pin. Once a bundle carries an Ed key,
+  // overwriting it requires a signature BY that incumbent key endorsing the update —
+  // attacker can no longer rotate keys they don't own. Legacy bundles without
+  // edIdentityKey stay overwritable (nothing to verify against — they were born
+  // clobberable; the first signed upload locks them in). Opt-out: PREKEY_REQUIRE_AUTH=false.
+  if (env.PREKEY_REQUIRE_AUTH !== 'false') {
+    const incumbent = safeJsonParse(await kvGet(env, `prekey:${userId}`) || 'null');
+    if (incumbent && typeof incumbent.edIdentityKey === 'string' && incumbent.edIdentityKey) {
+      const upTs = body.ts, upSig = body.sig;
+      if (typeof upTs !== 'number' || !Number.isFinite(upTs) || Math.abs(Date.now() - upTs) > TIMEOUT_MS.REQ_TS
+        || typeof upSig !== 'string' || !upSig || upSig.length > 500) {
+        return json({ error: 'Overwrite requires incumbent-key signature (ts + sig)', code: 'AUTH_REQUIRED' }, 403, request);
+      }
+      const ok = await verifyEd25519(incumbent.edIdentityKey, utf8ToB64(`breeze-prekey-upload:${userId}:${upTs}`), upSig);
+      if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
+    }
+  }
   const bundle = { identityKey, edIdentityKey, signedPreKey, signedPreKeySig, uploadedAt: Date.now() };
   // N3: persist capability set so the initiator can call parsePeerCaps(bundle) and
   // negotiate() to pick the right protocol path (same sanitization as the presence

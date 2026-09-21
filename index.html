@@ -4553,7 +4553,10 @@ async function initMessenger(dbName) {
       try {
         await initSigning(); // must precede generatePreKeyBundle() or edIdentityKey/signedPreKeySig get omitted (E2E-found)
         const bundle = await generatePreKeyBundle();
-        await postAPIRaw('/prekey/upload', { userId: myId, identityKey: pubB64, ...bundle });
+        // ts+sig endorse the upload under OUR Ed key — once a bundle is registered, the
+        // Worker requires the incumbent key's signature to overwrite (clobber defense).
+        const upTs = Date.now();
+        await postAPIRaw('/prekey/upload', { userId: myId, identityKey: pubB64, ...bundle, ts: upTs, sig: await signMessage(`breeze-prekey-upload:${myId}:${upTs}`) });
         _dbg(null, 'PreKeys uploaded: 1 SPK + ' + bundle.oneTimePreKeys.length + ' OTP');
       } catch(e) { _dbg(e, 'prekey-upload'); }
     }
@@ -9712,7 +9715,8 @@ async function initMessenger(dbName) {
       if (!expired && !st) return; // network/other error: try again next cycle
       if (expired || st.replenishOTP || st.replenishSPK) {
         const freshBundle = await generatePreKeyBundle();
-        const upResp = await postAPIRaw('/prekey/upload', { userId: myId, identityKey: myPubB64, ...freshBundle });
+        const upTs = Date.now();
+        const upResp = await postAPIRaw('/prekey/upload', { userId: myId, identityKey: myPubB64, ...freshBundle, ts: upTs, sig: await signMessage(`breeze-prekey-upload:${myId}:${upTs}`) });
         if (!upResp?.ok) { _lastPreKeyCheck = Date.now() - MS.MIN * 4; return; } // retry in ~1 min
         _dbg(null, (expired ? 'PreKey record had EXPIRED — re-registered: ' : 'PreKeys replenished: ') + freshBundle.oneTimePreKeys.length + ' OTPs');
       }

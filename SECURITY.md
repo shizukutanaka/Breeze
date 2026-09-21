@@ -202,6 +202,14 @@ store) rather than gated — an opt-in toggle leaves the contradiction one peer 
   Capability data (`caps`) never rode presence end-to-end (the heartbeat never sent it and
   the batch check — the only client reader — returns online only); it lives in the prekey
   bundle, read via `/prekey/status`.
+- **Prekey bundles are incumbent-endorsed.** `/prekey/upload` binds `userId` to the
+  `identityKey` prefix — but prefix alone can't stop a caller presenting the victim's
+  *real* identityKey with the attacker's SPK + Ed key (a mixed-key poison: new sessions
+  break and fresh contacts would pin the attacker's signing key). Once a bundle carries
+  an `edIdentityKey`, overwriting it requires an Ed25519 signature by that incumbent
+  (`breeze-prekey-upload:<id>:<ts>`) — key rotation stays self-consistent and an outsider
+  can't rotate keys they don't own. First writes and legacy bundles without an Ed key
+  stay open (nothing to verify against); `PREKEY_REQUIRE_AUTH=false` opts out entirely.
 - **Id-keyed queues are owner-enforced by default.** `/msg/poll`, `/sealed/poll` and
   `/sealed/ack` require an Ed25519 ownership signature (`breeze-<op>:<id>:<ts>`,
   verified against the registered `prekey:{id}` bundle — same pattern as group ops)

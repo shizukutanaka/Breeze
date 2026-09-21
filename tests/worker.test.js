@@ -416,6 +416,74 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     expect((await r2.json()).code).toBe('INVALID_TYPE');
   });
 
+  // Clobber defense: KEY_MISMATCH only binds userId to the identityKey PREFIX, so a
+  // caller could overwrite a registered bundle with victim-IK + attacker-SPK/Ed —
+  // mixed-key poison + Ed-key swap for fresh contacts. Once a bundle carries an Ed key,
+  // overwriting it requires a signature BY that incumbent key (breeze-prekey-upload).
+  const _b64 = (u8) => Buffer.from(u8 instanceof Uint8Array ? u8 : Uint8Array.from(u8)).toString('base64');
+  async function edKeyPair() {
+    const kp = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const raw = new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey));
+    return { pub: _b64(raw), sign: async (m) => _b64(new Uint8Array(await crypto.subtle.sign(
+      { name: 'Ed25519' }, kp.privateKey, new TextEncoder().encode(m)))) };
+  }
+  const upReq = () => apiRequest('/api/prekey/upload', {});
+
+  it('overwrite requires the incumbent Ed key signature once edIdentityKey is registered', async () => {
+    const e = makeEnv();
+    const victim = await edKeyPair();
+    const uid = 'clobber001';
+    // First write is free (no incumbent).
+    const first = await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK0', edIdentityKey: victim.pub },
+      e, upReq());
+    expect(first.status).toBe(200);
+    // Attacker re-uploads: victim's real IK prefix + their own Ed key, no sig → 403.
+    const attacker = await edKeyPair();
+    const clobber = await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK-A', edIdentityKey: attacker.pub },
+      e, upReq());
+    expect(clobber.status).toBe(403);
+    expect((await clobber.json()).code).toBe('AUTH_REQUIRED');
+    // Attacker-signed (wrong key) → SIG_INVALID.
+    const ts = Date.now();
+    const forged = await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK-A', edIdentityKey: attacker.pub,
+        ts, sig: await attacker.sign(`breeze-prekey-upload:${uid}:${ts}`) },
+      e, upReq());
+    expect(forged.status).toBe(403);
+    expect((await forged.json()).code).toBe('SIG_INVALID');
+    // Incumbent-signed overwrite → 200 (legit replenish/rotation).
+    const ts2 = Date.now();
+    const ok = await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK1', edIdentityKey: victim.pub,
+        ts: ts2, sig: await victim.sign(`breeze-prekey-upload:${uid}:${ts2}`) },
+      e, upReq());
+    expect(ok.status).toBe(200);
+    const stored = JSON.parse(await e.KV.get(`prekey:${uid}`));
+    expect(stored.signedPreKey).toBe('SPK1');
+    expect(stored.edIdentityKey).toBe(victim.pub); // attacker's key never landed
+  });
+
+  it('legacy incumbent without edIdentityKey stays overwritable (no regression)', async () => {
+    const e = makeEnv();
+    const uid = 'legacypk01';
+    await e.KV.put(`prekey:${uid}`, JSON.stringify({ identityKey: uid + 'IK', signedPreKey: 'OLD' }));
+    const res = await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'NEW' }, e, upReq());
+    expect(res.status).toBe(200);
+  });
+
+  it('opt-out: PREKEY_REQUIRE_AUTH=false keeps unsigned overwrite working', async () => {
+    const e = makeEnv({ PREKEY_REQUIRE_AUTH: 'false' });
+    const victim = await edKeyPair();
+    const uid = 'optoutpk01';
+    await e.KV.put(`prekey:${uid}`, JSON.stringify({ identityKey: uid + 'IK', signedPreKey: 'OLD', edIdentityKey: victim.pub }));
+    const res = await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'NEW' }, e, upReq());
+    expect(res.status).toBe(200);
+  });
+
   it('fetch succeeds (200, no oneTimePreKey) when the OTP KV value is corrupt JSON', async () => {
     const env = makeEnv();
     const uid = 'corruptotp1'; // ≥8 chars, passes validateUserId

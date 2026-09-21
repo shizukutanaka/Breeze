@@ -1,5 +1,16 @@
 # Changelog
 
+## Prekey bundles are incumbent-endorsed (clobber closed) (branch devin/consolidate-groups, 2026-09-20)
+
+KEY_MISMATCH bound userId to identityKey's prefix, but a caller could still ship
+the victim's real IK with attacker SPK + attacker Ed (self-signed SPK sig passed)
+— mixed-key poison breaking new sessions + Ed-key swap for fresh contacts. Once a
+bundle carries edIdentityKey, overwrite now requires a signature BY the incumbent
+(`breeze-prekey-upload:{id}:{ts}`, default-on, PREKEY_REQUIRE_AUTH=false opts out).
+First writes and Ed-less legacy bundles stay open. Both client upload callsites
+(onboarding + OTP replenish) now sign unconditionally.
+
+
 ## Device-registry rollback + rootEd substitution closed (branch devin/consolidate-groups, 2026-09-20)
 
 Two gaps in the multi-device trust path:
