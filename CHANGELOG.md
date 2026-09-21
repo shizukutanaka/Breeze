@@ -1,5 +1,13 @@
 # Changelog
 
+## Group roster only synced on growth — kicks/leaves never propagated (branch devin/group-roster-sync, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`startGroupMemberPoll` applied the `/group/info` roster only when `newMembers.length > oldCount` — a kicked or departed member stayed in my local roster forever: they kept receiving my group sends, and whenever the kicker's epoch rotation never reached me, they kept decrypting them with the pre-kick chain key. `creatorId`/`admins`/`name` were never refreshed either, so transfers and renames were invisible to other members. The poll now applies membership in both directions and syncs the moderation metadata (bounded, sanitized).
+
+---
+
 ## /admin transfer — ownership handoff for the dead /group/transfer endpoint (branch devin/group-transfer, 2026-09-20)
 
 `index.html`, `locales/ja.json`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).

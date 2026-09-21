@@ -9258,13 +9258,32 @@ async function initMessenger(dbName) {
         const group = await dbGet('contacts', groupId);
         if (!group) { clearInterval(poll); return; }
 
-        const oldCount = group.members?.length || 0;
+        const oldMembers = group.members || [];
         const newMembers = safeMemberList(data.members);
-        if (newMembers.length > oldCount) {
-          group.members = newMembers;
+        // Apply membership in BOTH directions — growth-only syncing meant a kicked or
+        // departed member stayed in my roster forever, kept receiving my sends, and (when
+        // the kicker's epoch rotation never reached me) kept decrypting them with the
+        // pre-kick chain key. Also sync creatorId/admins/name — transfer and rename
+        // mutate them server-side without touching membership.
+        const membersChanged = newMembers.length !== oldMembers.length ||
+          newMembers.some(m => !oldMembers.some(o => o.id === m.id)) ||
+          oldMembers.some(o => !newMembers.some(m => m.id === o.id));
+        const metaChanged = group.creatorId !== data.creatorId ||
+          JSON.stringify(group.admins || []) !== JSON.stringify(data.admins || []) ||
+          (typeof data.name === 'string' && data.name && group.name !== data.name);
+        if (membersChanged || metaChanged) {
+          if (membersChanged) group.members = newMembers;
+          if (typeof data.creatorId === 'string' && data.creatorId) group.creatorId = data.creatorId;
+          if (Array.isArray(data.admins)) group.admins = data.admins.filter(id => typeof id === 'string' && id.length <= 64).slice(0, CONFIG.GROUP_MAX);
+          if (typeof data.name === 'string' && data.name) group.name = data.name.slice(0, 50);
           await dbPut('contacts', group);
           // sendMessage reads activeContact.members (separate object) — without this an open group silently excludes new joiners until reopened.
-          if (activeContact?.id === groupId) activeContact.members = newMembers;
+          if (activeContact?.id === groupId) {
+            activeContact.members = group.members;
+            activeContact.admins = group.admins;
+            activeContact.createdBy = group.createdBy;
+            if (activeContact.name !== group.name) { activeContact.name = group.name; _DOM.get('msg-conv-name').textContent = group.name; }
+          }
           // Add new individual contacts
           for (const m of newMembers) {
             if (m.id === myId) continue;
