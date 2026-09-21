@@ -1,5 +1,13 @@
 # Changelog
 
+## Invited groups never recorded the creator — admin actions silently dropped (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The `group_invite` accept path stored `members` but no `createdBy`/`admins`. On an invite-joined client every privilege gate then failed for the REAL creator: `group_kick` notices were ignored (the kicked member stayed in the local roster and kept receiving — and decrypting — sends), `group_meta` announce-only propagation was dropped, and the privileged re-key on a member's leave never fired. The inviter is the verified sender and is the creator by construction (only `createGroup` emits invites), so the join side now seeds `createdBy: c.id` from the authenticated envelope — no self-reported field to forge.
+
+---
+
 ## Stale call notifications rang for dead calls (branch devin/consolidate-groups, 2026-09-21)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).

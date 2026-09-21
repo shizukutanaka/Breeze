@@ -9946,7 +9946,11 @@ async function initMessenger(dbName) {
         const inviteName = typeof invite.name === 'string' ? invite.name.slice(0, 64) : 'Group';
         const inviteMembers = safeMemberList(invite.members);
         if (invite.type === 'group_invite' && inviteGroupId && !(await dbGet('contacts', inviteGroupId))) {
-          await dbPut('contacts', { id: inviteGroupId, name: inviteName, isGroup: true, members: inviteMembers, addedAt: Date.now(), unread: 0, pubB64: '' });
+          // Seed createdBy from the VERIFIED sender: in this flow only the creator
+          // invites (createGroup fan-out), so c.id IS the creator. Without it every
+          // privilege gate (group_kick, group_meta, leave re-key) failed for the real
+          // admin — a kicked member stayed in the roster and kept receiving sends.
+          await dbPut('contacts', { id: inviteGroupId, name: inviteName, isGroup: true, members: inviteMembers, addedAt: Date.now(), unread: 0, pubB64: '', createdBy: c.id, admins: [] });
           if (!_focusActive()) playNotif();
           _renderContactsThrottled();
         }
