@@ -1221,9 +1221,7 @@ const CONFIG = {
   VOICE_MAX_MS: 120000,               // Max voice note duration: 2 minutes
   // Limits
   FILE_MAX: 50 * 1024 * 1024, // All users: 50MB
-  
   GROUP_MAX: 100, // All users: 100 members
-  
   MAX_MSG_LENGTH: 4096,
   CHUNK_SIZE: 16 * 1024,           // Safe cross-browser DataChannel max (16 KiB)
   DC_BUFFER_MAX: 262144,            // 256 KiB backpressure threshold
@@ -2924,7 +2922,6 @@ async function deriveKey(passphrase, salt, usage) {
     try {  
     const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
     return crypto.subtle.deriveKey({name:'PBKDF2', salt, iterations:CONFIG.PBKDF2_ITERATIONS, hash:'SHA-256'}, km, {name:'AES-GCM',length:CONFIG.AES_KEY_BITS}, false, [usage]);
-  
     } catch(_e) { _dbg(_e, 'deriveKey'); }
   }
 
@@ -3466,22 +3463,18 @@ async function switchAccount(accountId) {
     if (_messengerCleanup) { _messengerCleanup(); _messengerCleanup = null; }
     if (_currentAccountDb) { try { _currentAccountDb.close(); } catch(e) { _dbg(e); } }
     _DOM.clear(); // Invalidate memoized DOM cache
-  
     setActiveAccountId(accountId);
     // Clear unread badge for the account we're switching to
     delete _crossAccountUnread[accountId];
     try { localStorage.setItem('brz-cross-unread', JSON.stringify(_crossAccountUnread)); } catch(e) {}
     renderAccountTabs();
-  
     // Re-initialize messenger with new account
     const accs = getAccounts();
     const acc = accs.find(a => a.id === accountId);
     if (!acc) { switchAccount._switching = false; overlay?.remove(); return; }
-  
     // Reset messenger UI
     _DOM.get('msg-main')?.classList.add('hidden');
     _DOM.get('msg-setup')?.classList.add('hidden');
-  
     await initMessenger(acc.dbName || 'breeze-acc-' + accountId);
     // Re-render AFTER init: only now is it known whether this account landed on the setup
     // screen (a brand-new account, whose database has no identity) or the main UI, and the
@@ -3494,7 +3487,6 @@ async function switchAccount(accountId) {
     switchAccount._switching = false;
     const _switchTime = _perf.measure('switchAccount:done', 'switchAccount');
     if (_switchTime) _dbg(null, `switchAccount: ${Math.round(_switchTime.duration)}ms`);
-  
     } catch(_e) { 
       _dbg(_e, 'switchAccount'); 
       document.querySelector('.acc-switch-overlay')?.remove();
@@ -4629,7 +4621,6 @@ async function initMessenger(dbName) {
       }
       const kp = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey', 'deriveBits']);
       return { pub: await crypto.subtle.exportKey('raw', kp.publicKey), priv: await crypto.subtle.exportKey('jwk', kp.privateKey), publicKey: kp.publicKey, privateKey: kp.privateKey };
-    
     } catch(_e) { _dbg(_e, 'genRatchetKey'); }
   }
 
@@ -4646,7 +4637,6 @@ async function initMessenger(dbName) {
       }
       const peerPub = await crypto.subtle.importKey('raw', peerPubRaw, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
       return new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: peerPub }, privKey, 256));
-    
     } catch(_e) { _dbg(_e, 'ecdhBits'); }
   }
 
@@ -4656,7 +4646,6 @@ async function initMessenger(dbName) {
       const msgKey = await hkdf(chainKey, new Uint8Array(32), 'msg', 32);
       const nextChain = await hkdf(chainKey, new Uint8Array(32), 'chain', 32);
       return { msgKey, nextChain };
-    
     } catch(_e) { _dbg(_e, 'kdfChain'); }
   }
 
@@ -4840,6 +4829,15 @@ async function initMessenger(dbName) {
         ikPriv: myKeys.privateKey, spkPriv, opkPriv,
         ikPubPeer: u8(p.ik), ekPubPeer: u8(p.ek),
       });
+      // One-time means one-time: burn the consumed OTP private key — a lingering
+      // copy would let a later IDB compromise decrypt every bootstrap it sealed.
+      if (typeof p.opkId === 'number') {
+        const otpStore = await dbGet('identity', 'otp-priv');
+        if (otpStore?.keys && p.opkId in otpStore.keys) {
+          delete otpStore.keys[p.opkId];
+          await dbPut('identity', otpStore, 'otp-priv');
+        }
+      }
       return { rootKey: sk, ratchetPriv: spkPriv, ratchetPub: null, peerRatchetPub: null, sendCounter: 0, recvCounter: 0, seenMsgIds: [] };
     } catch(_e) { _dbg(_e, 'bootstrapResponderSessionV5'); return null; }
   }
@@ -4879,7 +4877,6 @@ async function initMessenger(dbName) {
         sendCounter: 0, recvCounter: 0,
         seenMsgIds: [],
       };
-    
     } catch(_e) { _dbg(_e, 'initSession'); }
   }
 
@@ -5167,7 +5164,6 @@ async function initMessenger(dbName) {
       let num = '';
       for (let i = 0; i < 6; i++) { num += String((bytes[i*2] << 8 | bytes[i*2+1]) % 100000).padStart(5, '0') + ' '; }
       return num.trim();
-    
     } catch(_e) { _dbg(_e, 'safetyNumber'); }
   }
 
@@ -5177,7 +5173,6 @@ async function initMessenger(dbName) {
       const raw = Uint8Array.from(atob(peerPubB64), c => c.charCodeAt(0));
       const peerPub = await crypto.subtle.importKey('raw', raw, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
       return crypto.subtle.deriveKey({ name: 'ECDH', public: peerPub }, myKeys.privateKey, { name: 'AES-GCM', length: CONFIG.AES_KEY_BITS }, false, ['encrypt', 'decrypt']);
-    
     } catch(_e) { _dbg(_e, 'deriveKeyWith'); }
   }
 
@@ -6315,7 +6310,6 @@ async function initMessenger(dbName) {
       await dbPut('contacts', { id, pubB64: safePub, name: safeName, addedAt: Date.now(), unread: 0 });
       auditLog('contact', 'Added: ' + name + ' (' + id + ')');
       await renderContacts();
-    
     } catch(_e) { _dbg(_e, 'addContact'); }
   }
 
@@ -6332,7 +6326,6 @@ async function initMessenger(dbName) {
       const labels = new Set();
       contacts.forEach(c => (c.labels || []).forEach(l => labels.add(l)));
       return [...labels].sort();
-    
     } catch(_e) { _dbg(_e, 'getAllLabels'); }
   }
 
@@ -6359,7 +6352,6 @@ async function initMessenger(dbName) {
         chip.onclick = () => { _activeLabel = (_activeLabel === label) ? null : label; renderLabelFilter(); renderContacts(); };
         bar.appendChild(chip);
       });
-    
     } catch(_e) { _dbg(_e, 'renderLabelFilter'); }
   }
 
@@ -7495,7 +7487,6 @@ async function initMessenger(dbName) {
         await relaySend(contact.id, { to: contact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts }, contact.pubB64);
       }
       renderContacts();
-    
     } catch(_e) { _dbg(_e, 'createPoll'); }
   }
 
