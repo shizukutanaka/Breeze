@@ -9099,7 +9099,7 @@ async function initMessenger(dbName) {
     // Signal end
     if (_callContact && API) {
       const room = 'call:' + [myId, _callContact.id].sort().join(':');
-      _signal(room, 'call-end');
+      _wrapCallSignal(_callContact.pubB64, { end: true }).then(d => { if (d != null) _signal(room, 'call-end', d); }).catch(() => { _signal(room, 'call-end'); });
     }
     _callState = 'idle';
     _callContact = null;
@@ -9117,8 +9117,9 @@ async function initMessenger(dbName) {
         for (const s of (data.messages || [])) {
           if (s.sender === myId) continue;
           // Sender binding (same as the data-channel signal poll): the call room name is
-          // the two sorted ids — a third party could otherwise post a bare 'call-end'
-          // and drop the active call (call-end is not decryptable-wrapped).
+          // the two sorted ids — a third party could otherwise inject ICE or fake call-offer.
+          // Defense-in-depth only: `sender` is attacker-controlled, so the real auth for
+          // call-end comes from the decryptable wrap below when CALL_E2E_SIGNAL is on.
           if (s.sender !== contact.id) continue;
           if (s.type === 'call-answer' && _callPC && _callPC.signalingState === 'have-local-offer') {
             // Authenticate before setRemoteDescription: a forged answer (relay-injected,
@@ -9131,7 +9132,16 @@ async function initMessenger(dbName) {
             const cand = await _unwrapCallSignal(contact.pubB64, s.data);
             if (cand && typeof cand === 'object' && !Array.isArray(cand)) await _callPC.addIceCandidate(cand).catch(e => _dbg(e, 'call-ICE'));
           }
-          if (s.type === 'call-end') { endCall(); clearInterval(poll); return; }
+          if (s.type === 'call-end') {
+            // Strict mode requires the decryptable wrap — a bare call-end (forged or from a
+            // legacy sender) is dropped rather than tearing down the call. Compat mode still
+            // accepts the unwrapped signal.
+            if (CONFIG.CALL_E2E_SIGNAL) {
+              const endSig = await _unwrapCallSignal(contact.pubB64, s.data);
+              if (!endSig || typeof endSig !== 'object') continue;
+            }
+            endCall(); clearInterval(poll); return;
+          }
           if (s.type === 'call-offer' && _callState === 'idle') { handleCallOffer(contact, s.data); }
         }
       } catch(e) { _dbg(e); }

@@ -4,7 +4,7 @@
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
 
-Both signal polls (`sig:` data-channel poll, `call:` call-signaling poll) skipped only `sender === myId` — every other post was processed. The relay is unauthenticated and the room name is the two sorted user ids, so a third party who knew the pair could fake typing/read indicators, inject ICE candidates, and post a bare `call-end` to drop an active call. Both polls now require `sender === contact.id`.
+Both signal polls (`sig:` data-channel poll, `call:` call-signaling poll) skipped only `sender === myId` — every other post was processed. The relay is unauthenticated and the room name is the two sorted user ids, so a third party who knew the pair could fake typing/read indicators, inject ICE candidates, and post a bare `call-end` to drop an active call. Both polls now require `sender === contact.id` — defense-in-depth only, since `sender` is attacker-controlled (anyone who can derive the room can forge it). The real fix for the hangup forgery: `call-end` is now sent through `_wrapCallSignal` (decryptable E2E wrap) and, when `CONFIG.CALL_E2E_SIGNAL` is on, a `call-end` that fails to unwrap is dropped rather than tearing down the call. Compat mode (flag off) still accepts the unwrapped signal — full auth needs the flag-on capability path.
 
 ---
 
