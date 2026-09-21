@@ -9613,6 +9613,30 @@ async function initMessenger(dbName) {
       return;
     }
 
+    // === Group metadata notice (announce-only propagation) ===
+    if (msg.isGroupMeta) {
+      try {
+        const c = await dbGet('contacts', (msg.from || '').slice?.(0, 12) || msg.from);
+        if (!c) return;
+        const decrypted = await decryptFrom(msg.payload, c.pubB64);
+        if (!decrypted) return;
+        const metaMsg = JSON.parse(decrypted);
+        if (metaMsg.type === 'group_meta' && typeof metaMsg.groupId === 'string') {
+          const g = await dbGet('contacts', metaMsg.groupId.slice(0, 64));
+          if (!g?.isGroup) return;
+          // Same privilege gate as group_kick: only creator/admins may set group policy.
+          const isPrivileged = g.createdBy === c.id || (g.admins || []).includes(c.id);
+          if (!isPrivileged) { _dbg(null, 'group_meta from non-admin — ignored'); return; }
+          if (typeof metaMsg.announceOnly === 'boolean') {
+            g.announceOnly = metaMsg.announceOnly;
+            await dbPut('contacts', g);
+            if (activeContact?.id === g.id) activeContact.announceOnly = g.announceOnly;
+          }
+        }
+      } catch(e) { _dbg(e, 'group-meta'); }
+      return;
+    }
+
     // === Group invite ===
     if (msg.isGroupInvite) {
       try {
@@ -9644,6 +9668,15 @@ async function initMessenger(dbName) {
       const group = await dbGet('contacts', msg.groupId);
       if (!group) return;
       const member = (group.members || []).find(m => m.id === msg.from);
+
+      // Announce-only enforcement (receive-side): the flag propagates via admin-signed
+      // group_meta notices. The relay can't see senders inside sealed envelopes, so
+      // enforcement is client-side — a non-admin member whose message arrives anyway
+      // (modified client, or flag change mid-flight) is dropped here.
+      if (group.announceOnly && member) {
+        const senderPrivileged = group.createdBy === member.id || (group.admins || []).includes(member.id);
+        if (!senderPrivileged && !msg.isSignal) return;
+      }
 
       // v3.6: Encrypted signal for group (edit/delete/reaction)
       if (msg.isSignal && msg.payload) {
@@ -12104,6 +12137,18 @@ async function initMessenger(dbName) {
         const mode = sub.slice(9).trim() === 'on';
         activeContact.announceOnly = mode;
         await dbPut('contacts', activeContact);
+        // Propagate to members — the flag was local-only: it gated nothing anywhere,
+        // including the setter's own client (an admin always passes !isGroupAdmin).
+        // Members receive it as an admin-gated group_meta notice and then enforce it
+        // receive-side, since the relay can't see senders inside sealed envelopes.
+        if (API && activeContact.joinToken) {
+          for (const m of (activeContact.members || []).filter(x => x.id !== myId && x.pubB64)) {
+            try {
+              const metaCt = await encryptFor(JSON.stringify({ type: 'group_meta', groupId: activeContact.id, announceOnly: mode }), m.pubB64);
+              if (metaCt) relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: metaCt, ts: Date.now(), isGroupMeta: true }, m.pubB64).catch(e => _dbg(e));
+            } catch(e) { _dbg(e, 'announce-notify'); }
+          }
+        }
         auditLog('group', (mode ? 'Enabled' : 'Disabled') + ' announce-only for ' + activeContact.name);
         d.textContent = t('uiAnnounceOnly') + ' ' + (mode ? t('uiAnnounceOn') : t('uiAnnounceOff'));
       } else if (sub.startsWith('rename ')) {
