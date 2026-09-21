@@ -1,5 +1,13 @@
 # Changelog
 
+## Group invites stored unsanitized member objects (branch devin/invite-member-sanitize, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`isGroupInvite` sliced `invite.members` to `GROUP_MAX` but skipped `safeMemberList` — the field-shaping the `/group/info` path always applies. A malicious (known) contact could ship members with oversized ids/pubs/names or junk types into `contacts`. Routed through the same sanitizer.
+
+---
+
 ## group_kick notices had no privilege check — any contact could "kick" members locally (branch devin/group-kick-auth, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
