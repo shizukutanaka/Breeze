@@ -1,5 +1,13 @@
 # Changelog
 
+## Badge interval opened an IndexedDB connection every 5s — never used, never closed (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The unread-badge timer ran `indexedDB.open('breeze-messenger', 2)` on every tick and did nothing with the result — the badge count is read from the DOM. Each orphaned open request left an untracked connection alive until GC, a real hazard for the db-upgrade path (a forgotten open connection blocks `versionchange` until collected). Removed the dead open.
+
+---
+
 ## sig-poll/heartbeat intervals leaked on manual pc.close() teardown (branch devin/consolidate-groups, 2026-09-21)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
