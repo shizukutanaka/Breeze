@@ -9786,6 +9786,7 @@ async function initMessenger(dbName) {
     const fresh = await dbGet('contacts', id).catch(() => null);
     if (!fresh) return dbPut('contacts', snap);
     if (snap.lastMsgAt >= (fresh.lastMsgAt || 0)) { fresh.lastMsg = snap.lastMsg; fresh.lastMsgAt = snap.lastMsgAt; if (snap.lastMsgSender !== undefined) fresh.lastMsgSender = snap.lastMsgSender; }
+    if (snap.sigPub && !fresh.sigPub) fresh.sigPub = snap.sigPub; // TOFU pin set during this receive must survive the merge
     if (unreadInc) fresh.unread = (fresh.unread || 0) + 1;
     await dbPut('contacts', fresh);
   }
