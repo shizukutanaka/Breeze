@@ -10290,11 +10290,13 @@ async function initMessenger(dbName) {
           // Reject oversized emoji strings (DoS/storage guard — legitimate emoji ≤ ~30 UTF-16 chars)
           if (stored && stored.contactId === contactId && typeof signal.emoji === 'string' && signal.emoji.length <= 64) {
             if (!stored.reactions) stored.reactions = {};
-            if (!stored.reactions[signal.emoji]) stored.reactions[signal.emoji] = [];
+            // Same caps as the group path (≤20 unique emoji, ≤100 reactors) — repeated
+            // signals with distinct emoji would otherwise grow the record unboundedly.
+            if (!stored.reactions[signal.emoji] && Object.keys(stored.reactions).length < 20) stored.reactions[signal.emoji] = [];
             // Use the verified sender identity from decryption, not the self-reported signal.userId
             const reactorId = contact.id;
-            if (signal.add) { if (!stored.reactions[signal.emoji].includes(reactorId)) stored.reactions[signal.emoji].push(reactorId); }
-            else { stored.reactions[signal.emoji] = stored.reactions[signal.emoji].filter(u => u !== reactorId); if (stored.reactions[signal.emoji].length === 0) delete stored.reactions[signal.emoji]; }
+            if (signal.add) { if (!stored.reactions[signal.emoji]?.includes(reactorId) && (stored.reactions[signal.emoji]?.length ?? 100) < 100) stored.reactions[signal.emoji].push(reactorId); }
+            else if (stored.reactions[signal.emoji]) { stored.reactions[signal.emoji] = stored.reactions[signal.emoji].filter(u => u !== reactorId); if (stored.reactions[signal.emoji].length === 0) delete stored.reactions[signal.emoji]; }
             await dbPut('messages', stored);
             const el = document.querySelector(`[data-msgid="${_smId}"]`);
             if (el) {

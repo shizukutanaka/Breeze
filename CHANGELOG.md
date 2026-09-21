@@ -1,3 +1,13 @@
+## 1:1 relayed reactions get the same caps the group path already had (branch devin/reaction-caps-1to1, 2026-09-21)
+
+The encrypted `isSignal` reaction handler on the 1:1 path created `reactions[emoji]`
+unconditionally and pushed without a bound — the group branch caps at 20 unique emoji
+and 100 reactors per emoji, but the 1:1 branch had neither: a contact could inflate a
+message record unboundedly by sending thousands of distinct ≤64-char emoji signals
+(IDB bloat + render cost on every open). The remove branch also indexed a possibly-absent
+key (`undefined.filter` → throw, caught only by the outer catch). Both halves now match
+the group path's guards verbatim.
+
 ## Relay-rollback hardening on signed stored state (branch devin/signed-state-monotonic, 2026-09-21)
 
 Every signed-state endpoint checked the signature's freshness (±5min `REQ_TS`) but nothing ordered two *in-window* writes — a relay that captures a signed request can replay it moments after a newer one lands and silently roll the state back. KV has no compare-and-swap, so the stored signed timestamp is now the high-water mark on both write paths:
