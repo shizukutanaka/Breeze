@@ -1,3 +1,12 @@
+## Acks stamp the closest bubble, not the first inside the window (branch devin/ack-closest-match, 2026-09-21)
+
+`updateMsgStatus` matched `Date.parse(title)` within 5s and `break`ed on the FIRST
+`.msg.me` — DOM order is oldest-first, so a burst of sends packed into one window
+got the newest message's 'delivered' ack stamped on the oldest pending bubble (and
+vice-versa for 'read'). Same first-in-window bug in the IDB pass. Both now pick the
+minimum-|Δts| candidate; the IDB pass also prefers un-acked rows so a second ack for
+a distinct message doesn't no-op on the first.
+
 ## Relay-rollback hardening on signed stored state (branch devin/signed-state-monotonic, 2026-09-21)
 
 Every signed-state endpoint checked the signature's freshness (±5min `REQ_TS`) but nothing ordered two *in-window* writes — a relay that captures a signed request can replay it moments after a newer one lands and silently roll the state back. KV has no compare-and-swap, so the stored signed timestamp is now the high-water mark on both write paths:

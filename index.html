@@ -7337,33 +7337,39 @@ async function initMessenger(dbName) {
       // iterating to the first .msg.me and breaking unconditionally landed every ack on
       // the OLDEST pending message instead of the one that was acked.
       const msgs = (contactId && activeContact?.id !== contactId) ? [] : box.querySelectorAll('.msg.me');
+      // Closest timestamp wins — a send burst packs several bubbles inside the 5s
+      // window and first-match would stamp the oldest with the newest's ack.
+      let bestEl = null, bestD = 5 * MS.SEC + 1;
       for (const msg of msgs) {
         const statusEl = msg.querySelector('.msg-status');
-        if (!statusEl) continue;
         const tsEl = msg.querySelector('.ts');
-        if (!tsEl) continue;
-        // Match by timestamp proximity (within 5s)
-        const msgTitle = tsEl.getAttribute('title') || '';
-        const msgTs = Date.parse(msgTitle);
-        if (Number.isFinite(msgTs) && Math.abs(msgTs - ts) > 5 * MS.SEC) continue;
-        if (status === 'delivered' && statusEl.classList.contains('sent')) {
-          statusEl.classList.remove('sent');
-          statusEl.classList.add('delivered');
-          statusEl.textContent = '✓✓';
-        } else if (status === 'read' && !statusEl.classList.contains('read')) {
-          statusEl.classList.remove('sent', 'delivered');
-          statusEl.classList.add('read');
-          statusEl.textContent = '✓✓';
+        if (!statusEl || !tsEl) continue;
+        const d = Math.abs(Date.parse(tsEl.getAttribute('title') || '') - ts);
+        if (d < bestD) { bestD = d; bestEl = statusEl; }
+      }
+      if (bestEl) {
+        if (status === 'delivered' && bestEl.classList.contains('sent')) {
+          bestEl.classList.remove('sent');
+          bestEl.classList.add('delivered');
+          bestEl.textContent = '✓✓';
+        } else if (status === 'read' && !bestEl.classList.contains('read')) {
+          bestEl.classList.remove('sent', 'delivered');
+          bestEl.classList.add('read');
+          bestEl.textContent = '✓✓';
         }
-        break; // Only update the most recent matching message
       }
       // Also update in IDB — bound to the ack's conversation, not whatever
       // happens to be open when the relay response lands.
       const cid = contactId || activeContact?.id;
       if (cid && typeof dbGetByIndex === 'function') {
         dbGetByIndex('messages', 'contact', cid).then(msgs => {
-          const m = msgs.find(x => x.mine && Math.abs((x.ts || 0) - ts) < 5 * MS.SEC);
-          if (m) { m.ack = true; dbPut('messages', m); }
+          let best = null, bd = 5 * MS.SEC + 1;
+          for (const x of msgs) {
+            if (!x.mine || x.ack) continue;
+            const d = Math.abs((x.ts || 0) - ts);
+            if (d < bd) { bd = d; best = x; }
+          }
+          if (best) { best.ack = true; dbPut('messages', best); }
         }).catch(e => _dbg(e, 'status-update'));
       }
     } catch(e) { _dbg(e, 'updateMsgStatus'); }
