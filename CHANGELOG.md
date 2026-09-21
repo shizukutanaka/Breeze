@@ -1,5 +1,13 @@
 # Changelog
 
+## Read receipts marked every sent bubble read + readAt was never persisted (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Two paired defects on the receipt path: `showReadReceipt` stamped 'read' on **every** `.msg.me` bubble regardless of the receipt's timestamp — a receipt for message A also marked B sent minutes later (a peer could also send a receipt with a far-future ts to retroactively mark things read, though receipts carry no proof either way). Now only bubbles with `dataset.ts <=` the receipt ts update, matching the watermark semantics the field claims. And `meta.readAt` was read at render for the "Read: <time>" tooltip but **nothing ever wrote it** — dead field, dead tooltip; the DOM ticks were also transient since nothing persisted. Receipts now write `readAt` to the affected sent records so the tooltip works and state survives reload.
+
+---
+
 ## Blocking a contact never actually severed the link (branch devin/consolidate-groups, 2026-09-21)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).

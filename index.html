@@ -11252,10 +11252,22 @@ async function initMessenger(dbName) {
     _lastReadTs[contactId] = ts;
     clearTimeout(showReadReceipt._saveTimer);
     showReadReceipt._saveTimer = setTimeout(() => dbPut('identity', _lastReadTs, 'readTs'), MS.SEC);
+    // Persist readAt so the "Read: <time>" tooltip survives reload — the
+    // DOM pass below is transient. Receipt ts = the read watermark.
+    if (typeof dbGetByIndex === 'function') {
+      dbGetByIndex('messages', 'contact', contactId).then(msgs => {
+        for (const m of msgs) {
+          if (m.mine && !m.readAt && m.ts <= ts) { m.readAt = ts; dbPut('messages', m); }
+        }
+      }).catch(e => _dbg(e, 'readAt-persist'));
+    }
     if (activeContact?.id !== contactId) return;
-    // v3.5: Update msg-status spans to 'read' (blue ✓✓)
+    // v3.5: Update msg-status spans to 'read' (blue ✓✓) — only messages sent
+    // at-or-before the receipt ts; later bubbles stay 'sent/delivered'.
     const box = _DOM.get('msg-messages');
     box.querySelectorAll('.msg.me .msg-status:not(.read)').forEach(el => {
+      const msgTs = parseInt(el.closest('.msg')?.dataset.ts || '0');
+      if (msgTs > ts) return;
       el.className = 'msg-status read';
       el.textContent = '✓✓';
     });
