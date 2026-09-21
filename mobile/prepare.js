@@ -30,6 +30,15 @@ const ASSETS = [
   ['404.html',      '404.html',      false],
 ];
 
+// locales/*.json are fetched at boot by _loadLocale() in index.html — without them the
+// packaged app silently falls back to English for every non-EN device. Enumerate rather
+// than hardcode so adding a locale file never requires a second edit here.
+try {
+  for (const f of fs.readdirSync(path.join(ROOT, 'locales'))) {
+    if (f.endsWith('.json')) ASSETS.push([`locales/${f}`, `locales/${f}`, true]);
+  }
+} catch { console.warn('  ⚠ locales/ not found — packaged app will be English-only'); }
+
 // ── Validate ────────────────────────────────────────────────
 let errors = 0;
 for (const [src, , required] of ASSETS) {
