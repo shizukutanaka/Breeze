@@ -1,5 +1,13 @@
 # Changelog
 
+## Stale call notifications rang for dead calls (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The `isCall` notification rides the persistent relay inbox (week-long TTL) while `call-end` lives only in the `call:` room (5-min TTL). A call placed while the recipient was offline stayed queued; when they opened the app hours later the phone rang for a call that ended long ago — a ghost ring with no caller behind it. The incoming-call path now drops notifications older than 2 minutes.
+
+---
+
 ## Blocked contacts could still be called (branch devin/consolidate-groups, 2026-09-21)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).

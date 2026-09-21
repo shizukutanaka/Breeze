@@ -9819,6 +9819,11 @@ async function initMessenger(dbName) {
     }
     // === Incoming call notification ===
     if (msg.isCall) {
+      // A call notification persists in the sealed inbox long after the caller
+      // hung up (call-end lives only 5min in the call: room, the isCall msg
+      // lives for the relay TTL). Without an age bound, opening the app hours
+      // later rings for a dead call — a ghost ring with no caller behind it.
+      if (!msg.ts || Date.now() - msg.ts > 2 * MS.MIN) return;
       const contact = await dbGet('contacts', msg.from);
       if (!contact) return;
       const room = 'call:' + [myId, contact.id].sort().join(':');
