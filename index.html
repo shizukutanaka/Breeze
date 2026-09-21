@@ -5819,12 +5819,11 @@ async function initMessenger(dbName) {
       // share a contact by public key. Messages were already persisted to _outboxKey.
       _outbox.clear();
       Object.values(peers).forEach(p => {
-        if (p._healthTimer) clearInterval(p._healthTimer);
-        // Leak fix: pc.close() does NOT fire connectionstatechange (per spec), so the
-        // state-change handler that normally clears _heartbeat never runs on teardown.
-        // Clear it here too — otherwise every peer's heartbeat interval keeps firing
-        // against a closed channel after an account switch, pinning the old peer object.
-        if (p._heartbeat) clearInterval(p._heartbeat);
+        // pc.close() does NOT fire connectionstatechange (per spec), so the CLOSED
+        // transition — which clears _healthTimer/_heartbeat/_sigPoll and releases the
+        // handler closures — must run manually or the intervals keep firing against a
+        // dead peer after teardown.
+        try { p.transition('CLOSED'); } catch(e) { _dbg(e); }
         try { p.pc?.close(); } catch(e) { _dbg(e); }
       });
       // Clear stale peer entries: connectPeer guards on peers[pubB64]?.pc to avoid
@@ -6580,7 +6579,7 @@ async function initMessenger(dbName) {
             _DOM.get('msg-conv-name').textContent = t('uiSelectContact');
             _DOM.get('msg-input-bar').classList.add('hidden');
           }
-          if (peers[c.pubB64]) { if (peers[c.pubB64]._healthTimer) clearInterval(peers[c.pubB64]._healthTimer); peers[c.pubB64].pc?.close(); delete peers[c.pubB64]; }
+          if (peers[c.pubB64]) { try { peers[c.pubB64].transition('CLOSED'); } catch(e) { _dbg(e); } peers[c.pubB64].pc?.close(); delete peers[c.pubB64]; }
           renderContacts();
         } else if (action === 'safety') {
           showSafetyNumber(c);
@@ -6592,7 +6591,7 @@ async function initMessenger(dbName) {
           c.blocked = !c.blocked;
           await dbPut('contacts', c);
           auditLog('contact', (c.blocked ? 'Blocked' : 'Unblocked') + ' ' + c.name, c.blocked ? 'warn' : 'info');
-          if (c.blocked && peers[c.pubB64]) { if (peers[c.pubB64]._healthTimer) clearInterval(peers[c.pubB64]._healthTimer); peers[c.pubB64].pc?.close(); delete peers[c.pubB64]; }
+          if (c.blocked && peers[c.pubB64]) { try { peers[c.pubB64].transition('CLOSED'); } catch(e) { _dbg(e); } peers[c.pubB64].pc?.close(); delete peers[c.pubB64]; }
           if (c.blocked && c.pubB64) { _outbox.delete(c.pubB64); _persistOutbox(); }
           renderContacts();
         } else if (action === 'vip') {

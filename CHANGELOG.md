@@ -1,5 +1,13 @@
 # Changelog
 
+## sig-poll/heartbeat intervals leaked on manual pc.close() teardown (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Per spec, `RTCPeerConnection.close()` does NOT fire `connectionstatechange`, so the CLOSED transition — which clears `_sigPoll`/`_heartbeat`/`_healthTimer` and releases the pc handler closures — never ran on the manual teardown paths: contact delete, block, and account switch. The sig-poll interval kept polling the dead peer's signaling room every 2s forever (and kept accepting that contact's typing/read signals into the UI — including a just-blocked peer). All three sites now run `peerState.transition('CLOSED')` before `pc.close()`.
+
+---
+
 ## Dead OGP feature removed — config + stale comments (branch devin/consolidate-groups, 2026-09-21)
 
 `index.html`, `_worker.js`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
