@@ -7244,13 +7244,13 @@ async function initMessenger(dbName) {
     d.oncontextmenu = (e) => {
       e.preventDefault();
       haptic.tap();
-      showMsgMenu(d, { msgId: d.dataset.msgid, text, isMine, ts, contactId: activeContact?.id });
+      showMsgMenu(d, { msgId: d.dataset.msgid, text, isMine, ts, contactId: activeContact?.id, noFwd: !!d.querySelector('.msg-file, .msg-img, .msg-voice') });
     };
     let _lpt = null;
     let _swipeStartX = 0, _swipeDx = 0, _swiping = false;
     d.addEventListener('touchstart', (e) => {
       _swipeStartX = e.touches[0].clientX; _swipeDx = 0; _swiping = false;
-      _lpt = setTimeout(() => { _lpt = null; haptic.tap(); showMsgMenu(d, { msgId: d.dataset.msgid, text, isMine, ts, contactId: activeContact?.id }); }, CONFIG.LONG_PRESS_MS);
+      _lpt = setTimeout(() => { _lpt = null; haptic.tap(); showMsgMenu(d, { msgId: d.dataset.msgid, text, isMine, ts, contactId: activeContact?.id, noFwd: !!d.querySelector('.msg-file, .msg-img, .msg-voice') }); }, CONFIG.LONG_PRESS_MS);
     }, { passive: true });
     d.addEventListener('touchmove', (e) => {
       if (_lpt) { clearTimeout(_lpt); _lpt = null; }
@@ -7540,7 +7540,9 @@ async function initMessenger(dbName) {
       msg.text ? [t('copy'), async () => { try { await navigator.clipboard.writeText(msg.text); showToast(t('toastCopied'), 'success'); } catch { showToast(t('toastCopyFail'), 'error'); } }] : null,
       msg.isMine ? [t('edit'), () => startEdit(msg)] : null,
       msg.isMine ? [t('delete'), () => deleteMsg(msg), true] : null,
-      [t('forward'), () => forwardMsg(msg)],
+      // File/voice bubbles carry bytes the forward path can't re-attach — it would send
+      // the recipient a bare '📎 name' / 'Voice message' stub. Hide rather than fake it.
+      msg.noFwd ? null : [t('forward'), () => forwardMsg(msg)],
       [t('pin'), () => pinMsg(msg)],
       [t('bookmark'), () => bookmarkMsg(msg)],
       [t('select'), () => enterSelectMode(el)],
@@ -7790,9 +7792,10 @@ async function initMessenger(dbName) {
             const groupCt = await encryptGroupMsg(target.id, msg.text);
             if (!groupCt) { _dbg(null, 'group encrypt failed for forward'); continue; }
             await dbPut('messages', { msgId: myId + ':' + ts, contactId: target.id, text: msg.text, mine: true, ts, forwarded: true });
-            target.lastMsg = msg.text.slice(0, 40);
-            target.lastMsgAt = ts;
-            await dbPut('contacts', target);
+            // Read-mutate-write: `target` was fetched before the picker waited — a
+            // verbatim dbPut rewinds any unread/lastMsg that arrived meanwhile.
+            const fg = await dbGet('contacts', target.id);
+            if (fg) { fg.lastMsg = msg.text.slice(0, 40); fg.lastMsgAt = ts; await dbPut('contacts', fg); }
             await Promise.allSettled(members.map(async (m) => {
               try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId: target.id, groupName: target.name, isGroupSK: true }, m.pubB64, target.id); } catch(e) { _dbg(e); }
             }));
@@ -7803,9 +7806,8 @@ async function initMessenger(dbName) {
           const encrypted = await encryptFor(msg.text, target.pubB64);
           if (!encrypted) { _dbg(null, 'encrypt failed for forward'); continue; }
           await dbPut('messages', { msgId: myId + ':' + ts, contactId: target.id, text: msg.text, mine: true, ts, forwarded: true });
-          target.lastMsg = msg.text.slice(0, 40);
-          target.lastMsgAt = ts;
-          await dbPut('contacts', target);
+          const fc = await dbGet('contacts', target.id);
+          if (fc) { fc.lastMsg = msg.text.slice(0, 40); fc.lastMsgAt = ts; await dbPut('contacts', fc); }
           await relaySend(target.id, { to: target.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts }, target.pubB64);
           sent++;
         } catch(e) { _dbg(e, 'forward'); }

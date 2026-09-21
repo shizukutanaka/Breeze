@@ -1,3 +1,13 @@
+## forwardMsg: attachment stubs + stale contact snapshot (branch devin/forward-fixes, 2026-09-21)
+
+Two correctness bugs in the forward flow: (1) file/image/voice bubbles forwarded
+only their text stub ('📎 name' / 'Voice message') — the recipient got a broken
+message with no bytes; the context menu now hides Forward on attachment bubbles
+(polls forward fine — their JSON text renders as a working card). (2) The picked
+target contact was a pre-picker snapshot written back verbatim — a dbPut that
+rewound unread/lastMsg for anything that arrived while the picker was open. Both
+send branches now read-mutate-write the fresh record.
+
 ## 1:1 relayed reactions get the same caps the group path already had (branch devin/reaction-caps-1to1, 2026-09-21)
 
 The encrypted `isSignal` reaction handler on the 1:1 path created `reactions[emoji]`
