@@ -1,5 +1,13 @@
 # Changelog
 
+## Announce-only gate only covered the text path (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`sendMessage` gates announce-only groups on the send side — but `createPoll`, `_sendFile`, and voice memos never checked. A non-admin tapping 📊/📎/🎤 in an announce-only group got a locally-stored message fanned out through the sender-key channel that every receiver then dropped (`group.announceOnly && !privileged → return`) — the send-into-the-void shape: your client shows it, nobody ever sees it. All three paths now gate at entry (voice at record-start, since `_recContact` pins the target there).
+
+---
+
 ## sendMessage TOCTOU — a mid-flight contact switch sent to the wrong recipient (branch devin/consolidate-groups, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
