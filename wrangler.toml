@@ -42,16 +42,23 @@ id = ""  # ← REQUIRED: paste your KV namespace ID here
 # wrangler pages secret put MIN_POW_DIFFICULTY         # Server-side PoW acceptance floor for
 #                                                       # @alias registration
 #
-# --- Auth hardening (recommended — off by default for zero-config self-hosting) ---
+# --- Auth hardening ---
 # Every registered client already signs the actions below with its Ed25519 identity key;
-# these flags just tell the Worker to REJECT a request that omits/fails that signature
-# instead of silently accepting it. Safe to enable once you're not also serving pre-upgrade
-# clients that predate this signing (check CHANGELOG.md for when each call started signing).
+# these flags tell the Worker to REJECT a request that omits/fails that signature
+# instead of silently accepting it.
+#
+# MSG_REQUIRE_AUTH and SEALED_REQUIRE_AUTH are DEFAULT-ON: unsigned /msg/poll is
+# destructive (a future lastTs purges an undelivered inbox) and unsigned sealed/ack
+# blind-deletes a sealed queue, so both reject unsigned callers unless you explicitly
+# opt out by setting the secret to "false" (only needed while serving pre-signing
+# clients — check CHANGELOG.md for when each call started signing).
+# wrangler pages secret put MSG_REQUIRE_AUTH           # "false" — re-allow unsigned /msg/poll
+# wrangler pages secret put SEALED_REQUIRE_AUTH        # "false" — re-allow unsigned sealed/poll + sealed/ack
+#
+# The remaining flags stay opt-in for zero-config self-hosting; set to "true" to enforce.
 # wrangler pages secret put PRESENCE_REQUIRE_AUTH      # true — reject unsigned presence writes
 # wrangler pages secret put ALIAS_REQUIRE_AUTH         # true — reject unsigned @alias registration
 # wrangler pages secret put GROUP_REQUIRE_AUTH         # true — reject unsigned group kick/rename/admin/leave/delete/transfer
 # wrangler pages secret put PUSH_REQUIRE_AUTH          # true — reject unsigned push subscribe/unsubscribe
 # wrangler pages secret put TURN_REQUIRE_AUTH          # true — reject unsigned TURN credential requests
 # wrangler pages secret put BACKUP_REQUIRE_AUTH        # true — without this, knowing a userId is enough to download that user's encrypted backup blob
-# wrangler pages secret put SEALED_REQUIRE_AUTH        # true — reject unsigned sealed/poll + sealed/ack (unsigned, a known userId can read queue metadata and delete the whole queue)
-# wrangler pages secret put MSG_REQUIRE_AUTH           # true — reject unsigned /msg/poll (unsigned, a future lastTs purges the victim's undelivered inbox)

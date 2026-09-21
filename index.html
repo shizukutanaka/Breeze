@@ -4528,6 +4528,7 @@ async function initMessenger(dbName) {
     if (CONFIG.X3DH_V5_ENABLED) caps.push(CAPS_X3DH_V5);
     if (CONFIG.GROUP_RATCHET_V5) caps.push(CAPS_GROUP_V5);
     if (CONFIG.SEAL_V2_ENABLED) caps.push(CAPS_SEAL_V2);
+    caps.push(CAPS_DM_SIG); // unconditional — this build can always unseal dm signals
     if (caps.length) body.caps = caps;
     return body;
   }
@@ -4698,6 +4699,7 @@ async function initMessenger(dbName) {
   // verifyEd25519 verifies the base64 STRING, so this uses signMessage/verifySignature.
   const CAPS_X3DH_V5 = 'x3dh-v5';
   const CAPS_SEAL_V2 = 'seal-v2';
+  const CAPS_DM_SIG = 'dm-sig-v1'; // peer can unseal dm:-room signal envelopes
 
   function _parsePeerCaps(bundle) {
     if (!bundle) return [];
@@ -5334,17 +5336,20 @@ async function initMessenger(dbName) {
   // seal-v2 (version rollback, identity re-registration) receives sealed envelopes it
   // ack+skips until the cache expires, so keep the window as short as the other caches.
   // Any failure answers "no" — the message still delivers, just legacy-shaped.
-  const _sealCapsCache = new Map();
-  async function _peerSealV2(peerId) {
+  const _peerCapsCache = new Map();
+  async function _peerCaps(peerId) {
     try {
-      const c = _sealCapsCache.get(peerId);
-      if (c && Date.now() - c.ts < 5 * MS.MIN) return c.ok;
+      const c = _peerCapsCache.get(peerId);
+      if (c && Date.now() - c.ts < 5 * MS.MIN) return c.caps;
       const resp = await postAPIRaw('/prekey/status', { userId: peerId });
       const data = resp?.ok ? await resp.json() : null;
-      const ok = Array.isArray(data?.caps) && data.caps.includes(CAPS_SEAL_V2);
-      _sealCapsCache.set(peerId, { ok, ts: Date.now() });
-      return ok;
-    } catch { return false; }
+      const caps = Array.isArray(data?.caps) ? data.caps.filter(x => typeof x === 'string') : [];
+      _peerCapsCache.set(peerId, { caps, ts: Date.now() });
+      return caps;
+    } catch { return []; }
+  }
+  async function _peerSealV2(peerId) {
+    return (await _peerCaps(peerId)).includes(CAPS_SEAL_V2);
   }
 
   // ONE fan-out for every kind of outgoing content. Three near-identical copies of this loop
@@ -6173,10 +6178,52 @@ async function initMessenger(dbName) {
   }
 
   // ═══ DRY: Signal helper (13 calls → 1 helper) ═══
-  // _signal(room, type, data) — fire-and-forget POST to /signal
-  function _signal(room, type, data) {
+  // dm-sig-v1: seal dm:-room signal payloads (SDP/ICE/typing/read) to the peer's identity
+  // key. The /signal relay is unauthenticated and previously carried these in plaintext —
+  // anyone who knows both ids can read ICE candidates (which disclose both parties' IPs)
+  // and typing/read activity. Reuses the seal-v2 ECIES primitive (ephemeral X25519 →
+  // HKDF → AES-GCM); AAD binds room+ts so an envelope can't be spliced across rooms or
+  // replayed with a doctored timestamp. Sign-then-seal: the SDP's Ed25519 signature rides
+  // inside the ciphertext, so sender authenticity is unchanged. Capability-gated: peer
+  // must advertise 'dm-sig-v1' in prekey-bundle caps; legacy peers get plaintext (delivery
+  // over privacy — same documented trade-off as seal-v2). Wire shape: {room, sender,
+  // type:'enc', data:'{"enc":"dm-sig-v1","ts":..,"se":{ek,iv,ct}}'} — the inner plaintext
+  // is {t: type, d: data}, so even the signal TYPE is hidden from the relay.
+  async function _sealDmSignal(room, msg) {
+    try {
+      const peerId = room.replace(/^(?:dm|call):/, '').split(':').find(id => id !== myId);
+      if (!peerId) return null;
+      if (!(await _peerCaps(peerId)).includes(CAPS_DM_SIG)) return null;
+      const c = await dbGet('contacts', peerId).catch(() => null);
+      if (!c || !c.pubB64 || !_isValidPubB64(c.pubB64)) return null;
+      const ts = Date.now();
+      const se = await sealMeta(c.pubB64, { t: msg.type, d: String(msg.data ?? '') }, room, ts);
+      return se ? JSON.stringify({ enc: 'dm-sig-v1', ts, se }) : null;
+    } catch(e) { _dbg(e, 'dm-sig-seal'); return null; }
+  }
+  // Reverse of the above. Returns {t,d} on success, null on any failure — fail-closed:
+  // a sealed envelope that doesn't verify is dropped, never downgraded to plaintext.
+  async function _unsealDmSignal(room, dataStr) {
+    try {
+      if (typeof dataStr !== 'string' || !myKeys) return null;
+      const w = JSON.parse(dataStr);
+      if (!w || w.enc !== 'dm-sig-v1' || !w.se || typeof w.ts !== 'number' || !Number.isFinite(w.ts)) return null;
+      const pt = await unsealMeta(myKeys.privateKey, w.se, room, w.ts);
+      return (pt && typeof pt.t === 'string' && typeof pt.d === 'string') ? pt : null;
+    } catch(_e) { _dbg(_e, 'dm-sig-unseal'); return null; }
+  }
+
+  // _signal(room, type, data) — fire-and-forget POST to /signal. dm: and call: rooms
+  // are sealed when the peer advertises dm-sig-v1 (see _sealDmSignal); other rooms
+  // and legacy peers stay plaintext.
+  async function _signal(room, type, data) {
+    let wireType = type, wireData = data || '';
+    if (room.startsWith('dm:') || room.startsWith('call:')) {
+      const sealed = await _sealDmSignal(room, { type, data: wireData });
+      if (sealed) { wireType = 'enc'; wireData = sealed; }
+    }
     return fetchT(API + '/signal', { method: 'POST', headers: _H,
-      body: JSON.stringify({ room, sender: myId, type, data: data || '' })
+      body: JSON.stringify({ room, sender: myId, type: wireType, data: wireData })
     }).catch(e => _dbg(e, 'signal:' + type));
   }
   // _signalAwait — same but returns response for poll pattern
@@ -7858,12 +7905,9 @@ async function initMessenger(dbName) {
         } catch(e) { _dbg(e, 'encrypt-signal'); }
       })();
     }
-    // ICE signaling (pre-connection, unencrypted by necessity — only SDP/candidates)
-    if (API && !persistentTypes.includes(data.type) && data.type !== 'typing' && data.type !== 'read-receipt') {
-      fetchT(API + '/signal', { method: 'POST', headers: _H,
-        body: JSON.stringify({ room: 'dm:' + [myId, contact.id].sort().join(':'), sender: myId, ...data })
-      }).catch(e => _dbg(e));
-    }
+    // Note: no /signal fallback here — every caller uses persistentTypes, and dm-room
+    // signaling now goes through _signal (capability-sealed). A plaintext post that
+    // bypassed _signal would leak the metadata dm-sig-v1 exists to hide.
   }
 
   let _prevConnState = ''; // v3.6: Track for SR announcements
@@ -9188,6 +9232,20 @@ async function initMessenger(dbName) {
           // Defense-in-depth only: `sender` is attacker-controlled, so the real auth for
           // call-end comes from the decryptable wrap below when CALL_E2E_SIGNAL is on.
           if (s.sender !== contact.id) continue;
+          // dm-sig-v1: unseal {type:'enc'} envelopes (same sealing as dm: rooms) —
+          // fails closed, a forged or malformed envelope is dropped not downgraded.
+          let wasSealed = false;
+          if (s.type === 'enc') {
+            const inner = await _unsealDmSignal(room, s.data);
+            if (!inner) continue;
+            s.type = inner.t; s.data = inner.d; wasSealed = true;
+          }
+          // call-end carries no inner auth when CALL_E2E_SIGNAL is off — a forged plaintext
+          // one is a remote hang-up. Once the peer advertises dm-sig-v1 their real traffic
+          // is sealed, so a plaintext call-end claiming this sender is a fake. Bounded by
+          // the caps cache window (a capable peer's plaintext still lands while their view
+          // of MY caps is stale — rollout race, ≤5min).
+          if (!wasSealed && s.type === 'call-end' && !CONFIG.CALL_E2E_SIGNAL && (await _peerCaps(contact.id)).includes(CAPS_DM_SIG)) continue;
           if (s.type === 'call-answer' && _callPC && _callPC.signalingState === 'have-local-offer') {
             // Authenticate before setRemoteDescription: a forged answer (relay-injected,
             // carrying the attacker's DTLS fingerprint) fails to decrypt → null → dropped,
@@ -10753,6 +10811,23 @@ async function initMessenger(dbName) {
             // two sorted user ids — anyone who knows the pair can POST. Only accept signals
             // from the peer this poll was opened for (typing/read fakes + ICE injection).
             if (s.sender !== contact.id) continue;
+            // dm-sig-v1: sealed envelopes ride as {type:'enc', data:'{enc,ts,se}'} —
+            // unseal to recover the real {type,data}. Fails closed: a sealed envelope
+            // that doesn't verify is dropped, never processed as plaintext.
+            let wasSealed = false;
+            if (s.type === 'enc') {
+              const inner = await _unsealDmSignal(sigRoom, s.data);
+              if (!inner) continue;
+              s.type = inner.t; s.data = inner.d; wasSealed = true;
+            }
+            // Typing/read carry no inner signature, so a forged PLAINTEXT one is trivially
+            // injectable by anyone who knows the room pair. Once the peer advertises
+            // dm-sig-v1 their real traffic is sealed — a plaintext typing/read claiming
+            // this sender is a fake (fake "typing…" and fake read receipts are a social-
+            // engineering surface). Rollout race stays open: the check only fires when
+            // the peer's caps are KNOWN, so a capable peer's plaintext still lands while
+            // their view of MY caps is stale (≤5min cache window).
+            if (!wasSealed && (s.type === 'typing' || s.type === 'read') && (await _peerCaps(contact.id)).includes(CAPS_DM_SIG)) continue;
             // Typing/read indicators (works both pre- and post-P2P connection)
             if (s.type === 'typing') { showTyping(contact.id, s.senderName || contact.name); continue; }
             if (s.type === 'read') { showReadReceipt(contact.id, parseInt(s.data) || Date.now()); continue; }

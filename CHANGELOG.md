@@ -1,5 +1,50 @@
 # Changelog
 
+## Plaintext-signal forgery closed on upgraded peers (branch devin/consolidate-groups, 2026-09-20)
+
+typing/read and call-end carry no inner auth — anyone knowing a room pair could
+forge them. Once the peer's advertised caps include dm-sig-v1, plaintext copies
+claiming that sender are dropped (wasSealed-gated so sealed envelopes restore
+correctly). Bounded by the caps-cache window so the rollout race still works.
+
+
+## dm-sig-v1 covers call: rooms too (branch devin/consolidate-groups, 2026-09-20)
+
+`call:<idA>:<idB>` rooms use the same sorted-id derivation as dm: rooms, so the
+dm-sig-v1 seal extends to call-offer/answer/ice/end with no new machinery —
+call-ICE candidates (IP disclosure) and call activity are now hidden when both
+ends upgrade. pollCallSignals unseals `type:'enc'` envelopes with the same
+fail-closed rule. Note the layer split: sealing is confidentiality-only (anyone
+can encrypt to a public key); `_wrapCallSignal`'s ratchet wrap remains the
+authenticity layer (still CONFIG.CALL_E2E_SIGNAL-gated — needs a session).
+
+
+## dm-sig-v1: sealed data-channel signaling (branch devin/consolidate-groups, 2026-09-20)
+
+Delegated wire-compat decision (おまかせ): `dm:<idA>:<idB>` rooms carried SDP/ICE/
+typing/read in signed-but-plaintext JSON — anyone knowing both ids could read ICE
+candidates (both IPs) and activity. Now, when the peer advertises `dm-sig-v1` in
+prekey-bundle caps, `_signal` seals `{type,data}` to the peer's identity key via
+the seal-v2 ECIES primitive and posts an opaque `{type:'enc'}` envelope — the
+relay sees only that a signal passed, not which kind. Sign-then-seal: the Ed25519
+SDP signature rides inside the ciphertext. Peer without the cap → legacy
+plaintext (delivery over privacy, same trade-off as seal-v2). `_peerCaps` now
+caches the whole caps array (was seal-v2-only). Tripwire tests pin the
+advertisement, the enc dispatch, and sign-then-seal ordering.
+
+
+## Owner-enforced relay queues by default (branch devin/consolidate-groups, 2026-09-20)
+
+Delegated wire-compat decision (user chose おまかせ): unsigned `/msg/poll` was
+destructive — a future `lastTs` purges a victim's undelivered inbox — and unsigned
+`/sealed/ack` blind-deletes a sealed queue. Every current client already attaches
+the `breeze-<op>:<id>:<ts>` Ed25519 signature via `_ownerAuth`, so `checkOwnerAuth`
+now enforces unless `MSG_REQUIRE_AUTH` / `SEALED_REQUIRE_AUTH` are explicitly set
+to `"false"` (opt-out for operators serving pre-signing clients). Docs updated
+(wrangler.toml, .env.example, SECURITY.md); tests pin flag-unset → 403 and
+explicit-false → compat.
+
+
 ## /admin unban — kicks were permanent bans with no way back (branch devin/consolidate-groups, 2026-09-20)
 
 Kick records a durable ban server-side (banned[] survives rejoin attempts) — but the

@@ -64,6 +64,46 @@ describe('SDP signature verification', () => {
   });
 });
 
+describe('dm-sig-v1 sealed signaling (dm: room confidentiality)', () => {
+  // The /signal relay is unauthenticated and rooms are named dm:<idA>:<idB> — anyone
+  // knowing both ids could read ICE candidates (both parties' IPs) and typing/read
+  // activity. dm-sig-v1 seals payloads to the peer's identity key (seal-v2 ECIES),
+  // sign-then-seal so the inner Ed25519 SDP signature still proves authorship.
+  it('advertises the capability so peers know to seal', () => {
+    expect(html).toContain("CAPS_DM_SIG = 'dm-sig-v1'");
+    expect(html).toContain('caps.push(CAPS_DM_SIG)');
+  });
+  it('_signal seals dm: and call: rooms — other rooms stay plaintext', () => {
+    expect(html).toContain("room.startsWith('dm:') || room.startsWith('call:')");
+    expect(html).toContain('_sealDmSignal(room, { type, data: wireData })');
+    expect(html).toContain("wireType = 'enc'");
+    // Both receive loops unseal enc envelopes — dm signals in the P2P poll, call signals in pollCallSignals
+    expect(html).toContain('_unsealDmSignal(sigRoom, s.data)');
+    expect(html).toContain('_unsealDmSignal(room, s.data)');
+  });
+  it('sender gates on the PEER caps and fails to plaintext, receiver fails closed', () => {
+    expect(html).toContain('(await _peerCaps(peerId)).includes(CAPS_DM_SIG)');
+    expect(html).toContain('_unsealDmSignal(sigRoom, s.data)');
+    expect(html).toContain("w.enc !== 'dm-sig-v1'");
+  });
+  it('unsigned-type plaintexts are rejected once the peer is known-capable', () => {
+    // typing/read + call-end carry no inner auth — a capable peer's real traffic is
+    // sealed, so plaintext copies are forged. `wasSealed` must gate them or sealed
+    // envelopes get dropped after restore.
+    expect(html).toContain("!wasSealed && (s.type === 'typing' || s.type === 'read')");
+    expect(html).toContain("!wasSealed && s.type === 'call-end'");
+    expect(html).toContain('wasSealed = true');
+  });
+  it('seal is sign-then-seal: SDP signature rides INSIDE the ciphertext', () => {
+    // The {sdp,sig,sigPub} wrapper is produced before _signal seals the payload —
+    // verify the receiver unseals BEFORE the signature check runs.
+    const unsealAt = html.indexOf('_unsealDmSignal(sigRoom, s.data)');
+    const verifyAt = html.indexOf('verifySignature(wrapper.sdp');
+    expect(unsealAt).toBeGreaterThan(-1);
+    expect(verifyAt).toBeGreaterThan(unsealAt);
+  });
+});
+
 describe('group trust boundaries', () => {
   it('group_kick notices require the sender to be creator/admin', () => {
     expect(html).toContain('group.createdBy === senderId || (group.admins || []).includes(senderId)');

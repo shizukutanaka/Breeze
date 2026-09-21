@@ -174,8 +174,9 @@ store) rather than gated — an opt-in toggle leaves the contradiction one peer 
   whenever any peer/member is un-upgraded, so first contact is authenticated and group messages
   are forward-secret without breaking older clients. Still opt-in: at-rest key wrapping (needs a
   user passphrase, `/keywrap`) and call-signaling E2E (`CALL_E2E_SIGNAL` has no capability
-  negotiation yet, so enabling it requires both ends). Worker-side `*_REQUIRE_AUTH` flags remain
-  operator choices — see `wrangler.toml`.
+  negotiation yet, so enabling it requires both ends). Of the Worker-side `*_REQUIRE_AUTH`
+  flags, `MSG_REQUIRE_AUTH`/`SEALED_REQUIRE_AUTH` are on by default (opt out with `=false`);
+  the rest remain operator choices — see `wrangler.toml`.
 - **@alias resolution** is answered by the relay, which returns an unsigned `{pub}`. Since
   v3.6.1 an alias add runs the key-transparency audit first: a **tampered** hash chain blocks the
   add outright, a **rolled** key warns. This detects a relay rewriting key *history*; it cannot
@@ -193,30 +194,42 @@ store) rather than gated — an opt-in toggle leaves the contradiction one peer 
   (removed v3.7): the endpoint is unauthenticated, so anyone holding a 12-character user id
   could read the chosen name of the person behind it. Online-status itself remains visible to
   anyone who knows an id — reduce exposure by not sharing your id publicly.
-- **Id-keyed queues are owner-signable, not owner-enforced by default.** `/msg/poll`,
-  `/sealed/poll` and `/sealed/ack` accept a bare `userId` — and a poll is *destructive*
-  (a future `lastTs` purges an inbox older than the multi-tab grace; an ack blind-deletes
-  the sealed queue). Unsigned, a known userId was enough to read queue metadata or wipe a
-  stranger's pending mail. The client now attaches an Ed25519 ownership signature
-  (`breeze-<op>:<id>:<ts>`, verified-when-present — same pattern as group ops), and an
-  operator can enforce it with `SEALED_REQUIRE_AUTH` / `MSG_REQUIRE_AUTH` once deployed
-  clients all sign. Until the flags are on, treat this surface as the presence caveat
-  above: known-id readable, and destructive-without-auth by design pending rollout.
+- **Id-keyed queues are owner-enforced by default.** `/msg/poll`, `/sealed/poll` and
+  `/sealed/ack` require an Ed25519 ownership signature (`breeze-<op>:<id>:<ts>`,
+  verified against the registered `prekey:{id}` bundle — same pattern as group ops)
+  because an unsigned call is *destructive*: a future `lastTs` purges an inbox older
+  than the multi-tab grace, and an ack blind-deletes the sealed queue. Every current
+  client already signs, so enforcement is on unless an operator explicitly sets
+  `SEALED_REQUIRE_AUTH=false` / `MSG_REQUIRE_AUTH=false` to keep serving pre-signing
+  clients. An account that has not yet uploaded a prekey bundle has no key to verify
+  against and is treated as unsigned — polls then fail-closed until onboarding
+  completes its bundle upload (self-healing on the next retry).
 - **A sealed queue's retention is not shortened by polling.** Polls used to rewrite the
   queue with a 5-minute "grace" TTL — a week of retention collapsed to 5 minutes on every
   poll, so going offline >5 min right after polling silently expired unprocessed mail.
   Polls no longer rewrite the queue; crash-recovery relies on the original TTL plus the
   high-water-mark + client dedup instead.
-- **Data-channel signaling is authenticated, not confidential.** 1:1 P2P negotiation posts
-  `offer`/`answer`/`ice` to the unauthenticated `dm:<idA>:<idB>` room as signed-but-plaintext
-  JSON — anyone who knows both ids (e.g. a shared group co-member) can poll the room and
-  read ICE candidates, which disclose both parties' IP addresses, plus `typing`/`read`
-  activity. Authenticity is enforced (Ed25519-signed SDP, see `_sendSignedSDP`), so injection
-  is covered; the leak is metadata, not integrity. Calls are better: `call-*` signals go
-  through `_wrapCallSignal` ECIES when `CALL_E2E_SIGNAL` is enabled — but that flag is OFF by
-  default with no capability negotiation, so shipped builds send call signaling in cleartext
-  too. Encrypting data-channel signaling the same way breaks old clients' P2P setup (they
-  cannot parse a wrapped offer) and is a wire decision pending a capability bit.
+- **Data-channel signaling is authenticated AND confidential when both ends upgrade.**
+  1:1 P2P negotiation posts to the unauthenticated `dm:<idA>:<idB>` room, which anyone
+  who knows both ids (e.g. a shared group co-member) can poll. Since this round, posts
+  are sealed when the peer advertises `dm-sig-v1` in its prekey-bundle caps: the
+  `{type,data}` pair is ECIES-encrypted to the peer's identity key (the seal-v2
+  primitive) and rides as an opaque `{type:'enc'}` envelope — the relay sees only
+  that *some* signal passed between the pair, not which kind (ICE candidates, which
+  disclose both IPs, and typing/read activity are now inside the ciphertext).
+  Authenticity is layered the same as before: the Ed25519 SDP signature is produced
+  first and rides inside the sealed envelope (sign-then-seal), so the MITM-injection
+  defense is unchanged. A peer without the cap still gets legacy plaintext —
+  delivery over privacy, matching the seal-v2 trade-off. `call:` rooms are sorted-id
+  pairs like `dm:` rooms, so the same sealing covers call-offer/answer/ice/end —
+  call signaling (incl. call-ICE candidates) is confidential whenever both ends
+  upgrade. Two layers remain distinct: dm-sig seals *confidentiality* (anyone can
+  encrypt to a public key, so it does not authenticate the sender), while
+  `_wrapCallSignal`'s ratchet wrap is the *authenticity* layer — still gated by
+  `CALL_E2E_SIGNAL` (off by default: it needs an established ratchet session).
+  Without that flag a sealed call-end is still forgeable by anyone who knows the
+  pair and the callee's public key — same injection surface as before sealing
+  landed, now minus the metadata leak.
 - **An invite token is effectively group membership.** `/group/info` returns the full member
   list (ids, public keys, names) to any token holder without joining — but restricting that
   read would not help: `/group/join` accepts the same token with no signature and no approval,
