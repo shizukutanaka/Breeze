@@ -1,5 +1,13 @@
 # Changelog
 
+## File-type guard had a side door: drag-drop and paste skipped the magic-bytes check (branch devin/magic-bytes-coverage, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The magic-bytes executable check (MZ/ELF/Mach-O/shebang/…) ran only in the file-picker path. Drag-drop and paste checked the *extension* — trivially bypassed by renaming `evil.exe` to `photo.png`. Both now run `isBlockedMagicBytes` like the picker; the clipboard image path gets it too (MIME is self-asserted). Forwarding is text-only, so no resend hole exists.
+
+---
+
 ## /contacts import bypassed the ?add= key-shape gate — dead contacts could still be planted (branch devin/import-key-validation, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
