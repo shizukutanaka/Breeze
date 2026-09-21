@@ -24,6 +24,14 @@ Also fixed the E2E-found STT toast: `recognition.onerror` reported `toastServerE
 
 ---
 
+## I19 landed: relay-only by default when TURN is provisioned + STUN self-hosting (branch devin/i19-relay-only-default, 2026-09-20)
+
+vitest 822 → **825** (+3 worker tests); `index.html`, `_worker.js`, `wrangler.toml`, `.env.example`, `docs/SELF_HOSTING.md`, `docs/ROADMAP.md`, `CHANGELOG.md`, plus `_headers`/`tauri/src-tauri/tauri.conf.json` CSP-hash propagation.
+
+The srflx privacy leak (arXiv 2510.16168) — a peer learns your public IP from STUN-derived ICE candidates — had a full opt-in mitigation already wired (`_settings.relayOnly` → `iceTransportPolicy=relay` + candidate filtering) but defaulted off, so almost nobody got it. Now `fetchTurnCredentials` defaults relay-only **on** when `/api/turn` reports operator-provisioned TURN (`provider` ∈ cloudflare/custom/static). Two deliberate exclusions: the shared `openrelay` fallback (metered.ca free tier is not provisioned capacity — auto-relaying every user would drain it), and anyone who ever touched the toggle (`brz-relay-only` explicit 0/1 wins over the default).
+
+`STUN self-host` half: `/api/turn` now honors `STUN_URL` (comma-separated) to replace the hardcoded Google/Cloudflare/Mozilla list, and auto-derives a `stun:` entry from a plain `turn:` TURN_URL — coturn answers STUN on the same listener, so a self-hosted deployment no longer needs third-party STUN. `turns:` (TLS) is intentionally not derived — a TLS listener doesn't answer plain STUN.
+
 ## I7 landed: skipped message keys now expire by TTL in the deployed client (branch devin/i7-skip-key-ttl, 2026-09-20)
 
 vitest 819 → **822** (+3 guard tests); `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation), `tests/mirror-drift.test.js`, `docs/ROADMAP.md`, `CHANGELOG.md`.

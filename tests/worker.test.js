@@ -4192,6 +4192,30 @@ describe('TURN credentials', () => {
     expect(turnServer.credential).toBe('staticpass');
   });
 
+  it('STUN_URL replaces the public STUN list (self-hosting, comma-separated)', async () => {
+    const e = makeEnv({ STUN_URL: 'stun:stun.selfhost.example:3478, stun2.selfhost.example:3478' });
+    const res = await handleTurn({ userId: 'user00001' }, e, req({}));
+    const j = await res.json();
+    expect(j.iceServers.filter(s => (Array.isArray(s.urls) ? s.urls[0] : s.urls).startsWith('stun:')))
+      .toEqual([{ urls: 'stun:stun.selfhost.example:3478' }, { urls: 'stun:stun2.selfhost.example:3478' }]);
+  });
+
+  it('derives a self-hosted stun: entry from a plain turn: TURN_URL (coturn dual-role)', async () => {
+    const e = { ...makeEnv(), TURN_SECRET: 'supersecret', TURN_URL: 'turn:turn.example.com:3478' };
+    const res = await handleTurn({ userId: 'user00001' }, e, req({}));
+    const j = await res.json();
+    expect(j.iceServers.some(s => s.urls === 'stun:turn.example.com:3478')).toBe(true);
+    // and the public STUN list is still there (STUN_URL not set)
+    expect(j.iceServers.some(s => s.urls === 'stun:stun.cloudflare.com:3478')).toBe(true);
+  });
+
+  it('does NOT derive stun from turns: or strip-transport weirdly (TLS listener is not plain STUN)', async () => {
+    const e = { ...makeEnv(), TURN_URL: 'turns:t.example.com:443?transport=tcp', TURN_USERNAME: 'u', TURN_CREDENTIAL: 'c' };
+    const res = await handleTurn({ userId: 'user00001' }, e, req({}));
+    const j = await res.json();
+    expect(j.iceServers.some(s => typeof s.urls === 'string' && s.urls.includes('t.example.com') && s.urls.startsWith('stun:'))).toBe(false);
+  });
+
   it('TURN_REQUIRE_AUTH: rejects unregistered userId (no prekey)', async () => {
     const e = makeEnv({ TURN_REQUIRE_AUTH: 'true' });
     const res = await handleTurn({ userId: 'unreg00001' }, e, req({}));
