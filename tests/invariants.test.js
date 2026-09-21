@@ -70,6 +70,12 @@ describe('group trust boundaries', () => {
   it('group join seeds creatorId/admins from the join response', () => {
     expect(html).toContain("createdBy: typeof data.creatorId === 'string'");
   });
+  it('sender-key channel requires roster membership (non-member key-plant + inject)', () => {
+    // isSenderKey: reject keys from non-members when the group is known locally
+    expect(html).toContain('(g.members || []).some(m => m.id === msg.from');
+    // isGroupSK: same guard as the legacy per-member fallback
+    expect(html).toContain('if (!member && msg.from !== myId) return;');
+  });
 });
 
 describe('wire + storage invariants', () => {

@@ -9764,6 +9764,11 @@ async function initMessenger(dbName) {
         const skMsg = JSON.parse(decrypted);
         // v5 payloads carry `chainKey` not `key` — requiring skMsg.key would drop them all.
         if (skMsg.type === 'sender_key' && skMsg.groupId && (skMsg.key || skMsg.chainKey)) {
+          // If the group is known locally, the key distributor must be in my roster —
+          // a 1:1 contact who is not a member could otherwise plant their own sender
+          // key, then inject "group" messages that decrypt as if from a member.
+          const g = await dbGet('contacts', skMsg.groupId);
+          if (g && !(g.members || []).some(m => m.id === msg.from || m.id === (msg.from || '').slice(0, 12))) return;
           const peerKey = 'gsk-peer:' + skMsg.groupId + ':' + (msg.from || '').slice(0, 12);
           const existingPeerSK = await dbGet('identity', peerKey);
           // Monotonic epoch guard: don't let a replayed/stale message undo a kick rotation.
@@ -9946,6 +9951,9 @@ async function initMessenger(dbName) {
       let text;
       // v3.1: Try Sender Key decryption first (O(1)), fallback to per-member
       if (msg.isGroupSK) {
+        // Same membership guard as the legacy fallback — the sender-key channel is not
+        // exempt: a non-member contact can plant their own key via isSenderKey.
+        if (!member && msg.from !== myId) return;
         text = await decryptGroupMsg(msg.groupId, (msg.from || '').slice(0, 12), msg.payload);
       }
       if (!text) {

@@ -1,5 +1,13 @@
 # Changelog
 
+## Sender-key channel skipped the roster check — non-members could inject group messages (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `tests/invariants.test.js`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The `isGroupSK` receive path decrypted without verifying the sender was in the group roster — only the legacy per-member fallback enforced membership. Combined with `isSenderKey` accepting keys from any known contact (membership unchecked), a 1:1 contact who is NOT in a group could plant their own sender key for it, then inject "group" messages that decrypt as if from a member — bypassing announce-only enforcement along the way. Both paths now require roster membership; kicked/left members' injected keys are dead on arrival.
+
+---
+
 ## updateMsgStatus never actually matched the timestamp (branch devin/consolidate-groups, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
