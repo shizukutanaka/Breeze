@@ -10662,7 +10662,10 @@ async function initMessenger(dbName) {
             if (await dbGet('messages', gmsgId)) { _replayCache.add(gmsgId); return; }
             const group = (await dbGetAll('contacts')).find(c => c.id === msg.groupId);
             if (group) {
-              await handleIncoming({ from: msg.sender || contact.pubB64, fromPub: msg.sender || contact.pubB64,
+              // `from` must be the 12-char user id (relay-envelope shape), not the full
+              // pubB64 the wire carries — otherwise the member lookup, announceOnly
+              // gate, signal path and msgId dedup in handleIncoming all miss.
+              await handleIncoming({ from: (msg.sender || contact.pubB64 || '').slice(0, 12), fromPub: msg.sender || contact.pubB64,
                 fromName: msg.name || contact.name, payload: msg.payload, ts: msg.ts,
                 groupId: msg.groupId, groupName: msg.groupName, isGroupSK: msg.isGroupSK,
                 replyTo: msg.replyTo, disappearAt: msg.disappearAt });

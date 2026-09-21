@@ -1,3 +1,23 @@
+## P2P group messages now reach the member checks — `from` was a full pubB64, roster ids are 12 chars (branch devin/p2p-group-sender-id, 2026-09-21)
+
+The DataChannel `group_msg` handler forwarded `msg.sender` (a full pubB64) as
+`handleIncoming`'s `from`, but every group roster check compares against 12-char user
+ids. `member` therefore resolved to `undefined` on **every** P2P group delivery:
+
+- `isGroupSK`'s `!member && msg.from !== myId` guard returned early — the "P2P direct
+  (instant)" group path was dead code; only the sealed-relay copy ever rendered.
+- `announceOnly` enforcement (`group.announceOnly && member`) skipped entirely on P2P —
+  a non-admin member's direct-channel message would have been accepted had decryption
+  been reached.
+- Group `isSignal` (edit/delete/reaction/poll_vote) dropped at `if (!member) return` —
+  mutations silently never applied for P2P-connected peers.
+- Latent dedup divergence: P2P's fallback key `pub:ts` vs relay's `id:ts` — the two
+  copies of one message would have double-stored once the drop was fixed.
+
+The handler now slices `from` to the 12-char id at the boundary (matching the relay
+envelope's shape) — member lookup, announceOnly, signals and dedup all behave identically
+on both transports.
+
 ## Alias registrations now carry the ownership signature the worker already checked (branch devin/consolidate-groups, 2026-09-20)
 
 `/alias/set` has supported an Ed25519 ownership binding (`userId` + `ts` + `sig` over `breeze-alias-set:{alias}:{ts}`, verified against the registrant's prekey bundle with `identityKey === pub`) since the worker shipped it — but no client ever sent it, so a PoW-only request could point any unclaimed `@handle` at any public key. Both registration sites now sign: onboarding moved alias registration after `initSigning()` + `/prekey/upload` (the worker verifies against the just-registered bundle), and `/alias` rename does the same. Unsigned requests stay accepted (verify-when-present unless `ALIAS_REQUIRE_AUTH`), so the change is wire-additive.
