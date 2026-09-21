@@ -1,5 +1,13 @@
 # Changelog
 
+## /security panel displayed a stale CSP claim (branch devin/csp-display-truth, 2026-09-20)
+
+`index.html`, `locales/ja.json`, `CHANGELOG.md`, `_headers`/`tauri/src-tauri/tauri.conf.json` (CSP hash).
+
+The security panel's CSP line was a hardcoded string describing the `<meta>` fallback (`script-src self unsafe-inline`) — for the actual deployed policy it *understated* protection: the real enforcement is the `_headers` hash-pinned `script-src` (no unsafe-inline). Now shows both layers truthfully: header = hash-pinned sha256, `<meta>` = fallback baseline read live from the DOM (so it can never drift again). Neighboring claims re-verified while here: `negotiated:true` DCEP, `bufferedAmountLowThreshold`, 256-B pad boundary, double-HMAC timing compare, ±5min anti-replay — all real.
+
+---
+
 ## QR codes were decorative: encoder rewrite + C13 scan-to-verify (branch devin/c13-qr-verify, 2026-09-20)
 
 vitest 829 → **835** (+6 decode regression tests); `index.html`, `tests/qr.test.js` (new), `locales/ja.json`, `package.json` (+jsqr devDep), `docs/ROADMAP.md`, `CHANGELOG.md`, `_headers`/`tauri/src-tauri/tauri.conf.json` (CSP hash propagation).
@@ -21,26 +29,6 @@ The C11 roadmap row ("Background Sync + persistent storage — reliable offline 
 `sw.js` now drains the queue itself when `clients.matchAll` returns zero windows: it reads `settings/retryQueue` (already-E2E envelopes, so no keys needed), re-POSTs each item sealed-first then `/api/msg/send` — the same order the page uses — and writes back only the failures (queue still capped at 50). Multi-account `breeze-acc-*` DBs are covered via `indexedDB.databases()` where it exists; `idbOpenExisting` aborts the upgrade transaction so the drain can never create an empty store-less DB that would poison the page's own `open()`. Page side: the `sync-outbox` handler is now gated on `_isLeaderTab` (the SW pings *every* window — before, N open tabs each re-POSTed the same queue), and the relay-failure catch registers a sync tag too, not just the offline path.
 
 Also fixed the E2E-found STT toast: `recognition.onerror` reported `toastServerError + ': not-allowed'` on mic-permission denial — a permission refusal labeled as a server failure. `not-allowed`/`service-not-allowed`/`audio-capture` now show the existing `toastMicDenied`; `no-speech`/`aborted` stay silent.
-
----
-
-||||||| parent of 5d4621f (fix: safeSetHTML stripped every <label> — settings option text was unclickable)
-## Settings labels were dead text — safeSetHTML stripped every <label> (branch devin/fix-label-sanitizer, 2026-09-20)
-
-vitest 822 → **825** (+3 sanitizer tripwire tests); `index.html`, `tests/mirror-drift.test.js`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` CSP-hash propagation.
-
-Found by E2E testing, not by reading code: clicking a settings option's *text* did nothing — only the ~13px checkbox glyph toggled. `safeSetHTML`'s `SAFE_TAGS` allowlist omitted `label`, so the Trusted-Types sanitizer unwrapped every `<label>` it rendered: all 10 `/settings` toggles, the contact-picker rows (`index.html:7433`), and any future label-wrapped control. `SAFE_ATTRS` already allows `class`/`for`, so labels keep their styling and explicit association. `label` is phrasing content with no URL-bearing attributes — safe to allowlist.
-
----
-
-||||||| parent of 0fc3221 (feat(C8-partial): /codeverify — SHA-256 served-vs-repo integrity check; README claim fixes)
-## C8 partial: /codeverify command — served-vs-repo SHA-256 check; README claim audit (branch devin/c8-codeverify, 2026-09-20)
-
-vitest 825 unchanged (UI-only command); `index.html`, `locales/ja.json`, `README.md`, `docs/ROADMAP.md`, `CHANGELOG.md`, `_headers`/`tauri/src-tauri/tauri.conf.json` (CSP hash propagation).
-
-Socratic pass on README claims: multi-account bullet still advertised removed paid tiers ("Free=1, Lite=2, Plus=4, Pro=unlimited") — contradicting the app's own ToS ("Every account is free. Additional local accounts are unlimited") and SECURITY.md's billing-removal note. "Full translations" overstated (ja is 100%; the other six are ~79% total/96% core per `tools/i18n-check.mjs`). The RTL-layout claim shipped no RTL locale at all — unreachable. All three rewritten to match reality.
-
-C8 kernel shipped as `/codeverify`: fetches the served `index.html` (query-busted past the SW's SWR cache) plus the repo copies on `main` and `claude/nice-ride-T6yb0` via `raw.githubusercontent.com` (already inside `connect-src https:`), SHA-256s each, and renders match/mismatch per branch. Manual/opt-in — a compromised host can't fake the repo copy, and self-hosted forks legitimately differ so no passive nagging. Full SW-side hash-pin + signed manifest remains the M-effort completion.
 
 ---
 
