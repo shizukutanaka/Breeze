@@ -8014,10 +8014,10 @@ async function initMessenger(dbName) {
       await dbPut('contacts', _storedC);
     } else await dbPut('contacts', contact);
 
-    if (activeContact.isGroup) {
+    if (contact.isGroup) {
       // v3.1: Sender Key: encrypt ONCE with group key, send same ciphertext to all members
-      const groupId = activeContact.id;
-      const members = (activeContact.members || []).filter(m => m.id !== myId);
+      const groupId = contact.id;
+      const members = (contact.members || []).filter(m => m.id !== myId);
       // Awaited: fire-and-forget let the content send below reach the relay first, so the
       // receiver's decryptGroupMsg (no key yet) fell back to decryptFrom and dropped it (E2E-found).
       for (const m of members) {
@@ -8036,7 +8036,7 @@ async function initMessenger(dbName) {
         if (peer?.connected && peer.dc?.readyState === 'open') {
           try {
             peer.dc.send(JSON.stringify({ v: CONFIG.PROTOCOL_VERSION, type: 'group_msg',
-              msgId, payload: groupCiphertext, ts, groupId, groupName: activeContact.name,
+              msgId, payload: groupCiphertext, ts, groupId, groupName: contact.name,
               sender: myPubB64, name: myName, isGroupSK: true,
               replyTo: envelopeReplyTo(meta.replyTo), disappearAt: meta.disappearAt }));
           } catch(e) { _dbg(e, 'group-p2p-send'); }
@@ -8044,16 +8044,16 @@ async function initMessenger(dbName) {
         // Sealed sender relay (ensures delivery even if P2P drops)
         try {
           await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName,
-            payload: groupCiphertext, ts, groupId, groupName: activeContact.name,
+            payload: groupCiphertext, ts, groupId, groupName: contact.name,
             replyTo: envelopeReplyTo(meta.replyTo), disappearAt: meta.disappearAt, isGroupSK: true }, m.pubB64);
         } catch(e) { _dbg(e); }
       }));
       // Self-sync: my other devices need the copy too (they're members of the same group).
-      _fanOut(activeContact, text, ts, {}, { sfFor: activeContact.id, sfName: activeContact.name });
+      _fanOut(contact, text, ts, {}, { sfFor: contact.id, sfName: contact.name });
     } else {
       // 1:1: v3 Double Ratchet + P2P + Sealed Sender
       const _frank = {};
-      const encrypted = await encryptFor(text, activeContact.pubB64, _frank);
+      const encrypted = await encryptFor(text, contact.pubB64, _frank);
       if (!encrypted) { showToast(t('toastSendFail'), 'error'); _isSending = false; return; }
       // Record the commitment BEFORE the message can be reported. Fire-and-forget: a failed
       // record must never block or fail a send — it only means this message can't be reported.
@@ -8108,21 +8108,21 @@ async function initMessenger(dbName) {
         // mirror, breaking in-flight messages. Deliberately not "fixed" in place.
       } else {
         // v3.5 SPEC: Queue the wire envelope (ciphertext) for later P2P delivery when peer reconnects
-        if (activeContact.pubB64) {
-          queueOutbox(activeContact.pubB64, envelope);
+        if (contact.pubB64) {
+          queueOutbox(contact.pubB64, envelope);
         }
       }
       // Relay: Sealed Sender (Worker doesn't see sender)
-      await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName,
+      await relaySend(contact.id, { to: contact.id, from: myId, fromPub: myPubB64, fromName: myName,
         payload: encrypted, ts, replyTo: envelope.replyTo, disappearAt: envelope.disappearAt,
-        sig: envelope.sig, sigPub: envelope.sigPub, acctRoot: envelope.acctRoot, nrn: envelope.nrn }, activeContact.pubB64);
+        sig: envelope.sig, sigPub: envelope.sigPub, acctRoot: envelope.acctRoot, nrn: envelope.nrn }, contact.pubB64);
 
       // Multi-device fan-out (see _fanOut). Fire-and-forget: it must never fail the send.
       // sfPub/sfName let a sibling device CREATE a conversation it has never seen, so messages
       // sent before the contact ever replies are not dropped on a freshly linked device.
-      _fanOut(activeContact, text, ts,
+      _fanOut(contact, text, ts,
         { sig: envelope.sig, sigPub: envelope.sigPub },
-        { sfFor: activeContact.id, sfPub: activeContact.pubB64, sfName: activeContact.name });
+        { sfFor: contact.id, sfPub: contact.pubB64, sfName: contact.name });
     }
     renderContacts();
     } catch(err) {

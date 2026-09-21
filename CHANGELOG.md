@@ -1,5 +1,13 @@
 # Changelog
 
+## sendMessage TOCTOU — a mid-flight contact switch sent to the wrong recipient (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`sendMessage` snapshotted `const contact = activeContact` for the DB write (with a comment explaining why) — then the entire wire path read live `activeContact` again: `isGroup`, `members`, `name`, `pubB64`, `peers[pubB64]`, `relaySend(id, …, pubB64)`, `_fanOut`. Several `await`s sit in between (dbPut, dbGet, encryptFor, signMessage, timingDelay), so a click on another conversation mid-flight flipped the branch: a message typed for Alice could encrypt for Bob's `pubB64` and relay to Bob's inbox while being stored under Alice's conversation — a wrong-recipient confidentiality bug. The whole send path now uses the `contact` snapshot taken before the first await.
+
+---
+
 ## /api/online counted heartbeats, not users (branch devin/consolidate-groups, 2026-09-20)
 
 `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
