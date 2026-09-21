@@ -9781,6 +9781,15 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'startPolling'); }
   }
 
+  // Merge a receive-path write-back onto the stored record — a verbatim put of the pre-decrypt snapshot erases concurrent updates.
+  async function _mergeContactRx(id, snap, unreadInc) {
+    const fresh = await dbGet('contacts', id).catch(() => null);
+    if (!fresh) return dbPut('contacts', snap);
+    if (snap.lastMsgAt >= (fresh.lastMsgAt || 0)) { fresh.lastMsg = snap.lastMsg; fresh.lastMsgAt = snap.lastMsgAt; if (snap.lastMsgSender !== undefined) fresh.lastMsgSender = snap.lastMsgSender; }
+    if (unreadInc) fresh.unread = (fresh.unread || 0) + 1;
+    await dbPut('contacts', fresh);
+  }
+
   async function handleIncoming(msg) {
     // Normalize msg.ts to a safe integer. P2P DataChannel messages carry a peer-supplied
     // ts field that is never validated by the relay; a non-numeric value would be
@@ -10165,8 +10174,8 @@ async function initMessenger(dbName) {
       group.lastMsg = text.slice(0, 30);
       group.lastMsgSender = msg.fromName;
       group.lastMsgAt = msg.ts;
-      if (activeContact?.id !== msg.groupId) {
-        group.unread = (group.unread || 0) + 1;
+      const _gUnreadInc = activeContact?.id !== msg.groupId;
+      if (_gUnreadInc) { group.unread = (group.unread || 0) + 1;
         const mentions = [...text.matchAll(/@(\w+)/g)].map(m => m[1]);
         const mentionsMe = mentions.some(m => m === myName || m === myAlias);
         // A group that is not talking TO you should not interrupt you: in focus mode only a
@@ -10180,7 +10189,7 @@ async function initMessenger(dbName) {
           }
         }
       }
-      await dbPut('contacts', group);
+      await _mergeContactRx(msg.groupId, group, _gUnreadInc);
       if (activeContact?.id === msg.groupId) { meta._animate = true; appendMsg(text, false, msg.ts, null, null, meta); showSmartReplies(text); }
       _renderContactsThrottled();
       // v3.4: Broadcast to follower tabs
@@ -10207,7 +10216,7 @@ async function initMessenger(dbName) {
         await dbPut('messages', { msgId, contactId: msg.from, text: t('voiceMsg'), mine: false, ts: msg.ts, voice: v.data });
         contact.lastMsg = t('voiceMsg'); contact.lastMsgAt = msg.ts;
         if (activeContact?.id !== msg.from) { contact.unread = (contact.unread || 0) + 1; if (_shouldAlert(contact, t('voiceMsg'))) playNotif(); }
-        await dbPut('contacts', contact);
+        await _mergeContactRx(msg.from, contact, activeContact?.id !== msg.from);
         if (activeContact?.id === msg.from) appendMsg(t('voiceMsg'), false, msg.ts, null, null, meta);
         _renderContactsThrottled();
       } catch(e) { _dbg(e); }
@@ -10426,7 +10435,7 @@ async function initMessenger(dbName) {
       // v3.6: Screen reader announcement for unread messages (research: ARIA23)
       announceToSR(`${contact.name}: ${text.slice(0, 60)}`);
     }
-    await dbPut('contacts', contact);
+    await _mergeContactRx(contactId, contact, activeContact?.id !== contactId && !meta.nrn);
     if (activeContact?.id === contactId) { meta._animate = true; appendMsg(text, false, msg.ts, null, storedFileData, meta); showSmartReplies(text); }
     _renderContactsThrottled();
     // v3.4: Broadcast to follower tabs
@@ -12262,7 +12271,7 @@ async function initMessenger(dbName) {
       }
       contact.lastMsg = msgs[msgs.length - 1]?.text?.slice(0, 40) || '';
       contact.lastMsgAt = msgs[msgs.length - 1]?.ts || Date.now();
-      await dbPut('contacts', contact);
+      await _mergeContactRx(contact.id, contact, false);
       // Refresh conversation — only if the user is still on it (they may have switched
       // away mid-import; the messages landed in the right chat either way).
       if (activeContact?.id === contact.id) await openConversation(contact);

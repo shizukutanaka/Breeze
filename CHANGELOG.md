@@ -1,3 +1,18 @@
+## Receive-path contact writes merge onto the stored record — racing receives no longer clobber unread/lastMsg (branch devin/rx-contact-merge, 2026-09-21)
+
+Client-side analog of the KV lost-write class fixed in the worker: `handleIncoming`'s
+1:1, group, and voice branches (plus `/import` chat history) each mutate a contact record
+fetched *before* the decrypt/import awaits, then `dbPut` it back verbatim. Two in-flight
+receives for the same contact (P2P DataChannel + sealed-relay copy arriving together, or
+two rapid messages) share the same pre-decrypt snapshot — the second write erases the
+first's `unread` increment and can stamp an *older* `lastMsg` over a newer one.
+
+New `_mergeContactRx(id, snap, unreadInc)` re-reads the stored record at write time:
+`unread` applies as an additive increment, and `lastMsg`/`lastMsgAt`/`lastMsgSender` move
+only when the incoming `msg.ts` is monotonic — an out-of-order or replayed-ts message can
+no longer drag the list preview backwards. `/import`'s end-of-import contact write routes
+through the same helper (its race window is the widest: the whole `file.text()` + parse).
+
 ## Alias registrations now carry the ownership signature the worker already checked (branch devin/consolidate-groups, 2026-09-20)
 
 `/alias/set` has supported an Ed25519 ownership binding (`userId` + `ts` + `sig` over `breeze-alias-set:{alias}:{ts}`, verified against the registrant's prekey bundle with `identityKey === pub`) since the worker shipped it — but no client ever sent it, so a PoW-only request could point any unclaimed `@handle` at any public key. Both registration sites now sign: onboarding moved alias registration after `initSigning()` + `/prekey/upload` (the worker verifies against the just-registered bundle), and `/alias` rename does the same. Unsigned requests stay accepted (verify-when-present unless `ALIAS_REQUIRE_AUTH`), so the change is wire-additive.
