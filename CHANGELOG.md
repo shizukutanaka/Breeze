@@ -1,5 +1,13 @@
 # Changelog
 
+## Scheduled-send recovery clobbered the live draft (branch devin/sched-draft-clobber, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Scheduled-message recovery routes through the composer: it sets `activeContact`, writes the scheduled text into `msg-input`, calls `sendMessage()`, then restores `activeContact` — but never restored the input. If the timer fired while the user was typing, their in-progress draft was silently overwritten by the scheduled text (and the draft map still pointed at the destroyed content). Both recovery paths now save and restore the input value alongside `activeContact`.
+
+---
+
 ## Documented: data-channel signaling is authenticated, not confidential (branch devin/sig-metadata-doc, 2026-09-20)
 
 `SECURITY.md`, `CHANGELOG.md`.

@@ -5861,10 +5861,12 @@ async function initMessenger(dbName) {
             const c = await dbGet('contacts', item.contactId);
             if (c) {
               const savedActive = activeContact;
+              const savedInput = _DOM.get('msg-input').value; // don't clobber a live draft
               activeContact = c;
               _DOM.get('msg-input').value = item.text;
               await sendMessage({ preventDefault: () => {} });
               activeContact = savedActive;
+              _DOM.get('msg-input').value = savedInput;
             }
           } else if (delay < 7 * MS.DAY) {
             // Set timer for future delivery; add to _intervals so _messengerCleanup cancels
@@ -5880,10 +5882,12 @@ async function initMessenger(dbName) {
                 const c = await dbGet('contacts', sched.contactId);
                 if (c) {
                   const savedActive = activeContact;
+                  const savedInput = _DOM.get('msg-input').value; // don't clobber a live draft
                   activeContact = c;
                   _DOM.get('msg-input').value = sched.text;
                   await sendMessage({ preventDefault: () => {} });
                   activeContact = savedActive;
+                  _DOM.get('msg-input').value = savedInput;
                 }
               } catch(e) { _dbg(e, 'schedule-recover'); }
             }, delay));
