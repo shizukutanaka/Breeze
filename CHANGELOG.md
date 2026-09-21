@@ -1,3 +1,24 @@
+## Alias registrations now carry the ownership signature the worker already checked (branch devin/consolidate-groups, 2026-09-20)
+
+`/alias/set` has supported an Ed25519 ownership binding (`userId` + `ts` + `sig` over `breeze-alias-set:{alias}:{ts}`, verified against the registrant's prekey bundle with `identityKey === pub`) since the worker shipped it — but no client ever sent it, so a PoW-only request could point any unclaimed `@handle` at any public key. Both registration sites now sign: onboarding moved alias registration after `initSigning()` + `/prekey/upload` (the worker verifies against the just-registered bundle), and `/alias` rename does the same. Unsigned requests stay accepted (verify-when-present unless `ALIAS_REQUIRE_AUTH`), so the change is wire-additive.
+
+## Group messages carry a per-sender signature — insider forgery closed (branch devin/consolidate-groups, 2026-09-20)
+
+eprint 2025/554 (Jaeger–Kumar, signcryption analysis of MLS/Session/Signal/Matrix) formalises
+why Signal signs every group message: in a Sender Keys protocol every member holds every
+member's chain key (required to decrypt), so without a signature **any member can encrypt
+under another member's chain key and claim `from: victim`** — undetectable impersonation.
+Breeze group envelopes (`{v,g,i,d,c,ep,cm}`) had no sender signature — the attack applied.
+
+- `encryptGroupMsg` signs `breeze-group-msg:{groupId}:{ep}:{c}:{iv}:{ct}` with the sender's
+  Ed25519 identity key, appended as `sg` (wire-additive, old clients ignore it)
+- `distributeSenderKey` ships `sigPub` alongside the chain key — the same E2E sender-bound
+  channel, so the signing key cannot be re-pinned by a forgery
+- `decryptGroupMsg` verifies-if-present: a recorded `sigPub` makes the sender a signing
+  client forever — a missing or invalid `sg` drops the envelope (strip/forgery proof);
+  no `sigPub` on record = legacy sender, still accepted (same rollout shape as `cm`)
+- Tripwire test pins the sign + distribute + verify chain
+
 ## Roster member id↔key binding enforced client-side (branch devin/consolidate-groups, 2026-09-20)
 
 `safeMemberList` accepted a member's `id` and `pubB64` without checking they correspond. The server binds them at join (`memberPub.startsWith(memberId)`), but `/group/info` is relay-controlled — a hostile relay could keep a member's id and swap in an attacker's key, silently MITMing sends to that member (invisible, unlike a fake member which shows in the roster). `safeMemberList` now drops any member whose `pub`/`pubB64` does not start with their `id`.

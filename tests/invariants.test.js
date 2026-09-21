@@ -155,6 +155,21 @@ describe('group trust boundaries', () => {
     // isGroupSK: same guard as the legacy per-member fallback
     expect(html).toContain('if (!member && msg.from !== myId) return;');
   });
+  it('group messages carry a per-sender signature (member-forgery defense, eprint 2025/554)', () => {
+    // Every member holds every member's chain key for decryption — without a signature
+    // any member can encrypt under another member's ck and claim `from: victim`. The
+    // sender's Ed25519 key rides the sender-key distribution (sigPub); receivers that
+    // recorded it MUST reject sig-less envelopes (a stripped/forged one) and verify the
+    // sig over the canonical context; legacy senders (no sigPub on record) stay accepted.
+    expect(html).toContain('sigPub: _signingPubB64 || undefined');
+    expect(html).toContain('skEntry.sigPub = skMsg.sigPub');
+    expect(html).toContain("breeze-group-msg:${groupId}:${out.ep | 0}:${out.c | 0}:");
+    expect(html).toContain("breeze-group-msg:${groupId}:${p.ep | 0}:${p.c | 0}:");
+    expect(html).toContain('peerSK.sigPub || (await dbGet(');
+    expect(html).toContain('if (sigPub)');
+    expect(html).toContain("typeof p.sg === 'string' && p.sg && await verifySignature");
+    expect(html).toContain('if (sgOk !== true) return null');
+  });
 });
 
 describe('wire + storage invariants', () => {
