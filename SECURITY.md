@@ -204,8 +204,8 @@ store) rather than gated — an opt-in toggle leaves the contradiction one peer 
   are forward-secret without breaking older clients. Still opt-in: at-rest key wrapping (needs a
   user passphrase, `/keywrap`) and call-signaling E2E (`CALL_E2E_SIGNAL` has no capability
   negotiation yet, so enabling it requires both ends). Of the Worker-side `*_REQUIRE_AUTH`
-  flags, `MSG_REQUIRE_AUTH`/`SEALED_REQUIRE_AUTH` are on by default (opt out with `=false`);
-  the rest remain operator choices — see `wrangler.toml`.
+  flags, `MSG_REQUIRE_AUTH`/`SEALED_REQUIRE_AUTH`/`PUSH_REQUIRE_AUTH` are on by default
+  (opt out with `=false`); the rest remain operator choices — see `wrangler.toml`.
 - **@alias resolution** is answered by the relay, which returns an unsigned `{pub}`. Since
   v3.6.1 an alias add runs the key-transparency audit first: a **tampered** hash chain blocks the
   add outright, a **rolled** key warns. This detects a relay rewriting key *history*; it cannot
@@ -246,7 +246,11 @@ store) rather than gated — an opt-in toggle leaves the contradiction one peer 
   than the multi-tab grace, and an ack blind-deletes the sealed queue. Every current
   client already signs, so enforcement is on unless an operator explicitly sets
   `SEALED_REQUIRE_AUTH=false` / `MSG_REQUIRE_AUTH=false` to keep serving pre-signing
-  clients. An account that has not yet uploaded a prekey bundle has no key to verify
+  clients. The same applies to `/push/subscribe` and `/push/unsubscribe`: a signed
+  subscribe binds the subscription's endpoint + p256dh + auth key (not just the userId)
+  so a relay can't swap in its own device under a replayed signature, and a signed
+  unsubscribe binds the endpoint being removed — both enforced by default now that the
+  client signs them (`PUSH_REQUIRE_AUTH=false` opts out). An account that has not yet uploaded a prekey bundle has no key to verify
   against and is treated as unsigned — polls then fail-closed until onboarding
   completes its bundle upload (self-healing on the next retry).
 - **A sealed queue's retention is not shortened by polling.** Polls used to rewrite the

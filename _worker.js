@@ -1652,8 +1652,8 @@ async function handlePushSubscribe(body, env, request) {
   // OWN device under push:${userId} and then receive the victim's notifications: the Web Push
   // payload is encrypted to the SUBSCRIBER-supplied p256dh/auth, so the attacker can decrypt the
   // metadata (sender display name, message type, contactId, timing). They could also evict the
-  // victim's real devices via the 5-device cap (denial of notification). Verified-when-present;
-  // required when PUSH_REQUIRE_AUTH=true. Same pattern as portal/group/backup/alias auth.
+  // victim's real devices via the 5-device cap (denial of notification). Required by
+  // default (clients sign subscribe/unsubscribe); PUSH_REQUIRE_AUTH=false opts out.
   {
     const { ts, sig } = body;
     const hasSig = ts !== undefined || sig !== undefined;
@@ -1675,7 +1675,7 @@ async function handlePushSubscribe(body, env, request) {
       const subBind = `${subscription.endpoint || ''}:${subscription.keys?.p256dh || ''}:${subscription.keys?.auth || ''}`;
       const ok = await verifyEd25519(bundle.edIdentityKey, utf8ToB64(`breeze-push-subscribe:${userId}:${ts}:${subBind}`), sig);
       if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
-    } else if (env.PUSH_REQUIRE_AUTH === 'true') {
+    } else if (env.PUSH_REQUIRE_AUTH !== 'false') {
       return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
     }
   }
@@ -1720,9 +1720,9 @@ async function handlePushUnsubscribe(body, env, request) {
   if (!userId || !endpoint) return json({ error: 'userId and endpoint required', code: 'MISSING_FIELDS' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   if (typeof endpoint !== 'string' || endpoint.length > 512) return json({ error: 'invalid endpoint', code: 'INVALID_FIELD' }, 400, request);
-  // Optional Ed25519 ownership auth — mirrors handlePushSubscribe. Without it any caller who
-  // knows a userId + endpoint can silently delete that user's push subscription (denial of
-  // notification). Verified-when-present; required when PUSH_REQUIRE_AUTH=true.
+  // Ed25519 ownership auth — mirrors handlePushSubscribe (endpoint-bound). Without it any
+  // caller who knows a userId + endpoint can silently delete that user's push subscription
+  // (denial of notification). Required by default; PUSH_REQUIRE_AUTH=false opts out.
   {
     const { ts, sig } = body;
     const hasSig = ts !== undefined || sig !== undefined;
@@ -1740,7 +1740,7 @@ async function handlePushUnsubscribe(body, env, request) {
       // Bind the specific endpoint being removed so a subscribe signature cannot be replayed here.
       const ok = await verifyEd25519(bundle.edIdentityKey, utf8ToB64(`breeze-push-unsubscribe:${userId}:${ts}:${endpoint}`), sig);
       if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
-    } else if (env.PUSH_REQUIRE_AUTH === 'true') {
+    } else if (env.PUSH_REQUIRE_AUTH !== 'false') {
       return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
     }
   }

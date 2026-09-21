@@ -1,3 +1,7 @@
+## Push subscribe/unsubscribe are signed by default (branch devin/consolidate-groups, 2026-09-20)
+
+The endpoint-side verified-when-present auth was inert while clients never sent `{ts, sig}` — anyone who knew a userId could register their own device under `push:{userId}` (decrypting notification metadata) or silently delete the victim's subscriptions. The client now signs both calls through `_ownerAuth` — subscribe binds `endpoint:p256dh:auth`, unsubscribe binds the endpoint — and `PUSH_REQUIRE_AUTH` defaults to required (`=false` opts out). Tests sign through a new `pA` helper sharing key-pinning with `gA`; the unsigned-subscribe case now exercises the explicit opt-out env.
+
 # Changelog
 
 ## Unsigned group mutations refused by default (branch devin/consolidate-groups, 2026-09-20)

@@ -3829,12 +3829,12 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'sign'); return null; }
   }
 
-  // Owner-auth for id-keyed poll/ack endpoints: returns {ts, sig} to spread into the
-  // request body, or {} when signing is unavailable (the Worker verifies-when-present and
-  // only requires it when the operator sets the matching *_REQUIRE_AUTH secret).
-  async function _ownerAuth(op) {
+  // Owner-auth for id-keyed endpoints: returns {ts, sig} to spread into the request
+  // body, or {} when signing is unavailable. The Worker verifies-when-present and
+  // requires it by default on the poll/ack/push surfaces (*_REQUIRE_AUTH=false opts out).
+  async function _ownerAuth(op, bind = '') {
     const ts = Date.now();
-    const sig = await signMessage(`breeze-${op}:${myId}:${ts}`);
+    const sig = await signMessage(`breeze-${op}:${myId}:${ts}${bind ? ':' + bind : ''}`);
     return sig ? { ts, sig } : {};
   }
 
@@ -5886,7 +5886,7 @@ async function initMessenger(dbName) {
       if (API && myId) {
         navigator.serviceWorker?.ready
           .then(r => r.pushManager?.getSubscription())
-          .then(sub => { if (sub) postAPIRaw('/push/unsubscribe', { userId: myId, endpoint: sub.endpoint }).catch(() => {}); })
+          .then(async sub => { if (sub) postAPIRaw('/push/unsubscribe', { userId: myId, endpoint: sub.endpoint, ...(await _ownerAuth('push-unsubscribe', sub.endpoint)) }).catch(() => {}); })
           .catch(() => {});
       }
       // Save unread count for cross-account badge
@@ -11410,7 +11410,7 @@ async function initMessenger(dbName) {
       const existing = await reg.pushManager.getSubscription();
       if (existing) {
         // Already subscribed, sync with server
-        await postAPIRaw('/push/subscribe', { userId: myId, subscription: existing.toJSON() }).catch(e => _dbg(e));
+        await postAPIRaw('/push/subscribe', { userId: myId, subscription: existing.toJSON(), ...(await _ownerAuth('push-subscribe', `${existing.endpoint||''}:${existing.keys?.p256dh||''}:${existing.keys?.auth||''}`)) }).catch(e => _dbg(e));
         return;
       }
       // Request permission and subscribe
@@ -11424,7 +11424,7 @@ async function initMessenger(dbName) {
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(health.vapidPublicKey),
       });
-      await postAPIRaw('/push/subscribe', { userId: myId, subscription: sub.toJSON() }).catch(e => _dbg(e));
+      await postAPIRaw('/push/subscribe', { userId: myId, subscription: sub.toJSON(), ...(await _ownerAuth('push-subscribe', `${sub.endpoint||''}:${sub.keys?.p256dh||''}:${sub.keys?.auth||''}`)) }).catch(e => _dbg(e));
     } catch(e) { _dbg(e, 'push'); }
   }
 
@@ -13383,7 +13383,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         try {
           const reg = await navigator.serviceWorker?.ready.catch(() => null);
           const sub = await reg?.pushManager?.getSubscription().catch(() => null);
-          if (sub) { postAPIRaw('/push/unsubscribe', { userId: myId, endpoint: sub.endpoint }).catch(() => {}); await sub.unsubscribe().catch(() => {}); }
+          if (sub) { postAPIRaw('/push/unsubscribe', { userId: myId, endpoint: sub.endpoint, ...(await _ownerAuth('push-unsubscribe', sub.endpoint)) }).catch(() => {}); await sub.unsubscribe().catch(() => {}); }
         } catch(e) { _dbg(e); }
       }
       // Local wipe

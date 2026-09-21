@@ -65,7 +65,8 @@ const toB64 = (bytes) => Buffer.from(bytes).toString('base64');
 // an Ed25519 key per actor, pins it as that actor's edIdentityKey, and returns
 // {ts, sig} over checkGroupAuth's canonical `breeze-group-{action}:{token}:{actor}:{ts}:{bind}`.
 const _gKeys = new Map();
-async function gA(env, action, token, actorId, bind = '') {
+// Mint+pin an Ed25519 identity for an actor (its key goes to prekey:{actorId}.edIdentityKey).
+async function _pinEd(env, actorId) {
   if (!_gKeys.has(actorId)) {
     const kp = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
     _gKeys.set(actorId, { kp, pub: toB64(new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey))) });
@@ -76,9 +77,25 @@ async function gA(env, action, token, actorId, bind = '') {
   try { b = raw ? JSON.parse(raw) : {}; } catch { b = {}; }
   b.edIdentityKey = k.pub;
   await env.KV.put(`prekey:${actorId}`, JSON.stringify(b));
+  return k;
+}
+async function _edSign(k, text) {
+  return toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, k.kp.privateKey, new TextEncoder().encode(text))));
+}
+async function gA(env, action, token, actorId, bind = '') {
+  const k = await _pinEd(env, actorId);
   const ts = Date.now();
-  const sig = toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, k.kp.privateKey, new TextEncoder().encode(`breeze-group-${action}:${token}:${actorId}:${ts}:${bind}`))));
-  return { ts, sig };
+  return { ts, sig: await _edSign(k, `breeze-group-${action}:${token}:${actorId}:${ts}:${bind}`) };
+}
+// Push subscribe/unsubscribe are signed by default too. pA signs
+// `breeze-push-{action}:{uid}:{ts}:{bind}`; pass the subscription object for subscribe
+// (bind = endpoint:p256dh:auth) or the endpoint string for unsubscribe.
+async function pA(env, action, userId, bindOrSub = '') {
+  const bind = typeof bindOrSub === 'string' ? bindOrSub
+    : `${bindOrSub.endpoint || ''}:${bindOrSub.keys?.p256dh || ''}:${bindOrSub.keys?.auth || ''}`;
+  const k = await _pinEd(env, userId);
+  const ts = Date.now();
+  return { ts, sig: await _edSign(k, `breeze-push-${action}:${userId}:${ts}:${bind}`) };
 }
 
 // The worker uses several in-memory globals; reset all between tests so they
@@ -3267,7 +3284,8 @@ describe('push subscribe SSRF guard', () => {
   const base = (endpoint) => ({ userId: 'bob000001', subscription: { endpoint } });
 
   it('rejects non-HTTPS endpoints', async () => {
-    const res = await handlePushSubscribe(base('http://fcm.googleapis.com/x'), makeEnv(), apiRequest('/api/push/subscribe', {}));
+    const env = makeEnv();
+    const res = await handlePushSubscribe({ ...base('http://fcm.googleapis.com/x'), ...(await pA(env,'subscribe','bob000001',{ endpoint: 'http://fcm.googleapis.com/x' })) }, env, apiRequest('/api/push/subscribe', {}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_ENDPOINT');
   });
@@ -3277,13 +3295,14 @@ describe('push subscribe SSRF guard', () => {
     const env = makeEnv();
     const real = env.KV.put.bind(env.KV);
     env.KV.put = async (key, ...rest) => { if (key.startsWith('push:')) throw new Error('KV down'); return real(key, ...rest); };
-    const res = await handlePushSubscribe(base('https://fcm.googleapis.com/fcm/send/abc'), env, apiRequest('/api/push/subscribe', {}));
+    const res = await handlePushSubscribe({ ...base('https://fcm.googleapis.com/fcm/send/abc'), ...(await pA(env,'subscribe','bob000001',{ endpoint: 'https://fcm.googleapis.com/fcm/send/abc' })) }, env, apiRequest('/api/push/subscribe', {}));
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe('STORE_FAILED');
   });
 
   it('rejects untrusted hosts (SSRF target)', async () => {
-    const res = await handlePushSubscribe(base('https://169.254.169.254/latest/meta-data'), makeEnv(), apiRequest('/api/push/subscribe', {}));
+    const env = makeEnv();
+    const res = await handlePushSubscribe({ ...base('https://169.254.169.254/latest/meta-data'), ...(await pA(env,'subscribe','bob000001',{ endpoint: 'https://169.254.169.254/latest/meta-data' })) }, env, apiRequest('/api/push/subscribe', {}));
     expect(res.status).toBe(400);
     const j = await res.json();
     expect(j.error).toMatch(/Untrusted/);
@@ -3291,7 +3310,8 @@ describe('push subscribe SSRF guard', () => {
   });
 
   it('accepts a trusted FCM endpoint', async () => {
-    const res = await handlePushSubscribe(base('https://fcm.googleapis.com/fcm/send/abc'), makeEnv(), apiRequest('/api/push/subscribe', {}));
+    const env = makeEnv();
+    const res = await handlePushSubscribe({ ...base('https://fcm.googleapis.com/fcm/send/abc'), ...(await pA(env,'subscribe','bob000001',{ endpoint: 'https://fcm.googleapis.com/fcm/send/abc' })) }, env, apiRequest('/api/push/subscribe', {}));
     expect(res.status).toBe(200);
     expect((await res.json()).ok).toBe(true);
   });
@@ -3310,7 +3330,7 @@ describe('push subscribe SSRF guard', () => {
     const req = apiRequest('/api/push/subscribe', {});
     for (let i = 1; i <= 6; i++) {
       const sub = { endpoint: `https://fcm.googleapis.com/fcm/send/device${i}` };
-      await handlePushSubscribe({ userId: 'u0000001', subscription: sub }, env, req);
+      await handlePushSubscribe({ userId: 'u0000001', subscription: sub , ...(await pA(env,'subscribe','u0000001',sub))}, env, req);
     }
     const stored = JSON.parse(await env.KV.get('push:u0000001'));
     expect(stored.length).toBe(5);
@@ -3328,7 +3348,7 @@ describe('push subscribe SSRF guard', () => {
       expirationTime: 1234567890,
       injectedField: 'x'.repeat(10000), // extra top-level field — must be dropped
     };
-    await handlePushSubscribe({ userId: 'u0000002', subscription: sub }, env, req);
+    await handlePushSubscribe({ userId: 'u0000002', subscription: sub , ...(await pA(env,'subscribe','u0000002',sub))}, env, req);
     const stored = JSON.parse(await env.KV.get('push:u0000002'));
     const saved = stored[0];
     expect(Object.keys(saved)).toEqual(expect.arrayContaining(['endpoint', 'keys', 'expirationTime']));
@@ -3357,13 +3377,14 @@ describe('push subscribe — optional Ed25519 ownership auth (item 62)', () => {
         `breeze-push-subscribe:${uid}:${ts}:${sub.endpoint || ''}:${sub.keys?.p256dh || ''}:${sub.keys?.auth || ''}`)))) };
   }
 
-  it('unsigned subscribe still works when the flag is unset (backward-compat)', async () => {
-    const res = await handlePushSubscribe({ userId: 'pushusr01', subscription: { endpoint: FCM } }, makeEnv(), req);
+  it('unsigned subscribe still works under the explicit opt-out (PUSH_REQUIRE_AUTH=false)', async () => {
+    const env = makeEnv({ PUSH_REQUIRE_AUTH: 'false' });
+    const res = await handlePushSubscribe({ userId: 'pushusr01', subscription: { endpoint: FCM } }, env, req);
     expect(res.status).toBe(200);
   });
 
-  it('rejects unsigned subscribe when PUSH_REQUIRE_AUTH=true', async () => {
-    const env = makeEnv({ PUSH_REQUIRE_AUTH: 'true' });
+  it('rejects unsigned subscribe by default', async () => {
+    const env = makeEnv();
     const res = await handlePushSubscribe({ userId: 'pushusr02', subscription: { endpoint: FCM } }, env, req);
     expect(res.status).toBe(403);
     expect((await res.json()).code).toBe('AUTH_REQUIRED');
@@ -3499,8 +3520,8 @@ describe('push unsubscribe', () => {
 
   it('removes the matching endpoint and returns removed: 1', async () => {
     const env = makeEnv();
-    await handlePushSubscribe({ userId: 'unsub001', subscription: { endpoint: FCM } }, env, req);
-    const res = await handlePushUnsubscribe({ userId: 'unsub001', endpoint: FCM }, env, req);
+    await handlePushSubscribe({ userId: 'unsub001', subscription: { endpoint: FCM } , ...(await pA(env,'subscribe','unsub001',{ endpoint: FCM }))}, env, req);
+    const res = await handlePushUnsubscribe({ userId: 'unsub001', endpoint: FCM , ...(await pA(env,'unsubscribe','unsub001',FCM))}, env, req);
     expect(res.status).toBe(200);
     const j = await res.json();
     expect(j.ok).toBe(true);
@@ -3511,15 +3532,16 @@ describe('push unsubscribe', () => {
 
   it('returns removed: 0 when endpoint is not in the list', async () => {
     const env = makeEnv();
-    await handlePushSubscribe({ userId: 'unsub002', subscription: { endpoint: FCM } }, env, req);
-    const res = await handlePushUnsubscribe({ userId: 'unsub002', endpoint: 'https://fcm.googleapis.com/other' }, env, req);
+    await handlePushSubscribe({ userId: 'unsub002', subscription: { endpoint: FCM } , ...(await pA(env,'subscribe','unsub002',{ endpoint: FCM }))}, env, req);
+    const res = await handlePushUnsubscribe({ userId: 'unsub002', endpoint: 'https://fcm.googleapis.com/other' , ...(await pA(env,'unsubscribe','unsub002','https://fcm.googleapis.com/other'))}, env, req);
     expect((await res.json()).removed).toBe(0);
     // Original subscription still present.
     expect(JSON.parse(await env.KV.get('push:unsub002')).length).toBe(1);
   });
 
   it('returns ok: true with removed: 0 when user has no subscriptions', async () => {
-    const res = await handlePushUnsubscribe({ userId: 'unsub003', endpoint: FCM }, makeEnv(), req);
+    const env = makeEnv();
+    const res = await handlePushUnsubscribe({ userId: 'unsub003', endpoint: FCM , ...(await pA(env,'unsubscribe','unsub003',FCM))}, env, req);
     expect(res.status).toBe(200);
     expect((await res.json()).removed).toBe(0);
   });
