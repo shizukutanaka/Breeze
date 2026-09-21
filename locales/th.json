@@ -249,6 +249,7 @@
  "installPlatformDevice": "อุปกรณ์",
  "typing": "กำลังพิมพ์...",
  "newMessages": "ข้อความใหม่",
+ "notifNewMessage": "ข้อความใหม่",
  "draftLabel": "ฉบับร่าง",
  "dropUsage": "วิธีใช้: /drop <ข้อความลับ>",
  "dropTooLong": "ความลับยาวเกินไป (สูงสุด 50,000 ตัวอักษร)",

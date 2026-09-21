@@ -1,5 +1,13 @@
 # Changelog
 
+## Locked-state OS notifications leaked message text + sender name (branch devin/lock-notif-privacy, 2026-09-20)
+
+`index.html`, `locales/*.json` ×7 (`notifNewMessage`), `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The app lock (`/lock`, auto-lock on tab-hide, idle lock) is an overlay that hides the UI — but message handlers ran on underneath it and `new Notification()` still fired with `contact.name` + the first 80 chars of the message, and group mentions pushed `@sender: text`. Anyone glancing at a "locked" screen still read incoming content through the OS. While the lock screen is up, message notifications degrade to `notifNewMessage` ("New message") under the generic `Breeze` title and drop the deep-link data; call notifications keep the call-type body but lose the caller's name; mention notifications are suppressed entirely.
+
+---
+
 ## Export hygiene: deleted-message tombstones no longer exported; stale sig-TTL comment (branch devin/export-deleted, 2026-09-20)
 
 `index.html`, `_worker.js` (comment only), `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).

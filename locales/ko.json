@@ -249,6 +249,7 @@
  "installPlatformDevice": "기기",
  "typing": "입력 중...",
  "newMessages": "새 메시지",
+ "notifNewMessage": "새 메시지",
  "draftLabel": "임시 저장",
  "dropUsage": "사용법: /drop <비밀 메시지>",
  "dropTooLong": "비밀이 너무 깁니다 (최대 50,000자)",

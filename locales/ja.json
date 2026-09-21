@@ -271,6 +271,7 @@
   "installPlatformDevice": "デバイス",
   "typing": "入力中...",
   "newMessages": "新着メッセージ",
+  "notifNewMessage": "新しいメッセージ",
   "draftLabel": "下書き",
   "dropUsage": "使い方: /drop <秘密のメッセージ>",
   "dropTooLong": "秘密が長すぎます (最大50,000文字)",

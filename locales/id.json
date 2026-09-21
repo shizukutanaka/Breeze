@@ -249,6 +249,7 @@
  "installPlatformDevice": "perangkat",
  "typing": "mengetik...",
  "newMessages": "Pesan Baru",
+ "notifNewMessage": "Pesan baru",
  "draftLabel": "Draf",
  "dropUsage": "Cara pakai: /drop <pesan rahasia>",
  "dropTooLong": "Rahasia terlalu panjang (maks. 50.000 karakter)",
