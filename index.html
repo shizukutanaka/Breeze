@@ -10132,8 +10132,14 @@ async function initMessenger(dbName) {
       } catch(e) { _dbg(e, 'device-attribution'); }
     }
     if (!contact && msg.fromPub) {
-      await addContact(msg.fromPub, msg.fromName || t('unknown'));
-      contact = await dbGet('contacts', contactId);
+      // Auto-add only a self-consistent identity: addContact derives the id from the
+      // pub key, so a msg whose `from` doesn't match it is a forgery — the message
+      // would drop anyway, but creating the contact first let a spammer plant
+      // unlimited junk entries in the roster (one per throwaway pub key).
+      if (msg.from === msg.fromPub.slice(0, 12)) {
+        await addContact(msg.fromPub, msg.fromName || t('unknown'));
+        contact = await dbGet('contacts', contactId);
+      }
     }
     if (!contact) return;
     // Session peer key: the attributed device's own pub, else the contact's.

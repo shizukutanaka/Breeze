@@ -1,5 +1,13 @@
 # Changelog
 
+## Unknown-sender auto-add planted contacts on from/fromPub mismatch (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`handleIncoming` auto-creates a roster entry for first-time senders via `addContact(msg.fromPub)` — then looks the contact up by `msg.from`. `addContact` derives the stored id from the *pub key* (`pubB64.slice(0,12)`), so a forged message with `from`≠derived-id drops the message — but not before the contact was created. One valid `fromPub` + any `from` = one junk roster entry; a spammer could plant unlimited entries (one per throwaway keypair). The auto-add now requires `msg.from === msg.fromPub.slice(0, 12)` — self-consistent identity only; mismatched envelopes drop without touching the roster.
+
+---
+
 ## Chat import dedup key collided across conversations (branch devin/consolidate-groups, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `tests/invariants.test.js`, `_headers`/`tauri.conf.json` (CSP hash).
