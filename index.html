@@ -7284,12 +7284,31 @@ async function initMessenger(dbName) {
       activeContact.lastMsgAt = ts;
       await dbPut('contacts', activeContact);
       appendMsg(null, true, ts, null, null, { msgId, poll: pollData });
-      // Send via P2P/relay
-      const encrypted = await encryptFor(JSON.stringify(pollData), activeContact.pubB64);
-      if (!encrypted) { _dbg(null, 'encrypt failed'); return; }
-      const peer = peers[activeContact.pubB64];
-      if (peer?.connected && peer.dc?.readyState === 'open') peer.dc.send(JSON.stringify({ type: 'msg', payload: encrypted, ts }));
-      await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts }, activeContact.pubB64);
+      if (activeContact.isGroup) {
+        // Groups have no pubB64 — encryptFor('') silently failed, so a group poll
+        // stored locally but reached nobody. Route through the sender-key channel
+        // like a normal group message; receivers detect the poll JSON in the text.
+        const groupId = activeContact.id;
+        const members = (activeContact.members || []).filter(m => m.id !== myId);
+        for (const m of members) await distributeSenderKey(groupId, m.pubB64).catch(e => _dbg(e, 'sk-dist'));
+        const groupCt = await encryptGroupMsg(groupId, JSON.stringify(pollData));
+        if (groupCt) {
+          for (const m of members) {
+            const peer = peers[m.pubB64];
+            if (peer?.connected && peer.dc?.readyState === 'open') {
+              try { peer.dc.send(JSON.stringify({ v: CONFIG.PROTOCOL_VERSION, type: 'group_msg', msgId, payload: groupCt, ts, groupId, groupName: activeContact.name, sender: myPubB64, name: myName, isGroupSK: true })); } catch(e) { _dbg(e, 'group-p2p-send'); }
+            }
+            try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId, groupName: activeContact.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
+          }
+        }
+      } else {
+        // Send via P2P/relay
+        const encrypted = await encryptFor(JSON.stringify(pollData), activeContact.pubB64);
+        if (!encrypted) { _dbg(null, 'encrypt failed'); return; }
+        const peer = peers[activeContact.pubB64];
+        if (peer?.connected && peer.dc?.readyState === 'open') peer.dc.send(JSON.stringify({ type: 'msg', payload: encrypted, ts }));
+        await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts }, activeContact.pubB64);
+      }
       renderContacts();
     
     } catch(_e) { _dbg(_e, 'createPoll'); }
@@ -7310,11 +7329,10 @@ async function initMessenger(dbName) {
     // Re-render poll
     const el = document.querySelector(`[data-msgid="${msgId}"]`);
     if (el) safeSetHTML(el, renderPollHtml(poll, msgId));
-    // Notify peer
+    // Notify peer(s) via sendSignal — handles 1:1 and group fan-out (the old path
+    // used peers[activeContact.pubB64] which is '' for groups: votes went nowhere).
     if (activeContact) {
-      const voteMsg = { type: 'poll_vote', pollId: poll.pollId, optionIndex, userId: myId };
-      const peer = peers[activeContact.pubB64];
-      if (peer?.connected && peer.dc?.readyState === 'open') peer.dc.send(JSON.stringify(voteMsg));
+      sendSignal({ type: 'poll_vote', pollId: poll.pollId, optionIndex, userId: myId });
     }
   };
 
@@ -7645,7 +7663,7 @@ async function initMessenger(dbName) {
               peer.dc.send(signalPayload);
             }
             // Encrypted relay for offline members — ALL persistent signals
-            const persistTypes = ['edit', 'delete', 'reaction'];
+            const persistTypes = ['edit', 'delete', 'reaction', 'poll_vote'];
             if (persistTypes.includes(data.type)) {
               const encrypted = await encryptFor(signalPayload, member.pubB64);
               if (encrypted) await relaySend(member.id, { to: member.id, from: myId, fromPub: myPubB64, fromName: myName,
@@ -9745,6 +9763,23 @@ async function initMessenger(dbName) {
               const el = document.querySelector(`[data-msgid="${targetMsgId}"]`);
               if (el) { const existing = el.querySelector('.msg-reactions'); if (existing) _safeReplace(existing, renderReactions(stored.reactions, targetMsgId)); else _safeAppend(el, renderReactions(stored.reactions, targetMsgId)); }
             }
+          } else if (signal.type === 'poll_vote') {
+            // Same binding as the 1:1 path: the poll must live in THIS group, and the
+            // voter id comes from the verified sender, not the self-reported userId.
+            const allMsgs = await dbGetAll('messages');
+            const pollMsg = allMsgs.find(m => m.isPoll && m.contactId === msg.groupId && (() => { try { return JSON.parse(m.text).pollId === signal.pollId; } catch { return false; } })());
+            if (pollMsg) {
+              const poll = JSON.parse(pollMsg.text);
+              const voterId = (senderPub || '').slice(0, 12);
+              for (const opt of poll.options) opt.votes = opt.votes.filter(v => v !== voterId);
+              if (Number.isInteger(signal.optionIndex) && signal.optionIndex >= 0 && poll.options[signal.optionIndex]) {
+                poll.options[signal.optionIndex].votes.push(voterId);
+                pollMsg.text = JSON.stringify(poll);
+                await dbPut('messages', pollMsg);
+                const el = document.querySelector(`[data-msgid="${safeMsgId(pollMsg.msgId)}"]`);
+                if (el) safeSetHTML(el, renderPollHtml(poll, pollMsg.msgId));
+              }
+            }
           }
         } catch(e) { _dbg(e, 'group-decrypt-signal'); }
         return;
@@ -9771,7 +9806,13 @@ async function initMessenger(dbName) {
       _replayCache.add(msgId); // Speculative mark before first await — blocks concurrent-path duplicates
       if (await dbGet('messages', msgId)) return; // Already persisted
       const meta = { msgId, senderName: msg.fromName, replyTo: msg.replyTo, disappearAt: msg.disappearAt };
-      await dbPut('messages', { msgId, contactId: msg.groupId, text, mine: false, ts: msg.ts, ...meta });
+      // Same poll detection as the 1:1 path — group polls now ride the sender-key
+      // channel, so the JSON text needs the same type tag for the card to render.
+      try {
+        const _p = JSON.parse(text);
+        if (_p && _p.type === 'poll' && typeof _p.pollId === 'string' && Array.isArray(_p.options)) { meta.isPoll = true; meta.poll = _p; }
+      } catch {}
+      await dbPut('messages', { msgId, contactId: msg.groupId, text, mine: false, ts: msg.ts, isPoll: meta.isPoll || undefined, ...meta });
       group.lastMsg = text.slice(0, 30);
       group.lastMsgSender = msg.fromName;
       group.lastMsgAt = msg.ts;
