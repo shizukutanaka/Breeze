@@ -10480,6 +10480,9 @@ async function initMessenger(dbName) {
           try {
             // State channel carries only tiny control frames (typing/read/ping/pong); cap at 4KB
             if (typeof e.data !== 'string' || e.data.length > 4 * 1024) return;
+            // Blocked peers get nothing — blocking closes the connection but a
+            // re-signaled peer re-establishes it, so gate at receive too.
+            if (contact.blocked) return;
             const msg = JSON.parse(e.data);
             if (msg.type === 'typing') { showTyping(contact.id, msg.senderName || contact.name); return; }
             if (msg.type === 'read') { showReadReceipt(contact.id, msg.ts); return; }
@@ -10499,6 +10502,11 @@ async function initMessenger(dbName) {
           // Cap at 512KB — relay enforces 256KB but P2P DataChannel has no server check;
           // an oversized JSON blob from a malicious peer would otherwise hang JSON.parse.
           if (typeof e.data !== 'string' || e.data.length > 512 * 1024) return;
+          // Blocked peers get nothing: blocking closes their connection, but nothing
+          // stops the remote from re-signaling a fresh one — and typing/read/reaction/
+          // poll_vote/ack bypass handleIncoming's blocked-sender drop entirely (they
+          // mutate my messages without it).
+          if (contact.blocked) return;
           const msg = JSON.parse(e.data);
           // v3.6: Typing/read may still arrive on main DC (backward compat)
           if (msg.type === 'typing') { showTyping(contact.id, msg.senderName || contact.name); return; }

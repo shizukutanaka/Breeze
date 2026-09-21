@@ -1,5 +1,13 @@
 # Changelog
 
+## P2P traffic from blocked peers was never dropped (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Blocking closes the peer connection — but nothing stops the remote side from re-signaling a fresh one, and once connected, the datachannel handlers processed their frames unconditionally: typing/read/presence on the state channel, and reactions, poll votes, acks, `msg`, `file`, `group_msg`, even binary chunks on the main channel. Only the types routed through `handleIncoming` hit the blocked-sender drop — a blocked contact's reactions and votes still mutated my messages, and binary chunks still fed the file reassembly buffer. Both channel handlers now drop everything from a `contact.blocked` peer.
+
+---
+
 ## Roster poll synced `creatorId` — but the gates read `createdBy` (branch devin/consolidate-groups, 2026-09-21)
 
 `index.html`, `tests/invariants.test.js`, `CHANGELOG.md`.
