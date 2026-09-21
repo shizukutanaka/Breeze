@@ -1,3 +1,7 @@
+## Packaged apps could never reach the relay — API/share links bound to a dead origin (branch devin/consolidate-groups, 2026-09-20)
+
+`const API = location.origin + '/api'` resolves to `file:///api` on packaged Electron (loadFile), `https://app.breeze.local/api` on Capacitor, and `tauri.localhost/api` on Tauri — none of which serve the worker, so every API call 404'd and a packaged app could not onboard, fetch prekeys, or send a single message. Same for share links: invite/add/drop URLs built on `location.origin` produced `file:///…?join=` links a web recipient cannot open. New `PACKAGED_API_ORIGIN` + `SHARE_BASE` constants (default `https://breeze.pages.dev`) now serve both; `BREEZE_URL` remote-mode Electron and dev servers are untouched, and self-hosters repoint one constant before packaging.
+
 ## Push subscribe/unsubscribe are signed by default (branch devin/consolidate-groups, 2026-09-20)
 
 The endpoint-side verified-when-present auth was inert while clients never sent `{ts, sig}` — anyone who knew a userId could register their own device under `push:{userId}` (decrypting notification metadata) or silently delete the victim's subscriptions. The client now signs both calls through `_ownerAuth` — subscribe binds `endpoint:p256dh:auth`, unsubscribe binds the endpoint — and `PUSH_REQUIRE_AUTH` defaults to required (`=false` opts out). Tests sign through a new `pA` helper sharing key-pinning with `gA`; the unsigned-subscribe case now exercises the explicit opt-out env.

@@ -2034,11 +2034,6 @@ const _I = {
   // validated by tools/i18n-check.mjs (wired into validate.sh).
 };
 // Locales with a full translation file in locales/. Everything else falls back to English.
-// (A 924-language × 25-string table, lang.js, used to sit between the two. Deleted: measured,
-// it supplied ZERO strings to the UI — 18 of its 25 keys were shadowed by the complete inline
-// English table, which t() consults first, and the other 7 are never passed to t() anywhere.
-// It cost 569 KB, 44% of the app's payload, on every cold load. Even working it could only
-// ever reach ~25 of 667 strings: a 96%-English UI, which is not "supporting a language".)
 const FULL_LOCALES = ['ja', 'ko', 'zh-TW', 'es', 'th', 'id', 'pt-BR'];
 function detectLang() {
   const nav = (navigator.language || 'en');
@@ -2677,7 +2672,16 @@ function toggleTheme() {
 
 // i18n: auto-detect browser language
 
-const API = location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? '' : location.origin + '/api';
+// Packaged runtimes serve from a non-relay origin (Electron file:, Capacitor
+// app.breeze.local, Tauri tauri.localhost) — location.origin+'/api' 404s there, so they
+// must talk to a real deployment. Self-hosters: repoint PACKAGED_API_ORIGIN before
+// packaging. SHARE_BASE mirrors it: recipients can't open file:/// or *.local invite links.
+const PACKAGED_API_ORIGIN = 'https://breeze.pages.dev';
+const _packagedOrigin = PLATFORM === 'capacitor' || location.protocol === 'file:'
+  || location.protocol === 'tauri:' || location.hostname.endsWith('.local');
+const API = location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? ''
+  : _packagedOrigin ? PACKAGED_API_ORIGIN + '/api' : location.origin + '/api';
+const SHARE_BASE = _packagedOrigin ? PACKAGED_API_ORIGIN + '/' : location.origin + location.pathname;
 const P = new URLSearchParams(location.search);
 // manifest.json registers web+breeze: as a protocol handler → /?join=%s, where %s is the
 // ENTIRE activated URL (e.g. "web+breeze:abc123"), not the bare token real invite links pass
@@ -9522,7 +9526,7 @@ async function initMessenger(dbName) {
       await renderContacts();
 
       // Generate and share invite link
-      const joinUrl = location.origin + location.pathname + '?join=' + data.token;
+      const joinUrl = SHARE_BASE + '?join=' + data.token;
       navigator.clipboard?.writeText(joinUrl);
 
       const box = _DOM.get('msg-messages');
@@ -10341,14 +10345,11 @@ async function initMessenger(dbName) {
     const meta = { msgId, replyTo: msg.replyTo, disappearAt: msg.disappearAt, senderName: msg.fromName,
       ...(msg.nrn === true ? { nrn: true } : {}) };
 
-
     if (msg.isFile) {
       try {
-        // Local binary-chunk reassembly (handleBinaryChunk): the payload is plaintext
-        // because the DataChannel itself is already authenticated + DTLS-encrypted —
-        // running it through decryptFrom dropped every received file AND counted as a
-        // decrypt failure (3 → bogus session-reset MITM banner). fileBytes cannot be
-        // forged by a peer: JSON.parse never produces a Uint8Array.
+        // Binary chunks stay plaintext — the DataChannel is already DTLS-encrypted, and
+        // decryptFrom dropped them as bogus failures. fileBytes is unforgeable: JSON.parse
+        // never produces a Uint8Array.
         const _localFile = msg.fileBytes instanceof Uint8Array;
         const fileMsg = _localFile ? msg.payload : await decryptFrom(msg.payload, _peerPub);
         if (!fileMsg) return;
@@ -12558,8 +12559,8 @@ async function initMessenger(dbName) {
 
   function generateInviteMessage() {
     const url = myAlias
-      ? location.origin + location.pathname + '?add=@' + myAlias
-      : location.origin + location.pathname + '?add=' + encodeURIComponent(myPubB64) + '&name=' + encodeURIComponent(myName);
+      ? SHARE_BASE + '?add=@' + myAlias
+      : SHARE_BASE + '?add=' + encodeURIComponent(myPubB64) + '&name=' + encodeURIComponent(myName);
 
     const msg = t('inviteMsg', myName, url);
     return { url, msg };
@@ -13464,7 +13465,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         // Store ciphertext on server (server never sees the key)
         const resp = await postAPIRaw('/drop/create', { id: dropId, ct: ctB64, ttl: 86400 });
         if (!resp.ok) throw new Error('Server error');
-        const dropUrl = `${location.origin}/?drop=${dropId}#${keyB64}`;
+        const dropUrl = `${SHARE_BASE}?drop=${dropId}#${keyB64}`;
         // Copy to clipboard
         try { await navigator.clipboard.writeText(dropUrl); } catch { /* fallback below */ }
         // Show result in chat
@@ -13539,8 +13540,8 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const box = _DOM.get('msg-messages');
       const d = document.createElement('div');
       d.className = 'cmd-panel-mono';
-      const addUrl = location.origin + '/?add=' + myPubB64 + '&name=' + encodeURIComponent(myName);
-      const aliasUrl = myAlias ? location.origin + '/?add=' + myAlias : '';
+      const addUrl = SHARE_BASE + '?add=' + myPubB64 + '&name=' + encodeURIComponent(myName);
+      const aliasUrl = myAlias ? SHARE_BASE + '?add=' + myAlias : '';
       safeSetHTML(d, [
         '<b class="i-g">' + t('cmdMyIdentity') + '</b>',
         t('cmdLblName') + ': <b>' + esc(myName) + '</b>',
@@ -13569,7 +13570,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const box = _DOM.get('msg-messages');
       const d = document.createElement('div');
       d.className = 'cmd-panel-mono';
-      const shareLink = location.origin + '/?add=' + (myAlias ? '@' + myAlias : myPubB64);
+      const shareLink = SHARE_BASE + '?add=' + (myAlias ? '@' + myAlias : myPubB64);
       safeSetHTML(d, [
         '<b class="i-green14">' + esc(myName) + '</b>',
         '<div class="i-body13">' + (myShortId || myId) + '</div>',
@@ -13775,7 +13776,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     if (val === '/share') {
       e.preventDefault();
       clearInput();
-      const link = location.origin + '/?add=' + (myAlias ? '@' + myAlias : myPubB64);
+      const link = SHARE_BASE + '?add=' + (myAlias ? '@' + myAlias : myPubB64);
       const shareData = { title: t('shareDialogTitle'), text: t('shareDialogText', myName), url: link };
       if (navigator.share) {
         try { await navigator.share(shareData); } catch(e) { if (e.name !== 'AbortError') _dbg(e); }

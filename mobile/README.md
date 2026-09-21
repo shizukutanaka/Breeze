@@ -2,6 +2,10 @@
 
 Capacitor 6 wrapper for the Breeze web app.
 
+The packaged webview serves from `https://app.breeze.local`, so API calls and invite
+links resolve against `PACKAGED_API_ORIGIN`/`SHARE_BASE` in `index.html` (default:
+the hosted breeze.pages.dev deployment — repoint it to self-host).
+
 ## Quick Start
 
 ```bash
