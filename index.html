@@ -1775,6 +1775,9 @@ const _I = {
     toastGroupLeaveFail: 'Failed to leave group on server (removed locally)',
     toastGroupDeleteFail: 'Failed to delete group on server (removed locally)',
     demotedAdmin: "{0} is no longer a group admin",
+    transferredOwnership: "{0} is now the group creator",
+    toastCreatorOnly: 'Only the group creator can transfer ownership',
+    toastTransferFail: 'Ownership transfer failed',
     toastNoIdentityBackup: 'No identity to backup',
     toastInvalidBackup: 'Invalid backup file',
     toastMsgTooLong: 'Message too long (max 64 KB)',
@@ -1974,6 +1977,7 @@ const _I = {
     cmdAdminKick: '/admin kick @name — Remove member',
     cmdAdminPromote: '/admin promote @name — Make admin',
     cmdAdminDemote: '/admin demote @name — Remove admin',
+    cmdAdminTransfer: '/admin transfer @name — Transfer ownership (creator only)',
     cmdAdminRename: '/admin rename New Name — Rename group',
     cmdAdminHelpLine: '/admin help — Show this help',
     cmdSessionTitle: 'Session Info',
@@ -12060,6 +12064,7 @@ async function initMessenger(dbName) {
           t('cmdAdminKick'),
           t('cmdAdminPromote'),
           t('cmdAdminDemote'),
+          t('cmdAdminTransfer'),
           t('cmdAdminRename'),
           t('cmdAdminHelpLine'),
         ].join('<br>'));
@@ -12166,6 +12171,37 @@ async function initMessenger(dbName) {
             }
             auditLog('group', 'Demoted ' + member.name + ' in ' + activeContact.name);
             d.textContent = t('demotedAdmin', member.name);
+          } else { d.textContent = t('uiMemberNotFound', target); }
+        }
+      } else if (sub.startsWith('transfer ')) {
+        // Ownership transfer — the Worker endpoint existed but no client path did, so a
+        // group whose creator went dark had permanently unmanageable admin surface.
+        const target = sub.slice(9).trim().replace('@', '');
+        if (activeContact.createdBy !== myId) { d.textContent = t('toastCreatorOnly'); box.appendChild(d); box.scrollTop = box.scrollHeight; return; }
+        if (activeContact.members) {
+          const member = activeContact.members.find(m => m.name?.toLowerCase() === target.toLowerCase());
+          if (member && member.id !== myId) {
+            let done = false;
+            if (API && activeContact.joinToken) {
+              try {
+                const trTs = Date.now();
+                const trSig = await signMessage(`breeze-group-transfer:${activeContact.joinToken}:${myId}:${trTs}:${member.id}`);
+                const trBody = { token: activeContact.joinToken, adminId: myId, newCreatorId: member.id, ts: trTs };
+                if (trSig) trBody.sig = trSig;
+                const trResp = await postAPIRaw('/group/transfer', trBody);
+                done = trResp.ok;
+              } catch(e) { _dbg(e, 'server-transfer'); }
+            }
+            if (done) {
+              // Mirror the server's admin rebuild: new creator's authority is implicit,
+              // outgoing creator is retained as admin.
+              activeContact.createdBy = member.id;
+              activeContact.admins = (activeContact.admins || []).filter(id => id !== member.id);
+              if (!activeContact.admins.includes(myId)) activeContact.admins.push(myId);
+              await dbPut('contacts', activeContact);
+              auditLog('group', 'Transferred ownership of ' + activeContact.name + ' to ' + member.name);
+              d.textContent = t('transferredOwnership', member.name);
+            } else { d.textContent = t('toastTransferFail'); }
           } else { d.textContent = t('uiMemberNotFound', target); }
         }
       } else {
