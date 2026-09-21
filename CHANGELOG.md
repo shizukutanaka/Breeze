@@ -1,3 +1,15 @@
+## esc() didn't escape quotes — every attr="${esc(x)}" was attribute-injectable (branch devin/esc-attr-quotes, 2026-09-21)
+
+esc() is textContent→innerHTML, which per the HTML serializer spec escapes only
+& < > (and nbsp) — " and ' pass through raw. But esc() output is interpolated into
+double-quoted attributes all over (alt=/download= on file bubbles, value=/placeholder=
+on prompts, data-name= in the mention list, title= on quotes/badges). A peer-supplied
+value like a file named `x"onmouseover="alert(1)` breaks out of the attribute into a
+live event handler — stored-XSS on every file message render. Fix at the root: esc()
+now also encodes " and ' as &quot;/&#39;, so every current and future
+attr="${esc(x)}" site is safe by construction. Text-node output is unchanged
+(quotes still display correctly — browsers decode the entities).
+
 ## Relay-rollback hardening on signed stored state (branch devin/signed-state-monotonic, 2026-09-21)
 
 Every signed-state endpoint checked the signature's freshness (±5min `REQ_TS`) but nothing ordered two *in-window* writes — a relay that captures a signed request can replay it moments after a newer one lands and silently roll the state back. KV has no compare-and-swap, so the stored signed timestamp is now the high-water mark on both write paths:

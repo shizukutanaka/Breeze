@@ -3052,7 +3052,11 @@ async function fetchRetry(url, opts = {}, { maxRetries = 3, baseDelay = 1000, ti
   }
 }
 
-function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+// esc() output lands in BOTH text and attribute contexts (`attr="${esc(x)}"`), but
+// textContent→innerHTML only escapes & < > — a raw " or ' breaks out of a quoted
+// attribute (e.g. a peer's filename `x"onmouseover="…` in alt=/download=). Encode
+// quotes here so every esc() call site is attribute-safe by construction.
+function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML.replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 // Grapheme-aware avatar truncator: takes up to `max` grapheme clusters so compound emoji (ZWJ sequences, skin-tone modifiers) aren't split into half-surrogates.
 function avatarSlice(s, max = 2) {
   if (!s) return '';
