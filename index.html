@@ -1731,12 +1731,8 @@ const _I = {
     ok: 'OK',
     settingsImmediate: 'Settings take effect immediately.',
     noBookmarks: 'No bookmarked messages',
-    permanent: 'Permanent',
-    permanentRoom: 'Permanent room',
     roomDefault: 'Room',
-    roomTTLPrompt: 'Room TTL: 1=1h, 2=24h, 3=7d, 4=Permanent',
     copiedClipboard: 'Copied to clipboard',
-    roomExpires: "Expires in {0}h",
     groupCreated: "Group \"{0}\" created",
     shareInvite: 'Share this link to invite members:',
     clipboardCopied: 'Copied to clipboard',
@@ -10925,24 +10921,13 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'restore'); showToast(t('backupWrongPass'), 'error'); }
   }
 
-  // v3 PRO: EPHEMERAL ROOMS — URL = chat
-  //
-  // Free: 1 hour TTL
-  // 24h / 7d / permanent
-  async function createEphemeralRoom(name, ttl) {
-    const roomId = 'room:' + btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(12)))).replace(/[+/=]/g, '');
-    const maxTtl = ttl;
-    const roomUrl = location.origin + '/?join=' + roomId;
-    // Register room on server (if available)
-    if (API) {
-      try {
-        await postAPIRaw('/group/create', { creatorId: myId, name: name || 'Room', members: [{ id: myId, pubB64: myPubB64, name: myName }], ttl: maxTtl });
-      } catch(e) { _dbg(e); }
-    }
-    // Copy to clipboard
-    navigator.clipboard?.writeText(roomUrl).catch(() => {});
-    return { roomId, roomUrl, ttl: maxTtl };
-  }
+  // REMOVED: createEphemeralRoom — /room's private copy of group creation that put a
+  // client-generated 'room:<random>' id in the ?join= URL while the Worker indexes groups
+  // by the SERVER token it returns (grp:<token>). Every /room link 404'd at /group/join —
+  // dead on arrival — and the creator never got a local contact for it. Its 1h/24h/7d/
+  // permanent TTL picker was also decorative: /group/create accepts ttl but ignores it
+  // (every invite is TTL.MONTH, refreshed on read). /room now delegates to
+  // createGroupInviteLink, the working path.
 
   // v1 INTEGRATION: Safety Features (Panic Wipe Mode)
 
@@ -13767,25 +13752,13 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       box.scrollTop = box.scrollHeight;
     }
 
-    // v3: /room — Create ephemeral room
+    // /room — create a shareable room (delegates to the working invite-link path; the old
+    // private implementation emitted links that could never join — see REMOVED note above)
     if (val.startsWith('/room')) {
       e.preventDefault();
       clearInput();
       const name = val.slice(6).trim() || t('roomDefault');
-      const ttlOptions = [3600, 86400, 604800, 0];
-      const ttlLabels = ['1h', '24h', '7d', t('permanent')];
-      const ttlChoice = parseInt(await showPrompt(
-        t('roomTTLPrompt'), '1', { placeholder: '1-4' }) || '1') - 1;
-      const { roomUrl, ttl } = await createEphemeralRoom(name, ttlOptions[Math.min(ttlChoice, ttlOptions.length - 1)]);
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'chat-empty';
-      safeSetHTML(d, `<b class="i-g">${esc(name)}</b><br>
-        <span class="text-xs color-t3">${ttl === 0 ? (t('permanentRoom')) : (t('roomExpires', ttl / 3600))}</span><br>
-        <code class="text-xs i-green-break">${esc(roomUrl)}</code><br>
-        <span class="text-xs color-t3">${t('copiedClipboard')}</span>`);
-      box.appendChild(d);
-      box.scrollTop = box.scrollHeight;
+      await createGroupInviteLink(name);
     }
   });
 
