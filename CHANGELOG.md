@@ -1,5 +1,13 @@
 # Changelog
 
+## /contacts import had no file-size or entry-count caps (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`/import` got a `file.size > CONFIG.FILE_MAX` cap earlier, but `/contacts import` read `file.text()` with no limit — a huge "contacts" JSON froze the tab before `JSON.parse` even ran — and then looped `dbGet`+`dbPut` over every entry. Now capped at `FILE_MAX` bytes and 10,000 entries.
+
+---
+
 ## Relay signal polls accepted posts from anyone who knew the room name (branch devin/consolidate-groups, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).

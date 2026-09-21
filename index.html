@@ -12673,9 +12673,14 @@ async function initMessenger(dbName) {
       input.type = 'file'; input.accept = '.json';
       input.onchange = async (ev) => {
         try {
+          // Same cap as /import — file.text() loads the whole file; a huge "contacts"
+          // JSON would hang the tab before JSON.parse even runs.
+          if (ev.target.files[0].size > CONFIG.FILE_MAX) { showToast(t('toastMax50MB'), 'error'); return; }
           const text = await ev.target.files[0].text();
           const data = JSON.parse(text);
           if (!data.contacts || !Array.isArray(data.contacts)) { showToast(t('toastInvalidFile'), 'error'); return; }
+          // 50 MB of contacts is ~500k entries × IDB write — cap the list itself.
+          if (data.contacts.length > 10000) { showToast(t('toastInvalidFile'), 'error'); return; }
           let added = 0, skipped = 0;
           for (const c of data.contacts) {
             // Validate required fields: pubB64 must be a valid base64 string for non-groups
