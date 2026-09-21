@@ -90,9 +90,6 @@ pub fn run() {
                     }
                 }
             }
-            RunEvent::ExitRequested { api, .. } => {
-                api.prevent_exit();
-            }
             _ => {}
         });
 }

@@ -1,5 +1,15 @@
 # Changelog
 
+## Tauri Quit was a dead menu item (branch devin/consolidate-groups, 2026-09-20)
+
+- **`RunEvent::ExitRequested` was unconditionally vetoed** — `api.prevent_exit()` ran for every exit request, including the tray Quit menu's own `app.exit(0)`: the Quit item emitted ExitRequested, which the handler immediately cancelled, so it did nothing. macOS Cmd+Q and OS-level quit requests were swallowed the same way. The hide-to-tray behavior already lives in `WindowEvent::CloseRequested`; the unconditional veto had no purpose. Removed.
+
+- **README claimed CI runs** (`npm test`, `validate.sh`, breeze.zip upload) — but `.github/workflows/` is `.gitignore`d and no workflow exists: the former automation account lacks the `workflows` OAuth scope, and a push attempt from this credential was rejected identically. The README now points at the preserved `ci.yml` + activation runbook in `docs/CI-SETUP.md`.
+
+- **`handleGroupCreate` creator-key ownership proof** — see entry above (creatorPub must start with creatorId, same as join's KEY_MISMATCH gate).
+
+---
+
 ## Group-create creator key ownership proof (branch devin/consolidate-groups, 2026-09-20)
 
 - **`handleGroupCreate` accepted `creatorPub` ≠ `creatorId`** — while `handleGroupJoin` has always enforced `memberPub.startsWith(memberId)`, create never bound the creator's claimed id to their key: `creatorId: <victim>` + `creatorPub: <attacker>` produced a roster record that binds the victim's id/name to the attacker's key, so every joiner encrypts sender keys to the wrong key under the victim's identity. Now rejects with `KEY_MISMATCH` (same as join). Tripwire test added; existing fixtures updated to satisfy the real invariant (`creatorId = creatorPub.slice(0,12)`, which every legit client already satisfies).
