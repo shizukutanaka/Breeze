@@ -1,5 +1,13 @@
 # Changelog
 
+## /security panel displayed a stale CSP claim (branch devin/csp-display-truth, 2026-09-20)
+
+`index.html`, `locales/ja.json`, `CHANGELOG.md`, `_headers`/`tauri/src-tauri/tauri.conf.json` (CSP hash).
+
+The security panel's CSP line was a hardcoded string describing the `<meta>` fallback (`script-src self unsafe-inline`) — for the actual deployed policy it *understated* protection: the real enforcement is the `_headers` hash-pinned `script-src` (no unsafe-inline). Now shows both layers truthfully: header = hash-pinned sha256, `<meta>` = fallback baseline read live from the DOM (so it can never drift again). Neighboring claims re-verified while here: `negotiated:true` DCEP, `bufferedAmountLowThreshold`, 256-B pad boundary, double-HMAC timing compare, ±5min anti-replay — all real.
+
+---
+
 ## I19 landed: relay-only by default when TURN is provisioned + STUN self-hosting (branch devin/i19-relay-only-default, 2026-09-20)
 
 vitest 822 → **825** (+3 worker tests); `index.html`, `_worker.js`, `wrangler.toml`, `.env.example`, `docs/SELF_HOSTING.md`, `docs/ROADMAP.md`, `CHANGELOG.md`, plus `_headers`/`tauri/src-tauri/tauri.conf.json` CSP-hash propagation.
