@@ -417,6 +417,7 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 
 /* ─── Template utility classes (v3.5: inline style elimination) ─── */
 .i-g { color: var(--g) }
+.i-r { color: var(--r) }
 .i-g13 { color: var(--g); font-size: 13px }
 .i-g12 { color: var(--g); font-size: 12px }
 .i-heading { font-weight: 600; color: var(--g); margin-top: 12px }
@@ -1392,6 +1393,17 @@ const _I = {
     ktRolled: '⚠️ This contact\'s key changed since your last check — verify the safety number above carefully',
     ktTampered: '🚨 The server\'s key log looks tampered — do not trust this safety number',
     ktUnavailable: 'Key-transparency check unavailable (offline or no server)',
+    // C8: code integrity — compare the served bundle against the public repo
+    cvTitle: 'Code verification',
+    cvChecking: 'Fetching served code and public repository copy…',
+    cvServedHash: 'Served index.html SHA-256',
+    cvUnreachable: 'unreachable',
+    cvMatch: 'match',
+    cvMismatch: 'MISMATCH',
+    cvVerdictOk: 'This host serves byte-identical code to the audited public repository.',
+    cvVerdictWarn: 'This host serves DIFFERENT code than the public repo. Unless you deployed a modified build yourself, treat this as a possible supply-chain warning.',
+    cvNote: 'Forks and self-hosted builds legitimately differ — this is an integrity signal, not a verdict.',
+    cvFailed: 'Verification failed — could not fetch (offline or blocked).',
     delivered: 'Delivered',
     read: 'Read',
     backupCreated: 'Backup complete! Remember your passphrase.',
@@ -12106,7 +12118,7 @@ async function initMessenger(dbName) {
         '/alias &lt;name&gt; · /whoami · /who · /debug · /online',
         '',
         '<b>' + t('helpSecurity') + '</b>',
-        '/security · /verify · /audit · /retention · /backup · /keywrap',
+        '/security · /verify · /codeverify · /audit · /retention · /backup · /keywrap',
         '/sessions · /wipe · /gdpr · /panic (Ctrl+Shift+Backspace)',
         '/devices · /link [pub] · /linkto &lt;pub&gt; · /unlink &lt;n&gt; · /migrate',
         '',
@@ -12887,6 +12899,53 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         t('secAntiReplay'),
       ].join('<br>'));
       box.appendChild(d); box.scrollTop = box.scrollHeight;
+    }
+
+    // C8: /codeverify — the honest kernel of "web-app integrity": the only trust
+    // anchor a host can't control is the public source repository itself, so fetch
+    // the served bundle and the repo's copy and compare SHA-256. Manual/opt-in so
+    // self-hosted forks (which legitimately differ) aren't spammed with warnings.
+    if (val === '/codeverify') {
+      e.preventDefault();
+      clearInput();
+      const box = _DOM.get('msg-messages');
+      const d = document.createElement('div');
+      d.className = 'cmd-panel-mono';
+      safeSetHTML(d, esc(t('cvChecking')));
+      box.appendChild(d); box.scrollTop = box.scrollHeight;
+      try {
+        const sha = async (txt) => {
+          const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(txt));
+          return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+        };
+        const branches = ['main', 'claude/nice-ride-T6yb0'];
+        // ?cv= defeats the SW's stale-while-revalidate cache — we want the bytes the
+        // host would serve to a fresh visitor, not last session's cached copy.
+        const [servedResp, repoTexts] = await Promise.all([
+          fetch('/index.html?cv=' + Date.now(), { cache: 'no-store' }),
+          Promise.all(branches.map(br =>
+            fetch('https://raw.githubusercontent.com/shizukutanaka/Breeze/' + br + '/index.html', { cache: 'no-store' })
+              .then(r => (r.ok ? r.text() : null)).catch(() => null))),
+        ]);
+        if (!servedResp.ok) throw new Error('serve-fetch ' + servedResp.status);
+        const servedHash = await sha(await servedResp.text());
+        const lines = ['<b>' + t('cvTitle') + '</b>', '', t('cvServedHash') + ': ' + servedHash.slice(0, 16) + '…'];
+        let matched = false;
+        for (let i = 0; i < branches.length; i++) {
+          const rt = repoTexts[i];
+          if (!rt) { lines.push('GitHub/' + branches[i] + ': ' + t('cvUnreachable')); continue; }
+          const rh = await sha(rt);
+          if (rh === servedHash) matched = true;
+          lines.push('GitHub/' + branches[i] + ': ' + rh.slice(0, 16) + '… — ' +
+            (rh === servedHash ? '<span class="i-g">✓ ' + t('cvMatch') + '</span>' : '<span class="i-r">✗ ' + t('cvMismatch') + '</span>'));
+        }
+        lines.push('', matched ? '<span class="i-g">' + t('cvVerdictOk') + '</span>' : '<span class="i-r">' + t('cvVerdictWarn') + '</span>', t('cvNote'));
+        safeSetHTML(d, lines.join('<br>'));
+      } catch (err) {
+        _dbg(err, 'codeverify');
+        safeSetHTML(d, esc(t('cvFailed')));
+      }
+      box.scrollTop = box.scrollHeight;
     }
 
     // v3.2: /rename — Change your display name
