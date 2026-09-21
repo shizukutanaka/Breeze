@@ -28,6 +28,16 @@ README same-grep leftovers: "6 platforms" listed only 5 (Web/Electron/Tauri/Andr
 
 ---
 
+## E2E suite ran nowhere but the author's machine (branch devin/e2e-portable, 2026-09-20)
+
+E2E **60/60 passing** (previously: every spec died at browser launch off the author's box); `playwright.config.js`, `package.json`, `CONTRIBUTING.md`, `docs/ASSESSMENT.md`, `CHANGELOG.md`.
+
+Socratic check: `docs/ASSESSMENT.md` advertises a real-browser E2E suite — but `playwright.config.js` hardcoded `executablePath: '/opt/pw-browsers/chromium'`, a path that only exists in the maintainer's own environment. On any other machine all 60 specs failed at `browserType.launch` before exercising a single assertion: a test suite that only ever ran on one machine. The fix keeps the preinstalled-path fast path when it actually exists (`existsSync` check, plus a new `E2E_BROWSER_PATH` override) and otherwise falls back to Playwright's managed `npx playwright install chromium` download — the standard, portable default.
+
+Also: `package.json` had no way to run the suite at all (only `test`/`test:watch`/`test:coverage`) — added `test:e2e`; CONTRIBUTING's pre-submit checklist mentioned zero test commands — now lists validate + vitest + e2e; and ASSESSMENT.md's "current measurements" table had drifted on every row (tests 798→841, E2E 34→60, gates 40→43, locales 97%→96% core, commands 59→65, file line counts) — refreshed to measured values with their verification commands.
+
+---
+
 ## QR codes were decorative: encoder rewrite + C13 scan-to-verify (branch devin/c13-qr-verify, 2026-09-20)
 
 vitest 829 → **835** (+6 decode regression tests); `index.html`, `tests/qr.test.js` (new), `locales/ja.json`, `package.json` (+jsqr devDep), `docs/ROADMAP.md`, `CHANGELOG.md`, `_headers`/`tauri/src-tauri/tauri.conf.json` (CSP hash propagation).
