@@ -1,10 +1,12 @@
 # Changelog
 
-## /security panel displayed a stale CSP claim (branch devin/csp-display-truth, 2026-09-20)
+## deploy.sh walked operators through provisioning a billing system the product deleted (branch devin/deploy-drift, 2026-09-20)
 
-`index.html`, `locales/ja.json`, `CHANGELOG.md`, `_headers`/`tauri/src-tauri/tauri.conf.json` (CSP hash).
+`deploy.sh`, `README.md`, `CHANGELOG.md`.
 
-The security panel's CSP line was a hardcoded string describing the `<meta>` fallback (`script-src self unsafe-inline`) — for the actual deployed policy it *understated* protection: the real enforcement is the `_headers` hash-pinned `script-src` (no unsafe-inline). Now shows both layers truthfully: header = hash-pinned sha256, `<meta>` = fallback baseline read live from the DOM (so it can never drift again). Neighboring claims re-verified while here: `negotiated:true` DCEP, `bufferedAmountLowThreshold`, 256-B pad boundary, double-HMAC timing compare, ±5min anti-replay — all real.
+Musk-algorithm pass on the deploy script ("delete the requirement" step): `grep` confirms **zero** references to `STRIPE_*`, `/api/webhook`, or `pricing` anywhere in `_worker.js`/`index.html` — multi-account billing was removed (see SECURITY.md "Removed: multi-account billing") — yet deploy.sh's §6 still prompted every deployer to create 3 Stripe products and paste **live `sk_`/`whsec_` secrets** into a Worker that never reads them. Pasting real credentials into a sinkhole is worse than a dead prompt. §2's legal-placeholder check was equally dead (`[Your Name / Company]` exists nowhere in index.html) and always printed "Already set". Both removed; sections renumbered; the trailing "Pricing: /?pricing" line pointed at a URL param nothing reads — removed. Verified every remaining step maps to a real env var (`VAPID_*`, `TURN_*`) or endpoint (`/api/health`).
+
+README same-grep leftovers: "6 platforms" listed only 5 (Web/Electron/Tauri/Android/iOS), and the command count was stale at "60+" (65 in /help).
 
 ---
 
