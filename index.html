@@ -5719,7 +5719,9 @@ async function initMessenger(dbName) {
     if (!CONFIG.GROUP_RATCHET_V5) return;
     try {
       const group = await dbGet('contacts', groupId);
-      const targets = (group?.members || []).filter(m => m.id !== myId && m.id !== kickedId && m.pubB64);
+      // Include kickedId: per-member 1:1 encryption (no group-key leak) — the
+      // receiver's kickedId===myId branch exists precisely for this notice.
+      const targets = (group?.members || []).filter(m => m.id !== myId && m.pubB64);
       for (const m of targets) {
         const encrypted = await encryptFor(JSON.stringify({ type: 'group_kick', groupId, kickedId, epoch }), m.pubB64);
         if (!encrypted) continue;
@@ -9624,7 +9626,14 @@ async function initMessenger(dbName) {
           JSON.stringify(group.bannedIds || []) !== JSON.stringify(data.banned || []) ||
           (typeof data.name === 'string' && data.name && group.name !== data.name);
         if (membersChanged || metaChanged) {
-          if (membersChanged) group.members = newMembers;
+          if (membersChanged) {
+            // Backstop for a lost kick notice: my id vanishing = kicked (stops void-sends); reappearing clears it.
+            const wasMember = oldMembers.some(m => m.id === myId);
+            const isMember = newMembers.some(m => m.id === myId);
+            if (wasMember && !isMember) { group.kicked = true; showToast(t('toastKickedFromGroup', group.name || ''), 'info'); }
+            else if (!wasMember && isMember && group.kicked) delete group.kicked;
+            group.members = newMembers;
+          }
           if (typeof data.creatorId === 'string' && data.creatorId) group.createdBy = data.creatorId;
           if (Array.isArray(data.admins)) group.admins = data.admins.filter(id => typeof id === 'string' && id.length <= 64).slice(0, CONFIG.GROUP_MAX);
           if (Array.isArray(data.banned)) group.bannedIds = data.banned.filter(id => typeof id === 'string' && id.length <= 64).slice(0, CONFIG.GROUP_MAX);

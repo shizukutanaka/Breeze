@@ -1,3 +1,15 @@
+## Kicked members never learned they were kicked — notice excluded them, poll ignored self-removal (branch devin/kick-self-notice, 2026-09-21)
+
+Two halves of one bug: notifyGroupKick filtered kickedId out of its targets, so the
+receiver-side kickedId===myId branch (mark group.kicked, toast, close conversation)
+was dead code — the kicked member's client never got the E2E notice. And the roster
+poll, which DID see their id vanish, updated members[] without setting kicked — so
+every send gate (contact.kicked) stayed open and they kept composing + relaying
+ciphertext that every recipient's roster check dropped: silent void-sending forever.
+Fix: include kickedId in the fan-out (it's per-member 1:1 encryption — no group-key
+leak), and treat "my id dropped out of the roster" as a kick signal in the poll —
+sets kicked, toasts, and clears it again if an unban+rejoin re-adds me.
+
 ## 1:1 relayed reactions get the same caps the group path already had (branch devin/reaction-caps-1to1, 2026-09-21)
 
 The encrypted `isSignal` reaction handler on the 1:1 path created `reactions[emoji]`
