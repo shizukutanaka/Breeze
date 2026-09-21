@@ -163,7 +163,10 @@ Unit tests (`tests/`) cover the Cloudflare worker's security-critical logic
 (rate limiting, proof-of-work, webhook idempotency, SSRF guard, prekey OTP
 consumption) and the Double Ratchet crypto core (`src/crypto/ratchet.js`:
 round-trip, out-of-order/skipped keys, large-gap recovery, replay rejection).
-CI runs syntax checks, `npm test`, `validate.sh`, and uploads `breeze.zip`.
+A CI workflow (syntax checks, `npm test`, `validate.sh`, `breeze.zip` artifact)
+is preserved in `docs/CI-SETUP.md` — it is **not yet active** on GitHub (the
+`.github/workflows/` push requires a maintainer credential with the `workflows`
+scope; see the runbook). Until then the gates above run locally.
 
 > `breeze.zip` is a build artifact (produced by `./build.sh zip`), not tracked
 > in git. The repository tree is the source of truth.
