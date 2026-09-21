@@ -5528,7 +5528,7 @@ async function initMessenger(dbName) {
     }
     if (e.data?.type === 'mark-read' && e.data.contactId) {
       _pushContactId(e.data.contactId).then(cid => dbGet('contacts', cid)).then(c => {
-        if (c) { c.unread = 0; dbPut('contacts', c).then(() => renderContacts()).catch(err => _dbg(err, 'mark-read-put')); }
+        if (c) _patchContact(c, f => { f.unread = 0; }).then(() => renderContacts()).catch(err => _dbg(err, 'mark-read-put'));
       }).catch(err => _dbg(err, 'mark-read'));
     }
   });
@@ -6517,9 +6517,7 @@ async function initMessenger(dbName) {
         div.addEventListener('touchend', () => {
           if (_cswiping && _cdx < -60) {
             haptic.tap();
-            c.archived = !c.archived;
-            dbPut('contacts', c).then(() => renderContacts()).catch(err => _dbg(err, 'archive-swipe'));
-            showToast(c.archived ? (t('archived')) : (t('unarchived')), 'info');
+            _patchContact(c, f => { f.archived = !f.archived; }).then(f => { renderContacts(); if (f) showToast(f.archived ? t('archived') : t('unarchived'), 'info'); }).catch(err => _dbg(err, 'archive-swipe'));
           }
           div.classList.remove('swiping');
           div.classList.add('swipe-back');
@@ -6581,8 +6579,8 @@ async function initMessenger(dbName) {
         if (action === 'rename') {
           const newName = await showPrompt(t('newNamePrompt'), c.name);
           if (newName && newName.trim()) {
-            c.name = newName.trim().slice(0, 64);
-            await dbPut('contacts', c);
+            const nn = newName.trim().slice(0, 64);
+            await _patchContact(c, f => { f.name = nn; });
             renderContacts();
             if (activeContact?.id === c.id) _DOM.get('msg-conv-name').textContent = c.name;
           }
@@ -6640,45 +6638,38 @@ async function initMessenger(dbName) {
         } else if (action === 'safety') {
           showSafetyNumber(c);
         } else if (action === 'pin') {
-          c.pinned = !c.pinned;
-          await dbPut('contacts', c);
+          await _patchContact(c, f => { f.pinned = !f.pinned; });
           renderContacts();
         } else if (action === 'block') {
-          c.blocked = !c.blocked;
-          await dbPut('contacts', c);
+          await _patchContact(c, f => { f.blocked = !f.blocked; });
           auditLog('contact', (c.blocked ? 'Blocked' : 'Unblocked') + ' ' + c.name, c.blocked ? 'warn' : 'info');
           if (c.blocked && peers[c.pubB64]) { try { peers[c.pubB64].transition('CLOSED'); } catch(e) { _dbg(e); } peers[c.pubB64].pc?.close(); delete peers[c.pubB64]; }
           if (c.blocked && c.pubB64) { _outbox.delete(c.pubB64); _persistOutbox(); }
           renderContacts();
         } else if (action === 'vip') {
-          c.vip = !c.vip;
-          if (c.vip) c.muted = false; // VIP and mute are opposites — holding both is incoherent
-          await dbPut('contacts', c);
+          // VIP and mute are opposites — holding both is incoherent
+          await _patchContact(c, f => { f.vip = !f.vip; if (f.vip) f.muted = false; });
           showToast(t(c.vip ? 'vipSet' : 'vipCleared', c.name), 'info');
           renderContacts();
         } else if (action === 'mute') {
-          c.muted = !c.muted;
-          if (c.muted) c.vip = false;
-          await dbPut('contacts', c);
+          await _patchContact(c, f => { f.muted = !f.muted; if (f.muted) f.vip = false; });
           renderContacts();
         } else if (action === 'label') {
           const current = (c.labels || []).join(', ');
           const val = await showPrompt(t('labelPrompt') + ' — ' + esc(c.name) + ':', current, { placeholder: t('labelPrompt') });
           if (val !== null) {
-            c.labels = val.split(',').map(s => s.trim()).filter(Boolean);
-            await dbPut('contacts', c);
+            const nl = val.split(',').map(s => s.trim()).filter(Boolean);
+            await _patchContact(c, f => { f.labels = nl; });
             auditLog('contact', 'Labels updated for ' + c.name + ': ' + (c.labels.join(', ') || 'none'));
             renderContacts();
             if (_activeFolder === 'labels') renderLabelFilter();
           }
         } else if (action === 'archive') {
-          c.archived = !c.archived;
-          await dbPut('contacts', c);
+          await _patchContact(c, f => { f.archived = !f.archived; });
           renderContacts();
           showToast(c.archived ? t('archived') : t('unarchived'), 'info');
         } else if (action === 'markread') {
-          c.unread = 0;
-          await dbPut('contacts', c);
+          await _patchContact(c, f => { f.unread = 0; });
           renderContacts();
         }
       };
@@ -6754,7 +6745,18 @@ async function initMessenger(dbName) {
   } catch { _drafts = {}; }
   function _persistDrafts() { try { dbPut('settings', _drafts, 'drafts').catch(e => _dbg(e, 'drafts')); } catch {} }
 
-  let openConversation = async function(contact) {
+  // Read-mutate-write the STORED record — mutating a render-list snapshot and putting
+  // it back verbatim clobbers concurrent lastMsg/unread writes that landed between
+  // render and action (same lost-write class the receive path fixed with _mergeContactRx).
+  async function _patchContact(stale, fn) {
+    const fresh = await dbGet('contacts', stale.id).catch(() => null);
+    if (!fresh) return null;
+    fn(fresh);
+    await dbPut('contacts', fresh);
+    return Object.assign(stale, fresh); // caller's object stays truthful too
+  }
+
+  let openConversation = async function(contact) { 
     // v3.3: Save draft for current contact before switching
     if (activeContact) {
       const input = _DOM.get('msg-input');
@@ -6777,7 +6779,9 @@ async function initMessenger(dbName) {
     // window must win — otherwise the stale render lands in the newer conversation's
     // view (rapid A→B click shows A's history under B's header).
     const openGen = ++_openGen;
-    await dbPut('contacts', contact);
+    // Patch the stored record — `contact` is a render-list snapshot and a verbatim
+    // put would clobber lastMsg/unread from a message that arrived mid-open.
+    await _patchContact(contact, f => { f.unread = 0; });
     const nameEl = _DOM.get('msg-conv-name');
     // v3.6: Show member count for groups in header
     const memberBadge = contact.isGroup && contact.members ? ` <span class="enc-badge">${contact.members.length} ${esc(t('cmdMembersLabel'))}</span>` : '';

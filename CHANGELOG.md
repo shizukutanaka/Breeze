@@ -1,3 +1,13 @@
+## Contact mutations patch the stored record, not a stale render snapshot (branch devin/patch-contact-helper, 2026-09-21)
+
+Every contact-list action (rename/pin/block/vip/mute/label/archive/mark-read,
+swipe-archive, openConversation, the push mark-read message) mutated the
+render-list object and `dbPut` it back verbatim — a lastMsg/unread bump that landed
+between render and the action was clobbered (same lost-write class #94 fixed on the
+receive path). New `_patchContact(stale, fn)` helper does read-mutate-write on the
+stored record and `Object.assign`s the caller's object so follow-up UI reads stay
+truthful. Eleven call sites converted; line count is neutral.
+
 ## Relay-rollback hardening on signed stored state (branch devin/signed-state-monotonic, 2026-09-21)
 
 Every signed-state endpoint checked the signature's freshness (±5min `REQ_TS`) but nothing ordered two *in-window* writes — a relay that captures a signed request can replay it moments after a newer one lands and silently roll the state back. KV has no compare-and-swap, so the stored signed timestamp is now the high-water mark on both write paths:
