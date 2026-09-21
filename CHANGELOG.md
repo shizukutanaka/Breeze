@@ -10,6 +10,14 @@ Socratic check on the "8 languages" claim, this time per-platform: `index.html` 
 
 ---
 
+## Remote wipe was doubly dead — and would have been an unsigned remote-wipe primitive (branch devin/wipe-harden, 2026-09-20)
+
+`index.html`, `_headers`/`tauri.conf.json` (CSP hash), `CHANGELOG.md`.
+
+Socratic trace of `/wipe`'s "wakes other devices" claim: the signal send was unobservable twice over — `/msg/send` rejects `payload: ''` (400 MISSING_FIELDS) and `handleMsgSend` never copies `type` onto the stored message, so `msg.type === 'remote_wipe'` can never fire. The dangerous half: if the relay ever did ferry it, `from === myId` is self-asserted — anyone who knows your userId could wipe every device you own. The dead send is removed; the receiver is now signature-gated (`breeze-remote-wipe:<from>:<ts>`, Ed25519 verified against this account's signing key) so any future signed send is safe by construction. Real multi-device wipe needs the signed device registry as trust anchor — a Worker change, deferred pending approval. Account delete (signed) + push unsubscribe + local wipe continue to do the real work of /wipe.
+
+---
+
 ## Onboarding @alias never registered — /alias/set requires PoW, createIdentity sent none (branch devin/onboard-alias-pow, 2026-09-20)
 
 `index.html`, `_headers`/`tauri.conf.json` (CSP hash), `CHANGELOG.md`.
