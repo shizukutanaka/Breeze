@@ -1,5 +1,13 @@
 # Changelog
 
+## Blocked contacts still received relayed signals (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Blocking closed the P2P channel and hid the input bar — but `sendSignal` (reactions, edits, deletes, poll votes) and the delayed read receipt both had a second delivery leg through the encrypted relay that ran regardless. A blocked contact's poll would still receive my mutation signals and read receipts — an activity leak to the exact person the block exists to cut off. Both paths now gate on `contact.blocked` before any leg fires.
+
+---
+
 ## Unknown-sender auto-add planted contacts on from/fromPub mismatch (branch devin/consolidate-groups, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).

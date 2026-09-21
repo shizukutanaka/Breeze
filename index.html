@@ -6888,7 +6888,7 @@ async function initMessenger(dbName) {
     // jittered receipt, so the UX fix and the privacy fix are the same change. ±20% jitter
     // keeps the delay from being a fingerprint of its own.
     if (_readTimer) { clearTimeout(_readTimer); _readTimer = null; }
-    if (!contact.isGroup && !_privacyHideReadReceipts) {
+    if (!contact.isGroup && !_privacyHideReadReceipts && !contact.blocked) {
       const snap = contact;
       const fire = () => {
         _readTimer = null;
@@ -7791,6 +7791,11 @@ async function initMessenger(dbName) {
     // A kicked member's signals void the same way messages do — every receiver
     // drops non-roster senders, so don't fan out ciphertext nobody accepts.
     if (contact.isGroup && contact.kicked) return;
+    // Blocked contacts get no signals at all — blocking severs the relationship,
+    // and a relayed reaction/edit/read receipt would leak my activity to the very
+    // person I cut off (the P2P channel is already closed on block, but the relay
+    // path still delivers to their poll).
+    if (contact.blocked) return;
     // v3.6: Group signal fan-out — send encrypted signal to each member
     if (contact.isGroup && contact.members?.length > 0) {
       const signalPayload = JSON.stringify(data);
