@@ -61,14 +61,24 @@ describe('group trust boundaries', () => {
   it('roster poll applies member removals, not just growth', () => {
     expect(html).toContain('oldMembers.some(o => !newMembers.some(m => m.id === o.id))');
   });
-  it('roster poll syncs creatorId/admins/name (transfer + rename visibility)', () => {
-    expect(html).toContain('group.creatorId !== data.creatorId');
+  it('roster poll syncs createdBy/admins/name (transfer + rename visibility)', () => {
+    // The local field is `createdBy` — every privilege gate reads it. Writing the
+    // wire name `creatorId` to a `group.creatorId` property synced nothing.
+    expect(html).toContain('group.createdBy !== data.creatorId');
+    expect(html).toContain('group.createdBy = data.creatorId');
+    expect(html).not.toContain('group.creatorId');
   });
   it('group invites run members through safeMemberList', () => {
     expect(html).toContain('safeMemberList(invite.members)');
   });
   it('group join seeds creatorId/admins from the join response', () => {
     expect(html).toContain("createdBy: typeof data.creatorId === 'string'");
+  });
+  it('sender-key channel requires roster membership (non-member key-plant + inject)', () => {
+    // isSenderKey: reject keys from non-members when the group is known locally
+    expect(html).toContain('(g.members || []).some(m => m.id === msg.from');
+    // isGroupSK: same guard as the legacy per-member fallback
+    expect(html).toContain('if (!member && msg.from !== myId) return;');
   });
 });
 
@@ -77,8 +87,10 @@ describe('wire + storage invariants', () => {
     expect(html).toContain('envelopeReplyTo(meta.replyTo)');
     expect(html).toContain("if (typeof msg.replyTo === 'string')");
   });
-  it('chat import dedup key is unique per message (minute-precision ts collides)', () => {
-    expect(html).toContain("'import:' + m.ts + ':' + (isMine ? '1' : '0') + ':' + i");
+  it('chat import dedup key is unique per message AND bound to the conversation', () => {
+    // minute-precision ts + index disambiguates within one file; contact.id prevents a
+    // second import of the same export into a different chat colliding with the first.
+    expect(html).toContain("'import:' + contact.id + ':' + m.ts + ':' + (isMine ? '1' : '0') + ':' + i");
   });
   it('scheduled sends restore the composer input (no draft clobber)', () => {
     expect(html.match(/savedInput = _DOM\.get\('msg-input'\)\.value/g)?.length).toBe(3);

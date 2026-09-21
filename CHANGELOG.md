@@ -1,5 +1,309 @@
 # Changelog
 
+## P2P acks could stamp delivery state on the open chat regardless of sender (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Same DOM-outside-predicate class as the edit/delete fix: `updateDeliveryState` bound its IDB write to `fromContactId`, but the DOM stamp (`[data-msgid] .ts` in the open box) ran unconditionally — an ack arriving while a different conversation was open could mark bubbles there. The DOM pass now only runs when the ack's conversation is the one on screen; the bound IDB write still happens either way.
+
+---
+
+## Edit/delete signals could repaint MY bubble despite failing authorization (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The author-binding predicate (`!stored.mine && stored.contactId === conv`) guarded the IDB write — but the `if (el)` DOM repaint sat OUTSIDE it on both the relay path and the group path. A peer sending an `edit`/`delete` for one of *my* messages failed the store check yet still had the rendered bubble replaced with attacker-chosen text (or tombstoned) for the rest of the session — a visual spoof that screenshots indistinguishably from a real edit (self-corrects on reload since the record was untouched). Both paths now gate DOM mutation on the same predicate as the store write.
+
+---
+
+## Delivery acks resolved against the open conversation, not the sent one (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`updateMsgStatus` looked up the DOM box and the IDB 'contact' index via live `activeContact` inside a `.then()` — a relay ack resolving after a conversation switch could stamp 'delivered' on a wrong-conversation message whose ts collided within the 5s match window. `relaySend` now takes a `convId` (the conversation owning the bubble: `to` for DMs, `groupId` for group fan-out) and the IDB write + DOM pass are bound to it. Bonus fix in the same pass: group fan-out acks previously fell through to `activeContact` too — now they land on the group.
+
+---
+
+## Read receipts marked every sent bubble read + readAt was never persisted (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Two paired defects on the receipt path: `showReadReceipt` stamped 'read' on **every** `.msg.me` bubble regardless of the receipt's timestamp — a receipt for message A also marked B sent minutes later (a peer could also send a receipt with a far-future ts to retroactively mark things read, though receipts carry no proof either way). Now only bubbles with `dataset.ts <=` the receipt ts update, matching the watermark semantics the field claims. And `meta.readAt` was read at render for the "Read: <time>" tooltip but **nothing ever wrote it** — dead field, dead tooltip; the DOM ticks were also transient since nothing persisted. Receipts now write `readAt` to the affected sent records so the tooltip works and state survives reload.
+
+---
+
+## Blocking a contact never actually severed the link (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The block toggle closed the current peer connection — then everything let it come back or went around it: the presence poll and network-recovery loops re-dialed blocked contacts, `connectPeer` never checked the flag, and (previous commit) both datachannel handlers processed a re-connected blocked peer's frames unconditionally. Blocking also only hid the input bar — `sendSignal` mutations, read receipts, and call offers still had a relay leg that fired regardless (previous commits). The severance is now complete: `connectPeer` refuses blocked contacts (one choke point covering open-chat dial, send-path dial, presence reconnect, and network recovery), both reconnect loops skip them, and no outbound signal leg fires for a blocked target.
+
+---
+
+## P2P traffic from blocked peers was never dropped (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Blocking closes the peer connection — but nothing stops the remote side from re-signaling a fresh one, and once connected, the datachannel handlers processed their frames unconditionally: typing/read/presence on the state channel, and reactions, poll votes, acks, `msg`, `file`, `group_msg`, even binary chunks on the main channel. Only the types routed through `handleIncoming` hit the blocked-sender drop — a blocked contact's reactions and votes still mutated my messages, and binary chunks still fed the file reassembly buffer. Both channel handlers now drop everything from a `contact.blocked` peer.
+
+---
+
+## Roster poll synced `creatorId` — but the gates read `createdBy` (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `tests/invariants.test.js`, `CHANGELOG.md`.
+
+`startGroupMemberPoll` wrote `group.creatorId` while every privilege check (`isGroupAdmin`, kick/leave/meta gates, `/admin` creator-only checks) reads `group.createdBy`. A server-side ownership transfer therefore never propagated — the old creator stayed privileged locally and the new one stayed a stranger. The poll now writes the field the gates read; the tripwire pins the binding both directions.
+
+---
+
+## Invited groups never recorded the creator — admin actions silently dropped (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The `group_invite` accept path stored `members` but no `createdBy`/`admins`. On an invite-joined client every privilege gate then failed for the REAL creator: `group_kick` notices were ignored (the kicked member stayed in the local roster and kept receiving — and decrypting — sends), `group_meta` announce-only propagation was dropped, and the privileged re-key on a member's leave never fired. The inviter is the verified sender and is the creator by construction (only `createGroup` emits invites), so the join side now seeds `createdBy: c.id` from the authenticated envelope — no self-reported field to forge.
+
+---
+
+## Stale call notifications rang for dead calls (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The `isCall` notification rides the persistent relay inbox (week-long TTL) while `call-end` lives only in the `call:` room (5-min TTL). A call placed while the recipient was offline stayed queued; when they opened the app hours later the phone rang for a call that ended long ago — a ghost ring with no caller behind it. The incoming-call path now drops notifications older than 2 minutes.
+
+---
+
+## Blocked contacts could still be called (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Same severance class as the relayed-signal fix: the call buttons only hid for groups, and `startCall` never checked `contact.blocked` — a blocked contact could still be voice/video called, posting `call-offer` into the `call:` relay room they poll. Call buttons now hide for blocked contacts and `startCall` early-returns on `blocked` too. (Inbound was already covered — the blocked-sender drop in `handleIncoming` runs before `isCall` handling.)
+
+---
+
+## Blocked contacts still received relayed signals (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Blocking closed the P2P channel and hid the input bar — but `sendSignal` (reactions, edits, deletes, poll votes) and the delayed read receipt both had a second delivery leg through the encrypted relay that ran regardless. A blocked contact's poll would still receive my mutation signals and read receipts — an activity leak to the exact person the block exists to cut off. Both paths now gate on `contact.blocked` before any leg fires.
+
+---
+
+## Unknown-sender auto-add planted contacts on from/fromPub mismatch (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`handleIncoming` auto-creates a roster entry for first-time senders via `addContact(msg.fromPub)` — then looks the contact up by `msg.from`. `addContact` derives the stored id from the *pub key* (`pubB64.slice(0,12)`), so a forged message with `from`≠derived-id drops the message — but not before the contact was created. One valid `fromPub` + any `from` = one junk roster entry; a spammer could plant unlimited entries (one per throwaway keypair). The auto-add now requires `msg.from === msg.fromPub.slice(0, 12)` — self-consistent identity only; mismatched envelopes drop without touching the roster.
+
+---
+
+## Chat import dedup key collided across conversations (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `tests/invariants.test.js`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The deterministic dedup key `'import:' + ts + ':' + mine + ':' + i` disambiguated messages *within* one export — but the same file imported into a second conversation produced identical keys, so every row dedup-skipped against the first import and the second chat silently got nothing. The key now binds to the conversation (`contact.id`); the in-file uniqueness properties are unchanged. Tripwire updated to pin the bound format.
+
+---
+
+## openConversation race — a stale async render overwrote the newer chat's view (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`openConversation` sets `activeContact` synchronously, then awaits `dbCountMsgs`/`dbGetRecentMsgs` before rendering. Two rapid opens interleave: open A starts loading, open B starts loading, A's messages resolve and render into `box` — now displaying under B's header, B's draft, B's input. The displayed history says A, everything else says B: a wrong-window confidentiality bug (read a conversation believing it's another), not just cosmetic. A generation counter (`_openGen`) now marks each open; a superseded render drops itself before touching the DOM.
+
+---
+
+## Send-side gates only covered the text path (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`sendMessage` gates announce-only groups on the send side — but `createPoll`, `_sendFile`, and voice memos never checked. A non-admin tapping 📊/📎/🎤 in an announce-only group got a locally-stored message fanned out through the sender-key channel that every receiver then dropped (`group.announceOnly && !privileged → return`) — the send-into-the-void shape: your client shows it, nobody ever sees it. Same for the `kicked` flag (receivers now drop non-roster senders) and `blocked`. All three paths now mirror sendMessage's full entry gates (kicked → announceOnly → blocked; voice at record-start, since `_recContact` pins the target there). `forwardMsg` had the same hole in picker form — it filtered blocked contacts but listed kicked and non-admin announce-only groups as forward targets; those are excluded from the picker now, AND re-validated at send time (a tampered checkbox `data-cid` could otherwise target a filtered-out conversation).
+
+---
+
+## sendMessage TOCTOU — a mid-flight contact switch sent to the wrong recipient (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`sendMessage` snapshotted `const contact = activeContact` for the DB write (with a comment explaining why) — then the entire wire path read live `activeContact` again: `isGroup`, `members`, `name`, `pubB64`, `peers[pubB64]`, `relaySend(id, …, pubB64)`, `_fanOut`. Several `await`s sit in between (dbPut, dbGet, encryptFor, signMessage, timingDelay), so a click on another conversation mid-flight flipped the branch: a message typed for Alice could encrypt for Bob's `pubB64` and relay to Bob's inbox while being stored under Alice's conversation — a wrong-recipient confidentiality bug. The whole send path now uses the `contact` snapshot taken before the first await.
+
+Same class swept everywhere else it existed: `sendSignal`'s group fan-out IIFE re-read `activeContact.members`/`id` inside awaits; `createPoll` and `_sendFile` re-read it after `dbPut`/`_compressImage`/`sendBinaryFile`; and the voice-memo `reader.onload` re-read it after an entire *recording* — the widest window of the class (seconds, not ms), so a chat switch during recording would deliver the voice note to the newly-opened conversation. Voice now pins the recipient at record-start (`_recContact`); the other three snapshot at entry.
+
+`importChat` had it too — a 50 MB export spends seconds in `file.text()`/parse and the message loop awaited `dbGet`/`dbPut` per row; every write went to live `activeContact.id`, so switching chats mid-import scattered imported history across conversations and rewrote the *other* chat's lastMsg. Now bound to the entry snapshot; the list refresh only fires when the user is still on that conversation.
+
+The mutation signals were the last, subtler leg: `toggleReaction`, `votePoll`, `startEdit`, `deleteMsg` all write the change to the message's own `stored.contactId` conversation — then called `sendSignal`, which targeted live `activeContact`. A reaction toggled from a message's picker while the user had already switched chats stored in convo A but signaled convo B: the peer got a `reaction`/`edit`/`delete` for a msgId that doesn't exist in the conversation they received it in (silently dropped on their side after the conversation-binding checks landed this round — so locally applied, never delivered). `sendSignal(data, snapContact)` now accepts the resolved conversation; all four callers resolve `dbGet('contacts', stored.contactId)` and signal the message's own chat.
+
+---
+
+## /api/online counted heartbeats, not users (branch devin/consolidate-groups, 2026-09-20)
+
+`_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
+
+The in-memory counter did `count++` per presence heartbeat — every client heartbeats every 30 s, so the "online" number ran ~2× the real unique-user count (and drifted further the longer a session stayed open). The counter now tracks a per-minute `Set` of user ids and reports `ids.size`; the minute-rollover fallback still carries the previous count forward. New test pins the dedup: three heartbeats from the same user report `online: 1`. Still an isolate-local approximation (Cloudflare PoPs don't share memory) — documented as approximate in the endpoint comment.
+
+---
+
+## /schedule never persisted — the IDB write was always rejected (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The `identity` object store has no keyPath (out-of-line keys required), but the `/schedule` write omitted the key argument: `dbPut('identity', {…})` with no third arg throws DataError, `dbPut` swallows it to `false`, and the caller never checks. Result: the "Scheduled" toast lied — every scheduled message lived only in the in-memory timer, died on reload, and the whole recovery loop at startup was dead code (`dbGetAll` never found a `sched:` row to begin with). Fixed by passing `schedId` as the key; `/schedule list` and past-due recovery now have records to read.
+
+Also in this batch: `restoreBackup` read `file.text()` uncapped before decrypt and validated `pubB64` with a regex instead of `_isValidPubB64` (a wrong-length key planted a dead contact); `/contacts import` had no file or entry cap; `/import` advertised `.zip` with no parser.
+
+---
+
+## /import advertised .zip with no zip support (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The picker accepted `.zip` but `importChat` has no zip parser — every zip fell through to "no messages found". Dropped the extension from the accept list (adding a zip decoder would violate the zero-runtime-deps rule).
+
+---
+
+## /contacts import had no file-size or entry-count caps (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`/import` got a `file.size > CONFIG.FILE_MAX` cap earlier, but `/contacts import` read `file.text()` with no limit — a huge "contacts" JSON froze the tab before `JSON.parse` even ran — and then looped `dbGet`+`dbPut` over every entry. Now capped at `FILE_MAX` bytes and 10,000 entries.
+
+---
+
+## Relay signal polls accepted posts from anyone who knew the room name (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Both signal polls (`sig:` data-channel poll, `call:` call-signaling poll) skipped only `sender === myId` — every other post was processed. The relay is unauthenticated and the room name is the two sorted user ids, so a third party who knew the pair could fake typing/read indicators, inject ICE candidates, and post a bare `call-end` to drop an active call. Both polls now require `sender === contact.id` — defense-in-depth only, since `sender` is attacker-controlled (anyone who can derive the room can forge it). The real fix for the hangup forgery: `call-end` is now sent through `_wrapCallSignal` (decryptable E2E wrap) and, when `CONFIG.CALL_E2E_SIGNAL` is on, a `call-end` that fails to unwrap is dropped rather than tearing down the call. Compat mode (flag off) still accepts the unwrapped signal — full auth needs the flag-on capability path.
+
+---
+
+## /admin mutations applied locally on server rejection (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `locales/*.json`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Only transfer checked `resp.ok` — kick, promote, demote and rename fired the API call and applied the local change unconditionally. An admin running `/admin promote @x` gets the server's 403 (creator-only), but their local roster still recorded the promotion — and every privileged-notice check (`group_meta`, `group_kick`, announce-only) consults that local `admins` list. A rejected kick silently removed the member from my roster while the server roster kept them (I'd stop sending to someone everyone else still sees). All four now gate the local mutation on the server response (offline groups keep local-only behavior). New i18n keys added to all 8 locales to keep the 95% coverage floor.
+
+---
+
+## Leaving a group kept every member's sender keys resident (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Group delete purged the contact, messages, and the `sess:` ratchet — but left `gsk:{id}` (my sender key) and every `gsk-peer:{id}:*` (each member's chain) in the identity store. "Leaving" kept full decrypt capability for the group's history resident on disk. Delete now purges the whole gsk namespace for the group (identity store has no keyPath — keys are enumerated via getAllKeys).
+
+---
+
+## Sender-key channel skipped the roster check — non-members could inject group messages (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `tests/invariants.test.js`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The `isGroupSK` receive path decrypted without verifying the sender was in the group roster — only the legacy per-member fallback enforced membership. Combined with `isSenderKey` accepting keys from any known contact (membership unchecked), a 1:1 contact who is NOT in a group could plant their own sender key for it, then inject "group" messages that decrypt as if from a member — bypassing announce-only enforcement along the way. Both paths now require roster membership; kicked/left members' injected keys are dead on arrival.
+
+---
+
+## updateMsgStatus never actually matched the timestamp (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The delivery/read tick updater iterated `.msg.me` and `break`'d on the FIRST element with a status+timestamp — the parsed `msgTitle` was read but never compared. Every relay ack landed on the oldest pending bubble instead of the acked one. The walk now filters by ±5s proximity before updating, matching the IDB half which already did the same comparison.
+
+---
+
+## Disappear timer was a global — armed in one chat, it fired in the next (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`_disappearTimer` was a single module-level value: arm "5min" in a sensitive conversation, open an unrelated one, and your next message there also vanished — with no way for the recipient to recover it. The timer is now per-conversation, stored as `contact.disappearSec` and restored on conversation open (button label syncs via `_applyTimerBtn`).
+
+---
+
+## Forwarding into a group silently skipped the target (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`forwardMsg`'s picker lists groups, but the send called `encryptFor(msg.text, '')` — every group target silently failed the encrypt check and was skipped. Group targets now go through the sender-key channel (`encryptGroupMsg` + parallel member relay + self-sync), and both paths store the wire id (`myId + ':' + ts`) so the forwarded copy stays mutation-addressable.
+
+---
+
+## Leaving a group told nobody — roster + sender key stayed live (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`/group/leave` removed me from the server roster and local list, but every remaining member kept me in their roster forever — and my copy of the sender key kept decrypting future traffic until someone kicked me. Now the leaver broadcasts an E2E `group_leave` notice (self-authenticating: `leftId` must equal the verified sender, so it can't be forged to remove others). Receivers drop the member; a privileged member who sees the leave re-keys the group — fresh epoch chain + redistribute + re-broadcast with the new epoch, mirroring the kick machinery.
+
+---
+
+## Group fan-out paid one relay round-trip per member (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Every group send path (text, poll, file, voice, retry) looped `await relaySend(member)` serially — a 20-member group paid twenty sequential round-trips before the send resolved. Members are independent recipients, so the loops now run `Promise.allSettled` in parallel (same pattern `_fanOut` already used for device dispatch).
+
+---
+
+## Group typing/read receipts leaked signals to a phantom dm: room (branch devin/group-phantom-signals, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Typing indicators and read receipts posted `_signal(_dmRoom(contact.id))` for every conversation — including groups, whose `dm:myId:g_x` room nobody polls. Every keystroke and open in a group logged a relay signal linking my id to the group id — metadata noise serving nobody. Relay signals now skip group contacts (P2P typing for groups was already a natural no-op: `peers['']`).
+
+---
+
+## Local msgId differed from the wire id — mutations couldn't find sent files/polls/voice (branch devin/group-selfsync, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Receivers store incoming messages as `from + ':' + ts`, but the sender's local copies of polls, files, and voice memos used `genMsgId()` (`id:ts:seq` — three parts). Edit/delete/vote signals carry the wire id, so follow-ups to my own file or voice message could never resolve on receivers — and selfSync'd copies on my siblings (`from:ts`) could never match the sender's 3-part id, breaking dedup and later mutations. The local stores now use the wire id (`myId + ':' + ts`) so sender, receivers, and siblings all agree.
+
+---
+
+## Group sends never reached my other devices — self-sync fan-out (branch devin/group-selfsync, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`_fanOut` returned early on `!snapContact.pubB64`, so every group send (text, poll, file, voice) synced to members but never to MY OWN linked devices — my group messages existed only on the sending device. The guard now allows group contacts (peer device list is naturally empty for groups; only my siblings get the copy), each group branch calls `_fanOut`, and the selfSync store path understands `isPoll` so a synced group poll renders as a poll, not raw JSON.
+
+---
+
+## Group voice messages and retries hit the same pubB64='' dead-end (branch devin/group-voice-retry, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Third and fourth instances of the group-send dead-end: voice memos in groups encrypted for `pubB64=''` and died silently after local store — now wrapped as `{type:'file'}` and sent via sender-key so members can play them; and the tap-to-retry icon on failed group messages re-ran `encryptFor('')` → no-op — now retries through `encryptGroupMsg` + member fan-out.
+
+---
+
+## Group file send was dead — encryptFor('') dropped every attachment (branch devin/group-files, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`_sendFile` in a group hit the same dead-end as polls: `peers['']` skips P2P, `encryptFor('')` fails, the file stored locally and silently reached nobody. Now the group branch encrypts once with the sender key and relays to every member (`isGroupSK`), and the group receive path detects `{type:'file'}` JSON, stores it as `fileData`, and shows `📎 name` — the existing `f.data` (base64) render/download path works unchanged. P2P binary chunks carry no groupId, so group files are relay-only (≤192 KB) for now.
+
+---
+
+## 1:1 poll votes never persisted to the relay — offline peers missed them (branch devin/poll-vote-relay, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`sendSignal`'s 1:1 `persistentTypes` relay list covered edit/delete/reaction but not `poll_vote` — a vote for an offline peer went P2P-only and vanished. Added (the group fan-out list already got it in devin/group-polls; this is the 1:1 parity half).
+
+---
+
+## /poll in groups was fully dead — encryptFor('') silently dropped every poll (branch devin/group-polls, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`/poll` in a group chat encrypted for `activeContact.pubB64` (empty for groups) — the poll stored locally and rendered for me, but reached no member. And even if it had, votes went nowhere: the vote notify used `peers['']` and the group signal handler had no `poll_vote` case. Now: creation rides the sender-key channel (encrypt once, relay/P2P per member) and the group receive path detects `type:'poll'` JSON like 1:1 does; votes go through `sendSignal` (1:1 + group fan-out, relay-persisted), and the group signal handler applies `poll_vote` with the same conversation-binding + verified-sender rules as reactions.
+
+---
+
+## Account delete requested the IDB drop before closing the open connection (branch devin/account-delete-order, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Deleting the ACTIVE account called `indexedDB.deleteDatabase` while that database's connection was still open — the request queues until `switchAccount`'s cleanup closed it, an inversion of the panic-wipe ordering fix. Now the switch runs first (closing the handle), then the delete is issued.
+
+---
+
 ## sw.js VERSION / CONFIG.VERSION drift tripwire (branch devin/version-sync-tripwire, 2026-09-20)
 
 `tests/invariants.test.js`, `CHANGELOG.md`.
