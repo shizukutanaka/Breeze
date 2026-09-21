@@ -11095,6 +11095,7 @@ async function initMessenger(dbName) {
   async function executePanic() {
     safeSetHTML(document.body, '<div class="i-fullscreen"></div>');
     try {
+      try { db?.close(); } catch {} // an open connection blocks deleteDatabase
       if (indexedDB.databases) { for (const d of await indexedDB.databases()) { if (d.name) indexedDB.deleteDatabase(d.name); } }
       else { indexedDB.deleteDatabase('breeze-messenger'); }
       localStorage.clear(); sessionStorage.clear();
