@@ -11650,14 +11650,18 @@ async function initMessenger(dbName) {
       }).catch(e => _dbg(e, 'ack-persist'));
       return;
     }
-    const existing = el.querySelector('.delivery-state');
-    if (existing) existing.remove();
-    const span = document.createElement('span');
-    span.className = 'delivery-state';
-    span.className = 'enc-badge';
-    if (state === 0) { span.textContent = '✓'; span.classList.remove('color-g','color-r'); span.classList.add('color-t3'); span.title = t('delivered'); }
-    else if (state === 1) { span.textContent = '✓✓'; span.classList.remove('color-t3','color-r'); span.classList.add('color-g'); span.title = t('read'); }
-    el.appendChild(span);
+    if (state === 0 || state === 1) {
+      const existing = el.querySelector('.delivery-state');
+      if (existing) existing.remove();
+      const span = document.createElement('span');
+      // Must keep .delivery-state — the dedup-removal above keys on it. A second
+      // className assignment here used to overwrite it, so every later ack stacked
+      // another badge and they rendered as green pills (.enc-badge) not checkmarks.
+      span.className = 'delivery-state';
+      if (state === 0) { span.textContent = '✓'; span.classList.remove('color-g','color-r'); span.classList.add('color-t3'); span.title = t('delivered'); }
+      else { span.textContent = '✓✓'; span.classList.remove('color-t3','color-r'); span.classList.add('color-g'); span.title = t('read'); }
+      el.appendChild(span);
+    }
     // v3.3: Persist delivery state to IDB — bind to the sender's conversation so a peer
     // cannot stamp read/delivered state onto another contact's messages.
     dbGet('messages', msgId).then(stored => {

@@ -1,3 +1,14 @@
+## updateDeliveryState overwrote .delivery-state with .enc-badge — ack badges stacked as green pills (branch devin/ack-badge-class, 2026-09-21)
+
+Two consecutive `span.className =` assignments: the second clobbered the first, so the
+delivered/read badge lost the .delivery-state class entirely. Consequences: (1) the
+dedup lookup `el.querySelector('.delivery-state')` could never find the previous badge,
+so each successive ack (delivered → read) APPENDED another badge — bubbles stacked ✓ + ✓✓;
+(2) the badge rendered with .enc-badge's green pill background instead of the subtle
+dimmed checkmark styling. Fixed by keeping .delivery-state as the class and gating the
+DOM append on state ∈ {0,1} (state 2/deleted was appending an empty badge). IDB ack
+persistence is unchanged.
+
 ## Relay-rollback hardening on signed stored state (branch devin/signed-state-monotonic, 2026-09-21)
 
 Every signed-state endpoint checked the signature's freshness (±5min `REQ_TS`) but nothing ordered two *in-window* writes — a relay that captures a signed request can replay it moments after a newer one lands and silently roll the state back. KV has no compare-and-swap, so the stored signed timestamp is now the high-water mark on both write paths:
