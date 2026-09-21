@@ -1,5 +1,13 @@
 # Changelog
 
+## Onboarding @alias never registered — /alias/set requires PoW, createIdentity sent none (branch devin/onboard-alias-pow, 2026-09-20)
+
+`index.html`, `_headers`/`tauri.conf.json` (CSP hash), `CHANGELOG.md`.
+
+Socratic trace of the setup screen's "alias" field: `createIdentity` POSTed `{alias,pub,name}` to `/alias/set` — but the Worker requires a verified proof-of-work token and 400s with POW_REQUIRED without one. `resp.ok` was false and the result swallowed, so an alias entered at onboarding **always silently failed** (the later `/alias` command path does send PoW — this caller just never got updated when PoW landed). Now generates the same `pub:alias:ts` challenge PoW and surfaces a real error toast on rejection instead of silent failure.
+
+---
+
 ## /room emitted links that could never join — dead on arrival (branch devin/room-honest, 2026-09-20)
 
 `index.html`, `tests/e2e/deeplink.spec.js`, `playwright.config.js`, `locales/*.json`, `_headers`/`tauri.conf.json` (CSP hash), `CHANGELOG.md`.

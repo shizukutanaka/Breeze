@@ -4502,12 +4502,16 @@ async function initMessenger(dbName) {
     const privJwk = await crypto.subtle.exportKey('jwk', keys.privateKey);
     const pubB64 = btoa(String.fromCharCode(...new Uint8Array(pubRaw)));
 
-    // Register alias on server
+    // Register alias on server — REQUIRES a PoW token: /alias/set 400s with POW_REQUIRED
+    // without one, so the onboarding field silently never registered (resp.ok was false and
+    // the code swallowed it). Same challenge shape as the /alias command: pub:alias:ts.
     let registeredAlias = '';
     if (alias && API) {
       try {
-        const resp = await postAPIRaw('/alias/set', { alias, pub: pubB64, name });
+        const powToken = await generatePoW(pubB64 + ':' + alias + ':' + Date.now(), CONFIG.POW_DIFFICULTY);
+        const resp = await postAPIRaw('/alias/set', { alias, pub: pubB64, name, pow: powToken });
         if (resp.ok) registeredAlias = alias;
+        else { const d = await resp.json().catch(() => ({})); showToast(d.error || t('toastAliasTaken'), 'error'); }
       } catch(e) { _dbg(e); }
     }
 
