@@ -528,6 +528,63 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     expect(res.status).toBe(200);
   });
 
+  // Relay rollback on the bundle itself: incumbent-sig + freshness only proves the
+  // request was signed recently — it can't order two in-window uploads. A relay
+  // holding a captured signed request can replay it just after a newer rotation and
+  // roll the bundle back (stale SPK, downgraded caps). The stored signedTs is the
+  // high-water mark; strictly-older is rejected, equal-ts needs the identical SPK.
+  it('rejects replay of an older signed upload after a newer one (signedTs monotonic)', async () => {
+    const e = makeEnv();
+    const victim = await edKeyPair();
+    const uid = 'rollback01';
+    // First signed upload seeds signedTs (fresh in-window ts, no incumbent needed).
+    const t1 = Date.now() - 1000;
+    const first = await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK0', edIdentityKey: victim.pub,
+        ts: t1, sig: await victim.sign(`breeze-prekey-upload:${uid}:${t1}`) },
+      e, upReq());
+    expect(first.status).toBe(200);
+    // Legit rotation: newer signed ts wins.
+    const t2 = Date.now();
+    const newer = await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK1', edIdentityKey: victim.pub,
+        ts: t2, sig: await victim.sign(`breeze-prekey-upload:${uid}:${t2}`) },
+      e, upReq());
+    expect(newer.status).toBe(200);
+    // Relay replays the captured t1 request — must not roll SPK1 back to SPK0.
+    const replay = await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK0', edIdentityKey: victim.pub,
+        ts: t1, sig: await victim.sign(`breeze-prekey-upload:${uid}:${t1}`) },
+      e, upReq());
+    expect(replay.status).toBe(409);
+    expect((await replay.json()).code).toBe('STALE_UPDATE');
+    expect(JSON.parse(await e.KV.get(`prekey:${uid}`)).signedPreKey).toBe('SPK1');
+  });
+
+  it('allows same-ts retry only when the signed pre-key is identical', async () => {
+    const e = makeEnv();
+    const victim = await edKeyPair();
+    const uid = 'rollback02';
+    const t1 = Date.now();
+    const first = await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK0', edIdentityKey: victim.pub,
+        ts: t1, sig: await victim.sign(`breeze-prekey-upload:${uid}:${t1}`) },
+      e, upReq());
+    expect(first.status).toBe(200);
+    // Idempotent resend of the same signed request — allowed.
+    const resend = await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK0', edIdentityKey: victim.pub,
+        ts: t1, sig: await victim.sign(`breeze-prekey-upload:${uid}:${t1}`) },
+      e, upReq());
+    expect(resend.status).toBe(200);
+    // Same ts but a different SPK — ambiguous ordering, refuse.
+    const conflict = await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK9', edIdentityKey: victim.pub,
+        ts: t1, sig: await victim.sign(`breeze-prekey-upload:${uid}:${t1}`) },
+      e, upReq());
+    expect(conflict.status).toBe(409);
+  });
+
   it('fetch succeeds (200, no oneTimePreKey) when the OTP KV value is corrupt JSON', async () => {
     const env = makeEnv();
     const uid = 'corruptotp1'; // ≥8 chars, passes validateUserId
@@ -3029,6 +3086,29 @@ describe('alias set / get (PoW anti-spam)', () => {
     const res = await handleAliasSet({ alias: 'takenname', pub: pub2, pow: pow2 }, env, req({}));
     expect(res.status).toBe(409);
     expect((await res.json()).code).toBe('ALIAS_TAKEN');
+  }, 30000);
+
+  // The alias key is permanent, so the check-then-set race loses loudly: two
+  // registrants can both see it free, the later put wins, and the loser was
+  // answered ok:true for a handle it doesn't own — they publish a dead @alias.
+  // The post-write re-read turns the loser's silent dead-alias into ALIAS_TAKEN.
+  it('returns 409 to the loser of a concurrent registration race', async () => {
+    const env = makeEnv();
+    const pub = 'LOSERPUB001';
+    const pow = await solvePoW(pub);
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbered = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === 'alias:racename' && !clobbered) {
+        clobbered = true; // the competing registration's put lands after ours
+        await origPut(k, JSON.stringify({ pub: 'WINNERPUB01', name: '', setAt: Date.now() }), o);
+      }
+    };
+    const res = await handleAliasSet({ alias: 'racename', pub, pow }, env, req({}));
+    expect(res.status).toBe(409);
+    expect((await res.json()).code).toBe('ALIAS_TAKEN');
+    expect(JSON.parse(await env.KV.get('alias:racename')).pub).toBe('WINNERPUB01'); // winner's record intact
   }, 30000);
 
   it('returns the stored pub and name on alias get', async () => {
@@ -5535,5 +5615,41 @@ describe('device registry (/api/device/set + /api/device/list)', () => {
     expect(puts).toBe(1); // first read refreshes the TTL...
     await handleDeviceList({ accountId: 'touchacct01' }, env, rq());
     expect(puts).toBe(1); // ...and the next read inside the throttle window does not
+  });
+
+  // Signed-state rollback: the ±5min freshness window bounds replay AGE but cannot
+  // order two in-window writes — a relay holding a captured signed set can replay it
+  // just after a newer one and silently drop a newly-linked device from every
+  // sender's fanout. The stored ts is the high-water mark; older is rejected.
+  it('rejects a replay of an older signed registry (relay rollback)', async () => {
+    const env = makeEnv();
+    const sign = await makeRoot(env, ACCT, ROOT_PUB);
+    const t1 = Date.now();
+    const oneDevice = [{ pub: ROOT_PUB, name: 'Phone' }];
+    const twoDevices = [{ pub: ROOT_PUB, name: 'Phone' }, { pub: DEV2, name: 'Laptop' }];
+    // Older-signed request: the pre-link one-device list.
+    expect((await setList(env, sign, oneDevice, t1)).status).toBe(200);
+    // User links a second device — newer signed ts wins.
+    expect((await setList(env, sign, twoDevices, t1 + 1000)).status).toBe(200);
+    // Relay replays the captured older request — must NOT roll back the link.
+    const replay = await setList(env, sign, oneDevice, t1);
+    expect(replay.status).toBe(409);
+    expect((await replay.json()).code).toBe('STALE_UPDATE');
+    const rec = await (await handleDeviceList({ accountId: ACCT }, env, rq())).json();
+    expect(rec.devices.map((d) => d.pub)).toEqual([ROOT_PUB, DEV2]);
+  });
+
+  it('rejects a conflicting list at the SAME ts but allows an identical re-send', async () => {
+    const env = makeEnv();
+    const sign = await makeRoot(env, ACCT, ROOT_PUB);
+    const t1 = Date.now();
+    const devices = [{ pub: ROOT_PUB, name: 'Phone' }, { pub: DEV2, name: 'Laptop' }];
+    expect((await setList(env, sign, devices, t1)).status).toBe(200);
+    // Same ts, different device list — ambiguous ordering, refuse.
+    const conflict = await setList(env, sign, [{ pub: ROOT_PUB, name: 'Phone' }], t1);
+    expect(conflict.status).toBe(409);
+    // Same ts, identical digest — idempotent re-send of the same signed request.
+    const resend = await setList(env, sign, devices, t1);
+    expect(resend.status).toBe(200);
   });
 });

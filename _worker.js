@@ -870,6 +870,15 @@ async function handleAliasSet(body, env, request) {
   // Store (no TTL — aliases are permanent)
   const aliasSaved = await kvPut(env, `alias:${clean}`, JSON.stringify({ pub, name: sanitizeString(name, 64), setAt: Date.now() }));
   if (!aliasSaved) return json({ error: 'Failed to store alias', code: 'STORE_FAILED' }, 500, request);
+  // Check-then-set on a PERMANENT key is the same last-write-wins class as the KV
+  // queues: two registrants can both see the alias free, the later put wins, and
+  // the loser is answered ok:true for a handle they don't actually own — they'd
+  // publish a dead @alias while the other account binds it. Re-read once: if the
+  // stored record points at a different pub, our write lost the race — answer
+  // ALIAS_TAKEN so the loser picks another handle instead of advertising a dead one.
+  const post = safeJsonParse(await kvGet(env, `alias:${clean}`) || 'null');
+  if (post && post.pub !== pub)
+    return json({ error: 'Alias already taken', code: 'ALIAS_TAKEN' }, 409, request);
   return json({ ok: true, alias: clean }, 200, request);
 }
 
@@ -962,6 +971,26 @@ async function handleDeviceSet(body, env, request) {
   const digest = await sha256Short(JSON.stringify(devices.map(d => d.pub)));
   const ok = await verifyEd25519(bundle.edIdentityKey, utf8ToB64(`breeze-device-set:${accountId}:${ts}:${digest}`), sig);
   if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
+
+  // Monotonic ordering on the signed ts. The ±5min freshness window bounds replay
+  // AGE but cannot order two in-window writes: a relay that captured a signed set
+  // can replay it moments after a newer one and roll the registry back — the silent
+  // kind of loss, where a linked device keeps working client-side but drops out of
+  // every sender's fanout. KV has no CAS, so the stored ts is the high-water mark:
+  // a strictly-older ts is a rollback and rejected; an equal ts is accepted only
+  // when the device-list digest is identical (an idempotent re-send of the same
+  // signed request, not a conflicting one at the same instant).
+  const existing = safeJsonParse(await kvGet(env, `devices:${accountId}`) || 'null');
+  if (existing && typeof existing.ts === 'number') {
+    if (ts < existing.ts)
+      return json({ error: 'Stale device registry (newer ts already stored)', code: 'STALE_UPDATE' }, 409, request);
+    if (ts === existing.ts) {
+      const oldDigest = await sha256Short(JSON.stringify(
+        (Array.isArray(existing.devices) ? existing.devices : []).map(d => d && d.pub)));
+      if (oldDigest !== digest)
+        return json({ error: 'Conflicting device registry at same ts', code: 'STALE_UPDATE' }, 409, request);
+    }
+  }
 
   const stored = await kvPut(env, `devices:${accountId}`,
     JSON.stringify({ root, devices, ts, sig }), { expirationTtl: TTL.MONTH * 3 });
@@ -2140,6 +2169,7 @@ async function handlePreKeyUpload(body, env, request) {
   // attacker can no longer rotate keys they don't own. Legacy bundles without
   // edIdentityKey stay overwritable (nothing to verify against — they were born
   // clobberable; the first signed upload locks them in). Opt-out: PREKEY_REQUIRE_AUTH=false.
+  let verifiedSignedTs = null;
   if (env.PREKEY_REQUIRE_AUTH !== 'false') {
     const incumbent = safeJsonParse(await kvGet(env, `prekey:${userId}`) || 'null');
     if (incumbent && typeof incumbent.edIdentityKey === 'string' && incumbent.edIdentityKey) {
@@ -2150,9 +2180,34 @@ async function handlePreKeyUpload(body, env, request) {
       }
       const ok = await verifyEd25519(incumbent.edIdentityKey, utf8ToB64(`breeze-prekey-upload:${userId}:${upTs}`), upSig);
       if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
+      // Monotonic ordering on the SIGNED ts (same class as /device/set): the ±5min
+      // freshness window bounds replay age but can't order two in-window uploads —
+      // a relay holding a captured request can replay it just after a newer upload
+      // and roll the bundle back (stale SPK, downgraded caps advertisement). The
+      // stored signedTs is the high-water mark: strictly-older is rejected; equal
+      // ts is accepted only when it carries the identical signed pre-key — a true
+      // idempotent retry of the same signed request.
+      if (typeof incumbent.signedTs === 'number'
+        && (upTs < incumbent.signedTs
+            || (upTs === incumbent.signedTs && incumbent.signedPreKey !== signedPreKey))) {
+        return json({ error: 'Stale prekey bundle (newer signed ts already stored)', code: 'STALE_UPDATE' }, 409, request);
+      }
+      verifiedSignedTs = upTs;
+    } else if (edIdentityKey) {
+      // First signed upload (or overwrite of an ed-less legacy bundle): no incumbent
+      // key to verify the endorsement ts against, but the client still sends one —
+      // seed the high-water mark from a fresh in-window timestamp so the NEXT signed
+      // overwrite has something to compare against. Out-of-window/absent ts simply
+      // skips the seed (legacy clients unaffected).
+      const seedTs = body.ts;
+      if (typeof seedTs === 'number' && Number.isFinite(seedTs)
+        && Math.abs(Date.now() - seedTs) <= TIMEOUT_MS.REQ_TS) {
+        verifiedSignedTs = seedTs;
+      }
     }
   }
   const bundle = { identityKey, edIdentityKey, signedPreKey, signedPreKeySig, uploadedAt: Date.now() };
+  if (verifiedSignedTs !== null) bundle.signedTs = verifiedSignedTs;
   // N3: persist capability set so the initiator can call parsePeerCaps(bundle) and
   // negotiate() to pick the right protocol path (same sanitization as the presence
   // heartbeat — ≤20 strings, ≤32 chars; non-string entries silently dropped).
