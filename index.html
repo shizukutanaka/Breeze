@@ -9130,7 +9130,9 @@ async function initMessenger(dbName) {
       showCallUI('ringing', contact.name, parsed.video);
       // Store offer for when user accepts
       window._pendingCallOffer = { contact, sdp: parsed.sdp, video: parsed.video };
+      return true;
     } catch(_e) { _dbg(_e, 'handleCallOffer'); }
+    return false;
   }
 
   async function acceptCall() {
@@ -9909,8 +9911,12 @@ async function initMessenger(dbName) {
       const contact = await dbGet('contacts', msg.from);
       if (!contact) return;
       const room = 'call:' + [myId, contact.id].sort().join(':');
-      // Start polling for call signals and show incoming UI
-      handleCallOffer(contact, msg.payload);
+      // Ring + notify only AFTER the offer authenticates — handleCallOffer returns
+      // false when _unwrapCallSignal rejects a forged/relay-injected payload, and
+      // sealed-sender envelopes carry an unverified `from` (anyone who knows my id
+      // could otherwise ring me while spoofing one of my contacts).
+      const _ringOk = await handleCallOffer(contact, msg.payload);
+      if (!_ringOk) return;
       pollCallSignals(contact, room);
       // A ringing call is inherently important; only strict focus ("/focus N all") silences it.
       if (!(_focusActive() && _settings.focusStrict)) playNotif();

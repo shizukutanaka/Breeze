@@ -1,3 +1,15 @@
+## isCall rang + notified before the offer authenticated — forged envelopes could ring (branch devin/ring-after-auth, 2026-09-21)
+
+The isCall envelope handler fired playNotif() + an OS Notification unconditionally —
+handleCallOffer is async, so its _unwrapCallSignal authentication finished AFTER the
+ring already sounded. Sealed-sender envelopes carry an unverified `from`, so anyone
+who knew my id plus one of my contacts' ids could push {isCall:true, from:<contact>}
+with a garbage payload and my device would ring and show that contact's name — a
+ghost ring / caller-ID spoof even though the ringing UI itself was decrypt-gated.
+handleCallOffer now returns true/false and the ring, notification, and call-signal
+polling only run after the offer authenticates. The decrypt-gated ringing UI path
+is unchanged.
+
 ## Relay-rollback hardening on signed stored state (branch devin/signed-state-monotonic, 2026-09-21)
 
 Every signed-state endpoint checked the signature's freshness (±5min `REQ_TS`) but nothing ordered two *in-window* writes — a relay that captures a signed request can replay it moments after a newer one lands and silently roll the state back. KV has no compare-and-swap, so the stored signed timestamp is now the high-water mark on both write paths:
