@@ -10,6 +10,38 @@ Socratic check on the "8 languages" claim, this time per-platform: `index.html` 
 
 ---
 
+## Remote wipe was doubly dead — and would have been an unsigned remote-wipe primitive (branch devin/wipe-harden, 2026-09-20)
+
+`index.html`, `_headers`/`tauri.conf.json` (CSP hash), `CHANGELOG.md`.
+
+Socratic trace of `/wipe`'s "wakes other devices" claim: the signal send was unobservable twice over — `/msg/send` rejects `payload: ''` (400 MISSING_FIELDS) and `handleMsgSend` never copies `type` onto the stored message, so `msg.type === 'remote_wipe'` can never fire. The dangerous half: if the relay ever did ferry it, `from === myId` is self-asserted — anyone who knows your userId could wipe every device you own. The dead send is removed; the receiver is now signature-gated (`breeze-remote-wipe:<from>:<ts>`, Ed25519 verified against this account's signing key) so any future signed send is safe by construction. Real multi-device wipe needs the signed device registry as trust anchor — a Worker change, deferred pending approval. Account delete (signed) + push unsubscribe + local wipe continue to do the real work of /wipe.
+
+---
+
+## Onboarding @alias never registered — /alias/set requires PoW, createIdentity sent none (branch devin/onboard-alias-pow, 2026-09-20)
+
+`index.html`, `_headers`/`tauri.conf.json` (CSP hash), `CHANGELOG.md`.
+
+Socratic trace of the setup screen's "alias" field: `createIdentity` POSTed `{alias,pub,name}` to `/alias/set` — but the Worker requires a verified proof-of-work token and 400s with POW_REQUIRED without one. `resp.ok` was false and the result swallowed, so an alias entered at onboarding **always silently failed** (the later `/alias` command path does send PoW — this caller just never got updated when PoW landed). Now generates the same `pub:alias:ts` challenge PoW and surfaces a real error toast on rejection instead of silent failure.
+
+---
+
+## /room emitted links that could never join — dead on arrival (branch devin/room-honest, 2026-09-20)
+
+`index.html`, `tests/e2e/deeplink.spec.js`, `playwright.config.js`, `locales/*.json`, `_headers`/`tauri.conf.json` (CSP hash), `CHANGELOG.md`.
+
+Socratic trace of the `/room` claim ("ephemeral room, share via link"): `createEphemeralRoom` put a client-generated `room:<random>` id into `?join=` while the Worker indexes groups by the SERVER token returned from `/group/create` (`grp:<token>`). The response was discarded, so every `/room` link 404'd at `/group/join` — the feature never worked, and the creator didn't even get a local contact. Its 1h/24h/7d/permanent TTL picker was decorative too: the Worker accepts `ttl` but ignores it (all invites are 30-day, refreshed on read). Deleted the duplicate (`createEphemeralRoom`, 4 dead i18n keys) — `/room` now delegates to `createGroupInviteLink`. New e2e spec drives create → link → fresh-context join end-to-end.
+
+---
+
+## File backups stored no iteration count — a future KDF bump would silently orphan them (branch devin/backup-iter, 2026-09-20)
+
+`index.html`, `_headers`/`tauri.conf.json` (CSP hash), `CHANGELOG.md`.
+
+Socratic asymmetry inside one feature: the cloud-backup path stores `iter` in the blob and enforces a floor on restore ("a compromised server cannot inject iter:1") — but the file-backup path's `encrypt()`/`decrypt()` pair hardcoded the live `CONFIG.PBKDF2_ITERATIONS` and wrote no `iter` field. Raise the constant later and every existing backup file fails to decrypt with a misleading "wrong passphrase". `encrypt()` now writes `iter` into the record and `decrypt()` reads it with the same floor+cap as cloud restore (`_AT_REST_MAX_ITER`); files without the field fall back to the constant they were written with.
+
+---
+
 ## Dead ?pricing links in FUNDING.yml/README + SELF_HOSTING "full locales" claim (branch devin/dead-links, 2026-09-20)
 
 `FUNDING.yml`, `README.md`, `docs/SELF_HOSTING.md`, `CHANGELOG.md`.

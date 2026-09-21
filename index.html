@@ -1731,12 +1731,8 @@ const _I = {
     ok: 'OK',
     settingsImmediate: 'Settings take effect immediately.',
     noBookmarks: 'No bookmarked messages',
-    permanent: 'Permanent',
-    permanentRoom: 'Permanent room',
     roomDefault: 'Room',
-    roomTTLPrompt: 'Room TTL: 1=1h, 2=24h, 3=7d, 4=Permanent',
     copiedClipboard: 'Copied to clipboard',
-    roomExpires: "Expires in {0}h",
     groupCreated: "Group \"{0}\" created",
     shareInvite: 'Share this link to invite members:',
     clipboardCopied: 'Copied to clipboard',
@@ -2928,19 +2924,28 @@ async function deriveKey(passphrase, salt, usage) {
   }
 
 async function encrypt(passphrase, plaintext) {
-    try {  
+    try {
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const iv = crypto.getRandomValues(new Uint8Array(CONFIG.IV_BYTES));
     const key = await deriveKey(passphrase, salt, 'encrypt');
     const ct = await crypto.subtle.encrypt({name:'AES-GCM',iv}, key, new TextEncoder().encode(plaintext));
-    return { s: arr(salt), i: arr(iv), d: arr(new Uint8Array(ct)) };
-  
+    // `iter` makes the file self-describing like a cloud backup: decrypt() reads it
+    // instead of the live constant, so raising PBKDF2_ITERATIONS later never silently
+    // orphans existing backup files with a misleading "wrong passphrase".
+    return { s: arr(salt), i: arr(iv), d: arr(new Uint8Array(ct)), iter: CONFIG.PBKDF2_ITERATIONS };
+
     } catch(_e) { _dbg(_e, 'encrypt'); }
   }
 
 async function decrypt(passphrase, payload) {
     try {
-    const key = await deriveKey(passphrase, u8(payload.s), 'decrypt');
+    // Old files carry no iter — fall back to the constant they were written with.
+    // Same floor as cloud restore: a hostile payload can't inject iter:1 to make
+    // offline brute-force nearly free, and 10M caps the DoS ceiling.
+    const iter = (typeof payload?.iter === 'number' && payload.iter >= CONFIG.PBKDF2_ITERATIONS && payload.iter <= _AT_REST_MAX_ITER)
+      ? payload.iter : CONFIG.PBKDF2_ITERATIONS;
+    const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+    const key = await crypto.subtle.deriveKey({name:'PBKDF2', salt:u8(payload.s), iterations:iter, hash:'SHA-256'}, km, {name:'AES-GCM',length:CONFIG.AES_KEY_BITS}, false, ['decrypt']);
     const pt = await crypto.subtle.decrypt({name:'AES-GCM',iv:u8(payload.i)}, key, u8(payload.d));
     return new TextDecoder().decode(pt);
 
@@ -4367,7 +4372,13 @@ async function initMessenger(dbName) {
       if (!resp.ok) return;
       const data = await resp.json();
       for (const msg of (data.messages || [])) {
-        if (msg.type === 'remote_wipe' && msg.from === myId) {
+        // Signature-gated: `from` is self-asserted on the relay, so a bare remote_wipe
+        // is forgeable by anyone who knows your userId — a remote data-destruction
+        // primitive. Only a valid Ed25519 sig over 'breeze-remote-wipe:<from>:<ts>' by
+        // THIS account's signing key is honoured. (Today /msg/send drops `type`, so no
+        // code path can produce this — the gate stands ready for a future signed send.)
+        if (msg.type === 'remote_wipe' && msg.from === myId && typeof msg.sig === 'string'
+            && (await verifySignature('breeze-remote-wipe:' + msg.from + ':' + msg.ts, msg.sig, _signingPubB64)) === true) {
           auditLog('security', 'Remote wipe signal received', 'critical');
           // Destroy all data
           const stores = [...db.objectStoreNames];
@@ -4497,12 +4508,16 @@ async function initMessenger(dbName) {
     const privJwk = await crypto.subtle.exportKey('jwk', keys.privateKey);
     const pubB64 = btoa(String.fromCharCode(...new Uint8Array(pubRaw)));
 
-    // Register alias on server
+    // Register alias on server — REQUIRES a PoW token: /alias/set 400s with POW_REQUIRED
+    // without one, so the onboarding field silently never registered (resp.ok was false and
+    // the code swallowed it). Same challenge shape as the /alias command: pub:alias:ts.
     let registeredAlias = '';
     if (alias && API) {
       try {
-        const resp = await postAPIRaw('/alias/set', { alias, pub: pubB64, name });
+        const powToken = await generatePoW(pubB64 + ':' + alias + ':' + Date.now(), CONFIG.POW_DIFFICULTY);
+        const resp = await postAPIRaw('/alias/set', { alias, pub: pubB64, name, pow: powToken });
         if (resp.ok) registeredAlias = alias;
+        else { const d = await resp.json().catch(() => ({})); showToast(d.error || t('toastAliasTaken'), 'error'); }
       } catch(e) { _dbg(e); }
     }
 
@@ -10916,24 +10931,13 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'restore'); showToast(t('backupWrongPass'), 'error'); }
   }
 
-  // v3 PRO: EPHEMERAL ROOMS — URL = chat
-  //
-  // Free: 1 hour TTL
-  // 24h / 7d / permanent
-  async function createEphemeralRoom(name, ttl) {
-    const roomId = 'room:' + btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(12)))).replace(/[+/=]/g, '');
-    const maxTtl = ttl;
-    const roomUrl = location.origin + '/?join=' + roomId;
-    // Register room on server (if available)
-    if (API) {
-      try {
-        await postAPIRaw('/group/create', { creatorId: myId, name: name || 'Room', members: [{ id: myId, pubB64: myPubB64, name: myName }], ttl: maxTtl });
-      } catch(e) { _dbg(e); }
-    }
-    // Copy to clipboard
-    navigator.clipboard?.writeText(roomUrl).catch(() => {});
-    return { roomId, roomUrl, ttl: maxTtl };
-  }
+  // REMOVED: createEphemeralRoom — /room's private copy of group creation that put a
+  // client-generated 'room:<random>' id in the ?join= URL while the Worker indexes groups
+  // by the SERVER token it returns (grp:<token>). Every /room link 404'd at /group/join —
+  // dead on arrival — and the creator never got a local contact for it. Its 1h/24h/7d/
+  // permanent TTL picker was also decorative: /group/create accepts ttl but ignores it
+  // (every invite is TTL.MONTH, refreshed on read). /room now delegates to
+  // createGroupInviteLink, the working path.
 
   // v1 INTEGRATION: Safety Features (Panic Wipe Mode)
 
@@ -12571,9 +12575,15 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       clearInput();
       const choice = await showConfirm(t('wipeTitle'), { okText: t('wipeBtn'), danger: true, desc: t('wipeDesc') });
       if (!choice) { showToast(t('toastCancelled'), 'info'); return; }
-      // Send remote wipe signal to own inbox (wakes other devices)
+      // REMOVED: the remote-wipe relay signal was doubly dead — the Worker rejects empty
+      // payloads (400 MISSING_FIELDS) AND never stores `type` on the message, so
+      // msg.type==='remote_wipe' could never be observed. Worse, if the relay ever did
+      // ferry it, `from === myId` is self-asserted: anyone who knows your userId could
+      // wipe every device you own. The receiver below now requires an Ed25519 signature
+      // by this account's signing key; a real multi-device wipe needs the signed device
+      // registry as the trust anchor (Worker change — deferred until approved). The
+      // account delete + push unsubscribe + local wipe below still do the real work.
       if (API && myId) {
-        try { await postAPIRaw('/msg/send', { to: myId, from: myId, payload: '', ts: Date.now(), type: 'remote_wipe' }); } catch(e) { _dbg(e); }
         // Delete server-side account data: prekeys, inbox, presence, push subscriptions.
         // Requires Ed25519 ownership proof matching the stored edIdentityKey.
         // Best-effort: local wipe proceeds regardless of server response.
@@ -13758,25 +13768,13 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       box.scrollTop = box.scrollHeight;
     }
 
-    // v3: /room — Create ephemeral room
+    // /room — create a shareable room (delegates to the working invite-link path; the old
+    // private implementation emitted links that could never join — see REMOVED note above)
     if (val.startsWith('/room')) {
       e.preventDefault();
       clearInput();
       const name = val.slice(6).trim() || t('roomDefault');
-      const ttlOptions = [3600, 86400, 604800, 0];
-      const ttlLabels = ['1h', '24h', '7d', t('permanent')];
-      const ttlChoice = parseInt(await showPrompt(
-        t('roomTTLPrompt'), '1', { placeholder: '1-4' }) || '1') - 1;
-      const { roomUrl, ttl } = await createEphemeralRoom(name, ttlOptions[Math.min(ttlChoice, ttlOptions.length - 1)]);
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'chat-empty';
-      safeSetHTML(d, `<b class="i-g">${esc(name)}</b><br>
-        <span class="text-xs color-t3">${ttl === 0 ? (t('permanentRoom')) : (t('roomExpires', ttl / 3600))}</span><br>
-        <code class="text-xs i-green-break">${esc(roomUrl)}</code><br>
-        <span class="text-xs color-t3">${t('copiedClipboard')}</span>`);
-      box.appendChild(d);
-      box.scrollTop = box.scrollHeight;
+      await createGroupInviteLink(name);
     }
   });
 
