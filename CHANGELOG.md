@@ -1,3 +1,14 @@
+## /msg/send preserves signal/group flags on the legacy fallback (branch devin/msgsend-flags, 2026-09-21)
+
+The sealed path ferries isSignal / isGroupLeave / isGroupMeta inside the encrypted
+meta block, but when /sealed/send itself fails the client reposts the same payload
+to /msg/send — whose field allowlist dropped all three. A relayed edit, reaction,
+poll_vote, leave notice, or group-meta update then arrived flagless: the receiver's
+normal-message path decrypted it to raw {"type":"edit",...} JSON and rendered the
+garbage as a chat bubble, while the intended mutation silently never applied. The
+allowlist now passes the three flags through (boolean-gated, same as the existing
+is* markers).
+
 ## 1:1 relayed reactions get the same caps the group path already had (branch devin/reaction-caps-1to1, 2026-09-21)
 
 The encrypted `isSignal` reaction handler on the 1:1 path created `reactions[emoji]`
