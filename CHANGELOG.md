@@ -1,3 +1,14 @@
+## renderLinks: email/phone regexes re-matched inside linkified URLs — nested anchors mangled markup (branch devin/renderlinks-nest, 2026-09-21)
+
+renderLinks ran replaces sequentially on the whole string: the URL pass emitted
+<a href="URL">URL</a>, then the email/phone passes matched AGAIN inside that fresh
+markup — a URL like https://x/?u=a@b.com had "a@b.com" mailto-wrapped inside the
+href attribute and the link text, producing nested <a> and broken rendering. URLs
+are now swapped to private-use placeholders first (\uE000{i}\uE001), the
+email/phone/mention passes run on the remaining text, then placeholders are
+restored. A peer can type the PUA markers literally — misses restore the match
+verbatim rather than emitting "undefined".
+
 ## 1:1 relayed reactions get the same caps the group path already had (branch devin/reaction-caps-1to1, 2026-09-21)
 
 The encrypted `isSignal` reaction handler on the 1:1 path created `reactions[emoji]`
