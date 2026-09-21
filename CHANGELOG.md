@@ -1,3 +1,14 @@
+## Sender-key redelivery wiped the receiver's decrypt cursor (branch devin/skdist-replay, 2026-09-21)
+
+A replayed sender_key distribution at the same epoch overwrote the stored gsk-peer
+record — resetting counter to 0 and emptying the skipped out-of-order cache. Any
+already-sent message beyond GROUP_MAX_SKIP then fails the forward-walk cap and is
+permanently undecryptable (sealed-inbox redelivery / duplicated relay envelopes are
+the trigger — no attacker needed, though one amplifies it). Same-epoch same-material
+distributions are now merged into the existing record (cursor + skipped survive;
+sigPub still refreshes). A same-epoch dist with DIFFERENT material is a real
+in-epoch rotation and still resets — unchanged.
+
 ## 1:1 relayed reactions get the same caps the group path already had (branch devin/reaction-caps-1to1, 2026-09-21)
 
 The encrypted `isSignal` reaction handler on the 1:1 path created `reactions[emoji]`

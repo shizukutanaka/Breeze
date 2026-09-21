@@ -9946,9 +9946,18 @@ async function initMessenger(dbName) {
           const existingPeerSK = await dbGet('identity', peerKey);
           // Monotonic epoch guard: don't let a replayed/stale message undo a kick rotation.
           if (existingPeerSK && (existingPeerSK.epoch || 0) > (skMsg.epoch || 0)) return;
-          const skEntry = (skMsg.v === 5 && skMsg.chainKey)
-            ? { chainKey: skMsg.chainKey, counter: 0, epoch: skMsg.epoch || 0, v: 5, skipped: {} }
-            : { raw: skMsg.key, counter: 0, epoch: skMsg.epoch || 0 };
+          // Same-epoch redelivery of the SAME key material is a relay replay, not a
+          // rotation: keep the receiver cursor. Overwriting counter/skipped with 0/{}
+          // strands every already-sent message beyond GROUP_MAX_SKIP as undecryptable.
+          const incKey = skMsg.v === 5 ? skMsg.chainKey : skMsg.key;
+          const curKey = existingPeerSK ? (existingPeerSK.v === 5 ? existingPeerSK.chainKey : existingPeerSK.raw) : null;
+          const replay = existingPeerSK && (existingPeerSK.epoch || 0) === (skMsg.epoch || 0)
+            && Array.isArray(incKey) && Array.isArray(curKey) && incKey.length === curKey.length
+            && incKey.every((b, i) => b === curKey[i]);
+          const skEntry = replay ? existingPeerSK
+            : (skMsg.v === 5 && skMsg.chainKey)
+              ? { chainKey: skMsg.chainKey, counter: 0, epoch: skMsg.epoch || 0, v: 5, skipped: {} }
+              : { raw: skMsg.key, counter: 0, epoch: skMsg.epoch || 0 };
           // Signing-capable senders ship sigPub on this channel; unsigned envelopes drop after.
           if (typeof skMsg.sigPub === 'string' && skMsg.sigPub.length > 0 && skMsg.sigPub.length < 200) skEntry.sigPub = skMsg.sigPub;
           await dbPut('identity', skEntry, peerKey);
