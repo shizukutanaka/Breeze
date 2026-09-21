@@ -5671,16 +5671,21 @@ async function initMessenger(dbName) {
   }
 
   // On a group_kick notice: drop the kicked member, rotate our key to the announced epoch, and re-share it. Epoch-guarded so a duplicate/replayed notice is a no-op.
-  async function rotateGroupKeyOnKickNotice(groupId, kickedId, epoch) {
+  // The notice is a rumor E2E'd by ANY member — without a privilege check, any contact
+  // could "kick" an arbitrary member from MY client (server kick needs admin+sig; this
+  // path needed nothing) or pin my chain key at a fake high epoch, after which the >=
+  // guard rejects every real rotation notice forever.
+  async function rotateGroupKeyOnKickNotice(groupId, kickedId, epoch, senderId) {
     if (!CONFIG.GROUP_RATCHET_V5 || typeof epoch !== 'number') return;
     try {
+      const group = await dbGet('contacts', groupId);
+      if (!group) return;
+      const isPrivileged = group.createdBy === senderId || (group.admins || []).includes(senderId);
+      if (!isPrivileged) { _dbg(null, 'group-kick notice from non-admin — ignored'); return; }
       const current = await dbGet('identity', 'gsk:' + groupId);
       if (current && (current.epoch || 0) >= epoch) return;
-      const group = await dbGet('contacts', groupId);
-      if (group) {
-        group.members = (group.members || []).filter(m => m.id !== kickedId);
-        await dbPut('contacts', group);
-      }
+      group.members = (group.members || []).filter(m => m.id !== kickedId);
+      await dbPut('contacts', group);
       const freshChain = Array.from(crypto.getRandomValues(new Uint8Array(32)));
       await dbPut('identity', { chainKey: freshChain, counter: 0, epoch, v: 5, skipped: {} }, 'gsk:' + groupId);
       const targets = (group?.members || []).filter(m => m.id !== myId && m.id !== kickedId && m.pubB64);
@@ -9594,7 +9599,7 @@ async function initMessenger(dbName) {
         if (!decrypted) return;
         const kickMsg = JSON.parse(decrypted);
         if (kickMsg.type === 'group_kick' && kickMsg.groupId) {
-          await rotateGroupKeyOnKickNotice(kickMsg.groupId, kickMsg.kickedId, kickMsg.epoch);
+          await rotateGroupKeyOnKickNotice(kickMsg.groupId, kickMsg.kickedId, kickMsg.epoch, c.id);
         }
       } catch(e) { _dbg(e, 'group-kick-notice'); }
       return;
