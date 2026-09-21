@@ -9385,6 +9385,10 @@ async function initMessenger(dbName) {
     // Relay-path messages are validated by the worker (numeric, finite, ±5min), so
     // this guard mainly protects the P2P path.
     if (typeof msg.ts !== 'number' || !Number.isFinite(msg.ts)) msg = { ...msg, ts: Date.now() };
+    // Clamp far-future timestamps on the P2P path (the relay already enforces ±5 min):
+    // a peer could otherwise pin their conversation to the top of the list forever via
+    // lastMsgAt, and float their message to "newest" in-conversation. 5 min covers skew.
+    if (msg.ts > Date.now() + 5 * MS.MIN) msg = { ...msg, ts: Date.now() };
     // Cap peer-supplied display name at the relay limit (64 chars). The relay path already
     // enforces this via sanitizeString(name, 64); the P2P group path (msg.name || contact.name
     // at line 10109) does not go through the relay, so guard here to keep IDB clean.
