@@ -150,3 +150,27 @@ test('drafts persist across contact switch and reload via IDB, not localStorage'
   await expect(page.locator('#msg-input')).toHaveValue('unsent draft text');
   expect(await page.evaluate(() => localStorage.getItem('brz-drafts'))).toBeNull();
 });
+
+// /?open=<contactId> — the OS-notification tap deep-link. sw.js's notificationclick
+// handler opens this URL, but nothing read the param — a tap landed on the contact list
+// instead of the conversation (same dead-shortcut class as ?settings).
+test('/?open=<contactId> opens that conversation on boot', async ({ page }) => {
+  const key = Buffer.alloc(32, 9).toString('base64');
+  await page.goto(`/?add=${encodeURIComponent(key)}&name=DeepOpen`);
+  await createIdentity(page, 'Opener');
+  await expect(page.locator('#msg-contacts .contact')).toHaveCount(1, { timeout: 10_000 });
+  const cid = key.slice(0, 12); // contact id = pub prefix
+  await page.goto(`/?open=${encodeURIComponent(cid)}`);
+  await expect(page.locator('#msg-main')).toBeVisible({ timeout: 15_000 });
+  // The conversation must be open: the input bar is shown only inside a conversation.
+  await expect(page.locator('#msg-input')).toBeVisible({ timeout: 10_000 });
+});
+
+// Unknown contact id must not crash boot — falls back to the contact list.
+test('/?open=<unknown> boots to the contact list without throwing', async ({ page }) => {
+  await page.goto('/');
+  await createIdentity(page, 'Opener2');
+  await page.goto('/?open=definitely-not-a-contact');
+  await expect(page.locator('#msg-main')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('#msg-contacts')).toBeVisible();
+});

@@ -5973,6 +5973,15 @@ async function initMessenger(dbName) {
     // manifest.json advertised this shortcut with nothing on the boot path ever reading the
     // param, so long-pressing the installed app icon → Settings silently did nothing.
     _openSettingsFromUrl();
+    // ?open=<contactId> — OS-notification tap deep-link (notification data.url). The SW
+    // notificationclick handler opens this URL, but nothing read the param, so a tap
+    // landed on the contact list instead of the conversation — same dead-shortcut class
+    // as ?settings. Look up the contact and open it; unknown ids are ignored.
+    const openId = P.get('open');
+    if (openId) {
+      const oc = await dbGet('contacts', String(openId).slice(0, 64)).catch(() => null);
+      if (oc) await openConversation(oc);
+    }
   } else {
     _DOM.get('msg-setup').classList.remove('hidden');
     _DOM.get('msg-main').classList.add('hidden');
