@@ -1,3 +1,7 @@
+## Alias registrations now carry the ownership signature the worker already checked (branch devin/consolidate-groups, 2026-09-20)
+
+`/alias/set` has supported an Ed25519 ownership binding (`userId` + `ts` + `sig` over `breeze-alias-set:{alias}:{ts}`, verified against the registrant's prekey bundle with `identityKey === pub`) since the worker shipped it — but no client ever sent it, so a PoW-only request could point any unclaimed `@handle` at any public key. Both registration sites now sign: onboarding moved alias registration after `initSigning()` + `/prekey/upload` (the worker verifies against the just-registered bundle), and `/alias` rename does the same. Unsigned requests stay accepted (verify-when-present unless `ALIAS_REQUIRE_AUTH`), so the change is wire-additive.
+
 ## Group messages carry a per-sender signature — insider forgery closed (branch devin/consolidate-groups, 2026-09-20)
 
 eprint 2025/554 (Jaeger–Kumar, signcryption analysis of MLS/Session/Signal/Matrix) formalises
