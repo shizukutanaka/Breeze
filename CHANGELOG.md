@@ -1,5 +1,19 @@
 # Changelog
 
+## Device-registry rollback + rootEd substitution closed (branch devin/consolidate-groups, 2026-09-20)
+
+Two gaps in the multi-device trust path:
+- The signed registry's ts is attacker-consistent on replay, so a relay could
+  serve a STALE signed record forever — resurrecting an unlinked device back
+  into every sender's fan-out. _fetchDeviceList now keeps a per-account
+  monotonic ts floor in IDB (devFloor) and rejects verified-but-older records.
+- /linkto pinned rec.rootEd straight off the wire — but rootEd rides OUTSIDE
+  the signed blob, so a relay could swap in its own Ed key and make every
+  future registry read "verify" under the attacker's key (forged device lists
+  → injected listener → self-sync leak). The link now verifies the record's
+  own sig under the candidate rootEd before pinning; a swapped key fails.
+
+
 ## Presence auth made real + dead caps/beacon/PII fields removed (branch devin/consolidate-groups, 2026-09-20)
 
 PRESENCE_REQUIRE_AUTH claimed to verify the caller owns the id but only checked

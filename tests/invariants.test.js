@@ -166,4 +166,19 @@ describe('wire + storage invariants', () => {
     expect(cfgV).toBeTruthy();
     expect(swV).toBe(cfgV);
   });
+  it('device registry: stale signed records are rejected (monotonic ts floor)', () => {
+    // A relay can replay an old signed registry to resurrect an unlinked device —
+    // verified-and-stale must reject, not degrade silently to accepting it.
+    expect(html).toContain('rec.ts < floor');
+    expect(html).toContain("_devFloorBump(accountId, rec.ts)");
+    expect(html).toContain("'devFloor'");
+  });
+  it('linkto pins rootEd only after the record sig verifies under it', () => {
+    // rootEd rides OUTSIDE the signed blob — a relay could swap it to its own key and
+    // make every future registry read "verify". The record's own sig (made by the real
+    // root key) must verify under the candidate rootEd before it is pinned.
+    const linkto = html.slice(html.indexOf("val.startsWith('/linkto '"));
+    expect(linkto).toContain('verifySignature(`breeze-device-set:${rootPub.slice(0, 12)}:${rec.ts}:${digest}`');
+    expect(linkto).toContain('if (okSig === true) rootEd = rec.rootEd');
+  });
 });

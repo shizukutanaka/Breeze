@@ -5211,6 +5211,22 @@ async function initMessenger(dbName) {
   // root-signed registry on the relay (see _worker.js handleDeviceSet). The registry is
   // client-verified: we check the root's Ed25519 signature ourselves, so the relay can
   // withhold the list (degrades to single-device) but cannot forge devices into it.
+  // Monotonic floor for device registries: the signed blob's ts is attacker-consistent
+  // on replay, so a hostile relay can serve an OLD signed record forever and resurrect a
+  // device the user already unlinked (every fan-out encrypts to it again). Keep the max
+  // verified ts per account in IDB and reject older records — a stale replay degrades to
+  // single-device instead of silently restoring the removed key.
+  let _devFloor = null;
+  async function _devFloorGet(accountId) {
+    if (!_devFloor) _devFloor = (await dbGet('settings', 'devFloor').catch(() => null)) || {};
+    return _devFloor[accountId] || 0;
+  }
+  async function _devFloorBump(accountId, ts) {
+    try {
+      if (!_devFloor) _devFloor = (await dbGet('settings', 'devFloor').catch(() => null)) || {};
+      if (ts > (_devFloor[accountId] || 0)) { _devFloor[accountId] = ts; await dbPut('settings', _devFloor, 'devFloor'); }
+    } catch(e) { _dbg(e, 'dev-floor'); }
+  }
   async function _fetchDeviceList(accountId, rootPubB64) {
     if (!API) return null;
     try {
@@ -5241,6 +5257,12 @@ async function initMessenger(dbName) {
       if (!sigPub) { _dbg(null, 'device list: no pinned signing key for ' + accountId + ' — staying single-device'); return null; }
       const okSig = await verifySignature(`breeze-device-set:${accountId}:${rec.ts}:${digest}`, rec.sig, sigPub);
       if (okSig !== true) { _dbg(null, 'device list signature not verified — ignoring registry'); return null; }
+      // Rollback guard (see _devFloor*): reject a verified record that is older than the
+      // newest one we've already accepted — the relay can replay a stale signed blob to
+      // resurrect a removed device otherwise.
+      const floor = await _devFloorGet(accountId);
+      if (typeof rec.ts === 'number' && rec.ts < floor) { _dbg(null, 'device list is stale (rollback) — ignoring'); return null; }
+      await _devFloorBump(accountId, rec.ts);
       return rec.devices.map(d => d.pub);
     } catch(e) { _dbg(e, 'device-list'); return null; }
   }
@@ -14273,7 +14295,21 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         const rec = resp?.ok ? await resp.json() : null;
         if (!rec?.devices || rec.root !== rootPub) { showToast(t('devNotListed'), 'error'); return; }
         if (!rec.devices.some(d => d.pub === myPubB64)) { showToast(t('devNotListed'), 'error'); return; }
-        await dbPut('identity', { root: rootPub, rootEd: rec.rootEd || null, isPrimary: false }, 'account');
+        // Bind rootEd to the record before pinning it: rootEd rides the response
+        // OUTSIDE the signed blob, so a relay could substitute its own Ed key and
+        // make every future registry read "verify" under the attacker's key (forge
+        // device lists → inject a listening device → self-sync leak). The record's
+        // own sig was made by the real root key — verifying it under the candidate
+        // rootEd rejects a substitution.
+        let rootEd = null;
+        if (rec.rootEd && rec.sig) {
+          const digestBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(rec.devices.map(d => d.pub))));
+          const digest = Array.from(new Uint8Array(digestBuf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
+          const okSig = await verifySignature(`breeze-device-set:${rootPub.slice(0, 12)}:${rec.ts}:${digest}`, rec.sig, rec.rootEd).catch(() => false);
+          if (okSig === true) rootEd = rec.rootEd;
+          else _dbg(null, 'linkto: rootEd did not verify the registry sig — not pinning it (secondary stays registry-unverified)');
+        }
+        await dbPut('identity', { root: rootPub, rootEd, isPrimary: false }, 'account');
         _myDevCache = null; await _refreshDeviceRole();
         showToast(t('devLinked'), 'success');
       } catch(err) { _dbg(err, 'linkto'); showToast(t('devSetFail'), 'error'); }
