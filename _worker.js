@@ -2703,12 +2703,11 @@ async function handleBackupDownload(body, env, request) {
   if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
 
-  // Optional Ed25519 auth: callers may include { ts, sig } to prove ownership before
-  // retrieving the backup. Both fields must be present or both absent.
-  // Set BACKUP_REQUIRE_AUTH=true to reject unauthenticated requests — recommended once
-  // all clients register an Ed25519 identity key (same pattern as GROUP_REQUIRE_AUTH,
-  // PRESENCE_REQUIRE_AUTH, etc.). Without it, knowing a userId is enough to download the
-  // encrypted blob and brute-force the passphrase offline.
+  // Ed25519 auth required BY DEFAULT — knowing a userId is otherwise enough to
+  // download the encrypted blob and brute-force the passphrase offline. Every
+  // deployed client signs `breeze-backup-download:{id}:{ts}`; the uniform 403
+  // fires before the blob lookup so an unsigned probe can't even learn whether
+  // a backup exists. BACKUP_REQUIRE_AUTH='false' is the explicit opt-out.
   const hasSig = ts !== undefined || sig !== undefined;
   if (hasSig) {
     if (ts === undefined || sig === undefined)
@@ -2724,7 +2723,7 @@ async function handleBackupDownload(body, env, request) {
     const challenge = `breeze-backup-download:${userId}:${ts}`;
     const ok = await verifyEd25519(bundle.edIdentityKey, btoa(challenge), sig);
     if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
-  } else if (env.BACKUP_REQUIRE_AUTH === 'true') {
+  } else if (env.BACKUP_REQUIRE_AUTH !== 'false') {
     return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
   }
 

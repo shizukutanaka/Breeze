@@ -3765,7 +3765,10 @@ describe('backup upload / download', () => {
     expect(j.ok).toBe(true);
     expect(j.size).toBe(bak.length);
 
-    const dl = await handleBackupDownload({ userId: 'user00001' }, e, dlReq({}));
+    // Download is signed by default — register + sign like the deployed client.
+    const ed0 = await registerForBackup(e, 'user00001');
+    const dlTs = Date.now();
+    const dl = await handleBackupDownload({ userId: 'user00001', ts: dlTs, sig: await signBackup(ed0, 'download', 'user00001', dlTs) }, e, dlReq({}));
     expect(dl.status).toBe(200);
     const dj = await dl.json();
     expect(dj.backup).toBe(bak);
@@ -3779,7 +3782,8 @@ describe('backup upload / download', () => {
     expect(res.status).toBe(403);
     expect((await res.json()).code).toBe('AUTH_REQUIRED');
     const dl = await handleBackupDownload({ userId: 'user00001' }, e, dlReq({}));
-    expect((await dl.json()).backup).toBe('v1'); // untouched
+    expect(dl.status).toBe(403); // unsigned read refused; blob untouched
+    expect((await e.KV.get('backup:user00001'))).toBe('v1');
   });
 
   it('rejects backup larger than 5MB', async () => {
@@ -3790,9 +3794,15 @@ describe('backup upload / download', () => {
     expect((await res.json()).code).toBe('PAYLOAD_TOO_LARGE');
   });
 
-  it('returns 404 for missing backup', async () => {
+  it('returns 404 for missing backup (signed); unsigned probe is a uniform 403', async () => {
     const e   = makeEnv();
-    const res = await handleBackupDownload({ userId: 'nobody001' }, e, dlReq({}));
+    // Unsigned: refused BEFORE the blob lookup — an unauthenticated probe cannot
+    // distinguish "no backup" from "exists" (existence oracle).
+    const un = await handleBackupDownload({ userId: 'nobody001' }, e, dlReq({}));
+    expect(un.status).toBe(403);
+    const ed = await registerForBackup(e, 'nobody001');
+    const ts = Date.now();
+    const res = await handleBackupDownload({ userId: 'nobody001', ts, sig: await signBackup(ed, 'download', 'nobody001', ts) }, e, dlReq({}));
     expect(res.status).toBe(404);
     expect((await res.json()).code).toBe('NOT_FOUND');
   });
@@ -3857,7 +3867,8 @@ describe('backup upload / download', () => {
     const sig = await signBackup(ed, 'upload', userId, ts);
     const res = await handleBackupUpload({ userId, backup: 'v2-signed', ts, sig }, e, req({}));
     expect(res.status).toBe(200);
-    const dl = await handleBackupDownload({ userId }, e, dlReq({}));
+    const dlTs = Date.now();
+    const dl = await handleBackupDownload({ userId, ts: dlTs, sig: await signBackup(ed, 'download', userId, dlTs) }, e, dlReq({}));
     expect((await dl.json()).backup).toBe('v2-signed');
   });
 
@@ -3938,11 +3949,9 @@ describe('backup upload / download', () => {
   });
 });
 
-// BACKUP_REQUIRE_AUTH enforcement flag (item 54)
-// Without the flag: knowing a userId is enough to download the encrypted blob and
-// brute-force the passphrase offline. With BACKUP_REQUIRE_AUTH=true, both upload
-// and download require a valid Ed25519 signature — same pattern as GROUP_REQUIRE_AUTH
-// and PRESENCE_REQUIRE_AUTH.
+// BACKUP_REQUIRE_AUTH (item 54): the registered-owner signature is required by
+// default — unsigned reads are a uniform 403 (no existence oracle). '=false' is the
+// opt-out; '=true' additionally requires sigs on FIRST upload (not just overwrites).
 describe('backup BACKUP_REQUIRE_AUTH enforcement (item 54)', () => {
   const req  = (body) => apiRequest('/api/backup/upload', body);
   const dlReq = (body) => apiRequest('/api/backup/download', body);
@@ -3991,8 +4000,8 @@ describe('backup BACKUP_REQUIRE_AUTH enforcement (item 54)', () => {
     expect((await res.json()).backup).toBe('my-enc-backup');
   });
 
-  it('unauthenticated upload/download still works when flag is unset (backward-compat)', async () => {
-    const e = makeEnv();
+  it('unauthenticated upload/download still works under the explicit opt-out (BACKUP_REQUIRE_AUTH=false)', async () => {
+    const e = makeEnv({ BACKUP_REQUIRE_AUTH: 'false' });
     const up = await handleBackupUpload({ userId: 'bakflg05', backup: 'blob' }, e, req({}));
     expect(up.status).toBe(200);
     await e.KV.put('backup:bakflg05', 'blob');
