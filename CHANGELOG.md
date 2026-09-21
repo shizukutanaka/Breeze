@@ -1,3 +1,16 @@
+## File/voice/poll sends stored under an msgId remote mutations can never match (branch devin/file-voice-msgid, 2026-09-21)
+
+doSend learned (Socratic fix) that message identity must equal the receiver's
+`${senderId}:${ts}` key — but the file, voice-memo and poll send paths kept storing
+`genMsgId()` (myId:ts:seq) and rendering bubbles under yet another id (`ts-1` or a
+second genMsgId). Result: on file/voice/poll messages, every edit/delete/reaction —
+local (dataset.msgid lookup missed IDB) AND remote (peer's signal carries `their:ts`,
+which never equals my stored seq-suffixed id) — was a silent no-op. Polls were
+additionally dual-path inconsistent: P2P copies keyed by wire msgId, relay copies by
+from:ts. All send paths now store `myId:ts` (with doSend's _lastSendTs bump) and pass
+that id to appendMsg. Residual: P2P binary-file chunks carry no sender ts, so remote
+mutations on P2P files still can't match (wire-format change, deferred).
+
 ## Relay-rollback hardening on signed stored state (branch devin/signed-state-monotonic, 2026-09-21)
 
 Every signed-state endpoint checked the signature's freshness (±5min `REQ_TS`) but nothing ordered two *in-window* writes — a relay that captures a signed request can replay it moments after a newer one lands and silently roll the state back. KV has no compare-and-swap, so the stored signed timestamp is now the high-water mark on both write paths:

@@ -7448,8 +7448,10 @@ async function initMessenger(dbName) {
       if (contact.blocked) return;
       const pollId = myId + ':poll:' + Date.now();
       const pollData = { type: 'poll', pollId, question, options: options.map(o => ({ text: o, votes: [] })), creator: myId };
-      const ts = correctedNow();
-      const msgId = genMsgId();
+      let ts = correctedNow();
+      if (ts <= _lastSendTs) ts = _lastSendTs + 1;
+      _lastSendTs = ts;
+      const msgId = myId + ':' + ts; // receivers key by `${senderId}:${ts}` — mutations must match
       await dbPut('messages', { msgId, contactId: contact.id, text: JSON.stringify(pollData), mine: true, ts, isPoll: true });
       contact.lastMsg = '📊 ' + question.slice(0, 30);
       contact.lastMsgAt = ts;
@@ -7781,7 +7783,9 @@ async function initMessenger(dbName) {
       let sent = 0;
       for (const target of targets) {
         try {
-          const ts = correctedNow();
+          let ts = correctedNow();
+          if (ts <= _lastSendTs) ts = _lastSendTs + 1;
+          _lastSendTs = ts;
           if (target.isGroup) {
             // Same pubB64='' dead-end as polls/files — encryptFor('') fails, so a
             // forward into a group silently skipped the target. Route via sender-key.
@@ -8341,14 +8345,18 @@ async function initMessenger(dbName) {
       if (contact.blocked) return;
       // v3.6: Auto-compress images
       file = await _compressImage(file);
-      const ts = correctedNow();
+      let ts = correctedNow();
+      if (ts <= _lastSendTs) ts = _lastSendTs + 1;
+      _lastSendTs = ts;
+      // Receivers key messages by `${senderId}:${ts}` — mutation signals must match (see doSend).
+      const msgId = myId + ':' + ts;
       const text = `📎 ${file.name}`;
       const peer = peers[contact.pubB64];
       if (peer?.connected && peer.dc?.readyState === 'open') {
         const sent = await sendBinaryFile(peer, file);
         if (sent) {
-          appendMsg(text, true, ts, null, JSON.stringify({ type: 'file', name: file.name, mime: file.type, data: '' }));
-          await dbPut('messages', { msgId: genMsgId(), contactId: contact.id, text, mine: true, ts, fileData: JSON.stringify({ type: 'file', name: file.name, mime: file.type }) });
+          appendMsg(text, true, ts, null, JSON.stringify({ type: 'file', name: file.name, mime: file.type, data: '' }), { msgId });
+          await dbPut('messages', { msgId, contactId: contact.id, text, mine: true, ts, fileData: JSON.stringify({ type: 'file', name: file.name, mime: file.type }) });
           return;
         }
       }
@@ -8360,8 +8368,8 @@ async function initMessenger(dbName) {
       }
       const b64 = bufToB64(ab);
       const fileMsg = JSON.stringify({ type: 'file', name: file.name, mime: file.type, data: b64 });
-      appendMsg(text, true, ts, null, fileMsg);
-      await dbPut('messages', { msgId: genMsgId(), contactId: contact.id, text, mine: true, ts, fileData: fileMsg });
+      appendMsg(text, true, ts, null, fileMsg, { msgId });
+      await dbPut('messages', { msgId, contactId: contact.id, text, mine: true, ts, fileData: fileMsg });
       if (contact.isGroup) {
         // Same dead-end as polls: peers['']/encryptFor('') silently dropped group files.
         // Route via the sender-key channel; receivers detect {type:'file'} in the text.
@@ -8681,7 +8689,10 @@ async function initMessenger(dbName) {
           const reader = new FileReader();
           reader.onload = async () => {
             const b64 = reader.result.split(',')[1];
-            const ts = correctedNow();
+            let ts = correctedNow();
+            if (ts <= _lastSendTs) ts = _lastSendTs + 1;
+            _lastSendTs = ts;
+            const msgId = myId + ':' + ts; // receivers key messages by `${senderId}:${ts}`
             const text = '🎤 Voice (' + Math.ceil(blob.size / 1024) + 'KB)';
             try {
               const contact = _recContact;
@@ -8690,7 +8701,7 @@ async function initMessenger(dbName) {
                 // Group voice hit the same pubB64='' dead-end as files/polls — wrap as
                 // a file payload and send via sender-key so members can play it back.
                 const gPayload = JSON.stringify({ type: 'file', name: file.name, mime: file.type, data: b64 });
-                await dbPut('messages', { msgId: genMsgId(), contactId: contact.id, text, mine: true, ts, fileData: gPayload });
+                await dbPut('messages', { msgId, contactId: contact.id, text, mine: true, ts, fileData: gPayload });
                 contact.lastMsg = text; contact.lastMsgAt = ts;
                 await dbPut('contacts', contact);
                 const members = (contact.members || []).filter(m => m.id !== myId);
@@ -8702,20 +8713,20 @@ async function initMessenger(dbName) {
                   }));
                   _fanOut(contact, gPayload, ts, {}, { isFile: true, sfFor: contact.id, sfName: contact.name });
                 }
-                appendMsg(text, true, ts, null, gPayload, { msgId: genMsgId() });
+                appendMsg(text, true, ts, null, gPayload, { msgId });
                 renderContacts();
                 return;
               }
               const filePayload = JSON.stringify({ name: file.name, type: file.type, size: file.size, data: b64 });
               const encrypted = await encryptFor(filePayload, contact.pubB64);
               if (!encrypted) { _dbg(null, 'encrypt failed'); return; }
-              await dbPut('messages', { msgId: genMsgId(), contactId: contact.id, text, mine: true, ts, fileData: filePayload });
+              await dbPut('messages', { msgId, contactId: contact.id, text, mine: true, ts, fileData: filePayload });
               contact.lastMsg = text; contact.lastMsgAt = ts;
               await dbPut('contacts', contact);
               await relaySend(contact.id, { to: contact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts, isFile: true }, contact.pubB64);
               _fanOut(contact, filePayload, ts, { isFile: true },
                 { isFile: true, sfFor: contact.id, sfPub: contact.pubB64, sfName: contact.name });
-              appendMsg(text, true, ts, null, filePayload, { msgId: genMsgId() });
+              appendMsg(text, true, ts, null, filePayload, { msgId });
               renderContacts();
               haptic.success();
             } catch(err) { _dbg(err, 'voice-send'); showToast(t('toastSendFailed'), 'error'); }
