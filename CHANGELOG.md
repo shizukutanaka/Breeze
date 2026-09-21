@@ -1,5 +1,13 @@
 # Changelog
 
+## updateMsgStatus never actually matched the timestamp (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The delivery/read tick updater iterated `.msg.me` and `break`'d on the FIRST element with a status+timestamp — the parsed `msgTitle` was read but never compared. Every relay ack landed on the oldest pending bubble instead of the acked one. The walk now filters by ±5s proximity before updating, matching the IDB half which already did the same comparison.
+
+---
+
 ## Disappear timer was a global — armed in one chat, it fired in the next (branch devin/consolidate-groups, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).

@@ -7246,7 +7246,9 @@ async function initMessenger(dbName) {
     try {
       const box = _DOM.get('msg-messages');
       if (!box) return;
-      // Find message by timestamp (own messages)
+      // Find message by timestamp (own messages). The DOM walk must actually compare —
+      // iterating to the first .msg.me and breaking unconditionally landed every ack on
+      // the OLDEST pending message instead of the one that was acked.
       const msgs = box.querySelectorAll('.msg.me');
       for (const msg of msgs) {
         const statusEl = msg.querySelector('.msg-status');
@@ -7255,6 +7257,8 @@ async function initMessenger(dbName) {
         if (!tsEl) continue;
         // Match by timestamp proximity (within 5s)
         const msgTitle = tsEl.getAttribute('title') || '';
+        const msgTs = Date.parse(msgTitle);
+        if (Number.isFinite(msgTs) && Math.abs(msgTs - ts) > 5 * MS.SEC) continue;
         if (status === 'delivered' && statusEl.classList.contains('sent')) {
           statusEl.classList.remove('sent');
           statusEl.classList.add('delivered');
