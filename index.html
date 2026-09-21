@@ -12451,13 +12451,14 @@ async function initMessenger(dbName) {
         const allMsgs = await dbGetAll('messages');
         const chats = {};
         for (const c of allContacts) {
-          const msgs = allMsgs.filter(m => m.contactId === c.id).sort((a, b) => a.ts - b.ts);
+          const msgs = allMsgs.filter(m => m.contactId === c.id && !m.deleted).sort((a, b) => a.ts - b.ts);
           if (msgs.length === 0) continue;
           chats[c.name || c.id] = msgs.map(m => ({ ts: m.ts, text: m.text, mine: m.mine }));
         }
         const blob = new Blob([JSON.stringify({ version: CONFIG.VERSION, exportedAt: new Date().toISOString(), chats }, null, 2)], { type: 'application/json' });
         downloadBlob(blob, 'breeze-all-' + new Date().toISOString().slice(0,10) + '.json');
-        showToast(t('toastExportedMessages', allMsgs.length, Object.keys(chats).length), 'success');
+        const exportedCount = Object.values(chats).reduce((n, arr) => n + arr.length, 0);
+        showToast(t('toastExportedMessages', exportedCount, Object.keys(chats).length), 'success');
       } else if (sub === 'csv') {
         if (!activeContact) { showToast(t('toastOpenChat'), 'error'); return; }
         const msgs = (await dbGetByIndex('messages', 'contact', activeContact.id)).sort((a, b) => a.ts - b.ts);
@@ -12486,7 +12487,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         showToast(t('toastExportedMessagesHTML', msgs.length), 'success');
       } else {
         if (!activeContact) { showToast(t('toastOpenChat'), 'error'); return; }
-        const msgs = (await dbGetByIndex('messages', 'contact', activeContact.id)).sort((a, b) => a.ts - b.ts).map(m => ({ ts: m.ts, text: m.text, mine: m.mine, sender: m.senderName || (m.mine ? myName : activeContact.name) }));
+        const msgs = (await dbGetByIndex('messages', 'contact', activeContact.id)).filter(m => !m.deleted).sort((a, b) => a.ts - b.ts).map(m => ({ ts: m.ts, text: m.text, mine: m.mine, sender: m.senderName || (m.mine ? myName : activeContact.name) }));
         const blob = new Blob([JSON.stringify({ version: CONFIG.VERSION, contact: activeContact.name, messages: msgs }, null, 2)], { type: 'application/json' });
         downloadBlob(blob, 'breeze-' + activeContact.name.replace(/\s+/g,'-') + '-' + new Date().toISOString().slice(0,10) + '.json');
         showToast(t('toastExportedMessagesJSON', msgs.length), 'success');

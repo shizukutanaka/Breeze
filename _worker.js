@@ -344,7 +344,7 @@ export default {
 
 // ============================================================
 // SIGNAL — WebRTC signaling (join/offer/answer/ICE)
-// Ephemeral: all signaling data has 60s TTL.
+// Ephemeral: all signaling data expires in 5 minutes (TTL.MIN * 5 at the puts below).
 // After P2P connects, signaling is no longer needed.
 // ============================================================
 

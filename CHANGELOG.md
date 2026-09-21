@@ -1,5 +1,13 @@
 # Changelog
 
+## Export hygiene: deleted-message tombstones no longer exported; stale sig-TTL comment (branch devin/export-deleted, 2026-09-20)
+
+`index.html`, `_worker.js` (comment only), `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`/export` filtered tombstones in csv/html but not in `all`/`json` — a deleted message's tombstone (timestamp + empty text) was still written to the archive, contradicting what "deleted" promises. All four exporters now skip `m.deleted`, and the `all` toast counts exported rows, not raw rows. Also corrected `_worker.js`'s "signaling data has 60s TTL" comment — it has been 5 minutes since forever.
+
+---
+
 ## Plaintext at rest: outbox stored ciphertext-only; drafts moved localStorage → per-account IDB (branch devin/at-rest-hygiene, 2026-09-20)
 
 `index.html`, `tests/e2e/deeplink.spec.js`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
