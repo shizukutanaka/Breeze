@@ -11753,8 +11753,13 @@ async function initMessenger(dbName) {
       if (!dc || dc.readyState !== 'open') return false;
       const CHUNK = CONFIG.CHUNK_SIZE;
       const fileId = crypto.getRandomValues(new Uint8Array(16));
-      const nameBytes = new TextEncoder().encode(file.name);
-      const mimeBytes = new TextEncoder().encode(file.type || 'application/octet-stream');
+      // Receiver drops any chunk with nameLen > 255 BYTES (handleBinaryChunk) — a ~90-char
+      // Japanese filename already exceeds that, and every chunk was silently discarded while
+      // the sender showed "sent". Truncate at a UTF-8 char boundary until it fits.
+      let _fname = file.name || 'file';
+      let nameBytes = new TextEncoder().encode(_fname);
+      while (nameBytes.length > 255 && _fname.length > 0) { _fname = _fname.slice(0, -1); nameBytes = new TextEncoder().encode(_fname); }
+      const mimeBytes = new TextEncoder().encode((file.type || 'application/octet-stream').slice(0, 128));
       const total = Math.ceil(file.size / CHUNK);
       const buf = await file.arrayBuffer();
       // v3.6: Progress indicator in message area

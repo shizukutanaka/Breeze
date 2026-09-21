@@ -1,3 +1,13 @@
+## P2P file transfer: truncate name/mime to the receiver's byte caps (branch devin/file-name-utf8-cap, 2026-09-21)
+
+`sendBinaryFile` emitted `file.name`/`file.type` unbounded, but `handleBinaryChunk`
+rejects every chunk with `nameLen > 255` **bytes** or `mimeLen > 128`. A ~90-char
+Japanese filename is already 270 UTF-8 bytes — every chunk silently discarded, the
+progress bar never completes, and the sender's UI shows the file as sent (the local
+bubble lands either way). The loop now truncates the name at UTF-16 char boundaries
+until its encoding fits, and the mime field slices to 128 chars (ASCII-safe).
+Misbehaving senders remain bounded by the unchanged receiver checks.
+
 ## Relay-rollback hardening on signed stored state (branch devin/signed-state-monotonic, 2026-09-21)
 
 Every signed-state endpoint checked the signature's freshness (±5min `REQ_TS`) but nothing ordered two *in-window* writes — a relay that captures a signed request can replay it moments after a newer one lands and silently roll the state back. KV has no compare-and-swap, so the stored signed timestamp is now the high-water mark on both write paths:
