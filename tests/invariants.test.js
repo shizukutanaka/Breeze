@@ -52,3 +52,35 @@ describe('poll receive path', () => {
     expect(html).toContain("meta.isPoll = true; meta.poll = _p");
   });
 });
+
+describe('group trust boundaries', () => {
+  it('group_kick notices require the sender to be creator/admin', () => {
+    expect(html).toContain('group.createdBy === senderId || (group.admins || []).includes(senderId)');
+    expect(html).toContain('group-kick notice from non-admin');
+  });
+  it('roster poll applies member removals, not just growth', () => {
+    expect(html).toContain('oldMembers.some(o => !newMembers.some(m => m.id === o.id))');
+  });
+  it('roster poll syncs creatorId/admins/name (transfer + rename visibility)', () => {
+    expect(html).toContain('group.creatorId !== data.creatorId');
+  });
+  it('group invites run members through safeMemberList', () => {
+    expect(html).toContain('safeMemberList(invite.members)');
+  });
+  it('group join seeds creatorId/admins from the join response', () => {
+    expect(html).toContain("createdBy: typeof data.creatorId === 'string'");
+  });
+});
+
+describe('wire + storage invariants', () => {
+  it('replyTo goes on the wire as a JSON string (Worker allowlist drops objects)', () => {
+    expect(html).toContain('envelopeReplyTo(meta.replyTo)');
+    expect(html).toContain("if (typeof msg.replyTo === 'string')");
+  });
+  it('chat import dedup key is unique per message (minute-precision ts collides)', () => {
+    expect(html).toContain("'import:' + m.ts + ':' + (isMine ? '1' : '0') + ':' + i");
+  });
+  it('scheduled sends restore the composer input (no draft clobber)', () => {
+    expect(html.match(/savedInput = _DOM\.get\('msg-input'\)\.value/g)?.length).toBe(3);
+  });
+});

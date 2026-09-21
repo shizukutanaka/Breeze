@@ -1,5 +1,13 @@
 # Changelog
 
+## Tripwire tests for the group-trust and wire invariants (branch devin/invariant-tripwires-2, 2026-09-20)
+
+`tests/invariants.test.js`, `CHANGELOG.md`.
+
+Eight new source-level tripwires pinning this round's fixes: group_kick admin gating, bidirectional roster sync (+creatorId/admins/name), invite member sanitization, join-time moderation metadata, replyTo string-on-wire + string normalization, import dedup uniqueness, and scheduled-send input restore. A refactor that drops any of these guards now fails the suite instead of shipping quietly.
+
+---
+
 ## Group join never stored creatorId/admins — /admin dead until a server-side mutation (branch devin/group-join-meta, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
