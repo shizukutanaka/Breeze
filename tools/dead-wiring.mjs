@@ -31,7 +31,9 @@ for (const m of html.matchAll(/\.id\s*=\s*['"`]([A-Za-z][\w-]*)['"`]/g)) have.ad
 // setAttribute('id', 'x') — rare but legal
 for (const m of html.matchAll(/setAttribute\(\s*['"]id['"]\s*,\s*['"]([A-Za-z][\w-]*)['"]/g)) have.add(m[1]);
 
-// Literal lookups only: _DOM.get('x') / getElementById('x') with a plain quoted string.
+// Literal lookups only: _DOM.get('x') / getElementById('x') / querySelector('#x') with a
+// plain quoted string. querySelector('#id') is the same dead-wiring hazard — used inside
+// overlay builders where a renamed template id leaves a silent null.onclick handler.
 const want = new Map();
 const scan = (re) => {
   for (const m of html.matchAll(re)) {
@@ -42,6 +44,8 @@ const scan = (re) => {
 scan(/_DOM\.get\(\s*'([A-Za-z][\w-]*)'\s*\)/g);
 scan(/_DOM\.get\(\s*"([A-Za-z][\w-]*)"\s*\)/g);
 scan(/getElementById\(\s*'([A-Za-z][\w-]*)'\s*\)/g);
+scan(/querySelector(?:All)?\(\s*'#([A-Za-z][\w-]*)'\s*\)/g);
+scan(/querySelector(?:All)?\(\s*"([A-Za-z][\w-]*)"\s*\)/g);
 
 const dead = [...want.entries()].filter(([id]) => !have.has(id));
 if (dead.length) {
