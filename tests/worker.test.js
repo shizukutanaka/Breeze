@@ -2187,6 +2187,69 @@ describe('sealed sender send / poll / ack', () => {
     expect((await (await handleSealedPoll({ id: 'window03' }, env, req({}))).json()).messages).toEqual([]);
   });
 
+  // A poll used to re-put the queue with TTL.MIN*5 — collapsing a week of retention to
+  // 5 minutes, so >5min offline after a poll = silent loss. Now a poll writes only the
+  // hwm marker; the queue key itself is never rewritten and keeps its original lifetime.
+  it('poll does not rewrite the queue (retention is not collapsed to 5 minutes)', async () => {
+    const env = makeEnv();
+    await handleSealedSend({ to: 'ttlcheck1', envelope: 'keep-me-a-week' }, env, req({}));
+    const puts = [];
+    const realPut = env.KV.put.bind(env.KV);
+    env.KV.put = async (k, v, o) => { puts.push(k); return realPut(k, v, o); };
+    const poll = await handleSealedPoll({ id: 'ttlcheck1' }, env, req({}));
+    expect(poll.status).toBe(200);
+    expect(puts).not.toContain('sealed:ttlcheck1');   // only `sealed:ttlcheck1:hwm` may be written
+  });
+
+  // Owner-auth: unsigned, a public userId is enough to read queue metadata or delete the
+  // whole queue (the no-hwm ack fallback blind-deletes). Verified-when-present with a
+  // per-op challenge so a sig lifted from sealed/poll can't be replayed at sealed/ack.
+  describe('sealed owner-auth (SEALED_REQUIRE_AUTH)', () => {
+    const registerOwner = async (env, userId) => {
+      const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+      const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
+      await env.KV.put(`prekey:${userId}`, JSON.stringify({ identityKey: 'IK-' + userId, edIdentityKey: Buffer.from(edPub).toString('base64'), uploadedAt: Date.now() }));
+      const sign = async (challenge) => Buffer.from(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, new TextEncoder().encode(challenge)))).toString('base64');
+      return { sign };
+    };
+
+    it('flag off: unsigned poll+ack still work (backward compat)', async () => {
+      const env = makeEnv();
+      await handleSealedSend({ to: 'compat01', envelope: 'e' }, env, req({}));
+      expect((await handleSealedPoll({ id: 'compat01' }, env, req({}))).status).toBe(200);
+      expect((await handleSealedAck({ id: 'compat01' }, env, req({}))).status).toBe(200);
+    });
+
+    it('flag on: unsigned poll+ack are rejected 403 AUTH_REQUIRED and delete nothing', async () => {
+      const env = makeEnv({ SEALED_REQUIRE_AUTH: 'true' });
+      await handleSealedSend({ to: 'strict01', envelope: 'e' }, env, req({}));
+      for (const res of [
+        await handleSealedPoll({ id: 'strict01' }, env, req({})),
+        await handleSealedAck({ id: 'strict01' }, env, req({})),
+      ]) {
+        expect(res.status).toBe(403);
+        expect((await res.json()).code).toBe('AUTH_REQUIRED');
+      }
+      expect(JSON.parse(await env.KV.get('sealed:strict01')).length).toBe(1); // queue intact
+    });
+
+    it('flag on: owner-signed poll and ack pass; a sig for the other op is rejected', async () => {
+      const env = makeEnv({ SEALED_REQUIRE_AUTH: 'true' });
+      const { sign } = await registerOwner(env, 'owner001');
+      await handleSealedSend({ to: 'owner001', envelope: 'e' }, env, req({}));
+      const ts = Date.now();
+      const poll = await handleSealedPoll({ id: 'owner001', ts, sig: await sign(`breeze-sealed-poll:owner001:${ts}`) }, env, req({}));
+      expect(poll.status).toBe(200);
+      // Same key, wrong op in the challenge — op binding prevents the relay swapping endpoints.
+      const replayed = await handleSealedAck({ id: 'owner001', ts, sig: await sign(`breeze-sealed-poll:owner001:${ts}`) }, env, req({}));
+      expect(replayed.status).toBe(403);
+      const ts2 = Date.now();
+      const ack = await handleSealedAck({ id: 'owner001', ts: ts2, sig: await sign(`breeze-sealed-ack:owner001:${ts2}`) }, env, req({}));
+      expect(ack.status).toBe(200);
+      expect((await (await handleSealedPoll({ id: 'owner001', ts: ts2, sig: await sign(`breeze-sealed-poll:owner001:${ts2}`) }, env, req({}))).json()).messages).toEqual([]);
+    });
+  });
+
   it('returns 500 ACK_FAILED when the selective-delete KV write fails', async () => {
     const env = makeEnv();
     await handleSealedSend({ to: 'window04', envelope: 'm1' }, env, req({}));
@@ -2540,6 +2603,27 @@ describe('msg send / poll (1:1 relay path)', () => {
     const res = await handleMsgPoll({ id: 'bad id!' }, makeEnv(), req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_ID');
+  });
+
+  // Unsigned /msg/poll is destructive: a future lastTs makes the keep-filter delete every
+  // message older than MULTITAB_GRACE — knowing a victim's (public) userId was enough to
+  // purge their undelivered inbox. MSG_REQUIRE_AUTH gates it behind an owner signature.
+  it('MSG_REQUIRE_AUTH: unsigned poll 403s and purges nothing; owner-signed poll works', async () => {
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'true' });
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
+    await env.KV.put('prekey:msgvictim', JSON.stringify({ identityKey: 'IK', edIdentityKey: Buffer.from(edPub).toString('base64'), uploadedAt: Date.now() }));
+    await handleMsgSend({ to: 'msgvictim', from: 'alice001', payload: 'UNDELIVERED', ts: Date.now() - 60000 }, ip, env, req({}));
+
+    const unsigned = await handleMsgPoll({ id: 'msgvictim', lastTs: Date.now() + 86400000 }, env, req({}));
+    expect(unsigned.status).toBe(403);
+    expect(JSON.parse(await env.KV.get('inbox:msgvictim')).length).toBe(1); // purge blocked
+
+    const ts = Date.now();
+    const sig = Buffer.from(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, new TextEncoder().encode(`breeze-msg-poll:msgvictim:${ts}`)))).toString('base64');
+    const signed = await handleMsgPoll({ id: 'msgvictim', lastTs: 0, ts, sig }, env, req({}));
+    expect(signed.status).toBe(200);
+    expect((await signed.json()).messages.length).toBe(1);
   });
 
   it('drops non-string groupId/replyTo silently (consistent with sig/sigPub guards)', async () => {

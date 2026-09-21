@@ -344,7 +344,7 @@ export default {
 
 // ============================================================
 // SIGNAL — WebRTC signaling (join/offer/answer/ICE)
-// Ephemeral: all signaling data has 60s TTL.
+// Ephemeral: all signaling data expires in 5 minutes (TTL.MIN * 5 at the puts below).
 // After P2P connects, signaling is no longer needed.
 // ============================================================
 
@@ -519,9 +519,11 @@ async function handleMsgSend(body, ip, env, request) {
 }
 
 async function handleMsgPoll(body, env, request) {
-  const { id, lastTs } = body;
+  const { id, lastTs, ts, sig } = body;
   if (!id) return json({ error: 'id required', code: 'MISSING_ID' }, 400, request);
   if (!validateUserId(id)) return json({ error: 'invalid id', code: 'INVALID_ID' }, 400, request);
+  const authErr = await checkOwnerAuth(env, request, 'msg-poll', id, ts, sig, 'MSG_REQUIRE_AUTH');
+  if (authErr) return authErr;
 
   const key = `inbox:${id}`;
   const data = await kvGet(env, key);
@@ -1175,6 +1177,34 @@ async function checkGroupAuth(env, request, action, token, actorId, ts, sig, bin
     return null;
   }
   if (env.GROUP_REQUIRE_AUTH === 'true') return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+  return null;
+}
+
+// Owner-auth for id-keyed read/destructive endpoints (same pattern as checkGroupAuth).
+// A userId is public (pub-prefix, exposed in group rosters) — unsigned, anyone who knows
+// it can read the sealed queue's metadata, blind-delete the queue via /sealed/ack, or purge
+// an inbox by polling with a future lastTs. Verified-when-present so old clients keep
+// working; the operator flips <flagName>='true' once clients sign. Challenge binds the op
+// and id so a sig lifted from one endpoint can't be replayed against another.
+// Returns a Response on failure, or null to proceed.
+async function checkOwnerAuth(env, request, op, id, ts, sig, flagName) {
+  const hasSig = ts !== undefined || sig !== undefined;
+  if (hasSig) {
+    if (ts === undefined || sig === undefined) return json({ error: 'ts and sig must both be provided', code: 'PARTIAL_AUTH' }, 400, request);
+    if (typeof sig !== 'string' || sig.length > 500) return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
+    if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS) return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
+    const pkRaw = await kvGet(env, `prekey:${id}`);
+    const bundle = pkRaw ? safeJsonParse(pkRaw) : null;
+    // No registered bundle → nothing to verify against; treat as unsigned so a fresh
+    // account signing before its first prekey upload isn't punished harder than a
+    // client that never signed at all.
+    if (bundle && typeof bundle.edIdentityKey === 'string' && bundle.edIdentityKey) {
+      const ok = await verifyEd25519(bundle.edIdentityKey, utf8ToB64(`breeze-${op}:${id}:${ts}`), sig);
+      if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
+      return null;
+    }
+  }
+  if (env[flagName] === 'true') return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
   return null;
 }
 
@@ -2437,18 +2467,22 @@ async function handleSealedSend(body, env, request) {
 }
 
 async function handleSealedPoll(body, env, request) {
-  const { id } = body;
+  const { id, ts, sig } = body;
   if (!id) return json({ error: 'id required', code: 'MISSING_ID' }, 400, request);
   if (!validateUserId(id)) return json({ error: 'invalid id', code: 'INVALID_ID' }, 400, request);
+  const authErr = await checkOwnerAuth(env, request, 'sealed-poll', id, ts, sig, 'SEALED_REQUIRE_AUTH');
+  if (authErr) return authErr;
   const key = `sealed:${id}`;
   const data = await kvGet(env, key);
   if (!data) return json({ messages: [] }, 200, request);
   const messages = safeJsonParse(data, []);
   if (!Array.isArray(messages)) return json({ messages: [] }, 200, request);
-  // v3.6: Grace period — set short TTL instead of immediate delete
-  // If client crashes after poll but before processing, messages survive 5 min
-  // Client-side _replayCache + IDB dedup prevents re-rendering on re-poll
-  await kvPut(env, key, data, { expirationTtl: TTL.MIN * 5 }); // 5 min grace
+  // The queue is NOT rewritten here. A poll used to re-put the same data with a 5-min
+  // "grace" TTL — collapsing a week of retention to 5 minutes on every poll, so a client
+  // that went offline >5 min after polling lost messages it never had a chance to process.
+  // Crash-recovery works without any write: the key keeps its original TTL.WEEK lifetime
+  // and the hwm marker bounds what a later ack may delete. Client-side _replayCache + IDB
+  // dedup prevents re-rendering on re-poll.
   // Record a high-water mark (max ts returned) so the later ACK clears ONLY what was
   // actually polled. handleSealedAck previously blind-deleted the whole queue, so any
   // envelope appended by handleSealedSend in the poll→ack window was destroyed
@@ -2466,9 +2500,13 @@ async function handleSealedPoll(body, env, request) {
 
 // v3.6: Sealed ACK — client confirms processing, worker deletes messages
 async function handleSealedAck(body, env, request) {
-  const { id } = body;
+  const { id, ts, sig } = body;
   if (!id || typeof id !== 'string') return json({ error: 'id required', code: 'MISSING_ID' }, 400, request);
   if (!validateUserId(id)) return json({ error: 'invalid id', code: 'INVALID_ID' }, 400, request);
+  // Destructive: deletes queue entries. Unsigned, a public userId is enough to wipe a
+  // stranger's pending sealed mail — the no-hwm fallback blind-deletes the whole queue.
+  const authErr = await checkOwnerAuth(env, request, 'sealed-ack', id, ts, sig, 'SEALED_REQUIRE_AUTH');
+  if (authErr) return authErr;
   // Clear only what the client actually polled. handleSealedPoll records a high-water mark
   // (max ts of the returned batch); here we keep any envelope with ts > hwm, i.e. one that
   // arrived in the poll→ack window, instead of blind-deleting the whole queue and losing it.

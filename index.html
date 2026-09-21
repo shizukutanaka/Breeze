@@ -1607,6 +1607,7 @@ const _I = {
     read: 'Read',
     typing: 'typing...',
     newMessages: 'New Messages',
+    notifNewMessage: 'New message',
     draftLabel: 'Draft',
     dropUsage: 'Usage: /drop <secret message>',
     dropTooLong: 'Secret too long (max 50,000 characters)',
@@ -1684,6 +1685,7 @@ const _I = {
     scanQR: 'Scan QR Code',
     scanning: 'Scanning...',
     toastInvalidQR: 'Not a Breeze invite QR code',
+    toastInvalidContact: 'Not a valid Breeze contact key',
     scanToVerify: 'Scan to verify',
     toastInvalidVerifyQR: 'Not a Breeze verification QR code',
     toastVerified: 'Safety number verified',
@@ -1773,6 +1775,9 @@ const _I = {
     toastGroupLeaveFail: 'Failed to leave group on server (removed locally)',
     toastGroupDeleteFail: 'Failed to delete group on server (removed locally)',
     demotedAdmin: "{0} is no longer a group admin",
+    transferredOwnership: "{0} is now the group creator",
+    toastCreatorOnly: 'Only the group creator can transfer ownership',
+    toastTransferFail: 'Ownership transfer failed',
     toastNoIdentityBackup: 'No identity to backup',
     toastInvalidBackup: 'Invalid backup file',
     toastMsgTooLong: 'Message too long (max 64 KB)',
@@ -1972,6 +1977,7 @@ const _I = {
     cmdAdminKick: '/admin kick @name — Remove member',
     cmdAdminPromote: '/admin promote @name — Make admin',
     cmdAdminDemote: '/admin demote @name — Remove admin',
+    cmdAdminTransfer: '/admin transfer @name — Transfer ownership (creator only)',
     cmdAdminRename: '/admin rename New Name — Rename group',
     cmdAdminHelpLine: '/admin help — Show this help',
     cmdSessionTitle: 'Session Info',
@@ -2781,8 +2787,7 @@ if ('serviceWorker' in navigator) { try {
       btn.className = 'update-btn';
       btn.textContent = t('uiReload');
       btn.onclick = () => {
-        // Save drafts before reload
-        try { localStorage.setItem('brz-drafts', JSON.stringify(_drafts || {})); } catch {}
+        // Drafts already persist to IDB on every change — nothing extra to save here.
         waitingSW.postMessage({ type: 'SKIP_WAITING' });
       };
       banner.appendChild(btn);
@@ -3303,15 +3308,19 @@ const _rateLimiter = {
 };
 
 // v3.5 SPEC: Message outbox — persistent (IDB) retry queue for offline peers, auto-sent on reconnect.
-const _outbox = new Map(); // peerId → [{text, ts, attempts}]
+const _outbox = new Map(); // peerId → [{env, ts, attempts}] — env is the full wire envelope (ciphertext only)
 // Account-scoped key ('brz-outbox-<myId>') so switching accounts doesn't deliver A's queue under B's identity.
 let _outboxKey = 'brz-outbox'; // updated to per-account key in initMessenger
 
-function queueOutbox(peerId, text, meta) {
+// Stores the wire envelope (ciphertext), never plaintext: localStorage sits on disk in
+// cleartext and the AGENTS.md rule is "no localStorage for sensitive data". The envelope's
+// ciphertext embeds its own ratchet position, so re-sending it later is protocol-safe —
+// the same bytes the sealed relay already carried.
+function queueOutbox(peerId, env) {
   if (!_outbox.has(peerId)) _outbox.set(peerId, []);
   const queue = _outbox.get(peerId);
   if (queue.length >= 50) queue.shift(); // Limit queue size
-  queue.push({ text, meta, ts: Date.now(), attempts: 0 });
+  queue.push({ env, ts: env.ts || Date.now(), attempts: 0 });
   _persistOutbox();
   _dbg(null, `Outbox: queued for ${peerId.slice(0, 8)} (${queue.length} pending)`);
 }
@@ -3331,7 +3340,10 @@ function _restoreOutbox() {
     if (!raw) return;
     const obj = JSON.parse(raw);
     for (const [k, v] of Object.entries(obj)) {
-      if (Array.isArray(v) && v.length > 0) _outbox.set(k, v);
+      // Drop legacy {text: <plaintext>} entries — the sealed relay already carried them,
+      // and plaintext must not survive at rest. Only ciphertext envelopes restore.
+      const envs = (Array.isArray(v) ? v : []).filter(m => m && typeof m.env === 'object' && m.env !== null);
+      if (envs.length > 0) _outbox.set(k, envs);
     }
     if (_outbox.size > 0) _dbg(null, `Outbox: restored ${_outbox.size} peer queues`);
   } catch(e) { /* ignore */ }
@@ -3816,6 +3828,15 @@ async function initMessenger(dbName) {
       const sig = await crypto.subtle.sign({ name: 'Ed25519' }, _signingKey.privateKey, data);
       return btoa(String.fromCharCode(...new Uint8Array(sig)));
     } catch(e) { _dbg(e, 'sign'); return null; }
+  }
+
+  // Owner-auth for id-keyed poll/ack endpoints: returns {ts, sig} to spread into the
+  // request body, or {} when signing is unavailable (the Worker verifies-when-present and
+  // only requires it when the operator sets the matching *_REQUIRE_AUTH secret).
+  async function _ownerAuth(op) {
+    const ts = Date.now();
+    const sig = await signMessage(`breeze-${op}:${myId}:${ts}`);
+    return sig ? { ts, sig } : {};
   }
 
   async function verifySignature(text, sigB64, pubKeyB64) {
@@ -4368,7 +4389,7 @@ async function initMessenger(dbName) {
   async function checkRemoteWipe() {
     if (!API || !myId) return;
     try {
-      const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: 0 });
+      const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: 0, ...(await _ownerAuth('msg-poll')) });
       if (!resp.ok) return;
       const data = await resp.json();
       for (const msg of (data.messages || [])) {
@@ -5844,10 +5865,12 @@ async function initMessenger(dbName) {
             const c = await dbGet('contacts', item.contactId);
             if (c) {
               const savedActive = activeContact;
+              const savedInput = _DOM.get('msg-input').value; // don't clobber a live draft
               activeContact = c;
               _DOM.get('msg-input').value = item.text;
               await sendMessage({ preventDefault: () => {} });
               activeContact = savedActive;
+              _DOM.get('msg-input').value = savedInput;
             }
           } else if (delay < 7 * MS.DAY) {
             // Set timer for future delivery; add to _intervals so _messengerCleanup cancels
@@ -5863,14 +5886,17 @@ async function initMessenger(dbName) {
                 const c = await dbGet('contacts', sched.contactId);
                 if (c) {
                   const savedActive = activeContact;
+                  const savedInput = _DOM.get('msg-input').value; // don't clobber a live draft
                   activeContact = c;
                   _DOM.get('msg-input').value = sched.text;
                   await sendMessage({ preventDefault: () => {} });
                   activeContact = savedActive;
+                  _DOM.get('msg-input').value = savedInput;
                 }
               } catch(e) { _dbg(e, 'schedule-recover'); }
             }, delay));
-            _dbg(null, 'Recovered scheduled message: ' + item.text?.slice(0, 30) + ' in ' + Math.round(delay / MS.MIN) + 'm');
+            // No text snippet: even opt-in debug logs end up in screenshots/log collectors.
+            _dbg(null, 'Recovered scheduled message in ' + Math.round(delay / MS.MIN) + 'm');
           }
         }
       }
@@ -5956,6 +5982,15 @@ async function initMessenger(dbName) {
     // manifest.json advertised this shortcut with nothing on the boot path ever reading the
     // param, so long-pressing the installed app icon → Settings silently did nothing.
     _openSettingsFromUrl();
+    // ?open=<contactId> — OS-notification tap deep-link (notification data.url). The SW
+    // notificationclick handler opens this URL, but nothing read the param, so a tap
+    // landed on the contact list instead of the conversation — same dead-shortcut class
+    // as ?settings. Look up the contact and open it; unknown ids are ignored.
+    const openId = P.get('open');
+    if (openId) {
+      const oc = await dbGet('contacts', String(openId).slice(0, 64)).catch(() => null);
+      if (oc) await openConversation(oc);
+    }
   } else {
     _DOM.get('msg-setup').classList.remove('hidden');
     _DOM.get('msg-main').classList.add('hidden');
@@ -6035,11 +6070,11 @@ async function initMessenger(dbName) {
     for (const item of toSend) {
       if (Date.now() - item.ts > 7 * MS.DAY) continue; // Skip messages older than 7 days
       try {
-        // Re-encrypt and send
-        const encrypted = await encryptFor(item.text, peerId);
-        if (encrypted && peer.dc?.readyState === 'open') {
-          const envelope = { v: CONFIG.PROTOCOL_VERSION, type: 'msg', payload: encrypted, ts: item.ts, sender: myPubB64, name: myName };
-          peer.dc.send(JSON.stringify(envelope));
+        // The stored envelope already carries ciphertext (re-encrypting here would burn a
+        // second ratchet step for identical content — and dedup already collapses the copy
+        // the sealed relay carried).
+        if (item.env && peer.dc?.readyState === 'open') {
+          peer.dc.send(JSON.stringify(item.env));
           sent++;
         }
       } catch(e) { _dbg(e, 'outbox-flush'); }
@@ -6101,10 +6136,24 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'unwrapCallSignal'); return null; }
   }
 
+  // Contact keys are raw WebCrypto exports: X25519 = 32 B, P-256 = 65 B, base64'd.
+  // Shared by addContact and /contacts import — both must refuse a syntactically-valid
+  // base64 string that decodes to anything else (a dead contact that looks real).
+  function _isValidPubB64(pub) {
+    try {
+      const n = Uint8Array.from(atob(pub), c => c.charCodeAt(0)).length;
+      return n === 32 || n === 65;
+    } catch { return false; }
+  }
+
   async function addContact(pubB64, name) {
     try {
       const safePub = typeof pubB64 === 'string' ? pubB64.slice(0, 200) : '';
       if (!safePub) return;
+      // Contact keys are raw WebCrypto exports: X25519 = 32 B, P-256 = 65 B, base64'd.
+      // A malformed ?add= link (or a bad alias response) otherwise plants a contact that
+      // can never complete a handshake — dead entry that looks real until send fails.
+      if (!_isValidPubB64(safePub)) { showToast(t('toastInvalidContact'), 'error'); return; }
       const id = safePub.slice(0, 12);
       const existing = await dbGet('contacts', id);
       if (existing) return;
@@ -6427,7 +6476,6 @@ async function initMessenger(dbName) {
             _DOM.get('msg-input-bar').classList.add('hidden');
           }
           if (peers[c.pubB64]) { if (peers[c.pubB64]._healthTimer) clearInterval(peers[c.pubB64]._healthTimer); peers[c.pubB64].pc?.close(); delete peers[c.pubB64]; }
-          delete _peerRelayQueue[c.id]; // Remove orphaned relay queue entries for deleted contact
           renderContacts();
         } else if (action === 'safety') {
           showSafetyNumber(c);
@@ -6527,10 +6575,24 @@ async function initMessenger(dbName) {
   }
 
   let _notifRequested = false;
-  // v3.6: Persistent drafts (survive page reload)
+  // v3.6: Persistent drafts (survive page reload) — now in the per-account IDB `settings`
+  // store instead of localStorage: localStorage held plaintext message text on disk and
+  // shared it across every account on the profile. Legacy localStorage drafts are migrated
+  // once, then the key is removed.
   let _drafts = {};
-  try { _drafts = JSON.parse(localStorage.getItem('brz-drafts') || '{}'); } catch { _drafts = {}; }
-  function _persistDrafts() { try { localStorage.setItem('brz-drafts', JSON.stringify(_drafts)); } catch {} }
+  try {
+    const _legacyDrafts = localStorage.getItem('brz-drafts');
+    _drafts = (await dbGet('settings', 'drafts')) || {};
+    if (_legacyDrafts !== null) {
+      try {
+        const leg = JSON.parse(_legacyDrafts);
+        if (leg && typeof leg === 'object') _drafts = { ...leg, ..._drafts }; // IDB wins on conflict
+      } catch {}
+      localStorage.removeItem('brz-drafts');
+      dbPut('settings', _drafts, 'drafts').catch(() => {});
+    }
+  } catch { _drafts = {}; }
+  function _persistDrafts() { try { dbPut('settings', _drafts, 'drafts').catch(e => _dbg(e, 'drafts')); } catch {} }
 
   let openConversation = async function(contact) {
     // v3.3: Save draft for current contact before switching
@@ -6749,6 +6811,14 @@ async function initMessenger(dbName) {
   window._privacyHideTyping = _privacyHideTyping;
 
   let _replyTo = null; // { msgId, text, sender }
+  // Wire form for replyTo: a JSON string ({i,t,s}) — the Worker's /msg allowlist only
+  // passes replyTo when typeof === 'string', so objects vanished on the relay path.
+  function envelopeReplyTo(rt) {
+    if (!rt) return undefined;
+    // Worker slices replyTo at 128 chars — keep the serialized form under ~120 so the
+    // JSON survives intact (a truncated string would fail to parse and drop anyway).
+    return JSON.stringify({ i: rt.msgId, t: (rt.text || '').slice(0, 50), s: (rt.sender || '').slice(0, 20) });
+  }
 
   function renderMarkdown(text) {
     // v3.6: Markdown table (| col | col | with separator row)
@@ -6934,9 +7004,13 @@ async function initMessenger(dbName) {
           const blob = new Blob([bytes], { type: f.mime || 'application/octet-stream' });
           href = URL.createObjectURL(blob);
           _blobUrls.add(href);
-        } else if (f.blobUrl) {
-          // v3.6: P2P binary received files — blob URL created in handleBinaryChunk
-          href = f.blobUrl;
+        } else if (f.blob && typeof f.blob === 'object') {
+          // Locally reassembled binary file — bytes persisted in IDB (survives reload;
+          // Uint8Array live, plain array/{index:byte} after a JSON round-trip).
+          // A blobUrl field is deliberately NOT honored: it would let a peer ship an
+          // arbitrary javascript:/data: URL into an <a href> through the wire format.
+          const bytes = f.blob instanceof Uint8Array ? f.blob : new Uint8Array(Object.values(f.blob));
+          href = URL.createObjectURL(new Blob([bytes], { type: f.mime || 'application/octet-stream' }));
           _blobUrls.add(href);
         }
         if (href) {
@@ -7800,14 +7874,14 @@ async function initMessenger(dbName) {
             peer.dc.send(JSON.stringify({ v: CONFIG.PROTOCOL_VERSION, type: 'group_msg',
               msgId, payload: groupCiphertext, ts, groupId, groupName: activeContact.name,
               sender: myPubB64, name: myName, isGroupSK: true,
-              replyTo: meta.replyTo, disappearAt: meta.disappearAt }));
+              replyTo: envelopeReplyTo(meta.replyTo), disappearAt: meta.disappearAt }));
           } catch(e) { _dbg(e, 'group-p2p-send'); }
         }
         // Sealed sender relay (ensures delivery even if P2P drops)
         try {
           await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName,
             payload: groupCiphertext, ts, groupId, groupName: activeContact.name,
-            replyTo: meta.replyTo, disappearAt: meta.disappearAt, isGroupSK: true }, m.pubB64);
+            replyTo: envelopeReplyTo(meta.replyTo), disappearAt: meta.disappearAt, isGroupSK: true }, m.pubB64);
         } catch(e) { _dbg(e); }
       }
     } else {
@@ -7835,7 +7909,11 @@ async function initMessenger(dbName) {
         const sig = await signMessage(text);
         if (sig) { envelope.sig = sig; envelope.sigPub = _signingPubB64; }
       }
-      if (meta.replyTo) envelope.replyTo = { text: meta.replyTo.text?.slice(0, 80) };
+      // replyTo must be a JSON STRING on the wire: the Worker's /msg allowlist only
+      // passes replyTo when typeof === 'string' (objects were silently dropped → reply
+      // quotes vanished on the relay fallback path). Include msgId too — without it the
+      // recipient's click-to-jump was dead even when the quote did arrive.
+      if (meta.replyTo) envelope.replyTo = envelopeReplyTo(meta.replyTo);
       if (meta.disappearAt) envelope.disappearAt = meta.disappearAt;
 
       // v3.5 SPEC: Client-side rate limiting
@@ -7863,19 +7941,9 @@ async function initMessenger(dbName) {
         // drop-in: it also re-derives recvChainKey/recvCounter, which the peer would not
         // mirror, breaking in-flight messages. Deliberately not "fixed" in place.
       } else {
-        // v3.5 SPEC: Queue to outbox for later delivery when peer reconnects
+        // v3.5 SPEC: Queue the wire envelope (ciphertext) for later P2P delivery when peer reconnects
         if (activeContact.pubB64) {
-          queueOutbox(activeContact.pubB64, text, meta);
-        }
-        // Peer relay: try relaying via connected peers
-        for (const [pubB64, p] of Object.entries(peers)) {
-          if (p.connected && p.dc?.readyState === 'open' && pubB64 !== activeContact.pubB64) {
-            try {
-              p.dc.send(JSON.stringify({ type: 'peer_relay_request', targetId: activeContact.id, payload: encrypted, ts }));
-              _dbg(null, 'Peer relay request sent via ' + pubB64.slice(0, 8));
-              break;
-            } catch(e) { _dbg(e); }
-          }
+          queueOutbox(activeContact.pubB64, envelope);
         }
       }
       // Relay: Sealed Sender (Worker doesn't see sender)
@@ -8088,6 +8156,7 @@ async function initMessenger(dbName) {
       const maxSize = CONFIG.FILE_MAX;
       if (file.size > maxSize) { showToast(t('toastMax50MB'), 'error'); return; }
       if (isBlockedFile(file.name)) { showToast(t('toastBlockedFile'), 'error'); return; }
+      if (await isBlockedMagicBytes(file)) { showToast(t('blockedFileType'), 'error'); return; }
       await _sendFile(file);
     });
   })();
@@ -8515,6 +8584,9 @@ async function initMessenger(dbName) {
         if (!file) return;
         const maxSize = CONFIG.FILE_MAX;
         if (file.size > maxSize) { showToast(t('toastMax50MB'), 'error'); return; }
+        // Clipboard lies about MIME often enough that the image/* filter isn't a real gate —
+        // check bytes like every other entry path.
+        if (await isBlockedMagicBytes(file)) { showToast(t('blockedFileType'), 'error'); return; }
         // v3.1: Show preview before sending
         const url = URL.createObjectURL(file);
         const overlay = document.createElement('div');
@@ -9186,13 +9258,32 @@ async function initMessenger(dbName) {
         const group = await dbGet('contacts', groupId);
         if (!group) { clearInterval(poll); return; }
 
-        const oldCount = group.members?.length || 0;
+        const oldMembers = group.members || [];
         const newMembers = safeMemberList(data.members);
-        if (newMembers.length > oldCount) {
-          group.members = newMembers;
+        // Apply membership in BOTH directions — growth-only syncing meant a kicked or
+        // departed member stayed in my roster forever, kept receiving my sends, and (when
+        // the kicker's epoch rotation never reached me) kept decrypting them with the
+        // pre-kick chain key. Also sync creatorId/admins/name — transfer and rename
+        // mutate them server-side without touching membership.
+        const membersChanged = newMembers.length !== oldMembers.length ||
+          newMembers.some(m => !oldMembers.some(o => o.id === m.id)) ||
+          oldMembers.some(o => !newMembers.some(m => m.id === o.id));
+        const metaChanged = group.creatorId !== data.creatorId ||
+          JSON.stringify(group.admins || []) !== JSON.stringify(data.admins || []) ||
+          (typeof data.name === 'string' && data.name && group.name !== data.name);
+        if (membersChanged || metaChanged) {
+          if (membersChanged) group.members = newMembers;
+          if (typeof data.creatorId === 'string' && data.creatorId) group.creatorId = data.creatorId;
+          if (Array.isArray(data.admins)) group.admins = data.admins.filter(id => typeof id === 'string' && id.length <= 64).slice(0, CONFIG.GROUP_MAX);
+          if (typeof data.name === 'string' && data.name) group.name = data.name.slice(0, 50);
           await dbPut('contacts', group);
           // sendMessage reads activeContact.members (separate object) — without this an open group silently excludes new joiners until reopened.
-          if (activeContact?.id === groupId) activeContact.members = newMembers;
+          if (activeContact?.id === groupId) {
+            activeContact.members = group.members;
+            activeContact.admins = group.admins;
+            activeContact.createdBy = group.createdBy;
+            if (activeContact.name !== group.name) { activeContact.name = group.name; _DOM.get('msg-conv-name').textContent = group.name; }
+          }
           // Add new individual contacts
           for (const m of newMembers) {
             if (m.id === myId) continue;
@@ -9273,7 +9364,7 @@ async function initMessenger(dbName) {
     _pollTimer = setTimeout(async () => {
       if (!_isOffline && API) {
         try {
-          const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: _lastPollTs });
+          const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: _lastPollTs, ...(await _ownerAuth('msg-poll')) });
           if (resp.ok) {
             const data = await resp.json();
             for (const msg of (data.messages || [])) {
@@ -9281,7 +9372,7 @@ async function initMessenger(dbName) {
               if (typeof msg.ts === 'number' && Number.isFinite(msg.ts) && msg.ts > _lastPollTs && msg.ts <= Date.now() + MS.DAY) _lastPollTs = msg.ts;
             }
           }
-          const sResp = await postAPIRaw('/sealed/poll', { id: myId });
+          const sResp = await postAPIRaw('/sealed/poll', { id: myId, ...(await _ownerAuth('sealed-poll')) });
           if (sResp.ok) {
             const sData = await sResp.json();
             // Honesty over silence: the relay counts envelopes its queue caps forced it to
@@ -9309,7 +9400,7 @@ async function initMessenger(dbName) {
               } catch(e) { _dbg(e, 'sealed-parse'); }
             }
             // v3.6: ACK after successful processing (crash-safe: server keeps 5min grace)
-            if (sealedProcessed > 0) postAPIRaw('/sealed/ack', { id: myId }).catch(e => _dbg(e, 'sealed-ack'));
+            if (sealedProcessed > 0) _ownerAuth('sealed-ack').then(a => postAPIRaw('/sealed/ack', { id: myId, ...a })).catch(e => _dbg(e, 'sealed-ack'));
           }
           checkAndReplenishPreKeys();
         } catch(e) { _dbg(e); }
@@ -9337,10 +9428,22 @@ async function initMessenger(dbName) {
     // Relay-path messages are validated by the worker (numeric, finite, ±5min), so
     // this guard mainly protects the P2P path.
     if (typeof msg.ts !== 'number' || !Number.isFinite(msg.ts)) msg = { ...msg, ts: Date.now() };
+    // Clamp far-future timestamps on the P2P path (the relay already enforces ±5 min):
+    // a peer could otherwise pin their conversation to the top of the list forever via
+    // lastMsgAt, and float their message to "newest" in-conversation. 5 min covers skew.
+    if (msg.ts > Date.now() + 5 * MS.MIN) msg = { ...msg, ts: Date.now() };
     // Cap peer-supplied display name at the relay limit (64 chars). The relay path already
     // enforces this via sanitizeString(name, 64); the P2P group path (msg.name || contact.name
     // at line 10109) does not go through the relay, so guard here to keep IDB clean.
     if (typeof msg.fromName === 'string' && msg.fromName.length > 64) msg = { ...msg, fromName: msg.fromName.slice(0, 64) };
+    // Normalize wire replyTo: it arrives as a JSON STRING ({i,t,s}) over the relay
+    // allowlist, or as a {msgId,text} object on the P2P path from older clients.
+    if (typeof msg.replyTo === 'string') {
+      try {
+        const rt = JSON.parse(msg.replyTo);
+        msg = { ...msg, replyTo: (rt && typeof rt === 'object') ? { msgId: rt.i, text: rt.t, sender: rt.s } : undefined };
+      } catch { msg = { ...msg, replyTo: undefined }; }
+    }
     // Cap peer-supplied replyTo fields before IDB storage (display already caps at render time
     // but unbounded writes bloat the messages store; no server-side check on the P2P path).
     if (msg.replyTo && typeof msg.replyTo === 'object') {
@@ -9446,7 +9549,10 @@ async function initMessenger(dbName) {
       // A ringing call is inherently important; only strict focus ("/focus N all") silences it.
       if (!(_focusActive() && _settings.focusStrict)) playNotif();
       if (Notification?.permission === 'granted') {
-        new Notification(contact.name, { body: msg.isVideoCall ? t('videoCall') : t('voiceCall'), tag: 'breeze-call' });
+        // Locked: a caller's name in an OS notification leaks who is calling while the UI
+        // is supposed to be hidden — degrade to a generic body.
+        const locked = !!_DOM.get('lock-screen');
+        new Notification(locked ? 'Breeze' : contact.name, { body: msg.isVideoCall ? t('videoCall') : t('voiceCall'), tag: 'breeze-call' });
       }
       return;
     }
@@ -9540,23 +9646,27 @@ async function initMessenger(dbName) {
           // containing CSS selector metacharacters (e.g. "] .other [") would break the
           // attribute selector and potentially match unintended DOM elements.
           const targetMsgId = safeMsgId(signal.msgId || '');
+          // msgId embeds the author's id (`${from}:${ts}`) — so `targetMsgId.startsWith(
+          // msg.from + ':')` enforces author-only edit/delete, and `stored.contactId ===
+          // msg.groupId` binds the target to THIS group (otherwise a member could mutate
+          // messages in another conversation by guessing msgIds).
+          const _ownGroupMsg = (m) => m && !m.mine && m.contactId === msg.groupId && targetMsgId.startsWith(msg.from + ':');
           if (signal.type === 'edit') {
             const stored = await dbGet('messages', targetMsgId);
-            // Only allow editing messages not authored by us — peers cannot remote-edit our outgoing messages.
             // Cap edit text to 64 KB to prevent storage DoS via the P2P signal path (no server-side check).
-            if (stored && !stored.mine && typeof signal.text === 'string') { stored.text = signal.text.slice(0, 65536); stored.edited = true; await dbPut('messages', stored); }
+            if (_ownGroupMsg(stored) && typeof signal.text === 'string') { stored.text = signal.text.slice(0, 65536); stored.edited = true; await dbPut('messages', stored); }
             const el = document.querySelector(`[data-msgid="${targetMsgId}"]`);
             if (el) { const tm = new Date(signal.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); safeSetHTML(el, renderLinks(renderMarkdown(esc(signal.text))) + ' <span class="i-edited">' + t('edited') + '</span><span class="ts">'+tm+'</span>'); }
           } else if (signal.type === 'delete') {
             const stored = await dbGet('messages', targetMsgId);
-            // Only allow deleting messages not authored by us — peers cannot remote-delete our outgoing messages
-            if (stored && !stored.mine) { stored.deleted = true; stored.text = ''; await dbPut('messages', stored); }
+            if (_ownGroupMsg(stored)) { stored.deleted = true; stored.text = ''; await dbPut('messages', stored); }
             const el = document.querySelector(`[data-msgid="${targetMsgId}"]`);
             if (el) safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>');
           } else if (signal.type === 'reaction') {
             const stored = await dbGet('messages', targetMsgId);
+            // Any member may react — but only to a message inside THIS group.
             // Reject oversized emoji strings (DoS/storage guard — legitimate emoji ≤ ~30 UTF-16 chars)
-            if (stored && typeof signal.emoji === 'string' && signal.emoji.length <= 64) {
+            if (stored && stored.contactId === msg.groupId && typeof signal.emoji === 'string' && signal.emoji.length <= 64) {
               if (!stored.reactions) stored.reactions = {};
               // Initialize reaction list for new emoji; cap unique emoji per message at 20
               if (!stored.reactions[signal.emoji]) {
@@ -9608,7 +9718,11 @@ async function initMessenger(dbName) {
         // mention (or a VIP group) gets through, and never in strict mode.
         if (_shouldAlert(group, mentionsMe ? '@' + myName : text)) playNotif();
         if (mentionsMe && _shouldAlert(group, '@' + myName) && Notification?.permission === 'granted') {
-          new Notification(group.name, { body: `@${msg.fromName}: ${text.slice(0, 80)}`, tag: 'breeze-' + msg.groupId });
+          // Locked: suppress the mention preview — the lock overlay hiding the UI is
+          // pointless if OS notifications still leak sender + message text.
+          if (!_DOM.get('lock-screen')) {
+            new Notification(group.name, { body: `@${msg.fromName}: ${text.slice(0, 80)}`, tag: 'breeze-' + msg.groupId });
+          }
         }
       }
       await dbPut('contacts', group);
@@ -9692,21 +9806,24 @@ async function initMessenger(dbName) {
         if (signal.type === 'edit') {
           const stored = await dbGet('messages', _smId);
           // Only allow editing messages not authored by us — contact cannot remote-edit our outgoing messages.
+          // stored.contactId === contactId binds the target to THIS conversation: without it a
+          // contact could rewrite/delete another contact's messages by guessing their msgId
+          // (`senderId:ms` — the id half is public, the timestamp half is guessable).
           // Cap edit text to 64 KB to prevent storage DoS via the P2P signal path (no server-side check).
-          if (stored && !stored.mine && typeof signal.text === 'string') { stored.text = signal.text.slice(0, 65536); stored.edited = true; await dbPut('messages', stored); }
+          if (stored && !stored.mine && stored.contactId === contactId && typeof signal.text === 'string') { stored.text = signal.text.slice(0, 65536); stored.edited = true; await dbPut('messages', stored); }
           const el = document.querySelector(`[data-msgid="${_smId}"]`);
           if (el) { const tm = new Date(signal.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); safeSetHTML(el, renderLinks(renderMarkdown(esc(signal.text))) + ' <span class="i-edited">' + t('edited') + '</span><span class="ts">'+tm+'</span>'); }
         } else if (signal.type === 'delete') {
           const stored = await dbGet('messages', _smId);
           // Only allow deleting messages not authored by us — contact cannot remote-delete our outgoing messages
-          if (stored && !stored.mine) { stored.deleted = true; stored.text = ''; await dbPut('messages', stored); }
+          if (stored && !stored.mine && stored.contactId === contactId) { stored.deleted = true; stored.text = ''; await dbPut('messages', stored); }
           const el = document.querySelector(`[data-msgid="${_smId}"]`);
           if (el) safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>');
         } else if (signal.type === 'reaction') {
           // v3.6: Encrypted reaction from relay
           const stored = await dbGet('messages', _smId);
           // Reject oversized emoji strings (DoS/storage guard — legitimate emoji ≤ ~30 UTF-16 chars)
-          if (stored && typeof signal.emoji === 'string' && signal.emoji.length <= 64) {
+          if (stored && stored.contactId === contactId && typeof signal.emoji === 'string' && signal.emoji.length <= 64) {
             if (!stored.reactions) stored.reactions = {};
             if (!stored.reactions[signal.emoji]) stored.reactions[signal.emoji] = [];
             // Use the verified sender identity from decryption, not the self-reported signal.userId
@@ -9755,7 +9872,13 @@ async function initMessenger(dbName) {
 
     if (msg.isFile) {
       try {
-        const fileMsg = await decryptFrom(msg.payload, _peerPub);
+        // Local binary-chunk reassembly (handleBinaryChunk): the payload is plaintext
+        // because the DataChannel itself is already authenticated + DTLS-encrypted —
+        // running it through decryptFrom dropped every received file AND counted as a
+        // decrypt failure (3 → bogus session-reset MITM banner). fileBytes cannot be
+        // forged by a peer: JSON.parse never produces a Uint8Array.
+        const _localFile = msg.fileBytes instanceof Uint8Array;
+        const fileMsg = _localFile ? msg.payload : await decryptFrom(msg.payload, _peerPub);
         if (!fileMsg) return;
         const _fp = JSON.parse(fileMsg);
         // Cap file data: reject oversized base64 payloads before IDB write and atob() decode.
@@ -9764,8 +9887,10 @@ async function initMessenger(dbName) {
         if (typeof _fp.data === 'string' && _fp.data.length > 350000) return;
         // Cap the displayed file name to prevent memory/render DoS from an oversized peer-supplied name.
         text = `📎 ${typeof _fp.name === 'string' ? _fp.name.slice(0, 255) : 'file'}`;
-        storedFileData = fileMsg;
-        await dbPut('messages', { msgId, contactId, text, mine: false, ts: msg.ts, fileData: fileMsg, ...meta });
+        // Bytes persist inside fileData — IDB structured-clone stores Uint8Array natively,
+        // so the file survives reload (a blob URL would die with the page).
+        storedFileData = _localFile ? { ..._fp, blob: msg.fileBytes } : fileMsg;
+        await dbPut('messages', { msgId, contactId, text, mine: false, ts: msg.ts, fileData: storedFileData, ...meta });
       } catch { return; }
     } else {
       const _frank = {};
@@ -9774,6 +9899,13 @@ async function initMessenger(dbName) {
       // Reject oversized text: the relay caps payloads at 256 KB but the P2P DataChannel has no server check.
       // 64 KB is generous for chat text while preventing memory/render DoS from a malicious peer.
       if (text.length > 65536) return;
+      // Poll payloads arrive as plain JSON text — only the sender's record ever had
+      // isPoll, so recipients saw raw JSON and could never vote. Detect + tag here so
+      // the card renders; renderPollHtml's own caps bound the peer-controlled fields.
+      try {
+        const _p = JSON.parse(text);
+        if (_p && _p.type === 'poll' && typeof _p.pollId === 'string' && Array.isArray(_p.options)) { meta.isPoll = true; meta.poll = _p; }
+      } catch {}
       // v3.3: Verify Ed25519 signature if present.
       // TOFU: a contact's signing key must stay stable. Verifying a signature
       // against the sigPub carried in the same message proves only that the
@@ -9817,10 +9949,13 @@ async function initMessenger(dbName) {
       if (!meta.nrn && _shouldAlert(contact, text)) { playNotif();
         if (Notification?.permission === 'granted') {
           const unread = contact.unread || 1;
-          const body = unread > 1
+          // Locked: the overlay hides the UI but the OS would still show sender + message
+          // text — degrade to a generic "new message" body and drop the deep-link data.
+          const locked = !!_DOM.get('lock-screen');
+          const body = locked ? t('notifNewMessage') : (unread > 1
             ? `(${unread}) ${text.slice(0, 60)}`
-            : text.slice(0, 80);
-          new Notification(contact.name, {
+            : text.slice(0, 80));
+          new Notification(locked ? 'Breeze' : contact.name, {
             body, tag: 'breeze-' + contactId, renotify: true, silent: false,
             data: { contactId, url: '/?open=' + contactId }
           });
@@ -9994,7 +10129,7 @@ async function initMessenger(dbName) {
           if (msg.type === 'typing') { showTyping(contact.id, msg.senderName || contact.name); return; }
           if (msg.type === 'read') { showReadReceipt(contact.id, msg.ts); return; }
           // v3 ACK
-          if (msg.type === 'ack') { updateDeliveryState(msg.i, msg.st); return; }
+          if (msg.type === 'ack') { updateDeliveryState(safeMsgId(msg.i || ''), msg.st, contact.id); return; }
           // v3.1: Emoji reaction
           if (msg.type === 'reaction') {
             // Sanitize peer-supplied msgId before querySelector (CSS selector injection guard).
@@ -10002,7 +10137,9 @@ async function initMessenger(dbName) {
             // Reject oversized emoji strings (DoS/storage guard — legitimate emoji ≤ ~30 UTF-16 chars)
             if (typeof msg.emoji !== 'string' || msg.emoji.length > 64) return;
             const stored = await dbGet('messages', _rmId);
-            if (stored) {
+            // Bind the target to THIS conversation — otherwise a contact could react on
+            // another conversation's messages by guessing their `senderId:ms` msgId.
+            if (stored && stored.contactId === contact.id) {
               if (!stored.reactions) stored.reactions = {};
               // Cap unique emoji per message at 20 (matches group path); cap users per emoji at 100
               if (!stored.reactions[msg.emoji]) {
@@ -10022,7 +10159,9 @@ async function initMessenger(dbName) {
           if (msg.type === 'poll_vote') {
             const allMsgs = await dbGetAll('messages');
             const pollMsg = allMsgs.find(m => m.isPoll && JSON.parse(m.text).pollId === msg.pollId);
-            if (pollMsg) {
+            // Same conversation binding as reactions — a peer must not vote on a poll
+            // that lives in a different conversation (pollId is self-reported).
+            if (pollMsg && pollMsg.contactId === contact.id) {
               const poll = JSON.parse(pollMsg.text);
               // Use contact.id (authenticated sender) — not msg.userId (peer-claimed, unverified)
               const voterId = contact.id;
@@ -10034,13 +10173,6 @@ async function initMessenger(dbName) {
               const el = document.querySelector(`[data-msgid="${pollMsg.msgId}"]`);
               if (el) safeSetHTML(el, renderPollHtml(poll, pollMsg.msgId));
             }
-            return;
-          }
-          // v3 Peer Relay: request to hold message for offline peer
-          if (msg.type === 'peer_relay_request') { handlePeerRelayRequest(contact, e.data); return; }
-          // v3 Peer Relay: delivery of held message
-          if (msg.type === 'peer_relay_deliver') {
-            try { await handleIncoming({ from: msg.from, fromPub: '', fromName: '', payload: msg.payload, ts: msg.ts }); } catch(err) { _dbg(err); }
             return;
           }
           if (msg.type === 'msg') {
@@ -10072,13 +10204,12 @@ async function initMessenger(dbName) {
       };
     }
 
-    // Connection open → deliver peer relay queue
+    // Connection open → flush outbox + mark UI state
     function onPeerConnected() {
       peerState.connected = true;
       peerState.transition('CONNECTED');
       updateConvStatus();
       renderContacts();
-      deliverPeerRelayQueue(contact.id);
       if (contact.pubB64) {
         setTimeout(async () => {
           const ct = await dbGet('contacts', contact.id).catch(() => null);
@@ -10498,6 +10629,7 @@ async function initMessenger(dbName) {
         return;
       }
       if (isBlockedFile(file.name)) { showToast(t('toastBlockedFile'), 'error'); return; }
+      if (await isBlockedMagicBytes(file)) { showToast(t('blockedFileType'), 'error'); return; }
       // Image preview before send
       if (file.type.startsWith('image/')) {
         const url = URL.createObjectURL(file);
@@ -10656,10 +10788,9 @@ async function initMessenger(dbName) {
             _presenceCache[id] = d.online?.[id] || false;
             // v3.2: Track last seen timestamp
             if (_presenceCache[id]) _lastSeenCache[id] = Date.now();
-            // v3: Peer Relay — deliver held messages when peer comes online
-            if (wasOffline && _presenceCache[id]) {
-              deliverPeerRelayQueue(id);
-            }
+            // Peer-relay hold/deliver path removed — it leaked {sender→target, ts, size}
+            // to an arbitrary connected peer, and sealed-sender relay already carries the
+            // same offline delivery unconditionally.
           }
         }
       } catch(e) { _dbg(e); }
@@ -10809,48 +10940,9 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'turn'); }
   }
 
-  // v3: PEER RELAY — All users relay for each other
-  //
-  // When a user receives a message for an offline contact,
-  // they hold it and deliver when the contact comes online.
-  // No central server needed. Network gets stronger with more users.
-  const _peerRelayQueue = {}; // { recipientId: [{ payload, ts }] }
-
-  function handlePeerRelayRequest(contact, data) {
-    // All users can relay messages for peers
-    try {
-      const req = JSON.parse(data);
-      if (req.type !== 'peer_relay_request') return;
-      const targetId = req.targetId;
-      // Guard against prototype-polluting keys and non-string values
-      if (typeof targetId !== 'string' || !targetId || targetId.length > 64) return;
-      // Cap payload size — an encrypted 1:1 message is ≤32 KB including overhead; anything
-      // larger is malformed and would waste memory in the relay queue.
-      if (typeof req.payload !== 'string' || req.payload.length > 65536) return;
-      if (!Object.prototype.hasOwnProperty.call(_peerRelayQueue, targetId)) _peerRelayQueue[targetId] = [];
-      _peerRelayQueue[targetId].push({ payload: req.payload, ts: Date.now(), from: contact.id });
-      // Limit: 20 messages per target, 1 hour TTL
-      _peerRelayQueue[targetId] = _peerRelayQueue[targetId]
-        .filter(m => Date.now() - m.ts < MS.HOUR)
-        .slice(-20);
-      _dbg(null, 'Peer relay: holding msg for ' + targetId);
-    } catch(e) { _dbg(e, 'peer-relay'); }
-  }
-
-  // Deliver held messages when target comes online
-  function deliverPeerRelayQueue(targetId) {
-    const queue = _peerRelayQueue[targetId];
-    if (!queue || queue.length === 0) return;
-    const peer = peers[Object.keys(peers).find(k => k.startsWith(targetId))];
-    if (!peer?.connected || peer.dc?.readyState !== 'open') return;
-    for (const msg of queue) {
-      try {
-        peer.dc.send(JSON.stringify({ type: 'peer_relay_deliver', payload: msg.payload, from: msg.from, ts: msg.ts }));
-      } catch(e) { _dbg(e); }
-    }
-    delete _peerRelayQueue[targetId];
-    _dbg(null, 'Peer relay: delivered ' + queue.length + ' msgs to ' + targetId);
-  }
+  // Peer-relay hold/deliver removed: it disclosed {sender→targetId, ts, size} to an
+  // arbitrary connected peer — contradicting the sealed-sender metadata posture — while
+  // the sealed relay already carried the same payload unconditionally.
 
   // v3 PRO: ENCRYPTED CLOUD BACKUP
   //
@@ -11028,7 +11120,7 @@ async function initMessenger(dbName) {
 
   // Show typing indicator when received
   // v3: DELIVERY STATE (ACK)
-  function updateDeliveryState(msgId, state) {
+  function updateDeliveryState(msgId, state, fromContactId) {
     // state: 0=delivered, 1=read, 2=deleted
     const el = document.querySelector(`[data-msgid="${msgId}"] .ts`);
     if (!el) return;
@@ -11040,9 +11132,10 @@ async function initMessenger(dbName) {
     if (state === 0) { span.textContent = '✓'; span.classList.remove('color-g','color-r'); span.classList.add('color-t3'); span.title = t('delivered'); }
     else if (state === 1) { span.textContent = '✓✓'; span.classList.remove('color-t3','color-r'); span.classList.add('color-g'); span.title = t('read'); }
     el.appendChild(span);
-    // v3.3: Persist delivery state to IDB
+    // v3.3: Persist delivery state to IDB — bind to the sender's conversation so a peer
+    // cannot stamp read/delivered state onto another contact's messages.
     dbGet('messages', msgId).then(stored => {
-      if (stored) { stored.ack = state; dbPut('messages', stored); }
+      if (stored && (!fromContactId || stored.contactId === fromContactId)) { stored.ack = state; dbPut('messages', stored); }
     }).catch(e => _dbg(e, 'ack-persist'));
   }
 
@@ -11068,6 +11161,10 @@ async function initMessenger(dbName) {
     // Reject unreasonably large metadata (255 bytes is plenty for a filename/MIME type).
     if (nameLen > 255 || mimeLen > 128) return;
     const data = new Uint8Array(buffer, 28 + nameLen + mimeLen);
+    // Sender never emits a chunk larger than CHUNK_SIZE; without this cap a peer could
+    // declare total = MAX_CHUNKS and send e.g. 1 MB per chunk — bytes in memory would
+    // blow far past FILE_MAX even though the chunk COUNT is bounded.
+    if (data.length > CONFIG.CHUNK_SIZE) return;
     if (!_fileChunks[fileId]) {
       // Prune transfers idle for > 60 s before checking the slot limit — prevents an
       // attacker from starting 10 incomplete transfers and permanently blocking new ones.
@@ -11111,12 +11208,13 @@ async function initMessenger(dbName) {
       const full = new Uint8Array(fullSize);
       let offset = 0;
       for (const chunk of fc.chunks) { full.set(chunk, offset); offset += chunk.length; }
-      const blob = new Blob([full], { type: fc.mime });
-      const href = URL.createObjectURL(blob);
       // Remove progress indicator
       if (progEl) progEl.remove();
+      // fileBytes carries the reassembled bytes through the local call — a peer cannot
+      // forge it because JSON.parse (the wire decoder) never yields a Uint8Array.
       handleIncoming({ from: contact.id, fromPub: contact.pubB64, fromName: contact.name,
-        payload: JSON.stringify({ type: 'file', name: fc.name, mime: fc.mime, data: '', blobUrl: href }),
+        payload: JSON.stringify({ type: 'file', name: fc.name, mime: fc.mime }),
+        fileBytes: full,
         ts: Date.now(), isFile: true });
       delete _fileChunks[fileId];
     }
@@ -11589,15 +11687,23 @@ async function initMessenger(dbName) {
   async function importChat(file) {
     try {  
       if (!activeContact) { showToast(t('toastOpenChat'), 'error'); return; }
+      // file.text() loads the whole export into memory — a multi-GB file hangs the tab.
+      // Chat exports are text; cap at the same FILE_MAX as attachments (50 MB is ~a decade
+      // of dense history; larger belongs in a desktop importer anyway).
+      if (file.size > CONFIG.FILE_MAX) { showToast(t('toastMax50MB'), 'error'); return; }
       const text = await file.text();
       const { source, msgs } = detectAndParse(text);
       if (msgs.length === 0) { showToast(t('toastNoImportMsgs'), 'error'); return; }
   
       const myNames = [myName.toLowerCase(), myAlias?.toLowerCase(), 'you', 'me', 'self'].filter(Boolean);
       let imported = 0;
-      for (const m of msgs) {
+      for (let i = 0; i < msgs.length; i++) {
+        const m = msgs[i];
         const isMine = myNames.some(n => m.sender.toLowerCase().includes(n));
-        const msgId = 'import:' + m.ts + ':' + (isMine ? '1' : '0');
+        // ts is only minute-precise (LINE/WhatsApp) — several messages can share
+        // ts+mine; the index keeps them distinct. Deterministic, so re-importing
+        // the same file still dedups.
+        const msgId = 'import:' + m.ts + ':' + (isMine ? '1' : '0') + ':' + i;
         const existing = await dbGet('messages', msgId);
         if (existing) continue;
         await dbPut('messages', {
@@ -11977,6 +12083,7 @@ async function initMessenger(dbName) {
           t('cmdAdminKick'),
           t('cmdAdminPromote'),
           t('cmdAdminDemote'),
+          t('cmdAdminTransfer'),
           t('cmdAdminRename'),
           t('cmdAdminHelpLine'),
         ].join('<br>'));
@@ -12085,6 +12192,37 @@ async function initMessenger(dbName) {
             d.textContent = t('demotedAdmin', member.name);
           } else { d.textContent = t('uiMemberNotFound', target); }
         }
+      } else if (sub.startsWith('transfer ')) {
+        // Ownership transfer — the Worker endpoint existed but no client path did, so a
+        // group whose creator went dark had permanently unmanageable admin surface.
+        const target = sub.slice(9).trim().replace('@', '');
+        if (activeContact.createdBy !== myId) { d.textContent = t('toastCreatorOnly'); box.appendChild(d); box.scrollTop = box.scrollHeight; return; }
+        if (activeContact.members) {
+          const member = activeContact.members.find(m => m.name?.toLowerCase() === target.toLowerCase());
+          if (member && member.id !== myId) {
+            let done = false;
+            if (API && activeContact.joinToken) {
+              try {
+                const trTs = Date.now();
+                const trSig = await signMessage(`breeze-group-transfer:${activeContact.joinToken}:${myId}:${trTs}:${member.id}`);
+                const trBody = { token: activeContact.joinToken, adminId: myId, newCreatorId: member.id, ts: trTs };
+                if (trSig) trBody.sig = trSig;
+                const trResp = await postAPIRaw('/group/transfer', trBody);
+                done = trResp.ok;
+              } catch(e) { _dbg(e, 'server-transfer'); }
+            }
+            if (done) {
+              // Mirror the server's admin rebuild: new creator's authority is implicit,
+              // outgoing creator is retained as admin.
+              activeContact.createdBy = member.id;
+              activeContact.admins = (activeContact.admins || []).filter(id => id !== member.id);
+              if (!activeContact.admins.includes(myId)) activeContact.admins.push(myId);
+              await dbPut('contacts', activeContact);
+              auditLog('group', 'Transferred ownership of ' + activeContact.name + ' to ' + member.name);
+              d.textContent = t('transferredOwnership', member.name);
+            } else { d.textContent = t('toastTransferFail'); }
+          } else { d.textContent = t('uiMemberNotFound', target); }
+        }
       } else {
         d.textContent = t('uiUnknownAdmin');
       }
@@ -12185,7 +12323,7 @@ async function initMessenger(dbName) {
             // Validate required fields: pubB64 must be a valid base64 string for non-groups
             if (!c?.isGroup) {
               if (typeof c?.pubB64 !== 'string' || !c.pubB64 || c.pubB64.length > 128 ||
-                  !/^[A-Za-z0-9+/=]+$/.test(c.pubB64)) { skipped++; continue; }
+                  !_isValidPubB64(c.pubB64)) { skipped++; continue; }
             }
             // id must be a non-empty string of safe length
             const rawId = c.id || c.pubB64 || c.name;
@@ -12364,22 +12502,25 @@ async function initMessenger(dbName) {
       await dbPut('identity', { id: schedId, contactId: contact.id, text: text.slice(0, 65536), sendAt });
       const timeStr = delayMs < MS.MIN ? Math.round(delayMs/MS.SEC) + 's' : delayMs < MS.HOUR ? Math.round(delayMs/MS.MIN) + 'm' : Math.round(delayMs/MS.HOUR) + 'h';
       showToast(t('toastScheduled', timeStr, text.slice(0, 30)), 'success');
-      // Set timer
-      setTimeout(async () => {
+      // Set timer — registered in _intervals so account switch cancels it (same as the
+      // recovery path: the sched row stays in this account's IDB and fires on next login).
+      _intervals.push(setTimeout(async () => {
         try {
           const sched = await dbGet('identity', schedId);
           if (!sched) return; // cancelled
           const c = await dbGet('contacts', sched.contactId);
           if (c) {
             const savedActive = activeContact;
+            const savedInput = _DOM.get('msg-input').value; // don't clobber a live draft
             activeContact = c;
             _DOM.get('msg-input').value = sched.text;
             await sendMessage({ preventDefault: () => {} });
             activeContact = savedActive;
+            _DOM.get('msg-input').value = savedInput;
           }
           await dbDel('identity', schedId);
         } catch(e) { _dbg(e, 'schedule-send'); }
-      }, delayMs);
+      }, delayMs));
       return;
     }
 
@@ -12473,13 +12614,14 @@ async function initMessenger(dbName) {
         const allMsgs = await dbGetAll('messages');
         const chats = {};
         for (const c of allContacts) {
-          const msgs = allMsgs.filter(m => m.contactId === c.id).sort((a, b) => a.ts - b.ts);
+          const msgs = allMsgs.filter(m => m.contactId === c.id && !m.deleted).sort((a, b) => a.ts - b.ts);
           if (msgs.length === 0) continue;
           chats[c.name || c.id] = msgs.map(m => ({ ts: m.ts, text: m.text, mine: m.mine }));
         }
         const blob = new Blob([JSON.stringify({ version: CONFIG.VERSION, exportedAt: new Date().toISOString(), chats }, null, 2)], { type: 'application/json' });
         downloadBlob(blob, 'breeze-all-' + new Date().toISOString().slice(0,10) + '.json');
-        showToast(t('toastExportedMessages', allMsgs.length, Object.keys(chats).length), 'success');
+        const exportedCount = Object.values(chats).reduce((n, arr) => n + arr.length, 0);
+        showToast(t('toastExportedMessages', exportedCount, Object.keys(chats).length), 'success');
       } else if (sub === 'csv') {
         if (!activeContact) { showToast(t('toastOpenChat'), 'error'); return; }
         const msgs = (await dbGetByIndex('messages', 'contact', activeContact.id)).sort((a, b) => a.ts - b.ts);
@@ -12508,7 +12650,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         showToast(t('toastExportedMessagesHTML', msgs.length), 'success');
       } else {
         if (!activeContact) { showToast(t('toastOpenChat'), 'error'); return; }
-        const msgs = (await dbGetByIndex('messages', 'contact', activeContact.id)).sort((a, b) => a.ts - b.ts).map(m => ({ ts: m.ts, text: m.text, mine: m.mine, sender: m.senderName || (m.mine ? myName : activeContact.name) }));
+        const msgs = (await dbGetByIndex('messages', 'contact', activeContact.id)).filter(m => !m.deleted).sort((a, b) => a.ts - b.ts).map(m => ({ ts: m.ts, text: m.text, mine: m.mine, sender: m.senderName || (m.mine ? myName : activeContact.name) }));
         const blob = new Blob([JSON.stringify({ version: CONFIG.VERSION, contact: activeContact.name, messages: msgs }, null, 2)], { type: 'application/json' });
         downloadBlob(blob, 'breeze-' + activeContact.name.replace(/\s+/g,'-') + '-' + new Date().toISOString().slice(0,10) + '.json');
         showToast(t('toastExportedMessagesJSON', msgs.length), 'success');

@@ -116,3 +116,61 @@ test('/room produces a join link a fresh context can actually join', async ({ br
   await expect(bob.locator('#msg-main')).toBeVisible({ timeout: 15_000 });
   await expect(bob.locator('#msg-contacts .contact').first()).toBeVisible({ timeout: 15_000 });
 });
+
+// ?add=<garbage> used to plant a contact whose "key" could never complete a handshake —
+// a dead entry that looks real until the first send fails. addContact now rejects anything
+// that isn't a 32-byte X25519 or 65-byte P-256 raw public key.
+test('/?add=<garbage> is refused with a toast instead of planting a dead contact', async ({ page }) => {
+  await page.goto('/');
+  await createIdentity(page, 'AddTarget');
+  await page.goto('/?add=this-is-not-a-key&name=Phantom');
+  await expect(page.locator('#msg-main')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.toast-container .toast').filter({ hasText: /not a valid/i }).first()).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('#msg-contacts .contact')).toHaveCount(0);
+});
+
+// Drafts used to live in localStorage as plaintext, shared across accounts — and the
+// "save drafts before reload" handler on SW update referenced _drafts outside its scope,
+// silently writing `{}` and wiping them. Now persisted per-account in the IDB settings
+// store: type → switch contact → switch back → reload → still there; localStorage empty.
+test('drafts persist across contact switch and reload via IDB, not localStorage', async ({ page }) => {
+  const key = (b) => Buffer.alloc(32, b).toString('base64'); // valid X25519-length keys
+  await page.goto(`/?add=${encodeURIComponent(key(11))}&name=DraftA`);
+  await createIdentity(page, 'Drafter');
+  await page.goto(`/?add=${encodeURIComponent(key(22))}&name=DraftB`);
+  await expect(page.locator('#msg-contacts .contact')).toHaveCount(2, { timeout: 10_000 });
+  await page.locator('#msg-contacts .contact').first().click();
+  await page.locator('#msg-input').fill('unsent draft text');
+  await page.locator('#msg-contacts .contact').nth(1).click();   // switch away → saves draft
+  await page.locator('#msg-contacts .contact').first().click();  // back → draft restores
+  await expect(page.locator('#msg-input')).toHaveValue('unsent draft text');
+  await page.reload();
+  await expect(page.locator('#msg-main')).toBeVisible({ timeout: 15_000 });
+  await page.locator('#msg-contacts .contact').first().click();
+  await expect(page.locator('#msg-input')).toHaveValue('unsent draft text');
+  expect(await page.evaluate(() => localStorage.getItem('brz-drafts'))).toBeNull();
+});
+
+// /?open=<contactId> — the OS-notification tap deep-link. sw.js's notificationclick
+// handler opens this URL, but nothing read the param — a tap landed on the contact list
+// instead of the conversation (same dead-shortcut class as ?settings).
+test('/?open=<contactId> opens that conversation on boot', async ({ page }) => {
+  const key = Buffer.alloc(32, 9).toString('base64');
+  await page.goto(`/?add=${encodeURIComponent(key)}&name=DeepOpen`);
+  await createIdentity(page, 'Opener');
+  await expect(page.locator('#msg-contacts .contact')).toHaveCount(1, { timeout: 10_000 });
+  const cid = key.slice(0, 12); // contact id = pub prefix
+  await page.goto(`/?open=${encodeURIComponent(cid)}`);
+  await expect(page.locator('#msg-main')).toBeVisible({ timeout: 15_000 });
+  // The conversation must be open: the input bar is shown only inside a conversation.
+  await expect(page.locator('#msg-input')).toBeVisible({ timeout: 10_000 });
+});
+
+// Unknown contact id must not crash boot — falls back to the contact list.
+test('/?open=<unknown> boots to the contact list without throwing', async ({ page }) => {
+  await page.goto('/');
+  await createIdentity(page, 'Opener2');
+  await page.goto('/?open=definitely-not-a-contact');
+  await expect(page.locator('#msg-main')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('#msg-contacts')).toBeVisible();
+});

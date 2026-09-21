@@ -1,5 +1,220 @@
 # Changelog
 
+## Group roster only synced on growth — kicks/leaves never propagated (branch devin/group-roster-sync, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`startGroupMemberPoll` applied the `/group/info` roster only when `newMembers.length > oldCount` — a kicked or departed member stayed in my local roster forever: they kept receiving my group sends, and whenever the kicker's epoch rotation never reached me, they kept decrypting them with the pre-kick chain key. `creatorId`/`admins`/`name` were never refreshed either, so transfers and renames were invisible to other members. The poll now applies membership in both directions and syncs the moderation metadata (bounded, sanitized).
+
+---
+
+## /admin transfer — ownership handoff for the dead /group/transfer endpoint (branch devin/group-transfer, 2026-09-20)
+
+`index.html`, `locales/ja.json`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The Worker shipped `/api/group/transfer` (creator-only ownership handoff, signature-bound to the new creator) but no client path ever called it — a group whose creator deleted their account or went dark had permanently unmanageable admin surface. Added `/admin transfer @name`: creator-gated client-side, signs `breeze-group-transfer:token:adminId:ts:newCreatorId` per checkGroupAuth, and mirrors the server's admin rebuild on success (new creator's authority implicit; outgoing creator retained as admin). Wired into `/admin help`; EN+JA keys.
+
+---
+
+## /schedule timer escaped account-switch cleanup and could clobber a draft (branch devin/sched-create-timer, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The `/schedule` create-path `setTimeout` was never pushed to `_intervals`, so `_messengerCleanup` could not cancel it on account switch — the exact hazard the recovery path's comment warns about (the sched row survives in this account's IDB and fires on next login via recovery, which is the intended semantic). It also had the same draft-clobber as the recovery path: `msg-input.value` was overwritten with the scheduled text and never restored. Now registered + input save/restore.
+
+---
+
+## Scheduled-send recovery clobbered the live draft (branch devin/sched-draft-clobber, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Scheduled-message recovery routes through the composer: it sets `activeContact`, writes the scheduled text into `msg-input`, calls `sendMessage()`, then restores `activeContact` — but never restored the input. If the timer fired while the user was typing, their in-progress draft was silently overwritten by the scheduled text (and the draft map still pointed at the destroyed content). Both recovery paths now save and restore the input value alongside `activeContact`.
+
+---
+
+## Documented: data-channel signaling is authenticated, not confidential (branch devin/sig-metadata-doc, 2026-09-20)
+
+`SECURITY.md`, `CHANGELOG.md`.
+
+SECURITY.md already said call-signaling E2E (`CALL_E2E_SIGNAL`) is opt-in — but never said the 1:1 data-channel `offer`/`answer`/`ice` ride the unauthenticated `dm:<idA>:<idB>` room as signed-but-plaintext JSON. Anyone who knows both ids (e.g. a shared group co-member) can poll the room and read ICE candidates — both parties' IPs — plus `typing`/`read` activity. Documented alongside the existing owner-signable-queue caveat; encrypting it reuses `_wrapCallSignal` but is a wire decision pending a capability bit.
+
+---
+
+## Chat import silently dropped same-minute messages (branch devin/import-dedup, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`importChat` keyed imported messages as `import:<ts>:<mine>` — but LINE and WhatsApp exports only carry minute-precision timestamps, so every burst of messages sent inside the same minute by the same side collided on one IDB key and all but the first were silently skipped. The index now joins the key (`import:<ts>:<mine>:<i>`), keeping messages distinct while staying deterministic so re-importing the same file still dedups.
+
+---
+
+## Reply quotes vanished on the relay path; reply msgId never shipped (branch devin/replyto-wire, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The 1:1 + group send paths put `replyTo` on the wire as an OBJECT — but the Worker's `/msg` allowlist only forwards it when `typeof === 'string'`, so every relay-delivered reply silently lost its quote. And even when a quote did arrive (sealed path, which stores the envelope verbatim), the sender dropped `msgId` — so the recipient's click-to-jump was dead. `envelopeReplyTo()` now serializes `{i,t,s}` as a compact JSON string sized to fit the Worker's 128-char slice; `handleIncoming` normalizes the string form back to `{msgId,text,sender}` and keeps accepting the legacy object form from P2P/older clients.
+
+---
+
+## tests/invariants.test.js — tripwires for the receive-path guards (branch devin/invariant-tripwires, 2026-09-20)
+
+`tests/invariants.test.js`, `CHANGELOG.md`.
+
+The guards landed this session (conversation-binding on every mutation path, per-chunk byte cap, timestamp clamp, fileData-bytes persistence, poll receive tagging) live inline in index.html where no importable unit test can reach them. A refactor that silently drops one would ship a regression with green tests — so grep-style source assertions pin each guard, mirroring the repo's existing mirror-drift convention.
+
+---
+
+## Received /poll rendered as raw JSON — recipients could never vote (branch devin/poll-receive, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`/poll` was send-only: `isPoll` was only ever set on the creator's own record. A received poll decrypted to `{"type":"poll",...}` plain text — stored and rendered as a raw JSON blob, with no card and no way to vote (the voter side looks up `m.isPoll` records, which never existed for recipients). The receive path now detects the `type:'poll'` shape and tags the record (`isPoll` + `meta.poll` for the live render); `renderPollHtml`'s own caps bound the peer-controlled fields.
+
+---
+
+## Group edit/delete/reaction lacked conversation + author binding (branch devin/group-mutation-binding, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Same class as the 1:1 mutation-binding fix, second location: the group `isSignal` path resolved its target by msgId alone. A group member could edit/delete/react to messages in ANOTHER conversation — and worse, edit/delete ANOTHER member's messages in the same group (nothing checked authorship). Now: edit/delete require `contactId === groupId` AND `msgId.startsWith(msg.from + ':')` (msgId embeds the author id, so members may only touch their own messages); reactions require `contactId === groupId`. Multi-device caveat: a linked device can only mutate messages that same device authored — failing closed.
+
+---
+
+## Binary file receive was silently broken — and an unverified blobUrl href vector (branch devin/binary-file-fix, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Two findings in the P2P binary-chunk file path:
+
+1. **Every received binary file was silently dropped.** `handleBinaryChunk` reassembled the chunks and called `handleIncoming` with a *plaintext* `{type:'file'}` payload — but the `isFile` branch ran it through `decryptFrom`, which failed (no ratchet fields → v2 fallback → empty-iv AES-GCM → null), incremented `_decryptFailures`, and at 3 transfers fired a bogus "Session reset — possible MITM" banner. The DataChannel is already authenticated + DTLS-encrypted, so the completed transfer now marks the local call with `fileBytes` — unforgeable by a peer because `JSON.parse` never produces a Uint8Array.
+
+2. **`f.blobUrl` was rendered into `<a href>`/`<img src>` unverified.** A peer could ship `blobUrl: 'javascript:…'` or `data:text/html,…` inside an encrypted file payload and get an executable URL into the DOM. The field is now deleted outright: the bytes themselves persist inside `fileData` (IDB structured-clones Uint8Array natively), so files also survive page reload — blob URLs used to die with the page.
+
+---
+
+## Incoming far-future timestamps pinned a conversation to the top of the list (branch devin/ts-clamp, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`handleIncoming` normalized `msg.ts` for finiteness only; the relay validates ±5 min but the P2P DataChannel path has no bound. A peer sending `ts = year 3000` would pin their conversation to the top of the contact list forever (`lastMsgAt`) and keep their message sorted newest in-conversation. Incoming ts is now clamped to `now + 5 min` — the same skew window the relay enforces. Past timestamps stay untouched (queued relay delivery is legitimate).
+
+---
+
+## Message mutations were not bound to the sender's conversation (branch devin/mutation-binding, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Every incoming mutation path — relay `isSignal` edit/delete/reaction AND P2P DataChannel reaction / poll_vote / ack — looked up the target message by msgId alone. msgId is `senderId:ms` — the id half is public and the timestamp half is guessable, so a contact could edit, delete, react to, or stamp delivery state on ANOTHER conversation's messages by forging the msgId. All paths now require `stored.contactId === contact.id` (the possibly device-attributed root id), and the P2P ack path routes `msg.i` through `safeMsgId` — it previously interpolated raw into a querySelector string.
+
+---
+
+## File receive: per-chunk size was unbounded (branch devin/chunk-cap, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`handleBinaryChunk` bounded the chunk COUNT (`total`/`seq` vs `FILE_MAX`/`CHUNK_SIZE`) but not the BYTES in each chunk. The sender always emits ≤16 KiB chunks, so a receiving cap of `CHUNK_SIZE` is a pure validity check — without it a peer could declare `total = MAX_CHUNKS` and put megabytes in each chunk, accumulating far past `FILE_MAX` in memory.
+
+---
+
+## Debug log printed a scheduled message's text snippet to console (branch devin/dbg-snippet, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`_dbg` is opt-in via `brz-debug`, but the schedule-recovery line logged `item.text.slice(0,30)` — message content into the browser console, where it survives in screenshots, screen shares, and devtools sessions. Debug lines now carry metadata only (delay, ids, counts) — the snippet is dropped.
+
+---
+
+## ?open=<contactId> was a dead deep-link — notification taps landed on the contact list (branch devin/open-deeplink, 2026-09-20)
+
+`index.html`, `tests/e2e/deeplink.spec.js`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Message notifications carry `data.url = '/?open=<contactId>'` and sw.js's notificationclick opens that URL — but no code ever read the `open` param, so tapping a notification booted to the contact list instead of the conversation. Same dead-shortcut class as the `?settings` manifest link. `_boot` now resolves the id against contacts and opens the conversation; unknown ids fall back to the list. e2e: +2 specs (opens conversation, unknown-id fallback).
+
+---
+
+## /import had no file-size cap — a multi-GB export froze the tab (branch devin/import-size-cap, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`importChat` called `file.text()` unconditionally — unlike every attachment path, nothing bounded the read, so a huge chat export (or a user picking the wrong file) loaded unbounded memory and froze the tab before any parser ran. Capped at `CONFIG.FILE_MAX` (50 MB — about a decade of dense history) with the existing `toastMax50MB` toast.
+
+---
+
+## File-type guard had a side door: drag-drop and paste skipped the magic-bytes check (branch devin/magic-bytes-coverage, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The magic-bytes executable check (MZ/ELF/Mach-O/shebang/…) ran only in the file-picker path. Drag-drop and paste checked the *extension* — trivially bypassed by renaming `evil.exe` to `photo.png`. Both now run `isBlockedMagicBytes` like the picker; the clipboard image path gets it too (MIME is self-asserted). Forwarding is text-only, so no resend hole exists.
+
+---
+
+## /contacts import bypassed the ?add= key-shape gate — dead contacts could still be planted (branch devin/import-key-validation, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The ?add= fix validated decoded key length (32/65 B) inside `addContact`, but `/contacts import` writes contacts via `dbPut` directly and only regex-checked the base64 alphabet — a syntactically-valid 128-char base64 string (96 B) passed and planted a contact that can never handshake. Extracted `_isValidPubB64()` and applied it to both paths; import skips instead of planting.
+
+---
+
+## Locked-state OS notifications leaked message text + sender name (branch devin/lock-notif-privacy, 2026-09-20)
+
+`index.html`, `locales/*.json` ×7 (`notifNewMessage`), `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The app lock (`/lock`, auto-lock on tab-hide, idle lock) is an overlay that hides the UI — but message handlers ran on underneath it and `new Notification()` still fired with `contact.name` + the first 80 chars of the message, and group mentions pushed `@sender: text`. Anyone glancing at a "locked" screen still read incoming content through the OS. While the lock screen is up, message notifications degrade to `notifNewMessage` ("New message") under the generic `Breeze` title and drop the deep-link data; call notifications keep the call-type body but lose the caller's name; mention notifications are suppressed entirely.
+
+---
+
+## Export hygiene: deleted-message tombstones no longer exported; stale sig-TTL comment (branch devin/export-deleted, 2026-09-20)
+
+`index.html`, `_worker.js` (comment only), `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`/export` filtered tombstones in csv/html but not in `all`/`json` — a deleted message's tombstone (timestamp + empty text) was still written to the archive, contradicting what "deleted" promises. All four exporters now skip `m.deleted`, and the `all` toast counts exported rows, not raw rows. Also corrected `_worker.js`'s "signaling data has 60s TTL" comment — it has been 5 minutes since forever.
+
+---
+
+## Plaintext at rest: outbox stored ciphertext-only; drafts moved localStorage → per-account IDB (branch devin/at-rest-hygiene, 2026-09-20)
+
+`index.html`, `tests/e2e/deeplink.spec.js`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Two "sensitive data in localStorage" violations of the repo's own AGENTS.md rule, found by grepping every `localStorage.setItem`:
+
+1. **`_outbox` persisted `{text}` plaintext.** The P2P fallback queue now stores the wire `envelope` itself (ciphertext — the same bytes the sealed relay carried unconditionally anyway), so flush re-sends without a second ratchet step, and disk holds no plaintext. Legacy plaintext entries are dropped on restore.
+2. **Drafts lived in localStorage, shared across accounts** — a draft for a contact under account A surfaced while running account B (cross-account leak), and plaintext on disk. Moved to the per-account IDB `settings` store with a one-time legacy migration that also removes the key. Bonus fix found by the same scope audit: the SW-update "Save drafts before reload" handler referenced `_drafts` outside its scope — it always wrote `{}` and **wiped drafts exactly when it claimed to save them**.
+
+e2e: +1 spec covering switch → restore → reload → localStorage-empty.
+
+---
+
+## Peer-relay hold/deliver removed — it leaked the social graph it claimed to protect (branch devin/remove-peer-relay, 2026-09-20)
+
+`index.html`, `SECURITY.md`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Musk "delete the part" on a v3 feature never documented in SECURITY.md: when a direct DataChannel send failed, the client sent `peer_relay_request` to an arbitrary OTHER connected contact asking them to hold the encrypted envelope for `targetId`. The payload stayed E2E — but the holder learned {sender → target, time, size}, i.e. the social graph that Sealed Sender v2 exists to hide even from the relay. And it was redundant: `relaySend` (sealed sender) ran unconditionally on the same path, so the peer detour only won when the recipient was reachable via a mutual peer but unreachable via the relay — narrow payoff for a metadata leak plus a "hold arbitrary payloads for arbitrary ids" surface on every client. Deleted: request send, both handlers, `_peerRelayQueue`, the three call sites (connect, presence, contact-delete), ~60 lines. SECURITY.md gains a "Removed: peer-relay hold/deliver" entry explaining the trade.
+
+---
+
+## ?add= planted dead contacts from malformed keys (branch devin/add-key-validation, 2026-09-20)
+
+`index.html`, `locales/*.json`, `tests/e2e/deeplink.spec.js`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Socratic check of the invite-link claim ("share `?add=<key>` to add a contact"): `addContact` stored any string ≤200 chars as a public key — a malformed or adversarial `?add=` link planted a contact that could never complete a handshake, failing only at first send. Contact keys are raw WebCrypto exports (X25519 = 32 B, P-256 = 65 B, base64'd), so `addContact` now decodes and rejects anything else with a new `toastInvalidContact` (EN + all 7 locales). Covers every caller — `?add` boot param, the add-contact form, `resolveAndAdd` (alias resolves to pub then hits the same gate). New e2e spec: `/?add=<garbage>` → toast, zero contacts.
+
+---
+
+## Unauthenticated id-keyed queues + sealed-poll TTL collapse (branch devin/relay-owner-auth, 2026-09-20)
+
+`_worker.js`, `index.html`, `wrangler.toml`, `SECURITY.md`, `tests/worker.test.js`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Two Socratic findings on the "reliable sealed delivery" claim, both in the relay layer:
+
+1. **Destructive unauthenticated reads.** `/msg/poll`, `/sealed/poll` and `/sealed/ack` take a bare `userId` — and polling is not read-only: a future `lastTs` makes the inbox keep-filter delete everything older than the multi-tab grace, and an ack with no high-water mark blind-deletes the whole sealed queue. A userId is public (pub-prefix, exposed by group rosters), so anyone who knew one could purge a stranger's undelivered mail. The client now attaches an Ed25519 ownership signature (`breeze-<op>:<id>:<ts>` — verified-when-present, per-op binding so a sig can't be replayed across endpoints), and operators can enforce with the new `SEALED_REQUIRE_AUTH` / `MSG_REQUIRE_AUTH` secrets once deployed clients all sign.
+
+2. **Poll collapsed retention.** `handleSealedPoll` re-put the queue with a 5-minute "grace" TTL — send-path retention is a week, so one poll then >5 min offline silently expired unprocessed mail. The rewrite is deleted entirely: crash recovery needs no write (the key keeps its original lifetime, the hwm marker bounds what an ack may clear, client dedup absorbs re-delivery). Also one less KV write per non-empty poll on the hot path.
+
+SECURITY.md now documents the id-keyed surface honestly: signable today, enforceable via flag, destructive-without-auth by design until rollout.
+
+---
+
 ## Mobile package silently dropped every non-English locale + webview navigable to any *.pages.dev (branch devin/mobile-fixes, 2026-09-20)
 
 `mobile/prepare.js`, `mobile/capacitor.config.json`, `CHANGELOG.md`.
