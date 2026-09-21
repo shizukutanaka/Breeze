@@ -1,3 +1,16 @@
+## Null-safe handling of postAPIRaw's network-failure return (branch devin/null-safe-resp, 2026-09-21)
+
+`postAPIRaw` resolves `null` on network failure (`.catch(() => null)`), but ~26 call
+sites dereferenced the response unguarded (`resp.ok`/`resp.json()`/`resp.status`).
+Most throws were swallowed by an enclosing try — skipping the intended error path —
+but in the main poll loop a failed `/msg/poll` threw **before** `/sealed/poll` ran,
+starving the sealed inbox for that tick. Sweep: `resp?.ok` guards; `.json()` calls in
+else-branches gated on `resp` (alias/set ×2, group/join, abuse/report); the
+group-member join poll keeps its interval alive on null (was: throw → same, now
+deterministic — only a real non-OK response clears it); group kick/transfer success
+flags coerce with `!!`. fetchT-based callers (`_signalAwait`, fetchRetry, health
+check) throw rather than return null, so they needed no change.
+
 ## Relay-rollback hardening on signed stored state (branch devin/signed-state-monotonic, 2026-09-21)
 
 Every signed-state endpoint checked the signature's freshness (±5min `REQ_TS`) but nothing ordered two *in-window* writes — a relay that captures a signed request can replay it moments after a newer one lands and silently roll the state back. KV has no compare-and-swap, so the stored signed timestamp is now the high-water mark on both write paths:

@@ -4379,7 +4379,7 @@ async function initMessenger(dbName) {
     if (!API || !myId) return;
     try {
       const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: 0, ...(await _ownerAuth('msg-poll')) });
-      if (!resp.ok) return;
+      if (!resp?.ok) return;
       const data = await resp.json();
       for (const msg of (data.messages || [])) {
         // Signature-gated: `from` is self-asserted on the relay, so a bare remote_wipe
@@ -4547,8 +4547,8 @@ async function initMessenger(dbName) {
         const body = { alias, pub: pubB64, name, pow: powToken };
         if (aliasSig) { body.userId = myId; body.ts = aliasTs; body.sig = aliasSig; }
         const resp = await postAPIRaw('/alias/set', body);
-        if (resp.ok) registeredAlias = alias;
-        else { const d = await resp.json().catch(() => ({})); showToast(d.error || t('toastAliasTaken'), 'error'); }
+        if (resp?.ok) registeredAlias = alias;
+        else { const d = resp ? await resp.json().catch(() => ({})) : {}; showToast(d.error || t('toastAliasTaken'), 'error'); }
       } catch(e) { _dbg(e); }
       if (registeredAlias) {
         myAlias = registeredAlias;
@@ -4782,7 +4782,7 @@ async function initMessenger(dbName) {
     if (!CONFIG.X3DH_V5_ENABLED || !API) return null;
     try {
       const resp = await postAPIRaw('/prekey/fetch', { userId: peerPubB64.slice(0, 12) });
-      if (!resp.ok) return null;
+      if (!resp?.ok) return null;
       const bundle = await resp.json();
       if (!_peerSupportsX3dhV5(bundle)) return null;
       if (!bundle.identityKey || !bundle.edIdentityKey || !bundle.signedPreKey || !bundle.signedPreKeySig) return null;
@@ -5228,7 +5228,7 @@ async function initMessenger(dbName) {
     if (!API) return null;
     try {
       const resp = await postAPIRaw('/device/list', { accountId });
-      if (!resp.ok) return null;
+      if (!resp?.ok) return null;
       const rec = await resp.json();
       if (!rec || !rec.root || !Array.isArray(rec.devices)) return null;
       if (rootPubB64 && rec.root !== rootPubB64) return null; // registry for a different root
@@ -5417,7 +5417,7 @@ async function initMessenger(dbName) {
     }
     try {
       const resp = await postAPIRaw('/sealed/send', { to, envelope: JSON.stringify(wire) });
-      if (resp.ok) {
+      if (resp?.ok) {
         const data = await resp.json().catch(() => ({}));
         if (data.ack && msgTs) updateMsgStatus(msgTs, 'delivered', _conv);
         return;
@@ -5469,7 +5469,7 @@ async function initMessenger(dbName) {
         let sent = false;
         try {
           const resp = await postAPIRaw('/sealed/send', { to: item.to, envelope: JSON.stringify(item.payload) });
-          if (resp.ok) sent = true;
+          if (resp?.ok) sent = true;
         } catch {}
         if (!sent) await postAPIRaw('/msg/send', item.payload);
       } catch(e) { _retryQueue.push(item); _saveRetryQueue(); }
@@ -6598,10 +6598,10 @@ async function initMessenger(dbName) {
               const gBody = isCreator ? { token: c.joinToken, adminId: myId, ts: gTs } : { token: c.joinToken, memberId: myId, ts: gTs };
               if (gSig) gBody.sig = gSig;
               const gResp = await postAPIRaw('/group/' + gAction, gBody);
-              showToast(t(gResp.ok ? (isCreator ? 'toastGroupDeleted' : 'toastGroupLeft') : (isCreator ? 'toastGroupDeleteFail' : 'toastGroupLeaveFail')), gResp.ok ? 'info' : 'error');
+              showToast(t(gResp?.ok ? (isCreator ? 'toastGroupDeleted' : 'toastGroupLeft') : (isCreator ? 'toastGroupDeleteFail' : 'toastGroupLeaveFail')), gResp?.ok ? 'info' : 'error');
               // Tell the remaining members I'm gone — otherwise their rosters keep me
               // forever and my old sender key keeps decrypting until someone kicks me.
-              if (gResp.ok) notifyGroupLeave(c.id).catch(e => _dbg(e, 'group-leave'));
+              if (gResp?.ok) notifyGroupLeave(c.id).catch(e => _dbg(e, 'group-leave'));
             } catch(e) { _dbg(e, 'group-leave-delete'); showToast(t(c.createdBy === myId ? 'toastGroupDeleteFail' : 'toastGroupLeaveFail'), 'error'); }
           }
           const msgs = await dbGetByIndex('messages', 'contact', c.id);
@@ -7614,8 +7614,8 @@ async function initMessenger(dbName) {
     if (!await showConfirm(t('confirmReport'), { danger: true, okText: t('report') })) return;
     try {
       const resp = await postAPIRaw('/abuse/report', { frankId: msg.frankId, message: msg.text, opening: msg.frankOpening });
-      const data = await resp.json().catch(() => ({}));
-      showToast(t(resp.ok && data.verified ? 'toastReported' : 'toastReportFail'), resp.ok && data.verified ? 'success' : 'error');
+      const data = resp ? await resp.json().catch(() => ({})) : {};
+      showToast(t(resp?.ok && data.verified ? 'toastReported' : 'toastReportFail'), resp?.ok && data.verified ? 'success' : 'error');
     } catch(e) { _dbg(e, 'report'); showToast(t('toastReportFail'), 'error'); }
   }
 
@@ -9435,7 +9435,7 @@ async function initMessenger(dbName) {
       const chunk = memberIds.slice(i, i + 10);
       try {
         const resp = await postAPIRaw('/prekey/fetch/batch', { userIds: chunk });
-        if (resp.ok) { const { results } = await resp.json(); for (const id of chunk) out[id] = _parsePeerCaps(results?.[id]); }
+        if (resp?.ok) { const { results } = await resp.json(); for (const id of chunk) out[id] = _parsePeerCaps(results?.[id]); }
       } catch(_e) { _dbg(_e, 'fetch-member-caps-batch'); }
     }
     for (const id of memberIds) if (!(id in out)) out[id] = [];
@@ -9487,7 +9487,7 @@ async function initMessenger(dbName) {
     if (!API) { showToast(t('toastServerRequired'), 'error'); return; }
     try {
       const resp = await postAPIRaw('/group/create', { name, creatorId: myId, creatorPub: myPubB64, creatorName: myName, caps: CONFIG.GROUP_RATCHET_V5 ? [CAPS_GROUP_V5] : undefined });
-      if (!resp.ok) { showToast(t('toastGroupFail'), 'error'); return; }
+      if (!resp?.ok) { showToast(t('toastGroupFail'), 'error'); return; }
       const data = await resp.json();
       const groupId = 'g_' + data.token;
       await dbPut('contacts', {
@@ -9543,8 +9543,8 @@ async function initMessenger(dbName) {
     try {
       // Join the group on server
       const resp = await postAPIRaw('/group/join', { token, memberId: myId, memberPub: myPubB64, memberName: myName, caps: CONFIG.GROUP_RATCHET_V5 ? [CAPS_GROUP_V5] : undefined });
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
+      if (!resp?.ok) {
+        const err = resp ? await resp.json().catch(() => ({})) : {};
         showToast(err.error || t('toastJoinFail'), 'error');
         return;
       }
@@ -9604,7 +9604,9 @@ async function initMessenger(dbName) {
     const poll = setInterval(async () => {
       try {
         const resp = await postAPIRaw('/group/info', { token });
-        if (!resp.ok) { clearInterval(poll); return; }
+        // null (network fail) keeps the interval alive for the next tick — only a real
+        // non-OK response means the token/group is definitively gone.
+        if (!resp?.ok) { if (resp) clearInterval(poll); return; }
         const data = await resp.json();
         const group = await dbGet('contacts', groupId);
         if (!group) { clearInterval(poll); return; }
@@ -9727,7 +9729,7 @@ async function initMessenger(dbName) {
       if (!_isOffline && API) {
         try {
           const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: _lastPollTs, ...(await _ownerAuth('msg-poll')) });
-          if (resp.ok) {
+          if (resp?.ok) {
             const data = await resp.json();
             for (const msg of (data.messages || [])) {
               try { await handleIncoming(msg); } catch(e) { _dbg(e, 'msg-process'); }
@@ -9735,7 +9737,7 @@ async function initMessenger(dbName) {
             }
           }
           const sResp = await postAPIRaw('/sealed/poll', { id: myId, ...(await _ownerAuth('sealed-poll')) });
-          if (sResp.ok) {
+          if (sResp?.ok) {
             const sData = await sResp.json();
             // Honesty over silence: the relay counts envelopes its queue caps forced it to
             // drop while we were offline — tell the user instead of losing them wordlessly.
@@ -11248,7 +11250,7 @@ async function initMessenger(dbName) {
     if (input.startsWith('@') && API) {
       try {
         const resp = await postAPIRaw('/alias/get', { alias: input.slice(1) });
-        if (resp.ok) {
+        if (resp?.ok) {
           const data = await resp.json();
           pubB64 = data.pub; name = data.name || name; aliasResolved = true;
         } else { showToast(t('toastAliasNotFound'), 'error'); return; }
@@ -11284,7 +11286,7 @@ async function initMessenger(dbName) {
       if (ids.length === 0) { renderContacts(); return; }
       try {
         const r = await postAPIRaw('/presence', { ids, check: true });
-        if (r.ok) {
+        if (r?.ok) {
           const d = await r.json();
           for (const id of ids) {
             const wasOffline = !_presenceCache[id];
@@ -11441,7 +11443,7 @@ async function initMessenger(dbName) {
     if (!API) return;
     try {
       const resp = await postAPIRaw('/turn', { userId: myId, ...(await _ownerAuth('turn')) });
-      if (resp.ok) {
+      if (resp?.ok) {
         _turnCredential = await resp.json();
         _dbg(null, 'TURN credentials obtained');
         // I19: relay-only by default when the operator provisioned TURN capacity —
@@ -11488,7 +11490,7 @@ async function initMessenger(dbName) {
         const upSig = await signMessage(`breeze-backup-upload:${myId}:${upTs}`);
         if (upSig) upBody.sig = upSig;
         const resp = await postAPIRaw('/backup/upload', upBody);
-        if (resp.ok) {
+        if (resp?.ok) {
           // Surface the retention deadline the relay just told us: a cloud backup is deleted
           // 90 days after its last upload and nothing renews it, so "I have a backup" quietly
           // stops being true. Say the date instead of letting the user find out on the day
@@ -11512,7 +11514,7 @@ async function initMessenger(dbName) {
       const dlSig = await signMessage(`breeze-backup-download:${myId}:${dlTs}`);
       if (dlSig) dlBody.sig = dlSig;
       const resp = await postAPIRaw('/backup/download', dlBody);
-      if (!resp.ok) { showToast(t('backupFailed'), 'error'); return; }
+      if (!resp?.ok) { showToast(t('backupFailed'), 'error'); return; }
       const { backup } = await resp.json();
       const b = JSON.parse(backup);
       const salt = u8(b.s); const iv = u8(b.i); const ct = u8(b.d);
@@ -11809,7 +11811,7 @@ async function initMessenger(dbName) {
     if (!API) return null;
     try {
       const resp = await postAPIRaw('/ktlog/get', { userId: contact.id });
-      if (!resp.ok) return null;
+      if (!resp?.ok) return null;
       const { log } = await resp.json();
       const stored = (await dbGet('identity', 'ktIk:' + contact.id)) ?? contact.pubB64;
       const audit = await _auditKeyHistory(stored, log);
@@ -12689,8 +12691,8 @@ async function initMessenger(dbName) {
                 const kickBody = { token: activeContact.joinToken, kickId: member.id, adminId: myId, ts: kickTs };
                 if (kickSig) kickBody.sig = kickSig;
                 const kickResp = await postAPIRaw('/group/kick', kickBody);
-                kicked = kickResp.ok;
-                if (kickResp.ok) {
+                kicked = !!kickResp?.ok;
+                if (kickResp?.ok) {
                   const kickData = await kickResp.json().catch(() => ({}));
                   newEpoch = (typeof kickData.epoch === 'number') ? kickData.epoch : null;
                 }
@@ -12820,7 +12822,7 @@ async function initMessenger(dbName) {
                 const trBody = { token: activeContact.joinToken, adminId: myId, newCreatorId: member.id, ts: trTs };
                 if (trSig) trBody.sig = trSig;
                 const trResp = await postAPIRaw('/group/transfer', trBody);
-                done = trResp.ok;
+                done = !!trResp?.ok;
               } catch(e) { _dbg(e, 'server-transfer'); }
             }
             if (done) {
@@ -13449,7 +13451,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         const keyB64 = btoa(String.fromCharCode(...keyBytes));
         // Store ciphertext on server (server never sees the key)
         const resp = await postAPIRaw('/drop/create', { id: dropId, ct: ctB64, ttl: 86400 });
-        if (!resp.ok) throw new Error('Server error');
+        if (!resp?.ok) throw new Error('Server error');
         const dropUrl = `${SHARE_BASE}?drop=${dropId}#${keyB64}`;
         // Copy to clipboard
         try { await navigator.clipboard.writeText(dropUrl); } catch { /* fallback below */ }
@@ -13832,7 +13834,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       if (API) {
         try {
           const resp = await postAPIRaw('/online', {});
-          if (resp.ok) {
+          if (resp?.ok) {
             const data = await resp.json();
             const peerCount = Object.values(peers).filter(p => p.connected).length;
             d.textContent = t('uiOnlineStatus', data.online, peerCount);
@@ -14356,7 +14358,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
           const aBody = { alias: newAlias, pub: myPubB64, name: myName, pow: powToken };
           if (aSig) { aBody.userId = myId; aBody.ts = aTs; aBody.sig = aSig; }
           const resp = await postAPIRaw('/alias/set', aBody);
-          if (resp.ok) {
+          if (resp?.ok) {
             myAlias = newAlias;
             const id = await dbGet('identity', 'keys');
             if (id) { id.alias = newAlias; await dbPut('identity', id, 'keys'); }
@@ -14375,7 +14377,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
               } catch(relErr) { _dbg(relErr, 'alias-release'); }
             }
           } else {
-            const d = await resp.json().catch(() => ({}));
+            const d = resp ? await resp.json().catch(() => ({})) : {};
             showToast(d.error || t('toastAliasTaken'), 'error');
           }
         } catch(er) { showToast(t('toastServerError'), 'error'); _dbg(er); }
