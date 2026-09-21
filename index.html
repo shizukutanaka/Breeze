@@ -3604,10 +3604,13 @@ function renderAccountTabs() {
         const i = accs.indexOf(acc);
         accs.splice(i, 1);
         saveAccounts(accs);
+        // Delete AFTER the switch: deleteDatabase waits on open connections, and the
+        // deleted account's db is still open until switchAccount() runs the cleanup
+        // that closes it (same class as the panic-wipe ordering fix).
+        if (acc.id === activeId) await switchAccount(accs[0].id);
+        else renderAccountTabs();
         indexedDB.deleteDatabase(acc.dbName || 'breeze-acc-' + acc.id);
         delete _crossAccountUnread[acc.id];
-        if (acc.id === activeId) switchAccount(accs[0].id);
-        else renderAccountTabs();
       }
     };
     tabs.appendChild(tab);

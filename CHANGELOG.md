@@ -1,5 +1,13 @@
 # Changelog
 
+## Account delete requested the IDB drop before closing the open connection (branch devin/account-delete-order, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Deleting the ACTIVE account called `indexedDB.deleteDatabase` while that database's connection was still open — the request queues until `switchAccount`'s cleanup closed it, an inversion of the panic-wipe ordering fix. Now the switch runs first (closing the handle), then the delete is issued.
+
+---
+
 ## Poll option rows skipped safeMsgId on data-msgid (branch devin/poll-msgid-escape, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
