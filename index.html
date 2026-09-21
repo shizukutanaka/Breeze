@@ -6118,6 +6118,16 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'unwrapCallSignal'); return null; }
   }
 
+  // Contact keys are raw WebCrypto exports: X25519 = 32 B, P-256 = 65 B, base64'd.
+  // Shared by addContact and /contacts import — both must refuse a syntactically-valid
+  // base64 string that decodes to anything else (a dead contact that looks real).
+  function _isValidPubB64(pub) {
+    try {
+      const n = Uint8Array.from(atob(pub), c => c.charCodeAt(0)).length;
+      return n === 32 || n === 65;
+    } catch { return false; }
+  }
+
   async function addContact(pubB64, name) {
     try {
       const safePub = typeof pubB64 === 'string' ? pubB64.slice(0, 200) : '';
@@ -6125,10 +6135,7 @@ async function initMessenger(dbName) {
       // Contact keys are raw WebCrypto exports: X25519 = 32 B, P-256 = 65 B, base64'd.
       // A malformed ?add= link (or a bad alias response) otherwise plants a contact that
       // can never complete a handshake — dead entry that looks real until send fails.
-      try {
-        const rawLen = Uint8Array.from(atob(safePub), c => c.charCodeAt(0)).length;
-        if (rawLen !== 32 && rawLen !== 65) { showToast(t('toastInvalidContact'), 'error'); return; }
-      } catch { showToast(t('toastInvalidContact'), 'error'); return; }
+      if (!_isValidPubB64(safePub)) { showToast(t('toastInvalidContact'), 'error'); return; }
       const id = safePub.slice(0, 12);
       const existing = await dbGet('contacts', id);
       if (existing) return;
@@ -12174,7 +12181,7 @@ async function initMessenger(dbName) {
             // Validate required fields: pubB64 must be a valid base64 string for non-groups
             if (!c?.isGroup) {
               if (typeof c?.pubB64 !== 'string' || !c.pubB64 || c.pubB64.length > 128 ||
-                  !/^[A-Za-z0-9+/=]+$/.test(c.pubB64)) { skipped++; continue; }
+                  !_isValidPubB64(c.pubB64)) { skipped++; continue; }
             }
             // id must be a non-empty string of safe length
             const rawId = c.id || c.pubB64 || c.name;

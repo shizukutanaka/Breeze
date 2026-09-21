@@ -1,5 +1,13 @@
 # Changelog
 
+## /contacts import bypassed the ?add= key-shape gate — dead contacts could still be planted (branch devin/import-key-validation, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The ?add= fix validated decoded key length (32/65 B) inside `addContact`, but `/contacts import` writes contacts via `dbPut` directly and only regex-checked the base64 alphabet — a syntactically-valid 128-char base64 string (96 B) passed and planted a contact that can never handshake. Extracted `_isValidPubB64()` and applied it to both paths; import skips instead of planting.
+
+---
+
 ## Locked-state OS notifications leaked message text + sender name (branch devin/lock-notif-privacy, 2026-09-20)
 
 `index.html`, `locales/*.json` ×7 (`notifNewMessage`), `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
