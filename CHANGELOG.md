@@ -1,5 +1,85 @@
 # Changelog
 
+## Dead config sweep + stale mobile-doc claims (branch devin/consolidate-groups, 2026-09-20)
+
+- **`CONFIG.AT_REST_KEY_WRAP` was dead** — the at-rest key-wrap feature is opt-in per account via `/keywrap` and detects enabled state from the key record's own shape; the CONFIG flag was never read. Removed (comment updated to describe the real mechanism).
+- **`mobile/README.md`** listed a `res/` overlay directory that no longer exists and a `release.yml` workflow that was never pushable (`workflows` scope) — both corrected.
+- **`docs/INTEGRATION.md` + `SPEC.md`** pointed at `.github/workflows/ci.yml` as if tracked — redirected to the preserved workflow in `docs/CI-SETUP.md`.
+
+---
+
+## Packaged desktop app crashed at launch — missing require()d modules (branch devin/consolidate-groups, 2026-09-20)
+
+- **`desktop/package.json` `files` whitelisted `main.js`/`preload.js`/icons only** — but `main.js` does top-level `require('./nav-guard')` and `require('./csp-guard')`, and electron-builder's `files` array REPLACES the default `**/*` glob (verified in docs: the default is not merged when a non-negation pattern is present). Both helpers were omitted from every packaged build → `MODULE_NOT_FOUND` at startup → dead on arrival. Changed to `"*.js"` so all top-level modules (and future ones) ship.
+
+---
+
+## Tauri Quit was a dead menu item (branch devin/consolidate-groups, 2026-09-20)
+
+- **`RunEvent::ExitRequested` was unconditionally vetoed** — `api.prevent_exit()` ran for every exit request, including the tray Quit menu's own `app.exit(0)`: the Quit item emitted ExitRequested, which the handler immediately cancelled, so it did nothing. macOS Cmd+Q and OS-level quit requests were swallowed the same way. The hide-to-tray behavior already lives in `WindowEvent::CloseRequested`; the unconditional veto had no purpose. Removed.
+
+- **README claimed CI runs** (`npm test`, `validate.sh`, breeze.zip upload) — but `.github/workflows/` is `.gitignore`d and no workflow exists: the former automation account lacks the `workflows` OAuth scope, and a push attempt from this credential was rejected identically. The README now points at the preserved `ci.yml` + activation runbook in `docs/CI-SETUP.md`.
+
+- **`handleGroupCreate` creator-key ownership proof** — see entry above (creatorPub must start with creatorId, same as join's KEY_MISMATCH gate).
+
+---
+
+## Group-create creator key ownership proof (branch devin/consolidate-groups, 2026-09-20)
+
+- **`handleGroupCreate` accepted `creatorPub` ≠ `creatorId`** — while `handleGroupJoin` has always enforced `memberPub.startsWith(memberId)`, create never bound the creator's claimed id to their key: `creatorId: <victim>` + `creatorPub: <attacker>` produced a roster record that binds the victim's id/name to the attacker's key, so every joiner encrypts sender keys to the wrong key under the victim's identity. Now rejects with `KEY_MISMATCH` (same as join). Tripwire test added; existing fixtures updated to satisfy the real invariant (`creatorId = creatorPub.slice(0,12)`, which every legit client already satisfies).
+
+---
+
+
+
+## SDP signature verification was dead — wrong function name silently dropped every signed SDP (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The sig-poll's SDP handler called `verifyMessage()` — a function that does not exist (the codebase's verifier is `verifySignature`). The ReferenceError was swallowed by the enclosing `catch`, so `sdpJson` never advanced past the `{sdp,sig,sigPub}` wrapper: `setRemoteDescription` then received the wrapper object (no `type` field), threw, and the signal was dropped. Net effect: signing-capable clients produced signed offers/answers that peers always discarded — the Ed25519 MITM defense never ran, and P2P handshakes between modern clients silently failed (falling back to relay-only delivery). One-word fix; verified `verifySignature` is the only verifier and the wire envelope shape is unchanged.
+
+---
+
+## Badge interval opened an IndexedDB connection every 5s — never used, never closed (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The unread-badge timer ran `indexedDB.open('breeze-messenger', 2)` on every tick and did nothing with the result — the badge count is read from the DOM. Each orphaned open request left an untracked connection alive until GC, a real hazard for the db-upgrade path (a forgotten open connection blocks `versionchange` until collected). Removed the dead open.
+
+---
+
+## sig-poll/heartbeat intervals leaked on manual pc.close() teardown (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Per spec, `RTCPeerConnection.close()` does NOT fire `connectionstatechange`, so the CLOSED transition — which clears `_sigPoll`/`_heartbeat`/`_healthTimer` and releases the pc handler closures — never ran on the manual teardown paths: contact delete, block, and account switch. The sig-poll interval kept polling the dead peer's signaling room every 2s forever (and kept accepting that contact's typing/read signals into the UI — including a just-blocked peer). All three sites now run `peerState.transition('CLOSED')` before `pc.close()`.
+
+---
+
+## Dead OGP feature removed — config + stale comments (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `_worker.js`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The OGP link-preview feature was fully dead: `CONFIG.OGP_CACHE_MAX` had zero references, no `fetchOGP`/`.ogp` producer or consumer existed, and a v3.1 comment claimed a "sender-side OGP preview" rendered where nothing did. The Worker's `sha256Short` comment likewise claimed its keys were `ogp:`-prefixed — they aren't (it serves device-list digests and IP hashes). Removed the dead config and corrected both comments.
+
+---
+
+## /contacts import bounded member count but not member shape (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The import loop ran `c.members.slice(0, GROUP_MAX)` — bounding how many members, not their shape. Member objects flow into `peers[m.pubB64]` lookups and `distributeSenderKey` encryption, so a crafted entry with a huge or non-string `pubB64`/`id` rode through. Now routes through `safeMemberList`, same as the group-invite and ?join paths.
+
+---
+
+## Restore path stored contact fields verbatim — unbounded name/members (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`restoreBackup` validated `id`/`pubB64` shape but stored every other field verbatim — a malformed backup entry could plant an unbounded `name` (renders on every contact-list pass) or an oversized/unshaped `members` array that bypasses `safeMemberList`. Restored contacts now re-run the same caps as the add/import paths (name ≤64, members through `safeMemberList`).
+
+---
+
 ## P2P acks could stamp delivery state on the open chat regardless of sender (branch devin/consolidate-groups, 2026-09-21)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).

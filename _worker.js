@@ -1009,6 +1009,12 @@ async function handleGroupCreate(body, env, request) {
   const creatorPub = rawCreatorPub.slice(0, 200);
   if (!name || !creatorId || !creatorPub) return json({ error: 'name, creatorId, creatorPub required', code: 'MISSING_FIELDS' }, 400, request);
   if (!validateUserId(creatorId)) return json({ error: 'invalid creatorId', code: 'INVALID_USER_ID' }, 400, request);
+  // Ownership proof (same as join): creatorId = creatorPub.slice(0,12), so the pub must
+  // start with the claimed id. Without it, anyone could create a group under another
+  // user's id with THEIR OWN key — the roster then binds that victim's name/id to the
+  // attacker's pub and every joiner encrypts sender keys to the wrong key.
+  if (!creatorPub.startsWith(creatorId))
+    return json({ error: 'creatorPub does not match creatorId', code: 'KEY_MISMATCH' }, 400, request);
   // v3.1: Validate name length
   if (name.length > 50) return json({ error: 'Group name max 50 chars', code: 'INVALID_NAME' }, 400, request);
   // v3.1: Validate initial member count
@@ -2684,8 +2690,8 @@ function json(data, status, request, _rid) {
 
 async function sha256Short(text) {
   // 16 bytes (32 hex chars) → 2^64 birthday-collision resistance, up from 8 bytes (2^32).
-  // KV cache keys are 'ogp:' prefixed; the extra 16 chars are negligible
-  // vs. the 512-byte KV key limit and removes the theoretically-breakable 2^32 window.
+  // The extra 16 chars are negligible vs. the 512-byte KV key limit and removes the
+  // theoretically-breakable 2^32 window.
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return Array.from(new Uint8Array(buf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
 }

@@ -1213,11 +1213,10 @@ const CONFIG = {
   // BOTH sides negotiate it (else falls back byte-identically). Also runs the KT chain+rollover audit.
   X3DH_V5_ENABLED: true,
   SEAL_V2_ENABLED: true, // Sealed Sender v2: encrypt sender metadata to the recipient (capability-gated)
-  // v3.6 SECURITY (default OFF — opt-in via /keywrap, run again to disable): wrap the identity
-  // ECDH + Ed25519 signing private keys with AES-256-GCM under a PBKDF2 key (600k iter, random
-  // salt) before IndexedDB storage. Guards against XSS cookie-theft, device forensics, IDB-reading
-  // extensions. ON: prompts for the passphrase at startup. /lock works independently. OFF by default so existing users aren't broken.
-  AT_REST_KEY_WRAP: false,
+  // v3.6 SECURITY (opt-in via /keywrap, run again to disable): wraps the identity
+  // ECDH + Ed25519 signing private keys with AES-256-GCM under a PBKDF2 key (600k iter,
+  // random salt) before IndexedDB storage — state is per-account (detected from the
+  // key record itself), never a global flag.
   PBKDF2_AT_REST_ITERATIONS: 600000, // 6× the lock-screen value; separate constant
   VOICE_MAX_MS: 120000,               // Max voice note duration: 2 minutes
   // Limits
@@ -1231,7 +1230,6 @@ const CONFIG = {
   DC_BUFFER_LOW: 65536,             // 64 KiB low-water mark for resume
   HEALTH_CHECK_MS: 15000,           // Connection health monitor interval
   REPLAY_CACHE_SIZE: 2000,          // In-memory LRU for message dedup (Spec v7 §9)
-  OGP_CACHE_MAX: 100,               // Max Open Graph preview entries
   MSG_DOM_LIMIT: 200,               // Max DOM messages before pruning (Spec v6 §10)
   MSG_PAD_BOUNDARY: 256,
   PREKEY_OTP_COUNT: 20,
@@ -5820,12 +5818,11 @@ async function initMessenger(dbName) {
       // share a contact by public key. Messages were already persisted to _outboxKey.
       _outbox.clear();
       Object.values(peers).forEach(p => {
-        if (p._healthTimer) clearInterval(p._healthTimer);
-        // Leak fix: pc.close() does NOT fire connectionstatechange (per spec), so the
-        // state-change handler that normally clears _heartbeat never runs on teardown.
-        // Clear it here too — otherwise every peer's heartbeat interval keeps firing
-        // against a closed channel after an account switch, pinning the old peer object.
-        if (p._heartbeat) clearInterval(p._heartbeat);
+        // pc.close() does NOT fire connectionstatechange (per spec), so the CLOSED
+        // transition — which clears _healthTimer/_heartbeat/_sigPoll and releases the
+        // handler closures — must run manually or the intervals keep firing against a
+        // dead peer after teardown.
+        try { p.transition('CLOSED'); } catch(e) { _dbg(e); }
         try { p.pc?.close(); } catch(e) { _dbg(e); }
       });
       // Clear stale peer entries: connectPeer guards on peers[pubB64]?.pc to avoid
@@ -6581,7 +6578,7 @@ async function initMessenger(dbName) {
             _DOM.get('msg-conv-name').textContent = t('uiSelectContact');
             _DOM.get('msg-input-bar').classList.add('hidden');
           }
-          if (peers[c.pubB64]) { if (peers[c.pubB64]._healthTimer) clearInterval(peers[c.pubB64]._healthTimer); peers[c.pubB64].pc?.close(); delete peers[c.pubB64]; }
+          if (peers[c.pubB64]) { try { peers[c.pubB64].transition('CLOSED'); } catch(e) { _dbg(e); } peers[c.pubB64].pc?.close(); delete peers[c.pubB64]; }
           renderContacts();
         } else if (action === 'safety') {
           showSafetyNumber(c);
@@ -6593,7 +6590,7 @@ async function initMessenger(dbName) {
           c.blocked = !c.blocked;
           await dbPut('contacts', c);
           auditLog('contact', (c.blocked ? 'Blocked' : 'Unblocked') + ' ' + c.name, c.blocked ? 'warn' : 'info');
-          if (c.blocked && peers[c.pubB64]) { if (peers[c.pubB64]._healthTimer) clearInterval(peers[c.pubB64]._healthTimer); peers[c.pubB64].pc?.close(); delete peers[c.pubB64]; }
+          if (c.blocked && peers[c.pubB64]) { try { peers[c.pubB64].transition('CLOSED'); } catch(e) { _dbg(e); } peers[c.pubB64].pc?.close(); delete peers[c.pubB64]; }
           if (c.blocked && c.pubB64) { _outbox.delete(c.pubB64); _persistOutbox(); }
           renderContacts();
         } else if (action === 'vip') {
@@ -7149,7 +7146,6 @@ async function initMessenger(dbName) {
     // Text message with markdown + links
     else {
       content += renderLinks(renderMarkdown(esc(text)));
-      // v3.1: Render sender-side OGP preview if attached
     }
 
     // v3.1: Render reactions below message
@@ -8702,6 +8698,10 @@ async function initMessenger(dbName) {
             const bars = ind.querySelectorAll('.rec-wave span');
             const dataArray = new Uint8Array(_analyser.frequencyBinCount);
             const updateWave = () => {
+              // Self-terminate when recording ends via ANY path — onstop cancels
+              // _waveRaf, but account-switch nulls onstop before stop(), leaving this
+              // chain running forever on the closed context.
+              if (!_mediaRecorder || _mediaRecorder.state !== 'recording') { _waveRaf = null; return; }
               _analyser.getByteFrequencyData(dataArray);
               for (let i = 0; i < bars.length; i++) {
                 const val = dataArray[i * 2 + 2] || 0; // Sample spread across spectrum
@@ -10766,7 +10766,7 @@ async function initMessenger(dbName) {
                       _dbg(null, 'P2P: SDP signing key mismatch — rejecting (possible MITM)');
                       continue;
                     }
-                    const valid = await verifyMessage(wrapper.sdp, wrapper.sig, wrapper.sigPub);
+                    const valid = await verifySignature(wrapper.sdp, wrapper.sig, wrapper.sigPub);
                     if (valid === false) { _dbg(null, 'P2P: SDP signature invalid — rejecting'); continue; }
                     // TOFU: pin the peer's signing key on first signed SDP
                     if (!contact.sigPub && wrapper.sigPub && _hasEd25519) {
@@ -11132,7 +11132,12 @@ async function initMessenger(dbName) {
         if (typeof c?.id !== 'string' || !c.id || c.id.length > 64 ||
             typeof c?.pubB64 !== 'string' || !c.pubB64 || c.pubB64.length > 128 ||
             !_isValidPubB64(c.pubB64)) continue;
-        await dbPut('contacts', c);
+        // Bound fields the add/import paths cap — a malformed backup entry must
+        // not plant an unbounded name or member list that renders every list pass.
+        const clean = { ...c,
+          name: typeof c.name === 'string' ? c.name.slice(0, 64) : 'Contact',
+          members: Array.isArray(c.members) ? safeMemberList(c.members) : c.members };
+        await dbPut('contacts', clean);
       }
 
       showToast(t('toastRestoredReload'), 'success'); setTimeout(() => location.reload(), 1.5 * MS.SEC);
@@ -12368,7 +12373,10 @@ async function initMessenger(dbName) {
       const detector = new BarcodeDetector({ formats: ['qr_code'] });
       const cleanup = () => { stream.getTracks().forEach(tr => tr.stop()); };
       const loop = async () => {
-        if (!video.parentNode) { cleanup(); return; }
+        // isConnected, not parentNode: modal.remove() detaches the subtree but the
+        // card stays video's parent — parentNode would keep the camera streaming and
+        // the detect loop alive forever after close.
+        if (!video.isConnected) { cleanup(); resolve(null); return; }
         try {
           const codes = await detector.detect(video);
           if (codes.length > 0) { cleanup(); video.remove(); resolve(codes[0].rawValue); return; }
@@ -12825,7 +12833,9 @@ async function initMessenger(dbName) {
             const safeNotes = typeof c.notes === 'string' ? c.notes.slice(0, 1024) : null;
             const safeLabels = Array.isArray(c.labels)
               ? c.labels.filter(l => typeof l === 'string').map(l => l.slice(0, 32)).slice(0, 20) : [];
-            const safeMembers = Array.isArray(c.members) ? c.members.slice(0, CONFIG.GROUP_MAX) : [];
+            // safeMemberList, not a bare slice: members' inner fields (id/pubB64/name)
+            // also need shape-validation — they flow into peer lookups + key distribution.
+            const safeMembers = safeMemberList(c.members);
             const safeAddedAt = (typeof c.addedAt === 'number' && Number.isFinite(c.addedAt)) ? c.addedAt : Date.now();
             await dbPut('contacts', { id: contactId, pubB64: c.pubB64, name: safeName,
               alias: safeAlias, isGroup: !!c.isGroup, members: safeMembers,
@@ -14551,8 +14561,7 @@ if (PLATFORM === 'electron' && window.breeze) {
   // the moment this block stopped being dead code).
   setInterval(async () => {
     try {
-      const db = indexedDB.open('breeze-messenger', 2);
-      // Simple approach: read unread count from contact list DOM
+      // Read unread count straight from the contact-list DOM
       const badges = document.querySelectorAll('.cbadge');
       let total = 0;
       badges.forEach(b => { total += parseInt(b.textContent) || 0; });

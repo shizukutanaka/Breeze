@@ -25,8 +25,7 @@
     "copyright": "Copyright \u00a9 2026 Breeze",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "files": [
-      "main.js",
-      "preload.js",
+      "*.js",
       "icon.*",
       "tray*.png"
     ],
