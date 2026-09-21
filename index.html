@@ -9116,6 +9116,10 @@ async function initMessenger(dbName) {
         const data = await resp.json();
         for (const s of (data.messages || [])) {
           if (s.sender === myId) continue;
+          // Sender binding (same as the data-channel signal poll): the call room name is
+          // the two sorted ids — a third party could otherwise post a bare 'call-end'
+          // and drop the active call (call-end is not decryptable-wrapped).
+          if (s.sender !== contact.id) continue;
           if (s.type === 'call-answer' && _callPC && _callPC.signalingState === 'have-local-offer') {
             // Authenticate before setRemoteDescription: a forged answer (relay-injected,
             // carrying the attacker's DTLS fingerprint) fails to decrypt → null → dropped,
@@ -10636,6 +10640,10 @@ async function initMessenger(dbName) {
           const data = await resp.json();
           for (const s of (data.messages || [])) {
             if (s.sender === myId) continue;
+            // Sender binding: the relay is unauthenticated and the room name is just the
+            // two sorted user ids — anyone who knows the pair can POST. Only accept signals
+            // from the peer this poll was opened for (typing/read fakes + ICE injection).
+            if (s.sender !== contact.id) continue;
             // Typing/read indicators (works both pre- and post-P2P connection)
             if (s.type === 'typing') { showTyping(contact.id, s.senderName || contact.name); continue; }
             if (s.type === 'read') { showReadReceipt(contact.id, parseInt(s.data) || Date.now()); continue; }

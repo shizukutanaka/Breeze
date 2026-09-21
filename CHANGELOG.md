@@ -1,5 +1,13 @@
 # Changelog
 
+## Relay signal polls accepted posts from anyone who knew the room name (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Both signal polls (`sig:` data-channel poll, `call:` call-signaling poll) skipped only `sender === myId` — every other post was processed. The relay is unauthenticated and the room name is the two sorted user ids, so a third party who knew the pair could fake typing/read indicators, inject ICE candidates, and post a bare `call-end` to drop an active call. Both polls now require `sender === contact.id`.
+
+---
+
 ## /admin mutations applied locally on server rejection (branch devin/consolidate-groups, 2026-09-20)
 
 `index.html`, `locales/*.json`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
