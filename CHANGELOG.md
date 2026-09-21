@@ -1,3 +1,12 @@
+## Delayed self-sync rewound the contact preview (branch devin/selfsync-lastmsg, 2026-09-21)
+
+The selfSync path (a copy of a message I sent from another device) wrote
+target.lastMsg/lastMsgAt unconditionally. Relay redelivery is unordered — a
+sibling's older envelope arriving late overwrote a newer preview that a live
+message had already set, regressing the contact list text and the sort order it
+drives. Both store branches (text + file) now stamp the preview only when
+msg.ts >= the recorded lastMsgAt — same monotonic rule as the incoming path.
+
 ## 1:1 relayed reactions get the same caps the group path already had (branch devin/reaction-caps-1to1, 2026-09-21)
 
 The encrypted `isSignal` reaction handler on the 1:1 path created `reactions[emoji]`
