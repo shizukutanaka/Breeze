@@ -1,5 +1,13 @@
 # Changelog
 
+## Disappear timer was a global — armed in one chat, it fired in the next (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`_disappearTimer` was a single module-level value: arm "5min" in a sensitive conversation, open an unrelated one, and your next message there also vanished — with no way for the recipient to recover it. The timer is now per-conversation, stored as `contact.disappearSec` and restored on conversation open (button label syncs via `_applyTimerBtn`).
+
+---
+
 ## Forwarding into a group silently skipped the target (branch devin/consolidate-groups, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).

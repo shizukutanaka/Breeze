@@ -6706,6 +6706,9 @@ async function initMessenger(dbName) {
     contact.blocked ? _DOM.get('msg-input-bar').classList.add('hidden') : _DOM.get('msg-input-bar').classList.remove('hidden');
     _DOM.get('b-msg-clear')?.classList.remove('hidden');
     _DOM.get('b-msg-timer')?.classList.remove('hidden');
+    // Per-conversation disappear timer — restore this contact's setting on open.
+    _disappearTimer = contact.disappearSec || 0;
+    _applyTimerBtn();
     // Call buttons (1:1 only, not groups)
     contact.isGroup ? _DOM.get('b-msg-call').classList.add('hidden') : _DOM.get('b-msg-call').classList.remove('hidden');
     contact.isGroup ? _DOM.get('b-msg-video').classList.add('hidden') : _DOM.get('b-msg-video').classList.remove('hidden');
@@ -7880,7 +7883,17 @@ async function initMessenger(dbName) {
   }
 
   // ===== Send (unified: 1:1 + group + reply + disappearing) =====
+  // Per-conversation: stored on the contact record. A single global leaked the setting
+  // across chats — arming 5min for one conversation silently armed it for the next too.
   let _disappearTimer = 0;
+  function _applyTimerBtn() {
+    const options = [0, 30, 300, 3600, 86400];
+    const labels = ['Off', '30s', '5min', '1h', '24h'];
+    const i = Math.max(0, options.indexOf(_disappearTimer));
+    const btn = _DOM.get('b-msg-timer'); if (!btn) return;
+    btn.textContent = _disappearTimer === 0 ? '⏱' : labels[i];
+    btn.classList.toggle('i-color-r', _disappearTimer !== 0); btn.classList.toggle('i-color-t3', _disappearTimer === 0);
+  }
 
   let _isSending = false; // v3.3: Double-submit prevention
   async function sendMessage() {
@@ -9204,13 +9217,14 @@ async function initMessenger(dbName) {
   // DISAPPEARING MESSAGES TIMER
   _DOM.get('b-msg-timer')?.addEventListener('click', () => {
     const options = [0, 30, 300, 3600, 86400];
-    const labels = ['Off', '30s', '5min', '1h', '24h'];
     const current = options.indexOf(_disappearTimer);
     const next = (current + 1) % options.length;
     _disappearTimer = options[next];
-    const btn = _DOM.get('b-msg-timer'); if (!btn) return;
-    btn.textContent = _disappearTimer === 0 ? '⏱' : labels[next];
-    btn.classList.toggle('i-color-r', _disappearTimer !== 0); btn.classList.toggle('i-color-t3', _disappearTimer === 0);
+    _applyTimerBtn();
+    if (activeContact && (activeContact.disappearSec || 0) !== _disappearTimer) {
+      activeContact.disappearSec = _disappearTimer || undefined;
+      dbPut('contacts', activeContact).catch(e => _dbg(e, 'disappear-persist'));
+    }
   });
 
   // Disappearing message cleanup: run every 10s
