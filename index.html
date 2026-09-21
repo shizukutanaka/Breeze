@@ -8122,6 +8122,7 @@ async function initMessenger(dbName) {
       const maxSize = CONFIG.FILE_MAX;
       if (file.size > maxSize) { showToast(t('toastMax50MB'), 'error'); return; }
       if (isBlockedFile(file.name)) { showToast(t('toastBlockedFile'), 'error'); return; }
+      if (await isBlockedMagicBytes(file)) { showToast(t('blockedFileType'), 'error'); return; }
       await _sendFile(file);
     });
   })();
@@ -8549,6 +8550,9 @@ async function initMessenger(dbName) {
         if (!file) return;
         const maxSize = CONFIG.FILE_MAX;
         if (file.size > maxSize) { showToast(t('toastMax50MB'), 'error'); return; }
+        // Clipboard lies about MIME often enough that the image/* filter isn't a real gate —
+        // check bytes like every other entry path.
+        if (await isBlockedMagicBytes(file)) { showToast(t('blockedFileType'), 'error'); return; }
         // v3.1: Show preview before sending
         const url = URL.createObjectURL(file);
         const overlay = document.createElement('div');
@@ -10534,6 +10538,7 @@ async function initMessenger(dbName) {
         return;
       }
       if (isBlockedFile(file.name)) { showToast(t('toastBlockedFile'), 'error'); return; }
+      if (await isBlockedMagicBytes(file)) { showToast(t('blockedFileType'), 'error'); return; }
       // Image preview before send
       if (file.type.startsWith('image/')) {
         const url = URL.createObjectURL(file);
