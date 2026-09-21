@@ -1,3 +1,16 @@
+## Signed requests timestamp with correctedNow(), not raw Date.now() (branch devin/corrected-ts-signed-ops, 2026-09-21)
+
+The Worker rejects signed operations whose `ts` drifts >5 min from server time
+(`TIMEOUT_MS.REQ_TS`, the anti-replay window), and the client built
+`_clockOffset`/`correctedNow()` from `/health` exactly to survive skewed device clocks —
+but all 18 signed-op call sites still timestamped with raw `Date.now()`. A device
+>5 min off server time (VM clock skew, manual clock set, timezone-buggy firmware) got
+every authenticated call rejected: owner-auth polls (messages silently stop arriving),
+prekey upload, alias set/delete, presence, backup up/download, device-set, all group
+admin ops, account delete. Pre-health-check calls are unaffected (`_clockOffset` starts
+at 0 → identical to `Date.now()`). Left raw `Date.now()` on the dm-sig seal ts — that
+value is AAD-bound, not worker-verified.
+
 ## Relay-rollback hardening on signed stored state (branch devin/signed-state-monotonic, 2026-09-21)
 
 Every signed-state endpoint checked the signature's freshness (±5min `REQ_TS`) but nothing ordered two *in-window* writes — a relay that captures a signed request can replay it moments after a newer one lands and silently roll the state back. KV has no compare-and-swap, so the stored signed timestamp is now the high-water mark on both write paths:

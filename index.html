@@ -3825,7 +3825,7 @@ async function initMessenger(dbName) {
   // body, or {} when signing is unavailable. The Worker verifies-when-present and
   // requires it by default on the poll/ack/push surfaces (*_REQUIRE_AUTH=false opts out).
   async function _ownerAuth(op, bind = '') {
-    const ts = Date.now();
+    const ts = correctedNow();
     const sig = await signMessage(`breeze-${op}:${myId}:${ts}${bind ? ':' + bind : ''}`);
     return sig ? { ts, sig } : {};
   }
@@ -4529,7 +4529,7 @@ async function initMessenger(dbName) {
         const bundle = await generatePreKeyBundle();
         // ts+sig endorse the upload under OUR Ed key — once a bundle is registered, the
         // Worker requires the incumbent key's signature to overwrite (clobber defense).
-        const upTs = Date.now();
+        const upTs = correctedNow();
         await postAPIRaw('/prekey/upload', { userId: myId, identityKey: pubB64, ...bundle, ts: upTs, sig: await signMessage(`breeze-prekey-upload:${myId}:${upTs}`) });
         _dbg(null, 'PreKeys uploaded: 1 SPK + ' + bundle.oneTimePreKeys.length + ' OTP');
       } catch(e) { _dbg(e, 'prekey-upload'); }
@@ -4542,7 +4542,7 @@ async function initMessenger(dbName) {
       try {
         const powToken = await generatePoW(pubB64 + ':' + alias + ':' + Date.now(), CONFIG.POW_DIFFICULTY);
         const clean = alias.toLowerCase().replace(/[^a-z0-9_]/g, '');
-        const aliasTs = Date.now();
+        const aliasTs = correctedNow();
         const aliasSig = await signMessage(`breeze-alias-set:${clean}:${aliasTs}`);
         const body = { alias, pub: pubB64, name, pow: powToken };
         if (aliasSig) { body.userId = myId; body.ts = aliasTs; body.sig = aliasSig; }
@@ -6592,7 +6592,7 @@ async function initMessenger(dbName) {
           if (c.isGroup && c.joinToken && API) {
             try {
               const isCreator = c.createdBy === myId;
-              const gTs = Date.now();
+              const gTs = correctedNow();
               const gAction = isCreator ? 'delete' : 'leave';
               const gSig = await signMessage(`breeze-group-${gAction}:${c.joinToken}:${myId}:${gTs}:`);
               const gBody = isCreator ? { token: c.joinToken, adminId: myId, ts: gTs } : { token: c.joinToken, memberId: myId, ts: gTs };
@@ -9708,7 +9708,7 @@ async function initMessenger(dbName) {
       if (!expired && !st) return; // network/other error: try again next cycle
       if (expired || st.replenishOTP || st.replenishSPK) {
         const freshBundle = await generatePreKeyBundle();
-        const upTs = Date.now();
+        const upTs = correctedNow();
         const upResp = await postAPIRaw('/prekey/upload', { userId: myId, identityKey: myPubB64, ...freshBundle, ts: upTs, sig: await signMessage(`breeze-prekey-upload:${myId}:${upTs}`) });
         if (!upResp?.ok) { _lastPreKeyCheck = Date.now() - MS.MIN * 4; return; } // retry in ~1 min
         _dbg(null, (expired ? 'PreKey record had EXPIRED — re-registered: ' : 'PreKeys replenished: ') + freshBundle.oneTimePreKeys.length + ' OTPs');
@@ -10908,7 +10908,7 @@ async function initMessenger(dbName) {
         // ts+sig let an operator flip PRESENCE_REQUIRE_AUTH to require proof the
         // heartbeat writer owns this id (default stays off — unsigned builds still
         // heartbeat fine until they upgrade).
-        const presTs = Date.now();
+        const presTs = correctedNow();
         const presSig = await signMessage(`breeze-presence:${myId}:${presTs}`);
         const resp = await postAPIRaw('/presence', { id: myId, pub: myPubB64, name: myName, inst: inst.v, instSig, ts: presTs, sig: presSig });
         const data = resp?.ok ? await resp.json().catch(() => null) : null;
@@ -11483,7 +11483,7 @@ async function initMessenger(dbName) {
       const backup = { s: arr(salt), i: arr(iv), d: arr(new Uint8Array(ct)), v: CONFIG.PROTOCOL_VERSION, iter: CONFIG.PBKDF2_AT_REST_ITERATIONS };
       // Upload. Signs ownership (ts+sig), same convention as group actions — lets an operator enable BACKUP_REQUIRE_AUTH (see wrangler.toml).
       if (API) {
-        const upTs = Date.now();
+        const upTs = correctedNow();
         const upBody = { userId: myId, backup: JSON.stringify(backup), ts: upTs };
         const upSig = await signMessage(`breeze-backup-upload:${myId}:${upTs}`);
         if (upSig) upBody.sig = upSig;
@@ -11507,7 +11507,7 @@ async function initMessenger(dbName) {
     const passphrase = await showPrompt(t('backupPassPrompt'), '', { type: 'password', autocomplete: 'current-password' });
     if (!passphrase) return;
     try {
-      const dlTs = Date.now();
+      const dlTs = correctedNow();
       const dlBody = { userId: myId, ts: dlTs };
       const dlSig = await signMessage(`breeze-backup-download:${myId}:${dlTs}`);
       if (dlSig) dlBody.sig = dlSig;
@@ -12660,7 +12660,7 @@ async function initMessenger(dbName) {
           let renamed = !(API && activeContact.joinToken);
           if (API && activeContact.joinToken) {
             try {
-              const renTs = Date.now();
+              const renTs = correctedNow();
               const renSig = await signMessage(`breeze-group-rename:${activeContact.joinToken}:${myId}:${renTs}:${newName}`);
               const renBody = { token: activeContact.joinToken, adminId: myId, name: newName, ts: renTs };
               if (renSig) renBody.sig = renSig;
@@ -12684,7 +12684,7 @@ async function initMessenger(dbName) {
             let kicked = !(API && activeContact.joinToken); // offline groups: local removal IS the action
             if (API && activeContact.joinToken) {
               try {
-                const kickTs = Date.now();
+                const kickTs = correctedNow();
                 const kickSig = await signMessage(`breeze-group-kick:${activeContact.joinToken}:${myId}:${kickTs}:${member.id}`);
                 const kickBody = { token: activeContact.joinToken, kickId: member.id, adminId: myId, ts: kickTs };
                 if (kickSig) kickBody.sig = kickSig;
@@ -12738,7 +12738,7 @@ async function initMessenger(dbName) {
             let promoted = !(API && activeContact.joinToken);
             if (API && activeContact.joinToken) {
               try {
-                const proTs = Date.now();
+                const proTs = correctedNow();
                 const proSig = await signMessage(`breeze-group-admin:${activeContact.joinToken}:${myId}:${proTs}:promote:${member.id}`);
                 const proBody = { token: activeContact.joinToken, adminId: myId, targetId: member.id, action: 'promote', ts: proTs };
                 if (proSig) proBody.sig = proSig;
@@ -12762,7 +12762,7 @@ async function initMessenger(dbName) {
             let demoted = !(API && activeContact.joinToken);
             if (API && activeContact.joinToken) {
               try {
-                const demTs = Date.now();
+                const demTs = correctedNow();
                 const demSig = await signMessage(`breeze-group-admin:${activeContact.joinToken}:${myId}:${demTs}:demote:${member.id}`);
                 const demBody = { token: activeContact.joinToken, adminId: myId, targetId: member.id, action: 'demote', ts: demTs };
                 if (demSig) demBody.sig = demSig;
@@ -12788,7 +12788,7 @@ async function initMessenger(dbName) {
         let unbanned = !(API && activeContact.joinToken);
         if (API && activeContact.joinToken) {
           try {
-            const unTs = Date.now();
+            const unTs = correctedNow();
             const unSig = await signMessage(`breeze-group-admin:${activeContact.joinToken}:${myId}:${unTs}:unban:${bannedId}`);
             const unBody = { token: activeContact.joinToken, adminId: myId, targetId: bannedId, action: 'unban', ts: unTs };
             if (unSig) unBody.sig = unSig;
@@ -12815,7 +12815,7 @@ async function initMessenger(dbName) {
             let done = false;
             if (API && activeContact.joinToken) {
               try {
-                const trTs = Date.now();
+                const trTs = correctedNow();
                 const trSig = await signMessage(`breeze-group-transfer:${activeContact.joinToken}:${myId}:${trTs}:${member.id}`);
                 const trBody = { token: activeContact.joinToken, adminId: myId, newCreatorId: member.id, ts: trTs };
                 if (trSig) trBody.sig = trSig;
@@ -13349,7 +13349,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         // Requires Ed25519 ownership proof matching the stored edIdentityKey.
         // Best-effort: local wipe proceeds regardless of server response.
         try {
-          const delTs = Date.now();
+          const delTs = correctedNow();
           const delSig = await signMessage(`breeze-account-delete:${myId}:${delTs}`);
           // Hand the relay the two things it CANNOT derive on its own. handleAccountDelete
           // erases everything keyed by userId, but there is no reverse index from a user to
@@ -14252,7 +14252,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         const current = (await _fetchDeviceList(myId, myPubB64)) || [myPubB64];
         if (current.includes(arg)) { showToast(t('devAlready'), 'info'); return; }
         const devices = [...new Set([myPubB64, ...current, arg])].map(p => ({ pub: p, name: p === myPubB64 ? 'primary' : '' }));
-        const ts = Date.now();
+        const ts = correctedNow();
         const digestBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(devices.map(d => d.pub))));
         const digest = Array.from(new Uint8Array(digestBuf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
         const sig = await signMessage(`breeze-device-set:${myId}:${ts}:${digest}`);
@@ -14321,7 +14321,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       if (!await showConfirm(t('devUnlinkConfirm', victim.slice(0, 16) + '…'), { danger: true })) return;
       try {
         const devices = current.filter(p => p !== victim).map(p => ({ pub: p, name: p === myPubB64 ? 'primary' : '' }));
-        const ts = Date.now();
+        const ts = correctedNow();
         const digestBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(devices.map(d => d.pub))));
         const digest = Array.from(new Uint8Array(digestBuf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
         const sig = await signMessage(`breeze-device-set:${myId}:${ts}:${digest}`);
@@ -14351,7 +14351,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
           showToast(t('toastPoW'), 'info');
           const powToken = await generatePoW(myPubB64 + ':' + newAlias + ':' + Date.now(), CONFIG.POW_DIFFICULTY);
           const cleanAlias = newAlias.toLowerCase().replace(/[^a-z0-9_]/g, '');
-          const aTs = Date.now();
+          const aTs = correctedNow();
           const aSig = await signMessage(`breeze-alias-set:${cleanAlias}:${aTs}`);
           const aBody = { alias: newAlias, pub: myPubB64, name: myName, pow: powToken };
           if (aSig) { aBody.userId = myId; aBody.ts = aTs; aBody.sig = aSig; }
@@ -14369,7 +14369,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
             // of the full /wipe. Best-effort — the rename itself already succeeded.
             if (oldAlias && oldAlias !== newAlias) {
               try {
-                const delTs = Date.now();
+                const delTs = correctedNow();
                 const delSig = await signMessage(`breeze-alias-delete:${oldAlias}:${delTs}`);
                 if (delSig) await postAPIRaw('/alias/delete', { alias: oldAlias, userId: myId, ts: delTs, sig: delSig });
               } catch(relErr) { _dbg(relErr, 'alias-release'); }
