@@ -7681,7 +7681,7 @@ async function initMessenger(dbName) {
     }
     // v3.6 SECURITY: ALL persistent signals encrypted before relay
     // Ephemeral (typing, read-receipt) = P2P only, no relay needed
-    const persistentTypes = ['edit', 'delete', 'reaction'];
+    const persistentTypes = ['edit', 'delete', 'reaction', 'poll_vote'];
     if (persistentTypes.includes(data.type)) {
       (async () => {
         try {

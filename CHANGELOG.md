@@ -1,5 +1,13 @@
 # Changelog
 
+## 1:1 poll votes never persisted to the relay — offline peers missed them (branch devin/poll-vote-relay, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`sendSignal`'s 1:1 `persistentTypes` relay list covered edit/delete/reaction but not `poll_vote` — a vote for an offline peer went P2P-only and vanished. Added (the group fan-out list already got it in devin/group-polls; this is the 1:1 parity half).
+
+---
+
 ## /poll in groups was fully dead — encryptFor('') silently dropped every poll (branch devin/group-polls, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
