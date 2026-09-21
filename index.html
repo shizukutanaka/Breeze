@@ -6803,6 +6803,14 @@ async function initMessenger(dbName) {
   window._privacyHideTyping = _privacyHideTyping;
 
   let _replyTo = null; // { msgId, text, sender }
+  // Wire form for replyTo: a JSON string ({i,t,s}) — the Worker's /msg allowlist only
+  // passes replyTo when typeof === 'string', so objects vanished on the relay path.
+  function envelopeReplyTo(rt) {
+    if (!rt) return undefined;
+    // Worker slices replyTo at 128 chars — keep the serialized form under ~120 so the
+    // JSON survives intact (a truncated string would fail to parse and drop anyway).
+    return JSON.stringify({ i: rt.msgId, t: (rt.text || '').slice(0, 50), s: (rt.sender || '').slice(0, 20) });
+  }
 
   function renderMarkdown(text) {
     // v3.6: Markdown table (| col | col | with separator row)
@@ -7858,14 +7866,14 @@ async function initMessenger(dbName) {
             peer.dc.send(JSON.stringify({ v: CONFIG.PROTOCOL_VERSION, type: 'group_msg',
               msgId, payload: groupCiphertext, ts, groupId, groupName: activeContact.name,
               sender: myPubB64, name: myName, isGroupSK: true,
-              replyTo: meta.replyTo, disappearAt: meta.disappearAt }));
+              replyTo: envelopeReplyTo(meta.replyTo), disappearAt: meta.disappearAt }));
           } catch(e) { _dbg(e, 'group-p2p-send'); }
         }
         // Sealed sender relay (ensures delivery even if P2P drops)
         try {
           await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName,
             payload: groupCiphertext, ts, groupId, groupName: activeContact.name,
-            replyTo: meta.replyTo, disappearAt: meta.disappearAt, isGroupSK: true }, m.pubB64);
+            replyTo: envelopeReplyTo(meta.replyTo), disappearAt: meta.disappearAt, isGroupSK: true }, m.pubB64);
         } catch(e) { _dbg(e); }
       }
     } else {
@@ -7893,7 +7901,11 @@ async function initMessenger(dbName) {
         const sig = await signMessage(text);
         if (sig) { envelope.sig = sig; envelope.sigPub = _signingPubB64; }
       }
-      if (meta.replyTo) envelope.replyTo = { text: meta.replyTo.text?.slice(0, 80) };
+      // replyTo must be a JSON STRING on the wire: the Worker's /msg allowlist only
+      // passes replyTo when typeof === 'string' (objects were silently dropped → reply
+      // quotes vanished on the relay fallback path). Include msgId too — without it the
+      // recipient's click-to-jump was dead even when the quote did arrive.
+      if (meta.replyTo) envelope.replyTo = envelopeReplyTo(meta.replyTo);
       if (meta.disappearAt) envelope.disappearAt = meta.disappearAt;
 
       // v3.5 SPEC: Client-side rate limiting
@@ -9397,6 +9409,14 @@ async function initMessenger(dbName) {
     // enforces this via sanitizeString(name, 64); the P2P group path (msg.name || contact.name
     // at line 10109) does not go through the relay, so guard here to keep IDB clean.
     if (typeof msg.fromName === 'string' && msg.fromName.length > 64) msg = { ...msg, fromName: msg.fromName.slice(0, 64) };
+    // Normalize wire replyTo: it arrives as a JSON STRING ({i,t,s}) over the relay
+    // allowlist, or as a {msgId,text} object on the P2P path from older clients.
+    if (typeof msg.replyTo === 'string') {
+      try {
+        const rt = JSON.parse(msg.replyTo);
+        msg = { ...msg, replyTo: (rt && typeof rt === 'object') ? { msgId: rt.i, text: rt.t, sender: rt.s } : undefined };
+      } catch { msg = { ...msg, replyTo: undefined }; }
+    }
     // Cap peer-supplied replyTo fields before IDB storage (display already caps at render time
     // but unbounded writes bloat the messages store; no server-side check on the P2P path).
     if (msg.replyTo && typeof msg.replyTo === 'object') {
