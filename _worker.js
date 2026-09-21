@@ -1142,11 +1142,13 @@ async function handleGroupInfo(body, env, request) {
     }
     await kvPut(env, `grp:${token}`, data, { expirationTtl: TTL.MONTH });
   }
-  // Expose creatorId + admins so clients can render moderation badges and gate the
-  // kick/admin UI to the right members (the server still re-authorizes every action).
+  // Expose creatorId + admins + banned so clients can render moderation badges, gate the
+  // kick/admin UI to the right members, and offer /admin unban (the server still
+  // re-authorizes every action; banned is additive — older clients ignore it).
   return json({
     name: group.name, members: group.members, creatorName: group.creatorName,
     creatorId: group.creatorId, admins: Array.isArray(group.admins) ? group.admins : [],
+    banned: Array.isArray(group.banned) ? group.banned : [],
     epoch: group.epoch | 0, createdAt: group.createdAt,
   }, 200, request);
 }

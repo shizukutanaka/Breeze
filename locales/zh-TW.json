@@ -369,6 +369,8 @@
  "toastGroupKickFail": "移除失敗（伺服器拒絕）",
  "toastGroupDeleteFail": "無法在伺服器上刪除群組（本機已移除）",
  "demotedAdmin": "{0} 已不再是群組管理員",
+ "unbannedMember": "{0} 現在可以重新加入群組",
+ "uiNotBanned": "未被封鎖：{0}",
  "toastNoIdentityBackup": "沒有可備份的身分",
  "toastInvalidBackup": "備份檔案無效",
  "toastMsgTooLong": "訊息太長（上限 64 KB）",

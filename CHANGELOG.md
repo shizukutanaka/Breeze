@@ -1,5 +1,13 @@
 # Changelog
 
+## /admin unban — kicks were permanent bans with no way back (branch devin/consolidate-groups, 2026-09-20)
+
+Kick records a durable ban server-side (banned[] survives rejoin attempts) — but the
+client had NO unban path and /group/info never exposed the ban list, so a kicked
+member could never be readmitted. Now: group/info returns banned, the roster poll
+syncs it to bannedIds, kick records the id+name locally, and /admin unban @name
+(creator-only, signed like promote/demote) lifts the ban so the id can rejoin.
+
 ## Dead config sweep + stale mobile-doc claims (branch devin/consolidate-groups, 2026-09-20)
 
 - **`CONFIG.AT_REST_KEY_WRAP` was dead** — the at-rest key-wrap feature is opt-in per account via `/keywrap` and detects enabled state from the key record's own shape; the CONFIG flag was never read. Removed (comment updated to describe the real mechanism).

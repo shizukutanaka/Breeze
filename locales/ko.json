@@ -369,6 +369,8 @@
  "toastGroupKickFail": "강퇴 실패 (서버 거부)",
  "toastGroupDeleteFail": "서버에서 그룹 삭제 실패 (로컬에서는 제거됨)",
  "demotedAdmin": "{0}은(는) 더 이상 그룹 관리자가 아닙니다",
+ "unbannedMember": "{0} 님이 그룹에 다시 참가할 수 있습니다",
+ "uiNotBanned": "차단되지 않음: {0}",
  "toastNoIdentityBackup": "백업할 신원이 없습니다",
  "toastInvalidBackup": "잘못된 백업 파일",
  "toastMsgTooLong": "메시지가 너무 깁니다 (최대 64 KB)",
