@@ -1129,6 +1129,32 @@ describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {
     expect(res.status).toBe(200);
     expect((await res.json()).epoch).toBe(1);
   });
+
+  // grp:{token} is read-modify-write on a single object: a concurrent join/mutation
+  // that lands after our put erases the new member from the stored roster while the
+  // joiner still gets 200 — "joined" client-side but invisible to every sender.
+  // handleGroupJoin now re-reads and re-appends just the missing member row.
+  it('recovers a member that a concurrent writer clobbered (lost-write recovery)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const key = `grp:${token}`;
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbered = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true; // another mutation wins — the stored roster lacks the joiner
+        await origPut(k, JSON.stringify({ name: 'G', members: [{ id: 'creator1', pub: 'cp' }], epoch: 0 }), o);
+      }
+    };
+    const res = await handleGroupJoin({ token, memberId: 'dave0001', memberPub: 'dave0001dpub', memberName: 'D' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect(clobbered).toBe(true);
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    const ids = info.members.map((m) => m.id);
+    expect(ids).toContain('dave0001');  // recovered
+    expect(ids).toContain('creator1');  // winner's roster preserved
+  });
 });
 
 // Item 64 — durable kick: a kicked member is banned from rejoining via the invite token
@@ -2904,6 +2930,62 @@ describe('msg send / poll (1:1 relay path)', () => {
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe('STORE_FAILED');
   });
+
+  // The inbox queue is the same read-modify-write single-KV-value the sealed queue
+  // patches: two senders to one recipient in the same instant both read the old queue,
+  // one message vanishes, both get 200. handleMsgSend now reads the key back and
+  // re-appends its own entry if missing (kvRecoverAppend).
+  it('recovers a message that a concurrent writer clobbered (lost-write recovery)', async () => {
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
+    const key = 'inbox:racemsg1';
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbered = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true; // the other sender's write lands last and wins — our msg is gone
+        await origPut(k, JSON.stringify([{ from: 'other000', payload: 'OTHER-MSG', ts: Date.now() }]), o);
+      }
+    };
+    const res = await handleMsgSend(
+      { to: 'racemsg1', from: 'alice001', payload: 'MINE-must-survive', ts: Date.now() },
+      ip, env, req({}),
+    );
+    expect(res.status).toBe(200);
+    expect(clobbered).toBe(true); // the race really happened
+    const polled = await (await handleMsgPoll({ id: 'racemsg1' }, env, req({}))).json();
+    const payloads = polled.messages.map((m) => m.payload);
+    expect(payloads).toContain('MINE-must-survive'); // recovered
+    expect(payloads).toContain('OTHER-MSG');          // without evicting the winner
+  });
+
+  it('lost-write recovery on a full inbox skips the re-append rather than evicting', async () => {
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
+    const key = 'inbox:racefull2';
+    for (let i = 0; i < 99; i++) {
+      await handleMsgSend({ to: 'racefull2', from: `fill${String(i).padStart(4, '0')}`, payload: `OLD${i}-${'x'.repeat(40)}`, ts: Date.now() }, ip, env, req({}));
+    }
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbered = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true; // racing writer lands last with a DIFFERENT full queue
+        await origPut(k, JSON.stringify(
+          Array.from({ length: 100 }, (_, i) => ({ from: 'othr', payload: `OTHER${i}`, ts: Date.now() }))), o);
+      }
+    };
+    const res = await handleMsgSend(
+      { to: 'racefull2', from: 'alice001', payload: 'MINE-lost', ts: Date.now() },
+      ip, env, req({}),
+    );
+    expect(res.status).toBe(200);
+    expect(clobbered).toBe(true);
+    const polled = await (await handleMsgPoll({ id: 'racefull2' }, env, req({}))).json();
+    expect(polled.messages.length).toBe(100);                       // nothing evicted
+    expect(polled.messages.every((m) => m.payload.startsWith('OTHER'))).toBe(true);
+    expect(polled.messages.some((m) => m.payload === 'MINE-lost')).toBe(false); // honestly lost
+  });
 });
 
 describe('alias set / get (PoW anti-spam)', () => {
@@ -3456,6 +3538,31 @@ describe('push subscribe — optional Ed25519 ownership auth (item 62)', () => {
       { userId: 'pushusr05', subscription: { endpoint: FCM }, sig: toB64(new Uint8Array(64)) }, makeEnv(), req);
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('PARTIAL_AUTH');
+  });
+
+  // push:{userId} is the same read-modify-write race as the mail queues: two devices
+  // subscribing at once both read the old array, one endpoint vanishes — and that
+  // device silently never gets a notification. handlePushSubscribe recovers its entry
+  // by endpoint identity (kvRecoverAppend).
+  it('recovers a subscription that a concurrent subscribe clobbered (lost-write recovery)', async () => {
+    const env = makeEnv({ PUSH_REQUIRE_AUTH: 'false' });
+    const key = 'push:racepush1';
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbered = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true; // the other device's write lands last — our endpoint is gone
+        await origPut(k, JSON.stringify([{ endpoint: 'https://fcm.googleapis.com/fcm/send/OTHER', keys: { p256dh: 'O', auth: 'O' } }]), o);
+      }
+    };
+    const res = await handlePushSubscribe({ userId: 'racepush1', subscription: { endpoint: 'https://fcm.googleapis.com/fcm/send/MINE' } }, env, req);
+    expect(res.status).toBe(200);
+    expect(clobbered).toBe(true);
+    const subs = JSON.parse(await env.KV.get(key));
+    const endpoints = subs.map((s) => s.endpoint);
+    expect(endpoints).toContain('https://fcm.googleapis.com/fcm/send/MINE');  // recovered
+    expect(endpoints).toContain('https://fcm.googleapis.com/fcm/send/OTHER'); // winner preserved
   });
 });
 
@@ -4142,6 +4249,30 @@ describe('signal relay', () => {
     // After the poll the KV should be cleaned. Carol polls the same room → empty.
     const r2 = await handleSignal({ room: 'testroom-nots', sender: 'carol', type: 'poll' }, '1.2.3.6', e, req({}));
     expect((await r2.json()).messages).toHaveLength(0);
+  });
+
+  // sig:{room} is another read-modify-write KV value: a clobbered call-offer means the
+  // callee never rings (silent call failure). handleSignal recovers its own entry the
+  // same way the mail queues do (kvRecoverAppend).
+  it('recovers a signal that a concurrent writer clobbered (lost-write recovery)', async () => {
+    const e = makeEnv();
+    const key = 'sig:call-room-x';
+    const origPut = e.KV.put.bind(e.KV);
+    let clobbered = false;
+    e.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true; // a racing ICE write lands last — the offer entry is gone
+        await origPut(k, JSON.stringify([{ sender: 'peer', type: 'call-ice', data: 'cand', ts: Date.now() }]), o);
+      }
+    };
+    const res = await handleSignal({ room: 'call-room-x', sender: 'alice001', type: 'call-offer', data: 'SDP-OFFER' }, '1.2.3.4', e, req({}));
+    expect(res.status).toBe(200);
+    expect(clobbered).toBe(true);
+    const polled = await (await handleSignal({ room: 'call-room-x', sender: 'bob00001', type: 'poll' }, '1.2.3.5', e, req({}))).json();
+    const types = polled.messages.map((m) => m.type);
+    expect(types).toContain('call-offer'); // recovered
+    expect(types).toContain('call-ice');   // winner preserved
   });
 });
 

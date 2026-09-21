@@ -386,8 +386,18 @@ async function handleSignal(body, ip, env, request) {
     return new Response(JSON.stringify({ error: 'Signal room full', code: 'QUEUE_FULL', retryAfter: 10 }), {
       status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '10', ...corsHeaders(request) } });
   }
-  signals.push({ sender, type, data, ts: Date.now() });
-  await kvPut(env, `sig:${room}`, JSON.stringify(signals), { expirationTtl: TTL.MIN * 5 });
+  const entry = { sender, type, data, ts: Date.now() };
+  signals.push(entry);
+  const stored = await kvPut(env, `sig:${room}`, JSON.stringify(signals), { expirationTtl: TTL.MIN * 5 });
+  if (!stored) return json({ error: 'Failed to store signal', code: 'STORE_FAILED' }, 500, request);
+
+  // Same lost-write race as the mail queues, and here it costs more than a message: a
+  // clobbered call-offer means the callee never rings; a clobbered ICE candidate means
+  // degraded connectivity that the client cannot distinguish from "no route". Identity
+  // is sender+type+data — a re-append of identical content is a client-visible no-op.
+  await kvRecoverAppend(env, `sig:${room}`, entry,
+    s => s && s.sender === sender && s.type === type && s.data === data,
+    { maxItems: 50, ttl: TTL.MIN * 5 });
 
   return json({ ok: true }, 200, request);
 }
@@ -411,6 +421,43 @@ function capQueueBytes(items, sizeOf, maxBytes = 16 * 1024 * 1024) {
   for (const it of items) total += sizeOf(it);
   while (items.length > 1 && total > maxBytes) total -= sizeOf(items.shift());
   return items;
+}
+
+// Lost-write recovery for read-modify-write KV queues (inbox:, sealed:, sig:).
+// KV is last-write-wins with no transactions: two writers to the SAME key in the same
+// instant both read the old value, one entry disappears — and BOTH writers are answered
+// 200. The silence is the defect: a rare loss you can see is an inconvenience, a rare
+// loss you cannot is a messenger that drops messages. Reading the key back catches the
+// common case for one extra read on the send path (cold next to polling). Deliberately
+// NOT the textbook fix — a key-per-entry layout removes the race outright but replaces
+// one `get` per poll with a `list` plus a `get` per item on the hottest path in a relay
+// that throttles writes to survive the free tier. This is recovery, not exactly-once
+// (SECURITY.md says so plainly), and it cannot make delivery worse: a stale read just
+// skips the re-append, and a duplicate is dropped by the recipient's msgId dedup.
+//
+// Identity is the ENTRY CONTENT, never the timestamp — the racing writer's entry can
+// carry the same millisecond, so matching on ts alone would report "mine is present" in
+// exactly the case this exists to detect. `isMine` must therefore compare the stored
+// item's distinguishing fields (msg.id, envelope bytes, or signal sender+type+data).
+// Recovery also respects the caller's refuse-when-full invariant: re-appending onto a
+// queue the winning writer already filled would evict an accepted entry — the same
+// promise-breaking the send gate exists to stop.
+async function kvRecoverAppend(env, key, entry, isMine, { maxItems, sizeOf = () => 0, maxBytes = Infinity, ttl } = {}) {
+  try {
+    const raw = await kvGet(env, key);
+    const seen = raw ? safeJsonParse(raw, []) : [];
+    if (!Array.isArray(seen) || seen.some(isMine)) return;
+    let seenBytes = 0;
+    for (const m of seen) seenBytes += sizeOf(m);
+    if (seen.length >= maxItems || seenBytes + sizeOf(entry) > maxBytes) return;
+    seen.push(entry);
+    await kvPut(env, key, JSON.stringify(seen), { expirationTtl: ttl });
+  } catch (e) {
+    // Recovery is best-effort: a failed verify-write must not fail the send — the entry
+    // may well have landed (the put already returned true), and a 500 here would tell the
+    // client to retry a message that is already queued.
+    console.error('[kvRecoverAppend]', key, e?.message || e);
+  }
 }
 
 async function handleMsgSend(body, ip, env, request) {
@@ -529,6 +576,14 @@ async function handleMsgSend(body, ip, env, request) {
     globalThis._msgDedup.delete(dedupKey);
     return json({ error: 'Failed to store message', code: 'STORE_FAILED' }, 500, request);
   }
+
+  // Lost-write recovery — same read-modify-write race the sealed queue patches. Two
+  // senders to the same recipient in the same instant: one message silently disappears
+  // with both senders told 200. Identity is msg.id (server-assigned, unique per write)
+  // with a payload+from fallback — a same-ciphertext entry already queued IS delivered.
+  await kvRecoverAppend(env, key, msg,
+    m => m && (m.id === msg.id || (m.from === from && m.payload === payload)),
+    { maxItems: 100, sizeOf: m => (typeof m.payload === 'string' ? m.payload.length : 0) + 1024, maxBytes: 16 * 1024 * 1024, ttl: TTL.WEEK });
 
   // Trigger Web Push notification (non-blocking)
   // Cap push title to match the stored msg.groupName limit (50 chars) — prevents
@@ -1164,6 +1219,24 @@ async function handleGroupJoin(body, env, request) {
   const joined = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
   if (!joined) return json({ error: 'Failed to join group', code: 'STORE_FAILED' }, 500, request);
 
+  // Lost-write recovery — same KV last-write-wins race as the mail queues (see
+  // kvRecoverAppend), worse here: a concurrent join/mutation that lands after our put
+  // erases this member from the stored roster, but the joiner was answered 200 with a
+  // members list containing themselves — they render "joined" while invisible to every
+  // sender fanning out to group.members. grp: is a single object, not an append queue,
+  // so this re-reads and re-appends just the member row, preserving the winner's
+  // concurrent field changes. Honour the same 100-member cap as the join gate.
+  try {
+    const verifyRaw = await kvGet(env, `grp:${token}`);
+    const seen = verifyRaw ? safeJsonParse(verifyRaw, null) : null;
+    if (seen && Array.isArray(seen.members)
+        && !seen.members.some(m => m && m.id === memberId)
+        && seen.members.length < 100) {
+      seen.members.push(memberRecord);
+      await kvPut(env, `grp:${token}`, JSON.stringify(seen), { expirationTtl: TTL.MONTH });
+    }
+  } catch (e) { console.error('[grp-join-recover]', e?.message || e); }
+
   return json({ ok: true, name: group.name, members: group.members, epoch: group.epoch | 0 }, 200, request);
 }
 
@@ -1712,6 +1785,13 @@ async function handlePushSubscribe(body, env, request) {
   if (subs.length > 5) subs = subs.slice(-5);
   const stored = await kvPut(env, key, JSON.stringify(subs), { expirationTtl: TTL.MONTH });
   if (!stored) return json({ error: 'Failed to store subscription', code: 'STORE_FAILED' }, 500, request);
+  // Lost-write recovery (kvRecoverAppend): two devices subscribing to the same account
+  // race the same push:{id} array — the loser's endpoint is silently absent and that
+  // device simply never gets notifications. Identity is the endpoint, which this
+  // handler already dedups on; the 5-device cap is the same policy as the write above.
+  await kvRecoverAppend(env, key, safeSub,
+    s => s && s.endpoint === safeSub.endpoint,
+    { maxItems: 5, ttl: TTL.MONTH });
   return json({ ok: true, devices: subs.length }, 200, request);
 }
 
@@ -2552,41 +2632,13 @@ async function handleSealedSend(body, env, request) {
     globalThis._sealedDedup.delete(dedupKey);
     return json({ error: 'Failed to store sealed message', code: 'STORE_FAILED' }, 500, request);
   }
-  // Lost-write recovery. `sealed:{to}` is one KV value mutated read-modify-write, and KV is
-  // last-write-wins with no transactions: two senders writing to the SAME recipient in the same
-  // instant both read the old queue, one envelope disappears — and BOTH senders are answered
-  // 200. The silence is the defect, not the race: a rare loss you can see is an inconvenience,
-  // a rare loss you cannot is a messenger that drops messages.
-  //
-  // Reading the key back catches the common case for ONE extra read on the SEND path, which is
-  // cold next to polling (every 3 s per user). Deliberately NOT the textbook fix — splitting
-  // the queue into a key per envelope removes the race outright, but replaces one `get` per
-  // poll with a `list` plus a `get` per message on the hottest path in a relay that already
-  // throttles presence writes to survive the free tier's 1000 writes/day. This is recovery,
-  // not exactly-once (SECURITY.md says so plainly), and it cannot make delivery worse: a stale
-  // read just skips the retry, and a duplicate re-append is dropped by the recipient's msgId
-  // dedup.
-  //
-  // Identity is the ENVELOPE, not the timestamp. Matching on ts alone looked cheaper and was
-  // wrong: the racing writer's entry can carry the same millisecond, so the check would report
-  // "mine is present" in exactly the case it exists to detect. The length test short-circuits
-  // the string compare for the common case. (Caught by the deterministic race test, which is
-  // the point of writing one.)
-  const verifyRaw = await kvGet(env, key);
-  const seen = verifyRaw ? safeJsonParse(verifyRaw, []) : [];
-  const mine = (m) => m && typeof m.envelope === 'string'
-    && m.envelope.length === envelope.length && m.envelope === envelope;
-  // Recovery respects the refuse-when-full invariant too: if the winning write already
-  // filled the queue, re-appending would evict another accepted envelope — the same
-  // promise-breaking this handler's gate exists to stop. Under capacity the re-append
-  // can't overflow (same bounds the send gate enforces), so no trim is needed.
-  let seenBytes = 0;
-  if (Array.isArray(seen)) for (const m of seen) seenBytes += (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128;
-  if (Array.isArray(seen) && !seen.some(mine)
-      && seen.length < 100 && seenBytes + envelope.length + 128 <= 16 * 1024 * 1024) {
-    seen.push({ envelope, ts: newTs });
-    await kvPut(env, key, JSON.stringify(seen), { expirationTtl: TTL.WEEK });
-  }
+  // Lost-write recovery via the shared helper (see kvRecoverAppend). Identity is the
+  // ENVELOPE bytes — the racing writer's entry can carry the same millisecond, so
+  // matching on ts would report "present" in exactly the case this exists to detect.
+  // The length test short-circuits the string compare for the common case.
+  await kvRecoverAppend(env, key, { envelope, ts: newTs },
+    m => m && typeof m.envelope === 'string' && m.envelope.length === envelope.length && m.envelope === envelope,
+    { maxItems: 100, sizeOf: m => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128, maxBytes: 16 * 1024 * 1024, ttl: TTL.WEEK });
   sendPushToUser(to, { title: 'Breeze', body: 'New message', tag: 'breeze-sealed', contactId: await sha256Short(to) }, env).catch(() => {});
   return json({ ok: true, ack: Date.now() }, 200, request);
 }

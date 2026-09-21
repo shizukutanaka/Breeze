@@ -1,3 +1,16 @@
+## Lost-write recovery extended to every remaining shared KV queue (branch devin/worker-lost-write-recovery, 2026-09-21)
+
+The sealed queue already patched KV's last-write-wins race (read-back + conditional re-append), but the same read-modify-write defect sat unpatched on every other shared key — and at least two of them lose louder than a chat message. New shared `kvRecoverAppend` helper (content-identity match, caller's refuse-when-full bounds, best-effort so a verify failure never flips a stored send to 500) now covers:
+
+- **`inbox:{to}`** (`handleMsgSend`) — a clobbered send was a silently-dropped message on the plain relay path (still used by legacy peers and all flag types). Identity: server-assigned `msg.id` with a `from`+`payload` fallback.
+- **`sig:{room}`** (`handleSignal`) — a clobbered `call-offer` means the callee never rings; a clobbered ICE candidate degrades connectivity invisibly. This also covers the poll-side trim clobbering a fresh append — the sender's own verify catches either loser. Identity: sender+type+data.
+- **`push:{userId}`** (`handlePushSubscribe`) — two devices subscribing at once: the loser's endpoint vanishes and that device just never gets notified. Identity: endpoint; 5-device cap preserved.
+- **`grp:{token}`** (`handleGroupJoin`) — object-shaped rather than an append queue, so it gets an inline variant: a clobbered join answers 200 with a roster that evaporates server-side — the joiner looks joined but is invisible to every sender fanning out to `group.members`. Re-reads and re-appends only the member row, preserving the winner's other field changes; 100-member cap preserved.
+
+`handleSealedSend`'s inline recovery is refactored onto the helper unchanged (tests still pin it); its incidental improvement: a throwing verify-read no longer surfaces as a fake STORE_FAILED. The remaining `grp:` mutations (kick/admin/leave/rename/transfer) share the race at lower stakes — the admin sees the unchanged roster on refresh and retries; documented but intentionally out of scope.
+
+Tests: deterministic clobber tests for `handleMsgSend` (recovery + full-queue skip), `handleSignal`, `handleGroupJoin`, `handlePushSubscribe` — the same KV.put-wrapping pattern the sealed tests established.
+
 ## Roster member id↔key binding enforced client-side (branch devin/consolidate-groups, 2026-09-20)
 
 `safeMemberList` accepted a member's `id` and `pubB64` without checking they correspond. The server binds them at join (`memberPub.startsWith(memberId)`), but `/group/info` is relay-controlled — a hostile relay could keep a member's id and swap in an attacker's key, silently MITMing sends to that member (invisible, unlike a fake member which shows in the roster). `safeMemberList` now drops any member whose `pub`/`pubB64` does not start with their `id`.
