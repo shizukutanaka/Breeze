@@ -1,5 +1,11 @@
 # Changelog
 
+## Packaged desktop app crashed at launch — missing require()d modules (branch devin/consolidate-groups, 2026-09-20)
+
+- **`desktop/package.json` `files` whitelisted `main.js`/`preload.js`/icons only** — but `main.js` does top-level `require('./nav-guard')` and `require('./csp-guard')`, and electron-builder's `files` array REPLACES the default `**/*` glob (verified in docs: the default is not merged when a non-negation pattern is present). Both helpers were omitted from every packaged build → `MODULE_NOT_FOUND` at startup → dead on arrival. Changed to `"*.js"` so all top-level modules (and future ones) ship.
+
+---
+
 ## Tauri Quit was a dead menu item (branch devin/consolidate-groups, 2026-09-20)
 
 - **`RunEvent::ExitRequested` was unconditionally vetoed** — `api.prevent_exit()` ran for every exit request, including the tray Quit menu's own `app.exit(0)`: the Quit item emitted ExitRequested, which the handler immediately cancelled, so it did nothing. macOS Cmd+Q and OS-level quit requests were swallowed the same way. The hide-to-tray behavior already lives in `WindowEvent::CloseRequested`; the unconditional veto had no purpose. Removed.
