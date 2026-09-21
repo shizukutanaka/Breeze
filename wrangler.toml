@@ -66,5 +66,5 @@ id = ""  # ← REQUIRED: paste your KV namespace ID here
 # wrangler pages secret put ALIAS_REQUIRE_AUTH         # true — reject unsigned @alias registration
 # wrangler pages secret put GROUP_REQUIRE_AUTH         # false — opt OUT; group mutations are signed by default
 # wrangler pages secret put PUSH_REQUIRE_AUTH          # false — opt OUT; push subscribe/unsubscribe signed by default
-# wrangler pages secret put TURN_REQUIRE_AUTH          # false — opt OUT; configured TURN providers default to registered-only
+# wrangler pages secret put TURN_REQUIRE_AUTH          # false — opt OUT; configured TURN providers default to signed-only
 # wrangler pages secret put BACKUP_REQUIRE_AUTH        # false — opt OUT; signed download/overwrite required by default

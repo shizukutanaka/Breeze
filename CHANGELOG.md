@@ -1,3 +1,7 @@
+## Configured TURN mint requires the caller's signature (not just a known id) (branch devin/consolidate-groups, 2026-09-20)
+
+The registration gate on `/api/turn` was one step short: "userId has a prekey bundle" is public knowledge, so any caller holding one registered id could still mint $0.05/GB Cloudflare Calls credentials. A configured provider now verifies `breeze-turn:{id}:{ts}` against `prekey:{id}.edIdentityKey` by default (uniform 403 — no registration oracle); the client signs via `_ownerAuth('turn')`. `=false` opts out, `=true` still gates the openrelay path explicitly. The api-contract gate now treats `*_REQUIRE_AUTH !== 'false'` handlers as requiring `{ts, sig}` in static call bodies — it caught this very callsite.
+
 ## Packaged apps could never reach the relay — API/share links bound to a dead origin (branch devin/consolidate-groups, 2026-09-20)
 
 `const API = location.origin + '/api'` resolves to `file:///api` on packaged Electron (loadFile), `https://app.breeze.local/api` on Capacitor, and `tauri.localhost/api` on Tauri — none of which serve the worker, so every API call 404'd and a packaged app could not onboard, fetch prekeys, or send a single message. Same for share links: invite/add/drop URLs built on `location.origin` produced `file:///…?join=` links a web recipient cannot open. New `PACKAGED_API_ORIGIN` + `SHARE_BASE` constants (default `https://breeze.pages.dev`) now serve both; `BREEZE_URL` remote-mode Electron and dev servers are untouched, and self-hosters repoint one constant before packaging.

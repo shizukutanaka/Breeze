@@ -97,6 +97,12 @@ async function pA(env, action, userId, bindOrSub = '') {
   const ts = Date.now();
   return { ts, sig: await _edSign(k, `breeze-push-${action}:${userId}:${ts}:${bind}`) };
 }
+// Configured TURN providers require a signature by default: `breeze-turn:{uid}:{ts}`.
+async function tA(env, userId) {
+  const k = await _pinEd(env, userId);
+  const ts = Date.now();
+  return { ts, sig: await _edSign(k, `breeze-turn:${userId}:${ts}`) };
+}
 
 // The worker uses several in-memory globals; reset all between tests so they
 // don't bleed across test cases.
@@ -4531,8 +4537,7 @@ describe('TURN credentials', () => {
 
   it('uses HMAC custom TURN when TURN_SECRET + TURN_URL are set', async () => {
     const e = { ...makeEnv(), TURN_SECRET: 'supersecret', TURN_URL: 'turn:turn.example.com:3478' };
-    await e.KV.put('prekey:user00001', JSON.stringify({ spkPub: 'x' })); // configured provider → registered-only by default
-    const res = await handleTurn({ userId: 'user00001' }, e, req({}));
+    const res = await handleTurn({ userId: 'user00001', ...(await tA(e, 'user00001')) }, e, req({}));
     expect(res.status).toBe(200);
     const j = await res.json();
     expect(j.provider).toBe('custom');
@@ -4552,8 +4557,7 @@ describe('TURN credentials', () => {
       TURN_USERNAME:   'staticuser',
       TURN_CREDENTIAL: 'staticpass',
     };
-    await e.KV.put('prekey:user00001', JSON.stringify({ spkPub: 'x' }));
-    const res = await handleTurn({ userId: 'user00001' }, e, req({}));
+    const res = await handleTurn({ userId: 'user00001', ...(await tA(e, 'user00001')) }, e, req({}));
     expect(res.status).toBe(200);
     const j = await res.json();
     expect(j.provider).toBe('static');
@@ -4573,8 +4577,7 @@ describe('TURN credentials', () => {
 
   it('derives a self-hosted stun: entry from a plain turn: TURN_URL (coturn dual-role)', async () => {
     const e = { ...makeEnv(), TURN_SECRET: 'supersecret', TURN_URL: 'turn:turn.example.com:3478' };
-    await e.KV.put('prekey:user00001', JSON.stringify({ spkPub: 'x' }));
-    const res = await handleTurn({ userId: 'user00001' }, e, req({}));
+    const res = await handleTurn({ userId: 'user00001', ...(await tA(e, 'user00001')) }, e, req({}));
     const j = await res.json();
     expect(j.iceServers.some(s => s.urls === 'stun:turn.example.com:3478')).toBe(true);
     // and the public STUN list is still there (STUN_URL not set)
@@ -4583,34 +4586,35 @@ describe('TURN credentials', () => {
 
   it('does NOT derive stun from turns: or strip-transport weirdly (TLS listener is not plain STUN)', async () => {
     const e = { ...makeEnv(), TURN_URL: 'turns:t.example.com:443?transport=tcp', TURN_USERNAME: 'u', TURN_CREDENTIAL: 'c' };
-    await e.KV.put('prekey:user00001', JSON.stringify({ spkPub: 'x' }));
-    const res = await handleTurn({ userId: 'user00001' }, e, req({}));
+    const res = await handleTurn({ userId: 'user00001', ...(await tA(e, 'user00001')) }, e, req({}));
     const j = await res.json();
     expect(j.iceServers.some(s => typeof s.urls === 'string' && s.urls.includes('t.example.com') && s.urls.startsWith('stun:'))).toBe(false);
   });
 
-  it('TURN_REQUIRE_AUTH: rejects unregistered userId (no prekey)', async () => {
+  it('TURN_REQUIRE_AUTH=true: rejects an unsigned call (uniform 403 — no registration oracle)', async () => {
     const e = makeEnv({ TURN_REQUIRE_AUTH: 'true' });
     const res = await handleTurn({ userId: 'unreg00001' }, e, req({}));
-    expect(res.status).toBe(401);
-    expect((await res.json()).code).toBe('UNREGISTERED');
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
   });
 
-  it('TURN_REQUIRE_AUTH: allows registered userId (prekey in KV)', async () => {
+  it('TURN_REQUIRE_AUTH=true: allows a signed call even on the openrelay path', async () => {
     const e = makeEnv({ TURN_REQUIRE_AUTH: 'true' });
-    await e.KV.put('prekey:reguser0001', JSON.stringify({ spkPub: 'x' }));
-    const res = await handleTurn({ userId: 'reguser0001' }, e, req({}));
+    const res = await handleTurn({ userId: 'reguser0001', ...(await tA(e, 'reguser0001')) }, e, req({}));
     expect(res.status).toBe(200);
     expect((await res.json()).provider).toBe('openrelay');
   });
 
-  it('a CONFIGURED TURN provider gates minting to registered users by default', async () => {
+  it('a CONFIGURED TURN provider requires a signature by default', async () => {
     // Paid/private creds behind an open mint = quota drain. The openrelay fallback
     // stays open — its credentials are public in _worker.js anyway.
     const e = { ...makeEnv(), TURN_URL: 'turn:x.example.com:3478', TURN_USERNAME: 'u', TURN_CREDENTIAL: 'c' };
     const res = await handleTurn({ userId: 'unreg00001' }, e, req({}));
-    expect(res.status).toBe(401);
-    expect((await res.json()).code).toBe('UNREGISTERED');
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
+    // and a signed call from a registered user succeeds
+    const res2 = await handleTurn({ userId: 'reguser0001', ...(await tA(e, 'reguser0001')) }, e, req({}));
+    expect(res2.status).toBe(200);
   });
 
   it('TURN_REQUIRE_AUTH=false opts a configured provider back out', async () => {
