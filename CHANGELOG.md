@@ -1,3 +1,14 @@
+## Retry queue preserves the sealed envelope, ack status, and conversation (branch devin/retry-seal-wire, 2026-09-21)
+
+Queued retries sent `item.payload` — the pre-seal envelope — straight through
+`/sealed/send`, so every retried message exposed plaintext sender metadata that the
+original send had sealed v2 (worst exactly where retries cluster: flaky networks).
+The queue also dropped `sealPub`/`convId` and never read the `ack`, leaving the bubble
+stuck on "sent" after delivery. `_sealWire()` is now a shared helper; queued items
+carry `sealPub`/`convId`; retries rebuild the sealed wire and stamp `delivered` on the
+owning conversation (group sends no longer ack onto the member's DM). Stacked on
+devin/retry-fallback-drop — edits the same retry block.
+
 ## Retry-queue fallback no longer drops a message on a non-OK relay response (branch devin/retry-fallback-drop, 2026-09-21)
 
 `scheduleRetry` tried `/sealed/send` first (checking `resp.ok`), then fell back to
