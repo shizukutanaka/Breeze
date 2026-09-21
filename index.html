@@ -12866,7 +12866,7 @@ async function initMessenger(dbName) {
       if (schedCount >= 20) { showToast(t('toastScheduleMax'), 'error'); return; }
       // Cap stored text to 64 KB — sendMessage() enforces this at send time, but the IDB
       // write happens earlier and an unbound value bloats the identity store on startup load.
-      await dbPut('identity', { id: schedId, contactId: contact.id, text: text.slice(0, 65536), sendAt });
+      await dbPut('identity', { id: schedId, contactId: contact.id, text: text.slice(0, 65536), sendAt }, schedId);
       const timeStr = delayMs < MS.MIN ? Math.round(delayMs/MS.SEC) + 's' : delayMs < MS.HOUR ? Math.round(delayMs/MS.MIN) + 'm' : Math.round(delayMs/MS.HOUR) + 'h';
       showToast(t('toastScheduled', timeStr, text.slice(0, 30)), 'success');
       // Set timer — registered in _intervals so account switch cancels it (same as the

@@ -1,5 +1,15 @@
 # Changelog
 
+## /schedule never persisted — the IDB write was always rejected (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The `identity` object store has no keyPath (out-of-line keys required), but the `/schedule` write omitted the key argument: `dbPut('identity', {…})` with no third arg throws DataError, `dbPut` swallows it to `false`, and the caller never checks. Result: the "Scheduled" toast lied — every scheduled message lived only in the in-memory timer, died on reload, and the whole recovery loop at startup was dead code (`dbGetAll` never found a `sched:` row to begin with). Fixed by passing `schedId` as the key; `/schedule list` and past-due recovery now have records to read.
+
+Also in this batch: `restoreBackup` read `file.text()` uncapped before decrypt and validated `pubB64` with a regex instead of `_isValidPubB64` (a wrong-length key planted a dead contact); `/contacts import` had no file or entry cap; `/import` advertised `.zip` with no parser.
+
+---
+
 ## /import advertised .zip with no zip support (branch devin/consolidate-groups, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
