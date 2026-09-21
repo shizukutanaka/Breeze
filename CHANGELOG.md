@@ -1,5 +1,13 @@
 # Changelog
 
+## /import advertised .zip with no zip support (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The picker accepted `.zip` but `importChat` has no zip parser — every zip fell through to "no messages found". Dropped the extension from the accept list (adding a zip decoder would violate the zero-runtime-deps rule).
+
+---
+
 ## /contacts import had no file-size or entry-count caps (branch devin/consolidate-groups, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).

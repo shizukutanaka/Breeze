@@ -12645,7 +12645,7 @@ async function initMessenger(dbName) {
     if (val === '/import') {
       e.preventDefault(); clearInput();
       const input = document.createElement('input');
-      input.type = 'file'; input.accept = '.txt,.json,.zip';
+      input.type = 'file'; input.accept = '.txt,.json';
       input.onchange = async (ev) => { if (ev.target.files[0]) await importChat(ev.target.files[0]); };
       input.click();
       return;
