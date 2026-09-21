@@ -387,7 +387,11 @@ async function handleSignal(body, ip, env, request) {
       status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '10', ...corsHeaders(request) } });
   }
   signals.push({ sender, type, data, ts: Date.now() });
-  await kvPut(env, `sig:${room}`, JSON.stringify(signals), { expirationTtl: TTL.MIN * 5 });
+  // A failed write must not return ok — the caller would believe a call offer / ICE
+  // candidate / dm-sig frame was stored when it vanished (same class the mail queues
+  // already return 500 for; the client's retry only fires on a non-OK response).
+  const sigStored = await kvPut(env, `sig:${room}`, JSON.stringify(signals), { expirationTtl: TTL.MIN * 5 });
+  if (!sigStored) return json({ error: 'Failed to store signal', code: 'STORE_FAILED' }, 500, request);
 
   return json({ ok: true }, 200, request);
 }

@@ -1,3 +1,11 @@
+## /signal reports store failure instead of ok-on-loss (branch devin/signal-store-fail, 2026-09-21)
+
+handleSignal's store path ignored kvPut's result — a transient KV failure still
+returned {ok:true}, so a call offer, answer, ICE candidate, or dm-sig frame that
+was never stored reported success; the caller's retry logic (which only fires on
+non-OK) never ran and the handshake silently died. Now returns 500 STORE_FAILED
+matching the /msg and /sealed send paths.
+
 ## 1:1 relayed reactions get the same caps the group path already had (branch devin/reaction-caps-1to1, 2026-09-21)
 
 The encrypted `isSignal` reaction handler on the 1:1 path created `reactions[emoji]`
