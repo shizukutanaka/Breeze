@@ -1,3 +1,15 @@
+## /drop secrets above ~48KB always failed; CJK secrets up to 3x the server cap (branch devin/drop-large-secret, 2026-09-21)
+
+Two independent reasons large drops could never be created:
+- `btoa(String.fromCharCode(...combined))` spread the whole ciphertext as function
+  args — >~65k args is a RangeError on WebKit/mobile (and ~50k+ on some engines), so
+  secrets above ~48KB always hit the generic dropFailed toast. Now uses the existing
+  chunked `bufToB64` helper (built for exactly this).
+- The client gate counted UTF-16 chars (`secret.length > 50000`) while the Worker caps
+  the base64 `ct` string at 100K (~75KB raw). A 40k-char CJK secret (~120KB raw) passed
+  the local check then got rejected server-side every time. Now encodes once and gates
+  on `encoded.length > 74000`, which also feeds the encryption input.
+
 ## Relay-rollback hardening on signed stored state (branch devin/signed-state-monotonic, 2026-09-21)
 
 Every signed-state endpoint checked the signature's freshness (±5min `REQ_TS`) but nothing ordered two *in-window* writes — a relay that captures a signed request can replay it moments after a newer one lands and silently roll the state back. KV has no compare-and-swap, so the stored signed timestamp is now the high-water mark on both write paths:

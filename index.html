@@ -13429,7 +13429,10 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       e.preventDefault(); clearInput();
       const secret = val.slice(6).trim();
       if (!secret) { showToast(t('dropUsage'), 'info'); return; }
-      if (secret.length > 50000) { showToast(t('dropTooLong'), 'error'); return; }
+      // The Worker's cap is on the base64 ct string (100K chars ≈ 75KB raw), but this
+      // check counted UTF-16 chars — CJK secrets passed locally then failed server-side.
+      const encBytes = new TextEncoder().encode(secret);
+      if (encBytes.length > 74000) { showToast(t('dropTooLong'), 'error'); return; }
       showToast(t('dropCreating'), 'info');
       try {
         // Generate random encryption key + ID
@@ -13439,14 +13442,16 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         const dropId = Array.from(idBytes).map(b => b.toString(36).padStart(2, '0')).join('').slice(0, 24);
         // Encrypt secret client-side
         const aesKey = await crypto.subtle.importKey('raw', keyBytes, 'AES-GCM', false, ['encrypt']);
-        const encoded = new TextEncoder().encode(secret);
+        const encoded = encBytes;
         const ctBuf = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, aesKey, encoded);
         // Combine iv + ciphertext → base64
         const combined = new Uint8Array(iv.length + ctBuf.byteLength);
         combined.set(iv); combined.set(new Uint8Array(ctBuf), iv.length);
-        const ctB64 = btoa(String.fromCharCode(...combined));
+        // bufToB64, not spread-fromCharCode: secrets up to the 50k-char cap encode to
+        // ~50-200KB — a >65k-arg function spread throws RangeError on WebKit/mobile.
+        const ctB64 = bufToB64(combined);
         // Key → URL fragment (never sent to server)
-        const keyB64 = btoa(String.fromCharCode(...keyBytes));
+        const keyB64 = bufToB64(keyBytes);
         // Store ciphertext on server (server never sees the key)
         const resp = await postAPIRaw('/drop/create', { id: dropId, ct: ctB64, ttl: 86400 });
         if (!resp.ok) throw new Error('Server error');
