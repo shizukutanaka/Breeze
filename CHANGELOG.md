@@ -1,5 +1,13 @@
 # Changelog
 
+## Chat import dedup key collided across conversations (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `tests/invariants.test.js`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The deterministic dedup key `'import:' + ts + ':' + mine + ':' + i` disambiguated messages *within* one export — but the same file imported into a second conversation produced identical keys, so every row dedup-skipped against the first import and the second chat silently got nothing. The key now binds to the conversation (`contact.id`); the in-file uniqueness properties are unchanged. Tripwire updated to pin the bound format.
+
+---
+
 ## openConversation race — a stale async render overwrote the newer chat's view (branch devin/consolidate-groups, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).

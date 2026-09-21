@@ -83,8 +83,10 @@ describe('wire + storage invariants', () => {
     expect(html).toContain('envelopeReplyTo(meta.replyTo)');
     expect(html).toContain("if (typeof msg.replyTo === 'string')");
   });
-  it('chat import dedup key is unique per message (minute-precision ts collides)', () => {
-    expect(html).toContain("'import:' + m.ts + ':' + (isMine ? '1' : '0') + ':' + i");
+  it('chat import dedup key is unique per message AND bound to the conversation', () => {
+    // minute-precision ts + index disambiguates within one file; contact.id prevents a
+    // second import of the same export into a different chat colliding with the first.
+    expect(html).toContain("'import:' + contact.id + ':' + m.ts + ':' + (isMine ? '1' : '0') + ':' + i");
   });
   it('scheduled sends restore the composer input (no draft clobber)', () => {
     expect(html.match(/savedInput = _DOM\.get\('msg-input'\)\.value/g)?.length).toBe(3);

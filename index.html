@@ -12079,8 +12079,9 @@ async function initMessenger(dbName) {
         const isMine = myNames.some(n => m.sender.toLowerCase().includes(n));
         // ts is only minute-precise (LINE/WhatsApp) — several messages can share
         // ts+mine; the index keeps them distinct. Deterministic, so re-importing
-        // the same file still dedups.
-        const msgId = 'import:' + m.ts + ':' + (isMine ? '1' : '0') + ':' + i;
+        // the same file still dedups. Bound to this conversation: the same export
+        // imported into a different chat must not collide with the first import.
+        const msgId = 'import:' + contact.id + ':' + m.ts + ':' + (isMine ? '1' : '0') + ':' + i;
         const existing = await dbGet('messages', msgId);
         if (existing) continue;
         await dbPut('messages', {
