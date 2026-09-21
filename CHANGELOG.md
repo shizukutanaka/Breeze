@@ -1,5 +1,13 @@
 # Changelog
 
+## Group typing/read receipts leaked signals to a phantom dm: room (branch devin/group-phantom-signals, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Typing indicators and read receipts posted `_signal(_dmRoom(contact.id))` for every conversation — including groups, whose `dm:myId:g_x` room nobody polls. Every keystroke and open in a group logged a relay signal linking my id to the group id — metadata noise serving nobody. Relay signals now skip group contacts (P2P typing for groups was already a natural no-op: `peers['']`).
+
+---
+
 ## Account delete requested the IDB drop before closing the open connection (branch devin/account-delete-order, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).

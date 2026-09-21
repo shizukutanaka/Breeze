@@ -6810,7 +6810,9 @@ async function initMessenger(dbName) {
           const rsc = peer.stateDC?.readyState === 'open' ? peer.stateDC : peer.dc;
           rsc.send(JSON.stringify({ type: 'read', sender: myId, ts: Date.now() }));
         }
-        if (API) {
+        // Group contacts have no meaningful read-receipt target — the dm: room
+        // for a group id is a phantom room nobody polls, pure metadata noise.
+        if (API && !snap.isGroup) {
           _signal(_dmRoom(snap.id), 'read', String(Date.now()));
         }
       };
@@ -11179,7 +11181,7 @@ async function initMessenger(dbName) {
       const sc = peer.stateDC?.readyState === 'open' ? peer.stateDC : peer.dc;
       sc.send(JSON.stringify({ type: 'typing', sender: myId, senderName: myName }));
     }
-    if (API) {
+    if (API && !activeContact.isGroup) {
       _signal(_dmRoom(activeContact.id), 'typing');
     }
   });
