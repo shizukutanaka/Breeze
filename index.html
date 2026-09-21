@@ -7366,40 +7366,42 @@ async function initMessenger(dbName) {
   async function createPoll(question, options) {
     try {  
       if (!activeContact) return;
+      // Snapshot before any await — same TOCTOU class as sendMessage.
+      const contact = activeContact;
       const pollId = myId + ':poll:' + Date.now();
       const pollData = { type: 'poll', pollId, question, options: options.map(o => ({ text: o, votes: [] })), creator: myId };
       const ts = correctedNow();
       const msgId = genMsgId();
-      await dbPut('messages', { msgId, contactId: activeContact.id, text: JSON.stringify(pollData), mine: true, ts, isPoll: true });
-      activeContact.lastMsg = '📊 ' + question.slice(0, 30);
-      activeContact.lastMsgAt = ts;
-      await dbPut('contacts', activeContact);
+      await dbPut('messages', { msgId, contactId: contact.id, text: JSON.stringify(pollData), mine: true, ts, isPoll: true });
+      contact.lastMsg = '📊 ' + question.slice(0, 30);
+      contact.lastMsgAt = ts;
+      await dbPut('contacts', contact);
       appendMsg(null, true, ts, null, null, { msgId, poll: pollData });
-      if (activeContact.isGroup) {
+      if (contact.isGroup) {
         // Groups have no pubB64 — encryptFor('') silently failed, so a group poll
         // stored locally but reached nobody. Route through the sender-key channel
         // like a normal group message; receivers detect the poll JSON in the text.
-        const groupId = activeContact.id;
-        const members = (activeContact.members || []).filter(m => m.id !== myId);
+        const groupId = contact.id;
+        const members = (contact.members || []).filter(m => m.id !== myId);
         for (const m of members) await distributeSenderKey(groupId, m.pubB64).catch(e => _dbg(e, 'sk-dist'));
         const groupCt = await encryptGroupMsg(groupId, JSON.stringify(pollData));
         if (groupCt) {
           await Promise.allSettled(members.map(async (m) => {
             const peer = peers[m.pubB64];
             if (peer?.connected && peer.dc?.readyState === 'open') {
-              try { peer.dc.send(JSON.stringify({ v: CONFIG.PROTOCOL_VERSION, type: 'group_msg', msgId, payload: groupCt, ts, groupId, groupName: activeContact.name, sender: myPubB64, name: myName, isGroupSK: true })); } catch(e) { _dbg(e, 'group-p2p-send'); }
+              try { peer.dc.send(JSON.stringify({ v: CONFIG.PROTOCOL_VERSION, type: 'group_msg', msgId, payload: groupCt, ts, groupId, groupName: contact.name, sender: myPubB64, name: myName, isGroupSK: true })); } catch(e) { _dbg(e, 'group-p2p-send'); }
             }
-            try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId, groupName: activeContact.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
+            try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId, groupName: contact.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
           }));
-          _fanOut(activeContact, JSON.stringify(pollData), ts, {}, { isPoll: true, sfFor: activeContact.id, sfName: activeContact.name });
+          _fanOut(contact, JSON.stringify(pollData), ts, {}, { isPoll: true, sfFor: contact.id, sfName: contact.name });
         }
       } else {
         // Send via P2P/relay
-        const encrypted = await encryptFor(JSON.stringify(pollData), activeContact.pubB64);
+        const encrypted = await encryptFor(JSON.stringify(pollData), contact.pubB64);
         if (!encrypted) { _dbg(null, 'encrypt failed'); return; }
-        const peer = peers[activeContact.pubB64];
+        const peer = peers[contact.pubB64];
         if (peer?.connected && peer.dc?.readyState === 'open') peer.dc.send(JSON.stringify({ type: 'msg', payload: encrypted, ts }));
-        await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts }, activeContact.pubB64);
+        await relaySend(contact.id, { to: contact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts }, contact.pubB64);
       }
       renderContacts();
     
@@ -7760,11 +7762,14 @@ async function initMessenger(dbName) {
   // Signal helper for edit/delete/reaction sync (1:1 + group)
   function sendSignal(data) {
     if (!activeContact) return;
+    // Snapshot before any await — the async fan-out below must not re-read live
+    // activeContact (a contact switch mid-flight would fan out to the wrong group).
+    const contact = activeContact;
     // v3.6: Group signal fan-out — send encrypted signal to each member
-    if (activeContact.isGroup && activeContact.members?.length > 0) {
+    if (contact.isGroup && contact.members?.length > 0) {
       const signalPayload = JSON.stringify(data);
       (async () => {
-        for (const member of activeContact.members) {
+        for (const member of contact.members) {
           if (member.id === myId) continue;
           try {
             // P2P direct if available
@@ -7777,7 +7782,7 @@ async function initMessenger(dbName) {
             if (persistTypes.includes(data.type)) {
               const encrypted = await encryptFor(signalPayload, member.pubB64);
               if (encrypted) await relaySend(member.id, { to: member.id, from: myId, fromPub: myPubB64, fromName: myName,
-                payload: encrypted, ts: data.ts || Date.now(), isSignal: true, groupId: activeContact.id }, member.pubB64);
+                payload: encrypted, ts: data.ts || Date.now(), isSignal: true, groupId: contact.id }, member.pubB64);
             }
           } catch(e) { _dbg(e, 'group-signal'); }
         }
@@ -7785,7 +7790,7 @@ async function initMessenger(dbName) {
       return;
     }
     // 1:1 signal
-    const peer = peers[activeContact.pubB64];
+    const peer = peers[contact.pubB64];
     if (peer?.connected && peer.dc?.readyState === 'open') {
       peer.dc.send(JSON.stringify(data));
     }
@@ -7795,7 +7800,7 @@ async function initMessenger(dbName) {
     if (persistentTypes.includes(data.type)) {
       (async () => {
         try {
-          const snapContact = activeContact; if (!snapContact) return;
+          const snapContact = contact;
           const sigTs = data.ts || Date.now();
           const signalPayload = JSON.stringify(data);
           const encrypted = await encryptFor(signalPayload, snapContact.pubB64);
@@ -7814,7 +7819,7 @@ async function initMessenger(dbName) {
     // ICE signaling (pre-connection, unencrypted by necessity — only SDP/candidates)
     if (API && !persistentTypes.includes(data.type) && data.type !== 'typing' && data.type !== 'read-receipt') {
       fetchT(API + '/signal', { method: 'POST', headers: _H,
-        body: JSON.stringify({ room: 'dm:' + [myId, activeContact.id].sort().join(':'), sender: myId, ...data })
+        body: JSON.stringify({ room: 'dm:' + [myId, contact.id].sort().join(':'), sender: myId, ...data })
       }).catch(e => _dbg(e));
     }
   }
@@ -8239,17 +8244,20 @@ async function initMessenger(dbName) {
   async function _sendFile(file) {
     try {  
       if (!activeContact) return;
-      if (activeContact.isGroup && _isSecondaryDevice) { showToast(t('groupPrimaryOnly'), 'error'); return; }
+      // Snapshot before any await — same TOCTOU class as sendMessage (_compressImage
+      // and sendBinaryFile both yield; a contact switch mid-flight must not retarget).
+      const contact = activeContact;
+      if (contact.isGroup && _isSecondaryDevice) { showToast(t('groupPrimaryOnly'), 'error'); return; }
       // v3.6: Auto-compress images
       file = await _compressImage(file);
       const ts = correctedNow();
       const text = `📎 ${file.name}`;
-      const peer = peers[activeContact.pubB64];
+      const peer = peers[contact.pubB64];
       if (peer?.connected && peer.dc?.readyState === 'open') {
         const sent = await sendBinaryFile(peer, file);
         if (sent) {
           appendMsg(text, true, ts, null, JSON.stringify({ type: 'file', name: file.name, mime: file.type, data: '' }));
-          await dbPut('messages', { msgId: genMsgId(), contactId: activeContact.id, text, mine: true, ts, fileData: JSON.stringify({ type: 'file', name: file.name, mime: file.type }) });
+          await dbPut('messages', { msgId: genMsgId(), contactId: contact.id, text, mine: true, ts, fileData: JSON.stringify({ type: 'file', name: file.name, mime: file.type }) });
           return;
         }
       }
@@ -8262,28 +8270,28 @@ async function initMessenger(dbName) {
       const b64 = bufToB64(ab);
       const fileMsg = JSON.stringify({ type: 'file', name: file.name, mime: file.type, data: b64 });
       appendMsg(text, true, ts, null, fileMsg);
-      await dbPut('messages', { msgId: genMsgId(), contactId: activeContact.id, text, mine: true, ts, fileData: fileMsg });
-      if (activeContact.isGroup) {
+      await dbPut('messages', { msgId: genMsgId(), contactId: contact.id, text, mine: true, ts, fileData: fileMsg });
+      if (contact.isGroup) {
         // Same dead-end as polls: peers['']/encryptFor('') silently dropped group files.
         // Route via the sender-key channel; receivers detect {type:'file'} in the text.
         // P2P binary chunks carry no groupId, so group files are relay-only for now.
-        const groupId = activeContact.id;
-        const members = (activeContact.members || []).filter(m => m.id !== myId);
+        const groupId = contact.id;
+        const members = (contact.members || []).filter(m => m.id !== myId);
         for (const m of members) await distributeSenderKey(groupId, m.pubB64).catch(e => _dbg(e, 'sk-dist'));
         const groupCt = await encryptGroupMsg(groupId, fileMsg);
         if (groupCt) {
           await Promise.allSettled(members.map(async (m) => {
-            try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId, groupName: activeContact.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
+            try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId, groupName: contact.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
           }));
-          _fanOut(activeContact, fileMsg, ts, {}, { isFile: true, sfFor: activeContact.id, sfName: activeContact.name });
+          _fanOut(contact, fileMsg, ts, {}, { isFile: true, sfFor: contact.id, sfName: contact.name });
         }
         return;
       }
-      const encrypted = await encryptFor(fileMsg, activeContact.pubB64);
+      const encrypted = await encryptFor(fileMsg, contact.pubB64);
       if (!encrypted) { _dbg(null, 'encrypt failed'); return; }
-      await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts, isFile: true }, activeContact.pubB64);
-      _fanOut(activeContact, fileMsg, ts, { isFile: true },
-        { isFile: true, sfFor: activeContact.id, sfPub: activeContact.pubB64, sfName: activeContact.name });
+      await relaySend(contact.id, { to: contact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts, isFile: true }, contact.pubB64);
+      _fanOut(contact, fileMsg, ts, { isFile: true },
+        { isFile: true, sfFor: contact.id, sfPub: contact.pubB64, sfName: contact.name });
     
     } catch(_e) { _dbg(_e, '_sendFile'); }
   }
@@ -8530,6 +8538,7 @@ async function initMessenger(dbName) {
   let _audioChunks = [];
   let _recTimer = null;
   let _recStartTs = 0;
+  let _recContact = null; // recording target — fixed at start (TOCTOU: user may switch chats mid-recording)
   const voiceBtn = _DOM.get('b-msg-voice');
   if (voiceBtn) {
     voiceBtn.addEventListener('click', async () => {
@@ -8548,6 +8557,7 @@ async function initMessenger(dbName) {
       // Start recording
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        _recContact = activeContact; // pin the recipient at record-start
         _audioChunks = [];
         _mediaRecorder = new MediaRecorder(stream, { mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm' });
         _mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) _audioChunks.push(e.data); };
@@ -8578,35 +8588,37 @@ async function initMessenger(dbName) {
             const ts = correctedNow();
             const text = '🎤 Voice (' + Math.ceil(blob.size / 1024) + 'KB)';
             try {
-              if (activeContact.isGroup) {
+              const contact = _recContact;
+              if (!contact) return; // recording cancelled before target was pinned
+              if (contact.isGroup) {
                 // Group voice hit the same pubB64='' dead-end as files/polls — wrap as
                 // a file payload and send via sender-key so members can play it back.
                 const gPayload = JSON.stringify({ type: 'file', name: file.name, mime: file.type, data: b64 });
-                await dbPut('messages', { msgId: genMsgId(), contactId: activeContact.id, text, mine: true, ts, fileData: gPayload });
-                activeContact.lastMsg = text; activeContact.lastMsgAt = ts;
-                await dbPut('contacts', activeContact);
-                const members = (activeContact.members || []).filter(m => m.id !== myId);
-                for (const m of members) await distributeSenderKey(activeContact.id, m.pubB64).catch(e => _dbg(e, 'sk-dist'));
-                const groupCt = await encryptGroupMsg(activeContact.id, gPayload);
+                await dbPut('messages', { msgId: genMsgId(), contactId: contact.id, text, mine: true, ts, fileData: gPayload });
+                contact.lastMsg = text; contact.lastMsgAt = ts;
+                await dbPut('contacts', contact);
+                const members = (contact.members || []).filter(m => m.id !== myId);
+                for (const m of members) await distributeSenderKey(contact.id, m.pubB64).catch(e => _dbg(e, 'sk-dist'));
+                const groupCt = await encryptGroupMsg(contact.id, gPayload);
                 if (groupCt) {
                   await Promise.allSettled(members.map(async (m) => {
-                    try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId: activeContact.id, groupName: activeContact.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
+                    try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId: contact.id, groupName: contact.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
                   }));
-                  _fanOut(activeContact, gPayload, ts, {}, { isFile: true, sfFor: activeContact.id, sfName: activeContact.name });
+                  _fanOut(contact, gPayload, ts, {}, { isFile: true, sfFor: contact.id, sfName: contact.name });
                 }
                 appendMsg(text, true, ts, null, gPayload, { msgId: genMsgId() });
                 renderContacts();
                 return;
               }
               const filePayload = JSON.stringify({ name: file.name, type: file.type, size: file.size, data: b64 });
-              const encrypted = await encryptFor(filePayload, activeContact.pubB64);
+              const encrypted = await encryptFor(filePayload, contact.pubB64);
               if (!encrypted) { _dbg(null, 'encrypt failed'); return; }
-              await dbPut('messages', { msgId: genMsgId(), contactId: activeContact.id, text, mine: true, ts, fileData: filePayload });
-              activeContact.lastMsg = text; activeContact.lastMsgAt = ts;
-              await dbPut('contacts', activeContact);
-              await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts, isFile: true }, activeContact.pubB64);
-              _fanOut(activeContact, filePayload, ts, { isFile: true },
-                { isFile: true, sfFor: activeContact.id, sfPub: activeContact.pubB64, sfName: activeContact.name });
+              await dbPut('messages', { msgId: genMsgId(), contactId: contact.id, text, mine: true, ts, fileData: filePayload });
+              contact.lastMsg = text; contact.lastMsgAt = ts;
+              await dbPut('contacts', contact);
+              await relaySend(contact.id, { to: contact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts, isFile: true }, contact.pubB64);
+              _fanOut(contact, filePayload, ts, { isFile: true },
+                { isFile: true, sfFor: contact.id, sfPub: contact.pubB64, sfName: contact.name });
               appendMsg(text, true, ts, null, filePayload, { msgId: genMsgId() });
               renderContacts();
               haptic.success();

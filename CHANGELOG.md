@@ -6,6 +6,8 @@
 
 `sendMessage` snapshotted `const contact = activeContact` for the DB write (with a comment explaining why) — then the entire wire path read live `activeContact` again: `isGroup`, `members`, `name`, `pubB64`, `peers[pubB64]`, `relaySend(id, …, pubB64)`, `_fanOut`. Several `await`s sit in between (dbPut, dbGet, encryptFor, signMessage, timingDelay), so a click on another conversation mid-flight flipped the branch: a message typed for Alice could encrypt for Bob's `pubB64` and relay to Bob's inbox while being stored under Alice's conversation — a wrong-recipient confidentiality bug. The whole send path now uses the `contact` snapshot taken before the first await.
 
+Same class swept everywhere else it existed: `sendSignal`'s group fan-out IIFE re-read `activeContact.members`/`id` inside awaits; `createPoll` and `_sendFile` re-read it after `dbPut`/`_compressImage`/`sendBinaryFile`; and the voice-memo `reader.onload` re-read it after an entire *recording* — the widest window of the class (seconds, not ms), so a chat switch during recording would deliver the voice note to the newly-opened conversation. Voice now pins the recipient at record-start (`_recContact`); the other three snapshot at entry.
+
 ---
 
 ## /api/online counted heartbeats, not users (branch devin/consolidate-groups, 2026-09-20)
