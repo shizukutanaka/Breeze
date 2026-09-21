@@ -46,9 +46,9 @@ Try the hosted version: **[breeze.pages.dev](https://breeze.pages.dev)**
 - **Files**: Up to 50MB, encrypted, auto-compress images (WebP), progress bar
 - **Multi-account**: Work/personal separation — unlimited local accounts, all free (no paid tiers; see SECURITY.md "Removed: multi-account billing")
 - **8 languages**: English + translations for ja (complete), ko, zh-TW, es, th, id, pt-BR (core UI, auto-detected)
-- **60+ slash commands**: /help, /search, /export [json|csv|html|all], /schedule [list|cancel], /contacts, /compress, /retry, /security, /codeverify, /alias, /focus, etc.
+- **65 slash commands**: /help, /search, /export [json|csv|html|all], /schedule [list|cancel], /contacts, /compress, /retry, /security, /codeverify, /alias, /focus, etc.
 - **PWA**: Engagement-gated install, works offline, push notifications
-- **6 platforms**: Web, Electron, Tauri (~5MB), Android (Capacitor), iOS
+- **5 platforms**: Web, Electron, Tauri (~5MB), Android (Capacitor), iOS
 - **Security**: Trusted Types, CSP+COOP, magic bytes validation, key change warning
 - **UX**: Swipe gestures, multi-select, markdown tables, smooth theme transition
 
