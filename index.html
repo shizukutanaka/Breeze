@@ -7324,7 +7324,7 @@ async function initMessenger(dbName) {
       const safeVotes = Array.isArray(opt.votes) ? opt.votes : [];
       const pct = totalVotes > 0 ? Math.round(safeVotes.length / totalVotes * 100) : 0;
       const voted = safeVotes.includes(myId);
-      html += `<div class="poll-opt${voted ? ' voted' : ''}" data-action="vote" data-msgid="${msgId}" data-idx="${i}">
+      html += `<div class="poll-opt${voted ? ' voted' : ''}" data-action="vote" data-msgid="${safeMsgId(msgId)}" data-idx="${i}">
         <span class="i-flex1">${esc(String(opt.text || '').slice(0, 200))}</span>
         <div class="i-flex2"><div class="poll-bar" style="width:${pct}%"></div></div>
         <span class="poll-pct">${pct}%</span>

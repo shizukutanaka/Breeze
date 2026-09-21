@@ -1,5 +1,13 @@
 # Changelog
 
+## Poll option rows skipped safeMsgId on data-msgid (branch devin/poll-msgid-escape, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`renderPollHtml` interpolated the raw `msgId` into `data-msgid` while `renderReactions` right next to it passes it through `safeMsgId` — inconsistent escaping of a remote-derived value. Harmless today (msgId is `id:ts` of a sender-bound id) but the sibling function exists precisely because the id reaches HTML attributes; applied the same scrub.
+
+---
+
 ## Delayed read receipt survived account switch — ghost timer under new identity (branch devin/read-timer-cleanup, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
