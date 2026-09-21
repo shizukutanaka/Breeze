@@ -1,5 +1,13 @@
 # Changelog
 
+## Panic wipe could leave IndexedDB behind — open connection blocks deleteDatabase (branch devin/panic-db-close, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`executePanic` fired `indexedDB.deleteDatabase` for every database while the app's own `db` connection was still open — a pending delete waits for open connections, and the immediate `location.replace` could navigate away before it completed. Close the handle first so the wipe actually lands.
+
+---
+
 ## /admin announce was decorative — announce-only enforced nowhere (branch devin/announce-propagation, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
