@@ -11590,6 +11590,10 @@ async function initMessenger(dbName) {
   async function importChat(file) {
     try {  
       if (!activeContact) { showToast(t('toastOpenChat'), 'error'); return; }
+      // file.text() loads the whole export into memory — a multi-GB file hangs the tab.
+      // Chat exports are text; cap at the same FILE_MAX as attachments (50 MB is ~a decade
+      // of dense history; larger belongs in a desktop importer anyway).
+      if (file.size > CONFIG.FILE_MAX) { showToast(t('toastMax50MB'), 'error'); return; }
       const text = await file.text();
       const { source, msgs } = detectAndParse(text);
       if (msgs.length === 0) { showToast(t('toastNoImportMsgs'), 'error'); return; }
