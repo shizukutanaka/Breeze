@@ -5624,8 +5624,11 @@ async function initMessenger(dbName) {
       if (!peerSK) return null;
 
       // sigPub on record = signing sender → an unsigned/bad-sig envelope is forged; drop it.
-      if (peerSK.sigPub) {
-        const sgOk = typeof p.sg === 'string' && p.sg && await verifySignature(`breeze-group-msg:${groupId}:${p.ep | 0}:${p.c | 0}:${JSON.stringify(p.i)}:${JSON.stringify(p.d)}`, p.sg, peerSK.sigPub);
+      // Fall back to the contact's SDP-TOFU sigPub so enforcement doesn't wait for the
+      // next key redistribution in a no-churn group.
+      const sigPub = peerSK.sigPub || (await dbGet('contacts', senderId).catch(() => null))?.sigPub;
+      if (sigPub) {
+        const sgOk = typeof p.sg === 'string' && p.sg && await verifySignature(`breeze-group-msg:${groupId}:${p.ep | 0}:${p.c | 0}:${JSON.stringify(p.i)}:${JSON.stringify(p.d)}`, p.sg, sigPub);
         if (sgOk !== true) return null;
       }
 

@@ -165,7 +165,8 @@ describe('group trust boundaries', () => {
     expect(html).toContain('skEntry.sigPub = skMsg.sigPub');
     expect(html).toContain("breeze-group-msg:${groupId}:${out.ep | 0}:${out.c | 0}:");
     expect(html).toContain("breeze-group-msg:${groupId}:${p.ep | 0}:${p.c | 0}:");
-    expect(html).toContain('if (peerSK.sigPub)');
+    expect(html).toContain('peerSK.sigPub || (await dbGet(');
+    expect(html).toContain('if (sigPub)');
     expect(html).toContain("typeof p.sg === 'string' && p.sg && await verifySignature");
     expect(html).toContain('if (sgOk !== true) return null');
   });
