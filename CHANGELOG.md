@@ -1,5 +1,13 @@
 # Changelog
 
+## Message mutations were not bound to the sender's conversation (branch devin/mutation-binding, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Every incoming mutation path — relay `isSignal` edit/delete/reaction AND P2P DataChannel reaction / poll_vote / ack — looked up the target message by msgId alone. msgId is `senderId:ms` — the id half is public and the timestamp half is guessable, so a contact could edit, delete, react to, or stamp delivery state on ANOTHER conversation's messages by forging the msgId. All paths now require `stored.contactId === contact.id` (the possibly device-attributed root id), and the P2P ack path routes `msg.i` through `safeMsgId` — it previously interpolated raw into a querySelector string.
+
+---
+
 ## File receive: per-chunk size was unbounded (branch devin/chunk-cap, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
