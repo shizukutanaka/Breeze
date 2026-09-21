@@ -7905,12 +7905,9 @@ async function initMessenger(dbName) {
         } catch(e) { _dbg(e, 'encrypt-signal'); }
       })();
     }
-    // ICE signaling (pre-connection, unencrypted by necessity — only SDP/candidates)
-    if (API && !persistentTypes.includes(data.type) && data.type !== 'typing' && data.type !== 'read-receipt') {
-      fetchT(API + '/signal', { method: 'POST', headers: _H,
-        body: JSON.stringify({ room: 'dm:' + [myId, contact.id].sort().join(':'), sender: myId, ...data })
-      }).catch(e => _dbg(e));
-    }
+    // Note: no /signal fallback here — every caller uses persistentTypes, and dm-room
+    // signaling now goes through _signal (capability-sealed). A plaintext post that
+    // bypassed _signal would leak the metadata dm-sig-v1 exists to hide.
   }
 
   let _prevConnState = ''; // v3.6: Track for SR announcements
