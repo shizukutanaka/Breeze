@@ -7368,9 +7368,12 @@ async function initMessenger(dbName) {
       if (!activeContact) return;
       // Snapshot before any await — same TOCTOU class as sendMessage.
       const contact = activeContact;
-      // Announce-only groups: sendMessage's gate must apply to every send path — a
-      // non-admin poll stored locally but dropped by every receiver = send-into-void.
+      // sendMessage's gates must cover every send path — otherwise a kicked member
+      // (receiver drops via roster check) or a non-admin in announce-only stores the
+      // poll locally while every receiver drops it: send-into-the-void.
+      if (contact.isGroup && contact.kicked) { showToast(t('toastNoLongerMember'), 'error'); return; }
       if (contact.isGroup && contact.announceOnly && !isGroupAdmin(contact)) { showToast(t('toastAnnounceOnlySend'), 'error'); return; }
+      if (contact.blocked) return;
       const pollId = myId + ':poll:' + Date.now();
       const pollData = { type: 'poll', pollId, question, options: options.map(o => ({ text: o, votes: [] })), creator: myId };
       const ts = correctedNow();
@@ -8255,7 +8258,9 @@ async function initMessenger(dbName) {
       // and sendBinaryFile both yield; a contact switch mid-flight must not retarget).
       const contact = activeContact;
       if (contact.isGroup && _isSecondaryDevice) { showToast(t('groupPrimaryOnly'), 'error'); return; }
+      if (contact.isGroup && contact.kicked) { showToast(t('toastNoLongerMember'), 'error'); return; }
       if (contact.isGroup && contact.announceOnly && !isGroupAdmin(contact)) { showToast(t('toastAnnounceOnlySend'), 'error'); return; }
+      if (contact.blocked) return;
       // v3.6: Auto-compress images
       file = await _compressImage(file);
       const ts = correctedNow();
@@ -8562,9 +8567,12 @@ async function initMessenger(dbName) {
         clearInterval(_recTimer); _recTimer = null;
         return;
       }
-      // Start recording — announce-only groups gate at record-start like every other
-      // send path (a non-admin voice note would be dropped by every receiver).
+      // Start recording — same entry gates as every other send path: a kicked
+      // member's / a non-admin's voice note would store locally and be dropped by
+      // every receiver (send-into-the-void).
+      if (activeContact?.isGroup && activeContact.kicked) { showToast(t('toastNoLongerMember'), 'error'); return; }
       if (activeContact?.isGroup && activeContact.announceOnly && !isGroupAdmin(activeContact)) { showToast(t('toastAnnounceOnlySend'), 'error'); return; }
+      if (activeContact?.blocked) return;
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         _recContact = activeContact; // pin the recipient at record-start
