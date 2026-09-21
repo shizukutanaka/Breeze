@@ -1,5 +1,13 @@
 # Changelog
 
+## ?add= planted dead contacts from malformed keys (branch devin/add-key-validation, 2026-09-20)
+
+`index.html`, `locales/*.json`, `tests/e2e/deeplink.spec.js`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Socratic check of the invite-link claim ("share `?add=<key>` to add a contact"): `addContact` stored any string ≤200 chars as a public key — a malformed or adversarial `?add=` link planted a contact that could never complete a handshake, failing only at first send. Contact keys are raw WebCrypto exports (X25519 = 32 B, P-256 = 65 B, base64'd), so `addContact` now decodes and rejects anything else with a new `toastInvalidContact` (EN + all 7 locales). Covers every caller — `?add` boot param, the add-contact form, `resolveAndAdd` (alias resolves to pub then hits the same gate). New e2e spec: `/?add=<garbage>` → toast, zero contacts.
+
+---
+
 ## Unauthenticated id-keyed queues + sealed-poll TTL collapse (branch devin/relay-owner-auth, 2026-09-20)
 
 `_worker.js`, `index.html`, `wrangler.toml`, `SECURITY.md`, `tests/worker.test.js`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).

@@ -281,6 +281,7 @@
  "scanQR": "QR 코드 스캔",
  "scanning": "스캔 중...",
  "toastInvalidQR": "Breeze 초대 QR 코드가 아닙니다",
+ "toastInvalidContact": "유효한 Breeze 연락처 키가 아닙니다",
  "toastCameraFail": "카메라 접근이 거부되었습니다",
  "compressMode": "이미지 압축",
  "compressOff": "끔 (원본 품질)",

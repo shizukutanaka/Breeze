@@ -116,3 +116,15 @@ test('/room produces a join link a fresh context can actually join', async ({ br
   await expect(bob.locator('#msg-main')).toBeVisible({ timeout: 15_000 });
   await expect(bob.locator('#msg-contacts .contact').first()).toBeVisible({ timeout: 15_000 });
 });
+
+// ?add=<garbage> used to plant a contact whose "key" could never complete a handshake —
+// a dead entry that looks real until the first send fails. addContact now rejects anything
+// that isn't a 32-byte X25519 or 65-byte P-256 raw public key.
+test('/?add=<garbage> is refused with a toast instead of planting a dead contact', async ({ page }) => {
+  await page.goto('/');
+  await createIdentity(page, 'AddTarget');
+  await page.goto('/?add=this-is-not-a-key&name=Phantom');
+  await expect(page.locator('#msg-main')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.toast-container .toast').filter({ hasText: /not a valid/i }).first()).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('#msg-contacts .contact')).toHaveCount(0);
+});

@@ -283,6 +283,7 @@
  "scanQR": "Escanear código QR",
  "scanning": "Escaneando...",
  "toastInvalidQR": "No es un código QR de invitación de Breeze",
+ "toastInvalidContact": "No es una clave de contacto de Breeze válida",
  "toastCameraFail": "Acceso a la cámara denegado",
  "compressMode": "Compresión de imágenes",
  "compressOff": "Desactivada (calidad original)",

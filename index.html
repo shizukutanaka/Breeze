@@ -1684,6 +1684,7 @@ const _I = {
     scanQR: 'Scan QR Code',
     scanning: 'Scanning...',
     toastInvalidQR: 'Not a Breeze invite QR code',
+    toastInvalidContact: 'Not a valid Breeze contact key',
     scanToVerify: 'Scan to verify',
     toastInvalidVerifyQR: 'Not a Breeze verification QR code',
     toastVerified: 'Safety number verified',
@@ -6114,6 +6115,13 @@ async function initMessenger(dbName) {
     try {
       const safePub = typeof pubB64 === 'string' ? pubB64.slice(0, 200) : '';
       if (!safePub) return;
+      // Contact keys are raw WebCrypto exports: X25519 = 32 B, P-256 = 65 B, base64'd.
+      // A malformed ?add= link (or a bad alias response) otherwise plants a contact that
+      // can never complete a handshake — dead entry that looks real until send fails.
+      try {
+        const rawLen = Uint8Array.from(atob(safePub), c => c.charCodeAt(0)).length;
+        if (rawLen !== 32 && rawLen !== 65) { showToast(t('toastInvalidContact'), 'error'); return; }
+      } catch { showToast(t('toastInvalidContact'), 'error'); return; }
       const id = safePub.slice(0, 12);
       const existing = await dbGet('contacts', id);
       if (existing) return;

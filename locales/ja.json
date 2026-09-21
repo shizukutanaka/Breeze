@@ -304,6 +304,7 @@
   "scanQR": "QRコードをスキャン",
   "scanning": "スキャン中...",
   "toastInvalidQR": "Breezeの招待QRコードではありません",
+  "toastInvalidContact": "有効なBreeze連絡先キーではありません",
   "scanToVerify": "スキャンで検証",
   "toastInvalidVerifyQR": "Breeze の検証用 QR コードではありません",
   "toastVerified": "安全番号を検証しました",

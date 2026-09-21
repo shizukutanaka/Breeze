@@ -281,6 +281,7 @@
  "scanQR": "สแกนคิวอาร์โค้ด",
  "scanning": "กำลังสแกน...",
  "toastInvalidQR": "ไม่ใช่คิวอาร์โค้ดเชิญของ Breeze",
+ "toastInvalidContact": "ไม่ใช่คีย์ผู้ติดต่อ Breeze ที่ถูกต้อง",
  "toastCameraFail": "ไม่ได้รับอนุญาตให้ใช้กล้อง",
  "compressMode": "การบีบอัดรูปภาพ",
  "compressOff": "ปิด (คุณภาพต้นฉบับ)",

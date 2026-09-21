@@ -281,6 +281,7 @@
  "scanQR": "Pindai Kode QR",
  "scanning": "Memindai...",
  "toastInvalidQR": "Bukan kode QR undangan Breeze",
+ "toastInvalidContact": "Bukan kunci kontak Breeze yang valid",
  "toastCameraFail": "Akses kamera ditolak",
  "compressMode": "Kompresi gambar",
  "compressOff": "Mati (kualitas asli)",
