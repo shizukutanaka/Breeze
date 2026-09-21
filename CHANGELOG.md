@@ -1,5 +1,46 @@
 # Changelog
 
+## Prekey bundles are incumbent-endorsed (clobber closed) (branch devin/consolidate-groups, 2026-09-20)
+
+KEY_MISMATCH bound userId to identityKey's prefix, but a caller could still ship
+the victim's real IK with attacker SPK + attacker Ed (self-signed SPK sig passed)
+— mixed-key poison breaking new sessions + Ed-key swap for fresh contacts. Once a
+bundle carries edIdentityKey, overwrite now requires a signature BY the incumbent
+(`breeze-prekey-upload:{id}:{ts}`, default-on, PREKEY_REQUIRE_AUTH=false opts out).
+First writes and Ed-less legacy bundles stay open. Both client upload callsites
+(onboarding + OTP replenish) now sign unconditionally.
+
+
+## Device-registry rollback + rootEd substitution closed (branch devin/consolidate-groups, 2026-09-20)
+
+Two gaps in the multi-device trust path:
+- The signed registry's ts is attacker-consistent on replay, so a relay could
+  serve a STALE signed record forever — resurrecting an unlinked device back
+  into every sender's fan-out. _fetchDeviceList now keeps a per-account
+  monotonic ts floor in IDB (devFloor) and rejects verified-but-older records.
+- /linkto pinned rec.rootEd straight off the wire — but rootEd rides OUTSIDE
+  the signed blob, so a relay could swap in its own Ed key and make every
+  future registry read "verify" under the attacker's key (forged device lists
+  → injected listener → self-sync leak). The link now verifies the record's
+  own sig under the candidate rootEd before pinning; a swapped key fails.
+
+
+## Presence auth made real + dead caps/beacon/PII fields removed (branch devin/consolidate-groups, 2026-09-20)
+
+PRESENCE_REQUIRE_AUTH claimed to verify the caller owns the id but only checked
+the id was REGISTERED — any caller satisfies that by naming an existing user.
+It now verifies an Ed25519 ownership signature (`breeze-presence:{id}:{ts}` vs
+`prekey:{id}`, fresh-ts inside the sig kills replay). Stays OPT-IN: every deployed
+client heartbeats unsigned, so a default-on flip would show them all offline
+until they upgrade — the client now sends ts+sig unconditionally so operators
+can flip it on any time. Also removed: presence-carried `caps` (dead end-to-end —
+heartbeats never sent it and the only reader, the batch check, returns `online`
+only; real caps live in the prekey bundle via /prekey/status), the never-served
+`pub`/`name` fields stored in the presence record (PII at rest for nobody), and
+the `{ids, offline}` sendBeacon calls — the Worker never had an offline path,
+so the beacons were a decade of 400s.
+
+
 ## Plaintext-signal forgery closed on upgraded peers (branch devin/consolidate-groups, 2026-09-20)
 
 typing/read and call-end carry no inner auth — anyone knowing a room pair could

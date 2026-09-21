@@ -2625,11 +2625,9 @@ window.addEventListener('offline', () => {
     banner.classList.remove('hidden');
   }
 });
-// v3.1: Notify server when page closes (sendBeacon for reliable delivery)
+// The {ids, offline} sendBeacon was removed: no offline path exists on the Worker (400
+// at !id) — the beacon was a no-op. Presence self-corrects via ~60s at-staleness.
 window.addEventListener('beforeunload', () => {
-  if (typeof API !== 'undefined' && API && typeof myId !== 'undefined' && myId) {
-    try { navigator.sendBeacon(API + '/presence', JSON.stringify({ ids: [myId], offline: true })); } catch(e) {}
-  }
   // v3.6: Emergency save retry queue (sync — beforeunload can't await)
   try {
     if (typeof _retryQueue !== 'undefined' && _retryQueue.length > 0) {
@@ -2639,14 +2637,7 @@ window.addEventListener('beforeunload', () => {
     }
   } catch {}
 });
-// v3.1: Pause polling when tab hidden (save battery)
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
-    if (typeof API !== 'undefined' && API && typeof myId !== 'undefined' && myId) {
-      try { navigator.sendBeacon(API + '/presence', JSON.stringify({ ids: [myId], offline: true })); } catch(e) {}
-    }
-  }
-});
+// (The dead {ids, offline} visibilitychange beacon was removed — see beforeunload note.)
 
 // Theme: auto-detect or restore preference
 (() => {
@@ -4562,7 +4553,10 @@ async function initMessenger(dbName) {
       try {
         await initSigning(); // must precede generatePreKeyBundle() or edIdentityKey/signedPreKeySig get omitted (E2E-found)
         const bundle = await generatePreKeyBundle();
-        await postAPIRaw('/prekey/upload', { userId: myId, identityKey: pubB64, ...bundle });
+        // ts+sig endorse the upload under OUR Ed key — once a bundle is registered, the
+        // Worker requires the incumbent key's signature to overwrite (clobber defense).
+        const upTs = Date.now();
+        await postAPIRaw('/prekey/upload', { userId: myId, identityKey: pubB64, ...bundle, ts: upTs, sig: await signMessage(`breeze-prekey-upload:${myId}:${upTs}`) });
         _dbg(null, 'PreKeys uploaded: 1 SPK + ' + bundle.oneTimePreKeys.length + ' OTP');
       } catch(e) { _dbg(e, 'prekey-upload'); }
     }
@@ -5216,6 +5210,21 @@ async function initMessenger(dbName) {
   // root-signed registry on the relay (see _worker.js handleDeviceSet). The registry is
   // client-verified: we check the root's Ed25519 signature ourselves, so the relay can
   // withhold the list (degrades to single-device) but cannot forge devices into it.
+  // Monotonic floor: a signed blob's ts is attacker-consistent on replay, so a hostile
+  // relay could serve a stale record forever and resurrect an unlinked device into every
+  // fan-out. Persist the max verified ts per account; reject older records (degrades to
+  // single-device instead of silently restoring the removed key).
+  let _devFloor = null;
+  async function _devFloorGet(accountId) {
+    if (!_devFloor) _devFloor = (await dbGet('settings', 'devFloor').catch(() => null)) || {};
+    return _devFloor[accountId] || 0;
+  }
+  async function _devFloorBump(accountId, ts) {
+    try {
+      if (!_devFloor) _devFloor = (await dbGet('settings', 'devFloor').catch(() => null)) || {};
+      if (ts > (_devFloor[accountId] || 0)) { _devFloor[accountId] = ts; await dbPut('settings', _devFloor, 'devFloor'); }
+    } catch(e) { _dbg(e, 'dev-floor'); }
+  }
   async function _fetchDeviceList(accountId, rootPubB64) {
     if (!API) return null;
     try {
@@ -5246,6 +5255,12 @@ async function initMessenger(dbName) {
       if (!sigPub) { _dbg(null, 'device list: no pinned signing key for ' + accountId + ' — staying single-device'); return null; }
       const okSig = await verifySignature(`breeze-device-set:${accountId}:${rec.ts}:${digest}`, rec.sig, sigPub);
       if (okSig !== true) { _dbg(null, 'device list signature not verified — ignoring registry'); return null; }
+      // Rollback guard (see _devFloor*): reject a verified record that is older than the
+      // newest one we've already accepted — the relay can replay a stale signed blob to
+      // resurrect a removed device otherwise.
+      const floor = await _devFloorGet(accountId);
+      if (typeof rec.ts === 'number' && rec.ts < floor) { _dbg(null, 'device list is stale (rollback) — ignoring'); return null; }
+      await _devFloorBump(accountId, rec.ts);
       return rec.devices.map(d => d.pub);
     } catch(e) { _dbg(e, 'device-list'); return null; }
   }
@@ -9700,7 +9715,8 @@ async function initMessenger(dbName) {
       if (!expired && !st) return; // network/other error: try again next cycle
       if (expired || st.replenishOTP || st.replenishSPK) {
         const freshBundle = await generatePreKeyBundle();
-        const upResp = await postAPIRaw('/prekey/upload', { userId: myId, identityKey: myPubB64, ...freshBundle });
+        const upTs = Date.now();
+        const upResp = await postAPIRaw('/prekey/upload', { userId: myId, identityKey: myPubB64, ...freshBundle, ts: upTs, sig: await signMessage(`breeze-prekey-upload:${myId}:${upTs}`) });
         if (!upResp?.ok) { _lastPreKeyCheck = Date.now() - MS.MIN * 4; return; } // retry in ~1 min
         _dbg(null, (expired ? 'PreKey record had EXPIRED — re-registered: ' : 'PreKeys replenished: ') + freshBundle.oneTimePreKeys.length + ' OTPs');
       }
@@ -10820,13 +10836,11 @@ async function initMessenger(dbName) {
               if (!inner) continue;
               s.type = inner.t; s.data = inner.d; wasSealed = true;
             }
-            // Typing/read carry no inner signature, so a forged PLAINTEXT one is trivially
-            // injectable by anyone who knows the room pair. Once the peer advertises
-            // dm-sig-v1 their real traffic is sealed — a plaintext typing/read claiming
-            // this sender is a fake (fake "typing…" and fake read receipts are a social-
-            // engineering surface). Rollout race stays open: the check only fires when
-            // the peer's caps are KNOWN, so a capable peer's plaintext still lands while
-            // their view of MY caps is stale (≤5min cache window).
+            // typing/read carry no inner signature — a forged PLAINTEXT one is injectable
+            // by anyone who knows the room pair. Once the peer advertises dm-sig-v1 their
+            // real traffic is sealed, so a plaintext copy claiming this sender is a fake.
+            // Rollout race stays open: only fires when the peer's caps are KNOWN (≤5min
+            // stale-view window where a capable peer may still legitimately send plaintext).
             if (!wasSealed && (s.type === 'typing' || s.type === 'read') && (await _peerCaps(contact.id)).includes(CAPS_DM_SIG)) continue;
             // Typing/read indicators (works both pre- and post-P2P connection)
             if (s.type === 'typing') { showTyping(contact.id, s.senderName || contact.name); continue; }
@@ -10900,7 +10914,12 @@ async function initMessenger(dbName) {
         // Sign the instance id: the relay only honours a SIGNED inst, so a stranger cannot
         // POST a fake one for our id and manufacture a clone warning on our screen.
         const instSig = await signMessage(`breeze-inst:${myId}:${inst.v}`);
-        const resp = await postAPIRaw('/presence', { id: myId, pub: myPubB64, name: myName, inst: inst.v, instSig });
+        // ts+sig let an operator flip PRESENCE_REQUIRE_AUTH to require proof the
+        // heartbeat writer owns this id (default stays off — unsigned builds still
+        // heartbeat fine until they upgrade).
+        const presTs = Date.now();
+        const presSig = await signMessage(`breeze-presence:${myId}:${presTs}`);
+        const resp = await postAPIRaw('/presence', { id: myId, pub: myPubB64, name: myName, inst: inst.v, instSig, ts: presTs, sig: presSig });
         const data = resp?.ok ? await resp.json().catch(() => null) : null;
         if (data?.conflict && Date.now() - _cloneWarnedAt > 5 * MS.MIN) {
           _cloneWarnedAt = Date.now();
@@ -14273,7 +14292,19 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         const rec = resp?.ok ? await resp.json() : null;
         if (!rec?.devices || rec.root !== rootPub) { showToast(t('devNotListed'), 'error'); return; }
         if (!rec.devices.some(d => d.pub === myPubB64)) { showToast(t('devNotListed'), 'error'); return; }
-        await dbPut('identity', { root: rootPub, rootEd: rec.rootEd || null, isPrimary: false }, 'account');
+        // rootEd rides OUTSIDE the signed blob — a relay could swap in its own Ed key and
+        // make every future registry read "verify" under the attacker (forged device lists
+        // → injected listener → self-sync leak). The record's own sig was made by the real
+        // root key: pin rootEd only if it verifies that sig.
+        let rootEd = null;
+        if (rec.rootEd && rec.sig) {
+          const digestBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(rec.devices.map(d => d.pub))));
+          const digest = Array.from(new Uint8Array(digestBuf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
+          const okSig = await verifySignature(`breeze-device-set:${rootPub.slice(0, 12)}:${rec.ts}:${digest}`, rec.sig, rec.rootEd).catch(() => false);
+          if (okSig === true) rootEd = rec.rootEd;
+          else _dbg(null, 'linkto: rootEd did not verify the registry sig — not pinning it (secondary stays registry-unverified)');
+        }
+        await dbPut('identity', { root: rootPub, rootEd, isPrimary: false }, 'account');
         _myDevCache = null; await _refreshDeviceRole();
         showToast(t('devLinked'), 'success');
       } catch(err) { _dbg(err, 'linkto'); showToast(t('devSetFail'), 'error'); }

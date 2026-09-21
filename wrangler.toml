@@ -54,9 +54,15 @@ id = ""  # ← REQUIRED: paste your KV namespace ID here
 # clients — check CHANGELOG.md for when each call started signing).
 # wrangler pages secret put MSG_REQUIRE_AUTH           # "false" — re-allow unsigned /msg/poll
 # wrangler pages secret put SEALED_REQUIRE_AUTH        # "false" — re-allow unsigned sealed/poll + sealed/ack
+# wrangler pages secret put PREKEY_REQUIRE_AUTH        # "false" — re-allow unsigned prekey bundle overwrite
+#
+# PREKEY_REQUIRE_AUTH is also DEFAULT-ON, but differently: once a bundle carries an
+# Ed25519 key, overwriting it requires a signature by the INCUMBENT key (unsigned could
+# otherwise clobber any registered userId with a poisoned bundle). First writes and
+# legacy bundles without an Ed key stay open (nothing to verify against).
 #
 # The remaining flags stay opt-in for zero-config self-hosting; set to "true" to enforce.
-# wrangler pages secret put PRESENCE_REQUIRE_AUTH      # true — reject unsigned presence writes
+# wrangler pages secret put PRESENCE_REQUIRE_AUTH      # true — require Ed25519 ownership sig on presence writes
 # wrangler pages secret put ALIAS_REQUIRE_AUTH         # true — reject unsigned @alias registration
 # wrangler pages secret put GROUP_REQUIRE_AUTH         # true — reject unsigned group kick/rename/admin/leave/delete/transfer
 # wrangler pages secret put PUSH_REQUIRE_AUTH          # true — reject unsigned push subscribe/unsubscribe
