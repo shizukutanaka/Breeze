@@ -6988,9 +6988,13 @@ async function initMessenger(dbName) {
           const blob = new Blob([bytes], { type: f.mime || 'application/octet-stream' });
           href = URL.createObjectURL(blob);
           _blobUrls.add(href);
-        } else if (f.blobUrl) {
-          // v3.6: P2P binary received files — blob URL created in handleBinaryChunk
-          href = f.blobUrl;
+        } else if (f.blob && typeof f.blob === 'object') {
+          // Locally reassembled binary file — bytes persisted in IDB (survives reload;
+          // Uint8Array live, plain array/{index:byte} after a JSON round-trip).
+          // A blobUrl field is deliberately NOT honored: it would let a peer ship an
+          // arbitrary javascript:/data: URL into an <a href> through the wire format.
+          const bytes = f.blob instanceof Uint8Array ? f.blob : new Uint8Array(Object.values(f.blob));
+          href = URL.createObjectURL(new Blob([bytes], { type: f.mime || 'application/octet-stream' }));
           _blobUrls.add(href);
         }
         if (href) {
@@ -9817,7 +9821,13 @@ async function initMessenger(dbName) {
 
     if (msg.isFile) {
       try {
-        const fileMsg = await decryptFrom(msg.payload, _peerPub);
+        // Local binary-chunk reassembly (handleBinaryChunk): the payload is plaintext
+        // because the DataChannel itself is already authenticated + DTLS-encrypted —
+        // running it through decryptFrom dropped every received file AND counted as a
+        // decrypt failure (3 → bogus session-reset MITM banner). fileBytes cannot be
+        // forged by a peer: JSON.parse never produces a Uint8Array.
+        const _localFile = msg.fileBytes instanceof Uint8Array;
+        const fileMsg = _localFile ? msg.payload : await decryptFrom(msg.payload, _peerPub);
         if (!fileMsg) return;
         const _fp = JSON.parse(fileMsg);
         // Cap file data: reject oversized base64 payloads before IDB write and atob() decode.
@@ -9826,8 +9836,10 @@ async function initMessenger(dbName) {
         if (typeof _fp.data === 'string' && _fp.data.length > 350000) return;
         // Cap the displayed file name to prevent memory/render DoS from an oversized peer-supplied name.
         text = `📎 ${typeof _fp.name === 'string' ? _fp.name.slice(0, 255) : 'file'}`;
-        storedFileData = fileMsg;
-        await dbPut('messages', { msgId, contactId, text, mine: false, ts: msg.ts, fileData: fileMsg, ...meta });
+        // Bytes persist inside fileData — IDB structured-clone stores Uint8Array natively,
+        // so the file survives reload (a blob URL would die with the page).
+        storedFileData = _localFile ? { ..._fp, blob: msg.fileBytes } : fileMsg;
+        await dbPut('messages', { msgId, contactId, text, mine: false, ts: msg.ts, fileData: storedFileData, ...meta });
       } catch { return; }
     } else {
       const _frank = {};
@@ -11138,12 +11150,13 @@ async function initMessenger(dbName) {
       const full = new Uint8Array(fullSize);
       let offset = 0;
       for (const chunk of fc.chunks) { full.set(chunk, offset); offset += chunk.length; }
-      const blob = new Blob([full], { type: fc.mime });
-      const href = URL.createObjectURL(blob);
       // Remove progress indicator
       if (progEl) progEl.remove();
+      // fileBytes carries the reassembled bytes through the local call — a peer cannot
+      // forge it because JSON.parse (the wire decoder) never yields a Uint8Array.
       handleIncoming({ from: contact.id, fromPub: contact.pubB64, fromName: contact.name,
-        payload: JSON.stringify({ type: 'file', name: fc.name, mime: fc.mime, data: '', blobUrl: href }),
+        payload: JSON.stringify({ type: 'file', name: fc.name, mime: fc.mime }),
+        fileBytes: full,
         ts: Date.now(), isFile: true });
       delete _fileChunks[fileId];
     }

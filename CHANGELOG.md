@@ -1,5 +1,17 @@
 # Changelog
 
+## Binary file receive was silently broken — and an unverified blobUrl href vector (branch devin/binary-file-fix, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Two findings in the P2P binary-chunk file path:
+
+1. **Every received binary file was silently dropped.** `handleBinaryChunk` reassembled the chunks and called `handleIncoming` with a *plaintext* `{type:'file'}` payload — but the `isFile` branch ran it through `decryptFrom`, which failed (no ratchet fields → v2 fallback → empty-iv AES-GCM → null), incremented `_decryptFailures`, and at 3 transfers fired a bogus "Session reset — possible MITM" banner. The DataChannel is already authenticated + DTLS-encrypted, so the completed transfer now marks the local call with `fileBytes` — unforgeable by a peer because `JSON.parse` never produces a Uint8Array.
+
+2. **`f.blobUrl` was rendered into `<a href>`/`<img src>` unverified.** A peer could ship `blobUrl: 'javascript:…'` or `data:text/html,…` inside an encrypted file payload and get an executable URL into the DOM. The field is now deleted outright: the bytes themselves persist inside `fileData` (IDB structured-clones Uint8Array natively), so files also survive page reload — blob URLs used to die with the page.
+
+---
+
 ## Incoming far-future timestamps pinned a conversation to the top of the list (branch devin/ts-clamp, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
