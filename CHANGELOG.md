@@ -1,5 +1,19 @@
 # Changelog
 
+## Unauthenticated id-keyed queues + sealed-poll TTL collapse (branch devin/relay-owner-auth, 2026-09-20)
+
+`_worker.js`, `index.html`, `wrangler.toml`, `SECURITY.md`, `tests/worker.test.js`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Two Socratic findings on the "reliable sealed delivery" claim, both in the relay layer:
+
+1. **Destructive unauthenticated reads.** `/msg/poll`, `/sealed/poll` and `/sealed/ack` take a bare `userId` — and polling is not read-only: a future `lastTs` makes the inbox keep-filter delete everything older than the multi-tab grace, and an ack with no high-water mark blind-deletes the whole sealed queue. A userId is public (pub-prefix, exposed by group rosters), so anyone who knew one could purge a stranger's undelivered mail. The client now attaches an Ed25519 ownership signature (`breeze-<op>:<id>:<ts>` — verified-when-present, per-op binding so a sig can't be replayed across endpoints), and operators can enforce with the new `SEALED_REQUIRE_AUTH` / `MSG_REQUIRE_AUTH` secrets once deployed clients all sign.
+
+2. **Poll collapsed retention.** `handleSealedPoll` re-put the queue with a 5-minute "grace" TTL — send-path retention is a week, so one poll then >5 min offline silently expired unprocessed mail. The rewrite is deleted entirely: crash recovery needs no write (the key keeps its original lifetime, the hwm marker bounds what an ack may clear, client dedup absorbs re-delivery). Also one less KV write per non-empty poll on the hot path.
+
+SECURITY.md now documents the id-keyed surface honestly: signable today, enforceable via flag, destructive-without-auth by design until rollout.
+
+---
+
 ## Mobile package silently dropped every non-English locale + webview navigable to any *.pages.dev (branch devin/mobile-fixes, 2026-09-20)
 
 `mobile/prepare.js`, `mobile/capacitor.config.json`, `CHANGELOG.md`.
