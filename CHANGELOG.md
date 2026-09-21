@@ -1,5 +1,13 @@
 # Changelog
 
+## Dead ?pricing links in FUNDING.yml/README + SELF_HOSTING "full locales" claim (branch devin/dead-links, 2026-09-20)
+
+`FUNDING.yml`, `README.md`, `docs/SELF_HOSTING.md`, `CHANGELOG.md`.
+
+Residue sweep for `?pricing`: the URL param is read by nothing (the pricing page was removed with billing), yet FUNDING.yml's `custom` sponsor link and README's sponsor bullet still pointed at it — both now open the hosted app root. SELF_HOSTING's "8 languages … 7 full locales" also overstated (ja 100%, others ~96% core / ~79% total) — same wording fix as the README feature list.
+
+---
+
 ## deploy.sh walked operators through provisioning a billing system the product deleted (branch devin/deploy-drift, 2026-09-20)
 
 `deploy.sh`, `README.md`, `CHANGELOG.md`.
