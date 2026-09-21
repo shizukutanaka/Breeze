@@ -1,5 +1,13 @@
 # Changelog
 
+## /schedule timer escaped account-switch cleanup and could clobber a draft (branch devin/sched-create-timer, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The `/schedule` create-path `setTimeout` was never pushed to `_intervals`, so `_messengerCleanup` could not cancel it on account switch — the exact hazard the recovery path's comment warns about (the sched row survives in this account's IDB and fires on next login via recovery, which is the intended semantic). It also had the same draft-clobber as the recovery path: `msg-input.value` was overwritten with the scheduled text and never restored. Now registered + input save/restore.
+
+---
+
 ## Scheduled-send recovery clobbered the live draft (branch devin/sched-draft-clobber, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
