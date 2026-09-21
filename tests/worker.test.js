@@ -4021,36 +4021,55 @@ describe('presence heartbeat and check', () => {
     expect(j.name).toBeUndefined();
   });
 
-  it('round-trips advertised capabilities (N3 negotiation before bundle fetch)', async () => {
+  // Presence-carried caps were dead end-to-end (heartbeats never sent them, the only
+  // client reader — batch check — returns online only). The stored fields were PII at
+  // rest with no consumer; caps/pub/name are now accepted-and-ignored. Real caps live
+  // in the prekey bundle, read via /prekey/status.
+  it('ignores advertised caps and pub/name — they are no longer stored or served', async () => {
     const e = makeEnv();
-    // advertise() output: a heartbeat carrying the supported protocol caps.
     await handlePresence(
       { id: 'capsuser1', pub: 'p', name: 'Caro', caps: ['x3dh-v5', 'group-v5', 'franking'] }, e, req({}),
     );
     const j = await (await handlePresence({ id: 'capsuser1', check: true }, e, req({}))).json();
     expect(j.online).toBe(true);
-    expect(j.caps).toEqual(['x3dh-v5', 'group-v5', 'franking']);
-  });
-
-  it('sanitizes advertised caps (≤20 string entries, ≤32 chars; non-strings dropped)', async () => {
-    const e = makeEnv();
-    await handlePresence(
-      { id: 'capsuser2', pub: 'p', name: 'X', caps: ['ok', 123, { a: 1 }, 'y'.repeat(50), ...Array(30).fill('z')] },
-      e, req({}),
-    );
-    const j = await (await handlePresence({ id: 'capsuser2', check: true }, e, req({}))).json();
-    expect(j.caps.length).toBeLessThanOrEqual(20);
-    expect(j.caps).toContain('ok');
-    expect(j.caps.every((c) => typeof c === 'string' && c.length <= 32)).toBe(true);
-    expect(j.caps).not.toContain(123);
-  });
-
-  it('omits caps for a heartbeat that advertised none (legacy v4 client)', async () => {
-    const e = makeEnv();
-    await handlePresence({ id: 'capsuser3', pub: 'p', name: 'Z' }, e, req({}));
-    const j = await (await handlePresence({ id: 'capsuser3', check: true }, e, req({}))).json();
-    expect(j.online).toBe(true);
     expect(j.caps).toBeUndefined();
+    expect(j.name).toBeUndefined();
+    const raw = JSON.parse((await e.KV.get('presence:capsuser1')) || 'null');
+    if (raw) { expect(raw.caps).toBeUndefined(); expect(raw.name).toBeUndefined(); expect(raw.pub).toBeUndefined(); }
+  });
+
+  // PRESENCE_REQUIRE_AUTH previously claimed to 'verify the caller owns this userId' but
+  // only checked the id was REGISTERED — any caller satisfies that by naming an existing
+  // user. It now verifies a real Ed25519 ownership signature (breeze-presence:{id}:{ts}).
+  async function presSigner(env, id) {
+    const kp = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const raw = new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey));
+    await env.KV.put(`prekey:${id}`, JSON.stringify({ edIdentityKey: b64(raw) }));
+    return async (ts) => b64(new Uint8Array(await crypto.subtle.sign(
+      { name: 'Ed25519' }, kp.privateKey, new TextEncoder().encode(`breeze-presence:${id}:${ts}`))));
+  }
+
+  it('flag on: signed heartbeat accepted, unsigned rejected, forged rejected', async () => {
+    const e = makeEnv({ PRESENCE_REQUIRE_AUTH: 'true' });
+    const sign = await presSigner(e, 'presauth1');
+    // unsigned → 403 AUTH_REQUIRED
+    const un = await handlePresence({ id: 'presauth1' }, e, req({}));
+    expect(un.status).toBe(403);
+    expect((await un.json()).code).toBe('AUTH_REQUIRED');
+    // forged sig → 403 SIG_INVALID
+    const bad = await handlePresence({ id: 'presauth1', ts: Date.now(), sig: b64(new Uint8Array(64)) }, e, req({}));
+    expect(bad.status).toBe(403);
+    expect((await bad.json()).code).toBe('SIG_INVALID');
+    // signed → 200
+    const ts = Date.now();
+    const ok = await handlePresence({ id: 'presauth1', ts, sig: await sign(ts) }, e, req({}));
+    expect(ok.status).toBe(200);
+  });
+
+  it('flag off (default): unsigned heartbeat still accepted (legacy compat)', async () => {
+    const e = makeEnv();
+    const res = await handlePresence({ id: 'presauth2' }, e, req({}));
+    expect(res.status).toBe(200);
   });
 
   it('check returns online=false for unknown user', async () => {
@@ -4071,6 +4090,14 @@ describe('presence heartbeat and check', () => {
     const j = await r.json();
     expect(j.online['user00001']).toBe(true);
     expect(j.online['user99999']).toBe(false);
+  });
+
+  it('omits caps for a heartbeat that advertised none (legacy v4 client)', async () => {
+    const e = makeEnv();
+    await handlePresence({ id: 'capsuser3', pub: 'p', name: 'Z' }, e, req({}));
+    const j = await (await handlePresence({ id: 'capsuser3', check: true }, e, req({}))).json();
+    expect(j.online).toBe(true);
+    expect(j.caps).toBeUndefined();
   });
 
   it('batch check caps at 50 ids', async () => {
@@ -4161,21 +4188,21 @@ describe('presence heartbeat and check', () => {
     expect(j.online['staleuser1']).toBe(false);
   });
 
-  it('PRESENCE_REQUIRE_AUTH: rejects heartbeat from unregistered userId', async () => {
-    globalThis._presenceVerified = new Map(); // fresh cache
-    const e = makeEnv({ PRESENCE_REQUIRE_AUTH: 'true' });
-    const res = await handlePresence({ id: 'unreg00001', pub: 'p', name: 'X' }, e, req({}));
-    expect(res.status).toBe(401);
-    expect((await res.json()).code).toBe('UNREGISTERED');
-  });
-
-  it('PRESENCE_REQUIRE_AUTH: allows heartbeat from registered userId (prekey in KV)', async () => {
-    globalThis._presenceVerified = new Map();
+  // The old flag only checked the id was REGISTERED — verification now requires a real
+  // ownership signature, so unregistered AND registered-but-unsigned both fail closed.
+  it('PRESENCE_REQUIRE_AUTH: rejects unsigned heartbeat even when the id is registered', async () => {
     const e = makeEnv({ PRESENCE_REQUIRE_AUTH: 'true' });
     await e.KV.put('prekey:reguser0001', JSON.stringify({ spkPub: 'x' }));
     const res = await handlePresence({ id: 'reguser0001', pub: 'p', name: 'Reg' }, e, req({}));
-    expect(res.status).toBe(200);
-    expect((await res.json()).ok).toBe(true);
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
+  });
+
+  it('PRESENCE_REQUIRE_AUTH: rejects heartbeat for unregistered userId (no key to verify)', async () => {
+    const e = makeEnv({ PRESENCE_REQUIRE_AUTH: 'true' });
+    const res = await handlePresence({ id: 'unreg00001', ts: Date.now(), sig: 'x' }, e, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
   });
 
   it('PRESENCE_REQUIRE_AUTH: check (read) path bypasses auth requirement', async () => {

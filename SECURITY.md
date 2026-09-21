@@ -190,10 +190,18 @@ store) rather than gated — an opt-in toggle leaves the contradiction one peer 
   mistaken for an enforced boundary; it is a nudge. Making it real would require the server to
   own a per-slot resource, which today it does not.
 - **Presence discloses online status, not identity.** A `/presence` check answers only
-  `online` plus protocol capabilities. It no longer returns the account's display name
-  (removed v3.7): the endpoint is unauthenticated, so anyone holding a 12-character user id
-  could read the chosen name of the person behind it. Online-status itself remains visible to
-  anyone who knows an id — reduce exposure by not sharing your id publicly.
+  `online`. It no longer returns the account's display name (removed v3.7): the endpoint is
+  unauthenticated, so anyone holding a 12-character user id could read the chosen name of
+  the person behind it. Online-status itself remains visible to anyone who knows an id —
+  reduce exposure by not sharing your id publicly. Presence *writes* are also unauthenticated
+  by default — anyone can heartbeat as a known id and fake an "online" dot; operators can
+  set `PRESENCE_REQUIRE_AUTH=true` to require an Ed25519 ownership signature
+  (`breeze-presence:<id>:<ts>`, verified against `prekey:<id>`). The flag stays opt-in —
+  unlike the queue flags, every already-deployed client posts unsigned heartbeats, so a
+  default-on flip would make existing builds look permanently offline until they upgrade.
+  Capability data (`caps`) never rode presence end-to-end (the heartbeat never sent it and
+  the batch check — the only client reader — returns online only); it lives in the prekey
+  bundle, read via `/prekey/status`.
 - **Id-keyed queues are owner-enforced by default.** `/msg/poll`, `/sealed/poll` and
   `/sealed/ack` require an Ed25519 ownership signature (`breeze-<op>:<id>:<ts>`,
   verified against the registered `prekey:{id}` bundle — same pattern as group ops)

@@ -558,12 +558,11 @@ async function handleMsgPoll(body, env, request) {
 }
 
 async function handlePresence(body, env, request) {
-  const { id, ids, pub, name, caps, check: isCheck } = body;
-  // N3: capability advertisement carried in the heartbeat so a peer can negotiate the
-  // protocol version (x3dh-v5 / group-v5) BEFORE fetching a 1:1 bundle — important for
-  // groups, where a member learns the group's capability floor without fetching every
-  // member's prekey bundle. (advertise() from src/crypto/negotiate.js.)
-  const safeCaps = sanitizeCaps(caps);
+  // caps negotiation does NOT ride presence — the heartbeat sends none and the batch
+  // check (the only client reader) returns only the online map. Capability data lives
+  // in the prekey bundle, read via /prekey/status (the N3 comment below once promised
+  // presence-carried caps; the path was never wired end-to-end — dead code removed).
+  const { id, ids, check: isCheck } = body;
 
   // Batch check: { ids: ['abc','def'], check: true }
   // v3.6: Check in-memory presence cache before KV for each id — the single-check
@@ -611,35 +610,42 @@ async function handlePresence(body, env, request) {
     // NOTE: `name` is deliberately NOT returned. This endpoint is unauthenticated, so any
     // party holding only a 12-char user id could read that account's chosen DISPLAY NAME —
     // a PII disclosure to strangers that no contact relationship gated and no user could
-    // refuse (Socratic metadata lens). `caps` stays: it is protocol capability data the N3
-    // negotiation needs, and it says nothing about the person. The batch path never leaked
-    // the name either, and no client code consumed it.
+    // refuse (Socratic metadata lens). The batch path never leaked the name either, and
+    // no client code consumed it.
     if (memData) {
       const p = safeJsonParse(memData);
       if (!p) return json({ online: false }, 200, request);
-      return json({ online: (Date.now() - p.at) < 60000, caps: p.caps }, 200, request);
+      return json({ online: (Date.now() - p.at) < 60000 }, 200, request);
     }
     const data = await kvGet(env, `presence:${id}`);
     if (!data) return json({ online: false }, 200, request);
     const p = safeJsonParse(data);
     if (!p) return json({ online: false }, 200, request);
-    return json({ online: (Date.now() - p.at) < 60000, caps: p.caps }, 200, request);
+    return json({ online: (Date.now() - p.at) < 60000 }, 200, request);
   }
 
-  // Store presence heartbeat
-  // When PRESENCE_REQUIRE_AUTH=true, verify the caller owns this userId before writing.
-  // The check is cached in-memory per isolate so a single KV read covers many heartbeats.
+  // Store presence heartbeat.
+  // PRESENCE_REQUIRE_AUTH=true makes the ownership check REAL: the write must carry
+  // ts+sig, Ed25519-verified over `breeze-presence:${id}:${ts}` against the identity
+  // key registered in prekey:${id} — the same scheme checkOwnerAuth uses for the
+  // queue endpoints. (The earlier version only checked the id was REGISTERED, which
+  // any caller satisfies by naming an existing user — it verified nothing about the
+  // caller.) Unsigned writes are otherwise open: a stranger could heartbeat AS any
+  // userId — a fake 'online' dot that never goes dark. This stays OPT-IN unlike the
+  // queue flags: every already-deployed client posts unsigned heartbeats, so a
+  // default-on flip would render all of them permanently offline-looking until they
+  // upgrade. Fresh ts inside the signature (no verify-cache) keeps replays dead.
   if (env.PRESENCE_REQUIRE_AUTH === 'true') {
-    if (!globalThis._presenceVerified) globalThis._presenceVerified = new Map();
-    if (!globalThis._presenceVerified.has(id)) {
-      const pkData = await kvGet(env, `prekey:${id}`);
-      if (!pkData) return json({ error: 'User not registered', code: 'UNREGISTERED' }, 401, request);
-      globalThis._presenceVerified.set(id, 1);
-      if (globalThis._presenceVerified.size > 2000) {
-        const entries = [...globalThis._presenceVerified.entries()];
-        globalThis._presenceVerified = new Map(entries.slice(-1000));
-      }
+    const pts = body.ts, psig = body.sig;
+    if (typeof pts !== 'number' || !Number.isFinite(pts) || Math.abs(Date.now() - pts) > TIMEOUT_MS.REQ_TS
+      || typeof psig !== 'string' || !psig || psig.length > 500) {
+      return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
     }
+    const pkRaw = await kvGet(env, `prekey:${id}`);
+    const bundle = pkRaw ? safeJsonParse(pkRaw) : null;
+    const ok = bundle && typeof bundle.edIdentityKey === 'string'
+      && await verifyEd25519(bundle.edIdentityKey, utf8ToB64(`breeze-presence:${id}:${pts}`), psig);
+    if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
   }
 
   // v3.6: In-memory presence cache — only writes to KV every 5 minutes (saves ~90% KV writes)
@@ -655,16 +661,13 @@ async function handlePresence(body, env, request) {
   }
   const presKey = `presence:${id}`;
   const lastWrite = globalThis._presenceCache.get(presKey) || 0;
-  // Cap pub to 200 chars (a base64 X25519/P-256 key is ≤88 chars; large values are abuse).
-  const safePub = typeof pub === 'string' ? pub.slice(0, 200) : undefined;
   // Identity-clone detection: `inst` is a per-INSTALL random id. Two different live insts
   // heartbeating the same identity within a heartbeat window = the same identity running on
   // two installs at once (e.g. a backup restored while the original device stays active) —
   // a Double-Ratchet-fork hazard the client warns the user about. Best-effort: the previous
   // record may live in another isolate's memory or a ≤5-min-stale KV entry, so a miss is
   // possible; a hit is always real (inst is compared only within the same identity).
-  // The inst must be SIGNED by the identity that owns this id. Presence writes are otherwise
-  // unauthenticated (PRESENCE_REQUIRE_AUTH is off by default), so an unsigned inst let any
+  // The inst must be SIGNED by the identity that owns this id — an unsigned inst let any
   // stranger POST a random inst for someone else's id and make that user see a scary
   // "your identity is running on two devices" warning on demand — a spoofable security alarm
   // trains users to ignore the real one (Socratic crypto-edge lens). Unsigned or
@@ -684,9 +687,11 @@ async function handlePresence(body, env, request) {
     const prev = prevRaw ? safeJsonParse(prevRaw) : null;
     if (prev?.inst && prev.inst !== safeInst && Date.now() - prev.at < 90000) conflict = true;
   }
-  const presData = { pub: safePub, name: sanitizeString(name, 64), at: Date.now() };
+  // Record is {at, inst?} only: pub/name/caps were written but no reader ever served
+  // them — PII stored at rest for nobody's benefit. The client may still send the
+  // fields; they are simply ignored rather than persisted.
+  const presData = { at: Date.now() };
   if (safeInst) presData.inst = safeInst;
-  if (safeCaps) presData.caps = safeCaps;
   if (Date.now() - lastWrite > TIMEOUT_MS.PRESENCE_WRITE) { // throttle KV writes
     await kvPut(env, presKey, JSON.stringify(presData), { expirationTtl: TTL.MIN * 6 }); // 6min TTL (covers 5min interval + slack)
     globalThis._presenceCache.set(presKey, Date.now());

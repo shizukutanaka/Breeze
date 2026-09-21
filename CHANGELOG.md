@@ -1,5 +1,21 @@
 # Changelog
 
+## Presence auth made real + dead caps/beacon/PII fields removed (branch devin/consolidate-groups, 2026-09-20)
+
+PRESENCE_REQUIRE_AUTH claimed to verify the caller owns the id but only checked
+the id was REGISTERED — any caller satisfies that by naming an existing user.
+It now verifies an Ed25519 ownership signature (`breeze-presence:{id}:{ts}` vs
+`prekey:{id}`, fresh-ts inside the sig kills replay). Stays OPT-IN: every deployed
+client heartbeats unsigned, so a default-on flip would show them all offline
+until they upgrade — the client now sends ts+sig unconditionally so operators
+can flip it on any time. Also removed: presence-carried `caps` (dead end-to-end —
+heartbeats never sent it and the only reader, the batch check, returns `online`
+only; real caps live in the prekey bundle via /prekey/status), the never-served
+`pub`/`name` fields stored in the presence record (PII at rest for nobody), and
+the `{ids, offline}` sendBeacon calls — the Worker never had an offline path,
+so the beacons were a decade of 400s.
+
+
 ## Plaintext-signal forgery closed on upgraded peers (branch devin/consolidate-groups, 2026-09-20)
 
 typing/read and call-end carry no inner auth — anyone knowing a room pair could

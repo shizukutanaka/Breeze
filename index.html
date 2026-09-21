@@ -2625,11 +2625,11 @@ window.addEventListener('offline', () => {
     banner.classList.remove('hidden');
   }
 });
-// v3.1: Notify server when page closes (sendBeacon for reliable delivery)
+// v3.1: Notify server when page closes — the old sendBeacon posted {ids, offline} but
+// the Worker never implemented an offline path (400 at !id), so the beacon was a no-op.
+// Presence self-corrects within ~60s via at-staleness; a real offline signal would need
+// a signed non-beacon write (sendBeacon can't await signMessage).
 window.addEventListener('beforeunload', () => {
-  if (typeof API !== 'undefined' && API && typeof myId !== 'undefined' && myId) {
-    try { navigator.sendBeacon(API + '/presence', JSON.stringify({ ids: [myId], offline: true })); } catch(e) {}
-  }
   // v3.6: Emergency save retry queue (sync — beforeunload can't await)
   try {
     if (typeof _retryQueue !== 'undefined' && _retryQueue.length > 0) {
@@ -2639,14 +2639,9 @@ window.addEventListener('beforeunload', () => {
     }
   } catch {}
 });
-// v3.1: Pause polling when tab hidden (save battery)
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
-    if (typeof API !== 'undefined' && API && typeof myId !== 'undefined' && myId) {
-      try { navigator.sendBeacon(API + '/presence', JSON.stringify({ ids: [myId], offline: true })); } catch(e) {}
-    }
-  }
-});
+// The dead {ids, offline} visibilitychange beacon was removed — the Worker never had an
+// offline path (400 at !id). Presence staleness handles backgrounded tabs; the real
+// battery saver is the PRESENCE_BG_INTERVAL_MS heartbeat switch.
 
 // Theme: auto-detect or restore preference
 (() => {
@@ -10900,7 +10895,12 @@ async function initMessenger(dbName) {
         // Sign the instance id: the relay only honours a SIGNED inst, so a stranger cannot
         // POST a fake one for our id and manufacture a clone warning on our screen.
         const instSig = await signMessage(`breeze-inst:${myId}:${inst.v}`);
-        const resp = await postAPIRaw('/presence', { id: myId, pub: myPubB64, name: myName, inst: inst.v, instSig });
+        // ts+sig let an operator flip PRESENCE_REQUIRE_AUTH to require proof the
+        // heartbeat writer owns this id (default stays off — unsigned builds still
+        // heartbeat fine until they upgrade).
+        const presTs = Date.now();
+        const presSig = await signMessage(`breeze-presence:${myId}:${presTs}`);
+        const resp = await postAPIRaw('/presence', { id: myId, pub: myPubB64, name: myName, inst: inst.v, instSig, ts: presTs, sig: presSig });
         const data = resp?.ok ? await resp.json().catch(() => null) : null;
         if (data?.conflict && Date.now() - _cloneWarnedAt > 5 * MS.MIN) {
           _cloneWarnedAt = Date.now();
