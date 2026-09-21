@@ -11079,6 +11079,10 @@ async function initMessenger(dbName) {
     // Reject unreasonably large metadata (255 bytes is plenty for a filename/MIME type).
     if (nameLen > 255 || mimeLen > 128) return;
     const data = new Uint8Array(buffer, 28 + nameLen + mimeLen);
+    // Sender never emits a chunk larger than CHUNK_SIZE; without this cap a peer could
+    // declare total = MAX_CHUNKS and send e.g. 1 MB per chunk — bytes in memory would
+    // blow far past FILE_MAX even though the chunk COUNT is bounded.
+    if (data.length > CONFIG.CHUNK_SIZE) return;
     if (!_fileChunks[fileId]) {
       // Prune transfers idle for > 60 s before checking the slot limit — prevents an
       // attacker from starting 10 incomplete transfers and permanently blocking new ones.
