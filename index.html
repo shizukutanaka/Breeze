@@ -7777,6 +7777,9 @@ async function initMessenger(dbName) {
     // reaction/edit/delete lands in the message's own chat, not whatever is open.
     const contact = snapContact || activeContact;
     if (!contact) return;
+    // A kicked member's signals void the same way messages do — every receiver
+    // drops non-roster senders, so don't fan out ciphertext nobody accepts.
+    if (contact.isGroup && contact.kicked) return;
     // v3.6: Group signal fan-out — send encrypted signal to each member
     if (contact.isGroup && contact.members?.length > 0) {
       const signalPayload = JSON.stringify(data);
