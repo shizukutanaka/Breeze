@@ -1,5 +1,13 @@
 # Changelog
 
+## SDP signature verification was dead — wrong function name silently dropped every signed SDP (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The sig-poll's SDP handler called `verifyMessage()` — a function that does not exist (the codebase's verifier is `verifySignature`). The ReferenceError was swallowed by the enclosing `catch`, so `sdpJson` never advanced past the `{sdp,sig,sigPub}` wrapper: `setRemoteDescription` then received the wrapper object (no `type` field), threw, and the signal was dropped. Net effect: signing-capable clients produced signed offers/answers that peers always discarded — the Ed25519 MITM defense never ran, and P2P handshakes between modern clients silently failed (falling back to relay-only delivery). One-word fix; verified `verifySignature` is the only verifier and the wire envelope shape is unchanged.
+
+---
+
 ## Badge interval opened an IndexedDB connection every 5s — never used, never closed (branch devin/consolidate-groups, 2026-09-21)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
