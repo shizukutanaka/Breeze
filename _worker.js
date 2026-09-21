@@ -693,15 +693,18 @@ async function handlePresence(body, env, request) {
   }
   // Always update in-memory for fast reads within same isolate
   globalThis._presenceCache.set(presKey + ':data', JSON.stringify(presData));
-  // v3.6: In-memory online counter (saves 1 KV read + 1 KV write per heartbeat)
-  if (!globalThis._onlineCounter) globalThis._onlineCounter = { minute: 0, count: 0, prev: 0 };
+  // v3.6: In-memory online counter (saves 1 KV read + 1 KV write per heartbeat).
+  // Count UNIQUE users, not heartbeats: a Set of ids this minute — the old counter
+  // incremented per heartbeat, inflating ~2× at the 30 s client interval.
+  if (!globalThis._onlineCounter) globalThis._onlineCounter = { minute: 0, ids: new Set(), prev: 0 };
   const currentMinute = Math.floor(Date.now() / 60000);
   if (globalThis._onlineCounter.minute !== currentMinute) {
     // Preserve the previous minute's count as a fallback so handleOnlineCount does not
     // report 0 at the start of each minute before the first heartbeat arrives.
-    globalThis._onlineCounter = { minute: currentMinute, count: 0, prev: globalThis._onlineCounter.count };
+    globalThis._onlineCounter = { minute: currentMinute, ids: new Set(), prev: globalThis._onlineCounter.ids?.size ?? globalThis._onlineCounter.count ?? 0 };
   }
-  globalThis._onlineCounter.count++;
+  globalThis._onlineCounter.ids.add(id);
+  globalThis._onlineCounter.count = globalThis._onlineCounter.ids.size;
   return json(conflict ? { ok: true, conflict: true } : { ok: true }, 200, request);
 }
 

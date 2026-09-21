@@ -4080,6 +4080,15 @@ describe('presence heartbeat and check', () => {
     expect(j.online).toBe(2);
   });
 
+  it('counts unique users, not heartbeats (repeat heartbeat stays 1)', async () => {
+    const e = makeEnv();
+    await handlePresence({ id: 'user00012', pub: 'p1', name: 'A' }, e, req({}));
+    await handlePresence({ id: 'user00012', pub: 'p1', name: 'A' }, e, req({}));
+    await handlePresence({ id: 'user00012', pub: 'p1', name: 'A' }, e, req({}));
+    const j = await (await handleOnlineCount({}, e, req({}))).json();
+    expect(j.online).toBe(1);
+  });
+
   it('rejects malformed id on heartbeat (KV key injection guard)', async () => {
     const e   = makeEnv();
     const res = await handlePresence({ id: 'bad id!!' }, e, req({}));

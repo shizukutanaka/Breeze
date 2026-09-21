@@ -1,5 +1,13 @@
 # Changelog
 
+## /api/online counted heartbeats, not users (branch devin/consolidate-groups, 2026-09-20)
+
+`_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
+
+The in-memory counter did `count++` per presence heartbeat — every client heartbeats every 30 s, so the "online" number ran ~2× the real unique-user count (and drifted further the longer a session stayed open). The counter now tracks a per-minute `Set` of user ids and reports `ids.size`; the minute-rollover fallback still carries the previous count forward. New test pins the dedup: three heartbeats from the same user report `online: 1`. Still an isolate-local approximation (Cloudflare PoPs don't share memory) — documented as approximate in the endpoint comment.
+
+---
+
 ## /schedule never persisted — the IDB write was always rejected (branch devin/consolidate-groups, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
