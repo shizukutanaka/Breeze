@@ -1,3 +1,13 @@
+## Read-receipt watermark: P2P callers skipped the clamp (branch devin/rr-clamp-p2p, 2026-09-21)
+
+showReadReceipt(contactId, ts) writes the peer-supplied ts into _lastReadTs (persisted
+to IDB) and stamps readAt on every m.ts <= ts. The sealed-relay caller clamps the
+watermark — but the two DataChannel callers (state channel + main channel) pass
+msg.ts raw: a peer sending {type:'read', ts: 9999999999999} permanently marks every
+FUTURE message in that conversation as read, replayed from storage on every load.
+The clamp moved INTO showReadReceipt so all current and future callers are covered:
+non-finite/non-number ts is a no-op, ts is capped at correctedNow()+1min.
+
 ## 1:1 relayed reactions get the same caps the group path already had (branch devin/reaction-caps-1to1, 2026-09-21)
 
 The encrypted `isSignal` reaction handler on the 1:1 path created `reactions[emoji]`

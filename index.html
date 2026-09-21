@@ -11363,6 +11363,11 @@ async function initMessenger(dbName) {
   })();
 
   function showReadReceipt(contactId, ts) {
+    // Peer-supplied watermark arrives unclamped from the P2P state/main channels too
+    // (the sealed-relay caller clamps its own): a far-future ts would stamp readAt on
+    // every future message in this conversation, replayed from IDB on every load.
+    if (typeof ts !== 'number' || !Number.isFinite(ts)) return;
+    ts = Math.min(ts, correctedNow() + MS.MIN);
     _lastReadTs[contactId] = ts;
     clearTimeout(showReadReceipt._saveTimer);
     showReadReceipt._saveTimer = setTimeout(() => dbPut('identity', _lastReadTs, 'readTs'), MS.SEC);
