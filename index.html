@@ -5734,6 +5734,7 @@ async function initMessenger(dbName) {
       if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null; }
       if (_retryTimer) { clearTimeout(_retryTimer); _retryTimer = null; }
       if (_typingTimeout) { clearTimeout(_typingTimeout); _typingTimeout = null; }
+      if (_readTimer) { clearTimeout(_readTimer); _readTimer = null; } // delayed read receipt — otherwise fires under the new account's identity
       // _updateFocusBanner() self-reschedules every minute for as long as /focus is
       // active, and #focus-bar is a static element that survives every account switch
       // (only _DOM's memoization cache is cleared, not the DOM itself) — so an

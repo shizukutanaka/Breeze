@@ -1,5 +1,13 @@
 # Changelog
 
+## Delayed read receipt survived account switch — ghost timer under new identity (branch devin/read-timer-cleanup, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`_readTimer` (the `/readreceipt delay` scheduler) was the one named timer missing from `_messengerCleanup` — a pending receipt fired after an account switch, calling `_signal(_dmRoom(oldContact), 'read', ...)` under the new account's identity and keys. Same ghost-timer class as the earlier presence/poll/retry fixes; added to the cleanup list.
+
+---
+
 ## Tripwires for group-policy and wipe invariants (branch devin/invariant-tripwires-3, 2026-09-20)
 
 `tests/invariants.test.js`, `CHANGELOG.md`.
