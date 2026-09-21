@@ -64,7 +64,7 @@ id = ""  # ← REQUIRED: paste your KV namespace ID here
 # The remaining flags stay opt-in for zero-config self-hosting; set to "true" to enforce.
 # wrangler pages secret put PRESENCE_REQUIRE_AUTH      # true — require Ed25519 ownership sig on presence writes
 # wrangler pages secret put ALIAS_REQUIRE_AUTH         # true — reject unsigned @alias registration
-# wrangler pages secret put GROUP_REQUIRE_AUTH         # true — reject unsigned group kick/rename/admin/leave/delete/transfer
-# wrangler pages secret put PUSH_REQUIRE_AUTH          # true — reject unsigned push subscribe/unsubscribe
-# wrangler pages secret put TURN_REQUIRE_AUTH          # true — reject unsigned TURN credential requests
-# wrangler pages secret put BACKUP_REQUIRE_AUTH        # true — without this, knowing a userId is enough to download that user's encrypted backup blob
+# wrangler pages secret put GROUP_REQUIRE_AUTH         # false — opt OUT; group mutations are signed by default
+# wrangler pages secret put PUSH_REQUIRE_AUTH          # false — opt OUT; push subscribe/unsubscribe signed by default
+# wrangler pages secret put TURN_REQUIRE_AUTH          # false — opt OUT; configured TURN providers default to registered-only
+# wrangler pages secret put BACKUP_REQUIRE_AUTH        # false — opt OUT; signed download/overwrite required by default

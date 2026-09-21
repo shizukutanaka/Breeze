@@ -60,6 +60,44 @@ import { negotiateGroup, CAPS } from '../src/crypto/negotiate.js';
 // base64 helper for building signed prekey bundles in tests.
 const toB64 = (bytes) => Buffer.from(bytes).toString('base64');
 
+// Group mutations are signed by default (GROUP_REQUIRE_AUTH opt-out), so every
+// test path exercises the signed flow the deployed client uses. gA lazily mints
+// an Ed25519 key per actor, pins it as that actor's edIdentityKey, and returns
+// {ts, sig} over checkGroupAuth's canonical `breeze-group-{action}:{token}:{actor}:{ts}:{bind}`.
+const _gKeys = new Map();
+// Mint+pin an Ed25519 identity for an actor (its key goes to prekey:{actorId}.edIdentityKey).
+async function _pinEd(env, actorId) {
+  if (!_gKeys.has(actorId)) {
+    const kp = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    _gKeys.set(actorId, { kp, pub: toB64(new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey))) });
+  }
+  const k = _gKeys.get(actorId);
+  const raw = await env.KV.get(`prekey:${actorId}`);
+  let b = {};
+  try { b = raw ? JSON.parse(raw) : {}; } catch { b = {}; }
+  b.edIdentityKey = k.pub;
+  await env.KV.put(`prekey:${actorId}`, JSON.stringify(b));
+  return k;
+}
+async function _edSign(k, text) {
+  return toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, k.kp.privateKey, new TextEncoder().encode(text))));
+}
+async function gA(env, action, token, actorId, bind = '') {
+  const k = await _pinEd(env, actorId);
+  const ts = Date.now();
+  return { ts, sig: await _edSign(k, `breeze-group-${action}:${token}:${actorId}:${ts}:${bind}`) };
+}
+// Push subscribe/unsubscribe are signed by default too. pA signs
+// `breeze-push-{action}:{uid}:{ts}:{bind}`; pass the subscription object for subscribe
+// (bind = endpoint:p256dh:auth) or the endpoint string for unsubscribe.
+async function pA(env, action, userId, bindOrSub = '') {
+  const bind = typeof bindOrSub === 'string' ? bindOrSub
+    : `${bindOrSub.endpoint || ''}:${bindOrSub.keys?.p256dh || ''}:${bindOrSub.keys?.auth || ''}`;
+  const k = await _pinEd(env, userId);
+  const ts = Date.now();
+  return { ts, sig: await _edSign(k, `breeze-push-${action}:${userId}:${ts}:${bind}`) };
+}
+
 // The worker uses several in-memory globals; reset all between tests so they
 // don't bleed across test cases.
 beforeEach(() => {
@@ -1036,7 +1074,7 @@ describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {
     const info0 = await (await handleGroupInfo({ token }, env, req({}))).json();
     expect(info0.epoch).toBe(0);
 
-    const kick = await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
+    const kick = await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','carol001'))}, env, req({}));
     const kj = await kick.json();
     expect(kj.ok).toBe(true);
     expect(kj.epoch).toBe(1); // bumped → remaining members rotate sender keys
@@ -1049,7 +1087,7 @@ describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {
   it('only the creator can kick (no epoch bump otherwise)', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupKick({ token, kickId: 'carol001', adminId: 'bob00001' }, env, req({}));
+    const res = await handleGroupKick({ token, kickId: 'carol001', adminId: 'bob00001' , ...(await gA(env,'kick',token,'bob00001','carol001'))}, env, req({}));
     expect(res.status).toBe(403);
     const info = await (await handleGroupInfo({ token }, env, req({}))).json();
     expect(info.epoch).toBe(0); // unchanged
@@ -1058,7 +1096,7 @@ describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {
   it('kicking a non-member returns 404 without bumping epoch', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupKick({ token, kickId: 'nobody00', adminId: 'creator1' }, env, req({}));
+    const res = await handleGroupKick({ token, kickId: 'nobody00', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','nobody00'))}, env, req({}));
     expect(res.status).toBe(404);
     expect((await res.json()).code).toBe('NOT_MEMBER');
     const info = await (await handleGroupInfo({ token }, env, req({}))).json();
@@ -1068,7 +1106,7 @@ describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {
   it('creator cannot kick themselves (self-kick returns 400)', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupKick({ token, kickId: 'creator1', adminId: 'creator1' }, env, req({}));
+    const res = await handleGroupKick({ token, kickId: 'creator1', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','creator1'))}, env, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('FORBIDDEN');
     // Epoch must not change.
@@ -1079,7 +1117,7 @@ describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {
   it('join after kick returns the bumped epoch so new members know which sender key to request', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
+    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','carol001'))}, env, req({}));
     // Dave joins the group after the kick — should see epoch 1, not 0.
     const res = await handleGroupJoin({ token, memberId: 'dave0001', memberPub: 'dave0001dpub', memberName: 'D' }, env, req({}));
     expect(res.status).toBe(200);
@@ -1103,7 +1141,7 @@ describe('group durable kick + unban (item 64)', () => {
   it('a kicked member cannot rejoin via the invite token', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
+    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','carol001'))}, env, req({}));
     const rejoin = await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
     expect(rejoin.status).toBe(403);
     expect((await rejoin.json()).code).toBe('BANNED');
@@ -1115,7 +1153,7 @@ describe('group durable kick + unban (item 64)', () => {
   it('a non-kicked member can still join normally (ban is targeted)', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
+    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','carol001'))}, env, req({}));
     const res = await handleGroupJoin({ token, memberId: 'dave0001', memberPub: 'dave0001dpub', memberName: 'D' }, env, req({}));
     expect(res.status).toBe(200);
   });
@@ -1123,8 +1161,8 @@ describe('group durable kick + unban (item 64)', () => {
   it('the creator can unban a kicked member, who may then rejoin', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
-    const unban = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'carol001', action: 'unban' }, env, req({}));
+    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','carol001'))}, env, req({}));
+    const unban = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'carol001', action: 'unban' , ...(await gA(env,'admin',token,'creator1','unban:carol001'))}, env, req({}));
     expect(unban.status).toBe(200);
     expect((await unban.json()).banned).not.toContain('carol001');
     const rejoin = await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
@@ -1134,7 +1172,7 @@ describe('group durable kick + unban (item 64)', () => {
   it('unban is idempotent for a non-banned id (no-op success)', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'carol001', action: 'unban' }, env, req({}));
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'carol001', action: 'unban' , ...(await gA(env,'admin',token,'creator1','unban:carol001'))}, env, req({}));
     expect(res.status).toBe(200);
     expect((await res.json()).notBanned).toBe(true);
   });
@@ -1142,8 +1180,8 @@ describe('group durable kick + unban (item 64)', () => {
   it('only the creator can unban (a regular member cannot)', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
-    const res = await handleGroupAdmin({ token, adminId: 'carol001', targetId: 'carol001', action: 'unban' }, env, req({}));
+    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','carol001'))}, env, req({}));
+    const res = await handleGroupAdmin({ token, adminId: 'carol001', targetId: 'carol001', action: 'unban' , ...(await gA(env,'admin',token,'carol001','unban:carol001'))}, env, req({}));
     expect(res.status).toBe(403);
   });
 });
@@ -1162,7 +1200,7 @@ describe('group multi-admin management (completes the half-built admins array)',
   it('the creator can promote a member to admin, surfaced in group info', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' , ...(await gA(env,'admin',token,'creator1','promote:bob00001'))}, env, req({}));
     expect(res.status).toBe(200);
     expect((await res.json()).admins).toEqual(['bob00001']);
     const info = await (await handleGroupInfo({ token }, env, req({}))).json();
@@ -1173,8 +1211,8 @@ describe('group multi-admin management (completes the half-built admins array)',
   it('promote is idempotent (re-promoting an admin does not duplicate)', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
-    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' , ...(await gA(env,'admin',token,'creator1','promote:bob00001'))}, env, req({}));
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' , ...(await gA(env,'admin',token,'creator1','promote:bob00001'))}, env, req({}));
     const j = await res.json();
     expect(j.alreadyAdmin).toBe(true);
     expect(j.admins).toEqual(['bob00001']);
@@ -1183,17 +1221,17 @@ describe('group multi-admin management (completes the half-built admins array)',
   it('the creator can demote an admin back to a regular member', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
-    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'demote' }, env, req({}));
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' , ...(await gA(env,'admin',token,'creator1','promote:bob00001'))}, env, req({}));
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'demote' , ...(await gA(env,'admin',token,'creator1','demote:bob00001'))}, env, req({}));
     expect((await res.json()).admins).toEqual([]);
   });
 
   it('a non-creator cannot manage admins (no privilege escalation)', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' , ...(await gA(env,'admin',token,'creator1','promote:bob00001'))}, env, req({}));
     // bob is an admin but still cannot mint another admin.
-    const res = await handleGroupAdmin({ token, adminId: 'bob00001', targetId: 'carol001', action: 'promote' }, env, req({}));
+    const res = await handleGroupAdmin({ token, adminId: 'bob00001', targetId: 'carol001', action: 'promote' , ...(await gA(env,'admin',token,'bob00001','promote:carol001'))}, env, req({}));
     expect(res.status).toBe(403);
     expect((await res.json()).code).toBe('FORBIDDEN');
   });
@@ -1201,7 +1239,7 @@ describe('group multi-admin management (completes the half-built admins array)',
   it('cannot promote the creator (creator authority is implicit)', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'creator1', action: 'promote' }, env, req({}));
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'creator1', action: 'promote' , ...(await gA(env,'admin',token,'creator1','promote:creator1'))}, env, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_TARGET');
   });
@@ -1209,7 +1247,7 @@ describe('group multi-admin management (completes the half-built admins array)',
   it('cannot promote a non-member', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'nobody00', action: 'promote' }, env, req({}));
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'nobody00', action: 'promote' , ...(await gA(env,'admin',token,'creator1','promote:nobody00'))}, env, req({}));
     expect(res.status).toBe(404);
     expect((await res.json()).code).toBe('NOT_MEMBER');
   });
@@ -1217,7 +1255,7 @@ describe('group multi-admin management (completes the half-built admins array)',
   it('rejects an unknown action', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'destroy' }, env, req({}));
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'destroy' , ...(await gA(env,'admin',token,'creator1','destroy:bob00001'))}, env, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_ACTION');
   });
@@ -1225,8 +1263,8 @@ describe('group multi-admin management (completes the half-built admins array)',
   it('a promoted admin can kick a regular member (authorization honors admins)', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
-    const kick = await handleGroupKick({ token, kickId: 'carol001', adminId: 'bob00001' }, env, req({}));
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' , ...(await gA(env,'admin',token,'creator1','promote:bob00001'))}, env, req({}));
+    const kick = await handleGroupKick({ token, kickId: 'carol001', adminId: 'bob00001' , ...(await gA(env,'kick',token,'bob00001','carol001'))}, env, req({}));
     expect(kick.status).toBe(200);
     expect((await kick.json()).epoch).toBe(1);
   });
@@ -1234,21 +1272,21 @@ describe('group multi-admin management (completes the half-built admins array)',
   it('an admin cannot kick a fellow admin — only the creator can', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
-    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'carol001', action: 'promote' }, env, req({}));
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' , ...(await gA(env,'admin',token,'creator1','promote:bob00001'))}, env, req({}));
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'carol001', action: 'promote' , ...(await gA(env,'admin',token,'creator1','promote:carol001'))}, env, req({}));
     // bob (admin) tries to kick carol (admin) → blocked.
-    const blocked = await handleGroupKick({ token, kickId: 'carol001', adminId: 'bob00001' }, env, req({}));
+    const blocked = await handleGroupKick({ token, kickId: 'carol001', adminId: 'bob00001' , ...(await gA(env,'kick',token,'bob00001','carol001'))}, env, req({}));
     expect(blocked.status).toBe(403);
     // creator can.
-    const ok = await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
+    const ok = await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','carol001'))}, env, req({}));
     expect(ok.status).toBe(200);
   });
 
   it('demoting a kicked/removed admin is handled (leave strips admin status)', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
-    await handleGroupLeave({ token, memberId: 'bob00001' }, env, req({}));
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' , ...(await gA(env,'admin',token,'creator1','promote:bob00001'))}, env, req({}));
+    await handleGroupLeave({ token, memberId: 'bob00001' , ...(await gA(env,'leave',token,'bob00001',''))}, env, req({}));
     const info = await (await handleGroupInfo({ token }, env, req({}))).json();
     expect(info.admins).toEqual([]); // leave filtered bob out of admins
   });
@@ -1268,7 +1306,7 @@ describe('group ownership transfer (companion to multi-admin)', () => {
   it('the creator transfers ownership; creator* fields follow the new owner', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'bob00001' }, env, req({}));
+    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'bob00001' , ...(await gA(env,'transfer',token,'creator1','bob00001'))}, env, req({}));
     expect(res.status).toBe(200);
     const j = await res.json();
     expect(j.creatorId).toBe('bob00001');
@@ -1284,21 +1322,21 @@ describe('group ownership transfer (companion to multi-admin)', () => {
   it('after transfer the new creator can perform creator-only actions; the old cannot', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'bob00001' }, env, req({}));
+    await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'bob00001' , ...(await gA(env,'transfer',token,'creator1','bob00001'))}, env, req({}));
     // Old creator (now an admin) cannot delete the group.
-    const del1 = await handleGroupDelete({ token, adminId: 'creator1' }, env, req({}));
+    const del1 = await handleGroupDelete({ token, adminId: 'creator1' , ...(await gA(env,'delete',token,'creator1',''))}, env, req({}));
     expect(del1.status).toBe(403);
     // New creator can.
-    const del2 = await handleGroupDelete({ token, adminId: 'bob00001' }, env, req({}));
+    const del2 = await handleGroupDelete({ token, adminId: 'bob00001' , ...(await gA(env,'delete',token,'bob00001',''))}, env, req({}));
     expect(del2.status).toBe(200);
   });
 
   it('promoting the new owner out of admins is idempotent (was already an admin)', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' , ...(await gA(env,'admin',token,'creator1','promote:bob00001'))}, env, req({}));
     // Transfer to bob who is currently an admin → bob's implicit authority, dropped from admins.
-    await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'bob00001' }, env, req({}));
+    await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'bob00001' , ...(await gA(env,'transfer',token,'creator1','bob00001'))}, env, req({}));
     const info = await (await handleGroupInfo({ token }, env, req({}))).json();
     expect(info.admins).not.toContain('bob00001');
     expect(info.admins).toContain('creator1');
@@ -1307,7 +1345,7 @@ describe('group ownership transfer (companion to multi-admin)', () => {
   it('a non-creator cannot transfer ownership', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupTransfer({ token, adminId: 'bob00001', newCreatorId: 'carol001' }, env, req({}));
+    const res = await handleGroupTransfer({ token, adminId: 'bob00001', newCreatorId: 'carol001' , ...(await gA(env,'transfer',token,'bob00001','carol001'))}, env, req({}));
     expect(res.status).toBe(403);
     expect((await res.json()).code).toBe('FORBIDDEN');
   });
@@ -1315,7 +1353,7 @@ describe('group ownership transfer (companion to multi-admin)', () => {
   it('cannot transfer to a non-member', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'nobody00' }, env, req({}));
+    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'nobody00' , ...(await gA(env,'transfer',token,'creator1','nobody00'))}, env, req({}));
     expect(res.status).toBe(404);
     expect((await res.json()).code).toBe('NOT_MEMBER');
   });
@@ -1323,7 +1361,7 @@ describe('group ownership transfer (companion to multi-admin)', () => {
   it('transferring to the current creator is a no-op error', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'creator1' }, env, req({}));
+    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'creator1' , ...(await gA(env,'transfer',token,'creator1','creator1'))}, env, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('NO_OP');
   });
@@ -1342,7 +1380,7 @@ describe('group rename (lifecycle CRUD — name was frozen at create)', () => {
   it('the creator can rename the group, reflected in info', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupRename({ token, adminId: 'creator1', name: 'New Name' }, env, req({}));
+    const res = await handleGroupRename({ token, adminId: 'creator1', name: 'New Name' , ...(await gA(env,'rename',token,'creator1','New Name'))}, env, req({}));
     expect(res.status).toBe(200);
     expect((await res.json()).name).toBe('New Name');
     const info = await (await handleGroupInfo({ token }, env, req({}))).json();
@@ -1353,11 +1391,11 @@ describe('group rename (lifecycle CRUD — name was frozen at create)', () => {
     const env = makeEnv();
     const token = await setupGroup(env);
     // Regular member blocked.
-    const blocked = await handleGroupRename({ token, adminId: 'bob00001', name: 'Hijacked' }, env, req({}));
+    const blocked = await handleGroupRename({ token, adminId: 'bob00001', name: 'Hijacked' , ...(await gA(env,'rename',token,'bob00001','Hijacked'))}, env, req({}));
     expect(blocked.status).toBe(403);
     // Promote bob → now allowed.
-    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
-    const ok = await handleGroupRename({ token, adminId: 'bob00001', name: 'Renamed' }, env, req({}));
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' , ...(await gA(env,'admin',token,'creator1','promote:bob00001'))}, env, req({}));
+    const ok = await handleGroupRename({ token, adminId: 'bob00001', name: 'Renamed' , ...(await gA(env,'rename',token,'bob00001','Renamed'))}, env, req({}));
     expect(ok.status).toBe(200);
     expect((await ok.json()).name).toBe('Renamed');
   });
@@ -1366,18 +1404,19 @@ describe('group rename (lifecycle CRUD — name was frozen at create)', () => {
     const env = makeEnv();
     const token = await setupGroup(env);
     // Pure control characters sanitize to an empty string (same rule as create()).
-    const empty = await handleGroupRename({ token, adminId: 'creator1', name: '\x00\x01\x02' }, env, req({}));
+    const empty = await handleGroupRename({ token, adminId: 'creator1', name: '\x00\x01\x02' , ...(await gA(env,'rename',token,'creator1','\x00\x01\x02'))}, env, req({}));
     expect(empty.status).toBe(400);
     expect((await empty.json()).code).toBe('INVALID_NAME');
-    // Oversized name is capped, not rejected.
-    const long = await handleGroupRename({ token, adminId: 'creator1', name: 'x'.repeat(80) }, env, req({}));
+    // Oversized name is capped, not rejected. The signature binds the SANITIZED
+    // (50-char-capped) name — the worker authenticates what it stores.
+    const long = await handleGroupRename({ token, adminId: 'creator1', name: 'x'.repeat(80) , ...(await gA(env,'rename',token,'creator1','x'.repeat(50)))}, env, req({}));
     expect(long.status).toBe(200);
     expect((await long.json()).name.length).toBe(50);
   });
 
   it('rename on a missing group returns 404', async () => {
     const env = makeEnv();
-    const res = await handleGroupRename({ token: 'nosuchtoken1', adminId: 'creator1', name: 'X' }, env, req({}));
+    const res = await handleGroupRename({ token: 'nosuchtoken1', adminId: 'creator1', name: 'X' , ...(await gA(env,'rename','nosuchtoken1','creator1','X'))}, env, req({}));
     expect(res.status).toBe(404);
   });
 });
@@ -1396,7 +1435,7 @@ describe('group leave / delete (lifecycle completion)', () => {
   it('a member can leave; they are removed and the epoch bumps (PCS on voluntary leave)', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupLeave({ token, memberId: 'bob00001' }, env, req({}));
+    const res = await handleGroupLeave({ token, memberId: 'bob00001' , ...(await gA(env,'leave',token,'bob00001',''))}, env, req({}));
     expect(res.status).toBe(200);
     const j = await res.json();
     expect(j.ok).toBe(true);
@@ -1410,7 +1449,7 @@ describe('group leave / delete (lifecycle completion)', () => {
   it('the creator cannot leave (must delete the group instead)', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupLeave({ token, memberId: 'creator1' }, env, req({}));
+    const res = await handleGroupLeave({ token, memberId: 'creator1' , ...(await gA(env,'leave',token,'creator1',''))}, env, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('CREATOR_CANNOT_LEAVE');
     const info = await (await handleGroupInfo({ token }, env, req({}))).json();
@@ -1420,7 +1459,7 @@ describe('group leave / delete (lifecycle completion)', () => {
   it('leaving a group you are not in returns 404 without epoch churn', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupLeave({ token, memberId: 'nobody00' }, env, req({}));
+    const res = await handleGroupLeave({ token, memberId: 'nobody00' , ...(await gA(env,'leave',token,'nobody00',''))}, env, req({}));
     expect(res.status).toBe(404);
     expect((await res.json()).code).toBe('NOT_MEMBER');
     const info = await (await handleGroupInfo({ token }, env, req({}))).json();
@@ -1429,14 +1468,14 @@ describe('group leave / delete (lifecycle completion)', () => {
 
   it('leave on a missing group returns 404', async () => {
     const env = makeEnv();
-    const res = await handleGroupLeave({ token: 'nosuchtoken1', memberId: 'bob00001' }, env, req({}));
+    const res = await handleGroupLeave({ token: 'nosuchtoken1', memberId: 'bob00001' , ...(await gA(env,'leave','nosuchtoken1','bob00001',''))}, env, req({}));
     expect(res.status).toBe(404);
   });
 
   it('the creator can delete the group; it is gone from KV', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupDelete({ token, adminId: 'creator1' }, env, req({}));
+    const res = await handleGroupDelete({ token, adminId: 'creator1' , ...(await gA(env,'delete',token,'creator1',''))}, env, req({}));
     expect(res.status).toBe(200);
     expect((await res.json()).ok).toBe(true);
     expect(await env.KV.get(`grp:${token}`)).toBeNull();
@@ -1447,7 +1486,7 @@ describe('group leave / delete (lifecycle completion)', () => {
   it('a non-creator cannot delete the group', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupDelete({ token, adminId: 'bob00001' }, env, req({}));
+    const res = await handleGroupDelete({ token, adminId: 'bob00001' , ...(await gA(env,'delete',token,'bob00001',''))}, env, req({}));
     expect(res.status).toBe(403);
     expect(await env.KV.get(`grp:${token}`)).not.toBeNull(); // still there
   });
@@ -1472,14 +1511,14 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
   const signGroup = async (ed, action, token, actorId, ts, bind = '') =>
     toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, new TextEncoder().encode(`breeze-group-${action}:${token}:${actorId}:${ts}:${bind}`))));
 
-  it('legacy unauthenticated kick still works when GROUP_REQUIRE_AUTH is unset (backward compat)', async () => {
-    const env = makeEnv();
+  it('legacy unauthenticated kick still works under the explicit opt-out (GROUP_REQUIRE_AUTH=false)', async () => {
+    const env = makeEnv({ GROUP_REQUIRE_AUTH: 'false' });
     const { token } = await setup(env);
     const res = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' }, env, req({}));
     expect(res.status).toBe(200);
   });
 
-  it('rejects unauthenticated group ops with 403 when GROUP_REQUIRE_AUTH is enabled', async () => {
+  it('rejects unauthenticated group ops with 403 by default (and under GROUP_REQUIRE_AUTH=true)', async () => {
     const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
     const { token } = await setup(env);
     for (const res of [
@@ -3245,7 +3284,8 @@ describe('push subscribe SSRF guard', () => {
   const base = (endpoint) => ({ userId: 'bob000001', subscription: { endpoint } });
 
   it('rejects non-HTTPS endpoints', async () => {
-    const res = await handlePushSubscribe(base('http://fcm.googleapis.com/x'), makeEnv(), apiRequest('/api/push/subscribe', {}));
+    const env = makeEnv();
+    const res = await handlePushSubscribe({ ...base('http://fcm.googleapis.com/x'), ...(await pA(env,'subscribe','bob000001',{ endpoint: 'http://fcm.googleapis.com/x' })) }, env, apiRequest('/api/push/subscribe', {}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_ENDPOINT');
   });
@@ -3255,13 +3295,14 @@ describe('push subscribe SSRF guard', () => {
     const env = makeEnv();
     const real = env.KV.put.bind(env.KV);
     env.KV.put = async (key, ...rest) => { if (key.startsWith('push:')) throw new Error('KV down'); return real(key, ...rest); };
-    const res = await handlePushSubscribe(base('https://fcm.googleapis.com/fcm/send/abc'), env, apiRequest('/api/push/subscribe', {}));
+    const res = await handlePushSubscribe({ ...base('https://fcm.googleapis.com/fcm/send/abc'), ...(await pA(env,'subscribe','bob000001',{ endpoint: 'https://fcm.googleapis.com/fcm/send/abc' })) }, env, apiRequest('/api/push/subscribe', {}));
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe('STORE_FAILED');
   });
 
   it('rejects untrusted hosts (SSRF target)', async () => {
-    const res = await handlePushSubscribe(base('https://169.254.169.254/latest/meta-data'), makeEnv(), apiRequest('/api/push/subscribe', {}));
+    const env = makeEnv();
+    const res = await handlePushSubscribe({ ...base('https://169.254.169.254/latest/meta-data'), ...(await pA(env,'subscribe','bob000001',{ endpoint: 'https://169.254.169.254/latest/meta-data' })) }, env, apiRequest('/api/push/subscribe', {}));
     expect(res.status).toBe(400);
     const j = await res.json();
     expect(j.error).toMatch(/Untrusted/);
@@ -3269,7 +3310,8 @@ describe('push subscribe SSRF guard', () => {
   });
 
   it('accepts a trusted FCM endpoint', async () => {
-    const res = await handlePushSubscribe(base('https://fcm.googleapis.com/fcm/send/abc'), makeEnv(), apiRequest('/api/push/subscribe', {}));
+    const env = makeEnv();
+    const res = await handlePushSubscribe({ ...base('https://fcm.googleapis.com/fcm/send/abc'), ...(await pA(env,'subscribe','bob000001',{ endpoint: 'https://fcm.googleapis.com/fcm/send/abc' })) }, env, apiRequest('/api/push/subscribe', {}));
     expect(res.status).toBe(200);
     expect((await res.json()).ok).toBe(true);
   });
@@ -3288,7 +3330,7 @@ describe('push subscribe SSRF guard', () => {
     const req = apiRequest('/api/push/subscribe', {});
     for (let i = 1; i <= 6; i++) {
       const sub = { endpoint: `https://fcm.googleapis.com/fcm/send/device${i}` };
-      await handlePushSubscribe({ userId: 'u0000001', subscription: sub }, env, req);
+      await handlePushSubscribe({ userId: 'u0000001', subscription: sub , ...(await pA(env,'subscribe','u0000001',sub))}, env, req);
     }
     const stored = JSON.parse(await env.KV.get('push:u0000001'));
     expect(stored.length).toBe(5);
@@ -3306,7 +3348,7 @@ describe('push subscribe SSRF guard', () => {
       expirationTime: 1234567890,
       injectedField: 'x'.repeat(10000), // extra top-level field — must be dropped
     };
-    await handlePushSubscribe({ userId: 'u0000002', subscription: sub }, env, req);
+    await handlePushSubscribe({ userId: 'u0000002', subscription: sub , ...(await pA(env,'subscribe','u0000002',sub))}, env, req);
     const stored = JSON.parse(await env.KV.get('push:u0000002'));
     const saved = stored[0];
     expect(Object.keys(saved)).toEqual(expect.arrayContaining(['endpoint', 'keys', 'expirationTime']));
@@ -3335,13 +3377,14 @@ describe('push subscribe — optional Ed25519 ownership auth (item 62)', () => {
         `breeze-push-subscribe:${uid}:${ts}:${sub.endpoint || ''}:${sub.keys?.p256dh || ''}:${sub.keys?.auth || ''}`)))) };
   }
 
-  it('unsigned subscribe still works when the flag is unset (backward-compat)', async () => {
-    const res = await handlePushSubscribe({ userId: 'pushusr01', subscription: { endpoint: FCM } }, makeEnv(), req);
+  it('unsigned subscribe still works under the explicit opt-out (PUSH_REQUIRE_AUTH=false)', async () => {
+    const env = makeEnv({ PUSH_REQUIRE_AUTH: 'false' });
+    const res = await handlePushSubscribe({ userId: 'pushusr01', subscription: { endpoint: FCM } }, env, req);
     expect(res.status).toBe(200);
   });
 
-  it('rejects unsigned subscribe when PUSH_REQUIRE_AUTH=true', async () => {
-    const env = makeEnv({ PUSH_REQUIRE_AUTH: 'true' });
+  it('rejects unsigned subscribe by default', async () => {
+    const env = makeEnv();
     const res = await handlePushSubscribe({ userId: 'pushusr02', subscription: { endpoint: FCM } }, env, req);
     expect(res.status).toBe(403);
     expect((await res.json()).code).toBe('AUTH_REQUIRED');
@@ -3477,8 +3520,8 @@ describe('push unsubscribe', () => {
 
   it('removes the matching endpoint and returns removed: 1', async () => {
     const env = makeEnv();
-    await handlePushSubscribe({ userId: 'unsub001', subscription: { endpoint: FCM } }, env, req);
-    const res = await handlePushUnsubscribe({ userId: 'unsub001', endpoint: FCM }, env, req);
+    await handlePushSubscribe({ userId: 'unsub001', subscription: { endpoint: FCM } , ...(await pA(env,'subscribe','unsub001',{ endpoint: FCM }))}, env, req);
+    const res = await handlePushUnsubscribe({ userId: 'unsub001', endpoint: FCM , ...(await pA(env,'unsubscribe','unsub001',FCM))}, env, req);
     expect(res.status).toBe(200);
     const j = await res.json();
     expect(j.ok).toBe(true);
@@ -3489,15 +3532,16 @@ describe('push unsubscribe', () => {
 
   it('returns removed: 0 when endpoint is not in the list', async () => {
     const env = makeEnv();
-    await handlePushSubscribe({ userId: 'unsub002', subscription: { endpoint: FCM } }, env, req);
-    const res = await handlePushUnsubscribe({ userId: 'unsub002', endpoint: 'https://fcm.googleapis.com/other' }, env, req);
+    await handlePushSubscribe({ userId: 'unsub002', subscription: { endpoint: FCM } , ...(await pA(env,'subscribe','unsub002',{ endpoint: FCM }))}, env, req);
+    const res = await handlePushUnsubscribe({ userId: 'unsub002', endpoint: 'https://fcm.googleapis.com/other' , ...(await pA(env,'unsubscribe','unsub002','https://fcm.googleapis.com/other'))}, env, req);
     expect((await res.json()).removed).toBe(0);
     // Original subscription still present.
     expect(JSON.parse(await env.KV.get('push:unsub002')).length).toBe(1);
   });
 
   it('returns ok: true with removed: 0 when user has no subscriptions', async () => {
-    const res = await handlePushUnsubscribe({ userId: 'unsub003', endpoint: FCM }, makeEnv(), req);
+    const env = makeEnv();
+    const res = await handlePushUnsubscribe({ userId: 'unsub003', endpoint: FCM , ...(await pA(env,'unsubscribe','unsub003',FCM))}, env, req);
     expect(res.status).toBe(200);
     expect((await res.json()).removed).toBe(0);
   });
@@ -3743,18 +3787,25 @@ describe('backup upload / download', () => {
     expect(j.ok).toBe(true);
     expect(j.size).toBe(bak.length);
 
-    const dl = await handleBackupDownload({ userId: 'user00001' }, e, dlReq({}));
+    // Download is signed by default — register + sign like the deployed client.
+    const ed0 = await registerForBackup(e, 'user00001');
+    const dlTs = Date.now();
+    const dl = await handleBackupDownload({ userId: 'user00001', ts: dlTs, sig: await signBackup(ed0, 'download', 'user00001', dlTs) }, e, dlReq({}));
     expect(dl.status).toBe(200);
     const dj = await dl.json();
     expect(dj.backup).toBe(bak);
   });
 
-  it('overwrites an existing backup on re-upload', async () => {
+  it('refuses an UNSIGNED overwrite of an existing backup (incumbent endorsement)', async () => {
     const e = makeEnv();
     await handleBackupUpload({ userId: 'user00001', backup: 'v1' }, e, req({}));
-    await handleBackupUpload({ userId: 'user00001', backup: 'v2' }, e, req({}));
+    // Anyone could previously replace the victim's recovery blob with attacker ciphertext.
+    const res = await handleBackupUpload({ userId: 'user00001', backup: 'v2-clobber' }, e, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
     const dl = await handleBackupDownload({ userId: 'user00001' }, e, dlReq({}));
-    expect((await dl.json()).backup).toBe('v2');
+    expect(dl.status).toBe(403); // unsigned read refused; blob untouched
+    expect((await e.KV.get('backup:user00001'))).toBe('v1');
   });
 
   it('rejects backup larger than 5MB', async () => {
@@ -3765,9 +3816,15 @@ describe('backup upload / download', () => {
     expect((await res.json()).code).toBe('PAYLOAD_TOO_LARGE');
   });
 
-  it('returns 404 for missing backup', async () => {
+  it('returns 404 for missing backup (signed); unsigned probe is a uniform 403', async () => {
     const e   = makeEnv();
-    const res = await handleBackupDownload({ userId: 'nobody001' }, e, dlReq({}));
+    // Unsigned: refused BEFORE the blob lookup — an unauthenticated probe cannot
+    // distinguish "no backup" from "exists" (existence oracle).
+    const un = await handleBackupDownload({ userId: 'nobody001' }, e, dlReq({}));
+    expect(un.status).toBe(403);
+    const ed = await registerForBackup(e, 'nobody001');
+    const ts = Date.now();
+    const res = await handleBackupDownload({ userId: 'nobody001', ts, sig: await signBackup(ed, 'download', 'nobody001', ts) }, e, dlReq({}));
     expect(res.status).toBe(404);
     expect((await res.json()).code).toBe('NOT_FOUND');
   });
@@ -3821,6 +3878,20 @@ describe('backup upload / download', () => {
     const j = await res.json();
     expect(j.ok).toBe(true);
     expect(j.authenticated).toBe(true);
+  });
+
+  it('signed overwrite of an existing backup succeeds (owner rotation path)', async () => {
+    const e = makeEnv();
+    const userId = 'bakauth09';
+    const ed = await registerForBackup(e, userId);
+    await handleBackupUpload({ userId, backup: 'v1' }, e, req({}));
+    const ts = Date.now();
+    const sig = await signBackup(ed, 'upload', userId, ts);
+    const res = await handleBackupUpload({ userId, backup: 'v2-signed', ts, sig }, e, req({}));
+    expect(res.status).toBe(200);
+    const dlTs = Date.now();
+    const dl = await handleBackupDownload({ userId, ts: dlTs, sig: await signBackup(ed, 'download', userId, dlTs) }, e, dlReq({}));
+    expect((await dl.json()).backup).toBe('v2-signed');
   });
 
   it('authenticated download succeeds and sets authenticated:true in response', async () => {
@@ -3900,11 +3971,9 @@ describe('backup upload / download', () => {
   });
 });
 
-// BACKUP_REQUIRE_AUTH enforcement flag (item 54)
-// Without the flag: knowing a userId is enough to download the encrypted blob and
-// brute-force the passphrase offline. With BACKUP_REQUIRE_AUTH=true, both upload
-// and download require a valid Ed25519 signature — same pattern as GROUP_REQUIRE_AUTH
-// and PRESENCE_REQUIRE_AUTH.
+// BACKUP_REQUIRE_AUTH (item 54): the registered-owner signature is required by
+// default — unsigned reads are a uniform 403 (no existence oracle). '=false' is the
+// opt-out; '=true' additionally requires sigs on FIRST upload (not just overwrites).
 describe('backup BACKUP_REQUIRE_AUTH enforcement (item 54)', () => {
   const req  = (body) => apiRequest('/api/backup/upload', body);
   const dlReq = (body) => apiRequest('/api/backup/download', body);
@@ -3953,8 +4022,8 @@ describe('backup BACKUP_REQUIRE_AUTH enforcement (item 54)', () => {
     expect((await res.json()).backup).toBe('my-enc-backup');
   });
 
-  it('unauthenticated upload/download still works when flag is unset (backward-compat)', async () => {
-    const e = makeEnv();
+  it('unauthenticated upload/download still works under the explicit opt-out (BACKUP_REQUIRE_AUTH=false)', async () => {
+    const e = makeEnv({ BACKUP_REQUIRE_AUTH: 'false' });
     const up = await handleBackupUpload({ userId: 'bakflg05', backup: 'blob' }, e, req({}));
     expect(up.status).toBe(200);
     await e.KV.put('backup:bakflg05', 'blob');
@@ -4009,15 +4078,23 @@ describe('signal relay', () => {
     expect(r2.status).toBe(400);
   });
 
-  it('keeps at most 50 signals per room', async () => {
+  it('refuses overflow with QUEUE_FULL instead of evicting the in-flight handshake', async () => {
+    // Same invariant as the mail queues: drop-oldest on the 50-cap let anyone who
+    // derives a room name destroy an active call's pending offer/answer/ICE.
     const e = makeEnv();
-    for (let i = 0; i < 55; i++) {
-      await handleSignal({ room: 'big', sender: `s${i}`, type: 'offer', data: `d${i}` }, '1.2.3.4', e, req({}));
+    for (let i = 0; i < 50; i++) {
+      const r = await handleSignal({ room: 'big', sender: `s${i}`, type: 'offer', data: `d${i}` }, '1.2.3.4', e, req({}));
+      expect(r.status).toBe(200);
     }
-    // Poll as someone not in the room — should see at most 50
-    const r = await handleSignal({ room: 'big', sender: 'observer', type: 'poll' }, '1.2.3.5', e, req({}));
-    const msgs = (await r.json()).messages;
-    expect(msgs.length).toBeLessThanOrEqual(50);
+    const r51 = await handleSignal({ room: 'big', sender: 's51', type: 'offer', data: 'd51' }, '1.2.3.4', e, req({}));
+    expect(r51.status).toBe(429);
+    expect((await r51.json()).code).toBe('QUEUE_FULL');
+    expect(r51.headers.get('Retry-After')).toBe('10');
+    // Nothing evicted — the very first accepted signal is still deliverable.
+    const poll = await handleSignal({ room: 'big', sender: 'observer', type: 'poll' }, '1.2.3.5', e, req({}));
+    const msgs = (await poll.json()).messages;
+    expect(msgs).toHaveLength(50);
+    expect(msgs[0].data).toBe('d0');
   });
 
   it('sanitizeString strips control characters — room with null byte resolves to clean name', async () => {
@@ -4075,6 +4152,22 @@ describe('presence heartbeat and check', () => {
     );
     expect(res.status).toBe(200);
     expect((await res.json()).ok).toBe(true);
+  });
+
+  it('heartbeat survives when /online ran first (lazy-init shape collision)', async () => {
+    // handleOnlineCount's lazy init used to create _onlineCounter WITHOUT the `ids` Set;
+    // in an isolate where the count endpoint beats the first heartbeat, ids.add() threw
+    // TypeError → every heartbeat 500'd until the minute rollover re-initialized.
+    const saved = globalThis._onlineCounter;
+    globalThis._onlineCounter = undefined;
+    try {
+      await handleOnlineCount({}, makeEnv(), apiRequest('/api/online', {}));
+      const e = makeEnv();
+      const res = await handlePresence({ id: 'colduser1' }, e, req({}));
+      expect(res.status).toBe(200);
+      const cnt = await (await handleOnlineCount({}, e, apiRequest('/api/online', {}))).json();
+      expect(cnt.online).toBe(1);
+    } finally { globalThis._onlineCounter = saved; }
   });
 
   it('check returns online=true immediately after heartbeat (in-memory cache)', async () => {
@@ -4392,8 +4485,9 @@ describe('online count', () => {
   it('handlePresence records prev count when minute rolls over', async () => {
     const e = makeEnv();
     const minuteKey = Math.floor(Date.now() / 60000);
-    // Prime with count=5 in the current minute
-    globalThis._onlineCounter = { minute: minuteKey, count: 5, prev: 0 };
+    // Prime with count=5 in the current minute — the real shape carries `ids` too
+    // (the Set is the source of truth; count is derived from it).
+    globalThis._onlineCounter = { minute: minuteKey, count: 5, prev: 0, ids: new Set(['a1','a2','a3','a4','a5']) };
     // Simulate rollover by resetting to an old minute and calling handlePresence
     globalThis._onlineCounter.minute = minuteKey - 1; // force rollover on next heartbeat
     await handlePresence({ id: 'user00001', pub: 'IK' }, e, apiRequest('/api/presence', {}));
@@ -4437,6 +4531,7 @@ describe('TURN credentials', () => {
 
   it('uses HMAC custom TURN when TURN_SECRET + TURN_URL are set', async () => {
     const e = { ...makeEnv(), TURN_SECRET: 'supersecret', TURN_URL: 'turn:turn.example.com:3478' };
+    await e.KV.put('prekey:user00001', JSON.stringify({ spkPub: 'x' })); // configured provider → registered-only by default
     const res = await handleTurn({ userId: 'user00001' }, e, req({}));
     expect(res.status).toBe(200);
     const j = await res.json();
@@ -4457,6 +4552,7 @@ describe('TURN credentials', () => {
       TURN_USERNAME:   'staticuser',
       TURN_CREDENTIAL: 'staticpass',
     };
+    await e.KV.put('prekey:user00001', JSON.stringify({ spkPub: 'x' }));
     const res = await handleTurn({ userId: 'user00001' }, e, req({}));
     expect(res.status).toBe(200);
     const j = await res.json();
@@ -4477,6 +4573,7 @@ describe('TURN credentials', () => {
 
   it('derives a self-hosted stun: entry from a plain turn: TURN_URL (coturn dual-role)', async () => {
     const e = { ...makeEnv(), TURN_SECRET: 'supersecret', TURN_URL: 'turn:turn.example.com:3478' };
+    await e.KV.put('prekey:user00001', JSON.stringify({ spkPub: 'x' }));
     const res = await handleTurn({ userId: 'user00001' }, e, req({}));
     const j = await res.json();
     expect(j.iceServers.some(s => s.urls === 'stun:turn.example.com:3478')).toBe(true);
@@ -4486,6 +4583,7 @@ describe('TURN credentials', () => {
 
   it('does NOT derive stun from turns: or strip-transport weirdly (TLS listener is not plain STUN)', async () => {
     const e = { ...makeEnv(), TURN_URL: 'turns:t.example.com:443?transport=tcp', TURN_USERNAME: 'u', TURN_CREDENTIAL: 'c' };
+    await e.KV.put('prekey:user00001', JSON.stringify({ spkPub: 'x' }));
     const res = await handleTurn({ userId: 'user00001' }, e, req({}));
     const j = await res.json();
     expect(j.iceServers.some(s => typeof s.urls === 'string' && s.urls.includes('t.example.com') && s.urls.startsWith('stun:'))).toBe(false);
@@ -4504,6 +4602,22 @@ describe('TURN credentials', () => {
     const res = await handleTurn({ userId: 'reguser0001' }, e, req({}));
     expect(res.status).toBe(200);
     expect((await res.json()).provider).toBe('openrelay');
+  });
+
+  it('a CONFIGURED TURN provider gates minting to registered users by default', async () => {
+    // Paid/private creds behind an open mint = quota drain. The openrelay fallback
+    // stays open — its credentials are public in _worker.js anyway.
+    const e = { ...makeEnv(), TURN_URL: 'turn:x.example.com:3478', TURN_USERNAME: 'u', TURN_CREDENTIAL: 'c' };
+    const res = await handleTurn({ userId: 'unreg00001' }, e, req({}));
+    expect(res.status).toBe(401);
+    expect((await res.json()).code).toBe('UNREGISTERED');
+  });
+
+  it('TURN_REQUIRE_AUTH=false opts a configured provider back out', async () => {
+    const e = { ...makeEnv(), TURN_URL: 'turn:x.example.com:3478', TURN_USERNAME: 'u', TURN_CREDENTIAL: 'c', TURN_REQUIRE_AUTH: 'false' };
+    const res = await handleTurn({ userId: 'unreg00001' }, e, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).provider).toBe('static');
   });
 });
 
@@ -4778,8 +4892,9 @@ describe('group create / join / info validation', () => {
     expect((await r1.json()).code).toBe('INVALID_TYPE');
   });
 
+  const env = makeEnv();
   it('kick returns 404 when the group token does not exist', async () => {
-    const res = await handleGroupKick({ token: 'nosuchtoken', kickId: 'member01', adminId: 'creator1' }, makeEnv(), req({}));
+    const res = await handleGroupKick({ token: 'nosuchtoken', kickId: 'member01', adminId: 'creator1' , ...(await gA(env,'kick','nosuchtoken','creator1','member01'))}, env, req({}));
     expect(res.status).toBe(404);
     expect((await res.json()).code).toBe('NOT_FOUND');
   });
@@ -4789,7 +4904,7 @@ describe('group create / join / info validation', () => {
     const { token } = await (await handleGroupCreate(
       { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
-    const res = await handleGroupKick({ token, kickId: 'member01', adminId: 'member01' }, env, req({}));
+    const res = await handleGroupKick({ token, kickId: 'member01', adminId: 'member01' , ...(await gA(env,'kick',token,'member01','member01'))}, env, req({}));
     expect(res.status).toBe(403);
     expect((await res.json()).code).toBe('FORBIDDEN');
   });
@@ -4799,7 +4914,7 @@ describe('group create / join / info validation', () => {
     const { token } = await (await handleGroupCreate(
       { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
-    const res = await handleGroupKick({ token, kickId: 'creator1', adminId: 'creator1' }, env, req({}));
+    const res = await handleGroupKick({ token, kickId: 'creator1', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','creator1'))}, env, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('FORBIDDEN');
   });
@@ -4808,7 +4923,7 @@ describe('group create / join / info validation', () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
       { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
-    const res = await handleGroupKick({ token, kickId: 'notamember', adminId: 'creator1' }, env, req({}));
+    const res = await handleGroupKick({ token, kickId: 'notamember', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','notamember'))}, env, req({}));
     expect(res.status).toBe(404);
     expect((await res.json()).code).toBe('NOT_MEMBER');
   });
@@ -4835,7 +4950,7 @@ describe('group create / join / info validation', () => {
     const { token } = await (await handleGroupCreate(
       { name: 'ratchet-group', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
-    const kick = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' }, env, req({}));
+    const kick = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','member01'))}, env, req({}));
     expect(kick.status).toBe(200);
     const kj = await kick.json();
     expect(kj.ok).toBe(true);
@@ -4865,7 +4980,7 @@ describe('group create / join / info validation', () => {
     g.epoch = '5'; // string, not number
     await env.KV.put(`grp:${token}`, JSON.stringify(g));
     // Kick should produce epoch 6 (integer), not '51' (string).
-    const kick = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' }, env, req({}));
+    const kick = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','member01'))}, env, req({}));
     const kj = await kick.json();
     expect(kj.epoch).toBe(6);
     expect(typeof kj.epoch).toBe('number');
@@ -4897,7 +5012,7 @@ describe('corrupted KV data resilience (safeJsonParse guard)', () => {
   it('groupKick returns 404 (not 500) when group KV value is corrupt JSON', async () => {
     const env = makeEnv();
     env.KV = makeKV({ 'grp:badtoken': 'null' });
-    const res = await handleGroupKick({ token: 'badtoken', kickId: 'member01', adminId: 'creator1' }, env, req({}));
+    const res = await handleGroupKick({ token: 'badtoken', kickId: 'member01', adminId: 'creator1' , ...(await gA(env,'kick','badtoken','creator1','member01'))}, env, req({}));
     expect(res.status).toBe(404);
   });
 
@@ -4968,7 +5083,7 @@ describe('group mutation KV failure propagation (item 33)', () => {
     const env = makeEnv();
     const token = await makeGroup(env);
     failOnGroupPut(env);
-    const res = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' }, env, req({}));
+    const res = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','member01'))}, env, req({}));
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe('STORE_FAILED');
   });
@@ -4977,7 +5092,7 @@ describe('group mutation KV failure propagation (item 33)', () => {
     const env = makeEnv();
     const token = await makeGroup(env);
     failOnGroupPut(env);
-    const res = await handleGroupLeave({ token, memberId: 'member01' }, env, req({}));
+    const res = await handleGroupLeave({ token, memberId: 'member01' , ...(await gA(env,'leave',token,'member01',''))}, env, req({}));
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe('STORE_FAILED');
   });
@@ -4986,7 +5101,7 @@ describe('group mutation KV failure propagation (item 33)', () => {
     const env = makeEnv();
     const token = await makeGroup(env);
     failOnGroupPut(env);
-    const res = await handleGroupRename({ token, adminId: 'creator1', name: 'NewName' }, env, req({}));
+    const res = await handleGroupRename({ token, adminId: 'creator1', name: 'NewName' , ...(await gA(env,'rename',token,'creator1','NewName'))}, env, req({}));
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe('STORE_FAILED');
   });
@@ -4995,7 +5110,7 @@ describe('group mutation KV failure propagation (item 33)', () => {
     const env = makeEnv();
     const token = await makeGroup(env);
     failOnGroupPut(env);
-    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'member01' }, env, req({}));
+    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'member01' , ...(await gA(env,'transfer',token,'creator1','member01'))}, env, req({}));
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe('STORE_FAILED');
   });
@@ -5121,7 +5236,7 @@ describe('kvDel failure propagation (item 34)', () => {
     const { token } = await (await handleGroupCreate(
       { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     failOnDelete(env, 'grp:');
-    const res = await handleGroupDelete({ token, adminId: 'creator1' }, env, req({}));
+    const res = await handleGroupDelete({ token, adminId: 'creator1' , ...(await gA(env,'delete',token,'creator1',''))}, env, req({}));
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe('STORE_FAILED');
     // Group must still exist in KV (delete didn't go through)

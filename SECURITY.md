@@ -154,7 +154,26 @@ store) rather than gated — an opt-in toggle leaves the contradiction one peer 
   Trade-off is honest — the flood can block *new* arrivals while it sustains a full
   queue, but it can never destroy mail the relay already accepted. The lost-write
   recovery re-append honors the same bound (it skips rather than evict onto a full
-  queue).
+  queue). The **signal room** (`sig:{room}`) follows the same invariant: the 50-entry
+  cap used to drop-oldest, letting anyone who could derive a room name
+  (`dm:{a}:{b}` from two public ids, `call:{id}` from one) destroy an in-flight
+  call handshake by flooding 51 entries. It now refuses with `429 QUEUE_FULL` —
+  accepted offer/answer/ICE survive to be polled, and the client retries once
+  within the drain window.
+- **Configured TURN providers gate credential minting by default.** `/api/turn`
+  used to mint credentials for anyone unless `TURN_REQUIRE_AUTH=true` was set —
+  an opt-in nobody knew about while a configured Cloudflare Calls key bills
+  $0.05/GB (and self-hosted coturn burns operator bandwidth). Now a configured
+  provider (CF Calls key pair, coturn HMAC secret, or static creds) requires a
+  registered `prekey:{userId}` unless `TURN_REQUIRE_AUTH=false` opts out. The
+  public openrelay fallback stays open — its credentials are already printed in
+  `_worker.js`, so gating only that path would be theater.
+- **Group mutations require the caller's signature by default.** Kick, admin
+  (promote/demote/unban), transfer, rename, leave and delete used to verify a
+  signature *when present* but accept unsigned requests unless
+  `GROUP_REQUIRE_AUTH=true` was set — and every deployed client has signed them
+  all along (`breeze-group-{action}:{token}:{actor}:{ts}:{bind}`). Unsigned is
+  now refused `403 AUTH_REQUIRED`; `GROUP_REQUIRE_AUTH=false` opts out.
 - **Metadata**: Sealed Sender **v2** hides the sender from the relay *cryptographically*:
   all sender-identifying fields (id, public key, display name, signature keys, the reply
   preview, multi-device markers — and the X3DH bootstrap header's initiator identity key,
@@ -185,8 +204,8 @@ store) rather than gated — an opt-in toggle leaves the contradiction one peer 
   are forward-secret without breaking older clients. Still opt-in: at-rest key wrapping (needs a
   user passphrase, `/keywrap`) and call-signaling E2E (`CALL_E2E_SIGNAL` has no capability
   negotiation yet, so enabling it requires both ends). Of the Worker-side `*_REQUIRE_AUTH`
-  flags, `MSG_REQUIRE_AUTH`/`SEALED_REQUIRE_AUTH` are on by default (opt out with `=false`);
-  the rest remain operator choices — see `wrangler.toml`.
+  flags, `MSG_REQUIRE_AUTH`/`SEALED_REQUIRE_AUTH`/`PUSH_REQUIRE_AUTH` are on by default
+  (opt out with `=false`); the rest remain operator choices — see `wrangler.toml`.
 - **@alias resolution** is answered by the relay, which returns an unsigned `{pub}`. Since
   v3.6.1 an alias add runs the key-transparency audit first: a **tampered** hash chain blocks the
   add outright, a **rolled** key warns. This detects a relay rewriting key *history*; it cannot
@@ -227,7 +246,11 @@ store) rather than gated — an opt-in toggle leaves the contradiction one peer 
   than the multi-tab grace, and an ack blind-deletes the sealed queue. Every current
   client already signs, so enforcement is on unless an operator explicitly sets
   `SEALED_REQUIRE_AUTH=false` / `MSG_REQUIRE_AUTH=false` to keep serving pre-signing
-  clients. An account that has not yet uploaded a prekey bundle has no key to verify
+  clients. The same applies to `/push/subscribe` and `/push/unsubscribe`: a signed
+  subscribe binds the subscription's endpoint + p256dh + auth key (not just the userId)
+  so a relay can't swap in its own device under a replayed signature, and a signed
+  unsubscribe binds the endpoint being removed — both enforced by default now that the
+  client signs them (`PUSH_REQUIRE_AUTH=false` opts out). An account that has not yet uploaded a prekey bundle has no key to verify
   against and is treated as unsigned — polls then fail-closed until onboarding
   completes its bundle upload (self-healing on the next retry).
 - **A sealed queue's retention is not shortened by polling.** Polls used to rewrite the
@@ -283,6 +306,12 @@ store) rather than gated — an opt-in toggle leaves the contradiction one peer 
   - **Secondary-device trust is anchored at link time**: `/linkto` pins the root's signing key
     obtained while physically holding both devices (same TOFU gesture as adding a contact by
     raw key), and the registry must already list the new device before it binds.
+  - **Cloud backups are incumbent-endorsed.** Once a backup exists for an account,
+    overwriting it requires the account's Ed25519 signature (`breeze-backup-upload:<id>:<ts>`)
+    — otherwise anyone who knew a userId could replace that user's recovery blob with
+    attacker ciphertext. First writes stay open (nothing stored to protect); all current
+    clients already sign, so no legitimate overwrite is affected. `BACKUP_REQUIRE_AUTH=true`
+    still makes even first writes signed.
   - **Cloud backups expire.** The relay keeps an uploaded backup for 90 days after its last
     upload and nothing renews it. The upload response now carries `expiresAt` and the client
     shows the date, because a safety net that quietly stopped existing is worse than no

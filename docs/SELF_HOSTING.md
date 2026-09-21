@@ -98,6 +98,14 @@ explicit choice is remembered), and unconfigured deployments see no change.
 # Point your domain's DNS to Cloudflare
 ```
 
+### Packaged apps (Electron / Capacitor / Tauri)
+
+Packaged builds serve the app from a non-relay origin (`file://`, `app.breeze.local`,
+`tauri.localhost`), so `index.html` resolves its API base to `PACKAGED_API_ORIGIN`
+(a top-of-script constant, default `https://breeze.pages.dev`). Repoint it to your
+own Pages deploy before packaging, and share/invite links (`SHARE_BASE`) follow it
+automatically. Electron's `BREEZE_URL` remote mode is unaffected.
+
 ## Scaling Beyond Free Tier
 
 When you outgrow the free tier ($5/month Workers Paid plan):

@@ -1,4 +1,43 @@
+## Packaged apps could never reach the relay — API/share links bound to a dead origin (branch devin/consolidate-groups, 2026-09-20)
+
+`const API = location.origin + '/api'` resolves to `file:///api` on packaged Electron (loadFile), `https://app.breeze.local/api` on Capacitor, and `tauri.localhost/api` on Tauri — none of which serve the worker, so every API call 404'd and a packaged app could not onboard, fetch prekeys, or send a single message. Same for share links: invite/add/drop URLs built on `location.origin` produced `file:///…?join=` links a web recipient cannot open. New `PACKAGED_API_ORIGIN` + `SHARE_BASE` constants (default `https://breeze.pages.dev`) now serve both; `BREEZE_URL` remote-mode Electron and dev servers are untouched, and self-hosters repoint one constant before packaging.
+
+## Push subscribe/unsubscribe are signed by default (branch devin/consolidate-groups, 2026-09-20)
+
+The endpoint-side verified-when-present auth was inert while clients never sent `{ts, sig}` — anyone who knew a userId could register their own device under `push:{userId}` (decrypting notification metadata) or silently delete the victim's subscriptions. The client now signs both calls through `_ownerAuth` — subscribe binds `endpoint:p256dh:auth`, unsubscribe binds the endpoint — and `PUSH_REQUIRE_AUTH` defaults to required (`=false` opts out). Tests sign through a new `pA` helper sharing key-pinning with `gA`; the unsigned-subscribe case now exercises the explicit opt-out env.
+
 # Changelog
+
+## Unsigned group mutations refused by default (branch devin/consolidate-groups, 2026-09-20)
+
+`checkGroupAuth` verified a caller signature when present but accepted unsigned requests unless `GROUP_REQUIRE_AUTH=true` was set — the comment said "flip that on once clients sign", and every deployed client has signed kick/admin/transfer/rename/leave/delete all along (`breeze-group-{action}:{token}:{actor}:{ts}:{bind}`, bound to the operation's target). Unsigned is now `403 AUTH_REQUIRED`; `GROUP_REQUIRE_AUTH=false` is the opt-out. The test suite now signs through a shared `gA` helper (lazily mints+registers an Ed key per actor); the rename test pins that the sig binds the SANITIZED name, matching both worker and client.
+
+## Signal rooms no longer evict in-flight call handshakes; configured TURN mints register-gated (branch devin/consolidate-groups, 2026-09-20)
+
+Same refuse-when-full class as the mail queues: `sig:{room}` drop-oldest on its 50-entry cap let anyone who could derive a room name (`dm:{a}:{b}` from two public ids, `call:{id}` from one) destroy an active call's pending offer/answer/ICE. Now `429 QUEUE_FULL` — accepted signals survive to be polled; `_signal` retries once within the drain window. Separately, `/api/turn` used to mint credentials for anyone unless `TURN_REQUIRE_AUTH=true` was set — a configured Cloudflare Calls key bills $0.05/GB to whoever asks. A configured provider (CF Calls, coturn secret, static creds) now requires a registered `prekey:{userId}` by default; `TURN_REQUIRE_AUTH=false` opts out. The openrelay fallback stays open — its creds are public in the source.
+
+## Cold isolate where /api/online beat the first heartbeat 500'd presence for ~60s (branch devin/consolidate-groups, 2026-09-20)
+
+`_onlineCounter` had two lazy initializers with DIFFERENT shapes: `handlePresence` creates `{minute, ids:Set, prev}` while `handleOnlineCount` created `{minute, count, prev}` — no `ids` Set. In a cold isolate where the online-count endpoint ran first, every subsequent heartbeat threw `TypeError: ids.add is not a function` → presence 500'd until the minute rollover re-initialized the object. Both initializers now merge-heal on `?.ids` (add the Set, keep minute/prev/count), and a test pins the ordering.
+
+## Push payloads no longer hand the sender's userId to APNs/FCM (branch devin/consolidate-groups, 2026-09-20)
+
+sendPushToUser's tag ('breeze-<from|groupId>') and contactId carried the raw
+sender/recipient userId — the push provider is a third-party relay, so sealed
+sender hid the sender from OUR relay while handing it to Apple/Google. Both
+fields now carry sha256Short(id): tag-collapse unchanged, and the client resolves
+the pseudonym by hashing its own contact ids (raw-id payloads still work via the
+raw fallback; unresolvable hashes no-op harmlessly).
+
+
+## Backup blobs are incumbent-endorsed (overwrite clobber closed) (branch devin/consolidate-groups, 2026-09-20)
+
+/backup/upload accepted unsigned overwrites of an existing backup — anyone who
+knew a userId could replace that user's recovery blob with attacker ciphertext.
+Once a backup exists, overwrite now requires the account's Ed25519 signature
+(breeze-backup-upload:{id}:{ts}). First writes stay open; every deployed client
+already signs both calls, so no legitimate path changes.
+
 
 ## Relay queues are refuse-when-full — accepted mail can't be evicted by a flood (branch devin/consolidate-groups, 2026-09-20)
 

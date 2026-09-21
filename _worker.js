@@ -377,10 +377,17 @@ async function handleSignal(body, ip, env, request) {
   const raw = await kvGet(env, `sig:${room}`);
   const parsed = safeJsonParse(raw, []);
   const signals = Array.isArray(parsed) ? parsed : [];
+  // Refuse-when-full, never evict (same invariant as the mail queues): slice(-50)
+  // drop-oldest let anyone who can derive a room name (dm:{a}:{b} from two public
+  // ids, call:{id} from one) destroy an in-flight call handshake by flooding 51
+  // signals. Refusing preserves the already-accepted offer/answer/ICE so the
+  // current handshake completes; the client relays retry on 429.
+  if (signals.length >= 50) {
+    return new Response(JSON.stringify({ error: 'Signal room full', code: 'QUEUE_FULL', retryAfter: 10 }), {
+      status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '10', ...corsHeaders(request) } });
+  }
   signals.push({ sender, type, data, ts: Date.now() });
-  // Keep last 50 signals, expire in 5 min (allow slow NAT traversal)
-  const trimmed = signals.slice(-50);
-  await kvPut(env, `sig:${room}`, JSON.stringify(trimmed), { expirationTtl: TTL.MIN * 5 });
+  await kvPut(env, `sig:${room}`, JSON.stringify(signals), { expirationTtl: TTL.MIN * 5 });
 
   return json({ ok: true }, 200, request);
 }
@@ -530,7 +537,15 @@ async function handleMsgSend(body, ip, env, request) {
   const rawTitle = groupName ? String(groupName).slice(0, 50) : (fromName || 'Breeze');
   const pushTitle = sanitizeString(rawTitle, 50);
   const pushBody = isCall ? (isVideoCall ? 'Video call' : 'Voice call') : isFile ? '📎 File' : isVoice ? '🎤 Voice' : 'New message';
-  sendPushToUser(to, { title: pushTitle, body: pushBody, tag: 'breeze-' + (groupId || from), contactId: from }, env).catch(() => {});
+  // The push service (APNs/FCM) is a third-party intermediary — hand it a stable
+  // pseudonym, not the sender's userId. sha256Short preserves tag-collapse and the
+  // client's contactId lookup resolves it by hashing its own contact ids; a raw-id
+  // payload from an older worker still works via the client's raw fallback.
+  sendPushToUser(to, {
+    title: pushTitle, body: pushBody,
+    tag: 'breeze-' + await sha256Short(String(groupId || from)),
+    contactId: await sha256Short(from),
+  }, env).catch(() => {});
 
   return json({ ok: true, ack: Date.now() }, 200, request);
 }
@@ -718,7 +733,15 @@ async function handlePresence(body, env, request) {
   // v3.6: In-memory online counter (saves 1 KV read + 1 KV write per heartbeat).
   // Count UNIQUE users, not heartbeats: a Set of ids this minute — the old counter
   // incremented per heartbeat, inflating ~2× at the 30 s client interval.
-  if (!globalThis._onlineCounter) globalThis._onlineCounter = { minute: 0, ids: new Set(), prev: 0 };
+  // Guard on .ids, not the object: handleOnlineCount's lazy init creates the same key
+  // WITHOUT the Set, and in an isolate where /api/online beats the first heartbeat the
+  // object exists but ids.add() would TypeError — every heartbeat 500s until the minute
+  // rollover re-inits. Merge-heal instead of overwrite so a partial object keeps its
+  // minute/prev/count fields.
+  if (!globalThis._onlineCounter?.ids) {
+    const _oc = globalThis._onlineCounter || {};
+    globalThis._onlineCounter = { minute: _oc.minute || 0, ids: new Set(), prev: _oc.prev || 0, count: _oc.count || 0 };
+  }
   const currentMinute = Math.floor(Date.now() / 60000);
   if (globalThis._onlineCounter.minute !== currentMinute) {
     // Preserve the previous minute's count as a fallback so handleOnlineCount does not
@@ -733,7 +756,10 @@ async function handlePresence(body, env, request) {
 // v3.3: Online user count (approximate)
 async function handleOnlineCount(body, env, request) {
   // v3.6: In-memory counter (no KV read needed)
-  if (!globalThis._onlineCounter) globalThis._onlineCounter = { minute: 0, count: 0, prev: 0 };
+  if (!globalThis._onlineCounter?.ids) {
+    const _oc = globalThis._onlineCounter || {};
+    globalThis._onlineCounter = { minute: _oc.minute || 0, ids: new Set(), count: _oc.count || 0, prev: _oc.prev || 0 };
+  }
   const minuteKey = Math.floor(Date.now() / 60000);
   // At a minute boundary the new minute's count is 0 until the first heartbeat. Return
   // the previous minute's count as a fallback to avoid a false "0 online" spike.
@@ -1182,9 +1208,10 @@ async function handleGroupInfo(body, env, request) {
 // ownership, rename, or delete the group. These are server-side state changes with no
 // client-side crypto recourse, so the E2E model does not cover them.
 //
-// Verified whenever {ts,sig} are supplied (forgeries rejected); required outright when
-// GROUP_REQUIRE_AUTH is set — flip that on once clients sign. Default (no sig + flag unset)
-// preserves the legacy flow so current clients keep working until updated. sig is Ed25519
+// Verified whenever {ts,sig} are supplied (forgeries rejected); REQUIRED by default
+// — every deployed client signs all six mutations (kick/admin/transfer/rename/
+// leave/delete), so an unsigned mutation is a forgery attempt, not a legacy flow.
+// GROUP_REQUIRE_AUTH='false' is the explicit opt-out. sig is Ed25519
 // over `breeze-group-${action}:${token}:${actorId}:${ts}:${bind}`, verified against the
 // actor's registered edIdentityKey.
 //
@@ -1209,7 +1236,7 @@ async function checkGroupAuth(env, request, action, token, actorId, ts, sig, bin
     if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
     return null;
   }
-  if (env.GROUP_REQUIRE_AUTH === 'true') return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+  if (env.GROUP_REQUIRE_AUTH !== 'false') return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
   return null;
 }
 
@@ -1625,8 +1652,8 @@ async function handlePushSubscribe(body, env, request) {
   // OWN device under push:${userId} and then receive the victim's notifications: the Web Push
   // payload is encrypted to the SUBSCRIBER-supplied p256dh/auth, so the attacker can decrypt the
   // metadata (sender display name, message type, contactId, timing). They could also evict the
-  // victim's real devices via the 5-device cap (denial of notification). Verified-when-present;
-  // required when PUSH_REQUIRE_AUTH=true. Same pattern as portal/group/backup/alias auth.
+  // victim's real devices via the 5-device cap (denial of notification). Required by
+  // default (clients sign subscribe/unsubscribe); PUSH_REQUIRE_AUTH=false opts out.
   {
     const { ts, sig } = body;
     const hasSig = ts !== undefined || sig !== undefined;
@@ -1648,7 +1675,7 @@ async function handlePushSubscribe(body, env, request) {
       const subBind = `${subscription.endpoint || ''}:${subscription.keys?.p256dh || ''}:${subscription.keys?.auth || ''}`;
       const ok = await verifyEd25519(bundle.edIdentityKey, utf8ToB64(`breeze-push-subscribe:${userId}:${ts}:${subBind}`), sig);
       if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
-    } else if (env.PUSH_REQUIRE_AUTH === 'true') {
+    } else if (env.PUSH_REQUIRE_AUTH !== 'false') {
       return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
     }
   }
@@ -1693,9 +1720,9 @@ async function handlePushUnsubscribe(body, env, request) {
   if (!userId || !endpoint) return json({ error: 'userId and endpoint required', code: 'MISSING_FIELDS' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   if (typeof endpoint !== 'string' || endpoint.length > 512) return json({ error: 'invalid endpoint', code: 'INVALID_FIELD' }, 400, request);
-  // Optional Ed25519 ownership auth — mirrors handlePushSubscribe. Without it any caller who
-  // knows a userId + endpoint can silently delete that user's push subscription (denial of
-  // notification). Verified-when-present; required when PUSH_REQUIRE_AUTH=true.
+  // Ed25519 ownership auth — mirrors handlePushSubscribe (endpoint-bound). Without it any
+  // caller who knows a userId + endpoint can silently delete that user's push subscription
+  // (denial of notification). Required by default; PUSH_REQUIRE_AUTH=false opts out.
   {
     const { ts, sig } = body;
     const hasSig = ts !== undefined || sig !== undefined;
@@ -1713,7 +1740,7 @@ async function handlePushUnsubscribe(body, env, request) {
       // Bind the specific endpoint being removed so a subscribe signature cannot be replayed here.
       const ok = await verifyEd25519(bundle.edIdentityKey, utf8ToB64(`breeze-push-unsubscribe:${userId}:${ts}:${endpoint}`), sig);
       if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
-    } else if (env.PUSH_REQUIRE_AUTH === 'true') {
+    } else if (env.PUSH_REQUIRE_AUTH !== 'false') {
       return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
     }
   }
@@ -1792,11 +1819,16 @@ async function handleTurn(body, env, request) {
   const { userId } = body;
   if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
-  // When TURN_REQUIRE_AUTH=true, only registered users (completed PoW + prekey upload) receive
-  // TURN credentials. Prevents unauthenticated bots from draining paid TURN quota
-  // (Cloudflare Calls TURN: $0.05/GB). Rate-limit alone (10 rpm) does not eliminate
-  // the risk when TURN_KEY_ID is configured.
-  if (env.TURN_REQUIRE_AUTH === 'true') {
+  // A configured private/paid TURN provider gates credential minting to registered
+  // users BY DEFAULT (TURN_REQUIRE_AUTH=false opts out): CF Calls bills $0.05/GB and
+  // coturn burns the operator's bandwidth, so open minting lets any bot drain the
+  // quota — the 10rpm per-IP limit does not stop multi-IP. The public openrelay
+  // fallback stays open: its credentials are already printed in this file, so
+  // gating only that path would be theater. TURN_REQUIRE_AUTH=true also gates it.
+  const _turnConfigured = !!(env.TURN_KEY_ID && env.TURN_KEY_API_TOKEN)
+    || !!(env.TURN_SECRET && env.TURN_URL)
+    || !!(env.TURN_URL && env.TURN_USERNAME && env.TURN_CREDENTIAL);
+  if (env.TURN_REQUIRE_AUTH === 'true' || (env.TURN_REQUIRE_AUTH !== 'false' && _turnConfigured)) {
     if (!(await kvGet(env, `prekey:${userId}`))) return json({ error: 'User not registered', code: 'UNREGISTERED' }, 401, request);
   }
 
@@ -2540,7 +2572,7 @@ async function handleSealedSend(body, env, request) {
     seen.push({ envelope, ts: newTs });
     await kvPut(env, key, JSON.stringify(seen), { expirationTtl: TTL.WEEK });
   }
-  sendPushToUser(to, { title: 'Breeze', body: 'New message', tag: 'breeze-sealed', contactId: to }, env).catch(() => {});
+  sendPushToUser(to, { title: 'Breeze', body: 'New message', tag: 'breeze-sealed', contactId: await sha256Short(to) }, env).catch(() => {});
   return json({ ok: true, ack: Date.now() }, 200, request);
 }
 
@@ -2625,9 +2657,17 @@ async function handleBackupUpload(body, env, request) {
   if (typeof backup !== 'string') return json({ error: 'backup must be a string', code: 'INVALID_FIELD' }, 400, request);
 
   // Optional Ed25519 auth: callers may include { ts, sig } to prove ownership of the
-  // account's identity key before overwriting the backup. When omitted the upload is
-  // unauthenticated (backward-compat). Both fields must be present or both absent.
+  // account's identity key before overwriting the backup. Both fields must be present or
+  // both absent. An UNSIGNED overwrite is refused only when a backup already exists —
+  // incumbent endorsement: a stored backup is accepted data, so letting any anonymous
+  // caller replace it (clobber — the victim's recovery path silently becomes attacker
+  // ciphertext) is strictly worse than keeping first writes open. Every current client
+  // already signs, so no legitimate overwrite is affected.
   const hasSig = ts !== undefined || sig !== undefined;
+  if (!hasSig && env.BACKUP_REQUIRE_AUTH !== 'true'
+      && (await kvGet(env, `backup:${userId}`)) !== null) {
+    return json({ error: 'Signature required to overwrite an existing backup', code: 'AUTH_REQUIRED' }, 403, request);
+  }
   if (hasSig) {
     if (ts === undefined || sig === undefined)
       return json({ error: 'ts and sig must both be provided together', code: 'PARTIAL_AUTH' }, 400, request);
@@ -2663,12 +2703,11 @@ async function handleBackupDownload(body, env, request) {
   if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
 
-  // Optional Ed25519 auth: callers may include { ts, sig } to prove ownership before
-  // retrieving the backup. Both fields must be present or both absent.
-  // Set BACKUP_REQUIRE_AUTH=true to reject unauthenticated requests — recommended once
-  // all clients register an Ed25519 identity key (same pattern as GROUP_REQUIRE_AUTH,
-  // PRESENCE_REQUIRE_AUTH, etc.). Without it, knowing a userId is enough to download the
-  // encrypted blob and brute-force the passphrase offline.
+  // Ed25519 auth required BY DEFAULT — knowing a userId is otherwise enough to
+  // download the encrypted blob and brute-force the passphrase offline. Every
+  // deployed client signs `breeze-backup-download:{id}:{ts}`; the uniform 403
+  // fires before the blob lookup so an unsigned probe can't even learn whether
+  // a backup exists. BACKUP_REQUIRE_AUTH='false' is the explicit opt-out.
   const hasSig = ts !== undefined || sig !== undefined;
   if (hasSig) {
     if (ts === undefined || sig === undefined)
@@ -2684,7 +2723,7 @@ async function handleBackupDownload(body, env, request) {
     const challenge = `breeze-backup-download:${userId}:${ts}`;
     const ok = await verifyEd25519(bundle.edIdentityKey, btoa(challenge), sig);
     if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
-  } else if (env.BACKUP_REQUIRE_AUTH === 'true') {
+  } else if (env.BACKUP_REQUIRE_AUTH !== 'false') {
     return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
   }
 

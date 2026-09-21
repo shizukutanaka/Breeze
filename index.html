@@ -2034,11 +2034,6 @@ const _I = {
   // validated by tools/i18n-check.mjs (wired into validate.sh).
 };
 // Locales with a full translation file in locales/. Everything else falls back to English.
-// (A 924-language × 25-string table, lang.js, used to sit between the two. Deleted: measured,
-// it supplied ZERO strings to the UI — 18 of its 25 keys were shadowed by the complete inline
-// English table, which t() consults first, and the other 7 are never passed to t() anywhere.
-// It cost 569 KB, 44% of the app's payload, on every cold load. Even working it could only
-// ever reach ~25 of 667 strings: a 96%-English UI, which is not "supporting a language".)
 const FULL_LOCALES = ['ja', 'ko', 'zh-TW', 'es', 'th', 'id', 'pt-BR'];
 function detectLang() {
   const nav = (navigator.language || 'en');
@@ -2677,7 +2672,16 @@ function toggleTheme() {
 
 // i18n: auto-detect browser language
 
-const API = location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? '' : location.origin + '/api';
+// Packaged runtimes serve from a non-relay origin (Electron file:, Capacitor
+// app.breeze.local, Tauri tauri.localhost) — location.origin+'/api' 404s there, so they
+// must talk to a real deployment. Self-hosters: repoint PACKAGED_API_ORIGIN before
+// packaging. SHARE_BASE mirrors it: recipients can't open file:/// or *.local invite links.
+const PACKAGED_API_ORIGIN = 'https://breeze.pages.dev';
+const _packagedOrigin = PLATFORM === 'capacitor' || location.protocol === 'file:'
+  || location.protocol === 'tauri:' || location.hostname.endsWith('.local');
+const API = location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? ''
+  : _packagedOrigin ? PACKAGED_API_ORIGIN + '/api' : location.origin + '/api';
+const SHARE_BASE = _packagedOrigin ? PACKAGED_API_ORIGIN + '/' : location.origin + location.pathname;
 const P = new URLSearchParams(location.search);
 // manifest.json registers web+breeze: as a protocol handler → /?join=%s, where %s is the
 // ENTIRE activated URL (e.g. "web+breeze:abc123"), not the bare token real invite links pass
@@ -3829,12 +3833,12 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'sign'); return null; }
   }
 
-  // Owner-auth for id-keyed poll/ack endpoints: returns {ts, sig} to spread into the
-  // request body, or {} when signing is unavailable (the Worker verifies-when-present and
-  // only requires it when the operator sets the matching *_REQUIRE_AUTH secret).
-  async function _ownerAuth(op) {
+  // Owner-auth for id-keyed endpoints: returns {ts, sig} to spread into the request
+  // body, or {} when signing is unavailable. The Worker verifies-when-present and
+  // requires it by default on the poll/ack/push surfaces (*_REQUIRE_AUTH=false opts out).
+  async function _ownerAuth(op, bind = '') {
     const ts = Date.now();
-    const sig = await signMessage(`breeze-${op}:${myId}:${ts}`);
+    const sig = await signMessage(`breeze-${op}:${myId}:${ts}${bind ? ':' + bind : ''}`);
     return sig ? { ts, sig } : {};
   }
 
@@ -5206,14 +5210,10 @@ async function initMessenger(dbName) {
   }
 
   // ---- Multi-device (Phase 1) ----
-  // A "device" is just another Breeze identity; this account's devices are bound by a
-  // root-signed registry on the relay (see _worker.js handleDeviceSet). The registry is
-  // client-verified: we check the root's Ed25519 signature ourselves, so the relay can
-  // withhold the list (degrades to single-device) but cannot forge devices into it.
-  // Monotonic floor: a signed blob's ts is attacker-consistent on replay, so a hostile
-  // relay could serve a stale record forever and resurrect an unlinked device into every
-  // fan-out. Persist the max verified ts per account; reject older records (degrades to
-  // single-device instead of silently restoring the removed key).
+  // Devices are bound by a root-signed registry on the relay (handleDeviceSet), verified
+  // client-side: the relay can withhold the list but not forge it. Monotonic floor: a
+  // signed blob's ts is attacker-consistent on replay — persist max verified ts per
+  // account and reject older records (a stale replay can't resurrect an unlinked device).
   let _devFloor = null;
   async function _devFloorGet(accountId) {
     if (!_devFloor) _devFloor = (await dbGet('settings', 'devFloor').catch(() => null)) || {};
@@ -5239,10 +5239,8 @@ async function initMessenger(dbName) {
       const digest = Array.from(new Uint8Array(digestBuf)).slice(0, 16)
         .map(b => b.toString(16).padStart(2, '0')).join('');
       if (!rec.devices.some(d => d.pub === rec.root)) return null;
-      // Verify under the account's PINNED signing key (TOFU pin from message signatures), or my
-      // own signing key when the registry is mine. No pinned key -> DO NOT trust extra devices:
-      // an unverifiable registry falls back to single-device rather than letting the relay
-      // inject a listening device. (Withholding degrades to today's behaviour either way.)
+      // Verify under the account's PINNED signing key (TOFU from message sigs) or my own
+      // key when the registry is mine. Unverifiable -> single-device, never an injected one.
       let sigPub = null;
       if (accountId === myId) sigPub = _signingPubB64;
       if (!sigPub) sigPub = (await dbGet('contacts', accountId).catch(() => null))?.sigPub || null;
@@ -5255,9 +5253,7 @@ async function initMessenger(dbName) {
       if (!sigPub) { _dbg(null, 'device list: no pinned signing key for ' + accountId + ' — staying single-device'); return null; }
       const okSig = await verifySignature(`breeze-device-set:${accountId}:${rec.ts}:${digest}`, rec.sig, sigPub);
       if (okSig !== true) { _dbg(null, 'device list signature not verified — ignoring registry'); return null; }
-      // Rollback guard (see _devFloor*): reject a verified record that is older than the
-      // newest one we've already accepted — the relay can replay a stale signed blob to
-      // resurrect a removed device otherwise.
+      // Rollback guard: reject a verified record older than the newest already accepted.
       const floor = await _devFloorGet(accountId);
       if (typeof rec.ts === 'number' && rec.ts < floor) { _dbg(null, 'device list is stale (rollback) — ignoring'); return null; }
       await _devFloorBump(accountId, rec.ts);
@@ -5410,10 +5406,8 @@ async function initMessenger(dbName) {
     let wire = payload;
     if (sealPub && CONFIG.SEAL_V2_ENABLED && await _peerSealV2(to)) {
       const { to: _t, ts: _ts, payload: _p, ...meta } = payload;
-      // Session-bootstrap leak: the first message of a session wraps the ratchet ciphertext
-      // in a plaintext X3DH header whose `ik` IS the sender's identity key — so a sealed
-      // envelope would still identify the sender on first contact (wiretap-E2E-found).
-      // Relocate ik into the sealed block; the recipient re-injects it before decrypting.
+      // Bootstrap leak: a first-message pkm header's `ik` is the sender's identity key —
+      // relocate it into the sealed block or the envelope still names the sender.
       let wirePayload = payload.payload;
       try {
         const pkm = JSON.parse(wirePayload);
@@ -5523,9 +5517,8 @@ async function initMessenger(dbName) {
       _dbg(null, 'Background sync: flushing ' + _retryQueue.length + ' messages');
       scheduleRetry();
     }
-    // v3.6: Handle notification quick-reply action
     if (e.data?.type === 'quick-reply' && e.data.contactId && e.data.text) {
-      dbGet('contacts', e.data.contactId).then(contact => {
+      _pushContactId(e.data.contactId).then(cid => dbGet('contacts', cid)).then(contact => {
         if (contact && e.data.text.trim()) {
           openConversation(contact).then(() => {
             _DOM.get('msg-input').value = e.data.text;
@@ -5534,13 +5527,32 @@ async function initMessenger(dbName) {
         }
       }).catch(err => _dbg(err, 'quick-reply'));
     }
-    // v3.6: Handle notification mark-read action
     if (e.data?.type === 'mark-read' && e.data.contactId) {
-      dbGet('contacts', e.data.contactId).then(c => {
+      _pushContactId(e.data.contactId).then(cid => dbGet('contacts', cid)).then(c => {
         if (c) { c.unread = 0; dbPut('contacts', c).then(() => renderContacts()).catch(err => _dbg(err, 'mark-read-put')); }
       }).catch(err => _dbg(err, 'mark-read'));
     }
   });
+
+  // Push contactId is a sha256 pseudonym (push service can't read who's writing);
+  // resolve by hashing our own contact ids — a raw-id payload falls through unchanged.
+  let _contactHashCache = null;
+  async function _pushContactId(raw) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (!_contactHashCache) {
+        _contactHashCache = new Map();
+        for (const c of (await dbGetAll('contacts').catch(() => [])) || [])
+          _contactHashCache.set(await _sha256hex(c.id), c.id);
+      }
+      if (_contactHashCache.has(raw)) return _contactHashCache.get(raw);
+      _contactHashCache = null; // contact added since the cache — rebuild once
+    }
+    return raw;
+  }
+  async function _sha256hex(s) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+    return Array.from(new Uint8Array(buf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
 
   // SENDER KEY — Group Encryption
   //
@@ -5878,7 +5890,7 @@ async function initMessenger(dbName) {
       if (API && myId) {
         navigator.serviceWorker?.ready
           .then(r => r.pushManager?.getSubscription())
-          .then(sub => { if (sub) postAPIRaw('/push/unsubscribe', { userId: myId, endpoint: sub.endpoint }).catch(() => {}); })
+          .then(async sub => { if (sub) postAPIRaw('/push/unsubscribe', { userId: myId, endpoint: sub.endpoint, ...(await _ownerAuth('push-unsubscribe', sub.endpoint)) }).catch(() => {}); })
           .catch(() => {});
       }
       // Save unread count for cross-account badge
@@ -6228,18 +6240,19 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'dm-sig-unseal'); return null; }
   }
 
-  // _signal(room, type, data) — fire-and-forget POST to /signal. dm: and call: rooms
-  // are sealed when the peer advertises dm-sig-v1 (see _sealDmSignal); other rooms
-  // and legacy peers stay plaintext.
+  // _signal — POST to /signal; dm:/call: rooms are sealed when the peer advertises dm-sig-v1.
   async function _signal(room, type, data) {
     let wireType = type, wireData = data || '';
     if (room.startsWith('dm:') || room.startsWith('call:')) {
       const sealed = await _sealDmSignal(room, { type, data: wireData });
       if (sealed) { wireType = 'enc'; wireData = sealed; }
     }
-    return fetchT(API + '/signal', { method: 'POST', headers: _H,
-      body: JSON.stringify({ room, sender: myId, type: wireType, data: wireData })
-    }).catch(e => _dbg(e, 'signal:' + type));
+    const post = () => fetchT(API + '/signal', { method: 'POST', headers: _H,
+      body: JSON.stringify({ room, sender: myId, type: wireType, data: wireData }) });
+    // 429 = room full (nothing evicted) — one bounded retry while the peer's poll drains it.
+    const resp = await post().catch(e => (_dbg(e, 'signal:' + type), null));
+    if (resp?.status === 429) await new Promise(r => setTimeout(r, Math.min(parseInt(resp.headers.get('Retry-After') || '5') || 5, 15) * MS.SEC)).then(() => post()).catch(e => _dbg(e, 'signal-r:' + type));
+    return resp;
   }
   // _signalAwait — same but returns response for poll pattern
   function _signalAwait(room, type, data) {
@@ -6250,11 +6263,8 @@ async function initMessenger(dbName) {
   // DRY: DM room key
   function _dmRoom(peerId) { return 'dm:' + [myId, peerId].sort().join(':'); }
 
-  // Sign and send a WebRTC SDP offer or answer. The /signal relay is unauthenticated
-  // (anyone who knows two user IDs can post), so a malicious third party could inject a
-  // crafted SDP and MITM the DTLS layer. Wrapping the SDP in an Ed25519 signature bound
-  // to our signing identity lets the peer verify provenance before calling setRemoteDescription.
-  // Backward-compat: if signing is unavailable (old browser, key not loaded), emits plain JSON.
+  // SDP offer/answer is Ed25519-signed (the /signal relay is unauthenticated — MITM
+  // defense); emits plain JSON when signing is unavailable.
   async function _sendSignedSDP(room, type, sdpObj) {
     const sdpJson = JSON.stringify(sdpObj);
     const sig = await signMessage(sdpJson);
@@ -6262,19 +6272,14 @@ async function initMessenger(dbName) {
     return _signal(room, type, data);
   }
 
-  // v3.6 SECURITY: call-signaling authentication (gated by CONFIG.CALL_E2E_SIGNAL).
-  // Wrap: when the flag is ON, encrypt the signal object to the pinned peer via the 1:1
-  // ratchet (the resulting ciphertext is opaque to the unauthenticated /signal relay and
-  // can only be produced by the holder of the peer's session); when OFF, emit the legacy
-  // plaintext JSON so behavior is unchanged. Returns null only if encryption fails (ON path).
+  // CALL_E2E_SIGNAL: ON ratchet-encrypts the call signal to the pinned peer (opaque to
+  // the relay, unforgeable without the session); OFF emits legacy plaintext.
   async function _wrapCallSignal(peerPub, obj) {
     if (!CONFIG.CALL_E2E_SIGNAL) return JSON.stringify(obj);
     if (!peerPub) return null;
     return await encryptFor(JSON.stringify(obj), peerPub);
   }
-  // Unwrap: when ON, decrypt+authenticate — a forged signal (not from the pinned peer, or a
-  // relay-injected substitute) fails to decrypt and yields null, so the caller drops it,
-  // closing the call-MITM. When OFF, parse the legacy plaintext. Returns null on any failure.
+  // Unwrap: forged/relay-injected signals → null → dropped; OFF parses legacy plaintext.
   async function _unwrapCallSignal(peerPub, data) {
     try {
       if (!CONFIG.CALL_E2E_SIGNAL) return JSON.parse(data);
@@ -9521,7 +9526,7 @@ async function initMessenger(dbName) {
       await renderContacts();
 
       // Generate and share invite link
-      const joinUrl = location.origin + location.pathname + '?join=' + data.token;
+      const joinUrl = SHARE_BASE + '?join=' + data.token;
       navigator.clipboard?.writeText(joinUrl);
 
       const box = _DOM.get('msg-messages');
@@ -10340,14 +10345,11 @@ async function initMessenger(dbName) {
     const meta = { msgId, replyTo: msg.replyTo, disappearAt: msg.disappearAt, senderName: msg.fromName,
       ...(msg.nrn === true ? { nrn: true } : {}) };
 
-
     if (msg.isFile) {
       try {
-        // Local binary-chunk reassembly (handleBinaryChunk): the payload is plaintext
-        // because the DataChannel itself is already authenticated + DTLS-encrypted —
-        // running it through decryptFrom dropped every received file AND counted as a
-        // decrypt failure (3 → bogus session-reset MITM banner). fileBytes cannot be
-        // forged by a peer: JSON.parse never produces a Uint8Array.
+        // Binary chunks stay plaintext — the DataChannel is already DTLS-encrypted, and
+        // decryptFrom dropped them as bogus failures. fileBytes is unforgeable: JSON.parse
+        // never produces a Uint8Array.
         const _localFile = msg.fileBytes instanceof Uint8Array;
         const fileMsg = _localFile ? msg.payload : await decryptFrom(msg.payload, _peerPub);
         if (!fileMsg) return;
@@ -11409,7 +11411,7 @@ async function initMessenger(dbName) {
       const existing = await reg.pushManager.getSubscription();
       if (existing) {
         // Already subscribed, sync with server
-        await postAPIRaw('/push/subscribe', { userId: myId, subscription: existing.toJSON() }).catch(e => _dbg(e));
+        await postAPIRaw('/push/subscribe', { userId: myId, subscription: existing.toJSON(), ...(await _ownerAuth('push-subscribe', `${existing.endpoint||''}:${existing.keys?.p256dh||''}:${existing.keys?.auth||''}`)) }).catch(e => _dbg(e));
         return;
       }
       // Request permission and subscribe
@@ -11423,7 +11425,7 @@ async function initMessenger(dbName) {
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(health.vapidPublicKey),
       });
-      await postAPIRaw('/push/subscribe', { userId: myId, subscription: sub.toJSON() }).catch(e => _dbg(e));
+      await postAPIRaw('/push/subscribe', { userId: myId, subscription: sub.toJSON(), ...(await _ownerAuth('push-subscribe', `${sub.endpoint||''}:${sub.keys?.p256dh||''}:${sub.keys?.auth||''}`)) }).catch(e => _dbg(e));
     } catch(e) { _dbg(e, 'push'); }
   }
 
@@ -12557,8 +12559,8 @@ async function initMessenger(dbName) {
 
   function generateInviteMessage() {
     const url = myAlias
-      ? location.origin + location.pathname + '?add=@' + myAlias
-      : location.origin + location.pathname + '?add=' + encodeURIComponent(myPubB64) + '&name=' + encodeURIComponent(myName);
+      ? SHARE_BASE + '?add=@' + myAlias
+      : SHARE_BASE + '?add=' + encodeURIComponent(myPubB64) + '&name=' + encodeURIComponent(myName);
 
     const msg = t('inviteMsg', myName, url);
     return { url, msg };
@@ -13382,7 +13384,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         try {
           const reg = await navigator.serviceWorker?.ready.catch(() => null);
           const sub = await reg?.pushManager?.getSubscription().catch(() => null);
-          if (sub) { postAPIRaw('/push/unsubscribe', { userId: myId, endpoint: sub.endpoint }).catch(() => {}); await sub.unsubscribe().catch(() => {}); }
+          if (sub) { postAPIRaw('/push/unsubscribe', { userId: myId, endpoint: sub.endpoint, ...(await _ownerAuth('push-unsubscribe', sub.endpoint)) }).catch(() => {}); await sub.unsubscribe().catch(() => {}); }
         } catch(e) { _dbg(e); }
       }
       // Local wipe
@@ -13463,7 +13465,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         // Store ciphertext on server (server never sees the key)
         const resp = await postAPIRaw('/drop/create', { id: dropId, ct: ctB64, ttl: 86400 });
         if (!resp.ok) throw new Error('Server error');
-        const dropUrl = `${location.origin}/?drop=${dropId}#${keyB64}`;
+        const dropUrl = `${SHARE_BASE}?drop=${dropId}#${keyB64}`;
         // Copy to clipboard
         try { await navigator.clipboard.writeText(dropUrl); } catch { /* fallback below */ }
         // Show result in chat
@@ -13538,8 +13540,8 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const box = _DOM.get('msg-messages');
       const d = document.createElement('div');
       d.className = 'cmd-panel-mono';
-      const addUrl = location.origin + '/?add=' + myPubB64 + '&name=' + encodeURIComponent(myName);
-      const aliasUrl = myAlias ? location.origin + '/?add=' + myAlias : '';
+      const addUrl = SHARE_BASE + '?add=' + myPubB64 + '&name=' + encodeURIComponent(myName);
+      const aliasUrl = myAlias ? SHARE_BASE + '?add=' + myAlias : '';
       safeSetHTML(d, [
         '<b class="i-g">' + t('cmdMyIdentity') + '</b>',
         t('cmdLblName') + ': <b>' + esc(myName) + '</b>',
@@ -13568,7 +13570,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const box = _DOM.get('msg-messages');
       const d = document.createElement('div');
       d.className = 'cmd-panel-mono';
-      const shareLink = location.origin + '/?add=' + (myAlias ? '@' + myAlias : myPubB64);
+      const shareLink = SHARE_BASE + '?add=' + (myAlias ? '@' + myAlias : myPubB64);
       safeSetHTML(d, [
         '<b class="i-green14">' + esc(myName) + '</b>',
         '<div class="i-body13">' + (myShortId || myId) + '</div>',
@@ -13774,7 +13776,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     if (val === '/share') {
       e.preventDefault();
       clearInput();
-      const link = location.origin + '/?add=' + (myAlias ? '@' + myAlias : myPubB64);
+      const link = SHARE_BASE + '?add=' + (myAlias ? '@' + myAlias : myPubB64);
       const shareData = { title: t('shareDialogTitle'), text: t('shareDialogText', myName), url: link };
       if (navigator.share) {
         try { await navigator.share(shareData); } catch(e) { if (e.name !== 'AbortError') _dbg(e); }
