@@ -2160,18 +2160,59 @@ describe('sealed sender send / poll / ack', () => {
   });
 
   // Socratic round: "what happens to message 101 while the recipient is offline?" The
-  // queue caps at 100 and silently dropped the oldest. Now the relay counts the drops and
-  // the next poll confesses them — once — so the recipient at least knows.
-  it('reports queue-overflow drops on the next poll, exactly once', async () => {
+  // queue used to cap at 100 and drop the OLDEST — so any unauthenticated sender could
+  // purge a victim's pending queue by flooding (4 min single-IP at 30/min). Now a full
+  // queue refuses with 429 QUEUE_FULL: pending mail is immutable once stored, and the
+  // sender's existing retry path re-sends after the recipient's next drain.
+  it('refuses overflow with QUEUE_FULL instead of evicting pending mail', async () => {
     const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
-    for (let i = 0; i < 103; i++) {
-      await handleSealedSend({ to: 'busybee1', envelope: `E${i}-${'x'.repeat(40)}` }, env, req({}));
+    for (let i = 0; i < 100; i++) {
+      const r = await handleSealedSend({ to: 'busybee1', envelope: `E${i}-${'x'.repeat(40)}` }, env, req({}));
+      expect(r.status).toBe(200);
     }
+    const refused = await handleSealedSend({ to: 'busybee1', envelope: 'ONE-TOO-MANY' }, env, req({}));
+    expect(refused.status).toBe(429);
+    expect((await refused.json()).code).toBe('QUEUE_FULL');
+    expect(refused.headers.get('Retry-After')).toBe('30');
+    // Pending mail survives intact — nothing was evicted.
     const first = await (await handleSealedPoll({ id: 'busybee1' }, env, req({}))).json();
     expect(first.messages.length).toBe(100);
-    expect(first.dropped).toBe(3); // 103 sent, cap 100 — three oldest were lost
-    const second = await (await handleSealedPoll({ id: 'busybee1' }, env, req({}))).json();
-    expect(second.dropped).toBeUndefined(); // confessed once, counter reset
+    // Refusal un-marks dedup, so a retry after the ack drain actually stores.
+    await handleSealedAck({ id: 'busybee1' }, env, req({}));
+    const retry = await handleSealedSend({ to: 'busybee1', envelope: 'ONE-TOO-MANY' }, env, req({}));
+    expect(retry.status).toBe(200);
+    expect((await retry.json()).dedup).toBeUndefined();
+    const after = await (await handleSealedPoll({ id: 'busybee1' }, env, req({}))).json();
+    expect(after.messages.some((m) => m.envelope === 'ONE-TOO-MANY')).toBe(true);
+  });
+
+  // The lost-write requeue cannot recover onto a full queue without evicting another
+  // accepted envelope — under the refuse-when-full invariant it skips the re-append
+  // instead. The envelope is lost (the race defect itself is unchanged), but no
+  // already-accepted entry is destroyed to make room for it.
+  it('lost-write recovery on a full queue skips the re-append rather than evicting', async () => {
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
+    const key = 'sealed:racefull1';
+    for (let i = 0; i < 99; i++) {
+      await handleSealedSend({ to: 'racefull1', envelope: `OLD${i}-${'x'.repeat(40)}` }, env, req({}));
+    }
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbered = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true; // racing writer lands last with a DIFFERENT full queue
+        await origPut(k, JSON.stringify(
+          Array.from({ length: 100 }, (_, i) => ({ envelope: `OTHER${i}`, ts: Date.now() }))), o);
+      }
+    };
+    const res = await handleSealedSend({ to: 'racefull1', envelope: 'MINE-lost' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect(clobbered).toBe(true);
+    const polled = await (await handleSealedPoll({ id: 'racefull1' }, env, req({}))).json();
+    expect(polled.messages.length).toBe(100);                     // nothing evicted
+    expect(polled.messages.every((m) => m.envelope.startsWith('OTHER'))).toBe(true);
+    expect(polled.messages.some((m) => m.envelope === 'MINE-lost')).toBe(false); // honestly lost
   });
 
   // The sealed queue is a single KV value mutated read-modify-write, and KV is
@@ -2534,6 +2575,35 @@ describe('msg send / poll (1:1 relay path)', () => {
     await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'C', ts: T }, ip, env, req({}));
     const stored = JSON.parse(await env.KV.get('inbox:bob00001'));
     expect(stored.map(m => m.ts)).toEqual([T, T + 1, T + 2]); // strictly increasing
+  });
+
+  // A full inbox used to evict the OLDEST pending message — any unauthenticated sender
+  // could purge a victim's undelivered mail by flooding (4 min at 30/min, single-IP).
+  // Now the send is refused with 429 QUEUE_FULL (client retries via its existing path),
+  // and the dedup key is un-marked so the retry isn't swallowed as a duplicate.
+  it('refuses overflow with QUEUE_FULL and keeps every pending message', async () => {
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
+    for (let i = 0; i < 100; i++) {
+      const r = await handleMsgSend(
+        { to: 'fullbox1', from: 'sndr' + String(i).padStart(4, '0'), payload: 'F' + i, ts: Date.now() },
+        ip, env, req({}));
+      expect(r.status).toBe(200);
+    }
+    const refused = await handleMsgSend(
+      { to: 'fullbox1', from: 'latecomer1', payload: 'LATE', ts: Date.now() }, ip, env, req({}));
+    expect(refused.status).toBe(429);
+    expect((await refused.json()).code).toBe('QUEUE_FULL');
+    expect(refused.headers.get('Retry-After')).toBe('30');
+    const stored = JSON.parse(await env.KV.get('inbox:fullbox1'));
+    expect(stored.length).toBe(100); // pending mail immutable — nothing evicted
+    // Retry after the queue drains actually stores (refusal un-marked the dedup key).
+    await env.KV.put('inbox:fullbox1', JSON.stringify([]));
+    const retry = await handleMsgSend(
+      { to: 'fullbox1', from: 'latecomer1', payload: 'LATE', ts: Date.now() }, ip, env, req({}));
+    expect(retry.status).toBe(200);
+    expect((await retry.json()).dedup).toBeUndefined();
+    const after = JSON.parse(await env.KV.get('inbox:fullbox1'));
+    expect(after.some((m) => m.payload === 'LATE')).toBe(true);
   });
 
   it('purges expired disappearing messages at poll (server-side disappearAt enforcement)', async () => {

@@ -1,5 +1,17 @@
 # Changelog
 
+## Relay queues are refuse-when-full — accepted mail can't be evicted by a flood (branch devin/consolidate-groups, 2026-09-20)
+
+inbox:{id} and sealed:{id} dropped the OLDEST pending entry on overflow. Send
+endpoints are unauthenticated, so anyone could purge a victim's undelivered queue
+by flooding ~4 min single-IP (30/min vs the 100-entry cap) — destroying mail the
+relay had already accepted. Both paths now answer 429 QUEUE_FULL when full (the
+client's existing 429 handler retries), the dedup key is un-marked on refusal so
+the retry isn't swallowed, and the sealed lost-write requeue skips rather than
+evict onto a full queue. Floods can block new arrivals while sustained, but can
+never destroy accepted-and-acked mail.
+
+
 ## Prekey bundles are incumbent-endorsed (clobber closed) (branch devin/consolidate-groups, 2026-09-20)
 
 KEY_MISMATCH bound userId to identityKey's prefix, but a caller could still ship
