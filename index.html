@@ -7671,10 +7671,28 @@ async function initMessenger(dbName) {
       let sent = 0;
       for (const target of targets) {
         try {
+          const ts = correctedNow();
+          if (target.isGroup) {
+            // Same pubB64='' dead-end as polls/files — encryptFor('') fails, so a
+            // forward into a group silently skipped the target. Route via sender-key.
+            const members = (target.members || []).filter(m => m.id !== myId);
+            for (const m of members) await distributeSenderKey(target.id, m.pubB64).catch(e => _dbg(e, 'sk-dist'));
+            const groupCt = await encryptGroupMsg(target.id, msg.text);
+            if (!groupCt) { _dbg(null, 'group encrypt failed for forward'); continue; }
+            await dbPut('messages', { msgId: myId + ':' + ts, contactId: target.id, text: msg.text, mine: true, ts, forwarded: true });
+            target.lastMsg = msg.text.slice(0, 40);
+            target.lastMsgAt = ts;
+            await dbPut('contacts', target);
+            await Promise.allSettled(members.map(async (m) => {
+              try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId: target.id, groupName: target.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
+            }));
+            _fanOut(target, msg.text, ts, {}, { sfFor: target.id, sfName: target.name });
+            sent++;
+            continue;
+          }
           const encrypted = await encryptFor(msg.text, target.pubB64);
           if (!encrypted) { _dbg(null, 'encrypt failed for forward'); continue; }
-          const ts = correctedNow();
-          await dbPut('messages', { msgId: genMsgId(), contactId: target.id, text: msg.text, mine: true, ts, forwarded: true });
+          await dbPut('messages', { msgId: myId + ':' + ts, contactId: target.id, text: msg.text, mine: true, ts, forwarded: true });
           target.lastMsg = msg.text.slice(0, 40);
           target.lastMsgAt = ts;
           await dbPut('contacts', target);

@@ -1,5 +1,13 @@
 # Changelog
 
+## Forwarding into a group silently skipped the target (branch devin/consolidate-groups, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`forwardMsg`'s picker lists groups, but the send called `encryptFor(msg.text, '')` — every group target silently failed the encrypt check and was skipped. Group targets now go through the sender-key channel (`encryptGroupMsg` + parallel member relay + self-sync), and both paths store the wire id (`myId + ':' + ts`) so the forwarded copy stays mutation-addressable.
+
+---
+
 ## Leaving a group told nobody — roster + sender key stayed live (branch devin/consolidate-groups, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
