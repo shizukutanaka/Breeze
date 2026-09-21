@@ -9747,21 +9747,24 @@ async function initMessenger(dbName) {
         if (signal.type === 'edit') {
           const stored = await dbGet('messages', _smId);
           // Only allow editing messages not authored by us — contact cannot remote-edit our outgoing messages.
+          // stored.contactId === contactId binds the target to THIS conversation: without it a
+          // contact could rewrite/delete another contact's messages by guessing their msgId
+          // (`senderId:ms` — the id half is public, the timestamp half is guessable).
           // Cap edit text to 64 KB to prevent storage DoS via the P2P signal path (no server-side check).
-          if (stored && !stored.mine && typeof signal.text === 'string') { stored.text = signal.text.slice(0, 65536); stored.edited = true; await dbPut('messages', stored); }
+          if (stored && !stored.mine && stored.contactId === contactId && typeof signal.text === 'string') { stored.text = signal.text.slice(0, 65536); stored.edited = true; await dbPut('messages', stored); }
           const el = document.querySelector(`[data-msgid="${_smId}"]`);
           if (el) { const tm = new Date(signal.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); safeSetHTML(el, renderLinks(renderMarkdown(esc(signal.text))) + ' <span class="i-edited">' + t('edited') + '</span><span class="ts">'+tm+'</span>'); }
         } else if (signal.type === 'delete') {
           const stored = await dbGet('messages', _smId);
           // Only allow deleting messages not authored by us — contact cannot remote-delete our outgoing messages
-          if (stored && !stored.mine) { stored.deleted = true; stored.text = ''; await dbPut('messages', stored); }
+          if (stored && !stored.mine && stored.contactId === contactId) { stored.deleted = true; stored.text = ''; await dbPut('messages', stored); }
           const el = document.querySelector(`[data-msgid="${_smId}"]`);
           if (el) safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>');
         } else if (signal.type === 'reaction') {
           // v3.6: Encrypted reaction from relay
           const stored = await dbGet('messages', _smId);
           // Reject oversized emoji strings (DoS/storage guard — legitimate emoji ≤ ~30 UTF-16 chars)
-          if (stored && typeof signal.emoji === 'string' && signal.emoji.length <= 64) {
+          if (stored && stored.contactId === contactId && typeof signal.emoji === 'string' && signal.emoji.length <= 64) {
             if (!stored.reactions) stored.reactions = {};
             if (!stored.reactions[signal.emoji]) stored.reactions[signal.emoji] = [];
             // Use the verified sender identity from decryption, not the self-reported signal.userId
@@ -10052,7 +10055,7 @@ async function initMessenger(dbName) {
           if (msg.type === 'typing') { showTyping(contact.id, msg.senderName || contact.name); return; }
           if (msg.type === 'read') { showReadReceipt(contact.id, msg.ts); return; }
           // v3 ACK
-          if (msg.type === 'ack') { updateDeliveryState(msg.i, msg.st); return; }
+          if (msg.type === 'ack') { updateDeliveryState(safeMsgId(msg.i || ''), msg.st, contact.id); return; }
           // v3.1: Emoji reaction
           if (msg.type === 'reaction') {
             // Sanitize peer-supplied msgId before querySelector (CSS selector injection guard).
@@ -10060,7 +10063,9 @@ async function initMessenger(dbName) {
             // Reject oversized emoji strings (DoS/storage guard — legitimate emoji ≤ ~30 UTF-16 chars)
             if (typeof msg.emoji !== 'string' || msg.emoji.length > 64) return;
             const stored = await dbGet('messages', _rmId);
-            if (stored) {
+            // Bind the target to THIS conversation — otherwise a contact could react on
+            // another conversation's messages by guessing their `senderId:ms` msgId.
+            if (stored && stored.contactId === contact.id) {
               if (!stored.reactions) stored.reactions = {};
               // Cap unique emoji per message at 20 (matches group path); cap users per emoji at 100
               if (!stored.reactions[msg.emoji]) {
@@ -10080,7 +10085,9 @@ async function initMessenger(dbName) {
           if (msg.type === 'poll_vote') {
             const allMsgs = await dbGetAll('messages');
             const pollMsg = allMsgs.find(m => m.isPoll && JSON.parse(m.text).pollId === msg.pollId);
-            if (pollMsg) {
+            // Same conversation binding as reactions — a peer must not vote on a poll
+            // that lives in a different conversation (pollId is self-reported).
+            if (pollMsg && pollMsg.contactId === contact.id) {
               const poll = JSON.parse(pollMsg.text);
               // Use contact.id (authenticated sender) — not msg.userId (peer-claimed, unverified)
               const voterId = contact.id;
@@ -11039,7 +11046,7 @@ async function initMessenger(dbName) {
 
   // Show typing indicator when received
   // v3: DELIVERY STATE (ACK)
-  function updateDeliveryState(msgId, state) {
+  function updateDeliveryState(msgId, state, fromContactId) {
     // state: 0=delivered, 1=read, 2=deleted
     const el = document.querySelector(`[data-msgid="${msgId}"] .ts`);
     if (!el) return;
@@ -11051,9 +11058,10 @@ async function initMessenger(dbName) {
     if (state === 0) { span.textContent = '✓'; span.classList.remove('color-g','color-r'); span.classList.add('color-t3'); span.title = t('delivered'); }
     else if (state === 1) { span.textContent = '✓✓'; span.classList.remove('color-t3','color-r'); span.classList.add('color-g'); span.title = t('read'); }
     el.appendChild(span);
-    // v3.3: Persist delivery state to IDB
+    // v3.3: Persist delivery state to IDB — bind to the sender's conversation so a peer
+    // cannot stamp read/delivered state onto another contact's messages.
     dbGet('messages', msgId).then(stored => {
-      if (stored) { stored.ack = state; dbPut('messages', stored); }
+      if (stored && (!fromContactId || stored.contactId === fromContactId)) { stored.ack = state; dbPut('messages', stored); }
     }).catch(e => _dbg(e, 'ack-persist'));
   }
 
