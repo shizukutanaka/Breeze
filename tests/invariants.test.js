@@ -64,6 +64,35 @@ describe('SDP signature verification', () => {
   });
 });
 
+describe('dm-sig-v1 sealed signaling (dm: room confidentiality)', () => {
+  // The /signal relay is unauthenticated and rooms are named dm:<idA>:<idB> — anyone
+  // knowing both ids could read ICE candidates (both parties' IPs) and typing/read
+  // activity. dm-sig-v1 seals payloads to the peer's identity key (seal-v2 ECIES),
+  // sign-then-seal so the inner Ed25519 SDP signature still proves authorship.
+  it('advertises the capability so peers know to seal', () => {
+    expect(html).toContain("CAPS_DM_SIG = 'dm-sig-v1'");
+    expect(html).toContain('caps.push(CAPS_DM_SIG)');
+  });
+  it('_signal seals dm: rooms only — other rooms stay plaintext', () => {
+    expect(html).toContain("room.startsWith('dm:')");
+    expect(html).toContain('_sealDmSignal(room, { type, data: wireData })');
+    expect(html).toContain("wireType = 'enc'");
+  });
+  it('sender gates on the PEER caps and fails to plaintext, receiver fails closed', () => {
+    expect(html).toContain('(await _peerCaps(peerId)).includes(CAPS_DM_SIG)');
+    expect(html).toContain('_unsealDmSignal(sigRoom, s.data)');
+    expect(html).toContain("w.enc !== 'dm-sig-v1'");
+  });
+  it('seal is sign-then-seal: SDP signature rides INSIDE the ciphertext', () => {
+    // The {sdp,sig,sigPub} wrapper is produced before _signal seals the payload —
+    // verify the receiver unseals BEFORE the signature check runs.
+    const unsealAt = html.indexOf('_unsealDmSignal(sigRoom, s.data)');
+    const verifyAt = html.indexOf('verifySignature(wrapper.sdp');
+    expect(unsealAt).toBeGreaterThan(-1);
+    expect(verifyAt).toBeGreaterThan(unsealAt);
+  });
+});
+
 describe('group trust boundaries', () => {
   it('group_kick notices require the sender to be creator/admin', () => {
     expect(html).toContain('group.createdBy === senderId || (group.admins || []).includes(senderId)');

@@ -1,5 +1,19 @@
 # Changelog
 
+## dm-sig-v1: sealed data-channel signaling (branch devin/consolidate-groups, 2026-09-20)
+
+Delegated wire-compat decision (おまかせ): `dm:<idA>:<idB>` rooms carried SDP/ICE/
+typing/read in signed-but-plaintext JSON — anyone knowing both ids could read ICE
+candidates (both IPs) and activity. Now, when the peer advertises `dm-sig-v1` in
+prekey-bundle caps, `_signal` seals `{type,data}` to the peer's identity key via
+the seal-v2 ECIES primitive and posts an opaque `{type:'enc'}` envelope — the
+relay sees only that a signal passed, not which kind. Sign-then-seal: the Ed25519
+SDP signature rides inside the ciphertext. Peer without the cap → legacy
+plaintext (delivery over privacy, same trade-off as seal-v2). `_peerCaps` now
+caches the whole caps array (was seal-v2-only). Tripwire tests pin the
+advertisement, the enc dispatch, and sign-then-seal ordering.
+
+
 ## Owner-enforced relay queues by default (branch devin/consolidate-groups, 2026-09-20)
 
 Delegated wire-compat decision (user chose おまかせ): unsigned `/msg/poll` was
