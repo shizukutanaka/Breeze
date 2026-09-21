@@ -7377,6 +7377,7 @@ async function initMessenger(dbName) {
       // sendMessage's gates must cover every send path — otherwise a kicked member
       // (receiver drops via roster check) or a non-admin in announce-only stores the
       // poll locally while every receiver drops it: send-into-the-void.
+      if (contact.isGroup && _isSecondaryDevice) { showToast(t('groupPrimaryOnly'), 'error'); return; }
       if (contact.isGroup && contact.kicked) { showToast(t('toastNoLongerMember'), 'error'); return; }
       if (contact.isGroup && contact.announceOnly && !isGroupAdmin(contact)) { showToast(t('toastAnnounceOnlySend'), 'error'); return; }
       if (contact.blocked) return;
@@ -8581,6 +8582,7 @@ async function initMessenger(dbName) {
       // Start recording — same entry gates as every other send path: a kicked
       // member's / a non-admin's voice note would store locally and be dropped by
       // every receiver (send-into-the-void).
+      if (activeContact?.isGroup && _isSecondaryDevice) { showToast(t('groupPrimaryOnly'), 'error'); return; }
       if (activeContact?.isGroup && activeContact.kicked) { showToast(t('toastNoLongerMember'), 'error'); return; }
       if (activeContact?.isGroup && activeContact.announceOnly && !isGroupAdmin(activeContact)) { showToast(t('toastAnnounceOnlySend'), 'error'); return; }
       if (activeContact?.blocked) return;
