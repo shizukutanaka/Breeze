@@ -1,3 +1,22 @@
+## Group ratchet state advances only after a verified decrypt — forged envelopes can no longer desync it (branch devin/group-ratchet-atomic, 2026-09-21)
+
+Mirror-drift fix: the inline `decryptGroupMsg` persisted v5 ratchet state **before** the
+AES-GCM check on both paths — the reference `src/crypto/group.js` had already fixed this
+("advance chain state only after successful decrypt"). Two consequences inline-only:
+
+- Out-of-order: the consumed skipped key was deleted and written to IDB before decrypt —
+  a forged envelope (`{g:true,c:<cached counter>,…}`) or a corrupted ciphertext burned
+  the real key, making that legit message undecryptable when it later arrived.
+- Forward: `chainKey`/`counter` advanced past a failing envelope — the frontier counter
+  was consumed without retaining a skip entry, so a failed-AEAD message at `c` could never
+  be recovered even on redelivery; a relay could also forge successive advances to push
+  real counters out of the `GROUP_MAX_SKIP` eviction window (unsigned/legacy senders only —
+  `sigPub`-verified senders are rejected earlier at the signature check).
+
+Both paths now compute into locals and persist via `_pendSk` only after AEAD succeeds —
+identical ordering to the reference and to the 1:1 skipped-key path's own comment
+("consume the skipped key only after successful decrypt").
+
 ## Alias registrations now carry the ownership signature the worker already checked (branch devin/consolidate-groups, 2026-09-20)
 
 `/alias/set` has supported an Ed25519 ownership binding (`userId` + `ts` + `sig` over `breeze-alias-set:{alias}:{ts}`, verified against the registrant's prekey bundle with `identityKey === pub`) since the worker shipped it — but no client ever sent it, so a PoW-only request could point any unclaimed `@handle` at any public key. Both registration sites now sign: onboarding moved alias registration after `initSigning()` + `/prekey/upload` (the worker verifies against the just-registered bundle), and `/alias` rename does the same. Unsigned requests stay accepted (verify-when-present unless `ALIAS_REQUIRE_AUTH`), so the change is wire-additive.

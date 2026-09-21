@@ -5642,6 +5642,7 @@ async function initMessenger(dbName) {
       }
 
       let msgKeyBits;
+      let _pendSk = null; // v5 ratchet state — persisted only after AEAD succeeds
       if (p.v === 5 && peerSK.v === 5) {
         // v5 hash ratchet
         if ((peerSK.epoch | 0) !== (p.ep | 0)) return null; // epoch mismatch — wait for new key
@@ -5658,13 +5659,14 @@ async function initMessenger(dbName) {
         let chainKey = new Uint8Array(peerSK.chainKey);
 
         if (targetC < counter) {
-          // Out-of-order: use cached key from a previous ratchet-forward pass
+          // Out-of-order: use cached key from a previous ratchet-forward pass. The skip
+          // entry is dropped from this working copy now but persisted only after the
+          // decrypt below succeeds — a forged/corrupt envelope must not burn the real
+          // key for that counter (same rule as the 1:1 skipped-key path).
           const cached = skipped[targetC];
           if (!cached) return null;
           msgKeyBits = new Uint8Array(cached.k !== undefined ? cached.k : cached);
           delete skipped[targetC];
-          peerSK.skipped = skipped;
-          await dbPut('identity', peerSK, skKey);
         } else {
           // Ratchet forward from `counter` to `targetC`, caching intermediate keys
           if (targetC - counter > CONFIG.GROUP_MAX_SKIP) return null;
@@ -5680,11 +5682,8 @@ async function initMessenger(dbName) {
           msgKeyBits = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-msg-v5', 32);
           chainKey = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-chain-v5', 32);
           counter++;
-          peerSK.chainKey = Array.from(chainKey);
-          peerSK.counter = counter;
-          peerSK.skipped = skipped;
-          await dbPut('identity', peerSK, skKey);
         }
+        _pendSk = { chainKey: Array.from(chainKey), counter, skipped };
       } else {
         // v3 fallback: static raw key, counter (from payload) as HKDF salt
         if (!peerSK.raw) return null;
@@ -5694,6 +5693,9 @@ async function initMessenger(dbName) {
       if (!(await _cmOk(p, msgKeyBits))) { _dbg(null, 'group key commitment mismatch'); return null; }
       const importedKey = await crypto.subtle.importKey('raw', msgKeyBits, { name: 'AES-GCM' }, false, ['decrypt']);
       const padded = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, importedKey, u8(p.d)));
+      // State advances only after a verified decrypt (mirror of src/crypto/group.js):
+      // an injected envelope that fails the AEAD tag must not desync the ratchet.
+      if (_pendSk) { peerSK.chainKey = _pendSk.chainKey; peerSK.counter = _pendSk.counter; peerSK.skipped = _pendSk.skipped; await dbPut('identity', peerSK, skKey); }
       const textLen = new DataView(padded.buffer).getUint16(0);
       return new TextDecoder().decode(padded.slice(2, 2 + textLen));
     } catch(e) { _dbg(e, 'group-decrypt'); return null; }
