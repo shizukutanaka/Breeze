@@ -5394,8 +5394,7 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'fanout'); }
   }
 
-  // Seal-v2 envelope construction, shared by relaySend and the retry queue — a retry
-  // that skips this sends the raw metadata envelope through /sealed/send (unsealed).
+  // Seal-v2 envelope, shared by relaySend + retry — skipping it POSTs raw metadata via /sealed/send.
   async function _sealWire(to, payload, sealPub) {
     if (!sealPub || !CONFIG.SEAL_V2_ENABLED || !await _peerSealV2(to)) return payload;
     const { to: _t, ts: _ts, payload: _p, ...meta } = payload;
@@ -5415,10 +5414,11 @@ async function initMessenger(dbName) {
   async function relaySend(to, payload, sealPub, convId) {
     if (!API) return;
     const _conv = convId || to;
-    if (_isOffline) { if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, sealPub, convId, attempts: 0 }); _saveRetryQueue(); scheduleRetry(); } registerBackgroundSync(); return; }
     const msgTs = payload.ts;
     // Sealed Sender (preferred — and with v2, actually sealed: see sealMeta above)
     const wire = await _sealWire(to, payload, sealPub);
+    // Queue the BUILT wire too — sw.js drains the outbox with no crypto to rebuild it.
+    if (_isOffline) { if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, wire, sealPub, convId, attempts: 0 }); _saveRetryQueue(); scheduleRetry(); } registerBackgroundSync(); return; }
     try {
       const resp = await postAPIRaw('/sealed/send', { to, envelope: JSON.stringify(wire) });
       if (resp.ok) {
@@ -5438,13 +5438,13 @@ async function initMessenger(dbName) {
       if (resp.status === 429) {
         const retryAfter = (parseInt(resp.headers.get('Retry-After') || '5') || 5) * MS.SEC;
         showToast(t('toastRateLimit') + ' ' + Math.ceil(retryAfter/MS.SEC) + 's', 'info');
-        setTimeout(() => { if (_retryQueue.length < 50) { _retryQueue.unshift({ to, payload, sealPub, convId, attempts: 0 }); _saveRetryQueue(); scheduleRetry(); } }, retryAfter);
+        setTimeout(() => { if (_retryQueue.length < 50) { _retryQueue.unshift({ to, payload, wire, sealPub, convId, attempts: 0 }); _saveRetryQueue(); scheduleRetry(); } }, retryAfter);
         return;
       }
       throw new Error('relay-' + resp.status);
     } catch(e) {
       _dbg(e, 'relay-fail');
-      if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, sealPub, convId, attempts: 0 }); _saveRetryQueue(); registerBackgroundSync(); }
+      if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, wire, sealPub, convId, attempts: 0 }); _saveRetryQueue(); registerBackgroundSync(); }
       scheduleRetry();
     }
   }
@@ -5470,8 +5470,7 @@ async function initMessenger(dbName) {
       item.attempts++;
       try {
         // v3.6: Retry via sealed sender first (privacy-preserving), fall back to standard relay.
-        // item.payload is the PRE-seal envelope — re-wrap it or the retry exposes
-        // sender metadata that the original send sealed.
+        // item.payload is PRE-seal — replaying it raw would expose the sealed metadata.
         let sent = false;
         // postAPIRaw nulls on network failure; ok → stamp delivered on the owning conversation.
         const ackIf = async (resp) => {
@@ -5480,7 +5479,8 @@ async function initMessenger(dbName) {
           const data = await resp.json().catch(() => ({}));
           if (data.ack && item.payload?.ts) updateMsgStatus(item.payload.ts, 'delivered', item.convId || item.to);
         };
-        await ackIf(await postAPIRaw('/sealed/send', { to: item.to, envelope: JSON.stringify(await _sealWire(item.to, item.payload, item.sealPub)) }));
+        // Prefer the stored wire (exact bytes the user sent); rebuild for pre-upgrade entries.
+        await ackIf(await postAPIRaw('/sealed/send', { to: item.to, envelope: JSON.stringify(item.wire || await _sealWire(item.to, item.payload, item.sealPub)) }));
         if (!sent) await ackIf(await postAPIRaw('/msg/send', item.payload)); // non-OK = same as network fail
         if (!sent) throw new Error('relay-not-ok');
       } catch(e) { _retryQueue.push(item); _saveRetryQueue(); }

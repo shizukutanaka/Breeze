@@ -1,3 +1,11 @@
+## sw.js outbox drain replays the sealed wire too (branch devin/retry-seal-wire, 2026-09-21, commit 2)
+
+`drainOutbox` re-POSTed `item.payload` (pre-seal) through `/sealed/send` — same
+metadata leak as the page path, and unfixable inside the SW (no sealMeta in scope).
+Queue items now carry the built `wire` envelope; the SW replays `item.wire ||
+item.payload` and the page retry prefers the stored wire, rebuilding via `_sealWire`
+only for pre-upgrade entries.
+
 ## Retry queue preserves the sealed envelope, ack status, and conversation (branch devin/retry-seal-wire, 2026-09-21)
 
 Queued retries sent `item.payload` — the pre-seal envelope — straight through

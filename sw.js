@@ -247,10 +247,12 @@ async function drainOutbox() {
         let sent = false;
         // Same order as the page: sealed sender first (metadata-hiding), then the
         // standard relay. Rate-limit/5xx responses keep the item for the next sync.
+        // item.wire is the sealed-v2 envelope built at send time — falling back to
+        // item.payload (pre-seal) would leak sender metadata through /sealed/send.
         try {
           const r = await fetch('/api/sealed/send', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ to: item.to, envelope: JSON.stringify(item.payload) }),
+            body: JSON.stringify({ to: item.to, envelope: JSON.stringify(item.wire || item.payload) }),
           });
           sent = r.ok;
         } catch {}
