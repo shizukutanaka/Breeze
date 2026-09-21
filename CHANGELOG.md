@@ -1,3 +1,16 @@
+## X3DH bundle/pkm identity-key consistency checks (branch devin/x3dh-ik-bind, 2026-09-21)
+
+Two unbound-key bootstrap paths: (1) initSessionV5Initiator trusted the fetched
+bundle's identityKey — but the Worker's upload gate only binds it by the 12-char
+userId prefix, so a relay (or a legacy unsigned bundle) can serve a key whose tail
+the victim doesn't hold: the initiator ratchets into a session nobody can decrypt,
+feeding _decryptFailures → session-reset churn + MITM banners. Full-equality check
+bundle.identityKey === peerPubB64 now aborts to the legacy session instead.
+(2) _bootstrapResponderSessionV5 derived the root key from the envelope's ik
+without checking it against the claimed sender's pub — a forged pkm installs a
+garbage session keyed under the victim's peerId. ik is now compared to
+peerPubB64 before any private-key use.
+
 ## 1:1 relayed reactions get the same caps the group path already had (branch devin/reaction-caps-1to1, 2026-09-21)
 
 The encrypted `isSignal` reaction handler on the 1:1 path created `reactions[emoji]`

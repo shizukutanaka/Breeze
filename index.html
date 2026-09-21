@@ -4786,6 +4786,9 @@ async function initMessenger(dbName) {
       const bundle = await resp.json();
       if (!_peerSupportsX3dhV5(bundle)) return null;
       if (!bundle.identityKey || !bundle.edIdentityKey || !bundle.signedPreKey || !bundle.signedPreKeySig) return null;
+      // The upload gate binds identityKey only by the 12-char userId prefix — full
+      // equality here binds the WHOLE key (a mismatched bundle isn't for this peer).
+      if (bundle.identityKey !== peerPubB64) { _dbg(null, 'X3DH: bundle identityKey mismatch — not this peer'); return null; }
       const spkPubPeer = Uint8Array.from(atob(bundle.signedPreKey), c => c.charCodeAt(0));
       // MUST verify before deriving (catches a relay/MITM swapping in its own SPK). Raw SPK bytes, not verifySignature()'s UTF-8-string convention used for msg sig/sigPub (E2E-found).
       let sigOk = false;
@@ -4825,8 +4828,11 @@ async function initMessenger(dbName) {
   }
 
   // Derive the X3DH root key from a pkm envelope; peerRatchetPub null triggers decryptFrom's ratchet-key-changed branch to bootstrap the receive chain.
-  async function _bootstrapResponderSessionV5(p) {
+  async function _bootstrapResponderSessionV5(p, peerPubB64) {
     try {
+      // The pkm header's ik must BE the claimed sender's key — a different ik derives
+      // a wrong root key, poisoning _decryptFailures (→ session reset) for nothing.
+      if (bufToB64(new Uint8Array(p.ik)) !== peerPubB64) { _dbg(null, 'pkm ik mismatch — forged bootstrap'); return null; }
       const spkPriv = await _loadSpkPriv();
       if (!spkPriv) return null;
       const opkPriv = await _resolveOtpPriv(p.opkId);
@@ -4999,7 +5005,7 @@ async function initMessenger(dbName) {
       // X3DH v5 first-message envelope. Only when we lack a session — a duplicate
       // delivery must reuse the session already bootstrapped (the OTP may be gone now).
       if (!sess && p.v === 5 && p.t === 'pkm' && Array.isArray(p.ik) && Array.isArray(p.ek) && typeof p.msg === 'string') {
-        sess = await _bootstrapResponderSessionV5(p);
+        sess = await _bootstrapResponderSessionV5(p, peerPubB64);
         if (!sess) return null; // no SPK private key on this device — nothing to fall back to
         try { p = JSON.parse(p.msg); } catch(parseErr) { _dbg(parseErr, 'malformed-pkm-inner'); return null; }
       }
