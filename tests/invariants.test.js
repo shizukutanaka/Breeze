@@ -83,4 +83,16 @@ describe('wire + storage invariants', () => {
   it('scheduled sends restore the composer input (no draft clobber)', () => {
     expect(html.match(/savedInput = _DOM\.get\('msg-input'\)\.value/g)?.length).toBe(3);
   });
+  it('announceOnly propagates via admin-gated group_meta and is enforced on receive', () => {
+    expect(html).toContain('isGroupMeta: true');
+    expect(html).toContain('group_meta from non-admin');
+    expect(html).toContain('if (group.announceOnly && member)');
+  });
+  it('panic wipe closes the open db before deleteDatabase (connection blocks it)', () => {
+    expect(html).toContain('db?.close()');
+  });
+  it('kicked-self path marks the group, toasts, and blocks sends', () => {
+    expect(html).toContain('if (kickedId === myId)');
+    expect(html).toContain('activeContact.kicked');
+  });
 });

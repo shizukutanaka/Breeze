@@ -1,5 +1,13 @@
 # Changelog
 
+## Tripwires for group-policy and wipe invariants (branch devin/invariant-tripwires-3, 2026-09-20)
+
+`tests/invariants.test.js`, `CHANGELOG.md`.
+
+Three more regex tripwires so the newest guards can't silently rot: announceOnly propagates via admin-gated `group_meta` + receive-side drop; panic wipe closes the open `db` handle before `deleteDatabase`; kicked-self marks `group.kicked` and blocks sends. 21 invariants total.
+
+---
+
 ## Kicked member was never told — sends kept going into the void (branch devin/kicked-member-ux, 2026-09-20)
 
 `index.html`, `locales/ja.json`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
