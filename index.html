@@ -8450,12 +8450,31 @@ async function initMessenger(dbName) {
           const reader = new FileReader();
           reader.onload = async () => {
             const b64 = reader.result.split(',')[1];
-            const filePayload = JSON.stringify({ name: file.name, type: file.type, size: file.size, data: b64 });
+            const ts = correctedNow();
+            const text = '🎤 Voice (' + Math.ceil(blob.size / 1024) + 'KB)';
             try {
+              if (activeContact.isGroup) {
+                // Group voice hit the same pubB64='' dead-end as files/polls — wrap as
+                // a file payload and send via sender-key so members can play it back.
+                const gPayload = JSON.stringify({ type: 'file', name: file.name, mime: file.type, data: b64 });
+                await dbPut('messages', { msgId: genMsgId(), contactId: activeContact.id, text, mine: true, ts, fileData: gPayload });
+                activeContact.lastMsg = text; activeContact.lastMsgAt = ts;
+                await dbPut('contacts', activeContact);
+                const members = (activeContact.members || []).filter(m => m.id !== myId);
+                for (const m of members) await distributeSenderKey(activeContact.id, m.pubB64).catch(e => _dbg(e, 'sk-dist'));
+                const groupCt = await encryptGroupMsg(activeContact.id, gPayload);
+                if (groupCt) {
+                  for (const m of members) {
+                    try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId: activeContact.id, groupName: activeContact.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
+                  }
+                }
+                appendMsg(text, true, ts, null, gPayload, { msgId: genMsgId() });
+                renderContacts();
+                return;
+              }
+              const filePayload = JSON.stringify({ name: file.name, type: file.type, size: file.size, data: b64 });
               const encrypted = await encryptFor(filePayload, activeContact.pubB64);
               if (!encrypted) { _dbg(null, 'encrypt failed'); return; }
-              const ts = correctedNow();
-              const text = '🎤 Voice (' + Math.ceil(blob.size / 1024) + 'KB)';
               await dbPut('messages', { msgId: genMsgId(), contactId: activeContact.id, text, mine: true, ts, fileData: filePayload });
               activeContact.lastMsg = text; activeContact.lastMsgAt = ts;
               await dbPut('contacts', activeContact);
@@ -11713,9 +11732,25 @@ async function initMessenger(dbName) {
           try {
             const stored = await dbGet('messages', msgEl.dataset.msgid);
             if (stored && stored.mine && activeContact) {
-              const encrypted = await encryptFor(stored.text, activeContact.pubB64);
-              if (encrypted) {
-                await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: stored.ts }, activeContact.pubB64);
+              let sent = false;
+              if (activeContact.isGroup) {
+                // encryptFor('') fails for groups — retry via the sender-key channel.
+                const members = (activeContact.members || []).filter(m => m.id !== myId);
+                const groupCt = await encryptGroupMsg(activeContact.id, stored.text);
+                if (groupCt) {
+                  for (const m of members) {
+                    try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts: stored.ts, groupId: activeContact.id, groupName: activeContact.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
+                  }
+                  sent = true;
+                }
+              } else {
+                const encrypted = await encryptFor(stored.text, activeContact.pubB64);
+                if (encrypted) {
+                  await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: stored.ts }, activeContact.pubB64);
+                  sent = true;
+                }
+              }
+              if (sent) {
                 const statusEl = msgEl.querySelector('.msg-status');
                 if (statusEl) { statusEl.className = 'msg-status sent'; statusEl.textContent = '✓'; statusEl.title = t('sent'); statusEl.removeAttribute('data-action'); }
               }

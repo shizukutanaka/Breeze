@@ -1,5 +1,13 @@
 # Changelog
 
+## Group voice messages and retries hit the same pubB64='' dead-end (branch devin/group-voice-retry, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Third and fourth instances of the group-send dead-end: voice memos in groups encrypted for `pubB64=''` and died silently after local store — now wrapped as `{type:'file'}` and sent via sender-key so members can play them; and the tap-to-retry icon on failed group messages re-ran `encryptFor('')` → no-op — now retries through `encryptGroupMsg` + member fan-out.
+
+---
+
 ## Group file send was dead — encryptFor('') dropped every attachment (branch devin/group-files, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
