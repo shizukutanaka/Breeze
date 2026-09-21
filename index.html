@@ -5355,7 +5355,8 @@ async function initMessenger(dbName) {
   // round-trips before the last one saw the message). Now it costs one.
   async function _fanOut(snapContact, plaintext, ts, peerExtra, selfExtra) {
     try {
-      if (!snapContact?.pubB64 || !plaintext) return;
+      // pubB64 is '' for groups — still fan out to MY other devices (peerDevs will be []).
+      if (!snapContact || !plaintext) return;
       const acct = await dbGet('identity', 'account').catch(() => null);
       const acctRoot = (acct?.root && acct.root !== myPubB64) ? acct.root : undefined;
       const [peerDevs, myDevs] = await Promise.all([_devicesFor(snapContact), _myOtherDevices()]);
@@ -7300,6 +7301,7 @@ async function initMessenger(dbName) {
             }
             try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId, groupName: activeContact.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
           }
+          _fanOut(activeContact, JSON.stringify(pollData), ts, {}, { isPoll: true, sfFor: activeContact.id, sfName: activeContact.name });
         }
       } else {
         // Send via P2P/relay
@@ -7926,6 +7928,8 @@ async function initMessenger(dbName) {
             replyTo: envelopeReplyTo(meta.replyTo), disappearAt: meta.disappearAt, isGroupSK: true }, m.pubB64);
         } catch(e) { _dbg(e); }
       }
+      // Self-sync: my other devices need the copy too (they're members of the same group).
+      _fanOut(activeContact, text, ts, {}, { sfFor: activeContact.id, sfName: activeContact.name });
     } else {
       // 1:1: v3 Double Ratchet + P2P + Sealed Sender
       const _frank = {};
@@ -8151,6 +8155,7 @@ async function initMessenger(dbName) {
           for (const m of members) {
             try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId, groupName: activeContact.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
           }
+          _fanOut(activeContact, fileMsg, ts, {}, { isFile: true, sfFor: activeContact.id, sfName: activeContact.name });
         }
         return;
       }
@@ -8467,6 +8472,7 @@ async function initMessenger(dbName) {
                   for (const m of members) {
                     try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId: activeContact.id, groupName: activeContact.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
                   }
+                  _fanOut(activeContact, gPayload, ts, {}, { isFile: true, sfFor: activeContact.id, sfName: activeContact.name });
                 }
                 appendMsg(text, true, ts, null, gPayload, { msgId: genMsgId() });
                 renderContacts();
@@ -9608,8 +9614,8 @@ async function initMessenger(dbName) {
           renderContacts();
           return;
         }
-        await dbPut('messages', { msgId: syncId, contactId: target.id, text: syncText, mine: true, ts: msg.ts, synced: true });
-        target.lastMsg = syncText.slice(0, 40); target.lastMsgAt = msg.ts;
+        await dbPut('messages', { msgId: syncId, contactId: target.id, text: syncText, mine: true, ts: msg.ts, isPoll: msg.isPoll || undefined, synced: true });
+        target.lastMsg = (msg.isPoll ? '📊 ' : '') + syncText.slice(0, 40); target.lastMsgAt = msg.ts;
         await dbPut('contacts', target);
         if (activeContact?.id === target.id) appendMsg(syncText, true, msg.ts, null, null, { synced: true });
         renderContacts();
