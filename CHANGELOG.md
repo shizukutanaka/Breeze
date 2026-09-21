@@ -1,5 +1,15 @@
 # Changelog
 
+## C8 partial: /codeverify command — served-vs-repo SHA-256 check; README claim audit (branch devin/c8-codeverify, 2026-09-20)
+
+vitest 825 unchanged (UI-only command); `index.html`, `locales/ja.json`, `README.md`, `docs/ROADMAP.md`, `CHANGELOG.md`, `_headers`/`tauri/src-tauri/tauri.conf.json` (CSP hash propagation).
+
+Socratic pass on README claims: multi-account bullet still advertised removed paid tiers ("Free=1, Lite=2, Plus=4, Pro=unlimited") — contradicting the app's own ToS ("Every account is free. Additional local accounts are unlimited") and SECURITY.md's billing-removal note. "Full translations" overstated (ja is 100%; the other six are ~79% total/96% core per `tools/i18n-check.mjs`). The RTL-layout claim shipped no RTL locale at all — unreachable. All three rewritten to match reality.
+
+C8 kernel shipped as `/codeverify`: fetches the served `index.html` (query-busted past the SW's SWR cache) plus the repo copies on `main` and `claude/nice-ride-T6yb0` via `raw.githubusercontent.com` (already inside `connect-src https:`), SHA-256s each, and renders match/mismatch per branch. Manual/opt-in — a compromised host can't fake the repo copy, and self-hosted forks legitimately differ so no passive nagging. Full SW-side hash-pin + signed manifest remains the M-effort completion.
+
+---
+
 ## I19 landed: relay-only by default when TURN is provisioned + STUN self-hosting (branch devin/i19-relay-only-default, 2026-09-20)
 
 vitest 822 → **825** (+3 worker tests); `index.html`, `_worker.js`, `wrangler.toml`, `.env.example`, `docs/SELF_HOSTING.md`, `docs/ROADMAP.md`, `CHANGELOG.md`, plus `_headers`/`tauri/src-tauri/tauri.conf.json` CSP-hash propagation.
