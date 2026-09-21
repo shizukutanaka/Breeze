@@ -1,5 +1,13 @@
 # Changelog
 
+## /admin announce was decorative — announce-only enforced nowhere (branch devin/announce-propagation, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+`/admin announce on` wrote `announceOnly` to the *local* contact record only — the Worker stores no such field and nothing propagated it, so it gated nobody's sends (the setter is an admin; the send gate exempts admins; other clients never saw the flag). Now: the admin broadcasts an E2E `group_meta` notice to all members; receivers apply it only when the sender is creator/admin (same privilege gate as group_kick); and the group receive path drops non-admin member messages while the flag is set — the only enforcement possible when the relay can't see senders inside sealed envelopes. Added an `isGroupMeta` handler + receive-side drop; `/admin announce` now means what it says.
+
+---
+
 ## Tripwire tests for the group-trust and wire invariants (branch devin/invariant-tripwires-2, 2026-09-20)
 
 `tests/invariants.test.js`, `CHANGELOG.md`.
