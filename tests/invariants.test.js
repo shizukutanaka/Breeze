@@ -53,6 +53,17 @@ describe('poll receive path', () => {
   });
 });
 
+describe('SDP signature verification', () => {
+  it('sig-poll verifies signed SDPs with verifySignature (a typo here is invisible — the call is inside a catch-all)', () => {
+    // verifyMessage() was called instead — it does not exist, the ReferenceError was
+    // swallowed by the surrounding catch, and signed SDPs were passed to
+    // setRemoteDescription as the {sdp,sig,sigPub} wrapper → dropped → P2P never
+    // established between signing clients. Pin the real call.
+    expect(html).toContain('verifySignature(wrapper.sdp, wrapper.sig, wrapper.sigPub)');
+    expect(html).not.toContain('verifyMessage(');
+  });
+});
+
 describe('group trust boundaries', () => {
   it('group_kick notices require the sender to be creator/admin', () => {
     expect(html).toContain('group.createdBy === senderId || (group.admins || []).includes(senderId)');
