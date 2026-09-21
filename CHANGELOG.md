@@ -1,5 +1,13 @@
 # Changelog
 
+## ?open=<contactId> was a dead deep-link — notification taps landed on the contact list (branch devin/open-deeplink, 2026-09-20)
+
+`index.html`, `tests/e2e/deeplink.spec.js`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Message notifications carry `data.url = '/?open=<contactId>'` and sw.js's notificationclick opens that URL — but no code ever read the `open` param, so tapping a notification booted to the contact list instead of the conversation. Same dead-shortcut class as the `?settings` manifest link. `_boot` now resolves the id against contacts and opens the conversation; unknown ids fall back to the list. e2e: +2 specs (opens conversation, unknown-id fallback).
+
+---
+
 ## /import had no file-size cap — a multi-GB export froze the tab (branch devin/import-size-cap, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
