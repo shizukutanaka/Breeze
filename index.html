@@ -7710,7 +7710,11 @@ async function initMessenger(dbName) {
     // Multi-forward
     overlay.querySelector('#fwd-send').onclick = async () => {
       const checked = [...overlay.querySelectorAll('input[type=checkbox]:checked')];
-      const targets = checked.map(cb => contacts.find(c => c.id === cb.closest('[data-cid]').dataset.cid)).filter(Boolean);
+      // Re-validate at send time: the picker list filters void targets, but a tampered
+      // DOM could check a checkbox for an excluded cid — apply the same predicate here.
+      const targets = checked
+        .map(cb => contacts.find(c => c.id === cb.closest('[data-cid]').dataset.cid))
+        .filter(c => c && !c.blocked && !(c.isGroup && (c.kicked || (c.announceOnly && !isGroupAdmin(c)))));
       overlay.remove();
       let sent = 0;
       for (const target of targets) {
