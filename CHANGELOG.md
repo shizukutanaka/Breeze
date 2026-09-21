@@ -1,5 +1,21 @@
 # Changelog
 
+## Group typing/read receipts leaked signals to a phantom dm: room (branch devin/group-phantom-signals, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Typing indicators and read receipts posted `_signal(_dmRoom(contact.id))` for every conversation — including groups, whose `dm:myId:g_x` room nobody polls. Every keystroke and open in a group logged a relay signal linking my id to the group id — metadata noise serving nobody. Relay signals now skip group contacts (P2P typing for groups was already a natural no-op: `peers['']`).
+
+---
+
+## Local msgId differed from the wire id — mutations couldn't find sent files/polls/voice (branch devin/group-selfsync, 2026-09-20)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Receivers store incoming messages as `from + ':' + ts`, but the sender's local copies of polls, files, and voice memos used `genMsgId()` (`id:ts:seq` — three parts). Edit/delete/vote signals carry the wire id, so follow-ups to my own file or voice message could never resolve on receivers — and selfSync'd copies on my siblings (`from:ts`) could never match the sender's 3-part id, breaking dedup and later mutations. The local stores now use the wire id (`myId + ':' + ts`) so sender, receivers, and siblings all agree.
+
+---
+
 ## Group sends never reached my other devices — self-sync fan-out (branch devin/group-selfsync, 2026-09-20)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
