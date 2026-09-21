@@ -10005,14 +10005,16 @@ async function initMessenger(dbName) {
           if (signal.type === 'edit') {
             const stored = await dbGet('messages', targetMsgId);
             // Cap edit text to 64 KB to prevent storage DoS via the P2P signal path (no server-side check).
-            if (_ownGroupMsg(stored) && typeof signal.text === 'string') { stored.text = signal.text.slice(0, 65536); stored.edited = true; await dbPut('messages', stored); }
+            const _ok = _ownGroupMsg(stored) && typeof signal.text === 'string';
+            if (_ok) { stored.text = signal.text.slice(0, 65536); stored.edited = true; await dbPut('messages', stored); }
             const el = document.querySelector(`[data-msgid="${targetMsgId}"]`);
-            if (el) { const tm = new Date(signal.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); safeSetHTML(el, renderLinks(renderMarkdown(esc(signal.text))) + ' <span class="i-edited">' + t('edited') + '</span><span class="ts">'+tm+'</span>'); }
+            if (el && _ok) { const tm = new Date(signal.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); safeSetHTML(el, renderLinks(renderMarkdown(esc(signal.text))) + ' <span class="i-edited">' + t('edited') + '</span><span class="ts">'+tm+'</span>'); }
           } else if (signal.type === 'delete') {
             const stored = await dbGet('messages', targetMsgId);
-            if (_ownGroupMsg(stored)) { stored.deleted = true; stored.text = ''; await dbPut('messages', stored); }
+            const _ok = _ownGroupMsg(stored);
+            if (_ok) { stored.deleted = true; stored.text = ''; await dbPut('messages', stored); }
             const el = document.querySelector(`[data-msgid="${targetMsgId}"]`);
-            if (el) safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>');
+            if (el && _ok) safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>');
           } else if (signal.type === 'reaction') {
             const stored = await dbGet('messages', targetMsgId);
             // Any member may react — but only to a message inside THIS group.
@@ -10195,15 +10197,19 @@ async function initMessenger(dbName) {
           // contact could rewrite/delete another contact's messages by guessing their msgId
           // (`senderId:ms` — the id half is public, the timestamp half is guessable).
           // Cap edit text to 64 KB to prevent storage DoS via the P2P signal path (no server-side check).
-          if (stored && !stored.mine && stored.contactId === contactId && typeof signal.text === 'string') { stored.text = signal.text.slice(0, 65536); stored.edited = true; await dbPut('messages', stored); }
+          const _okEdit = stored && !stored.mine && stored.contactId === contactId && typeof signal.text === 'string';
+          if (_okEdit) { stored.text = signal.text.slice(0, 65536); stored.edited = true; await dbPut('messages', stored); }
           const el = document.querySelector(`[data-msgid="${_smId}"]`);
-          if (el) { const tm = new Date(signal.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); safeSetHTML(el, renderLinks(renderMarkdown(esc(signal.text))) + ' <span class="i-edited">' + t('edited') + '</span><span class="ts">'+tm+'</span>'); }
+          // DOM update gated on the same predicate — else a peer could paint an
+          // "edited" text over MY bubble (record untouched, visual-only spoof).
+          if (el && _okEdit) { const tm = new Date(signal.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); safeSetHTML(el, renderLinks(renderMarkdown(esc(signal.text))) + ' <span class="i-edited">' + t('edited') + '</span><span class="ts">'+tm+'</span>'); }
         } else if (signal.type === 'delete') {
           const stored = await dbGet('messages', _smId);
           // Only allow deleting messages not authored by us — contact cannot remote-delete our outgoing messages
-          if (stored && !stored.mine && stored.contactId === contactId) { stored.deleted = true; stored.text = ''; await dbPut('messages', stored); }
+          const _okDel = stored && !stored.mine && stored.contactId === contactId;
+          if (_okDel) { stored.deleted = true; stored.text = ''; await dbPut('messages', stored); }
           const el = document.querySelector(`[data-msgid="${_smId}"]`);
-          if (el) safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>');
+          if (el && _okDel) safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>');
         } else if (signal.type === 'reaction') {
           // v3.6: Encrypted reaction from relay
           const stored = await dbGet('messages', _smId);

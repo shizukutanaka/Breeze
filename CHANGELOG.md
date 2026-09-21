@@ -1,5 +1,13 @@
 # Changelog
 
+## Edit/delete signals could repaint MY bubble despite failing authorization (branch devin/consolidate-groups, 2026-09-21)
+
+`index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+The author-binding predicate (`!stored.mine && stored.contactId === conv`) guarded the IDB write — but the `if (el)` DOM repaint sat OUTSIDE it on both the relay path and the group path. A peer sending an `edit`/`delete` for one of *my* messages failed the store check yet still had the rendered bubble replaced with attacker-chosen text (or tombstoned) for the rest of the session — a visual spoof that screenshots indistinguishably from a real edit (self-corrects on reload since the record was untouched). Both paths now gate DOM mutation on the same predicate as the store write.
+
+---
+
 ## Delivery acks resolved against the open conversation, not the sent one (branch devin/consolidate-groups, 2026-09-21)
 
 `index.html`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
