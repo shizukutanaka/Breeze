@@ -1213,11 +1213,10 @@ const CONFIG = {
   // BOTH sides negotiate it (else falls back byte-identically). Also runs the KT chain+rollover audit.
   X3DH_V5_ENABLED: true,
   SEAL_V2_ENABLED: true, // Sealed Sender v2: encrypt sender metadata to the recipient (capability-gated)
-  // v3.6 SECURITY (default OFF — opt-in via /keywrap, run again to disable): wrap the identity
-  // ECDH + Ed25519 signing private keys with AES-256-GCM under a PBKDF2 key (600k iter, random
-  // salt) before IndexedDB storage. Guards against XSS cookie-theft, device forensics, IDB-reading
-  // extensions. ON: prompts for the passphrase at startup. /lock works independently. OFF by default so existing users aren't broken.
-  AT_REST_KEY_WRAP: false,
+  // v3.6 SECURITY (opt-in via /keywrap, run again to disable): wraps the identity
+  // ECDH + Ed25519 signing private keys with AES-256-GCM under a PBKDF2 key (600k iter,
+  // random salt) before IndexedDB storage — state is per-account (detected from the
+  // key record itself), never a global flag.
   PBKDF2_AT_REST_ITERATIONS: 600000, // 6× the lock-screen value; separate constant
   VOICE_MAX_MS: 120000,               // Max voice note duration: 2 minutes
   // Limits

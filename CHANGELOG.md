@@ -1,5 +1,13 @@
 # Changelog
 
+## Dead config sweep + stale mobile-doc claims (branch devin/consolidate-groups, 2026-09-20)
+
+- **`CONFIG.AT_REST_KEY_WRAP` was dead** — the at-rest key-wrap feature is opt-in per account via `/keywrap` and detects enabled state from the key record's own shape; the CONFIG flag was never read. Removed (comment updated to describe the real mechanism).
+- **`mobile/README.md`** listed a `res/` overlay directory that no longer exists and a `release.yml` workflow that was never pushable (`workflows` scope) — both corrected.
+- **`docs/INTEGRATION.md` + `SPEC.md`** pointed at `.github/workflows/ci.yml` as if tracked — redirected to the preserved workflow in `docs/CI-SETUP.md`.
+
+---
+
 ## Packaged desktop app crashed at launch — missing require()d modules (branch devin/consolidate-groups, 2026-09-20)
 
 - **`desktop/package.json` `files` whitelisted `main.js`/`preload.js`/icons only** — but `main.js` does top-level `require('./nav-guard')` and `require('./csp-guard')`, and electron-builder's `files` array REPLACES the default `**/*` glob (verified in docs: the default is not merged when a non-negation pattern is present). Both helpers were omitted from every packaged build → `MODULE_NOT_FOUND` at startup → dead on arrival. Changed to `"*.js"` so all top-level modules (and future ones) ship.
