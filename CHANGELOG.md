@@ -1,5 +1,18 @@
 # Changelog
 
+## Plaintext at rest: outbox stored ciphertext-only; drafts moved localStorage → per-account IDB (branch devin/at-rest-hygiene, 2026-09-20)
+
+`index.html`, `tests/e2e/deeplink.spec.js`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).
+
+Two "sensitive data in localStorage" violations of the repo's own AGENTS.md rule, found by grepping every `localStorage.setItem`:
+
+1. **`_outbox` persisted `{text}` plaintext.** The P2P fallback queue now stores the wire `envelope` itself (ciphertext — the same bytes the sealed relay carried unconditionally anyway), so flush re-sends without a second ratchet step, and disk holds no plaintext. Legacy plaintext entries are dropped on restore.
+2. **Drafts lived in localStorage, shared across accounts** — a draft for a contact under account A surfaced while running account B (cross-account leak), and plaintext on disk. Moved to the per-account IDB `settings` store with a one-time legacy migration that also removes the key. Bonus fix found by the same scope audit: the SW-update "Save drafts before reload" handler referenced `_drafts` outside its scope — it always wrote `{}` and **wiped drafts exactly when it claimed to save them**.
+
+e2e: +1 spec covering switch → restore → reload → localStorage-empty.
+
+---
+
 ## Peer-relay hold/deliver removed — it leaked the social graph it claimed to protect (branch devin/remove-peer-relay, 2026-09-20)
 
 `index.html`, `SECURITY.md`, `CHANGELOG.md`, `_headers`/`tauri.conf.json` (CSP hash).

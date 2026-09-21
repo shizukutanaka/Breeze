@@ -2782,8 +2782,7 @@ if ('serviceWorker' in navigator) { try {
       btn.className = 'update-btn';
       btn.textContent = t('uiReload');
       btn.onclick = () => {
-        // Save drafts before reload
-        try { localStorage.setItem('brz-drafts', JSON.stringify(_drafts || {})); } catch {}
+        // Drafts already persist to IDB on every change — nothing extra to save here.
         waitingSW.postMessage({ type: 'SKIP_WAITING' });
       };
       banner.appendChild(btn);
@@ -3304,15 +3303,19 @@ const _rateLimiter = {
 };
 
 // v3.5 SPEC: Message outbox — persistent (IDB) retry queue for offline peers, auto-sent on reconnect.
-const _outbox = new Map(); // peerId → [{text, ts, attempts}]
+const _outbox = new Map(); // peerId → [{env, ts, attempts}] — env is the full wire envelope (ciphertext only)
 // Account-scoped key ('brz-outbox-<myId>') so switching accounts doesn't deliver A's queue under B's identity.
 let _outboxKey = 'brz-outbox'; // updated to per-account key in initMessenger
 
-function queueOutbox(peerId, text, meta) {
+// Stores the wire envelope (ciphertext), never plaintext: localStorage sits on disk in
+// cleartext and the AGENTS.md rule is "no localStorage for sensitive data". The envelope's
+// ciphertext embeds its own ratchet position, so re-sending it later is protocol-safe —
+// the same bytes the sealed relay already carried.
+function queueOutbox(peerId, env) {
   if (!_outbox.has(peerId)) _outbox.set(peerId, []);
   const queue = _outbox.get(peerId);
   if (queue.length >= 50) queue.shift(); // Limit queue size
-  queue.push({ text, meta, ts: Date.now(), attempts: 0 });
+  queue.push({ env, ts: env.ts || Date.now(), attempts: 0 });
   _persistOutbox();
   _dbg(null, `Outbox: queued for ${peerId.slice(0, 8)} (${queue.length} pending)`);
 }
@@ -3332,7 +3335,10 @@ function _restoreOutbox() {
     if (!raw) return;
     const obj = JSON.parse(raw);
     for (const [k, v] of Object.entries(obj)) {
-      if (Array.isArray(v) && v.length > 0) _outbox.set(k, v);
+      // Drop legacy {text: <plaintext>} entries — the sealed relay already carried them,
+      // and plaintext must not survive at rest. Only ciphertext envelopes restore.
+      const envs = (Array.isArray(v) ? v : []).filter(m => m && typeof m.env === 'object' && m.env !== null);
+      if (envs.length > 0) _outbox.set(k, envs);
     }
     if (_outbox.size > 0) _dbg(null, `Outbox: restored ${_outbox.size} peer queues`);
   } catch(e) { /* ignore */ }
@@ -6045,11 +6051,11 @@ async function initMessenger(dbName) {
     for (const item of toSend) {
       if (Date.now() - item.ts > 7 * MS.DAY) continue; // Skip messages older than 7 days
       try {
-        // Re-encrypt and send
-        const encrypted = await encryptFor(item.text, peerId);
-        if (encrypted && peer.dc?.readyState === 'open') {
-          const envelope = { v: CONFIG.PROTOCOL_VERSION, type: 'msg', payload: encrypted, ts: item.ts, sender: myPubB64, name: myName };
-          peer.dc.send(JSON.stringify(envelope));
+        // The stored envelope already carries ciphertext (re-encrypting here would burn a
+        // second ratchet step for identical content — and dedup already collapses the copy
+        // the sealed relay carried).
+        if (item.env && peer.dc?.readyState === 'open') {
+          peer.dc.send(JSON.stringify(item.env));
           sent++;
         }
       } catch(e) { _dbg(e, 'outbox-flush'); }
@@ -6543,10 +6549,24 @@ async function initMessenger(dbName) {
   }
 
   let _notifRequested = false;
-  // v3.6: Persistent drafts (survive page reload)
+  // v3.6: Persistent drafts (survive page reload) — now in the per-account IDB `settings`
+  // store instead of localStorage: localStorage held plaintext message text on disk and
+  // shared it across every account on the profile. Legacy localStorage drafts are migrated
+  // once, then the key is removed.
   let _drafts = {};
-  try { _drafts = JSON.parse(localStorage.getItem('brz-drafts') || '{}'); } catch { _drafts = {}; }
-  function _persistDrafts() { try { localStorage.setItem('brz-drafts', JSON.stringify(_drafts)); } catch {} }
+  try {
+    const _legacyDrafts = localStorage.getItem('brz-drafts');
+    _drafts = (await dbGet('settings', 'drafts')) || {};
+    if (_legacyDrafts !== null) {
+      try {
+        const leg = JSON.parse(_legacyDrafts);
+        if (leg && typeof leg === 'object') _drafts = { ...leg, ..._drafts }; // IDB wins on conflict
+      } catch {}
+      localStorage.removeItem('brz-drafts');
+      dbPut('settings', _drafts, 'drafts').catch(() => {});
+    }
+  } catch { _drafts = {}; }
+  function _persistDrafts() { try { dbPut('settings', _drafts, 'drafts').catch(e => _dbg(e, 'drafts')); } catch {} }
 
   let openConversation = async function(contact) {
     // v3.3: Save draft for current contact before switching
@@ -7879,9 +7899,9 @@ async function initMessenger(dbName) {
         // drop-in: it also re-derives recvChainKey/recvCounter, which the peer would not
         // mirror, breaking in-flight messages. Deliberately not "fixed" in place.
       } else {
-        // v3.5 SPEC: Queue to outbox for later delivery when peer reconnects
+        // v3.5 SPEC: Queue the wire envelope (ciphertext) for later P2P delivery when peer reconnects
         if (activeContact.pubB64) {
-          queueOutbox(activeContact.pubB64, text, meta);
+          queueOutbox(activeContact.pubB64, envelope);
         }
       }
       // Relay: Sealed Sender (Worker doesn't see sender)

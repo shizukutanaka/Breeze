@@ -128,3 +128,25 @@ test('/?add=<garbage> is refused with a toast instead of planting a dead contact
   await expect(page.locator('.toast-container .toast').filter({ hasText: /not a valid/i }).first()).toBeVisible({ timeout: 10_000 });
   await expect(page.locator('#msg-contacts .contact')).toHaveCount(0);
 });
+
+// Drafts used to live in localStorage as plaintext, shared across accounts — and the
+// "save drafts before reload" handler on SW update referenced _drafts outside its scope,
+// silently writing `{}` and wiping them. Now persisted per-account in the IDB settings
+// store: type → switch contact → switch back → reload → still there; localStorage empty.
+test('drafts persist across contact switch and reload via IDB, not localStorage', async ({ page }) => {
+  const key = (b) => Buffer.alloc(32, b).toString('base64'); // valid X25519-length keys
+  await page.goto(`/?add=${encodeURIComponent(key(11))}&name=DraftA`);
+  await createIdentity(page, 'Drafter');
+  await page.goto(`/?add=${encodeURIComponent(key(22))}&name=DraftB`);
+  await expect(page.locator('#msg-contacts .contact')).toHaveCount(2, { timeout: 10_000 });
+  await page.locator('#msg-contacts .contact').first().click();
+  await page.locator('#msg-input').fill('unsent draft text');
+  await page.locator('#msg-contacts .contact').nth(1).click();   // switch away → saves draft
+  await page.locator('#msg-contacts .contact').first().click();  // back → draft restores
+  await expect(page.locator('#msg-input')).toHaveValue('unsent draft text');
+  await page.reload();
+  await expect(page.locator('#msg-main')).toBeVisible({ timeout: 15_000 });
+  await page.locator('#msg-contacts .contact').first().click();
+  await expect(page.locator('#msg-input')).toHaveValue('unsent draft text');
+  expect(await page.evaluate(() => localStorage.getItem('brz-drafts'))).toBeNull();
+});
