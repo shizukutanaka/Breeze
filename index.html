@@ -9621,7 +9621,7 @@ async function initMessenger(dbName) {
         // Validate and cap invite fields to prevent storage DoS from a malicious contact
         const inviteGroupId = typeof invite.groupId === 'string' ? invite.groupId.slice(0, 64) : null;
         const inviteName = typeof invite.name === 'string' ? invite.name.slice(0, 64) : 'Group';
-        const inviteMembers = (Array.isArray(invite.members) ? invite.members : []).slice(0, CONFIG.GROUP_MAX);
+        const inviteMembers = safeMemberList(invite.members);
         if (invite.type === 'group_invite' && inviteGroupId && !(await dbGet('contacts', inviteGroupId))) {
           await dbPut('contacts', { id: inviteGroupId, name: inviteName, isGroup: true, members: inviteMembers, addedAt: Date.now(), unread: 0, pubB64: '' });
           if (!_focusActive()) playNotif();
