@@ -1,3 +1,20 @@
+## Backup restore validates the identity + message records it writes (branch devin/backup-restore-validation, 2026-09-21)
+
+Both restore paths trusted the passphrase-decrypted blob too much:
+
+- **File restore** checked only `data.identity?.pubB64` — a record carrying a plausible
+  handle but malformed `pub`/`priv` passed, then `location.reload()` left the account
+  permanently bricked (`u8(stored.pub)` / JWK import throws on every login attempt).
+- **Cloud restore** (`/backup/download`) wrote `data.identity` unconditionally and
+  iterated `data.messages` with **zero** field validation — a crafted `msgId` overwrote
+  real history, and missing `contactId`/`ts` corrupted the render path.
+
+New `_validBackupIdentity` (object + `pubB64` key-shape + non-null `pub`/`priv` — raw JWK
+and at-rest-wrapped halves both count) guards both restore paths; message entries now
+require `msgId`/`contactId`/`ts` shape before `dbPut`, and contacts/messages iterate only
+real arrays. Malformed identity on the cloud path is skipped (contacts/messages still
+restore) rather than aborting the whole restore.
+
 ## Alias registrations now carry the ownership signature the worker already checked (branch devin/consolidate-groups, 2026-09-20)
 
 `/alias/set` has supported an Ed25519 ownership binding (`userId` + `ts` + `sig` over `breeze-alias-set:{alias}:{ts}`, verified against the registrant's prekey bundle with `identityKey === pub`) since the worker shipped it — but no client ever sent it, so a PoW-only request could point any unclaimed `@handle` at any public key. Both registration sites now sign: onboarding moved alias registration after `initSigning()` + `/prekey/upload` (the worker verifies against the just-registered bundle), and `/alias` rename does the same. Unsigned requests stay accepted (verify-when-present unless `ALIAS_REQUIRE_AUTH`), so the change is wire-additive.

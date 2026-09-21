@@ -11161,6 +11161,12 @@ async function initMessenger(dbName) {
   }
 
   // ===== Backup & Restore =====
+  // Backup identity records must match createIdentity()'s shape or reload bricks the account.
+  function _validBackupIdentity(id) {
+    return !!id && typeof id === 'object' && typeof id.pubB64 === 'string' &&
+      /^[A-Za-z0-9+/=]{40,60}$/.test(id.pubB64) && id.pub != null && id.priv != null;
+  }
+
   async function backupToFile() {
     const identity = await dbGet('identity', 'keys');
     const contacts = await dbGetAll('contacts');
@@ -11213,8 +11219,7 @@ async function initMessenger(dbName) {
       const enc = JSON.parse(text);
       const decrypted = await decrypt(pass, enc);
       const data = JSON.parse(decrypted);
-      if (!data.identity?.pubB64) { showToast(t('toastInvalidBackup'), 'error'); return; }
-
+      if (!_validBackupIdentity(data.identity)) { showToast(t('toastInvalidBackup'), 'error'); return; }
       await dbPut('identity', data.identity, 'keys');
       for (const c of (data.contacts || [])) {
         // Validate required fields before storing — a malformed backup entry could corrupt the DB.
@@ -11525,15 +11530,21 @@ async function initMessenger(dbName) {
       const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
       const data = JSON.parse(new TextDecoder().decode(pt));
       // Restore
-      if (data.identity) await dbPut('identity', data.identity, 'keys');
-      if (data.contacts) for (const c of data.contacts) {
+      if (_validBackupIdentity(data.identity)) await dbPut('identity', data.identity, 'keys');
+      else if (data.identity) _dbg(null, 'backup: skipped malformed identity record');
+      if (Array.isArray(data.contacts)) for (const c of data.contacts) {
         // Validate required fields before storing — a malformed backup entry could corrupt the DB
         if (typeof c?.id !== 'string' || !c.id || c.id.length > 64 ||
             typeof c?.pubB64 !== 'string' || !c.pubB64 || c.pubB64.length > 128 ||
             !/^[A-Za-z0-9+/=]+$/.test(c.pubB64)) continue;
         await dbPut('contacts', c);
       }
-      if (data.messages) for (const m of data.messages) await dbPut('messages', m);
+      if (Array.isArray(data.messages)) for (const m of data.messages) {
+        if (typeof m?.msgId !== 'string' || !m.msgId || m.msgId.length > 128 || typeof m?.contactId !== 'string' ||
+            !m.contactId || m.contactId.length > 64 || !Number.isFinite(m.ts) ||
+            (m.text !== undefined && typeof m.text !== 'string')) continue;
+        await dbPut('messages', m);
+      }
       showToast(t('backupRestored'), 'success');
       setTimeout(() => location.reload(), CONFIG.TOAST_DURATION_MS);
     } catch(e) { _dbg(e, 'restore'); showToast(t('backupWrongPass'), 'error'); }
