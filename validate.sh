@@ -138,6 +138,13 @@ else fail "listener(s) wired to missing DOM id(s) (run: node tools/dead-wiring.m
 if node tools/unreachable-branch.mjs >/dev/null 2>&1; then pass "no platform branch nested inside an incompatible one" 3
 else fail "unreachable platform branch (run: node tools/unreachable-branch.mjs)" 3; fi
 
+# API-contract gate: every postAPIRaw('/api/x', {...}) call must include the fields the
+# Worker handler 400s as required. Two production bugs were this exact shape: onboarding
+# /alias/set sent no `pow` (silently failed every setup-screen alias), and /room's private
+# group-create omitted `creatorPub`. See tools/api-contract.mjs.
+if node tools/api-contract.mjs >/dev/null 2>&1; then pass "client calls satisfy Worker required fields" 3
+else fail "postAPIRaw call missing a Worker-required field (run: node tools/api-contract.mjs)" 3; fi
+
 # HTML tag-balance gate. One duplicated </div> closed .msg-layout early and moved the whole
 # conversation pane out of the two-pane layout — chat below the fold, #msg-messages unable to
 # scroll, #scroll-fab dead. Every element still existed and was still clickable, so 41 checks,
