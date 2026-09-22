@@ -10037,7 +10037,7 @@ async function initMessenger(dbName) {
         const invite = JSON.parse(decrypted);
         // Validate and cap invite fields to prevent storage DoS from a malicious contact
         const inviteGroupId = typeof invite.groupId === 'string' ? invite.groupId.slice(0, 64) : null;
-        const inviteName = typeof invite.name === 'string' ? invite.name.slice(0, 64) : 'Group';
+        const inviteName = typeof invite.name === 'string' ? _safeDisplayName(invite.name, 64) || 'Group' : 'Group';
         const inviteMembers = safeMemberList(invite.members);
         if (invite.type === 'group_invite' && inviteGroupId && !(await dbGet('contacts', inviteGroupId))) {
           // Seed createdBy from the VERIFIED sender: in this flow only the creator
