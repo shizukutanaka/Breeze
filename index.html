@@ -13640,7 +13640,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         t('secLblStatus') + ': ' + cs.pqReady,
         '',
         '<b>' + t('cmdSectionSession') + '</b>',
-        activeContact ? t('cmdLblPeer') + ': ' + activeContact.name : t('cmdNoContact'),
+        activeContact ? t('cmdLblPeer') + ': ' + esc(activeContact.name) : t('cmdNoContact'),
         t('cmdLblSession') + ': ' + (sess ? '<span class="i-g">✓ ' + t('statusActive') + ' (counter: ' + (sess.sendCounter || 0) + ')</span>' : '✗ ' + t('statusNoSession')),
         t('secLblFwdSec') + ': ' + (sess ? t('cmdCryptoFwdSec') : '—'),
         t('secLblReplay') + ': ' + _replayCache.size() + '/' + CONFIG.REPLAY_CACHE_SIZE + ' ' + t('secInLruCache'),

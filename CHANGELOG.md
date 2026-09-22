@@ -1,3 +1,11 @@
+## index.html /security panel escapes the peer name (branch devin/sec-panel-esc, 2026-09-22)
+
+The crypto-stack report built its safeSetHTML payload with `activeContact.name`
+raw — the only peer-supplied field in the array. A contact whose display name is
+an HTML payload (peer names are length-capped, never sanitized) injected markup
+into the security panel every time /security ran against that conversation.
+Wrapped with esc() like every other name interpolation in the file.
+
 ## index.html notification sounds share one AudioContext (branch devin/audioctx-pool, 2026-09-22)
 
 playNotif/playSendSound created a new AudioContext per chime and never closed it —
