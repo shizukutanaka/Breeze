@@ -11236,10 +11236,9 @@ async function initMessenger(dbName) {
         if (typeof c?.id !== 'string' || !c.id || c.id.length > 64 ||
             typeof c?.pubB64 !== 'string' || !c.pubB64 || c.pubB64.length > 128 ||
             !_isValidPubB64(c.pubB64)) continue;
-        // Bound fields the add/import paths cap — a malformed backup entry must
-        // not plant an unbounded name or member list that renders every list pass.
+        // Bound fields like the add/import paths — a malformed backup must not plant oversized data.
         const clean = { ...c,
-          name: typeof c.name === 'string' ? c.name.slice(0, 64) : 'Contact',
+          name: _safeDisplayName(c.name, 64) || 'Contact',
           members: Array.isArray(c.members) ? safeMemberList(c.members) : c.members };
         await dbPut('contacts', clean);
       }
@@ -12267,7 +12266,8 @@ async function initMessenger(dbName) {
           msgId, contactId: contact.id,
           text: typeof m.text === 'string' ? m.text.slice(0, CONFIG.MAX_MSG_LENGTH) : '',
           mine: isMine, ts: m.ts,
-          senderName: isMine ? myName : (typeof m.sender === 'string' ? m.sender.slice(0, 64) : ''),
+          // _safeDisplayName like every name ingest — a crafted export plants invisible/bidi twins otherwise.
+          senderName: isMine ? myName : _safeDisplayName(m.sender, 64),
           imported: true
         });
         imported++;
