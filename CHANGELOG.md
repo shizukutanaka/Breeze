@@ -1,3 +1,13 @@
+## index.html verified mark binds to the identity pair it was checked on (branch devin/verified-pair, 2026-09-22)
+
+The safety number is pair-specific — sort(myPubB64|peerPubB64) — but the
+`verified` flag on the contact record was pair-agnostic and travelled with
+backups/imports. Restoring on another device or identity (each /link device has
+its own pub) displayed ✓ Verified for a pair that was never compared. The flag
+is now stored as `verifiedFor: myPubB64` and only rendered when it matches the
+current identity; stale pair-agnostic flags are ignored and cleared on
+re-verify.
+
 ## index.html notification sounds share one AudioContext (branch devin/audioctx-pool, 2026-09-22)
 
 playNotif/playSendSound created a new AudioContext per chime and never closed it —

@@ -11837,7 +11837,7 @@ async function initMessenger(dbName) {
       safeSetHTML(overlay, `<div class="modal">
         <div class="i-emoji-lg">🔐</div>
         <div class="fw-700 text-sm mb-2">${t('safetyNumber')}</div>
-        ${contact.verified ? `<div class="text-xs color-g mb-2">${t('verifiedMark')}</div>` : ''}
+        ${contact.verifiedFor === myPubB64 ? `<div class="text-xs color-g mb-2">${t('verifiedMark')}</div>` : ''}
         <div class="i-safety-num">${num}</div>
         <div class="text-xs color-t3 mb-3">${t('safetyDesc')}</div>
         <div class="i-tac i-mb8" id="safety-qr"></div>
@@ -11859,7 +11859,7 @@ async function initMessenger(dbName) {
         const m = scanned.match(/^breeze-verify:v1:(\d{30})$/);
         if (!m) { showToast(t('toastInvalidVerifyQR'), 'error'); return; }
         if (m[1] === num.replace(/\s/g, '')) {
-          contact.verified = true;
+          contact.verifiedFor = myPubB64; delete contact.verified; // pair-bound flag
           await dbPut('contacts', contact).catch(e => _dbg(e, 'verify-put'));
           showToast(t('toastVerified'), 'success');
           overlay.remove();
