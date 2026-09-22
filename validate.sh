@@ -60,6 +60,12 @@ if [ "$KEYS" -eq 0 ]; then pass "No hardcoded API keys" 10; else fail "$KEYS pot
 EXTSCRIPT=$(echo "$H" | grep -cE '<script[^>]+src=' || true)
 if [ "$EXTSCRIPT" -eq 0 ]; then pass "No external scripts (zero supply-chain surface)" 5
 else fail "$EXTSCRIPT external <script src> found — inline it or pin it with SRI deliberately" 5; fi
+
+# Trojan-Source gate: raw bidi direction controls (U+202A..U+202E, U+2066..U+2069) and
+# invisible format chars in source can reorder rendered code in editors/review and make
+# impostor identifiers that differ only in bytes. Escaped \uXXXX forms are fine.
+if node tools/bidi-check.mjs >/dev/null 2>&1; then pass "no raw bidi/invisible chars in source (Trojan-Source)" 4
+else fail "raw direction-control/invisible char(s) in source (run: node tools/bidi-check.mjs)" 4; fi
 echo ""
 
 # ═══ Gate 3: i18n ═══
