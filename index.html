@@ -1216,7 +1216,7 @@ const CONFIG = {
   // ECDH + Ed25519 signing private keys with AES-256-GCM under a PBKDF2 key (600k iter,
   // random salt) before IndexedDB storage — state is per-account (detected from the
   // key record itself), never a global flag.
-  PBKDF2_AT_REST_ITERATIONS: 600000, // 6× the lock-screen value; separate constant
+  PBKDF2_AT_REST_ITERATIONS: 600000, // OWASP floor for password-derived keys — at-rest wrap + lock screen
   VOICE_MAX_MS: 120000,               // Max voice note duration: 2 minutes
   // Limits
   FILE_MAX: 50 * 1024 * 1024, // All users: 50MB
@@ -10982,7 +10982,8 @@ async function initMessenger(dbName) {
       } else {
         const salt = Uint8Array.from(atob(stored.salt), c => c.charCodeAt(0));
         const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(inp.value), 'PBKDF2', false, ['deriveBits']);
-        const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: CONFIG.PBKDF2_ITERATIONS, hash: 'SHA-256' }, km, 256);
+        // Records written before the 600k raise have no iter — verify at the old 100k.
+        const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: stored.iter || CONFIG.PBKDF2_ITERATIONS, hash: 'SHA-256' }, km, 256);
         hashB64 = btoa(String.fromCharCode(...new Uint8Array(bits)));
       }
       // v3.5: Constant-time comparison (prevent timing attack)
@@ -10990,13 +10991,13 @@ async function initMessenger(dbName) {
         overlay.remove();
         _attempts = 0; _backoffUntil = 0;
         auditLog('security', 'Lock screen unlocked');
-        // Migrate legacy hash to PBKDF2
-        if (isLegacy) {
+        // Upgrade weaker stored hashes (legacy SHA-256, old 100k PBKDF2) to the current iter target.
+        if (isLegacy || (stored.iter || 0) < CONFIG.PBKDF2_AT_REST_ITERATIONS) {
           const salt = crypto.getRandomValues(new Uint8Array(16));
           const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(inp.value), 'PBKDF2', false, ['deriveBits']);
-          const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: CONFIG.PBKDF2_ITERATIONS, hash: 'SHA-256' }, km, 256);
-          localStorage.setItem('brz-lock-hash', JSON.stringify({ hash: btoa(String.fromCharCode(...new Uint8Array(bits))), salt: btoa(String.fromCharCode(...salt)) }));
-          auditLog('security', 'Lock hash migrated to PBKDF2');
+          const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: CONFIG.PBKDF2_AT_REST_ITERATIONS, hash: 'SHA-256' }, km, 256);
+          localStorage.setItem('brz-lock-hash', JSON.stringify({ hash: btoa(String.fromCharCode(...new Uint8Array(bits))), salt: btoa(String.fromCharCode(...salt)), iter: CONFIG.PBKDF2_AT_REST_ITERATIONS }));
+          auditLog('security', 'Lock hash upgraded to PBKDF2 x' + CONFIG.PBKDF2_AT_REST_ITERATIONS / 1000 + 'k');
         }
       } else {
         _attempts++;
@@ -14067,13 +14068,12 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       if (!stored) {
         const pass = await showPrompt(t('lockPassPrompt'), '', { type: 'password', okText: t('set') });
         if (!pass || pass.length < 4) { showToast(t('toastMin4Chars'), 'error'); return; }
-        // v3.5: SECURITY — PBKDF2 with random salt (was bare SHA-256)
+        // v3.5: SECURITY — PBKDF2 + salt + per-record iter (was bare SHA-256).
         const salt = crypto.getRandomValues(new Uint8Array(16));
         const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveBits']);
-        const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: CONFIG.PBKDF2_ITERATIONS, hash: 'SHA-256' }, km, 256);
-        const hashB64 = btoa(String.fromCharCode(...new Uint8Array(bits)));
-        const saltB64 = btoa(String.fromCharCode(...salt));
-        localStorage.setItem('brz-lock-hash', JSON.stringify({ hash: hashB64, salt: saltB64 }));
+        const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: CONFIG.PBKDF2_AT_REST_ITERATIONS, hash: 'SHA-256' }, km, 256);
+        const hashB64 = btoa(String.fromCharCode(...new Uint8Array(bits))), saltB64 = btoa(String.fromCharCode(...salt));
+        localStorage.setItem('brz-lock-hash', JSON.stringify({ hash: hashB64, salt: saltB64, iter: CONFIG.PBKDF2_AT_REST_ITERATIONS }));
         auditLog('security', 'Lock password set (PBKDF2)');
         showToast(t('toastLockSet'), 'success');
       } else {
