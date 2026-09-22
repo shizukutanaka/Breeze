@@ -2849,7 +2849,7 @@ if (P.has('drop')) {
       const plaintext = new TextDecoder().decode(ptBuf);
       _DOM.get('drop-status').textContent = t('dropRevealed');
       const content = _DOM.get('drop-content');
-      content.textContent = plaintext;
+      content.textContent = plaintext.replace(_BIDI_CTL_RE, ''); // render-safe: controls stripped, clipboard keeps original
       content.classList.add('visible');
       _DOM.get('drop-actions').classList.add('visible');
       _DOM.get('drop-copy').onclick = () => {
@@ -3053,7 +3053,8 @@ async function fetchRetry(url, opts = {}, { maxRetries = 3, baseDelay = 1000, ti
   }
 }
 
-function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+const _BIDI_CTL_RE = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/gu; // bidi direction controls (TR39) — strip at render; ZWSP/ZWJ kept (legit text)
+function esc(s) { const d=document.createElement('div'); d.textContent=typeof s==='string'?s.replace(_BIDI_CTL_RE,''):s; return d.innerHTML; }
 // Scrub bidi controls + invisible format chars from display names at ingest — class byte-identical to _worker.js (tests/unicode-spoof.test.js pins parity).
 const _UNSAFE_DISPLAY_RE = /[\u00AD\u034F\u061C\u115F\u1160\u180E\u200B\u200E\u200F\u202A-\u202E\u2060\u2066-\u2069\u2800\u3164\uFFA0\uFEFF\u{1D173}-\u{1D17A}\u{E0000}-\u{E007F}]/gu;
 const _safeDisplayName = (s, n = 64) => typeof s === 'string' ? s.replace(_UNSAFE_DISPLAY_RE, '').slice(0, n) : '';
@@ -3064,7 +3065,6 @@ function avatarSlice(s, max = 2) {
   catch { return [...s].slice(0, max).join(''); }
 }
 
-// v3.6: DRY download helper (13 blob URL + download patterns → 1)
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
