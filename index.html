@@ -10669,13 +10669,13 @@ async function initMessenger(dbName) {
             await handleIncoming({ from: contact.id, fromPub: contact.pubB64, fromName: contact.name, payload: msg.payload, ts: msg.ts, isFile: true });
             try { ch.send(JSON.stringify({ type: 'ack', i: msg.ts + '', st: 0 })); } catch(e) { _dbg(e); }
           }
-          // v3.6: P2P direct group message (dual-path: P2P instant + sealed sender reliable)
+          // v3.6: P2P direct group message (dual-path: P2P instant + sealed sender reliable; deduped — the paths may deliver twice)
           if (msg.type === 'group_msg' && msg.groupId) {
-            // v3.6: Dedup — dual-path (P2P + sealed) may deliver same message twice
-            const gmsgId = msg.msgId || (msg.sender + ':' + msg.ts);
+            const gSender = typeof msg.sender === 'string' ? msg.sender.slice(0, 12) : '';
+            const gmsgId = (typeof msg.msgId === 'string' && msg.msgId.startsWith(gSender + ':')) ? msg.msgId.slice(0, 64) : (gSender + ':' + msg.ts); // bind claimed msgId to sender — else members plant each other's ids in the replay cache to suppress future msgs (CWE-345)
             if (_replayCache.has(gmsgId)) return;
             if (await dbGet('messages', gmsgId)) { _replayCache.add(gmsgId); return; }
-            const group = (await dbGetAll('contacts')).find(c => c.id === msg.groupId);
+            const group = await dbGet('contacts', msg.groupId);
             if (group) {
               await handleIncoming({ from: msg.sender || contact.pubB64, fromPub: msg.sender || contact.pubB64,
                 fromName: msg.name || contact.name, payload: msg.payload, ts: msg.ts,
