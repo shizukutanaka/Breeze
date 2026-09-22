@@ -98,23 +98,31 @@ self.addEventListener('push', (e) => {
   let data = { title: 'Breeze', body: 'New message' };
   try { data = e.data.json(); } catch {}
   e.waitUntil(
-    self.registration.showNotification(data.title || 'Breeze', {
-      body: data.body || 'New message',
-      tag: data.tag || 'breeze-msg',
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
-      vibrate: [100, 50, 100],
-      data: { url: data.url || '/', contactId: data.contactId },
-      renotify: true,
+    (() => {
+      const opts = {
+        body: data.body || 'New message',
+        tag: data.tag || 'breeze-msg',
+        icon: '/icon-192.png',
+        badge: '/icon-192.png',
+        vibrate: [100, 50, 100],
+        data: { url: data.url || '/', contactId: data.contactId },
+        renotify: true,
+      };
+      // A sealed-sender push can't carry a resolvable contactId (the relay doesn't
+      // know the sender — it hashes the recipient), so Reply / Mark Read would
+      // silently no-op 100% of the time; don't offer dead actions on them.
       // v3.6: Notification action buttons (Chrome 48+, Firefox 44+)
-      actions: (navigator.language || '').startsWith('ja') ? [
-        { action: 'reply', title: '返信', type: 'text' },
-        { action: 'mark-read', title: '既読にする' },
-      ] : [
-        { action: 'reply', title: 'Reply', type: 'text' },
-        { action: 'mark-read', title: 'Mark Read' },
-      ],
-    })
+      if (data.tag !== 'breeze-sealed') {
+        opts.actions = (navigator.language || '').startsWith('ja') ? [
+          { action: 'reply', title: '返信', type: 'text' },
+          { action: 'mark-read', title: '既読にする' },
+        ] : [
+          { action: 'reply', title: 'Reply', type: 'text' },
+          { action: 'mark-read', title: 'Mark Read' },
+        ];
+      }
+      return self.registration.showNotification(data.title || 'Breeze', opts);
+    })()
   );
 });
 

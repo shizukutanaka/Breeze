@@ -1,3 +1,11 @@
+## sw.js: no Reply/Mark-Read actions on sealed-sender pushes (branch devin/sw-sealed-actions, 2026-09-22)
+
+Sealed pushes carry `contactId: sha256(recipient)` — the relay can't know the
+sender — so the client's `_pushContactId` lookup can never resolve them and the
+Reply / Mark Read buttons silently did nothing on every sealed notification.
+The push handler now omits `actions` for `tag === 'breeze-sealed'`; unsealed
+pushes are unchanged.
+
 ## index.html notification sounds share one AudioContext (branch devin/audioctx-pool, 2026-09-22)
 
 playNotif/playSendSound created a new AudioContext per chime and never closed it —
