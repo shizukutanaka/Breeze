@@ -3415,7 +3415,8 @@ const haptic = {
 
 // Multi-account system: each account is a separate IDB; switching closes the DB and opens another.
 function getAccounts() {
-  try { return JSON.parse(localStorage.getItem('brz-accounts') || '[]'); } catch { return []; }
+  // Shape-guard: a non-array payload (corrupt/legacy) → [] — `.find`/`.length` would throw at BOOT.
+  try { const a = JSON.parse(localStorage.getItem('brz-accounts') || '[]'); return Array.isArray(a) ? a : []; } catch { return []; }
 }
 function saveAccounts(accs) {
   try { localStorage.setItem('brz-accounts', JSON.stringify(accs)); } catch(e) { _dbg(e); }
@@ -3430,7 +3431,6 @@ function setActiveAccountId(id) {
 // Migrate: if no accounts list but old DB exists, create first account
 (function migrateToMultiAccount() {
   if (getAccounts().length > 0) return;
-  // Check if old DB exists by looking for brz-uid
   const uid = localStorage.getItem('brz-uid');
   if (uid) {
     // Old single-account user → create account entry pointing to existing DB
