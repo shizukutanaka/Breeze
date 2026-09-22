@@ -5283,8 +5283,7 @@ async function initMessenger(dbName) {
     contact._devCacheTs = now;
     return contact._devCache;
   }
-  // Receiver-side registry cache for sender attribution (handleIncoming) — keyed by root id,
-  // 5-min TTL like the sender-side caches. Bounds /device/list traffic to 1 per account/5 min.
+  // Receiver-side registry cache for sender attribution — 5-min TTL, 1 fetch per account/5 min.
   const _attribDevCache = new Map();
   // My OWN other devices (for self-sync). Uses the local account record written by /link.
   let _myDevCache = null, _myDevCacheTs = 0, _unlinkNoticed = false;
@@ -9553,6 +9552,15 @@ async function initMessenger(dbName) {
       }));
   }
 
+  // Canonicalize wire polls before store: ingest checked only Array.isArray(options), so a crafted
+  // poll could pre-seed fake `votes` (legit polls always start empty — votes arrive via poll_vote).
+  function _safePoll(p) {
+    if (!p || p.type !== 'poll' || typeof p.pollId !== 'string' || !p.pollId || !Array.isArray(p.options)) return null;
+    return { type: 'poll', pollId: p.pollId.slice(0, 128), creator: typeof p.creator === 'string' ? p.creator.slice(0, 128) : undefined,
+      question: typeof p.question === 'string' ? p.question.slice(0, 200) : '',
+      options: p.options.slice(0, 50).filter(o => o && typeof o === 'object').map(o => ({ text: typeof o.text === 'string' ? o.text.slice(0, 200) : '', votes: [] })) };
+  }
+
   // Process ?join=token — join an existing group
   async function processJoinToken(token) {
     if (!API) return;
@@ -10168,11 +10176,10 @@ async function initMessenger(dbName) {
       // fromName is self-claimed — sanitize like every name ingest, else invisible-twin headers.
       const senderName = _safeDisplayName(msg.fromName, 64);
       const meta = { msgId, senderName, replyTo: msg.replyTo, disappearAt: msg.disappearAt };
-      // Same typed-payload detection as the 1:1 path — sender-key payloads carry raw JSON.
-      let fileDataG;
+      let fileDataG; // Same typed-payload detection as the 1:1 path — sender-key payloads carry raw JSON.
       try {
         const _p = JSON.parse(text);
-        if (_p && _p.type === 'poll' && typeof _p.pollId === 'string' && Array.isArray(_p.options)) { meta.isPoll = true; meta.poll = _p; }
+        const _sp = _safePoll(_p); if (_sp) { meta.isPoll = true; meta.poll = _sp; text = JSON.stringify(_sp); }
         else if (_p && _p.type === 'file' && typeof _p.name === 'string' && typeof _p.data === 'string') { fileDataG = _p; text = `📎 ${String(_p.name).slice(0, 128)}`; }
       } catch {}
       await dbPut('messages', { msgId, contactId: msg.groupId, text, mine: false, ts: msg.ts, isPoll: meta.isPoll || undefined, fileData: fileDataG, ...meta });
@@ -10232,10 +10239,9 @@ async function initMessenger(dbName) {
     let contactId = msg.from;
     let contact = await dbGet('contacts', contactId);
     // Multi-device sender attribution: an unknown sender claiming an account root is checked
-    // against that root's SIGNED device registry (verified with the root's pinned signing key
-    // in _fetchDeviceList). Listed -> the message belongs to the root's conversation; the
-    // session peer stays the DEVICE's pub (its own ratchet). The claim alone is never trusted:
-    // unverifiable/absent registry falls through to the stranger-contact path below.
+    // against that root's SIGNED device registry (verified via _fetchDeviceList). Listed -> the
+    // message belongs to the root's conversation; the session peer stays the DEVICE's pub. The
+    // claim alone is never trusted: unverifiable/absent registry falls through to strangers below.
     let _attribPub = null;
     if (!contact && msg.fromPub && typeof msg.acctRoot === 'string') {
       try {
@@ -10252,10 +10258,9 @@ async function initMessenger(dbName) {
       } catch(e) { _dbg(e, 'device-attribution'); }
     }
     if (!contact && msg.fromPub) {
-      // Auto-add only a self-consistent identity: addContact derives the id from the
-      // pub key, so a msg whose `from` doesn't match it is a forgery — the message
-      // would drop anyway, but creating the contact first let a spammer plant
-      // unlimited junk entries in the roster (one per throwaway pub key).
+      // Auto-add only a self-consistent identity: addContact derives the id from the pub key,
+      // so a msg whose `from` mismatches it is a forgery — creating the contact first let a
+      // spammer plant unlimited junk entries in the roster (one per throwaway pub key).
       if (msg.from === msg.fromPub.slice(0, 12)) {
         await addContact(msg.fromPub, msg.fromName || t('unknown'));
         contact = await dbGet('contacts', contactId);
@@ -10373,27 +10378,23 @@ async function initMessenger(dbName) {
       const _frank = {};
       text = await decryptFrom(msg.payload, _peerPub, _frank);
       if (!text) return;
-      // Reject oversized text: the relay caps payloads at 256 KB but the P2P DataChannel has no server check.
-      // 64 KB is generous for chat text while preventing memory/render DoS from a malicious peer.
+      // Reject oversized text: relay caps at 256 KB but P2P has no server check; 64 KB prevents memory/render DoS.
       if (text.length > 65536) return;
-      // Poll payloads arrive as plain JSON text — only the sender's record ever had
-      // isPoll, so recipients saw raw JSON and could never vote. Detect + tag here so
-      // the card renders; renderPollHtml's own caps bound the peer-controlled fields.
+      // Poll payloads arrive as plain JSON text — detect + canonicalize via _safePoll (strips
+      // pre-seeded votes, bounds fields) so recipients store a clean card and can vote.
       try {
         const _p = JSON.parse(text);
-        if (_p && _p.type === 'poll' && typeof _p.pollId === 'string' && Array.isArray(_p.options)) { meta.isPoll = true; meta.poll = _p; }
+        const _sp = _safePoll(_p); if (_sp) { meta.isPoll = true; meta.poll = _sp; text = JSON.stringify(_sp); }
       } catch {}
       // v3.3: Verify Ed25519 signature if present.
-      // TOFU: a contact's signing key must stay stable. Verifying a signature
-      // against the sigPub carried in the same message proves only that the
-      // message is self-consistent — an attacker can sign forged text with their
-      // own key. Pin the signing key on first sighting and require it to match
-      // thereafter, so the "verified" badge actually binds to the known identity.
+      // TOFU: a contact's signing key must stay stable. A signature checked against the sigPub
+      // carried in the same message proves only self-consistency — an attacker can sign forged
+      // text with their own key. Pin on first sighting and require it to match thereafter, so
+      // the "verified" badge actually binds to the known identity.
       if (msg.sig && msg.sigPub && _attribPub) {
         // Attributed device sender: its Ed25519 key legitimately differs from the root's pinned
-        // sigPub, so the TOFU pin/compare below would fire a false MITM banner. Identity here is
-        // carried by the root-signed registry + a successful ratchet decrypt against the listed
-        // device pub; the signature is only checked for self-consistency (never pinned).
+        // sigPub, so the TOFU pin/compare below would fire a false MITM banner. Identity is
+        // carried by the root-signed registry + ratchet decrypt; the sig is self-consistency only.
         const verified = await verifySignature(text, msg.sig, msg.sigPub);
         if (verified === true) meta.verified = true;
         else if (verified === false) { meta.tampered = true; _dbg(null, 'Signature verification FAILED for device msg from ' + contactId); }
@@ -10403,8 +10404,7 @@ async function initMessenger(dbName) {
         } else if (contact.sigPub !== msg.sigPub) {
           meta.tampered = true;
           _dbg(null, 'Signing key changed for ' + contactId + ' — possible MITM');
-          // A signing-key substitution is a stronger MITM signal than a decrypt failure, so
-          // reuse the same prominent banner (not just the subtle ⚠sig badge).
+          // A signing-key substitution is a stronger MITM signal than a decrypt failure — reuse the prominent banner.
           await showKeyChangeWarning(contactId, contact.pubB64, 'Signing key change — possible MITM.');
         }
         if (!meta.tampered) {

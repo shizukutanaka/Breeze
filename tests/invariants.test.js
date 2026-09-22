@@ -49,7 +49,10 @@ describe('fileData integrity', () => {
 
 describe('poll receive path', () => {
   it('incoming type:poll messages are tagged so the card renders (not raw JSON)', () => {
-    expect(html).toContain("meta.isPoll = true; meta.poll = _p");
+    // Canonicalized via _safePoll at both ingest sites — the stored text is rewritten to
+    // canonical JSON, so nothing downstream ever sees pre-seeded votes or unbounded fields.
+    expect((html.match(/meta\.isPoll = true; meta\.poll = _sp; text = JSON\.stringify\(_sp\);/g) || []).length).toBe(2);
+    expect(html).toContain('function _safePoll');
   });
 });
 
