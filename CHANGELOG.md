@@ -1,3 +1,12 @@
+## sw.js outbox drain bounds retries — permanently-undeliverable items drop (branch devin/sw-dlq-cap, 2026-09-21)
+
+drainOutbox re-queued every failed item without ever bumping attempts, so a
+permanently-undeliverable envelope (an invalid `to`, a recipient whose relay
+record expired) was retried on every background-sync event forever — battery and
+quota burned on mail that can never land, and the page's dead-letter cap never
+reached because it only counts its own failures. Failures now increment
+attempts and items drop past the same bound the page uses.
+
 ## 1:1 relayed reactions get the same caps the group path already had (branch devin/reaction-caps-1to1, 2026-09-21)
 
 The encrypted `isSignal` reaction handler on the 1:1 path created `reactions[emoji]`

@@ -263,7 +263,10 @@ async function drainOutbox() {
             sent = r.ok;
           } catch {}
         }
-        if (!sent) remaining.push(item);
+        if (!sent && (item.attempts | 0) < 4) { item.attempts = (item.attempts | 0) + 1; remaining.push(item); }
+        // Past the cap the item drops — a permanently-undeliverable envelope (bad `to`,
+        // a recipient record that expired from relay TTL) otherwise retried on every
+        // sync event forever, and the page-side dead-letter cap counts only ITS failures.
       }
       // Persist only the survivors (the page caps the queue at 50 — keep that bound).
       if (remaining.length !== queue.length) {
