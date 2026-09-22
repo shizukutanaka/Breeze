@@ -6847,10 +6847,10 @@ async function initMessenger(dbName) {
       return true;
     });
     let _loadedCount = msgs.length;
-    // v3.3: Compute reply counts for thread indicators
-    const _replyCounts = {};
+    const _replyCounts = Object.create(null); // null-proto: wire msgId keys can't hit Object.prototype (CWE-915)
     for (const m of msgs) {
-      if (m.replyTo?.msgId) _replyCounts[m.replyTo.msgId] = (_replyCounts[m.replyTo.msgId] || 0) + 1;
+      const rtId = typeof m.replyTo?.msgId === 'string' ? safeMsgId(m.replyTo.msgId) : '';
+      if (rtId) _replyCounts[rtId] = (_replyCounts[rtId] || 0) + 1;
     }
     const renderBatch = (start, end) => {
       // v3.6: Unread separator — show "New Messages" line before first unread
