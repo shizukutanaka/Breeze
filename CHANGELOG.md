@@ -1,3 +1,13 @@
+## index.html signing-key-change banner warns once per key (branch devin/sigpub-warn-once, 2026-09-22)
+
+On a sigPub mismatch the msg-sig path set meta.tampered (correct) AND fired
+showKeyChangeWarning on every single message — a rotated or forged signing key
+meant every subsequent envelope re-flew the 8s MITM toast, announceToSR, and an
+auditLog write, turning one security event into a permanent notification/audit
+DoS. The banner now fires once per (contact, sigPub value): later envelopes
+stay tampered but quiet; a further rotation warns again. State lives on the
+contact (_sigWarn), persisting across reloads like the pin itself.
+
 ## index.html notification sounds share one AudioContext (branch devin/audioctx-pool, 2026-09-22)
 
 playNotif/playSendSound created a new AudioContext per chime and never closed it —
