@@ -10968,21 +10968,9 @@ async function initMessenger(dbName) {
         return;
       }
       // v3.5: PBKDF2 + salt verification (backward compatible with old SHA-256)
-      let stored, isLegacy = false;
-      try { stored = JSON.parse(raw); } catch { stored = { hash: raw, salt: null }; isLegacy = true; }
-      let hashB64;
-      if (isLegacy) {
-        // Legacy SHA-256 (migrate on successful unlock)
-        const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(inp.value));
-        hashB64 = btoa(String.fromCharCode(...new Uint8Array(hash)));
-      } else {
-        const salt = Uint8Array.from(atob(stored.salt), c => c.charCodeAt(0));
-        const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(inp.value), 'PBKDF2', false, ['deriveBits']);
-        const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: CONFIG.PBKDF2_ITERATIONS, hash: 'SHA-256' }, km, 256);
-        hashB64 = btoa(String.fromCharCode(...new Uint8Array(bits)));
-      }
-      // v3.5: Constant-time comparison (prevent timing attack)
-      if (hashB64.length === stored.hash.length && await timingSafeEqual(hashB64, stored.hash)) {
+      const _lc = await _lockPassCheck(inp.value, raw);
+      if (_lc) {
+        const isLegacy = _lc === 'legacy';
         overlay.remove();
         _attempts = 0; _backoffUntil = 0;
         auditLog('security', 'Lock screen unlocked');
@@ -11033,6 +11021,15 @@ async function initMessenger(dbName) {
       return result === 0;
     }
   }
+
+  // 'ok' | 'legacy' | false — shared by the lock screen and /lock reset
+  async function _lockPassCheck(pass, raw) { try {
+      let stored, legacy = false;
+      try { stored = JSON.parse(raw); } catch { stored = { hash: raw, salt: null }; legacy = true; }
+      const enc = new TextEncoder(), b64 = (u8) => btoa(String.fromCharCode(...new Uint8Array(u8)));
+      const hashB64 = legacy ? b64(await crypto.subtle.digest('SHA-256', enc.encode(pass))) : b64(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: Uint8Array.from(atob(stored.salt), c => c.charCodeAt(0)), iterations: CONFIG.PBKDF2_ITERATIONS, hash: 'SHA-256' }, await crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveBits']), 256));
+      return hashB64.length === stored.hash.length && await timingSafeEqual(hashB64, stored.hash) ? (legacy ? 'legacy' : 'ok') : false;
+  } catch(e) { _dbg(e); return false; } }
 
   // v3.3: Auto-lock on tab hide (if lock password is set)
   document.addEventListener('visibilitychange', () => {
@@ -14078,10 +14075,16 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       }
     }
 
-    // v3.2: /lock reset — Remove lock password
+    // v3.2: /lock reset — Remove lock password (requires the current one — an already
+    // unlocked app must not let a passer-by strip the lock while it looks protected)
     if (val === '/lock reset') {
       e.preventDefault();
       clearInput();
+      const _lr = localStorage.getItem('brz-lock-hash');
+      if (_lr) {
+        const pass = await showPrompt(t('enterPassword'), '', { type: 'password' });
+        if (pass === null || !(await _lockPassCheck(pass, _lr))) { showToast(t(pass === null ? 'toastCancelled' : 'toastWrongPassphrase'), pass === null ? 'info' : 'error'); return; }
+      }
       localStorage.removeItem('brz-lock-hash');
       localStorage.removeItem('brz-autolock');
       localStorage.removeItem('brz-idle-lock');

@@ -1,3 +1,14 @@
+## index.html /lock reset requires the current password (branch devin/lock-reset-auth, 2026-09-22)
+
+/lock reset stripped brz-lock-hash + both auto-lock toggles with no password
+check — anyone with brief access to an already-unlocked app could silently
+remove the lock, leaving the user believing the app still re-locks on idle/tab
+hide. The handler now prompts for the current password and verifies it against
+the stored hash through a shared _lockPassCheck helper ('ok'|'legacy'|false),
+which the lock screen's unlock path also uses (same PBKDF2+legacy-SHA-256+
+timing-safe path — the legacy-migrate-on-success behaviour is unchanged).
+Cancel or a wrong password aborts; a missing hash resets freely as before.
+
 ## ?join= links silently joined groups on existing accounts — now asks first (branch devin/join-confirm, 2026-09-21)
 
 processJoinToken ran unconditionally at boot for logged-in accounts: clicking a shared
