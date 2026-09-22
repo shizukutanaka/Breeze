@@ -1,3 +1,14 @@
+## index.html: unsigned SDP rejected once the peer's signing key is pinned (branch devin/sdp-unsigned-reject, 2026-09-22)
+
+The dm: signal-poll accepted unwrapped {type:'offer'|answer', sdp:'...'} under a
+'legacy compat' comment — even when contact.sigPub was already TOFU-pinned. The
+/signal relay is unauthenticated and the room name is just the two sorted ids,
+so anyone knowing the pair could strip a signed wrapper or inject their own
+unsigned SDP carrying their DTLS fingerprint; setRemoteDescription() then
+nailed the victim's media to the attacker (full P2P MITM). Pinned now means
+signed-only; unpinned peers keep the legacy path, and the sig-verification and
+mismatch rejects are unchanged.
+
 ## index.html notification sounds share one AudioContext (branch devin/audioctx-pool, 2026-09-22)
 
 playNotif/playSendSound created a new AudioContext per chime and never closed it —

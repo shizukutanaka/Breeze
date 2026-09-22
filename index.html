@@ -10858,19 +10858,18 @@ async function initMessenger(dbName) {
                 let sdpJson = s.data;
                 try {
                   const wrapper = JSON.parse(s.data);
-                  if (wrapper && typeof wrapper.sdp === 'string' && wrapper.sig && wrapper.sigPub) {
-                    if (contact.sigPub && contact.sigPub !== wrapper.sigPub) {
-                      _dbg(null, 'P2P: SDP signing key mismatch — rejecting (possible MITM)');
-                      continue;
+                  if (wrapper && typeof wrapper.sdp === 'string') {
+                    if (wrapper.sig && wrapper.sigPub) {
+                      if (contact.sigPub && contact.sigPub !== wrapper.sigPub) { _dbg(null, 'P2P: SDP signing key mismatch — rejecting (possible MITM)'); continue; }
+                      const valid = await verifySignature(wrapper.sdp, wrapper.sig, wrapper.sigPub);
+                      if (valid === false) { _dbg(null, 'P2P: SDP signature invalid — rejecting'); continue; }
+                      // TOFU: pin the peer's signing key on first signed SDP
+                      if (!contact.sigPub && wrapper.sigPub && _hasEd25519) { contact.sigPub = wrapper.sigPub; dbPut('contacts', contact).catch(() => {}); }
+                      sdpJson = wrapper.sdp;
+                    } else if (contact.sigPub) {
+                      // Downgrade: pinned peer signs — unsigned SDP is a stripped or injected copy (attacker DTLS fingerprint).
+                      _dbg(null, 'P2P: unsigned SDP from pinned-signing peer — rejecting'); continue;
                     }
-                    const valid = await verifySignature(wrapper.sdp, wrapper.sig, wrapper.sigPub);
-                    if (valid === false) { _dbg(null, 'P2P: SDP signature invalid — rejecting'); continue; }
-                    // TOFU: pin the peer's signing key on first signed SDP
-                    if (!contact.sigPub && wrapper.sigPub && _hasEd25519) {
-                      contact.sigPub = wrapper.sigPub;
-                      dbPut('contacts', contact).catch(() => {});
-                    }
-                    sdpJson = wrapper.sdp;
                   }
                 } catch(_e) { _dbg(_e, 'sdp-auth'); }
                 const description = JSON.parse(sdpJson);
