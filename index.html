@@ -2618,8 +2618,7 @@ window.addEventListener('offline', () => {
     banner.classList.remove('hidden');
   }
 });
-// The {ids, offline} sendBeacon was removed: no offline path exists on the Worker (400
-// at !id) — the beacon was a no-op. Presence self-corrects via ~60s at-staleness.
+// The {ids, offline} sendBeacon was removed: the Worker has no offline path — it was a no-op. Presence self-corrects via ~60s at-staleness.
 window.addEventListener('beforeunload', () => {
   // v3.6: Emergency save retry queue (sync — beforeunload can't await)
   try {
@@ -3633,7 +3632,8 @@ function renderAccountTabs() {
 
 // Cross-account unread tracking (persisted in localStorage)
 const _crossAccountUnread = (() => {
-  try { return JSON.parse(localStorage.getItem('brz-cross-unread') || '{}'); } catch { return {}; }
+  // Shape-guard like getAccounts(): a 'null'/'42' payload → member access throws at boot.
+  try { const v = JSON.parse(localStorage.getItem('brz-cross-unread') || '{}'); return (v && typeof v === 'object') ? v : {}; } catch { return {}; }
 })();
 
 // Keyboard shortcuts: Ctrl+1..9 to switch accounts
