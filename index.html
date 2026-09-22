@@ -2853,7 +2853,7 @@ if (P.has('drop')) {
       content.classList.add('visible');
       _DOM.get('drop-actions').classList.add('visible');
       _DOM.get('drop-copy').onclick = () => {
-        navigator.clipboard.writeText(plaintext).then(() => { _DOM.get('drop-copy').textContent = t('toastCopied'); }).catch(() => {});
+        _copySensitive(plaintext).then(() => { _DOM.get('drop-copy').textContent = t('toastCopied'); }).catch(() => {});
       };
     } catch(e) { _DOM.get('drop-status').textContent = t('dropReadFailed'); }
   })();
@@ -3058,6 +3058,10 @@ function esc(s) { const d=document.createElement('div'); d.textContent=typeof s=
 // Scrub bidi controls + invisible format chars from display names at ingest — class byte-identical to _worker.js (tests/unicode-spoof.test.js pins parity).
 const _UNSAFE_DISPLAY_RE = /[\u00AD\u034F\u061C\u115F\u1160\u180E\u200B\u200E\u200F\u202A-\u202E\u2060\u2066-\u2069\u2800\u3164\uFFA0\uFEFF\u{1D173}-\u{1D17A}\u{E0000}-\u{E007F}]/gu;
 const _safeDisplayName = (s, n = 64) => typeof s === 'string' ? s.replace(_UNSAFE_DISPLAY_RE, '').slice(0, n) : '';
+// KeePass/Bitwarden-style: secrets copied to clipboard auto-clear after ~30s. The read-back
+// guard never erases a foreign copy; readText fails silently w/o permission -> no clear.
+let _clipGen = 0;
+async function _copySensitive(text) { await navigator.clipboard.writeText(text); const g = ++_clipGen; setTimeout(async () => { try { if (g === _clipGen && await navigator.clipboard.readText() === text) await navigator.clipboard.writeText(''); } catch {} }, MS.SEC * 30); }
 // Grapheme-aware avatar truncator: takes up to `max` grapheme clusters so compound emoji (ZWJ sequences, skin-tone modifiers) aren't split into half-surrogates.
 function avatarSlice(s, max = 2) {
   if (!s) return '';
@@ -8899,7 +8903,6 @@ async function initMessenger(dbName) {
     });
   });
 
-  // v3.1: Clipboard paste → preview before send
   _DOM.get('msg-input')?.addEventListener('paste', async (e) => {
     const items = e.clipboardData?.items;
     if (!items || !activeContact || activeContact.blocked) return;
@@ -9494,7 +9497,6 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'createGroup'); }
   }
 
-  // Create server-backed group with shareable invite link
   async function createGroupInviteLink(name) {
     if (!API) { showToast(t('toastServerRequired'), 'error'); return; }
     try {
@@ -9510,9 +9512,8 @@ async function initMessenger(dbName) {
       });
       await renderContacts();
 
-      // Generate and share invite link
       const joinUrl = SHARE_BASE + '?join=' + data.token;
-      navigator.clipboard?.writeText(joinUrl);
+      _copySensitive(joinUrl).catch(() => {});
 
       const box = _DOM.get('msg-messages');
       const d = document.createElement('div');
@@ -13462,8 +13463,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         const resp = await postAPIRaw('/drop/create', { id: dropId, ct: ctB64, ttl: 86400 });
         if (!resp.ok) throw new Error('Server error');
         const dropUrl = `${SHARE_BASE}?drop=${dropId}#${keyB64}`;
-        // Copy to clipboard
-        try { await navigator.clipboard.writeText(dropUrl); } catch { /* fallback below */ }
+        try { await _copySensitive(dropUrl); } catch { /* fallback below */ }
         // Show result in chat
         const box = _DOM.get('msg-messages');
         const d = document.createElement('div');
@@ -13475,7 +13475,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         box.appendChild(d);
         const _copyUrl = dropUrl;
         d.querySelector('#drop-url-copy')?.addEventListener('click', () => {
-          navigator.clipboard.writeText(_copyUrl).then(() => showToast(t('copiedClipboard'), 'success')).catch(() => showToast(t('toastCopyFail'), 'error'));
+          _copySensitive(_copyUrl).then(() => showToast(t('copiedClipboard'), 'success')).catch(() => showToast(t('toastCopyFail'), 'error'));
         });
         box.scrollTop = box.scrollHeight;
         haptic.success();
