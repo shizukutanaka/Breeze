@@ -1737,6 +1737,9 @@ const _I = {
     joinShareInfo: 'Joining shares your id and display name with the group.',
     invitedBy: "{0} invited you. Enter your name to join. ({1} members)",
     joinBtn: 'Join Group',
+    addLink: 'Add "{0}" to contacts?',
+    addLinkWarn: 'Anyone can send this link — only add people you expected to hear from. The name is claimed, not verified.',
+    addLinkBtn: 'Add Contact',
     rename: 'Rename',
     // v3.5: Toast messages
     toastIdCopied: 'ID copied',
@@ -6035,6 +6038,12 @@ async function initMessenger(dbName) {
     }
   }
 
+  // URL-driven enrollment asks first — ?add= plants a contact and ?join= enrolls in
+  // a group; both are attacker-sendable links (the join gate already existed on the
+  // boot path; the setup-completion path below had neither).
+  async function _confirmJoin(token) { const gi = await postAPIRaw('/group/info', { token }).then(r => (r && r.ok) ? r.json() : null).catch(() => null); return showConfirm(t('joinGroup', gi?.name || '…'), { desc: t('joinShareInfo'), okText: t('joinBtn') }); }
+  async function _confirmAddLink(addKey) { const label = addKey.startsWith('@') ? addKey : (P.get('name') || '…'); return showConfirm(t('addLink', label), { desc: t('addLinkWarn'), okText: t('addLinkBtn') }); }
+
   // ===== Setup or Load =====
   // DELIBERATELY a function, invoked at the very END of initMessenger (grep "_boot()").
   // Running this inline here was a Temporal Dead Zone crash: renderContacts() reads
@@ -6084,21 +6093,14 @@ async function initMessenger(dbName) {
     // only defined here.
     _registerMessengerCleanup();
     // Auto-add contact from URL (?add=@alias or ?add=pubkey&name=X)
+    // ?add=/?join= are attacker-sendable links — both ask first. Joining publishes
+    // id/pub/name to the roster; adding plants an unverified contact under a
+    // sender-chosen name.
     const addKey = P.get('add');
-    if (addKey && addKey !== myPubB64) {
-      if (addKey.startsWith('@')) {
-        await resolveAndAdd(addKey);
-      } else {
-        await addContact(addKey, P.get('name') || t('newContact'));
-      }
+    if (addKey && addKey !== myPubB64 && await _confirmAddLink(addKey)) {
+      if (addKey.startsWith('@')) await resolveAndAdd(addKey); else await addContact(addKey, P.get('name') || t('newContact'));
     }
-    // Auto-join group from URL (?join=token) — but ASK first: a shared link must not
-    // silently enroll this account into an attacker's group. Joining publishes my
-    // id/pub/name to the roster and the relay before I ever see the conversation.
-    if (joinToken) {
-      const gi = await postAPIRaw('/group/info', { token: joinToken }).then(r => (r && r.ok) ? r.json() : null).catch(() => null);
-      if (await showConfirm(t('joinGroup', gi?.name || '…'), { desc: t('joinShareInfo'), okText: t('joinBtn') })) await processJoinToken(joinToken);
-    }
+    if (joinToken && await _confirmJoin(joinToken)) await processJoinToken(joinToken);
     // Auto-open settings from URL (?settings — PWA manifest "Settings" shortcut).
     // manifest.json advertised this shortcut with nothing on the boot path ever reading the
     // param, so long-pressing the installed app icon → Settings silently did nothing.
@@ -6156,14 +6158,11 @@ async function initMessenger(dbName) {
       setActiveAccountId('0');
     }
     renderAccountTabs();
-    // BUG 10 fix: process add= parameter after identity creation
+    // BUG 10 fix: process add= parameter after identity creation — same URL
+    // enrollment gates as the boot path above.
     const addKey = P.get('add');
-    if (addKey && addKey !== myPubB64) {
-      if (addKey.startsWith('@')) { await resolveAndAdd(addKey); }
-      else { await addContact(addKey, P.get('name') || t('newContact')); }
-    }
-    // Auto-join group
-    if (joinToken) await processJoinToken(joinToken);
+    if (addKey && addKey !== myPubB64 && await _confirmAddLink(addKey)) { if (addKey.startsWith('@')) await resolveAndAdd(addKey); else await addContact(addKey, P.get('name') || t('newContact')); }
+    if (joinToken && await _confirmJoin(joinToken)) await processJoinToken(joinToken);
     _openSettingsFromUrl();
   });
   // Enter on name field → move focus to alias (matches enterkeyhint="next")
