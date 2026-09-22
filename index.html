@@ -3224,6 +3224,9 @@ function safeOpen(url) {
     return true;
   } catch(e) { return false; }
 }
+// Scanned QR → location.href must be a real https invite on THIS origin — a bare
+// includes('?add=') check also passes javascript:/data: URLs and foreign phishing hosts.
+function _isTrustedScanUrl(v) { try { const u = new URL(v); return u.protocol === 'https:' && u.host === new URL(SHARE_BASE).host && u.searchParams.has('add'); } catch { return false; } }
 
 // v3.5: SECURITY — Validate URL scheme for OGP/external content
 
@@ -12535,11 +12538,7 @@ async function initMessenger(dbName) {
         const value = await qrScanOnce(closeBtn, scanBtn);
         if (!value) return;
         modal.remove();
-        if (value.includes('?add=')) {
-          window.location.href = value;
-        } else {
-          showToast(t('toastInvalidQR'), 'error');
-        }
+        if (_isTrustedScanUrl(value)) window.location.href = value; else showToast(t('toastInvalidQR'), 'error');
       };
       card.append(title, qr, urlDiv, copyBtn, scanBtn, closeBtn);
     } else {
