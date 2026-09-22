@@ -2686,6 +2686,10 @@ const P = new URLSearchParams(location.search);
 // (?join=abc123 from createGroupInviteLink). Strip the scheme prefix so both paths converge
 // on the same bare token processJoinToken() expects.
 const joinToken = P.get('join')?.replace(/^web\+breeze:\/{0,2}/, '') || null;
+const _urlHash = location.hash.slice(1); // captured before the scrub below — the ?drop #key fragment
+// Params are now captured in the P/_urlHash snapshots: strip bearer params (?join= token,
+// ?drop id+#key, ?add key, share text) from the bar+history — OIDC-clients do the same for ?code.
+if (location.search || location.hash) history.replaceState(null, '', '/');
 
 // Performance Markers (optional — no-op if Performance API unavailable). Moved up here: initMessenger() (hoisted call below) reads _perf on its first line; declared later, that `const` stays TDZ-locked — crashed boot for every real user until found via E2E.
 const _perf = {
@@ -2819,11 +2823,9 @@ if ('serviceWorker' in navigator) { try {
   }).catch(e => _dbg(e));
 } catch(e) { _dbg(e, 'sw-register-sync-throw'); } }
 
-// v3.6: Dead Drop read handler — ?drop=<id>#<key>
 if (P.has('drop')) {
   const dropId = P.get('drop');
-  const keyB64 = location.hash.slice(1); // Fragment never sent to server
-  // Build drop page via DOM API (avoids safeSetHTML; no functional need to change)
+  const keyB64 = _urlHash; // Fragment never sent to server
   const _dw = document.createElement('div'); _dw.className = 'drop-page';
   const _di = document.createElement('div'); _di.className = 'drop-page-icon'; _di.textContent = '🔐'; _dw.appendChild(_di);
   const _ds = document.createElement('div'); _ds.id = 'drop-status'; _ds.className = 'drop-page-status'; _ds.textContent = t('dropDecrypting'); _dw.appendChild(_ds);
@@ -6156,13 +6158,11 @@ async function initMessenger(dbName) {
       setActiveAccountId('0');
     }
     renderAccountTabs();
-    // BUG 10 fix: process add= parameter after identity creation
     const addKey = P.get('add');
     if (addKey && addKey !== myPubB64) {
       if (addKey.startsWith('@')) { await resolveAndAdd(addKey); }
       else { await addContact(addKey, P.get('name') || t('newContact')); }
     }
-    // Auto-join group
     if (joinToken) await processJoinToken(joinToken);
     _openSettingsFromUrl();
   });
