@@ -35,7 +35,7 @@ const MIME = {
   '.txt': 'text/plain; charset=utf-8',
 };
 
-const API_LINE_RE = /^const API = location\.hostname === 'localhost' \|\| location\.hostname === '127\.0\.0\.1' \? '' : location\.origin \+ '\/api';$/m;
+const API_LINE_RE = /^const API = location\.hostname === 'localhost' \|\| location\.hostname === '127\.0\.0\.1' \? ''\n  : _packagedOrigin \? PACKAGED_API_ORIGIN \+ '\/api' : location\.origin \+ '\/api';$/m;
 
 // Apply the REAL production CSP (from _headers' `/*` block) as an actual HTTP header,
 // not just the <meta> tag already in index.html. Production (Cloudflare Pages) sends
