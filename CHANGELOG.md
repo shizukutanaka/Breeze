@@ -1,3 +1,12 @@
+## _worker.js /account/delete also erases the device registry + sealed dropped counter (branch devin/acct-del-devices, 2026-09-22)
+
+The delete handler wiped inbox/sealed/prekeys/ktlog/push/backup/presence/slots
+but left two account-keyed records behind: `devices:{userId}` — the signed
+device registry (TTL.MONTH*3, ~90 days), so secondary devices kept trusting a
+deleted account's roster — and `sealed:{userId}:dropped`, the refused-envelope
+counter (TTL.WEEK). Both now deleted with the rest; 'devices' joins the erased
+report.
+
 ## index.html notification sounds share one AudioContext (branch devin/audioctx-pool, 2026-09-22)
 
 playNotif/playSendSound created a new AudioContext per chime and never closed it —

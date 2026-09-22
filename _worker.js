@@ -2026,6 +2026,8 @@ async function handleAccountDelete(body, env, request) {
     kvDel(env, `inbox:${userId}`),
     kvDel(env, `sealed:${userId}`),
     kvDel(env, `sealed:${userId}:hwm`), // sealed-poll high-water mark (else lingers ~5min, leaking last-delivery ts)
+    kvDel(env, `sealed:${userId}:dropped`), // refused-envelope counter (TTL.WEEK) — same erased-elsewhere class
+    kvDel(env, `devices:${userId}`), // signed device registry (TTL.MONTH*3) — else secondaries keep trusting a dead account
     kvDel(env, `prekey:${userId}`),
     kvDel(env, `ktlog:${userId}`),
     kvDel(env, `push:${userId}`),
@@ -2077,7 +2079,7 @@ async function handleAccountDelete(body, env, request) {
     }
   }
 
-  const erased = ['inbox', 'sealed', 'prekeys', 'ktlog', 'push', 'backup', 'presence', 'slots'];
+  const erased = ['inbox', 'sealed', 'prekeys', 'ktlog', 'push', 'backup', 'presence', 'slots', 'devices'];
   if (customerId) erased.push('cust');
   return json({
     ok: true,
