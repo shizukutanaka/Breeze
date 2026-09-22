@@ -7052,13 +7052,13 @@ async function initMessenger(dbName) {
   let _lastMsgTs = 0;
   // v3.4: Track blob URLs for memory leak prevention
   const _blobUrls = new Set();
+  let _ttlArmed = 0; // armed disappearing-message countdowns (cap below)
 
   function appendMsg(text, isMine, ts, box, fileData, meta) {
     meta = meta || {};
     box = box || _DOM.get('msg-messages');
 
-    // v3.4: DOM PRUNING — Remove oldest messages when exceeding limit
-    // Keeps DOM lean for long conversations (Telegram-inspired approach)
+    // v3.4: DOM PRUNING — drop oldest msgs past the limit (Telegram-inspired lean DOM)
     const msgs = box.querySelectorAll('.msg');
     if (msgs.length > CONFIG.MSG_DOM_LIMIT) {
       const toRemove = msgs.length - CONFIG.MSG_DOM_LIMIT + 20;
@@ -7076,7 +7076,6 @@ async function initMessenger(dbName) {
       }
     }
 
-    // v3.1: Date separator
     const msgDate = new Date(ts).toLocaleDateString(navigator.language || LANG, { year: 'numeric', month: 'short', day: 'numeric' });
     if (msgDate !== _lastMsgDate) {
       _lastMsgDate = msgDate;
@@ -7086,7 +7085,7 @@ async function initMessenger(dbName) {
       box.appendChild(sep);
     }
 
-    // v3.1: Message grouping (same sender within 2 min → compact bubble)
+    // Grouping: same sender within 2 min → compact bubble
     const senderKey = isMine ? 'me' : (meta.senderName || 'them');
     const isGrouped = senderKey === _lastMsgSender && (ts - _lastMsgTs) < 120000;
     _lastMsgSender = senderKey;
@@ -7134,13 +7133,13 @@ async function initMessenger(dbName) {
         const label = mins >= 60 ? Math.floor(mins / 60) + 'h' : mins + 'm';
         const timerId = 'ttl-' + Math.random().toString(36).slice(2, 8);
         timerBadge = ` <span class="msg-timer-badge" id="${timerId}" title="${esc(t('ttDisappearsIn', label))}">⏱${label}</span>`;
-        // v3.6: Live countdown + auto-fade DOM removal
         const disappearAt = meta.disappearAt;
         const updateCountdown = () => {
           const el = _DOM.get(timerId);
-          if (!el) return;
+          if (!el) { _ttlArmed = Math.max(0, _ttlArmed - 1); return; }
           const left = disappearAt - Date.now();
           if (left <= 0) {
+            _ttlArmed = Math.max(0, _ttlArmed - 1);
             const msgEl = el.closest('.msg');
             if (msgEl) { msgEl.classList.add('fade-out'); setTimeout(() => msgEl.remove(), CONFIG.FADE_OUT_MS); }
             return;
@@ -7150,7 +7149,8 @@ async function initMessenger(dbName) {
           if (s <= 30) el.classList.add('color-r');
           setTimeout(updateCountdown, s > 60 ? MS.SEC * 30 : MS.SEC);
         };
-        requestAnimationFrame(() => setTimeout(updateCountdown, MS.SEC));
+        // Cap armed countdowns — each recurs ≤1s, so a flood of disappearing msgs would otherwise spin hundreds of perpetual wakes; unarmed badges keep the static label.
+        if (_ttlArmed < 16) { _ttlArmed++; requestAnimationFrame(() => setTimeout(updateCountdown, MS.SEC)); }
       }
     }
     // v3.3: Signature verification badge
