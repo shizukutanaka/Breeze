@@ -1,3 +1,12 @@
+## index.html: file-chunk totals must agree across a transfer (branch devin/chunk-total-drift, 2026-09-22)
+
+Every chunk packet re-declares `total`, but the transfer record (`fc.total`)
+was fixed by whichever chunk arrived first — so a sender that drifted the
+total mid-transfer could make `received.size === fc.total` fire with missing
+slots: a truncated file silently delivered as complete, or a TypeError
+reassembling the sparse array inside dc.onmessage. Chunks whose declared
+total differs from the established record are now dropped.
+
 ## index.html notification sounds share one AudioContext (branch devin/audioctx-pool, 2026-09-22)
 
 playNotif/playSendSound created a new AudioContext per chime and never closed it —

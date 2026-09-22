@@ -11725,7 +11725,7 @@ async function initMessenger(dbName) {
         if (box) box.scrollTop = box.scrollHeight;
       }
     }
-    const fc = _fileChunks[fileId];
+    const fc = _fileChunks[fileId]; if (total !== fc.total) return; // a drifting total can fire the "complete" check on sparse slots
     fc.chunks[seq] = data;
     fc.received.add(seq);
     // v3.6: Update receive progress
