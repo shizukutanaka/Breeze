@@ -3054,6 +3054,9 @@ async function fetchRetry(url, opts = {}, { maxRetries = 3, baseDelay = 1000, ti
 }
 
 function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+// Scrub bidi controls + invisible format chars from display names at ingest — class byte-identical to _worker.js (tests/unicode-spoof.test.js pins parity).
+const _UNSAFE_DISPLAY_RE = /[\u00AD\u034F\u061C\u115F\u1160\u180E\u200B\u200E\u200F\u202A-\u202E\u2060\u2066-\u2069\u2800\u3164\uFFA0\uFEFF\u{1D173}-\u{1D17A}\u{E0000}-\u{E007F}]/gu;
+const _safeDisplayName = (s, n = 64) => typeof s === 'string' ? s.replace(_UNSAFE_DISPLAY_RE, '').slice(0, n) : '';
 // Grapheme-aware avatar truncator: takes up to `max` grapheme clusters so compound emoji (ZWJ sequences, skin-tone modifiers) aren't split into half-surrogates.
 function avatarSlice(s, max = 2) {
   if (!s) return '';
@@ -3586,7 +3589,7 @@ function renderAccountTabs() {
       ].filter(Boolean));
       if (action === 'rename') {
         const newName = await showPrompt(t('newName'), acc.name);
-        if (newName) { acc.name = newName; saveAccounts(accs); renderAccountTabs(); }
+        if (newName) { acc.name = _safeDisplayName(newName, 64) || acc.name; saveAccounts(accs); renderAccountTabs(); }
       } else if (action === 'avatar') {
         const choice = await showPrompt(t('chooseAvatar'), acc.avatar || '👤', { placeholder: t('avatarPlaceholder') });
         if (choice) { acc.avatar = choice.slice(0, 2); saveAccounts(accs); renderAccountTabs(); }
@@ -6116,7 +6119,7 @@ async function initMessenger(dbName) {
   } // end _boot
 
   _DOM.get('b-msg-setup')?.addEventListener('click', async () => {
-    const name = _DOM.get('msg-name').value.trim().slice(0, 64) || 'Anonymous';
+    const name = _safeDisplayName(_DOM.get('msg-name').value.trim(), 64) || 'Anonymous';
     const alias = (_DOM.get('msg-alias').value.trim() || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
     await createIdentity(name, alias);
     _outboxKey = 'brz-outbox-' + myId;
@@ -6310,7 +6313,7 @@ async function initMessenger(dbName) {
       const id = safePub.slice(0, 12);
       const existing = await dbGet('contacts', id);
       if (existing) return;
-      const safeName = typeof name === 'string' ? name.slice(0, 64) : 'Contact';
+      const safeName = _safeDisplayName(name, 64) || 'Contact';
       await dbPut('contacts', { id, pubB64: safePub, name: safeName, addedAt: Date.now(), unread: 0 });
       auditLog('contact', 'Added: ' + name + ' (' + id + ')');
       await renderContacts();
@@ -6590,7 +6593,7 @@ async function initMessenger(dbName) {
         if (action === 'rename') {
           const newName = await showPrompt(t('newNamePrompt'), c.name);
           if (newName && newName.trim()) {
-            c.name = newName.trim().slice(0, 64);
+            c.name = _safeDisplayName(newName.trim(), 64) || c.name;
             await dbPut('contacts', c);
             renderContacts();
             if (activeContact?.id === c.id) _DOM.get('msg-conv-name').textContent = c.name;
@@ -9541,7 +9544,7 @@ async function initMessenger(dbName) {
       .map(m => ({
         id: m.id,
         pubB64: typeof m.pub === 'string' ? m.pub.slice(0, 200) : (typeof m.pubB64 === 'string' ? m.pubB64.slice(0, 200) : ''),
-        name: typeof m.name === 'string' ? m.name.slice(0, 64) : 'Member',
+        name: _safeDisplayName(m.name, 64) || 'Member',
         caps: Array.isArray(m.caps) ? m.caps.filter(c => typeof c === 'string').slice(0, 20).map(c => String(c).slice(0, 32)) : undefined,
       }));
   }
@@ -9567,12 +9570,12 @@ async function initMessenger(dbName) {
         existing.members = safeMemberList(data.members);
         if (typeof data.creatorId === 'string' && data.creatorId) existing.createdBy = data.creatorId;
         if (Array.isArray(data.admins)) existing.admins = data.admins.filter(id => typeof id === 'string' && id.length <= 64).slice(0, CONFIG.GROUP_MAX);
-        if (typeof data.name === 'string' && data.name) existing.name = data.name.slice(0, 64);
+        if (typeof data.name === 'string' && data.name) existing.name = _safeDisplayName(data.name, 64);
         if (existing.groupV5 !== true && _computeGroupV5(existing)) existing.groupV5 = true; // pin (see getGroupSenderKey)
         await dbPut('contacts', existing);
       } else {
         await dbPut('contacts', {
-          id: groupId, name: typeof data.name === 'string' ? data.name.slice(0, 64) : 'Group',
+          id: groupId, name: _safeDisplayName(data.name, 64) || 'Group',
           isGroup: true, joinToken: token,
           members: safeMemberList(data.members),
           groupV5: _computeGroupV5({ members: safeMemberList(data.members) }) || undefined,
@@ -9637,7 +9640,7 @@ async function initMessenger(dbName) {
           if (typeof data.creatorId === 'string' && data.creatorId) group.createdBy = data.creatorId;
           if (Array.isArray(data.admins)) group.admins = data.admins.filter(id => typeof id === 'string' && id.length <= 64).slice(0, CONFIG.GROUP_MAX);
           if (Array.isArray(data.banned)) group.bannedIds = data.banned.filter(id => typeof id === 'string' && id.length <= 64).slice(0, CONFIG.GROUP_MAX);
-          if (typeof data.name === 'string' && data.name) group.name = data.name.slice(0, 50);
+          if (typeof data.name === 'string' && data.name) group.name = _safeDisplayName(data.name, 50);
           await dbPut('contacts', group);
           // sendMessage reads activeContact.members (separate object) — without this an open group silently excludes new joiners until reopened.
           if (activeContact?.id === groupId) {
@@ -9802,10 +9805,8 @@ async function initMessenger(dbName) {
     // a peer could otherwise pin their conversation to the top of the list forever via
     // lastMsgAt, and float their message to "newest" in-conversation. 5 min covers skew.
     if (msg.ts > Date.now() + 5 * MS.MIN) msg = { ...msg, ts: Date.now() };
-    // Cap peer-supplied display name at the relay limit (64 chars). The relay path already
-    // enforces this via sanitizeString(name, 64); the P2P group path (msg.name || contact.name
-    // at line 10109) does not go through the relay, so guard here to keep IDB clean.
-    if (typeof msg.fromName === 'string' && msg.fromName.length > 64) msg = { ...msg, fromName: msg.fromName.slice(0, 64) };
+    // Peer-supplied name never crosses the relay's sanitizeString on the P2P path — scrub bidi/invisible chars + cap here.
+    if (typeof msg.fromName === 'string') msg = { ...msg, fromName: _safeDisplayName(msg.fromName, 64) };
     // Normalize wire replyTo: it arrives as a JSON STRING ({i,t,s}) over the relay
     // allowlist, or as a {msgId,text} object on the P2P path from older clients.
     if (typeof msg.replyTo === 'string') {
@@ -11891,8 +11892,7 @@ async function initMessenger(dbName) {
     if (activeContact?.isGroup && senderName) {
       // Group: track multiple typers
       if (!_groupTypingState[contactId]) _groupTypingState[contactId] = {};
-      // Truncate peer-supplied senderName: used as a dict key; unbounded values cause memory bloat
-      const _safeSenderName = String(senderName).slice(0, 64);
+      const _safeSenderName = _safeDisplayName(senderName, 64);
       _groupTypingState[contactId][_safeSenderName] = Date.now();
       // Clean stale (>5s)
       const now = Date.now();
@@ -12664,7 +12664,7 @@ async function initMessenger(dbName) {
         auditLog('group', (mode ? 'Enabled' : 'Disabled') + ' announce-only for ' + activeContact.name);
         d.textContent = t('uiAnnounceOnly') + ' ' + (mode ? t('uiAnnounceOn') : t('uiAnnounceOff'));
       } else if (sub.startsWith('rename ')) {
-        const newName = sub.slice(7).trim();
+        const newName = _safeDisplayName(sub.slice(7).trim(), 50);
         if (newName && newName.length <= 50) {
           // Gate the local mutation on the server response — a rejected rename used to
           // still apply locally, desyncing my roster from the rest of the group.
@@ -12961,7 +12961,7 @@ async function initMessenger(dbName) {
             const existing = await dbGet('contacts', contactId);
             if (existing) { skipped++; continue; }
             // Cap every field to the same limits enforced at normal add/edit time
-            const safeName = typeof c.name === 'string' ? c.name.slice(0, 64) : 'Contact';
+            const safeName = _safeDisplayName(c.name, 64) || 'Contact';
             const safeAlias = typeof c.alias === 'string' ? c.alias.slice(0, 32) : null;
             const safeNotes = typeof c.notes === 'string' ? c.notes.slice(0, 1024) : null;
             const safeLabels = Array.isArray(c.labels)
@@ -13738,7 +13738,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     if (val.startsWith('/rename ')) {
       e.preventDefault();
       clearInput();
-      const newName = val.slice(8).trim();
+      const newName = _safeDisplayName(val.slice(8).trim(), 30);
       if (!newName || newName.length > 30) {
         showToast(t('toastNameInvalid'), 'error');
         return;

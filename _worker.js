@@ -36,9 +36,19 @@ const TIMEOUT_MS = { // fetchWithTimeout values (milliseconds)
   PRESENCE_WRITE:  300000,  // minimum interval between KV presence writes (throttle)
 };
 
+// Display-name spoofing guard (Unicode TR36/TR39): direction controls (bidi
+// embeds/overrides, isolates, ALM, marks) reorder rendered text, and invisible
+// format chars (ZWSP, soft hyphen, word joiner, BOM, Hangul fillers, Braille
+// blank, tag chars) pad an identifier into a visually-identical impostor —
+// a member named "<RLO>ecilA" reads as "Alice" in every roster. ZWJ/ZWNJ and
+// variation selectors stay: invisible too, but load-bearing in emoji and
+// Indic/Arabic-script names. Byte-identical class to index.html's copy —
+// tests/unicode-spoof.test.js pins the parity.
+const _UNSAFE_DISPLAY_RE = /[\u00AD\u034F\u061C\u115F\u1160\u180E\u200B\u200E\u200F\u202A-\u202E\u2060\u2066-\u2069\u2800\u3164\uFFA0\uFEFF\u{1D173}-\u{1D17A}\u{E0000}-\u{E007F}]/gu;
+
 function sanitizeString(val, maxLen = MAX_STRING_LEN) {
   if (typeof val !== 'string') return '';
-  return val.slice(0, maxLen).replace(/[\x00-\x08\x0a-\x0c\x0d\x0e-\x1f]/g, '');
+  return val.replace(_UNSAFE_DISPLAY_RE, '').slice(0, maxLen).replace(/[\x00-\x08\x0a-\x0c\x0d\x0e-\x1f]/g, '');
 }
 
 function validateUserId(id) {
