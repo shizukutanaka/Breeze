@@ -131,7 +131,8 @@ describe('sw.js notificationclick — relay-controlled URL is contained to our o
 
   it('defaults to the app root when no url is supplied (the normal worker payload)', async () => {
     await fireNotificationClick(ctx, { data: { contactId: 'x' } });
-    expect(ctx.openWindowCalls).toEqual([`${ORIGIN}/`]);
+    // contactId rides the push payload as a sha256 pseudonym — tap deep-links into it.
+    expect(ctx.openWindowCalls).toEqual([`${ORIGIN}/?open=x`]);
   });
 
   it('focuses an existing same-origin window instead of opening a new one', async () => {

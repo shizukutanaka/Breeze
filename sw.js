@@ -165,9 +165,14 @@ self.addEventListener('notificationclick', (e) => {
       }
       // Default: focus existing window or open new
       for (const client of list) {
-        if (sameOrigin(client.url) && 'focus' in client) return client.focus();
+        if (sameOrigin(client.url) && 'focus' in client) {
+          // Deep-link the tapped conversation: contactId is a sha256 pseudonym the client
+          // resolves via _pushContactId (same path as quick-reply / mark-read above).
+          if (data.contactId) client.postMessage({ type: 'open-contact', contactId: data.contactId });
+          return client.focus();
+        }
       }
-      return clients.openWindow(safeAppUrl(data.url));
+      return clients.openWindow(safeAppUrl(data.contactId ? '/?open=' + encodeURIComponent(data.contactId) : data.url));
     })
   );
 });

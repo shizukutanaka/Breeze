@@ -5538,10 +5538,15 @@ async function initMessenger(dbName) {
         if (c) { c.unread = 0; dbPut('contacts', c).then(() => renderContacts()).catch(err => _dbg(err, 'mark-read-put')); }
       }).catch(err => _dbg(err, 'mark-read'));
     }
+    // Notification tap on an already-open window — same pseudonym→id resolution as quick-reply.
+    if (e.data?.type === 'open-contact' && e.data.contactId) {
+      _pushContactId(e.data.contactId).then(cid => dbGet('contacts', cid)).then(c => {
+        if (c) openConversation(c);
+      }).catch(err => _dbg(err, 'open-contact'));
+    }
   });
 
-  // Push contactId is a sha256 pseudonym (push service can't read who's writing);
-  // resolve by hashing our own contact ids — a raw-id payload falls through unchanged.
+  // Push contactId is a sha256 pseudonym — resolve by hashing our own contact ids (raw id falls through).
   let _contactHashCache = null;
   async function _pushContactId(raw) {
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -6093,23 +6098,18 @@ async function initMessenger(dbName) {
       }
     }
     // Auto-join group from URL (?join=token) — but ASK first: a shared link must not
-    // silently enroll this account into an attacker's group. Joining publishes my
-    // id/pub/name to the roster and the relay before I ever see the conversation.
+    // silently enroll this account into an attacker's group.
     if (joinToken) {
       const gi = await postAPIRaw('/group/info', { token: joinToken }).then(r => (r && r.ok) ? r.json() : null).catch(() => null);
       if (await showConfirm(t('joinGroup', gi?.name || '…'), { desc: t('joinShareInfo'), okText: t('joinBtn') })) await processJoinToken(joinToken);
     }
     // Auto-open settings from URL (?settings — PWA manifest "Settings" shortcut).
-    // manifest.json advertised this shortcut with nothing on the boot path ever reading the
-    // param, so long-pressing the installed app icon → Settings silently did nothing.
     _openSettingsFromUrl();
-    // ?open=<contactId> — OS-notification tap deep-link (notification data.url). The SW
-    // notificationclick handler opens this URL, but nothing read the param, so a tap
-    // landed on the contact list instead of the conversation — same dead-shortcut class
-    // as ?settings. Look up the contact and open it; unknown ids are ignored.
+    // ?open=<contactId> — OS-notification tap deep-link; the value is a sha256 pseudonym,
+    // resolved via _pushContactId like the quick-reply/mark-read SW messages (raw id falls through).
     const openId = P.get('open');
     if (openId) {
-      const oc = await dbGet('contacts', String(openId).slice(0, 64)).catch(() => null);
+      const oc = await dbGet('contacts', await _pushContactId(String(openId).slice(0, 64))).catch(() => null);
       if (oc) await openConversation(oc);
     }
   } else {
