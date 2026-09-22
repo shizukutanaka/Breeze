@@ -37,9 +37,9 @@ describe('/group/info display sanitization (TR39)', () => {
   });
   it('title strips invisible/bidi chars (invisible-twin prevention)', () => {
     const title = {};
-    const data = { name: 'TeamAlpha‍Troll‮elppeA' };
+    const data = { name: 'TeamAlpha\u200DTroll\u202EelppeA' };
     drive(TITLE_LINE, { title, data });
-    expect(title.textContent).toEqual(['joinGroup', 'TeamAlpha‍TrollelppeA']);
+    expect(title.textContent).toEqual(['joinGroup', 'TeamAlpha\u200DTrollelppeA']);
   });
   it('desc line sanitizes creatorName and array-guards members.length', () => {
     const desc = {};
@@ -57,7 +57,7 @@ describe('/group/info display sanitization (TR39)', () => {
     let askedWith = null;
     const showConfirm = async (titleArg) => { askedWith = titleArg; return false; };
     const processJoinToken = async () => { throw new Error('must not reach'); };
-    const gi = { name: 'Club‮xela' };
+    const gi = { name: 'Club\u202Exela' };
     await new Function('showConfirm', 'processJoinToken', 't', '_safeDisplayName', 'gi',
       `return (async () => { ${CONFIRM_LINE} })()`)(showConfirm, processJoinToken, (...a) => a, _safeDisplayName, gi);
     expect(askedWith).toEqual(['joinGroup', 'Clubxela']);
