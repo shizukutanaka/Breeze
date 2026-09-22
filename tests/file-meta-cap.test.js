@@ -57,6 +57,11 @@ describe('wire sites — every persisted fileData record goes through _capFileMe
     expect(site).not.toContain('{ ..._fp, blob'); // raw spread must be gone
   });
 
+  it('self-sync path caps fp before dbPut and appendMsg', () => {
+    expect(html).toContain('fileData: JSON.stringify(_capFileMeta(fp))');
+    expect(html).not.toContain('fileData: syncText');
+  });
+
   it('group path caps _p into fileDataG', () => {
     expect(html).toContain('fileDataG = _capFileMeta(_p);');
   });

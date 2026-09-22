@@ -9890,10 +9890,10 @@ async function initMessenger(dbName) {
             if (typeof fp.name === 'string') fileName = fp.name.slice(0, 255);
           } catch { return; }
           const fileText = '📎 ' + fileName;
-          await dbPut('messages', { msgId: syncId, contactId: target.id, text: fileText, mine: true, ts: msg.ts, fileData: syncText, synced: true });
+          await dbPut('messages', { msgId: syncId, contactId: target.id, text: fileText, mine: true, ts: msg.ts, fileData: JSON.stringify(_capFileMeta(fp)), synced: true });
           target.lastMsg = fileText.slice(0, 40); target.lastMsgAt = msg.ts;
           await dbPut('contacts', target);
-          if (activeContact?.id === target.id) appendMsg(fileText, true, msg.ts, null, syncText, { synced: true });
+          if (activeContact?.id === target.id) appendMsg(fileText, true, msg.ts, null, JSON.stringify(_capFileMeta(fp)), { synced: true });
           renderContacts();
           return;
         }
