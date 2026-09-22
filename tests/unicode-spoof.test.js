@@ -123,3 +123,40 @@ describe('ingest wiring tripwires', () => {
     expect(html).not.toContain('msg.fromName.slice(0, 64)');
   });
 });
+
+describe('rendered-text bidi strip — esc() funnel', () => {
+  // Message bodies are a different surface than names: ZWSP/SHY are legitimate
+  // word-break hints (Thai/Khmer), ZWJ/VS load-bearing, so rendered text strips
+  // ONLY the direction controls — the class that can reorder what you read
+  // (e.g. an RLO-reversed URL inside an auto-linked message).
+  const reSrc = html.match(/const _BIDI_CTL_RE = \/(\[[^\n]+\])\/gu;/)?.[1];
+  const RE = reSrc ? new RegExp(reSrc, 'gu') : null;
+
+  it('index.html defines _BIDI_CTL_RE', () => {
+    expect(RE, '_BIDI_CTL_RE const must exist in index.html').toBeTruthy();
+  });
+  it('strips direction controls from crafted URLs/text', () => {
+    expect(`https://x.co/${RLO}moc.elppa${PDI}`.replace(RE, '')).toBe('https://x.co/moc.elppa');
+    expect(`a${LRO}b${RLI}c${ALM}d${LRM}e\u200F`.replace(RE, '')).toBe('abcde');
+  });
+  it('keeps legit invisible/format chars that names strip', () => {
+    expect('ผมรัก\u200Bคุณ'.replace(RE, '')).toBe('ผมรัก\u200Bคุณ'); // Thai + ZWSP word-break
+    expect(`👨${ZWJ}👩${VS16}`.replace(RE, '')).toBe(`👨${ZWJ}👩${VS16}`);
+    expect('na\u0308me!'.replace(RE, '')).toBe('na\u0308me!');
+    expect('اختبار'.replace(RE, '')).toBe('اختبار');
+    expect('soft\u00ADhy'.replace(RE, '')).toBe('soft\u00ADhy'); // SHY kept
+  });
+  it('is a NARROWER class than the name-sanitizer (ZWSP kept here, stripped there)', () => {
+    const nameReSrc = workerSrc.match(/const _UNSAFE_DISPLAY_RE = (\/[^;]+?\/gu);/)?.[1];
+    const nameRE = new RegExp(nameReSrc.slice(1, -3), 'u');
+    expect('x\u200By'.replace(RE, '')).toBe('x\u200By');  // ZWSP survives text render
+    expect('x\u200By'.replace(nameRE, '')).toBe('xy');              // but not a stored name
+  });
+  it('esc() routes text through _BIDI_CTL_RE', () => {
+    const line = html.match(/function esc\(s\)[^\n]+/);
+    expect(line?.[0]).toContain('s.replace(_BIDI_CTL_RE');
+  });
+  it('drop-page plaintext display strips the same class (clipboard keeps original)', () => {
+    expect(html).toContain('plaintext.replace(_BIDI_CTL_RE');
+  });
+});
