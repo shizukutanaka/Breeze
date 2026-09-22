@@ -3058,6 +3058,8 @@ function esc(s) { const d=document.createElement('div'); d.textContent=typeof s=
 // Scrub bidi controls + invisible format chars from display names at ingest — class byte-identical to _worker.js (tests/unicode-spoof.test.js pins parity).
 const _UNSAFE_DISPLAY_RE = /[\u00AD\u034F\u061C\u115F\u1160\u180E\u200B\u200E\u200F\u202A-\u202E\u2060\u2066-\u2069\u2800\u3164\uFFA0\uFEFF\u{1D173}-\u{1D17A}\u{E0000}-\u{E007F}]/gu;
 const _safeDisplayName = (s, n = 64) => typeof s === 'string' ? s.replace(_UNSAFE_DISPLAY_RE, '').slice(0, n) : '';
+// Cap peer file name/mime in the PERSISTED record too — uncapped they bloat IDB and every later render.
+function _capFileMeta(o) { return { ...o, name: String(o?.name ?? 'file').slice(0, 255), mime: String(o?.mime ?? '').slice(0, 128) }; }
 // Grapheme-aware avatar truncator: takes up to `max` grapheme clusters so compound emoji (ZWJ sequences, skin-tone modifiers) aren't split into half-surrogates.
 function avatarSlice(s, max = 2) {
   if (!s) return '';
@@ -10169,7 +10171,7 @@ async function initMessenger(dbName) {
       try {
         const _p = JSON.parse(text);
         if (_p && _p.type === 'poll' && typeof _p.pollId === 'string' && Array.isArray(_p.options)) { meta.isPoll = true; meta.poll = _p; }
-        else if (_p && _p.type === 'file' && typeof _p.name === 'string' && typeof _p.data === 'string') { fileDataG = _p; text = `📎 ${String(_p.name).slice(0, 128)}`; }
+        else if (_p && _p.type === 'file' && typeof _p.name === 'string' && typeof _p.data === 'string') { fileDataG = _capFileMeta(_p); text = `📎 ${String(_p.name).slice(0, 128)}`; }
       } catch {}
       await dbPut('messages', { msgId, contactId: msg.groupId, text, mine: false, ts: msg.ts, isPoll: meta.isPoll || undefined, fileData: fileDataG, ...meta });
       group.lastMsg = text.slice(0, 30);
@@ -10348,22 +10350,20 @@ async function initMessenger(dbName) {
 
     if (msg.isFile) {
       try {
-        // Binary chunks stay plaintext — the DataChannel is already DTLS-encrypted, and
-        // decryptFrom dropped them as bogus failures. fileBytes is unforgeable: JSON.parse
-        // never produces a Uint8Array.
+        // Binary chunks stay plaintext — the DataChannel is already DTLS-encrypted and
+        // decryptFrom dropped them as bogus; fileBytes is unforgeable (JSON.parse never yields Uint8Array).
         const _localFile = msg.fileBytes instanceof Uint8Array;
         const fileMsg = _localFile ? msg.payload : await decryptFrom(msg.payload, _peerPub);
         if (!fileMsg) return;
         const _fp = JSON.parse(fileMsg);
-        // Cap file data: reject oversized base64 payloads before IDB write and atob() decode.
-        // Voice messages use the same 350 000-char cap (line above); relay caps at 256 KB but
-        // the P2P DataChannel path has no server-side limit.
+        // Cap file data before IDB write and atob() decode — voice msgs share the 350k cap;
+        // relay bounds at 256 KB but the P2P DataChannel path has no server-side limit.
         if (typeof _fp.data === 'string' && _fp.data.length > 350000) return;
         // Cap the displayed file name to prevent memory/render DoS from an oversized peer-supplied name.
         text = `📎 ${typeof _fp.name === 'string' ? _fp.name.slice(0, 255) : 'file'}`;
         // Bytes persist inside fileData — IDB structured-clone stores Uint8Array natively,
         // so the file survives reload (a blob URL would die with the page).
-        storedFileData = _localFile ? { ..._fp, blob: msg.fileBytes } : fileMsg;
+        storedFileData = _localFile ? { ..._capFileMeta(_fp), blob: msg.fileBytes } : JSON.stringify(_capFileMeta(_fp));
         await dbPut('messages', { msgId, contactId, text, mine: false, ts: msg.ts, fileData: storedFileData, ...meta });
       } catch { return; }
     } else {
