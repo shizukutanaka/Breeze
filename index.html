@@ -6781,7 +6781,7 @@ async function initMessenger(dbName) {
       Notification.requestPermission().catch(e => _dbg(e));
     }
     activeContact = contact;
-    contact.unread = 0;
+    const _unreadAtOpen = contact.unread || 0; contact.unread = 0; // capture-then-clear: unread separator + scroll-to-unread below use it
     // Generation guard: the message load below awaits; a second open during that
     // window must win — otherwise the stale render lands in the newer conversation's
     // view (rapid A→B click shows A's history under B's header).
@@ -6844,10 +6844,10 @@ async function initMessenger(dbName) {
     }
     const renderBatch = (start, end) => {
       // v3.6: Unread separator — show "New Messages" line before first unread
-      const unreadCount = contact.unread || 0;
+      const unreadCount = _unreadAtOpen;
       const unreadSepIdx = unreadCount > 0 ? Math.max(0, end - unreadCount) : -1;
       for (let i = start; i < end; i++) {
-        if (i === unreadSepIdx && unreadSepIdx > 0) {
+        if (i === unreadSepIdx) {
           const sep = document.createElement('div');
           sep.className = 'unread-sep';
           safeSetHTML(sep, `<span>${t('newMessages')}</span>`);
@@ -6885,7 +6885,7 @@ async function initMessenger(dbName) {
     if (!anchor) { anchor = document.createElement('div'); anchor.className = 'scroll-anchor'; box.appendChild(anchor); }
     // v3.6: Scroll to first unread separator if present, else bottom
     const unreadSep = box.querySelector('.unread-sep');
-    if (unreadSep && contact.unread > 0) {
+    if (unreadSep && _unreadAtOpen > 0) {
       unreadSep.scrollIntoView({ block: 'center' });
     } else {
       box.scrollTop = box.scrollHeight;

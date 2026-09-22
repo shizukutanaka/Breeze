@@ -1,3 +1,12 @@
+## index.html: unread separator + scroll-to-unread were dead — unread cleared before they read it (branch devin/unread-separator, 2026-09-22)
+
+openConversation zeroed `contact.unread` at entry, then renderBatch and the
+scroll check both read `contact.unread` — always 0 — so the 'New Messages'
+separator never rendered and every open scrolled to the bottom instead of the
+first unread. Captured as `_unreadAtOpen` before clearing (both consumers now
+use it), and `unreadSepIdx > 0` relaxed so a fully-unread conversation still
+shows the separator at the top.
+
 ## index.html notification sounds share one AudioContext (branch devin/audioctx-pool, 2026-09-22)
 
 playNotif/playSendSound created a new AudioContext per chime and never closed it —
