@@ -9747,7 +9747,7 @@ async function initMessenger(dbName) {
             const data = await resp.json();
             for (const msg of (data.messages || [])) {
               try { await handleIncoming(msg); } catch(e) { _dbg(e, 'msg-process'); }
-              if (typeof msg.ts === 'number' && Number.isFinite(msg.ts) && msg.ts > _lastPollTs && msg.ts <= Date.now() + MS.DAY) _lastPollTs = msg.ts;
+              if (typeof msg.ts === 'number' && Number.isFinite(msg.ts) && msg.ts > _lastPollTs && msg.ts <= Date.now() + 5 * MS.MIN) _lastPollTs = msg.ts; // ±5min mirrors the worker's send window — a poisoned far-future ts must not skip the cursor past undelivered mail
             }
           }
           const sResp = await postAPIRaw('/sealed/poll', { id: myId, ...(await _ownerAuth('sealed-poll')) });
