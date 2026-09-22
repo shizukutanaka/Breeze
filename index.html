@@ -3060,6 +3060,7 @@ function esc(s) { const d=document.createElement('div'); d.textContent=typeof s=
 // Scrub bidi controls + invisible format chars from display names at ingest — class byte-identical to _worker.js (tests/unicode-spoof.test.js pins parity).
 const _UNSAFE_DISPLAY_RE = /[\u00AD\u034F\u061C\u115F\u1160\u180E\u200B\u200E\u200F\u202A-\u202E\u2060\u2066-\u2069\u2800\u3164\uFFA0\uFEFF\u{1D173}-\u{1D17A}\u{E0000}-\u{E007F}]/gu;
 const _safeDisplayName = (s, n = 64) => typeof s === 'string' ? s.replace(_UNSAFE_DISPLAY_RE, '').slice(0, n) : '';
+const _ownArrayMap = o => { const m = Object.create(null); if (o && typeof o === 'object') for (const [k, v] of Object.entries(o)) if (Array.isArray(v)) m[k] = v; return m; }; // null-proto map — '__proto__'/'constructor' wire keys can't hit Object.prototype (CWE-915)
 // KeePass/Bitwarden-style: secrets copied to clipboard auto-clear after ~30s. The read-back
 // guard never erases a foreign copy; readText fails silently w/o permission -> no clear.
 let _clipGen = 0;
@@ -7429,7 +7430,7 @@ async function initMessenger(dbName) {
   window.toggleReaction = async function(msgId, emoji) {
     const stored = await dbGet('messages', msgId);
     if (!stored) return;
-    if (!stored.reactions) stored.reactions = {};
+    stored.reactions = _ownArrayMap(stored.reactions);
     if (!stored.reactions[emoji]) stored.reactions[emoji] = [];
     const idx = stored.reactions[emoji].indexOf(myId);
     if (idx >= 0) stored.reactions[emoji].splice(idx, 1);
@@ -9858,7 +9859,7 @@ async function initMessenger(dbName) {
             const el = document.querySelector(`[data-msgid="${smId}"]`);
             if (el) safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>');
           } else if (signal.type === 'reaction' && typeof signal.emoji === 'string' && signal.emoji.length <= 64) {
-            if (!stored.reactions) stored.reactions = {};
+            stored.reactions = _ownArrayMap(stored.reactions);
             if (!stored.reactions[signal.emoji] && Object.keys(stored.reactions).length < 20) stored.reactions[signal.emoji] = [];
             if (signal.add) { if (!stored.reactions[signal.emoji]?.includes(myId) && (stored.reactions[signal.emoji]?.length ?? 100) < 100) stored.reactions[signal.emoji].push(myId); }
             else if (stored.reactions[signal.emoji]) { stored.reactions[signal.emoji] = stored.reactions[signal.emoji].filter(u => u !== myId); if (stored.reactions[signal.emoji].length === 0) delete stored.reactions[signal.emoji]; }
@@ -10107,7 +10108,7 @@ async function initMessenger(dbName) {
             // Any member may react — but only to a message inside THIS group.
             // Reject oversized emoji strings (DoS/storage guard — legitimate emoji ≤ ~30 UTF-16 chars)
             if (stored && stored.contactId === msg.groupId && typeof signal.emoji === 'string' && signal.emoji.length <= 64) {
-              if (!stored.reactions) stored.reactions = {};
+              stored.reactions = _ownArrayMap(stored.reactions);
               // Initialize reaction list for new emoji; cap unique emoji per message at 20
               if (!stored.reactions[signal.emoji]) {
                 if (Object.keys(stored.reactions).length < 20) stored.reactions[signal.emoji] = [];
@@ -10302,9 +10303,8 @@ async function initMessenger(dbName) {
           const stored = await dbGet('messages', _smId);
           // Reject oversized emoji strings (DoS/storage guard — legitimate emoji ≤ ~30 UTF-16 chars)
           if (stored && stored.contactId === contactId && typeof signal.emoji === 'string' && signal.emoji.length <= 64) {
-            if (!stored.reactions) stored.reactions = {};
-            // Same caps as the group path (≤20 unique emoji, ≤100 reactors) — repeated
-            // signals with distinct emoji would otherwise grow the record unboundedly.
+            stored.reactions = _ownArrayMap(stored.reactions);
+            // Same caps as the group path (≤20 unique emoji, ≤100 reactors) — repeated signals would otherwise grow the record unboundedly.
             if (!stored.reactions[signal.emoji] && Object.keys(stored.reactions).length < 20) stored.reactions[signal.emoji] = [];
             // Use the verified sender identity from decryption, not the self-reported signal.userId
             const reactorId = contact.id;
@@ -10625,7 +10625,7 @@ async function initMessenger(dbName) {
             // Bind the target to THIS conversation — otherwise a contact could react on
             // another conversation's messages by guessing their `senderId:ms` msgId.
             if (stored && stored.contactId === contact.id) {
-              if (!stored.reactions) stored.reactions = {};
+              stored.reactions = _ownArrayMap(stored.reactions);
               // Cap unique emoji per message at 20 (matches group path); cap users per emoji at 100
               if (!stored.reactions[msg.emoji]) {
                 if (Object.keys(stored.reactions).length < 20) stored.reactions[msg.emoji] = [];
