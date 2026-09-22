@@ -3267,7 +3267,6 @@ function isBlockedFile(filename) {
   return CONFIG.BLOCKED_EXTENSIONS.some(ext => lower.endsWith(ext));
 }
 
-// v3.6: Magic bytes file validation — checks the first 8 bytes against known dangerous file signatures (defeats extension spoofing).
 const DANGEROUS_SIGNATURES = [
   [0x4D, 0x5A],                   // MZ — PE executable (.exe, .dll, .scr)
   [0x7F, 0x45, 0x4C, 0x46],       // ELF — Linux executable
@@ -3279,17 +3278,11 @@ const DANGEROUS_SIGNATURES = [
   [0xCF, 0xFA, 0xED, 0xFE],       // Mach-O reverse 64
   [0xD0, 0xCF, 0x11, 0xE0],       // MS Office legacy (.doc/.xls with macros)
 ];
+function _hasDangerousSig(buf) { return DANGEROUS_SIGNATURES.some(sig => sig.every((b, i) => buf[i] === b)); }
 async function isBlockedMagicBytes(file) {
-  try {
-    const slice = file.slice(0, 8);
-    const buf = new Uint8Array(await slice.arrayBuffer());
-    for (const sig of DANGEROUS_SIGNATURES) {
-      if (sig.every((b, i) => buf[i] === b)) return true;
-    }
-  } catch {}
+  try { return _hasDangerousSig(new Uint8Array(await file.slice(0, 8).arrayBuffer())); } catch {}
   return false;
 }
-// v3.5 SPEC: Client-side send rate limiter (token bucket) — prevents flooding the network.
 const _rateLimiter = {
   tokens: 30,        // max burst
   maxTokens: 30,
@@ -7189,15 +7182,13 @@ async function initMessenger(dbName) {
           href = URL.createObjectURL(blob);
           _blobUrls.add(href);
         } else if (f.blob && typeof f.blob === 'object') {
-          // Locally reassembled binary file — bytes persisted in IDB (survives reload;
-          // Uint8Array live, plain array/{index:byte} after a JSON round-trip).
           // A blobUrl field is deliberately NOT honored: it would let a peer ship an
           // arbitrary javascript:/data: URL into an <a href> through the wire format.
           const bytes = f.blob instanceof Uint8Array ? f.blob : new Uint8Array(Object.values(f.blob));
           href = URL.createObjectURL(new Blob([bytes], { type: f.mime || 'application/octet-stream' }));
           _blobUrls.add(href);
         }
-        if (href) {
+        if (href && !(f.name && isBlockedFile(f.name))) {
           if (f.mime && f.mime.startsWith('image/')) {
             content += `<img src="${href}" class="msg-img" data-lightbox="${href}" alt="${esc(f.name)}" loading="lazy" decoding="async"><a href="${href}" download="${esc(f.name)}" class="msg-file-name">${esc(f.name)}</a>`;
           } else {
@@ -10355,14 +10346,14 @@ async function initMessenger(dbName) {
         const fileMsg = _localFile ? msg.payload : await decryptFrom(msg.payload, _peerPub);
         if (!fileMsg) return;
         const _fp = JSON.parse(fileMsg);
-        // Cap file data: reject oversized base64 payloads before IDB write and atob() decode.
-        // Voice messages use the same 350 000-char cap (line above); relay caps at 256 KB but
-        // the P2P DataChannel path has no server-side limit.
+        // Cap file data — same 350k bound as voice; the P2P DataChannel has no server-side limit.
         if (typeof _fp.data === 'string' && _fp.data.length > 350000) return;
-        // Cap the displayed file name to prevent memory/render DoS from an oversized peer-supplied name.
+        // Receive-side file gate: sender-side checks only stop OUR client from attaching — a
+        // malicious peer crafts the payload directly, so re-check extension + magic bytes here.
+        if (typeof _fp.name === 'string' && isBlockedFile(_fp.name)) return;
+        { const head = _localFile && msg.fileBytes ? msg.fileBytes.slice(0, 8) : Uint8Array.from(atob((_fp.data || '').slice(0, 12)), c => c.charCodeAt(0)); if (head.length && _hasDangerousSig(head)) return; }
         text = `📎 ${typeof _fp.name === 'string' ? _fp.name.slice(0, 255) : 'file'}`;
-        // Bytes persist inside fileData — IDB structured-clone stores Uint8Array natively,
-        // so the file survives reload (a blob URL would die with the page).
+        // bytes persist in IDB (structured clone) — a blob URL would die with the page
         storedFileData = _localFile ? { ..._fp, blob: msg.fileBytes } : fileMsg;
         await dbPut('messages', { msgId, contactId, text, mine: false, ts: msg.ts, fileData: storedFileData, ...meta });
       } catch { return; }
@@ -10370,8 +10361,6 @@ async function initMessenger(dbName) {
       const _frank = {};
       text = await decryptFrom(msg.payload, _peerPub, _frank);
       if (!text) return;
-      // Reject oversized text: the relay caps payloads at 256 KB but the P2P DataChannel has no server check.
-      // 64 KB is generous for chat text while preventing memory/render DoS from a malicious peer.
       if (text.length > 65536) return;
       // Poll payloads arrive as plain JSON text — only the sender's record ever had
       // isPoll, so recipients saw raw JSON and could never vote. Detect + tag here so
