@@ -2545,12 +2545,17 @@ const _adaptiveConfig = {
       this.imageQuality = 0.85;
     }
   },
-  // v3.6: RTT-based adaptive (feeds from DC heartbeat, overrides network info)
+  // v3.6: RTT-based adaptive (feeds from DC heartbeat, overrides network info). pong.ts is
+  // peer-reported — drop implausible values (>10s is dead air, not "quality" — the missed-
+  // pong path owns that) and smooth the rest (RFC 6298 SRTT, α=1/32) so one forged pong
+  // can't flip the whole app to the worst tier (it used to, instantly).
   updateFromRTT(rttMs) {
-    if (rttMs > 2000) { // Very poor
+    if (!Number.isFinite(rttMs) || rttMs < 0 || rttMs > 10000) return;
+    this._srtt = this._srtt == null ? rttMs : 0.96875 * this._srtt + 0.03125 * rttMs;
+    if (this._srtt > 2000) { // Very poor
       this.pollInterval = 20000;
       this.imageQuality = 0.4;
-    } else if (rttMs > 500) { // Poor
+    } else if (this._srtt > 500) { // Poor
       this.pollInterval = 10000;
       this.imageQuality = 0.6;
     } else { // Good RTT — restore to network-appropriate defaults
@@ -2573,8 +2578,7 @@ _updateNetInfo();
 if (navigator.connection) {
   navigator.connection.addEventListener('change', () => {
     _updateNetInfo();
-    // v3.6: Reset adaptive config immediately on network improvement
-    // (updateFromRTT may have degraded quality; network change should reset)
+    // v3.6: Reset adaptive config on network improvement (RTT may have degraded quality)
     if (_effectiveType === '4g' || _networkType === 'wifi') {
       _adaptiveConfig.update(_effectiveType, false); // Force reset to defaults
       if (typeof _reconnectAllPeers === 'function') _reconnectAllPeers();
@@ -2618,8 +2622,6 @@ window.addEventListener('offline', () => {
     banner.classList.remove('hidden');
   }
 });
-// The {ids, offline} sendBeacon was removed: no offline path exists on the Worker (400
-// at !id) — the beacon was a no-op. Presence self-corrects via ~60s at-staleness.
 window.addEventListener('beforeunload', () => {
   // v3.6: Emergency save retry queue (sync — beforeunload can't await)
   try {
@@ -10699,8 +10701,7 @@ async function initMessenger(dbName) {
           if (!ct?.blocked) flushOutbox(contact.pubB64);
         }, MS.SEC / 2);
       }
-      // v3.6: DC heartbeat — ping/pong via state channel for liveness detection
-      // Critical for serverless P2P: detect dead connections in 30s (not 5min TCP timeout)
+      // v3.6: DC heartbeat — dead P2P is detected in ~30s via state-channel ping/pong
       if (peerState._heartbeat) clearInterval(peerState._heartbeat);
       let _missedPongs = 0;
       peerState._heartbeat = setInterval(() => {
@@ -10716,7 +10717,6 @@ async function initMessenger(dbName) {
           else { peerState.transition('CLOSED'); try { pc.close(); } catch {} delete peers[contact.pubB64]; connectPeer(contact); }
         }
       }, 10000);
-      // Handle pong responses
       const _origOnMsg = peerState.stateDC?.onmessage;
       if (peerState.stateDC) {
         const prevHandler = peerState.stateDC.onmessage;
