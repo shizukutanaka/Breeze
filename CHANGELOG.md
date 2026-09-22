@@ -1,3 +1,12 @@
+## index.html notification sounds share one AudioContext (branch devin/audioctx-pool, 2026-09-22)
+
+playNotif/playSendSound created a new AudioContext per chime and never closed it —
+browsers cap live contexts (~6 in Chrome, fewer on iOS), so after a handful of
+notifications the chime silently stopped working (and every abandoned context
+kept audio resources alive until GC). A shared lazy context with a suspended-
+state resume now backs both sounds; the voice-recorder context keeps its own
+(createMediaStreamSource + close on stop, unchanged).
+
 ## ?join= links silently joined groups on existing accounts — now asks first (branch devin/join-confirm, 2026-09-21)
 
 processJoinToken ran unconditionally at boot for logged-in accounts: clicking a shared

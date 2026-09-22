@@ -3367,11 +3367,14 @@ async function waitForBuffer(dc, maxBytes) {
   });
 }
 // ======================== NOTIFICATION SOUND (Web Audio API) ========================
+// Shared context — browsers cap live AudioContexts (~6), so one-per-chime kills sound.
+let _notifAC = null;
+function _audioCtx() { try { const a = _notifAC || (_notifAC = new (window.AudioContext || window.webkitAudioContext)()); if (a.state === 'suspended') a.resume().catch(() => {}); return a; } catch { return null; } }
 function playNotif() {
   if (localStorage.getItem('brz-notif-sound') === '0') return;
   try {
     // v3: Improved notification sound (soft chime, two-tone ascending)
-    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    const ac = _audioCtx(); if (!ac) return;
     const g = ac.createGain();
     g.connect(ac.destination);
     g.gain.setValueAtTime(0.12, ac.currentTime);
@@ -3388,7 +3391,7 @@ function playNotif() {
 // v3.3: Send confirmation sound (soft pop)
 function playSendSound() {
   try {
-    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    const ac = _audioCtx(); if (!ac) return;
     const g = ac.createGain();
     g.connect(ac.destination);
     g.gain.setValueAtTime(0.06, ac.currentTime);
