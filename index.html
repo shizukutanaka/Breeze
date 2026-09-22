@@ -10121,9 +10121,9 @@ async function initMessenger(dbName) {
           } else if (signal.type === 'poll_vote') {
             // Same binding as the 1:1 path: the poll must live in THIS group, and the
             // voter id comes from the verified sender, not the self-reported userId.
-            const allMsgs = await dbGetAll('messages');
-            const pollMsg = allMsgs.find(m => m.isPoll && m.contactId === msg.groupId && (() => { try { return JSON.parse(m.text).pollId === signal.pollId; } catch { return false; } })());
-            if (pollMsg) {
+            // Conversation-scoped index lookup — a per-vote dbGetAll let peers force full scans.
+            const pollMsg = (await dbGetByIndex('messages', 'contact', msg.groupId)).find(m => m.isPoll && (() => { try { return JSON.parse(m.text).pollId === signal.pollId; } catch { return false; } })());
+            if (pollMsg && pollMsg.contactId === msg.groupId) {
               const poll = JSON.parse(pollMsg.text);
               const voterId = (senderPub || '').slice(0, 12);
               for (const opt of poll.options) opt.votes = opt.votes.filter(v => v !== voterId);
@@ -10640,8 +10640,8 @@ async function initMessenger(dbName) {
           }
           // v3.1: Poll vote
           if (msg.type === 'poll_vote') {
-            const allMsgs = await dbGetAll('messages');
-            const pollMsg = allMsgs.find(m => m.isPoll && JSON.parse(m.text).pollId === msg.pollId);
+            // Conversation-scoped index lookup — a per-vote dbGetAll let peers force full scans.
+            const pollMsg = (await dbGetByIndex('messages', 'contact', contact.id)).find(m => m.isPoll && (() => { try { return JSON.parse(m.text).pollId === msg.pollId; } catch { return false; } })());
             // Same conversation binding as reactions — a peer must not vote on a poll
             // that lives in a different conversation (pollId is self-reported).
             if (pollMsg && pollMsg.contactId === contact.id) {
