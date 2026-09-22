@@ -2722,11 +2722,11 @@ const _ttPolicy = (() => {
         for (const attr of [...el.attributes]) {
           if (attr.name.startsWith('on') || !SAFE_ATTRS.test(attr.name)) el.removeAttribute(attr.name);
         }
-        // Sanitize href: allow https:, mailto:, #anchors, and absolute paths (/foo).
-        // Exclude protocol-relative (//evil.com) which browsers open as https://evil.com.
+        // Sanitize href: allow https:/mailto:/tel:/#/path — tel: MUST be allowed because
+        // renderLinks emits tel: hrefs; stripped here they became dead anchors (silent break).
         if (el.hasAttribute('href')) {
           const href = el.getAttribute('href');
-          if (!/^(https?:|mailto:|#|\/[^\/])/i.test(href)) el.removeAttribute('href');
+          if (!/^(https?:|mailto:|tel:|#|\/[^\/])/i.test(href)) el.removeAttribute('href');
         }
         // Sanitize src: allow only blob:, data:image/, https:
         if (el.hasAttribute('src')) {
