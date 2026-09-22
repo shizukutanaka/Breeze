@@ -369,3 +369,72 @@ describe('sw.js fetch — method guard (only GET is intercepted/cached)', () => 
     });
   }
 });
+
+// Fire the push handler and capture the showNotification invocation.
+async function firePush(ctx, payload) {
+  const calls = [];
+  ctx.self.registration.showNotification = (title, opts) => { calls.push({ title, opts }); return Promise.resolve(); };
+  let waited;
+  ctx.handlers.push({ data: { json: () => payload }, waitUntil: (p) => { waited = p; } });
+  await waited;
+  return calls;
+}
+
+describe('sw.js push — relay-supplied payload fields are bounded before the OS renders them', () => {
+  let ctx;
+  beforeEach(() => { ctx = loadSW(); });
+
+  it('strips bidi direction controls and invisible format chars from title and body', async () => {
+    const [n] = await firePush(ctx, {
+      title: 'Ali\u202Ece\u200B\uFEFF',
+      body: 'meet me at \u2066evil\u2069.com\u00AD',
+      tag: 't', contactId: 'c1',
+    });
+    expect(n.title).toBe('Alice');
+    expect(n.opts.body).toBe('meet me at evil.com');
+  });
+
+  it('caps title/body length (unbounded body cannot spam a huge notification)', async () => {
+    const [n] = await firePush(ctx, { title: 'T'.repeat(500), body: 'B'.repeat(5000), tag: 't' });
+    expect(n.title.length).toBe(50);
+    expect(n.opts.body.length).toBe(200);
+  });
+
+  it('non-string/missing fields fall back to safe defaults', async () => {
+    const [n] = await firePush(ctx, { title: 7, body: {}, tag: null, contactId: 42 });
+    expect(n.title).toBe('Breeze');
+    expect(n.opts.body).toBe('New message');
+    expect(n.opts.tag).toBe('breeze-msg');
+    expect(n.opts.data.contactId).toBeUndefined();
+  });
+
+  it('a null payload cannot crash the listener (liveness: notifications keep working)', async () => {
+    const [n] = await firePush(ctx, null);
+    expect(n.title).toBe('Breeze');
+    expect(n.opts.body).toBe('New message');
+    const [m] = await firePush(ctx, 'a string');
+    expect(m.title).toBe('Breeze');
+  });
+
+  it('bounds tag to a machine charset so a hostile tag cannot carry markup/whitespace', async () => {
+    const [n] = await firePush(ctx, { tag: 'a<b>"\'\n'.repeat(20) + 'x'.repeat(100) });
+    expect(n.opts.tag.length).toBeLessThanOrEqual(64);
+    expect(/[^\w:-]/.test(n.opts.tag)).toBe(false);
+    const [e] = await firePush(ctx, { tag: '<><><>' });
+    expect(e.opts.tag).toBe('breeze-msg');
+  });
+
+  it('charset-bounds contactId (flows into quick-reply/mark-read postMessage)', async () => {
+    const [n] = await firePush(ctx, { contactId: 'abc123+/=_-[]{};<>'.repeat(10) });
+    expect(/[^a-z0-9+/=_-]/i.test(n.opts.data.contactId)).toBe(false);
+    expect(n.opts.data.contactId.length).toBeLessThanOrEqual(128);
+  });
+
+  it('_UNSAFE_PUSH_RE is the byte-identical class as the worker/app copies (parity tripwire)', () => {
+    const reSrc = (src, name) => src.match(new RegExp('const ' + name + ' = /(.+)/gu;'))?.[1];
+    const workerSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '_worker.js'), 'utf8');
+    const htmlSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'index.html'), 'utf8');
+    expect(reSrc(swSource, '_UNSAFE_PUSH_RE')).toBe(reSrc(workerSrc, '_UNSAFE_DISPLAY_RE'));
+    expect(reSrc(swSource, '_UNSAFE_PUSH_RE')).toBe(reSrc(htmlSrc, '_UNSAFE_DISPLAY_RE'));
+  });
+});

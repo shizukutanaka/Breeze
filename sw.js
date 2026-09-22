@@ -94,17 +94,34 @@ function cachePut(request, response) {
 }
 
 // Web Push
+// Push payloads are relay-supplied. The normal worker sanitizes title via
+// sanitizeString, but a malicious/compromised relay — the threat model safeAppUrl
+// below already accepts — can push arbitrary title/body/tag into an OS-rendered
+// surface (spoofed sender names via bidi/invisible chars, unbounded bodies,
+// hostile notification tags). Bound them the same way the app binds wire strings:
+// the byte-identical unsafe class as _worker.js/index.html's _UNSAFE_DISPLAY_RE
+// (invisible + bidi format chars) plus C0 controls, capped lengths, and a
+// charset-bounded tag/contactId. A non-object payload is also replaced — a relay
+// pushing `null` would otherwise throw on data.title and silently kill the
+// notification (and every later one while the handler stays broken).
+const _UNSAFE_PUSH_RE = /[\u00AD\u034F\u061C\u115F\u1160\u180E\u200B\u200E\u200F\u202A-\u202E\u2060\u2066-\u2069\u2800\u3164\uFFA0\uFEFF\u{1D173}-\u{1D17A}\u{E0000}-\u{E007F}]/gu;
+function _pushText(val, maxLen) {
+  if (typeof val !== 'string') return '';
+  return val.replace(_UNSAFE_PUSH_RE, '').slice(0, maxLen).replace(/[\x00-\x1f]/g, '');
+}
+const _pushTag = v => typeof v === 'string' ? v.replace(/[^\w:-]/g, '').slice(0, 64) || 'breeze-msg' : 'breeze-msg';
+const _pushContactId = v => typeof v === 'string' ? v.replace(/[^a-z0-9+/=_-]/gi, '').slice(0, 128) || undefined : undefined;
 self.addEventListener('push', (e) => {
   let data = { title: 'Breeze', body: 'New message' };
-  try { data = e.data.json(); } catch {}
+  try { const j = e.data.json(); if (j && typeof j === 'object') data = j; } catch {}
   e.waitUntil(
-    self.registration.showNotification(data.title || 'Breeze', {
-      body: data.body || 'New message',
-      tag: data.tag || 'breeze-msg',
+    self.registration.showNotification(_pushText(data.title, 50) || 'Breeze', {
+      body: _pushText(data.body, 200) || 'New message',
+      tag: _pushTag(data.tag),
       icon: '/icon-192.png',
       badge: '/icon-192.png',
       vibrate: [100, 50, 100],
-      data: { url: data.url || '/', contactId: data.contactId },
+      data: { url: data.url || '/', contactId: _pushContactId(data.contactId) },
       renotify: true,
       // v3.6: Notification action buttons (Chrome 48+, Firefox 44+)
       actions: (navigator.language || '').startsWith('ja') ? [
