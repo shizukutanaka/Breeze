@@ -7508,9 +7508,9 @@ async function initMessenger(dbName) {
     const stored = await dbGet('messages', msgId);
     if (!stored || !stored.isPoll) return;
     const poll = JSON.parse(stored.text);
-    // Remove previous vote
+    // Remove previous vote — tolerate malformed wire polls: per-option votes may not be an array (ingest only checks Array.isArray(options)); .filter on a non-array throws and permanently breaks voting on that poll.
     for (const opt of poll.options) {
-      opt.votes = opt.votes.filter(v => v !== myId);
+      opt.votes = (Array.isArray(opt.votes) ? opt.votes : []).filter(v => v !== myId);
     }
     // Add vote
     poll.options[optionIndex].votes.push(myId);
@@ -10128,7 +10128,7 @@ async function initMessenger(dbName) {
             if (pollMsg) {
               const poll = JSON.parse(pollMsg.text);
               const voterId = (senderPub || '').slice(0, 12);
-              for (const opt of poll.options) opt.votes = opt.votes.filter(v => v !== voterId);
+              for (const opt of poll.options) opt.votes = (Array.isArray(opt.votes) ? opt.votes : []).filter(v => v !== voterId);
               if (Number.isInteger(signal.optionIndex) && signal.optionIndex >= 0 && poll.options[signal.optionIndex]) {
                 poll.options[signal.optionIndex].votes.push(voterId);
                 pollMsg.text = JSON.stringify(poll);
@@ -10643,14 +10643,14 @@ async function initMessenger(dbName) {
           // v3.1: Poll vote
           if (msg.type === 'poll_vote') {
             const allMsgs = await dbGetAll('messages');
-            const pollMsg = allMsgs.find(m => m.isPoll && JSON.parse(m.text).pollId === msg.pollId);
+            const pollMsg = allMsgs.find(m => m.isPoll && (() => { try { return JSON.parse(m.text).pollId === msg.pollId; } catch { return false; } })());
             // Same conversation binding as reactions — a peer must not vote on a poll
             // that lives in a different conversation (pollId is self-reported).
             if (pollMsg && pollMsg.contactId === contact.id) {
               const poll = JSON.parse(pollMsg.text);
               // Use contact.id (authenticated sender) — not msg.userId (peer-claimed, unverified)
               const voterId = contact.id;
-              for (const opt of poll.options) opt.votes = opt.votes.filter(v => v !== voterId);
+              for (const opt of poll.options) opt.votes = (Array.isArray(opt.votes) ? opt.votes : []).filter(v => v !== voterId);
               // Validate optionIndex: must be a non-negative integer (guards non-integer/symbol keys that could access array properties)
               if (Number.isInteger(msg.optionIndex) && msg.optionIndex >= 0 && poll.options[msg.optionIndex]) poll.options[msg.optionIndex].votes.push(voterId);
               pollMsg.text = JSON.stringify(poll);
