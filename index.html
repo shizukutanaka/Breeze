@@ -10121,8 +10121,7 @@ async function initMessenger(dbName) {
               if (el) { const existing = el.querySelector('.msg-reactions'); if (existing) _safeReplace(existing, renderReactions(stored.reactions, targetMsgId)); else _safeAppend(el, renderReactions(stored.reactions, targetMsgId)); }
             }
           } else if (signal.type === 'poll_vote') {
-            // Same binding as the 1:1 path: the poll must live in THIS group, and the
-            // voter id comes from the verified sender, not the self-reported userId.
+            // Same binding as the 1:1 path: poll must live in THIS group; voter = verified sender.
             const allMsgs = await dbGetAll('messages');
             const pollMsg = allMsgs.find(m => m.isPoll && m.contactId === msg.groupId && (() => { try { return JSON.parse(m.text).pollId === signal.pollId; } catch { return false; } })());
             if (pollMsg) {
@@ -10165,9 +10164,10 @@ async function initMessenger(dbName) {
       if (_replayCache.has(msgId)) return; // Fast in-memory dedup
       _replayCache.add(msgId); // Speculative mark before first await — blocks concurrent-path duplicates
       if (await dbGet('messages', msgId)) return; // Already persisted
-      const meta = { msgId, senderName: msg.fromName, replyTo: msg.replyTo, disappearAt: msg.disappearAt };
-      // Same typed-payload detection as the 1:1 path — group polls/files now ride the
-      // sender-key channel, so the JSON text needs the type tag for the card to render.
+      // fromName is self-claimed — sanitize like every name ingest, else invisible-twin headers.
+      const senderName = _safeDisplayName(msg.fromName, 64);
+      const meta = { msgId, senderName, replyTo: msg.replyTo, disappearAt: msg.disappearAt };
+      // Same typed-payload detection as the 1:1 path — sender-key payloads carry raw JSON.
       let fileDataG;
       try {
         const _p = JSON.parse(text);
@@ -10176,7 +10176,7 @@ async function initMessenger(dbName) {
       } catch {}
       await dbPut('messages', { msgId, contactId: msg.groupId, text, mine: false, ts: msg.ts, isPoll: meta.isPoll || undefined, fileData: fileDataG, ...meta });
       group.lastMsg = text.slice(0, 30);
-      group.lastMsgSender = msg.fromName;
+      group.lastMsgSender = senderName;
       group.lastMsgAt = msg.ts;
       if (activeContact?.id !== msg.groupId) {
         group.unread = (group.unread || 0) + 1;
@@ -10189,7 +10189,7 @@ async function initMessenger(dbName) {
           // Locked: suppress the mention preview — the lock overlay hiding the UI is
           // pointless if OS notifications still leak sender + message text.
           if (!_DOM.get('lock-screen')) {
-            new Notification(group.name, { body: `@${msg.fromName}: ${text.slice(0, 80)}`, tag: 'breeze-' + msg.groupId });
+            new Notification(group.name, { body: `@${senderName || '?'}: ${text.slice(0, 80)}`, tag: 'breeze-' + msg.groupId });
           }
         }
       }
@@ -10346,7 +10346,7 @@ async function initMessenger(dbName) {
     if (await dbGet('messages', msgId)) return; // Already persisted
 
     let text, storedFileData = null;
-    const meta = { msgId, replyTo: msg.replyTo, disappearAt: msg.disappearAt, senderName: msg.fromName,
+    const meta = { msgId, replyTo: msg.replyTo, disappearAt: msg.disappearAt, senderName: _safeDisplayName(msg.fromName, 64),
       ...(msg.nrn === true ? { nrn: true } : {}) };
 
     if (msg.isFile) {
