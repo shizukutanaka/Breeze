@@ -8185,10 +8185,7 @@ async function initMessenger(dbName) {
       if (meta.disappearAt) envelope.disappearAt = meta.disappearAt;
 
       // v3.5 SPEC: Client-side rate limiting
-      if (!_rateLimiter.consume()) {
-        showToast(t('toastRateLimit'), 'info');
-        return;
-      }
+      if (!_rateLimiter.consume()) { showToast(t('toastRateLimit'), 'info'); input.value = text; return; }
 
       // v3.5 SPEC: Timing obfuscation (metadata protection)
       await timingDelay();
@@ -8232,10 +8229,12 @@ async function initMessenger(dbName) {
       showToast(t('toastSendFail'), 'error');
       // Restore message text so user doesn't lose it
       if (!input.value) input.value = text;
+    } finally {
+      // v3.1: Reset send button state — in finally so early returns inside try
+      // (rate-limit, encrypt failure) can't strand the input permanently.
+      if (sendBtn) { sendBtn.disabled = false; sendBtn.classList.add('i-op-full'); sendBtn.classList.remove('pulse'); }
+      _isSending = false; // v3.3: Reset double-submit lock
     }
-    // v3.1: Reset send button state
-    if (sendBtn) { sendBtn.disabled = false; sendBtn.classList.add('i-op-full'); sendBtn.classList.remove('pulse'); }
-    _isSending = false; // v3.3: Reset double-submit lock
     // v3.6: Track engagement for PWA install gating
     try { const c = parseInt(localStorage.getItem('brz-msgs-sent') || '0'); localStorage.setItem('brz-msgs-sent', String(c + 1)); } catch {}
   }

@@ -1,3 +1,12 @@
+## index.html: sendMessage cleanup moved to finally — a rate-limit trip bricked the input (branch devin/send-finally-reset, 2026-09-22)
+
+sendMessage's early returns inside try (rate-limiter failure, encrypt failure)
+skipped the post-try button/lock reset — there was no finally. `_rateLimiter.consume()`
+failing left `_isSending = true` and the send button disabled+pulse forever
+(every later send silently refused), and the message had already been rendered
+and persisted as sent. The reset now runs in `finally` so every exit cleans up;
+the rate-limit path also restores the draft text like the catch path does.
+
 ## index.html notification sounds share one AudioContext (branch devin/audioctx-pool, 2026-09-22)
 
 playNotif/playSendSound created a new AudioContext per chime and never closed it —
