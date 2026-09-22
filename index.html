@@ -4176,13 +4176,13 @@ async function initMessenger(dbName) {
   // v3.3: Throttled renderContacts — prevents 38 calls/cycle from causing jank
   const _renderContactsThrottled = throttle(() => renderContacts(), 200);
 
-  // v3.3: ENTERPRISE — AUDIT LOG
+  // v3.3: ENTERPRISE — AUDIT LOG (types: auth/key/contact/message/group/security/settings)
   // Records security events for compliance. IDB 'audit' store.
-  // Types: auth, key, contact, message, group, security, settings
   async function auditLog(type, detail, severity = 'info') {
     try {
       if (!db.objectStoreNames.contains('audit')) return;
-      await dbPut('audit', { ts: Date.now(), type, detail: typeof detail === 'string' ? detail : JSON.stringify(detail), severity });
+      // Cap detail at the funnel — caller-unbounded strings (a ?add= name) must not bloat the store.
+      await dbPut('audit', { ts: Date.now(), type, detail: String(typeof detail === 'string' ? detail : JSON.stringify(detail)).slice(0, 512), severity });
     } catch(e) { _dbg(e, 'audit'); }
   }
   // Prune audit log (keep last 1000 entries)
