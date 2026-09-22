@@ -11891,11 +11891,11 @@ async function initMessenger(dbName) {
 
     if (activeContact?.isGroup && senderName) {
       // Group: track multiple typers
-      if (!_groupTypingState[contactId]) _groupTypingState[contactId] = {};
+      if (!_groupTypingState[contactId]) _groupTypingState[contactId] = Object.create(null);
       const _safeSenderName = _safeDisplayName(senderName, 64);
-      _groupTypingState[contactId][_safeSenderName] = Date.now();
-      // Clean stale (>5s)
-      const now = Date.now();
+      const _ts = _groupTypingState[contactId];
+      if (_ts[_safeSenderName] || Object.keys(_ts).length < 8) _ts[_safeSenderName] = Date.now(); // cap typers — fake-name flood grows map unbounded (CWE-400)
+      const now = Date.now(); // clean stale (>5s)
       for (const [k, v] of Object.entries(_groupTypingState[contactId])) {
         if (now - v > 5000) delete _groupTypingState[contactId][k];
       }
@@ -11919,7 +11919,7 @@ async function initMessenger(dbName) {
     clearTimeout(_typingTimeout);
     _typingTimeout = setTimeout(() => {
       if (typingEl) typingEl.classList.remove('active');
-      if (_groupTypingState[contactId]) _groupTypingState[contactId] = {};
+      if (_groupTypingState[contactId]) _groupTypingState[contactId] = Object.create(null);
       updateConvStatus();
     }, CONFIG.TYPING_TIMEOUT_MS);
   }
