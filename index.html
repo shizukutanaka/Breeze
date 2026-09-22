@@ -7022,15 +7022,18 @@ async function initMessenger(dbName) {
 
   function renderLinks(text) {
     return text
-      // URLs
       .replace(/(https?:\/\/[^\s<]+)/g, (url) => {
-        return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="md-link">${url}</a>`;
+        // TR36/UTS39: a Unicode-lookalike or non-canonical host shows its punycode form, like a
+        // browser URL bar (\u0430\u0440\u0440\u04cf\u0435.com -> xn--80ak6aa92e.com). Stricter than Chrome's locale-aware IDN — deliberate.
+        let shown = url;
+        try {
+          const u = new URL(url), h0 = url.slice(url.indexOf('://') + 3).split(/[\/?#]/)[0];
+          if (u.host !== h0) shown = url.replace(h0, u.host);
+        } catch {}
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="md-link">${shown}</a>`;
       })
-      // v3.1: Auto-link email addresses
       .replace(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, '<a href="mailto:$1" class="md-link">$1</a>')
-      // v3.1: Auto-link phone numbers (intl format)
       .replace(/(\+\d{1,3}[\s-]?\d{2,4}[\s-]?\d{3,4}[\s-]?\d{3,4})/g, '<a href="tel:$1" class="md-link">$1</a>')
-      // v3.3: @mention highlight — (?<![/\w]) skips @ in email addresses (user@domain) and URL paths (/user/@handle)
       .replace(/(?<![/\w])@(\w{2,20})/g, '<span class="md-mention">@$1</span>');
   }
 
@@ -8942,7 +8945,6 @@ async function initMessenger(dbName) {
 
   // Mobile: back button
   _DOM.get('b-msg-back')?.addEventListener('click', () => {
-    // v3.6: Use history.back() to trigger popstate (consistent with browser back button)
     if (history.state?.conversation) { history.back(); return; }
     _DOM.get('msg-sidebar').classList.remove('hidden');
     _DOM.get('b-msg-back').classList.add('hidden');
@@ -10193,7 +10195,6 @@ async function initMessenger(dbName) {
       await dbPut('contacts', group);
       if (activeContact?.id === msg.groupId) { meta._animate = true; appendMsg(text, false, msg.ts, null, null, meta); showSmartReplies(text); }
       _renderContactsThrottled();
-      // v3.4: Broadcast to follower tabs
       broadcastToTabs('new-message', { contactId: msg.groupId, text, mine: false, ts: msg.ts, ...meta });
       return;
     }
@@ -10435,7 +10436,6 @@ async function initMessenger(dbName) {
           });
         }
       }
-      // v3.6: Screen reader announcement for unread messages (research: ARIA23)
       announceToSR(`${contact.name}: ${text.slice(0, 60)}`);
     }
     await dbPut('contacts', contact);
