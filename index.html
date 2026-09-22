@@ -2897,8 +2897,9 @@ if (joinToken && API) {
       const title = _DOM.get('msg-setup-title');
       const desc = _DOM.get('msg-setup-desc');
       const btn = _DOM.get('b-msg-setup');
-      if (title) title.textContent = t('joinGroup', data.name);
-      if (desc) desc.textContent = t('invitedBy', data.creatorName, data.members.length);
+      // Creator-supplied strings shown pre-consent — sanitize like every name ingest (TR39)
+      if (title) title.textContent = t('joinGroup', _safeDisplayName(data.name, 64) || '…');
+      if (desc) desc.textContent = t('invitedBy', _safeDisplayName(data.creatorName, 64) || '…', Array.isArray(data.members) ? data.members.length : 0);
       if (btn) btn.textContent = t('joinBtn');
     })
     .catch(e => _dbg(e));
@@ -6100,11 +6101,10 @@ async function initMessenger(dbName) {
       }
     }
     // Auto-join group from URL (?join=token) — but ASK first: a shared link must not
-    // silently enroll this account into an attacker's group. Joining publishes my
-    // id/pub/name to the roster and the relay before I ever see the conversation.
+    // silently enroll this account (joining publishes my id/pub/name to roster+relay).
     if (joinToken) {
       const gi = await postAPIRaw('/group/info', { token: joinToken }).then(r => (r && r.ok) ? r.json() : null).catch(() => null);
-      if (await showConfirm(t('joinGroup', gi?.name || '…'), { desc: t('joinShareInfo'), okText: t('joinBtn') })) await processJoinToken(joinToken);
+      if (await showConfirm(t('joinGroup', _safeDisplayName(gi?.name, 64) || '…'), { desc: t('joinShareInfo'), okText: t('joinBtn') })) await processJoinToken(joinToken);
     }
     // Auto-open settings from URL (?settings — PWA manifest "Settings" shortcut).
     // manifest.json advertised this shortcut with nothing on the boot path ever reading the
