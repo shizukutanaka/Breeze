@@ -2121,9 +2121,8 @@ let _installPrompt = null;
 let _installBannerDismissed = false;
 
 // v3.6: Engagement gate (3+ msgs or 2+ visits), computed once so this + the fallback below don't double-count a visit.
-const _visits = parseInt(localStorage.getItem('brz-visit-count') || '0') + 1;
-localStorage.setItem('brz-visit-count', String(_visits));
-const _isEngagedVisitor = _visits >= 2 || parseInt(localStorage.getItem('brz-msgs-sent') || '0') >= 3;
+let _visits = 1, _isEngagedVisitor = false;
+try { _visits = parseInt(localStorage.getItem('brz-visit-count') || '0') + 1; localStorage.setItem('brz-visit-count', String(_visits)); _isEngagedVisitor = _visits >= 2 || parseInt(localStorage.getItem('brz-msgs-sent') || '0') >= 3; } catch(e) { _dbg(e, 'visits'); }
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   _installPrompt = e;
@@ -2275,9 +2274,7 @@ window.addEventListener('unhandledrejection', (event) => {
 });
 
 // v3.5: Auto theme (respect system preference)
-if (localStorage.getItem('brz-theme') === 'auto' || !localStorage.getItem('brz-theme')) {
-  document.documentElement.classList.add('auto-theme');
-}
+try { if (localStorage.getItem('brz-theme') === 'auto' || !localStorage.getItem('brz-theme')) { document.documentElement.classList.add('auto-theme'); } } catch(e) { _dbg(e, 'theme'); document.documentElement.classList.add('auto-theme'); }
 
 const _DBG = (() => { try { return localStorage.getItem('brz-debug') === '1'; } catch { return false; } })();
 const _appStartTime = Date.now();
@@ -2285,7 +2282,7 @@ function _dbg(e, ctx) { if (_DBG) console.warn('[Breeze]', ctx || '', e?.message
 
 // v3.5: GDPR/CCPA data consent banner
 (() => {
-  if (localStorage.getItem('brz-consent')) return; // Already consented
+  try { if (localStorage.getItem('brz-consent')) return; } catch(e) { _dbg(e, 'consent-read'); } // Already consented
   const banner = document.createElement('div');
   banner.className = 'consent-banner';
   banner.setAttribute('role', 'dialog');
@@ -2301,7 +2298,7 @@ function _dbg(e, ctx) { if (_DBG) console.warn('[Breeze]', ctx || '', e?.message
   const acceptBtn = document.createElement('button');
   acceptBtn.className = 'btn btn-g btn-sm';
   acceptBtn.textContent = t('uiAccept');
-  acceptBtn.onclick = () => { localStorage.setItem('brz-consent', Date.now()); banner.remove(); };
+  acceptBtn.onclick = () => { try { localStorage.setItem('brz-consent', Date.now()); } catch(e) { _dbg(e, 'consent-save'); } banner.remove(); };
   banner.appendChild(acceptBtn);
   document.body.appendChild(banner);
 })();
@@ -2635,7 +2632,7 @@ window.addEventListener('beforeunload', () => {
 
 // Theme: auto-detect or restore preference
 (() => {
-  const saved = localStorage.getItem('brz-theme');
+  const saved = (() => { try { return localStorage.getItem('brz-theme'); } catch(e) { _dbg(e, 'theme'); return null; } })();
   const isLight = saved === 'light' || (!saved && window.matchMedia?.('(prefers-color-scheme: light)').matches);
   if (isLight) document.documentElement.classList.add('light');
   const meta = document.querySelector('meta[name="theme-color"]');
@@ -3430,7 +3427,7 @@ function saveAccounts(accs) {
   try { localStorage.setItem('brz-accounts', JSON.stringify(accs)); } catch(e) { _dbg(e); }
 }
 function getActiveAccountId() {
-  return localStorage.getItem('brz-active') || '0';
+  try { return localStorage.getItem('brz-active') || '0'; } catch { return '0'; }
 }
 function setActiveAccountId(id) {
   try { localStorage.setItem('brz-active', id); } catch(e) { _dbg(e); }
@@ -3440,7 +3437,7 @@ function setActiveAccountId(id) {
 (function migrateToMultiAccount() {
   if (getAccounts().length > 0) return;
   // Check if old DB exists by looking for brz-uid
-  const uid = localStorage.getItem('brz-uid');
+  const uid = (() => { try { return localStorage.getItem('brz-uid'); } catch { return null; } })();
   if (uid) {
     // Old single-account user → create account entry pointing to existing DB
     saveAccounts([{ id: '0', name: 'Account 1', avatar: '🌊', dbName: 'breeze-messenger', createdAt: Date.now() }]);
@@ -7006,8 +7003,8 @@ async function initMessenger(dbName) {
   // MESSAGE RENDERER (supports all message features)
 
   // v3.1: Privacy settings (persisted in localStorage)
-  let _privacyHideReadReceipts = localStorage.getItem('brz-hide-rr') === '1';
-  let _privacyHideTyping = localStorage.getItem('brz-hide-typing') === '1';
+  let _privacyHideReadReceipts = false, _privacyHideTyping = false;
+  try { _privacyHideReadReceipts = localStorage.getItem('brz-hide-rr') === '1'; _privacyHideTyping = localStorage.getItem('brz-hide-typing') === '1'; } catch(e) { _dbg(e, 'privacy'); }
   // Expose to global for inline onchange handlers
   window._privacyHideReadReceipts = _privacyHideReadReceipts;
   window._privacyHideTyping = _privacyHideTyping;
@@ -8324,7 +8321,7 @@ async function initMessenger(dbName) {
   // v3.6: Auto-compress images before send (saves P2P bandwidth, fits relay 192KB limit)
   // v3.6: Image compression setting (user preference)
   // 'off' = send original (no quality loss), 'auto' = adaptive, 'lossless' = resize only (quality 1.0)
-  let _imgCompress = localStorage.getItem('brz-img-compress') || 'off';
+  let _imgCompress = (() => { try { return localStorage.getItem('brz-img-compress') || 'off'; } catch(e) { _dbg(e, 'img-compress'); return 'off'; } })();
 
   async function _compressImage(file) {
     // v3.6: Respect user preference — 'off' = no compression at all
@@ -12185,7 +12182,7 @@ async function initMessenger(dbName) {
     try { localStorage.setItem('brz-compact', document.body.classList.contains('compact') ? '1' : '0'); } catch(e) { _dbg(e, 'compact-save'); }
   };
   // Restore compact mode
-  if (localStorage.getItem('brz-compact') === '1') document.body.classList.add('compact');
+  try { if (localStorage.getItem('brz-compact') === '1') document.body.classList.add('compact'); } catch(e) { _dbg(e, 'compact'); }
 
   // v1 INTEGRATION: Message Search
 
