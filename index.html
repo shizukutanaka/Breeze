@@ -2121,9 +2121,15 @@ let _installPrompt = null;
 let _installBannerDismissed = false;
 
 // v3.6: Engagement gate (3+ msgs or 2+ visits), computed once so this + the fallback below don't double-count a visit.
-const _visits = parseInt(localStorage.getItem('brz-visit-count') || '0') + 1;
-localStorage.setItem('brz-visit-count', String(_visits));
-const _isEngagedVisitor = _visits >= 2 || parseInt(localStorage.getItem('brz-msgs-sent') || '0') >= 3;
+// localStorage read/write can throw (storage disabled, strict privacy, quota) — an uncaught
+// throw at top level would abort the rest of this script and initMessenger would never run.
+let _visitCount = 0, _msgsSent = 0;
+try {
+  _visitCount = parseInt(localStorage.getItem('brz-visit-count') || '0') + 1;
+  localStorage.setItem('brz-visit-count', String(_visitCount));
+  _msgsSent = parseInt(localStorage.getItem('brz-msgs-sent') || '0');
+} catch (e) { _dbg(e, 'visit-count'); }
+const _isEngagedVisitor = _visitCount >= 2 || _msgsSent >= 3;
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   _installPrompt = e;
@@ -2301,7 +2307,7 @@ function _dbg(e, ctx) { if (_DBG) console.warn('[Breeze]', ctx || '', e?.message
   const acceptBtn = document.createElement('button');
   acceptBtn.className = 'btn btn-g btn-sm';
   acceptBtn.textContent = t('uiAccept');
-  acceptBtn.onclick = () => { localStorage.setItem('brz-consent', Date.now()); banner.remove(); };
+  acceptBtn.onclick = () => { try { localStorage.setItem('brz-consent', Date.now()); } catch (e) { _dbg(e, 'consent'); } banner.remove(); };
   banner.appendChild(acceptBtn);
   document.body.appendChild(banner);
 })();
