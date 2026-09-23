@@ -3610,7 +3610,15 @@ function renderAccountTabs() {
         // that closes it (same class as the panic-wipe ordering fix).
         if (acc.id === activeId) await switchAccount(accs[0].id);
         else renderAccountTabs();
-        indexedDB.deleteDatabase(acc.dbName || 'breeze-acc-' + acc.id);
+        try {
+          const _delDb = acc.dbName || 'breeze-acc-' + acc.id;
+          const _delReq = indexedDB.deleteDatabase(_delDb);
+          // A sibling tab holding the deleted account's DB open fires `blocked` — without
+          // a handler the delete stays pending forever and the account silently survives.
+          // Ask tabs on that DB to close (targeted db-upgrade; receivers match on dbName).
+          _delReq.onblocked = () => { try { _tabChannel?.postMessage({ type: 'db-upgrade', version: DB_VER, dbName: _delDb }); } catch {} };
+          _delReq.onerror = (e) => _dbg(e.target?.error, 'acc-delete-db');
+        } catch (_e) { _dbg(_e, 'acc-delete-db'); }
         delete _crossAccountUnread[acc.id];
       }
     };
@@ -4033,8 +4041,13 @@ async function initMessenger(dbName) {
       if (type === 'contact-update') _renderContactsThrottled();
       // v3.6: Another tab needs to upgrade DB — close our connection so it can proceed
       if (type === 'db-upgrade') {
-        _dbg(null, 'DB upgrade requested by another tab — closing connection');
-        try { db?.close(); } catch {}
+        // Targeted close: a missing dbName means a version upgrade (close always); a set
+        // dbName means an account delete — only tabs holding THAT database block it.
+        const _delTarget = e.data?.dbName;
+        if (!_delTarget || db?.name === _delTarget) {
+          _dbg(null, 'DB close requested by another tab — closing connection');
+          try { db?.close(); } catch {}
+        }
       }
     };
   }
