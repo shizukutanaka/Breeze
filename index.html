@@ -6800,6 +6800,9 @@ async function initMessenger(dbName) {
     }
     activeContact = contact;
     contact.unread = 0;
+    // A typing indicator armed before an account/conversation switch outlives its own
+    // clear timer (the timeout is torn down with the old context) — drop any residue.
+    _DOM.get('typing-indicator')?.classList.remove('active');
     // Generation guard: the message load below awaits; a second open during that
     // window must win — otherwise the stale render lands in the newer conversation's
     // view (rapid A→B click shows A's history under B's header).
@@ -11893,7 +11896,7 @@ async function initMessenger(dbName) {
   // v3.6: Group-aware typing indicator (research: show who's typing)
   const _groupTypingState = {};
   const _typingContacts = {}; // v3.6: Track typing state per-contact for sidebar preview
-  function showTyping(contactId, senderName) {
+  function showTyping(contactId, senderName) { if (_ac.signal.aborted) return; // typing frames on a dead context must not write the shared indicator/status or re-arm the cleared timeout
     // v3.6: Update sidebar typing state
     _typingContacts[contactId] = Date.now();
     _renderContactsThrottled();
