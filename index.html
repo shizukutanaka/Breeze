@@ -13544,7 +13544,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const box = _DOM.get('msg-messages');
       const d = document.createElement('div');
       d.className = 'cmd-panel-mono';
-      const addUrl = SHARE_BASE + '?add=' + myPubB64 + '&name=' + encodeURIComponent(myName);
+      const addUrl = SHARE_BASE + '?add=' + encodeURIComponent(myPubB64) + '&name=' + encodeURIComponent(myName);
       const aliasUrl = myAlias ? SHARE_BASE + '?add=' + myAlias : '';
       safeSetHTML(d, [
         '<b class="i-g">' + t('cmdMyIdentity') + '</b>',
@@ -13574,7 +13574,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const box = _DOM.get('msg-messages');
       const d = document.createElement('div');
       d.className = 'cmd-panel-mono';
-      const shareLink = SHARE_BASE + '?add=' + (myAlias ? '@' + myAlias : myPubB64);
+      const shareLink = SHARE_BASE + '?add=' + (myAlias ? '@' + myAlias : encodeURIComponent(myPubB64));
       safeSetHTML(d, [
         '<b class="i-green14">' + esc(myName) + '</b>',
         '<div class="i-body13">' + (myShortId || myId) + '</div>',
@@ -13780,7 +13780,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     if (val === '/share') {
       e.preventDefault();
       clearInput();
-      const link = SHARE_BASE + '?add=' + (myAlias ? '@' + myAlias : myPubB64);
+      const link = SHARE_BASE + '?add=' + (myAlias ? '@' + myAlias : encodeURIComponent(myPubB64));
       const shareData = { title: t('shareDialogTitle'), text: t('shareDialogText', myName), url: link };
       if (navigator.share) {
         try { await navigator.share(shareData); } catch(e) { if (e.name !== 'AbortError') _dbg(e); }
