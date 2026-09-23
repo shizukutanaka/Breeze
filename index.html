@@ -6259,6 +6259,7 @@ async function initMessenger(dbName) {
 
   // _signal — POST to /signal; dm:/call: rooms are sealed when the peer advertises dm-sig-v1.
   async function _signal(room, type, data) {
+    if (_ac.signal.aborted) return null; // dead context must not signal as the old account
     let wireType = type, wireData = data || '';
     if (room.startsWith('dm:') || room.startsWith('call:')) {
       const sealed = await _sealDmSignal(room, { type, data: wireData });
@@ -6273,6 +6274,7 @@ async function initMessenger(dbName) {
   }
   // _signalAwait — same but returns response for poll pattern
   function _signalAwait(room, type, data) {
+    if (_ac.signal.aborted) return Promise.resolve({ ok: false });
     return fetchT(API + '/signal', { method: 'POST', headers: _H,
       body: JSON.stringify({ room, sender: myId, type, data: data || '' })
     });
