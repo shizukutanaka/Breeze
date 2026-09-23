@@ -3865,8 +3865,14 @@ async function initMessenger(dbName) {
         // v3.6: Clock drift detection + correction (critical for ±5min anti-replay)
         try {
           const health = await r.json();
-          if (health.serverTime) {
+          if (typeof health.serverTime === 'number') {
             const rawDrift = health.serverTime - Date.now();
+            // A non-finite or absurd server clock must NEVER touch _clockOffset — NaN
+            // would brand every outgoing ts NaN (relay rejects all sends); a day+ offset
+            // is broken data, not drift (the ±1h clamp would still stamp outside the
+            // relay's ±5min window anyway).
+            if (!Number.isFinite(rawDrift) || Math.abs(rawDrift) > MS.DAY) { _dbg(null, 'Implausible serverTime — clock correction skipped'); }
+            else {
             // Cap to ±1 hour: beyond that the server value is implausible (broken clock or
             // compromise). An uncapped offset could make correctedNow() return a timestamp
             // far in the past/future, confusing the ±5 min anti-replay window.
@@ -3877,6 +3883,7 @@ async function initMessenger(dbName) {
               showToast(t('clockDrift'), 'error', 10000);
             } else if (absDrift > 5000) {
               _dbg(null, `Clock drift: ${Math.round(rawDrift/1000)}s — minor, correcting silently`);
+            }
             }
           }
           // v3.6: Worker version mismatch warning
