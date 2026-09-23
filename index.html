@@ -3141,6 +3141,11 @@ self.onmessage = async (e) => {
 let _cryptoWorker = null;
 let _cwPending = {};
 let _cwId = 0;
+// Worker died or hung — resolve every pending op with null so callers take the
+// main-thread fallback instead of awaiting a reply that will never arrive.
+function _cwDrop() {
+  for (const id in _cwPending) { try { _cwPending[id].resolve(null); } catch {} delete _cwPending[id]; }
+}
 function getCryptoWorker() {
   if (!_cryptoWorker) {
     try {
@@ -3153,7 +3158,7 @@ function getCryptoWorker() {
         const p = _cwPending[id];
         if (p) { delete _cwPending[id]; error ? p.reject(new Error(error)) : p.resolve(result); }
       };
-      _cryptoWorker.onerror = () => { _cryptoWorker = null; }; // Fallback to main thread
+      _cryptoWorker.onerror = () => { _cwDrop(); _cryptoWorker = null; }; // Fallback to main thread
     } catch { return null; } // Workers not available (e.g. CSP restriction)
   }
   return _cryptoWorker;
@@ -3167,7 +3172,16 @@ function workerCrypto(op, keyRaw, iv, data) {
     _cwPending[id] = { resolve, reject };
     // Transfer data buffer (zero-copy to worker)
     const dataCopy = data instanceof ArrayBuffer ? data : data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
-    w.postMessage({ id, op, keyRaw, iv, data: dataCopy }, [dataCopy]);
+    try { w.postMessage({ id, op, keyRaw, iv, data: dataCopy }, [dataCopy]); }
+    catch { delete _cwPending[id]; resolve(null); return; }
+    // A hung worker leaves the caller awaiting forever — bound the wait, then drop the
+    // worker so the next call re-creates it or falls back to main thread.
+    setTimeout(() => {
+      if (!_cwPending[id]) return;
+      try { _cryptoWorker?.terminate(); } catch {}
+      _cryptoWorker = null;
+      _cwDrop();
+    }, 10 * MS.SEC);
   });
 }
 
