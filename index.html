@@ -3034,6 +3034,15 @@ function fetchT(url, opts = {}, timeoutMs = 10000) {
   }
   return fetch(url, opts);
 }
+// Streaming-bounded body read — unlike resp.text(), an over-cap stream is cancelled at the
+// limit instead of materializing in memory first (used where the peer-of-last-resort is
+// itself the suspect, e.g. /codeverify diffing the served bundle against the repo's).
+async function _boundedText(resp, maxBytes) {
+  const rd = resp.body.getReader(), parts = []; let n = 0;
+  for (;;) { const { done, value } = await rd.read(); if (done) break; n += value.byteLength; if (n > maxBytes) { await rd.cancel(); throw new Error('response too large'); } parts.push(value); }
+  const all = new Uint8Array(n); let off = 0; for (const p of parts) { all.set(p, off); off += p.byteLength; }
+  return new TextDecoder().decode(all);
+}
 // v3.5: fetchT with automatic retry + exponential backoff
 async function fetchRetry(url, opts = {}, { maxRetries = 3, baseDelay = 1000, timeoutMs = 10000 } = {}) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -13709,10 +13718,10 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
           fetch('/index.html?cv=' + Date.now(), { cache: 'no-store' }),
           Promise.all(branches.map(br =>
             fetch('https://raw.githubusercontent.com/shizukutanaka/Breeze/' + br + '/index.html', { cache: 'no-store' })
-              .then(r => (r.ok ? r.text() : null)).catch(() => null))),
+              .then(r => (r.ok ? _boundedText(r, 4 * 1024 * 1024) : null)).catch(() => null))),
         ]);
         if (!servedResp.ok) throw new Error('serve-fetch ' + servedResp.status);
-        const servedHash = await sha(await servedResp.text());
+        const servedHash = await sha(await _boundedText(servedResp, 4 * 1024 * 1024));
         const lines = ['<b>' + t('cvTitle') + '</b>', '', t('cvServedHash') + ': ' + servedHash.slice(0, 16) + '…'];
         let matched = false;
         for (let i = 0; i < branches.length; i++) {
