@@ -5897,6 +5897,11 @@ async function initMessenger(dbName) {
           if (mrStream) mrStream.getTracks().forEach(t => t.stop());
         } catch(e) { _dbg(e); }
       }
+      // The recording AudioContext lives in the click-handler's scope — onstop would
+      // close it, but cleanup nulls onstop before stop(), so release it here or each
+      // interrupted recording leaks a context (browsers cap live AudioContexts ~6).
+      try { _recAC?.close(); } catch(e) { _dbg(e); }
+      _recAC = null;
       if (_recTimer) { clearInterval(_recTimer); _recTimer = null; }
       // End any active voice/video call to release camera/mic and close the peer connection
       if (_callState && _callState !== 'idle') {
@@ -8650,6 +8655,7 @@ async function initMessenger(dbName) {
   let _recTimer = null;
   let _recStartTs = 0;
   let _recContact = null; // recording target — fixed at start (TOCTOU: user may switch chats mid-recording)
+  let _recAC = null; // recording AudioContext — hoisted here so _messengerCleanup can close it on switch
   const voiceBtn = _DOM.get('b-msg-voice');
   if (voiceBtn) {
     voiceBtn.addEventListener('click', async () => {
@@ -8680,11 +8686,11 @@ async function initMessenger(dbName) {
         _mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) _audioChunks.push(e.data); };
 
         // v3.6: Real-time audio waveform via AnalyserNode
-        let _audioCtx = null, _analyser = null, _waveRaf = null;
+        let _analyser = null, _waveRaf = null;
         try {
-          _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-          const source = _audioCtx.createMediaStreamSource(stream);
-          _analyser = _audioCtx.createAnalyser();
+          _recAC = new (window.AudioContext || window.webkitAudioContext)();
+          const source = _recAC.createMediaStreamSource(stream);
+          _analyser = _recAC.createAnalyser();
           _analyser.fftSize = 64;
           source.connect(_analyser);
         } catch {}
@@ -8692,8 +8698,8 @@ async function initMessenger(dbName) {
         _mediaRecorder.onstop = async () => {
           stream.getTracks().forEach(t => t.stop());
           if (_waveRaf) cancelAnimationFrame(_waveRaf);
-          if (_audioCtx) try { _audioCtx.close(); } catch {}
-          _audioCtx = null; _analyser = null;
+          if (_recAC) try { _recAC.close(); } catch {}
+          _recAC = null; _analyser = null;
           const blob = new Blob(_audioChunks, { type: _mediaRecorder.mimeType });
           if (blob.size < 100) return; // Too short
           const maxSize = CONFIG.FILE_MAX;
