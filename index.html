@@ -4398,7 +4398,10 @@ async function initMessenger(dbName) {
       const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: 0, ...(await _ownerAuth('msg-poll')) });
       if (!resp.ok) return;
       const data = await resp.json();
-      for (const msg of (data.messages || [])) {
+      // Non-array `messages` from a hostile relay: for..of on a giant string iterates
+      // per-char (boot-time CPU stall) and on an object throws, silently disabling the
+      // wipe check — gate the shape before iterating.
+      for (const msg of (Array.isArray(data.messages) ? data.messages : [])) {
         // Signature-gated: `from` is self-asserted on the relay, so a bare remote_wipe
         // is forgeable by anyone who knows your userId — a remote data-destruction
         // primitive. Only a valid Ed25519 sig over 'breeze-remote-wipe:<from>:<ts>' by
