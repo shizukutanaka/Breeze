@@ -1,5 +1,53 @@
 # Changelog
 
+## A stale P2P reconnect timer could delete a live, just-succeeded connection from the peer map (branch claude/nice-ride-T6yb0, 2026-09-23)
+
+819 vitest unchanged; Playwright E2E 60 unchanged (full suite re-run to confirm no regression; see below for why no new test was added); `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation).
+
+Moved to a fresh area this cycle rather than re-running the same generic sweeps (dead CSS, i18n
+keys, mirror-drift, missing-await — all already confirmed clean, unlikely to have changed) that
+found five real bugs earlier this session, all sharing one shape: "two related code paths that
+should stay in sync, where one silently doesn't." `connectPeer()` (the WebRTC connection
+lifecycle, `index.html` ~line 9783) had never been deeply audited — and turned out to hold a sixth
+instance of that same shape, in a new area.
+
+Four teardown sites in `connectPeer()` each tear down a failed/stale connection and run `delete
+peers[contact.pubB64]` — **by key, not by identity**: the 30s "give up" `connTimeout`, the
+exponential-backoff reconnect retry, the give-up-after-max-attempts branch, and the heartbeat
+handler's ICE-restart-unavailable fallback. Each closes over its OWN `peerState` from its OWN
+`connectPeer()` invocation, but the `delete` doesn't check whether that `peerState` is still the
+one currently keyed in the shared `peers` map.
+
+Concrete failure scenario: ICE fails fast (symmetric NAT, blocked UDP — a realistic case, not
+contrived). `CONFIG.RECONNECT_BASE_MS` is 1000ms, so a retry can complete well inside the original
+attempt's 30s `connTimeout` window. If that retry's own fresh `connectPeer()` call succeeds and
+becomes the live entry in `peers[contact.pubB64]`, the ORIGINAL attempt's `connTimeout` still fires
+at its own +30s mark, sees its own (permanently stale, never-connected) `peerState.connected` is
+false, and deletes whatever is CURRENTLY keyed there — the live, working connection, not the one it
+was watching. Effect: a fully-connected P2P channel silently vanishes from the `peers` map, sends
+believe the peer is offline and fall back to relay, and the entry-guard at the top of
+`connectPeer()` (`peers[contact.pubB64]?.pc`) no longer blocks a fresh connect attempt, so a
+duplicate, competing connection to the same peer can spin up.
+
+Confirmed this is contained to a single account session (not a 6th cross-account leak, unlike the
+five listener/timer/cleanup bugs already fixed this session): `peers` is a `const peers = {}`
+declared fresh per `initMessenger()` closure, so a stale timer from a previous account's session
+closes over that account's own already-discarded `peers` object, not the live one.
+
+Fixed by guarding each of the four `delete peers[contact.pubB64]` calls with
+`if (peers[contact.pubB64] === peerState) delete peers[contact.pubB64];` — a superseded attempt's
+delete becomes a no-op once the map has moved on, while the normal (non-race) single-attempt case
+is byte-for-byte unchanged (the guard is always true when nothing else touched the map in
+between). No new E2E test: reliably reproducing this exact timing race (sub-30s ICE failure +
+successful retry) in the Playwright/CDP harness would require simulating precise ICE failure
+timing, disproportionately expensive for a four-line guard whose correctness is a straightforward
+identity check; instead verified via manual trace-through of the exact race (documented above) plus
+re-running the full E2E suite (60 tests, unchanged pass count), which exercises `connectPeer()`'s
+normal path repeatedly across `messaging.spec.js`, `lifecycle.spec.js`, `multidevice.spec.js`, and
+`group.spec.js` — confirms the guard doesn't regress the common case.
+
+---
+
 ## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
 
 819 vitest unchanged; Playwright E2E 60 unchanged; `docs/ROADMAP.md`, `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation) — dead-code removal only, no runtime behavior change.

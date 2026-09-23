@@ -9819,10 +9819,17 @@ async function initMessenger(dbName) {
     peers[contact.pubB64] = peerState;
 
     // P5 FIX: 30s timeout — if not connected, clean up and allow retry
+    // Every teardown site below guards its `delete peers[contact.pubB64]` with an identity
+    // check against THIS closure's own peerState. Without it: a fast ICE failure can trigger
+    // an exponential-backoff retry (starts at 1s) well inside this 30s window; if that retry
+    // succeeds, `peers[contact.pubB64]` now holds a live, connected peerState — but this timer
+    // still fires at its own +30s, sees ITS OWN (stale, never-connected) peerState.connected
+    // is false, and would delete whatever is CURRENTLY keyed there — the live connection, not
+    // the one it was watching. The identity check makes a superseded attempt's delete a no-op.
     const connTimeout = setTimeout(() => {
       if (!peerState.connected) {
         peerState.transition('CLOSED'); try { pc.close(); } catch(e) { _dbg(e); }
-        delete peers[contact.pubB64];
+        if (peers[contact.pubB64] === peerState) delete peers[contact.pubB64];
         _dbg(null, 'P2P timeout for ' + contact.id);
         // P2P timeout — TURN relay handles NAT traversal automatically
       }
@@ -9872,14 +9879,14 @@ async function initMessenger(dbName) {
           setTimeout(() => {
             if (!peerState.connected) {
               peerState.transition('CLOSED'); try { pc.close(); } catch(e) { _dbg(e); }
-              delete peers[contact.pubB64];
+              if (peers[contact.pubB64] === peerState) delete peers[contact.pubB64];
               connectPeer(contact);
             }
           }, delay + jitter);
         } else {
           _dbg(null, `P2P reconnect gave up after ${CONFIG.RECONNECT_MAX_ATTEMPTS} attempts for ${contact.id}`);
           peerState.transition('CLOSED'); try { pc.close(); } catch(e) { _dbg(e); }
-          delete peers[contact.pubB64];
+          if (peers[contact.pubB64] === peerState) delete peers[contact.pubB64];
           if (activeContact?.id === contact.id) {
             const el = _DOM.get('msg-conv-status');
             if (el) { el.textContent = t('uiOfflineRelay'); el.classList.add('color-r'); }
@@ -10042,7 +10049,7 @@ async function initMessenger(dbName) {
           _dbg(null, `Heartbeat: 3 missed pongs for ${contact.id.slice(0,8)} — triggering ICE restart`);
           _missedPongs = 0;
           if (pc.restartIce) pc.restartIce();
-          else { peerState.transition('CLOSED'); try { pc.close(); } catch {} delete peers[contact.pubB64]; connectPeer(contact); }
+          else { peerState.transition('CLOSED'); try { pc.close(); } catch {} if (peers[contact.pubB64] === peerState) delete peers[contact.pubB64]; connectPeer(contact); }
         }
       }, 10000);
       // Handle pong responses
