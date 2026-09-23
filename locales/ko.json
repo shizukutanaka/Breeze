@@ -440,7 +440,6 @@
  "toastPinToggleOn": "{0} 고정됨",
  "toastPinToggleOff": "{0} 고정 해제됨",
  "toastNoteActionOn": "메모 삭제됨",
- "toastNoteActionOff": "메모 저장됨",
  "toastAliasSet": "@{0} 설정됨",
  "toastAliasTaken": "이미 사용 중인 별명입니다",
  "uiAccept": "수락",

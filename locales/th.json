@@ -440,7 +440,6 @@
  "toastPinToggleOn": "ปักหมุด {0} แล้ว",
  "toastPinToggleOff": "เลิกปักหมุด {0} แล้ว",
  "toastNoteActionOn": "ลบโน้ตแล้ว",
- "toastNoteActionOff": "บันทึกโน้ตแล้ว",
  "toastAliasSet": "ตั้ง @{0} แล้ว",
  "toastAliasTaken": "ชื่อเล่นถูกใช้แล้ว",
  "uiAccept": "ยอมรับ",

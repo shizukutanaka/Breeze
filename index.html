@@ -1897,7 +1897,6 @@ const _I = {
     toastPinToggleOn: "Pinned {0}",
     toastPinToggleOff: "Unpinned {0}",
     toastNoteActionOn: "Note cleared",
-    toastNoteActionOff: "Note saved",
     toastAliasSet: "@{0} set",
     toastAliasTaken: 'Alias taken',
     // R95: UI strings i18n
@@ -13938,19 +13937,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       } catch(err) { _dbg(err, 'retry-dlq'); }
     }
 
-    // v3.3: /changelog — Version history
-    if (val.startsWith('/note ')) {
-      e.preventDefault();
-      clearInput();
-      if (!activeContact) return;
-      const noteText = val.slice(6).trim();
-      if (!noteText) return;
-      activeContact.notes = noteText.slice(0, 1024);
-      await dbPut('contacts', activeContact);
-      showToast(t('toastNoteSavedFor', activeContact.name), 'success');
-    }
-
-    // v3.3: /note (no args) — Show contact note
+    // v3.3: /note — Show note (no args), set note, or '/note clear'
     if (val === '/note' || val.startsWith('/note ')) {
       e.preventDefault();
       clearInput();
@@ -13960,7 +13947,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         // Set note
         activeContact.notes = arg === 'clear' ? '' : arg.slice(0, 1024);
         await dbPut('contacts', activeContact);
-        showToast(t(arg === 'clear' ? 'toastNoteActionOn' : 'toastNoteActionOff'), 'success');
+        showToast(arg === 'clear' ? t('toastNoteActionOn') : t('toastNoteSavedFor', activeContact.name), 'success');
       } else {
         const box = _DOM.get('msg-messages');
         const d = document.createElement('div');

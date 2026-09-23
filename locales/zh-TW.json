@@ -440,7 +440,6 @@
  "toastPinToggleOn": "已釘選 {0}",
  "toastPinToggleOff": "已取消釘選 {0}",
  "toastNoteActionOn": "備註已刪除",
- "toastNoteActionOff": "備註已儲存",
  "toastAliasSet": "@{0} 已設定",
  "toastAliasTaken": "別名已被使用",
  "uiAccept": "接受",

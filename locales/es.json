@@ -445,7 +445,6 @@
  "toastPinToggleOn": "{0} fijado",
  "toastPinToggleOff": "{0} desfijado",
  "toastNoteActionOn": "Nota borrada",
- "toastNoteActionOff": "Nota guardada",
  "toastAliasSet": "@{0} establecido",
  "toastAliasTaken": "Alias ya en uso",
  "uiAccept": "Aceptar",
