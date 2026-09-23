@@ -6425,8 +6425,8 @@ async function initMessenger(dbName) {
     if (e.key === 'Escape') { e.target.value = ''; _contactFilter = ''; renderContacts(); e.target.blur(); }
   });
 
-  async function renderContacts() {
-    const contacts = await dbGetAll('contacts');
+  async function renderContacts() { if (_ac.signal.aborted) return; // dead-context callers (throttle timer, dc.onclose, presence) must not write the shared list
+    const contacts = await dbGetAll('contacts'); if (_ac.signal.aborted) return; // switch mid-read — the stale account's contacts must not land in the live list
     const el = _DOM.get('msg-contacts');
     // v3.3: PERFORMANCE — Use DocumentFragment for batch DOM insertion
     const frag = document.createDocumentFragment();
