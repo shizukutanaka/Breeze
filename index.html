@@ -4413,8 +4413,7 @@ async function initMessenger(dbName) {
             const tx = db.transaction(store, 'readwrite');
             tx.objectStore(store).clear();
           }
-          localStorage.clear();
-          sessionStorage.clear();
+          try { localStorage.clear(); sessionStorage.clear(); } catch (_e) { _dbg(_e, 'wipe-clear'); }
           showToast(t('toastWiped'), 'error');
           setTimeout(() => location.reload(), CONFIG.TOAST_DURATION_MS);
           return;
@@ -6932,8 +6931,11 @@ async function initMessenger(dbName) {
     // switch was in flight (see _inputAtSwitch above).
     if (_msgInput.value === _inputAtSwitch) _msgInput.value = _drafts[contact.id] || '';
     // v3.6: Paste shared text from Web Share Target
-    const shared = sessionStorage.getItem('brz-shared-text');
-    if (shared && !_msgInput.value) { _msgInput.value = shared; sessionStorage.removeItem('brz-shared-text'); }
+    // sessionStorage throws SecurityError like localStorage when storage is disabled —
+    // unguarded access here would kill openConversation entirely.
+    let shared = null;
+    try { shared = sessionStorage.getItem('brz-shared-text'); } catch (_e) { _dbg(_e, 'shared-text'); }
+    if (shared && !_msgInput.value) { _msgInput.value = shared; try { sessionStorage.removeItem('brz-shared-text'); } catch (_e) { _dbg(_e, 'shared-text'); } }
     if (_msgInput.value) _autoHeight(_msgInput);
     else _msgInput.style.height = '';
     _msgInput.focus();
