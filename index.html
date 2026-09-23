@@ -11548,8 +11548,9 @@ async function initMessenger(dbName) {
       const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: bIter, hash: 'SHA-256' }, km, { name: 'AES-GCM', length: CONFIG.AES_KEY_BITS }, false, ['decrypt']);
       const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
       const data = JSON.parse(new TextDecoder().decode(pt));
-      // Restore
-      if (data.identity) await dbPut('identity', data.identity, 'keys');
+      // Restore — same gate as restoreBackup: no identity pubB64 = not a usable backup.
+      if (!data.identity?.pubB64) { showToast(t('toastInvalidBackup'), 'error'); return; }
+      await dbPut('identity', data.identity, 'keys');
       if (data.contacts) for (const c of data.contacts) {
         // Validate required fields before storing — a malformed backup entry could corrupt the DB
         if (typeof c?.id !== 'string' || !c.id || c.id.length > 64 ||
