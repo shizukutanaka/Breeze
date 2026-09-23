@@ -4097,6 +4097,9 @@ async function initMessenger(dbName) {
   async function dbGetByIndex(store, idx, key) {
     return new Promise(r => { try { const tx = db.transaction(store); const req = tx.objectStore(store).index(idx).getAll(key); req.onsuccess = () => r(req.result || []); req.onerror = () => r([]); } catch(e) { _dbg(e, 'db-idx'); r([]); } });
   }
+  async function dbPutMany(store, vals) {
+    return new Promise(r => { try { const tx = db.transaction(store, 'readwrite', { durability: 'relaxed' }); const os = tx.objectStore(store); for (const v of vals) os.put(v); tx.oncomplete = () => r(true); tx.onerror = () => r(false); } catch(e) { _dbg(e, 'db-put-many'); r(false); } });
+  }
   // v3.4: Efficient paginated message loading via compound index [contactId, ts]
   // Returns last N messages for a contact, sorted by ts ascending, using reverse cursor
   // v3.6: Optimized batch read (research: getAll 37× faster on Safari, getAllRecords 68% faster reverse)
@@ -12251,27 +12254,23 @@ async function initMessenger(dbName) {
       const { source, msgs } = detectAndParse(text);
       if (msgs.length === 0) { showToast(t('toastNoImportMsgs'), 'error'); return; }
       const myNames = [myName.toLowerCase(), myAlias?.toLowerCase(), 'you', 'me', 'self'].filter(Boolean);
-      let imported = 0;
+      // One indexed read + one batched write replace ~2N sequential IDB round-trips on large imports.
+      const existingIds = new Set((await dbGetByIndex('messages', 'contact', contact.id)).map(m => m.msgId));
+      const batch = [];
       for (let i = 0; i < msgs.length; i++) {
         const m = msgs[i];
-        const isMine = myNames.some(n => m.sender.toLowerCase().includes(n));
-        // ts is only minute-precise (LINE/WhatsApp) — several messages can share
-        // ts+mine; the index keeps them distinct. Deterministic, so re-importing
-        // the same file still dedups. Bound to this conversation: the same export
-        // imported into a different chat must not collide with the first import.
+        // Exact match, not substring: 'Amelia' contains 'me', 'Yousef' 'you' — includes() misattributed them as mine.
+        const isMine = myNames.some(n => (m.sender || '').toLowerCase() === n);
+        // ts is only minute-precise — several msgs share ts+mine; the index keeps them
+        // distinct. Deterministic, so re-import dedups; bound to this conversation.
         const msgId = 'import:' + contact.id + ':' + m.ts + ':' + (isMine ? '1' : '0') + ':' + i;
-        const existing = await dbGet('messages', msgId);
-        if (existing) continue;
-        await dbPut('messages', {
-          msgId, contactId: contact.id,
-          text: typeof m.text === 'string' ? m.text.slice(0, CONFIG.MAX_MSG_LENGTH) : '',
-          mine: isMine, ts: m.ts,
-          // _safeDisplayName like every name ingest — a crafted export plants invisible/bidi twins otherwise.
-          senderName: isMine ? myName : _safeDisplayName(m.sender, 64),
-          imported: true
-        });
-        imported++;
+        if (existingIds.has(msgId)) continue;
+        batch.push({ msgId, contactId: contact.id, text: typeof m.text === 'string' ? m.text.slice(0, CONFIG.MAX_MSG_LENGTH) : '',
+          mine: isMine, ts: m.ts, senderName: isMine ? myName : _safeDisplayName(m.sender, 64), imported: true });
+        existingIds.add(msgId);
       }
+      const imported = batch.length;
+      if (imported) await dbPutMany('messages', batch);
       contact.lastMsg = msgs[msgs.length - 1]?.text?.slice(0, 40) || '';
       contact.lastMsgAt = msgs[msgs.length - 1]?.ts || Date.now();
       await dbPut('contacts', contact);
