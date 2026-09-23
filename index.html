@@ -7436,7 +7436,7 @@ async function initMessenger(dbName) {
   // Toggle reaction on a message (add/remove)
   window.toggleReaction = async function(msgId, emoji) {
     const stored = await dbGet('messages', msgId);
-    if (!stored) return;
+    if (!stored || stored.deleted) return;
     stored.reactions = _ownArrayMap(stored.reactions);
     if (!stored.reactions[emoji]) stored.reactions[emoji] = [];
     const idx = stored.reactions[emoji].indexOf(myId);
@@ -10634,7 +10634,7 @@ async function initMessenger(dbName) {
             const stored = await dbGet('messages', _rmId);
             // Bind the target to THIS conversation — otherwise a contact could react on
             // another conversation's messages by guessing their `senderId:ms` msgId.
-            if (stored && stored.contactId === contact.id) {
+            if (stored && !stored.deleted && stored.contactId === contact.id) {
               stored.reactions = _ownArrayMap(stored.reactions);
               // Cap unique emoji per message at 20 (matches group path); cap users per emoji at 100
               if (!stored.reactions[msg.emoji]) {
