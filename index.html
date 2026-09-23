@@ -11661,6 +11661,7 @@ async function initMessenger(dbName) {
   // v3: DELIVERY STATE (ACK)
   function updateDeliveryState(msgId, state, fromContactId) {
     // state: 0=delivered, 1=read, 2=deleted
+    if (!Number.isInteger(state) || state < 0 || state > 2) return;
     // DOM pass only makes sense when the ack's conversation is the open one —
     // otherwise a peer could stamp state onto bubbles of whatever chat I happen
     // to be viewing (IDB write below is already bound to fromContactId).
@@ -11668,7 +11669,7 @@ async function initMessenger(dbName) {
       : document.querySelector(`[data-msgid="${msgId}"] .ts`);
     if (!el) {
       dbGet('messages', msgId).then(stored => {
-        if (stored && (!fromContactId || stored.contactId === fromContactId)) { stored.ack = state; dbPut('messages', stored); }
+        if (stored && !stored.deleted && (!fromContactId || stored.contactId === fromContactId)) { stored.ack = state; dbPut('messages', stored); }
       }).catch(e => _dbg(e, 'ack-persist'));
       return;
     }
@@ -11683,7 +11684,7 @@ async function initMessenger(dbName) {
     // v3.3: Persist delivery state to IDB — bind to the sender's conversation so a peer
     // cannot stamp read/delivered state onto another contact's messages.
     dbGet('messages', msgId).then(stored => {
-      if (stored && (!fromContactId || stored.contactId === fromContactId)) { stored.ack = state; dbPut('messages', stored); }
+      if (stored && !stored.deleted && (!fromContactId || stored.contactId === fromContactId)) { stored.ack = state; dbPut('messages', stored); }
     }).catch(e => _dbg(e, 'ack-persist'));
   }
 
