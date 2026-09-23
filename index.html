@@ -6179,15 +6179,15 @@ async function initMessenger(dbName) {
     // Auto-join group
     if (joinToken) await processJoinToken(joinToken);
     _openSettingsFromUrl();
-  });
+  }, { signal: _ac.signal });
   // Enter on name field → move focus to alias (matches enterkeyhint="next")
   _DOM.get('msg-name')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); _DOM.get('msg-alias')?.focus(); }
-  });
+  }, { signal: _ac.signal });
   // Enter on alias field → submit (matches enterkeyhint="done")
   _DOM.get('msg-alias')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); _DOM.get('b-msg-setup')?.click(); }
-  });
+  }, { signal: _ac.signal });
 
   // ===== Contacts =====
   let activeContact = null;
@@ -6412,14 +6412,14 @@ async function initMessenger(dbName) {
     else if (e.key === 'Home') next = 0;
     else if (e.key === 'End') next = tabs.length - 1;
     if (next !== undefined) { tabs[next].click(); tabs[next].focus(); }
-  });
+  }, { signal: _ac.signal });
   // v3.2: Contact search filter
   let _contactFilter = '';
-  _DOM.get('contact-filter')?.addEventListener('input', debounce((e) => { _contactFilter = e.target.value.trim().toLowerCase(); renderContacts(); }, 150));
+  _DOM.get('contact-filter')?.addEventListener('input', debounce((e) => { _contactFilter = e.target.value.trim().toLowerCase(); renderContacts(); }, 150), { signal: _ac.signal });
   // v3.2: Escape clears filter + blurs
   _DOM.get('contact-filter')?.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { e.target.value = ''; _contactFilter = ''; renderContacts(); e.target.blur(); }
-  });
+  }, { signal: _ac.signal });
 
   async function renderContacts() {
     const contacts = await dbGetAll('contacts');
@@ -7430,7 +7430,7 @@ async function initMessenger(dbName) {
     msgEl.classList.add('i-rel');
     msgEl.appendChild(picker);
     // Auto-remove on outside click
-    setTimeout(() => document.addEventListener('click', function rm() { picker.remove(); document.removeEventListener('click', rm); }, { once: true }), CONFIG.DOM_SETTLE_MS);
+    setTimeout(() => document.addEventListener('click', function rm() { picker.remove(); document.removeEventListener('click', rm); }, { signal: _ac.signal, once: true }), CONFIG.DOM_SETTLE_MS);
   }
 
   // Toggle reaction on a message (add/remove)
@@ -7629,7 +7629,7 @@ async function initMessenger(dbName) {
     // exit paths through one cleanup so a click also detaches the Escape handler.
     const escHandler = (e) => { if (e.key === 'Escape') cleanup(); };
     function cleanup() { menu.remove(); document.removeEventListener('keydown', escHandler); }
-    setTimeout(() => document.addEventListener('click', cleanup, { once: true }), CONFIG.DOM_SETTLE_MS);
+    setTimeout(() => document.addEventListener('click', cleanup, { signal: _ac.signal, once: true }), CONFIG.DOM_SETTLE_MS);
     document.addEventListener('keydown', escHandler, { signal: _ac.signal });
   }
 
@@ -8314,7 +8314,7 @@ async function initMessenger(dbName) {
     cancelBtn.onclick = () => { preview.remove(); e.target.value = ''; };
     preview.append(sendBtn, cancelBtn);
     bar.insertBefore(preview, bar.firstChild);
-  });
+  }, { signal: _ac.signal });
 
   // v3.5: Extracted file send logic (shared by preview confirm + drag-drop)
   // v3.6: Auto-compress images before send (saves P2P bandwidth, fits relay 192KB limit)
@@ -8434,12 +8434,12 @@ async function initMessenger(dbName) {
       return;
     }
     sendMessage();
-  });
+  }, { signal: _ac.signal });
   _DOM.get('b-msg-nrn')?.addEventListener('click', () => {
     _noReplyNeeded = !_noReplyNeeded;
     _updateNrnButton();
     showToast(t(_noReplyNeeded ? 'nrnOn' : 'nrnOff'), 'info');
-  });
+  }, { signal: _ac.signal });
 
   // v3.5: Drag-and-drop file upload
   (() => {
@@ -8450,12 +8450,12 @@ async function initMessenger(dbName) {
     chatArea.addEventListener('dragenter', (e) => {
       e.preventDefault(); dragCounter++;
       dropOverlay.classList.add('active');
-    });
+    }, { signal: _ac.signal });
     chatArea.addEventListener('dragleave', (e) => {
       e.preventDefault(); dragCounter--;
       if (dragCounter <= 0) { dropOverlay.classList.remove('active'); dragCounter = 0; }
-    });
-    chatArea.addEventListener('dragover', (e) => e.preventDefault());
+    }, { signal: _ac.signal });
+    chatArea.addEventListener('dragover', (e) => e.preventDefault(), { signal: _ac.signal });
     chatArea.addEventListener('drop', async (e) => {
       e.preventDefault(); dragCounter = 0;
       dropOverlay.classList.remove('active');
@@ -8466,7 +8466,7 @@ async function initMessenger(dbName) {
       if (isBlockedFile(file.name)) { showToast(t('toastBlockedFile'), 'error'); return; }
       if (await isBlockedMagicBytes(file)) { showToast(t('blockedFileType'), 'error'); return; }
       await _sendFile(file);
-    });
+    }, { signal: _ac.signal });
   })();
 
   // v3.5: Tab title unread counter
@@ -8792,7 +8792,7 @@ async function initMessenger(dbName) {
         }
         setTimeout(() => { if (_mediaRecorder?.state === 'recording') _mediaRecorder.stop(); }, CONFIG.VOICE_MAX_MS);
       } catch(err) { _dbg(err, 'voice'); showToast(t('toastMicDenied'), 'error'); }
-    });
+    }, { signal: _ac.signal });
   }
 
   // v3.3: AI — Speech-to-Text (Web Speech API)
@@ -8824,7 +8824,7 @@ async function initMessenger(dbName) {
       sttBtn.textContent = '🔴';
       sttBtn.setAttribute('aria-pressed', 'true');
       recognition.start();
-    });
+    }, { signal: _ac.signal });
   }
 
   // v3.3: AI — Smart Reply (show suggestions after receiving a message)
@@ -8879,7 +8879,7 @@ async function initMessenger(dbName) {
     if (e.key === 'Escape') {
       _DOM.get('mention-picker')?.remove();
     }
-  });
+  }, { signal: _ac.signal });
 
   // v3.3: @mention autocomplete for groups
   _DOM.get('msg-input')?.addEventListener('input', (e) => {
@@ -8915,7 +8915,7 @@ async function initMessenger(dbName) {
         input.focus();
       };
     });
-  });
+  }, { signal: _ac.signal });
 
   _DOM.get('msg-input')?.addEventListener('paste', async (e) => {
     const items = e.clipboardData?.items;
@@ -8955,7 +8955,7 @@ async function initMessenger(dbName) {
         return;
       }
     }
-  });
+  }, { signal: _ac.signal });
 
   // Mobile: back button
   _DOM.get('b-msg-back')?.addEventListener('click', () => {
@@ -8963,7 +8963,7 @@ async function initMessenger(dbName) {
     if (history.state?.conversation) { history.back(); return; }
     _DOM.get('msg-sidebar').classList.remove('hidden');
     _DOM.get('b-msg-back').classList.add('hidden');
-  });
+  }, { signal: _ac.signal });
 
   // v3.6: Browser back button → close conversation, show sidebar (critical for mobile PWA)
   window.addEventListener('popstate', (e) => {
@@ -8985,7 +8985,7 @@ async function initMessenger(dbName) {
     await dbPut('contacts', activeContact);
     _DOM.get('msg-messages').replaceChildren();
     renderContacts();
-  });
+  }, { signal: _ac.signal });
 
   // VOICE / VIDEO CALLING (WebRTC MediaStream)
   //
@@ -9395,8 +9395,8 @@ async function initMessenger(dbName) {
   };
 
   // Call button handlers
-  _DOM.get('b-msg-call')?.addEventListener('click', () => { if (activeContact) startCall(activeContact, false); });
-  _DOM.get('b-msg-video')?.addEventListener('click', () => { if (activeContact) startCall(activeContact, true); });
+  _DOM.get('b-msg-call')?.addEventListener('click', () => { if (activeContact) startCall(activeContact, false); }, { signal: _ac.signal });
+  _DOM.get('b-msg-video')?.addEventListener('click', () => { if (activeContact) startCall(activeContact, true); }, { signal: _ac.signal });
 
   // Listen for incoming calls via signal poll (piggyback on existing messenger signal poll)
   // Incoming calls are detected in the signal poll's message handling
@@ -9413,7 +9413,7 @@ async function initMessenger(dbName) {
       activeContact.disappearSec = _disappearTimer || undefined;
       dbPut('contacts', activeContact).catch(e => _dbg(e, 'disappear-persist'));
     }
-  });
+  }, { signal: _ac.signal });
 
   // Disappearing message cleanup: run every 10s
   _intervals.push(setInterval(async () => {
@@ -9452,7 +9452,7 @@ async function initMessenger(dbName) {
       const urlMatch = input.match(/https?:\/\/[^\s]+\?add=[^\s]+/);
       await resolveAndAdd(urlMatch ? urlMatch[0] : input.trim());
     }
-  });
+  }, { signal: _ac.signal });
 
   // Local-members groups have no server registry to snapshot caps from (invite-link groups
   // get them free via /group/info) — fetch once via the batch prekey endpoint, chunked at
@@ -9706,7 +9706,7 @@ async function initMessenger(dbName) {
     stored.bio = bio.slice(0, 100);
     await dbPut('identity', stored, 'keys');
     _DOM.get('msg-my-name').textContent = stored.avatar + ' ' + myName;
-  });
+  }, { signal: _ac.signal });
 
   // Show avatar in name display
   (async () => {
@@ -11123,13 +11123,13 @@ async function initMessenger(dbName) {
       const btn = _DOM.get('b-msg-share'); if (!btn) return;
       btn.textContent = '✓'; setTimeout(() => { btn.textContent = t('btnShareId'); }, CONFIG.TOAST_DURATION_MS);
     }
-  });
+  }, { signal: _ac.signal });
 
   // Drag-drop: import chat history OR send file to active contact
   const msgArea = _DOM.get('msg-messages');
   if (msgArea) {
-    msgArea.addEventListener('dragover', (e) => { e.preventDefault(); msgArea.classList.add('drag-active'); });
-    msgArea.addEventListener('dragleave', () => { msgArea.classList.remove('drag-active'); });
+    msgArea.addEventListener('dragover', (e) => { e.preventDefault(); msgArea.classList.add('drag-active'); }, { signal: _ac.signal });
+    msgArea.addEventListener('dragleave', () => { msgArea.classList.remove('drag-active'); }, { signal: _ac.signal });
     msgArea.addEventListener('drop', async (e) => {
       e.preventDefault(); msgArea.classList.remove('drag-active');
       const file = e.dataTransfer?.files?.[0];
@@ -11181,7 +11181,7 @@ async function initMessenger(dbName) {
         fi.files = dt.files;
         fi.dispatchEvent(new Event('change'));
       }
-    });
+    }, { signal: _ac.signal });
   }
 
   // ===== Backup & Restore =====
@@ -11214,18 +11214,18 @@ async function initMessenger(dbName) {
   // Neither feature was lost — /panic (and Ctrl+Shift+Backspace) and /sort still reach them.
 
   // Theme toggle
-  _DOM.get('b-msg-theme')?.addEventListener('click', toggleTheme);
+  _DOM.get('b-msg-theme')?.addEventListener('click', toggleTheme, { signal: _ac.signal });
   (() => { const btn = _DOM.get('b-msg-theme');
     if (btn) btn.textContent = document.documentElement.classList.contains('light') ? '🌙' : '☀'; })();
 
   // Restore: drag-drop or file input (hidden)
-  _DOM.get('msg-sidebar')?.addEventListener('dragover', (e) => e.preventDefault());
+  _DOM.get('msg-sidebar')?.addEventListener('dragover', (e) => e.preventDefault(), { signal: _ac.signal });
   _DOM.get('msg-sidebar')?.addEventListener('drop', async (e) => {
     e.preventDefault();
     const file = e.dataTransfer?.files?.[0];
     if (!file) return;
     await restoreBackup(file);
-  });
+  }, { signal: _ac.signal });
 
   async function restoreBackup(file) {
     const pass = await showPrompt(t('backupPassEnter'), '', { type: 'password', okText: t('decrypt'), autocomplete: 'current-password' });
@@ -11624,7 +11624,7 @@ async function initMessenger(dbName) {
         <div class="kbd-row"><span>This help</span><kbd>?</kbd></div>
       </div>`);
       document.body.appendChild(overlay);
-      document.addEventListener('keydown', function h(ev) { if (ev.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', h); } }, { once: true });
+      document.addEventListener('keydown', function h(ev) { if (ev.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', h); } }, { signal: _ac.signal, once: true });
     }
   }, { signal: _ac.signal });
   // v1 INTEGRATION: Typing Indicator + Read Receipts
@@ -12092,7 +12092,7 @@ async function initMessenger(dbName) {
       confirmEl.querySelector('#link-open').onclick = () => { confirmEl.remove(); window.open(url, '_blank', 'noopener,noreferrer'); };
       return;
     }
-  });
+  }, { signal: _ac.signal });
 
   // The v3.5 delegated right-click handler that used to live here is deleted, not fixed
   // in place. Every `.msg[data-msgid]` already gets its own `oncontextmenu` (above,
@@ -12556,7 +12556,7 @@ async function initMessenger(dbName) {
     modal.appendChild(card);
     modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
     document.body.appendChild(modal);
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') modal.remove(); }, { once: true });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') modal.remove(); }, { signal: _ac.signal, once: true });
   }
 
   // BULK INVITE: Send one link to invite multiple people
@@ -14560,7 +14560,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const name = val.slice(6).trim() || t('roomDefault');
       await createGroupInviteLink(name);
     }
-  });
+  }, { signal: _ac.signal });
 
   // Expose to global scope for onclick handlers in dynamic HTML
   window.createCloudBackup = createCloudBackup;
