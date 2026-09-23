@@ -12486,7 +12486,7 @@ async function initMessenger(dbName) {
         // isConnected, not parentNode: modal.remove() detaches the subtree but the
         // card stays video's parent — parentNode would keep the camera streaming and
         // the detect loop alive forever after close.
-        if (!video.isConnected) { cleanup(); resolve(null); return; }
+        if (!video.isConnected || _ac.signal.aborted) { cleanup(); resolve(null); return; }
         try {
           const codes = await detector.detect(video);
           if (codes.length > 0) { cleanup(); video.remove(); resolve(codes[0].rawValue); return; }
