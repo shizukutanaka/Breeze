@@ -9809,7 +9809,7 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'startPolling'); }
   }
 
-  async function handleIncoming(msg) {
+  async function handleIncoming(msg) { if (_ac.signal.aborted) return; // wire arrivals dispatched on a dead context (in-flight poll iterations, channel stragglers) must not notify/write the live account
     // Normalize msg.ts to a safe integer. P2P DataChannel messages carry a peer-supplied
     // ts field that is never validated by the relay; a non-numeric value would be
     // concatenated into msgId (contactId + ':' + msg.ts) and later break querySelector
@@ -10188,6 +10188,7 @@ async function initMessenger(dbName) {
         else if (_p && _p.type === 'file' && typeof _p.name === 'string' && typeof _p.data === 'string') { fileDataG = _p; text = `📎 ${String(_p.name).slice(0, 128)}`; }
       } catch {}
       await dbPut('messages', { msgId, contactId: msg.groupId, text, mine: false, ts: msg.ts, isPoll: meta.isPoll || undefined, fileData: fileDataG, ...meta });
+      if (_ac.signal.aborted) return; // mid-flight arrival resuming after switch — stop before unread/notify/broadcast writes
       group.lastMsg = text.slice(0, 30);
       group.lastMsgSender = senderName;
       group.lastMsgAt = msg.ts;
@@ -10428,7 +10429,7 @@ async function initMessenger(dbName) {
       }
       await dbPut('messages', { msgId, contactId, text, mine: false, ts: msg.ts, ...meta, ...(_frank.frankId ? { frankId: _frank.frankId, frankOpening: _frank.opening } : {}) });
     }
-
+    if (_ac.signal.aborted) return; // mid-flight arrival resuming after switch — stop before unread/notify/SR/broadcast writes
     contact.lastMsg = text.slice(0, 40);
     contact.lastMsgAt = msg.ts;
     if (activeContact?.id !== contactId) {
@@ -11384,7 +11385,7 @@ async function initMessenger(dbName) {
     if (stored) _lastReadTs = stored;
   })();
 
-  function showReadReceipt(contactId, ts) {
+  function showReadReceipt(contactId, ts) { if (_ac.signal.aborted) return; // dead-context stateDC continuations must not stamp read ticks onto the live account's bubbles
     _lastReadTs[contactId] = ts;
     clearTimeout(showReadReceipt._saveTimer);
     showReadReceipt._saveTimer = setTimeout(() => dbPut('identity', _lastReadTs, 'readTs'), MS.SEC);
@@ -11661,7 +11662,7 @@ async function initMessenger(dbName) {
 
   // Show typing indicator when received
   // v3: DELIVERY STATE (ACK)
-  function updateDeliveryState(msgId, state, fromContactId) {
+  function updateDeliveryState(msgId, state, fromContactId) { if (_ac.signal.aborted) return; // dead-context stateDC acks must not stamp badges onto the live account's bubbles
     // state: 0=delivered, 1=read, 2=deleted
     // DOM pass only makes sense when the ack's conversation is the open one —
     // otherwise a peer could stamp state onto bubbles of whatever chat I happen
