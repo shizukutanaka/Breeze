@@ -5464,6 +5464,7 @@ async function initMessenger(dbName) {
   }
 
   function scheduleRetry() {
+    if (_ac.signal.aborted) return; // dead context must not re-arm the retry chain
     _updateOutboxBadge();
     if (_retryTimer || _retryQueue.length === 0) return;
     _retryTimer = setTimeout(async () => {
