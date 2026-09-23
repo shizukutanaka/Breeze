@@ -10454,7 +10454,7 @@ async function initMessenger(dbName) {
         }
       }
       // v3.6: Screen reader announcement for unread messages (research: ARIA23)
-      announceToSR(`${contact.name}: ${text.slice(0, 60)}`);
+      announceToSR(locked ? t('notifNewMessage') : `${contact.name}: ${text.slice(0, 60)}`);
     }
     await dbPut('contacts', contact);
     if (activeContact?.id === contactId) { meta._animate = true; appendMsg(text, false, msg.ts, null, storedFileData, meta); showSmartReplies(text); }
@@ -10972,6 +10972,7 @@ async function initMessenger(dbName) {
     safeSetHTML(overlay, `<div class="i-icon48">🔒</div><div class="i-title16">${esc(t('lockTitle'))}</div>`);
     overlay.appendChild(inp); overlay.appendChild(btn);
     document.body.appendChild(overlay);
+    ['msg-messages','typing-indicator','msg-conv-status'].forEach(id => _DOM.get(id)?.setAttribute('aria-live','off')); // silence live regions while locked
     let _attempts = 0;
     let _backoffUntil = 0; // timestamp: block unlock() until this passes (0 = no block)
     const unlock = async () => {
@@ -11003,7 +11004,7 @@ async function initMessenger(dbName) {
       }
       // v3.5: Constant-time comparison (prevent timing attack)
       if (hashB64.length === stored.hash.length && await timingSafeEqual(hashB64, stored.hash)) {
-        overlay.remove();
+        overlay.remove(); ['msg-messages','typing-indicator','msg-conv-status'].forEach(id => _DOM.get(id)?.setAttribute('aria-live','polite'));
         _attempts = 0; _backoffUntil = 0;
         auditLog('security', 'Lock screen unlocked');
         // Migrate legacy hash to PBKDF2
