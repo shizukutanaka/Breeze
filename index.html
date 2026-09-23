@@ -5548,7 +5548,10 @@ async function initMessenger(dbName) {
         if (c) { c.unread = 0; dbPut('contacts', c).then(() => renderContacts()).catch(err => _dbg(err, 'mark-read-put')); }
       }).catch(err => _dbg(err, 'mark-read'));
     }
-  });
+    // navigator.serviceWorker outlives account switches — without the _ac signal this
+    // listener accumulates: N switches → quick-reply sends N copies, mark-read writes
+    // into the stale account's IDB, sync-outbox drains the dead queue (CWE-772).
+  }, { signal: _ac.signal });
 
   // Push contactId is a sha256 pseudonym (push service can't read who's writing);
   // resolve by hashing our own contact ids — a raw-id payload falls through unchanged.
