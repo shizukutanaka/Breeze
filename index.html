@@ -4396,7 +4396,7 @@ async function initMessenger(dbName) {
       const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: 0, ...(await _ownerAuth('msg-poll')) });
       if (!resp.ok) return;
       const data = await resp.json();
-      for (const msg of (data.messages || [])) {
+      for (const msg of (Array.isArray(data.messages) ? data.messages : [])) { // shape-gate: a truthy non-array (huge string) iterates per-element — seconds per poll
         // Signature-gated: `from` is self-asserted on the relay, so a bare remote_wipe
         // is forgeable by anyone who knows your userId — a remote data-destruction
         // primitive. Only a valid Ed25519 sig over 'breeze-remote-wipe:<from>:<ts>' by
@@ -9241,7 +9241,7 @@ async function initMessenger(dbName) {
         const resp = await _signalAwait(room, 'poll');
         if (!resp.ok) return;
         const data = await resp.json();
-        for (const s of (data.messages || [])) {
+        for (const s of (Array.isArray(data.messages) ? data.messages : [])) {
           if (s.sender === myId) continue;
           // Sender binding (same as the data-channel signal poll): the call room name is
           // the two sorted ids — a third party could otherwise inject ICE or fake call-offer.
@@ -9745,7 +9745,7 @@ async function initMessenger(dbName) {
           const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: _lastPollTs, ...(await _ownerAuth('msg-poll')) });
           if (resp.ok) {
             const data = await resp.json();
-            for (const msg of (data.messages || [])) {
+            for (const msg of (Array.isArray(data.messages) ? data.messages : [])) {
               try { await handleIncoming(msg); } catch(e) { _dbg(e, 'msg-process'); }
               if (typeof msg.ts === 'number' && Number.isFinite(msg.ts) && msg.ts > _lastPollTs && msg.ts <= Date.now() + MS.DAY) _lastPollTs = msg.ts;
             }
@@ -9757,7 +9757,7 @@ async function initMessenger(dbName) {
             // drop while we were offline — tell the user instead of losing them wordlessly.
             if (Number.isInteger(sData.dropped) && sData.dropped > 0) showToast(t('toastMsgsDropped', sData.dropped), 'error');
             let sealedProcessed = 0;
-            for (const sealed of (sData.messages || [])) {
+            for (const sealed of (Array.isArray(sData.messages) ? sData.messages : [])) {
               try {
                 let env = JSON.parse(sealed.envelope);
                 if (!env || typeof env !== 'object') { sealedProcessed++; continue; } // malformed: ACK+skip to avoid infinite retry
@@ -10825,7 +10825,7 @@ async function initMessenger(dbName) {
           const resp = await _signalAwait(sigRoom, 'poll');
           if (!resp.ok) return;
           const data = await resp.json();
-          for (const s of (data.messages || [])) {
+          for (const s of (Array.isArray(data.messages) ? data.messages : [])) {
             if (s.sender === myId) continue;
             // Sender binding: the relay is unauthenticated and the room name is just the
             // two sorted user ids — anyone who knows the pair can POST. Only accept signals
