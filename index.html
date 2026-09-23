@@ -9855,7 +9855,12 @@ async function initMessenger(dbName) {
           const stored = await dbGet('messages', smId);
           if (!stored) return; // mutation for a message this device never had
           if (signal.type === 'edit' && typeof signal.text === 'string') {
-            stored.text = signal.text.slice(0, 65536); stored.edited = true; await dbPut('messages', stored);
+            const _newText = signal.text.slice(0, 65536);
+            // Keep a poll record parseable: an 'edit' carrying non-JSON text would leave
+            // isPoll=true with unparseable text -> every JSON.parse(m.text) poll path throws.
+            let _editOk = true;
+            if (stored.isPoll) { try { const _po = JSON.parse(_newText); _editOk = !!(_po && typeof _po === 'object'); } catch { _editOk = false; } }
+            if (_editOk) { stored.text = _newText; stored.edited = true; await dbPut('messages', stored); }
             const el = document.querySelector(`[data-msgid="${smId}"]`);
             if (el) { const tm = new Date(signal.ts || msg.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); safeSetHTML(el, renderLinks(renderMarkdown(esc(stored.text))) + ' <span class="i-edited">' + t('edited') + '</span><span class="ts">' + tm + '</span>'); }
           } else if (signal.type === 'delete') {
@@ -10097,7 +10102,7 @@ async function initMessenger(dbName) {
           if (signal.type === 'edit') {
             const stored = await dbGet('messages', targetMsgId);
             // Cap edit text to 64 KB to prevent storage DoS via the P2P signal path (no server-side check).
-            const _ok = _ownGroupMsg(stored) && typeof signal.text === 'string';
+            const _ok = _ownGroupMsg(stored) && typeof signal.text === 'string' && (!stored.isPoll || (() => { try { const _po = JSON.parse(signal.text.slice(0, 65536)); return !!(_po && typeof _po === 'object'); } catch { return false; } })());
             if (_ok) { stored.text = signal.text.slice(0, 65536); stored.edited = true; await dbPut('messages', stored); }
             const el = document.querySelector(`[data-msgid="${targetMsgId}"]`);
             if (el && _ok) { const tm = new Date(signal.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); safeSetHTML(el, renderLinks(renderMarkdown(esc(signal.text))) + ' <span class="i-edited">' + t('edited') + '</span><span class="ts">'+tm+'</span>'); }
@@ -10289,7 +10294,7 @@ async function initMessenger(dbName) {
           // contact could rewrite/delete another contact's messages by guessing their msgId
           // (`senderId:ms` — the id half is public, the timestamp half is guessable).
           // Cap edit text to 64 KB to prevent storage DoS via the P2P signal path (no server-side check).
-          const _okEdit = stored && !stored.mine && stored.contactId === contactId && typeof signal.text === 'string';
+          const _okEdit = stored && !stored.mine && stored.contactId === contactId && typeof signal.text === 'string' && (!stored.isPoll || (() => { try { const _po = JSON.parse(signal.text.slice(0, 65536)); return !!(_po && typeof _po === 'object'); } catch { return false; } })());
           if (_okEdit) { stored.text = signal.text.slice(0, 65536); stored.edited = true; await dbPut('messages', stored); }
           const el = document.querySelector(`[data-msgid="${_smId}"]`);
           // DOM update gated on the same predicate — else a peer could paint an
