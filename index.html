@@ -3838,7 +3838,7 @@ async function initMessenger(dbName) {
   // body, or {} when signing is unavailable. The Worker verifies-when-present and
   // requires it by default on the poll/ack/push surfaces (*_REQUIRE_AUTH=false opts out).
   async function _ownerAuth(op, bind = '') {
-    const ts = Date.now();
+    const ts = correctedNow(); // outgoing ts must use the server-corrected clock — the ±5min anti-replay window rejects drifted signatures
     const sig = await signMessage(`breeze-${op}:${myId}:${ts}${bind ? ':' + bind : ''}`);
     return sig ? { ts, sig } : {};
   }
