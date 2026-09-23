@@ -5933,10 +5933,10 @@ async function initMessenger(dbName) {
       // Clear incomplete binary file transfers — their chunk buffers belong to this
       // account's peer sessions and must not survive into the next account's context.
       for (const id in _fileChunks) delete _fileChunks[id];
-      // Abort live speech recognition: it is created per initMessenger call and holds
-      // the mic open — a running session would keep transcribing into the shared
-      // #msg-input under the next account (and each switch stacked one more recognizer).
-      try { _sttRec?.abort(); } catch(e) { _dbg(e); }
+      // Revoke rendered-attachment blob: URLs — they outlive the orphaned set — and abort
+      // live speech recognition: it is created per initMessenger call and holds the mic
+      // open — it would keep transcribing into the shared #msg-input under the next account.
+      try { _blobUrls.forEach(u => URL.revokeObjectURL(u)); _blobUrls.clear(); } catch(e) { _dbg(e); } try { _sttRec?.abort(); } catch(e) { _dbg(e); }
       _sttRec = null;
     };
   }
