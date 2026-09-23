@@ -2327,6 +2327,9 @@ function showToast(message, type = 'info', duration = CONFIG.TOAST_DURATION_MS) 
     _toastContainer.className = 'toast-container';
     document.body.appendChild(_toastContainer);
   }
+  // Wire events (keyChanged etc.) can toast per message — cap concurrency so a flood
+  // can't pile up DOM nodes, timers and haptics; oldest toasts are evicted first.
+  while (_toastContainer.childElementCount >= 5) _toastContainer.firstElementChild.remove();
   const toast = document.createElement('div');
   toast.className = 'toast toast-' + type;
   toast.textContent = message;
