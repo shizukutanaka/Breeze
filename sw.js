@@ -89,8 +89,22 @@ function cachePut(request, response) {
   if (!response || response.status !== 200 || response.type !== 'basic') return;
   const cc = response.headers?.get('cache-control') || '';
   if (cc.includes('no-store')) return;
+  // Parameterized URLs are one-off deep links (?open=<contactId> notification taps,
+  // share-target payloads, /index.html?cv= codeverify probes): their entries are never
+  // served back — navigations are network-first and the offline fallback matches literal
+  // '/index.html' — so each variant only spends quota on a ~700KB shell copy. Without a
+  // runtime bound the activate-only trim never ran mid-session and the cache grew
+  // unboundedly between SW restarts, crowding out IDB quota.
+  if (new URL(request.url).search) return;
   const copy = response.clone();
-  caches.open(CACHE).then(c => c.put(request, copy)).catch(() => {});
+  caches.open(CACHE).then(async c => {
+    await c.put(request, copy);
+    const keys = await c.keys();
+    const shell = new Set(ASSETS.map(a => new URL(a, self.location.origin).href));
+    const trimmable = keys.filter(k => !shell.has(k.url));
+    if (trimmable.length <= MAX_CACHE_ITEMS) return;
+    await Promise.all(trimmable.slice(0, trimmable.length - MAX_CACHE_ITEMS).map(k => c.delete(k)));
+  }).catch(() => {});
 }
 
 // Web Push
