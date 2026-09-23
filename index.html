@@ -11377,6 +11377,11 @@ async function initMessenger(dbName) {
   })();
 
   function showReadReceipt(contactId, ts) {
+    // Peer-controlled ts: a forged far-future receipt would mark every past AND FUTURE
+    // message as read (the `m.ts <= ts` watermark) — clamp to the same window the
+    // relay enforces on sends. NaN/Infinity receipts are dropped outright.
+    if (typeof ts !== 'number' || !Number.isFinite(ts) || ts < 0) return;
+    ts = Math.min(ts, Date.now() + 5 * MS.MIN);
     _lastReadTs[contactId] = ts;
     clearTimeout(showReadReceipt._saveTimer);
     showReadReceipt._saveTimer = setTimeout(() => dbPut('identity', _lastReadTs, 'readTs'), MS.SEC);
