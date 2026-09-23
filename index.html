@@ -2690,6 +2690,7 @@ const _perf = {
   mark: (name) => { try { performance?.mark?.('brz:' + name); } catch {} },
   measure: (name, start) => { try { return performance?.measure?.('brz:' + name, 'brz:' + start); } catch { return null; } },
 };
+let _messengerCleanup = null; // previous initMessenger's teardown. Must stay above the boot call: initMessenger's sync prefix writes it (TDZ crashed every boot) — tools/boot-tdz.mjs
 
 // v3.6: Trusted Types — 'breeze-sanitizer' (named, via safeSetHTML) + 'default' (safety net sanitizing raw innerHTML/outerHTML under require-trusted-types-for 'script'). Fallback: same API, no TT.
 const _ttPolicy = (() => {
@@ -3446,7 +3447,6 @@ function setActiveAccountId(id) {
 })();
 
 let _currentAccountDb = null;
-let _messengerCleanup = null; // cleanup function from previous initMessenger
 
 async function switchAccount(accountId) {
     try {  

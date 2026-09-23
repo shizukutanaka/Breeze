@@ -95,6 +95,18 @@ The endpoint-side verified-when-present auth was inert while clients never sent 
 
 # Changelog
 
+## Every page load crashed: `_messengerCleanup` written in its temporal dead zone — and a gate so it can't ship a fourth time (branch claude/nice-ride-T6yb0, 2026-09-23)
+
+vitest 1033 unchanged; Playwright E2E **3/69 → 62/69** (the remaining 7 fail against the merged branch's own changes — invisible until boot worked again; fixed in the next entry); `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash), new `tools/boot-tdz.mjs`, `validate.sh` (45 → 46 checks), `CLAUDE.md`.
+
+Merging the ~240 PRs another agent had pushed to this branch went cleanly at the text level, but the full E2E run then failed 66 of 69 — including the smoke test that only checks the app boots. The failure snapshot showed the crash overlay: `Cannot access '_messengerCleanup' before initialization`. It was not the merge: origin HEAD had the identical lines, so the branch had been crashing on every fresh page load since PR #241 (`43eae51`, "register a minimal cleanup at init start").
+
+The mechanism: the top-level boot block calls `initMessenger()` (a hoisted function) at line ~2866. initMessenger runs synchronously up to its first `await`, and #241 added `_messengerCleanup = () => {…}` as its third statement — but `let _messengerCleanup = null` sat ~580 lines further down, not yet executed, so the write hit the binding's temporal dead zone. Nothing but a real browser boot sees this: the code parses, and unit tests exercise extracted fragments, never the real top-level order.
+
+This is the third time this exact class has broken boot — `_perf` (read on initMessenger's first line; its declaration carries a comment saying so) and `_boot()`'s closure `let`s both came before. Fix: moved the declaration above the boot call next to `_perf` (a pure move — `index.html` stays at 14999 lines, under the 15K gate). And because a documented lesson didn't stop the third instance, it's now a gate: `tools/boot-tdz.mjs` takes initMessenger's synchronous prefix (through its first `await`) and fails on any name in it that's a top-level `let`/`const` declared after the boot call. Teeth-tested both ways: it flags `_messengerCleanup` on the pre-fix tree, flags `_perf` on a scratch copy with `_perf` moved back below the boot call, and passes on the fix.
+
+---
+
 ## A stale P2P reconnect timer could delete a live, just-succeeded connection from the peer map (branch claude/nice-ride-T6yb0, 2026-09-23)
 
 819 vitest unchanged; Playwright E2E 60 unchanged (full suite re-run to confirm no regression; see below for why no new test was added); `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation).

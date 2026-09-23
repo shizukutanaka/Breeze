@@ -167,6 +167,13 @@ else fail "mismatched HTML tag nesting (run: node tools/html-balance.mjs)" 3; fi
 if node tools/closure-boundary.mjs >/dev/null 2>&1; then pass "no initMessenger-closure-local name referenced outside it" 3
 else fail "closure-local name referenced outside initMessenger() (run: node tools/closure-boundary.mjs)" 3; fi
 
+# Boot-TDZ gate. The top-level boot calls initMessenger() hundreds of lines before many
+# top-level let/const run; anything its synchronous prefix touches that's declared later is
+# in its temporal dead zone — a ReferenceError on every page load. Shipped three times
+# (_perf, _boot's closure lets, _messengerCleanup). See tools/boot-tdz.mjs.
+if node tools/boot-tdz.mjs >/dev/null 2>&1; then pass "no top-level binding read by initMessenger() before its declaration" 3
+else fail "top-level binding in its TDZ at boot (run: node tools/boot-tdz.mjs)" 3; fi
+
 DEADFN=$(node -e '
 const fs=require("fs");const h=fs.readFileSync("index.html","utf8");
 const fns=[...h.matchAll(/^\s*(?:async\s+)?function\s+([A-Za-z_][\w]*)\s*\(/gm)].map(m=>m[1]);
