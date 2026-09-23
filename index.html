@@ -3041,7 +3041,9 @@ async function fetchRetry(url, opts = {}, { maxRetries = 3, baseDelay = 1000, ti
       const resp = await fetchT(url, { ...opts }, timeoutMs);
       if (resp.status === 429) {
         // Rate limited — wait and retry
-        const retryAfter = parseInt(resp.headers.get('Retry-After') || '5') || 5;
+        // Clamp a hostile Retry-After like the /msg and /signal retry loops do — an
+        // unclamped value stalls this caller for hours on a single 429 (CWE-400).
+        const retryAfter = Math.min(parseInt(resp.headers.get('Retry-After') || '5') || 5, 300);
         if (attempt < maxRetries) { await new Promise(r => setTimeout(r, retryAfter * MS.SEC)); continue; }
       }
       return resp;
@@ -5449,7 +5451,9 @@ async function initMessenger(dbName) {
         return;
       }
       if (resp.status === 429) {
-        const retryAfter = (parseInt(resp.headers.get('Retry-After') || '5') || 5) * MS.SEC;
+        // Clamp a hostile Retry-After like the /signal loop does — an unclamped value
+        // defers the re-queue for hours on a single 429 (CWE-400 delivery starvation).
+        const retryAfter = Math.min(parseInt(resp.headers.get('Retry-After') || '5') || 5, 300) * MS.SEC;
         showToast(t('toastRateLimit') + ' ' + Math.ceil(retryAfter/MS.SEC) + 's', 'info');
         setTimeout(() => { if (_retryQueue.length < 50) { _retryQueue.unshift({ to, payload, attempts: 0 }); _saveRetryQueue(); scheduleRetry(); } }, retryAfter);
         return;
