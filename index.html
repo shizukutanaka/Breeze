@@ -9909,7 +9909,8 @@ async function initMessenger(dbName) {
           renderContacts();
           return;
         }
-        await dbPut('messages', { msgId: syncId, contactId: target.id, text: syncText, mine: true, ts: msg.ts, isPoll: msg.isPoll || undefined, synced: true });
+        const syncPollOk = (() => { try { const p = JSON.parse(syncText); return p !== null && typeof p === 'object'; } catch { return false; } })();
+        await dbPut('messages', { msgId: syncId, contactId: target.id, text: syncText, mine: true, ts: msg.ts, isPoll: (msg.isPoll && syncPollOk) || undefined, synced: true });
         target.lastMsg = (msg.isPoll ? '📊 ' : '') + syncText.slice(0, 40); target.lastMsgAt = msg.ts;
         await dbPut('contacts', target);
         if (activeContact?.id === target.id) appendMsg(syncText, true, msg.ts, null, null, { synced: true });
@@ -10653,7 +10654,7 @@ async function initMessenger(dbName) {
           // v3.1: Poll vote
           if (msg.type === 'poll_vote') {
             const allMsgs = await dbGetAll('messages');
-            const pollMsg = allMsgs.find(m => m.isPoll && JSON.parse(m.text).pollId === msg.pollId);
+            const pollMsg = allMsgs.find(m => m.isPoll && (() => { try { return JSON.parse(m.text).pollId === msg.pollId; } catch { return false; } })());
             // Same conversation binding as reactions — a peer must not vote on a poll
             // that lives in a different conversation (pollId is self-reported).
             if (pollMsg && pollMsg.contactId === contact.id) {
