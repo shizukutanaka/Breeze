@@ -4545,7 +4545,7 @@ async function initMessenger(dbName) {
         const bundle = await generatePreKeyBundle();
         // ts+sig endorse the upload under OUR Ed key — once a bundle is registered, the
         // Worker requires the incumbent key's signature to overwrite (clobber defense).
-        const upTs = Date.now();
+        const upTs = correctedNow();
         await postAPIRaw('/prekey/upload', { userId: myId, identityKey: pubB64, ...bundle, ts: upTs, sig: await signMessage(`breeze-prekey-upload:${myId}:${upTs}`) });
         _dbg(null, 'PreKeys uploaded: 1 SPK + ' + bundle.oneTimePreKeys.length + ' OTP');
       } catch(e) { _dbg(e, 'prekey-upload'); }
@@ -4556,9 +4556,9 @@ async function initMessenger(dbName) {
     let registeredAlias = '';
     if (alias && API) {
       try {
-        const powToken = await generatePoW(pubB64 + ':' + alias + ':' + Date.now(), CONFIG.POW_DIFFICULTY);
+        const powToken = await generatePoW(pubB64 + ':' + alias + ':' + correctedNow(), CONFIG.POW_DIFFICULTY);
         const clean = alias.toLowerCase().replace(/[^a-z0-9_]/g, '');
-        const aliasTs = Date.now();
+        const aliasTs = correctedNow();
         const aliasSig = await signMessage(`breeze-alias-set:${clean}:${aliasTs}`);
         const body = { alias, pub: pubB64, name, pow: powToken };
         if (aliasSig) { body.userId = myId; body.ts = aliasTs; body.sig = aliasSig; }
@@ -5728,7 +5728,7 @@ async function initMessenger(dbName) {
       const encrypted = await encryptFor(JSON.stringify(skPayload), memberPubB64);
       if (!encrypted) { _dbg(null, 'encrypt failed'); return; }
       const memberId = memberPubB64.slice(0, 12);
-      await relaySend(memberId, { to: memberId, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: Date.now(), isSenderKey: true }, memberPubB64);
+      await relaySend(memberId, { to: memberId, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: correctedNow(), isSenderKey: true }, memberPubB64);
     } catch(_e) { _dbg(_e, 'distributeSenderKey'); }
   }
 
@@ -5741,7 +5741,7 @@ async function initMessenger(dbName) {
       for (const m of targets) {
         const encrypted = await encryptFor(JSON.stringify({ type: 'group_kick', groupId, kickedId, epoch }), m.pubB64);
         if (!encrypted) continue;
-        await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: Date.now(), isGroupKick: true }, m.pubB64);
+        await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: correctedNow(), isGroupKick: true }, m.pubB64);
       }
     } catch(_e) { _dbg(_e, 'notifyGroupKick'); }
   }
@@ -5820,7 +5820,7 @@ async function initMessenger(dbName) {
           try {
             await distributeSenderKey(groupId, m.pubB64);
             const enc = await encryptFor(JSON.stringify({ type: 'group_leave', groupId, leftId, epoch: newEpoch }), m.pubB64);
-            if (enc) await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: enc, ts: Date.now(), isGroupLeave: true }, m.pubB64);
+            if (enc) await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: enc, ts: correctedNow(), isGroupLeave: true }, m.pubB64);
           } catch(e) { _dbg(e, 'leave-rekey'); }
         }));
       }
@@ -5835,7 +5835,7 @@ async function initMessenger(dbName) {
       await Promise.allSettled(targets.map(async (m) => {
         try {
           const enc = await encryptFor(JSON.stringify({ type: 'group_leave', groupId, leftId: myId }), m.pubB64);
-          if (enc) await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: enc, ts: Date.now(), isGroupLeave: true }, m.pubB64);
+          if (enc) await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: enc, ts: correctedNow(), isGroupLeave: true }, m.pubB64);
         } catch(e) { _dbg(e, 'group-leave-send'); }
       }));
     } catch(_e) { _dbg(_e, 'notifyGroupLeave'); }
@@ -6240,7 +6240,7 @@ async function initMessenger(dbName) {
       if (!(await _peerCaps(peerId)).includes(CAPS_DM_SIG)) return null;
       const c = await dbGet('contacts', peerId).catch(() => null);
       if (!c || !c.pubB64 || !_isValidPubB64(c.pubB64)) return null;
-      const ts = Date.now();
+      const ts = correctedNow();
       const se = await sealMeta(c.pubB64, { t: msg.type, d: String(msg.data ?? '') }, room, ts);
       return se ? JSON.stringify({ enc: 'dm-sig-v1', ts, se }) : null;
     } catch(e) { _dbg(e, 'dm-sig-seal'); return null; }
@@ -6985,7 +6985,7 @@ async function initMessenger(dbName) {
         if (peer?.connected && peer.dc?.readyState === 'open') {
           // v3.6: Use unreliable state channel for read receipts
           const rsc = peer.stateDC?.readyState === 'open' ? peer.stateDC : peer.dc;
-          rsc.send(JSON.stringify({ type: 'read', sender: myId, ts: Date.now() }));
+          rsc.send(JSON.stringify({ type: 'read', sender: myId, ts: correctedNow() }));
         }
         // Group contacts have no meaningful read-receipt target — the dm: room
         // for a group id is a phantom room nobody polls, pure metadata noise.
@@ -9137,7 +9137,7 @@ async function initMessenger(dbName) {
       // Also notify via msg relay (so recipient's poll detects the call)
       const callNotif = await _wrapCallSignal(contact.pubB64, { sdp: offer, video: withVideo });
       if (callNotif != null) await relaySend(contact.id, { to: contact.id, from: myId, fromPub: myPubB64, fromName: myName,
-        payload: callNotif, ts: Date.now(), isCall: true, isVideoCall: withVideo }, contact.pubB64);
+        payload: callNotif, ts: correctedNow(), isCall: true, isVideoCall: withVideo }, contact.pubB64);
 
       // Poll for answer
       pollCallSignals(contact, room);
@@ -9507,7 +9507,7 @@ async function initMessenger(dbName) {
         if (m.id === myId) continue;
         const encrypted = await encryptFor(JSON.stringify({ type: 'group_invite', groupId, name, members }), m.pubB64);
         if (!encrypted) { _dbg(null, 'encrypt failed for invite to ' + m.id?.slice(0,8)); continue; }
-        await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: Date.now(), isGroupInvite: true }, m.pubB64);
+        await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: correctedNow(), isGroupInvite: true }, m.pubB64);
       }
     } catch(_e) { _dbg(_e, 'createGroup'); }
   }
@@ -9736,7 +9736,7 @@ async function initMessenger(dbName) {
       if (!expired && !st) return; // network/other error: try again next cycle
       if (expired || st.replenishOTP || st.replenishSPK) {
         const freshBundle = await generatePreKeyBundle();
-        const upTs = Date.now();
+        const upTs = correctedNow();
         const upResp = await postAPIRaw('/prekey/upload', { userId: myId, identityKey: myPubB64, ...freshBundle, ts: upTs, sig: await signMessage(`breeze-prekey-upload:${myId}:${upTs}`) });
         if (!upResp?.ok) { _lastPreKeyCheck = Date.now() - MS.MIN * 4; return; } // retry in ~1 min
         _dbg(null, (expired ? 'PreKey record had EXPIRED — re-registered: ' : 'PreKeys replenished: ') + freshBundle.oneTimePreKeys.length + ' OTPs');
@@ -11507,7 +11507,7 @@ async function initMessenger(dbName) {
       const backup = { s: arr(salt), i: arr(iv), d: arr(new Uint8Array(ct)), v: CONFIG.PROTOCOL_VERSION, iter: CONFIG.PBKDF2_AT_REST_ITERATIONS };
       // Upload. Signs ownership (ts+sig), same convention as group actions — lets an operator enable BACKUP_REQUIRE_AUTH (see wrangler.toml).
       if (API) {
-        const upTs = Date.now();
+        const upTs = correctedNow();
         const upBody = { userId: myId, backup: JSON.stringify(backup), ts: upTs };
         const upSig = await signMessage(`breeze-backup-upload:${myId}:${upTs}`);
         if (upSig) upBody.sig = upSig;
@@ -11765,7 +11765,7 @@ async function initMessenger(dbName) {
       handleIncoming({ from: contact.id, fromPub: contact.pubB64, fromName: contact.name,
         payload: JSON.stringify({ type: 'file', name: fc.name, mime: fc.mime }),
         fileBytes: full,
-        ts: Date.now(), isFile: true });
+        ts: correctedNow(), isFile: true });
       delete _fileChunks[fileId];
     }
   }
@@ -12666,7 +12666,7 @@ async function initMessenger(dbName) {
           for (const m of (activeContact.members || []).filter(x => x.id !== myId && x.pubB64)) {
             try {
               const metaCt = await encryptFor(JSON.stringify({ type: 'group_meta', groupId: activeContact.id, announceOnly: mode }), m.pubB64);
-              if (metaCt) relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: metaCt, ts: Date.now(), isGroupMeta: true }, m.pubB64).catch(e => _dbg(e));
+              if (metaCt) relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: metaCt, ts: correctedNow(), isGroupMeta: true }, m.pubB64).catch(e => _dbg(e));
             } catch(e) { _dbg(e, 'announce-notify'); }
           }
         }
@@ -14356,9 +14356,9 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
           const oldAlias = myAlias; // captured before overwrite — released below on success
           // v3.5 SPEC: Proof-of-Work required for alias registration (anti-spam)
           showToast(t('toastPoW'), 'info');
-          const powToken = await generatePoW(myPubB64 + ':' + newAlias + ':' + Date.now(), CONFIG.POW_DIFFICULTY);
+          const powToken = await generatePoW(myPubB64 + ':' + newAlias + ':' + correctedNow(), CONFIG.POW_DIFFICULTY);
           const cleanAlias = newAlias.toLowerCase().replace(/[^a-z0-9_]/g, '');
-          const aTs = Date.now();
+          const aTs = correctedNow();
           const aSig = await signMessage(`breeze-alias-set:${cleanAlias}:${aTs}`);
           const aBody = { alias: newAlias, pub: myPubB64, name: myName, pow: powToken };
           if (aSig) { aBody.userId = myId; aBody.ts = aTs; aBody.sig = aSig; }
