@@ -95,6 +95,14 @@ The endpoint-side verified-when-present auth was inert while clients never sent 
 
 # Changelog
 
+## Six E2E tests fed addContact a key format the app never produces (branch claude/nice-ride-T6yb0, 2026-09-23)
+
+Playwright E2E 62/69 → **68/69**; `tests/e2e/commands.spec.js`, `tests/e2e/disappear.spec.js`, `tests/e2e/layout.spec.js`.
+
+With boot working again, six tests (the three emoji-picker widths, the contact-row swipe, `/searchall` keyboard access, and the 1h-disappear check) timed out waiting for a contact that never appeared. Each builds a throwaway contact from a random 32-byte key encoded as **base64url** (`-`/`_`, unpadded). Merged commit `383357d` made `addContact` validate keys via `atob()` — which throws on `-`/`_` — so the add was refused and the tests hung. The app is right: every real contact key is `btoa()` output (standard base64); base64url appears nowhere in the contact path (only VAPID push keys use it). Fixed the fixtures to emit standard base64, the format the app itself produces. All 13 tests in those files pass. The seventh failure (group-v5 negotiation) is a real protocol question, not a fixture bug — see the next entry.
+
+---
+
 ## Every page load crashed: `_messengerCleanup` written in its temporal dead zone — and a gate so it can't ship a fourth time (branch claude/nice-ride-T6yb0, 2026-09-23)
 
 vitest 1033 unchanged; Playwright E2E **3/69 → 62/69** (the remaining 7 fail against the merged branch's own changes — invisible until boot worked again; fixed in the next entry); `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash), new `tools/boot-tdz.mjs`, `validate.sh` (45 → 46 checks), `CLAUDE.md`.

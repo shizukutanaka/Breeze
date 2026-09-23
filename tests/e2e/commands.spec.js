@@ -113,8 +113,8 @@ test('/searchall result headers are keyboard-reachable and jump to the conversat
 
   await A.locator('#b-msg-add').click();
   const dialog = A.locator('dialog[aria-labelledby]');
-  const fakePub = await A.evaluate(() => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''));
+  // Standard base64, exactly as the app's own btoa-exported keys — addContact rejects base64url.
+  const fakePub = await A.evaluate(() => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))));
   await dialog.locator('.modal-input').fill(fakePub);
   await dialog.locator('[value="ok"]').click();
   await expect(dialog).toBeHidden();

@@ -29,8 +29,8 @@ test('a message set to disappear in 1h is not deleted within the first 90 second
 
   await page.locator('#b-msg-add').click();
   const dialog = page.locator('dialog[aria-labelledby]');
-  const fakePub = await page.evaluate(() => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''));
+  // Standard base64, exactly as the app's own btoa-exported keys — addContact rejects base64url.
+  const fakePub = await page.evaluate(() => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))));
   await dialog.locator('.modal-input').fill(fakePub);
   await dialog.locator('[value="ok"]').click();
   await expect(dialog).toBeHidden();
