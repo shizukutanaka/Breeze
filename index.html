@@ -11423,8 +11423,9 @@ async function initMessenger(dbName) {
       const reg = await navigator.serviceWorker.ready;
       const existing = await reg.pushManager.getSubscription();
       if (existing) {
-        // Already subscribed, sync with server
-        await postAPIRaw('/push/subscribe', { userId: myId, subscription: existing.toJSON(), ...(await _ownerAuth('push-subscribe', `${existing.endpoint||''}:${existing.keys?.p256dh||''}:${existing.keys?.auth||''}`)) }).catch(e => _dbg(e));
+        // Already subscribed, sync with server (skip if the context died mid-await —
+        // a dead account must not re-register push after cleanup's unsubscribe).
+        if (!_ac.signal.aborted) await postAPIRaw('/push/subscribe', { userId: myId, subscription: existing.toJSON(), ...(await _ownerAuth('push-subscribe', `${existing.endpoint||''}:${existing.keys?.p256dh||''}:${existing.keys?.auth||''}`)) }).catch(e => _dbg(e));
         return;
       }
       // Request permission and subscribe
@@ -11438,7 +11439,7 @@ async function initMessenger(dbName) {
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(health.vapidPublicKey),
       });
-      await postAPIRaw('/push/subscribe', { userId: myId, subscription: sub.toJSON(), ...(await _ownerAuth('push-subscribe', `${sub.endpoint||''}:${sub.keys?.p256dh||''}:${sub.keys?.auth||''}`)) }).catch(e => _dbg(e));
+      if (!_ac.signal.aborted) await postAPIRaw('/push/subscribe', { userId: myId, subscription: sub.toJSON(), ...(await _ownerAuth('push-subscribe', `${sub.endpoint||''}:${sub.keys?.p256dh||''}:${sub.keys?.auth||''}`)) }).catch(e => _dbg(e));
     } catch(e) { _dbg(e, 'push'); }
   }
 
