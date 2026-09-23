@@ -3199,6 +3199,11 @@ const _replayCache = {
 function postAPIRaw(path, body, opts = {}) {
   return fetchT(API + path, { method: 'POST', headers: _H, body: JSON.stringify(body), ...opts }).catch(() => null);
 }
+// Bounded resp.json() for recurring polls — a hostile relay answering every poll with a huge body would be materialized fully, per cycle (sw.js safeAppUrl's threat model).
+async function _safeJson(resp, maxBytes) {
+  if (parseInt(resp.headers.get('Content-Length') || '0') > maxBytes) throw new Error('response too large');
+  const t = await resp.text(); if (t.length > maxBytes) throw new Error('response too large'); return JSON.parse(t);
+}
 
 // ═══ Title helper — Account name + unread count ═══
 function _updateTitle(unreadCount) {
@@ -4398,13 +4403,12 @@ async function initMessenger(dbName) {
     try {
       const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: 0, ...(await _ownerAuth('msg-poll')) });
       if (!resp.ok) return;
-      const data = await resp.json();
+      const data = await _safeJson(resp, 8 * 1024 * 1024); // inbox ≤100 × 64KB
       for (const msg of (data.messages || [])) {
-        // Signature-gated: `from` is self-asserted on the relay, so a bare remote_wipe
-        // is forgeable by anyone who knows your userId — a remote data-destruction
-        // primitive. Only a valid Ed25519 sig over 'breeze-remote-wipe:<from>:<ts>' by
-        // THIS account's signing key is honoured. (Today /msg/send drops `type`, so no
-        // code path can produce this — the gate stands ready for a future signed send.)
+        // Signature-gated: `from` is self-asserted on the relay, so a bare remote_wipe is
+        // forgeable by anyone who knows your userId — a remote data-destruction primitive.
+        // Only a valid Ed25519 sig over 'breeze-remote-wipe:<from>:<ts>' by THIS account's
+        // signing key is honoured. (/msg/send drops `type` — no path produces this today; the gate stands ready.)
         if (msg.type === 'remote_wipe' && msg.from === myId && typeof msg.sig === 'string'
             && (await verifySignature('breeze-remote-wipe:' + msg.from + ':' + msg.ts, msg.sig, _signingPubB64)) === true) {
           auditLog('security', 'Remote wipe signal received', 'critical');
@@ -9243,7 +9247,7 @@ async function initMessenger(dbName) {
       try {
         const resp = await _signalAwait(room, 'poll');
         if (!resp.ok) return;
-        const data = await resp.json();
+        const data = await _safeJson(resp, 4 * 1024 * 1024); // sig room ≤50 × 64KB
         for (const s of (data.messages || [])) {
           if (s.sender === myId) continue;
           // Sender binding (same as the data-channel signal poll): the call room name is
@@ -9624,7 +9628,7 @@ async function initMessenger(dbName) {
       try {
         const resp = await postAPIRaw('/group/info', { token });
         if (!resp.ok) { clearInterval(poll); return; }
-        const data = await resp.json();
+        const data = await _safeJson(resp, 4 * 1024 * 1024);
         const group = await dbGet('contacts', groupId);
         if (!group) { clearInterval(poll); return; }
 
@@ -9747,7 +9751,7 @@ async function initMessenger(dbName) {
         try {
           const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: _lastPollTs, ...(await _ownerAuth('msg-poll')) });
           if (resp.ok) {
-            const data = await resp.json();
+            const data = await _safeJson(resp, 8 * 1024 * 1024);
             for (const msg of (data.messages || [])) {
               try { await handleIncoming(msg); } catch(e) { _dbg(e, 'msg-process'); }
               if (typeof msg.ts === 'number' && Number.isFinite(msg.ts) && msg.ts > _lastPollTs && msg.ts <= Date.now() + MS.DAY) _lastPollTs = msg.ts;
@@ -9755,7 +9759,7 @@ async function initMessenger(dbName) {
           }
           const sResp = await postAPIRaw('/sealed/poll', { id: myId, ...(await _ownerAuth('sealed-poll')) });
           if (sResp.ok) {
-            const sData = await sResp.json();
+            const sData = await _safeJson(sResp, 32 * 1024 * 1024); // sealed ≤100 × 256KB
             // Honesty over silence: the relay counts envelopes its queue caps forced it to
             // drop while we were offline — tell the user instead of losing them wordlessly.
             if (Number.isInteger(sData.dropped) && sData.dropped > 0) showToast(t('toastMsgsDropped', sData.dropped), 'error');
@@ -10827,7 +10831,7 @@ async function initMessenger(dbName) {
         try {
           const resp = await _signalAwait(sigRoom, 'poll');
           if (!resp.ok) return;
-          const data = await resp.json();
+          const data = await _safeJson(resp, 4 * 1024 * 1024);
           for (const s of (data.messages || [])) {
             if (s.sender === myId) continue;
             // Sender binding: the relay is unauthenticated and the room name is just the
@@ -11300,7 +11304,7 @@ async function initMessenger(dbName) {
       try {
         const r = await postAPIRaw('/presence', { ids, check: true });
         if (r.ok) {
-          const d = await r.json();
+          const d = await _safeJson(r, 1024 * 1024);
           for (const id of ids) {
             const wasOffline = !_presenceCache[id];
             _presenceCache[id] = d.online?.[id] || false;
@@ -11443,9 +11447,7 @@ async function initMessenger(dbName) {
   // TURN CREDENTIALS — available to all users
   // TURN CREDENTIAL — available to all users for NAT traversal
 
-  // True when the TURN credentials came from operator config (not the shared
-  // 'openrelay' fallback) and include a turn(s): URL — i.e. someone provisioned
-  // real relay capacity.
+  // True when TURN creds came from operator config (not 'openrelay') and include a turn(s): URL — provisioned relay capacity.
   function _turnHasProvisioned(cred) {
     if (!cred || cred.provider === 'openrelay') return false;
     const list = cred.iceServers || (cred.urls ? [cred] : []);
@@ -11459,10 +11461,9 @@ async function initMessenger(dbName) {
       if (resp.ok) {
         _turnCredential = await resp.json();
         _dbg(null, 'TURN credentials obtained');
-        // I19: relay-only by default when the operator provisioned TURN capacity —
-        // srflx candidates leak the public IP to the peer. The shared openrelay
-        // fallback isn't provisioned capacity, so it doesn't qualify. An explicit
-        // brz-relay-only choice (checkbox, 0 or 1) always wins.
+        // I19: relay-only by default when the operator provisioned TURN capacity — srflx
+        // candidates leak the public IP to the peer. The shared openrelay fallback isn't
+        // provisioned capacity; an explicit brz-relay-only choice (checkbox, 0 or 1) wins.
         if (localStorage.getItem('brz-relay-only') === null && _turnHasProvisioned(_turnCredential)) {
           _settings.relayOnly = true;
           _dbg(null, 'TURN: relay-only auto-enabled (provisioned TURN — IP hidden from peers)');
