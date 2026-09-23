@@ -8204,6 +8204,11 @@ async function initMessenger(dbName) {
       // v3.5 SPEC: Client-side rate limiting
       if (!_rateLimiter.consume()) {
         showToast(t('toastRateLimit'), 'info');
+        // Release the send lock BEFORE returning — every other early-return resets it,
+        // and a stuck _isSending would dead the composer for the rest of the session.
+        input.value = text;
+        _isSending = false;
+        if (sendBtn) { sendBtn.disabled = false; sendBtn.classList.add('i-op-full'); sendBtn.classList.remove('pulse'); }
         return;
       }
 
