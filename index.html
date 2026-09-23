@@ -3379,7 +3379,7 @@ async function waitForBuffer(dc, maxBytes) {
 // Shared context — browsers cap live AudioContexts (~6), so one-per-chime kills sound.
 let _notifAC = null;
 function _audioCtx() { try { const a = _notifAC || (_notifAC = new (window.AudioContext || window.webkitAudioContext)()); if (a.state === 'suspended') a.resume().catch(() => {}); return a; } catch { return null; } }
-function playNotif() {
+function playNotif() { const _nt = Date.now(); if (_nt - (playNotif._t || 0) < MS.SEC) return; playNotif._t = _nt; // a wire flood must not ring per-message — min 1s gap between alerts
   if (localStorage.getItem('brz-notif-sound') === '0') return;
   try {
     // v3: Improved notification sound (soft chime, two-tone ascending)
