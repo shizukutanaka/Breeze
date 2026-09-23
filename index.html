@@ -2274,8 +2274,12 @@ window.addEventListener('unhandledrejection', (event) => {
   event.preventDefault();
 });
 
+// Safe localStorage read: throws SecurityError when storage is disabled and can quota-fail —
+// unguarded reads at top level or inside initMessenger crash boot/feature init (CWE-248).
+const _lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+
 // v3.5: Auto theme (respect system preference)
-if (localStorage.getItem('brz-theme') === 'auto' || !localStorage.getItem('brz-theme')) {
+if (_lsGet('brz-theme') === 'auto' || !_lsGet('brz-theme')) {
   document.documentElement.classList.add('auto-theme');
 }
 
@@ -2285,7 +2289,7 @@ function _dbg(e, ctx) { if (_DBG) console.warn('[Breeze]', ctx || '', e?.message
 
 // v3.5: GDPR/CCPA data consent banner
 (() => {
-  if (localStorage.getItem('brz-consent')) return; // Already consented
+  if (_lsGet('brz-consent')) return; // Already consented
   const banner = document.createElement('div');
   banner.className = 'consent-banner';
   banner.setAttribute('role', 'dialog');
@@ -2635,14 +2639,14 @@ window.addEventListener('beforeunload', () => {
 
 // Theme: auto-detect or restore preference
 (() => {
-  const saved = localStorage.getItem('brz-theme');
+  const saved = _lsGet('brz-theme');
   const isLight = saved === 'light' || (!saved && window.matchMedia?.('(prefers-color-scheme: light)').matches);
   if (isLight) document.documentElement.classList.add('light');
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta && isLight) meta.content = '#fafafa';
   // v3: Listen for OS theme changes (realtime)
   window.matchMedia?.('(prefers-color-scheme: light)').addEventListener('change', (e) => {
-    if (localStorage.getItem('brz-theme')) return; // User has manual preference
+    if (_lsGet('brz-theme')) return; // User has manual preference
     if (e.matches) document.documentElement.classList.add('light');
     else document.documentElement.classList.remove('light');
     const btn = _DOM.get('b-msg-theme');
@@ -3381,7 +3385,7 @@ async function waitForBuffer(dc, maxBytes) {
 let _notifAC = null;
 function _audioCtx() { try { const a = _notifAC || (_notifAC = new (window.AudioContext || window.webkitAudioContext)()); if (a.state === 'suspended') a.resume().catch(() => {}); return a; } catch { return null; } }
 function playNotif() {
-  if (localStorage.getItem('brz-notif-sound') === '0') return;
+  if (_lsGet('brz-notif-sound') === '0') return;
   try {
     // v3: Improved notification sound (soft chime, two-tone ascending)
     const ac = _audioCtx(); if (!ac) return;
@@ -3428,7 +3432,7 @@ function saveAccounts(accs) {
   try { localStorage.setItem('brz-accounts', JSON.stringify(accs)); } catch(e) { _dbg(e); }
 }
 function getActiveAccountId() {
-  return localStorage.getItem('brz-active') || '0';
+  return _lsGet('brz-active') || '0';
 }
 function setActiveAccountId(id) {
   try { localStorage.setItem('brz-active', id); } catch(e) { _dbg(e); }
@@ -3438,7 +3442,7 @@ function setActiveAccountId(id) {
 (function migrateToMultiAccount() {
   if (getAccounts().length > 0) return;
   // Check if old DB exists by looking for brz-uid
-  const uid = localStorage.getItem('brz-uid');
+  const uid = _lsGet('brz-uid');
   if (uid) {
     // Old single-account user → create account entry pointing to existing DB
     saveAccounts([{ id: '0', name: 'Account 1', avatar: '🌊', dbName: 'breeze-messenger', createdAt: Date.now() }]);
@@ -4242,7 +4246,7 @@ async function initMessenger(dbName) {
       if (localStorage.getItem('brz-hide-rr') === '1') _settings.hideReadReceipts = true;
       if (localStorage.getItem('brz-hide-typing') === '1') _settings.hideTyping = true;
       if (localStorage.getItem('brz-relay-only') === '1') _settings.relayOnly = true;
-      if (localStorage.getItem('brz-autolock') === '1') _settings.autoLock = true;
+      if (_lsGet('brz-autolock') === '1') _settings.autoLock = true;
       if (localStorage.getItem('brz-wallpaper')) _settings.wallpaper = localStorage.getItem('brz-wallpaper');
       if (document.body.classList.contains('light')) _settings.theme = 'light';
     } catch(e) { _dbg(e, 'load-settings'); }
@@ -6029,7 +6033,7 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'schedule-recovery'); }
     checkRemoteWipe(); // v3.3: Check for remote wipe signal on startup
     // v3.3: Restore wallpaper from settings
-    const savedWallpaper = localStorage.getItem('brz-wallpaper');
+    const savedWallpaper = _lsGet('brz-wallpaper');
     if (savedWallpaper && (/^#[0-9a-fA-F]{3,6}$/.test(savedWallpaper) || /^(?:linear|radial)-gradient\([^"'<>]*\)$/.test(savedWallpaper))) {
       _DOM.get('msg-messages').style.background = savedWallpaper;
     }
@@ -6997,8 +7001,8 @@ async function initMessenger(dbName) {
   // MESSAGE RENDERER (supports all message features)
 
   // v3.1: Privacy settings (persisted in localStorage)
-  let _privacyHideReadReceipts = localStorage.getItem('brz-hide-rr') === '1';
-  let _privacyHideTyping = localStorage.getItem('brz-hide-typing') === '1';
+  let _privacyHideReadReceipts = _lsGet('brz-hide-rr') === '1';
+  let _privacyHideTyping = _lsGet('brz-hide-typing') === '1';
   // Expose to global for inline onchange handlers
   window._privacyHideReadReceipts = _privacyHideReadReceipts;
   window._privacyHideTyping = _privacyHideTyping;
@@ -8105,7 +8109,7 @@ async function initMessenger(dbName) {
 
     meta._animate = true;
     appendMsg(text, true, ts, null, null, meta);
-    if (localStorage.getItem('brz-send-sound') !== '0') playSendSound();
+    if (_lsGet('brz-send-sound') !== '0') playSendSound();
     haptic.send();
     // Snapshot activeContact before any await: a contact switch mid-async-chain would
     // otherwise mutate the NEW contact's lastMsg with the old message text.
@@ -8313,7 +8317,7 @@ async function initMessenger(dbName) {
   // v3.6: Auto-compress images before send (saves P2P bandwidth, fits relay 192KB limit)
   // v3.6: Image compression setting (user preference)
   // 'off' = send original (no quality loss), 'auto' = adaptive, 'lossless' = resize only (quality 1.0)
-  let _imgCompress = localStorage.getItem('brz-img-compress') || 'off';
+  let _imgCompress = _lsGet('brz-img-compress') || 'off';
 
   async function _compressImage(file) {
     // v3.6: Respect user preference — 'off' = no compression at all
@@ -10946,7 +10950,7 @@ async function initMessenger(dbName) {
   // v3.3: Shared lock screen function (used by /lock and auto-lock)
   function showLockScreen() {
     if (_DOM.get('lock-screen')) return;
-    const raw = localStorage.getItem('brz-lock-hash');
+    const raw = _lsGet('brz-lock-hash');
     if (!raw) return;
     const overlay = document.createElement('div');
     overlay.id = 'lock-screen';
@@ -11043,7 +11047,7 @@ async function initMessenger(dbName) {
 
   // v3.3: Auto-lock on tab hide (if lock password is set)
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden && localStorage.getItem('brz-lock-hash') && localStorage.getItem('brz-autolock') === '1') {
+    if (document.hidden && _lsGet('brz-lock-hash') && _lsGet('brz-autolock') === '1') {
       showLockScreen();
     }
   }, { signal: _ac.signal });
@@ -11057,8 +11061,8 @@ async function initMessenger(dbName) {
   ['pointerdown', 'keydown', 'touchstart', 'wheel', 'mousemove'].forEach(ev =>
     window.addEventListener(ev, _idleBump, { passive: true, signal: _ac.signal }));
   _intervals.push(setInterval(() => {
-    const mins = parseInt(localStorage.getItem('brz-idle-lock') || '0', 10);
-    if (!(mins > 0) || !localStorage.getItem('brz-lock-hash')) return;
+    const mins = parseInt(_lsGet('brz-idle-lock') || '0', 10);
+    if (!(mins > 0) || !_lsGet('brz-lock-hash')) return;
     if (_DOM.get('lock-screen')) return; // already locked
     if (Date.now() - _idleLockLast >= mins * MS.MIN) showLockScreen();
   }, 15000));
@@ -11462,7 +11466,7 @@ async function initMessenger(dbName) {
         // srflx candidates leak the public IP to the peer. The shared openrelay
         // fallback isn't provisioned capacity, so it doesn't qualify. An explicit
         // brz-relay-only choice (checkbox, 0 or 1) always wins.
-        if (localStorage.getItem('brz-relay-only') === null && _turnHasProvisioned(_turnCredential)) {
+        if (_lsGet('brz-relay-only') === null && _turnHasProvisioned(_turnCredential)) {
           _settings.relayOnly = true;
           _dbg(null, 'TURN: relay-only auto-enabled (provisioned TURN — IP hidden from peers)');
         }
@@ -12172,7 +12176,7 @@ async function initMessenger(dbName) {
     try { localStorage.setItem('brz-compact', document.body.classList.contains('compact') ? '1' : '0'); } catch(e) { _dbg(e, 'compact-save'); }
   };
   // Restore compact mode
-  if (localStorage.getItem('brz-compact') === '1') document.body.classList.add('compact');
+  if (_lsGet('brz-compact') === '1') document.body.classList.add('compact');
 
   // v1 INTEGRATION: Message Search
 
@@ -13667,9 +13671,9 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         'HTTPS: ' + (location.protocol === 'https:' ? '✓' : '⚠ HTTP'),
         '',
         '<b>' + t('cmdSectionLock') + '</b>',
-        t('secLblPassword') + ': ' + (localStorage.getItem('brz-lock-hash') ? '✓ ' + t('secPwdSet') : '✗ ' + t('secPwdNotSet')),
-        t('secLblAutoLock') + ': ' + (localStorage.getItem('brz-autolock') === '1' ? '✓ ' + t('secOnTabSwitch') : '✗ ' + t('secOff')),
-        t('secLblIdleLock') + ': ' + (parseInt(localStorage.getItem('brz-idle-lock') || '0', 10) > 0 ? '✓ ' + localStorage.getItem('brz-idle-lock') + ' min' : '✗ ' + t('secOff')),
+        t('secLblPassword') + ': ' + (_lsGet('brz-lock-hash') ? '✓ ' + t('secPwdSet') : '✗ ' + t('secPwdNotSet')),
+        t('secLblAutoLock') + ': ' + (_lsGet('brz-autolock') === '1' ? '✓ ' + t('secOnTabSwitch') : '✗ ' + t('secOff')),
+        t('secLblIdleLock') + ': ' + (parseInt(_lsGet('brz-idle-lock') || '0', 10) > 0 ? '✓ ' + _lsGet('brz-idle-lock') + ' min' : '✗ ' + t('secOff')),
         t('secBruteForce'),
         t('secTimingSafe'),
         '',
@@ -13757,7 +13761,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     if (val === '/debug') {
       e.preventDefault();
       clearInput();
-      const current = localStorage.getItem('brz-debug') === '1';
+      const current = _lsGet('brz-debug') === '1';
       localStorage.setItem('brz-debug', current ? '0' : '1');
       const box = _DOM.get('msg-messages');
       const d = document.createElement('div');
@@ -13890,7 +13894,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     if (val === '/sound') {
       e.preventDefault();
       clearInput();
-      const current = localStorage.getItem('brz-notif-sound') === '0';
+      const current = _lsGet('brz-notif-sound') === '0';
       localStorage.setItem('brz-notif-sound', current ? '1' : '0');
       showToast(t('toastNotifSound', current ? 'ON' : 'OFF'), 'info');
       if (current) playNotif(); // Play test sound when enabling
@@ -14049,7 +14053,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     if (val === '/lock') {
       e.preventDefault();
       clearInput();
-      const stored = localStorage.getItem('brz-lock-hash');
+      const stored = _lsGet('brz-lock-hash');
       if (!stored) {
         const pass = await showPrompt(t('lockPassPrompt'), '', { type: 'password', okText: t('set') });
         if (!pass || pass.length < 4) { showToast(t('toastMin4Chars'), 'error'); return; }
@@ -14082,11 +14086,11 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     if (val === '/lock auto') {
       e.preventDefault();
       clearInput();
-      if (!localStorage.getItem('brz-lock-hash')) {
+      if (!_lsGet('brz-lock-hash')) {
         showToast(t('toastLockFirst'), 'error');
         return;
       }
-      const current = localStorage.getItem('brz-autolock') === '1';
+      const current = _lsGet('brz-autolock') === '1';
       localStorage.setItem('brz-autolock', current ? '0' : '1');
       showToast(t('toastAutoLock', current ? 'OFF' : 'ON'), 'info');
     }
@@ -14095,7 +14099,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     if (val.startsWith('/lock idle')) {
       e.preventDefault();
       clearInput();
-      if (!localStorage.getItem('brz-lock-hash')) { showToast(t('toastLockFirst'), 'error'); return; }
+      if (!_lsGet('brz-lock-hash')) { showToast(t('toastLockFirst'), 'error'); return; }
       const arg = val.slice('/lock idle'.length).trim().toLowerCase();
       if (arg === 'off' || arg === '0') {
         localStorage.removeItem('brz-idle-lock');
@@ -14436,8 +14440,8 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const box = _DOM.get('msg-messages');
       const d = document.createElement('div');
       d.className = 'cmd-panel-mono';
-      const _sendSoundEnabled = localStorage.getItem('brz-send-sound') !== '0';
-      const _notifSoundEnabled = localStorage.getItem('brz-notif-sound') !== '0';
+      const _sendSoundEnabled = _lsGet('brz-send-sound') !== '0';
+      const _notifSoundEnabled = _lsGet('brz-notif-sound') !== '0';
       safeSetHTML(d, `<b class="i-g">${t('settingsPrivacy')}</b><br>
         <label class="i-cur"><input type="checkbox" data-setting="hide-rr" ${_privacyHideReadReceipts ? 'checked' : ''}> ${t('hideReadReceipts')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="rr-delay" ${_settings.readReceiptDelay ? 'checked' : ''}> ${t('rrDelayLabel')}</label><br>
@@ -14452,7 +14456,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         <label class="i-cur"><input type="checkbox" data-setting="notif-perm" ${Notification?.permission === 'granted' ? 'checked' : ''}> ${t('enableNotif')}</label><br>
         <br><b class="i-g">${t('settingsAccounts')}</b><br>
         <button class="btn btn-o btn-sm" data-action="add-account">${t('addAccountBtn')}</button><br>
-        <label class="i-cur"><input type="checkbox" data-setting="auto-lock" ${localStorage.getItem('brz-autolock') === '1' ? 'checked' : ''}> ${t('autoLockLabel')}</label><br>
+        <label class="i-cur"><input type="checkbox" data-setting="auto-lock" ${_lsGet('brz-autolock') === '1' ? 'checked' : ''}> ${t('autoLockLabel')}</label><br>
         <br><span class="i-t3-10">${t('settingsImmediate')}</span>`);
       // Multi-account was UNREACHABLE: the "+" that creates a second account lives inside the
       // account tab bar, and renderAccountTabs() only builds that bar once you already have
