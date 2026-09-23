@@ -5929,6 +5929,11 @@ async function initMessenger(dbName) {
       // Clear incomplete binary file transfers — their chunk buffers belong to this
       // account's peer sessions and must not survive into the next account's context.
       for (const id in _fileChunks) delete _fileChunks[id];
+      // Disconnect the lazy-image IntersectionObserver: it is created per initMessenger
+      // call and never released, so every account switch leaks the observer plus every
+      // img element it was watching (blob:/data: payloads included — MBs per switch
+      // on an image-heavy chat).
+      try { _imgObserver?.disconnect(); } catch(e) { _dbg(e); }
     };
   }
 
