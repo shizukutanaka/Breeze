@@ -2228,6 +2228,18 @@ let _lastErrorAt = 0;
 const _ERROR_FLOOD_LIMIT = 10;
 const _FATAL_WINDOW_MS = 60000; // only a burst of errors within this window counts as a crash loop
 
+// Bridged + rate-limited error audits: the old `typeof auditLog` guard never fired
+// (auditLog is closure-local — errors never reached the store). 10/min + summary (CWE-770).
+let _auditLogRef = null, _errAudited = 0, _errAuditResetAt = 0, _errAuditSuppressed = 0;
+function _auditErr(detail) {
+  const fn = _auditLogRef; if (typeof fn !== 'function') return;
+  const now = Date.now();
+  if (now >= _errAuditResetAt) { const s = _errAuditSuppressed; _errAuditResetAt = now + MS.MIN; _errAudited = 0; _errAuditSuppressed = 0;
+    if (s > 0) fn('error', `Flood-limited: suppressed ${s} error audits in the last minute`, 'warn'); }
+  if (_errAudited >= 10) { _errAuditSuppressed++; return; }
+  _errAudited++; fn('error', detail, 'error');
+}
+
 window.addEventListener('error', (event) => {
   // Reset both counters when outside the window — otherwise _errorCount only ever
   // grows and the flood limit silences all error toasts permanently after 10 errors.
@@ -2236,7 +2248,7 @@ window.addEventListener('error', (event) => {
   _fatalErrors++;
   _errorCount++;
   if (typeof _dbg === 'function') _dbg(event.error || event.message, 'UNCAUGHT');
-  if (typeof auditLog === 'function') auditLog('error', 'JS Error: ' + (event.message || '').slice(0, 200), 'error');
+  _auditErr('JS Error: ' + (event.message || '').slice(0, 200));
   if (_errorCount <= _ERROR_FLOOD_LIMIT && typeof showToast === 'function') {
     showToast((event.message || t('errUnknown')).slice(0, 80), 'error');
   }
@@ -2265,7 +2277,7 @@ window.addEventListener('unhandledrejection', (event) => {
   _errorCount++;
   const msg = event.reason?.message || String(event.reason || 'Promise rejected');
   if (typeof _dbg === 'function') _dbg(event.reason, 'UNHANDLED_PROMISE');
-  if (typeof auditLog === 'function') auditLog('error', 'Unhandled: ' + msg.slice(0, 200), 'error');
+  _auditErr('Unhandled: ' + msg.slice(0, 200));
   // Skip toast for expected network errors
   if (msg.includes('AbortError') || msg.includes('Failed to fetch') || msg.includes('NetworkError')) return;
   if (_errorCount <= _ERROR_FLOOD_LIMIT && typeof showToast === 'function') {
@@ -4195,6 +4207,7 @@ async function initMessenger(dbName) {
       await dbPut('audit', { ts: Date.now(), type, detail: typeof detail === 'string' ? detail : JSON.stringify(detail), severity });
     } catch(e) { _dbg(e, 'audit'); }
   }
+  _auditLogRef = auditLog; // expose to the top-level error/rejection listeners (see _auditErr)
   // Prune audit log (keep last 1000 entries)
   async function pruneAuditLog() {
     try {
