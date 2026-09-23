@@ -11560,8 +11560,7 @@ async function initMessenger(dbName) {
       if (Array.isArray(data.messages)) for (const m of data.messages) {
         if (!m || typeof m.msgId !== 'string' || typeof m.contactId !== 'string' || !Number.isFinite(m.ts)) continue;
         if (m.isPoll) { let p = null; try { p = JSON.parse(m.text); } catch { continue; } if (!p || typeof p !== 'object') continue; }
-        if (!Number.isFinite(m.disappearAt)) m.disappearAt = undefined;
-        await dbPut('messages', m);
+        if (!Number.isFinite(m.disappearAt)) m.disappearAt = undefined; await dbPut('messages', m);
       }
       showToast(t('backupRestored'), 'success');
       setTimeout(() => location.reload(), CONFIG.TOAST_DURATION_MS);
