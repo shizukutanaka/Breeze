@@ -10416,8 +10416,8 @@ async function initMessenger(dbName) {
           meta.tampered = true;
           _dbg(null, 'Signing key changed for ' + contactId + ' — possible MITM');
           // A signing-key substitution is a stronger MITM signal than a decrypt failure, so
-          // reuse the same prominent banner (not just the subtle ⚠sig badge).
-          await showKeyChangeWarning(contactId, contact.pubB64, 'Signing key change — possible MITM.');
+          // reuse the same prominent banner (not just the subtle ⚠sig badge) — ≤1/day/peer:
+          if (!contact.sigWarnedAt || Date.now() - contact.sigWarnedAt > MS.DAY) { contact.sigWarnedAt = Date.now(); await showKeyChangeWarning(contactId, contact.pubB64, 'Signing key change — possible MITM.'); }
         }
         if (!meta.tampered) {
           const verified = await verifySignature(text, msg.sig, msg.sigPub);
