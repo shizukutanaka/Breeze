@@ -523,7 +523,6 @@
   "toastPinToggleOn": "ピン留め {0}",
   "toastPinToggleOff": "ピン解除 {0}",
   "toastNoteActionOn": "メモ削除",
-  "toastNoteActionOff": "メモ保存",
   "toastAliasSet": "@{0} 設定完了",
   "toastAliasTaken": "エイリアスは使用中です",
   "uiAccept": "承認",
