@@ -8482,7 +8482,9 @@ async function initMessenger(dbName) {
     const CAT_LABELS = ['😀','👋','🐶','🍎','⚽','🚗','❤'];
     const CAT_ARIA = ['emojiCatSmileys','emojiCatPeople','emojiCatAnimals','emojiCatFood','emojiCatActivities','emojiCatTravel','emojiCatSymbols'];
     let recentEmojis = [];
-    try { recentEmojis = JSON.parse(localStorage.getItem('brz-recent-emoji') || '[]'); } catch {}
+    // Shape-normalize at the funnel: a non-array payload ('null', '5', {}) or a garbage entry
+    // (null → item.em throws in renderGrid) made every downstream array method TypeError.
+    try { const r = JSON.parse(localStorage.getItem('brz-recent-emoji') || '[]'); if (Array.isArray(r)) recentEmojis = r.filter(e => typeof e === 'string' || typeof e?.em === 'string'); } catch {}
 
     let pickerEl = null;
     function togglePicker() {
