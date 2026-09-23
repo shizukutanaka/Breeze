@@ -9071,6 +9071,7 @@ async function initMessenger(dbName) {
 
     try {
       _callStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: withVideo });
+      if (_callState !== 'calling' || _ac.signal.aborted) { _callStream.getTracks().forEach(t => t.stop()); _callStream = null; return; }
       _callPC = new RTCPeerConnection(getCallICEConfig());
 
       _callStream.getTracks().forEach(t => _callPC.addTrack(t, _callStream));
