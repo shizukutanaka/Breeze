@@ -7262,7 +7262,7 @@ async function initMessenger(dbName) {
     let _lastTap = 0;
     d.addEventListener('touchend', (e) => {
       const now = Date.now();
-      if (now - _lastTap < 300) { showReactPicker(d, d.dataset.msgid); e.preventDefault(); }
+      if (now - _lastTap < 300 && d.dataset.deleted !== '1') { showReactPicker(d, d.dataset.msgid); e.preventDefault(); }
       _lastTap = now;
     }, { passive: false });
 
@@ -7295,7 +7295,7 @@ async function initMessenger(dbName) {
     }, { passive: true });
     d.addEventListener('touchend', () => {
       if (_lpt) { clearTimeout(_lpt); _lpt = null; }
-      if (_swiping && _swipeDx >= 60) {
+      if (_swiping && _swipeDx >= 60 && d.dataset.deleted !== '1') {
         startReply({ msgId: d.dataset.msgid, text, sender: isMine ? myName : '' });
       }
       d.classList.remove('swiping');
@@ -7389,7 +7389,7 @@ async function initMessenger(dbName) {
       if (cid && typeof dbGetByIndex === 'function') {
         dbGetByIndex('messages', 'contact', cid).then(msgs => {
           const m = msgs.find(x => x.mine && Math.abs((x.ts || 0) - ts) < 5 * MS.SEC);
-          if (m) { m.ack = true; dbPut('messages', m); }
+          if (m && !m.deleted) { m.ack = true; dbPut('messages', m); }
         }).catch(e => _dbg(e, 'status-update'));
       }
     } catch(e) { _dbg(e, 'updateMsgStatus'); }
@@ -7556,6 +7556,7 @@ async function initMessenger(dbName) {
   // MESSAGE CONTEXT MENU (reply, edit, delete, forward, pin, react)
 
   function showMsgMenu(el, msg) {
+    if (el?.dataset?.deleted === '1' || msg?.deleted) return;
     document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
     const menu = document.createElement('div');
     menu.className = 'ctx-menu';
@@ -7739,7 +7740,7 @@ async function initMessenger(dbName) {
       const editText = newText.slice(0, CONFIG.MAX_MSG_LENGTH);
       // Update IDB
       const stored = await dbGet('messages', msg.msgId);
-      if (stored) {
+      if (stored && !stored.deleted) {
         stored.text = editText;
         stored.edited = true;
         await dbPut('messages', stored);
@@ -7765,7 +7766,7 @@ async function initMessenger(dbName) {
       if (stored) { stored.deleted = true; stored.text = ''; delete stored.isPoll; delete stored.poll; delete stored.fileData; delete stored.voice; await dbPut('messages', stored); }
       auditLog('message', 'Deleted message ' + msg.msgId.slice(0, 12));
       const el = document.querySelector(`[data-msgid="${msg.msgId}"]`);
-      if (el) safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>');
+      if (el) { el.dataset.deleted = '1'; safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>'); }
       const convContact = stored?.contactId ? await dbGet('contacts', stored.contactId) : activeContact;
       if (convContact) sendSignal({ type: 'delete', msgId: msg.msgId }, convContact);
     } catch(_e) { _dbg(_e, 'deleteMsg'); }
@@ -7847,7 +7848,7 @@ async function initMessenger(dbName) {
   async function pinMsg(msg) {
     try {  
       const stored = await dbGet('messages', msg.msgId);
-      if (stored) { stored.pinned = !stored.pinned; await dbPut('messages', stored); }
+      if (stored && !stored.deleted) { stored.pinned = !stored.pinned; await dbPut('messages', stored); }
       const el = document.querySelector(`[data-msgid="${msg.msgId}"]`);
       if (el) if (stored?.pinned) el.classList.add('msg-pinned'); else el.classList.remove('msg-pinned');
     } catch(_e) { _dbg(_e, 'pinMsg'); }
@@ -7857,7 +7858,7 @@ async function initMessenger(dbName) {
   async function bookmarkMsg(msg) {
     try {  
       const stored = await dbGet('messages', msg.msgId);
-      if (stored) {
+      if (stored && !stored.deleted) {
         stored.bookmarked = !stored.bookmarked;
         await dbPut('messages', stored);
         const el = document.querySelector(`[data-msgid="${msg.msgId}"]`);
@@ -9867,7 +9868,7 @@ async function initMessenger(dbName) {
           } else if (signal.type === 'delete') {
             stored.deleted = true; stored.text = ''; delete stored.isPoll; delete stored.poll; delete stored.fileData; delete stored.voice; await dbPut('messages', stored);
             const el = document.querySelector(`[data-msgid="${smId}"]`);
-            if (el) safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>');
+            if (el) { el.dataset.deleted = '1'; safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>'); }
           } else if (signal.type === 'reaction' && typeof signal.emoji === 'string' && signal.emoji.length <= 64) {
             stored.reactions = _ownArrayMap(stored.reactions);
             if (!stored.reactions[signal.emoji] && Object.keys(stored.reactions).length < 20) stored.reactions[signal.emoji] = [];
@@ -10112,7 +10113,7 @@ async function initMessenger(dbName) {
             const _ok = _ownGroupMsg(stored);
             if (_ok) { stored.deleted = true; stored.text = ''; delete stored.isPoll; delete stored.poll; delete stored.fileData; delete stored.voice; await dbPut('messages', stored); }
             const el = document.querySelector(`[data-msgid="${targetMsgId}"]`);
-            if (el && _ok) safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>');
+            if (el && _ok) { el.dataset.deleted = '1'; safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>'); }
           } else if (signal.type === 'reaction') {
             const stored = await dbGet('messages', targetMsgId);
             // Any member may react — but only to a message inside THIS group.
@@ -10307,7 +10308,7 @@ async function initMessenger(dbName) {
           const _okDel = stored && !stored.mine && stored.contactId === contactId;
           if (_okDel) { stored.deleted = true; stored.text = ''; delete stored.isPoll; delete stored.poll; delete stored.fileData; delete stored.voice; await dbPut('messages', stored); }
           const el = document.querySelector(`[data-msgid="${_smId}"]`);
-          if (el && _okDel) safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>');
+          if (el && _okDel) { el.dataset.deleted = '1'; safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>'); }
         } else if (signal.type === 'reaction') {
           // v3.6: Encrypted reaction from relay
           const stored = await dbGet('messages', _smId);
