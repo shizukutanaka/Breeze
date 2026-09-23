@@ -9048,8 +9048,9 @@ async function initMessenger(dbName) {
   async function acquireWakeLock() {
     try {
       if ('wakeLock' in navigator) {
-        _wakeLock = await navigator.wakeLock.request('screen');
-        _wakeLock.addEventListener('release', () => { _wakeLock = null; });
+        const s = await navigator.wakeLock.request('screen');
+        if (_callState === 'idle' || _ac.signal.aborted) { s.release(); return; }
+        _wakeLock = s; _wakeLock.addEventListener('release', () => { _wakeLock = null; });
         _dbg(null, 'Wake lock acquired');
       }
     } catch(e) { _dbg(e, 'wake-lock'); }
