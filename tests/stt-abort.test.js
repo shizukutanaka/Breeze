@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 
 const SRC = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-const CLEANUP = SRC.match(/_messengerCleanup = \(\) => \{[\s\S]+?\n    \};/)[0];
+// The FULL teardown is the guarded registration; the minimal mid-init cleanup at the head of
+// initMessenger is intentionally separate and must not be the block extracted here.
+const CLEANUP = SRC.match(/if \(!_ac\.signal\.aborted\) _messengerCleanup = \(\) => \{[\s\S]+?\n    \};/)[0];
 
 describe('speech-recognition lifecycle on account switch', () => {
   it('recognizer is hoisted to initMessenger scope and assigned at creation', () => {

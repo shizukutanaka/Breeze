@@ -3658,6 +3658,7 @@ document.addEventListener('keydown', (e) => {
 async function initMessenger(dbName) {
   _perf.mark('initMessenger');
   const _ac = new AbortController(); // Abort all listeners on account switch
+  _messengerCleanup = () => { _ac.abort(); try { db?.close(); } catch {} }; // minimal cleanup until the full teardown registers at boot end — a mid-init switch must still abort this context
   dbName = dbName || 'breeze-messenger';
   const DB_VER = 5; // v3.4: compound index [contactId, ts]
 
@@ -5845,7 +5846,7 @@ async function initMessenger(dbName) {
   // branch, so a freshly-created account's first session had _messengerCleanup === null
   // and every _ac-scoped listener leaked on the first switch away (E2E-confirmed).
   function _registerMessengerCleanup() {
-    _messengerCleanup = () => {
+    if (!_ac.signal.aborted) _messengerCleanup = () => { // dead mid-init context must not clobber the live cleanup
       _ac.abort(); // Remove all event listeners registered with signal
       _intervals.forEach(i => clearInterval(i));
       // These are setTimeout (not setInterval) calls so _intervals doesn't catch them.
@@ -6064,7 +6065,7 @@ async function initMessenger(dbName) {
   // Keep boot last, and keep it a function: that is what makes the ordering safe rather than
   // lucky. tests/e2e/smoke.spec.js guards both symptoms.
   async function _boot() {
-  const hasId = await loadIdentity();
+  if (_ac.signal.aborted) return; const hasId = await loadIdentity();
   if (hasId) {
     // Scope the outbox to this account before any peer activity. Without this,
     // pending messages from account A remain in _outbox when switching to account B
@@ -6134,7 +6135,7 @@ async function initMessenger(dbName) {
   } // end _boot
 
   _DOM.get('b-msg-setup')?.addEventListener('click', async () => {
-    const name = _safeDisplayName(_DOM.get('msg-name').value.trim(), 64) || 'Anonymous';
+    if (_ac.signal.aborted) return; const name = _safeDisplayName(_DOM.get('msg-name').value.trim(), 64) || 'Anonymous';
     const alias = (_DOM.get('msg-alias').value.trim() || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
     await createIdentity(name, alias);
     _outboxKey = 'brz-outbox-' + myId;
