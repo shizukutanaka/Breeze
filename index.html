@@ -3203,7 +3203,7 @@ function _updateTitle(unreadCount) {
   const accs = getAccounts();
   const activeAcc = accs.find(a => a.id === getActiveAccountId());
   const accName = accs.length > 1 && activeAcc ? ` — ${activeAcc.name}` : '';
-  document.title = (unreadCount > 0 ? `(${unreadCount}) ` : '') + 'Breeze' + accName;
+  document.title = _DOM.get('lock-screen') ? 'Breeze' : (unreadCount > 0 ? `(${unreadCount}) ` : '') + 'Breeze' + accName;
 }
 
 // v3.5: SECURITY — Safe redirect (prevents open redirect via server response)
@@ -11005,7 +11005,7 @@ async function initMessenger(dbName) {
       if (hashB64.length === stored.hash.length && await timingSafeEqual(hashB64, stored.hash)) {
         overlay.remove();
         _attempts = 0; _backoffUntil = 0;
-        auditLog('security', 'Lock screen unlocked');
+        auditLog('security', 'Lock screen unlocked'); updateTabTitle(); // restore name+unread count now hidden below the overlay
         // Migrate legacy hash to PBKDF2
         if (isLegacy) {
           const salt = crypto.getRandomValues(new Uint8Array(16));
