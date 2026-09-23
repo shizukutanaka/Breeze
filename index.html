@@ -7945,7 +7945,7 @@ async function initMessenger(dbName) {
   }
 
   let _prevConnState = ''; // v3.6: Track for SR announcements
-  function updateConvStatus() {
+  function updateConvStatus() { if (_ac.signal.aborted) return; // dead-context callers (dc.onclose on switch, timers) must not write the shared status element
     const el = _DOM.get('msg-conv-status');
     if (!activeContact) return;
     if (activeContact.isGroup) {
@@ -11106,7 +11106,7 @@ async function initMessenger(dbName) {
       const r = await fetchT(API + '/health', { signal: _netQualityAC.signal });
       _lastRtt = Math.round(performance.now() - t0);
       const statusEl = _DOM.get('msg-conv-status');
-      if (statusEl && activeContact) {
+      if (statusEl && activeContact && !_ac.signal.aborted) {
         const peer = peers[activeContact.pubB64];
         const mode = peer?.connected ? 'P2P' : 'Relay';
         const quality = _lastRtt < 100 ? '🟢' : _lastRtt < 300 ? '🟡' : '🔴';
