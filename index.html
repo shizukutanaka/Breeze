@@ -5001,7 +5001,7 @@ async function initMessenger(dbName) {
 
   // --- Decrypt with Double Ratchet ---
   // Track decrypt failures per peer for auto-reset
-  const _decryptFailures = {};
+  const _decryptFailures = {}; const _sessWarnAt = {}; // peerId → ts: reset-warn is ≤1/day/peer (forged ciphertexts are ~free)
 
   function decryptFrom(payload, peerPubB64, frank) {
     return _withPeerLock((peerPubB64 || '').slice(0, 12), () => _decryptFromRaw(payload, peerPubB64, frank));
@@ -5130,7 +5130,7 @@ async function initMessenger(dbName) {
         // eprint 2026/727). Next inbound re-bootstraps lazily (and v5 pkm requires !sess).
         await dbDel('identity', 'sess:' + peerId);
         _decryptFailures[peerId] = 0;
-        await showKeyChangeWarning(peerId, peerPubB64, 'Session reset.');
+        if (!(_sessWarnAt[peerId] > Date.now() - MS.DAY)) { _sessWarnAt[peerId] = Date.now(); await showKeyChangeWarning(peerId, peerPubB64, 'Session reset.'); }
       }
       return null;
     }
