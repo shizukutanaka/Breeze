@@ -5937,7 +5937,7 @@ async function initMessenger(dbName) {
       // the mic open — a running session would keep transcribing into the shared
       // #msg-input under the next account (and each switch stacked one more recognizer).
       try { _sttRec?.abort(); } catch(e) { _dbg(e); }
-      _sttRec = null;
+      _sttRec = null; try { db.close(); } catch(e) { _dbg(e, 'db-close'); }
     };
   }
 
