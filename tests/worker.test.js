@@ -60,6 +60,50 @@ import { negotiateGroup, CAPS } from '../src/crypto/negotiate.js';
 // base64 helper for building signed prekey bundles in tests.
 const toB64 = (bytes) => Buffer.from(bytes).toString('base64');
 
+// Group mutations are signed by default (GROUP_REQUIRE_AUTH opt-out), so every
+// test path exercises the signed flow the deployed client uses. gA lazily mints
+// an Ed25519 key per actor, pins it as that actor's edIdentityKey, and returns
+// {ts, sig} over checkGroupAuth's canonical `breeze-group-{action}:{token}:{actor}:{ts}:{bind}`.
+const _gKeys = new Map();
+// Mint+pin an Ed25519 identity for an actor (its key goes to prekey:{actorId}.edIdentityKey).
+async function _pinEd(env, actorId) {
+  if (!_gKeys.has(actorId)) {
+    const kp = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    _gKeys.set(actorId, { kp, pub: toB64(new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey))) });
+  }
+  const k = _gKeys.get(actorId);
+  const raw = await env.KV.get(`prekey:${actorId}`);
+  let b = {};
+  try { b = raw ? JSON.parse(raw) : {}; } catch { b = {}; }
+  b.edIdentityKey = k.pub;
+  await env.KV.put(`prekey:${actorId}`, JSON.stringify(b));
+  return k;
+}
+async function _edSign(k, text) {
+  return toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, k.kp.privateKey, new TextEncoder().encode(text))));
+}
+async function gA(env, action, token, actorId, bind = '') {
+  const k = await _pinEd(env, actorId);
+  const ts = Date.now();
+  return { ts, sig: await _edSign(k, `breeze-group-${action}:${token}:${actorId}:${ts}:${bind}`) };
+}
+// Push subscribe/unsubscribe are signed by default too. pA signs
+// `breeze-push-{action}:{uid}:{ts}:{bind}`; pass the subscription object for subscribe
+// (bind = endpoint:p256dh:auth) or the endpoint string for unsubscribe.
+async function pA(env, action, userId, bindOrSub = '') {
+  const bind = typeof bindOrSub === 'string' ? bindOrSub
+    : `${bindOrSub.endpoint || ''}:${bindOrSub.keys?.p256dh || ''}:${bindOrSub.keys?.auth || ''}`;
+  const k = await _pinEd(env, userId);
+  const ts = Date.now();
+  return { ts, sig: await _edSign(k, `breeze-push-${action}:${userId}:${ts}:${bind}`) };
+}
+// Configured TURN providers require a signature by default: `breeze-turn:{uid}:{ts}`.
+async function tA(env, userId) {
+  const k = await _pinEd(env, userId);
+  const ts = Date.now();
+  return { ts, sig: await _edSign(k, `breeze-turn:${userId}:${ts}`) };
+}
+
 // The worker uses several in-memory globals; reset all between tests so they
 // don't bleed across test cases.
 beforeEach(() => {
@@ -414,6 +458,131 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     );
     expect(r2.status).toBe(400);
     expect((await r2.json()).code).toBe('INVALID_TYPE');
+  });
+
+  // Clobber defense: KEY_MISMATCH only binds userId to the identityKey PREFIX, so a
+  // caller could overwrite a registered bundle with victim-IK + attacker-SPK/Ed —
+  // mixed-key poison + Ed-key swap for fresh contacts. Once a bundle carries an Ed key,
+  // overwriting it requires a signature BY that incumbent key (breeze-prekey-upload).
+  const _b64 = (u8) => Buffer.from(u8 instanceof Uint8Array ? u8 : Uint8Array.from(u8)).toString('base64');
+  async function edKeyPair() {
+    const kp = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const raw = new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey));
+    return { pub: _b64(raw), sign: async (m) => _b64(new Uint8Array(await crypto.subtle.sign(
+      { name: 'Ed25519' }, kp.privateKey, new TextEncoder().encode(m)))) };
+  }
+  const upReq = () => apiRequest('/api/prekey/upload', {});
+
+  it('overwrite requires the incumbent Ed key signature once edIdentityKey is registered', async () => {
+    const e = makeEnv();
+    const victim = await edKeyPair();
+    const uid = 'clobber001';
+    // First write is free (no incumbent).
+    const first = await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK0', edIdentityKey: victim.pub },
+      e, upReq());
+    expect(first.status).toBe(200);
+    // Attacker re-uploads: victim's real IK prefix + their own Ed key, no sig → 403.
+    const attacker = await edKeyPair();
+    const clobber = await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK-A', edIdentityKey: attacker.pub },
+      e, upReq());
+    expect(clobber.status).toBe(403);
+    expect((await clobber.json()).code).toBe('AUTH_REQUIRED');
+    // Attacker-signed (wrong key) → SIG_INVALID.
+    const ts = Date.now();
+    const forged = await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK-A', edIdentityKey: attacker.pub,
+        ts, sig: await attacker.sign(`breeze-prekey-upload:${uid}:${ts}`) },
+      e, upReq());
+    expect(forged.status).toBe(403);
+    expect((await forged.json()).code).toBe('SIG_INVALID');
+    // Incumbent-signed overwrite → 200 (legit replenish/rotation).
+    const ts2 = Date.now();
+    const ok = await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK1', edIdentityKey: victim.pub,
+        ts: ts2, sig: await victim.sign(`breeze-prekey-upload:${uid}:${ts2}`) },
+      e, upReq());
+    expect(ok.status).toBe(200);
+    const stored = JSON.parse(await e.KV.get(`prekey:${uid}`));
+    expect(stored.signedPreKey).toBe('SPK1');
+    expect(stored.edIdentityKey).toBe(victim.pub); // attacker's key never landed
+  });
+
+  it('legacy incumbent without edIdentityKey stays overwritable (no regression)', async () => {
+    const e = makeEnv();
+    const uid = 'legacypk01';
+    await e.KV.put(`prekey:${uid}`, JSON.stringify({ identityKey: uid + 'IK', signedPreKey: 'OLD' }));
+    const res = await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'NEW' }, e, upReq());
+    expect(res.status).toBe(200);
+  });
+
+  it('opt-out: PREKEY_REQUIRE_AUTH=false keeps unsigned overwrite working', async () => {
+    const e = makeEnv({ PREKEY_REQUIRE_AUTH: 'false' });
+    const victim = await edKeyPair();
+    const uid = 'optoutpk01';
+    await e.KV.put(`prekey:${uid}`, JSON.stringify({ identityKey: uid + 'IK', signedPreKey: 'OLD', edIdentityKey: victim.pub }));
+    const res = await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'NEW' }, e, upReq());
+    expect(res.status).toBe(200);
+  });
+
+  // Relay rollback on the bundle itself: incumbent-sig + freshness only proves the
+  // request was signed recently — it can't order two in-window uploads. A relay
+  // holding a captured signed request can replay it just after a newer rotation and
+  // roll the bundle back (stale SPK, downgraded caps). The stored signedTs is the
+  // high-water mark; strictly-older is rejected, equal-ts needs the identical SPK.
+  it('rejects replay of an older signed upload after a newer one (signedTs monotonic)', async () => {
+    const e = makeEnv();
+    const victim = await edKeyPair();
+    const uid = 'rollback01';
+    // First signed upload seeds signedTs (fresh in-window ts, no incumbent needed).
+    const t1 = Date.now() - 1000;
+    const first = await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK0', edIdentityKey: victim.pub,
+        ts: t1, sig: await victim.sign(`breeze-prekey-upload:${uid}:${t1}`) },
+      e, upReq());
+    expect(first.status).toBe(200);
+    // Legit rotation: newer signed ts wins.
+    const t2 = Date.now();
+    const newer = await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK1', edIdentityKey: victim.pub,
+        ts: t2, sig: await victim.sign(`breeze-prekey-upload:${uid}:${t2}`) },
+      e, upReq());
+    expect(newer.status).toBe(200);
+    // Relay replays the captured t1 request — must not roll SPK1 back to SPK0.
+    const replay = await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK0', edIdentityKey: victim.pub,
+        ts: t1, sig: await victim.sign(`breeze-prekey-upload:${uid}:${t1}`) },
+      e, upReq());
+    expect(replay.status).toBe(409);
+    expect((await replay.json()).code).toBe('STALE_UPDATE');
+    expect(JSON.parse(await e.KV.get(`prekey:${uid}`)).signedPreKey).toBe('SPK1');
+  });
+
+  it('allows same-ts retry only when the signed pre-key is identical', async () => {
+    const e = makeEnv();
+    const victim = await edKeyPair();
+    const uid = 'rollback02';
+    const t1 = Date.now();
+    const first = await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK0', edIdentityKey: victim.pub,
+        ts: t1, sig: await victim.sign(`breeze-prekey-upload:${uid}:${t1}`) },
+      e, upReq());
+    expect(first.status).toBe(200);
+    // Idempotent resend of the same signed request — allowed.
+    const resend = await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK0', edIdentityKey: victim.pub,
+        ts: t1, sig: await victim.sign(`breeze-prekey-upload:${uid}:${t1}`) },
+      e, upReq());
+    expect(resend.status).toBe(200);
+    // Same ts but a different SPK — ambiguous ordering, refuse.
+    const conflict = await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK9', edIdentityKey: victim.pub,
+        ts: t1, sig: await victim.sign(`breeze-prekey-upload:${uid}:${t1}`) },
+      e, upReq());
+    expect(conflict.status).toBe(409);
   });
 
   it('fetch succeeds (200, no oneTimePreKey) when the OTP KV value is corrupt JSON', async () => {
@@ -955,7 +1124,7 @@ describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {
   const req = (b) => apiRequest('/api/group/x', b);
   async function setupGroup(env) {
     const create = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub', creatorName: 'C' }, env, req({}));
     const { token } = await create.json();
     await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', memberName: 'B' }, env, req({}));
     await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
@@ -968,7 +1137,7 @@ describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {
     const info0 = await (await handleGroupInfo({ token }, env, req({}))).json();
     expect(info0.epoch).toBe(0);
 
-    const kick = await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
+    const kick = await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','carol001'))}, env, req({}));
     const kj = await kick.json();
     expect(kj.ok).toBe(true);
     expect(kj.epoch).toBe(1); // bumped → remaining members rotate sender keys
@@ -981,7 +1150,7 @@ describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {
   it('only the creator can kick (no epoch bump otherwise)', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupKick({ token, kickId: 'carol001', adminId: 'bob00001' }, env, req({}));
+    const res = await handleGroupKick({ token, kickId: 'carol001', adminId: 'bob00001' , ...(await gA(env,'kick',token,'bob00001','carol001'))}, env, req({}));
     expect(res.status).toBe(403);
     const info = await (await handleGroupInfo({ token }, env, req({}))).json();
     expect(info.epoch).toBe(0); // unchanged
@@ -990,7 +1159,7 @@ describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {
   it('kicking a non-member returns 404 without bumping epoch', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupKick({ token, kickId: 'nobody00', adminId: 'creator1' }, env, req({}));
+    const res = await handleGroupKick({ token, kickId: 'nobody00', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','nobody00'))}, env, req({}));
     expect(res.status).toBe(404);
     expect((await res.json()).code).toBe('NOT_MEMBER');
     const info = await (await handleGroupInfo({ token }, env, req({}))).json();
@@ -1000,7 +1169,7 @@ describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {
   it('creator cannot kick themselves (self-kick returns 400)', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupKick({ token, kickId: 'creator1', adminId: 'creator1' }, env, req({}));
+    const res = await handleGroupKick({ token, kickId: 'creator1', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','creator1'))}, env, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('FORBIDDEN');
     // Epoch must not change.
@@ -1011,7 +1180,7 @@ describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {
   it('join after kick returns the bumped epoch so new members know which sender key to request', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
+    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','carol001'))}, env, req({}));
     // Dave joins the group after the kick — should see epoch 1, not 0.
     const res = await handleGroupJoin({ token, memberId: 'dave0001', memberPub: 'dave0001dpub', memberName: 'D' }, env, req({}));
     expect(res.status).toBe(200);
@@ -1026,7 +1195,7 @@ describe('group durable kick + unban (item 64)', () => {
   const req = (b) => apiRequest('/api/group/x', b);
   async function setupGroup(env) {
     const create = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub', creatorName: 'C' }, env, req({}));
     const { token } = await create.json();
     await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
     return token;
@@ -1035,7 +1204,7 @@ describe('group durable kick + unban (item 64)', () => {
   it('a kicked member cannot rejoin via the invite token', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
+    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','carol001'))}, env, req({}));
     const rejoin = await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
     expect(rejoin.status).toBe(403);
     expect((await rejoin.json()).code).toBe('BANNED');
@@ -1047,7 +1216,7 @@ describe('group durable kick + unban (item 64)', () => {
   it('a non-kicked member can still join normally (ban is targeted)', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
+    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','carol001'))}, env, req({}));
     const res = await handleGroupJoin({ token, memberId: 'dave0001', memberPub: 'dave0001dpub', memberName: 'D' }, env, req({}));
     expect(res.status).toBe(200);
   });
@@ -1055,8 +1224,8 @@ describe('group durable kick + unban (item 64)', () => {
   it('the creator can unban a kicked member, who may then rejoin', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
-    const unban = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'carol001', action: 'unban' }, env, req({}));
+    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','carol001'))}, env, req({}));
+    const unban = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'carol001', action: 'unban' , ...(await gA(env,'admin',token,'creator1','unban:carol001'))}, env, req({}));
     expect(unban.status).toBe(200);
     expect((await unban.json()).banned).not.toContain('carol001');
     const rejoin = await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
@@ -1066,7 +1235,7 @@ describe('group durable kick + unban (item 64)', () => {
   it('unban is idempotent for a non-banned id (no-op success)', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'carol001', action: 'unban' }, env, req({}));
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'carol001', action: 'unban' , ...(await gA(env,'admin',token,'creator1','unban:carol001'))}, env, req({}));
     expect(res.status).toBe(200);
     expect((await res.json()).notBanned).toBe(true);
   });
@@ -1074,8 +1243,8 @@ describe('group durable kick + unban (item 64)', () => {
   it('only the creator can unban (a regular member cannot)', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
-    const res = await handleGroupAdmin({ token, adminId: 'carol001', targetId: 'carol001', action: 'unban' }, env, req({}));
+    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','carol001'))}, env, req({}));
+    const res = await handleGroupAdmin({ token, adminId: 'carol001', targetId: 'carol001', action: 'unban' , ...(await gA(env,'admin',token,'carol001','unban:carol001'))}, env, req({}));
     expect(res.status).toBe(403);
   });
 });
@@ -1084,7 +1253,7 @@ describe('group multi-admin management (completes the half-built admins array)',
   const req = (b) => apiRequest('/api/group/admin', b);
   async function setupGroup(env) {
     const create = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub', creatorName: 'C' }, env, req({}));
     const { token } = await create.json();
     await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', memberName: 'B' }, env, req({}));
     await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
@@ -1094,7 +1263,7 @@ describe('group multi-admin management (completes the half-built admins array)',
   it('the creator can promote a member to admin, surfaced in group info', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' , ...(await gA(env,'admin',token,'creator1','promote:bob00001'))}, env, req({}));
     expect(res.status).toBe(200);
     expect((await res.json()).admins).toEqual(['bob00001']);
     const info = await (await handleGroupInfo({ token }, env, req({}))).json();
@@ -1105,8 +1274,8 @@ describe('group multi-admin management (completes the half-built admins array)',
   it('promote is idempotent (re-promoting an admin does not duplicate)', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
-    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' , ...(await gA(env,'admin',token,'creator1','promote:bob00001'))}, env, req({}));
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' , ...(await gA(env,'admin',token,'creator1','promote:bob00001'))}, env, req({}));
     const j = await res.json();
     expect(j.alreadyAdmin).toBe(true);
     expect(j.admins).toEqual(['bob00001']);
@@ -1115,17 +1284,17 @@ describe('group multi-admin management (completes the half-built admins array)',
   it('the creator can demote an admin back to a regular member', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
-    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'demote' }, env, req({}));
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' , ...(await gA(env,'admin',token,'creator1','promote:bob00001'))}, env, req({}));
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'demote' , ...(await gA(env,'admin',token,'creator1','demote:bob00001'))}, env, req({}));
     expect((await res.json()).admins).toEqual([]);
   });
 
   it('a non-creator cannot manage admins (no privilege escalation)', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' , ...(await gA(env,'admin',token,'creator1','promote:bob00001'))}, env, req({}));
     // bob is an admin but still cannot mint another admin.
-    const res = await handleGroupAdmin({ token, adminId: 'bob00001', targetId: 'carol001', action: 'promote' }, env, req({}));
+    const res = await handleGroupAdmin({ token, adminId: 'bob00001', targetId: 'carol001', action: 'promote' , ...(await gA(env,'admin',token,'bob00001','promote:carol001'))}, env, req({}));
     expect(res.status).toBe(403);
     expect((await res.json()).code).toBe('FORBIDDEN');
   });
@@ -1133,7 +1302,7 @@ describe('group multi-admin management (completes the half-built admins array)',
   it('cannot promote the creator (creator authority is implicit)', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'creator1', action: 'promote' }, env, req({}));
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'creator1', action: 'promote' , ...(await gA(env,'admin',token,'creator1','promote:creator1'))}, env, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_TARGET');
   });
@@ -1141,7 +1310,7 @@ describe('group multi-admin management (completes the half-built admins array)',
   it('cannot promote a non-member', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'nobody00', action: 'promote' }, env, req({}));
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'nobody00', action: 'promote' , ...(await gA(env,'admin',token,'creator1','promote:nobody00'))}, env, req({}));
     expect(res.status).toBe(404);
     expect((await res.json()).code).toBe('NOT_MEMBER');
   });
@@ -1149,7 +1318,7 @@ describe('group multi-admin management (completes the half-built admins array)',
   it('rejects an unknown action', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'destroy' }, env, req({}));
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'destroy' , ...(await gA(env,'admin',token,'creator1','destroy:bob00001'))}, env, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_ACTION');
   });
@@ -1157,8 +1326,8 @@ describe('group multi-admin management (completes the half-built admins array)',
   it('a promoted admin can kick a regular member (authorization honors admins)', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
-    const kick = await handleGroupKick({ token, kickId: 'carol001', adminId: 'bob00001' }, env, req({}));
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' , ...(await gA(env,'admin',token,'creator1','promote:bob00001'))}, env, req({}));
+    const kick = await handleGroupKick({ token, kickId: 'carol001', adminId: 'bob00001' , ...(await gA(env,'kick',token,'bob00001','carol001'))}, env, req({}));
     expect(kick.status).toBe(200);
     expect((await kick.json()).epoch).toBe(1);
   });
@@ -1166,21 +1335,21 @@ describe('group multi-admin management (completes the half-built admins array)',
   it('an admin cannot kick a fellow admin — only the creator can', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
-    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'carol001', action: 'promote' }, env, req({}));
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' , ...(await gA(env,'admin',token,'creator1','promote:bob00001'))}, env, req({}));
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'carol001', action: 'promote' , ...(await gA(env,'admin',token,'creator1','promote:carol001'))}, env, req({}));
     // bob (admin) tries to kick carol (admin) → blocked.
-    const blocked = await handleGroupKick({ token, kickId: 'carol001', adminId: 'bob00001' }, env, req({}));
+    const blocked = await handleGroupKick({ token, kickId: 'carol001', adminId: 'bob00001' , ...(await gA(env,'kick',token,'bob00001','carol001'))}, env, req({}));
     expect(blocked.status).toBe(403);
     // creator can.
-    const ok = await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
+    const ok = await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','carol001'))}, env, req({}));
     expect(ok.status).toBe(200);
   });
 
   it('demoting a kicked/removed admin is handled (leave strips admin status)', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
-    await handleGroupLeave({ token, memberId: 'bob00001' }, env, req({}));
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' , ...(await gA(env,'admin',token,'creator1','promote:bob00001'))}, env, req({}));
+    await handleGroupLeave({ token, memberId: 'bob00001' , ...(await gA(env,'leave',token,'bob00001',''))}, env, req({}));
     const info = await (await handleGroupInfo({ token }, env, req({}))).json();
     expect(info.admins).toEqual([]); // leave filtered bob out of admins
   });
@@ -1190,7 +1359,7 @@ describe('group ownership transfer (companion to multi-admin)', () => {
   const req = (b) => apiRequest('/api/group/transfer', b);
   async function setupGroup(env) {
     const create = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub', creatorName: 'C' }, env, req({}));
     const { token } = await create.json();
     await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', memberName: 'Bob' }, env, req({}));
     await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
@@ -1200,7 +1369,7 @@ describe('group ownership transfer (companion to multi-admin)', () => {
   it('the creator transfers ownership; creator* fields follow the new owner', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'bob00001' }, env, req({}));
+    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'bob00001' , ...(await gA(env,'transfer',token,'creator1','bob00001'))}, env, req({}));
     expect(res.status).toBe(200);
     const j = await res.json();
     expect(j.creatorId).toBe('bob00001');
@@ -1216,21 +1385,21 @@ describe('group ownership transfer (companion to multi-admin)', () => {
   it('after transfer the new creator can perform creator-only actions; the old cannot', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'bob00001' }, env, req({}));
+    await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'bob00001' , ...(await gA(env,'transfer',token,'creator1','bob00001'))}, env, req({}));
     // Old creator (now an admin) cannot delete the group.
-    const del1 = await handleGroupDelete({ token, adminId: 'creator1' }, env, req({}));
+    const del1 = await handleGroupDelete({ token, adminId: 'creator1' , ...(await gA(env,'delete',token,'creator1',''))}, env, req({}));
     expect(del1.status).toBe(403);
     // New creator can.
-    const del2 = await handleGroupDelete({ token, adminId: 'bob00001' }, env, req({}));
+    const del2 = await handleGroupDelete({ token, adminId: 'bob00001' , ...(await gA(env,'delete',token,'bob00001',''))}, env, req({}));
     expect(del2.status).toBe(200);
   });
 
   it('promoting the new owner out of admins is idempotent (was already an admin)', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' , ...(await gA(env,'admin',token,'creator1','promote:bob00001'))}, env, req({}));
     // Transfer to bob who is currently an admin → bob's implicit authority, dropped from admins.
-    await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'bob00001' }, env, req({}));
+    await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'bob00001' , ...(await gA(env,'transfer',token,'creator1','bob00001'))}, env, req({}));
     const info = await (await handleGroupInfo({ token }, env, req({}))).json();
     expect(info.admins).not.toContain('bob00001');
     expect(info.admins).toContain('creator1');
@@ -1239,7 +1408,7 @@ describe('group ownership transfer (companion to multi-admin)', () => {
   it('a non-creator cannot transfer ownership', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupTransfer({ token, adminId: 'bob00001', newCreatorId: 'carol001' }, env, req({}));
+    const res = await handleGroupTransfer({ token, adminId: 'bob00001', newCreatorId: 'carol001' , ...(await gA(env,'transfer',token,'bob00001','carol001'))}, env, req({}));
     expect(res.status).toBe(403);
     expect((await res.json()).code).toBe('FORBIDDEN');
   });
@@ -1247,7 +1416,7 @@ describe('group ownership transfer (companion to multi-admin)', () => {
   it('cannot transfer to a non-member', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'nobody00' }, env, req({}));
+    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'nobody00' , ...(await gA(env,'transfer',token,'creator1','nobody00'))}, env, req({}));
     expect(res.status).toBe(404);
     expect((await res.json()).code).toBe('NOT_MEMBER');
   });
@@ -1255,7 +1424,7 @@ describe('group ownership transfer (companion to multi-admin)', () => {
   it('transferring to the current creator is a no-op error', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'creator1' }, env, req({}));
+    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'creator1' , ...(await gA(env,'transfer',token,'creator1','creator1'))}, env, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('NO_OP');
   });
@@ -1265,7 +1434,7 @@ describe('group rename (lifecycle CRUD — name was frozen at create)', () => {
   const req = (b) => apiRequest('/api/group/rename', b);
   async function setupGroup(env) {
     const create = await handleGroupCreate(
-      { name: 'Old Name', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+      { name: 'Old Name', creatorId: 'creator1', creatorPub: 'creator1pub', creatorName: 'C' }, env, req({}));
     const { token } = await create.json();
     await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', memberName: 'B' }, env, req({}));
     return token;
@@ -1274,7 +1443,7 @@ describe('group rename (lifecycle CRUD — name was frozen at create)', () => {
   it('the creator can rename the group, reflected in info', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupRename({ token, adminId: 'creator1', name: 'New Name' }, env, req({}));
+    const res = await handleGroupRename({ token, adminId: 'creator1', name: 'New Name' , ...(await gA(env,'rename',token,'creator1','New Name'))}, env, req({}));
     expect(res.status).toBe(200);
     expect((await res.json()).name).toBe('New Name');
     const info = await (await handleGroupInfo({ token }, env, req({}))).json();
@@ -1285,11 +1454,11 @@ describe('group rename (lifecycle CRUD — name was frozen at create)', () => {
     const env = makeEnv();
     const token = await setupGroup(env);
     // Regular member blocked.
-    const blocked = await handleGroupRename({ token, adminId: 'bob00001', name: 'Hijacked' }, env, req({}));
+    const blocked = await handleGroupRename({ token, adminId: 'bob00001', name: 'Hijacked' , ...(await gA(env,'rename',token,'bob00001','Hijacked'))}, env, req({}));
     expect(blocked.status).toBe(403);
     // Promote bob → now allowed.
-    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
-    const ok = await handleGroupRename({ token, adminId: 'bob00001', name: 'Renamed' }, env, req({}));
+    await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' , ...(await gA(env,'admin',token,'creator1','promote:bob00001'))}, env, req({}));
+    const ok = await handleGroupRename({ token, adminId: 'bob00001', name: 'Renamed' , ...(await gA(env,'rename',token,'bob00001','Renamed'))}, env, req({}));
     expect(ok.status).toBe(200);
     expect((await ok.json()).name).toBe('Renamed');
   });
@@ -1298,18 +1467,19 @@ describe('group rename (lifecycle CRUD — name was frozen at create)', () => {
     const env = makeEnv();
     const token = await setupGroup(env);
     // Pure control characters sanitize to an empty string (same rule as create()).
-    const empty = await handleGroupRename({ token, adminId: 'creator1', name: '\x00\x01\x02' }, env, req({}));
+    const empty = await handleGroupRename({ token, adminId: 'creator1', name: '\x00\x01\x02' , ...(await gA(env,'rename',token,'creator1','\x00\x01\x02'))}, env, req({}));
     expect(empty.status).toBe(400);
     expect((await empty.json()).code).toBe('INVALID_NAME');
-    // Oversized name is capped, not rejected.
-    const long = await handleGroupRename({ token, adminId: 'creator1', name: 'x'.repeat(80) }, env, req({}));
+    // Oversized name is capped, not rejected. The signature binds the SANITIZED
+    // (50-char-capped) name — the worker authenticates what it stores.
+    const long = await handleGroupRename({ token, adminId: 'creator1', name: 'x'.repeat(80) , ...(await gA(env,'rename',token,'creator1','x'.repeat(50)))}, env, req({}));
     expect(long.status).toBe(200);
     expect((await long.json()).name.length).toBe(50);
   });
 
   it('rename on a missing group returns 404', async () => {
     const env = makeEnv();
-    const res = await handleGroupRename({ token: 'nosuchtoken1', adminId: 'creator1', name: 'X' }, env, req({}));
+    const res = await handleGroupRename({ token: 'nosuchtoken1', adminId: 'creator1', name: 'X' , ...(await gA(env,'rename','nosuchtoken1','creator1','X'))}, env, req({}));
     expect(res.status).toBe(404);
   });
 });
@@ -1318,7 +1488,7 @@ describe('group leave / delete (lifecycle completion)', () => {
   const req = (b) => apiRequest('/api/group/x', b);
   async function setupGroup(env) {
     const create = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub', creatorName: 'C' }, env, req({}));
     const { token } = await create.json();
     await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', memberName: 'B' }, env, req({}));
     await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
@@ -1328,7 +1498,7 @@ describe('group leave / delete (lifecycle completion)', () => {
   it('a member can leave; they are removed and the epoch bumps (PCS on voluntary leave)', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupLeave({ token, memberId: 'bob00001' }, env, req({}));
+    const res = await handleGroupLeave({ token, memberId: 'bob00001' , ...(await gA(env,'leave',token,'bob00001',''))}, env, req({}));
     expect(res.status).toBe(200);
     const j = await res.json();
     expect(j.ok).toBe(true);
@@ -1342,7 +1512,7 @@ describe('group leave / delete (lifecycle completion)', () => {
   it('the creator cannot leave (must delete the group instead)', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupLeave({ token, memberId: 'creator1' }, env, req({}));
+    const res = await handleGroupLeave({ token, memberId: 'creator1' , ...(await gA(env,'leave',token,'creator1',''))}, env, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('CREATOR_CANNOT_LEAVE');
     const info = await (await handleGroupInfo({ token }, env, req({}))).json();
@@ -1352,7 +1522,7 @@ describe('group leave / delete (lifecycle completion)', () => {
   it('leaving a group you are not in returns 404 without epoch churn', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupLeave({ token, memberId: 'nobody00' }, env, req({}));
+    const res = await handleGroupLeave({ token, memberId: 'nobody00' , ...(await gA(env,'leave',token,'nobody00',''))}, env, req({}));
     expect(res.status).toBe(404);
     expect((await res.json()).code).toBe('NOT_MEMBER');
     const info = await (await handleGroupInfo({ token }, env, req({}))).json();
@@ -1361,14 +1531,14 @@ describe('group leave / delete (lifecycle completion)', () => {
 
   it('leave on a missing group returns 404', async () => {
     const env = makeEnv();
-    const res = await handleGroupLeave({ token: 'nosuchtoken1', memberId: 'bob00001' }, env, req({}));
+    const res = await handleGroupLeave({ token: 'nosuchtoken1', memberId: 'bob00001' , ...(await gA(env,'leave','nosuchtoken1','bob00001',''))}, env, req({}));
     expect(res.status).toBe(404);
   });
 
   it('the creator can delete the group; it is gone from KV', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupDelete({ token, adminId: 'creator1' }, env, req({}));
+    const res = await handleGroupDelete({ token, adminId: 'creator1' , ...(await gA(env,'delete',token,'creator1',''))}, env, req({}));
     expect(res.status).toBe(200);
     expect((await res.json()).ok).toBe(true);
     expect(await env.KV.get(`grp:${token}`)).toBeNull();
@@ -1379,7 +1549,7 @@ describe('group leave / delete (lifecycle completion)', () => {
   it('a non-creator cannot delete the group', async () => {
     const env = makeEnv();
     const token = await setupGroup(env);
-    const res = await handleGroupDelete({ token, adminId: 'bob00001' }, env, req({}));
+    const res = await handleGroupDelete({ token, adminId: 'bob00001' , ...(await gA(env,'delete',token,'bob00001',''))}, env, req({}));
     expect(res.status).toBe(403);
     expect(await env.KV.get(`grp:${token}`)).not.toBeNull(); // still there
   });
@@ -1395,7 +1565,7 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
     const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
     const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
     await env.KV.put('prekey:creator1', JSON.stringify({ identityKey: 'IK', edIdentityKey: toB64(edPub), uploadedAt: Date.now() }));
-    const { token } = await (await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    const { token } = await (await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
     return { token, ed };
   }
@@ -1404,14 +1574,14 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
   const signGroup = async (ed, action, token, actorId, ts, bind = '') =>
     toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, new TextEncoder().encode(`breeze-group-${action}:${token}:${actorId}:${ts}:${bind}`))));
 
-  it('legacy unauthenticated kick still works when GROUP_REQUIRE_AUTH is unset (backward compat)', async () => {
-    const env = makeEnv();
+  it('legacy unauthenticated kick still works under the explicit opt-out (GROUP_REQUIRE_AUTH=false)', async () => {
+    const env = makeEnv({ GROUP_REQUIRE_AUTH: 'false' });
     const { token } = await setup(env);
     const res = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' }, env, req({}));
     expect(res.status).toBe(200);
   });
 
-  it('rejects unauthenticated group ops with 403 when GROUP_REQUIRE_AUTH is enabled', async () => {
+  it('rejects unauthenticated group ops with 403 by default (and under GROUP_REQUIRE_AUTH=true)', async () => {
     const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
     const { token } = await setup(env);
     for (const res of [
@@ -1558,7 +1728,7 @@ describe('cross-protocol signature replay rejection (item 49)', () => {
   it('a group-rename signature is rejected by group-delete (cannot replay rename-auth to delete)', async () => {
     const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
     const ed = await registerEd(env, 'creator1');
-    const { token } = await (await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, apiRequest('/api/group/create', {}))).json();
+    const { token } = await (await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, apiRequest('/api/group/create', {}))).json();
     const ts = Date.now();
     const renameSig = await sign(ed, `breeze-group-rename:${token}:creator1:${ts}`);
     const res = await handleGroupDelete({ token, adminId: 'creator1', ts, sig: renameSig }, env, apiRequest('/api/group/delete', {}));
@@ -1783,13 +1953,13 @@ describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
 
     // A group the user only joined (someone else is creator).
     const created = await handleGroupCreate(
-      { name: 'theirs', creatorId: 'owner001', creatorPub: 'opub', creatorName: 'O' }, env, gReq({}));
+      { name: 'theirs', creatorId: 'owner001', creatorPub: 'owner001pub', creatorName: 'O' }, env, gReq({}));
     const memberToken = (await created.json()).token;
     await handleGroupJoin({ token: memberToken, memberId: userId, memberPub: userId + 'mpub', memberName: 'Me' }, env, gReq({}));
 
     // A group the user created.
     const ownCreate = await handleGroupCreate(
-      { name: 'mine', creatorId: userId, creatorPub: 'mpub', creatorName: 'Me' }, env, gReq({}));
+      { name: 'mine', creatorId: userId, creatorPub: userId + 'mpub', creatorName: 'Me' }, env, gReq({}));
     const ownToken = (await ownCreate.json()).token;
     await handleGroupJoin({ token: ownToken, memberId: 'friend01', memberPub: 'friend01fpub', memberName: 'F' }, env, gReq({}));
 
@@ -1816,7 +1986,7 @@ describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
     const { ed } = await registeredAccount(env, userId);
     // A group the user is NOT in.
     const created = await handleGroupCreate(
-      { name: 'other', creatorId: 'owner002', creatorPub: 'opub', creatorName: 'O' }, env, gReq({}));
+      { name: 'other', creatorId: 'owner002', creatorPub: 'owner002pub', creatorName: 'O' }, env, gReq({}));
     const otherToken = (await created.json()).token;
 
     const ts = Date.now();
@@ -2061,7 +2231,7 @@ describe('sealed sender send / poll / ack', () => {
   const req = (b) => apiRequest('/api/sealed/x', b);
 
   it('queues an envelope and returns it on poll', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     const send = await handleSealedSend({ to: 'bob00001', envelope: 'ENCRYPTED_PAYLOAD' }, env, req({}));
     expect(send.status).toBe(200);
     expect((await send.json()).ok).toBe(true);
@@ -2074,12 +2244,12 @@ describe('sealed sender send / poll / ack', () => {
   });
 
   it('returns empty array when no sealed messages exist', async () => {
-    const { messages } = await (await handleSealedPoll({ id: 'nobody001' }, makeEnv(), req({}))).json();
+    const { messages } = await (await handleSealedPoll({ id: 'nobody001' }, makeEnv({ SEALED_REQUIRE_AUTH: 'false' }), req({}))).json();
     expect(messages).toEqual([]);
   });
 
   it('ack deletes the sealed queue', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     await handleSealedSend({ to: 'charlie1', envelope: 'payload' }, env, req({}));
     await handleSealedAck({ id: 'charlie1' }, env, req({}));
     const { messages } = await (await handleSealedPoll({ id: 'charlie1' }, env, req({}))).json();
@@ -2087,23 +2257,64 @@ describe('sealed sender send / poll / ack', () => {
   });
 
   it('rejects ack with an invalid userId', async () => {
-    const res = await handleSealedAck({ id: 'bad id!' }, makeEnv(), req({}));
+    const res = await handleSealedAck({ id: 'bad id!' }, makeEnv({ SEALED_REQUIRE_AUTH: 'false' }), req({}));
     expect(res.status).toBe(400);
   });
 
   // Socratic round: "what happens to message 101 while the recipient is offline?" The
-  // queue caps at 100 and silently dropped the oldest. Now the relay counts the drops and
-  // the next poll confesses them — once — so the recipient at least knows.
-  it('reports queue-overflow drops on the next poll, exactly once', async () => {
-    const env = makeEnv();
-    for (let i = 0; i < 103; i++) {
-      await handleSealedSend({ to: 'busybee1', envelope: `E${i}-${'x'.repeat(40)}` }, env, req({}));
+  // queue used to cap at 100 and drop the OLDEST — so any unauthenticated sender could
+  // purge a victim's pending queue by flooding (4 min single-IP at 30/min). Now a full
+  // queue refuses with 429 QUEUE_FULL: pending mail is immutable once stored, and the
+  // sender's existing retry path re-sends after the recipient's next drain.
+  it('refuses overflow with QUEUE_FULL instead of evicting pending mail', async () => {
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
+    for (let i = 0; i < 100; i++) {
+      const r = await handleSealedSend({ to: 'busybee1', envelope: `E${i}-${'x'.repeat(40)}` }, env, req({}));
+      expect(r.status).toBe(200);
     }
+    const refused = await handleSealedSend({ to: 'busybee1', envelope: 'ONE-TOO-MANY' }, env, req({}));
+    expect(refused.status).toBe(429);
+    expect((await refused.json()).code).toBe('QUEUE_FULL');
+    expect(refused.headers.get('Retry-After')).toBe('30');
+    // Pending mail survives intact — nothing was evicted.
     const first = await (await handleSealedPoll({ id: 'busybee1' }, env, req({}))).json();
     expect(first.messages.length).toBe(100);
-    expect(first.dropped).toBe(3); // 103 sent, cap 100 — three oldest were lost
-    const second = await (await handleSealedPoll({ id: 'busybee1' }, env, req({}))).json();
-    expect(second.dropped).toBeUndefined(); // confessed once, counter reset
+    // Refusal un-marks dedup, so a retry after the ack drain actually stores.
+    await handleSealedAck({ id: 'busybee1' }, env, req({}));
+    const retry = await handleSealedSend({ to: 'busybee1', envelope: 'ONE-TOO-MANY' }, env, req({}));
+    expect(retry.status).toBe(200);
+    expect((await retry.json()).dedup).toBeUndefined();
+    const after = await (await handleSealedPoll({ id: 'busybee1' }, env, req({}))).json();
+    expect(after.messages.some((m) => m.envelope === 'ONE-TOO-MANY')).toBe(true);
+  });
+
+  // The lost-write requeue cannot recover onto a full queue without evicting another
+  // accepted envelope — under the refuse-when-full invariant it skips the re-append
+  // instead. The envelope is lost (the race defect itself is unchanged), but no
+  // already-accepted entry is destroyed to make room for it.
+  it('lost-write recovery on a full queue skips the re-append rather than evicting', async () => {
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
+    const key = 'sealed:racefull1';
+    for (let i = 0; i < 99; i++) {
+      await handleSealedSend({ to: 'racefull1', envelope: `OLD${i}-${'x'.repeat(40)}` }, env, req({}));
+    }
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbered = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true; // racing writer lands last with a DIFFERENT full queue
+        await origPut(k, JSON.stringify(
+          Array.from({ length: 100 }, (_, i) => ({ envelope: `OTHER${i}`, ts: Date.now() }))), o);
+      }
+    };
+    const res = await handleSealedSend({ to: 'racefull1', envelope: 'MINE-lost' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect(clobbered).toBe(true);
+    const polled = await (await handleSealedPoll({ id: 'racefull1' }, env, req({}))).json();
+    expect(polled.messages.length).toBe(100);                     // nothing evicted
+    expect(polled.messages.every((m) => m.envelope.startsWith('OTHER'))).toBe(true);
+    expect(polled.messages.some((m) => m.envelope === 'MINE-lost')).toBe(false); // honestly lost
   });
 
   // The sealed queue is a single KV value mutated read-modify-write, and KV is
@@ -2113,7 +2324,7 @@ describe('sealed sender send / poll / ack', () => {
   // deterministically by having a "concurrent" writer clobber the queue at the moment of the
   // put, then asserts the envelope is present anyway.
   it('recovers an envelope that a concurrent writer clobbered (lost-write recovery)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     const key = 'sealed:racetgt1';
     const origPut = env.KV.put.bind(env.KV);
     let clobbered = false;
@@ -2135,14 +2346,14 @@ describe('sealed sender send / poll / ack', () => {
   });
 
   it('does not re-append when the write landed cleanly (no duplicates in the common case)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     await handleSealedSend({ to: 'noracetgt', envelope: 'only-once' }, env, req({}));
     const polled = await (await handleSealedPoll({ id: 'noracetgt' }, env, req({}))).json();
     expect(polled.messages.filter((m) => m.envelope === 'only-once').length).toBe(1);
   });
 
   it('a queue that never overflows reports no drops', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     await handleSealedSend({ to: 'quietone', envelope: 'just-one' }, env, req({}));
     const polled = await (await handleSealedPoll({ id: 'quietone' }, env, req({}))).json();
     expect(polled.messages.length).toBe(1);
@@ -2152,7 +2363,7 @@ describe('sealed sender send / poll / ack', () => {
   // Item 40: an envelope that arrives AFTER a poll but BEFORE the ack must survive the ack
   // (the ack clears only up to the polled high-water mark, not the whole queue).
   it('preserves an envelope sent in the poll->ack window (no blind full-delete)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     await handleSealedSend({ to: 'window01', envelope: 'm1-polled' }, env, req({}));
     // Poll returns m1 and records the high-water mark.
     const polled = await (await handleSealedPoll({ id: 'window01' }, env, req({}))).json();
@@ -2169,7 +2380,7 @@ describe('sealed sender send / poll / ack', () => {
   });
 
   it('full-deletes (kept 0) when every queued envelope was polled', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     await handleSealedSend({ to: 'window02', envelope: 'only-msg' }, env, req({}));
     await handleSealedPoll({ id: 'window02' }, env, req({}));
     const ack = await handleSealedAck({ id: 'window02' }, env, req({}));
@@ -2180,15 +2391,91 @@ describe('sealed sender send / poll / ack', () => {
   });
 
   it('ack with no prior poll (no high-water mark) still full-deletes (backward compat)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     await handleSealedSend({ to: 'window03', envelope: 'unpolled' }, env, req({}));
     const ack = await handleSealedAck({ id: 'window03' }, env, req({}));
     expect(ack.status).toBe(200);
     expect((await (await handleSealedPoll({ id: 'window03' }, env, req({}))).json()).messages).toEqual([]);
   });
 
+  // A poll used to re-put the queue with TTL.MIN*5 — collapsing a week of retention to
+  // 5 minutes, so >5min offline after a poll = silent loss. Now a poll writes only the
+  // hwm marker; the queue key itself is never rewritten and keeps its original lifetime.
+  it('poll does not rewrite the queue (retention is not collapsed to 5 minutes)', async () => {
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
+    await handleSealedSend({ to: 'ttlcheck1', envelope: 'keep-me-a-week' }, env, req({}));
+    const puts = [];
+    const realPut = env.KV.put.bind(env.KV);
+    env.KV.put = async (k, v, o) => { puts.push(k); return realPut(k, v, o); };
+    const poll = await handleSealedPoll({ id: 'ttlcheck1' }, env, req({}));
+    expect(poll.status).toBe(200);
+    expect(puts).not.toContain('sealed:ttlcheck1');   // only `sealed:ttlcheck1:hwm` may be written
+  });
+
+  // Owner-auth: unsigned, a public userId is enough to read queue metadata or delete the
+  // whole queue (the no-hwm ack fallback blind-deletes). Verified-when-present with a
+  // per-op challenge so a sig lifted from sealed/poll can't be replayed at sealed/ack.
+  describe('sealed owner-auth (SEALED_REQUIRE_AUTH)', () => {
+    const registerOwner = async (env, userId) => {
+      const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+      const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
+      await env.KV.put(`prekey:${userId}`, JSON.stringify({ identityKey: 'IK-' + userId, edIdentityKey: Buffer.from(edPub).toString('base64'), uploadedAt: Date.now() }));
+      const sign = async (challenge) => Buffer.from(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, new TextEncoder().encode(challenge)))).toString('base64');
+      return { sign };
+    };
+
+    it('flag unset: unsigned poll+ack are rejected 403 AUTH_REQUIRED (default-enforced)', async () => {
+      const env = makeEnv(); // no flag — default is ON since the delegated wire-compat decision
+      await handleSealedSend({ to: 'deflt001', envelope: 'e' }, env, req({}));
+      for (const res of [
+        await handleSealedPoll({ id: 'deflt001' }, env, req({})),
+        await handleSealedAck({ id: 'deflt001' }, env, req({})),
+      ]) {
+        expect(res.status).toBe(403);
+        expect((await res.json()).code).toBe('AUTH_REQUIRED');
+      }
+      expect(JSON.parse(await env.KV.get('sealed:deflt001')).length).toBe(1); // queue intact
+    });
+
+    it('flag explicitly false: unsigned poll+ack still work (operator opt-out)', async () => {
+      const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
+      await handleSealedSend({ to: 'compat01', envelope: 'e' }, env, req({}));
+      expect((await handleSealedPoll({ id: 'compat01' }, env, req({}))).status).toBe(200);
+      expect((await handleSealedAck({ id: 'compat01' }, env, req({}))).status).toBe(200);
+    });
+
+    it('flag on: unsigned poll+ack are rejected 403 AUTH_REQUIRED and delete nothing', async () => {
+      const env = makeEnv({ SEALED_REQUIRE_AUTH: 'true' });
+      await handleSealedSend({ to: 'strict01', envelope: 'e' }, env, req({}));
+      for (const res of [
+        await handleSealedPoll({ id: 'strict01' }, env, req({})),
+        await handleSealedAck({ id: 'strict01' }, env, req({})),
+      ]) {
+        expect(res.status).toBe(403);
+        expect((await res.json()).code).toBe('AUTH_REQUIRED');
+      }
+      expect(JSON.parse(await env.KV.get('sealed:strict01')).length).toBe(1); // queue intact
+    });
+
+    it('flag on: owner-signed poll and ack pass; a sig for the other op is rejected', async () => {
+      const env = makeEnv({ SEALED_REQUIRE_AUTH: 'true' });
+      const { sign } = await registerOwner(env, 'owner001');
+      await handleSealedSend({ to: 'owner001', envelope: 'e' }, env, req({}));
+      const ts = Date.now();
+      const poll = await handleSealedPoll({ id: 'owner001', ts, sig: await sign(`breeze-sealed-poll:owner001:${ts}`) }, env, req({}));
+      expect(poll.status).toBe(200);
+      // Same key, wrong op in the challenge — op binding prevents the relay swapping endpoints.
+      const replayed = await handleSealedAck({ id: 'owner001', ts, sig: await sign(`breeze-sealed-poll:owner001:${ts}`) }, env, req({}));
+      expect(replayed.status).toBe(403);
+      const ts2 = Date.now();
+      const ack = await handleSealedAck({ id: 'owner001', ts: ts2, sig: await sign(`breeze-sealed-ack:owner001:${ts2}`) }, env, req({}));
+      expect(ack.status).toBe(200);
+      expect((await (await handleSealedPoll({ id: 'owner001', ts: ts2, sig: await sign(`breeze-sealed-poll:owner001:${ts2}`) }, env, req({}))).json()).messages).toEqual([]);
+    });
+  });
+
   it('returns 500 ACK_FAILED when the selective-delete KV write fails', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     await handleSealedSend({ to: 'window04', envelope: 'm1' }, env, req({}));
     await handleSealedPoll({ id: 'window04' }, env, req({}));
     await new Promise(r => setTimeout(r, 2));
@@ -2202,7 +2489,7 @@ describe('sealed sender send / poll / ack', () => {
   });
 
   it('deduplicates identical envelopes sent twice (replay guard)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     await handleSealedSend({ to: 'dave0001', envelope: 'SAME_PAYLOAD_XYZ' }, env, req({}));
     await handleSealedSend({ to: 'dave0001', envelope: 'SAME_PAYLOAD_XYZ' }, env, req({}));
     const { messages } = await (await handleSealedPoll({ id: 'dave0001' }, env, req({}))).json();
@@ -2212,7 +2499,7 @@ describe('sealed sender send / poll / ack', () => {
   it('does NOT dedup envelopes that share a 32-char prefix but differ in length (length-keyed dedup)', async () => {
     // Without the length in the dedup key, 'AAAA...32...AAAA' and 'AAAA...32...AAAAextra' would
     // share the same key and the second message would be silently dropped.
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     globalThis._sealedDedup = new Map(); // reset cross-test dedup state
     const prefix = 'A'.repeat(32);
     await handleSealedSend({ to: 'lentest1', envelope: prefix }, env, req({}));
@@ -2222,13 +2509,13 @@ describe('sealed sender send / poll / ack', () => {
   });
 
   it('poll returns 400 when id is missing', async () => {
-    const res = await handleSealedPoll({}, makeEnv(), req({}));
+    const res = await handleSealedPoll({}, makeEnv({ SEALED_REQUIRE_AUTH: 'false' }), req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('MISSING_ID');
   });
 
   it('multiple envelopes from different senders all appear on poll', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     await handleSealedSend({ to: 'eve00001', envelope: 'from-alice' }, env, req({}));
     await handleSealedSend({ to: 'eve00001', envelope: 'from-bob' }, env, req({}));
     const { messages } = await (await handleSealedPoll({ id: 'eve00001' }, env, req({}))).json();
@@ -2238,7 +2525,7 @@ describe('sealed sender send / poll / ack', () => {
   });
 
   it('send returns 400 when to or envelope is missing', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     const r1 = await handleSealedSend({ envelope: 'x' }, e, req({}));
     expect(r1.status).toBe(400);
     const r2 = await handleSealedSend({ to: 'bob00001' }, e, req({}));
@@ -2246,7 +2533,7 @@ describe('sealed sender send / poll / ack', () => {
   });
 
   it('send rejects an envelope larger than 256 KB (DoS guard)', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     const res = await handleSealedSend(
       { to: 'bob00001', envelope: 'x'.repeat(256 * 1024 + 1) }, e, req({})
     );
@@ -2255,13 +2542,13 @@ describe('sealed sender send / poll / ack', () => {
   });
 
   it('send rejects a malformed recipient id (KV key injection guard)', async () => {
-    const res = await handleSealedSend({ to: 'bad id!', envelope: 'ENC' }, makeEnv(), req({}));
+    const res = await handleSealedSend({ to: 'bad id!', envelope: 'ENC' }, makeEnv({ SEALED_REQUIRE_AUTH: 'false' }), req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_USER_ID');
   });
 
   it('poll rejects an id that does not match the userId format', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     const r1 = await handleSealedPoll({ id: 'bad id!' }, e, req({})); // space + ! not in charset
     expect(r1.status).toBe(400);
     expect((await r1.json()).code).toBe('INVALID_ID');
@@ -2271,7 +2558,7 @@ describe('sealed sender send / poll / ack', () => {
 
   // ── KV failure propagation (item 27) ─────────────────────────────────────────
   it('send returns STORE_FAILED 500 when KV put throws (not false success)', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     e.KV.put = async () => { throw new Error('KV_QUOTA_EXCEEDED'); };
     const res = await handleSealedSend({ to: 'bob00001', envelope: 'ENC' }, e, req({}));
     expect(res.status).toBe(500);
@@ -2279,7 +2566,7 @@ describe('sealed sender send / poll / ack', () => {
   });
 
   it('ack returns ACK_FAILED 500 when KV delete throws (not false success)', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     await handleSealedSend({ to: 'frank001', envelope: 'ENC' }, e, req({}));
     e.KV.delete = async () => { throw new Error('KV_TRANSIENT_ERROR'); };
     const res = await handleSealedAck({ id: 'frank001' }, e, req({}));
@@ -2294,7 +2581,7 @@ describe('sealed sender send / poll / ack', () => {
   // here (mirrors handleMsgSend) gives every appended entry a strictly-larger ts,
   // making the ack filter lossless.
   it('two envelopes stored in the same millisecond get distinct, strictly-increasing ts values', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     // Freeze Date.now() so both sends definitely share a timestamp
     const frozenTs = Date.now();
     vi.spyOn(Date, 'now').mockReturnValue(frozenTs);
@@ -2312,7 +2599,7 @@ describe('sealed sender send / poll / ack', () => {
 
   it('ack preserves a same-millisecond envelope that arrived after the poll (monotonic bump guard)', async () => {
     // Without the bump, a second envelope stored at ts == hwm would be filtered out by `m.ts > hwm`.
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     const frozenTs = Date.now();
     vi.spyOn(Date, 'now').mockReturnValue(frozenTs);
     try {
@@ -2340,7 +2627,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   beforeEach(() => { globalThis._msgDedup = new Map(); });
 
   it('stores a message and returns it on poll', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const send = await handleMsgSend(
       { to: 'bob00001', from: 'alice001', payload: 'ENCRYPTED', ts: Date.now() },
       ip, env, req({}),
@@ -2355,7 +2642,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('assigns a unique server-side message id (same-millisecond cursor groundwork)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const ts = Date.now();
     await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'CT-A', ts }, ip, env, req({}));
     await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'CT-B', ts }, ip, env, req({}));
@@ -2368,7 +2655,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   // Item 41: a message that shares a millisecond with an already-polled one must still be
   // delivered. The server bumps a colliding ts so the `m.ts > lastTs` cursor stays lossless.
   it('does not lose a message sharing a ms with an already-polled one (monotonic ts cursor)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const T = Date.now();
     await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'FIRST', ts: T }, ip, env, req({}));
     // First poll delivers FIRST; the client's cursor advances to the max ts it saw.
@@ -2383,7 +2670,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('bumps a colliding stored ts by 1ms so inbox timestamps are strictly increasing', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const T = Date.now();
     await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'A', ts: T }, ip, env, req({}));
     await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'B', ts: T }, ip, env, req({}));
@@ -2392,8 +2679,37 @@ describe('msg send / poll (1:1 relay path)', () => {
     expect(stored.map(m => m.ts)).toEqual([T, T + 1, T + 2]); // strictly increasing
   });
 
+  // A full inbox used to evict the OLDEST pending message — any unauthenticated sender
+  // could purge a victim's undelivered mail by flooding (4 min at 30/min, single-IP).
+  // Now the send is refused with 429 QUEUE_FULL (client retries via its existing path),
+  // and the dedup key is un-marked so the retry isn't swallowed as a duplicate.
+  it('refuses overflow with QUEUE_FULL and keeps every pending message', async () => {
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
+    for (let i = 0; i < 100; i++) {
+      const r = await handleMsgSend(
+        { to: 'fullbox1', from: 'sndr' + String(i).padStart(4, '0'), payload: 'F' + i, ts: Date.now() },
+        ip, env, req({}));
+      expect(r.status).toBe(200);
+    }
+    const refused = await handleMsgSend(
+      { to: 'fullbox1', from: 'latecomer1', payload: 'LATE', ts: Date.now() }, ip, env, req({}));
+    expect(refused.status).toBe(429);
+    expect((await refused.json()).code).toBe('QUEUE_FULL');
+    expect(refused.headers.get('Retry-After')).toBe('30');
+    const stored = JSON.parse(await env.KV.get('inbox:fullbox1'));
+    expect(stored.length).toBe(100); // pending mail immutable — nothing evicted
+    // Retry after the queue drains actually stores (refusal un-marked the dedup key).
+    await env.KV.put('inbox:fullbox1', JSON.stringify([]));
+    const retry = await handleMsgSend(
+      { to: 'fullbox1', from: 'latecomer1', payload: 'LATE', ts: Date.now() }, ip, env, req({}));
+    expect(retry.status).toBe(200);
+    expect((await retry.json()).dedup).toBeUndefined();
+    const after = JSON.parse(await env.KV.get('inbox:fullbox1'));
+    expect(after.some((m) => m.payload === 'LATE')).toBe(true);
+  });
+
   it('purges expired disappearing messages at poll (server-side disappearAt enforcement)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const now = Date.now();
     // Seed the inbox directly: one expired, one still-live, one non-disappearing.
     await env.KV.put('inbox:bob00001', JSON.stringify([
@@ -2412,7 +2728,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('rejects a message with a timestamp outside ±5 min (replay guard)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const stale = Date.now() - 6 * 60 * 1000; // 6 minutes ago
     const res = await handleMsgSend(
       { to: 'bob00001', from: 'alice001', payload: 'X', ts: stale },
@@ -2423,7 +2739,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('rejects a non-numeric ts (type guard — prevents replay-window bypass + poisoned msg.ts)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     // A string/object ts makes Math.abs(now - ts) NaN, which is never > 300000, so the
     // ±5 min replay guard would silently pass and store a non-numeric ts that breaks
     // the numeric poll cursor. The type guard must reject it before that happens.
@@ -2438,7 +2754,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('rejects self-send', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const res = await handleMsgSend(
       { to: 'alice001', from: 'alice001', payload: 'X', ts: Date.now() },
       ip, env, req({}),
@@ -2448,7 +2764,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('deduplicates an immediately repeated send (content-keyed)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const body = { to: 'carol001', from: 'alice001', payload: 'SAME', ts: Date.now() };
     await handleMsgSend(body, ip, env, req({}));
     const r2 = await handleMsgSend(body, ip, env, req({}));
@@ -2458,7 +2774,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('rejects a payload larger than 256 KB (DoS guard)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const res = await handleMsgSend(
       { to: 'bob00001', from: 'alice001', payload: 'x'.repeat(256 * 1024 + 1), ts: Date.now() },
       ip, env, req({}),
@@ -2468,7 +2784,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('poll lastTs cursor returns only messages newer than the cursor', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const now = Date.now();
     // Send two messages with distinct timestamps.
     await handleMsgSend(
@@ -2484,7 +2800,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('poll with a non-numeric lastTs falls back to cursor 0 (still delivers, no data loss)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     // A buggy/hostile string lastTs must not make every `m.ts > cutoff` NaN→false,
     // which would both starve the poller and (via the shared cutoff) delete still-
     // undelivered messages older than the 10s grace window.
@@ -2497,7 +2813,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('returns 400 MISSING_FIELDS when to, from, or payload is absent', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const ts = Date.now();
     const r1 = await handleMsgSend({ from: 'alice001', payload: 'x', ts }, ip, e, req({}));
     expect(r1.status).toBe(400);
@@ -2509,7 +2825,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('rejects send with malformed to or from userId (KV key injection guard)', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const ts = Date.now();
     const r1 = await handleMsgSend({ to: 'bad id!', from: 'alice001', payload: 'x', ts }, ip, e, req({}));
     expect(r1.status).toBe(400);
@@ -2520,7 +2836,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('rejects non-string to/from/payload (INVALID_TYPE type guard)', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const ts = Date.now();
     // Non-string `to` — would bypass validateUserId and form a bad KV key
     const r1 = await handleMsgSend({ to: 42, from: 'alice001', payload: 'x', ts }, ip, e, req({}));
@@ -2537,16 +2853,41 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('rejects poll with malformed id (KV key injection guard)', async () => {
-    const res = await handleMsgPoll({ id: 'bad id!' }, makeEnv(), req({}));
+    const res = await handleMsgPoll({ id: 'bad id!' }, makeEnv({ MSG_REQUIRE_AUTH: 'false' }), req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_ID');
+  });
+
+  // Unsigned /msg/poll is destructive: a future lastTs makes the keep-filter delete every
+  // message older than MULTITAB_GRACE — knowing a victim's (public) userId was enough to
+  // purge their undelivered inbox. MSG_REQUIRE_AUTH gates it behind an owner signature;
+  // default-on since the delegated wire-compat decision (explicit 'false' opts out).
+  it('MSG_REQUIRE_AUTH: unsigned poll 403s and purges nothing; owner-signed poll works', async () => {
+    const env = makeEnv(); // flag unset — exercises the enforced default
+    await handleMsgSend({ to: 'msgvictim0', from: 'alice001', payload: 'X', ts: Date.now() - 60000 }, ip, env, req({}));
+    expect((await handleMsgPoll({ id: 'msgvictim0', lastTs: 0 }, env, req({}))).status).toBe(403);
+    env.MSG_REQUIRE_AUTH = 'true';
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
+    await env.KV.put('prekey:msgvictim', JSON.stringify({ identityKey: 'IK', edIdentityKey: Buffer.from(edPub).toString('base64'), uploadedAt: Date.now() }));
+    await handleMsgSend({ to: 'msgvictim', from: 'alice001', payload: 'UNDELIVERED', ts: Date.now() - 60000 }, ip, env, req({}));
+
+    const unsigned = await handleMsgPoll({ id: 'msgvictim', lastTs: Date.now() + 86400000 }, env, req({}));
+    expect(unsigned.status).toBe(403);
+    expect(JSON.parse(await env.KV.get('inbox:msgvictim')).length).toBe(1); // purge blocked
+
+    const ts = Date.now();
+    const sig = Buffer.from(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, new TextEncoder().encode(`breeze-msg-poll:msgvictim:${ts}`)))).toString('base64');
+    const signed = await handleMsgPoll({ id: 'msgvictim', lastTs: 0, ts, sig }, env, req({}));
+    expect(signed.status).toBe(200);
+    expect((await signed.json()).messages.length).toBe(1);
   });
 
   it('drops non-string groupId/replyTo silently (consistent with sig/sigPub guards)', async () => {
     // String(object) = '[object Object]' — storing this corrupts the groupId that
     // clients use for group detection.  Like sig/sigPub/fromPub, non-string optional
     // fields must be treated as absent rather than coerced.
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const ts = Date.now();
     await handleMsgSend({
       to: 'bob00001', from: 'alice001', payload: 'ENC', ts,
@@ -2559,7 +2900,7 @@ describe('msg send / poll (1:1 relay path)', () => {
   });
 
   it('rejects Infinity disappearAt but stores a valid finite timestamp', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const now = Date.now();
     // Infinity passes `typeof x === 'number'` so the old guard stored it as-is,
     // creating a disappearAt that never fires on the client (Infinity > Date.now() always).
@@ -2588,7 +2929,7 @@ describe('msg send / poll (1:1 relay path)', () => {
     // returned every time and never cleaned from KV.  Number.isFinite coerces
     // Infinity to 0, so it behaves like an oldest-possible timestamp: NOT returned
     // when cutoff=0 (0 > 0 is false), and deleted from KV (not kept).
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     const now = Date.now();
     // Directly write a malformed KV entry with ts:Infinity (bypasses send-side guard
     // to simulate old data or corrupted KV).
@@ -2611,7 +2952,7 @@ describe('msg send / poll (1:1 relay path)', () => {
 
   // ── KV failure propagation (item 27) ─────────────────────────────────────────
   it('send returns STORE_FAILED 500 when KV put throws (not false success)', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     e.KV.put = async () => { throw new Error('KV_QUOTA_EXCEEDED'); };
     const res = await handleMsgSend(
       { to: 'bob00001', from: 'alice001', payload: 'ENC', ts: Date.now() },
@@ -2745,6 +3086,29 @@ describe('alias set / get (PoW anti-spam)', () => {
     const res = await handleAliasSet({ alias: 'takenname', pub: pub2, pow: pow2 }, env, req({}));
     expect(res.status).toBe(409);
     expect((await res.json()).code).toBe('ALIAS_TAKEN');
+  }, 30000);
+
+  // The alias key is permanent, so the check-then-set race loses loudly: two
+  // registrants can both see it free, the later put wins, and the loser was
+  // answered ok:true for a handle it doesn't own — they publish a dead @alias.
+  // The post-write re-read turns the loser's silent dead-alias into ALIAS_TAKEN.
+  it('returns 409 to the loser of a concurrent registration race', async () => {
+    const env = makeEnv();
+    const pub = 'LOSERPUB001';
+    const pow = await solvePoW(pub);
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbered = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === 'alias:racename' && !clobbered) {
+        clobbered = true; // the competing registration's put lands after ours
+        await origPut(k, JSON.stringify({ pub: 'WINNERPUB01', name: '', setAt: Date.now() }), o);
+      }
+    };
+    const res = await handleAliasSet({ alias: 'racename', pub, pow }, env, req({}));
+    expect(res.status).toBe(409);
+    expect((await res.json()).code).toBe('ALIAS_TAKEN');
+    expect(JSON.parse(await env.KV.get('alias:racename')).pub).toBe('WINNERPUB01'); // winner's record intact
   }, 30000);
 
   it('returns the stored pub and name on alias get', async () => {
@@ -3006,7 +3370,8 @@ describe('push subscribe SSRF guard', () => {
   const base = (endpoint) => ({ userId: 'bob000001', subscription: { endpoint } });
 
   it('rejects non-HTTPS endpoints', async () => {
-    const res = await handlePushSubscribe(base('http://fcm.googleapis.com/x'), makeEnv(), apiRequest('/api/push/subscribe', {}));
+    const env = makeEnv();
+    const res = await handlePushSubscribe({ ...base('http://fcm.googleapis.com/x'), ...(await pA(env,'subscribe','bob000001',{ endpoint: 'http://fcm.googleapis.com/x' })) }, env, apiRequest('/api/push/subscribe', {}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_ENDPOINT');
   });
@@ -3016,13 +3381,14 @@ describe('push subscribe SSRF guard', () => {
     const env = makeEnv();
     const real = env.KV.put.bind(env.KV);
     env.KV.put = async (key, ...rest) => { if (key.startsWith('push:')) throw new Error('KV down'); return real(key, ...rest); };
-    const res = await handlePushSubscribe(base('https://fcm.googleapis.com/fcm/send/abc'), env, apiRequest('/api/push/subscribe', {}));
+    const res = await handlePushSubscribe({ ...base('https://fcm.googleapis.com/fcm/send/abc'), ...(await pA(env,'subscribe','bob000001',{ endpoint: 'https://fcm.googleapis.com/fcm/send/abc' })) }, env, apiRequest('/api/push/subscribe', {}));
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe('STORE_FAILED');
   });
 
   it('rejects untrusted hosts (SSRF target)', async () => {
-    const res = await handlePushSubscribe(base('https://169.254.169.254/latest/meta-data'), makeEnv(), apiRequest('/api/push/subscribe', {}));
+    const env = makeEnv();
+    const res = await handlePushSubscribe({ ...base('https://169.254.169.254/latest/meta-data'), ...(await pA(env,'subscribe','bob000001',{ endpoint: 'https://169.254.169.254/latest/meta-data' })) }, env, apiRequest('/api/push/subscribe', {}));
     expect(res.status).toBe(400);
     const j = await res.json();
     expect(j.error).toMatch(/Untrusted/);
@@ -3030,7 +3396,8 @@ describe('push subscribe SSRF guard', () => {
   });
 
   it('accepts a trusted FCM endpoint', async () => {
-    const res = await handlePushSubscribe(base('https://fcm.googleapis.com/fcm/send/abc'), makeEnv(), apiRequest('/api/push/subscribe', {}));
+    const env = makeEnv();
+    const res = await handlePushSubscribe({ ...base('https://fcm.googleapis.com/fcm/send/abc'), ...(await pA(env,'subscribe','bob000001',{ endpoint: 'https://fcm.googleapis.com/fcm/send/abc' })) }, env, apiRequest('/api/push/subscribe', {}));
     expect(res.status).toBe(200);
     expect((await res.json()).ok).toBe(true);
   });
@@ -3049,7 +3416,7 @@ describe('push subscribe SSRF guard', () => {
     const req = apiRequest('/api/push/subscribe', {});
     for (let i = 1; i <= 6; i++) {
       const sub = { endpoint: `https://fcm.googleapis.com/fcm/send/device${i}` };
-      await handlePushSubscribe({ userId: 'u0000001', subscription: sub }, env, req);
+      await handlePushSubscribe({ userId: 'u0000001', subscription: sub , ...(await pA(env,'subscribe','u0000001',sub))}, env, req);
     }
     const stored = JSON.parse(await env.KV.get('push:u0000001'));
     expect(stored.length).toBe(5);
@@ -3067,7 +3434,7 @@ describe('push subscribe SSRF guard', () => {
       expirationTime: 1234567890,
       injectedField: 'x'.repeat(10000), // extra top-level field — must be dropped
     };
-    await handlePushSubscribe({ userId: 'u0000002', subscription: sub }, env, req);
+    await handlePushSubscribe({ userId: 'u0000002', subscription: sub , ...(await pA(env,'subscribe','u0000002',sub))}, env, req);
     const stored = JSON.parse(await env.KV.get('push:u0000002'));
     const saved = stored[0];
     expect(Object.keys(saved)).toEqual(expect.arrayContaining(['endpoint', 'keys', 'expirationTime']));
@@ -3096,13 +3463,14 @@ describe('push subscribe — optional Ed25519 ownership auth (item 62)', () => {
         `breeze-push-subscribe:${uid}:${ts}:${sub.endpoint || ''}:${sub.keys?.p256dh || ''}:${sub.keys?.auth || ''}`)))) };
   }
 
-  it('unsigned subscribe still works when the flag is unset (backward-compat)', async () => {
-    const res = await handlePushSubscribe({ userId: 'pushusr01', subscription: { endpoint: FCM } }, makeEnv(), req);
+  it('unsigned subscribe still works under the explicit opt-out (PUSH_REQUIRE_AUTH=false)', async () => {
+    const env = makeEnv({ PUSH_REQUIRE_AUTH: 'false' });
+    const res = await handlePushSubscribe({ userId: 'pushusr01', subscription: { endpoint: FCM } }, env, req);
     expect(res.status).toBe(200);
   });
 
-  it('rejects unsigned subscribe when PUSH_REQUIRE_AUTH=true', async () => {
-    const env = makeEnv({ PUSH_REQUIRE_AUTH: 'true' });
+  it('rejects unsigned subscribe by default', async () => {
+    const env = makeEnv();
     const res = await handlePushSubscribe({ userId: 'pushusr02', subscription: { endpoint: FCM } }, env, req);
     expect(res.status).toBe(403);
     expect((await res.json()).code).toBe('AUTH_REQUIRED');
@@ -3238,8 +3606,8 @@ describe('push unsubscribe', () => {
 
   it('removes the matching endpoint and returns removed: 1', async () => {
     const env = makeEnv();
-    await handlePushSubscribe({ userId: 'unsub001', subscription: { endpoint: FCM } }, env, req);
-    const res = await handlePushUnsubscribe({ userId: 'unsub001', endpoint: FCM }, env, req);
+    await handlePushSubscribe({ userId: 'unsub001', subscription: { endpoint: FCM } , ...(await pA(env,'subscribe','unsub001',{ endpoint: FCM }))}, env, req);
+    const res = await handlePushUnsubscribe({ userId: 'unsub001', endpoint: FCM , ...(await pA(env,'unsubscribe','unsub001',FCM))}, env, req);
     expect(res.status).toBe(200);
     const j = await res.json();
     expect(j.ok).toBe(true);
@@ -3250,15 +3618,16 @@ describe('push unsubscribe', () => {
 
   it('returns removed: 0 when endpoint is not in the list', async () => {
     const env = makeEnv();
-    await handlePushSubscribe({ userId: 'unsub002', subscription: { endpoint: FCM } }, env, req);
-    const res = await handlePushUnsubscribe({ userId: 'unsub002', endpoint: 'https://fcm.googleapis.com/other' }, env, req);
+    await handlePushSubscribe({ userId: 'unsub002', subscription: { endpoint: FCM } , ...(await pA(env,'subscribe','unsub002',{ endpoint: FCM }))}, env, req);
+    const res = await handlePushUnsubscribe({ userId: 'unsub002', endpoint: 'https://fcm.googleapis.com/other' , ...(await pA(env,'unsubscribe','unsub002','https://fcm.googleapis.com/other'))}, env, req);
     expect((await res.json()).removed).toBe(0);
     // Original subscription still present.
     expect(JSON.parse(await env.KV.get('push:unsub002')).length).toBe(1);
   });
 
   it('returns ok: true with removed: 0 when user has no subscriptions', async () => {
-    const res = await handlePushUnsubscribe({ userId: 'unsub003', endpoint: FCM }, makeEnv(), req);
+    const env = makeEnv();
+    const res = await handlePushUnsubscribe({ userId: 'unsub003', endpoint: FCM , ...(await pA(env,'unsubscribe','unsub003',FCM))}, env, req);
     expect(res.status).toBe(200);
     expect((await res.json()).removed).toBe(0);
   });
@@ -3457,7 +3826,7 @@ describe('rate limiting — group create / join explicit limits (item 55)', () =
     let last;
     for (let i = 0; i < 6; i++) {
       last = await worker.fetch(apiRequest('/api/group/create', {
-        name: 'g', creatorId: 'creator1', creatorPub: 'pub',
+        name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub',
       }), env);
     }
     expect(last.status).toBe(429);
@@ -3469,7 +3838,7 @@ describe('rate limiting — group create / join explicit limits (item 55)', () =
     let last;
     for (let i = 0; i < 5; i++) {
       last = await worker.fetch(apiRequest('/api/group/create', {
-        name: `g${i}`, creatorId: 'creator1', creatorPub: 'pub',
+        name: `g${i}`, creatorId: 'creator1', creatorPub: 'creator1pub',
       }), env);
     }
     expect(last.status).not.toBe(429);
@@ -3504,18 +3873,25 @@ describe('backup upload / download', () => {
     expect(j.ok).toBe(true);
     expect(j.size).toBe(bak.length);
 
-    const dl = await handleBackupDownload({ userId: 'user00001' }, e, dlReq({}));
+    // Download is signed by default — register + sign like the deployed client.
+    const ed0 = await registerForBackup(e, 'user00001');
+    const dlTs = Date.now();
+    const dl = await handleBackupDownload({ userId: 'user00001', ts: dlTs, sig: await signBackup(ed0, 'download', 'user00001', dlTs) }, e, dlReq({}));
     expect(dl.status).toBe(200);
     const dj = await dl.json();
     expect(dj.backup).toBe(bak);
   });
 
-  it('overwrites an existing backup on re-upload', async () => {
+  it('refuses an UNSIGNED overwrite of an existing backup (incumbent endorsement)', async () => {
     const e = makeEnv();
     await handleBackupUpload({ userId: 'user00001', backup: 'v1' }, e, req({}));
-    await handleBackupUpload({ userId: 'user00001', backup: 'v2' }, e, req({}));
+    // Anyone could previously replace the victim's recovery blob with attacker ciphertext.
+    const res = await handleBackupUpload({ userId: 'user00001', backup: 'v2-clobber' }, e, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
     const dl = await handleBackupDownload({ userId: 'user00001' }, e, dlReq({}));
-    expect((await dl.json()).backup).toBe('v2');
+    expect(dl.status).toBe(403); // unsigned read refused; blob untouched
+    expect((await e.KV.get('backup:user00001'))).toBe('v1');
   });
 
   it('rejects backup larger than 5MB', async () => {
@@ -3526,9 +3902,15 @@ describe('backup upload / download', () => {
     expect((await res.json()).code).toBe('PAYLOAD_TOO_LARGE');
   });
 
-  it('returns 404 for missing backup', async () => {
+  it('returns 404 for missing backup (signed); unsigned probe is a uniform 403', async () => {
     const e   = makeEnv();
-    const res = await handleBackupDownload({ userId: 'nobody001' }, e, dlReq({}));
+    // Unsigned: refused BEFORE the blob lookup — an unauthenticated probe cannot
+    // distinguish "no backup" from "exists" (existence oracle).
+    const un = await handleBackupDownload({ userId: 'nobody001' }, e, dlReq({}));
+    expect(un.status).toBe(403);
+    const ed = await registerForBackup(e, 'nobody001');
+    const ts = Date.now();
+    const res = await handleBackupDownload({ userId: 'nobody001', ts, sig: await signBackup(ed, 'download', 'nobody001', ts) }, e, dlReq({}));
     expect(res.status).toBe(404);
     expect((await res.json()).code).toBe('NOT_FOUND');
   });
@@ -3582,6 +3964,20 @@ describe('backup upload / download', () => {
     const j = await res.json();
     expect(j.ok).toBe(true);
     expect(j.authenticated).toBe(true);
+  });
+
+  it('signed overwrite of an existing backup succeeds (owner rotation path)', async () => {
+    const e = makeEnv();
+    const userId = 'bakauth09';
+    const ed = await registerForBackup(e, userId);
+    await handleBackupUpload({ userId, backup: 'v1' }, e, req({}));
+    const ts = Date.now();
+    const sig = await signBackup(ed, 'upload', userId, ts);
+    const res = await handleBackupUpload({ userId, backup: 'v2-signed', ts, sig }, e, req({}));
+    expect(res.status).toBe(200);
+    const dlTs = Date.now();
+    const dl = await handleBackupDownload({ userId, ts: dlTs, sig: await signBackup(ed, 'download', userId, dlTs) }, e, dlReq({}));
+    expect((await dl.json()).backup).toBe('v2-signed');
   });
 
   it('authenticated download succeeds and sets authenticated:true in response', async () => {
@@ -3661,11 +4057,9 @@ describe('backup upload / download', () => {
   });
 });
 
-// BACKUP_REQUIRE_AUTH enforcement flag (item 54)
-// Without the flag: knowing a userId is enough to download the encrypted blob and
-// brute-force the passphrase offline. With BACKUP_REQUIRE_AUTH=true, both upload
-// and download require a valid Ed25519 signature — same pattern as GROUP_REQUIRE_AUTH
-// and PRESENCE_REQUIRE_AUTH.
+// BACKUP_REQUIRE_AUTH (item 54): the registered-owner signature is required by
+// default — unsigned reads are a uniform 403 (no existence oracle). '=false' is the
+// opt-out; '=true' additionally requires sigs on FIRST upload (not just overwrites).
 describe('backup BACKUP_REQUIRE_AUTH enforcement (item 54)', () => {
   const req  = (body) => apiRequest('/api/backup/upload', body);
   const dlReq = (body) => apiRequest('/api/backup/download', body);
@@ -3714,8 +4108,8 @@ describe('backup BACKUP_REQUIRE_AUTH enforcement (item 54)', () => {
     expect((await res.json()).backup).toBe('my-enc-backup');
   });
 
-  it('unauthenticated upload/download still works when flag is unset (backward-compat)', async () => {
-    const e = makeEnv();
+  it('unauthenticated upload/download still works under the explicit opt-out (BACKUP_REQUIRE_AUTH=false)', async () => {
+    const e = makeEnv({ BACKUP_REQUIRE_AUTH: 'false' });
     const up = await handleBackupUpload({ userId: 'bakflg05', backup: 'blob' }, e, req({}));
     expect(up.status).toBe(200);
     await e.KV.put('backup:bakflg05', 'blob');
@@ -3770,15 +4164,23 @@ describe('signal relay', () => {
     expect(r2.status).toBe(400);
   });
 
-  it('keeps at most 50 signals per room', async () => {
+  it('refuses overflow with QUEUE_FULL instead of evicting the in-flight handshake', async () => {
+    // Same invariant as the mail queues: drop-oldest on the 50-cap let anyone who
+    // derives a room name destroy an active call's pending offer/answer/ICE.
     const e = makeEnv();
-    for (let i = 0; i < 55; i++) {
-      await handleSignal({ room: 'big', sender: `s${i}`, type: 'offer', data: `d${i}` }, '1.2.3.4', e, req({}));
+    for (let i = 0; i < 50; i++) {
+      const r = await handleSignal({ room: 'big', sender: `s${i}`, type: 'offer', data: `d${i}` }, '1.2.3.4', e, req({}));
+      expect(r.status).toBe(200);
     }
-    // Poll as someone not in the room — should see at most 50
-    const r = await handleSignal({ room: 'big', sender: 'observer', type: 'poll' }, '1.2.3.5', e, req({}));
-    const msgs = (await r.json()).messages;
-    expect(msgs.length).toBeLessThanOrEqual(50);
+    const r51 = await handleSignal({ room: 'big', sender: 's51', type: 'offer', data: 'd51' }, '1.2.3.4', e, req({}));
+    expect(r51.status).toBe(429);
+    expect((await r51.json()).code).toBe('QUEUE_FULL');
+    expect(r51.headers.get('Retry-After')).toBe('10');
+    // Nothing evicted — the very first accepted signal is still deliverable.
+    const poll = await handleSignal({ room: 'big', sender: 'observer', type: 'poll' }, '1.2.3.5', e, req({}));
+    const msgs = (await poll.json()).messages;
+    expect(msgs).toHaveLength(50);
+    expect(msgs[0].data).toBe('d0');
   });
 
   it('sanitizeString strips control characters — room with null byte resolves to clean name', async () => {
@@ -3836,6 +4238,22 @@ describe('presence heartbeat and check', () => {
     );
     expect(res.status).toBe(200);
     expect((await res.json()).ok).toBe(true);
+  });
+
+  it('heartbeat survives when /online ran first (lazy-init shape collision)', async () => {
+    // handleOnlineCount's lazy init used to create _onlineCounter WITHOUT the `ids` Set;
+    // in an isolate where the count endpoint beats the first heartbeat, ids.add() threw
+    // TypeError → every heartbeat 500'd until the minute rollover re-initialized.
+    const saved = globalThis._onlineCounter;
+    globalThis._onlineCounter = undefined;
+    try {
+      await handleOnlineCount({}, makeEnv(), apiRequest('/api/online', {}));
+      const e = makeEnv();
+      const res = await handlePresence({ id: 'colduser1' }, e, req({}));
+      expect(res.status).toBe(200);
+      const cnt = await (await handleOnlineCount({}, e, apiRequest('/api/online', {}))).json();
+      expect(cnt.online).toBe(1);
+    } finally { globalThis._onlineCounter = saved; }
   });
 
   it('check returns online=true immediately after heartbeat (in-memory cache)', async () => {
@@ -3920,36 +4338,55 @@ describe('presence heartbeat and check', () => {
     expect(j.name).toBeUndefined();
   });
 
-  it('round-trips advertised capabilities (N3 negotiation before bundle fetch)', async () => {
+  // Presence-carried caps were dead end-to-end (heartbeats never sent them, the only
+  // client reader — batch check — returns online only). The stored fields were PII at
+  // rest with no consumer; caps/pub/name are now accepted-and-ignored. Real caps live
+  // in the prekey bundle, read via /prekey/status.
+  it('ignores advertised caps and pub/name — they are no longer stored or served', async () => {
     const e = makeEnv();
-    // advertise() output: a heartbeat carrying the supported protocol caps.
     await handlePresence(
       { id: 'capsuser1', pub: 'p', name: 'Caro', caps: ['x3dh-v5', 'group-v5', 'franking'] }, e, req({}),
     );
     const j = await (await handlePresence({ id: 'capsuser1', check: true }, e, req({}))).json();
     expect(j.online).toBe(true);
-    expect(j.caps).toEqual(['x3dh-v5', 'group-v5', 'franking']);
-  });
-
-  it('sanitizes advertised caps (≤20 string entries, ≤32 chars; non-strings dropped)', async () => {
-    const e = makeEnv();
-    await handlePresence(
-      { id: 'capsuser2', pub: 'p', name: 'X', caps: ['ok', 123, { a: 1 }, 'y'.repeat(50), ...Array(30).fill('z')] },
-      e, req({}),
-    );
-    const j = await (await handlePresence({ id: 'capsuser2', check: true }, e, req({}))).json();
-    expect(j.caps.length).toBeLessThanOrEqual(20);
-    expect(j.caps).toContain('ok');
-    expect(j.caps.every((c) => typeof c === 'string' && c.length <= 32)).toBe(true);
-    expect(j.caps).not.toContain(123);
-  });
-
-  it('omits caps for a heartbeat that advertised none (legacy v4 client)', async () => {
-    const e = makeEnv();
-    await handlePresence({ id: 'capsuser3', pub: 'p', name: 'Z' }, e, req({}));
-    const j = await (await handlePresence({ id: 'capsuser3', check: true }, e, req({}))).json();
-    expect(j.online).toBe(true);
     expect(j.caps).toBeUndefined();
+    expect(j.name).toBeUndefined();
+    const raw = JSON.parse((await e.KV.get('presence:capsuser1')) || 'null');
+    if (raw) { expect(raw.caps).toBeUndefined(); expect(raw.name).toBeUndefined(); expect(raw.pub).toBeUndefined(); }
+  });
+
+  // PRESENCE_REQUIRE_AUTH previously claimed to 'verify the caller owns this userId' but
+  // only checked the id was REGISTERED — any caller satisfies that by naming an existing
+  // user. It now verifies a real Ed25519 ownership signature (breeze-presence:{id}:{ts}).
+  async function presSigner(env, id) {
+    const kp = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const raw = new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey));
+    await env.KV.put(`prekey:${id}`, JSON.stringify({ edIdentityKey: b64(raw) }));
+    return async (ts) => b64(new Uint8Array(await crypto.subtle.sign(
+      { name: 'Ed25519' }, kp.privateKey, new TextEncoder().encode(`breeze-presence:${id}:${ts}`))));
+  }
+
+  it('flag on: signed heartbeat accepted, unsigned rejected, forged rejected', async () => {
+    const e = makeEnv({ PRESENCE_REQUIRE_AUTH: 'true' });
+    const sign = await presSigner(e, 'presauth1');
+    // unsigned → 403 AUTH_REQUIRED
+    const un = await handlePresence({ id: 'presauth1' }, e, req({}));
+    expect(un.status).toBe(403);
+    expect((await un.json()).code).toBe('AUTH_REQUIRED');
+    // forged sig → 403 SIG_INVALID
+    const bad = await handlePresence({ id: 'presauth1', ts: Date.now(), sig: b64(new Uint8Array(64)) }, e, req({}));
+    expect(bad.status).toBe(403);
+    expect((await bad.json()).code).toBe('SIG_INVALID');
+    // signed → 200
+    const ts = Date.now();
+    const ok = await handlePresence({ id: 'presauth1', ts, sig: await sign(ts) }, e, req({}));
+    expect(ok.status).toBe(200);
+  });
+
+  it('flag off (default): unsigned heartbeat still accepted (legacy compat)', async () => {
+    const e = makeEnv();
+    const res = await handlePresence({ id: 'presauth2' }, e, req({}));
+    expect(res.status).toBe(200);
   });
 
   it('check returns online=false for unknown user', async () => {
@@ -3970,6 +4407,14 @@ describe('presence heartbeat and check', () => {
     const j = await r.json();
     expect(j.online['user00001']).toBe(true);
     expect(j.online['user99999']).toBe(false);
+  });
+
+  it('omits caps for a heartbeat that advertised none (legacy v4 client)', async () => {
+    const e = makeEnv();
+    await handlePresence({ id: 'capsuser3', pub: 'p', name: 'Z' }, e, req({}));
+    const j = await (await handlePresence({ id: 'capsuser3', check: true }, e, req({}))).json();
+    expect(j.online).toBe(true);
+    expect(j.caps).toBeUndefined();
   });
 
   it('batch check caps at 50 ids', async () => {
@@ -3994,6 +4439,15 @@ describe('presence heartbeat and check', () => {
     const countRes = await handleOnlineCount({}, e, req({}));
     const j = await countRes.json();
     expect(j.online).toBe(2);
+  });
+
+  it('counts unique users, not heartbeats (repeat heartbeat stays 1)', async () => {
+    const e = makeEnv();
+    await handlePresence({ id: 'user00012', pub: 'p1', name: 'A' }, e, req({}));
+    await handlePresence({ id: 'user00012', pub: 'p1', name: 'A' }, e, req({}));
+    await handlePresence({ id: 'user00012', pub: 'p1', name: 'A' }, e, req({}));
+    const j = await (await handleOnlineCount({}, e, req({}))).json();
+    expect(j.online).toBe(1);
   });
 
   it('rejects malformed id on heartbeat (KV key injection guard)', async () => {
@@ -4051,21 +4505,21 @@ describe('presence heartbeat and check', () => {
     expect(j.online['staleuser1']).toBe(false);
   });
 
-  it('PRESENCE_REQUIRE_AUTH: rejects heartbeat from unregistered userId', async () => {
-    globalThis._presenceVerified = new Map(); // fresh cache
-    const e = makeEnv({ PRESENCE_REQUIRE_AUTH: 'true' });
-    const res = await handlePresence({ id: 'unreg00001', pub: 'p', name: 'X' }, e, req({}));
-    expect(res.status).toBe(401);
-    expect((await res.json()).code).toBe('UNREGISTERED');
-  });
-
-  it('PRESENCE_REQUIRE_AUTH: allows heartbeat from registered userId (prekey in KV)', async () => {
-    globalThis._presenceVerified = new Map();
+  // The old flag only checked the id was REGISTERED — verification now requires a real
+  // ownership signature, so unregistered AND registered-but-unsigned both fail closed.
+  it('PRESENCE_REQUIRE_AUTH: rejects unsigned heartbeat even when the id is registered', async () => {
     const e = makeEnv({ PRESENCE_REQUIRE_AUTH: 'true' });
     await e.KV.put('prekey:reguser0001', JSON.stringify({ spkPub: 'x' }));
     const res = await handlePresence({ id: 'reguser0001', pub: 'p', name: 'Reg' }, e, req({}));
-    expect(res.status).toBe(200);
-    expect((await res.json()).ok).toBe(true);
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
+  });
+
+  it('PRESENCE_REQUIRE_AUTH: rejects heartbeat for unregistered userId (no key to verify)', async () => {
+    const e = makeEnv({ PRESENCE_REQUIRE_AUTH: 'true' });
+    const res = await handlePresence({ id: 'unreg00001', ts: Date.now(), sig: 'x' }, e, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
   });
 
   it('PRESENCE_REQUIRE_AUTH: check (read) path bypasses auth requirement', async () => {
@@ -4117,8 +4571,9 @@ describe('online count', () => {
   it('handlePresence records prev count when minute rolls over', async () => {
     const e = makeEnv();
     const minuteKey = Math.floor(Date.now() / 60000);
-    // Prime with count=5 in the current minute
-    globalThis._onlineCounter = { minute: minuteKey, count: 5, prev: 0 };
+    // Prime with count=5 in the current minute — the real shape carries `ids` too
+    // (the Set is the source of truth; count is derived from it).
+    globalThis._onlineCounter = { minute: minuteKey, count: 5, prev: 0, ids: new Set(['a1','a2','a3','a4','a5']) };
     // Simulate rollover by resetting to an old minute and calling handlePresence
     globalThis._onlineCounter.minute = minuteKey - 1; // force rollover on next heartbeat
     await handlePresence({ id: 'user00001', pub: 'IK' }, e, apiRequest('/api/presence', {}));
@@ -4162,7 +4617,7 @@ describe('TURN credentials', () => {
 
   it('uses HMAC custom TURN when TURN_SECRET + TURN_URL are set', async () => {
     const e = { ...makeEnv(), TURN_SECRET: 'supersecret', TURN_URL: 'turn:turn.example.com:3478' };
-    const res = await handleTurn({ userId: 'user00001' }, e, req({}));
+    const res = await handleTurn({ userId: 'user00001', ...(await tA(e, 'user00001')) }, e, req({}));
     expect(res.status).toBe(200);
     const j = await res.json();
     expect(j.provider).toBe('custom');
@@ -4182,7 +4637,7 @@ describe('TURN credentials', () => {
       TURN_USERNAME:   'staticuser',
       TURN_CREDENTIAL: 'staticpass',
     };
-    const res = await handleTurn({ userId: 'user00001' }, e, req({}));
+    const res = await handleTurn({ userId: 'user00001', ...(await tA(e, 'user00001')) }, e, req({}));
     expect(res.status).toBe(200);
     const j = await res.json();
     expect(j.provider).toBe('static');
@@ -4192,19 +4647,61 @@ describe('TURN credentials', () => {
     expect(turnServer.credential).toBe('staticpass');
   });
 
-  it('TURN_REQUIRE_AUTH: rejects unregistered userId (no prekey)', async () => {
-    const e = makeEnv({ TURN_REQUIRE_AUTH: 'true' });
-    const res = await handleTurn({ userId: 'unreg00001' }, e, req({}));
-    expect(res.status).toBe(401);
-    expect((await res.json()).code).toBe('UNREGISTERED');
+  it('STUN_URL replaces the public STUN list (self-hosting, comma-separated)', async () => {
+    const e = makeEnv({ STUN_URL: 'stun:stun.selfhost.example:3478, stun2.selfhost.example:3478' });
+    const res = await handleTurn({ userId: 'user00001' }, e, req({}));
+    const j = await res.json();
+    expect(j.iceServers.filter(s => (Array.isArray(s.urls) ? s.urls[0] : s.urls).startsWith('stun:')))
+      .toEqual([{ urls: 'stun:stun.selfhost.example:3478' }, { urls: 'stun:stun2.selfhost.example:3478' }]);
   });
 
-  it('TURN_REQUIRE_AUTH: allows registered userId (prekey in KV)', async () => {
+  it('derives a self-hosted stun: entry from a plain turn: TURN_URL (coturn dual-role)', async () => {
+    const e = { ...makeEnv(), TURN_SECRET: 'supersecret', TURN_URL: 'turn:turn.example.com:3478' };
+    const res = await handleTurn({ userId: 'user00001', ...(await tA(e, 'user00001')) }, e, req({}));
+    const j = await res.json();
+    expect(j.iceServers.some(s => s.urls === 'stun:turn.example.com:3478')).toBe(true);
+    // and the public STUN list is still there (STUN_URL not set)
+    expect(j.iceServers.some(s => s.urls === 'stun:stun.cloudflare.com:3478')).toBe(true);
+  });
+
+  it('does NOT derive stun from turns: or strip-transport weirdly (TLS listener is not plain STUN)', async () => {
+    const e = { ...makeEnv(), TURN_URL: 'turns:t.example.com:443?transport=tcp', TURN_USERNAME: 'u', TURN_CREDENTIAL: 'c' };
+    const res = await handleTurn({ userId: 'user00001', ...(await tA(e, 'user00001')) }, e, req({}));
+    const j = await res.json();
+    expect(j.iceServers.some(s => typeof s.urls === 'string' && s.urls.includes('t.example.com') && s.urls.startsWith('stun:'))).toBe(false);
+  });
+
+  it('TURN_REQUIRE_AUTH=true: rejects an unsigned call (uniform 403 — no registration oracle)', async () => {
     const e = makeEnv({ TURN_REQUIRE_AUTH: 'true' });
-    await e.KV.put('prekey:reguser0001', JSON.stringify({ spkPub: 'x' }));
-    const res = await handleTurn({ userId: 'reguser0001' }, e, req({}));
+    const res = await handleTurn({ userId: 'unreg00001' }, e, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
+  });
+
+  it('TURN_REQUIRE_AUTH=true: allows a signed call even on the openrelay path', async () => {
+    const e = makeEnv({ TURN_REQUIRE_AUTH: 'true' });
+    const res = await handleTurn({ userId: 'reguser0001', ...(await tA(e, 'reguser0001')) }, e, req({}));
     expect(res.status).toBe(200);
     expect((await res.json()).provider).toBe('openrelay');
+  });
+
+  it('a CONFIGURED TURN provider requires a signature by default', async () => {
+    // Paid/private creds behind an open mint = quota drain. The openrelay fallback
+    // stays open — its credentials are public in _worker.js anyway.
+    const e = { ...makeEnv(), TURN_URL: 'turn:x.example.com:3478', TURN_USERNAME: 'u', TURN_CREDENTIAL: 'c' };
+    const res = await handleTurn({ userId: 'unreg00001' }, e, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
+    // and a signed call from a registered user succeeds
+    const res2 = await handleTurn({ userId: 'reguser0001', ...(await tA(e, 'reguser0001')) }, e, req({}));
+    expect(res2.status).toBe(200);
+  });
+
+  it('TURN_REQUIRE_AUTH=false opts a configured provider back out', async () => {
+    const e = { ...makeEnv(), TURN_URL: 'turn:x.example.com:3478', TURN_USERNAME: 'u', TURN_CREDENTIAL: 'c', TURN_REQUIRE_AUTH: 'false' };
+    const res = await handleTurn({ userId: 'unreg00001' }, e, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).provider).toBe('static');
   });
 });
 
@@ -4214,7 +4711,7 @@ describe('group member capability negotiation (N3 — unblocks negotiate.js nego
   it('stores creator + member caps and surfaces them via group/info', async () => {
     const env = makeEnv();
     const create = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C',
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub', creatorName: 'C',
         caps: ['x3dh-v5', 'group-v5', 'franking'] }, env, req({}));
     const { token } = await create.json();
     await handleGroupJoin(
@@ -4231,7 +4728,7 @@ describe('group member capability negotiation (N3 — unblocks negotiate.js nego
   it('the surfaced caps drive negotiateGroup: group-v5 floor holds, franking floor does not', async () => {
     const env = makeEnv();
     const create = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub',
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub',
         caps: ['group-v5', 'franking'] }, env, req({}));
     const { token } = await create.json();
     // One member supports group-v5 but NOT franking.
@@ -4249,7 +4746,7 @@ describe('group member capability negotiation (N3 — unblocks negotiate.js nego
   it('drops non-string / oversized caps and omits the field for legacy clients', async () => {
     const env = makeEnv();
     const create = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub',
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub',
         caps: ['ok', 42, { x: 1 }, 'y'.repeat(50)] }, env, req({}));
     const { token } = await create.json();
     // Legacy member: no caps field at all.
@@ -4265,7 +4762,7 @@ describe('group member capability negotiation (N3 — unblocks negotiate.js nego
   it('a rejoin refreshes a member\'s caps so an upgraded client can raise the floor', async () => {
     const env = makeEnv();
     const create = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', caps: ['group-v5'] }, env, req({}));
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub', caps: ['group-v5'] }, env, req({}));
     const { token } = await create.json();
     // Bob first joins as a legacy client (no group-v5).
     await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', caps: [] }, env, req({}));
@@ -4285,7 +4782,7 @@ describe('group member capability negotiation (N3 — unblocks negotiate.js nego
 
   it('a legacy rejoin (no caps) does not erase a previously recorded capability set', async () => {
     const env = makeEnv();
-    const create = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}));
+    const create = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}));
     const { token } = await create.json();
     await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', caps: ['group-v5', 'franking'] }, env, req({}));
     // Reconnect without advertising caps (e.g. an older code path) must not wipe them.
@@ -4308,13 +4805,24 @@ describe('group create / join / info validation', () => {
   it('create returns a token and memberCount 1', async () => {
     const env = makeEnv();
     const res = await handleGroupCreate(
-      { name: 'TestGroup', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'Alice' },
+      { name: 'TestGroup', creatorId: 'creator1', creatorPub: 'creator1pub', creatorName: 'Alice' },
       env, req({}));
     expect(res.status).toBe(201);
     const j = await res.json();
     expect(typeof j.token).toBe('string');
     expect(j.memberCount).toBe(1);
     expect(j.name).toBe('TestGroup');
+  });
+
+  it('create rejects creatorPub not matching creatorId (ownership proof)', async () => {
+    // Same KEY_MISMATCH gate as join: without it a caller could register
+    // creatorId=victim + creatorPub=attacker — the roster then binds the victim's
+    // id/name to the attacker's key and joiners encrypt sender keys to it.
+    const env = makeEnv();
+    const res = await handleGroupCreate(
+      { name: 'g', creatorId: 'victim0001', creatorPub: 'attackerpub' }, env, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('KEY_MISMATCH');
   });
 
   // ── Token generator (item 70) ───────────────────────────────────────────────
@@ -4326,7 +4834,7 @@ describe('group create / join / info validation', () => {
     // Generate 20 tokens and verify all are exactly 12 chars of [0-9a-z].
     for (let i = 0; i < 20; i++) {
       const res = await handleGroupCreate(
-        { name: `G${i}`, creatorId: `cre${String(i).padStart(5,'0')}`, creatorPub: 'p', creatorName: 'C' },
+        { name: `G${i}`, creatorId: `cre${String(i).padStart(5,'0')}`, creatorPub: `cre${String(i).padStart(5,'0')}pub`, creatorName: 'C' },
         makeEnv(), req({}));
       const { token } = await res.json();
       expect(token).toMatch(/^[0-9a-z]{12}$/); // exactly 12 base-36 chars
@@ -4363,7 +4871,7 @@ describe('group create / join / info validation', () => {
   it('join returns alreadyMember:true for duplicate join without adding again', async () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     // creator1 joins again
     const res = await handleGroupJoin(
       { token, memberId: 'creator1', memberPub: 'creator1cpub' }, env, req({}));
@@ -4377,7 +4885,7 @@ describe('group create / join / info validation', () => {
   it('info returns epoch 0 on a freshly created group', async () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     const res = await handleGroupInfo({ token }, env, req({}));
     expect(res.status).toBe(200);
     const j = await res.json();
@@ -4400,7 +4908,7 @@ describe('group create / join / info validation', () => {
   it('join rejects when group is full (100 members)', async () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
-      { name: 'big', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+      { name: 'big', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     // Fill to 100 members (creator is already 1, add 99 more).
     for (let i = 0; i < 99; i++) {
       await handleGroupJoin(
@@ -4415,7 +4923,7 @@ describe('group create / join / info validation', () => {
 
   it('create rejects array members with more than 100 entries', async () => {
     const res = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', members: new Array(101).fill({ id: 'x', pub: 'p' }) },
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub', members: new Array(101).fill({ id: 'x', pub: 'p' }) },
       makeEnv(), req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).error).toMatch(/Max 100/);
@@ -4426,14 +4934,14 @@ describe('group create / join / info validation', () => {
     // have triggered the "Max 100 members" guard (falsy .length property match on
     // a string). After the fix, only genuine arrays are checked.
     const res = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', members: 'x'.repeat(200) },
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub', members: 'x'.repeat(200) },
       makeEnv(), req({}));
     expect(res.status).toBe(201);
   });
 
   it('create rejects malformed creatorId (KV member injection guard)', async () => {
     const res = await handleGroupCreate(
-      { name: 'g', creatorId: 'bad id!', creatorPub: 'cpub' }, makeEnv(), req({}));
+      { name: 'g', creatorId: 'bad id!', creatorPub: 'creator1pub' }, makeEnv(), req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_USER_ID');
   });
@@ -4453,7 +4961,7 @@ describe('group create / join / info validation', () => {
   it('join rejects malformed memberId (KV member injection guard)', async () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     const res = await handleGroupJoin({ token, memberId: 'bad id!', memberPub: 'mpub' }, env, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_USER_ID');
@@ -4462,14 +4970,15 @@ describe('group create / join / info validation', () => {
   it('join rejects non-string memberPub (type guard)', async () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     const r1 = await handleGroupJoin({ token, memberId: 'member01', memberPub: { key: 'x' } }, env, req({}));
     expect(r1.status).toBe(400);
     expect((await r1.json()).code).toBe('INVALID_TYPE');
   });
 
+  const env = makeEnv();
   it('kick returns 404 when the group token does not exist', async () => {
-    const res = await handleGroupKick({ token: 'nosuchtoken', kickId: 'member01', adminId: 'creator1' }, makeEnv(), req({}));
+    const res = await handleGroupKick({ token: 'nosuchtoken', kickId: 'member01', adminId: 'creator1' , ...(await gA(env,'kick','nosuchtoken','creator1','member01'))}, env, req({}));
     expect(res.status).toBe(404);
     expect((await res.json()).code).toBe('NOT_FOUND');
   });
@@ -4477,9 +4986,9 @@ describe('group create / join / info validation', () => {
   it('kick returns 403 when the adminId is not the group creator', async () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
-    const res = await handleGroupKick({ token, kickId: 'member01', adminId: 'member01' }, env, req({}));
+    const res = await handleGroupKick({ token, kickId: 'member01', adminId: 'member01' , ...(await gA(env,'kick',token,'member01','member01'))}, env, req({}));
     expect(res.status).toBe(403);
     expect((await res.json()).code).toBe('FORBIDDEN');
   });
@@ -4487,9 +4996,9 @@ describe('group create / join / info validation', () => {
   it('kick returns 400 when adminId tries to kick the creator (self-kick guard)', async () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
-    const res = await handleGroupKick({ token, kickId: 'creator1', adminId: 'creator1' }, env, req({}));
+    const res = await handleGroupKick({ token, kickId: 'creator1', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','creator1'))}, env, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('FORBIDDEN');
   });
@@ -4497,8 +5006,8 @@ describe('group create / join / info validation', () => {
   it('kick returns 404 when kickId is not a member of the group', async () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
-    const res = await handleGroupKick({ token, kickId: 'notamember', adminId: 'creator1' }, env, req({}));
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
+    const res = await handleGroupKick({ token, kickId: 'notamember', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','notamember'))}, env, req({}));
     expect(res.status).toBe(404);
     expect((await res.json()).code).toBe('NOT_MEMBER');
   });
@@ -4506,7 +5015,7 @@ describe('group create / join / info validation', () => {
   it('kick rejects malformed adminId or kickId (member injection guard)', async () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
     const r1 = await handleGroupKick({ token, kickId: 'bad id!', adminId: 'creator1' }, env, req({}));
     expect(r1.status).toBe(400);
@@ -4523,9 +5032,9 @@ describe('group create / join / info validation', () => {
     // corrupted) and that the returned epoch is incremented.
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
-      { name: 'ratchet-group', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+      { name: 'ratchet-group', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
-    const kick = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' }, env, req({}));
+    const kick = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','member01'))}, env, req({}));
     expect(kick.status).toBe(200);
     const kj = await kick.json();
     expect(kj.ok).toBe(true);
@@ -4547,7 +5056,7 @@ describe('group create / join / info validation', () => {
     // The fix uses (group.epoch | 0) + 1 which coerces strings to integers.
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
-      { name: 'ep-test', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+      { name: 'ep-test', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
     // Corrupt the epoch: write '5' (a string) into the stored group record.
     const raw = await env.KV.get(`grp:${token}`);
@@ -4555,7 +5064,7 @@ describe('group create / join / info validation', () => {
     g.epoch = '5'; // string, not number
     await env.KV.put(`grp:${token}`, JSON.stringify(g));
     // Kick should produce epoch 6 (integer), not '51' (string).
-    const kick = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' }, env, req({}));
+    const kick = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','member01'))}, env, req({}));
     const kj = await kick.json();
     expect(kj.epoch).toBe(6);
     expect(typeof kj.epoch).toBe('number');
@@ -4587,12 +5096,12 @@ describe('corrupted KV data resilience (safeJsonParse guard)', () => {
   it('groupKick returns 404 (not 500) when group KV value is corrupt JSON', async () => {
     const env = makeEnv();
     env.KV = makeKV({ 'grp:badtoken': 'null' });
-    const res = await handleGroupKick({ token: 'badtoken', kickId: 'member01', adminId: 'creator1' }, env, req({}));
+    const res = await handleGroupKick({ token: 'badtoken', kickId: 'member01', adminId: 'creator1' , ...(await gA(env,'kick','badtoken','creator1','member01'))}, env, req({}));
     expect(res.status).toBe(404);
   });
 
   it('msgPoll returns empty messages (not 500) when inbox KV value is corrupt JSON', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ MSG_REQUIRE_AUTH: 'false' });
     env.KV = makeKV({ 'inbox:alice123x': '{corrupted' });
     const res = await handleMsgPoll({ id: 'alice123x' }, env, req({}));
     expect(res.status).toBe(200);
@@ -4600,7 +5109,7 @@ describe('corrupted KV data resilience (safeJsonParse guard)', () => {
   });
 
   it('sealedPoll returns empty messages (not 500) when sealed KV value is corrupt JSON', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ SEALED_REQUIRE_AUTH: 'false' });
     env.KV = makeKV({ 'sealed:alice123x': '[not json' });
     const res = await handleSealedPoll({ id: 'alice123x' }, env, req({}));
     expect(res.status).toBe(200);
@@ -4623,7 +5132,7 @@ describe('group mutation KV failure propagation (item 33)', () => {
   const req = (b) => apiRequest('/api/x', b);
 
   async function makeGroup(env) {
-    const r = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}));
+    const r = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}));
     const { token } = await r.json();
     await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
     return token;
@@ -4640,14 +5149,14 @@ describe('group mutation KV failure propagation (item 33)', () => {
   it('handleGroupCreate returns 500 STORE_FAILED when KV put throws', async () => {
     const env = makeEnv();
     failOnGroupPut(env);
-    const res = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}));
+    const res = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}));
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe('STORE_FAILED');
   });
 
   it('handleGroupJoin returns 500 STORE_FAILED when KV put throws', async () => {
     const env = makeEnv();
-    const { token } = await (await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    const { token } = await (await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     failOnGroupPut(env);
     const res = await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
     expect(res.status).toBe(500);
@@ -4658,7 +5167,7 @@ describe('group mutation KV failure propagation (item 33)', () => {
     const env = makeEnv();
     const token = await makeGroup(env);
     failOnGroupPut(env);
-    const res = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' }, env, req({}));
+    const res = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' , ...(await gA(env,'kick',token,'creator1','member01'))}, env, req({}));
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe('STORE_FAILED');
   });
@@ -4667,7 +5176,7 @@ describe('group mutation KV failure propagation (item 33)', () => {
     const env = makeEnv();
     const token = await makeGroup(env);
     failOnGroupPut(env);
-    const res = await handleGroupLeave({ token, memberId: 'member01' }, env, req({}));
+    const res = await handleGroupLeave({ token, memberId: 'member01' , ...(await gA(env,'leave',token,'member01',''))}, env, req({}));
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe('STORE_FAILED');
   });
@@ -4676,7 +5185,7 @@ describe('group mutation KV failure propagation (item 33)', () => {
     const env = makeEnv();
     const token = await makeGroup(env);
     failOnGroupPut(env);
-    const res = await handleGroupRename({ token, adminId: 'creator1', name: 'NewName' }, env, req({}));
+    const res = await handleGroupRename({ token, adminId: 'creator1', name: 'NewName' , ...(await gA(env,'rename',token,'creator1','NewName'))}, env, req({}));
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe('STORE_FAILED');
   });
@@ -4685,7 +5194,7 @@ describe('group mutation KV failure propagation (item 33)', () => {
     const env = makeEnv();
     const token = await makeGroup(env);
     failOnGroupPut(env);
-    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'member01' }, env, req({}));
+    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'member01' , ...(await gA(env,'transfer',token,'creator1','member01'))}, env, req({}));
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe('STORE_FAILED');
   });
@@ -4809,9 +5318,9 @@ describe('kvDel failure propagation (item 34)', () => {
   it('handleGroupDelete returns 500 STORE_FAILED when kvDel throws', async () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     failOnDelete(env, 'grp:');
-    const res = await handleGroupDelete({ token, adminId: 'creator1' }, env, req({}));
+    const res = await handleGroupDelete({ token, adminId: 'creator1' , ...(await gA(env,'delete',token,'creator1',''))}, env, req({}));
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe('STORE_FAILED');
     // Group must still exist in KV (delete didn't go through)
@@ -4940,7 +5449,7 @@ describe('signed group rename — UTF-8 signing contract', () => {
   async function signedRename(name) {
     const env = makeEnv();
     const created = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, rq());
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub', creatorName: 'C' }, env, rq());
     const { token } = await created.json();
     const sign = await registerSigner(env, 'creator1');
     const ts = Date.now();
@@ -4975,7 +5484,7 @@ describe('signed group rename — UTF-8 signing contract', () => {
   it('still rejects a forged signature on a non-ASCII name', async () => {
     const env = makeEnv();
     const created = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, rq());
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub', creatorName: 'C' }, env, rq());
     const { token } = await created.json();
     await registerSigner(env, 'creator1');
     const res = await handleGroupRename(
@@ -5106,5 +5615,41 @@ describe('device registry (/api/device/set + /api/device/list)', () => {
     expect(puts).toBe(1); // first read refreshes the TTL...
     await handleDeviceList({ accountId: 'touchacct01' }, env, rq());
     expect(puts).toBe(1); // ...and the next read inside the throttle window does not
+  });
+
+  // Signed-state rollback: the ±5min freshness window bounds replay AGE but cannot
+  // order two in-window writes — a relay holding a captured signed set can replay it
+  // just after a newer one and silently drop a newly-linked device from every
+  // sender's fanout. The stored ts is the high-water mark; older is rejected.
+  it('rejects a replay of an older signed registry (relay rollback)', async () => {
+    const env = makeEnv();
+    const sign = await makeRoot(env, ACCT, ROOT_PUB);
+    const t1 = Date.now();
+    const oneDevice = [{ pub: ROOT_PUB, name: 'Phone' }];
+    const twoDevices = [{ pub: ROOT_PUB, name: 'Phone' }, { pub: DEV2, name: 'Laptop' }];
+    // Older-signed request: the pre-link one-device list.
+    expect((await setList(env, sign, oneDevice, t1)).status).toBe(200);
+    // User links a second device — newer signed ts wins.
+    expect((await setList(env, sign, twoDevices, t1 + 1000)).status).toBe(200);
+    // Relay replays the captured older request — must NOT roll back the link.
+    const replay = await setList(env, sign, oneDevice, t1);
+    expect(replay.status).toBe(409);
+    expect((await replay.json()).code).toBe('STALE_UPDATE');
+    const rec = await (await handleDeviceList({ accountId: ACCT }, env, rq())).json();
+    expect(rec.devices.map((d) => d.pub)).toEqual([ROOT_PUB, DEV2]);
+  });
+
+  it('rejects a conflicting list at the SAME ts but allows an identical re-send', async () => {
+    const env = makeEnv();
+    const sign = await makeRoot(env, ACCT, ROOT_PUB);
+    const t1 = Date.now();
+    const devices = [{ pub: ROOT_PUB, name: 'Phone' }, { pub: DEV2, name: 'Laptop' }];
+    expect((await setList(env, sign, devices, t1)).status).toBe(200);
+    // Same ts, different device list — ambiguous ordering, refuse.
+    const conflict = await setList(env, sign, [{ pub: ROOT_PUB, name: 'Phone' }], t1);
+    expect(conflict.status).toBe(409);
+    // Same ts, identical digest — idempotent re-send of the same signed request.
+    const resend = await setList(env, sign, devices, t1);
+    expect(resend.status).toBe(200);
   });
 });

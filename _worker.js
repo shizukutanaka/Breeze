@@ -36,9 +36,19 @@ const TIMEOUT_MS = { // fetchWithTimeout values (milliseconds)
   PRESENCE_WRITE:  300000,  // minimum interval between KV presence writes (throttle)
 };
 
+// Display-name spoofing guard (Unicode TR36/TR39): direction controls (bidi
+// embeds/overrides, isolates, ALM, marks) reorder rendered text, and invisible
+// format chars (ZWSP, soft hyphen, word joiner, BOM, Hangul fillers, Braille
+// blank, tag chars) pad an identifier into a visually-identical impostor —
+// a member named "<RLO>ecilA" reads as "Alice" in every roster. ZWJ/ZWNJ and
+// variation selectors stay: invisible too, but load-bearing in emoji and
+// Indic/Arabic-script names. Byte-identical class to index.html's copy —
+// tests/unicode-spoof.test.js pins the parity.
+const _UNSAFE_DISPLAY_RE = /[\u00AD\u034F\u061C\u115F\u1160\u180E\u200B\u200E\u200F\u202A-\u202E\u2060\u2066-\u2069\u2800\u3164\uFFA0\uFEFF\u{1D173}-\u{1D17A}\u{E0000}-\u{E007F}]/gu;
+
 function sanitizeString(val, maxLen = MAX_STRING_LEN) {
   if (typeof val !== 'string') return '';
-  return val.slice(0, maxLen).replace(/[\x00-\x08\x0a-\x0c\x0d\x0e-\x1f]/g, '');
+  return val.replace(_UNSAFE_DISPLAY_RE, '').slice(0, maxLen).replace(/[\x00-\x08\x0a-\x0c\x0d\x0e-\x1f]/g, '');
 }
 
 function validateUserId(id) {
@@ -344,7 +354,7 @@ export default {
 
 // ============================================================
 // SIGNAL — WebRTC signaling (join/offer/answer/ICE)
-// Ephemeral: all signaling data has 60s TTL.
+// Ephemeral: all signaling data expires in 5 minutes (TTL.MIN * 5 at the puts below).
 // After P2P connects, signaling is no longer needed.
 // ============================================================
 
@@ -377,10 +387,17 @@ async function handleSignal(body, ip, env, request) {
   const raw = await kvGet(env, `sig:${room}`);
   const parsed = safeJsonParse(raw, []);
   const signals = Array.isArray(parsed) ? parsed : [];
+  // Refuse-when-full, never evict (same invariant as the mail queues): slice(-50)
+  // drop-oldest let anyone who can derive a room name (dm:{a}:{b} from two public
+  // ids, call:{id} from one) destroy an in-flight call handshake by flooding 51
+  // signals. Refusing preserves the already-accepted offer/answer/ICE so the
+  // current handshake completes; the client relays retry on 429.
+  if (signals.length >= 50) {
+    return new Response(JSON.stringify({ error: 'Signal room full', code: 'QUEUE_FULL', retryAfter: 10 }), {
+      status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '10', ...corsHeaders(request) } });
+  }
   signals.push({ sender, type, data, ts: Date.now() });
-  // Keep last 50 signals, expire in 5 min (allow slow NAT traversal)
-  const trimmed = signals.slice(-50);
-  await kvPut(env, `sig:${room}`, JSON.stringify(trimmed), { expirationTtl: TTL.MIN * 5 });
+  await kvPut(env, `sig:${room}`, JSON.stringify(signals), { expirationTtl: TTL.MIN * 5 });
 
   return json({ ok: true }, 200, request);
 }
@@ -494,7 +511,24 @@ async function handleMsgSend(body, ip, env, request) {
     const lastStoredTs = inbox[inbox.length - 1].ts;
     if (Number.isFinite(lastStoredTs) && msg.ts <= lastStoredTs) msg.ts = lastStoredTs + 1;
   }
+  // Refuse-when-full, never evict. This queue holds ACCEPTED mail — drop-oldest would let
+  // any unauthenticated sender purge the recipient's pending inbox by flooding it (~4 min
+  // single-IP at 30/min for the count cap, ~2 for the byte cap): the victim's stored mail
+  // was destroyed while the flooder's junk took its place. A 429 instead tells the sender
+  // to retry — the client's existing 429 handler re-queues and drains free capacity on
+  // the recipient's next poll. Pending mail is immutable once stored.
+  let inboxBytes = 0;
+  for (const m of inbox) inboxBytes += (typeof m.payload === 'string' ? m.payload.length : 0) + 1024;
+  if (inbox.length >= 100 || inboxBytes + payload.length + 1024 > 16 * 1024 * 1024) {
+    globalThis._msgDedup.delete(dedupKey); // un-mark — a refused send must stay retryable
+    return new Response(JSON.stringify({ error: 'Recipient queue full', code: 'QUEUE_FULL', retryAfter: 30 }), {
+      status: 429,
+      headers: { 'Content-Type': 'application/json', 'Retry-After': '30', ...corsHeaders(request) },
+    });
+  }
   inbox.push(msg);
+  // Gate above bounds the value; capQueueBytes stays as defense against a pre-existing
+  // oversized record (legacy data or a corrupted write).
   const trimmed = capQueueBytes(inbox.slice(-100), m => (typeof m.payload === 'string' ? m.payload.length : 0) + 1024);
   const stored = await kvPut(env, key, JSON.stringify(trimmed), { expirationTtl: TTL.WEEK });
   if (!stored) {
@@ -513,15 +547,25 @@ async function handleMsgSend(body, ip, env, request) {
   const rawTitle = groupName ? String(groupName).slice(0, 50) : (fromName || 'Breeze');
   const pushTitle = sanitizeString(rawTitle, 50);
   const pushBody = isCall ? (isVideoCall ? 'Video call' : 'Voice call') : isFile ? '📎 File' : isVoice ? '🎤 Voice' : 'New message';
-  sendPushToUser(to, { title: pushTitle, body: pushBody, tag: 'breeze-' + (groupId || from), contactId: from }, env).catch(() => {});
+  // The push service (APNs/FCM) is a third-party intermediary — hand it a stable
+  // pseudonym, not the sender's userId. sha256Short preserves tag-collapse and the
+  // client's contactId lookup resolves it by hashing its own contact ids; a raw-id
+  // payload from an older worker still works via the client's raw fallback.
+  sendPushToUser(to, {
+    title: pushTitle, body: pushBody,
+    tag: 'breeze-' + await sha256Short(String(groupId || from)),
+    contactId: await sha256Short(from),
+  }, env).catch(() => {});
 
   return json({ ok: true, ack: Date.now() }, 200, request);
 }
 
 async function handleMsgPoll(body, env, request) {
-  const { id, lastTs } = body;
+  const { id, lastTs, ts, sig } = body;
   if (!id) return json({ error: 'id required', code: 'MISSING_ID' }, 400, request);
   if (!validateUserId(id)) return json({ error: 'invalid id', code: 'INVALID_ID' }, 400, request);
+  const authErr = await checkOwnerAuth(env, request, 'msg-poll', id, ts, sig, 'MSG_REQUIRE_AUTH');
+  if (authErr) return authErr;
 
   const key = `inbox:${id}`;
   const data = await kvGet(env, key);
@@ -556,12 +600,11 @@ async function handleMsgPoll(body, env, request) {
 }
 
 async function handlePresence(body, env, request) {
-  const { id, ids, pub, name, caps, check: isCheck } = body;
-  // N3: capability advertisement carried in the heartbeat so a peer can negotiate the
-  // protocol version (x3dh-v5 / group-v5) BEFORE fetching a 1:1 bundle — important for
-  // groups, where a member learns the group's capability floor without fetching every
-  // member's prekey bundle. (advertise() from src/crypto/negotiate.js.)
-  const safeCaps = sanitizeCaps(caps);
+  // caps negotiation does NOT ride presence — the heartbeat sends none and the batch
+  // check (the only client reader) returns only the online map. Capability data lives
+  // in the prekey bundle, read via /prekey/status (the N3 comment below once promised
+  // presence-carried caps; the path was never wired end-to-end — dead code removed).
+  const { id, ids, check: isCheck } = body;
 
   // Batch check: { ids: ['abc','def'], check: true }
   // v3.6: Check in-memory presence cache before KV for each id — the single-check
@@ -609,35 +652,42 @@ async function handlePresence(body, env, request) {
     // NOTE: `name` is deliberately NOT returned. This endpoint is unauthenticated, so any
     // party holding only a 12-char user id could read that account's chosen DISPLAY NAME —
     // a PII disclosure to strangers that no contact relationship gated and no user could
-    // refuse (Socratic metadata lens). `caps` stays: it is protocol capability data the N3
-    // negotiation needs, and it says nothing about the person. The batch path never leaked
-    // the name either, and no client code consumed it.
+    // refuse (Socratic metadata lens). The batch path never leaked the name either, and
+    // no client code consumed it.
     if (memData) {
       const p = safeJsonParse(memData);
       if (!p) return json({ online: false }, 200, request);
-      return json({ online: (Date.now() - p.at) < 60000, caps: p.caps }, 200, request);
+      return json({ online: (Date.now() - p.at) < 60000 }, 200, request);
     }
     const data = await kvGet(env, `presence:${id}`);
     if (!data) return json({ online: false }, 200, request);
     const p = safeJsonParse(data);
     if (!p) return json({ online: false }, 200, request);
-    return json({ online: (Date.now() - p.at) < 60000, caps: p.caps }, 200, request);
+    return json({ online: (Date.now() - p.at) < 60000 }, 200, request);
   }
 
-  // Store presence heartbeat
-  // When PRESENCE_REQUIRE_AUTH=true, verify the caller owns this userId before writing.
-  // The check is cached in-memory per isolate so a single KV read covers many heartbeats.
+  // Store presence heartbeat.
+  // PRESENCE_REQUIRE_AUTH=true makes the ownership check REAL: the write must carry
+  // ts+sig, Ed25519-verified over `breeze-presence:${id}:${ts}` against the identity
+  // key registered in prekey:${id} — the same scheme checkOwnerAuth uses for the
+  // queue endpoints. (The earlier version only checked the id was REGISTERED, which
+  // any caller satisfies by naming an existing user — it verified nothing about the
+  // caller.) Unsigned writes are otherwise open: a stranger could heartbeat AS any
+  // userId — a fake 'online' dot that never goes dark. This stays OPT-IN unlike the
+  // queue flags: every already-deployed client posts unsigned heartbeats, so a
+  // default-on flip would render all of them permanently offline-looking until they
+  // upgrade. Fresh ts inside the signature (no verify-cache) keeps replays dead.
   if (env.PRESENCE_REQUIRE_AUTH === 'true') {
-    if (!globalThis._presenceVerified) globalThis._presenceVerified = new Map();
-    if (!globalThis._presenceVerified.has(id)) {
-      const pkData = await kvGet(env, `prekey:${id}`);
-      if (!pkData) return json({ error: 'User not registered', code: 'UNREGISTERED' }, 401, request);
-      globalThis._presenceVerified.set(id, 1);
-      if (globalThis._presenceVerified.size > 2000) {
-        const entries = [...globalThis._presenceVerified.entries()];
-        globalThis._presenceVerified = new Map(entries.slice(-1000));
-      }
+    const pts = body.ts, psig = body.sig;
+    if (typeof pts !== 'number' || !Number.isFinite(pts) || Math.abs(Date.now() - pts) > TIMEOUT_MS.REQ_TS
+      || typeof psig !== 'string' || !psig || psig.length > 500) {
+      return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
     }
+    const pkRaw = await kvGet(env, `prekey:${id}`);
+    const bundle = pkRaw ? safeJsonParse(pkRaw) : null;
+    const ok = bundle && typeof bundle.edIdentityKey === 'string'
+      && await verifyEd25519(bundle.edIdentityKey, utf8ToB64(`breeze-presence:${id}:${pts}`), psig);
+    if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
   }
 
   // v3.6: In-memory presence cache — only writes to KV every 5 minutes (saves ~90% KV writes)
@@ -653,16 +703,13 @@ async function handlePresence(body, env, request) {
   }
   const presKey = `presence:${id}`;
   const lastWrite = globalThis._presenceCache.get(presKey) || 0;
-  // Cap pub to 200 chars (a base64 X25519/P-256 key is ≤88 chars; large values are abuse).
-  const safePub = typeof pub === 'string' ? pub.slice(0, 200) : undefined;
   // Identity-clone detection: `inst` is a per-INSTALL random id. Two different live insts
   // heartbeating the same identity within a heartbeat window = the same identity running on
   // two installs at once (e.g. a backup restored while the original device stays active) —
   // a Double-Ratchet-fork hazard the client warns the user about. Best-effort: the previous
   // record may live in another isolate's memory or a ≤5-min-stale KV entry, so a miss is
   // possible; a hit is always real (inst is compared only within the same identity).
-  // The inst must be SIGNED by the identity that owns this id. Presence writes are otherwise
-  // unauthenticated (PRESENCE_REQUIRE_AUTH is off by default), so an unsigned inst let any
+  // The inst must be SIGNED by the identity that owns this id — an unsigned inst let any
   // stranger POST a random inst for someone else's id and make that user see a scary
   // "your identity is running on two devices" warning on demand — a spoofable security alarm
   // trains users to ignore the real one (Socratic crypto-edge lens). Unsigned or
@@ -682,31 +729,47 @@ async function handlePresence(body, env, request) {
     const prev = prevRaw ? safeJsonParse(prevRaw) : null;
     if (prev?.inst && prev.inst !== safeInst && Date.now() - prev.at < 90000) conflict = true;
   }
-  const presData = { pub: safePub, name: sanitizeString(name, 64), at: Date.now() };
+  // Record is {at, inst?} only: pub/name/caps were written but no reader ever served
+  // them — PII stored at rest for nobody's benefit. The client may still send the
+  // fields; they are simply ignored rather than persisted.
+  const presData = { at: Date.now() };
   if (safeInst) presData.inst = safeInst;
-  if (safeCaps) presData.caps = safeCaps;
   if (Date.now() - lastWrite > TIMEOUT_MS.PRESENCE_WRITE) { // throttle KV writes
     await kvPut(env, presKey, JSON.stringify(presData), { expirationTtl: TTL.MIN * 6 }); // 6min TTL (covers 5min interval + slack)
     globalThis._presenceCache.set(presKey, Date.now());
   }
   // Always update in-memory for fast reads within same isolate
   globalThis._presenceCache.set(presKey + ':data', JSON.stringify(presData));
-  // v3.6: In-memory online counter (saves 1 KV read + 1 KV write per heartbeat)
-  if (!globalThis._onlineCounter) globalThis._onlineCounter = { minute: 0, count: 0, prev: 0 };
+  // v3.6: In-memory online counter (saves 1 KV read + 1 KV write per heartbeat).
+  // Count UNIQUE users, not heartbeats: a Set of ids this minute — the old counter
+  // incremented per heartbeat, inflating ~2× at the 30 s client interval.
+  // Guard on .ids, not the object: handleOnlineCount's lazy init creates the same key
+  // WITHOUT the Set, and in an isolate where /api/online beats the first heartbeat the
+  // object exists but ids.add() would TypeError — every heartbeat 500s until the minute
+  // rollover re-inits. Merge-heal instead of overwrite so a partial object keeps its
+  // minute/prev/count fields.
+  if (!globalThis._onlineCounter?.ids) {
+    const _oc = globalThis._onlineCounter || {};
+    globalThis._onlineCounter = { minute: _oc.minute || 0, ids: new Set(), prev: _oc.prev || 0, count: _oc.count || 0 };
+  }
   const currentMinute = Math.floor(Date.now() / 60000);
   if (globalThis._onlineCounter.minute !== currentMinute) {
     // Preserve the previous minute's count as a fallback so handleOnlineCount does not
     // report 0 at the start of each minute before the first heartbeat arrives.
-    globalThis._onlineCounter = { minute: currentMinute, count: 0, prev: globalThis._onlineCounter.count };
+    globalThis._onlineCounter = { minute: currentMinute, ids: new Set(), prev: globalThis._onlineCounter.ids?.size ?? globalThis._onlineCounter.count ?? 0 };
   }
-  globalThis._onlineCounter.count++;
+  globalThis._onlineCounter.ids.add(id);
+  globalThis._onlineCounter.count = globalThis._onlineCounter.ids.size;
   return json(conflict ? { ok: true, conflict: true } : { ok: true }, 200, request);
 }
 
 // v3.3: Online user count (approximate)
 async function handleOnlineCount(body, env, request) {
   // v3.6: In-memory counter (no KV read needed)
-  if (!globalThis._onlineCounter) globalThis._onlineCounter = { minute: 0, count: 0, prev: 0 };
+  if (!globalThis._onlineCounter?.ids) {
+    const _oc = globalThis._onlineCounter || {};
+    globalThis._onlineCounter = { minute: _oc.minute || 0, ids: new Set(), count: _oc.count || 0, prev: _oc.prev || 0 };
+  }
   const minuteKey = Math.floor(Date.now() / 60000);
   // At a minute boundary the new minute's count is 0 until the first heartbeat. Return
   // the previous minute's count as a fallback to avoid a false "0 online" spike.
@@ -817,6 +880,15 @@ async function handleAliasSet(body, env, request) {
   // Store (no TTL — aliases are permanent)
   const aliasSaved = await kvPut(env, `alias:${clean}`, JSON.stringify({ pub, name: sanitizeString(name, 64), setAt: Date.now() }));
   if (!aliasSaved) return json({ error: 'Failed to store alias', code: 'STORE_FAILED' }, 500, request);
+  // Check-then-set on a PERMANENT key is the same last-write-wins class as the KV
+  // queues: two registrants can both see the alias free, the later put wins, and
+  // the loser is answered ok:true for a handle they don't actually own — they'd
+  // publish a dead @alias while the other account binds it. Re-read once: if the
+  // stored record points at a different pub, our write lost the race — answer
+  // ALIAS_TAKEN so the loser picks another handle instead of advertising a dead one.
+  const post = safeJsonParse(await kvGet(env, `alias:${clean}`) || 'null');
+  if (post && post.pub !== pub)
+    return json({ error: 'Alias already taken', code: 'ALIAS_TAKEN' }, 409, request);
   return json({ ok: true, alias: clean }, 200, request);
 }
 
@@ -909,6 +981,26 @@ async function handleDeviceSet(body, env, request) {
   const digest = await sha256Short(JSON.stringify(devices.map(d => d.pub)));
   const ok = await verifyEd25519(bundle.edIdentityKey, utf8ToB64(`breeze-device-set:${accountId}:${ts}:${digest}`), sig);
   if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
+
+  // Monotonic ordering on the signed ts. The ±5min freshness window bounds replay
+  // AGE but cannot order two in-window writes: a relay that captured a signed set
+  // can replay it moments after a newer one and roll the registry back — the silent
+  // kind of loss, where a linked device keeps working client-side but drops out of
+  // every sender's fanout. KV has no CAS, so the stored ts is the high-water mark:
+  // a strictly-older ts is a rollback and rejected; an equal ts is accepted only
+  // when the device-list digest is identical (an idempotent re-send of the same
+  // signed request, not a conflicting one at the same instant).
+  const existing = safeJsonParse(await kvGet(env, `devices:${accountId}`) || 'null');
+  if (existing && typeof existing.ts === 'number') {
+    if (ts < existing.ts)
+      return json({ error: 'Stale device registry (newer ts already stored)', code: 'STALE_UPDATE' }, 409, request);
+    if (ts === existing.ts) {
+      const oldDigest = await sha256Short(JSON.stringify(
+        (Array.isArray(existing.devices) ? existing.devices : []).map(d => d && d.pub)));
+      if (oldDigest !== digest)
+        return json({ error: 'Conflicting device registry at same ts', code: 'STALE_UPDATE' }, 409, request);
+    }
+  }
 
   const stored = await kvPut(env, `devices:${accountId}`,
     JSON.stringify({ root, devices, ts, sig }), { expirationTtl: TTL.MONTH * 3 });
@@ -1004,6 +1096,12 @@ async function handleGroupCreate(body, env, request) {
   const creatorPub = rawCreatorPub.slice(0, 200);
   if (!name || !creatorId || !creatorPub) return json({ error: 'name, creatorId, creatorPub required', code: 'MISSING_FIELDS' }, 400, request);
   if (!validateUserId(creatorId)) return json({ error: 'invalid creatorId', code: 'INVALID_USER_ID' }, 400, request);
+  // Ownership proof (same as join): creatorId = creatorPub.slice(0,12), so the pub must
+  // start with the claimed id. Without it, anyone could create a group under another
+  // user's id with THEIR OWN key — the roster then binds that victim's name/id to the
+  // attacker's pub and every joiner encrypts sender keys to the wrong key.
+  if (!creatorPub.startsWith(creatorId))
+    return json({ error: 'creatorPub does not match creatorId', code: 'KEY_MISMATCH' }, 400, request);
   // v3.1: Validate name length
   if (name.length > 50) return json({ error: 'Group name max 50 chars', code: 'INVALID_NAME' }, 400, request);
   // v3.1: Validate initial member count
@@ -1131,11 +1229,13 @@ async function handleGroupInfo(body, env, request) {
     }
     await kvPut(env, `grp:${token}`, data, { expirationTtl: TTL.MONTH });
   }
-  // Expose creatorId + admins so clients can render moderation badges and gate the
-  // kick/admin UI to the right members (the server still re-authorizes every action).
+  // Expose creatorId + admins + banned so clients can render moderation badges, gate the
+  // kick/admin UI to the right members, and offer /admin unban (the server still
+  // re-authorizes every action; banned is additive — older clients ignore it).
   return json({
     name: group.name, members: group.members, creatorName: group.creatorName,
     creatorId: group.creatorId, admins: Array.isArray(group.admins) ? group.admins : [],
+    banned: Array.isArray(group.banned) ? group.banned : [],
     epoch: group.epoch | 0, createdAt: group.createdAt,
   }, 200, request);
 }
@@ -1147,9 +1247,10 @@ async function handleGroupInfo(body, env, request) {
 // ownership, rename, or delete the group. These are server-side state changes with no
 // client-side crypto recourse, so the E2E model does not cover them.
 //
-// Verified whenever {ts,sig} are supplied (forgeries rejected); required outright when
-// GROUP_REQUIRE_AUTH is set — flip that on once clients sign. Default (no sig + flag unset)
-// preserves the legacy flow so current clients keep working until updated. sig is Ed25519
+// Verified whenever {ts,sig} are supplied (forgeries rejected); REQUIRED by default
+// — every deployed client signs all six mutations (kick/admin/transfer/rename/
+// leave/delete), so an unsigned mutation is a forgery attempt, not a legacy flow.
+// GROUP_REQUIRE_AUTH='false' is the explicit opt-out. sig is Ed25519
 // over `breeze-group-${action}:${token}:${actorId}:${ts}:${bind}`, verified against the
 // actor's registered edIdentityKey.
 //
@@ -1174,7 +1275,40 @@ async function checkGroupAuth(env, request, action, token, actorId, ts, sig, bin
     if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
     return null;
   }
-  if (env.GROUP_REQUIRE_AUTH === 'true') return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+  if (env.GROUP_REQUIRE_AUTH !== 'false') return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+  return null;
+}
+
+// Owner-auth for id-keyed read/destructive endpoints (same pattern as checkGroupAuth).
+// A userId is public (pub-prefix, exposed in group rosters) — unsigned, anyone who knows
+// it can read the sealed queue's metadata, blind-delete the queue via /sealed/ack, or purge
+// an inbox by polling with a future lastTs. Verified-when-present so old clients keep
+// working; the operator flips <flagName>='true' once clients sign. Challenge binds the op
+// and id so a sig lifted from one endpoint can't be replayed against another.
+// Returns a Response on failure, or null to proceed.
+async function checkOwnerAuth(env, request, op, id, ts, sig, flagName) {
+  const hasSig = ts !== undefined || sig !== undefined;
+  if (hasSig) {
+    if (ts === undefined || sig === undefined) return json({ error: 'ts and sig must both be provided', code: 'PARTIAL_AUTH' }, 400, request);
+    if (typeof sig !== 'string' || sig.length > 500) return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
+    if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS) return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
+    const pkRaw = await kvGet(env, `prekey:${id}`);
+    const bundle = pkRaw ? safeJsonParse(pkRaw) : null;
+    // No registered bundle → nothing to verify against; treat as unsigned so a fresh
+    // account signing before its first prekey upload isn't punished harder than a
+    // client that never signed at all.
+    if (bundle && typeof bundle.edIdentityKey === 'string' && bundle.edIdentityKey) {
+      const ok = await verifyEd25519(bundle.edIdentityKey, utf8ToB64(`breeze-${op}:${id}:${ts}`), sig);
+      if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
+      return null;
+    }
+  }
+  // Default-ON for the queue endpoints this guards (msg-poll / sealed-poll / sealed-ack):
+  // unsigned, a known userId is enough to purge an inbox (future lastTs) or blind-wipe a
+  // sealed queue — and every current client already signs via _ownerAuth, so enforcement
+  // costs nothing but the hole. Operators serving pre-signing clients can explicitly opt
+  // out by setting the flag to "false" (legacy compat; docs in wrangler.toml/.env.example).
+  if (env[flagName] !== 'false') return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
   return null;
 }
 
@@ -1557,8 +1691,8 @@ async function handlePushSubscribe(body, env, request) {
   // OWN device under push:${userId} and then receive the victim's notifications: the Web Push
   // payload is encrypted to the SUBSCRIBER-supplied p256dh/auth, so the attacker can decrypt the
   // metadata (sender display name, message type, contactId, timing). They could also evict the
-  // victim's real devices via the 5-device cap (denial of notification). Verified-when-present;
-  // required when PUSH_REQUIRE_AUTH=true. Same pattern as portal/group/backup/alias auth.
+  // victim's real devices via the 5-device cap (denial of notification). Required by
+  // default (clients sign subscribe/unsubscribe); PUSH_REQUIRE_AUTH=false opts out.
   {
     const { ts, sig } = body;
     const hasSig = ts !== undefined || sig !== undefined;
@@ -1580,7 +1714,7 @@ async function handlePushSubscribe(body, env, request) {
       const subBind = `${subscription.endpoint || ''}:${subscription.keys?.p256dh || ''}:${subscription.keys?.auth || ''}`;
       const ok = await verifyEd25519(bundle.edIdentityKey, utf8ToB64(`breeze-push-subscribe:${userId}:${ts}:${subBind}`), sig);
       if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
-    } else if (env.PUSH_REQUIRE_AUTH === 'true') {
+    } else if (env.PUSH_REQUIRE_AUTH !== 'false') {
       return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
     }
   }
@@ -1625,9 +1759,9 @@ async function handlePushUnsubscribe(body, env, request) {
   if (!userId || !endpoint) return json({ error: 'userId and endpoint required', code: 'MISSING_FIELDS' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   if (typeof endpoint !== 'string' || endpoint.length > 512) return json({ error: 'invalid endpoint', code: 'INVALID_FIELD' }, 400, request);
-  // Optional Ed25519 ownership auth — mirrors handlePushSubscribe. Without it any caller who
-  // knows a userId + endpoint can silently delete that user's push subscription (denial of
-  // notification). Verified-when-present; required when PUSH_REQUIRE_AUTH=true.
+  // Ed25519 ownership auth — mirrors handlePushSubscribe (endpoint-bound). Without it any
+  // caller who knows a userId + endpoint can silently delete that user's push subscription
+  // (denial of notification). Required by default; PUSH_REQUIRE_AUTH=false opts out.
   {
     const { ts, sig } = body;
     const hasSig = ts !== undefined || sig !== undefined;
@@ -1645,7 +1779,7 @@ async function handlePushUnsubscribe(body, env, request) {
       // Bind the specific endpoint being removed so a subscribe signature cannot be replayed here.
       const ok = await verifyEd25519(bundle.edIdentityKey, utf8ToB64(`breeze-push-unsubscribe:${userId}:${ts}:${endpoint}`), sig);
       if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
-    } else if (env.PUSH_REQUIRE_AUTH === 'true') {
+    } else if (env.PUSH_REQUIRE_AUTH !== 'false') {
       return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
     }
   }
@@ -1724,12 +1858,32 @@ async function handleTurn(body, env, request) {
   const { userId } = body;
   if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
-  // When TURN_REQUIRE_AUTH=true, only registered users (completed PoW + prekey upload) receive
-  // TURN credentials. Prevents unauthenticated bots from draining paid TURN quota
-  // (Cloudflare Calls TURN: $0.05/GB). Rate-limit alone (10 rpm) does not eliminate
-  // the risk when TURN_KEY_ID is configured.
-  if (env.TURN_REQUIRE_AUTH === 'true') {
-    if (!(await kvGet(env, `prekey:${userId}`))) return json({ error: 'User not registered', code: 'UNREGISTERED' }, 401, request);
+  // A configured private/paid TURN provider gates credential minting to the caller's
+  // Ed25519 signature BY DEFAULT (TURN_REQUIRE_AUTH=false opts out): CF Calls bills
+  // $0.05/GB and coturn burns the operator's bandwidth. A mere "registered userId"
+  // check would be theater — registered ids are public knowledge, so one known id
+  // still drains the quota. `breeze-turn:{userId}:{ts}` is verified against the
+  // caller's prekey bundle (same pattern as group/push auth). The public openrelay
+  // fallback stays open: its credentials are already printed in this file.
+  const _turnConfigured = !!(env.TURN_KEY_ID && env.TURN_KEY_API_TOKEN)
+    || !!(env.TURN_SECRET && env.TURN_URL)
+    || !!(env.TURN_URL && env.TURN_USERNAME && env.TURN_CREDENTIAL);
+  if (env.TURN_REQUIRE_AUTH === 'true' || (_turnConfigured && env.TURN_REQUIRE_AUTH !== 'false')) {
+    const { ts, sig } = body;
+    if (ts === undefined || sig === undefined)
+      return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+    if (typeof sig !== 'string' || sig.length > 500)
+      return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
+    if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS)
+      return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
+    const pkRaw = await kvGet(env, `prekey:${userId}`);
+    const bundle = pkRaw ? safeJsonParse(pkRaw) : null;
+    // Uniform 403 whether the account is unregistered or the signature is wrong —
+    // distinguishing them would leak which userIds own provisioned TURN capacity.
+    if (!bundle || typeof bundle.edIdentityKey !== 'string' || !bundle.edIdentityKey)
+      return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+    const ok = await verifyEd25519(bundle.edIdentityKey, utf8ToB64(`breeze-turn:${userId}:${ts}`), sig);
+    if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
   }
 
   // ═══════════════════════════════════════════════════════
@@ -1744,11 +1898,24 @@ async function handleTurn(body, env, request) {
   // STUN is always free (Google, Cloudflare)
   // ═══════════════════════════════════════════════════════
 
-  const iceServers = [
-    // Free STUN servers (always included — zero cost)
-    { urls: 'stun:stun.cloudflare.com:3478' },
-    { urls: 'stun:stun.l.google.com:19302' },
-  ];
+  // STUN: free public list by default; STUN_URL overrides for self-hosting
+  // (comma-separated is fine). coturn answers STUN on its TURN listener.
+  const iceServers = env.STUN_URL
+    ? env.STUN_URL.split(',').map(u => u.trim()).filter(Boolean)
+        .map(u => ({ urls: u.startsWith('stun:') ? u : 'stun:' + u }))
+    : [
+        // Free STUN servers (always included — zero cost)
+        { urls: 'stun:stun.cloudflare.com:3478' },
+        { urls: 'stun:stun.l.google.com:19302' },
+      ];
+
+  // I19: a self-hosted coturn serves STUN binding on the same plain-TURN
+  // listener — surface it so a TURN-provisioned deployment can resolve its
+  // own candidates without a third-party STUN dependency.
+  if (!env.STUN_URL && /^turn:/i.test(env.TURN_URL || '')) {
+    const stunUrl = env.TURN_URL.replace(/^turn:/i, 'stun:').split('?')[0];
+    if (stunUrl.length > 'stun:x'.length) iceServers.push({ urls: stunUrl });
+  }
 
   // Option A: Cloudflare Calls TURN (recommended — $0.05/GB, global anycast)
   if (env.TURN_KEY_ID && env.TURN_KEY_API_TOKEN) {
@@ -2003,7 +2170,54 @@ async function handlePreKeyUpload(body, env, request) {
     const ok = await verifyEd25519(edIdentityKey, signedPreKey, signedPreKeySig);
     if (!ok) return json({ error: 'Invalid signed pre-key signature', code: 'PREKEY_SIG_INVALID' }, 400, request);
   }
+  // Incumbent endorsement: the KEY_MISMATCH gate only binds userId to identityKey's
+  // prefix — a caller can still present the VICTIM's real identityKey with the
+  // attacker's SPK + edIdentityKey (self-signed, passes the check above) and clobber
+  // the registered bundle: a mixed-key poison that breaks every new session to the
+  // victim AND swaps the Ed key fresh contacts pin. Once a bundle carries an Ed key,
+  // overwriting it requires a signature BY that incumbent key endorsing the update —
+  // attacker can no longer rotate keys they don't own. Legacy bundles without
+  // edIdentityKey stay overwritable (nothing to verify against — they were born
+  // clobberable; the first signed upload locks them in). Opt-out: PREKEY_REQUIRE_AUTH=false.
+  let verifiedSignedTs = null;
+  if (env.PREKEY_REQUIRE_AUTH !== 'false') {
+    const incumbent = safeJsonParse(await kvGet(env, `prekey:${userId}`) || 'null');
+    if (incumbent && typeof incumbent.edIdentityKey === 'string' && incumbent.edIdentityKey) {
+      const upTs = body.ts, upSig = body.sig;
+      if (typeof upTs !== 'number' || !Number.isFinite(upTs) || Math.abs(Date.now() - upTs) > TIMEOUT_MS.REQ_TS
+        || typeof upSig !== 'string' || !upSig || upSig.length > 500) {
+        return json({ error: 'Overwrite requires incumbent-key signature (ts + sig)', code: 'AUTH_REQUIRED' }, 403, request);
+      }
+      const ok = await verifyEd25519(incumbent.edIdentityKey, utf8ToB64(`breeze-prekey-upload:${userId}:${upTs}`), upSig);
+      if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
+      // Monotonic ordering on the SIGNED ts (same class as /device/set): the ±5min
+      // freshness window bounds replay age but can't order two in-window uploads —
+      // a relay holding a captured request can replay it just after a newer upload
+      // and roll the bundle back (stale SPK, downgraded caps advertisement). The
+      // stored signedTs is the high-water mark: strictly-older is rejected; equal
+      // ts is accepted only when it carries the identical signed pre-key — a true
+      // idempotent retry of the same signed request.
+      if (typeof incumbent.signedTs === 'number'
+        && (upTs < incumbent.signedTs
+            || (upTs === incumbent.signedTs && incumbent.signedPreKey !== signedPreKey))) {
+        return json({ error: 'Stale prekey bundle (newer signed ts already stored)', code: 'STALE_UPDATE' }, 409, request);
+      }
+      verifiedSignedTs = upTs;
+    } else if (edIdentityKey) {
+      // First signed upload (or overwrite of an ed-less legacy bundle): no incumbent
+      // key to verify the endorsement ts against, but the client still sends one —
+      // seed the high-water mark from a fresh in-window timestamp so the NEXT signed
+      // overwrite has something to compare against. Out-of-window/absent ts simply
+      // skips the seed (legacy clients unaffected).
+      const seedTs = body.ts;
+      if (typeof seedTs === 'number' && Number.isFinite(seedTs)
+        && Math.abs(Date.now() - seedTs) <= TIMEOUT_MS.REQ_TS) {
+        verifiedSignedTs = seedTs;
+      }
+    }
+  }
   const bundle = { identityKey, edIdentityKey, signedPreKey, signedPreKeySig, uploadedAt: Date.now() };
+  if (verifiedSignedTs !== null) bundle.signedTs = verifiedSignedTs;
   // N3: persist capability set so the initiator can call parsePeerCaps(bundle) and
   // negotiate() to pick the right protocol path (same sanitization as the presence
   // heartbeat — ≤20 strings, ≤32 chars; non-string entries silently dropped).
@@ -2372,6 +2586,19 @@ async function handleSealedSend(body, env, request) {
   const newTs = queue.length > 0 && Number.isFinite(queue[queue.length - 1].ts)
     ? Math.max(Date.now(), queue[queue.length - 1].ts + 1)
     : Date.now();
+  // Same refuse-when-full policy as /msg/send: a sealed queue is also accepted mail, so a
+  // flood must fill free slots but can never evict already-pending envelopes. Envelopes
+  // are anonymous (no `from`), so any refusal is global — the sender retries after the
+  // recipient drains. 429 keeps the client's retry path identical to rate limiting.
+  let queueBytes = 0;
+  for (const m of queue) queueBytes += (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128;
+  if (queue.length >= 100 || queueBytes + envelope.length + 128 > 16 * 1024 * 1024) {
+    globalThis._sealedDedup.delete(dedupKey); // un-mark — refused send stays retryable
+    return new Response(JSON.stringify({ error: 'Recipient queue full', code: 'QUEUE_FULL', retryAfter: 30 }), {
+      status: 429,
+      headers: { 'Content-Type': 'application/json', 'Retry-After': '30', ...corsHeaders(request) },
+    });
+  }
   queue.push({ envelope, ts: newTs });
   const trimmed = capQueueBytes(queue.slice(-100), m => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
   // Queue overflow drops the OLDEST envelopes. Don't do it silently (Socratic round —
@@ -2414,28 +2641,38 @@ async function handleSealedSend(body, env, request) {
   const seen = verifyRaw ? safeJsonParse(verifyRaw, []) : [];
   const mine = (m) => m && typeof m.envelope === 'string'
     && m.envelope.length === envelope.length && m.envelope === envelope;
-  if (Array.isArray(seen) && !seen.some(mine)) {
+  // Recovery respects the refuse-when-full invariant too: if the winning write already
+  // filled the queue, re-appending would evict another accepted envelope — the same
+  // promise-breaking this handler's gate exists to stop. Under capacity the re-append
+  // can't overflow (same bounds the send gate enforces), so no trim is needed.
+  let seenBytes = 0;
+  if (Array.isArray(seen)) for (const m of seen) seenBytes += (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128;
+  if (Array.isArray(seen) && !seen.some(mine)
+      && seen.length < 100 && seenBytes + envelope.length + 128 <= 16 * 1024 * 1024) {
     seen.push({ envelope, ts: newTs });
-    const requeued = capQueueBytes(seen.slice(-100), (m) => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
-    await kvPut(env, key, JSON.stringify(requeued), { expirationTtl: TTL.WEEK });
+    await kvPut(env, key, JSON.stringify(seen), { expirationTtl: TTL.WEEK });
   }
-  sendPushToUser(to, { title: 'Breeze', body: 'New message', tag: 'breeze-sealed', contactId: to }, env).catch(() => {});
+  sendPushToUser(to, { title: 'Breeze', body: 'New message', tag: 'breeze-sealed', contactId: await sha256Short(to) }, env).catch(() => {});
   return json({ ok: true, ack: Date.now() }, 200, request);
 }
 
 async function handleSealedPoll(body, env, request) {
-  const { id } = body;
+  const { id, ts, sig } = body;
   if (!id) return json({ error: 'id required', code: 'MISSING_ID' }, 400, request);
   if (!validateUserId(id)) return json({ error: 'invalid id', code: 'INVALID_ID' }, 400, request);
+  const authErr = await checkOwnerAuth(env, request, 'sealed-poll', id, ts, sig, 'SEALED_REQUIRE_AUTH');
+  if (authErr) return authErr;
   const key = `sealed:${id}`;
   const data = await kvGet(env, key);
   if (!data) return json({ messages: [] }, 200, request);
   const messages = safeJsonParse(data, []);
   if (!Array.isArray(messages)) return json({ messages: [] }, 200, request);
-  // v3.6: Grace period — set short TTL instead of immediate delete
-  // If client crashes after poll but before processing, messages survive 5 min
-  // Client-side _replayCache + IDB dedup prevents re-rendering on re-poll
-  await kvPut(env, key, data, { expirationTtl: TTL.MIN * 5 }); // 5 min grace
+  // The queue is NOT rewritten here. A poll used to re-put the same data with a 5-min
+  // "grace" TTL — collapsing a week of retention to 5 minutes on every poll, so a client
+  // that went offline >5 min after polling lost messages it never had a chance to process.
+  // Crash-recovery works without any write: the key keeps its original TTL.WEEK lifetime
+  // and the hwm marker bounds what a later ack may delete. Client-side _replayCache + IDB
+  // dedup prevents re-rendering on re-poll.
   // Record a high-water mark (max ts returned) so the later ACK clears ONLY what was
   // actually polled. handleSealedAck previously blind-deleted the whole queue, so any
   // envelope appended by handleSealedSend in the poll→ack window was destroyed
@@ -2453,9 +2690,13 @@ async function handleSealedPoll(body, env, request) {
 
 // v3.6: Sealed ACK — client confirms processing, worker deletes messages
 async function handleSealedAck(body, env, request) {
-  const { id } = body;
+  const { id, ts, sig } = body;
   if (!id || typeof id !== 'string') return json({ error: 'id required', code: 'MISSING_ID' }, 400, request);
   if (!validateUserId(id)) return json({ error: 'invalid id', code: 'INVALID_ID' }, 400, request);
+  // Destructive: deletes queue entries. Unsigned, a public userId is enough to wipe a
+  // stranger's pending sealed mail — the no-hwm fallback blind-deletes the whole queue.
+  const authErr = await checkOwnerAuth(env, request, 'sealed-ack', id, ts, sig, 'SEALED_REQUIRE_AUTH');
+  if (authErr) return authErr;
   // Clear only what the client actually polled. handleSealedPoll records a high-water mark
   // (max ts of the returned batch); here we keep any envelope with ts > hwm, i.e. one that
   // arrived in the poll→ack window, instead of blind-deleting the whole queue and losing it.
@@ -2496,9 +2737,17 @@ async function handleBackupUpload(body, env, request) {
   if (typeof backup !== 'string') return json({ error: 'backup must be a string', code: 'INVALID_FIELD' }, 400, request);
 
   // Optional Ed25519 auth: callers may include { ts, sig } to prove ownership of the
-  // account's identity key before overwriting the backup. When omitted the upload is
-  // unauthenticated (backward-compat). Both fields must be present or both absent.
+  // account's identity key before overwriting the backup. Both fields must be present or
+  // both absent. An UNSIGNED overwrite is refused only when a backup already exists —
+  // incumbent endorsement: a stored backup is accepted data, so letting any anonymous
+  // caller replace it (clobber — the victim's recovery path silently becomes attacker
+  // ciphertext) is strictly worse than keeping first writes open. Every current client
+  // already signs, so no legitimate overwrite is affected.
   const hasSig = ts !== undefined || sig !== undefined;
+  if (!hasSig && env.BACKUP_REQUIRE_AUTH !== 'true'
+      && (await kvGet(env, `backup:${userId}`)) !== null) {
+    return json({ error: 'Signature required to overwrite an existing backup', code: 'AUTH_REQUIRED' }, 403, request);
+  }
   if (hasSig) {
     if (ts === undefined || sig === undefined)
       return json({ error: 'ts and sig must both be provided together', code: 'PARTIAL_AUTH' }, 400, request);
@@ -2534,12 +2783,11 @@ async function handleBackupDownload(body, env, request) {
   if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
 
-  // Optional Ed25519 auth: callers may include { ts, sig } to prove ownership before
-  // retrieving the backup. Both fields must be present or both absent.
-  // Set BACKUP_REQUIRE_AUTH=true to reject unauthenticated requests — recommended once
-  // all clients register an Ed25519 identity key (same pattern as GROUP_REQUIRE_AUTH,
-  // PRESENCE_REQUIRE_AUTH, etc.). Without it, knowing a userId is enough to download the
-  // encrypted blob and brute-force the passphrase offline.
+  // Ed25519 auth required BY DEFAULT — knowing a userId is otherwise enough to
+  // download the encrypted blob and brute-force the passphrase offline. Every
+  // deployed client signs `breeze-backup-download:{id}:{ts}`; the uniform 403
+  // fires before the blob lookup so an unsigned probe can't even learn whether
+  // a backup exists. BACKUP_REQUIRE_AUTH='false' is the explicit opt-out.
   const hasSig = ts !== undefined || sig !== undefined;
   if (hasSig) {
     if (ts === undefined || sig === undefined)
@@ -2555,7 +2803,7 @@ async function handleBackupDownload(body, env, request) {
     const challenge = `breeze-backup-download:${userId}:${ts}`;
     const ok = await verifyEd25519(bundle.edIdentityKey, btoa(challenge), sig);
     if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
-  } else if (env.BACKUP_REQUIRE_AUTH === 'true') {
+  } else if (env.BACKUP_REQUIRE_AUTH !== 'false') {
     return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
   }
 
@@ -2630,8 +2878,8 @@ function json(data, status, request, _rid) {
 
 async function sha256Short(text) {
   // 16 bytes (32 hex chars) → 2^64 birthday-collision resistance, up from 8 bytes (2^32).
-  // KV cache keys are 'ogp:' prefixed; the extra 16 chars are negligible
-  // vs. the 512-byte KV key limit and removes the theoretically-breakable 2^32 window.
+  // The extra 16 chars are negligible vs. the 512-byte KV key limit and removes the
+  // theoretically-breakable 2^32 window.
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return Array.from(new Uint8Array(buf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
 }

@@ -16,7 +16,9 @@ const swSource = readFileSync(
 const ORIGIN = 'https://breeze.app';
 
 // Load sw.js against a fresh mock global and return the captured event handlers.
-function loadSW() {
+// `indexedDB`/`fetchImpl` are injectable for the closed-page outbox drain; callers
+// that never hit that path get a throwing stub / the real global fetch.
+function loadSW({ indexedDB, fetchImpl } = {}) {
   const handlers = {};
   const self = {
     location: { origin: ORIGIN },
@@ -49,7 +51,11 @@ function loadSW() {
     match: () => Promise.resolve(undefined),
   };
   // eslint-disable-next-line no-new-func
-  new Function('self', 'clients', 'caches', swSource)(self, clients, caches);
+  new Function('self', 'clients', 'caches', 'indexedDB', 'fetch', swSource)(
+    self, clients, caches,
+    indexedDB || { open: () => { throw new Error('no idb in test'); } },
+    fetchImpl || globalThis.fetch,
+  );
   return { handlers, self, clients, openWindowCalls, postMessageCalls, putCalls, state };
 }
 
@@ -206,6 +212,147 @@ describe('sw.js cachePut — guards the Cache.put() pitfalls', () => {
   });
 });
 
+// ─── C11 closed-page outbox drain ────────────────────────────────────────────
+// In-memory IndexedDB stand-in. `stores` maps dbName → { retryQueue: [...] }.
+// A name NOT in `stores` behaves like a DB that does not exist yet: the real
+// open() would create it, so idbOpenExisting's upgradeneeded-abort path fires
+// (we emulate: fire onupgradeneeded, then AbortError) and nothing is created.
+function makeIDB(stores = {}, knownNames = null) {
+  return {
+    databases: knownNames === null
+      ? undefined // Firefox/Safari path — no enumeration
+      : () => Promise.resolve(knownNames.map(name => ({ name }))),
+    open: (name) => {
+      const req = {};
+      setTimeout(() => {
+        if (!(name in stores)) {
+          req.transaction = { abort: () => {} };
+          req.onupgradeneeded?.();
+          req.onerror?.(new Error('AbortError'));
+          return;
+        }
+        const data = stores[name];
+        req.result = {
+          close: () => {},
+          transaction: (store, mode) => {
+            const tx = { oncomplete: null, onerror: null };
+            tx.objectStore = () => ({
+              get: (key) => {
+                const g = {};
+                setTimeout(() => { g.result = data[key]; g.onsuccess?.({ target: g }); }, 0);
+                return g;
+              },
+              put: (val, key) => {
+                const p = {};
+                setTimeout(() => { data[key] = val; p.onsuccess?.({ target: p }); tx.oncomplete?.(); }, 0);
+                return p;
+              },
+            });
+            return tx;
+          },
+        };
+        req.onsuccess?.();
+      }, 0);
+      return req;
+    },
+  };
+}
+
+async function fireSync(ctx, { tag = 'breeze-outbox', windows = [] } = {}) {
+  ctx.clients.matchAll = () => Promise.resolve(windows);
+  let waited;
+  ctx.handlers.sync({ tag, waitUntil: (p) => { waited = p; } });
+  await waited;
+}
+
+const okResp = { ok: true };
+const badResp = { ok: false, status: 500 };
+
+describe('sw.js sync — outbox drain when the app is closed', () => {
+  it('posts sync-outbox to open windows and does NOT drain itself', async () => {
+    const postMessageCalls = [];
+    const ctx = loadSW({
+      indexedDB: makeIDB({ 'breeze-messenger': { retryQueue: [{ to: 'x', payload: {} }] } }),
+      fetchImpl: async () => { throw new Error('must not fetch while a window is open'); },
+    });
+    const win = { postMessage: (m) => postMessageCalls.push(m) };
+    await fireSync(ctx, { windows: [win] });
+    expect(postMessageCalls).toEqual([{ type: 'sync-outbox' }]);
+  });
+
+  it('drains the persisted queue via sealed-send when no window is open', async () => {
+    const stores = { 'breeze-messenger': { retryQueue: [{ to: 'alice', payload: { to: 'alice', payload: 'enc' } }] } };
+    const calls = [];
+    const ctx = loadSW({
+      indexedDB: makeIDB(stores),
+      fetchImpl: async (url, opts) => { calls.push({ url, body: JSON.parse(opts.body) }); return okResp; },
+    });
+    await fireSync(ctx, { windows: [] });
+    expect(calls.length).toBe(1);
+    expect(calls[0].url).toBe('/api/sealed/send');
+    expect(calls[0].body.to).toBe('alice');
+    expect(JSON.parse(calls[0].body.envelope)).toEqual({ to: 'alice', payload: 'enc' });
+    expect(stores['breeze-messenger'].retryQueue).toEqual([]); // written back empty
+  });
+
+  it('falls back to /api/msg/send when the sealed endpoint rejects', async () => {
+    const stores = { 'breeze-messenger': { retryQueue: [{ to: 'bob', payload: { to: 'bob', payload: 'enc' } }] } };
+    const urls = [];
+    const ctx = loadSW({
+      indexedDB: makeIDB(stores),
+      fetchImpl: async (url) => { urls.push(url); return url.includes('/sealed/') ? badResp : okResp; },
+    });
+    await fireSync(ctx, { windows: [] });
+    expect(urls).toEqual(['/api/sealed/send', '/api/msg/send']);
+    expect(stores['breeze-messenger'].retryQueue).toEqual([]);
+  });
+
+  it('keeps undelivered items in the queue for the next sync', async () => {
+    const item = { to: 'carol', payload: { to: 'carol', payload: 'enc' } };
+    const stores = { 'breeze-messenger': { retryQueue: [item] } };
+    const ctx = loadSW({
+      indexedDB: makeIDB(stores),
+      fetchImpl: async () => { throw new Error('offline'); },
+    });
+    await fireSync(ctx, { windows: [] });
+    expect(stores['breeze-messenger'].retryQueue).toEqual([item]);
+  });
+
+  it('drains breeze-acc-* databases discovered via indexedDB.databases()', async () => {
+    const stores = {
+      'breeze-messenger': { retryQueue: [] },
+      'breeze-acc-2': { retryQueue: [{ to: 'dave', payload: { to: 'dave', payload: 'enc' } }] },
+    };
+    const calls = [];
+    const ctx = loadSW({
+      indexedDB: makeIDB(stores, ['breeze-messenger', 'breeze-acc-2']),
+      fetchImpl: async (url, opts) => { calls.push(JSON.parse(opts.body).to); return okResp; },
+    });
+    await fireSync(ctx, { windows: [] });
+    expect(calls).toEqual(['dave']);
+    expect(stores['breeze-acc-2'].retryQueue).toEqual([]);
+  });
+
+  it('does not create the DB on a device where the app never ran', async () => {
+    const stores = {}; // nothing exists
+    let fetched = false;
+    const ctx = loadSW({
+      indexedDB: makeIDB(stores, []),
+      fetchImpl: async () => { fetched = true; return okResp; },
+    });
+    await fireSync(ctx, { windows: [] });
+    expect(fetched).toBe(false);
+    expect(stores).toEqual({}); // the aborted upgrade left no empty DB behind
+  });
+
+  it('ignores sync events for other tags', async () => {
+    const ctx = loadSW();
+    let ran = false;
+    ctx.handlers.sync({ tag: 'something-else', waitUntil: () => { ran = true; } });
+    expect(ran).toBe(false);
+  });
+});
+
 describe('sw.js fetch — method guard (only GET is intercepted/cached)', () => {
   let ctx;
   beforeEach(() => { ctx = loadSW(); });
@@ -221,4 +368,73 @@ describe('sw.js fetch — method guard (only GET is intercepted/cached)', () => 
       expect(fireFetch(ctx, { method })).toBe(false);
     });
   }
+});
+
+// Fire the push handler and capture the showNotification invocation.
+async function firePush(ctx, payload) {
+  const calls = [];
+  ctx.self.registration.showNotification = (title, opts) => { calls.push({ title, opts }); return Promise.resolve(); };
+  let waited;
+  ctx.handlers.push({ data: { json: () => payload }, waitUntil: (p) => { waited = p; } });
+  await waited;
+  return calls;
+}
+
+describe('sw.js push — relay-supplied payload fields are bounded before the OS renders them', () => {
+  let ctx;
+  beforeEach(() => { ctx = loadSW(); });
+
+  it('strips bidi direction controls and invisible format chars from title and body', async () => {
+    const [n] = await firePush(ctx, {
+      title: 'Ali\u202Ece\u200B\uFEFF',
+      body: 'meet me at \u2066evil\u2069.com\u00AD',
+      tag: 't', contactId: 'c1',
+    });
+    expect(n.title).toBe('Alice');
+    expect(n.opts.body).toBe('meet me at evil.com');
+  });
+
+  it('caps title/body length (unbounded body cannot spam a huge notification)', async () => {
+    const [n] = await firePush(ctx, { title: 'T'.repeat(500), body: 'B'.repeat(5000), tag: 't' });
+    expect(n.title.length).toBe(50);
+    expect(n.opts.body.length).toBe(200);
+  });
+
+  it('non-string/missing fields fall back to safe defaults', async () => {
+    const [n] = await firePush(ctx, { title: 7, body: {}, tag: null, contactId: 42 });
+    expect(n.title).toBe('Breeze');
+    expect(n.opts.body).toBe('New message');
+    expect(n.opts.tag).toBe('breeze-msg');
+    expect(n.opts.data.contactId).toBeUndefined();
+  });
+
+  it('a null payload cannot crash the listener (liveness: notifications keep working)', async () => {
+    const [n] = await firePush(ctx, null);
+    expect(n.title).toBe('Breeze');
+    expect(n.opts.body).toBe('New message');
+    const [m] = await firePush(ctx, 'a string');
+    expect(m.title).toBe('Breeze');
+  });
+
+  it('bounds tag to a machine charset so a hostile tag cannot carry markup/whitespace', async () => {
+    const [n] = await firePush(ctx, { tag: 'a<b>"\'\n'.repeat(20) + 'x'.repeat(100) });
+    expect(n.opts.tag.length).toBeLessThanOrEqual(64);
+    expect(/[^\w:-]/.test(n.opts.tag)).toBe(false);
+    const [e] = await firePush(ctx, { tag: '<><><>' });
+    expect(e.opts.tag).toBe('breeze-msg');
+  });
+
+  it('charset-bounds contactId (flows into quick-reply/mark-read postMessage)', async () => {
+    const [n] = await firePush(ctx, { contactId: 'abc123+/=_-[]{};<>'.repeat(10) });
+    expect(/[^a-z0-9+/=_-]/i.test(n.opts.data.contactId)).toBe(false);
+    expect(n.opts.data.contactId.length).toBeLessThanOrEqual(128);
+  });
+
+  it('_UNSAFE_PUSH_RE is the byte-identical class as the worker/app copies (parity tripwire)', () => {
+    const reSrc = (src, name) => src.match(new RegExp('const ' + name + ' = /(.+)/gu;'))?.[1];
+    const workerSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '_worker.js'), 'utf8');
+    const htmlSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'index.html'), 'utf8');
+    expect(reSrc(swSource, '_UNSAFE_PUSH_RE')).toBe(reSrc(workerSrc, '_UNSAFE_DISPLAY_RE'));
+    expect(reSrc(swSource, '_UNSAFE_PUSH_RE')).toBe(reSrc(htmlSrc, '_UNSAFE_DISPLAY_RE'));
+  });
 });

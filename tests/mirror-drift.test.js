@@ -404,14 +404,16 @@ function makeGroupInline(config) {
   const { _computeGroupV5 } = makeX3dhInline(null, config, 'me');
   const factory = new Function(
     'crypto', 'CONFIG', 'dbGet', 'dbPut', 'hkdf', 'arr', 'u8', '_dbg', 'TextEncoder', 'TextDecoder', '_computeGroupV5',
-    '_keyCommit', '_cmOk',
+    '_keyCommit', '_cmOk', '_signingKey', 'signMessage', 'verifySignature',
     html.slice(gs, ge) +
       '\nreturn { getGroupSenderKey, encryptGroupMsg, decryptGroupMsg };',
   );
+  // Signing stubs: the reference has no per-sender `sg`, so injecting "no signing key"
+  // keeps the wire shape identical for parity — the sg field is additive on top.
   const api = factory(
     globalThis.crypto, config, dbGet, dbPut, inlineKdf.hkdf,
     (a) => Array.from(a), (a) => new Uint8Array(a), () => {}, TextEncoder, TextDecoder, _computeGroupV5,
-    _injKeyCommit, _injCmOk,
+    _injKeyCommit, _injCmOk, null, async () => null, async () => null,
   );
   return { ...api, store };
 }
@@ -901,6 +903,34 @@ describe('Unpad mirror — inline _unpadAndDecompress (index.html) vs reference 
 });
 
 // ---------------------------------------------------------------------------
+// Sanitizer tripwire — the TT 'breeze-sanitizer' allowlist must keep <label>:
+// the settings toggles, contact picker, and attach button all wrap their input
+// in a <label> so clicking the text toggles it. When `label` is missing from
+// SAFE_TAGS the sanitizer unwraps it and only the ~13px checkbox glyph stays
+// clickable — found via E2E (clickable text was dead).
+// ---------------------------------------------------------------------------
+describe('safeSetHTML sanitizer allowlist (index.html)', () => {
+  const m = html.match(/SAFE_TAGS = (\/.+\/i)/);
+  const SAFE_TAGS = new Function('return ' + (m ? m[1] : 'null'))();
+
+  it('extracts the SAFE_TAGS literal from index.html', () => {
+    expect(SAFE_TAGS instanceof RegExp).toBe(true);
+  });
+
+  it('keeps <label> (and the other UI tags the app renders through safeSetHTML)', () => {
+    for (const tag of ['label', 'input', 'button', 'span', 'div', 'a', 'img', 'table', 'mark']) {
+      expect(SAFE_TAGS.test(tag)).toBe(true);
+    }
+  });
+
+  it('still blocks the dangerous tags', () => {
+    for (const tag of ['script', 'iframe', 'object', 'embed', 'svg', 'math', 'form', 'style', 'link', 'meta']) {
+      expect(SAFE_TAGS.test(tag)).toBe(false);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Bare-IK session bootstrap — first-contact convergence guard.
 //
 // initSession() treats a fresh LOCAL ephemeral ratchet key as "our current ratchet
@@ -930,7 +960,7 @@ function makeSessionDevice(myKeys, myPubB64) {
   const idb = new Map();
   const dbGet = async (store, key) => idb.get(store + ':' + key) ?? null;
   const dbPut = async (store, val, key) => { idb.set(store + ':' + key, val); return true; };
-  const CONFIG = { PREFERRED_CURVE: 'X25519', X3DH_V5_ENABLED: false, IV_BYTES: 12, MSG_PAD_BOUNDARY: 256, REPLAY_CACHE_SIZE: 200, SESSION_RESET_THRESHOLD: 3, HKDF_HASH: 'SHA-256' };
+  const CONFIG = { PREFERRED_CURVE: 'X25519', X3DH_V5_ENABLED: false, IV_BYTES: 12, MSG_PAD_BOUNDARY: 256, REPLAY_CACHE_SIZE: 200, SESSION_RESET_THRESHOLD: 3, HKDF_HASH: 'SHA-256', SKIP_KEY_TTL_MS: 7 * 24 * 60 * 60 * 1000 };
   const factory = new Function(
     'CONFIG', '_hasX25519', 'dbGet', 'dbPut', 'zeroBuffer', 'workerCrypto', 'postAPIRaw', 'API',
     '_signingKey', '_signingPubB64', 'signMessage', 'verifySignature', 'myKeys', 'myPubB64', '_dbg', 'arr', 'u8',
@@ -943,6 +973,7 @@ function makeSessionDevice(myKeys, myPubB64) {
     (a) => Array.from(a), (a) => new Uint8Array(a),
     async (x, y) => x === y,
   );
+  R.idb = idb; // exposed for storage-shape assertions (e.g. skipped-key TTL)
   return R;
 }
 
@@ -1011,6 +1042,63 @@ describe('Bare-IK session bootstrap — inline encryptFor/decryptFrom convergenc
     for (let i = 0; i < 5; i++) {
       expect(await B.decryptFrom(wires[i], alice.pubB64)).toBe('burst ' + i);
     }
+  });
+
+  it('I7: skipped message keys carry a timestamp and expire after SKIP_KEY_TTL_MS', async () => {
+    // Out-of-order delivery caches the skipped counter's key; retention must be
+    // time-bounded (forward secrecy — a stolen device shouldn't hold last month's keys).
+    const alice = await genSessionIdentity();
+    const bob = await genSessionIdentity();
+    const A = makeSessionDevice(alice.keys, alice.pubB64);
+    const B = makeSessionDevice(bob.keys, bob.pubB64);
+    const w1 = await A.encryptFor('m1', bob.pubB64);
+    const w2 = await A.encryptFor('m2', bob.pubB64);
+    const w3 = await A.encryptFor('m3', bob.pubB64);
+    expect(await B.decryptFrom(w1, alice.pubB64)).toBe('m1');
+    expect(await B.decryptFrom(w3, alice.pubB64)).toBe('m3'); // c=2 cached as skipped {k,t}
+    const bSess = B.idb.get('identity:sess:' + alice.pubB64.slice(0, 12));
+    const skEntry = bSess.skippedKeys[alice.pubB64.slice(0, 12) + ':2'];
+    expect(skEntry.t).toBeTypeOf('number'); // TTL timestamp present
+    expect(Array.isArray(skEntry.k)).toBe(true);
+    expect(await B.decryptFrom(w2, alice.pubB64)).toBe('m2'); // fresh skipped key still works
+    expect(bSess.skippedKeys[alice.pubB64.slice(0, 12) + ':2']).toBeUndefined(); // consumed on success
+  });
+
+  it('I7: a skipped key older than the TTL is swept and its message becomes undecryptable', async () => {
+    const carol = await genSessionIdentity();
+    const dave = await genSessionIdentity();
+    const C = makeSessionDevice(carol.keys, carol.pubB64);
+    const D = makeSessionDevice(dave.keys, dave.pubB64);
+    const x1 = await C.encryptFor('x1', dave.pubB64);
+    const x2 = await C.encryptFor('x2', dave.pubB64);
+    const x3 = await C.encryptFor('x3', dave.pubB64);
+    expect(await D.decryptFrom(x1, carol.pubB64)).toBe('x1');
+    expect(await D.decryptFrom(x3, carol.pubB64)).toBe('x3');
+    const peerId = carol.pubB64.slice(0, 12);
+    const dSess = D.idb.get('identity:sess:' + peerId);
+    expect(dSess.skippedKeys[peerId + ':2']).toBeDefined();
+    // Age the entry past the 7-day TTL — the next decrypt sweeps it.
+    dSess.skippedKeys[peerId + ':2'].t = Date.now() - 8 * 24 * 60 * 60 * 1000;
+    expect(await D.decryptFrom(x2, carol.pubB64)).toBeNull();
+    expect(dSess.skippedKeys[peerId + ':2']).toBeUndefined();
+  });
+
+  it('I7: legacy pre-TTL skipped entries (bare arrays, no timestamp) are swept as expired', async () => {
+    const carol = await genSessionIdentity();
+    const dave = await genSessionIdentity();
+    const C = makeSessionDevice(carol.keys, carol.pubB64);
+    const D = makeSessionDevice(dave.keys, dave.pubB64);
+    const x1 = await C.encryptFor('x1', dave.pubB64);
+    const x2 = await C.encryptFor('x2', dave.pubB64);
+    const x3 = await C.encryptFor('x3', dave.pubB64);
+    expect(await D.decryptFrom(x1, carol.pubB64)).toBe('x1');
+    expect(await D.decryptFrom(x3, carol.pubB64)).toBe('x3');
+    const peerId = carol.pubB64.slice(0, 12);
+    const dSess = D.idb.get('identity:sess:' + peerId);
+    // Simulate an entry written by a pre-I7 build: bare key array, no t field.
+    dSess.skippedKeys[peerId + ':2'] = dSess.skippedKeys[peerId + ':2'].k;
+    expect(await D.decryptFrom(x2, carol.pubB64)).toBeNull();
+    expect(dSess.skippedKeys[peerId + ':2']).toBeUndefined();
   });
 
   it('survives several back-and-forth turns after first contact (ratchet keeps converging)', async () => {

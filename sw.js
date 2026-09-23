@@ -89,22 +89,53 @@ function cachePut(request, response) {
   if (!response || response.status !== 200 || response.type !== 'basic') return;
   const cc = response.headers?.get('cache-control') || '';
   if (cc.includes('no-store')) return;
+  // Parameterized URLs are one-off deep links (?open=<contactId> notification taps,
+  // share-target payloads, /index.html?cv= codeverify probes): their entries are never
+  // served back — navigations are network-first and the offline fallback matches literal
+  // '/index.html' — so each variant only spends quota on a ~700KB shell copy. Without a
+  // runtime bound the activate-only trim never ran mid-session and the cache grew
+  // unboundedly between SW restarts, crowding out IDB quota.
+  if (new URL(request.url).search) return;
   const copy = response.clone();
-  caches.open(CACHE).then(c => c.put(request, copy)).catch(() => {});
+  caches.open(CACHE).then(async c => {
+    await c.put(request, copy);
+    const keys = await c.keys();
+    const shell = new Set(ASSETS.map(a => new URL(a, self.location.origin).href));
+    const trimmable = keys.filter(k => !shell.has(k.url));
+    if (trimmable.length <= MAX_CACHE_ITEMS) return;
+    await Promise.all(trimmable.slice(0, trimmable.length - MAX_CACHE_ITEMS).map(k => c.delete(k)));
+  }).catch(() => {});
 }
 
 // Web Push
+// Push payloads are relay-supplied. The normal worker sanitizes title via
+// sanitizeString, but a malicious/compromised relay — the threat model safeAppUrl
+// below already accepts — can push arbitrary title/body/tag into an OS-rendered
+// surface (spoofed sender names via bidi/invisible chars, unbounded bodies,
+// hostile notification tags). Bound them the same way the app binds wire strings:
+// the byte-identical unsafe class as _worker.js/index.html's _UNSAFE_DISPLAY_RE
+// (invisible + bidi format chars) plus C0 controls, capped lengths, and a
+// charset-bounded tag/contactId. A non-object payload is also replaced — a relay
+// pushing `null` would otherwise throw on data.title and silently kill the
+// notification (and every later one while the handler stays broken).
+const _UNSAFE_PUSH_RE = /[\u00AD\u034F\u061C\u115F\u1160\u180E\u200B\u200E\u200F\u202A-\u202E\u2060\u2066-\u2069\u2800\u3164\uFFA0\uFEFF\u{1D173}-\u{1D17A}\u{E0000}-\u{E007F}]/gu;
+function _pushText(val, maxLen) {
+  if (typeof val !== 'string') return '';
+  return val.replace(_UNSAFE_PUSH_RE, '').slice(0, maxLen).replace(/[\x00-\x1f]/g, '');
+}
+const _pushTag = v => typeof v === 'string' ? v.replace(/[^\w:-]/g, '').slice(0, 64) || 'breeze-msg' : 'breeze-msg';
+const _pushContactId = v => typeof v === 'string' ? v.replace(/[^a-z0-9+/=_-]/gi, '').slice(0, 128) || undefined : undefined;
 self.addEventListener('push', (e) => {
   let data = { title: 'Breeze', body: 'New message' };
-  try { data = e.data.json(); } catch {}
+  try { const j = e.data.json(); if (j && typeof j === 'object') data = j; } catch {}
   e.waitUntil(
-    self.registration.showNotification(data.title || 'Breeze', {
-      body: data.body || 'New message',
-      tag: data.tag || 'breeze-msg',
+    self.registration.showNotification(_pushText(data.title, 50) || 'Breeze', {
+      body: _pushText(data.body, 200) || 'New message',
+      tag: _pushTag(data.tag),
       icon: '/icon-192.png',
       badge: '/icon-192.png',
       vibrate: [100, 50, 100],
-      data: { url: data.url || '/', contactId: data.contactId },
+      data: { url: data.url || '/', contactId: _pushContactId(data.contactId) },
       renotify: true,
       // v3.6: Notification action buttons (Chrome 48+, Firefox 44+)
       actions: (navigator.language || '').startsWith('ja') ? [
@@ -178,10 +209,100 @@ self.addEventListener('sync', (e) => {
     e.waitUntil(
       clients.matchAll({ type: 'window' }).then(all => {
         for (const client of all) client.postMessage({ type: 'sync-outbox' });
+        // C11: with no app window open there is no one to receive sync-outbox, so the
+        // persisted outbox would sit in IDB until the next launch. Drain it here — the
+        // queued payloads are already E2E-encrypted envelopes, so the worker needs no
+        // keys; it re-POSTs them to the same endpoints the page would have used.
+        if (all.length === 0) return drainOutbox();
       })
     );
   }
 });
+
+// Open an existing app DB without ever creating one: no version is passed, and if the
+// open would trigger an upgrade (i.e. the DB does not exist yet — fresh device, never
+// onboarded) the transaction is aborted, which discards the would-be empty database
+// instead of leaving a store-less husk that would poison the page's own open() later.
+function idbOpenExisting(name) {
+  return new Promise((resolve) => {
+    let req;
+    try { req = indexedDB.open(name); } catch { resolve(null); return; }
+    req.onupgradeneeded = () => { try { req.transaction.abort(); } catch {} };
+    req.onerror = () => resolve(null);
+    req.onblocked = () => resolve(null);
+    req.onsuccess = () => resolve(req.result);
+  });
+}
+
+function idbGet(db, store, key) {
+  return new Promise((resolve) => {
+    try {
+      const req = db.transaction(store, 'readonly').objectStore(store).get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(undefined);
+    } catch { resolve(undefined); }
+  });
+}
+
+function idbPut(db, store, key, val) {
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(store, 'readwrite');
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+      tx.objectStore(store).put(val, key);
+    } catch { resolve(false); }
+  });
+}
+
+async function drainOutbox() {
+  // Multi-account: the first identity lives in 'breeze-messenger', extra accounts in
+  // 'breeze-acc-*' (each has its own retryQueue). databases() is Chromium-only; where
+  // it is absent we still drain the default DB, which covers single-account users.
+  const names = ['breeze-messenger'];
+  try {
+    const dbs = await indexedDB.databases?.();
+    if (dbs) for (const d of dbs) {
+      if (d.name && d.name.startsWith('breeze-acc-') && !names.includes(d.name)) names.push(d.name);
+    }
+  } catch {}
+  for (const name of names) {
+    const db = await idbOpenExisting(name);
+    if (!db) continue;
+    try {
+      const queue = await idbGet(db, 'settings', 'retryQueue');
+      if (!Array.isArray(queue) || !queue.length) continue;
+      const remaining = [];
+      for (const item of queue) {
+        if (!item || !item.to || !item.payload) continue;
+        let sent = false;
+        // Same order as the page: sealed sender first (metadata-hiding), then the
+        // standard relay. Rate-limit/5xx responses keep the item for the next sync.
+        try {
+          const r = await fetch('/api/sealed/send', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to: item.to, envelope: JSON.stringify(item.payload) }),
+          });
+          sent = r.ok;
+        } catch {}
+        if (!sent) {
+          try {
+            const r = await fetch('/api/msg/send', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(item.payload),
+            });
+            sent = r.ok;
+          } catch {}
+        }
+        if (!sent) remaining.push(item);
+      }
+      // Persist only the survivors (the page caps the queue at 50 — keep that bound).
+      if (remaining.length !== queue.length) {
+        await idbPut(db, 'settings', 'retryQueue', remaining.slice(0, 50));
+      }
+    } finally { db.close(); }
+  }
+}
 
 // v3.6: SKIP_WAITING message from client → activate new SW immediately
 self.addEventListener('message', (e) => {

@@ -1,8 +1,8 @@
 # Breeze — Hardening Plan
 
-Living plan for the code-review follow-up work. The app ships as a single
-bundle inside `breeze.zip` (the only tracked file); fixes are made by extracting
-the zip, editing the source, and re-packing it.
+Historical record of the original code-review follow-up work. (Written when the
+app shipped as `breeze.zip`; the repo now tracks sources directly — edit
+`index.html`/`_worker.js`/`sw.js` in place and run `./validate.sh`.)
 
 **Status legend:** ✅ done · 🛠️ in this iteration · ⏸️ deferred (needs protocol
 version bump or design/validation) · 🔎 needs more investigation

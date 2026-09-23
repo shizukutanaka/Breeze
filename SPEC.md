@@ -40,7 +40,7 @@ Breeze is a serverless, end-to-end encrypted P2P messenger deployed as a single 
 | desktop/* | — | Electron (Win/Mac/Linux) |
 | mobile/* | — | Capacitor (Android/iOS) |
 | dist/* | — | Flatpak/Snap packaging |
-| .github/* | — | GitHub Actions CI/CD |
+| .github/* | — | templates/meta only — CI/CD workflow pending activation (docs/CI-SETUP.md) |
 
 ---
 

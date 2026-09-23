@@ -54,4 +54,8 @@ desktop/
 | Variable | Description |
 |----------|-------------|
 | `BREEZE_URL` | Remote URL (default: load local index.html) |
+
+`BREEZE_URL`-unset runs load `index.html` from `file://` — API calls and invite links
+resolve against `PACKAGED_API_ORIGIN`/`SHARE_BASE` in `index.html` (default: the hosted
+breeze.pages.dev deployment).
 | `GH_TOKEN` | GitHub token for auto-update publishing |
