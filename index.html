@@ -11551,11 +11551,13 @@ async function initMessenger(dbName) {
       // Restore
       if (data.identity) await dbPut('identity', data.identity, 'keys');
       if (data.contacts) for (const c of data.contacts) {
-        // Validate required fields before storing — a malformed backup entry could corrupt the DB
+        // Validate + bound like restoreBackup — same record shape, same threat surface.
         if (typeof c?.id !== 'string' || !c.id || c.id.length > 64 ||
             typeof c?.pubB64 !== 'string' || !c.pubB64 || c.pubB64.length > 128 ||
-            !/^[A-Za-z0-9+/=]+$/.test(c.pubB64)) continue;
-        await dbPut('contacts', c);
+            !_isValidPubB64(c.pubB64)) continue;
+        const clean = { ...c, name: _safeDisplayName(c.name, 64) || 'Contact',
+          members: Array.isArray(c.members) ? safeMemberList(c.members) : c.members };
+        await dbPut('contacts', clean);
       }
       if (data.messages) for (const m of data.messages) await dbPut('messages', m);
       showToast(t('backupRestored'), 'success');
