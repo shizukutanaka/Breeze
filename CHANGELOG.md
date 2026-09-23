@@ -95,6 +95,18 @@ The endpoint-side verified-when-present auth was inert while clients never sent 
 
 # Changelog
 
+## Groups created by a v5 client locked out every legacy joiner — replaced the group-level v5 pin with per-member sticky caps (branch claude/nice-ride-T6yb0, 2026-09-23)
+
+vitest 1033 → **1037** (+4 sticky-caps mirror tests); Playwright E2E 68/69 → **69/69** (full suite, 6.9 min); `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash), `src/crypto/negotiate.js`, `tests/mirror-drift.test.js`, `CLAUDE.md`.
+
+The last E2E failure — "one legacy member keeps the whole group on the v3 fallback" — was a real protocol regression from merged commit `d738dd2`. Its goal was sound: `/group/info` is a relay-controlled roster, so a hostile relay could strip `caps` to make v5 members look legacy and silently push a group onto v3 static keys (no forward secrecy). Its mechanism wasn't: it pinned `groupV5 = true` *at group creation*, when the creator is the only member, and made `getGroupSenderKey` honor that pin over the actual roster. So every group a v5 client ever created stayed v5 regardless of who joined, and a genuinely older client that joined could never decrypt the creator's messages — breaking the AND rule ("a single legacy member keeps the whole group on v3") that CLAUDE.md's crypto status table documents. The test's black-box check still passed, because its "legacy" client is the same build with the flag flipped (it still has the v5 receive code); the IDB assertions caught what a real older client would have suffered.
+
+A group-level pin can't tell "a known v5 member's caps were stripped" (attack) from "a new member who never had v5 joined" (legitimate). Per-member state can. New `mergeStickyGroupCaps` (reference in `src/crypto/negotiate.js`, inline mirror `_mergeStickyGroupCaps`) runs at every roster write — the join refresh and the member poll. Once a member (same id **and** key) has advertised `group-v5`, a later roster omitting it is treated as a strip: the cap is kept and an audit entry records it (logged only when the roster is actually rewritten, not on every 5 s poll). A new member is taken at face value, so a legacy joiner still yields v3. All three group-level pins and `getGroupSenderKey`'s override are gone; the format is decided from the sticky roster. Known limit (same as before): a relay that strips a *new* member's caps from their very first appearance is indistinguishable client-side from a real legacy client.
+
+Four mirror-drift tests pin inline/reference parity on the strip, legacy-joiner, changed-key, and garbage-input cases; teeth-tested by removing the same-key check from the inline copy — the parity test fails. All 7 `group.spec.js` tests pass, including both-v5 still upgrading. `index.html` stays at 14,999 lines.
+
+---
+
 ## Six E2E tests fed addContact a key format the app never produces (branch claude/nice-ride-T6yb0, 2026-09-23)
 
 Playwright E2E 62/69 → **68/69**; `tests/e2e/commands.spec.js`, `tests/e2e/disappear.spec.js`, `tests/e2e/layout.spec.js`.

@@ -4732,6 +4732,18 @@ async function initMessenger(dbName) {
     const memberCapsList = (group?.members || []).filter(m => m.id !== myId).map(m => _parsePeerCaps(m));
     return _negotiateGroupCaps(localCaps, memberCapsList).useGroupV5;
   }
+  // Mirror of negotiate.js mergeStickyGroupCaps: a known member's (same id+key) group-v5 cap survives a relay roster that drops it (strip → no v3 downgrade); a NEW legacy joiner still holds the group on v3.
+  function _mergeStickyGroupCaps(prev, next) {
+    const had = new Map((Array.isArray(prev) ? prev : []).filter(m => m && typeof m.id === 'string' && Array.isArray(m.caps) && m.caps.includes(CAPS_GROUP_V5)).map(m => [m.id, m.pubB64]));
+    const stripped = [];
+    const members = (Array.isArray(next) ? next : []).map(m => {
+      if (!m || !had.has(m.id) || had.get(m.id) !== m.pubB64) return m;
+      const caps = Array.isArray(m.caps) ? m.caps.filter(c => typeof c === 'string') : [];
+      if (caps.includes(CAPS_GROUP_V5)) return m;
+      stripped.push(m.id); return { ...m, caps: [...caps, CAPS_GROUP_V5] };
+    });
+    return { members, stripped };
+  }
   function _concatBytes(parts) {
     const total = parts.reduce((n, p) => n + p.length, 0);
     const out = new Uint8Array(total);
@@ -5588,15 +5600,8 @@ async function initMessenger(dbName) {
       const stored = await dbGet('identity', 'gsk:' + groupId);
       if (stored) return stored;
       const group = await dbGet('contacts', groupId);
-      const freshV5 = _computeGroupV5(group || {});
-      // Pin once negotiated: a relay that strips member caps in /group/info could
-      // otherwise force my first send onto a static v3 key — losing forward secrecy
-      // silently. If v5 was ever negotiated, keep it and flag the downgrade attempt.
-      const useV5 = group?.groupV5 === true || freshV5;
-      if (group?.groupV5 === true && !freshV5) {
-        _dbg(null, 'group caps vanished after v5 pin — staying on v5 (tampered roster?)');
-        auditLog('security', `Group ${groupId} member caps disappeared after v5 was negotiated — staying on v5 (possible relay tampering)`);
-      }
+      // Roster caps are sticky per member (_mergeStickyGroupCaps): a relay strip can't downgrade known v5 members; a real legacy joiner still yields v3.
+      const useV5 = _computeGroupV5(group || {});
       if (group && group.groupV5 !== useV5) { group.groupV5 = useV5; await dbPut('contacts', group); }
       const rawBytes = crypto.getRandomValues(new Uint8Array(32));
       const key = useV5
@@ -9526,7 +9531,6 @@ async function initMessenger(dbName) {
       await dbPut('contacts', {
         id: groupId, name, isGroup: true, joinToken: data.token, createdBy: myId, // isGroupAdmin() needs createdBy or the creator fails their own /admin checks (E2E-found)
         members: [{ id: myId, pubB64: myPubB64, name: myName }],
-        groupV5: CONFIG.GROUP_RATCHET_V5 || undefined, // pin — see getGroupSenderKey (no other members yet)
         addedAt: Date.now(), unread: 0, pubB64: ''
       });
       await renderContacts();
@@ -9587,11 +9591,12 @@ async function initMessenger(dbName) {
       const existing = await dbGet('contacts', groupId);
       if (existing) {
         // Update members list + moderation metadata
-        existing.members = safeMemberList(data.members);
+        const sticky = _mergeStickyGroupCaps(existing.members, safeMemberList(data.members));
+        existing.members = sticky.members;
+        if (sticky.stripped.length) auditLog('security', `Group ${groupId}: roster dropped group-v5 for ${sticky.stripped.length} known member(s) — kept (possible relay tampering)`);
         if (typeof data.creatorId === 'string' && data.creatorId) existing.createdBy = data.creatorId;
         if (Array.isArray(data.admins)) existing.admins = data.admins.filter(id => typeof id === 'string' && id.length <= 64).slice(0, CONFIG.GROUP_MAX);
         if (typeof data.name === 'string' && data.name) existing.name = _safeDisplayName(data.name, 64);
-        if (existing.groupV5 !== true && _computeGroupV5(existing)) existing.groupV5 = true; // pin (see getGroupSenderKey)
         await dbPut('contacts', existing);
       } else {
         await dbPut('contacts', {
@@ -9642,7 +9647,8 @@ async function initMessenger(dbName) {
         if (!group) { clearInterval(poll); return; }
 
         const oldMembers = group.members || [];
-        const newMembers = safeMemberList(data.members);
+        const sticky = _mergeStickyGroupCaps(oldMembers, safeMemberList(data.members));
+        const newMembers = sticky.members;
         // Apply membership in BOTH directions — growth-only syncing meant a kicked or
         // departed member stayed in my roster forever, kept receiving my sends, and (when
         // the kicker's epoch rotation never reached me) kept decrypting them with the
@@ -9657,6 +9663,7 @@ async function initMessenger(dbName) {
           (typeof data.name === 'string' && data.name && group.name !== data.name);
         if (membersChanged || metaChanged) {
           if (membersChanged) group.members = newMembers;
+          if (membersChanged && sticky.stripped.length) auditLog('security', `Group ${groupId}: roster dropped group-v5 for ${sticky.stripped.length} known member(s) — kept (possible relay tampering)`);
           if (typeof data.creatorId === 'string' && data.creatorId) group.createdBy = data.creatorId;
           if (Array.isArray(data.admins)) group.admins = data.admins.filter(id => typeof id === 'string' && id.length <= 64).slice(0, CONFIG.GROUP_MAX);
           if (Array.isArray(data.banned)) group.bannedIds = data.banned.filter(id => typeof id === 'string' && id.length <= 64).slice(0, CONFIG.GROUP_MAX);
@@ -9676,13 +9683,6 @@ async function initMessenger(dbName) {
             if (!(await dbGet('contacts', m.id))) await addContact(m.pubB64, m.name);
           }
           renderContacts();
-        }
-        // Pin the negotiated group format as soon as the roster says all-v5 — caps can
-        // appear/disappear without membership churn (join-time refresh), and pinning
-        // pre-first-send closes the relay strip-caps → silent v3 downgrade window.
-        if (group.groupV5 !== true && _computeGroupV5(group)) {
-          group.groupV5 = true;
-          await dbPut('contacts', group);
         }
       } catch(e) { _dbg(e); }
     }, 5000);

@@ -28,7 +28,7 @@ import { createAtRest } from '../src/crypto/atrest.js';
 import { makeChallengeString, solve as powSolve, verify as powVerify } from '../src/crypto/pow.js';
 import { createRatchet } from '../src/crypto/ratchet.js';
 import { checkRollover, auditBundle, appendChainEntry } from '../src/crypto/ktlog.js';
-import { negotiateGroup } from '../src/crypto/negotiate.js';
+import { negotiateGroup, mergeStickyGroupCaps } from '../src/crypto/negotiate.js';
 import { createFranking } from '../src/crypto/franking.js';
 import { sealMeta as refSealMeta, unsealMeta as refUnsealMeta } from '../src/crypto/seal.js';
 
@@ -522,7 +522,7 @@ function makeX3dhInline(myKeys, config, myId) {
   const factory = new Function(
     'crypto', 'CONFIG', '_hasX25519', 'dbGet', 'dbPut', '_dbg', 'hkdf', 'arr', 'u8', 'myKeys', 'myId',
     html.slice(x3s, x3e) +
-      '\nreturn { genRatchetKey, ecdhBits, _x3dhInitiator, _x3dhResponder, _parsePeerCaps, _peerSupportsX3dhV5, _negotiateGroupCaps, _computeGroupV5, _importEcdhPriv, _loadSpkPriv, _resolveOtpPriv, _bootstrapResponderSessionV5 };',
+      '\nreturn { genRatchetKey, ecdhBits, _x3dhInitiator, _x3dhResponder, _parsePeerCaps, _peerSupportsX3dhV5, _negotiateGroupCaps, _computeGroupV5, _mergeStickyGroupCaps, _importEcdhPriv, _loadSpkPriv, _resolveOtpPriv, _bootstrapResponderSessionV5 };',
   );
   const api = factory(
     globalThis.crypto, config || {}, false /* P-256, matches refR below for determinism */,
@@ -660,6 +660,46 @@ describe('getGroupSenderKey freezes format from the negotiated decision, not the
     expect(key.v).toBeUndefined();
     expect(Array.isArray(key.raw)).toBe(true);
     expect(inline.store.get('g2').groupV5).toBe(false);
+  });
+});
+
+// Sticky per-member caps (replaced a group-level "pin v5 once true" that locked legacy joiners
+// out of every group a v5 client created). Both copies must agree on every case below: a drift
+// either re-opens the relay strip-caps downgrade or re-breaks the legacy-joiner AND rule.
+describe('Group sticky-caps mirror — inline _mergeStickyGroupCaps vs reference mergeStickyGroupCaps', () => {
+  const inline = () => makeX3dhInline(null, { GROUP_RATCHET_V5: true }, 'me');
+  const both = (prev, next) => {
+    const a = inline()._mergeStickyGroupCaps(prev, next), b = mergeStickyGroupCaps(prev, next);
+    expect(a).toEqual(b);
+    return b;
+  };
+  const V5 = (id, extra = []) => ({ id, pubB64: id + 'KEY', caps: ['group-v5', ...extra] });
+  const LEGACY = (id) => ({ id, pubB64: id + 'KEY' });
+
+  it('relay strips a KNOWN v5 member\'s caps -> kept, reported, group stays v5', () => {
+    const r = both([V5('a'), V5('b')], [LEGACY('a'), V5('b')]);
+    expect(r.stripped).toEqual(['a']);
+    expect(r.members[0].caps).toContain('group-v5');
+    expect(inline()._computeGroupV5({ members: r.members })).toBe(true);
+  });
+
+  it('a NEW legacy joiner is taken at face value -> group drops to v3 (the AND rule)', () => {
+    const r = both([V5('a')], [V5('a'), LEGACY('newbie')]);
+    expect(r.stripped).toEqual([]);
+    expect(inline()._computeGroupV5({ members: r.members })).toBe(false);
+  });
+
+  it('same id but a DIFFERENT key is not the same member -> no stickiness', () => {
+    const r = both([V5('a')], [{ id: 'a', pubB64: 'OTHERKEY' }]);
+    expect(r.stripped).toEqual([]);
+    expect(r.members[0].caps).toBeUndefined();
+  });
+
+  it('other caps are preserved when group-v5 is restored; garbage inputs fail safe', () => {
+    const r = both([V5('a', ['franking'])], [{ ...LEGACY('a'), caps: ['franking', 7] }]);
+    expect(r.members[0].caps).toEqual(['franking', 'group-v5']);
+    expect(both(null, undefined)).toEqual({ members: [], stripped: [] });
+    expect(both([{ id: 'x' }], [null, V5('x')]).members[0]).toBeNull();
   });
 });
 

@@ -63,6 +63,30 @@ export function negotiate(localCaps, peerCaps) {
   };
 }
 
+// Sticky per-member group caps. The roster (/group/info) is relay-controlled, so a hostile
+// relay can strip `caps` to make v5 members look legacy and push negotiateGroup() onto the
+// v3 static-key path (no forward secrecy). Remember caps PER MEMBER: once a member (same id
+// AND same key) has advertised group-v5, a later roster omitting it is treated as a strip —
+// the cap is kept and the id reported so the caller can audit-log it. A NEW member who never
+// advertised it is taken at face value, so a genuinely legacy joiner still holds the group on
+// v3 (negotiateGroup's AND rule, below). A group-level "pin v5 once true" can't make that distinction: it
+// locks legacy joiners out of every group a v5 client ever created.
+export function mergeStickyGroupCaps(prevMembers = [], nextMembers = []) {
+  const had = new Map();
+  for (const m of Array.isArray(prevMembers) ? prevMembers : []) {
+    if (m && typeof m.id === 'string' && Array.isArray(m.caps) && m.caps.includes(CAPS.GROUP_V5)) had.set(m.id, m.pubB64);
+  }
+  const stripped = [];
+  const members = (Array.isArray(nextMembers) ? nextMembers : []).map((m) => {
+    if (!m || !had.has(m.id) || had.get(m.id) !== m.pubB64) return m;
+    const caps = Array.isArray(m.caps) ? m.caps.filter((c) => typeof c === 'string') : [];
+    if (caps.includes(CAPS.GROUP_V5)) return m;
+    stripped.push(m.id);
+    return { ...m, caps: [...caps, CAPS.GROUP_V5] };
+  });
+  return { members, stripped };
+}
+
 // Group capability floor: a group feature is enabled only when EVERY member — us plus
 // each peer in `memberCapsList` (e.g. each member's presence `caps` array) — advertises
 // it. This is the N-party generalization of negotiate()'s AND rule: a single legacy
