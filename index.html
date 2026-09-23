@@ -5929,6 +5929,12 @@ async function initMessenger(dbName) {
       // Clear incomplete binary file transfers — their chunk buffers belong to this
       // account's peer sessions and must not survive into the next account's context.
       for (const id in _fileChunks) delete _fileChunks[id];
+      // Close the BroadcastChannel: it is created per initMessenger call but has no
+      // AbortSignal hook, so without close() every account switch leaks one channel +
+      // handler — and the stale handler keeps acting on this account's dead state:
+      // 'new-message' appends into the shared (now new-account) DOM when the old
+      // activeContact id collides, 'contact-update' re-renders stale contacts.
+      try { if (_tabChannel) { _tabChannel.onmessage = null; _tabChannel.close(); } } catch(e) { _dbg(e); }
     };
   }
 
