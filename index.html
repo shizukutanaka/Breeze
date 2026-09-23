@@ -13545,7 +13545,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const d = document.createElement('div');
       d.className = 'cmd-panel-mono';
       const addUrl = SHARE_BASE + '?add=' + myPubB64 + '&name=' + encodeURIComponent(myName);
-      const aliasUrl = myAlias ? SHARE_BASE + '?add=' + myAlias : '';
+      const aliasUrl = myAlias ? SHARE_BASE + '?add=@' + myAlias : '';
       safeSetHTML(d, [
         '<b class="i-g">' + t('cmdMyIdentity') + '</b>',
         t('cmdLblName') + ': <b>' + esc(myName) + '</b>',
