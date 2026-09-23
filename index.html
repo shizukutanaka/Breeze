@@ -2906,10 +2906,12 @@ if (joinToken && API) {
 
 // v3.6: Web Share Target handler — receive shared text/URLs from other apps
 if (P.get('text') || P.get('url') || P.get('title')) {
-  const sharedText = [P.get('title'), P.get('text'), P.get('url')].filter(Boolean).join('\n');
+  const sharedText = [P.get('title'), P.get('text'), P.get('url')].filter(Boolean).join('\n').slice(0, 64 * 1024);
   if (sharedText) {
-    // Store shared text; paste into input when conversation is opened
-    sessionStorage.setItem('brz-shared-text', sharedText);
+    // Store shared text; paste into input when conversation is opened. Bounded: the
+    // sharing app/page controls these params — a multi-MB share would write a giant
+    // sessionStorage entry and paste it into the input on every conversation open.
+    try { sessionStorage.setItem('brz-shared-text', sharedText); } catch (_e) { _dbg(_e, 'share-target'); }
     history.replaceState(null, '', '/');
     // If already in a conversation, paste immediately
     setTimeout(() => {
