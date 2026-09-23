@@ -7062,7 +7062,7 @@ async function initMessenger(dbName) {
   // v3.4: Track blob URLs for memory leak prevention
   const _blobUrls = new Set();
 
-  function appendMsg(text, isMine, ts, box, fileData, meta) {
+  function appendMsg(text, isMine, ts, box, fileData, meta) { if (_ac.signal.aborted) return; // in-flight wire arrivals must not land the dead account's messages in the live view
     meta = meta || {};
     box = box || _DOM.get('msg-messages');
 
@@ -8829,7 +8829,7 @@ async function initMessenger(dbName) {
   }
 
   // v3.3: AI — Smart Reply (show suggestions after receiving a message)
-  function showSmartReplies(lastMsgText) {
+  function showSmartReplies(lastMsgText) { if (_ac.signal.aborted) return; // dead-context arrivals must not write reply chips into the shared composer
     const bar = _DOM.get('smart-reply-bar');
     if (!bar) return;
     // Show local replies immediately (no latency)
