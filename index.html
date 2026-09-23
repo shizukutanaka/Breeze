@@ -9747,12 +9747,13 @@ async function initMessenger(dbName) {
   // v3.3: Adaptive polling — fast when active, slow when background
   let _pollTimer = null;
   function schedulePoll() {
+    if (_ac.signal.aborted) return; // dead context must not re-arm the poll chain
     if (_pollTimer) clearTimeout(_pollTimer);
     // v3.5: Adaptive interval — slower on poor connections (Skill Guide Pattern 4)
     const baseInterval = document.hidden ? CONFIG.POLL_SLOW_MS : CONFIG.POLL_FAST_MS;
     const interval = Math.max(baseInterval, _adaptiveConfig.pollInterval);
     _pollTimer = setTimeout(async () => {
-      if (!_isOffline && API) {
+      if (!_isOffline && API && !_ac.signal.aborted) {
         try {
           const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: _lastPollTs, ...(await _ownerAuth('msg-poll')) });
           if (resp.ok) {
@@ -9790,7 +9791,7 @@ async function initMessenger(dbName) {
               } catch(e) { _dbg(e, 'sealed-parse'); }
             }
             // v3.6: ACK after successful processing (crash-safe: server keeps 5min grace)
-            if (sealedProcessed > 0) _ownerAuth('sealed-ack').then(a => postAPIRaw('/sealed/ack', { id: myId, ...a })).catch(e => _dbg(e, 'sealed-ack'));
+            if (sealedProcessed > 0 && !_ac.signal.aborted) _ownerAuth('sealed-ack').then(a => postAPIRaw('/sealed/ack', { id: myId, ...a })).catch(e => _dbg(e, 'sealed-ack'));
           }
           checkAndReplenishPreKeys();
         } catch(e) { _dbg(e); }
