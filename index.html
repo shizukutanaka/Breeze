@@ -2863,6 +2863,7 @@ if (P.has('terms') || P.has('privacy') || P.has('legal')) {
   else if (P.has('legal')) _DOM.get('legal-terms').classList.remove('hidden');
 } else {
   show('v-msg');
+  history.replaceState(null, '', location.pathname); // consume deep-link params once: ?add/?open/?settings/?join otherwise linger in the address bar + history all session (added contact key / opened conversation leak via screenshot/share) — P already holds a snapshot; ?join (post-success) and ?text precedents scrub the same way
   initMessenger().catch(e => {
     _dbg(e, 'initMessenger-fatal');
     const d = document.createElement('div');
