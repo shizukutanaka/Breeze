@@ -7761,7 +7761,8 @@ async function initMessenger(dbName) {
     try {  
       if (!await showConfirm(t('confirmDeleteMsg'), { danger: true, okText: t('delete') })) return;
       const stored = await dbGet('messages', msg.msgId);
-      if (stored) { stored.deleted = true; stored.text = ''; await dbPut('messages', stored); }
+      // A tombstone must drop isPoll — else isPoll+'' makes every JSON.parse(m.text) poll lookup throw.
+      if (stored) { stored.deleted = true; stored.text = ''; delete stored.isPoll; await dbPut('messages', stored); }
       auditLog('message', 'Deleted message ' + msg.msgId.slice(0, 12));
       const el = document.querySelector(`[data-msgid="${msg.msgId}"]`);
       if (el) safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>');
@@ -9864,7 +9865,7 @@ async function initMessenger(dbName) {
             const el = document.querySelector(`[data-msgid="${smId}"]`);
             if (el) { const tm = new Date(signal.ts || msg.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); safeSetHTML(el, renderLinks(renderMarkdown(esc(stored.text))) + ' <span class="i-edited">' + t('edited') + '</span><span class="ts">' + tm + '</span>'); }
           } else if (signal.type === 'delete') {
-            stored.deleted = true; stored.text = ''; await dbPut('messages', stored);
+            stored.deleted = true; stored.text = ''; delete stored.isPoll; await dbPut('messages', stored);
             const el = document.querySelector(`[data-msgid="${smId}"]`);
             if (el) safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>');
           } else if (signal.type === 'reaction' && typeof signal.emoji === 'string' && signal.emoji.length <= 64) {
@@ -10109,7 +10110,7 @@ async function initMessenger(dbName) {
           } else if (signal.type === 'delete') {
             const stored = await dbGet('messages', targetMsgId);
             const _ok = _ownGroupMsg(stored);
-            if (_ok) { stored.deleted = true; stored.text = ''; await dbPut('messages', stored); }
+            if (_ok) { stored.deleted = true; stored.text = ''; delete stored.isPoll; await dbPut('messages', stored); }
             const el = document.querySelector(`[data-msgid="${targetMsgId}"]`);
             if (el && _ok) safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>');
           } else if (signal.type === 'reaction') {
@@ -10304,7 +10305,7 @@ async function initMessenger(dbName) {
           const stored = await dbGet('messages', _smId);
           // Only allow deleting messages not authored by us — contact cannot remote-delete our outgoing messages
           const _okDel = stored && !stored.mine && stored.contactId === contactId;
-          if (_okDel) { stored.deleted = true; stored.text = ''; await dbPut('messages', stored); }
+          if (_okDel) { stored.deleted = true; stored.text = ''; delete stored.isPoll; await dbPut('messages', stored); }
           const el = document.querySelector(`[data-msgid="${_smId}"]`);
           if (el && _okDel) safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>');
         } else if (signal.type === 'reaction') {
