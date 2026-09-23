@@ -5929,6 +5929,11 @@ async function initMessenger(dbName) {
       // Clear incomplete binary file transfers — their chunk buffers belong to this
       // account's peer sessions and must not survive into the next account's context.
       for (const id in _fileChunks) delete _fileChunks[id];
+      // Abort live speech recognition: it is created per initMessenger call and holds
+      // the mic open — a running session would keep transcribing into the shared
+      // #msg-input under the next account (and each switch stacked one more recognizer).
+      try { _sttRec?.abort(); } catch(e) { _dbg(e); }
+      _sttRec = null;
     };
   }
 
@@ -8791,10 +8796,10 @@ async function initMessenger(dbName) {
   // v3.3: AI — Speech-to-Text (Web Speech API)
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   const sttBtn = _DOM.get('b-msg-stt');
-  let _sttActive = false;
+  let _sttActive = false, _sttRec = null;
   if (SpeechRecognition && sttBtn) {
     sttBtn.classList.remove('hidden');
-    const recognition = new SpeechRecognition();
+    const recognition = _sttRec = new SpeechRecognition();
     recognition.continuous = false;
     recognition.interimResults = true;
     recognition.lang = navigator.language || 'en-US';
