@@ -10948,9 +10948,10 @@ async function initMessenger(dbName) {
     };
     beat();
     function schedulePresence() {
+      if (_ac.signal.aborted) return; // dead context: never re-arm the presence chain
       if (_presenceTimer) clearTimeout(_presenceTimer);
       const interval = document.hidden ? CONFIG.PRESENCE_BG_INTERVAL_MS : CONFIG.PRESENCE_INTERVAL_MS;
-      _presenceTimer = setTimeout(() => { beat(); if (activeContact) updateConvStatus(activeContact); schedulePresence(); }, interval);
+      _presenceTimer = setTimeout(() => { if (_ac.signal.aborted) return; beat(); if (activeContact) updateConvStatus(activeContact); schedulePresence(); }, interval);
     }
     schedulePresence();
     document.addEventListener('visibilitychange', () => { if (!document.hidden) { beat(); schedulePresence(); } }, { signal: _ac.signal });
