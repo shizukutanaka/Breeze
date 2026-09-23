@@ -4058,7 +4058,12 @@ async function initMessenger(dbName) {
           _isLeaderTab = !!lock;
           _dbg(null, lock ? 'Tab is leader — will run poll loop' : 'Tab is follower — receiving via BroadcastChannel');
           decided();
-          return lock ? new Promise(() => {}) : undefined; // hold until this tab goes away
+          // Hold for THIS account's session only: Web Locks survive the dead closure
+          // (they release on callback resolution or document unload — account switch is
+          // neither), so a never-resolving hold would keep 'breeze-leader' locked and
+          // leave the next account a permanent follower that never polls. Tie the hold
+          // to _ac — _messengerCleanup aborts it, releasing the lock for the next init.
+          return lock ? new Promise((release) => { _ac.signal.addEventListener('abort', release, { once: true }); }) : undefined;
         }).catch(() => { _isLeaderTab = true; decided(); });
       });
     } catch { _isLeaderTab = true; return; }
@@ -4070,7 +4075,7 @@ async function initMessenger(dbName) {
         _isLeaderTab = true;
         _dbg(null, 'Promoted to leader — starting poll loop');
         try { startPolling(); } catch (e) { _dbg(e, 'promote-poll'); }
-        return new Promise(() => {});
+        return new Promise((release) => { _ac.signal.addEventListener('abort', release, { once: true }); }); // session-scoped hold — see the ifAvailable branch
       }).catch(e => _dbg(e, 'leader-retry'));
     }
   }
