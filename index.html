@@ -2839,7 +2839,7 @@ if (P.has('drop')) {
       const resp = await postAPIRaw('/drop/read', { id: dropId });
       if (!resp || resp.status === 404) { _DOM.get('drop-status').textContent = t('dropReadExpired'); return; }
       if (!resp.ok) throw new Error('Server error');
-      const data = await resp.json();
+      const data = await _safeJson(resp, 1024 * 1024); // drop ct ≤100KB
       // Decrypt
       const combined = Uint8Array.from(atob(data.ct), c => c.charCodeAt(0));
       const iv = combined.slice(0, 12);
@@ -2890,7 +2890,7 @@ try { _userId = localStorage.getItem('brz-uid') || ''; } catch(e) { _dbg(e); }
 // If arriving via ?join=token, show group info on setup screen
 if (joinToken && API) {
   postAPIRaw('/group/info', { token: joinToken })
-    .then(r => r.ok ? r.json() : null)
+    .then(r => r.ok ? _safeJson(r, 1024 * 1024) : null)
     .then(data => {
       if (!data) return;
       const title = _DOM.get('msg-setup-title');
@@ -3197,6 +3197,11 @@ const _replayCache = {
 // API helper (DRY for 48+ POST calls): returns Response, not auto-parsed, so callers can check .ok/.status; opts forwarded for signal etc.
 function postAPIRaw(path, body, opts = {}) {
   return fetchT(API + path, { method: 'POST', headers: _H, body: JSON.stringify(body), ...opts }).catch(() => null);
+}
+// Bounded resp.json() for recurring polls — a hostile relay answering every poll with a huge body would be materialized fully, per cycle (sw.js safeAppUrl's threat model).
+async function _safeJson(resp, maxBytes) {
+  if (parseInt(resp.headers.get('Content-Length') || '0') > maxBytes) throw new Error('response too large');
+  const t = await resp.text(); if (t.length > maxBytes) throw new Error('response too large'); return JSON.parse(t);
 }
 
 // ═══ Title helper — Account name + unread count ═══
@@ -3864,7 +3869,7 @@ async function initMessenger(dbName) {
         _serverOk = true;
         // v3.6: Clock drift detection + correction (critical for ±5min anti-replay)
         try {
-          const health = await r.json();
+          const health = await _safeJson(r, 256 * 1024);
           if (health.serverTime) {
             const rawDrift = health.serverTime - Date.now();
             // Cap to ±1 hour: beyond that the server value is implausible (broken clock or
@@ -3892,7 +3897,7 @@ async function initMessenger(dbName) {
         } catch {}
       }
       else {
-        const d = await r.json().catch(() => ({}));
+        const d = await _safeJson(r, 256 * 1024).catch(() => ({}));
         if (!d.kv) {
           const banner = _DOM.get('msg-server-banner');
           if (banner) {
@@ -4565,7 +4570,7 @@ async function initMessenger(dbName) {
         if (aliasSig) { body.userId = myId; body.ts = aliasTs; body.sig = aliasSig; }
         const resp = await postAPIRaw('/alias/set', body);
         if (resp.ok) registeredAlias = alias;
-        else { const d = await resp.json().catch(() => ({})); showToast(d.error || t('toastAliasTaken'), 'error'); }
+        else { const d = await _safeJson(resp, 256 * 1024).catch(() => ({})); showToast(d.error || t('toastAliasTaken'), 'error'); }
       } catch(e) { _dbg(e); }
       if (registeredAlias) {
         myAlias = registeredAlias;
@@ -4800,7 +4805,7 @@ async function initMessenger(dbName) {
     try {
       const resp = await postAPIRaw('/prekey/fetch', { userId: peerPubB64.slice(0, 12) });
       if (!resp.ok) return null;
-      const bundle = await resp.json();
+      const bundle = await _safeJson(resp, 1024 * 1024);
       if (!_peerSupportsX3dhV5(bundle)) return null;
       if (!bundle.identityKey || !bundle.edIdentityKey || !bundle.signedPreKey || !bundle.signedPreKeySig) return null;
       const spkPubPeer = Uint8Array.from(atob(bundle.signedPreKey), c => c.charCodeAt(0));
@@ -5246,7 +5251,7 @@ async function initMessenger(dbName) {
     try {
       const resp = await postAPIRaw('/device/list', { accountId });
       if (!resp.ok) return null;
-      const rec = await resp.json();
+      const rec = await _safeJson(resp, 1024 * 1024);
       if (!rec || !rec.root || !Array.isArray(rec.devices)) return null;
       if (rootPubB64 && rec.root !== rootPubB64) return null; // registry for a different root
       // Recompute the signed digest and verify against the ROOT's registered signing key.
@@ -5369,7 +5374,7 @@ async function initMessenger(dbName) {
       const c = _peerCapsCache.get(peerId);
       if (c && Date.now() - c.ts < 5 * MS.MIN) return c.caps;
       const resp = await postAPIRaw('/prekey/status', { userId: peerId });
-      const data = resp?.ok ? await resp.json() : null;
+      const data = resp?.ok ? await _safeJson(resp, 256 * 1024) : null;
       const caps = Array.isArray(data?.caps) ? data.caps.filter(x => typeof x === 'string') : [];
       _peerCapsCache.set(peerId, { caps, ts: Date.now() });
       return caps;
@@ -5435,7 +5440,7 @@ async function initMessenger(dbName) {
     try {
       const resp = await postAPIRaw('/sealed/send', { to, envelope: JSON.stringify(wire) });
       if (resp.ok) {
-        const data = await resp.json().catch(() => ({}));
+        const data = await _safeJson(resp, 256 * 1024).catch(() => ({}));
         if (data.ack && msgTs) updateMsgStatus(msgTs, 'delivered', _conv);
         return;
       }
@@ -5444,7 +5449,7 @@ async function initMessenger(dbName) {
     try {
       const resp = await postAPIRaw('/msg/send', payload);
       if (resp.ok) {
-        const data = await resp.json().catch(() => ({}));
+        const data = await _safeJson(resp, 256 * 1024).catch(() => ({}));
         if (data.ack && msgTs) updateMsgStatus(msgTs, 'delivered', _conv);
         return;
       }
@@ -7635,7 +7640,7 @@ async function initMessenger(dbName) {
     if (!await showConfirm(t('confirmReport'), { danger: true, okText: t('report') })) return;
     try {
       const resp = await postAPIRaw('/abuse/report', { frankId: msg.frankId, message: msg.text, opening: msg.frankOpening });
-      const data = await resp.json().catch(() => ({}));
+      const data = await _safeJson(resp, 256 * 1024).catch(() => ({}));
       showToast(t(resp.ok && data.verified ? 'toastReported' : 'toastReportFail'), resp.ok && data.verified ? 'success' : 'error');
     } catch(e) { _dbg(e, 'report'); showToast(t('toastReportFail'), 'error'); }
   }
@@ -9455,7 +9460,7 @@ async function initMessenger(dbName) {
       const chunk = memberIds.slice(i, i + 10);
       try {
         const resp = await postAPIRaw('/prekey/fetch/batch', { userIds: chunk });
-        if (resp.ok) { const { results } = await resp.json(); for (const id of chunk) out[id] = _parsePeerCaps(results?.[id]); }
+        if (resp.ok) { const { results } = await _safeJson(resp, 1024 * 1024); for (const id of chunk) out[id] = _parsePeerCaps(results?.[id]); }
       } catch(_e) { _dbg(_e, 'fetch-member-caps-batch'); }
     }
     for (const id of memberIds) if (!(id in out)) out[id] = [];
@@ -9507,7 +9512,7 @@ async function initMessenger(dbName) {
     try {
       const resp = await postAPIRaw('/group/create', { name, creatorId: myId, creatorPub: myPubB64, creatorName: myName, caps: CONFIG.GROUP_RATCHET_V5 ? [CAPS_GROUP_V5] : undefined });
       if (!resp.ok) { showToast(t('toastGroupFail'), 'error'); return; }
-      const data = await resp.json();
+      const data = await _safeJson(resp, 256 * 1024);
       const groupId = 'g_' + data.token;
       await dbPut('contacts', {
         id: groupId, name, isGroup: true, joinToken: data.token, createdBy: myId, // isGroupAdmin() needs createdBy or the creator fails their own /admin checks (E2E-found)
@@ -9562,11 +9567,11 @@ async function initMessenger(dbName) {
       // Join the group on server
       const resp = await postAPIRaw('/group/join', { token, memberId: myId, memberPub: myPubB64, memberName: myName, caps: CONFIG.GROUP_RATCHET_V5 ? [CAPS_GROUP_V5] : undefined });
       if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
+        const err = await _safeJson(resp, 256 * 1024).catch(() => ({}));
         showToast(err.error || t('toastJoinFail'), 'error');
         return;
       }
-      const data = await resp.json();
+      const data = await _safeJson(resp, 1024 * 1024);
 
       // Create local group contact
       const groupId = 'g_' + token;
@@ -9722,7 +9727,7 @@ async function initMessenger(dbName) {
       // recover from: it returned on !ok, so a 30-day-quiet identity stayed permanently
       // unreachable to every new contact. Re-upload is exactly the cure.
       const expired = resp && resp.status === 404;
-      const st = (resp && resp.ok) ? await resp.json().catch(() => null) : null;
+      const st = (resp && resp.ok) ? await _safeJson(resp, 256 * 1024).catch(() => null) : null;
       if (!expired && !st) return; // network/other error: try again next cycle
       if (expired || st.replenishOTP || st.replenishSPK) {
         const freshBundle = await generatePreKeyBundle();
@@ -10926,7 +10931,7 @@ async function initMessenger(dbName) {
         const presTs = Date.now();
         const presSig = await signMessage(`breeze-presence:${myId}:${presTs}`);
         const resp = await postAPIRaw('/presence', { id: myId, pub: myPubB64, name: myName, inst: inst.v, instSig, ts: presTs, sig: presSig });
-        const data = resp?.ok ? await resp.json().catch(() => null) : null;
+        const data = resp?.ok ? await _safeJson(resp, 256 * 1024).catch(() => null) : null;
         if (data?.conflict && Date.now() - _cloneWarnedAt > 5 * MS.MIN) {
           _cloneWarnedAt = Date.now();
           showToast(t('toastIdentityClone'), 'error', 10000);
@@ -11263,7 +11268,7 @@ async function initMessenger(dbName) {
       try {
         const resp = await postAPIRaw('/alias/get', { alias: input.slice(1) });
         if (resp.ok) {
-          const data = await resp.json();
+          const data = await _safeJson(resp, 256 * 1024);
           pubB64 = data.pub; name = data.name || name; aliasResolved = true;
         } else { showToast(t('toastAliasNotFound'), 'error'); return; }
       } catch(e) { _dbg(e,'alias'); showToast(t('toastAliasResolveFail'), 'error'); return; }
@@ -11422,7 +11427,7 @@ async function initMessenger(dbName) {
       if (perm !== 'granted') return;
       // VAPID public key from server health endpoint
       const healthResp = await fetchT(API + '/health').catch(() => null);
-      const health = healthResp?.ok ? await healthResp.json().catch(() => null) : null;
+      const health = healthResp?.ok ? await _safeJson(healthResp, 256 * 1024).catch(() => null) : null;
       if (!health?.vapidPublicKey) { _dbg(null, 'No VAPID key'); return; }
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
@@ -11456,7 +11461,7 @@ async function initMessenger(dbName) {
     try {
       const resp = await postAPIRaw('/turn', { userId: myId, ...(await _ownerAuth('turn')) });
       if (resp.ok) {
-        _turnCredential = await resp.json();
+        _turnCredential = await _safeJson(resp, 256 * 1024);
         _dbg(null, 'TURN credentials obtained');
         // I19: relay-only by default when the operator provisioned TURN capacity —
         // srflx candidates leak the public IP to the peer. The shared openrelay
@@ -11507,7 +11512,7 @@ async function initMessenger(dbName) {
           // 90 days after its last upload and nothing renews it, so "I have a backup" quietly
           // stops being true. Say the date instead of letting the user find out on the day
           // they actually need it.
-          const info = await resp.json().catch(() => null);
+          const info = await _safeJson(resp, 256 * 1024).catch(() => null);
           showToast(info?.expiresAt
             ? t('backupCreatedUntil', new Date(info.expiresAt).toLocaleDateString())
             : t('backupCreated'), 'success');
@@ -11527,7 +11532,7 @@ async function initMessenger(dbName) {
       if (dlSig) dlBody.sig = dlSig;
       const resp = await postAPIRaw('/backup/download', dlBody);
       if (!resp.ok) { showToast(t('backupFailed'), 'error'); return; }
-      const { backup } = await resp.json();
+      const { backup } = await _safeJson(resp, 8 * 1024 * 1024);
       const b = JSON.parse(backup);
       const salt = u8(b.s); const iv = u8(b.i); const ct = u8(b.d);
       // Read iteration count from the backup. New backups store 600k; old backups have no
@@ -11824,7 +11829,7 @@ async function initMessenger(dbName) {
     try {
       const resp = await postAPIRaw('/ktlog/get', { userId: contact.id });
       if (!resp.ok) return null;
-      const { log } = await resp.json();
+      const { log } = await _safeJson(resp, 1024 * 1024);
       const stored = (await dbGet('identity', 'ktIk:' + contact.id)) ?? contact.pubB64;
       const audit = await _auditKeyHistory(stored, log);
       if (audit.verdict === 'ok' || audit.verdict === 'new') await dbPut('identity', contact.pubB64, 'ktIk:' + contact.id);
@@ -12701,7 +12706,7 @@ async function initMessenger(dbName) {
                 const kickResp = await postAPIRaw('/group/kick', kickBody);
                 kicked = kickResp.ok;
                 if (kickResp.ok) {
-                  const kickData = await kickResp.json().catch(() => ({}));
+                  const kickData = await _safeJson(kickResp, 256 * 1024).catch(() => ({}));
                   newEpoch = (typeof kickData.epoch === 'number') ? kickData.epoch : null;
                 }
               } catch(e) { _dbg(e, 'server-kick'); }
@@ -13842,7 +13847,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         try {
           const resp = await postAPIRaw('/online', {});
           if (resp.ok) {
-            const data = await resp.json();
+            const data = await _safeJson(resp, 256 * 1024);
             const peerCount = Object.values(peers).filter(p => p.connected).length;
             d.textContent = t('uiOnlineStatus', data.online, peerCount);
           } else { d.textContent = t('uiFetchOnlineFail'); }
@@ -14273,7 +14278,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       if (rootPub === myPubB64) { showToast(t('devSelfLink'), 'error'); return; }
       try {
         const resp = await postAPIRaw('/device/list', { accountId: rootPub.slice(0, 12) });
-        const rec = resp?.ok ? await resp.json() : null;
+        const rec = resp?.ok ? await _safeJson(resp, 1024 * 1024) : null;
         if (!rec?.devices || rec.root !== rootPub) { showToast(t('devNotListed'), 'error'); return; }
         if (!rec.devices.some(d => d.pub === myPubB64)) { showToast(t('devNotListed'), 'error'); return; }
         // rootEd rides OUTSIDE the signed blob — a relay could swap in its own Ed key and
@@ -14372,7 +14377,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
               } catch(relErr) { _dbg(relErr, 'alias-release'); }
             }
           } else {
-            const d = await resp.json().catch(() => ({}));
+            const d = await _safeJson(resp, 256 * 1024).catch(() => ({}));
             showToast(d.error || t('toastAliasTaken'), 'error');
           }
         } catch(er) { showToast(t('toastServerError'), 'error'); _dbg(er); }
