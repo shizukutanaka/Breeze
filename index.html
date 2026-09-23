@@ -4392,7 +4392,7 @@ async function initMessenger(dbName) {
   // v3.3: ENTERPRISE — REMOTE WIPE
   // Check server for wipe signal; if found, destroy all local data
   async function checkRemoteWipe() {
-    if (!API || !myId) return;
+    if (!API || !myId || _ac.signal.aborted) return; // dead context must not drain the dormant account's backlog
     try {
       const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: 0, ...(await _ownerAuth('msg-poll')) });
       if (!resp.ok) return;
