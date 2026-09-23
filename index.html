@@ -8657,7 +8657,7 @@ async function initMessenger(dbName) {
   // v3.3: Voice message recording
   let _mediaRecorder = null;
   let _audioChunks = [];
-  let _recTimer = null;
+  let _recTimer = null, _recPending = false; // pending getUserMedia — blocks a second acquire racing the first
   let _recStartTs = 0;
   let _recContact = null; // recording target — fixed at start (TOCTOU: user may switch chats mid-recording)
   const voiceBtn = _DOM.get('b-msg-voice');
@@ -8683,7 +8683,10 @@ async function initMessenger(dbName) {
       if (activeContact?.isGroup && activeContact.announceOnly && !isGroupAdmin(activeContact)) { showToast(t('toastAnnounceOnlySend'), 'error'); return; }
       if (activeContact?.blocked) return;
       try {
+        if (_recPending) return; _recPending = true;
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        _recPending = false;
+        if (_ac.signal.aborted) { stream.getTracks().forEach(t => t.stop()); return; }
         _recContact = activeContact; // pin the recipient at record-start
         _audioChunks = [];
         _mediaRecorder = new MediaRecorder(stream, { mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm' });
@@ -8792,7 +8795,7 @@ async function initMessenger(dbName) {
           }
         }
         setTimeout(() => { if (_mediaRecorder?.state === 'recording') _mediaRecorder.stop(); }, CONFIG.VOICE_MAX_MS);
-      } catch(err) { _dbg(err, 'voice'); showToast(t('toastMicDenied'), 'error'); }
+      } catch(err) { _recPending = false; _dbg(err, 'voice'); showToast(t('toastMicDenied'), 'error'); }
     });
   }
 
@@ -9171,6 +9174,7 @@ async function initMessenger(dbName) {
 
     try {
       _callStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: pending.video });
+      if (_callState !== 'calling' || _ac.signal.aborted) { _callStream.getTracks().forEach(t => t.stop()); _callStream = null; return; }
       _callPC = new RTCPeerConnection(getCallICEConfig());
 
       _callStream.getTracks().forEach(t => _callPC.addTrack(t, _callStream));
