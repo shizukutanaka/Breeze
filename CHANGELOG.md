@@ -95,6 +95,16 @@ The endpoint-side verified-when-present auth was inert while clients never sent 
 
 # Changelog
 
+## Restoring a backup silently dropped every group (branch claude/nice-ride-T6yb0, 2026-09-24)
+
+vitest 1037 unchanged (one source tripwire updated); Playwright E2E +1 (`backup.spec.js`); `index.html` −6 lines (14,999 → 14,993), `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash), `tests/file-name-ingest.test.js`.
+
+First of a deletion/consolidation pass against the 15K ceiling (`docs/FIRST-PRINCIPLES.md`: delete, don't squeeze). A duplicate-block inventory turned up nine places where copies had drifted; this is the worst. Both backup-restore loops — file (`restoreBackup`) and cloud (`restoreCloudBackup`) — required a non-empty `pubB64` on every contact, but groups are stored with `pubB64:''`, so every restore skipped every group. The file loop's very next line sanitized `members`, a field only groups have: it was meant to restore them. `/contacts import` exempted groups correctly (`if (!c?.isGroup)`); the restore copies never got that. The cloud copy had drifted further — no `_isValidPubB64`, no name/member bounding, and it wrote `identity` without checking it had a key.
+
+Both now call one `_restoreContacts(list)`: the key-shape check applies to 1:1 contacts only, names go through `_safeDisplayName`, members through `safeMemberList`, and the cloud path gained the `identity.pubB64` check its file sibling had (cloud uploads always include identity). New E2E creates a group, downloads a real backup, deletes the group, restores through the real drag-drop flow, and checks the group is back — fails on the pre-fix build (`[]`), passes after.
+
+---
+
 ## Groups created by a v5 client locked out every legacy joiner — replaced the group-level v5 pin with per-member sticky caps (branch claude/nice-ride-T6yb0, 2026-09-23)
 
 vitest 1033 → **1037** (+4 sticky-caps mirror tests); Playwright E2E 68/69 → **69/69** (full suite, 6.9 min); `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash), `src/crypto/negotiate.js`, `tests/mirror-drift.test.js`, `CLAUDE.md`.

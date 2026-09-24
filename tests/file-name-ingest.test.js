@@ -21,8 +21,9 @@ const _safeDisplayName = (s, n = 64) =>
   typeof s === 'string' ? s.replace(_UNSAFE_DISPLAY_RE, '').slice(0, n) : '';
 
 describe('file-sourced name ingest → _safeDisplayName', () => {
-  it('wire-site: restoreBackup contact name is sanitized', () => {
-    expect(html).toContain("name: _safeDisplayName(c.name, 64) || 'Contact'");
+  it('wire-site: backup-restore contact name is sanitized (file + cloud share _restoreContacts)', () => {
+    expect(html).toContain("name: _safeDisplayName(c.name, 64) || (c.isGroup ? 'Group' : 'Contact')");
+    expect(html.match(/await _restoreContacts\(data\.contacts\)/g) || []).toHaveLength(2);
   });
 
   it('wire-site: importChat senderName is sanitized', () => {

@@ -59,3 +59,68 @@ test('restoring a backup shows its confirmation toast for a real interval before
   // leaving margin for CI slowness on the "real delay happened" side.
   expect(elapsed, 'the reload should wait for the full toast delay, not fire near-instantly').toBeGreaterThan(1000);
 });
+
+// Both restore paths (file + cloud) required a non-empty `pubB64` on every contact — but groups
+// are stored with pubB64:'' — so restoring a backup silently dropped EVERY group, even though the
+// loop's own next line sanitized `members` (a field only groups have). /contacts import exempted
+// groups correctly; the two restore copies had drifted. Both now share _restoreContacts().
+test('restoring a backup brings back groups, not just 1:1 contacts', async ({ browser }) => {
+  test.setTimeout(90_000);
+  const ctx = await browser.newContext({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.170' } });
+  const page = await ctx.newPage();
+  await page.addInitScript(() => { try { localStorage.setItem('brz-consent', String(Date.now())); } catch {} });
+  await page.goto('/');
+  await page.locator('#msg-name').fill('Group Restore');
+  await page.locator('#b-msg-setup').click();
+  await expect(page.locator('#msg-main')).toBeVisible();
+
+  // Create a server-backed group (same dialog flow as group.spec's createGroupWithInviteLink).
+  await page.locator('#b-msg-add').click();
+  await page.locator('dialog[aria-labelledby] .modal-input').fill('group:Restore Me');
+  await page.locator('dialog[aria-labelledby] [value="ok"]').click();
+  await page.locator('dialog[aria-labelledby] [value="ok"]').click(); // empty members -> invite link
+  await expect(page.locator('.i-mono-box')).toBeVisible();
+
+  const groups = () => page.evaluate(() => new Promise((resolve) => {
+    const req = indexedDB.open('breeze-messenger', 5);
+    req.onsuccess = () => {
+      req.result.transaction('contacts', 'readonly').objectStore('contacts').getAll()
+        .onsuccess = (e) => resolve(e.target.result.filter((c) => c.isGroup).map((c) => c.name));
+    };
+  }));
+  expect(await groups()).toEqual(['Restore Me']);
+
+  await page.locator('#msg-input').fill('/backup');
+  await page.locator('#msg-input').press('Enter');
+  const downloadPromise = page.waitForEvent('download');
+  await page.locator('[data-action="backup-file"]').click();
+  await page.locator('dialog[aria-labelledby] .modal-input').fill('grouppass123');
+  await page.locator('dialog[aria-labelledby] [value="ok"]').click();
+  const backupB64 = fs.readFileSync(await (await downloadPromise).path()).toString('base64');
+
+  // Simulate restoring onto a device that doesn't have the group.
+  await page.evaluate(() => new Promise((resolve) => {
+    const req = indexedDB.open('breeze-messenger', 5);
+    req.onsuccess = () => {
+      const tx = req.result.transaction('contacts', 'readwrite');
+      const store = tx.objectStore('contacts');
+      store.getAll().onsuccess = (e) => { for (const c of e.target.result) if (c.isGroup) store.delete(c.id); };
+      tx.oncomplete = resolve;
+    };
+  }));
+  expect(await groups()).toEqual([]);
+
+  await page.evaluate(async (b64) => {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const dt = new DataTransfer();
+    dt.items.add(new File([bytes], 'backup.json', { type: 'application/json' }));
+    document.getElementById('msg-sidebar').dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+  }, backupB64);
+  const nav = page.waitForEvent('framenavigated', { timeout: 15_000 });
+  await page.locator('dialog[aria-labelledby] .modal-input').fill('grouppass123');
+  await page.locator('dialog[aria-labelledby] [value="ok"]').click();
+  await nav;
+  await expect(page.locator('#msg-main')).toBeVisible();
+  expect(await groups(), 'the group must survive a backup/restore round trip').toEqual(['Restore Me']);
+  await ctx.close();
+});

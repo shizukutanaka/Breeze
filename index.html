@@ -11232,6 +11232,19 @@ async function initMessenger(dbName) {
     await restoreBackup(file);
   });
 
+  // One contact-restore rule for file AND cloud backups, same as /contacts import: the key-shape
+  // check (_isValidPubB64: 32/65 decoded bytes) applies to 1:1 contacts only. Groups are stored
+  // with pubB64:'' — both restores used to require a non-empty key and silently dropped every group.
+  async function _restoreContacts(list) {
+    for (const c of (Array.isArray(list) ? list : [])) {
+      if (typeof c?.id !== 'string' || !c.id || c.id.length > 64) continue;
+      if (!c.isGroup && (typeof c.pubB64 !== 'string' || c.pubB64.length > 128 || !_isValidPubB64(c.pubB64))) continue;
+      // Bound fields like the add/import paths — a malformed backup must not plant oversized data.
+      await dbPut('contacts', { ...c, name: _safeDisplayName(c.name, 64) || (c.isGroup ? 'Group' : 'Contact'),
+        members: Array.isArray(c.members) ? safeMemberList(c.members) : c.members });
+    }
+  }
+
   async function restoreBackup(file) {
     const pass = await showPrompt(t('backupPassEnter'), '', { type: 'password', okText: t('decrypt'), autocomplete: 'current-password' });
     if (!pass) return;
@@ -11245,20 +11258,7 @@ async function initMessenger(dbName) {
       if (!data.identity?.pubB64) { showToast(t('toastInvalidBackup'), 'error'); return; }
 
       await dbPut('identity', data.identity, 'keys');
-      for (const c of (data.contacts || [])) {
-        // Validate required fields before storing — a malformed backup entry could corrupt the DB.
-        // _isValidPubB64 enforces the real key shape (32 or 65 decoded bytes), same as
-        // addContact and /contacts import — a wrong-length key makes a dead contact.
-        if (typeof c?.id !== 'string' || !c.id || c.id.length > 64 ||
-            typeof c?.pubB64 !== 'string' || !c.pubB64 || c.pubB64.length > 128 ||
-            !_isValidPubB64(c.pubB64)) continue;
-        // Bound fields like the add/import paths — a malformed backup must not plant oversized data.
-        const clean = { ...c,
-          name: _safeDisplayName(c.name, 64) || 'Contact',
-          members: Array.isArray(c.members) ? safeMemberList(c.members) : c.members };
-        await dbPut('contacts', clean);
-      }
-
+      await _restoreContacts(data.contacts);
       showToast(t('toastRestoredReload'), 'success'); setTimeout(() => location.reload(), 1.5 * MS.SEC);
     } catch(e) { _dbg(e,'restore'); showToast(t('toastWrongPassphrase'), 'error'); }
   }
@@ -11552,15 +11552,9 @@ async function initMessenger(dbName) {
       const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: bIter, hash: 'SHA-256' }, km, { name: 'AES-GCM', length: CONFIG.AES_KEY_BITS }, false, ['decrypt']);
       const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
       const data = JSON.parse(new TextDecoder().decode(pt));
-      // Restore
-      if (data.identity) await dbPut('identity', data.identity, 'keys');
-      if (data.contacts) for (const c of data.contacts) {
-        // Validate required fields before storing — a malformed backup entry could corrupt the DB
-        if (typeof c?.id !== 'string' || !c.id || c.id.length > 64 ||
-            typeof c?.pubB64 !== 'string' || !c.pubB64 || c.pubB64.length > 128 ||
-            !/^[A-Za-z0-9+/=]+$/.test(c.pubB64)) continue;
-        await dbPut('contacts', c);
-      }
+      if (!data.identity?.pubB64) { showToast(t('toastInvalidBackup'), 'error'); return; }
+      await dbPut('identity', data.identity, 'keys');
+      await _restoreContacts(data.contacts);
       if (data.messages) for (const m of data.messages) await dbPut('messages', m);
       showToast(t('backupRestored'), 'success');
       setTimeout(() => location.reload(), CONFIG.TOAST_DURATION_MS);
