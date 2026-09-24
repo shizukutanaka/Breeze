@@ -95,6 +95,16 @@ The endpoint-side verified-when-present auth was inert while clients never sent 
 
 # Changelog
 
+## One member leaving silently converted a mixed group to v5 — one epoch-rotation rule for all four paths (branch claude/nice-ride-T6yb0, 2026-09-24)
+
+vitest 1037 → **1041**; `index.html` −3 lines (14,993 → 14,990), `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash), `tests/mirror-drift.test.js`.
+
+Epoch rotation (fresh chain key on kick/leave so a departed member can't read new messages) existed as four hand-written copies. Only the kick *sender* checked that the group actually negotiated v5 after the member was removed. The kick-notice receiver checked only the local flag; both leave paths (an admin re-keying on a bare self-leave, and a member adopting an admin's epoch-bearing leave notice) checked nothing — all three hardcoded `v: 5`. So in a mixed group (held on v3 because a legacy member is present), a single leave switched the key to v5 and the legacy member could no longer decrypt: the same harm the sticky-caps fix just closed, via a different path.
+
+One `_rotateGroupEpoch(group, epoch)` now carries the rule — rotate to v5 only if `CONFIG.GROUP_RATCHET_V5 && _computeGroupV5(group)` holds with the departed member already removed — and all four sites call it (plus a shared `_redistSenderKey`). A v3 group keeps its static key, exactly as kick always did (v3 has no PCS by design); a group whose *legacy* member is the one who left may newly go v5, which is correct. Tested by slicing the real helper out of `index.html` with the real inline `_computeGroupV5`: mixed group → no rotation, all-v5 → v5 key at the announced epoch, flag off → never; plus a tripwire that exactly three `v: 5` key constructions exist (helper, negotiated first key, a peer's received key — pre-fix there were six). Teeth-tested by removing the negotiation check: the mixed-group test fails. (An E2E would race the 5 s roster poll, which can drop the leaver before the notice arrives and skip the rotation path entirely — it would pass pre-fix too, so it isn't used.) All 7 `group.spec.js` E2E pass.
+
+---
+
 ## Restoring a backup silently dropped every group (branch claude/nice-ride-T6yb0, 2026-09-24)
 
 vitest 1037 unchanged (one source tripwire updated); Playwright E2E +1 (`backup.spec.js`); `index.html` −6 lines (14,999 → 14,993), `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash), `tests/file-name-ingest.test.js`.

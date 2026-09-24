@@ -666,6 +666,47 @@ describe('getGroupSenderKey freezes format from the negotiated decision, not the
 // Sticky per-member caps (replaced a group-level "pin v5 once true" that locked legacy joiners
 // out of every group a v5 client created). Both copies must agree on every case below: a drift
 // either re-opens the relay strip-caps downgrade or re-breaks the legacy-joiner AND rule.
+// Epoch rotation (kick, kick notice, leave, leave notice) used to be four hand-written copies;
+// three hardcoded a v:5 chain key and checked at most the LOCAL flag, so one leave in a mixed
+// group silently converted it to a format its legacy member can't read. Now one helper, sliced
+// from the real index.html and exercised here with the real inline _computeGroupV5.
+describe('_rotateGroupEpoch — one rule for every epoch rotation', () => {
+  const RS = html.indexOf('  async function _rotateGroupEpoch(');
+  const RE = html.indexOf('  function _redistSenderKey(', RS);
+  if (RS < 0 || RE < 0) throw new Error('mirror-drift guard: _rotateGroupEpoch not found in index.html — update this test');
+  const make = (config) => {
+    const store = new Map();
+    const { _computeGroupV5 } = makeX3dhInline(null, config, 'me');
+    const fn = new Function('CONFIG', 'crypto', 'dbPut', '_computeGroupV5', html.slice(RS, RE) + '\nreturn _rotateGroupEpoch;')(
+      config, globalThis.crypto, async (_s, v, k) => { store.set(k, v); }, _computeGroupV5);
+    return { rotate: fn, store };
+  };
+  const V5 = (id) => ({ id, pubB64: id + 'K', caps: ['group-v5'] });
+
+  it('mixed group (a legacy member remains): NO rotation, no v5 key written', async () => {
+    const { rotate, store } = make({ GROUP_RATCHET_V5: true });
+    expect(await rotate({ id: 'g1', members: [{ id: 'me' }, V5('a'), { id: 'legacy', pubB64: 'legacyK' }] }, 2)).toBe(false);
+    expect(store.size).toBe(0);
+  });
+
+  it('all-v5 group: rotates to a fresh v5 chain key at the announced epoch', async () => {
+    const { rotate, store } = make({ GROUP_RATCHET_V5: true });
+    expect(await rotate({ id: 'g2', members: [{ id: 'me' }, V5('a')] }, 3)).toBe(true);
+    const k = store.get('gsk:g2');
+    expect(k.v).toBe(5); expect(k.epoch).toBe(3); expect(k.chainKey).toHaveLength(32);
+  });
+
+  it('local flag off or non-numeric epoch: never rotates', async () => {
+    expect(await make({ GROUP_RATCHET_V5: false }).rotate({ id: 'g', members: [{ id: 'me' }, V5('a')] }, 1)).toBe(false);
+    expect(await make({ GROUP_RATCHET_V5: true }).rotate({ id: 'g', members: [{ id: 'me' }, V5('a')] }, undefined)).toBe(false);
+  });
+
+  it('tripwire: no other code writes a hardcoded v5 group key', () => {
+    // Allowed: the helper itself, getGroupSenderKey's negotiated first key, and storing a PEER's received v5 key.
+    expect((html.match(/v: 5, skipped: \{\}/g) || []).length).toBe(3);
+  });
+});
+
 describe('Group sticky-caps mirror — inline _mergeStickyGroupCaps vs reference mergeStickyGroupCaps', () => {
   const inline = () => makeX3dhInline(null, { GROUP_RATCHET_V5: true }, 'me');
   const both = (prev, next) => {
