@@ -10396,26 +10396,25 @@ async function initMessenger(dbName) {
         // never produces a Uint8Array.
         const _localFile = msg.fileBytes instanceof Uint8Array;
         const fileMsg = _localFile ? msg.payload : await decryptFrom(msg.payload, _peerPub);
-        if (!fileMsg) return;
+        // Failure must release the speculative replay mark — a transient decrypt failure
+        // (no session yet, ratchet gap) otherwise makes this msgId permanently dedup-dead.
+        if (!fileMsg) { _replayCache.delete(msgId); return; }
         const _fp = JSON.parse(fileMsg);
-        // Cap file data: reject oversized base64 payloads before IDB write and atob() decode.
-        // Voice messages use the same 350 000-char cap (line above); relay caps at 256 KB but
-        // the P2P DataChannel path has no server-side limit.
-        if (typeof _fp.data === 'string' && _fp.data.length > 350000) return;
+        // Cap file data before IDB write/atob — relay caps 256 KB but P2P has no server check.
+        if (typeof _fp.data === 'string' && _fp.data.length > 350000) { _replayCache.delete(msgId); return; }
         // Cap the displayed file name to prevent memory/render DoS from an oversized peer-supplied name.
         text = `📎 ${typeof _fp.name === 'string' ? _fp.name.slice(0, 255) : 'file'}`;
         // Bytes persist inside fileData — IDB structured-clone stores Uint8Array natively,
         // so the file survives reload (a blob URL would die with the page).
         storedFileData = _localFile ? { ..._fp, blob: msg.fileBytes } : fileMsg;
         await dbPut('messages', { msgId, contactId, text, mine: false, ts: msg.ts, fileData: storedFileData, ...meta });
-      } catch { return; }
+      } catch { _replayCache.delete(msgId); return; }
     } else {
       const _frank = {};
       text = await decryptFrom(msg.payload, _peerPub, _frank);
-      if (!text) return;
-      // Reject oversized text: the relay caps payloads at 256 KB but the P2P DataChannel has no server check.
-      // 64 KB is generous for chat text while preventing memory/render DoS from a malicious peer.
-      if (text.length > 65536) return;
+      if (!text) { _replayCache.delete(msgId); return; }
+      // Reject oversized text: the relay caps at 256 KB but the P2P path has no server check.
+      if (text.length > 65536) { _replayCache.delete(msgId); return; }
       // Poll payloads arrive as plain JSON text — only the sender's record ever had
       // isPoll, so recipients saw raw JSON and could never vote. Detect + tag here so
       // the card renders; renderPollHtml's own caps bound the peer-controlled fields.
