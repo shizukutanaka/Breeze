@@ -7941,6 +7941,7 @@ async function initMessenger(dbName) {
             }
           } catch(e) { _dbg(e, 'group-signal'); }
         }
+        _fanOut(contact, signalPayload, data.ts || Date.now(), {}, { isSignal: true }); // my siblings — same mutation, selfSync'd
       })();
       return;
     }
