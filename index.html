@@ -5042,8 +5042,9 @@ async function initMessenger(dbName) {
   // Track decrypt failures per peer for auto-reset
   const _decryptFailures = {};
 
-  function decryptFrom(payload, peerPubB64, frank) {
-    return _withPeerLock((peerPubB64 || '').slice(0, 12), () => _decryptFromRaw(payload, peerPubB64, frank));
+  async function decryptFrom(payload, peerPubB64, frank) {
+    const r = await _withPeerLock((peerPubB64 || '').slice(0, 12), () => _decryptFromRaw(payload, peerPubB64, frank));
+    if (r && _sv2Ctx) _markPeerCapProven(_sv2Ctx, CAPS_SEAL_V2); return r; // decryptable sealed env proves seal-v2
   }
   async function _decryptFromRaw(payload, peerPubB64, frank) {
     try {
@@ -5396,20 +5397,25 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'unseal'); return null; }
   }
   // ═══ end inline mirror of src/crypto/seal.js ═══
-  // Does this peer understand sealed-v2 envelopes? Read from /prekey/status (no OTP cost),
-  // cached 5 min — the cache TTL IS the downgrade window: a peer that stops advertising
-  // seal-v2 (version rollback, identity re-registration) receives sealed envelopes it
-  // ack+skips until the cache expires, so keep the window as short as the other caches.
-  // Any failure answers "no" — the message still delivers, just legacy-shaped.
+  // Two-tier caps. Asserted caps (relay /prekey/status — UNSIGNED: the upload sig covers
+  // only userId+ts) union into the SESSION cache only: a strip can't downgrade in-flight
+  // sends, but they never persist — a forged response would otherwise implant 'seal-v2' on
+  // a legacy peer forever. contact.caps = PROVEN caps only (_markPeerCapProven).
   const _peerCapsCache = new Map();
+  let _sv2Ctx = null, _dmSigCtx = null; // sealed-env sender / last dm-sig env's peer (cap provenance)
+  async function _markPeerCapProven(peerId, cap) {
+    try {
+      const ct = await dbGet('contacts', peerId); if (!ct || (Array.isArray(ct.caps) && ct.caps.includes(cap))) return;
+      ct.caps = [...new Set([...(Array.isArray(ct.caps) ? ct.caps : []), cap])]; await dbPut('contacts', ct).catch(e => _dbg(e, 'caps-proven'));
+      const c = _peerCapsCache.get(peerId); if (c) { c.caps = [...new Set([...c.caps, cap])]; c.ts = Date.now(); }
+    } catch(e) { _dbg(e, 'caps-proven'); }
+  }
   async function _peerCaps(peerId) {
     try {
       const c = _peerCapsCache.get(peerId); if (c && Date.now() - c.ts < 5 * MS.MIN) return c.caps;
       const resp = await postAPIRaw('/prekey/status', { userId: peerId });
       const data = resp?.ok ? await resp.json() : null;
-      // Sticky caps (1:1 analogue of _mergeStickyGroupCaps): a relay stripping seal-v2/dm-sig silently downgrades this peer's sends to the metadata-leaking legacy path AND re-enables forged plaintext typing/read — caps only grow once seen.
-      const ct = await dbGet('contacts', peerId), caps = [...new Set([...(Array.isArray(ct?.caps) ? ct.caps : []), ...(Array.isArray(data?.caps) ? data.caps.filter(x => typeof x === 'string') : [])])];
-      if (ct && (!Array.isArray(ct.caps) || ct.caps.length !== caps.length)) { ct.caps = caps; await dbPut('contacts', ct).catch(e => _dbg(e, 'caps-sticky')); }
+      const ct = await dbGet('contacts', peerId), caps = [...new Set([...(c?.caps || []), ...(Array.isArray(ct?.caps) ? ct.caps : []), ...(Array.isArray(data?.caps) ? data.caps.filter(x => typeof x === 'string') : [])])]; // proven ∪ session ∪ fresh
       _peerCapsCache.set(peerId, { caps, ts: Date.now() }); return caps;
     } catch { return []; }
   }
@@ -5417,16 +5423,8 @@ async function initMessenger(dbName) {
     return (await _peerCaps(peerId)).includes(CAPS_SEAL_V2);
   }
 
-  // ONE fan-out for every kind of outgoing content. Three near-identical copies of this loop
-  // had accumulated — text in sendMessage, attachments in _sendFile/voice, mutations in
-  // sendSignal — differing only in which envelope flags they set, so each new device rule had
-  // to be remembered in three places (attachments were forgotten exactly that way). Collapsed
-  // to one function taking those flags: a fix now lands on every path at once.
-  //
-  // Devices are dispatched in PARALLEL. They are distinct peers and the ratchet lock is
-  // per-peer, so nothing serialises them but the old sequential `await` in the loop — which
-  // made fan-out latency linear in device count (an account with 3 devices paid three
-  // round-trips before the last one saw the message). Now it costs one.
+  // ONE fan-out for every kind of outgoing content (text/attachments/mutations were three
+  // near-identical loops differing only in envelope flags). Devices dispatched in PARALLEL.
   async function _fanOut(snapContact, plaintext, ts, peerExtra, selfExtra) {
     try {
       // pubB64 is '' for groups — still fan out to MY other devices (peerDevs will be []).
@@ -6280,6 +6278,7 @@ async function initMessenger(dbName) {
       const w = JSON.parse(dataStr);
       if (!w || w.enc !== 'dm-sig-v1' || !w.se || typeof w.ts !== 'number' || !Number.isFinite(w.ts)) return null;
       const pt = await unsealMeta(myKeys.privateKey, w.se, room, w.ts);
+      if (pt) _dmSigCtx = room.replace(/^(?:dm|call):/, '').split(':').find(id => id !== myId) || null; // auth check on inner content proves dm-sig-v1
       return (pt && typeof pt.t === 'string' && typeof pt.d === 'string') ? pt : null;
     } catch(_e) { _dbg(_e, 'dm-sig-unseal'); return null; }
   }
@@ -6330,7 +6329,7 @@ async function initMessenger(dbName) {
       if (!peerPub) return null;
       const pt = await decryptFrom(data, peerPub);
       if (!pt) return null;
-      return JSON.parse(pt);
+      if (_dmSigCtx === peerPub.slice(0, 12)) _markPeerCapProven(_dmSigCtx, CAPS_DM_SIG); return JSON.parse(pt); // decryptable wrap = proven dm-sig-v1
     } catch(_e) { _dbg(_e, 'unwrapCallSignal'); return null; }
   }
 
@@ -9289,7 +9288,7 @@ async function initMessenger(dbName) {
           if (s.sender !== contact.id) continue;
           // dm-sig-v1: unseal {type:'enc'} envelopes (same sealing as dm: rooms) —
           // fails closed, a forged or malformed envelope is dropped not downgraded.
-          let wasSealed = false;
+          let wasSealed = false; _dmSigCtx = null; // provenance is per-envelope
           if (s.type === 'enc') {
             const inner = await _unsealDmSignal(room, s.data);
             if (!inner) continue;
@@ -9807,8 +9806,8 @@ async function initMessenger(dbName) {
                   }
                   env = { to: env.to, ts: env.ts, payload: pl, ...meta };
                 }
-                await handleIncoming(env);
-                sealedProcessed++;
+                const _prevSv2 = _sv2Ctx; _sv2Ctx = meta && typeof meta.from === 'string' ? meta.from : null; // flag: decrypt success under it proves seal-v2
+                await handleIncoming(env); _sv2Ctx = _prevSv2; sealedProcessed++;
               } catch(e) { _dbg(e, 'sealed-parse'); }
             }
             // v3.6: ACK after successful processing (crash-safe: server keeps 5min grace)
@@ -10874,7 +10873,7 @@ async function initMessenger(dbName) {
             // dm-sig-v1: sealed envelopes ride as {type:'enc', data:'{enc,ts,se}'} —
             // unseal to recover the real {type,data}. Fails closed: a sealed envelope
             // that doesn't verify is dropped, never processed as plaintext.
-            let wasSealed = false;
+            let wasSealed = false; _dmSigCtx = null; // provenance is per-envelope
             if (s.type === 'enc') {
               const inner = await _unsealDmSignal(sigRoom, s.data);
               if (!inner) continue;
@@ -10907,6 +10906,7 @@ async function initMessenger(dbName) {
                     }
                     const valid = await verifySignature(wrapper.sdp, wrapper.sig, wrapper.sigPub);
                     if (valid === false) { _dbg(null, 'P2P: SDP signature invalid — rejecting'); continue; }
+                    if (_dmSigCtx === contact.id) _markPeerCapProven(contact.id, CAPS_DM_SIG); // signed SDP inside a dm-sig envelope = proven support
                     // TOFU: pin the peer's signing key on first signed SDP
                     if (!contact.sigPub && wrapper.sigPub && _hasEd25519) {
                       contact.sigPub = wrapper.sigPub;

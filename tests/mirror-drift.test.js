@@ -1045,7 +1045,7 @@ function makeSessionDevice(myKeys, myPubB64) {
   const factory = new Function(
     'CONFIG', '_hasX25519', 'dbGet', 'dbPut', 'zeroBuffer', 'workerCrypto', 'postAPIRaw', 'API',
     '_signingKey', '_signingPubB64', 'signMessage', 'verifySignature', 'myKeys', 'myPubB64', '_dbg', 'arr', 'u8',
-    'timingSafeEqual',
+    'timingSafeEqual', '_sv2Ctx', '_markPeerCapProven',
     html.slice(bs, be) + '\nreturn { encryptFor, decryptFrom };',
   );
   const R = factory(
@@ -1053,6 +1053,7 @@ function makeSessionDevice(myKeys, myPubB64) {
     null, '', async () => null, async () => true, myKeys, myPubB64, () => {},
     (a) => Array.from(a), (a) => new Uint8Array(a),
     async (x, y) => x === y,
+    null, async () => {}, // _sv2Ctx off (raw-path test env), _markPeerCapProven no-op
   );
   R.idb = idb; // exposed for storage-shape assertions (e.g. skipped-key TTL)
   return R;
