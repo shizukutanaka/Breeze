@@ -8206,7 +8206,7 @@ async function initMessenger(dbName) {
         } catch(e) { _dbg(e); }
       }));
       // Self-sync: my other devices need the copy too (they're members of the same group).
-      _fanOut(contact, text, ts, {}, { sfFor: contact.id, sfName: contact.name });
+      _fanOut(contact, text, ts, {}, { sfFor: contact.id, sfName: contact.name, replyTo: envelopeReplyTo(meta.replyTo) });
     } else {
       // 1:1: v3 Double Ratchet + P2P + Sealed Sender
       const _frank = {};
@@ -8278,8 +8278,8 @@ async function initMessenger(dbName) {
       // sfPub/sfName let a sibling device CREATE a conversation it has never seen, so messages
       // sent before the contact ever replies are not dropped on a freshly linked device.
       _fanOut(contact, text, ts,
-        { sig: envelope.sig, sigPub: envelope.sigPub },
-        { sfFor: contact.id, sfPub: contact.pubB64, sfName: contact.name });
+        { sig: envelope.sig, sigPub: envelope.sigPub, replyTo: envelope.replyTo },
+        { sfFor: contact.id, sfPub: contact.pubB64, sfName: contact.name, replyTo: envelope.replyTo });
     }
     renderContacts();
     } catch(err) {
@@ -9932,17 +9932,17 @@ async function initMessenger(dbName) {
             if (typeof fp.name === 'string') fileName = fp.name.slice(0, 255);
           } catch { return; }
           const fileText = '📎 ' + fileName;
-          await dbPut('messages', { msgId: syncId, contactId: target.id, text: fileText, mine: true, ts: msg.ts, fileData: syncText, synced: true });
+          await dbPut('messages', { msgId: syncId, contactId: target.id, text: fileText, mine: true, ts: msg.ts, fileData: syncText, synced: true, replyTo: msg.replyTo });
           target.lastMsg = fileText.slice(0, 40); target.lastMsgAt = msg.ts;
           await dbPut('contacts', target);
-          if (activeContact?.id === target.id) appendMsg(fileText, true, msg.ts, null, syncText, { synced: true });
+          if (activeContact?.id === target.id) appendMsg(fileText, true, msg.ts, null, syncText, { synced: true, replyTo: msg.replyTo });
           renderContacts();
           return;
         }
-        await dbPut('messages', { msgId: syncId, contactId: target.id, text: syncText, mine: true, ts: msg.ts, isPoll: msg.isPoll || undefined, synced: true });
+        await dbPut('messages', { msgId: syncId, contactId: target.id, text: syncText, mine: true, ts: msg.ts, isPoll: msg.isPoll || undefined, synced: true, replyTo: msg.replyTo });
         target.lastMsg = (msg.isPoll ? '📊 ' : '') + syncText.slice(0, 40); target.lastMsgAt = msg.ts;
         await dbPut('contacts', target);
-        if (activeContact?.id === target.id) appendMsg(syncText, true, msg.ts, null, null, { synced: true });
+        if (activeContact?.id === target.id) appendMsg(syncText, true, msg.ts, null, null, { synced: true, replyTo: msg.replyTo });
         renderContacts();
       } catch(e) { _dbg(e, 'self-sync'); }
       return;
