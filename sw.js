@@ -137,14 +137,17 @@ self.addEventListener('push', (e) => {
       vibrate: [100, 50, 100],
       data: { url: data.url || '/', contactId: _pushContactId(data.contactId) },
       renotify: true,
-      // v3.6: Notification action buttons (Chrome 48+, Firefox 44+)
-      actions: (navigator.language || '').startsWith('ja') ? [
+      // v3.6: Notification action buttons (Chrome 48+, Firefox 44+).
+      // Only shown when the payload names a resolvable contact — sealed-sender pushes
+      // deliberately carry no contactId (the relay can't know the sender), so reply and
+      // mark-read would silently no-op; dead buttons teach users actions are broken.
+      actions: data.contactId ? ((navigator.language || '').startsWith('ja') ? [
         { action: 'reply', title: '返信', type: 'text' },
         { action: 'mark-read', title: '既読にする' },
       ] : [
         { action: 'reply', title: 'Reply', type: 'text' },
         { action: 'mark-read', title: 'Mark Read' },
-      ],
+      ]) : [],
     })
   );
 });

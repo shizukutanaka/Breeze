@@ -2652,7 +2652,9 @@ async function handleSealedSend(body, env, request) {
     seen.push({ envelope, ts: newTs });
     await kvPut(env, key, JSON.stringify(seen), { expirationTtl: TTL.WEEK });
   }
-  sendPushToUser(to, { title: 'Breeze', body: 'New message', tag: 'breeze-sealed', contactId: await sha256Short(to) }, env).catch(() => {});
+  // No contactId on sealed pushes: the sender is hidden by design, so there is no
+  // resolvable target — the client drops reply/mark-read actions on such notifications.
+  sendPushToUser(to, { title: 'Breeze', body: 'New message', tag: 'breeze-sealed' }, env).catch(() => {});
   return json({ ok: true, ack: Date.now() }, 200, request);
 }
 

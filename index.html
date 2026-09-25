@@ -5575,12 +5575,10 @@ async function initMessenger(dbName) {
     }
     if (e.data?.type === 'quick-reply' && e.data.contactId && e.data.text) {
       _pushContactId(e.data.contactId).then(cid => dbGet('contacts', cid)).then(contact => {
-        if (contact && e.data.text.trim()) {
-          openConversation(contact).then(() => {
-            _DOM.get('msg-input').value = e.data.text;
-            sendMessage();
-          }).catch(err => _dbg(err, 'quick-reply'));
-        }
+        // contactId is relay-supplied metadata — a hostile relay can point the reply at a
+        // group or the wrong chat, so pre-fill and let the user confirm the destination
+        // rather than auto-sending their typed text to a forged target.
+        if (contact && e.data.text.trim()) openConversation(contact).then(() => { _DOM.get('msg-input').value = e.data.text; _DOM.get('msg-input').focus(); }).catch(err => _dbg(err, 'quick-reply'));
       }).catch(err => _dbg(err, 'quick-reply'));
     }
     if (e.data?.type === 'mark-read' && e.data.contactId) {
