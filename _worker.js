@@ -424,7 +424,7 @@ function capQueueBytes(items, sizeOf, maxBytes = 16 * 1024 * 1024) {
 }
 
 async function handleMsgSend(body, ip, env, request) {
-  const { to, from, fromPub, fromName, payload, ts, isFile, isGroupInvite, isVoice, isCall, isVideoCall, isSenderKey, isGroupSK, isGroupKick, groupId, groupName, replyTo, disappearAt, sig, sigPub } = body;
+  const { to, from, fromPub, fromName, payload, ts, isFile, isGroupInvite, isVoice, isCall, isVideoCall, isSenderKey, isGroupSK, isGroupKick, isSignal, isGroupLeave, isGroupMeta, groupId, groupName, replyTo, disappearAt, sig, sigPub } = body;
   if (!to || !from || !payload) return json({ error: 'to, from, payload required', code: 'MISSING_FIELDS' }, 400, request);
   // v3.3: Input type validation
   if (typeof to !== 'string' || typeof from !== 'string' || typeof payload !== 'string') return json({ error: 'Invalid types', code: 'INVALID_TYPE' }, 400, request);
@@ -494,6 +494,14 @@ async function handleMsgSend(body, ip, env, request) {
   if (isSenderKey) msg.isSenderKey = true;
   if (isGroupSK) msg.isGroupSK = true;
   if (isGroupKick) msg.isGroupKick = true;
+  // Type flags that route the envelope to a handler instead of a chat bubble must ride
+  // the /msg fallback too — the sealed path carries them inside `se`, but a sealed-send
+  // failure strips them here: an isSignal would otherwise DECRYPT + render as a raw JSON
+  // chat message (mutation silently dead), and an isGroupLeave would leak-as-text while
+  // the departed member stays in everyone's roster (keeps receiving group traffic).
+  if (isSignal) msg.isSignal = true;
+  if (isGroupLeave) msg.isGroupLeave = true;
+  if (isGroupMeta) msg.isGroupMeta = true;
   if (typeof groupId === 'string' && groupId) { msg.groupId = groupId.slice(0, 64); msg.groupName = typeof groupName === 'string' ? groupName.slice(0, 50) : undefined; }
   if (typeof replyTo === 'string' && replyTo) msg.replyTo = replyTo.slice(0, 128);
   if (disappearAt) msg.disappearAt = (typeof disappearAt === 'number' && Number.isFinite(disappearAt)) ? disappearAt : undefined;
