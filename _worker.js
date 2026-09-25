@@ -554,7 +554,9 @@ async function handleMsgSend(body, ip, env, request) {
   sendPushToUser(to, {
     title: pushTitle, body: pushBody,
     tag: 'breeze-' + await sha256Short(String(groupId || from)),
-    contactId: await sha256Short(from),
+    // Same conversation key as tag: for a group message the notification must resolve to
+    // the GROUP contact — hashing `from` pointed taps/quick-replies at the sender's 1:1.
+    contactId: await sha256Short(String(groupId || from)),
   }, env).catch(() => {});
 
   return json({ ok: true, ack: Date.now() }, 200, request);
