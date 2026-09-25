@@ -11413,6 +11413,10 @@ async function initMessenger(dbName) {
   })();
 
   function showReadReceipt(contactId, ts) {
+    // Peer-supplied watermark — clamp like the poll loop clamps msg.ts: a forged huge
+    // ts persists in readTs and re-marks every LATER-sent message as read on each
+    // replay, so one bad receipt mooted read receipts for that contact permanently.
+    ts = Math.min(Number(ts) || 0, Date.now() + 5 * MS.MIN);
     _lastReadTs[contactId] = ts;
     clearTimeout(showReadReceipt._saveTimer);
     showReadReceipt._saveTimer = setTimeout(() => dbPut('identity', _lastReadTs, 'readTs'), MS.SEC);
