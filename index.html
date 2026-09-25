@@ -7587,6 +7587,18 @@ async function initMessenger(dbName) {
     return html;
   }
 
+  // One vote applier for every poll_vote path (relay signal / P2P / selfSync): voterId is
+  // the AUTHENTICATED sender (contact.id / member pub prefix / myId), never the peer-claimed
+  // signal.userId. Replaces the voter's prior vote; an invalid optionIndex only clears it.
+  async function _applyPollVote(pollMsg, voterId, optionIndex) {
+    const poll = JSON.parse(pollMsg.text);
+    for (const opt of poll.options) opt.votes = opt.votes.filter(v => v !== voterId);
+    if (Number.isInteger(optionIndex) && poll.options[optionIndex]) poll.options[optionIndex].votes.push(voterId);
+    pollMsg.text = JSON.stringify(poll); await dbPut('messages', pollMsg);
+    const el = document.querySelector(`[data-msgid="${safeMsgId(pollMsg.msgId)}"]`);
+    if (el) safeSetHTML(el, renderPollHtml(poll, pollMsg.msgId));
+  }
+
   // MESSAGE CONTEXT MENU (reply, edit, delete, forward, pin, react)
 
   function showMsgMenu(el, msg) {
@@ -9881,6 +9893,12 @@ async function initMessenger(dbName) {
           // sender is registry-verified as me, so the `stored.mine` guard that (correctly)
           // stops a CONTACT from mutating my messages does not apply — my other device IS me.
           const signal = JSON.parse(syncText);
+          if (signal.type === 'poll_vote' && typeof signal.pollId === 'string') {
+            // Votes target the poll by pollId, not a msgId — apply before the stored gate.
+            const pv = (await dbGetAll('messages')).find(m => m.isPoll && (() => { try { return JSON.parse(m.text).pollId === signal.pollId; } catch { return false; } })());
+            if (pv) await _applyPollVote(pv, myId, signal.optionIndex); // voter = me (registry-verified sibling)
+            return;
+          }
           const smId = safeMsgId(signal.msgId || '');
           const stored = await dbGet('messages', smId);
           if (!stored) {
@@ -10170,18 +10188,7 @@ async function initMessenger(dbName) {
             // Same binding as the 1:1 path: poll must live in THIS group; voter = verified sender.
             const allMsgs = await dbGetAll('messages');
             const pollMsg = allMsgs.find(m => m.isPoll && m.contactId === msg.groupId && (() => { try { return JSON.parse(m.text).pollId === signal.pollId; } catch { return false; } })());
-            if (pollMsg) {
-              const poll = JSON.parse(pollMsg.text);
-              const voterId = (senderPub || '').slice(0, 12);
-              for (const opt of poll.options) opt.votes = opt.votes.filter(v => v !== voterId);
-              if (Number.isInteger(signal.optionIndex) && signal.optionIndex >= 0 && poll.options[signal.optionIndex]) {
-                poll.options[signal.optionIndex].votes.push(voterId);
-                pollMsg.text = JSON.stringify(poll);
-                await dbPut('messages', pollMsg);
-                const el = document.querySelector(`[data-msgid="${safeMsgId(pollMsg.msgId)}"]`);
-                if (el) safeSetHTML(el, renderPollHtml(poll, pollMsg.msgId));
-              }
-            }
+            if (pollMsg) await _applyPollVote(pollMsg, (senderPub || '').slice(0, 12), signal.optionIndex);
           }
         } catch(e) { _dbg(e, 'group-decrypt-signal'); }
         return;
@@ -10683,21 +10690,11 @@ async function initMessenger(dbName) {
           // v3.1: Poll vote
           if (msg.type === 'poll_vote') {
             const allMsgs = await dbGetAll('messages');
-            const pollMsg = allMsgs.find(m => m.isPoll && JSON.parse(m.text).pollId === msg.pollId);
             // Same conversation binding as reactions — a peer must not vote on a poll
-            // that lives in a different conversation (pollId is self-reported).
-            if (pollMsg && pollMsg.contactId === contact.id) {
-              const poll = JSON.parse(pollMsg.text);
-              // Use contact.id (authenticated sender) — not msg.userId (peer-claimed, unverified)
-              const voterId = contact.id;
-              for (const opt of poll.options) opt.votes = opt.votes.filter(v => v !== voterId);
-              // Validate optionIndex: must be a non-negative integer (guards non-integer/symbol keys that could access array properties)
-              if (Number.isInteger(msg.optionIndex) && msg.optionIndex >= 0 && poll.options[msg.optionIndex]) poll.options[msg.optionIndex].votes.push(voterId);
-              pollMsg.text = JSON.stringify(poll);
-              await dbPut('messages', pollMsg);
-              const el = document.querySelector(`[data-msgid="${pollMsg.msgId}"]`);
-              if (el) safeSetHTML(el, renderPollHtml(poll, pollMsg.msgId));
-            }
+            // that lives in a different conversation (pollId is self-reported). The
+            // try/catch matches the group path — an isPoll flag on non-JSON text must not crash.
+            const pollMsg = allMsgs.find(m => m.isPoll && m.contactId === contact.id && (() => { try { return JSON.parse(m.text).pollId === msg.pollId; } catch { return false; } })());
+            if (pollMsg) await _applyPollVote(pollMsg, contact.id, msg.optionIndex);
             return;
           }
           if (msg.type === 'msg') {
