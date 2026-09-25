@@ -17,7 +17,7 @@ describe('in-session tombstones refuse interaction + mutation', () => {
     expect(SRC).toContain("if (stored && !stored.deleted) {\n        stored.text = editText;");
     expect(SRC).toContain("if (stored && !stored.deleted) { stored.pinned = !stored.pinned;");
     expect(SRC).toContain("if (stored && !stored.deleted) {\n        stored.bookmarked = !stored.bookmarked;");
-    expect(SRC).toContain("if (m && !m.deleted) { m.ack = true;");
+    expect(SRC).toContain("if (m && !m.deleted) { if (status === 'failed') m.failed = true; else m.ack = true;");
   });
   it('functional: a marked element fails the menu gate but a live one passes', () => {
     const menuGuard = (el, msg) => !(el?.dataset?.deleted === '1' || msg?.deleted);

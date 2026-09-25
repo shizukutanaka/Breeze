@@ -7414,16 +7414,17 @@ async function initMessenger(dbName) {
           statusEl.classList.remove('sent', 'delivered');
           statusEl.classList.add('read');
           statusEl.textContent = '✓✓';
+        } else if (status === 'failed' && !statusEl.classList.contains('failed')) {
+          statusEl.classList.remove('sent', 'delivered'); statusEl.classList.add('failed'); statusEl.textContent = '✗';
         }
         break; // Only update the most recent matching message
       }
-      // Also update in IDB — bound to the ack's conversation, not whatever
-      // happens to be open when the relay response lands.
+      // Also update in IDB — bound to the ack's conversation, not the open chat.
       const cid = contactId || activeContact?.id;
       if (cid && typeof dbGetByIndex === 'function') {
         dbGetByIndex('messages', 'contact', cid).then(msgs => {
           const m = msgs.find(x => x.mine && Math.abs((x.ts || 0) - ts) < 5 * MS.SEC);
-          if (m && !m.deleted) { m.ack = true; dbPut('messages', m); }
+          if (m && !m.deleted) { if (status === 'failed') m.failed = true; else m.ack = true; dbPut('messages', m); }
         }).catch(e => _dbg(e, 'status-update'));
       }
     } catch(e) { _dbg(e, 'updateMsgStatus'); }
@@ -7532,11 +7533,11 @@ async function initMessenger(dbName) {
             try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId, groupName: contact.name, isGroupSK: true }, m.pubB64, groupId); } catch(e) { _dbg(e); }
           }));
           _fanOut(contact, JSON.stringify(pollData), ts, {}, { isPoll: true, sfFor: contact.id, sfName: contact.name });
-        }
+        } else { updateMsgStatus(ts, 'failed', contact.id); showToast(t('toastSendFail'), 'error'); } // poll row persisted above — mark it, don't leave a lying 'sent'
       } else {
         // Send via P2P/relay
         const encrypted = await encryptFor(JSON.stringify(pollData), contact.pubB64);
-        if (!encrypted) { _dbg(null, 'encrypt failed'); return; }
+        if (!encrypted) { updateMsgStatus(ts, 'failed', contact.id); showToast(t('toastSendFail'), 'error'); _dbg(null, 'encrypt failed'); return; }
         const peer = peers[contact.pubB64];
         if (peer?.connected && peer.dc?.readyState === 'open') peer.dc.send(JSON.stringify({ type: 'msg', payload: encrypted, ts }));
         await relaySend(contact.id, { to: contact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts }, contact.pubB64);
@@ -8122,10 +8123,8 @@ async function initMessenger(dbName) {
       document.querySelector('.reply-preview')?.remove();
     }
     if (_disappearTimer > 0) meta.disappearAt = ts + _disappearTimer * 1000;
-    // "No reply needed": the sender states, in the message itself, that no answer is owed.
-    // The recipient sees a badge and the message does NOT raise their unread count — the
-    // obligation is removed at its source instead of being managed after the fact. One-shot:
-    // it applies to this message only, so it can never silently mute a conversation.
+    // "No reply needed": sender marks no answer owed — badge, no unread bump.
+    // One-shot: applies to this message only, can't silently mute a conversation.
     if (_noReplyNeeded) { meta.nrn = true; _noReplyNeeded = false; _updateNrnButton(); }
     if (activeContact.isGroup) {
       // A linked SECONDARY device is not in the group roster — the roster holds the account
@@ -8182,7 +8181,8 @@ async function initMessenger(dbName) {
       }
       // Encrypt once with Sender Key (O(1))
       const groupCiphertext = await encryptGroupMsg(groupId, text);
-        if (!groupCiphertext) { showToast(t('toastSendFail'), 'error'); _isSending = false; return; }
+        // Row persisted BEFORE encrypt — mark failure (✗+retry), not a lying 'sent'.
+        if (!groupCiphertext) { updateMsgStatus(ts, 'failed', contact.id); showToast(t('toastSendFail'), 'error'); _isSending = false; return; }
       // Send same ciphertext to all members (no per-member re-encryption)
       // Fan out in parallel — members are independent recipients; a serial loop paid
       // one relay round-trip per member.
@@ -8211,7 +8211,7 @@ async function initMessenger(dbName) {
       // 1:1: v3 Double Ratchet + P2P + Sealed Sender
       const _frank = {};
       const encrypted = await encryptFor(text, contact.pubB64, _frank);
-      if (!encrypted) { showToast(t('toastSendFail'), 'error'); _isSending = false; return; }
+      if (!encrypted) { updateMsgStatus(ts, 'failed', contact.id); showToast(t('toastSendFail'), 'error'); _isSending = false; return; }
       // Record the commitment BEFORE the message can be reported. Fire-and-forget: a failed
       // record must never block or fail a send — it only means this message can't be reported.
       if (_frank.frankId && API) {
@@ -8439,11 +8439,11 @@ async function initMessenger(dbName) {
             try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId, groupName: contact.name, isGroupSK: true }, m.pubB64, groupId); } catch(e) { _dbg(e); }
           }));
           _fanOut(contact, fileMsg, ts, {}, { isFile: true, sfFor: contact.id, sfName: contact.name });
-        }
+        } else { updateMsgStatus(ts, 'failed', contact.id); showToast(t('toastSendFail'), 'error'); } // file row persisted above — mark it
         return;
       }
       const encrypted = await encryptFor(fileMsg, contact.pubB64);
-      if (!encrypted) { _dbg(null, 'encrypt failed'); return; }
+      if (!encrypted) { updateMsgStatus(ts, 'failed', contact.id); showToast(t('toastSendFail'), 'error'); _dbg(null, 'encrypt failed'); return; }
       await relaySend(contact.id, { to: contact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts, isFile: true }, contact.pubB64);
       _fanOut(contact, fileMsg, ts, { isFile: true },
         { isFile: true, sfFor: contact.id, sfPub: contact.pubB64, sfName: contact.name });
@@ -8759,14 +8759,14 @@ async function initMessenger(dbName) {
                     try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId: contact.id, groupName: contact.name, isGroupSK: true }, m.pubB64, contact.id); } catch(e) { _dbg(e); }
                   }));
                   _fanOut(contact, gPayload, ts, {}, { isFile: true, sfFor: contact.id, sfName: contact.name });
-                }
-                appendMsg(text, true, ts, null, gPayload, { msgId: genMsgId() });
+                } else { updateMsgStatus(ts, 'failed', contact.id); showToast(t('toastSendFail'), 'error'); } // row persisted above — mark it
+                appendMsg(text, true, ts, null, gPayload, { msgId: genMsgId(), failed: !groupCt });
                 renderContacts();
                 return;
               }
               const filePayload = JSON.stringify({ name: file.name, type: file.type, size: file.size, data: b64 });
               const encrypted = await encryptFor(filePayload, contact.pubB64);
-              if (!encrypted) { _dbg(null, 'encrypt failed'); return; }
+              if (!encrypted) { showToast(t('toastSendFail'), 'error'); _dbg(null, 'encrypt failed'); return; } // nothing persisted yet — encrypt-then-persist is the correct order, just surface the failure
               await dbPut('messages', { msgId: genMsgId(), contactId: contact.id, text, mine: true, ts, fileData: filePayload });
               contact.lastMsg = text; contact.lastMsgAt = ts;
               await dbPut('contacts', contact);
