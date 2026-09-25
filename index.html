@@ -10292,7 +10292,7 @@ async function initMessenger(dbName) {
             devs = { list: await _fetchDeviceList(rootId, msg.acctRoot) || [], ts: Date.now() };
             _attribDevCache.set(rootId, devs);
           }
-          if (devs.list.includes(msg.fromPub)) { contact = rootContact; contactId = rootContact.id; _attribPub = msg.fromPub; }
+          if (devs.list.includes(msg.fromPub) && msg.from === msg.fromPub.slice(0, 12)) { contact = rootContact; contactId = rootContact.id; _attribPub = msg.fromPub; }
         }
       } catch(e) { _dbg(e, 'device-attribution'); }
     }
@@ -10343,7 +10343,7 @@ async function initMessenger(dbName) {
           if (_okDel) { stored.deleted = true; stored.text = ''; delete stored.isPoll; delete stored.poll; delete stored.fileData; delete stored.voice; await dbPut('messages', stored); await _refreshPreview(stored.contactId, stored.ts); }
           // Delete raced its own message (dual-path reorder): tombstone the unknown id
           // under the same author-only binding, so the late original drops via dedup.
-          else if (!stored && _smId.startsWith(contactId + ':')) await dbPut('messages', _purgeTombstone({ msgId: _smId, mine: false, ts: Number(_smId.split(':')[1]) || msg.ts }));
+          else if (!stored && _smId.startsWith((_attribPub ? _attribPub.slice(0, 12) : contactId) + ':')) await dbPut('messages', _purgeTombstone({ msgId: _smId, mine: false, ts: Number(_smId.split(':')[1]) || msg.ts }));
           const el = document.querySelector(`[data-msgid="${_smId}"]`);
           if (el && _okDel) { el.dataset.deleted = '1'; safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>'); }
         } else if (signal.type === 'reaction') {

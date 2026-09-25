@@ -16,7 +16,10 @@ describe('delete-before-arrival — remote delete for an unknown msgId must not 
     // Group + relay embed the author in `authorId:ts` — the startsWith guard is the
     // same binding the stored-record path enforces via !mine + contactId.
     expect(SRC).toContain('!stored && targetMsgId.startsWith(msg.from + \':\')');
-    expect(SRC).toContain('!stored && _smId.startsWith(contactId + \':\')');
+    // 1:1 binds to the VERIFIED author id: the attributed device's pub prefix when the
+    // sender is a registry-listed sibling device (contactId was rewritten to the root id,
+    // whose prefix never matches the device-authored msgId), else the contact id.
+    expect(SRC).toContain('_smId.startsWith((_attribPub ? _attribPub.slice(0, 12) : contactId) + \':\')');
     // selfSync marks mine only for ids authored by this account's devices.
     expect(SRC).toContain("smId.startsWith(myId + ':') || mine.some(");
   });
@@ -54,6 +57,26 @@ describe('delete-before-arrival — remote delete for an unknown msgId must not 
     // so a repeated delete signal rejects cleanly.
     const _okDel = stored && !stored.mine && stored.contactId === 'peer123';
     expect(_okDel).toBe(false);
+  });
+
+  it('attributed lane: delete-before-arrival tombstones under the device id, not the root id', () => {
+    // Attributed senders rewrite contactId to the ROOT id while their messages keep
+    // `deviceId:ts` msgIds — binding to contactId never matched, so their
+    // delete-before-arrival was dropped and the late original resurrected.
+    const _attribPub = 'devPubABCDEFGH9999';
+    const contactId = 'rootIdABCDEF';
+    const _smId = 'devPubABCDEF:777';
+    const authorId = _attribPub ? _attribPub.slice(0, 12) : contactId;
+    expect(_smId.startsWith(authorId + ':')).toBe(true);
+    // Pre-fix binding would have failed this: device msgId under the root id.
+    expect(_smId.startsWith(contactId + ':')).toBe(false);
+  });
+
+  it('attribution requires a self-consistent claimed id (msg.from === device pub prefix)', () => {
+    // Without it a verified device could claim any `from`, planting msgIds under an
+    // arbitrary namespace — and with the author-binding, tombstoning ids it never
+    // owned. Same rule the stranger auto-add path already enforces.
+    expect(SRC).toContain('devs.list.includes(msg.fromPub) && msg.from === msg.fromPub.slice(0, 12)');
   });
 
   it('functional: forged author-binding fails — a peer cannot tombstone ids it did not author', () => {
