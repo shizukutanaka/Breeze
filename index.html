@@ -9656,10 +9656,13 @@ async function initMessenger(dbName) {
   // Poll for new members joining the group
   function startGroupMemberPoll(token, groupId) {
     if (!API) return;
+    const _memberName = (members, id) => _safeDisplayName((((members || []).find(m => m.id === id)) || {}).name || id, 30);
     const poll = setInterval(async () => {
       try {
         const resp = await postAPIRaw('/group/info', { token });
-        if (!resp.ok) { clearInterval(poll); return; }
+        // Only a definitive failure stops the poll — a transient 5xx/429/network blip must not
+        // permanently freeze roster convergence for the rest of the session (silent stale membership).
+        if (!resp || !resp.ok) { if (resp && resp.status >= 400 && resp.status < 500 && resp.status !== 429) { clearInterval(poll); return; } return; }
         const data = await resp.json();
         const group = await dbGet('contacts', groupId);
         if (!group) { clearInterval(poll); return; }
@@ -9667,6 +9670,7 @@ async function initMessenger(dbName) {
         const oldMembers = group.members || [];
         const sticky = _mergeStickyGroupCaps(oldMembers, safeMemberList(data.members));
         const newMembers = sticky.members;
+        if (!newMembers.length) return; // an empty roster is malformed — a member always sees itself; never let a bad response wipe membership
         // Apply membership in BOTH directions — growth-only syncing meant a kicked or
         // departed member stayed in my roster forever, kept receiving my sends, and (when
         // the kicker's epoch rotation never reached me) kept decrypting them with the
@@ -9675,31 +9679,27 @@ async function initMessenger(dbName) {
         const membersChanged = newMembers.length !== oldMembers.length ||
           newMembers.some(m => !oldMembers.some(o => o.id === m.id)) ||
           oldMembers.some(o => !newMembers.some(m => m.id === o.id));
-        const metaChanged = group.createdBy !== data.creatorId ||
-          JSON.stringify(group.admins || []) !== JSON.stringify(data.admins || []) ||
-          JSON.stringify(group.bannedIds || []) !== JSON.stringify(data.banned || []) ||
-          (typeof data.name === 'string' && data.name && group.name !== data.name);
+        const metaChanged = group.createdBy !== data.creatorId || JSON.stringify(group.admins || []) !== JSON.stringify(data.admins || []) || JSON.stringify(group.bannedIds || []) !== JSON.stringify(data.banned || []) || (typeof data.name === 'string' && data.name && group.name !== data.name);
         if (membersChanged || metaChanged) {
           if (membersChanged) group.members = newMembers;
           if (membersChanged && sticky.stripped.length) auditLog('security', `Group ${groupId}: roster dropped group-v5 for ${sticky.stripped.length} known member(s) — kept (possible relay tampering)`);
+          // Relay-asserted privilege data gates isPrivileged on incoming group signals — a silent
+          // admin/creator elevation lets a forged member's kick/meta notices pass locally. Same
+          // visibility rule as member joins: surface every privilege-set change.
+          const _prevAdmins = group.admins || []; const _prevCreator = group.createdBy;
           if (typeof data.creatorId === 'string' && data.creatorId) group.createdBy = data.creatorId;
           if (Array.isArray(data.admins)) group.admins = data.admins.filter(id => typeof id === 'string' && id.length <= 64).slice(0, CONFIG.GROUP_MAX);
           if (Array.isArray(data.banned)) group.bannedIds = data.banned.filter(id => typeof id === 'string' && id.length <= 64).slice(0, CONFIG.GROUP_MAX);
           if (typeof data.name === 'string' && data.name) group.name = _safeDisplayName(data.name, 50);
           await dbPut('contacts', group);
+          if (_prevCreator && group.createdBy !== _prevCreator) { auditLog('security', `Group ${groupId}: creator ${_prevCreator} → ${group.createdBy}`); showToast(t('transferredOwnership', _memberName(newMembers, group.createdBy)), 'info'); }
+          for (const _pid of (group.admins || []).filter(a => !_prevAdmins.includes(a))) { auditLog('security', `Group ${groupId}: admin promoted ${_pid}`); showToast(t('promotedAdmin', _memberName(newMembers, _pid)), 'info'); }
+          for (const _did of _prevAdmins.filter(a => !(group.admins || []).includes(a))) { auditLog('security', `Group ${groupId}: admin demoted ${_did}`); showToast(t('demotedAdmin', _memberName(oldMembers, _did)), 'info'); }
           // sendMessage reads activeContact.members (separate object) — without this an open group silently excludes new joiners until reopened.
-          if (activeContact?.id === groupId) {
-            activeContact.members = group.members;
-            activeContact.admins = group.admins;
-            activeContact.bannedIds = group.bannedIds;
-            activeContact.createdBy = group.createdBy;
-            if (activeContact.name !== group.name) { activeContact.name = group.name; _DOM.get('msg-conv-name').textContent = group.name; }
-          }
+          if (activeContact?.id === groupId) { activeContact.members = group.members; activeContact.admins = group.admins; activeContact.bannedIds = group.bannedIds; activeContact.createdBy = group.createdBy;
+            if (activeContact.name !== group.name) { activeContact.name = group.name; _DOM.get('msg-conv-name').textContent = group.name; } }
           // Add new individual contacts
-          for (const m of newMembers) {
-            if (m.id === myId) continue;
-            if (!(await dbGet('contacts', m.id))) await addContact(m.pubB64, m.name);
-          }
+          for (const m of newMembers) { if (m.id !== myId && !(await dbGet('contacts', m.id))) await addContact(m.pubB64, m.name); }
           renderContacts();
         }
       } catch(e) { _dbg(e); }
