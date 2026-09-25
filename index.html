@@ -9927,14 +9927,14 @@ async function initMessenger(dbName) {
           } catch { return; }
           const fileText = '📎 ' + fileName;
           await dbPut('messages', { msgId: syncId, contactId: target.id, text: fileText, mine: true, ts: msg.ts, fileData: syncText, synced: true });
-          target.lastMsg = fileText.slice(0, 40); target.lastMsgAt = msg.ts;
+          if (msg.ts > (target.lastMsgAt || 0) && msg.ts <= Date.now() + MS.DAY) { target.lastMsg = fileText.slice(0, 40); target.lastMsgAt = msg.ts; }
           await dbPut('contacts', target);
           if (activeContact?.id === target.id) appendMsg(fileText, true, msg.ts, null, syncText, { synced: true });
           renderContacts();
           return;
         }
         await dbPut('messages', { msgId: syncId, contactId: target.id, text: syncText, mine: true, ts: msg.ts, isPoll: msg.isPoll || undefined, synced: true });
-        target.lastMsg = (msg.isPoll ? '📊 ' : '') + syncText.slice(0, 40); target.lastMsgAt = msg.ts;
+        if (msg.ts > (target.lastMsgAt || 0) && msg.ts <= Date.now() + MS.DAY) { target.lastMsg = (msg.isPoll ? '📊 ' : '') + syncText.slice(0, 40); target.lastMsgAt = msg.ts; }
         await dbPut('contacts', target);
         if (activeContact?.id === target.id) appendMsg(syncText, true, msg.ts, null, null, { synced: true });
         renderContacts();
@@ -10212,9 +10212,13 @@ async function initMessenger(dbName) {
         else if (_p && _p.type === 'file' && typeof _p.name === 'string' && typeof _p.data === 'string') { fileDataG = _p; text = `📎 ${String(_p.name).slice(0, 128)}`; }
       } catch {}
       await dbPut('messages', { msgId, contactId: msg.groupId, text, mine: false, ts: msg.ts, isPoll: meta.isPoll || undefined, fileData: fileDataG, ...meta });
-      group.lastMsg = text.slice(0, 30);
-      group.lastMsgSender = senderName;
-      group.lastMsgAt = msg.ts;
+      // Dual-path delivers out of order: only a genuinely newer message may own the
+      // preview — an old late copy must not rewind lastMsgAt (also what delete matching keys on).
+      if (msg.ts > (group.lastMsgAt || 0) && msg.ts <= Date.now() + MS.DAY) {
+        group.lastMsg = text.slice(0, 30);
+        group.lastMsgSender = senderName;
+        group.lastMsgAt = msg.ts;
+      }
       if (activeContact?.id !== msg.groupId) {
         group.unread = (group.unread || 0) + 1;
         const mentions = [...text.matchAll(/@(\w+)/g)].map(m => m[1]);
@@ -10255,7 +10259,7 @@ async function initMessenger(dbName) {
         if (await dbGet('messages', msgId)) return; // Already persisted
         const meta = { msgId, voice: v.data };
         await dbPut('messages', { msgId, contactId: msg.from, text: t('voiceMsg'), mine: false, ts: msg.ts, voice: v.data });
-        contact.lastMsg = t('voiceMsg'); contact.lastMsgAt = msg.ts;
+        if (msg.ts > (contact.lastMsgAt || 0) && msg.ts <= Date.now() + MS.DAY) { contact.lastMsg = t('voiceMsg'); contact.lastMsgAt = msg.ts; }
         if (activeContact?.id !== msg.from) { contact.unread = (contact.unread || 0) + 1; if (_shouldAlert(contact, t('voiceMsg'))) playNotif(); }
         await dbPut('contacts', contact);
         if (activeContact?.id === msg.from) appendMsg(t('voiceMsg'), false, msg.ts, null, null, meta);
@@ -10445,8 +10449,9 @@ async function initMessenger(dbName) {
       await dbPut('messages', { msgId, contactId, text, mine: false, ts: msg.ts, ...meta, ...(_frank.frankId ? { frankId: _frank.frankId, frankOpening: _frank.opening } : {}) });
     }
 
-    contact.lastMsg = text.slice(0, 40);
-    contact.lastMsgAt = msg.ts;
+    // Dual-path delivers out of order: only a genuinely newer message may own the
+    // preview — an old late copy must not rewind lastMsgAt (also what delete matching keys on).
+    if (msg.ts > (contact.lastMsgAt || 0) && msg.ts <= Date.now() + MS.DAY) { contact.lastMsg = text.slice(0, 40); contact.lastMsgAt = msg.ts; }
     if (activeContact?.id !== contactId) {
       // A message marked "no reply needed" is delivered in full but never adds to the unread
       // count and never rings: the sender explicitly said it does not require you.
