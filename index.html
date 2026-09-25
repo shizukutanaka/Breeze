@@ -9933,14 +9933,14 @@ async function initMessenger(dbName) {
           } catch { return; }
           const fileText = '📎 ' + fileName;
           await dbPut('messages', { msgId: syncId, contactId: target.id, text: fileText, mine: true, ts: msg.ts, fileData: syncText, synced: true });
-          target.lastMsg = fileText.slice(0, 40); target.lastMsgAt = msg.ts;
+          if (msg.ts > (target.lastMsgAt || 0)) { target.lastMsg = fileText.slice(0, 40); target.lastMsgAt = msg.ts; } // monotonic — a late selfSync must not rewind the preview
           await dbPut('contacts', target);
           if (activeContact?.id === target.id) appendMsg(fileText, true, msg.ts, null, syncText, { synced: true });
           renderContacts();
           return;
         }
         await dbPut('messages', { msgId: syncId, contactId: target.id, text: syncText, mine: true, ts: msg.ts, isPoll: msg.isPoll || undefined, synced: true });
-        target.lastMsg = (msg.isPoll ? '📊 ' : '') + syncText.slice(0, 40); target.lastMsgAt = msg.ts;
+        if (msg.ts > (target.lastMsgAt || 0)) { target.lastMsg = (msg.isPoll ? '📊 ' : '') + syncText.slice(0, 40); target.lastMsgAt = msg.ts; } // monotonic — a late selfSync must not rewind the preview
         await dbPut('contacts', target);
         if (activeContact?.id === target.id) appendMsg(syncText, true, msg.ts, null, null, { synced: true });
         renderContacts();
