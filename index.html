@@ -4960,16 +4960,11 @@ async function initMessenger(dbName) {
   }
 
   // --- Encrypt with Double Ratchet ---
-  // Per-peer session lock. The Double Ratchet session is a read-modify-write record
-  // (getSession -> advance chain -> saveSession); multi-device fan-out fires concurrent
-  // encryptFor calls at the same peer, and two racers that both read chain counter N emit
-  // TWO messages under the SAME message key — the receiver drops the second as a replay
-  // and the copy is silently lost (Socratic concurrency lens). One promise-chain per peer
-  // serializes every encrypt AND decrypt touching that session. Failures release the lock.
-  // The in-tab promise chain alone is not enough: the session lives in SHARED IndexedDB, so
-  // a second TAB has its own Map and can interleave with this one. navigator.locks makes the
-  // critical section cross-tab (same-origin, auto-released if a tab dies); the promise chain
-  // stays as the inner guard and as the fallback where Web Locks is unavailable.
+  // Per-peer session lock: the session is read-modify-write (getSession -> advance ->
+  // saveSession); concurrent encryptFor calls at the same peer would emit two messages
+  // under the SAME message key (receiver drops the second as replay). One promise-chain
+  // per peer serializes encrypt AND decrypt; navigator.locks extends it cross-tab since
+  // the session lives in SHARED IndexedDB (auto-released on tab death, chain is fallback).
   const _peerLocks = new Map();
   function _withPeerLock(peerId, fn) {
     const prev = _peerLocks.get(peerId) || Promise.resolve();
@@ -5356,16 +5351,12 @@ async function initMessenger(dbName) {
   }
 
   // ═══ Sealed Sender v2 (inline mirror of src/crypto/seal.js) ═══
-  // The pre-v2 "sealed" envelope carried from/fromPub/fromName — and the replyTo PLAINTEXT
-  // preview — in the clear inside the JSON string the relay stores, so "the Worker doesn't
-  // see the sender" was only true of a Worker that chose not to look (Socratic-found). v2
-  // encrypts ALL sender-identifying metadata to the RECIPIENT's identity key: ephemeral
-  // X25519/P-256 ECDH → HKDF('breeze-seal-v2') → AES-256-GCM with AAD binding to+ts (no
-  // cross-recipient/cross-time splicing). The relay now sees only {to, ts, ratchet
-  // ciphertext, sealed blob}. Capability-gated: recipients advertise 'seal-v2' in their
-  // prekey-bundle caps; senders read caps via /prekey/status (consumes NO one-time prekey)
-  // and fall back to the legacy envelope for un-upgraded peers — delivery over privacy,
-  // and the /msg fallback + offline retry queue stay legacy (documented in SECURITY.md).
+  // The pre-v2 envelope carried sender metadata + the replyTo PLAINTEXT preview in the
+  // clear for the relay. v2 encrypts all sender-identifying metadata to the recipient's
+  // identity key: ephemeral X25519 → HKDF('breeze-seal-v2') → AES-GCM, AAD binds to+ts
+  // (no cross-recipient/time splicing). Capability-gated ('seal-v2' in prekey caps via
+  // /prekey/status, no OTP consumed); legacy envelope fallback — delivery over privacy
+  // (/msg fallback + retry queue stay legacy; documented in SECURITY.md).
   const SEAL_INFO = 'breeze-seal-v2';
   async function sealMeta(recipPubB64, meta, to, ts) {
     try {
@@ -5417,16 +5408,10 @@ async function initMessenger(dbName) {
     return (await _peerCaps(peerId)).includes(CAPS_SEAL_V2);
   }
 
-  // ONE fan-out for every kind of outgoing content. Three near-identical copies of this loop
-  // had accumulated — text in sendMessage, attachments in _sendFile/voice, mutations in
-  // sendSignal — differing only in which envelope flags they set, so each new device rule had
-  // to be remembered in three places (attachments were forgotten exactly that way). Collapsed
-  // to one function taking those flags: a fix now lands on every path at once.
-  //
-  // Devices are dispatched in PARALLEL. They are distinct peers and the ratchet lock is
-  // per-peer, so nothing serialises them but the old sequential `await` in the loop — which
-  // made fan-out latency linear in device count (an account with 3 devices paid three
-  // round-trips before the last one saw the message). Now it costs one.
+  // ONE fan-out for every kind of outgoing content (was three near-identical loops in
+  // sendMessage/_sendFile/sendSignal — each new device rule had to be remembered thrice).
+  // Devices dispatch in PARALLEL: they're distinct peers (per-peer ratchet lock), so the
+  // old serial `await` loop only made latency linear in device count. Now it costs one.
   async function _fanOut(snapContact, plaintext, ts, peerExtra, selfExtra) {
     try {
       // pubB64 is '' for groups — still fan out to MY other devices (peerDevs will be []).
@@ -5764,6 +5749,34 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'distributeSenderKey'); }
   }
 
+  // Group messages arriving BEFORE their sender key (reorder, in-flight epoch rotation,
+  // a failed distribution) were dropped forever — pend and retry when the key lands.
+  const _groupPending = new Map();
+  async function _groupKeyPending(groupId, senderId, payload) {
+    try {
+      const peerSK = await dbGet('identity', 'gsk-peer:' + groupId + ':' + senderId);
+      if (!peerSK) return true;
+      const p = JSON.parse(payload);
+      return p && p.v === 5 && (peerSK.v !== 5 || (p.ep | 0) > (peerSK.epoch | 0));
+    } catch(e) { _dbg(e, 'group-pending'); return false; }
+  }
+  function _pendGroupMsg(msg, groupId, senderId) {
+    const k = groupId + ':' + senderId, mid = (msg.from || '') + ':' + (msg.ts || '');
+    const arr = (_groupPending.get(k) || []).filter(e => Date.now() - e.ts < 2 * MS.HOUR);
+    if (!arr.some(e => (e.msg.from || '') + ':' + (e.msg.ts || '') === mid)) arr.push({ msg, ts: Date.now() });
+    const kept = arr.slice(-40);
+    if (kept.length) _groupPending.set(k, kept); else _groupPending.delete(k);
+  }
+  async function _drainGroupPending(groupId, senderId) {
+    const arr = _groupPending.get(groupId + ':' + senderId);
+    if (!arr?.length) return;
+    _groupPending.delete(groupId + ':' + senderId);
+    for (const e of arr) {
+      if (Date.now() - e.ts >= 2 * MS.HOUR) continue;
+      try { await handleIncoming(e.msg); } catch(err) { _dbg(err, 'group-pending-drain'); }
+    }
+  }
+
   // v5 kick completeness: the kicker rotates ITS OWN key, but every other member also handed theirs to the kicked member — without rotating too, the kick isn't complete.
   async function notifyGroupKick(groupId, kickedId, epoch) {
     if (!CONFIG.GROUP_RATCHET_V5) return;
@@ -5778,15 +5791,10 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'notifyGroupKick'); }
   }
 
-  // On a group_kick notice: drop the kicked member, rotate our key to the announced epoch, and re-share it. Epoch-guarded so a duplicate/replayed notice is a no-op.
-  // The notice is a rumor E2E'd by ANY member — without a privilege check, any contact
-  // could "kick" an arbitrary member from MY client (server kick needs admin+sig; this
-  // path needed nothing) or pin my chain key at a fake high epoch, after which the >=
-  // guard rejects every real rotation notice forever.
-  // One rule for every epoch rotation (kick, kick notice, leave, leave notice): rotate to a fresh v5
-  // chain key only if the group — departed member already removed — still negotiates v5. A v3 group
-  // (a legacy member remains) keeps its static key, as kick always did; hardcoding v:5 in the leave /
-  // notice paths converted mixed groups to a format their legacy member can't read.
+  // On a group_kick notice: drop the member, rotate to the announced epoch, re-share.
+  // Privilege-gated + epoch-monotonic — a rumor from a non-admin must not rotate or pin.
+  // One rule for every epoch rotation (kick/kick notice/leave/leave notice): rotate to a fresh v5
+  // chain key only if the group still negotiates v5 — hardcoding v:5 exiles any remaining legacy member.
   async function _rotateGroupEpoch(group, epoch) {
     if (!CONFIG.GROUP_RATCHET_V5 || typeof epoch !== 'number' || !_computeGroupV5(group)) return false;
     await dbPut('identity', { chainKey: Array.from(crypto.getRandomValues(new Uint8Array(32))), counter: 0, epoch, v: 5, skipped: {} }, 'gsk:' + group.id);
@@ -6250,16 +6258,12 @@ async function initMessenger(dbName) {
 
   // ═══ DRY: Signal helper (13 calls → 1 helper) ═══
   // dm-sig-v1: seal dm:-room signal payloads (SDP/ICE/typing/read) to the peer's identity
-  // key. The /signal relay is unauthenticated and previously carried these in plaintext —
-  // anyone who knows both ids can read ICE candidates (which disclose both parties' IPs)
-  // and typing/read activity. Reuses the seal-v2 ECIES primitive (ephemeral X25519 →
-  // HKDF → AES-GCM); AAD binds room+ts so an envelope can't be spliced across rooms or
-  // replayed with a doctored timestamp. Sign-then-seal: the SDP's Ed25519 signature rides
-  // inside the ciphertext, so sender authenticity is unchanged. Capability-gated: peer
-  // must advertise 'dm-sig-v1' in prekey-bundle caps; legacy peers get plaintext (delivery
-  // over privacy — same documented trade-off as seal-v2). Wire shape: {room, sender,
-  // type:'enc', data:'{"enc":"dm-sig-v1","ts":..,"se":{ek,iv,ct}}'} — the inner plaintext
-  // is {t: type, d: data}, so even the signal TYPE is hidden from the relay.
+  // key — /signal is unauthenticated and carried them in plaintext (ICE leaks both IPs).
+  // Reuses the seal-v2 ECIES primitive; AAD binds room+ts (no cross-room splice/replay).
+  // Sign-then-seal: the SDP signature rides inside the ciphertext, authenticity unchanged.
+  // Cap-gated ('dm-sig-v1' in prekey caps); legacy peers get plaintext — delivery over
+  // privacy, same documented trade-off as seal-v2. Inner plaintext {t, d} hides even the
+  // signal TYPE from the relay.
   async function _sealDmSignal(room, msg) {
     try {
       const peerId = room.replace(/^(?:dm|call):/, '').split(':').find(id => id !== myId);
@@ -9015,14 +9019,8 @@ async function initMessenger(dbName) {
     renderContacts();
   });
 
-  // VOICE / VIDEO CALLING (WebRTC MediaStream)
-  //
-  // Architecture:
-  //   - Separate PeerConnection from DataChannel (avoids renegotiation)
-  //   - Signal via existing /api/signal with type: call-offer, call-answer, call-end
-  //   - ICE config reuses messenger config (STUN + TURN)
-  //   - UI: fullscreen overlay with timer + controls
-
+  // VOICE / VIDEO CALLING — separate PeerConnection from DataChannel (no renegotiation);
+  // signals via /api/signal (call-offer/answer/end); ICE reuses messenger config; fullscreen UI.
   let _callState = 'idle'; // idle | calling | ringing | connected
   let _callPC = null;
   let _callStream = null;    // local media stream
@@ -10007,6 +10005,8 @@ async function initMessenger(dbName) {
           if (typeof skMsg.sigPub === 'string' && skMsg.sigPub.length > 0 && skMsg.sigPub.length < 200) skEntry.sigPub = skMsg.sigPub;
           await dbPut('identity', skEntry, peerKey);
           _dbg(null, 'Received sender key for group ' + skMsg.groupId);
+          // New key material may unblock messages that arrived before it (see _groupPending).
+          await _drainGroupPending(skMsg.groupId, (msg.from || '').slice(0, 12));
         }
       } catch(e) { _dbg(e, 'sender-key'); }
       return;
@@ -10203,7 +10203,12 @@ async function initMessenger(dbName) {
         if (!member) return;
         text = await decryptFrom(msg.payload, member.pubB64);
       }
-      if (!text) return;
+      if (!text) {
+        // Key material may still be in flight (reorder / epoch rotation / failed dist)
+        // — forgery-class failures (bad sig, stale epoch, exhausted skip cache) never pend.
+        if (msg.isGroupSK && await _groupKeyPending(msg.groupId, (msg.from || '').slice(0, 12), msg.payload)) _pendGroupMsg(msg, msg.groupId, (msg.from || '').slice(0, 12));
+        return;
+      }
       // Cap group message text — relay enforces 256 KB but the P2P group path has no server check.
       if (text.length > 65536) return;
       const msgId = msg.from + ':' + msg.ts;
@@ -11585,13 +11590,9 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'restore'); showToast(t('backupWrongPass'), 'error'); }
   }
 
-  // REMOVED: createEphemeralRoom — /room's private copy of group creation that put a
-  // client-generated 'room:<random>' id in the ?join= URL while the Worker indexes groups
-  // by the SERVER token it returns (grp:<token>). Every /room link 404'd at /group/join —
-  // dead on arrival — and the creator never got a local contact for it. Its 1h/24h/7d/
-  // permanent TTL picker was also decorative: /group/create accepts ttl but ignores it
-  // (every invite is TTL.MONTH, refreshed on read). /room now delegates to
-  // createGroupInviteLink, the working path.
+  // REMOVED: createEphemeralRoom — /room put a client-generated 'room:<random>' id in the
+  // join URL but the Worker indexes by SERVER token (grp:<token>): every link 404'd and its
+  // TTL picker was decorative (/group/create ignores ttl). /room delegates to createGroupInviteLink.
 
   // v1 INTEGRATION: Safety Features (Panic Wipe Mode)
 
@@ -14783,16 +14784,9 @@ if (PLATFORM === 'electron' && window.breeze) {
     });
   }
 } // ← END of the Electron-only block. It used to close ~190 lines further down, which
-  // silently trapped everything below inside `PLATFORM === 'electron' && window.breeze`:
-  // the handler that calls ITSELF "all platforms", the scroll-to-bottom FAB, the unread
-  // badge bump while scrolled up, the disappearing-message countdown, the in-chat search
-  // bar wiring, an `if (IS_MOBILE)` block and an `if (PLATFORM === 'capacitor')` block
-  // (neither can ever be true inside an electron guard). On web — the primary platform —
-  // none of it ran: verified in a browser, where pressing Escape left an .overlay in place
-  // while #scroll-fab and #search-bar sat in the DOM as dead UI.
-  // The code below is deliberately left at its original indentation: it sits inside
-  // template literals whose leading whitespace is part of the emitted HTML, so re-indenting
-  // would change strings, not just formatting. Read it as top level.
+  // silently trapped everything below inside `PLATFORM === 'electron' && window.breeze` —
+  // on web none of it ran. The code below keeps its original indentation: it sits inside
+  // template literals whose leading whitespace is emitted HTML; read it as top level.
 
   // Global: Escape to close modals + keyboard shortcuts (all platforms)
   document.addEventListener('keydown', (e) => {
@@ -14881,25 +14875,10 @@ if (PLATFORM === 'electron' && window.breeze) {
     }
   }
 
-  // This block used to hold a second, REDUNDANT disappearing-message countdown: a
-  // 30-second global scanner over every `.msg-timer-badge`, re-deriving a deadline by
-  // regex-matching the badge's translated title ("Disappears in 1h") instead of using
-  // the real timestamp. appendMsg() (the ONE function that renders every message —
-  // fresh, incoming, AND reloaded from IndexedDB history, `disappearAt` passed through
-  // in every call site) ALREADY sets up a precise per-message countdown using the real
-  // `meta.disappearAt` timestamp directly, so this scanner covered zero cases the
-  // precise one didn't.
-  //
-  // It was also actively harmful. Its title-parsing regex, `/(\d+)/`, extracts the
-  // leading digits and always multiplies by MS.MIN — ignoring the unit letter the label
-  // itself carries ('h' vs 'm'). E2E-confirmed against the real generated title
-  // "Disappears in 1h": it computed a 1-MINUTE deadline, 59 minutes short of the real
-  // one hour. For the longest offered TTL, 24h, the error is 23 hours 36 minutes. Any
-  // message set to disappear in 1h or 24h — the two longest, most-trusted options in the
-  // picker — was actually deleted within one to two 30-second scan intervals of being
-  // sent, not after the promised hour or day. Deleted rather than fixed: the correct
-  // implementation already existed right where the message renders, this one had
-  // nothing worth keeping.
+  // This block used to hold a second, REDUNDANT disappearing-message countdown — a 30s
+  // scanner over `.msg-timer-badge` whose title-parsing regex ignored the unit letter
+  // ('h' vs 'm'), deleting 1h/24h messages within minutes. appendMsg() already sets a
+  // precise per-message countdown from the real meta.disappearAt; deleted, not fixed.
 
   // v3.3: Search in chat (Ctrl+Shift+F)
   const _searchBar = _DOM.get('search-bar');
