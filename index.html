@@ -9883,7 +9883,13 @@ async function initMessenger(dbName) {
           const signal = JSON.parse(syncText);
           const smId = safeMsgId(signal.msgId || '');
           const stored = await dbGet('messages', smId);
-          if (!stored) return; // mutation for a message this device never had
+          if (!stored) {
+            // A delete can race its own message: a sibling device erased it before this
+            // device ever received it. Tombstone the unknown id so the late original is
+            // dropped by dedup instead of resurrecting what I already erased elsewhere.
+            if (signal.type === 'delete') await dbPut('messages', _purgeTombstone({ msgId: smId, mine: smId.startsWith(myId + ':') || mine.some(p => smId.startsWith(String(p || '').slice(0, 12) + ':')), ts: Number(smId.split(':')[1]) || msg.ts }));
+            return; // mutation for a message this device never had
+          }
           if (signal.type === 'edit' && typeof signal.text === 'string' && !stored.deleted) {
             stored.text = signal.text.slice(0, 65536); stored.edited = true; await dbPut('messages', stored);
             const el = document.querySelector(`[data-msgid="${smId}"]`);
@@ -10137,6 +10143,9 @@ async function initMessenger(dbName) {
             const stored = await dbGet('messages', targetMsgId);
             const _ok = _ownGroupMsg(stored);
             if (_ok) { stored.deleted = true; stored.text = ''; delete stored.isPoll; delete stored.poll; delete stored.fileData; delete stored.voice; await dbPut('messages', stored); await _refreshPreview(stored.contactId, stored.ts); }
+            // Delete raced its own message (dual-path reorder): tombstone the unknown id
+            // under the same author-only binding, so the late original drops via dedup.
+            else if (!stored && targetMsgId.startsWith(msg.from + ':')) await dbPut('messages', _purgeTombstone({ msgId: targetMsgId, mine: false, ts: Number(targetMsgId.split(':')[1]) || msg.ts }));
             const el = document.querySelector(`[data-msgid="${targetMsgId}"]`);
             if (el && _ok) { el.dataset.deleted = '1'; safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>'); }
           } else if (signal.type === 'reaction') {
@@ -10332,6 +10341,9 @@ async function initMessenger(dbName) {
           // Only allow deleting messages not authored by us — contact cannot remote-delete our outgoing messages
           const _okDel = stored && !stored.mine && stored.contactId === contactId;
           if (_okDel) { stored.deleted = true; stored.text = ''; delete stored.isPoll; delete stored.poll; delete stored.fileData; delete stored.voice; await dbPut('messages', stored); await _refreshPreview(stored.contactId, stored.ts); }
+          // Delete raced its own message (dual-path reorder): tombstone the unknown id
+          // under the same author-only binding, so the late original drops via dedup.
+          else if (!stored && _smId.startsWith(contactId + ':')) await dbPut('messages', _purgeTombstone({ msgId: _smId, mine: false, ts: Number(_smId.split(':')[1]) || msg.ts }));
           const el = document.querySelector(`[data-msgid="${_smId}"]`);
           if (el && _okDel) { el.dataset.deleted = '1'; safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>'); }
         } else if (signal.type === 'reaction') {
