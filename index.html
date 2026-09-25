@@ -7860,7 +7860,7 @@ async function initMessenger(dbName) {
             await Promise.allSettled(members.map(async (m) => {
               try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCt, ts, groupId: target.id, groupName: target.name, isGroupSK: true }, m.pubB64, target.id); } catch(e) { _dbg(e); }
             }));
-            _fanOut(target, msg.text, ts, {}, { sfFor: target.id, sfName: target.name });
+            _fanOut(target, msg.text, ts, {}, { forwarded: true, sfFor: target.id, sfName: target.name });
             sent++;
             continue;
           }
@@ -7871,6 +7871,8 @@ async function initMessenger(dbName) {
           target.lastMsgAt = ts;
           await dbPut('contacts', target);
           await relaySend(target.id, { to: target.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts }, target.pubB64);
+          // 1:1 forwards never self-synced — siblings silently missed them.
+          _fanOut(target, msg.text, ts, {}, { forwarded: true, sfFor: target.id, sfPub: target.pubB64, sfName: target.name });
           sent++;
         } catch(e) { _dbg(e, 'forward'); }
       }
@@ -9939,10 +9941,12 @@ async function initMessenger(dbName) {
           renderContacts();
           return;
         }
-        await dbPut('messages', { msgId: syncId, contactId: target.id, text: syncText, mine: true, ts: msg.ts, isPoll: msg.isPoll || undefined, synced: true });
-        target.lastMsg = (msg.isPoll ? '📊 ' : '') + syncText.slice(0, 40); target.lastMsgAt = msg.ts;
+        // Poll detected from JSON like the receive paths; msgId/forwarded ride the record + render meta.
+        let _sp = null; try { const _p = JSON.parse(syncText); _sp = (_p && _p.type === 'poll' && typeof _p.pollId === 'string' && Array.isArray(_p.options)) ? _p : null; } catch {}
+        await dbPut('messages', { msgId: syncId, contactId: target.id, text: syncText, mine: true, ts: msg.ts, isPoll: _sp ? true : undefined, forwarded: msg.forwarded || undefined, synced: true });
+        target.lastMsg = _sp ? '📊 ' + String(_sp.question || '').slice(0, 30) : syncText.slice(0, 40); target.lastMsgAt = msg.ts;
         await dbPut('contacts', target);
-        if (activeContact?.id === target.id) appendMsg(syncText, true, msg.ts, null, null, { synced: true });
+        if (activeContact?.id === target.id) appendMsg(syncText, true, msg.ts, null, null, { synced: true, msgId: syncId, forwarded: msg.forwarded, poll: _sp });
         renderContacts();
       } catch(e) { _dbg(e, 'self-sync'); }
       return;
