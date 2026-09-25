@@ -4621,15 +4621,11 @@ async function initMessenger(dbName) {
   // Wire MUST stay arr() to match the reference. _cmOk = verify-if-present, constant-time.
   async function _keyCommit(mk) { return arr(await hkdf(u8(mk), new Uint8Array(32), 'breeze-commit', 32)); }
   async function _cmOk(p, mk) { return !p.cm || await timingSafeEqual(u8(p.cm).join(','), (await _keyCommit(mk)).join(',')); }
-  // I17 message franking. Cf = HMAC(Kf, plaintext) is recorded at the relay at send time; a
-  // recipient reporting abuse reveals (frankId, plaintext, Kf) and the relay recomputes the HMAC,
-  // so it can verify a reported message was really sent WITHOUT ever seeing un-reported content.
-  // Kf is DERIVED from the message key rather than drawn randomly and shipped (as
-  // src/crypto/franking.js does): both parties already hold msgKey, so deriving removes the key
-  // transport entirely — only the opaque frankId goes on the wire, and old clients ignore it.
-  // HKDF is one-way, so revealing Kf in a report discloses nothing about msgKey or any other message.
-  // Limit (CRYPTO-SPEC §9 N4): symmetric franking cannot bind a MALICIOUS sender, who can simply
-  // skip the /abuse/record call; it stops forged reports, not a determined abuser.
+  // I17 franking: Cf = HMAC(Kf, plaintext) recorded at the relay at send time; an abuse
+  // report reveals (frankId, plaintext, Kf) so the relay recomputes+verifies without ever
+  // seeing un-reported content. Kf is HKDF-DERIVED from msgKey (not shipped — both sides
+  // hold it): only the opaque frankId rides the wire, and revealing Kf leaks nothing.
+  // Limit (§9 N4): can't bind a malicious sender who skips /abuse/record — stops forged reports.
   async function _frankKey(mk) { return hkdf(u8(mk), new Uint8Array(32), 'breeze-frank', 32); }
   async function _frankCommit(kf, text) {
     const k = await crypto.subtle.importKey('raw', kf, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
@@ -4839,7 +4835,9 @@ async function initMessenger(dbName) {
       const resp = await postAPIRaw('/prekey/fetch', { userId: peerPubB64.slice(0, 12) });
       if (!resp.ok) return null;
       const bundle = await resp.json();
-      if (!_peerSupportsX3dhV5(bundle)) return null;
+      const ktPeerId = peerPubB64.slice(0, 12);
+      // Bundle caps are relay-asserted — merge in PROVEN caps so a strip can't downgrade an established v5 peer to bare DH.
+      if (!_peerSupportsX3dhV5(bundle) && !(await _peerCaps(ktPeerId)).includes(CAPS_X3DH_V5)) return null;
       if (!bundle.identityKey || !bundle.edIdentityKey || !bundle.signedPreKey || !bundle.signedPreKeySig) return null;
       const spkPubPeer = Uint8Array.from(atob(bundle.signedPreKey), c => c.charCodeAt(0));
       // MUST verify before deriving (catches a relay/MITM swapping in its own SPK). Raw SPK bytes, not verifySignature()'s UTF-8-string convention used for msg sig/sigPub (E2E-found).
@@ -4849,8 +4847,10 @@ async function initMessenger(dbName) {
         if (edPub) sigOk = await crypto.subtle.verify({ name: 'Ed25519' }, edPub, Uint8Array.from(atob(bundle.signedPreKeySig), c => c.charCodeAt(0)), spkPubPeer);
       } catch(e) { _dbg(e, 'verify-spk'); }
       if (!sigOk) { _dbg(null, 'X3DH: signed pre-key signature INVALID — aborting, falling back'); return null; }
+      // A sig-valid bundle addressed to this peer's own IK is a peer-AUTHORED v5
+      // advertisement — proven, so a later cap-strip can't undo it.
+      if (bundle.identityKey === peerPubB64) _markPeerCapProven(ktPeerId, CAPS_X3DH_V5);
       // I11 KT audit: independent MITM signal — warns, doesn't block (no hard-abort flow yet).
-      const ktPeerId = peerPubB64.slice(0, 12);
       const audit = await _auditKeyHistory(await dbGet('identity', 'ktIk:' + ktPeerId), bundle.keyHistory);
       if (audit.verdict === 'tampered') showKeyChangeWarning(ktPeerId, peerPubB64, 'X3DH key-transparency chain tampered — possible hostile relay.').catch(e => _dbg(e, 'kt-warn'));
       else if (audit.verdict === 'rolled') showKeyChangeWarning(ktPeerId, peerPubB64, 'X3DH key-history rollover.').catch(e => _dbg(e, 'kt-warn'));
@@ -4960,16 +4960,11 @@ async function initMessenger(dbName) {
   }
 
   // --- Encrypt with Double Ratchet ---
-  // Per-peer session lock. The Double Ratchet session is a read-modify-write record
-  // (getSession -> advance chain -> saveSession); multi-device fan-out fires concurrent
-  // encryptFor calls at the same peer, and two racers that both read chain counter N emit
-  // TWO messages under the SAME message key — the receiver drops the second as a replay
-  // and the copy is silently lost (Socratic concurrency lens). One promise-chain per peer
-  // serializes every encrypt AND decrypt touching that session. Failures release the lock.
-  // The in-tab promise chain alone is not enough: the session lives in SHARED IndexedDB, so
-  // a second TAB has its own Map and can interleave with this one. navigator.locks makes the
-  // critical section cross-tab (same-origin, auto-released if a tab dies); the promise chain
-  // stays as the inner guard and as the fallback where Web Locks is unavailable.
+  // Per-peer session lock: the session is read-modify-write (getSession -> advance ->
+  // saveSession); concurrent encryptFor calls at the same peer would emit two messages
+  // under the SAME message key (receiver drops the second as replay). One promise-chain
+  // per peer serializes encrypt AND decrypt; navigator.locks extends it cross-tab since
+  // the session lives in SHARED IndexedDB (auto-released on tab death, chain is fallback).
   const _peerLocks = new Map();
   function _withPeerLock(peerId, fn) {
     const prev = _peerLocks.get(peerId) || Promise.resolve();
@@ -5043,8 +5038,13 @@ async function initMessenger(dbName) {
   const _decryptFailures = {};
 
   async function decryptFrom(payload, peerPubB64, frank) {
-    const r = await _withPeerLock((peerPubB64 || '').slice(0, 12), () => _decryptFromRaw(payload, peerPubB64, frank));
-    if (r && _sv2Ctx) _markPeerCapProven(_sv2Ctx, CAPS_SEAL_V2); return r; // decryptable sealed env proves seal-v2
+    const peerId = (peerPubB64 || '').slice(0, 12);
+    const hadSess = !!(await getSession(peerId));
+    const r = await _withPeerLock(peerId, () => _decryptFromRaw(payload, peerPubB64, frank));
+    if (r && _sv2Ctx) _markPeerCapProven(_sv2Ctx, CAPS_SEAL_V2); // decryptable sealed env proves seal-v2
+    // Decryptable inner msg on a pkm-bootstrapped session proves the initiator did X3DH v5 — proven cap resists later cap-strip. ik must equal the session peer (no self-plant).
+    if (r && !hadSess) { try { const pk = JSON.parse(payload); if (pk?.v === 5 && pk?.t === 'pkm' && bufToB64(new Uint8Array(pk.ik)) === peerPubB64) _markPeerCapProven(peerId, CAPS_X3DH_V5); } catch(e) {} }
+    return r;
   }
   async function _decryptFromRaw(payload, peerPubB64, frank) {
     try {

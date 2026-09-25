@@ -25,7 +25,7 @@ function loadMark(env) {
   return new Function('env', `const {dbGet, dbPut, _peerCapsCache, _dbg} = env; return (${FN_MARK});`)(env);
 }
 function loadDec(env) {
-  return new Function('env', `const {_withPeerLock, _decryptFromRaw, _markPeerCapProven, CAPS_SEAL_V2, _sv2Ctx} = env; return (${FN_DEC});`)(env);
+  return new Function('env', `const {_withPeerLock, _decryptFromRaw, _markPeerCapProven, CAPS_SEAL_V2, _sv2Ctx, getSession, JSON, Uint8Array, bufToB64, CAPS_X3DH_V5} = env; return (${FN_DEC});`)(env);
 }
 
 function mkEnv({ caps, contact }) {
@@ -140,6 +140,7 @@ describe('decryptFrom marks seal-v2 only under a sealed-envelope window', () => 
       _markPeerCapProven: async (id, cap) => marked.push([id, cap]),
       CAPS_SEAL_V2: 'seal-v2',
       _sv2Ctx: 'alice00000x1',
+      getSession: async () => ({}), // established session — pkm path unreachable
     };
     const f = loadDec(env);
     expect(await f('payload', 'alice00000x1pub')).toBe('plaintext');
@@ -154,6 +155,7 @@ describe('decryptFrom marks seal-v2 only under a sealed-envelope window', () => 
       _markPeerCapProven: async (id, cap) => marked.push([id, cap]),
       CAPS_SEAL_V2: 'seal-v2',
       _sv2Ctx: null,
+      getSession: async () => ({}),
     };
     expect(await loadDec(env)('payload', 'x'.repeat(12))).toBe('plaintext');
     expect(marked).toEqual([]);
@@ -167,6 +169,7 @@ describe('decryptFrom marks seal-v2 only under a sealed-envelope window', () => 
       _markPeerCapProven: async (id, cap) => marked.push([id, cap]),
       CAPS_SEAL_V2: 'seal-v2',
       _sv2Ctx: 'alice00000x1',
+      getSession: async () => ({}),
     };
     expect(await loadDec(env)('payload', 'x'.repeat(12))).toBe(null);
     expect(marked).toEqual([]);
@@ -187,5 +190,56 @@ describe('pins', () => {
     expect(src).toContain('if (r && _sv2Ctx) _markPeerCapProven(_sv2Ctx, CAPS_SEAL_V2)');
     expect(src).toContain("if (_dmSigCtx === peerPub.slice(0, 12)) _markPeerCapProven(_dmSigCtx, CAPS_DM_SIG)");
     expect(src).toContain("if (_dmSigCtx === contact.id) _markPeerCapProven(contact.id, CAPS_DM_SIG)");
+  });
+  it('v5 bundle caps are relay-asserted — the gate merges in PROVEN caps', () => {
+    expect(src).toContain('!(await _peerCaps(ktPeerId)).includes(CAPS_X3DH_V5)');
+    expect(src).toContain('if (bundle.identityKey === peerPubB64) _markPeerCapProven(ktPeerId, CAPS_X3DH_V5)');
+  });
+  it('pkm mark is gated on decrypt success AND ik === session peer', () => {
+    expect(src).toContain("pk?.v === 5 && pk?.t === 'pkm' && bufToB64(new Uint8Array(pk.ik)) === peerPubB64");
+    expect(src).toMatch(/if \(r && !hadSess\)/);
+  });
+});
+
+describe('x3dh-v5 provenance (decryptFrom)', () => {
+  const b64 = u8 => Buffer.from(u8).toString('base64');
+  const PEER = b64([7,7,7]);
+  const peerId = PEER.slice(0, 12);
+
+  async function run(payload, { hadSess = false, result = 'ok', sv2 = null } = {}) {
+    const marked = [];
+    const env = {
+      _withPeerLock: (_id, fn) => fn(),
+      getSession: async () => hadSess ? {} : null,
+      _decryptFromRaw: async () => result,
+      _sv2Ctx: sv2,
+      _markPeerCapProven: (id, cap) => { marked.push([id, cap]); },
+      bufToB64: b => Buffer.from(b).toString('base64'),
+      Uint8Array, JSON, payload, peerPubB64: PEER, frank: undefined,
+      CAPS_X3DH_V5: 'x3dh-v5', CAPS_SEAL_V2: 'seal-v2',
+    };
+    const fn = new Function('env', 'const {' + Object.keys(env).join(',') + '} = env; return (async () => {' + FN_DEC + '  return decryptFrom(payload, peerPubB64, frank);})();');
+    return { r: await fn(env), marked };
+  }
+
+  it('decryptable inner on a fresh pkm session marks x3dh-v5 proven', async () => {
+    const { marked } = await run(JSON.stringify({ v: 5, t: 'pkm', ik: [7,7,7], ek: [1], msg: '{}' }));
+    expect(marked).toEqual([[peerId, 'x3dh-v5']]);
+  });
+  it('a forged pkm naming another identity does not self-plant', async () => {
+    const { marked } = await run(JSON.stringify({ v: 5, t: 'pkm', ik: [9,9,9], ek: [1], msg: '{}' }));
+    expect(marked).toEqual([]);
+  });
+  it('no mark when the session pre-existed (not a pkm bootstrap)', async () => {
+    const { marked } = await run(JSON.stringify({ v: 4 }), { hadSess: true });
+    expect(marked).toEqual([]);
+  });
+  it('no mark on decrypt failure', async () => {
+    const { marked } = await run(JSON.stringify({ v: 5, t: 'pkm', ik: [7,7,7], ek: [1] }), { result: null });
+    expect(marked).toEqual([]);
+  });
+  it('seal-v2 proven mark still fires alongside', async () => {
+    const { marked } = await run(JSON.stringify({ v: 4 }), { hadSess: true, sv2: 'peerB' });
+    expect(marked).toEqual([['peerB', 'seal-v2']]);
   });
 });
