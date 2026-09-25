@@ -4455,12 +4455,14 @@ async function initMessenger(dbName) {
       // Sort by timestamp, keep newest 80%
       allMsgs.sort((a, b) => a.ts - b.ts);
       const deleteCount = Math.floor(allMsgs.length * 0.2);
-      const toDelete = allMsgs.slice(0, deleteCount).filter(m => !m.pinned && !m.bookmarked);
+      const toDelete = allMsgs.slice(0, deleteCount).filter(m => !m.pinned && !m.bookmarked && !m.purged);
       // Await the transaction so callers can retry saves after space is freed
       await new Promise((resolve) => {
         const tx = db.transaction('messages', 'readwrite');
         const store = tx.objectStore('messages');
-        for (const m of toDelete) store.delete(m.msgId);
+        // Tombstone, not delete — a hard delete frees the msgId and a re-delivered
+        // copy resurrects; the purged row keeps dedup at ~100 B.
+        for (const m of toDelete) store.put(_purgeTombstone(m));
         tx.oncomplete = () => resolve(true);
         tx.onerror = () => resolve(false);
       });
@@ -8206,7 +8208,7 @@ async function initMessenger(dbName) {
         } catch(e) { _dbg(e); }
       }));
       // Self-sync: my other devices need the copy too (they're members of the same group).
-      _fanOut(contact, text, ts, {}, { sfFor: contact.id, sfName: contact.name });
+      _fanOut(contact, text, ts, {}, { sfFor: contact.id, sfName: contact.name, disappearAt: meta.disappearAt });
     } else {
       // 1:1: v3 Double Ratchet + P2P + Sealed Sender
       const _frank = {};
@@ -8278,8 +8280,8 @@ async function initMessenger(dbName) {
       // sfPub/sfName let a sibling device CREATE a conversation it has never seen, so messages
       // sent before the contact ever replies are not dropped on a freshly linked device.
       _fanOut(contact, text, ts,
-        { sig: envelope.sig, sigPub: envelope.sigPub },
-        { sfFor: contact.id, sfPub: contact.pubB64, sfName: contact.name });
+        { sig: envelope.sig, sigPub: envelope.sigPub, disappearAt: envelope.disappearAt },
+        { sfFor: contact.id, sfPub: contact.pubB64, sfName: contact.name, disappearAt: envelope.disappearAt });
     }
     renderContacts();
     } catch(err) {
@@ -9452,7 +9454,7 @@ async function initMessenger(dbName) {
       const store = tx.objectStore('messages');
       const all = await new Promise(r => { const req = store.getAll(); req.onsuccess = () => r(req.result); req.onerror = () => r([]); });
       for (const m of all) {
-        if (m.disappearAt && m.disappearAt < now) store.delete(m.msgId);
+        if (m.disappearAt && m.disappearAt < now) { store.put(_purgeTombstone(m)); _refreshPreview(m.contactId, m.ts); }
       }
     } catch(e) { _dbg(e); }
     // Refresh UI if viewing active conversation
@@ -9933,7 +9935,7 @@ async function initMessenger(dbName) {
           renderContacts();
           return;
         }
-        await dbPut('messages', { msgId: syncId, contactId: target.id, text: syncText, mine: true, ts: msg.ts, isPoll: msg.isPoll || undefined, synced: true });
+        await dbPut('messages', { msgId: syncId, contactId: target.id, text: syncText, mine: true, ts: msg.ts, isPoll: msg.isPoll || undefined, disappearAt: msg.disappearAt, synced: true });
         target.lastMsg = (msg.isPoll ? '📊 ' : '') + syncText.slice(0, 40); target.lastMsgAt = msg.ts;
         await dbPut('contacts', target);
         if (activeContact?.id === target.id) appendMsg(syncText, true, msg.ts, null, null, { synced: true });
@@ -10201,6 +10203,9 @@ async function initMessenger(dbName) {
       if (_replayCache.has(msgId)) return; // Fast in-memory dedup
       _replayCache.add(msgId); // Speculative mark before first await — blocks concurrent-path duplicates
       if (await dbGet('messages', msgId)) return; // Already persisted
+      // Offline longer than the timer: it expired in transit — tombstone rather than
+      // render once + notify until a sweeper catches up.
+      if (msg.disappearAt && msg.disappearAt <= Date.now()) { await dbPut('messages', _purgeTombstone({ msgId, mine: false, ts: msg.ts })); return; }
       // fromName is self-claimed — sanitize like every name ingest, else invisible-twin headers.
       const senderName = _safeDisplayName(msg.fromName, 64);
       const meta = { msgId, senderName, replyTo: msg.replyTo, disappearAt: msg.disappearAt };
@@ -10372,6 +10377,9 @@ async function initMessenger(dbName) {
     if (_replayCache.has(msgId)) return; // Fast in-memory dedup
     _replayCache.add(msgId); // Speculative mark before first await — blocks concurrent-path duplicates
     if (await dbGet('messages', msgId)) return; // Already persisted
+    // Offline longer than the timer: it expired in transit — tombstone rather than
+    // render once + notify until a sweeper catches up.
+    if (msg.disappearAt && msg.disappearAt <= Date.now()) { await dbPut('messages', _purgeTombstone({ msgId, mine: false, ts: msg.ts })); return; }
 
     let text, storedFileData = null;
     const meta = { msgId, replyTo: msg.replyTo, disappearAt: msg.disappearAt, senderName: _safeDisplayName(msg.fromName, 64),
@@ -11097,7 +11105,8 @@ async function initMessenger(dbName) {
       let cleaned = 0;
       for (const m of allMsgs) {
         if (m.disappearAt && m.disappearAt < now) {
-          await dbDel('messages', m.msgId);
+          await dbPut('messages', _purgeTombstone(m));
+          await _refreshPreview(m.contactId, m.ts);
           const el = document.querySelector(`[data-msgid="${m.msgId}"]`);
           if (el) { el.classList.add('i-op0'); setTimeout(() => el.remove(), CONFIG.FADE_OUT_MS); }
           cleaned++;
