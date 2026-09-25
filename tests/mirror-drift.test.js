@@ -402,20 +402,23 @@ function makeGroupInline(config) {
   // version from an X3DH-inline instance sharing the same config, rather than duplicating
   // the negotiation code's extraction here (both live in the same source window anyway).
   const { _computeGroupV5 } = makeX3dhInline(null, config, 'me');
+  const marked = [];
   const factory = new Function(
     'crypto', 'CONFIG', 'dbGet', 'dbPut', 'hkdf', 'arr', 'u8', '_dbg', 'TextEncoder', 'TextDecoder', '_computeGroupV5',
-    '_keyCommit', '_cmOk', '_signingKey', 'signMessage', 'verifySignature',
+    '_keyCommit', '_cmOk', '_signingKey', 'signMessage', 'verifySignature', '_markGroupMemberCapProven', 'CAPS_GROUP_V5',
     html.slice(gs, ge) +
       '\nreturn { getGroupSenderKey, encryptGroupMsg, decryptGroupMsg };',
   );
   // Signing stubs: the reference has no per-sender `sg`, so injecting "no signing key"
-  // keeps the wire shape identical for parity — the sg field is additive on top.
+  // keeps the wire shape identical for parity — the sg field is additive on top. The
+  // cap-provenance mark records into `marked` (a side channel the reference lacks).
   const api = factory(
     globalThis.crypto, config, dbGet, dbPut, inlineKdf.hkdf,
     (a) => Array.from(a), (a) => new Uint8Array(a), () => {}, TextEncoder, TextDecoder, _computeGroupV5,
     _injKeyCommit, _injCmOk, null, async () => null, async () => null,
+    async (g, m, c) => { marked.push([g, m, c]); }, 'group-v5',
   );
-  return { ...api, store };
+  return { ...api, store, marked };
 }
 
 describe('Group sender-key mirror — inline (index.html) vs reference (src/crypto/ratchet.js)', () => {
@@ -520,16 +523,17 @@ function makeX3dhInline(myKeys, config, myId) {
   const dbGet = async (_s, key) => (idb.has(key) ? idb.get(key) : null);
   const dbPut = async (_s, val, key) => { idb.set(key, val); };
   const factory = new Function(
-    'crypto', 'CONFIG', '_hasX25519', 'dbGet', 'dbPut', '_dbg', 'hkdf', 'arr', 'u8', 'myKeys', 'myId',
+    'crypto', 'CONFIG', '_hasX25519', 'dbGet', 'dbPut', '_dbg', 'hkdf', 'arr', 'u8', 'myKeys', 'myId', '_peerCapsCache',
     html.slice(x3s, x3e) +
-      '\nreturn { genRatchetKey, ecdhBits, _x3dhInitiator, _x3dhResponder, _parsePeerCaps, _peerSupportsX3dhV5, _negotiateGroupCaps, _computeGroupV5, _mergeStickyGroupCaps, _importEcdhPriv, _loadSpkPriv, _resolveOtpPriv, _bootstrapResponderSessionV5 };',
+      '\nreturn { genRatchetKey, ecdhBits, _x3dhInitiator, _x3dhResponder, _parsePeerCaps, _peerSupportsX3dhV5, _negotiateGroupCaps, _computeGroupV5, _mergeStickyGroupCaps, _memberGroupCaps, _assertPeerCaps, _harvestGroupCaps, _markGroupMemberCapProven, _importEcdhPriv, _loadSpkPriv, _resolveOtpPriv, _bootstrapResponderSessionV5 };',
   );
+  const peerCapsCache = new Map();
   const api = factory(
     globalThis.crypto, config || {}, false /* P-256, matches refR below for determinism */,
     dbGet, dbPut, () => {}, inlineKdf.hkdf, (a) => Array.from(a), (a) => new Uint8Array(a),
-    myKeys || {}, myId || 'me',
+    myKeys || {}, myId || 'me', peerCapsCache,
   );
-  return { ...api, idb };
+  return { ...api, idb, peerCapsCache };
 }
 
 describe('X3DH v5 mirror — inline (index.html) vs reference (src/crypto/ratchet.js)', () => {

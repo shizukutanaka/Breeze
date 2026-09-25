@@ -4750,15 +4750,16 @@ async function initMessenger(dbName) {
     const sets = [new Set(norm(localCaps)), ...(Array.isArray(memberCapsList) ? memberCapsList : []).map(c => new Set(norm(c)))];
     return { useGroupV5: sets.every(s => s.has(CAPS_GROUP_V5)) };
   }
-  // Computes (doesn't persist) the group decision: local flag AND every OTHER member's caps
-  // (reuses _parsePeerCaps — member records and prekey bundles share {caps:[...]}). Fails CLOSED:
-  // a member missing `caps` (legacy client or failed fetch) contributes [] and blocks v5 group-wide.
+  // Computes (doesn't persist) the group decision: local flag AND every OTHER member's
+  // caps (proven ∪ asserted — UNSIGNED caps never persist, or a forged roster implants
+  // 'group-v5' on a legacy member forever → v5 traffic it can't read). Fails CLOSED.
   function _computeGroupV5(group) {
     const localCaps = CONFIG.GROUP_RATCHET_V5 ? [CAPS_GROUP_V5] : [];
-    const memberCapsList = (group?.members || []).filter(m => m.id !== myId).map(m => _parsePeerCaps(m));
+    const memberCapsList = (group?.members || []).filter(m => m.id !== myId).map(m => _memberGroupCaps(m));
     return _negotiateGroupCaps(localCaps, memberCapsList).useGroupV5;
   }
-  // Mirror of negotiate.js mergeStickyGroupCaps: a known member's (same id+key) group-v5 cap survives a relay roster that drops it (strip → no v3 downgrade); a NEW legacy joiner still holds the group on v3.
+  // Mirror of negotiate.js mergeStickyGroupCaps: carries a known member's (same id+key)
+  // proven group-v5 cap forward when a roster rewrite drops it (routine carry-forward).
   function _mergeStickyGroupCaps(prev, next) {
     const had = new Map((Array.isArray(prev) ? prev : []).filter(m => m && typeof m.id === 'string' && Array.isArray(m.caps) && m.caps.includes(CAPS_GROUP_V5)).map(m => [m.id, m.pubB64]));
     const stripped = [];
@@ -4769,6 +4770,27 @@ async function initMessenger(dbName) {
       stripped.push(m.id); return { ...m, caps: [...caps, CAPS_GROUP_V5] };
     });
     return { members, stripped };
+  }
+  // Two-tier caps for groups: member.caps = proven (via _markGroupMemberCapProven below);
+  // roster/prekey caps = asserted → _peerCapsCache only, never persisted (pub-bound check).
+  function _memberGroupCaps(m) {
+    return [...new Set([...(Array.isArray(m?.caps) ? m.caps : []), ...((_peerCapsCache.get(m?.id)?.caps) || [])])];
+  }
+  function _assertPeerCaps(memberId, pubB64, caps) {
+    const pub = typeof pubB64 === 'string' ? pubB64 : '', list = (Array.isArray(caps) ? caps.filter(x => typeof x === 'string') : []);
+    if (typeof memberId !== 'string' || !pub.startsWith(memberId) || !list.length) return;
+    const c = _peerCapsCache.get(memberId);
+    _peerCapsCache.set(memberId, { caps: [...new Set([...(c?.caps || []), ...list])], ts: Date.now() });
+  }
+  function _harvestGroupCaps(members) { for (const m of (Array.isArray(members) ? members : [])) _assertPeerCaps(m?.id, m?.pub || m?.pubB64, m?.caps); }
+  // The ONLY persistence path: the member demonstrably produced v5 traffic.
+  async function _markGroupMemberCapProven(groupId, memberId, cap) {
+    try {
+      const g = await dbGet('contacts', groupId); if (!g || !Array.isArray(g.members)) return;
+      const m = g.members.find(x => x.id === memberId); if (!m || (Array.isArray(m.caps) && m.caps.includes(cap))) return;
+      m.caps = [...new Set([...(Array.isArray(m.caps) ? m.caps : []), cap])]; await dbPut('contacts', g).catch(e => _dbg(e, 'gcaps-proven'));
+      const c = _peerCapsCache.get(memberId); if (c) { c.caps = [...new Set([...c.caps, cap])]; c.ts = Date.now(); }
+    } catch(e) { _dbg(e, 'gcaps-proven'); }
   }
   function _concatBytes(parts) {
     const total = parts.reduce((n, p) => n + p.length, 0);
@@ -5396,11 +5418,9 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'unseal'); return null; }
   }
   // ═══ end inline mirror of src/crypto/seal.js ═══
-  // Does this peer understand sealed-v2 envelopes? Read from /prekey/status (no OTP cost),
-  // cached 5 min — the cache TTL IS the downgrade window: a peer that stops advertising
-  // seal-v2 (version rollback, identity re-registration) receives sealed envelopes it
-  // ack+skips until the cache expires, so keep the window as short as the other caches.
-  // Any failure answers "no" — the message still delivers, just legacy-shaped.
+  // Does this peer understand sealed-v2 envelopes? /prekey/status, cached 5 min — the
+  // cache TTL IS the downgrade window; also the session ASSERTED-caps store for
+  // _computeGroupV5 (see _memberGroupCaps). Any failure answers "no" — legacy-shaped.
   const _peerCapsCache = new Map();
   async function _peerCaps(peerId) {
     try {
@@ -5417,16 +5437,9 @@ async function initMessenger(dbName) {
     return (await _peerCaps(peerId)).includes(CAPS_SEAL_V2);
   }
 
-  // ONE fan-out for every kind of outgoing content. Three near-identical copies of this loop
-  // had accumulated — text in sendMessage, attachments in _sendFile/voice, mutations in
-  // sendSignal — differing only in which envelope flags they set, so each new device rule had
-  // to be remembered in three places (attachments were forgotten exactly that way). Collapsed
-  // to one function taking those flags: a fix now lands on every path at once.
-  //
-  // Devices are dispatched in PARALLEL. They are distinct peers and the ratchet lock is
-  // per-peer, so nothing serialises them but the old sequential `await` in the loop — which
-  // made fan-out latency linear in device count (an account with 3 devices paid three
-  // round-trips before the last one saw the message). Now it costs one.
+  // ONE fan-out for every kind of outgoing content (text/attachments/mutations were three
+  // near-identical loops differing only in envelope flags). Devices dispatched in PARALLEL
+  // (distinct peers; the ratchet lock is per-peer anyway).
   async function _fanOut(snapContact, plaintext, ts, peerExtra, selfExtra) {
     try {
       // pubB64 is '' for groups — still fan out to MY other devices (peerDevs will be []).
@@ -5611,22 +5624,20 @@ async function initMessenger(dbName) {
   }
 
   // SENDER KEY — Group Encryption
-  // v3 (GROUP_RATCHET_V5=false, legacy): static raw key; msgKey = HKDF(raw, counter,
-  //   'group-msg') — no forward secrecy. v5 (default): hash ratchet — each message
-  //   advances the chain key (one-way HKDF), old chain keys evicted; kick/leave bumps
-  //   epoch and re-distributes a fresh chainKey to remaining members only.
+  // v3 (legacy): static raw key, no forward secrecy. v5 (default): hash ratchet — each msg
+  //   advances the chain key; kick/leave bumps epoch + re-distributes to remaining members.
   // Wire: {v:3|5, g:true, i:[iv], d:[ct], c:counter, ep:epoch, cm, sg?} — cm = key
   //   commitment, sg = per-sender Ed25519 signature (both verify-if-present).
 
-  // Negotiates lazily, once, when a group's sender key doesn't exist yet (the existing
-  // "first-send freezes the format" moment), using the freshest local membership snapshot.
-  // Caches the decision onto the group record for kick/UI to read.
+  // Negotiates lazily, once, when a group's sender key doesn't exist yet ("first-send
+  // freezes the format"), using the freshest local membership snapshot; caches the
+  // decision onto the group record for kick/UI.
   async function getGroupSenderKey(groupId) {
     try {
       const stored = await dbGet('identity', 'gsk:' + groupId);
       if (stored) return stored;
       const group = await dbGet('contacts', groupId);
-      // Roster caps are sticky per member (_mergeStickyGroupCaps): a relay strip can't downgrade known v5 members; a real legacy joiner still yields v3.
+      // Two-tier caps (_memberGroupCaps): proven + session-asserted; a strip can't downgrade.
       const useV5 = _computeGroupV5(group || {});
       if (group && group.groupV5 !== useV5) { group.groupV5 = useV5; await dbPut('contacts', group); }
       const rawBytes = crypto.getRandomValues(new Uint8Array(32));
@@ -5665,9 +5676,8 @@ async function initMessenger(dbName) {
       const importedKey = await crypto.subtle.importKey('raw', msgKeyBits, { name: 'AES-GCM' }, false, ['encrypt']);
       const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, importedKey, padded);
       const out = { v: version, g: true, i: arr(iv), d: arr(new Uint8Array(ct)), c: sk.counter - 1, ep: sk.epoch, cm: await _keyCommit(msgKeyBits) };
-      // Per-sender sig (eprint 2025/554): members hold each other's chain keys, so
-      // unsigned msgs are member-forgeable. sigPub rides the sender-key distribution;
-      // legacy senders (no sigPub on record) stay decryptable — same rollout as `cm`.
+      // Per-sender sig (eprint 2025/554): members hold each other's chain keys, so unsigned
+      // msgs are member-forgeable. sigPub rides sender-key distribution; legacy stays decryptable.
       const sg = _signingKey?.privateKey && await signMessage(`breeze-group-msg:${groupId}:${out.ep | 0}:${out.c | 0}:${JSON.stringify(out.i)}:${JSON.stringify(out.d)}`);
       if (sg) out.sg = sg;
       return JSON.stringify(out);
@@ -5745,12 +5755,12 @@ async function initMessenger(dbName) {
       const importedKey = await crypto.subtle.importKey('raw', msgKeyBits, { name: 'AES-GCM' }, false, ['decrypt']);
       const padded = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, importedKey, u8(p.d)));
       const textLen = new DataView(padded.buffer).getUint16(0);
+      if (p.v === 5 && peerSK.v === 5) _markGroupMemberCapProven(groupId, senderId, CAPS_GROUP_V5); // decryptable v5 traffic = proven
       return new TextDecoder().decode(padded.slice(2, 2 + textLen));
     } catch(e) { _dbg(e, 'group-decrypt'); return null; }
   }
 
-  // Distribute sender key to a specific group member (via 1:1 encrypted channel).
-  // v5 sends { chainKey, epoch, v:5 } so the receiver can initialize their hash ratchet.
+  // Distribute sender key to a specific group member (1:1 encrypted channel); v5 sends {chainKey,epoch,v:5}.
   async function distributeSenderKey(groupId, memberPubB64) {
     try {
       const sk = await getGroupSenderKey(groupId);
@@ -5779,14 +5789,11 @@ async function initMessenger(dbName) {
   }
 
   // On a group_kick notice: drop the kicked member, rotate our key to the announced epoch, and re-share it. Epoch-guarded so a duplicate/replayed notice is a no-op.
-  // The notice is a rumor E2E'd by ANY member — without a privilege check, any contact
-  // could "kick" an arbitrary member from MY client (server kick needs admin+sig; this
-  // path needed nothing) or pin my chain key at a fake high epoch, after which the >=
-  // guard rejects every real rotation notice forever.
+  // The notice is a rumor E2E'd by ANY member — without the privilege check above, any contact
+  // could "kick" an arbitrary member from MY client or pin my chain key at a fake high epoch.
   // One rule for every epoch rotation (kick, kick notice, leave, leave notice): rotate to a fresh v5
-  // chain key only if the group — departed member already removed — still negotiates v5. A v3 group
-  // (a legacy member remains) keeps its static key, as kick always did; hardcoding v:5 in the leave /
-  // notice paths converted mixed groups to a format their legacy member can't read.
+  // chain key only if the group — departed member already removed — still negotiates v5; a v3
+  // group (a legacy member remains) keeps its static key, as kick always did.
   async function _rotateGroupEpoch(group, epoch) {
     if (!CONFIG.GROUP_RATCHET_V5 || typeof epoch !== 'number' || !_computeGroupV5(group)) return false;
     await dbPut('identity', { chainKey: Array.from(crypto.getRandomValues(new Uint8Array(32))), counter: 0, epoch, v: 5, skipped: {} }, 'gsk:' + group.id);
@@ -5803,8 +5810,7 @@ async function initMessenger(dbName) {
       if (!group) return;
       const isPrivileged = group.createdBy === senderId || (group.admins || []).includes(senderId);
       if (!isPrivileged) { _dbg(null, 'group-kick notice from non-admin — ignored'); return; }
-      // I'm the one kicked: don't rotate a key for a group I'm out of — mark it,
-      // leave the conversation, and block further sends into the void.
+      // I'm the one kicked: mark it, leave the conversation, block further sends.
       if (kickedId === myId) {
         group.kicked = true;
         await dbPut('contacts', group);
@@ -5822,9 +5828,8 @@ async function initMessenger(dbName) {
   }
 
   // The leaver announces their own departure E2E (self-authenticating — leftId must equal
-  // the verified sender, so nobody can forge a leave for someone else). A privileged member
-  // who sees a leave re-keys the group (fresh epoch chain + redistribute + re-broadcast with
-  // the new epoch), so the departed member loses future traffic without waiting for a kick.
+  // the verified sender). A privileged member who sees a leave re-keys the group, so the
+  // departed member loses future traffic without waiting for a kick.
   async function handleGroupLeaveNotice(groupId, leftId, epoch, senderId) {
     if (!CONFIG.GROUP_RATCHET_V5) return;
     try {
@@ -9514,7 +9519,7 @@ async function initMessenger(dbName) {
       if (members.length === 0) { await createGroupInviteLink(name); return; }
       if (CONFIG.GROUP_RATCHET_V5) {
         const capsById = await _fetchMemberCapsBatch(members.map(m => m.id));
-        for (const m of members) m.caps = capsById[m.id] || [];
+        for (const m of members) _assertPeerCaps(m.id, m.pubB64, capsById[m.id]); // asserted, not persisted
       }
       members.push({ id: myId, pubB64: myPubB64, name: myName });
       // A3: Group member limit
@@ -9587,7 +9592,6 @@ async function initMessenger(dbName) {
         id: m.id,
         pubB64: typeof m.pub === 'string' ? m.pub.slice(0, 200) : (typeof m.pubB64 === 'string' ? m.pubB64.slice(0, 200) : ''),
         name: _safeDisplayName(m.name, 64) || 'Member',
-        caps: Array.isArray(m.caps) ? m.caps.filter(c => typeof c === 'string').slice(0, 20).map(c => String(c).slice(0, 32)) : undefined,
       }));
   }
 
@@ -9603,15 +9607,15 @@ async function initMessenger(dbName) {
         return;
       }
       const data = await resp.json();
+      _harvestGroupCaps(data.members); // wire caps → session-asserted only (records carry proven only)
+      const joinList = safeMemberList(data.members);
 
       // Create local group contact
       const groupId = 'g_' + token;
       const existing = await dbGet('contacts', groupId);
       if (existing) {
         // Update members list + moderation metadata
-        const sticky = _mergeStickyGroupCaps(existing.members, safeMemberList(data.members));
-        existing.members = sticky.members;
-        if (sticky.stripped.length) auditLog('security', `Group ${groupId}: roster dropped group-v5 for ${sticky.stripped.length} known member(s) — kept (possible relay tampering)`);
+        existing.members = _mergeStickyGroupCaps(existing.members, joinList).members; // carries proven caps forward
         if (typeof data.creatorId === 'string' && data.creatorId) existing.createdBy = data.creatorId;
         if (Array.isArray(data.admins)) existing.admins = data.admins.filter(id => typeof id === 'string' && id.length <= 64).slice(0, CONFIG.GROUP_MAX);
         if (typeof data.name === 'string' && data.name) existing.name = _safeDisplayName(data.name, 64);
@@ -9620,11 +9624,10 @@ async function initMessenger(dbName) {
         await dbPut('contacts', {
           id: groupId, name: _safeDisplayName(data.name, 64) || 'Group',
           isGroup: true, joinToken: token,
-          members: safeMemberList(data.members),
-          groupV5: _computeGroupV5({ members: safeMemberList(data.members) }) || undefined,
-          // Seed moderation metadata — isGroupAdmin() reads createdBy/admins and the
-          // roster poll only patches them on change, so a group that never mutates
-          // post-join would leave the creator unable to run /admin.
+          members: joinList,
+          groupV5: _computeGroupV5({ members: joinList }) || undefined,
+          // Seed moderation metadata — the roster poll only patches on change, so a
+          // group that never mutates post-join would leave the creator unable to run /admin.
           createdBy: typeof data.creatorId === 'string' ? data.creatorId : undefined,
           admins: Array.isArray(data.admins) ? data.admins.filter(id => typeof id === 'string' && id.length <= 64).slice(0, CONFIG.GROUP_MAX) : [],
           addedAt: Date.now(), unread: 0, pubB64: ''
@@ -9632,7 +9635,7 @@ async function initMessenger(dbName) {
       }
 
       // Also add individual contacts for each member
-      for (const m of safeMemberList(data.members)) {
+      for (const m of joinList) {
         if (m.id === myId) continue;
         if (!(await dbGet('contacts', m.id))) {
           await addContact(m.pubB64, m.name);
@@ -9665,13 +9668,11 @@ async function initMessenger(dbName) {
         if (!group) { clearInterval(poll); return; }
 
         const oldMembers = group.members || [];
-        const sticky = _mergeStickyGroupCaps(oldMembers, safeMemberList(data.members));
-        const newMembers = sticky.members;
-        // Apply membership in BOTH directions — growth-only syncing meant a kicked or
-        // departed member stayed in my roster forever, kept receiving my sends, and (when
-        // the kicker's epoch rotation never reached me) kept decrypting them with the
-        // pre-kick chain key. Also sync creatorId/admins/name — transfer and rename
-        // mutate them server-side without touching membership.
+        _harvestGroupCaps(data.members);
+        const newMembers = _mergeStickyGroupCaps(oldMembers, safeMemberList(data.members)).members;
+        // Apply membership in BOTH directions — growth-only syncing meant a departed
+        // member kept receiving sends and (absent the kick notice) kept decrypting them.
+        // Also sync creatorId/admins/name — those mutate server-side without membership.
         const membersChanged = newMembers.length !== oldMembers.length ||
           newMembers.some(m => !oldMembers.some(o => o.id === m.id)) ||
           oldMembers.some(o => !newMembers.some(m => m.id === o.id));
@@ -9681,7 +9682,6 @@ async function initMessenger(dbName) {
           (typeof data.name === 'string' && data.name && group.name !== data.name);
         if (membersChanged || metaChanged) {
           if (membersChanged) group.members = newMembers;
-          if (membersChanged && sticky.stripped.length) auditLog('security', `Group ${groupId}: roster dropped group-v5 for ${sticky.stripped.length} known member(s) — kept (possible relay tampering)`);
           if (typeof data.creatorId === 'string' && data.creatorId) group.createdBy = data.creatorId;
           if (Array.isArray(data.admins)) group.admins = data.admins.filter(id => typeof id === 'string' && id.length <= 64).slice(0, CONFIG.GROUP_MAX);
           if (Array.isArray(data.banned)) group.bannedIds = data.banned.filter(id => typeof id === 'string' && id.length <= 64).slice(0, CONFIG.GROUP_MAX);
@@ -9981,10 +9981,8 @@ async function initMessenger(dbName) {
     if (msg.isSenderKey) {
       try {
         const c = await dbGet('contacts', (msg.from || '').slice?.(0, 12) || msg.from);
-        // Only accept sender keys from known contacts. An unknown sender who is not in
-        // the contacts DB would otherwise use msg.fromPub (attacker-controlled) as the
-        // decryption peer key, letting them inject arbitrary sender keys into identity
-        // store (DB pollution; defense-in-depth since group messages also require membership).
+        // Only accept sender keys from known contacts — otherwise msg.fromPub
+        // (attacker-controlled) becomes the decryption peer key (identity-store pollution).
         if (!c) return;
         const decrypted = await decryptFrom(msg.payload, c.pubB64);
         if (!decrypted) return;
@@ -9992,8 +9990,7 @@ async function initMessenger(dbName) {
         // v5 payloads carry `chainKey` not `key` — requiring skMsg.key would drop them all.
         if (skMsg.type === 'sender_key' && skMsg.groupId && (skMsg.key || skMsg.chainKey)) {
           // If the group is known locally, the key distributor must be in my roster —
-          // a 1:1 contact who is not a member could otherwise plant their own sender
-          // key, then inject "group" messages that decrypt as if from a member.
+          // else a non-member could plant a key and forge "member" group messages.
           const g = await dbGet('contacts', skMsg.groupId);
           if (g && !(g.members || []).some(m => m.id === msg.from || m.id === (msg.from || '').slice(0, 12))) return;
           const peerKey = 'gsk-peer:' + skMsg.groupId + ':' + (msg.from || '').slice(0, 12);
@@ -10006,6 +10003,8 @@ async function initMessenger(dbName) {
           // Signing-capable senders ship sigPub on this channel; unsigned envelopes drop after.
           if (typeof skMsg.sigPub === 'string' && skMsg.sigPub.length > 0 && skMsg.sigPub.length < 200) skEntry.sigPub = skMsg.sigPub;
           await dbPut('identity', skEntry, peerKey);
+          // A v5 sender key on the member's authenticated channel proves group-v5 — persist it.
+          if (skEntry.v === 5) _markGroupMemberCapProven(skMsg.groupId, (msg.from || '').slice(0, 12), CAPS_GROUP_V5);
           _dbg(null, 'Received sender key for group ' + skMsg.groupId);
         }
       } catch(e) { _dbg(e, 'sender-key'); }
@@ -10082,6 +10081,7 @@ async function initMessenger(dbName) {
         // Validate and cap invite fields to prevent storage DoS from a malicious contact
         const inviteGroupId = typeof invite.groupId === 'string' ? invite.groupId.slice(0, 64) : null;
         const inviteName = typeof invite.name === 'string' ? invite.name.slice(0, 64) : 'Group';
+        _harvestGroupCaps(invite.members);
         const inviteMembers = safeMemberList(invite.members);
         if (invite.type === 'group_invite' && inviteGroupId && !(await dbGet('contacts', inviteGroupId))) {
           // Seed createdBy from the VERIFIED sender: in this flow only the creator
