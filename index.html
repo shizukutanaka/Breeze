@@ -3877,10 +3877,10 @@ async function initMessenger(dbName) {
           const health = await r.json();
           if (health.serverTime) {
             const rawDrift = health.serverTime - Date.now();
-            // Cap to ±1 hour: beyond that the server value is implausible (broken clock or
-            // compromise). An uncapped offset could make correctedNow() return a timestamp
-            // far in the past/future, confusing the ±5 min anti-replay window.
-            _clockOffset = Math.max(-3600000, Math.min(3600000, rawDrift));
+            // Cap strictly INSIDE the worker's ±5min ts window (REQ_TS) minus transit margin:
+            // a larger offset makes correctedNow() return a ts the worker rejects outright —
+            // one hostile/garbage serverTime value would DoS every subsequent send.
+            _clockOffset = Math.max(-4.5 * MS.MIN, Math.min(4.5 * MS.MIN, rawDrift));
             const absDrift = Math.abs(rawDrift);
             if (absDrift > 120000) {
               _dbg(null, `Clock drift: ${Math.round(rawDrift/1000)}s — applying correction to outgoing timestamps`);
