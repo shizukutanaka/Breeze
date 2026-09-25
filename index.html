@@ -5404,13 +5404,13 @@ async function initMessenger(dbName) {
   const _peerCapsCache = new Map();
   async function _peerCaps(peerId) {
     try {
-      const c = _peerCapsCache.get(peerId);
-      if (c && Date.now() - c.ts < 5 * MS.MIN) return c.caps;
+      const c = _peerCapsCache.get(peerId); if (c && Date.now() - c.ts < 5 * MS.MIN) return c.caps;
       const resp = await postAPIRaw('/prekey/status', { userId: peerId });
       const data = resp?.ok ? await resp.json() : null;
-      const caps = Array.isArray(data?.caps) ? data.caps.filter(x => typeof x === 'string') : [];
-      _peerCapsCache.set(peerId, { caps, ts: Date.now() });
-      return caps;
+      // Sticky caps (1:1 analogue of _mergeStickyGroupCaps): a relay stripping seal-v2/dm-sig silently downgrades this peer's sends to the metadata-leaking legacy path AND re-enables forged plaintext typing/read — caps only grow once seen.
+      const ct = await dbGet('contacts', peerId), caps = [...new Set([...(Array.isArray(ct?.caps) ? ct.caps : []), ...(Array.isArray(data?.caps) ? data.caps.filter(x => typeof x === 'string') : [])])];
+      if (ct && (!Array.isArray(ct.caps) || ct.caps.length !== caps.length)) { ct.caps = caps; await dbPut('contacts', ct).catch(e => _dbg(e, 'caps-sticky')); }
+      _peerCapsCache.set(peerId, { caps, ts: Date.now() }); return caps;
     } catch { return []; }
   }
   async function _peerSealV2(peerId) {
