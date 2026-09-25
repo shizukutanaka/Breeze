@@ -403,6 +403,7 @@
   "uiNotBanned": "BANされていません: {0}",
   "transferredOwnership": "{0} がグループの作成者になりました",
   "toastKickedFromGroup": "{0} から退出させられました",
+  "memberJoined": "{0}がグループに参加しました",
   "toastNoLongerMember": "このグループのメンバーではなくなりました",
   "toastCreatorOnly": "グループ作成者のみ所有権を譲渡できます",
   "toastTransferFail": "所有権の譲渡に失敗しました",

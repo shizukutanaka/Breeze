@@ -1776,6 +1776,7 @@ const _I = {
     uiNotBanned: "Not banned: {0}",
     transferredOwnership: "{0} is now the group creator",
     toastKickedFromGroup: "You were removed from {0}",
+    memberJoined: "{0} joined the group",
     toastNoLongerMember: "You are no longer a member of this group",
     toastCreatorOnly: 'Only the group creator can transfer ownership',
     toastTransferFail: 'Ownership transfer failed',
@@ -9675,31 +9676,25 @@ async function initMessenger(dbName) {
         const membersChanged = newMembers.length !== oldMembers.length ||
           newMembers.some(m => !oldMembers.some(o => o.id === m.id)) ||
           oldMembers.some(o => !newMembers.some(m => m.id === o.id));
-        const metaChanged = group.createdBy !== data.creatorId ||
-          JSON.stringify(group.admins || []) !== JSON.stringify(data.admins || []) ||
-          JSON.stringify(group.bannedIds || []) !== JSON.stringify(data.banned || []) ||
-          (typeof data.name === 'string' && data.name && group.name !== data.name);
+        const metaChanged = group.createdBy !== data.creatorId || JSON.stringify(group.admins || []) !== JSON.stringify(data.admins || []) || JSON.stringify(group.bannedIds || []) !== JSON.stringify(data.banned || []) || (typeof data.name === 'string' && data.name && group.name !== data.name);
         if (membersChanged || metaChanged) {
-          if (membersChanged) group.members = newMembers;
-          if (membersChanged && sticky.stripped.length) auditLog('security', `Group ${groupId}: roster dropped group-v5 for ${sticky.stripped.length} known member(s) — kept (possible relay tampering)`);
+          if (membersChanged) { group.members = newMembers; if (sticky.stripped.length) auditLog('security', `Group ${groupId}: roster dropped group-v5 for ${sticky.stripped.length} known member(s) — kept (possible relay tampering)`); }
+          // Bearer-token groups stay safe only while joins are VISIBLE — the roster is relay-asserted
+          // and /group/join takes no signature, so a relay-injected member would sit silently and
+          // collect sender keys on the next send. Surface every new member in-chat, on toast, in audit.
+          if (membersChanged) { const added = newMembers.filter(n => !oldMembers.some(o => o.id === n.id));
+            if (added.length) { const nm = added.slice(0, 5).map(m => _safeDisplayName(m.name || m.id, 30)).join(', ') + (added.length > 5 ? ` +${added.length - 5}` : ''); auditLog('security', `Group ${groupId}: member(s) joined — ${added.map(m => m.id).join(', ')}`); showToast(t('memberJoined', nm), 'info');
+              const box = _DOM.get('msg-messages'); if (box && activeContact?.id === groupId) { const d = document.createElement('div'); d.className = 'msg sys'; safeSetHTML(d, `<span>${esc(t('memberJoined', nm))}</span>`); box.appendChild(d); box.scrollTop = box.scrollHeight; } } }
           if (typeof data.creatorId === 'string' && data.creatorId) group.createdBy = data.creatorId;
           if (Array.isArray(data.admins)) group.admins = data.admins.filter(id => typeof id === 'string' && id.length <= 64).slice(0, CONFIG.GROUP_MAX);
           if (Array.isArray(data.banned)) group.bannedIds = data.banned.filter(id => typeof id === 'string' && id.length <= 64).slice(0, CONFIG.GROUP_MAX);
           if (typeof data.name === 'string' && data.name) group.name = _safeDisplayName(data.name, 50);
           await dbPut('contacts', group);
           // sendMessage reads activeContact.members (separate object) — without this an open group silently excludes new joiners until reopened.
-          if (activeContact?.id === groupId) {
-            activeContact.members = group.members;
-            activeContact.admins = group.admins;
-            activeContact.bannedIds = group.bannedIds;
-            activeContact.createdBy = group.createdBy;
-            if (activeContact.name !== group.name) { activeContact.name = group.name; _DOM.get('msg-conv-name').textContent = group.name; }
-          }
+          if (activeContact?.id === groupId) { activeContact.members = group.members; activeContact.admins = group.admins; activeContact.bannedIds = group.bannedIds; activeContact.createdBy = group.createdBy;
+            if (activeContact.name !== group.name) { activeContact.name = group.name; _DOM.get('msg-conv-name').textContent = group.name; } }
           // Add new individual contacts
-          for (const m of newMembers) {
-            if (m.id === myId) continue;
-            if (!(await dbGet('contacts', m.id))) await addContact(m.pubB64, m.name);
-          }
+          for (const m of newMembers) { if (m.id !== myId && !(await dbGet('contacts', m.id))) await addContact(m.pubB64, m.name); }
           renderContacts();
         }
       } catch(e) { _dbg(e); }
