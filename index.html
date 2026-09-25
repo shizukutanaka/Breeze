@@ -9696,11 +9696,11 @@ async function initMessenger(dbName) {
             if (activeContact.name !== group.name) { activeContact.name = group.name; _DOM.get('msg-conv-name').textContent = group.name; }
           }
           // Add new individual contacts
-          for (const m of newMembers) {
-            if (m.id === myId) continue;
-            if (!(await dbGet('contacts', m.id))) await addContact(m.pubB64, m.name);
-          }
+          for (const m of newMembers) { if (m.id !== myId && !(await dbGet('contacts', m.id))) await addContact(m.pubB64, m.name); }
           renderContacts();
+          // Roster SHRINK = kick/leave even if its E2E notice never arrives (relay drop/TTL/reorder): me-gone = kicked (gate sends); other-gone = rotate my chain key + redist, or the departed keeps decrypting every send with the pre-shrink key (PCS).
+          if (membersChanged) { const removed = oldMembers.filter(o => !newMembers.some(n => n.id === o.id));
+            if (newMembers.length && removed.some(o => o.id === myId)) { if (!group.kicked) { group.kicked = true; await dbPut('contacts', group); showToast(t('toastKickedFromGroup', group.name || ''), 'info'); if (activeContact?.id === groupId) { activeContact = null; renderContacts(); } } } else if (removed.length) { const cur = await dbGet('identity', 'gsk:' + groupId); if (await _rotateGroupEpoch(group, ((cur?.epoch) || 0) + 1)) _redistSenderKey(group, 'roster-shrink-redist'); } }
         }
       } catch(e) { _dbg(e); }
     }, 5000);
