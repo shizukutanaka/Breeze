@@ -9610,7 +9610,7 @@ async function initMessenger(dbName) {
       if (existing) {
         // Update members list + moderation metadata
         const sticky = _mergeStickyGroupCaps(existing.members, safeMemberList(data.members));
-        existing.members = sticky.members;
+        existing.members = sticky.members; delete existing.kicked; // Server re-admitted me — a stale 'kicked' flag (kick→unban→rejoin) would block every send forever
         if (sticky.stripped.length) auditLog('security', `Group ${groupId}: roster dropped group-v5 for ${sticky.stripped.length} known member(s) — kept (possible relay tampering)`);
         if (typeof data.creatorId === 'string' && data.creatorId) existing.createdBy = data.creatorId;
         if (Array.isArray(data.admins)) existing.admins = data.admins.filter(id => typeof id === 'string' && id.length <= 64).slice(0, CONFIG.GROUP_MAX);
