@@ -9981,10 +9981,9 @@ async function initMessenger(dbName) {
     if (msg.isSenderKey) {
       try {
         const c = await dbGet('contacts', (msg.from || '').slice?.(0, 12) || msg.from);
-        // Only accept sender keys from known contacts. An unknown sender who is not in
-        // the contacts DB would otherwise use msg.fromPub (attacker-controlled) as the
-        // decryption peer key, letting them inject arbitrary sender keys into identity
-        // store (DB pollution; defense-in-depth since group messages also require membership).
+        // Only accept sender keys from known contacts — otherwise an unknown sender uses
+        // msg.fromPub (attacker-controlled) as the peer key to plant arbitrary sender keys
+        // (DB pollution; defense-in-depth since group messages also require membership).
         if (!c) return;
         const decrypted = await decryptFrom(msg.payload, c.pubB64);
         if (!decrypted) return;
@@ -9998,8 +9997,9 @@ async function initMessenger(dbName) {
           if (g && !(g.members || []).some(m => m.id === msg.from || m.id === (msg.from || '').slice(0, 12))) return;
           const peerKey = 'gsk-peer:' + skMsg.groupId + ':' + (msg.from || '').slice(0, 12);
           const existingPeerSK = await dbGet('identity', peerKey);
-          // Monotonic epoch guard: don't let a replayed/stale message undo a kick rotation.
-          if (existingPeerSK && (existingPeerSK.epoch || 0) > (skMsg.epoch || 0)) return;
+          // Monotonic epoch guard + identical-key replay dedup (redelivery must not reset counter / wipe skipped-key cache; same-epoch NEW material still replaces).
+          if (existingPeerSK && ((existingPeerSK.epoch || 0) > (skMsg.epoch || 0) ||
+            ((existingPeerSK.epoch || 0) === (skMsg.epoch || 0) && JSON.stringify(skMsg.v === 5 ? skMsg.chainKey : skMsg.key) === JSON.stringify(skMsg.v === 5 ? existingPeerSK.chainKey : existingPeerSK.raw)))) return;
           const skEntry = (skMsg.v === 5 && skMsg.chainKey)
             ? { chainKey: skMsg.chainKey, counter: 0, epoch: skMsg.epoch || 0, v: 5, skipped: {} }
             : { raw: skMsg.key, counter: 0, epoch: skMsg.epoch || 0 };
