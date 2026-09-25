@@ -5621,7 +5621,9 @@ async function initMessenger(dbName) {
   // Negotiates lazily, once, when a group's sender key doesn't exist yet (the existing
   // "first-send freezes the format" moment), using the freshest local membership snapshot.
   // Caches the decision onto the group record for kick/UI to read.
-  async function getGroupSenderKey(groupId) {
+  // All sender-key lifecycle runs under the 'grp:' lock: two interleaved encrypts derived the SAME chainKey/counter — the receiver consumed one and replay-dropped the other, a guaranteed silent message loss.
+  function getGroupSenderKey(groupId) { return _withPeerLock('grp:' + groupId, () => _getGroupSenderKeyRaw(groupId)); }
+  async function _getGroupSenderKeyRaw(groupId) {
     try {
       const stored = await dbGet('identity', 'gsk:' + groupId);
       if (stored) return stored;
@@ -5638,11 +5640,11 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'getGroupSenderKey'); }
   }
 
-  async function encryptGroupMsg(groupId, text) {
+  function encryptGroupMsg(groupId, text) { return _withPeerLock('grp:' + groupId, () => _encryptGroupMsgRaw(groupId, text)); }
+  async function _encryptGroupMsgRaw(groupId, text) {
     try {
-      const sk = await getGroupSenderKey(groupId);
-      let msgKeyBits, version;
-      if (CONFIG.GROUP_RATCHET_V5 && sk.v === 5) {
+      const sk = await _getGroupSenderKeyRaw(groupId); // already under the 'grp:' lock — getGroupSenderKey would self-deadlock
+      let msgKeyBits, version; if (CONFIG.GROUP_RATCHET_V5 && sk.v === 5) {
         // v5: hash ratchet — derive msg key from current chainKey, then advance
         const ck = new Uint8Array(sk.chainKey);
         msgKeyBits = await hkdf(ck, new Uint8Array(32), 'breeze-group-msg-v5', 32);
@@ -5655,8 +5657,7 @@ async function initMessenger(dbName) {
         msgKeyBits = await hkdf(new Uint8Array(sk.raw), new Uint8Array(new Uint32Array([sk.counter]).buffer), 'group-msg', 32);
         version = 3;
       }
-      sk.counter++;
-      await dbPut('identity', sk, 'gsk:' + groupId);
+      sk.counter++; await dbPut('identity', sk, 'gsk:' + groupId);
       const raw = new TextEncoder().encode(text);
       const padded = new Uint8Array(Math.ceil((raw.length + 2) / CONFIG.MSG_PAD_BOUNDARY) * CONFIG.MSG_PAD_BOUNDARY);
       new DataView(padded.buffer).setUint16(0, raw.length);
@@ -5669,12 +5670,12 @@ async function initMessenger(dbName) {
       // unsigned msgs are member-forgeable. sigPub rides the sender-key distribution;
       // legacy senders (no sigPub on record) stay decryptable — same rollout as `cm`.
       const sg = _signingKey?.privateKey && await signMessage(`breeze-group-msg:${groupId}:${out.ep | 0}:${out.c | 0}:${JSON.stringify(out.i)}:${JSON.stringify(out.d)}`);
-      if (sg) out.sg = sg;
-      return JSON.stringify(out);
+      if (sg) out.sg = sg; return JSON.stringify(out);
     } catch(_e) { _dbg(_e, 'encryptGroupMsg'); }
   }
 
-  async function decryptGroupMsg(groupId, senderId, payload) {
+  function decryptGroupMsg(groupId, senderId, payload) { return _withPeerLock('grp:' + groupId + ':' + senderId, () => _decryptGroupMsgRaw(groupId, senderId, payload)); }
+  async function _decryptGroupMsgRaw(groupId, senderId, payload) {
     try {
       const p = JSON.parse(payload);
       if (!p.g) return null;
@@ -5729,8 +5730,7 @@ async function initMessenger(dbName) {
           }
           msgKeyBits = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-msg-v5', 32);
           chainKey = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-chain-v5', 32);
-          counter++;
-          peerSK.chainKey = Array.from(chainKey);
+          counter++; peerSK.chainKey = Array.from(chainKey);
           peerSK.counter = counter;
           peerSK.skipped = skipped;
           await dbPut('identity', peerSK, skKey);

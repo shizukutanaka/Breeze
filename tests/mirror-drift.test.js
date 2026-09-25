@@ -380,14 +380,14 @@ describe('Ratchet KDF mirror — inline (index.html) vs reference (src/crypto/ra
 // for v5, plus the v3 legacy path. Pre-seeding the keystore makes getGroupSenderKey
 // return the shared chain key instead of generating a random one.
 // ---------------------------------------------------------------------------
-const GROUP_START = '  async function getGroupSenderKey(groupId) {';
+const GROUP_START = '  function getGroupSenderKey(groupId) {';
 const GROUP_END = '\n  // Distribute sender key to a specific group member';
 const gs = html.indexOf(GROUP_START);
 const ge = html.indexOf(GROUP_END, gs);
 if (gs < 0 || ge < 0) {
   throw new Error(
     'mirror-drift guard: could not locate inline group sender-key functions in index.html ' +
-    '(markers "async function getGroupSenderKey" .. "// Distribute sender key to a specific member"). ' +
+    '(markers "function getGroupSenderKey" .. "// Distribute sender key to a specific member"). ' +
     'If the group block moved, update tests/mirror-drift.test.js.',
   );
 }
@@ -404,7 +404,7 @@ function makeGroupInline(config) {
   const { _computeGroupV5 } = makeX3dhInline(null, config, 'me');
   const factory = new Function(
     'crypto', 'CONFIG', 'dbGet', 'dbPut', 'hkdf', 'arr', 'u8', '_dbg', 'TextEncoder', 'TextDecoder', '_computeGroupV5',
-    '_keyCommit', '_cmOk', '_signingKey', 'signMessage', 'verifySignature',
+    '_keyCommit', '_cmOk', '_signingKey', 'signMessage', 'verifySignature', '_withPeerLock',
     html.slice(gs, ge) +
       '\nreturn { getGroupSenderKey, encryptGroupMsg, decryptGroupMsg };',
   );
@@ -413,7 +413,7 @@ function makeGroupInline(config) {
   const api = factory(
     globalThis.crypto, config, dbGet, dbPut, inlineKdf.hkdf,
     (a) => Array.from(a), (a) => new Uint8Array(a), () => {}, TextEncoder, TextDecoder, _computeGroupV5,
-    _injKeyCommit, _injCmOk, null, async () => null, async () => null,
+    _injKeyCommit, _injCmOk, null, async () => null, async () => null, (_id, fn) => fn(),
   );
   return { ...api, store };
 }
