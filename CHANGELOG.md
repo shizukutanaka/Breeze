@@ -1,5 +1,18 @@
 # Changelog
 
+## Client signs the remaining *_REQUIRE_AUTH surfaces — alias/set + push subscribe/unsubscribe (branch devin/1790411749-auth-rollout, 2026-09-26)
+
+vitest 830 unchanged; `index.html`, `_headers`, `tauri.conf.json` (CSP hash propagation).
+
+- `queueAuth` generalized into `authFields(makeChallenge)` — every `*_REQUIRE_AUTH` family shares one {ts, sig} signer for its own `breeze-…` challenge string.
+- `alias/set` (both call sites: account setup + rename) now sends `{userId, ts, sig}` over `breeze-alias-set:{clean-alias}:{ts}` — binds the @handle to the registered identity key, closing the first-come impersonation path ALIAS_REQUIRE_AUTH exists to gate. The signed challenge covers the worker-sanitized alias (`toLowerCase` + charset strip), matching `clean`.
+- `push/subscribe` (both paths: existing-sub sync and fresh subscribe) signs `breeze-push-subscribe:{userId}:{ts}:{endpoint}:{p256dh}:{auth}` — the subBind that stops a captured signature from being replayed with swapped endpoint keys.
+- `push/unsubscribe` (account switch + account delete) signs `breeze-push-unsubscribe:{userId}:{ts}:{endpoint}`.
+- Not signed, by design: `/turn` (worker checks registration only, no signature scheme) and presence (inst already signed via `breeze-inst:`).
+- Same client-first rollout: verified-when-present today, mandatory when the operator sets the flag — flipping it no longer breaks clients.
+
+---
+
 ## Queue read/delete ops now send Ed25519 ownership proofs — client half of QUEUE_REQUIRE_AUTH (branch devin/1790411749-queue-auth-v2, 2026-09-26)
 
 vitest 833 unchanged; `index.html`, `_headers`, `tauri.conf.json` (CSP hash propagation).
