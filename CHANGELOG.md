@@ -1,6 +1,17 @@
 # Changelog
 
-## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
+## Inbox queue overflow now reports "N dropped" to the poller (was fully silent), and the drop counter itself survives racing sends (branch devin/1790407679-inbox-dropped, 2026-09-26)
+
+vitest 819 → **822**; `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md` — worker-only, no index.html.
+
+The sealed queue counts evicted envelopes so a recipient's poll can report "N messages were lost" — but `handleMsgSend`'s `/msg` inbox path (`capQueueBytes`, 100-entry/16MB bounds) silently discarded the oldest undelivered messages with no counter at all. A recipient offline long enough to overflow never learned anything was lost — exactly the "silent drop" the sealed path's own comment calls the real defect. `handleMsgPoll` now returns `dropped` and clears the counter, matching `handleSealedPoll` — including when the inbox fully drained (the case that matters most).
+
+The counter itself is a read-modify-write under last-write-wins, so two racing sends could also lose each other's increments. Extracted into a shared `bumpDropped` helper (used by both send paths plus the sealed lost-write re-append, which previously trimmed without counting) that re-reads after writing and re-adds the delta on top of the current value. A racer's identical-value write is the one residual under-count — same documented bound as the queue recoveries.
+
+Tests: inbox overflow reports `dropped: 1` + oldest evicted + counter consumed on report; `dropped` returned even on an empty inbox; deterministic race test — a competing increment injected between the expected-write and the re-read yields the correct summed total (7+1=8) rather than a clobbered one.
+
+---
+
 
 819 vitest unchanged; Playwright E2E 60 unchanged; `docs/ROADMAP.md`, `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation) — dead-code removal only, no runtime behavior change.
 
