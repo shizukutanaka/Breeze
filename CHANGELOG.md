@@ -1,5 +1,15 @@
 # Changelog
 
+## Test-infra hardening: mockKV enforces real KV TTLs; version strings + health advertisement pinned against drift (branch devin/<ts>-infra-hygiene, 2026-09-26)
+
+vitest 819 → **832**; `tests/helpers/mockKV.js`, `tests/worker-health.test.js`, `tests/version-sync.test.js` (new), `CHANGELOG.md` — test-infra only, no deployed code.
+
+- **mockKV now enforces TTLs** — `expirationTtl`/absolute `expiration` honored lazily on read/list, overwrite-without-TTL clears expiry (real KV semantics), and `list()` exposes `expiration` so the health checker's `sig:` sweeper path is exercisable. Before this, TTL-dependent behavior was untestable: every put silently ignored its TTL.
+- **`/api/health` advertisement pinned** — `endpoints` must equal parsed `case '/api/…'` count + health itself; `version`/`protocol` must equal the client `CONFIG` they are compared against. The client toasts "update available" to every connected user on a version mismatch, so a stale worker string is a user-visible false alarm.
+- **Version strings synced across six copies** — index.html `CONFIG.VERSION`, sw.js `VERSION`, manifest.json, package.json, build.sh, `_worker.js` health: all must parse and agree.
+
+---
+
 ## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
 
 819 vitest unchanged; Playwright E2E 60 unchanged; `docs/ROADMAP.md`, `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation) — dead-code removal only, no runtime behavior change.

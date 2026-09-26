@@ -1,24 +1,43 @@
 // Minimal in-memory stand-in for a Cloudflare KV namespace, sufficient for the
 // worker handlers under test. Values are stored as strings (the worker always
 // JSON.stringify's before put), matching real KV semantics closely enough for
-// unit tests. TTLs are accepted but not enforced.
+// unit tests. TTLs ARE enforced (expirationTtl / absolute expiration, both in
+// seconds like real KV) — lazily, on read/list — so expiry-dependent code paths
+// (health's `sig:` sweeper, TTL-refreshed registries) behave like production.
+// Direct `store.set` writes bypass expiry bookkeeping by design: use them to
+// plant fixtures, use `put` for TTL coverage.
 export function makeKV(initial = {}) {
   const store = new Map(Object.entries(initial));
+  const expires = new Map(); // key -> absolute expiry in ms
+  const live = (key) => {
+    const exp = expires.get(key);
+    if (exp !== undefined && exp <= Date.now()) { store.delete(key); expires.delete(key); return false; }
+    return true;
+  };
   return {
     store,
     async get(key) {
-      return store.has(key) ? store.get(key) : null;
+      return live(key) && store.has(key) ? store.get(key) : null;
     },
-    async put(key, value, _opts) {
+    async put(key, value, opts = {}) {
       store.set(key, String(value));
+      // A rewrite resets TTL in real KV — an overwrite without expiry clears it.
+      if (opts?.expirationTtl) expires.set(key, Date.now() + opts.expirationTtl * 1000);
+      else if (opts?.expiration) expires.set(key, opts.expiration * 1000);
+      else expires.delete(key);
     },
     async delete(key) {
       store.delete(key);
+      expires.delete(key);
     },
     async list({ prefix = '', limit = 1000 } = {}) {
       const keys = [];
       for (const k of store.keys()) {
-        if (k.startsWith(prefix)) keys.push({ name: k });
+        if (!live(k)) continue;
+        if (k.startsWith(prefix)) {
+          const exp = expires.get(k);
+          keys.push(exp !== undefined ? { name: k, expiration: exp / 1000 } : { name: k });
+        }
         if (keys.length >= limit) break;
       }
       return { keys, list_complete: true };
