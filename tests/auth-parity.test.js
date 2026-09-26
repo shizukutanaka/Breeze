@@ -41,6 +41,7 @@ const MAIN_VERIFIED = [
   'breeze-device-set:{}:{}:{}',
   'breeze-account-delete:{}:{}',
   'breeze-inst:{}:{}',
+  'breeze-sig:{}:{}:{}',
 ];
 
 // push/subscribe: the worker composes the last slot from a subBind variable —
