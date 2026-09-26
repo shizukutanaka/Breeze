@@ -1,6 +1,6 @@
 # Changelog
 
-## Worker env-var documentation gate: every env.* the Worker reads must exist in wrangler.toml (branch devin/<ts>-env-docs-gate, 2026-09-26)
+## Worker env-var documentation gate: every env.* the Worker reads must exist in wrangler.toml (branch devin/1790409872-env-docs-gate, 2026-09-26)
 
 vitest 819 → **836**; `tests/worker-env-docs.test.js` (new), `CHANGELOG.md` — test only.
 
