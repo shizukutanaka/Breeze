@@ -1,5 +1,15 @@
 # Changelog
 
+## SPEC↔code drift gate + remaining stale counts fixed (branch devin/<ts>-spec-drift-gate, 2026-09-26)
+
+vitest 841 (+22); `tests/spec-docs.test.js`, `SPEC.md`, `docs/CRYPTO-SPEC.md`, `CHANGELOG.md`.
+
+- `tests/spec-docs.test.js` pins SPEC.md §3.2 to `_worker.js` bidirectionally: every dispatch case must appear in the table, no dead rows, and every rate limit must equal the `limits` map value verbatim; §3.3 must document every `env.NAME` the Worker reads (with `*_REQUIRE_AUTH` family wildcards). The drift the previous entry fixed by hand can no longer regrow silently.
+- SPEC.md §11: "English (372 keys), Japanese (372 keys)" → 657 each (per `i18n-check`'s inline EN reference + `locales/ja.json`).
+- `docs/CRYPTO-SPEC.md` "Test status": dropped the per-suite counts that drift every commit ("13 suites, 433 tests, validate.sh 33/36" — actual ~841 tests, 19 files, 160/166) in favor of the suite inventory + "run `npm test` for the live count".
+
+---
+
 ## SPEC.md drift repair: endpoint/rate-limit table and env-var table now match `_worker.js` (branch devin/1790410756-spec-drift, 2026-09-26)
 
 vitest 819 unchanged; `SPEC.md`, `CHANGELOG.md` — docs only.
