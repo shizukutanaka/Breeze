@@ -2540,6 +2540,77 @@ describe('msg send / poll (1:1 relay path)', () => {
     expect((await res.json()).code).toBe('SELF_SEND');
   });
 
+  // remote_wipe: `from` and `type` are sender-claimed, so an unauthenticated
+  // self-addressed control message would be a wipe-anyone primitive. The worker
+  // must require an Ed25519 signature over breeze-remote-wipe:<to>:<ts> against
+  // the account's registered auth root, and persist type only when verified.
+  describe('remote_wipe self-message gate', () => {
+    const edPair = async () => crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const signCh = async (ed, s) => toB64(new Uint8Array(await crypto.subtle.sign(
+      { name: 'Ed25519' }, ed.privateKey, new TextEncoder().encode(s))));
+    const seedAcct = async (env, id, ed) => env.KV.put(`prekey:${id}`, JSON.stringify({
+      identityKey: 'IK-' + id, edIdentityKey: toB64(new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey))),
+    }));
+
+    it('rejects a self-message with an unknown type', async () => {
+      const env = makeEnv();
+      const res = await handleMsgSend(
+        { to: 'alice001', from: 'alice001', payload: 'X', ts: Date.now(), type: 'bogus' },
+        ip, env, req({}),
+      );
+      expect(res.status).toBe(400);
+      expect((await res.json()).code).toBe('INVALID_TYPE');
+    });
+
+    it('rejects unsigned remote_wipe even with a registered account', async () => {
+      const env = makeEnv();
+      const ed = await edPair();
+      await seedAcct(env, 'alice001', ed);
+      const res = await handleMsgSend(
+        { to: 'alice001', from: 'alice001', payload: 'wipe', ts: Date.now(), type: 'remote_wipe' },
+        ip, env, req({}),
+      );
+      expect(res.status).toBe(403);
+      expect((await res.json()).code).toBe('AUTH_REQUIRED');
+      expect(await env.KV.get('inbox:alice001')).toBeNull();
+    });
+
+    it('rejects a forged remote_wipe signed by an attacker key', async () => {
+      const env = makeEnv();
+      await seedAcct(env, 'alice001', await edPair());   // victim's real root
+      const evil = await edPair();
+      const ts = Date.now();
+      const sig = await signCh(evil, `breeze-remote-wipe:alice001:${ts}`); // attacker-signed
+      const res = await handleMsgSend(
+        { to: 'alice001', from: 'alice001', payload: 'wipe', ts, type: 'remote_wipe', sig },
+        ip, env, req({}),
+      );
+      expect(res.status).toBe(403);
+      expect((await res.json()).code).toBe('SIG_INVALID');
+      expect(await env.KV.get('inbox:alice001')).toBeNull();
+    });
+
+    it('accepts + stores a remote_wipe signed by the registered auth root', async () => {
+      const env = makeEnv();
+      const ed = await edPair();
+      await seedAcct(env, 'alice001', ed);
+      const ts = Date.now();
+      const sig = await signCh(ed, `breeze-remote-wipe:alice001:${ts}`);
+      const res = await handleMsgSend(
+        { to: 'alice001', from: 'alice001', payload: 'wipe', ts, type: 'remote_wipe', sig },
+        ip, env, req({}),
+      );
+      expect(res.status).toBe(200);
+      const stored = JSON.parse(await env.KV.get('inbox:alice001'));
+      expect(stored.length).toBe(1);
+      expect(stored[0].type).toBe('remote_wipe');
+      expect(stored[0].sig).toBe(sig);
+      // …and the wipe is delivered to the poller with its type intact.
+      const { messages } = await (await handleMsgPoll({ id: 'alice001', lastTs: 0 }, env, req({}))).json();
+      expect(messages[0].type).toBe('remote_wipe');
+    });
+  });
+
   it('deduplicates an immediately repeated send (content-keyed)', async () => {
     const env = makeEnv();
     const body = { to: 'carol001', from: 'alice001', payload: 'SAME', ts: Date.now() };

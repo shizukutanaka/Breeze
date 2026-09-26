@@ -1,5 +1,16 @@
 # Changelog
 
+## Secure remote-wipe revival: dead feature fixed, then signature-gated end to end (branch devin/1790421641-round19, 2026-09-26)
+
+vitest 873 (+5); `index.html`, `_worker.js`, `tests/worker.test.js`, `tests/auth-parity.test.js`, `_headers`, `tauri/src-tauri/tauri.conf.json`.
+
+- `/wipe` was **dead code on main**: the send posted `payload: ''` (fails `MISSING_FIELDS`), and the worker never stored `body.type`, so `checkRemoteWipe`'s `msg.type === 'remote_wipe'` could never be true.
+- Reviving it naively would have been catastrophic: `from` on a relayed message is sender-claimed, so anyone who learns an account's `myId` could post `{to: X, from: X, type: 'remote_wipe'}` — a wipe-anyone primitive.
+- **Worker** (`handleMsgSend`): self-addressed typed messages are now whitelisted (`remote_wipe` only) and require an Ed25519 signature over `breeze-remote-wipe:<to>:<ts>` verified against the account's registered `edIdentityKey` auth root; the `type` field is persisted only when verified. Forged or unsigned control messages → 403, nothing stored.
+- **Client**: `/wipe` signs `breeze-remote-wipe:<myId>:<ts>` with the account signing key and sends a non-empty payload. `_verifyRemoteWipe` re-verifies against `_signingPubB64` or the pinned `acct.rootEd` (defense in depth) before `_execRemoteWipe` destroys local state; unverifiable wipes are dropped, not acted on.
+- The live `/msg/poll` loop now honors a verified wipe (previously only the next-boot `checkRemoteWipe` scan did, so an online device would have consumed and deleted the wipe within the 10s grace window without ever acting on it).
+- Limitation: a secondary device's `/wipe` reaches only devices that accept its key (own id or the account root); primary-issued wipes verify for every device via `acct.rootEd`.
+
 ## Mobile bundle shipped English-only: prepare.js never copied locales/; signing injection now idempotent (branch devin/1790411492-mobile-locales, 2026-09-26)
 
 vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/mobile-assets.test.js`, `CHANGELOG.md`.

@@ -41,6 +41,7 @@ const MAIN_VERIFIED = [
   'breeze-device-set:{}:{}:{}',
   'breeze-account-delete:{}:{}',
   'breeze-inst:{}:{}',
+  'breeze-remote-wipe:{}:{}', // self-addressed control op — worker verifies vs auth root
 ];
 
 // push/subscribe: the worker composes the last slot from a subBind variable —

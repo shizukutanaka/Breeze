@@ -425,6 +425,22 @@ async function handleMsgSend(body, ip, env, request) {
   const msgTs = ts || now;
   if (Math.abs(now - msgTs) > TIMEOUT_MS.REQ_TS) return json({ error: 'Timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
 
+  // Self-addressed typed control messages (currently only remote_wipe): `from` and
+  // `type` are sender-CLAIMED — without verification, posting {to:X, from:X,
+  // type:'remote_wipe'} is a wipe-anyone primitive. Require an Ed25519 signature over
+  // breeze-remote-wipe:<to>:<ts> verified against the account's registered auth root
+  // (edIdentityKey); the client re-verifies before acting (defense in depth).
+  let selfMsgType = null;
+  if (to === from && body.type) {
+    if (body.type !== 'remote_wipe') return json({ error: 'unknown self-message type', code: 'INVALID_TYPE' }, 400, request);
+    const pk = await kvGet(env, `prekey:${to}`);
+    const edKey = pk ? safeJsonParse(pk, null)?.edIdentityKey : null;
+    if (!edKey || typeof sig !== 'string' || !sig) return json({ error: 'self-message requires signature', code: 'AUTH_REQUIRED' }, 403, request);
+    const okSelf = await verifyEd25519(edKey, utf8ToB64(`breeze-remote-wipe:${to}:${msgTs}`), sig);
+    if (okSelf !== true) return json({ error: 'bad signature', code: 'SIG_INVALID' }, 403, request);
+    selfMsgType = body.type;
+  }
+
   // v3.6: In-memory dedup (saves 1 KV write per message — critical for free tier)
   // Trade-off: duplicate detection is per-isolate (~5min window), not global.
   // Client-side _replayCache provides secondary dedup layer.
@@ -462,6 +478,10 @@ async function handleMsgSend(body, ip, env, request) {
   // "No reply needed" marker: opaque to the relay, consumed by the recipient's UI. Passed
   // through on the /msg fallback so the flag survives when sealed sending is unavailable.
   if (body.nrn === true) msg.nrn = true;
+  // Self-addressed typed control messages are whitelisted + signature-verified (set
+  // earlier — `from`/`type` are claimed, so an unauthenticated control op would be a
+  // wipe-anyone primitive).
+  if (selfMsgType) msg.type = selfMsgType;
   // Server-assigned unique message id — groundwork for an exclusive poll cursor.
   // Two messages stored in the same millisecond share a ts, and the ts-only cursor
   // (`m.ts > lastTs`) drops the second one if a poll lands between them. Current

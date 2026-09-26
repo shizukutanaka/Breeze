@@ -4381,6 +4381,35 @@ async function initMessenger(dbName) {
 
   // v3.3: ENTERPRISE — REMOTE WIPE
   // Check server for wipe signal; if found, destroy all local data
+  // 'from' and 'type' on a polled message are sender-CLAIMED — the relay stores them
+  // verbatim for self-addressed control messages, so anyone who learns myId could
+  // otherwise post {type:'remote_wipe', from:myId} and wipe this device. Verify the
+  // signature under a key this account controls before destroying local state: our
+  // own signing key (self-wipe, and primary == account root) or the pinned root Ed
+  // key (secondary device accepting a primary-issued wipe).
+  async function _verifyRemoteWipe(msg) {
+    if (msg?.type !== 'remote_wipe' || msg.from !== myId || typeof msg.ts !== 'number') return false;
+    const acct = await dbGet('identity', 'account').catch(() => null);
+    for (const k of [_signingPubB64, acct?.rootEd]) {
+      if (!k) continue;
+      try { if (await verifySignature(`breeze-remote-wipe:${myId}:${msg.ts}`, msg.sig, k) === true) return true; }
+      catch(e) { _dbg(e, 'wipe-verify'); }
+    }
+    _dbg(null, 'remote_wipe: signature not verified — ignoring');
+    return false;
+  }
+  async function _execRemoteWipe() {
+    auditLog('security', 'Remote wipe signal received', 'critical');
+    const stores = [...db.objectStoreNames];
+    for (const store of stores) {
+      const tx = db.transaction(store, 'readwrite');
+      tx.objectStore(store).clear();
+    }
+    localStorage.clear();
+    sessionStorage.clear();
+    showToast(t('toastWiped'), 'error');
+    setTimeout(() => location.reload(), CONFIG.TOAST_DURATION_MS);
+  }
   async function checkRemoteWipe() {
     if (!API || !myId) return;
     try {
@@ -4388,20 +4417,7 @@ async function initMessenger(dbName) {
       if (!resp.ok) return;
       const data = await resp.json();
       for (const msg of (data.messages || [])) {
-        if (msg.type === 'remote_wipe' && msg.from === myId) {
-          auditLog('security', 'Remote wipe signal received', 'critical');
-          // Destroy all data
-          const stores = [...db.objectStoreNames];
-          for (const store of stores) {
-            const tx = db.transaction(store, 'readwrite');
-            tx.objectStore(store).clear();
-          }
-          localStorage.clear();
-          sessionStorage.clear();
-          showToast(t('toastWiped'), 'error');
-          setTimeout(() => location.reload(), CONFIG.TOAST_DURATION_MS);
-          return;
-        }
+        if (await _verifyRemoteWipe(msg)) { await _execRemoteWipe(); return; }
       }
     } catch(e) { _dbg(e, 'remote-wipe-check'); }
   }
@@ -9315,7 +9331,13 @@ async function initMessenger(dbName) {
           if (resp.ok) {
             const data = await resp.json();
             for (const msg of (data.messages || [])) {
-              try { await handleIncoming(msg); } catch(e) { _dbg(e, 'msg-process'); }
+              try {
+                // Self-addressed control messages never reach handleIncoming (self isn't
+                // a contact) — check the wipe marker here so an ONLINE device honours it
+                // too, not just the next-boot checkRemoteWipe() scan.
+                if (msg.type === 'remote_wipe') { if (await _verifyRemoteWipe(msg)) { await _execRemoteWipe(); return; } continue; }
+                await handleIncoming(msg);
+              } catch(e) { _dbg(e, 'msg-process'); }
               if (typeof msg.ts === 'number' && Number.isFinite(msg.ts) && msg.ts > _lastPollTs && msg.ts <= Date.now() + MS.DAY) _lastPollTs = msg.ts;
             }
           }
@@ -12573,9 +12595,18 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       clearInput();
       const choice = await showConfirm(t('wipeTitle'), { okText: t('wipeBtn'), danger: true, desc: t('wipeDesc') });
       if (!choice) { showToast(t('toastCancelled'), 'info'); return; }
-      // Send remote wipe signal to own inbox (wakes other devices)
+      // Send remote wipe signal to own inbox (wakes other devices). Signed with our
+      // Ed25519 identity — receivers verify `breeze-remote-wipe:<id>:<ts>` before
+      // destroying anything; the relay can't authenticate `from`, so an unsigned
+      // wipe would be a wipe-anyone primitive. Primary devices sign with the account
+      // root; a secondary device can only wipe itself (its sig won't verify as root).
       if (API && myId) {
-        try { await postAPIRaw('/msg/send', { to: myId, from: myId, payload: '', ts: Date.now(), type: 'remote_wipe' }); } catch(e) { _dbg(e); }
+        try {
+          const wipeTs = Date.now();
+          const wipeSig = await signMessage(`breeze-remote-wipe:${myId}:${wipeTs}`);
+          await postAPIRaw('/msg/send', { to: myId, from: myId, payload: 'wipe', ts: wipeTs, type: 'remote_wipe',
+            ...(wipeSig ? { sig: wipeSig, sigPub: _signingPubB64 } : {}) });
+        } catch(e) { _dbg(e); }
         // Delete server-side account data: prekeys, inbox, presence, push subscriptions.
         // Requires Ed25519 ownership proof matching the stored edIdentityKey.
         // Best-effort: local wipe proceeds regardless of server response.
