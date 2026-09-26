@@ -1,5 +1,15 @@
 # Changelog
 
+## Queue read/delete ops now send Ed25519 ownership proofs — client half of QUEUE_REQUIRE_AUTH (branch devin/1790411749-queue-auth-v2, 2026-09-26)
+
+vitest 833 unchanged; `index.html`, `_headers`, `tauri.conf.json` (CSP hash propagation).
+
+- `msg/poll`, `sealed/poll`, `sealed/ack` now attach `{ts, sig}` = Ed25519(`breeze-<op>:<id>:<ts>`) via the install's identity signing key — the `edIdentityKey` the registered prekey bundle advertises, which `checkQueueAuth` verifies against (per-op domain separation, so a captured poll sig can't be replayed as an ack).
+- Client-first rollout: today's Worker ignores the fields; they become mandatory when the operator sets `QUEUE_REQUIRE_AUTH=true` on the auth branch. Returns `{}` when Ed25519 is unavailable or `initSigning` is still in flight — optional until the flag flips.
+- Until this lands, an operator enabling `QUEUE_REQUIRE_AUTH` would break every client; after it, the queue ops stop being anonymous read/delete surfaces (anyone holding a userId could drain the ciphertext inbox or ack-wipe undelivered sealed envelopes).
+
+---
+
 ## Skipped message keys now expire (I7, the last pending P0) — plus a forged-group-ciphertext could persistently desync a member (branch devin/1790400137-i7-skipped-key-ttl, 2026-09-26)
 
 830 vitest (819 → **830**); Playwright E2E 60 unchanged; `index.html`, `src/crypto/ratchet.js`, `tests/mirror-drift.test.js`, `tests/ratchet.test.js`, `docs/ROADMAP.md`, `CHANGELOG.md`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation).
