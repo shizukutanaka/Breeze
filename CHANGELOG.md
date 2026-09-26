@@ -1,6 +1,6 @@
 # Changelog
 
-## SPEC.md drift repair: endpoint/rate-limit table and env-var table now match `_worker.js` (branch devin/<ts>-spec-drift, 2026-09-26)
+## SPEC.md drift repair: endpoint/rate-limit table and env-var table now match `_worker.js` (branch devin/1790410756-spec-drift, 2026-09-26)
 
 vitest 819 unchanged; `SPEC.md`, `CHANGELOG.md` — docs only.
 
