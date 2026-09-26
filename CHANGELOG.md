@@ -77,6 +77,27 @@ vitest 819 → **824**; `tools/lib/mask-js.mjs` (new shared lib), `tools/unreach
 
 ---
 
+||||||| 0f93fe1
+## Desktop CSP fallback now fails CLOSED; mobile allowNavigation narrowed to the real host (branch devin/1790409387-shell-hardening, 2026-09-26)
+
+vitest 832 → **834**; `desktop/csp-guard.js`, `mobile/capacitor.config.json`, `tests/csp-guard.test.js`, `tests/version-sync.test.js`, `CHANGELOG.md` — no web-app files.
+
+- **`desktop/csp-guard.js` `FALLBACK_CSP` carried `'unsafe-inline'`** — reachable only on a packaging bug (build.sh's WEB_FILES and package.json's extraResources both ship `_headers`), but a missing/corrupt `_headers` would silently resurrect the exact XSS-to-IndexedDB-key-exfiltration hole that hash-pinned `script-src` exists to close. Now `default-src 'none'` — a blank window is loudly broken; a permissive fallback is invisible.
+- **`mobile/capacitor.config.json` `allowNavigation: ["*.pages.dev"]`** — let ANY third-party pages.dev site navigate inside the WebView, where pages get the Capacitor native bridge (LocalNotifications/PushNotifications plugins) with no user gesture. Narrowed to `["breeze.pages.dev"]`.
+- version-sync pin extended to seven copies (adds `desktop/package.json` — its version feeds artifact names and the auto-updater's labels).
+
+---
+
+## Test-infra hardening: mockKV enforces real KV TTLs; version strings + health advertisement pinned against drift (branch devin/1790409129-infra-hygiene, 2026-09-26)
+
+vitest 819 → **832**; `tests/helpers/mockKV.js`, `tests/worker-health.test.js`, `tests/version-sync.test.js` (new), `CHANGELOG.md` — test-infra only, no deployed code.
+
+- **mockKV now enforces TTLs** — `expirationTtl`/absolute `expiration` honored lazily on read/list, overwrite-without-TTL clears expiry (real KV semantics), and `list()` exposes `expiration` so the health checker's `sig:` sweeper path is exercisable. Before this, TTL-dependent behavior was untestable: every put silently ignored its TTL.
+- **`/api/health` advertisement pinned** — `endpoints` must equal parsed `case '/api/…'` count + health itself; `version`/`protocol` must equal the client `CONFIG` they are compared against. The client toasts "update available" to every connected user on a version mismatch, so a stale worker string is a user-visible false alarm.
+- **Version strings synced across six copies** — index.html `CONFIG.VERSION`, sw.js `VERSION`, manifest.json, package.json, build.sh, `_worker.js` health: all must parse and agree.
+
+---
+
 ## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
 ||||||| 0f93fe1
 ## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
