@@ -1,5 +1,14 @@
 # Changelog
 
+## Erasure-completeness gate: account/delete must leave zero keys naming the userId (branch devin/<ts>-erasure-gate, 2026-09-26)
+
+vitest 822 → **825**; `tests/worker-erasure.test.js` (new), `CHANGELOG.md` — test only.
+
+- Per-family delete tests already pin each erased store — but a future `foo:${userId}` family added without a matching `kvDel` would survive months of TTLs unnoticed. Catch-all: seed every user-keyed family, signed-delete the account, assert **no** KV key contains the userId; co-tenant records verified untouched; `erased[]` response must enumerate every wiped family.
+- Static pin: inline snapshot of EVERY `kvGet/Put/Del` key prefix in `_worker.js` — a new family trips review, where the reviewer must decide whether it is user-linked (the GDPR Art. 17 obligation this handler exists for).
+
+---
+
 ## Signaling-path races closed + account deletion erases the device registry and drop counter (branch devin/1790403400-signal-race-and-erasure, 2026-09-26)
 
 822 vitest (819→822: two signaling-path race tests + one erasure-completeness test, deterministic KV injection); `_worker.js`, `tests/worker.test.js` — Cloudflare Workers + KV only; index.html untouched.
