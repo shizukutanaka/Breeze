@@ -1,5 +1,13 @@
 # Changelog
 
+## Prekey re-uploads require the stored auth root's signature — PREKEY_REQUIRE_AUTH tightened to strict continuity (branch devin/1790416313-prekey-auth-root, 2026-09-26)
+
+vitest 871 (+3); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
+
+- `handlePreKeyUpload` (PR #302) verified a `breeze-prekey-upload:{userId}:{ts}:{digest}` signature *when present* and required it only under `PREKEY_REQUIRE_AUTH=true` — so the takeover it was built to stop still worked by simply omitting `ts`/`sig`: anyone could overwrite a registered account's whole bundle, keeping the victim's public `identityKey` (the prefix check needs only public data) and swapping in their own `edIdentityKey`. Since every signed endpoint (group admin ops, push subs, alias/account delete, device registry, backup) verifies against the stored `edIdentityKey`, one unsigned request hijacked the account's entire auth surface and poisoned its X3DH store.
+- Now the prior bundle is read unconditionally and an unsigned overwrite is `403 AUTH_REQUIRED` whenever a stored `edIdentityKey` exists — flag or no flag. Signed rotation still works (verified against the *current* key), first-upload TOFU and legacy keyless bundles keep unsigned behavior, and `PREKEY_REQUIRE_AUTH=true` continues to hard-require signatures even for them.
+- Tests: unsigned-overwrite→403 with bundle unchanged, signed overwrite with flag off, and the residual legacy-keyless window pinned (+3 worker tests).
+
 ## Mobile bundle shipped English-only: prepare.js never copied locales/; signing injection now idempotent (branch devin/1790411492-mobile-locales, 2026-09-26)
 
 vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/mobile-assets.test.js`, `CHANGELOG.md`.

@@ -2083,6 +2083,17 @@ async function handlePreKeyUpload(body, env, request) {
   // stored an edIdentityKey) verifies against the bundle's own edIdentityKey — self-binding,
   // same trust level as today for that corner.
   const hasPkAuth = ts !== undefined || sig !== undefined;
+  // Read the prior bundle unconditionally: a stored edIdentityKey is this account's
+  // AUTH ROOT — every signed endpoint (group admin ops, push subs, alias/account
+  // delete, device registry, backup) verifies against `prekey:{id}.edIdentityKey`.
+  // Verified-when-present alone cannot protect it: an attacker simply does not sign,
+  // keeps the victim's public identityKey (required by the prefix rule), and swaps in
+  // their own edIdentityKey — taking over every signed operation as that account.
+  // So an UNSIGNED overwrite is rejected whenever a prior auth root exists, flag or
+  // no flag. (Recovery for a lost key: account delete + re-register.)
+  const existingRaw = await kvGet(env, `prekey:${userId}`);
+  const existing = existingRaw ? safeJsonParse(existingRaw) : null;
+  const priorEd = (existing && typeof existing.edIdentityKey === 'string' && existing.edIdentityKey) || null;
   if (hasPkAuth) {
     if (ts === undefined || sig === undefined)
       return json({ error: 'ts and sig must both be provided together', code: 'PARTIAL_AUTH' }, 400, request);
@@ -2090,10 +2101,7 @@ async function handlePreKeyUpload(body, env, request) {
       return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
     if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS)
       return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
-    const existingRaw = await kvGet(env, `prekey:${userId}`);
-    const existing = existingRaw ? safeJsonParse(existingRaw) : null;
-    const edRoot = (existing && typeof existing.edIdentityKey === 'string' && existing.edIdentityKey)
-      || (typeof edIdentityKey === 'string' && edIdentityKey) || null;
+    const edRoot = priorEd || (typeof edIdentityKey === 'string' && edIdentityKey) || null;
     if (!edRoot) return json({ error: 'No Ed25519 identity key to verify against', code: 'NO_IDENTITY_KEY' }, 403, request);
     const digest = await sha256Short(JSON.stringify([
       identityKey, edIdentityKey || '', signedPreKey, signedPreKeySig || '',
@@ -2102,7 +2110,7 @@ async function handlePreKeyUpload(body, env, request) {
     ]));
     const okAuth = await verifyEd25519(edRoot, utf8ToB64(`breeze-prekey-upload:${userId}:${ts}:${digest}`), sig);
     if (!okAuth) return json({ error: 'Invalid upload signature', code: 'SIG_INVALID' }, 403, request);
-  } else if (env.PREKEY_REQUIRE_AUTH === 'true') {
+  } else if (env.PREKEY_REQUIRE_AUTH === 'true' || priorEd) {
     return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
   }
   const bundle = { identityKey, edIdentityKey, signedPreKey, signedPreKeySig, uploadedAt: Date.now() };

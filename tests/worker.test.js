@@ -3936,6 +3936,45 @@ describe('prekey upload auth — PREKEY_REQUIRE_AUTH', () => {
     expect(res.status).toBe(403);
     expect((await res.json()).code).toBe('SIG_INVALID');
   });
+
+  it('rejects an unsigned overwrite of a keyed bundle even with the flag off (auth-root continuity)', async () => {
+    // Verified-when-present alone leaves the hole: the attacker just doesn't sign.
+    // A stored edIdentityKey is the account's auth root, so overwrite requires the
+    // current key's signature regardless of PREKEY_REQUIRE_AUTH.
+    const e = makeEnv();
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const b = await makeBundle(ed, 'pkflga08');
+    expect((await handlePreKeyUpload(baseBody('pkflga08', b), e, req({}))).status).toBe(200); // TOFU first upload
+    // Unsigned overwrite keeps the victim's public identityKey (prefix rule) but swaps
+    // in attacker-controlled edIdentityKey/SPK/OTPs.
+    const res = await handlePreKeyUpload(
+      { userId: 'pkflga08', identityKey: 'pkflga08-IK', edIdentityKey: 'attackerEd', signedPreKey: 'attackerSPK' },
+      e, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
+    const stored = JSON.parse(await e.KV.get('prekey:pkflga08'));
+    expect(stored.edIdentityKey).toBe(b.edIdentityKey);
+    expect(stored.signedPreKey).toBe(b.signedPreKey);
+  });
+
+  it('signed overwrite of a keyed bundle still works with the flag off', async () => {
+    const e = makeEnv();
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const b1 = await makeBundle(ed, 'pkflga09');
+    expect((await handlePreKeyUpload(baseBody('pkflga09', b1), e, req({}))).status).toBe(200);
+    const b2 = await makeBundle(ed, 'pkflga09');
+    const s2 = await signUpload(ed, 'pkflga09', baseBody('pkflga09', b2));
+    expect((await handlePreKeyUpload({ ...baseBody('pkflga09', b2), ...s2 }, e, req({}))).status).toBe(200);
+  });
+
+  it('unsigned overwrite still allowed over a legacy KEYLESS bundle (transition window)', async () => {
+    // A bundle with no edIdentityKey has no auth root to prove against — pinning the
+    // residual pre-hardening behavior for legacy accounts.
+    const e = makeEnv();
+    await handlePreKeyUpload({ userId: 'pkflga10', identityKey: 'pkflga10-IK', signedPreKey: 'SPK1' }, e, req({}));
+    const res = await handlePreKeyUpload({ userId: 'pkflga10', identityKey: 'pkflga10-IK', signedPreKey: 'SPK2' }, e, req({}));
+    expect(res.status).toBe(200);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
