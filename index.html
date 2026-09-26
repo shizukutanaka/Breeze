@@ -8860,7 +8860,10 @@ async function initMessenger(dbName) {
     // Signal end
     if (_callContact && API) {
       const room = 'call:' + [myId, _callContact.id].sort().join(':');
-      _signal(room, 'call-end');
+      // The room id derives from the two PUBLIC user ids — anyone can push a bare
+      // 'call-end' into it and kill an in-progress call. Under CALL_E2E_SIGNAL wrap the
+      // marker so receivers can authenticate it; legacy receivers ignore s.data anyway.
+      _wrapCallSignal(_callContact.pubB64, { e: 1 }).then(d => { if (d != null) _signal(room, 'call-end', d); }).catch(e => _dbg(e, 'call-end-wrap'));
     }
     _callState = 'idle';
     _callContact = null;
@@ -8888,7 +8891,13 @@ async function initMessenger(dbName) {
             const cand = await _unwrapCallSignal(contact.pubB64, s.data);
             if (cand && typeof cand === 'object' && !Array.isArray(cand)) await _callPC.addIceCandidate(cand).catch(e => _dbg(e, 'call-ICE'));
           }
-          if (s.type === 'call-end') { endCall(); clearInterval(poll); return; }
+          if (s.type === 'call-end') {
+            // Authenticate under CALL_E2E_SIGNAL: the room id is derivable from two public
+            // ids, so a bare call-end is a one-packet call teardown. Wrapped ends decrypt
+            // only from the pinned peer; under the flag a forged one is dropped.
+            if (CONFIG.CALL_E2E_SIGNAL && !(await _unwrapCallSignal(contact.pubB64, s.data))) continue;
+            endCall(); clearInterval(poll); return;
+          }
           if (s.type === 'call-offer' && _callState === 'idle') { handleCallOffer(contact, s.data); }
         }
       } catch(e) { _dbg(e); }
@@ -10265,6 +10274,13 @@ async function initMessenger(dbName) {
                 let sdpJson = s.data;
                 try {
                   const wrapper = JSON.parse(s.data);
+                  if (!(wrapper && typeof wrapper.sdp === 'string' && wrapper.sig && wrapper.sigPub) && contact.sigPub) {
+                    // Signed-before ⇒ signed-always: a peer with a pinned sigPub proved it can
+                    // sign, so an unsigned SDP here is a strip-downgrade (drop the wrapper, keep
+                    // the plaintext) by the unauthenticated relay or a third party. Reject it.
+                    _dbg(null, 'P2P: unsigned SDP from a key-pinned peer — rejecting (downgrade)');
+                    continue;
+                  }
                   if (wrapper && typeof wrapper.sdp === 'string' && wrapper.sig && wrapper.sigPub) {
                     if (contact.sigPub && contact.sigPub !== wrapper.sigPub) {
                       _dbg(null, 'P2P: SDP signing key mismatch — rejecting (possible MITM)');

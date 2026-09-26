@@ -1,5 +1,15 @@
 # Changelog
 
+## Signaling audit: `call-end` teardown injection + signed-SDP strip-downgrade (branch devin/1790418529-round8, 2026-09-26)
+
+vitest 868 (+0, client logic has no harness coverage); `index.html`, `_headers`, `tauri.conf.json` (CSP re-pin), `CHANGELOG.md`.
+
+- **`call-end` was the one unauthenticated call signal.** The call room id derives from the two PUBLIC user ids (`call:{idA}:{idB}`), and `/api/signal` writes are unauthenticated — anyone who knows both ids (including a malicious relay) could kill an in-progress call with one POST. Offers/answers/ICE were already `encryptFor()`-wrapped under `CONFIG.CALL_E2E_SIGNAL`; `call-end` now is too — senders wrap `{e:1}`, receivers under the flag drop a call-end that fails `_unwrapCallSignal`. Flag-OFF behavior unchanged (the data field is ignored), and wrapping is fail-closed: a wrap failure sends nothing, leaving the call to its 60s timeout rather than emitting a forgeable plaintext signal.
+- **Signed-SDP strip-downgrade.** The `dm:` signaling loop authenticates offer/answer SDPs by Ed25519 signature with a TOFU `sigPub` pin — but once a pin existed, a raw unsigned SDP was still accepted for "compat". An attacker (or the relay) could strip the `{sdp, sig, sigPub}` wrapper and inject a forged plaintext SDP carrying their own DTLS fingerprint → full P2P MITM. Now: if `contact.sigPub` is pinned and the signal lacks a signature, it's rejected (signed-before ⇒ signed-always). Contacts that never demonstrated signing keep the legacy unsigned path.
+- Remaining documented limits: `ice` candidates and `typing`/`read` indicators stay unauthenticated (they can't MITM the signed/DTLS-bound channel; worst case is noise), and CALL_E2E_SIGNAL remains default-off pending the coordinated rollout it documents.
+
+---
+
 ## Mobile bundle shipped English-only: prepare.js never copied locales/; signing injection now idempotent (branch devin/1790411492-mobile-locales, 2026-09-26)
 
 vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/mobile-assets.test.js`, `CHANGELOG.md`.
