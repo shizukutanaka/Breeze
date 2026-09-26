@@ -1,5 +1,15 @@
 # Changelog
 
+## Desktop CSP fallback now fails CLOSED; mobile allowNavigation narrowed to the real host (branch devin/1790409387-shell-hardening, 2026-09-26)
+
+vitest 832 → **834**; `desktop/csp-guard.js`, `mobile/capacitor.config.json`, `tests/csp-guard.test.js`, `tests/version-sync.test.js`, `CHANGELOG.md` — no web-app files.
+
+- **`desktop/csp-guard.js` `FALLBACK_CSP` carried `'unsafe-inline'`** — reachable only on a packaging bug (build.sh's WEB_FILES and package.json's extraResources both ship `_headers`), but a missing/corrupt `_headers` would silently resurrect the exact XSS-to-IndexedDB-key-exfiltration hole that hash-pinned `script-src` exists to close. Now `default-src 'none'` — a blank window is loudly broken; a permissive fallback is invisible.
+- **`mobile/capacitor.config.json` `allowNavigation: ["*.pages.dev"]`** — let ANY third-party pages.dev site navigate inside the WebView, where pages get the Capacitor native bridge (LocalNotifications/PushNotifications plugins) with no user gesture. Narrowed to `["breeze.pages.dev"]`.
+- version-sync pin extended to seven copies (adds `desktop/package.json` — its version feeds artifact names and the auto-updater's labels).
+
+---
+
 ## Test-infra hardening: mockKV enforces real KV TTLs; version strings + health advertisement pinned against drift (branch devin/1790409129-infra-hygiene, 2026-09-26)
 
 vitest 819 → **832**; `tests/helpers/mockKV.js`, `tests/worker-health.test.js`, `tests/version-sync.test.js` (new), `CHANGELOG.md` — test-infra only, no deployed code.
