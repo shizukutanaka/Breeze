@@ -10,6 +10,15 @@ vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/m
 
 ---
 
+## Auth-challenge parity gate + alias/delete sanitize fix (branch devin/1790412600-auth-final, 2026-09-26)
+
+vitest 847 (+14); `tests/auth-parity.test.js`, `index.html` (alias/delete fix), `_headers`, `tauri.conf.json` (CSP hash propagation).
+
+- New `tests/auth-parity.test.js`: extracts every `breeze-…` challenge template literal from index.html and _worker.js, normalizes `${…}` slots, and requires byte-identical skeletons for the nine ops the Worker verifies on main (alias set/delete, push sub/unsub, backup up/download, device/set, account/delete, presence inst). Also pins the generic `breeze-group-{action}:{token}:{actorId}:{ts}:{bind}` shape against every client group template (literal action or `{}` slot, bind may be a compound literal like `promote:{id}`), the push-subscribe composed `subBind`, and that the client signs nothing the worker can never verify (queue/prekey/group-create remain PENDING until #283/#284/#285 land).
+- **Bug it found immediately**: `alias/delete` signed the raw `oldAlias`, but the worker hashes `clean` = lowercase + `[a-z0-9_]` strip + `slice(0,20)` — a stored alias with uppercase or out-of-charset chars (kept raw client-side) could never produce a valid signature → SIG_INVALID on delete. Client now signs the sanitized form. (`alias/set` needs no cap — the worker rejects `clean` >20 outright.)
+
+---
+
 ## Client signs prekey/upload + group/create — every Worker-side Ed25519 check now has a signer (branch devin/1790412600-auth-final, 2026-09-26)
 
 vitest 830 unchanged; `index.html`, `_headers`, `tauri.conf.json` (CSP hash propagation).
