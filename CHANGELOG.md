@@ -1,5 +1,12 @@
 # Changelog
 
+## Group mutation signals bound to their own group — cross-context edit/delete/reaction forgery closed (branch devin/1790422756-round23, 2026-09-26)
+
+vitest 868 (+0); `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json`.
+
+- The group `isSignal` path had the same gap the 1:1 path had: mutations required only `stored && !stored.mine`, so a group member could forge `signal.msgId` naming a message in **another** conversation (a different group or a 1:1 thread) and edit/delete/react to it — the `member` guard proves the sender belongs to the group but did nothing to bind the target to it.
+- All three mutation types now require `stored.contactId === msg.groupId` via a shared `_ownGroupMessage` predicate.
+
 ## Mobile bundle shipped English-only: prepare.js never copied locales/; signing injection now idempotent (branch devin/1790411492-mobile-locales, 2026-09-26)
 
 vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/mobile-assets.test.js`, `CHANGELOG.md`.
