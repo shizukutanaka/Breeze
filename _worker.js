@@ -132,7 +132,7 @@ export default {
           'account-delete', 'group-leave', 'group-delete', 'group-admin',
           'group-transfer', 'group-rename', 'msg-disappear-enforce',
           'sealed-sender', 'franking', 'prekey-x3dh',
-          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'alias-auth', 'backup-auth', 'push-auth', 'drop-server-id', 'group-auth', 'group-ban',
+          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'alias-auth', 'backup-auth', 'push-auth', 'drop-server-id', 'group-auth', 'group-ban', 'prekey-auth',
         ],
         crypto: ['X25519', 'Ed25519', 'AES-256-GCM', 'HKDF-SHA256', 'Double Ratchet', 'Sender Key O(1)'],
         ts: Date.now(),
@@ -1966,7 +1966,7 @@ async function verifyEd25519(edPubB64, msgB64, sigB64) {
 }
 
 async function handlePreKeyUpload(body, env, request) {
-  const { userId, identityKey, edIdentityKey, signedPreKey, signedPreKeySig, oneTimePreKeys, caps, x3dh } = body;
+  const { userId, identityKey, edIdentityKey, signedPreKey, signedPreKeySig, oneTimePreKeys, caps, x3dh, ts, sig } = body;
   if (!userId || !identityKey || !signedPreKey) return json({ error: 'userId, identityKey, signedPreKey required', code: 'MISSING_FIELDS' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   // Type guard: public key fields must be strings. An object/array passes the !x
@@ -2002,6 +2002,42 @@ async function handlePreKeyUpload(body, env, request) {
   if (signedPreKeySig && edIdentityKey) {
     const ok = await verifyEd25519(edIdentityKey, signedPreKey, signedPreKeySig);
     if (!ok) return json({ error: 'Invalid signed pre-key signature', code: 'PREKEY_SIG_INVALID' }, 400, request);
+  }
+
+  // Upload ownership proof (same doctrine as QUEUE/BACKUP/GROUP_REQUIRE_AUTH):
+  // identityKey.startsWith(userId) binds a NEW account's key to its id, but does nothing
+  // for an EXISTING userId — anyone could overwrite the bundle (keys, OTP list, caps) of a
+  // registered account, the exact "unexpected key change" the ktlog exists to detect. Callers
+  // may sign `breeze-prekey-upload:{userId}:{ts}:{digest}` where digest binds every
+  // attacker-malleable field (keys, signedPreKeySig, oneTimePreKeys, caps, x3dh); verified
+  // when present, mandatory when PREKEY_REQUIRE_AUTH=true.
+  // Continuity: the verifier is the STORED bundle's edIdentityKey — the root of identity
+  // continuity — so rotation requires the previous key's signature (recovery path when it is
+  // lost: account delete + re-register). A first-time upload (or a legacy bundle that never
+  // stored an edIdentityKey) verifies against the bundle's own edIdentityKey — self-binding,
+  // same trust level as today for that corner.
+  const hasPkAuth = ts !== undefined || sig !== undefined;
+  if (hasPkAuth) {
+    if (ts === undefined || sig === undefined)
+      return json({ error: 'ts and sig must both be provided together', code: 'PARTIAL_AUTH' }, 400, request);
+    if (typeof sig !== 'string' || sig.length > 500)
+      return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
+    if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS)
+      return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
+    const existingRaw = await kvGet(env, `prekey:${userId}`);
+    const existing = existingRaw ? safeJsonParse(existingRaw) : null;
+    const edRoot = (existing && typeof existing.edIdentityKey === 'string' && existing.edIdentityKey)
+      || (typeof edIdentityKey === 'string' && edIdentityKey) || null;
+    if (!edRoot) return json({ error: 'No Ed25519 identity key to verify against', code: 'NO_IDENTITY_KEY' }, 403, request);
+    const digest = await sha256Short(JSON.stringify([
+      identityKey, edIdentityKey || '', signedPreKey, signedPreKeySig || '',
+      Array.isArray(oneTimePreKeys) ? oneTimePreKeys : [], Array.isArray(caps) ? caps : [],
+      typeof x3dh === 'string' ? x3dh : '',
+    ]));
+    const okAuth = await verifyEd25519(edRoot, utf8ToB64(`breeze-prekey-upload:${userId}:${ts}:${digest}`), sig);
+    if (!okAuth) return json({ error: 'Invalid upload signature', code: 'SIG_INVALID' }, 403, request);
+  } else if (env.PREKEY_REQUIRE_AUTH === 'true') {
+    return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
   }
   const bundle = { identityKey, edIdentityKey, signedPreKey, signedPreKeySig, uploadedAt: Date.now() };
   // N3: persist capability set so the initiator can call parsePeerCaps(bundle) and

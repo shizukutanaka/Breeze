@@ -1,5 +1,17 @@
 # Changelog
 
+## PREKEY_REQUIRE_AUTH — Ed25519 ownership proof for prekey bundle uploads (branch devin/1790405800-prekey-upload-auth, 2026-09-26)
+
+399 vitest (392 → **399**, +7); `_worker.js`, `tests/worker.test.js`, `wrangler.toml`.
+
+The symmetric audit to QUEUE_REQUIRE_AUTH: the queue read/delete endpoints were unauthenticated, and so was the *write* endpoint that feeds them — `prekey/upload`. `identityKey.startsWith(userId)` binds a new account's key to its id, but for an **existing** userId anyone who knows the id could overwrite the entire stored bundle — a new `identityKey` with the same prefix plus the attacker's signed prekey and OTP list. Every subsequent X3DH initiation to that user would key to attacker-controlled material (silent MITM/identity hijack), with the ktlog recording the anomaly only if clients bother to audit. userIds are not secrets — they're shared with contacts and leaked by alias lookups.
+
+Same doctrine as QUEUE/BACKUP/GROUP_REQUIRE_AUTH: callers may include `{ts, sig}` signing `breeze-prekey-upload:{userId}:{ts}:{digest}` where the digest is `sha256Short(JSON.stringify([identityKey, edIdentityKey, signedPreKey, signedPreKeySig, oneTimePreKeys, caps, x3dh]))` — binding every attacker-malleable field so a captured signed request can't swap the OTP list or downgrade caps. **Continuity**: the verifier is the *stored* bundle's `edIdentityKey`, the root of identity continuity — rotation requires the previous key's signature (recovery when it's lost: account delete + re-register). A first upload, or a legacy bundle that never stored an `edIdentityKey`, verifies against the bundle's own `edIdentityKey` — self-binding, same trust level as today for that corner. Verified-when-present today (a signed request with a bad signature is rejected even with the flag off), mandatory once `wrangler pages secret put PREKEY_REQUIRE_AUTH=true`; advertised as `prekey-auth` in `/api/health` capabilities. Backward-compatible: the deployed client's `postAPIRaw` sends the body verbatim with no `ts`/`sig`, so nothing changes until the flag is set and clients start signing.
+
+Tests: unsigned rejected when flag on (403 AUTH_REQUIRED); signed first upload + same-key rotation accepted; **overwrite by a different ed key rejected even though the signature itself is valid** (stored key is the root); captured signature replayed with a tampered OTP list rejected (digest binding); partial auth 400; unsigned still accepted with flag off; bad signature rejected with flag off.
+
+---
+
 ## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
 
 819 vitest unchanged; Playwright E2E 60 unchanged; `docs/ROADMAP.md`, `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation) — dead-code removal only, no runtime behavior change.
