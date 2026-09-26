@@ -2726,6 +2726,56 @@ describe('msg send / poll (1:1 relay path)', () => {
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe('STORE_FAILED');
   });
+
+  // ── Queue-overflow drop reporting (inbox path — mirrors sealed's dropped counter) ──
+  it('inbox overflow is counted and reported to the poller as dropped (not silent)', async () => {
+    const env = makeEnv();
+    // Seed a full inbox (cap is 100 entries) with distinct payloads to dodge dedup.
+    const seeded = Array.from({ length: 100 }, (_, i) => ({ ts: Date.now() - 1000 + i, payload: 'old-' + i }));
+    await env.KV.put('inbox:bob00001', JSON.stringify(seeded));
+    const send = await handleMsgSend(
+      { to: 'bob00001', from: 'alice001', payload: 'NEWEST', ts: Date.now() },
+      ip, env, req({}),
+    );
+    expect(send.status).toBe(200);
+    expect(await env.KV.get('inbox:bob00001:dropped')).toBe('1');
+
+    const poll = await handleMsgPoll({ id: 'bob00001', lastTs: 0 }, env, req({}));
+    const j = await poll.json();
+    expect(j.dropped).toBe(1);
+    expect(j.messages.some(m => m.payload === 'NEWEST')).toBe(true);
+    expect(j.messages.length).toBe(100); // oldest evicted, newest survives
+    // Counter is consumed on report — a second poll does not re-report.
+    const j2 = await (await handleMsgPoll({ id: 'bob00001', lastTs: 0 }, env, req({}))).json();
+    expect(j2.dropped).toBeUndefined();
+  });
+
+  it('reports dropped even when the inbox itself is empty (fully drained queue)', async () => {
+    const env = makeEnv();
+    await env.KV.put('inbox:bob00001:dropped', '7');
+    const j = await (await handleMsgPoll({ id: 'bob00001', lastTs: 0 }, env, req({}))).json();
+    expect(j.messages).toEqual([]);
+    expect(j.dropped).toBe(7);
+  });
+
+  it('bumpDropped reconciles a racing increment instead of losing it', async () => {
+    const env = makeEnv();
+    // Seed a full sealed queue so this send evicts exactly 1 envelope.
+    const seeded = Array.from({ length: 100 }, (_, i) => ({ ts: Date.now() - 1000 + i, envelope: 'old-' + i }));
+    await env.KV.put('sealed:carol001', JSON.stringify(seeded));
+    // A racing sender's drop increment lands between our expected-write and our
+    // re-read: we must re-add our delta on top of theirs (final = 7 + 1), not lose it.
+    let raced = false;
+    const origPut = env.KV.put.bind(env.KV);
+    env.KV.put = async (k, v, o) => {
+      const r = await origPut(k, v, o);
+      if (k === 'sealed:carol001:dropped' && !raced) { raced = true; await origPut(k, '7'); }
+      return r;
+    };
+    const res = await handleSealedSend({ to: 'carol001', envelope: 'NEWEST' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect(await env.KV.get('sealed:carol001:dropped')).toBe('8'); // racer's 7 + our 1
+  });
 });
 
 describe('alias set / get (PoW anti-spam)', () => {

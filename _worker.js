@@ -427,6 +427,25 @@ function capQueueBytes(items, sizeOf, maxBytes = 16 * 1024 * 1024) {
   return items;
 }
 
+// Queue-overflow telemetry shared by the inbox and sealed send paths: evicted messages
+// are counted under `${queueKey}:dropped` so the recipient's next poll can report
+// "N messages were lost" instead of silently dropping them. The counter is itself a
+// read-modify-write under last-write-wins — a racing send's increment can clobber ours —
+// so after writing we re-read and re-add our delta on top of whatever value is current.
+// A racer's identical-value write is indistinguishable from ours and is the one residual
+// under-count; the same documented bound as the queue read-back recoveries.
+async function bumpDropped(env, key, delta) {
+  if (delta <= 0) return;
+  const dkey = `${key}:dropped`;
+  const prev = parseInt(await kvGet(env, dkey) || '0') || 0;
+  const expected = Math.min(prev + delta, 99999);
+  await kvPut(env, dkey, String(expected), { expirationTtl: TTL.WEEK });
+  const fresh = parseInt(await kvGet(env, dkey) || '0') || 0;
+  if (fresh !== expected) {
+    await kvPut(env, dkey, String(Math.min(fresh + delta, 99999)), { expirationTtl: TTL.WEEK });
+  }
+}
+
 async function handleMsgSend(body, ip, env, request) {
   const { to, from, fromPub, fromName, payload, ts, isFile, isGroupInvite, isVoice, isCall, isVideoCall, isSenderKey, isGroupSK, isGroupKick, groupId, groupName, replyTo, disappearAt, sig, sigPub } = body;
   if (!to || !from || !payload) return json({ error: 'to, from, payload required', code: 'MISSING_FIELDS' }, 400, request);
@@ -526,6 +545,10 @@ async function handleMsgSend(body, ip, env, request) {
     globalThis._msgDedup.delete(dedupKey);
     return json({ error: 'Failed to store message', code: 'STORE_FAILED' }, 500, request);
   }
+  // Queue overflow drops the OLDEST undelivered messages. Count them only on a
+  // successful store (a failed write evicted nothing) so the recipient's next poll
+  // reports "N lost" — the same contract the sealed queue already honors.
+  await bumpDropped(env, key, inbox.length - trimmed.length);
 
   // Trigger Web Push notification (non-blocking)
   // Cap push title to match the stored msg.groupName limit (50 chars) — prevents
@@ -546,10 +569,16 @@ async function handleMsgPoll(body, env, request) {
 
   const key = `inbox:${id}`;
   const data = await kvGet(env, key);
-  if (!data) return json({ messages: [] }, 200, request);
+  // Queue-overflow losses are counted by handleMsgSend (bumpDropped) and reported even
+  // when the inbox itself is empty — a fully-drained queue is exactly when the drop
+  // notification matters most. Same contract as sealed/poll.
+  const droppedStr = await kvGet(env, `${key}:dropped`);
+  const dropped = parseInt(droppedStr || '0') || 0;
+  if (dropped > 0) await kvDel(env, `${key}:dropped`);
+  if (!data) return json(dropped > 0 ? { messages: [], dropped } : { messages: [] }, 200, request);
 
   const all = safeJsonParse(data, []);
-  if (!Array.isArray(all)) return json({ messages: [] }, 200, request);
+  if (!Array.isArray(all)) return json(dropped > 0 ? { messages: [], dropped } : { messages: [] }, 200, request);
   // P4 FIX: Return only messages newer than lastTs, keep rest for other tabs.
   // Coerce a non-numeric lastTs to 0: a string cursor makes every `m.ts > cutoff`
   // comparison NaN→false, which both starves the poller AND (via the same cutoff in
@@ -573,7 +602,7 @@ async function handleMsgPoll(body, env, request) {
     else await kvPut(env, key, JSON.stringify(keep), { expirationTtl: TTL.WEEK });
   }
 
-  return json({ messages: newMsgs }, 200, request);
+  return json(dropped > 0 ? { messages: newMsgs, dropped } : { messages: newMsgs }, 200, request);
 }
 
 async function handlePresence(body, env, request) {
@@ -2422,14 +2451,6 @@ async function handleSealedSend(body, env, request) {
     : Date.now();
   queue.push({ envelope, ts: newTs });
   const trimmed = capQueueBytes(queue.slice(-100), m => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
-  // Queue overflow drops the OLDEST envelopes. Don't do it silently (Socratic round —
-  // "what happens to message 101 while the recipient is offline?"): count the drops so the
-  // recipient's next poll can say "N messages were lost", instead of them never knowing.
-  const droppedNow = queue.length - trimmed.length;
-  if (droppedNow > 0) {
-    const prev = parseInt(await kvGet(env, `${key}:dropped`) || '0') || 0;
-    await kvPut(env, `${key}:dropped`, String(Math.min(prev + droppedNow, 99999)), { expirationTtl: TTL.WEEK });
-  }
   const stored = await kvPut(env, key, JSON.stringify(trimmed), { expirationTtl: TTL.WEEK });
   if (!stored) {
     // Un-mark the dedup key on a failed store (set before this write): otherwise the
@@ -2438,6 +2459,11 @@ async function handleSealedSend(body, env, request) {
     globalThis._sealedDedup.delete(dedupKey);
     return json({ error: 'Failed to store sealed message', code: 'STORE_FAILED' }, 500, request);
   }
+  // Queue overflow drops the OLDEST envelopes. Don't do it silently (Socratic round —
+  // "what happens to message 101 while the recipient is offline?"): count the drops so the
+  // recipient's next poll can say "N messages were lost", instead of them never knowing.
+  // Only after a successful store — a failed write evicted nothing.
+  await bumpDropped(env, key, queue.length - trimmed.length);
   // Lost-write recovery. `sealed:{to}` is one KV value mutated read-modify-write, and KV is
   // last-write-wins with no transactions: two senders writing to the SAME recipient in the same
   // instant both read the old queue, one envelope disappears — and BOTH senders are answered
@@ -2465,6 +2491,9 @@ async function handleSealedSend(body, env, request) {
   if (Array.isArray(seen) && !seen.some(mine)) {
     seen.push({ envelope, ts: newTs });
     const requeued = capQueueBytes(seen.slice(-100), (m) => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
+    // The re-append can itself evict (racer's envelopes already filled the queue) —
+    // count those drops too, same as the primary write above.
+    await bumpDropped(env, key, seen.length - requeued.length);
     await kvPut(env, key, JSON.stringify(requeued), { expirationTtl: TTL.WEEK });
   }
   sendPushToUser(to, { title: 'Breeze', body: 'New message', tag: 'breeze-sealed', contactId: to }, env).catch(() => {});
