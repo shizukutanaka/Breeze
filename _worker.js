@@ -1150,7 +1150,13 @@ async function handleGroupInfo(body, env, request) {
     if (globalThis._grpTouch.size > 2000) {
       globalThis._grpTouch = new Map([...globalThis._grpTouch.entries()].slice(-1000));
     }
-    await kvPut(env, `grp:${token}`, data, { expirationTtl: TTL.MONTH });
+    // Re-read before the TTL refresh: rewriting `data` here would revert a join/kick/
+    // rename/leave that landed between our get and this put (stale-snapshot
+    // last-write-wins) — silently un-kicking a member or dropping a join. If the record
+    // changed, the newer write already refreshed the TTL, so the touch can just be
+    // skipped. Same guard as handleDeviceList's touch.
+    const fresh = await kvGet(env, `grp:${token}`);
+    if (fresh === data) await kvPut(env, `grp:${token}`, data, { expirationTtl: TTL.MONTH });
   }
   // Expose creatorId + admins so clients can render moderation badges and gate the
   // kick/admin UI to the right members (the server still re-authorizes every action).
@@ -2158,7 +2164,17 @@ async function handlePreKeyFetch(body, env, request) {
     remainingOTP = 0;
     // Heal the stale count only when the entries are genuinely gone (found none). Don't touch
     // it on transient delete failures (foundAny) — those OTPs still exist and stay fetchable.
-    if (!foundAny) await kvPut(env, `prekey:otp:${userId}:count`, '0', { expirationTtl: TTL.MONTH });
+    // Last-write-wins: a concurrent prekey/upload landing between our count read and this
+    // put would get its fresh count zeroed — orphaning OTPs that exist but can never be
+    // fetched (the scan iterates 0..count-1). Re-read and heal only if the count and the
+    // top slot are unchanged since our read (same guard as the group/info touch).
+    if (!foundAny) {
+      const freshCount = await kvGet(env, `prekey:otp:${userId}:count`);
+      const freshTop = freshCount === countStr
+        ? await kvGet(env, `prekey:otp:${userId}:${count - 1}`) : 'x';
+      if (freshCount === countStr && !freshTop)
+        await kvPut(env, `prekey:otp:${userId}:count`, '0', { expirationTtl: TTL.MONTH });
+    }
   }
   // Signal the owner to replenish one-time prekeys before they are exhausted.
   if (remainingOTP <= 5) bundle.replenishOTP = true;
@@ -2228,8 +2244,19 @@ async function handlePreKeyStatus(body, env, request) {
   if (otpCount > 0) {
     const top = await kvGet(env, `prekey:otp:${userId}:${otpCount - 1}`);
     if (!top) {
-      otpCount = 0;
-      await kvPut(env, `prekey:otp:${userId}:count`, '0', { expirationTtl: TTL.MONTH });
+      // Same stale-rewrite window as the fetch heal: a prekey/upload landing between
+      // our reads and this put would get its fresh count zeroed — orphaning OTPs that
+      // exist but are unreachable. Heal only if count and top slot are unchanged.
+      const freshCount = await kvGet(env, `prekey:otp:${userId}:count`);
+      const freshTop = freshCount === countStr
+        ? await kvGet(env, `prekey:otp:${userId}:${otpCount - 1}`) : 'x';
+      if (freshCount === countStr && !freshTop) {
+        otpCount = 0;
+        await kvPut(env, `prekey:otp:${userId}:count`, '0', { expirationTtl: TTL.MONTH });
+      } else {
+        // An upload raced in — report the fresh count instead of the stale one.
+        otpCount = Math.min(Math.max(parseInt(freshCount || '0') || 0, 0), 100);
+      }
     }
   }
   const result = {

@@ -41,6 +41,21 @@ Still deferred (needs index.html, which conflicts with open #278): `call-end` is
 ---
 
 ## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
+||||||| 0f93fe1
+## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
+## Touch-on-read / heal writes no longer revert a concurrent mutation (group/info TTL touch, OTP count heals in prekey fetch + status) (branch devin/1790406850-touch-stale-rewrite, 2026-09-26)
+
+vitest 819 → **823**; `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md` — same last-write-wins guard pattern as the device-list touch.
+
+Two more read-modify-write sites were still rewriting a snapshot verbatim — under Cloudflare KV's last-write-wins, any mutation landing in the read→put gap is silently reverted:
+
+- **`handleGroupInfo`'s 24h TTL touch** rewrote the `data` snapshot unconditionally. A `join`/`kick`/`rename`/`leave` that committed between the get and this put was reverted to the pre-read state — a read silently **un-kicking** a member or dropping a join. Now re-reads `grp:${token}` and writes only if `fresh === data`; a changed record means the newer write already carried a fresh TTL, so skipping costs nothing. Same guard `handleDeviceList` already has.
+- **OTP count heals in `handlePreKeyFetch` and `handlePreKeyStatus`** — both write `count='0'` after deciding the OTP entries expired. A `prekey/upload` racing in (fresh OTP entries + fresh count) was clobbered to `0`, leaving the uploaded OTPs **orphaned**: present in KV but unreachable, since the fetch scan iterates `0..count-1`. Both heals now re-read the count and the top OTP slot, and write `0` only if both are unchanged. On a race, status additionally reports the *fresh* count instead of the stale one.
+
+Deterministic race tests: KV `get`/`put` wrappers inject the concurrent write at the exact read/put gap (kick surviving a group/info read; upload surviving both heals; a control test proving the touch still writes when nothing raced).
+
+---
+
 
 819 vitest unchanged; Playwright E2E 60 unchanged; `docs/ROADMAP.md`, `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation) — dead-code removal only, no runtime behavior change.
 

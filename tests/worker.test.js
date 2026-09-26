@@ -567,6 +567,38 @@ describe('prekey upload + fetch (OTP consumption)', () => {
       // r1 but we deleted it above to simulate "no guard" — so r2 can consume freely.
     });
   });
+
+  it('heal does not zero a count that a racing prekey/upload just refreshed', async () => {
+    const env = makeEnv();
+    // Stale count: count='2' but both OTP entries expired/are absent → fetch scan finds
+    // nothing and enters the heal path (foundAny=false, consumed=false, ipLock unset).
+    await env.KV.put('prekey:healusr1', JSON.stringify({ identityKey: 'healusr1IK', signedPreKey: 'SPK', edIdentityKey: 'ED', uploadedAt: Date.now() }));
+    await env.KV.put('prekey:otp:healusr1:count', '2');
+    // The re-read inside the heal observes a racing upload's fresh write: count='3' with
+    // real entries — healing must skip instead of zeroing it (which would orphan them).
+    let countReads = 0;
+    const origGet = env.KV.get.bind(env.KV);
+    const origPut = env.KV.put.bind(env.KV);
+    env.KV.get = async (k) => {
+      if (k === 'prekey:otp:healusr1:count') {
+        countReads += 1;
+        if (countReads === 2) {
+          await origPut('prekey:otp:healusr1:0', '"n0"');
+          await origPut('prekey:otp:healusr1:1', '"n1"');
+          await origPut('prekey:otp:healusr1:2', '"n2"');
+          await origPut('prekey:otp:healusr1:count', '3');
+          return '3';
+        }
+      }
+      return origGet(k);
+    };
+    const res = await handlePreKeyFetch({ userId: 'healusr1' }, env, apiRequest('/api/prekey/fetch', {}));
+    expect(res.status).toBe(200);
+    // The racing upload's count must survive; the OTPs it wrote are fetchable.
+    expect(await env.KV.get('prekey:otp:healusr1:count')).toBe('3');
+    const res2 = await handlePreKeyFetch({ userId: 'healusr1' }, env, apiRequest('/api/prekey/fetch', {}));
+    expect((await res2.json()).oneTimePreKey).toBeDefined();
+  });
 });
 
 describe('prekey key-history audit log (I11 precursor)', () => {
@@ -905,6 +937,34 @@ describe('prekey status — non-destructive OTP/SPK health check (/api/prekey/st
     expect(j.caps).toBeUndefined();
     expect(j.x3dh).toBeUndefined();
   });
+
+  it('heal does not zero a count that a racing prekey/upload just refreshed', async () => {
+    const env = makeEnv();
+    // Stale count='2' with no OTP entries → status enters the heal path.
+    await env.KV.put('prekey:stheal01', JSON.stringify({ identityKey: 'stheal01IK', signedPreKey: 'SPK', uploadedAt: Date.now() }));
+    await env.KV.put('prekey:otp:stheal01:count', '2');
+    // The re-read inside the heal observes a racing upload's write: count='4', entries exist.
+    let countReads = 0;
+    const origGet = env.KV.get.bind(env.KV);
+    const origPut = env.KV.put.bind(env.KV);
+    env.KV.get = async (k) => {
+      if (k === 'prekey:otp:stheal01:count') {
+        countReads += 1;
+        if (countReads === 2) {
+          await origPut('prekey:otp:stheal01:0', '"n0"');
+          await origPut('prekey:otp:stheal01:1', '"n1"');
+          await origPut('prekey:otp:stheal01:2', '"n2"');
+          await origPut('prekey:otp:stheal01:3', '"n3"');
+          await origPut('prekey:otp:stheal01:count', '4');
+          return '4';
+        }
+      }
+      return origGet(k);
+    };
+    const j = await (await handlePreKeyStatus({ userId: 'stheal01' }, env, req)).json();
+    expect(j.otpCount).toBe(4); // fresh count reported, not the stale 2 nor a healed 0
+    expect(await env.KV.get('prekey:otp:stheal01:count')).toBe('4'); // never zeroed
+  });
 });
 
 describe('key-transparency log — standalone get endpoint (/api/ktlog/get)', () => {
@@ -1006,6 +1066,52 @@ describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {
     // Epoch must not change.
     const info = await (await handleGroupInfo({ token }, env, req({}))).json();
     expect(info.epoch).toBe(0);
+  });
+
+  it('group/info touch-on-read does not revert a kick that lands in the read/put gap', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    globalThis._grpTouch = new Map(); // isolate throttle state — force the touch to fire
+    // Between handleGroupInfo's get and its touch put, a kick lands (epoch bumped,
+    // member removed). The touch must re-read and skip rather than rewrite the stale
+    // snapshot — otherwise the kick is silently reverted.
+    let reads = 0;
+    const origGet = env.KV.get.bind(env.KV);
+    const origPut = env.KV.put.bind(env.KV);
+    env.KV.get = async (k) => {
+      if (k === `grp:${token}`) {
+        reads += 1;
+        if (reads === 2) {
+          // The "fresh" re-read: simulate the kick having landed — the stored value
+          // now differs from the snapshot the handler read first.
+          const kicked = JSON.parse(await origGet(k));
+          kicked.epoch = 1;
+          kicked.members = kicked.members.filter(m => m.id !== 'carol001');
+          kicked.banned = ['carol001'];
+          await origPut(k, JSON.stringify(kicked), { expirationTtl: 2592000 });
+          return JSON.stringify(kicked);
+        }
+      }
+      return origGet(k);
+    };
+    const info = await (await handleGroupInfo({ token }, env, req({}))).json();
+    expect(info.members).toHaveLength(3); // response still reflects the pre-kick snapshot
+    // The stored record must be the kicked version — NOT the stale snapshot rewritten.
+    const stored = JSON.parse(await env.KV.get(`grp:${token}`));
+    expect(stored.epoch).toBe(1);
+    expect(stored.members.some(m => m.id === 'carol001')).toBe(false);
+    expect(stored.banned).toContain('carol001');
+  });
+
+  it('group/info touch still refreshes the TTL when nothing raced (control)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    globalThis._grpTouch = new Map();
+    let touchWrites = 0;
+    const origPut = env.KV.put.bind(env.KV);
+    env.KV.put = async (k, v, o) => { if (k === `grp:${token}`) touchWrites += 1; return origPut(k, v, o); };
+    await handleGroupInfo({ token }, env, req({}));
+    expect(touchWrites).toBe(1); // unchanged record → the TTL refresh write still happens
   });
 
   it('join after kick returns the bumped epoch so new members know which sender key to request', async () => {
