@@ -4414,6 +4414,61 @@ describe('presence heartbeat and check', () => {
     expect((await res.json()).ok).toBe(true);
   });
 
+  // Offline signal: the client sendBeacons {ids:[myId], offline:true} on pagehide —
+  // without the delete path those beacons were silently 400'd and a closed tab kept
+  // reporting online until the 60s freshness window expired.
+  it('offline beacon removes presence immediately (ids form, as the client sends)', async () => {
+    const e = makeEnv();
+    globalThis._presenceCache = new Map();
+    await handlePresence({ id: 'goneuser01', pub: 'p', name: 'G' }, e, req({}));
+    expect((await (await handlePresence({ id: 'goneuser01', check: true }, e, req({}))).json()).online).toBe(true);
+    const off = await handlePresence({ ids: ['goneuser01'], offline: true }, e, req({}));
+    expect(off.status).toBe(200);
+    expect((await off.json()).gone).toBe(1);
+    expect((await (await handlePresence({ id: 'goneuser01', check: true }, e, req({}))).json()).online).toBe(false);
+    expect(await e.KV.get('presence:goneuser01')).toBeNull();
+  });
+
+  it('offline accepts the singular {id, offline} form and skips malformed ids', async () => {
+    const e = makeEnv();
+    globalThis._presenceCache = new Map();
+    await handlePresence({ id: 'goneuser02', pub: 'p', name: 'G' }, e, req({}));
+    const off = await handlePresence({ id: 'goneuser02', offline: true }, e, req({}));
+    expect((await off.json()).gone).toBe(1);
+    const offBad = await handlePresence({ ids: ['bad id!!', 'x'], offline: true }, e, req({}));
+    expect((await offBad.json()).gone).toBe(0); // invalid + too-short ids skipped, still 200
+  });
+
+  // Forged-heartbeat defense: unsigned presence writes can claim any id, so for accounts
+  // with a registered bundle the advertised pub/caps are pinned to the stored record —
+  // otherwise an attacker rewrites the victim's identity key, or strips 'x3dh-v5'/'group-v5'
+  // to force a protocol downgrade on the next negotiation.
+  it('keyed account: a heartbeat forging pub/caps is pinned to the stored bundle', async () => {
+    const e = makeEnv();
+    globalThis._presencePin = new Map();
+    globalThis._presenceCache = new Map();
+    await e.KV.put('prekey:pinuser01', JSON.stringify({ identityKey: 'REAL-IDENTITY-KEY', caps: ['x3dh-v5', 'group-v5'] }));
+    const res = await handlePresence(
+      { id: 'pinuser01', pub: 'FORGED-KEY', name: 'x', caps: [] }, e, req({}));
+    expect(res.status).toBe(200);
+    const stored = JSON.parse(await globalThis._presenceCache.get('presence:pinuser01:data'));
+    expect(stored.pub).toBe('REAL-IDENTITY-KEY');
+    expect(stored.caps).toEqual(['x3dh-v5', 'group-v5']); // stripped caps restored
+    const j = await (await handlePresence({ id: 'pinuser01', check: true }, e, req({}))).json();
+    expect(j.caps).toEqual(['x3dh-v5', 'group-v5']);
+  });
+
+  it('keyed account without bundle caps keeps wire-supplied caps (old bundles)', async () => {
+    const e = makeEnv();
+    globalThis._presencePin = new Map();
+    globalThis._presenceCache = new Map();
+    await e.KV.put('prekey:pinuser02', JSON.stringify({ identityKey: 'REAL-IK-2' }));
+    await handlePresence({ id: 'pinuser02', pub: 'FORGED', name: 'x', caps: ['seal-v2'] }, e, req({}));
+    const stored = JSON.parse(await globalThis._presenceCache.get('presence:pinuser02:data'));
+    expect(stored.pub).toBe('REAL-IK-2');
+    expect(stored.caps).toEqual(['seal-v2']);
+  });
+
   it('PRESENCE_REQUIRE_AUTH: check (read) path bypasses auth requirement', async () => {
     const e = makeEnv({ PRESENCE_REQUIRE_AUTH: 'true' });
     // Check should work even for an unregistered user (read-only path)

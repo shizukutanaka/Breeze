@@ -1,5 +1,15 @@
 # Changelog
 
+## Presence: `offline` beacon implemented + keyed accounts pin pub/caps to the stored bundle (branch devin/1790417566-presence-offline-pinning, 2026-09-26)
+
+vitest 872 (+4); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
+
+- **Bug (feature never worked)**: the client sendBeacons `{ids:[myId], offline:true}` to `/presence` on pagehide and visibility-loss, but `handlePresence` had no `offline` path — the body fell through to `MISSING_ID` 400, so a closed tab kept reporting "online" for the full 60-second freshness window. The worker now deletes `presence:{id}` (KV + both in-memory cache entries, incl. the write-throttle marker) for `{offline:true}` in either `ids:[...]` or `id` form. Unauthenticated like the heartbeat itself — strictly weaker than the write path, since a forged heartbeat could already write `at:0` to the same effect.
+- **Hardening (unsigned heartbeat → identity/capability spoofing)**: presence writes are unauthenticated (deployed clients send no signature), so anyone could overwrite a victim's `presence:{id}` `pub` (impersonating their identity key to presence readers) or `caps` — stripping `x3dh-v5`/`group-v5` forces peers to negotiate the legacy protocol, a real downgrade vector since the deployed client never sends caps on the wire (every stored caps field was attacker-writable). For accounts with a registered prekey bundle, `pub` is now pinned to `bundle.identityKey` and `caps` to `bundle.caps` (when present; old bundles without caps keep wire values). Keyless accounts unchanged. A per-isolate `_presencePin` cache (5-min TTL, same cadence as the KV write throttle) keeps the extra `prekey:` read off the 30-second heartbeat hot path; on key rotation the pinned value is the account's own previous key for ≤5 min.
+- Tests: beacon deletion (KV + cache → check reports offline), singular/id forms with malformed ids, pin-rewrites-forged-pub+caps for a keyed account, wire-caps fallback for keyed accounts whose bundle predates caps. The pinned field and its 60s freshness semantics were already covered.
+
+---
+
 ## Mobile bundle shipped English-only: prepare.js never copied locales/; signing injection now idempotent (branch devin/1790411492-mobile-locales, 2026-09-26)
 
 vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/mobile-assets.test.js`, `CHANGELOG.md`.

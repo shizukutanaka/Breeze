@@ -653,6 +653,25 @@ async function handlePresence(body, env, request) {
     return json({ online }, 200, request);
   }
 
+  // Offline signal: the client fires navigator.sendBeacon({ids:[id], offline:true}) on
+  // pagehide — delete the record so contacts see 'offline' immediately instead of waiting
+  // out the 60s freshness window. Unauthenticated like the heartbeat itself, and strictly
+  // weaker: a forged heartbeat can already write at:0 to the same effect.
+  if (body.offline === true) {
+    const offIds = (Array.isArray(body.ids) ? body.ids : [body.id]).slice(0, 50);
+    let gone = 0;
+    for (const oid of offIds) {
+      if (typeof oid !== 'string' || !validateUserId(oid)) continue;
+      await kvDel(env, `presence:${oid}`);
+      if (globalThis._presenceCache) {
+        globalThis._presenceCache.delete(`presence:${oid}:data`);
+        globalThis._presenceCache.delete(`presence:${oid}`); // also clears the write throttle
+      }
+      gone++;
+    }
+    return json({ ok: true, gone }, 200, request);
+  }
+
   if (!id) return json({ error: 'id required', code: 'MISSING_ID' }, 400, request);
   if (!validateUserId(id)) return json({ error: 'invalid id', code: 'INVALID_USER_ID' }, 400, request);
 
@@ -708,7 +727,7 @@ async function handlePresence(body, env, request) {
   const presKey = `presence:${id}`;
   const lastWrite = globalThis._presenceCache.get(presKey) || 0;
   // Cap pub to 200 chars (a base64 X25519/P-256 key is ≤88 chars; large values are abuse).
-  const safePub = typeof pub === 'string' ? pub.slice(0, 200) : undefined;
+  let safePub = typeof pub === 'string' ? pub.slice(0, 200) : undefined;
   // Identity-clone detection: `inst` is a per-INSTALL random id. Two different live insts
   // heartbeating the same identity within a heartbeat window = the same identity running on
   // two installs at once (e.g. a backup restored while the original device stays active) —
@@ -736,9 +755,31 @@ async function handlePresence(body, env, request) {
     const prev = prevRaw ? safeJsonParse(prevRaw) : null;
     if (prev?.inst && prev.inst !== safeInst && Date.now() - prev.at < 90000) conflict = true;
   }
+  // Strict continuity for the identity fields: unsigned heartbeats are honored (deployed
+  // clients send no signature), so for an account with a registered bundle the advertised
+  // pub/caps are PINNED to it — a forged heartbeat can still write 'online', but can no
+  // longer impersonate the account's identity key or strip its capability set (an
+  // x3dh-v5/group-v5 → legacy negotiation downgrade). Per-isolate pin cache keeps the
+  // extra prekey read off the 30s heartbeat hot path (stale ≤5min on key rotation, harmless:
+  // the stale value is the account's own previous key).
+  if (!globalThis._presencePin) globalThis._presencePin = new Map();
+  let pin = globalThis._presencePin.get(id);
+  if (!pin || Date.now() - pin.at > TIMEOUT_MS.PRESENCE_WRITE) {
+    const pk = safeJsonParse(await kvGet(env, `prekey:${id}`) || 'null');
+    pin = {
+      at: Date.now(),
+      pub: pk && typeof pk.identityKey === 'string' && pk.identityKey ? pk.identityKey : null,
+      caps: Array.isArray(pk?.caps) ? pk.caps : undefined,
+    };
+    globalThis._presencePin.set(id, pin);
+    if (globalThis._presencePin.size > 2000)
+      globalThis._presencePin = new Map([...globalThis._presencePin.entries()].slice(-1000));
+  }
+  if (pin.pub) safePub = pin.pub;
   const presData = { pub: safePub, name: sanitizeString(name, 64), at: Date.now() };
   if (safeInst) presData.inst = safeInst;
-  if (safeCaps) presData.caps = safeCaps;
+  const effCaps = pin.pub && pin.caps ? pin.caps : safeCaps;
+  if (effCaps) presData.caps = effCaps;
   if (Date.now() - lastWrite > TIMEOUT_MS.PRESENCE_WRITE) { // throttle KV writes
     await kvPut(env, presKey, JSON.stringify(presData), { expirationTtl: TTL.MIN * 6 }); // 6min TTL (covers 5min interval + slack)
     globalThis._presenceCache.set(presKey, Date.now());
