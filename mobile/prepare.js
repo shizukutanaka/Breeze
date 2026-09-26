@@ -16,7 +16,9 @@ const path = require('path');
 const crypto = require('crypto');
 
 const ROOT = path.join(__dirname, '..');
-const WWW = path.join(__dirname, 'www');
+// BREEZE_WWW overrides the output dir — used by tests to run the real copy
+// into a temp dir instead of mobile/www.
+const WWW = process.env.BREEZE_WWW || path.join(__dirname, 'www');
 const CHECK_ONLY = process.argv.includes('--check');
 
 // ── Asset manifest ──────────────────────────────────────────
@@ -29,6 +31,18 @@ const ASSETS = [
   ['icon-512.png',  'icon-512.png',  true],
   ['404.html',      '404.html',      false],
 ];
+
+// Every locales/<lang>.json the app may fetch at boot — _loadLocale() does a
+// relative `locales/${LANG}.json` fetch, so a file missing here silently
+// forces that locale back to English inside the packaged app (the exact
+// failure this list existed unnoticed for). Globbed so a future locale file
+// can't be left out by an edit to the table above.
+const LOCALE_DIR = path.join(ROOT, 'locales');
+if (fs.existsSync(LOCALE_DIR)) {
+  for (const f of fs.readdirSync(LOCALE_DIR).filter(f => f.endsWith('.json')).sort()) {
+    ASSETS.push([`locales/${f}`, `locales/${f}`, true]);
+  }
+}
 
 // ── Validate ────────────────────────────────────────────────
 let errors = 0;
