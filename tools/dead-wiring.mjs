@@ -42,6 +42,7 @@ const scan = (re) => {
 scan(/_DOM\.get\(\s*'([A-Za-z][\w-]*)'\s*\)/g);
 scan(/_DOM\.get\(\s*"([A-Za-z][\w-]*)"\s*\)/g);
 scan(/getElementById\(\s*'([A-Za-z][\w-]*)'\s*\)/g);
+scan(/getElementById\(\s*"([A-Za-z][\w-]*)"\s*\)/g);
 
 const dead = [...want.entries()].filter(([id]) => !have.has(id));
 if (dead.length) {
