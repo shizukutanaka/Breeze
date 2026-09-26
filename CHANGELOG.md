@@ -1,5 +1,12 @@
 # Changelog
 
+## Validate contact ids at every untrusted entry point (deep-link add + file import) (branch devin/1790420879-round16, 2026-09-26)
+
+vitest 868 (+0); `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json`, `CHANGELOG.md`.
+
+- `addContact` never checked `pubB64` shape — a `?add=` deep link (click-only, no confirmation) could inject arbitrary strings as a contact: junk `id` flowing into `data-cid` attributes and roster entries that can never establish a session. Now requires the base64 key shape `/^[A-Za-z0-9+/]{40,}={0,2}$/` (same check as `_verifyQrScan`).
+- `/contacts import`: `contactId` came from the file's raw `c.id` (`|| pubB64 || name`) — a crafted export planted arbitrary ids into DOM/IDB keys. Non-group ids now derive from the validated `pubB64.slice(0,12)` (identical to normal adds); group ids must match `^g_[A-Za-z0-9]{1,64}$`.
+
 ## Mobile bundle shipped English-only: prepare.js never copied locales/; signing injection now idempotent (branch devin/1790411492-mobile-locales, 2026-09-26)
 
 vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/mobile-assets.test.js`, `CHANGELOG.md`.

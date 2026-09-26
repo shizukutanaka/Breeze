@@ -6139,7 +6139,10 @@ async function initMessenger(dbName) {
   async function addContact(pubB64, name) {
     try {
       const safePub = typeof pubB64 === 'string' ? pubB64.slice(0, 200) : '';
-      if (!safePub) return;
+      // Reject non-base64 key material: `?add=` deep links reach here with arbitrary
+      // strings, and a malformed pub produces a junk contact id that leaks into DOM
+      // attributes (data-cid) and can never establish a working session anyway.
+      if (!/^[A-Za-z0-9+/]{40,}={0,2}$/.test(safePub)) return;
       const id = safePub.slice(0, 12);
       const existing = await dbGet('contacts', id);
       if (existing) return;
@@ -12185,11 +12188,18 @@ async function initMessenger(dbName) {
               if (typeof c?.pubB64 !== 'string' || !c.pubB64 || c.pubB64.length > 128 ||
                   !/^[A-Za-z0-9+/=]+$/.test(c.pubB64)) { skipped++; continue; }
             }
-            // id must be a non-empty string of safe length
-            const rawId = c.id || c.pubB64 || c.name;
-            if (typeof rawId !== 'string' || !rawId || rawId.length > 128) { skipped++; continue; }
-            // Use exported id when present (preserves group IDs); fall back to pubB64 for older exports
-            const contactId = rawId;
+            // Derive the DOM/IDB-facing contactId from validated material, not the
+            // file's raw c.id: non-group ids are always pubB64.slice(0,12), and group
+            // ids have the g_<token> shape — an arbitrary c.id would leak straight
+            // into attributes like data-cid.
+            let contactId;
+            if (c?.isGroup) {
+              const gid = typeof c.id === 'string' ? c.id : '';
+              if (!/^g_[A-Za-z0-9]{1,64}$/.test(gid)) { skipped++; continue; }
+              contactId = gid;
+            } else {
+              contactId = c.pubB64.slice(0, 12);
+            }
             const existing = await dbGet('contacts', contactId);
             if (existing) { skipped++; continue; }
             // Cap every field to the same limits enforced at normal add/edit time
