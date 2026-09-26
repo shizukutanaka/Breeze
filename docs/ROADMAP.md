@@ -21,14 +21,15 @@
 | I1 | Authenticated X3DH — sign + verify the pre-key | S | Closes an **active first-contact MITM**; voids the premise every Signal proof needs (ePrint 2016/1013). Wire-versioned (v5) w/ v4 read path. | tests ✅ | ✅ **fully deployed**: `src/crypto/ratchet.js` (Ed25519 sign/verify SPK + x3dhInitiator/Responder DH1-4 + MITM-defense, `tests/x3dh.test.js`); worker `handlePreKeyUpload` verifies sig (G2); **index.html**: inline mirror wired in, `CONFIG.X3DH_V5_ENABLED` default ON since v3.6.1, mirror-drift guarded (see `CLAUDE.md`) |
 | I16 | Key commitment on AEAD (HKDF commitment tag) | S | AES-GCM isn't committing → "invisible salamanders" in group/sealed/multi-key paths (ePrint 2020/1456). | — | ✅ **fully deployed** in `src/crypto/ratchet.js` + `src/crypto/group.js` (cm tag + constant-time verify; also in group messages N2); **index.html**: inline `_keyCommit`/`_cmOk` verify-if-present on both 1:1 and group/sealed paths, mirror-drift guarded (see `CLAUDE.md`) |
 | I15 | Stop pre-encryption compression (1:1 `encryptFor`) | S | CRIME/BREACH-class length leak; partly defeats the 256-B padding. Pure removal. | — | ✅ **fully deployed**: module `ratchet.js` (`compressMin: Infinity` default, off); **index.html**: `_encryptForRaw` hardcodes `compressed = false` — new messages always send uncompressed (flags bit0 = 0), 256-byte-boundary padding via `CONFIG.MSG_PAD_BOUNDARY`; the receive path still decompresses legacy flag-set messages for backward compat |
-| I7 | Bound **+ time-expire** skipped-key cache | S | Lingering skipped keys = FS leak + DoS (ePrint 2018/1037). Count bound already exists; add TTL. | — | ✅ **done** in `src/crypto/ratchet.js` (1:1 TTL) + `src/crypto/group.js` (group TTL, both configurable); port to index.html pending |
+| I7 | Bound **+ time-expire** skipped-key cache | S | Lingering skipped keys = FS leak + DoS (ePrint 2018/1037). Count bound already exists; add TTL. | — | ✅ **fully deployed**: `src/crypto/ratchet.js` (1:1 TTL + group TTL on `groupSenderDecrypt`) + `src/crypto/group.js` (group TTL, all configurable); **index.html**: `{ k, t }` timestamped entries + `MS.WEEK` expiry pass on both the 1:1 and group v5 paths, plus commit-after-decrypt (a forged group ciphertext used to `dbPut` the advanced chain state before the AEAD check) — mirror-drift guarded |
 | I20 | Known-answer test vectors (RFC/NIST/Wycheproof) | S–M | Catches HKDF-info/nonce/tag glue bugs incl. the I15/I16 class; slots into the new harness. | tests ✅ | ✅ **done** — `tests/kat.test.js` (HKDF RFC 5869, X25519 RFC 7748, AES-256-GCM NIST + tamper-reject) |
 
 **P0 = one focused security sprint.** All S-effort, all unit-testable against
 `src/crypto/ratchet.js` + `tests/`, and I15/I16/I7/I20 don't change the handshake.
-I1, I16, I15, I20 are now deployed (I1 wire-versioned with a v4 read path); **I7 (TTL
-on skipped keys) is the only P0 item still pending an index.html port** — the count
-bound (`MAX_SKIP`) is deployed, but skipped keys never expire by age.
+I1, I16, I15, I20 are now deployed (I1 wire-versioned with a v4 read path), and **I7
+(TTL on skipped keys) is now deployed to index.html as well** — P0 is complete: the
+count bound (`MAX_SKIP`), the age bound (`MS.WEEK`), and commit-after-decrypt ordering
+all run on the deployed path.
 
 ---
 
@@ -97,8 +98,8 @@ I18 ──► C16
 **I1 + I16 + I15 + I7 + I20.** All small, all land under the existing test harness,
 and together they close the active MITM (I1), the invisible-salamanders exposure (I16),
 the compression side-channel (I15), and the skipped-key FS leak (I7) — with KAT vectors
-(I20) guarding the lot. **Status: I1, I16, I15, I20 are deployed; I7 (TTL on skipped
-keys) is the only remaining item**, non-wire-breaking, module-side done.
+(I20) guarding the lot. **Status: all five are now deployed**, including I7's index.html
+port (skipped-key TTL + commit-after-decrypt on both 1:1 and group v5 paths).
 
 ## Sprint 2 (groups + at-rest, ~1–2 weeks)
 **I2 + I3 + I4** — **all three now deployed** (see P1 table above). **C13** (QR verify)

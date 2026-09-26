@@ -483,6 +483,53 @@ describe('group sender-key v5 hash ratchet', () => {
     expect(peerSk.skipped[1]).toBeUndefined(); // consumed
   });
 
+  it('I7 (group): cached skipped keys expire after skippedKeyTTL', async () => {
+    let clock = 1000;
+    const Rt = createRatchet({ skippedKeyTTL: 5000, now: () => clock });
+    const sk = freshSK();
+    const { ciphertext: ct0, nextSk: sk1 } = await Rt.groupSenderEncrypt(sk, 'm0');
+    const { ciphertext: ct1, nextSk: sk2 } = await Rt.groupSenderEncrypt(sk1, 'm1');
+    const { ciphertext: ct2 } = await Rt.groupSenderEncrypt(sk2, 'm2');
+    let peerSk = peerFromSK(sk);
+    expect((await Rt.groupSenderDecrypt(peerSk, ct0))?.plaintext).toBe('m0');
+    peerSk = (await Rt.groupSenderDecrypt(peerSk, ct2)).nextPeerSk; // caches key for m1 at t=1000
+    clock = 7000; // past the 5s TTL
+    expect(await Rt.groupSenderDecrypt(peerSk, ct1)).toBeNull(); // expired
+  });
+
+  it('I7 (group): a skipped key inside the TTL still recovers the delayed message', async () => {
+    let clock = 1000;
+    const Rt = createRatchet({ skippedKeyTTL: 5000, now: () => clock });
+    const sk = freshSK();
+    const { ciphertext: ct0, nextSk: sk1 } = await Rt.groupSenderEncrypt(sk, 'm0');
+    const { ciphertext: ct1, nextSk: sk2 } = await Rt.groupSenderEncrypt(sk1, 'm1');
+    const { ciphertext: ct2 } = await Rt.groupSenderEncrypt(sk2, 'm2');
+    let peerSk = peerFromSK(sk);
+    peerSk = (await Rt.groupSenderDecrypt(peerSk, ct0)).nextPeerSk;
+    peerSk = (await Rt.groupSenderDecrypt(peerSk, ct2)).nextPeerSk; // caches key for m1
+    clock = 3000; // inside the 5s TTL
+    const r1 = await Rt.groupSenderDecrypt(peerSk, ct1);
+    expect(r1?.plaintext).toBe('m1'); // recovered from the (timestamped) skip cache
+    expect(r1.nextPeerSk.skipped['1']).toBeUndefined(); // consumed on success
+  });
+
+  it('a forged replay does not consume a cached skipped group key', async () => {
+    const sk = freshSK();
+    const { ciphertext: ct0, nextSk: sk1 } = await R.groupSenderEncrypt(sk, 'm0');
+    const { ciphertext: ct1, nextSk: sk2 } = await R.groupSenderEncrypt(sk1, 'm1');
+    const { ciphertext: ct2 } = await R.groupSenderEncrypt(sk2, 'm2');
+    let peerSk = peerFromSK(sk);
+    peerSk = (await R.groupSenderDecrypt(peerSk, ct0)).nextPeerSk;
+    peerSk = (await R.groupSenderDecrypt(peerSk, ct2)).nextPeerSk; // caches key for m1
+    expect(peerSk.skipped['1']).toBeDefined();
+    // Replay counter 1 with a corrupted ciphertext — the cached key must survive.
+    const forged = JSON.parse(ct1);
+    forged.d[0] ^= 0xff;
+    await expect(R.groupSenderDecrypt(peerSk, forged)).rejects.toThrow(); // AEAD rejects
+    const r1 = await R.groupSenderDecrypt(peerSk, ct1);
+    expect(r1?.plaintext).toBe('m1');
+  });
+
   it('rejects a gap larger than GROUP_MAX_SKIP', async () => {
     const Rs = createRatchet({ GROUP_MAX_SKIP: 5 });
     const sk = freshSK();

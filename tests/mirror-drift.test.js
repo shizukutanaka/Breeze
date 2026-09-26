@@ -20,7 +20,7 @@
 // To extend to other mirrors (ratchet/group/pow/…), add a block that extracts the
 // inline functions the same way and cross-tests them against their src/crypto module.
 // ============================================================================
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -404,14 +404,14 @@ function makeGroupInline(config) {
   const { _computeGroupV5 } = makeX3dhInline(null, config, 'me');
   const factory = new Function(
     'crypto', 'CONFIG', 'dbGet', 'dbPut', 'hkdf', 'arr', 'u8', '_dbg', 'TextEncoder', 'TextDecoder', '_computeGroupV5',
-    '_keyCommit', '_cmOk',
+    '_keyCommit', '_cmOk', 'MS',
     html.slice(gs, ge) +
       '\nreturn { getGroupSenderKey, encryptGroupMsg, decryptGroupMsg };',
   );
   const api = factory(
     globalThis.crypto, config, dbGet, dbPut, inlineKdf.hkdf,
     (a) => Array.from(a), (a) => new Uint8Array(a), () => {}, TextEncoder, TextDecoder, _computeGroupV5,
-    _injKeyCommit, _injCmOk,
+    _injKeyCommit, _injCmOk, { WEEK: 604800000 },
   );
   return { ...api, store };
 }
@@ -481,6 +481,89 @@ describe('Group sender-key mirror — inline (index.html) vs reference (src/cryp
     const inline = makeGroupInline({ GROUP_RATCHET_V5: true, GROUP_MAX_SKIP: 50, MSG_PAD_BOUNDARY: 256, IV_BYTES: 12 });
     inline.store.set('gsk-peer:G:S', freshV5()); // peer still on epoch 0
     expect(await inline.decryptGroupMsg('G', 'S', ciphertext)).toBeNull();
+  });
+
+  // I7 (deployed): the group skipped-key cache now carries per-key timestamps and
+  // expires entries older than MS.WEEK — mirroring the reference ratchet.js /
+  // group.js TTL (Signal DR spec §8.4: skipped message keys must not live forever).
+  it('I7 TTL: a skipped group key expires after MS.WEEK — the delayed message is undecryptable', async () => {
+    const cfg = { GROUP_RATCHET_V5: true, GROUP_MAX_SKIP: 50, MSG_PAD_BOUNDARY: 256, IV_BYTES: 12 };
+    const sender = makeGroupInline(cfg);
+    const recv = makeGroupInline(cfg);
+    sender.store.set('gsk:G', freshV5());
+    recv.store.set('gsk-peer:G:S', freshV5());
+    const c0 = await sender.encryptGroupMsg('G', 'm0');
+    const c1 = await sender.encryptGroupMsg('G', 'm1');
+    const c2 = await sender.encryptGroupMsg('G', 'm2');
+    expect(await recv.decryptGroupMsg('G', 'S', c0)).toBe('m0');
+    expect(await recv.decryptGroupMsg('G', 'S', c2)).toBe('m2'); // caches key for c=1
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(Date.now() + 8 * 86400000); // past the 7-day TTL
+      expect(await recv.decryptGroupMsg('G', 'S', c1)).toBeNull(); // expired
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('I7 TTL (positive control): a skipped group key still recovers the delayed message within the TTL', async () => {
+    const cfg = { GROUP_RATCHET_V5: true, GROUP_MAX_SKIP: 50, MSG_PAD_BOUNDARY: 256, IV_BYTES: 12 };
+    const sender = makeGroupInline(cfg);
+    const recv = makeGroupInline(cfg);
+    sender.store.set('gsk:G', freshV5());
+    recv.store.set('gsk-peer:G:S', freshV5());
+    const c0 = await sender.encryptGroupMsg('G', 'm0');
+    const c1 = await sender.encryptGroupMsg('G', 'm1');
+    const c2 = await sender.encryptGroupMsg('G', 'm2');
+    expect(await recv.decryptGroupMsg('G', 'S', c0)).toBe('m0');
+    expect(await recv.decryptGroupMsg('G', 'S', c2)).toBe('m2'); // caches key for c=1
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(Date.now() + 6 * 86400000); // still inside the 7-day TTL
+      expect(await recv.decryptGroupMsg('G', 'S', c1)).toBe('m1');
+      expect(recv.store.get('gsk-peer:G:S').skipped['1']).toBeUndefined(); // consumed
+    } finally { vi.useRealTimers(); }
+  });
+
+  // Commit-after-decrypt: the inline group path used to dbPut the advanced chain
+  // state BEFORE the AEAD check, so one forged packet permanently desynced this
+  // member — every later legitimate message derived from the wrong position.
+  it('a forged group ciphertext cannot advance the persisted chain state', async () => {
+    const cfg = { GROUP_RATCHET_V5: true, GROUP_MAX_SKIP: 50, MSG_PAD_BOUNDARY: 256, IV_BYTES: 12 };
+    const sender = makeGroupInline(cfg);
+    const recv = makeGroupInline(cfg);
+    sender.store.set('gsk:G', freshV5());
+    recv.store.set('gsk-peer:G:S', freshV5());
+    const c0 = await sender.encryptGroupMsg('G', 'm0');
+    const c1 = await sender.encryptGroupMsg('G', 'm1');
+    const c2 = await sender.encryptGroupMsg('G', 'm2');
+    expect(await recv.decryptGroupMsg('G', 'S', c0)).toBe('m0');
+    // Forged: valid epoch + counter jump inside GROUP_MAX_SKIP, corrupted ct, no cm.
+    const forged = JSON.parse(c2);
+    forged.c = 30;
+    forged.d = forged.d.slice(); forged.d[0] ^= 0xff;
+    delete forged.cm;
+    expect(await recv.decryptGroupMsg('G', 'S', JSON.stringify(forged))).toBeNull();
+    expect(recv.store.get('gsk-peer:G:S').counter).toBe(1); // persisted state untouched
+    expect(await recv.decryptGroupMsg('G', 'S', c1)).toBe('m1'); // real gap fill still works
+  });
+
+  it('a forged replay does not burn a cached skipped group key', async () => {
+    const cfg = { GROUP_RATCHET_V5: true, GROUP_MAX_SKIP: 50, MSG_PAD_BOUNDARY: 256, IV_BYTES: 12 };
+    const sender = makeGroupInline(cfg);
+    const recv = makeGroupInline(cfg);
+    sender.store.set('gsk:G', freshV5());
+    recv.store.set('gsk-peer:G:S', freshV5());
+    const c0 = await sender.encryptGroupMsg('G', 'm0');
+    const c1 = await sender.encryptGroupMsg('G', 'm1');
+    const c2 = await sender.encryptGroupMsg('G', 'm2');
+    expect(await recv.decryptGroupMsg('G', 'S', c0)).toBe('m0');
+    expect(await recv.decryptGroupMsg('G', 'S', c2)).toBe('m2'); // c1's key cached
+    // Replay c1's counter with a corrupted ciphertext: the cached key must survive
+    // the failed attempt so the real delayed message still decrypts.
+    const forged = JSON.parse(c1);
+    forged.d = forged.d.slice(); forged.d[0] ^= 0xff;
+    delete forged.cm;
+    expect(await recv.decryptGroupMsg('G', 'S', JSON.stringify(forged))).toBeNull();
+    expect(await recv.decryptGroupMsg('G', 'S', c1)).toBe('m1');
   });
 });
 
@@ -934,14 +1017,14 @@ function makeSessionDevice(myKeys, myPubB64) {
   const factory = new Function(
     'CONFIG', '_hasX25519', 'dbGet', 'dbPut', 'zeroBuffer', 'workerCrypto', 'postAPIRaw', 'API',
     '_signingKey', '_signingPubB64', 'signMessage', 'verifySignature', 'myKeys', 'myPubB64', '_dbg', 'arr', 'u8',
-    'timingSafeEqual',
+    'timingSafeEqual', 'MS',
     html.slice(bs, be) + '\nreturn { encryptFor, decryptFrom };',
   );
   const R = factory(
     CONFIG, true, dbGet, dbPut, () => {}, async () => null, async () => { throw new Error('not used'); }, null,
     null, '', async () => null, async () => true, myKeys, myPubB64, () => {},
     (a) => Array.from(a), (a) => new Uint8Array(a),
-    async (x, y) => x === y,
+    async (x, y) => x === y, { WEEK: 604800000 },
   );
   return R;
 }
@@ -1024,6 +1107,78 @@ describe('Bare-IK session bootstrap — inline encryptFor/decryptFrom convergenc
       expect(await B.decryptFrom(await A.encryptFor('A-' + i, bob.pubB64), alice.pubB64)).toBe('A-' + i);
       expect(await A.decryptFrom(await B.encryptFor('B-' + i, alice.pubB64), bob.pubB64)).toBe('B-' + i);
     }
+  });
+
+  // I7 (deployed): skipped 1:1 message keys are stored as { k, t } and expired
+  // after MS.WEEK — the deployed inline path now matches src/crypto/ratchet.js.
+  it('skipped-key TTL: a message delayed past MS.WEEK is undecryptable (I7)', async () => {
+    const alice = await genSessionIdentity();
+    const bob = await genSessionIdentity();
+    const A = makeSessionDevice(alice.keys, alice.pubB64);
+    const B = makeSessionDevice(bob.keys, bob.pubB64);
+    const w1 = await A.encryptFor('one', bob.pubB64);
+    const w2 = await A.encryptFor('two', bob.pubB64);
+    const w3 = await A.encryptFor('three', bob.pubB64);
+    expect(await B.decryptFrom(w1, alice.pubB64)).toBe('one');
+    expect(await B.decryptFrom(w3, alice.pubB64)).toBe('three'); // caches skipped key for #2
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(Date.now() + 8 * 86400000); // past the 7-day TTL
+      expect(await B.decryptFrom(w2, alice.pubB64)).toBeNull(); // expired
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('skipped-key TTL (positive control): a delayed message within the TTL still decrypts', async () => {
+    const alice = await genSessionIdentity();
+    const bob = await genSessionIdentity();
+    const A = makeSessionDevice(alice.keys, alice.pubB64);
+    const B = makeSessionDevice(bob.keys, bob.pubB64);
+    const w1 = await A.encryptFor('one', bob.pubB64);
+    const w2 = await A.encryptFor('two', bob.pubB64);
+    const w3 = await A.encryptFor('three', bob.pubB64);
+    expect(await B.decryptFrom(w1, alice.pubB64)).toBe('one');
+    expect(await B.decryptFrom(w3, alice.pubB64)).toBe('three'); // caches skipped key for #2
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(Date.now() + 6 * 86400000); // still inside the 7-day TTL
+      expect(await B.decryptFrom(w2, alice.pubB64)).toBe('two'); // recovered from cache
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('a forged replay of a skipped counter cannot burn the cached key', async () => {
+    const alice = await genSessionIdentity();
+    const bob = await genSessionIdentity();
+    const A = makeSessionDevice(alice.keys, alice.pubB64);
+    const B = makeSessionDevice(bob.keys, bob.pubB64);
+    const w1 = await A.encryptFor('one', bob.pubB64);
+    const w2 = await A.encryptFor('two', bob.pubB64);
+    const w3 = await A.encryptFor('three', bob.pubB64);
+    expect(await B.decryptFrom(w1, alice.pubB64)).toBe('one');
+    expect(await B.decryptFrom(w3, alice.pubB64)).toBe('three'); // caches skipped key for #2
+    // Replay #2's counter with corrupted ciphertext: the cached key must survive
+    // the failed attempt (delete-after-decrypt), or the real message is lost.
+    const forged = JSON.parse(w2);
+    forged.d[0] ^= 0xff;
+    delete forged.cm;
+    expect(await B.decryptFrom(JSON.stringify(forged), alice.pubB64)).toBeNull();
+    expect(await B.decryptFrom(w2, alice.pubB64)).toBe('two');
+  });
+
+  it('rejects forged counters (c=0 / non-finite) before any state work', async () => {
+    const alice = await genSessionIdentity();
+    const bob = await genSessionIdentity();
+    const A = makeSessionDevice(alice.keys, alice.pubB64);
+    const B = makeSessionDevice(bob.keys, bob.pubB64);
+    const w1 = await A.encryptFor('one', bob.pubB64);
+    const w2 = await A.encryptFor('two', bob.pubB64);
+    expect(await B.decryptFrom(w1, alice.pubB64)).toBe('one');
+    for (const bad of [0, 'not-a-number', null]) {
+      const forged = JSON.parse(w2);
+      forged.c = bad;
+      expect(await B.decryptFrom(JSON.stringify(forged), alice.pubB64)).toBeNull();
+    }
+    // The session is undamaged: the real next message still decrypts.
+    expect(await B.decryptFrom(w2, alice.pubB64)).toBe('two');
   });
 });
 
