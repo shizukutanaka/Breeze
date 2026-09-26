@@ -506,6 +506,23 @@ async function handleMsgSend(body, ip, env, request) {
     return json({ error: 'Failed to store message', code: 'STORE_FAILED' }, 500, request);
   }
 
+  // Lost-write recovery (same class as handleSealedSend — see its comment for the full
+  // rationale and why this stays read-modify-write rather than one-key-per-message).
+  // `inbox:{to}` is a single KV value and KV is last-write-wins: a concurrent send to the
+  // same recipient — the exact thing the sealed path already guards — can clobber this
+  // append while both senders get 200. The sealed fix was never ported here even though
+  // /msg is the fallback path when sealed sending is unavailable. Read the key back and
+  // re-append if our entry (identified by the server-assigned msg.id, not ts — a racing
+  // write can share the millisecond) is missing; the recipient's msgId dedup makes a rare
+  // double-append harmless.
+  const verifyRaw = await kvGet(env, key);
+  const seen = verifyRaw ? safeJsonParse(verifyRaw, []) : [];
+  if (Array.isArray(seen) && !seen.some((m) => m && m.id === msg.id)) {
+    seen.push(msg);
+    const requeued = capQueueBytes(seen.slice(-100), (m) => (typeof m.payload === 'string' ? m.payload.length : 0) + 1024);
+    await kvPut(env, key, JSON.stringify(requeued), { expirationTtl: TTL.WEEK });
+  }
+
   // Trigger Web Push notification (non-blocking)
   // Cap push title to match the stored msg.groupName limit (50 chars) — prevents
   // an oversized raw groupName from bloating the encrypted Web Push payload past

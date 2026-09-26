@@ -25,6 +25,16 @@ Sources: Signal Double Ratchet spec §8.4 (deletion of skipped message keys) + �
 ---
 
 ## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
+## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
+## The plain /msg relay path lost racing writes that the sealed queue already recovered from (branch devin/1790401233-msg-send-lost-write, 2026-09-26)
+
+821 vitest (819 → **821**); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
+
+`inbox:{to}` is a single KV value mutated read-modify-write, and Cloudflare KV is last-write-wins: two senders hitting the same recipient in the same instant both read the old inbox, and one message silently vanishes — with both senders told `200`. Commit ec0323e fixed exactly this on the sealed queue (`sealed:{to}`) with a read-back + conditional re-append, but the sibling plain-message path never got the same fix — the same asymmetry trap this codebase has hit repeatedly (a fix applied to one of two mirrored paths). It matters more here than the rarity suggests: `/msg` is not a legacy endpoint, it is the **fallback that carries traffic whenever Sealed Sender is unavailable** — precisely the degraded-mode path a user leans on hardest.
+
+The fix mirrors the sealed handler exactly: after the store write, read the key back and re-append when our entry is missing. Identity is the server-assigned `msg.id`, not the timestamp — a racing write can share the millisecond, which is what makes ts alone wrong for this check. Recovery, not exactly-once: a stale read just skips the retry, and the recipient's msgId dedup makes a rare double-append harmless (the same trade-off the sealed path already documents and accepts). New deterministic race test clobbers the KV write at the moment of the put and asserts both messages deliver — plus a no-duplicates-in-the-common-case control.
+
+Source pattern: Cloudflare KV's documented last-write-wins semantics (no transactions — the textbook fix, one-key-per-message or Durable Objects, is C10's listed larger effort and was deliberately declined for the same free-tier write-budget reasons recorded in the sealed fix).
 
 819 vitest unchanged; Playwright E2E 60 unchanged; `docs/ROADMAP.md`, `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation) — dead-code removal only, no runtime behavior change.
 
