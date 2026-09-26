@@ -1,6 +1,6 @@
 # Changelog
 
-## Mobile bundle shipped English-only: prepare.js never copied locales/; signing injection now idempotent (branch devin/<ts>-mobile-locales, 2026-09-26)
+## Mobile bundle shipped English-only: prepare.js never copied locales/; signing injection now idempotent (branch devin/1790411492-mobile-locales, 2026-09-26)
 
 vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/mobile-assets.test.js`, `CHANGELOG.md`.
 
