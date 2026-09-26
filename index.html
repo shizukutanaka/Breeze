@@ -3791,18 +3791,21 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'sign'); return null; }
   }
 
-  // Queue read/delete ownership proof (rollout for the Worker's QUEUE_REQUIRE_AUTH):
-  // sign `breeze-<op>:<id>:<ts>` with this install's Ed25519 identity key — the same
-  // key the registered prekey bundle advertises as edIdentityKey, which is what
-  // checkQueueAuth verifies against. Returns {} when signing is unavailable (no
-  // Ed25519 support, or initSigning still in flight — the fields are optional until
-  // the operator flips the flag, so an early {} is self-healing on the next poll).
-  async function queueAuth(op) {
+  // Ed25519 ownership proof shared by every *_REQUIRE_AUTH family (queue, alias,
+  // push, backup — verified-when-present, mandatory once the operator flips the
+  // flag in wrangler.toml). Signs the worker's challenge string with this
+  // install's identity key — the same key the registered prekey bundle advertises
+  // as edIdentityKey. Returns {} when signing is unavailable (no Ed25519 support,
+  // or initSigning still in flight — the fields are optional until the flag is
+  // set, so an early {} is self-healing on the next call).
+  async function authFields(makeChallenge) {
     if (!_signingKey?.privateKey || !myId) return {};
     const ts = Date.now();
-    const sig = await signMessage(`breeze-${op}:${myId}:${ts}`);
+    const sig = await signMessage(makeChallenge(ts));
     return sig ? { ts, sig } : {};
   }
+  // Queue read/delete ops: challenge `breeze-<op>:<id>:<ts>` (checkQueueAuth).
+  function queueAuth(op) { return authFields(ts => `breeze-${op}:${myId}:${ts}`); }
 
   async function verifySignature(text, sigB64, pubKeyB64) {
     if (!_hasEd25519 || !sigB64 || !pubKeyB64) return null; // null = cannot verify
@@ -4492,7 +4495,8 @@ async function initMessenger(dbName) {
     let registeredAlias = '';
     if (alias && API) {
       try {
-        const resp = await postAPIRaw('/alias/set', { alias, pub: pubB64, name });
+        const resp = await postAPIRaw('/alias/set', { alias, pub: pubB64, name, userId: pubB64.slice(0, 12),
+          ...(await authFields(ts => `breeze-alias-set:${alias.toLowerCase().replace(/[^a-z0-9_]/g, '')}:${ts}`)) });
         if (resp.ok) registeredAlias = alias;
       } catch(e) { _dbg(e); }
     }
@@ -5752,7 +5756,8 @@ async function initMessenger(dbName) {
       if (API && myId) {
         navigator.serviceWorker?.ready
           .then(r => r.pushManager?.getSubscription())
-          .then(sub => { if (sub) postAPIRaw('/push/unsubscribe', { userId: myId, endpoint: sub.endpoint }).catch(() => {}); })
+          .then(async sub => { if (sub) postAPIRaw('/push/unsubscribe', { userId: myId, endpoint: sub.endpoint,
+            ...(await authFields(ts => `breeze-push-unsubscribe:${myId}:${ts}:${sub.endpoint}`)) }).catch(() => {}); })
           .catch(() => {});
       }
       // Save unread count for cross-account badge
@@ -10755,7 +10760,9 @@ async function initMessenger(dbName) {
       const existing = await reg.pushManager.getSubscription();
       if (existing) {
         // Already subscribed, sync with server
-        await postAPIRaw('/push/subscribe', { userId: myId, subscription: existing.toJSON() }).catch(e => _dbg(e));
+        const subJson = existing.toJSON();
+        await postAPIRaw('/push/subscribe', { userId: myId, subscription: subJson,
+          ...(await authFields(ts => `breeze-push-subscribe:${myId}:${ts}:${subJson.endpoint || ''}:${subJson.keys?.p256dh || ''}:${subJson.keys?.auth || ''}`)) }).catch(e => _dbg(e));
         return;
       }
       // Request permission and subscribe
@@ -10769,7 +10776,9 @@ async function initMessenger(dbName) {
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(health.vapidPublicKey),
       });
-      await postAPIRaw('/push/subscribe', { userId: myId, subscription: sub.toJSON() }).catch(e => _dbg(e));
+      const subJsonNew = sub.toJSON();
+      await postAPIRaw('/push/subscribe', { userId: myId, subscription: subJsonNew,
+        ...(await authFields(ts => `breeze-push-subscribe:${myId}:${ts}:${subJsonNew.endpoint || ''}:${subJsonNew.keys?.p256dh || ''}:${subJsonNew.keys?.auth || ''}`)) }).catch(e => _dbg(e));
     } catch(e) { _dbg(e, 'push'); }
   }
 
@@ -12556,7 +12565,8 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         try {
           const reg = await navigator.serviceWorker?.ready.catch(() => null);
           const sub = await reg?.pushManager?.getSubscription().catch(() => null);
-          if (sub) { postAPIRaw('/push/unsubscribe', { userId: myId, endpoint: sub.endpoint }).catch(() => {}); await sub.unsubscribe().catch(() => {}); }
+          if (sub) { postAPIRaw('/push/unsubscribe', { userId: myId, endpoint: sub.endpoint,
+            ...(await authFields(ts => `breeze-push-unsubscribe:${myId}:${ts}:${sub.endpoint}`)) }).catch(() => {}); await sub.unsubscribe().catch(() => {}); }
         } catch(e) { _dbg(e); }
       }
       // Local wipe
@@ -13477,7 +13487,8 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
           // v3.5 SPEC: Proof-of-Work required for alias registration (anti-spam)
           showToast(t('toastPoW'), 'info');
           const powToken = await generatePoW(myPubB64 + ':' + newAlias + ':' + Date.now(), CONFIG.POW_DIFFICULTY);
-          const resp = await postAPIRaw('/alias/set', { alias: newAlias, pub: myPubB64, name: myName, pow: powToken });
+          const resp = await postAPIRaw('/alias/set', { alias: newAlias, pub: myPubB64, name: myName, pow: powToken, userId: myId,
+            ...(await authFields(ts => `breeze-alias-set:${newAlias.toLowerCase().replace(/[^a-z0-9_]/g, '')}:${ts}`)) });
           if (resp.ok) {
             myAlias = newAlias;
             const id = await dbGet('identity', 'keys');
