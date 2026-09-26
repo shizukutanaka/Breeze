@@ -65,7 +65,7 @@ Breeze is a serverless, end-to-end encrypted P2P messenger deployed as a single 
 
 - **Identity Key Pair**: X25519 (or P-256), generated on first setup, stored in IDB `identity` store
 - **Signed PreKey (SPK)**: Uploaded to server, rotated periodically
-- **One-Time PreKeys (OTP)**: 10 keys generated, auto-replenished when < 5 remain
+- **One-Time PreKeys (OTP)**: 20 keys generated (CONFIG.PREKEY_OTP_COUNT), auto-replenished when the relay's `/api/prekey/status` reports depletion
 - **Session Rekey**: *not implemented* (removed v3.7). A threshold-based forced rekey shipped
   as dead code — it called `dhRatchetStep` with the wrong arguments, threw on every call, and
   still wrote a "Session rekeyed" audit entry. Forward secrecy comes from the per-message KDF
@@ -118,7 +118,11 @@ Sender                          Server                         Receiver
   └──────┘                               └─────────┘
 ```
 
-### 3.2 Worker API Endpoints (32)
+### 3.2 Worker API Endpoints (38)
+
+Rate limits are per-IP per-minute; the live table is the `limits` object in
+`_worker.js` (tests/worker-hygiene.test.js on the pending gate PRs pins that
+every dispatch case has one — this list is the human-readable copy).
 
 | Endpoint | Rate Limit | Purpose |
 |----------|------------|---------|
@@ -127,26 +131,39 @@ Sender                          Server                         Receiver
 | /api/msg/poll | 40/min | Poll for relay messages |
 | /api/sealed/send | 30/min | Sealed Sender message |
 | /api/sealed/poll | 40/min | Poll sealed messages |
-| /api/presence | 20/min | Online presence heartbeat |
-| /api/alias/set | default | Register @username |
-| /api/alias/get | default | Resolve @username to public key |
+| /api/sealed/ack | 40/min | Acknowledge sealed delivery (receipt) |
+| /api/presence | 20/min | Online presence heartbeat + check |
+| /api/alias/set | 10/min | Register @username (PoW-gated) |
+| /api/alias/get | 30/min | Resolve @username to public key |
+| /api/alias/delete | 5/min | Release @username |
+| /api/device/set | 5/min | Write signed multi-device registry |
+| /api/device/list | 30/min | Read the device registry |
 | /api/prekey/upload | 5/min | Upload PreKeys |
-| /api/prekey/fetch | default | Fetch target's PreKeys |
-| /api/group/create | default | Create group |
-| /api/group/join | default | Join group via token |
-| /api/group/info | default | Get group metadata |
-| /api/group/kick | default | Remove group member |
-| /api/push/subscribe | default | Web Push subscription |
-| /api/turn | default | TURN credential request |
-| /api/online | default | Online user count |
+| /api/prekey/fetch | 10/min | Fetch target's PreKeys (consumes an OTP) |
+| /api/prekey/fetch/batch | 5/min | Batch OTP fetch for group bootstrap |
+| /api/prekey/status | 20/min | OTP depth + capability advertisement |
+| /api/ktlog/get | 20/min | Key-transparency log fetch |
+| /api/group/create | 5/min | Create group |
+| /api/group/join | 10/min | Join group via token |
+| /api/group/info | 20/min | Get group metadata |
+| /api/group/kick | 5/min | Remove group member |
+| /api/group/admin | 10/min | Grant/revoke admin |
+| /api/group/transfer | 5/min | Transfer creator role |
+| /api/group/rename | 10/min | Rename group |
+| /api/group/leave | 10/min | Leave group |
+| /api/group/delete | 5/min | Delete group |
+| /api/account/delete | 3/min | Delete account + erase user-keyed stores |
+| /api/push/subscribe | 5/min | Web Push subscription |
+| /api/push/unsubscribe | 5/min | Remove subscription |
+| /api/turn | 10/min | TURN credential request |
+| /api/online | 20/min | Online user count |
 | /api/backup/upload | 2/min | Encrypted backup upload |
 | /api/backup/download | 5/min | Encrypted backup download |
-| /api/sealed/ack | default | Acknowledge sealed message delivery |
-| /api/drop/create | default | Create file drop (encrypted transfer) |
-| /api/drop/read | default | Download file drop |
-| /api/abuse/record | default | Record abuse metadata for reporting |
-| /api/abuse/report | default | Submit abuse report |
-| /api/health | unlimited | Health check (no auth) |
+| /api/drop/create | 10/min | Create file drop (encrypted transfer) |
+| /api/drop/read | 20/min | Download file drop (one-time read) |
+| /api/abuse/record | 30/min | Record franking commitment at send |
+| /api/abuse/report | 10/min | Submit verified abuse report |
+| /api/health | unlimited | Health check (no auth, GET-only) |
 
 ### 3.3 Worker Environment Variables
 
@@ -156,9 +173,14 @@ Sender                          Server                         Receiver
 | VAPID_PUBLIC_KEY | For push | Web Push VAPID public key |
 | VAPID_PRIVATE_KEY | For push | Web Push VAPID private key |
 | TURN_URL | Recommended | TURN server URL |
-| TURN_SECRET | Recommended | TURN server secret |
+| TURN_SECRET | Recommended | TURN server secret (HMAC temp credentials) |
+| TURN_KEY_ID + TURN_KEY_API_TOKEN | Optional | Cloudflare Calls TURN (preferred over TURN_SECRET) |
 | TURN_USERNAME | Optional | TURN static username |
 | TURN_CREDENTIAL | Optional | TURN static credential |
+| MIN_POW_DIFFICULTY | Optional | PoW floor for @alias registration (default 20) |
+| ABUSE_WEBHOOK_URL | Optional | Operator webhook for verified abuse reports (metadata only) |
+| ASSETS | Platform | Pages asset binding (auto-provided) |
+| *_REQUIRE_AUTH | Optional | Per-family Ed25519 auth enforcement: PRESENCE, ALIAS, GROUP, PUSH, TURN, BACKUP — see wrangler.toml comments for each flag's scope |
 
 ### 3.4 Adaptive Networking
 
@@ -447,7 +469,7 @@ Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline';
 
 ## 11. i18n
 
-- **Built-in**: English (372 keys), Japanese (372 keys)
+- **Built-in**: English (657 keys), Japanese (657 keys — `locales/ja.json`)
 - **External**: none — the 924-language `lang.js` table was deleted (supplied zero strings to the UI at 44% of payload; see SECURITY.md)
 - **Hardcoded UI strings**: 0 (100% coverage via `t()` function)
 - **Toast i18n**: 100%

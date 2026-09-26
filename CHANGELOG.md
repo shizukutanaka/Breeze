@@ -108,6 +108,27 @@ vitest 819 → **836**; `tests/worker-env-docs.test.js` (new), `CHANGELOG.md` �
 
 ---
 
+||||||| 0f93fe1
+## SPEC↔code drift gate + remaining stale counts fixed (branch devin/1790411115-spec-drift-gate, 2026-09-26)
+
+vitest 841 (+22); `tests/spec-docs.test.js`, `SPEC.md`, `docs/CRYPTO-SPEC.md`, `CHANGELOG.md`.
+
+- `tests/spec-docs.test.js` pins SPEC.md §3.2 to `_worker.js` bidirectionally: every dispatch case must appear in the table, no dead rows, and every rate limit must equal the `limits` map value verbatim; §3.3 must document every `env.NAME` the Worker reads (with `*_REQUIRE_AUTH` family wildcards). The drift the previous entry fixed by hand can no longer regrow silently.
+- SPEC.md §11: "English (372 keys), Japanese (372 keys)" → 657 each (per `i18n-check`'s inline EN reference + `locales/ja.json`).
+- `docs/CRYPTO-SPEC.md` "Test status": dropped the per-suite counts that drift every commit ("13 suites, 433 tests, validate.sh 33/36" — actual ~841 tests, 19 files, 160/166) in favor of the suite inventory + "run `npm test` for the live count".
+
+---
+
+## SPEC.md drift repair: endpoint/rate-limit table and env-var table now match `_worker.js` (branch devin/1790410756-spec-drift, 2026-09-26)
+
+vitest 819 unchanged; `SPEC.md`, `CHANGELOG.md` — docs only.
+
+- §3.2 listed 32 endpoints with most rate limits marked "default"; reality is 38 (37 dispatch cases + `/api/health`), every route with an explicit per-IP limit. Rewrote the table verbatim from the `limits` object — 13 endpoints were missing entirely (device registry, batch prekey, ktlog, six group mutations, account/delete, unsubscribe).
+- §3.3 added the undocumented env vars the Worker actually reads: `MIN_POW_DIFFICULTY`, `ABUSE_WEBHOOK_URL`, `TURN_KEY_ID`/`TURN_KEY_API_TOKEN`, `ASSETS`, and the `*_REQUIRE_AUTH` flag family.
+- §2.2 OTP: "10 keys, replenish < 5" → actual `PREKEY_OTP_COUNT: 20` with relay-driven replenish via `/api/prekey/status`.
+
+---
+
 ## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
 ||||||| 0f93fe1
 ## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
