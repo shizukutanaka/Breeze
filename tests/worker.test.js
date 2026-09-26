@@ -2713,6 +2713,57 @@ describe('msg send / poll (1:1 relay path)', () => {
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe('STORE_FAILED');
   });
+
+  // Same KV last-write-wins class as the sealed queue: two senders to the same
+  // recipient in the same instant both read the old inbox, one message vanishes, and
+  // both got ok. The send path now verifies the write and re-appends if clobbered.
+  it('recovers a message that a concurrent writer clobbered (lost-write recovery)', async () => {
+    const env = makeEnv();
+    const key = 'inbox:racetgt2';
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbered = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true; // the other sender's write lands last and wins — our entry is gone
+        await origPut(k, JSON.stringify([{ from: 'other001', payload: 'OTHER-MSG', ts: Date.now() + 1 }]), o);
+      }
+    };
+    const res = await handleMsgSend(
+      { to: 'racetgt2', from: 'alice001', payload: 'MINE-must-survive', ts: Date.now() },
+      ip, env, req({}));
+    expect(res.status).toBe(200);
+    expect(clobbered).toBe(true); // the race really happened
+    const { messages } = await (await handleMsgPoll({ id: 'racetgt2', lastTs: 0 }, env, req({}))).json();
+    const payloads = messages.map((m) => m.payload);
+    expect(payloads).toContain('MINE-must-survive'); // recovered...
+    expect(payloads).toContain('OTHER-MSG');         // ...without evicting the winner
+  });
+
+  it('does not re-append when the write landed cleanly (no duplicates in the common case)', async () => {
+    const env = makeEnv();
+    await handleMsgSend({ to: 'noracetgt2', from: 'alice001', payload: 'only-once', ts: Date.now() }, ip, env, req({}));
+    const { messages } = await (await handleMsgPoll({ id: 'noracetgt2', lastTs: 0 }, env, req({}))).json();
+    expect(messages.filter((m) => m.payload === 'only-once').length).toBe(1);
+  });
+
+  it('overflow drops are counted and surfaced on the next poll, then reset', async () => {
+    const env = makeEnv();
+    // capQueueBytes trims the inbox past its byte budget; 101 sends of ~2 KB each
+    // force drops even under the 100-entry slice.
+    for (let i = 0; i < 101; i++) {
+      globalThis._msgDedup = new Map(); // distinct payloads per i; reset anyway
+      await handleMsgSend(
+        { to: 'ovf00001', from: 'alice001', payload: `P${i}-` + 'x'.repeat(2000), ts: Date.now() + i },
+        ip, env, req({}));
+    }
+    const poll = await handleMsgPoll({ id: 'ovf00001', lastTs: 0 }, env, req({}));
+    const data = await poll.json();
+    expect(data.dropped).toBeGreaterThan(0);
+    // Second poll: counter was reset — dropped no longer reported.
+    const poll2 = await handleMsgPoll({ id: 'ovf00001', lastTs: 0 }, env, req({}));
+    expect((await poll2.json()).dropped).toBeUndefined();
+  });
 });
 
 describe('alias set / get (PoW anti-spam)', () => {

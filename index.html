@@ -9314,6 +9314,8 @@ async function initMessenger(dbName) {
           const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: _lastPollTs, ...(await queueAuth('msg-poll')) });
           if (resp.ok) {
             const data = await resp.json();
+            // Same honesty rule as the sealed poll below: the relay counts overflow drops.
+            if (Number.isInteger(data.dropped) && data.dropped > 0) showToast(t('toastMsgsDropped', data.dropped), 'error');
             for (const msg of (data.messages || [])) {
               try { await handleIncoming(msg); } catch(e) { _dbg(e, 'msg-process'); }
               if (typeof msg.ts === 'number' && Number.isFinite(msg.ts) && msg.ts > _lastPollTs && msg.ts <= Date.now() + MS.DAY) _lastPollTs = msg.ts;

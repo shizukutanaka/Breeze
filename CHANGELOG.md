@@ -1,5 +1,16 @@
 # Changelog
 
+## Worker: plain inbox gets the sealed queue's lost-write verify + drop counter (branch devin/1790423903-round27, 2026-09-26)
+
+vitest 887 (+3); `_worker.js`, `index.html`, `tests/worker.test.js`, `CHANGELOG.md`, CSP hash re-pinned.
+
+- The sealed queue already had verify-and-repair for Cloudflare KV's last-write-wins race plus an overflow-drop counter; the plain `inbox:{to}` path had neither. `handleMsgSend` now re-reads the key after a successful store and re-appends ours when a racing writer clobbered it — identity is `(from, payload, ts)`, unique because inbox ts is strictly increasing — and counts overflow drops under `inbox:{to}:dropped`.
+- `handleMsgPoll` surfaces `{ dropped }` once and resets the counter (same honesty contract as the sealed poll); the client's live poll loop toasts `toastMsgsDropped` for it.
+- Account-delete sweep now deletes `inbox:{id}:dropped` and `sealed:{id}:dropped` — both counters would otherwise linger ~7 days after erasure.
+- Tests: deterministic clobber-recovery (KV.put interposed stale write), no-duplicate-on-clean-write, and counted+reported+reset overflow drops.
+
+---
+
 ## Lost-write recovery sweeps the rest of the worker's multi-actor KV mutations (branch devin/1790415615-grp-sig-push-lost-write, 2026-09-26)
 
 vitest 849 (+16); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
