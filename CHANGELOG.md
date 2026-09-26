@@ -1,5 +1,12 @@
 # Changelog
 
+## Sign read/typing signals (unauthenticated relay forgery) + fix verifyMessage ReferenceError (branch devin/1790421434-round18, 2026-09-26)
+
+vitest 868 (+0); `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json`, `CHANGELOG.md`.
+
+- `/api/signal` is unauthenticated and the DM room id (`dm:<idA>:<idB>`) is derivable from two public ids — anyone could inject `{type:'read'}` frames into a victim's poll and flip their outgoing ticks to ✓✓ (fake "seen" pressure / social-engineering primitive), plus fake `typing` indicators. Read receipts and typing now go out as signed envelopes `{v, sig, sigPub}` over `${type}:${data}`; the poll path verifies against the peer's TOFU-pinned signing key and, once pinned, drops unsigned or unverifiable frames (downgrade-safe, same model as signed SDP).
+- **Live bug found on main while wiring this up**: the signed-SDP verification called `verifyMessage(...)`, which is never defined — every signed SDP threw `ReferenceError` into a silent `catch`, so signed call setup was broken (the wrapper JSON was passed to `setRemoteDescription`). Renamed to `verifySignature` (the actual export — identical signature).
+
 ## Mobile bundle shipped English-only: prepare.js never copied locales/; signing injection now idempotent (branch devin/1790411492-mobile-locales, 2026-09-26)
 
 vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/mobile-assets.test.js`, `CHANGELOG.md`.

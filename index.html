@@ -6101,6 +6101,19 @@ async function initMessenger(dbName) {
   // DRY: DM room key
   function _dmRoom(peerId) { return 'dm:' + [myId, peerId].sort().join(':'); }
 
+  // Sign an ephemeral signal (read receipt / typing) with our Ed25519 identity. The
+  // /signal relay is unauthenticated — anyone knowing two user ids can post — so a
+  // bare signal is forgeable. The signature is bound to `${type}:${data}` to prevent
+  // cross-type replay; peers verify against the pinned sigPub (TOFU'd from SDP).
+  // Falls back to the legacy bare payload when signing is unavailable.
+  async function _signalSigned(room, type, data) {
+    try {
+      const sig = await signMessage(`${type}:${data}`);
+      if (sig && _signingPubB64) return _signal(room, type, JSON.stringify({ v: data, sig, sigPub: _signingPubB64 }));
+    } catch(e) { _dbg(e, 'signal-sign'); }
+    return _signal(room, type, data);
+  }
+
   // Sign and send a WebRTC SDP offer or answer. The /signal relay is unauthenticated
   // (anyone who knows two user IDs can post), so a malicious third party could inject a
   // crafted SDP and MITM the DTLS layer. Wrapping the SDP in an Ed25519 signature bound
@@ -6764,7 +6777,7 @@ async function initMessenger(dbName) {
           rsc.send(JSON.stringify({ type: 'read', sender: myId, ts: Date.now() }));
         }
         if (API) {
-          _signal(_dmRoom(snap.id), 'read', String(Date.now()));
+          _signalSigned(_dmRoom(snap.id), 'read', String(Date.now()));
         }
       };
       const base = (_settings.readReceiptDelay || 0) * MS.SEC;
@@ -10251,9 +10264,29 @@ async function initMessenger(dbName) {
           const data = await resp.json();
           for (const s of (data.messages || [])) {
             if (s.sender === myId) continue;
-            // Typing/read indicators (works both pre- and post-P2P connection)
-            if (s.type === 'typing') { showTyping(contact.id, s.senderName || contact.name); continue; }
-            if (s.type === 'read') { showReadReceipt(contact.id, parseInt(s.data) || Date.now()); continue; }
+            // Typing/read indicators (works both pre- and post-P2P connection).
+            // The /signal relay is UNAUTHENTICATED: anyone who learns both user ids can
+            // inject a 'read' frame and the victim's outgoing ticks flip to ✓✓ — a
+            // social-engineering primitive (fake "seen" pressure). Signed envelopes
+            // ({v, sig, sigPub}) verify against the TOFU-pinned signing key; once the
+            // pin exists, unsigned or unverifiable frames are dropped (downgrade-safe).
+            if (s.type === 'typing' || s.type === 'read') {
+              let payload = s.data, signed = false, verified = false;
+              try {
+                const w = JSON.parse(s.data);
+                if (w && typeof w.v === 'string' && typeof w.sig === 'string' && typeof w.sigPub === 'string') {
+                  signed = true;
+                  if (contact.sigPub && contact.sigPub === w.sigPub &&
+                      await verifySignature(`${s.type}:${w.v}`, w.sig, w.sigPub) === true) {
+                    verified = true; payload = w.v;
+                  }
+                }
+              } catch { /* not JSON → legacy bare payload */ }
+              if (signed && !verified) continue;                 // forged signature — drop
+              if (!signed && contact.sigPub) continue;           // pinned peer must sign
+              if (s.type === 'typing') { showTyping(contact.id, s.senderName || contact.name); continue; }
+              showReadReceipt(contact.id, parseInt(payload) || Date.now()); continue;
+            }
             // WebRTC signaling
             if (peerState.connected && s.type !== 'ice') continue;
 
@@ -10270,7 +10303,7 @@ async function initMessenger(dbName) {
                       _dbg(null, 'P2P: SDP signing key mismatch — rejecting (possible MITM)');
                       continue;
                     }
-                    const valid = await verifyMessage(wrapper.sdp, wrapper.sig, wrapper.sigPub);
+                    const valid = await verifySignature(wrapper.sdp, wrapper.sig, wrapper.sigPub);
                     if (valid === false) { _dbg(null, 'P2P: SDP signature invalid — rejecting'); continue; }
                     // TOFU: pin the peer's signing key on first signed SDP
                     if (!contact.sigPub && wrapper.sigPub && _hasEd25519) {
@@ -11062,7 +11095,7 @@ async function initMessenger(dbName) {
       sc.send(JSON.stringify({ type: 'typing', sender: myId, senderName: myName }));
     }
     if (API) {
-      _signal(_dmRoom(activeContact.id), 'typing');
+      _signalSigned(_dmRoom(activeContact.id), 'typing');
     }
   });
 
