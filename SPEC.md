@@ -469,7 +469,7 @@ Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline';
 
 ## 11. i18n
 
-- **Built-in**: English (372 keys), Japanese (372 keys)
+- **Built-in**: English (657 keys), Japanese (657 keys — `locales/ja.json`)
 - **External**: none — the 924-language `lang.js` table was deleted (supplied zero strings to the UI at 44% of payload; see SECURITY.md)
 - **Hardcoded UI strings**: 0 (100% coverage via `t()` function)
 - **Toast i18n**: 100%
