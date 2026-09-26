@@ -55,6 +55,8 @@ Deferred, same as before: group kick/leave/rename rewrites and OTP consumption (
 ---
 
 ## Erasure-completeness gate: account/delete must leave zero keys naming the userId (branch devin/<ts>-erasure-gate, 2026-09-26)
+## Erasure-completeness gate: account/delete must leave zero keys naming the userId (branch devin/<ts>-erasure-gate, 2026-09-26)
+## Erasure-completeness gate: account/delete must leave zero keys naming the userId (branch devin/1790410508-erasure-gate, 2026-09-26)
 
 vitest 822 → **825**; `tests/worker-erasure.test.js` (new), `CHANGELOG.md` — test only.
 
