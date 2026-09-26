@@ -3791,6 +3791,49 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'sign'); return null; }
   }
 
+  // Ed25519 ownership proof shared by every *_REQUIRE_AUTH family (queue, alias,
+  // push, backup — verified-when-present, mandatory once the operator flips the
+  // flag in wrangler.toml). Signs the worker's challenge string with this
+  // install's identity key — the same key the registered prekey bundle advertises
+  // as edIdentityKey. Returns {} when signing is unavailable (no Ed25519 support,
+  // or initSigning still in flight — the fields are optional until the flag is
+  // set, so an early {} is self-healing on the next call).
+  async function authFields(makeChallenge) {
+    if (!_signingKey?.privateKey || !myId) return {};
+    const ts = Date.now();
+    const sig = await signMessage(await makeChallenge(ts));
+    return sig ? { ts, sig } : {};
+  }
+  // Queue read/delete ops: challenge `breeze-<op>:<id>:<ts>` (checkQueueAuth).
+  function queueAuth(op) { return authFields(ts => `breeze-${op}:${myId}:${ts}`); }
+  // sha256Short twin (worker): SHA-256 → first 16 bytes → hex. Several
+  // challenges bind a digest of the mutable fields so a captured sig can't be
+  // replayed with a tampered payload.
+  async function digestHex16(text) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  // Worker sanitizeString twin — challenge digests bind its OUTPUT, so the
+  // client must apply the identical truncation + control-char strip before hashing.
+  const sanStr = (v, n) => (typeof v === 'string' ? v.slice(0, n).replace(/[\x00-\x08\x0a-\x0c\x0d\x0e-\x1f]/g, '') : '');
+  // prekey/upload: breeze-prekey-upload:{userId}:{ts}:{digest over every mutable field}.
+  async function prekeyUploadAuth(userId, identityKey, b) {
+    return authFields(async ts => `breeze-prekey-upload:${userId}:${ts}:${await digestHex16(JSON.stringify([
+      identityKey, b.edIdentityKey || '', b.signedPreKey, b.signedPreKeySig || '',
+      Array.isArray(b.oneTimePreKeys) ? b.oneTimePreKeys : [],
+      Array.isArray(b.caps) ? b.caps : [],
+      typeof b.x3dh === 'string' ? b.x3dh : '',
+    ]))}`);
+  }
+  // group/create: breeze-group-create::{creatorId}:{ts}:{bind} — empty token slot
+  // (no invite token exists yet), bind = digest of the stored creator fields.
+  async function groupCreateAuth(creatorPub, name, creatorName, caps) {
+    return authFields(async ts => `breeze-group-create::${myId}:${ts}:${await digestHex16(JSON.stringify([
+      creatorPub, sanStr(name, 50), sanStr(creatorName, 64) || '',
+      Array.isArray(caps) ? caps.slice(0, 20).filter(c => typeof c === 'string').map(c => c.slice(0, 32)) : [],
+    ]))}`);
+  }
+
   async function verifySignature(text, sigB64, pubKeyB64) {
     if (!_hasEd25519 || !sigB64 || !pubKeyB64) return null; // null = cannot verify
     try {
@@ -4341,7 +4384,7 @@ async function initMessenger(dbName) {
   async function checkRemoteWipe() {
     if (!API || !myId) return;
     try {
-      const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: 0 });
+      const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: 0, ...(await queueAuth('msg-poll')) });
       if (!resp.ok) return;
       const data = await resp.json();
       for (const msg of (data.messages || [])) {
@@ -4479,7 +4522,8 @@ async function initMessenger(dbName) {
     let registeredAlias = '';
     if (alias && API) {
       try {
-        const resp = await postAPIRaw('/alias/set', { alias, pub: pubB64, name });
+        const resp = await postAPIRaw('/alias/set', { alias, pub: pubB64, name, userId: pubB64.slice(0, 12),
+          ...(await authFields(ts => `breeze-alias-set:${alias.toLowerCase().replace(/[^a-z0-9_]/g, '')}:${ts}`)) });
         if (resp.ok) registeredAlias = alias;
       } catch(e) { _dbg(e); }
     }
@@ -4494,7 +4538,8 @@ async function initMessenger(dbName) {
       try {
         await initSigning(); // must precede generatePreKeyBundle() or edIdentityKey/signedPreKeySig get omitted (E2E-found)
         const bundle = await generatePreKeyBundle();
-        await postAPIRaw('/prekey/upload', { userId: myId, identityKey: pubB64, ...bundle });
+        await postAPIRaw('/prekey/upload', { userId: myId, identityKey: pubB64, ...bundle,
+          ...(await prekeyUploadAuth(myId, pubB64, bundle)) });
         _dbg(null, 'PreKeys uploaded: 1 SPK + ' + bundle.oneTimePreKeys.length + ' OTP');
       } catch(e) { _dbg(e, 'prekey-upload'); }
     }
@@ -5739,7 +5784,8 @@ async function initMessenger(dbName) {
       if (API && myId) {
         navigator.serviceWorker?.ready
           .then(r => r.pushManager?.getSubscription())
-          .then(sub => { if (sub) postAPIRaw('/push/unsubscribe', { userId: myId, endpoint: sub.endpoint }).catch(() => {}); })
+          .then(async sub => { if (sub) postAPIRaw('/push/unsubscribe', { userId: myId, endpoint: sub.endpoint,
+            ...(await authFields(ts => `breeze-push-unsubscribe:${myId}:${ts}:${sub.endpoint}`)) }).catch(() => {}); })
           .catch(() => {});
       }
       // Save unread count for cross-account badge
@@ -9069,7 +9115,9 @@ async function initMessenger(dbName) {
   async function createGroupInviteLink(name) {
     if (!API) { showToast(t('toastServerRequired'), 'error'); return; }
     try {
-      const resp = await postAPIRaw('/group/create', { name, creatorId: myId, creatorPub: myPubB64, creatorName: myName, caps: CONFIG.GROUP_RATCHET_V5 ? [CAPS_GROUP_V5] : undefined });
+      const gcaps = CONFIG.GROUP_RATCHET_V5 ? [CAPS_GROUP_V5] : undefined;
+      const resp = await postAPIRaw('/group/create', { name, creatorId: myId, creatorPub: myPubB64, creatorName: myName, caps: gcaps,
+        ...(await groupCreateAuth(myPubB64, name, myName, gcaps)) });
       if (!resp.ok) { showToast(t('toastGroupFail'), 'error'); return; }
       const data = await resp.json();
       const groupId = 'g_' + data.token;
@@ -9245,7 +9293,8 @@ async function initMessenger(dbName) {
       if (!expired && !st) return; // network/other error: try again next cycle
       if (expired || st.replenishOTP || st.replenishSPK) {
         const freshBundle = await generatePreKeyBundle();
-        const upResp = await postAPIRaw('/prekey/upload', { userId: myId, identityKey: myPubB64, ...freshBundle });
+        const upResp = await postAPIRaw('/prekey/upload', { userId: myId, identityKey: myPubB64, ...freshBundle,
+          ...(await prekeyUploadAuth(myId, myPubB64, freshBundle)) });
         if (!upResp?.ok) { _lastPreKeyCheck = Date.now() - MS.MIN * 4; return; } // retry in ~1 min
         _dbg(null, (expired ? 'PreKey record had EXPIRED — re-registered: ' : 'PreKeys replenished: ') + freshBundle.oneTimePreKeys.length + ' OTPs');
       }
@@ -9262,7 +9311,7 @@ async function initMessenger(dbName) {
     _pollTimer = setTimeout(async () => {
       if (!_isOffline && API) {
         try {
-          const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: _lastPollTs });
+          const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: _lastPollTs, ...(await queueAuth('msg-poll')) });
           if (resp.ok) {
             const data = await resp.json();
             for (const msg of (data.messages || [])) {
@@ -9270,7 +9319,7 @@ async function initMessenger(dbName) {
               if (typeof msg.ts === 'number' && Number.isFinite(msg.ts) && msg.ts > _lastPollTs && msg.ts <= Date.now() + MS.DAY) _lastPollTs = msg.ts;
             }
           }
-          const sResp = await postAPIRaw('/sealed/poll', { id: myId });
+          const sResp = await postAPIRaw('/sealed/poll', { id: myId, ...(await queueAuth('sealed-poll')) });
           if (sResp.ok) {
             const sData = await sResp.json();
             // Honesty over silence: the relay counts envelopes its queue caps forced it to
@@ -9298,7 +9347,7 @@ async function initMessenger(dbName) {
               } catch(e) { _dbg(e, 'sealed-parse'); }
             }
             // v3.6: ACK after successful processing (crash-safe: server keeps 5min grace)
-            if (sealedProcessed > 0) postAPIRaw('/sealed/ack', { id: myId }).catch(e => _dbg(e, 'sealed-ack'));
+            if (sealedProcessed > 0) queueAuth('sealed-ack').then(a => postAPIRaw('/sealed/ack', { id: myId, ...a })).catch(e => _dbg(e, 'sealed-ack'));
           }
           checkAndReplenishPreKeys();
         } catch(e) { _dbg(e); }
@@ -10742,7 +10791,9 @@ async function initMessenger(dbName) {
       const existing = await reg.pushManager.getSubscription();
       if (existing) {
         // Already subscribed, sync with server
-        await postAPIRaw('/push/subscribe', { userId: myId, subscription: existing.toJSON() }).catch(e => _dbg(e));
+        const subJson = existing.toJSON();
+        await postAPIRaw('/push/subscribe', { userId: myId, subscription: subJson,
+          ...(await authFields(ts => `breeze-push-subscribe:${myId}:${ts}:${subJson.endpoint || ''}:${subJson.keys?.p256dh || ''}:${subJson.keys?.auth || ''}`)) }).catch(e => _dbg(e));
         return;
       }
       // Request permission and subscribe
@@ -10756,7 +10807,9 @@ async function initMessenger(dbName) {
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(health.vapidPublicKey),
       });
-      await postAPIRaw('/push/subscribe', { userId: myId, subscription: sub.toJSON() }).catch(e => _dbg(e));
+      const subJsonNew = sub.toJSON();
+      await postAPIRaw('/push/subscribe', { userId: myId, subscription: subJsonNew,
+        ...(await authFields(ts => `breeze-push-subscribe:${myId}:${ts}:${subJsonNew.endpoint || ''}:${subJsonNew.keys?.p256dh || ''}:${subJsonNew.keys?.auth || ''}`)) }).catch(e => _dbg(e));
     } catch(e) { _dbg(e, 'push'); }
   }
 
@@ -10914,7 +10967,11 @@ async function initMessenger(dbName) {
     // Register room on server (if available)
     if (API) {
       try {
-        await postAPIRaw('/group/create', { creatorId: myId, name: name || 'Room', members: [{ id: myId, pubB64: myPubB64, name: myName }], ttl: maxTtl });
+        // creatorPub/creatorName required by the worker (MISSING_FIELDS without them —
+        // this call was silently 400ing); members/ttl aren't part of the signed bind.
+        await postAPIRaw('/group/create', { creatorId: myId, name: name || 'Room', creatorPub: myPubB64, creatorName: myName,
+          members: [{ id: myId, pubB64: myPubB64, name: myName }], ttl: maxTtl,
+          ...(await groupCreateAuth(myPubB64, name || 'Room', myName, undefined)) });
       } catch(e) { _dbg(e); }
     }
     // Copy to clipboard
@@ -12543,7 +12600,8 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         try {
           const reg = await navigator.serviceWorker?.ready.catch(() => null);
           const sub = await reg?.pushManager?.getSubscription().catch(() => null);
-          if (sub) { postAPIRaw('/push/unsubscribe', { userId: myId, endpoint: sub.endpoint }).catch(() => {}); await sub.unsubscribe().catch(() => {}); }
+          if (sub) { postAPIRaw('/push/unsubscribe', { userId: myId, endpoint: sub.endpoint,
+            ...(await authFields(ts => `breeze-push-unsubscribe:${myId}:${ts}:${sub.endpoint}`)) }).catch(() => {}); await sub.unsubscribe().catch(() => {}); }
         } catch(e) { _dbg(e); }
       }
       // Local wipe
@@ -13464,7 +13522,8 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
           // v3.5 SPEC: Proof-of-Work required for alias registration (anti-spam)
           showToast(t('toastPoW'), 'info');
           const powToken = await generatePoW(myPubB64 + ':' + newAlias + ':' + Date.now(), CONFIG.POW_DIFFICULTY);
-          const resp = await postAPIRaw('/alias/set', { alias: newAlias, pub: myPubB64, name: myName, pow: powToken });
+          const resp = await postAPIRaw('/alias/set', { alias: newAlias, pub: myPubB64, name: myName, pow: powToken, userId: myId,
+            ...(await authFields(ts => `breeze-alias-set:${newAlias.toLowerCase().replace(/[^a-z0-9_]/g, '')}:${ts}`)) });
           if (resp.ok) {
             myAlias = newAlias;
             const id = await dbGet('identity', 'keys');
@@ -13479,7 +13538,9 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
             if (oldAlias && oldAlias !== newAlias) {
               try {
                 const delTs = Date.now();
-                const delSig = await signMessage(`breeze-alias-delete:${oldAlias}:${delTs}`);
+                // Worker signs over `clean` — lowercase + charset strip + 20-char cap —
+                // so a raw alias with uppercase/invalid chars never verifies (SIG_INVALID).
+                const delSig = await signMessage(`breeze-alias-delete:${oldAlias.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20)}:${delTs}`);
                 if (delSig) await postAPIRaw('/alias/delete', { alias: oldAlias, userId: myId, ts: delTs, sig: delSig });
               } catch(relErr) { _dbg(relErr, 'alias-release'); }
             }

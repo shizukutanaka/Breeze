@@ -10,6 +10,50 @@ vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/m
 
 ---
 
+## Auth-challenge parity gate + alias/delete sanitize fix (branch devin/1790412600-auth-final, 2026-09-26)
+
+vitest 847 (+14); `tests/auth-parity.test.js`, `index.html` (alias/delete fix), `_headers`, `tauri.conf.json` (CSP hash propagation).
+
+- New `tests/auth-parity.test.js`: extracts every `breeze-…` challenge template literal from index.html and _worker.js, normalizes `${…}` slots, and requires byte-identical skeletons for the nine ops the Worker verifies on main (alias set/delete, push sub/unsub, backup up/download, device/set, account/delete, presence inst). Also pins the generic `breeze-group-{action}:{token}:{actorId}:{ts}:{bind}` shape against every client group template (literal action or `{}` slot, bind may be a compound literal like `promote:{id}`), the push-subscribe composed `subBind`, and that the client signs nothing the worker can never verify (queue/prekey/group-create remain PENDING until #283/#284/#285 land).
+- **Bug it found immediately**: `alias/delete` signed the raw `oldAlias`, but the worker hashes `clean` = lowercase + `[a-z0-9_]` strip + `slice(0,20)` — a stored alias with uppercase or out-of-charset chars (kept raw client-side) could never produce a valid signature → SIG_INVALID on delete. Client now signs the sanitized form. (`alias/set` needs no cap — the worker rejects `clean` >20 outright.)
+
+---
+
+## Client signs prekey/upload + group/create — every Worker-side Ed25519 check now has a signer (branch devin/1790412600-auth-final, 2026-09-26)
+
+vitest 830 unchanged; `index.html`, `_headers`, `tauri.conf.json` (CSP hash propagation).
+
+- `prekey/upload` (initial registration + OTP/SPK replenish) signs `breeze-prekey-upload:{userId}:{ts}:{digest}` where the digest covers every mutable bundle field (identityKey, edIdentityKey, signedPreKey, signedPreKeySig, oneTimePreKeys, caps, x3dh) — the PREKEY_REQUIRE_AUTH (#284) counterpart that stops a registered account's bundle being overwritten by anyone who knows its userId.
+- `group/create` (invite link + ephemeral room) signs `breeze-group-create::{id}:{ts}:{bind}` with an empty token slot and bind = digest of the stored creator fields — the GROUP_REQUIRE_AUTH (#285) counterpart that stops groups being attributed to arbitrary identities.
+- `createEphemeralRoom`'s `/group/create` call was silently 400ing: it never sent `creatorPub`/`creatorName` (MISSING_FIELDS), so rooms were never registered server-side. Now sends both, plus the signature.
+- New helpers next to `authFields`: `digestHex16` (worker's sha256Short twin — SHA-256 → 16 bytes → hex) and `sanStr` (worker's sanitizeString twin — the binds hash the *sanitized* values, so the client must apply the identical transform before hashing).
+- With this, the verified-when-present rollout covers every auth scheme the Worker implements: queue, backup, alias, device, group (mutations + create), prekey, push. Flipping any flag in wrangler.toml no longer breaks clients.
+
+---
+
+## Client signs the remaining *_REQUIRE_AUTH surfaces — alias/set + push subscribe/unsubscribe (branch devin/1790411749-auth-rollout, 2026-09-26)
+
+vitest 830 unchanged; `index.html`, `_headers`, `tauri.conf.json` (CSP hash propagation).
+
+- `queueAuth` generalized into `authFields(makeChallenge)` — every `*_REQUIRE_AUTH` family shares one {ts, sig} signer for its own `breeze-…` challenge string.
+- `alias/set` (both call sites: account setup + rename) now sends `{userId, ts, sig}` over `breeze-alias-set:{clean-alias}:{ts}` — binds the @handle to the registered identity key, closing the first-come impersonation path ALIAS_REQUIRE_AUTH exists to gate. The signed challenge covers the worker-sanitized alias (`toLowerCase` + charset strip), matching `clean`.
+- `push/subscribe` (both paths: existing-sub sync and fresh subscribe) signs `breeze-push-subscribe:{userId}:{ts}:{endpoint}:{p256dh}:{auth}` — the subBind that stops a captured signature from being replayed with swapped endpoint keys.
+- `push/unsubscribe` (account switch + account delete) signs `breeze-push-unsubscribe:{userId}:{ts}:{endpoint}`.
+- Not signed, by design: `/turn` (worker checks registration only, no signature scheme) and presence (inst already signed via `breeze-inst:`).
+- Same client-first rollout: verified-when-present today, mandatory when the operator sets the flag — flipping it no longer breaks clients.
+
+---
+
+## Queue read/delete ops now send Ed25519 ownership proofs — client half of QUEUE_REQUIRE_AUTH (branch devin/1790411749-queue-auth-v2, 2026-09-26)
+
+vitest 833 unchanged; `index.html`, `_headers`, `tauri.conf.json` (CSP hash propagation).
+
+- `msg/poll`, `sealed/poll`, `sealed/ack` now attach `{ts, sig}` = Ed25519(`breeze-<op>:<id>:<ts>`) via the install's identity signing key — the `edIdentityKey` the registered prekey bundle advertises, which `checkQueueAuth` verifies against (per-op domain separation, so a captured poll sig can't be replayed as an ack).
+- Client-first rollout: today's Worker ignores the fields; they become mandatory when the operator sets `QUEUE_REQUIRE_AUTH=true` on the auth branch. Returns `{}` when Ed25519 is unavailable or `initSigning` is still in flight — optional until the flag flips.
+- Until this lands, an operator enabling `QUEUE_REQUIRE_AUTH` would break every client; after it, the queue ops stop being anonymous read/delete surfaces (anyone holding a userId could drain the ciphertext inbox or ack-wipe undelivered sealed envelopes).
+
+---
+
 ## Skipped message keys now expire (I7, the last pending P0) — plus a forged-group-ciphertext could persistently desync a member (branch devin/1790400137-i7-skipped-key-ttl, 2026-09-26)
 
 830 vitest (819 → **830**); Playwright E2E 60 unchanged; `index.html`, `src/crypto/ratchet.js`, `tests/mirror-drift.test.js`, `tests/ratchet.test.js`, `docs/ROADMAP.md`, `CHANGELOG.md`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation).
