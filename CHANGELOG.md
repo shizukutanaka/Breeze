@@ -1,5 +1,15 @@
 # Changelog
 
+## SPEC.md drift repair: endpoint/rate-limit table and env-var table now match `_worker.js` (branch devin/<ts>-spec-drift, 2026-09-26)
+
+vitest 819 unchanged; `SPEC.md`, `CHANGELOG.md` — docs only.
+
+- §3.2 listed 32 endpoints with most rate limits marked "default"; reality is 38 (37 dispatch cases + `/api/health`), every route with an explicit per-IP limit. Rewrote the table verbatim from the `limits` object — 13 endpoints were missing entirely (device registry, batch prekey, ktlog, six group mutations, account/delete, unsubscribe).
+- §3.3 added the undocumented env vars the Worker actually reads: `MIN_POW_DIFFICULTY`, `ABUSE_WEBHOOK_URL`, `TURN_KEY_ID`/`TURN_KEY_API_TOKEN`, `ASSETS`, and the `*_REQUIRE_AUTH` flag family.
+- §2.2 OTP: "10 keys, replenish < 5" → actual `PREKEY_OTP_COUNT: 20` with relay-driven replenish via `/api/prekey/status`.
+
+---
+
 ## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
 
 819 vitest unchanged; Playwright E2E 60 unchanged; `docs/ROADMAP.md`, `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation) — dead-code removal only, no runtime behavior change.
