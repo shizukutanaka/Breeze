@@ -26,10 +26,13 @@
 // comment and regex contents blanked out. Naive brace counting mis-parses this file —
 // it has template literals containing HTML braces and significant leading whitespace —
 // and produced confidently wrong answers twice while this bug was being diagnosed.
+// (Regex contents included: an unbalanced brace inside `/\}/` or `/[{}]/` corrupts the
+// guard-boundary matching — see tools/lib/mask-js.mjs.)
 // ============================================================================
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { maskJs } from './lib/mask-js.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const html = readFileSync(join(ROOT, 'index.html'), 'utf8');
@@ -39,25 +42,7 @@ if (!js) {
   process.exit(1);
 }
 
-function mask(src) {
-  const out = src.split('');
-  const blank = (a, b) => { for (let k = a; k < b && k < out.length; k++) if (out[k] !== '\n') out[k] = ' '; };
-  let i = 0;
-  while (i < src.length) {
-    const c = src[i], n = src[i + 1];
-    if (c === '/' && n === '/') { let j = src.indexOf('\n', i); if (j < 0) j = src.length; blank(i, j); i = j; continue; }
-    if (c === '/' && n === '*') { const j = src.indexOf('*/', i + 2); const e = j < 0 ? src.length : j + 2; blank(i, e); i = e; continue; }
-    if (c === '"' || c === "'" || c === '`') {
-      let j = i + 1;
-      while (j < src.length) { if (src[j] === '\\') { j += 2; continue; } if (src[j] === c) break; j++; }
-      blank(i + 1, j); i = j + 1; continue;
-    }
-    i++;
-  }
-  return out.join('');
-}
-
-const masked = mask(js);
+const masked = maskJs(js);
 const lineOf = (idx) => js.slice(0, idx).split('\n').length;
 
 const guards = [];

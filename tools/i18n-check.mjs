@@ -44,19 +44,19 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { extractBraceBlock } from './lib/mask-js.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const html = readFileSync(join(ROOT, 'index.html'), 'utf8');
 
+// The extraction MUST walk a masked copy: EN values are full of `{0}` placeholders
+// (balanced, harmless) but a lone `}` inside any string value would end a naive
+// brace count early, silently truncating the reference table — checks 6/7/8 would
+// then pass on a subset of keys and report a coverage that isn't real.
 function extractInline() {
-  const start = html.indexOf('const _I = {');
-  if (start < 0) throw new Error('i18n-check: could not find `const _I = {` in index.html');
-  let depth = 0;
-  for (let i = html.indexOf('{', start); i < html.length; i++) {
-    if (html[i] === '{') depth++;
-    else if (html[i] === '}') { depth--; if (depth === 0) return html.slice(html.indexOf('{', start), i + 1); }
-  }
-  throw new Error('i18n-check: unbalanced braces in _I');
+  const raw = extractBraceBlock(html, 'const _I = ');
+  if (raw === null) throw new Error('i18n-check: could not find `const _I = {` in index.html');
+  return raw;
 }
 
 const rawInline = extractInline();
