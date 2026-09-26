@@ -1,5 +1,22 @@
 # Changelog
 
+## Lost-write recovery sweeps the rest of the worker's multi-actor KV mutations (branch devin/1790415615-grp-sig-push-lost-write, 2026-09-26)
+
+vitest 849 (+16); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
+
+The sealed queue already had verify-and-repair for KV last-write-wins clobbers (a racing writer erases an entry while both callers get success) — every other read-modify-write handler had the same defect and none of the coverage. A new shared `grpVerifyRepair(env, token, check, reapply)` re-reads `grp:{token}` after a successful store, checks the semantic postcondition, and re-applies the mutation onto the freshly-read object once when it's absent. Applied to every site that had the race:
+
+- **kick / leave** — the security-critical case: a clobbered kick keeps the member in the roster AND loses the epoch bump, so they keep decrypting current traffic while remaining members believe they rotated them out (I3 PCS silently voided).
+- **join** (new member + caps-refresh path) — a clobbered join returns ok while the member isn't in the roster, so they never receive sender keys. Repair merges the record; it *vetoes* when a concurrent ban or the 100-member cap won, and the caller now reports that truthfully (403 BANNED / 400 GROUP_FULL) instead of a silent non-join.
+- **admin promote/demote + unban** — a clobbered promote leaves the target without rights; a clobbered demote leaves them armed. Repair vetoes promoting a target who was concurrently kicked (no admin rights for a non-member).
+- **transfer** — a clobbered transfer leaves the old creator in charge while they were told they handed off. Vetoes crowning a member who left in the same tick (would orphan the group) and reports an honest NOT_MEMBER.
+- **rename** — metadata write, same pattern.
+- **`sig:{room}`** — two signaling writes in the same instant (offer+answer crossing, offer+ICE burst) clobber each other; the loser got ok and the call silently never connects. Now verifies sender+type+ts+data presence and re-appends. Also returns 500 STORE_FAILED on a failed store — previously the write result was ignored entirely.
+- **`push:{userId}` subscribe + unsubscribe** — two of a user's devices racing silently lose one registration (notification denial) or resurrect a removed endpoint. Verify + re-merge / re-filter once.
+- **`alias:{alias}`** — check-then-act double-claim: both registrants pass the taken-check, both write, the second wins while the first is told ok and believes they own an alias pointing at someone else's key. Verify-read confesses with 409 ALIAS_TAKEN (deliberately not repaired — the winner's claim is valid; ours is the collision loser).
+
+Recovery, not exactly-once — bounded to one repair write (a third racing writer in the same tick can still clobber it; closing that window needs Durable Objects, C10). Each check tests a semantic postcondition, so a stale read-back on KV's eventual consistency rewrites the same state rather than double-applying (a repaired kick produces one epoch bump, not two). 16 deterministic clobber tests monkey-patch `env.KV.put` to interpose the stale write between each handler's put and its verify-read.
+
 ## Mobile bundle shipped English-only: prepare.js never copied locales/; signing injection now idempotent (branch devin/1790411492-mobile-locales, 2026-09-26)
 
 vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/mobile-assets.test.js`, `CHANGELOG.md`.
