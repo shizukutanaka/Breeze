@@ -454,7 +454,7 @@
  "secInLruCache": "/ LRUキャッシュ内",
  "secSkippedKeys": "スキップ鍵: ✓ 順序外メッセージの復元（最大100鍵/セッション）",
  "secLblMsgPadding": "メッセージパディング",
- "secByteBoundary": "バイト境界",
+ "secByteBoundary": "バイト基準 ×4 バケット",
  "secLblSecureCtx": "セキュアコンテキスト",
  "secIceCandFilter": "ICE候補フィルタ: ✓（ホストIPアドレスを除去）",
  "secLblRelayOnly": "リレーオンリーモード",

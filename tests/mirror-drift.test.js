@@ -452,6 +452,20 @@ describe('Group sender-key mirror — inline (index.html) vs reference (src/cryp
     expect(Array.isArray(p.d)).toBe(true);
   });
 
+  it('I6 bucketed padding parity: inline ciphertext length lands on the same 256·4^k buckets as the reference', async () => {
+    // The deployed inline pad loop must agree with ratchet.js padLen — a drift back
+    // to flat-256 would silently leak message length again while every wire test
+    // stays green (the length prefix hides it). Ciphertext len = padded + 16 tag.
+    const inline = makeGroupInline({ GROUP_RATCHET_V5: true, GROUP_MAX_SKIP: 50, MSG_PAD_BOUNDARY: 256, IV_BYTES: 12 });
+    inline.store.set('gsk:G', freshV5());
+    const small = JSON.parse(await inline.encryptGroupMsg('G', 'hi'));
+    expect(small.d.length).toBe(256 + 16);
+    inline.store.set('gsk:G', freshV5());
+    const mid = JSON.parse(await inline.encryptGroupMsg('G', 'x'.repeat(300)));
+    expect(mid.d.length).toBe(1024 + 16);
+    expect(refR.padLen(302)).toBe(1024); // reference agrees on the schedule
+  });
+
   it('FORWARD SECRECY parity: second inline message ratchets the chain (c increments, both decrypt)', async () => {
     const inline = makeGroupInline({ GROUP_RATCHET_V5: true, GROUP_MAX_SKIP: 50, MSG_PAD_BOUNDARY: 256, IV_BYTES: 12 });
     inline.store.set('gsk:G', freshV5());

@@ -1829,7 +1829,7 @@ const _I = {
     secInLruCache: 'in LRU cache',
     secSkippedKeys: 'Skipped Keys: ✓ Out-of-order message recovery (max 100 keys/session)',
     secLblMsgPadding: 'Message Padding',
-    secByteBoundary: '-byte boundary',
+    secByteBoundary: '-byte base, ×4 buckets',
     secLblSecureCtx: 'Secure Context',
     secIceCandFilter: 'ICE Candidate Filter: ✓ (host IP addresses stripped)',
     secLblRelayOnly: 'Relay-only mode',
@@ -4878,8 +4878,14 @@ async function initMessenger(dbName) {
       // This matches src/crypto/ratchet.js (frameEncrypt defaults compressMin: Infinity).
       const raw = new TextEncoder().encode(text);
       const compressed = false;
-      // Pad plaintext to 256-byte boundary (traffic analysis protection)
-      const padded = new Uint8Array(Math.ceil((raw.length + 3) / CONFIG.MSG_PAD_BOUNDARY) * CONFIG.MSG_PAD_BOUNDARY);
+      // I6: bucketed padding (traffic analysis protection) — pad to the next
+      // MSG_PAD_BOUNDARY·4^k bucket (256, 1024, 4096, …) so ciphertext length leaks
+      // only the size class, not the plaintext length (Loopix-style size buckets;
+      // docs/IMPROVEMENTS.md I6). Receivers read the explicit length prefix, so this
+      // stays wire-compatible with flat-256-boundary senders in both directions.
+      let padB = CONFIG.MSG_PAD_BOUNDARY;
+      while (padB < raw.length + 3) padB *= 4;
+      const padded = new Uint8Array(padB);
       // Header: [flags:1][length:2][data...]
       padded[0] = compressed ? 0x01 : 0x00; // flags: bit0 = compressed
       new DataView(padded.buffer).setUint16(1, raw.length);
@@ -5528,7 +5534,11 @@ async function initMessenger(dbName) {
       sk.counter++;
       await dbPut('identity', sk, 'gsk:' + groupId);
       const raw = new TextEncoder().encode(text);
-      const padded = new Uint8Array(Math.ceil((raw.length + 2) / CONFIG.MSG_PAD_BOUNDARY) * CONFIG.MSG_PAD_BOUNDARY);
+      // I6: bucketed padding — next MSG_PAD_BOUNDARY·4^k bucket, same size-class
+      // reasoning as the 1:1 path (mirrors padLen in src/crypto/ratchet.js).
+      let padB = CONFIG.MSG_PAD_BOUNDARY;
+      while (padB < raw.length + 2) padB *= 4;
+      const padded = new Uint8Array(padB);
       new DataView(padded.buffer).setUint16(0, raw.length);
       padded.set(raw, 2);
       const iv = crypto.getRandomValues(new Uint8Array(CONFIG.IV_BYTES));
@@ -9265,6 +9275,9 @@ async function initMessenger(dbName) {
           const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: _lastPollTs });
           if (resp.ok) {
             const data = await resp.json();
+            // Same queue-overflow confession the sealed path already surfaces: the
+            // plain inbox counted drops too, so tell the user rather than lose wordlessly.
+            if (Number.isInteger(data.dropped) && data.dropped > 0) showToast(t('toastMsgsDropped', data.dropped), 'error');
             for (const msg of (data.messages || [])) {
               try { await handleIncoming(msg); } catch(e) { _dbg(e, 'msg-process'); }
               if (typeof msg.ts === 'number' && Number.isFinite(msg.ts) && msg.ts > _lastPollTs && msg.ts <= Date.now() + MS.DAY) _lastPollTs = msg.ts;

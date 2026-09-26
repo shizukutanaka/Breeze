@@ -496,6 +496,7 @@ async function handleMsgSend(body, ip, env, request) {
   }
   inbox.push(msg);
   const trimmed = capQueueBytes(inbox.slice(-100), m => (typeof m.payload === 'string' ? m.payload.length : 0) + 1024);
+  const droppedNow = inbox.length - trimmed.length;
   const stored = await kvPut(env, key, JSON.stringify(trimmed), { expirationTtl: TTL.WEEK });
   if (!stored) {
     // Un-mark the dedup key on a failed store: it was set BEFORE this write, so leaving it
@@ -504,6 +505,36 @@ async function handleMsgSend(body, ip, env, request) {
     // stored. Deleting it lets the retry actually persist.
     globalThis._msgDedup.delete(dedupKey);
     return json({ error: 'Failed to store message', code: 'STORE_FAILED' }, 500, request);
+  }
+  // Queue overflow drops the OLDEST messages. Don't do it silently (mirrors the
+  // sealed queue's dropped counter, same defect): count them so the recipient's
+  // next poll can say "N messages were lost" instead of never knowing. Written only
+  // after the store succeeded — a failed put persisted nothing, so nothing was lost.
+  if (droppedNow > 0) {
+    const prev = parseInt(await kvGet(env, `${key}:dropped`) || '0') || 0;
+    await kvPut(env, `${key}:dropped`, String(Math.min(prev + droppedNow, 99999)), { expirationTtl: TTL.WEEK });
+  }
+
+  // Lost-write recovery (mirrors handleSealedSend). `inbox:{to}` is one KV value
+  // mutated read-modify-write, and KV is last-write-wins with no transactions: two
+  // senders writing to the SAME recipient in the same instant both read the old
+  // inbox, one message disappears — and BOTH senders are answered 200. Read the key
+  // back and re-append if our entry is absent; identity is the payload ciphertext,
+  // not the timestamp (a racing writer's entry can share the millisecond).
+  // A stale read just skips the retry, and a duplicate re-append is dropped by the
+  // recipient's dedup. The re-append re-bumps ts above the just-read tail so the
+  // strictly-increasing-ts invariant (and with it the client's `m.ts > lastTs`
+  // poll cursor) still holds.
+  const verifyRaw = await kvGet(env, key);
+  const seen = verifyRaw ? safeJsonParse(verifyRaw, []) : [];
+  const mine = (m) => m && m.payload === payload && m.from === from;
+  if (Array.isArray(seen) && !seen.some(mine)) {
+    const reMsg = { ...msg };
+    const lastSeenTs = seen.length ? seen[seen.length - 1].ts : 0;
+    if (Number.isFinite(lastSeenTs) && reMsg.ts <= lastSeenTs) reMsg.ts = lastSeenTs + 1;
+    seen.push(reMsg);
+    const requeued = capQueueBytes(seen.slice(-100), m => (typeof m.payload === 'string' ? m.payload.length : 0) + 1024);
+    await kvPut(env, key, JSON.stringify(requeued), { expirationTtl: TTL.WEEK });
   }
 
   // Trigger Web Push notification (non-blocking)
@@ -552,7 +583,12 @@ async function handleMsgPoll(body, env, request) {
     else await kvPut(env, key, JSON.stringify(keep), { expirationTtl: TTL.WEEK });
   }
 
-  return json({ messages: newMsgs }, 200, request);
+  // Surface queue-overflow losses once, then reset the counter (mirrors
+  // handleSealedPoll — see handleMsgSend's dropped accounting).
+  const droppedStr = await kvGet(env, `${key}:dropped`);
+  const dropped = parseInt(droppedStr || '0') || 0;
+  if (dropped > 0) await kvDel(env, `${key}:dropped`);
+  return json(dropped > 0 ? { messages: newMsgs, dropped } : { messages: newMsgs }, 200, request);
 }
 
 async function handlePresence(body, env, request) {
@@ -1867,8 +1903,10 @@ async function handleAccountDelete(body, env, request) {
 
   const dels = [
     kvDel(env, `inbox:${userId}`),
+    kvDel(env, `inbox:${userId}:dropped`), // queue-overflow loss counter (else lingers ~7d)
     kvDel(env, `sealed:${userId}`),
     kvDel(env, `sealed:${userId}:hwm`), // sealed-poll high-water mark (else lingers ~5min, leaking last-delivery ts)
+    kvDel(env, `sealed:${userId}:dropped`), // sealed queue-overflow counter (same 7d residue)
     kvDel(env, `prekey:${userId}`),
     kvDel(env, `ktlog:${userId}`),
     kvDel(env, `push:${userId}`),

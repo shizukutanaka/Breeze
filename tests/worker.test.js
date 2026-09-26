@@ -2620,6 +2620,74 @@ describe('msg send / poll (1:1 relay path)', () => {
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe('STORE_FAILED');
   });
+
+  // Same defect the sealed queue already confesses: the plain inbox caps at 100 and
+  // used to drop the oldest wordlessly. Now the send path counts the drops and the
+  // next poll reports them — once.
+  it('reports queue-overflow drops on the next poll, exactly once (plain inbox path)', async () => {
+    const env = makeEnv();
+    const now = Date.now();
+    for (let i = 0; i < 103; i++) {
+      await handleMsgSend(
+        { to: 'busybee2', from: 'alice001', payload: `E${i}-${'x'.repeat(40)}`, ts: now + i },
+        ip, env, req({}),
+      );
+    }
+    const first = await (await handleMsgPoll({ id: 'busybee2', lastTs: 0 }, env, req({}))).json();
+    expect(first.messages.length).toBe(100);
+    expect(first.dropped).toBe(3); // 103 sent, cap 100 — three oldest were lost
+    const second = await (await handleMsgPoll({ id: 'busybee2', lastTs: now + 103 }, env, req({}))).json();
+    expect(second.dropped).toBeUndefined(); // confessed once, counter reset
+  });
+
+  // Same lost-write race the sealed path recovers from: inbox:{to} is one KV value
+  // mutated read-modify-write, so a concurrent writer that lands last erases this
+  // send. The read-back now re-appends a clobbered entry without evicting the winner.
+  it('recovers a message that a concurrent writer clobbered (lost-write recovery)', async () => {
+    const env = makeEnv();
+    const key = 'inbox:racetgt2';
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbered = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true; // the other sender's write lands last and wins — our entry is gone
+        await origPut(k, JSON.stringify([{ from: 'other', payload: 'THE-OTHER-SENDERS-MSG', ts: Date.now() }]), o);
+      }
+    };
+    const res = await handleMsgSend(
+      { to: 'racetgt2', from: 'alice001', payload: 'MINE-must-survive', ts: Date.now() },
+      ip, env, req({}),
+    );
+    expect(res.status).toBe(200);
+    expect(clobbered).toBe(true); // the race really happened
+
+    const polled = await (await handleMsgPoll({ id: 'racetgt2', lastTs: 0 }, env, req({}))).json();
+    const payloads = polled.messages.map((m) => m.payload);
+    expect(payloads).toContain('MINE-must-survive');          // recovered...
+    expect(payloads).toContain('THE-OTHER-SENDERS-MSG');      // ...without evicting the winner
+  });
+
+  it('does not re-append when the write landed cleanly (no duplicates in the common case)', async () => {
+    const env = makeEnv();
+    await handleMsgSend(
+      { to: 'norace22', from: 'alice001', payload: 'only-once', ts: Date.now() },
+      ip, env, req({}),
+    );
+    const polled = await (await handleMsgPoll({ id: 'norace22', lastTs: 0 }, env, req({}))).json();
+    expect(polled.messages.filter((m) => m.payload === 'only-once').length).toBe(1);
+  });
+
+  it('a queue that never overflows reports no drops (plain inbox path)', async () => {
+    const env = makeEnv();
+    await handleMsgSend(
+      { to: 'quietone2', from: 'alice001', payload: 'just-one', ts: Date.now() },
+      ip, env, req({}),
+    );
+    const polled = await (await handleMsgPoll({ id: 'quietone2', lastTs: 0 }, env, req({}))).json();
+    expect(polled.messages.length).toBe(1);
+    expect(polled.dropped).toBeUndefined();
+  });
 });
 
 describe('alias set / get (PoW anti-spam)', () => {

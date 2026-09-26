@@ -47,6 +47,40 @@ describe('symmetric ratchet round-trip', () => {
   });
 });
 
+describe('bucketed padding (I6 — Loopix-style size classes)', () => {
+  // padLen returns the smallest `floor·4^k` ≥ n: 256, 1024, 4096, 16384, …
+  it('padLen lands exactly on bucket boundaries', () => {
+    const cases = [
+      [1, 256], [253, 256], [256, 256],   // fits the 256 bucket (incl. exact edge)
+      [257, 1024], [1000, 1024], [1024, 1024],
+      [1025, 4096], [4096, 4096],
+      [4097, 16384], [16385, 65536], [65537, 262144],
+    ];
+    for (const [n, want] of cases) expect(R.padLen(n)).toBe(want);
+  });
+
+  it('frameEncrypt ciphertext length is bucketed: short msg → 256+16, 300 B → 1024+16', async () => {
+    const { sender } = R.pairFromSharedChain(randomChain());
+    const small = JSON.parse(await R.ratchetEncrypt(sender, 'hi'));
+    expect(small.d.length).toBe(256 + 16); // padded frame + AES-GCM tag
+    const mid = JSON.parse(await R.ratchetEncrypt(sender, 'x'.repeat(300)));
+    expect(mid.d.length).toBe(1024 + 16); // 300+3 raw → next bucket up
+  });
+
+  it('groupSenderEncrypt ciphertext length is bucketed the same way', async () => {
+    const sk = { chainKey: Array.from(randomChain()), counter: 0, epoch: 0, v: 5 };
+    const { ciphertext } = await R.groupSenderEncrypt(sk, 'x'.repeat(300));
+    expect(JSON.parse(ciphertext).d.length).toBe(1024 + 16); // 300+2 raw
+  });
+
+  it('bucketed frames still round-trip (receiver reads the explicit length prefix)', async () => {
+    const { sender, receiver } = R.pairFromSharedChain(randomChain());
+    const text = 'x'.repeat(2000); // pads to the 4096 bucket
+    const ct = await R.ratchetEncrypt(sender, text);
+    expect(await R.ratchetDecrypt(receiver, ct)).toBe(text);
+  });
+});
+
 describe('out-of-order & skipped keys', () => {
   it('decrypts messages delivered out of order (1,3,2)', async () => {
     const { sender, receiver } = R.pairFromSharedChain(randomChain());

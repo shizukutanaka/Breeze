@@ -10,7 +10,7 @@
 // The constructions here mirror index.html exactly:
 //   - hkdf(ikm, salt, info, len)        : HKDF-SHA256
 //   - kdfChain(ck)                      : msgKey=HKDF(ck,0^32,'msg'); next=HKDF(ck,0^32,'chain')
-//   - v4 frame                          : padded=[flags:1][len:2][data...], pad→256, AES-256-GCM
+//   - v4 frame                          : padded=[flags:1][len:2][data...], pad→bucket, AES-256-GCM
 //   - skipped-key / replay / MAX_GAP    : ported verbatim from decryptFrom
 //
 // NOTE: index.html still contains the canonical inline copy. Wiring index.html
@@ -56,6 +56,18 @@ export function createRatchet(opts = {}) {
     const msgKey = await hkdf(chainKey, new Uint8Array(32), 'msg', 32);
     const nextChain = await hkdf(chainKey, new Uint8Array(32), 'chain', 32);
     return { msgKey, nextChain };
+  }
+
+  // --- I6: bucketed padding (Loopix-style size classes) ---
+  // A flat boundary still reveals the plaintext length to ±`boundary` bytes, so an
+  // observer can fingerprint message sizes. Pad to the next `boundary·4^k` bucket
+  // (256, 1024, 4096, 16384, …) instead: the wire exposes only the size class.
+  // Receivers read the explicit length prefix, so bucketed senders stay
+  // wire-compatible with flat-boundary receivers in both directions.
+  function padLen(n, floor = cfg.MSG_PAD_BOUNDARY || 256) {
+    let b = floor;
+    while (b < n) b *= 4;
+    return b;
   }
 
   function curveAlgo() {
@@ -117,7 +129,7 @@ export function createRatchet(opts = {}) {
         if (deflated.length < raw.length * 0.9) { raw = deflated; compressed = true; }
       } catch (e) { dbg(e, 'compress'); }
     }
-    const padded = new Uint8Array(Math.ceil((raw.length + 3) / cfg.MSG_PAD_BOUNDARY) * cfg.MSG_PAD_BOUNDARY);
+    const padded = new Uint8Array(padLen(raw.length + 3));
     padded[0] = compressed ? 0x01 : 0x00;
     new DataView(padded.buffer).setUint16(1, raw.length);
     padded.set(raw, 3);
@@ -522,9 +534,8 @@ export function createRatchet(opts = {}) {
     const msgKeyBits = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-msg-v5', 32);
     const nextChainRaw = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-chain-v5', 32);
     // Pad plaintext to a fixed boundary (hides message length)
-    const boundary = cfg.MSG_PAD_BOUNDARY || 256;
     const raw = new TextEncoder().encode(plaintext);
-    const padded = new Uint8Array(Math.ceil((raw.length + 2) / boundary) * boundary);
+    const padded = new Uint8Array(padLen(raw.length + 2));
     new DataView(padded.buffer).setUint16(0, raw.length);
     padded.set(raw, 2);
     const iv = getRandomValues(new Uint8Array(cfg.IV_BYTES || 12));
@@ -619,7 +630,7 @@ export function createRatchet(opts = {}) {
     initiatorSession, responderSession,
     buildPreKeyMessage, parsePreKeyMessage,
     initiatorHandshake, responderHandshake, bundleFromRelay,
-    groupSenderEncrypt, groupSenderDecrypt, groupDecryptV3,
+    groupSenderEncrypt, groupSenderDecrypt, groupDecryptV3, padLen,
     _cfg: cfg,
   };
 }
