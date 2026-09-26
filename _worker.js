@@ -1082,6 +1082,17 @@ async function handleGroupCreate(body, env, request) {
   const creatorCaps = sanitizeCaps(caps);
   if (creatorCaps) creatorRecord.caps = creatorCaps;
 
+  // Optional Ed25519 auth (checkGroupAuth; mandatory under GROUP_REQUIRE_AUTH — same
+  // verified-when-present rollout as the other group ops this flag already covers).
+  // creatorId + creatorPub are both attacker-chosen and the victim's real pub is public
+  // via prekey/fetch, so unsigned create can attribute a group — and its creator role —
+  // to anyone's identity. No invite token exists yet, so the challenge's token slot is
+  // empty; `bind` carries the stored creator fields so a captured signature can't be
+  // replayed with a swapped pub or renamed attribution.
+  const cAuth = await checkGroupAuth(env, request, 'create', '', creatorId, body.ts, body.sig,
+    await sha256Short(JSON.stringify([creatorPub, name, creatorName || '', creatorCaps || []])));
+  if (cAuth) return cAuth;
+
   const group = {
     name: name.slice(0, 50),
     creatorId,

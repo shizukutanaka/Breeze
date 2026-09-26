@@ -45,7 +45,7 @@ id = ""  # ← REQUIRED: paste your KV namespace ID here
 # clients that predate this signing (check CHANGELOG.md for when each call started signing).
 # wrangler pages secret put PRESENCE_REQUIRE_AUTH      # true — reject unsigned presence writes
 # wrangler pages secret put ALIAS_REQUIRE_AUTH         # true — reject unsigned @alias registration
-# wrangler pages secret put GROUP_REQUIRE_AUTH         # true — reject unsigned group kick/rename/admin/leave/delete/transfer
+# wrangler pages secret put GROUP_REQUIRE_AUTH         # true — reject unsigned group create/kick/rename/admin/leave/delete/transfer
 # wrangler pages secret put PUSH_REQUIRE_AUTH          # true — reject unsigned push subscribe/unsubscribe
 # wrangler pages secret put TURN_REQUIRE_AUTH          # true — reject unsigned TURN credential requests
 # wrangler pages secret put QUEUE_REQUIRE_AUTH         # true — reject unsigned msg/sealed poll + sealed ack (queue read/delete)
