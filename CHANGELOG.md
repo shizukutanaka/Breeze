@@ -1,6 +1,6 @@
 # Changelog
 
-## Test-infra hardening: mockKV enforces real KV TTLs; version strings + health advertisement pinned against drift (branch devin/<ts>-infra-hygiene, 2026-09-26)
+## Test-infra hardening: mockKV enforces real KV TTLs; version strings + health advertisement pinned against drift (branch devin/1790409129-infra-hygiene, 2026-09-26)
 
 vitest 819 → **832**; `tests/helpers/mockKV.js`, `tests/worker-health.test.js`, `tests/version-sync.test.js` (new), `CHANGELOG.md` — test-infra only, no deployed code.
 
