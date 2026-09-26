@@ -1,5 +1,12 @@
 # Changelog
 
+## Mutation signals bound to the sender's own conversation — cross-contact edit/delete/reaction forgery closed (branch devin/1790422612-round22, 2026-09-26)
+
+vitest 868 (+0); `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json`.
+
+- `handleIncoming`'s encrypted-signal path (`isSignal`: edit / delete / reaction) required only `stored && !stored.mine` — a contact could forge `signal.msgId` as `<otherContactId>:<ts>` (both halves guessable: contact ids are pub-derived, timestamps ms-precision) and rewrite, delete, or react to a message in **someone else's conversation**, without ever seeing its ciphertext.
+- All three mutation types now also require `stored.contactId === contactId` — the signal may only touch a message stored under the sender's own contact. Self-sync mutations are unaffected (that path is verified against the signed device registry, so the sender IS me).
+
 ## Mobile bundle shipped English-only: prepare.js never copied locales/; signing injection now idempotent (branch devin/1790411492-mobile-locales, 2026-09-26)
 
 vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/mobile-assets.test.js`, `CHANGELOG.md`.
