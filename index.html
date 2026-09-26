@@ -9548,7 +9548,15 @@ async function initMessenger(dbName) {
         // Validate and cap invite fields to prevent storage DoS from a malicious contact
         const inviteGroupId = typeof invite.groupId === 'string' ? invite.groupId.slice(0, 64) : null;
         const inviteName = typeof invite.name === 'string' ? invite.name.slice(0, 64) : 'Group';
-        const inviteMembers = (Array.isArray(invite.members) ? invite.members : []).slice(0, CONFIG.GROUP_MAX);
+        // Member entries are (id, pubB64) bindings used for fan-out encryption — enforce
+        // id === pubB64.slice(0,12), otherwise a crafted invite can bind a victim member's
+        // id to an attacker-controlled pub and every group message encrypts to the attacker.
+        const inviteMembers = (Array.isArray(invite.members) ? invite.members : [])
+          .filter(m => m && typeof m.id === 'string' && m.id.length <= 64 &&
+                       typeof m.pubB64 === 'string' && m.pubB64.length <= 128 &&
+                       m.pubB64.slice(0, 12) === m.id)
+          .slice(0, CONFIG.GROUP_MAX)
+          .map(m => ({ id: m.id, pubB64: m.pubB64, name: typeof m.name === 'string' ? m.name.slice(0, 64) : '' }));
         if (invite.type === 'group_invite' && inviteGroupId && !(await dbGet('contacts', inviteGroupId))) {
           await dbPut('contacts', { id: inviteGroupId, name: inviteName, isGroup: true, members: inviteMembers, addedAt: Date.now(), unread: 0, pubB64: '' });
           if (!_focusActive()) playNotif();
