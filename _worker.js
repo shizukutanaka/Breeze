@@ -1853,11 +1853,6 @@ async function handleTurn(body, env, request) {
 }
 
 // ============================================================
-// OGP — Fetch link preview metadata (title, description, image)
-// Server-side fetch to bypass CORS restrictions
-// ============================================================
-
-// ============================================================
 // MULTI-ACCOUNT — Plan-based subscription
 // Free=1, Lite($0.99)=2, Plus($5.99)=4, Pro($19.99)=unlimited
 // ============================================================
@@ -2707,8 +2702,9 @@ function json(data, status, request, _rid) {
 
 async function sha256Short(text) {
   // 16 bytes (32 hex chars) → 2^64 birthday-collision resistance, up from 8 bytes (2^32).
-  // KV cache keys are 'ogp:' prefixed; the extra 16 chars are negligible
-  // vs. the 512-byte KV key limit and removes the theoretically-breakable 2^32 window.
+  // Used for KV keys that embed untrusted values (e.g. otp_lock:{userId}:{ipHash});
+  // the extra chars are negligible vs. the 512-byte KV key limit and remove the
+  // theoretically-breakable 2^32 window.
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return Array.from(new Uint8Array(buf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
 }
