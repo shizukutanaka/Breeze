@@ -1,6 +1,6 @@
 # Changelog
 
-## Worker dispatch hygiene pinned as permanent gates: every endpoint rate-limited, every response security-headed, unknown paths 404 (branch devin/<ts>-worker-hygiene, 2026-09-26)
+## Worker dispatch hygiene pinned as permanent gates: every endpoint rate-limited, every response security-headed, unknown paths 404 (branch devin/1790408295-worker-hygiene, 2026-09-26)
 
 vitest 819 → **823**; `tests/worker-hygiene.test.js` (new), `_worker.js`, `CHANGELOG.md` — worker-only, no index.html.
 
