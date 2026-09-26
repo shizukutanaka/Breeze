@@ -1671,6 +1671,11 @@ const _I = {
     scanning: 'Scanning...',
     toastInvalidQR: 'Not a Breeze invite QR code',
     toastCameraFail: 'Camera access denied',
+    verifyQrBtn: 'Show verification QR',
+    verifyQrTitle: 'Verification QR — your contact scans this to confirm your key',
+    qrVerifyNotContact: 'Scanned key does not match any contact',
+    qrVerifiedAt: 'Verified in person on {0}',
+    logQrVerified: 'QR verification: key confirmed for {0}',
     compressMode: 'Image compression',
     compressOff: 'Off (original quality)',
     compressLossless: 'Lossless (resize only)',
@@ -5985,6 +5990,10 @@ async function initMessenger(dbName) {
         await addContact(addKey, P.get('name') || t('newContact'));
       }
     }
+    // Verify QR opened as a link (phone camera scan → ?verify=pub) — same ceremony
+    // as the in-app scan: compare against the pinned contact key.
+    const verifyKey = P.get('verify');
+    if (verifyKey && verifyKey !== myPubB64) await _verifyQrScan(verifyKey);
     // Auto-join group from URL (?join=token)
     if (joinToken) await processJoinToken(joinToken);
     // Auto-open settings from URL (?settings — PWA manifest "Settings" shortcut).
@@ -6041,6 +6050,8 @@ async function initMessenger(dbName) {
       if (addKey.startsWith('@')) { await resolveAndAdd(addKey); }
       else { await addContact(addKey, P.get('name') || t('newContact')); }
     }
+    const verifyKey2 = P.get('verify');
+    if (verifyKey2 && verifyKey2 !== myPubB64) await _verifyQrScan(verifyKey2);
     // Auto-join group
     if (joinToken) await processJoinToken(joinToken);
     _openSettingsFromUrl();
@@ -11245,9 +11256,18 @@ async function initMessenger(dbName) {
         <div class="i-safety-num">${num}</div>
         <div class="text-xs color-t3 mb-3">${t('safetyDesc')}</div>
         <div class="text-xs mb-3" id="kt-audit-status">${esc(t('ktChecking'))}</div>
+        <div class="text-xs color-g mb-3" id="qr-verified-line">${contact.qrVerifiedAt ? esc(t('qrVerifiedAt', new Date(contact.qrVerifiedAt).toLocaleDateString())) : ''}</div>
         <button class="btn btn-o btn-sm" data-close="overlay">${t('close')}</button>
+        <button class="btn btn-g btn-sm" id="show-verify-qr">${t('verifyQrBtn')}</button>
       </div>`);
       overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+      overlay.querySelector('#show-verify-qr')?.addEventListener('click', () => {
+        // C13: my verify QR carries ?verify=<myPub>; a peer scanning it compares the
+        // key against their pinned copy of MY contact — closes the I1 MITM gap
+        // in person without exposing the pub over a channel.
+        overlay.remove();
+        showQRModal(location.origin + location.pathname + '?verify=' + encodeURIComponent(myPubB64), 'verifyQrTitle');
+      });
       document.body.appendChild(overlay);
       _auditKeyTransparency(contact).then(audit => {
         const el = overlay.querySelector('#kt-audit-status');
@@ -11795,7 +11815,29 @@ async function initMessenger(dbName) {
     return canvas;
   }
 
-  function showQRModal(url) {
+  // C13 scan-to-verify: the holder's QR encodes ?verify=<their pubkey>. The
+  // scanner's client compares that key against its pinned contact key — match
+  // proves (in person) that no MITM ever substituted a key for this pair.
+  // We deliberately do NOT use ?add= here: adding is unauthenticated TOFU, while
+  // this path is a TOFU-pin confirmation against an existing contact.
+  async function _verifyQrScan(scannedPub) {
+    try {
+      const pub = String(scannedPub || '').trim();
+      if (!/^[A-Za-z0-9+/]{40,}={0,2}$/.test(pub)) { showToast(t('toastInvalidQR'), 'error'); return; }
+      const contact = await dbGet('contacts', pub.slice(0, 12));
+      if (!contact || contact.isGroup) { showToast(t('qrVerifyNotContact'), 'error'); return; }
+      if (contact.pubB64 !== pub) {
+        showKeyChangeWarning(contact.id, contact.pubB64, 'qr-scan-mismatch');
+        return;
+      }
+      contact.qrVerifiedAt = Date.now();
+      await dbPut('contacts', contact);
+      auditLog('security', t('logQrVerified', contact.name || contact.id));
+      showSafetyNumber(contact);
+    } catch(e) { _dbg(e, 'qr-verify'); }
+  }
+
+  function showQRModal(url, titleKey) {
     // Remove existing modal
     document.querySelectorAll('.qr-modal').forEach(m => m.remove());
 
@@ -11807,7 +11849,7 @@ async function initMessenger(dbName) {
     card.className = 'qr-modal';
 
     const title = document.createElement('div');
-    title.textContent = t('uiShareId');
+    title.textContent = t(titleKey || 'uiShareId');
     title.className = 'cmd-title';
 
     const qr = generateQR(url);
@@ -11863,7 +11905,10 @@ async function initMessenger(dbName) {
                 if (value.includes('?add=')) {
                   window.location.href = value;
                 } else {
-                  showToast(t('toastInvalidQR'), 'error');
+                  // C13: verify QRs are handled in place — no navigation, no contact add.
+                  const v = value.match(/[?&]verify=([^&\s]+)/);
+                  if (v) { _verifyQrScan(decodeURIComponent(v[1])); }
+                  else showToast(t('toastInvalidQR'), 'error');
                 }
                 return;
               }

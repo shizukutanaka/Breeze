@@ -1,5 +1,16 @@
 # Changelog
 
+## C13 QR scan-to-verify ceremony: ?verify= QR + in-app scan compare against pinned key (branch devin/1790419282-round11, 2026-09-26)
+
+vitest 868 (+0); `index.html`, `locales/ja.json`, `_headers`, `tauri/src-tauri/tauri.conf.json`, `CHANGELOG.md`.
+
+- `/verify` (safety number) gained a "Show verification QR" button — encodes `?verify=<myPubB64>`, deliberately NOT `?add=` (adding is unauthenticated TOFU; this path confirms an existing pin).
+- `_verifyQrScan(pub)`: finds contact by `pub.slice(0,12)`, compares `contact.pubB64` — match stamps `contact.qrVerifiedAt` + audit-log line + reopens the safety modal; mismatch fires `showKeyChangeWarning` (MITM alarm); unknown id toasts.
+- In-app scan: the QR modal's BarcodeDetector loop now routes `?verify=` to the compare path instead of rejecting it as a non-invite QR.
+- Deep link: `?verify=` handled at boot in both `hasId` and post-identity-creation branches, so a phone camera scan of the QR opens the same ceremony.
+- Safety modal shows a "Verified in person on {date}" line once `qrVerifiedAt` is set.
+- Remaining C13 gap: verification is one-directional per scan (each side must show their QR to the other — same as Signal).
+
 ## Mobile bundle shipped English-only: prepare.js never copied locales/; signing injection now idempotent (branch devin/1790411492-mobile-locales, 2026-09-26)
 
 vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/mobile-assets.test.js`, `CHANGELOG.md`.
