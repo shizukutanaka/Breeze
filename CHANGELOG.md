@@ -1,5 +1,15 @@
 # Changelog
 
+## Worker: group create binds creatorPub to creatorId (same rule join already enforces) (branch devin/1790424181-round28, 2026-09-26)
+
+vitest 885 (+1); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
+
+- `handleGroupJoin` has always rejected `memberPub` values that don't start with `memberId` (KEY_MISMATCH — account id is the pub's prefix), but `handleGroupCreate` stored `creatorId`/`creatorPub` unbound. An unsigned create could register `creatorId=<victim>` + `creatorPub=<attacker>`: the roster and `creatorId`-gated admin checks attribute the group to the victim while every member-side fan-out encrypts the "victim's" share to the attacker's key.
+- The fix is the same syntactic prefix check, applied unconditionally — no auth flag, no signature required — matching join exactly. The real client sends `creatorId: myId, creatorPub: myPubB64` (`myId = pubB64.slice(0,12)`), so legitimate creates are unaffected.
+- Tests: mismatch rejected with KEY_MISMATCH + bound pair still creates; ~40 existing fixtures updated to bound id/pub pairs so they keep exercising their intended paths (the replayed-signature test now swaps to a *bound-but-different* pub and still reaches SIG_INVALID).
+
+---
+
 ## Lost-write recovery sweeps the rest of the worker's multi-actor KV mutations (branch devin/1790415615-grp-sig-push-lost-write, 2026-09-26)
 
 vitest 849 (+16); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.

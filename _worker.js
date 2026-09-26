@@ -1116,6 +1116,12 @@ async function handleGroupCreate(body, env, request) {
   const creatorPub = rawCreatorPub.slice(0, 200);
   if (!name || !creatorId || !creatorPub) return json({ error: 'name, creatorId, creatorPub required', code: 'MISSING_FIELDS' }, 400, request);
   if (!validateUserId(creatorId)) return json({ error: 'invalid creatorId', code: 'INVALID_USER_ID' }, 400, request);
+  // Same id↔pub binding join already enforces (account id = pubB64 prefix): without it an
+  // unsigned create registers creatorId=<victim> + creatorPub=<attacker>, so the roster
+  // shows the victim as creator while every member encrypts the victim's share to the
+  // attacker's key. Syntactic check — no auth flag needed.
+  if (!creatorPub.startsWith(creatorId))
+    return json({ error: 'creatorPub does not match creatorId', code: 'KEY_MISMATCH' }, 400, request);
   // v3.1: Validate name length
   if (name.length > 50) return json({ error: 'Group name max 50 chars', code: 'INVALID_NAME' }, 400, request);
   // v3.1: Validate initial member count
