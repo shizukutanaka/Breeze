@@ -2897,28 +2897,35 @@ if (P.get('text') || P.get('url') || P.get('title')) {
 }
 
 // ======================== CRYPTO ========================
-async function deriveKey(passphrase, salt, usage) {
-    try {  
+async function deriveKey(passphrase, salt, usage, iter) {
+    try {
     const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
-    return crypto.subtle.deriveKey({name:'PBKDF2', salt, iterations:CONFIG.PBKDF2_ITERATIONS, hash:'SHA-256'}, km, {name:'AES-GCM',length:CONFIG.AES_KEY_BITS}, false, [usage]);
-  
+    return crypto.subtle.deriveKey({name:'PBKDF2', salt, iterations:iter || CONFIG.PBKDF2_ITERATIONS, hash:'SHA-256'}, km, {name:'AES-GCM',length:CONFIG.AES_KEY_BITS}, false, [usage]);
+
     } catch(_e) { _dbg(_e, 'deriveKey'); }
   }
 
 async function encrypt(passphrase, plaintext) {
-    try {  
+    try {
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const iv = crypto.getRandomValues(new Uint8Array(CONFIG.IV_BYTES));
-    const key = await deriveKey(passphrase, salt, 'encrypt');
+    // File backups protect the identity's PRIVATE keys — use the same 600k iterations as
+    // the cloud backup + at-rest wrap, not the legacy 100k file default. The count is
+    // recorded in the payload (`k`) so old 100k files still decrypt (floor-checked there).
+    const key = await deriveKey(passphrase, salt, 'encrypt', CONFIG.PBKDF2_AT_REST_ITERATIONS);
     const ct = await crypto.subtle.encrypt({name:'AES-GCM',iv}, key, new TextEncoder().encode(plaintext));
-    return { s: arr(salt), i: arr(iv), d: arr(new Uint8Array(ct)) };
-  
+    return { s: arr(salt), i: arr(iv), d: arr(new Uint8Array(ct)), k: CONFIG.PBKDF2_AT_REST_ITERATIONS };
+
     } catch(_e) { _dbg(_e, 'encrypt'); }
   }
 
 async function decrypt(passphrase, payload) {
     try {
-    const key = await deriveKey(passphrase, u8(payload.s), 'decrypt');
+    // Iterations come from the file — floor at the legacy 100k so a tampered file can't
+    // set iter=1 to make offline brute-force nearly free; cap to bound deriveKey CPU.
+    const k = (typeof payload.k === 'number' && payload.k >= CONFIG.PBKDF2_ITERATIONS && payload.k <= 10000000)
+      ? payload.k : CONFIG.PBKDF2_ITERATIONS;
+    const key = await deriveKey(passphrase, u8(payload.s), 'decrypt', k);
     const pt = await crypto.subtle.decrypt({name:'AES-GCM',iv:u8(payload.i)}, key, u8(payload.d));
     return new TextDecoder().decode(pt);
 
@@ -10627,10 +10634,15 @@ async function initMessenger(dbName) {
 
       await dbPut('identity', data.identity, 'keys');
       for (const c of (data.contacts || [])) {
-        // Validate required fields before storing — a malformed backup entry could corrupt the DB
-        if (typeof c?.id !== 'string' || !c.id || c.id.length > 64 ||
+        // Validate required fields before storing — a malformed backup entry could corrupt the DB.
+        // Group contacts carry pubB64:'' — requiring it non-empty silently dropped every group on
+        // restore. For 1:1 contacts also require id === pubB64.slice(0,12): a crafted entry can
+        // otherwise overwrite a known contact's id-slot with a different key.
+        if (c?.isGroup) {
+          if (typeof c?.id !== 'string' || !/^g_[A-Za-z0-9]{1,64}$/.test(c.id)) continue;
+        } else if (typeof c?.id !== 'string' || !c.id || c.id.length > 64 ||
             typeof c?.pubB64 !== 'string' || !c.pubB64 || c.pubB64.length > 128 ||
-            !/^[A-Za-z0-9+/=]+$/.test(c.pubB64)) continue;
+            !/^[A-Za-z0-9+/=]+$/.test(c.pubB64) || c.pubB64.slice(0, 12) !== c.id) continue;
         await dbPut('contacts', c);
       }
 
@@ -10944,10 +10956,14 @@ async function initMessenger(dbName) {
       // Restore
       if (data.identity) await dbPut('identity', data.identity, 'keys');
       if (data.contacts) for (const c of data.contacts) {
-        // Validate required fields before storing — a malformed backup entry could corrupt the DB
-        if (typeof c?.id !== 'string' || !c.id || c.id.length > 64 ||
+        // Same validation as file restore: groups carry pubB64:'' (drop the non-empty
+        // requirement or every group is silently lost); 1:1 contacts must satisfy
+        // id === pubB64.slice(0,12) so a crafted entry can't overwrite another contact's slot.
+        if (c?.isGroup) {
+          if (typeof c?.id !== 'string' || !/^g_[A-Za-z0-9]{1,64}$/.test(c.id)) continue;
+        } else if (typeof c?.id !== 'string' || !c.id || c.id.length > 64 ||
             typeof c?.pubB64 !== 'string' || !c.pubB64 || c.pubB64.length > 128 ||
-            !/^[A-Za-z0-9+/=]+$/.test(c.pubB64)) continue;
+            !/^[A-Za-z0-9+/=]+$/.test(c.pubB64) || c.pubB64.slice(0, 12) !== c.id) continue;
         await dbPut('contacts', c);
       }
       if (data.messages) for (const m of data.messages) await dbPut('messages', m);

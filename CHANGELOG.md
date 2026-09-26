@@ -1,5 +1,12 @@
 # Changelog
 
+## Backup hardening: file backups at 600k PBKDF2 (versioned payload); restores no longer drop group contacts (branch devin/1790422392-round21, 2026-09-26)
+
+vitest 868 (+0); `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json`.
+
+- File backups (`/export`-family, `encrypt()`/`decrypt()`) derived the AES key at **PBKDF2 100k iterations** while the cloud backup of the same private keys already used `PBKDF2_AT_REST_ITERATIONS` (600k) — the weaker path was the one a stolen file would be brute-forced against. New file backups encrypt at 600k and record `k` in the payload; `decrypt` reads it with a floor of `PBKDF2_ITERATIONS` (a tampered file can't set iter=1 to make offline brute-force nearly free) and a 10M cap (DoS bound), falling back to 100k for legacy files.
+- Both restore paths (`restoreBackup` file, `restoreCloudBackup` cloud) required `c.pubB64` non-empty — but group contacts carry `pubB64: ''`, so **every group was silently dropped on restore**. Groups now validate as `{isGroup: true, id: /^g_[A-Za-z0-9]{1,64}$/}`; 1:1 contacts additionally require `id === pubB64.slice(0,12)` so a crafted entry can't overwrite another contact's id-slot with a different key.
+
 ## Mobile bundle shipped English-only: prepare.js never copied locales/; signing injection now idempotent (branch devin/1790411492-mobile-locales, 2026-09-26)
 
 vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/mobile-assets.test.js`, `CHANGELOG.md`.
