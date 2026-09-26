@@ -2354,6 +2354,48 @@ describe('msg send / poll (1:1 relay path)', () => {
     expect(messages[0].payload).toBe('ENCRYPTED');
   });
 
+  // `inbox:{to}` is a single KV value mutated read-modify-write, and KV is
+  // last-write-wins: two senders hitting the same recipient at once both read the old
+  // inbox and one message vanishes — with both senders told 200. The sealed queue got
+  // this recovery first (see its test); the plain /msg path is the fallback when sealed
+  // sending is unavailable, so it must not lose the race either. The send path now reads
+  // the key back and re-appends if its own msg.id is missing. This simulates the losing
+  // race deterministically by clobbering the inbox at the moment of the put.
+  it('recovers a message that a concurrent writer clobbered (lost-write recovery)', async () => {
+    const env = makeEnv();
+    const key = 'inbox:msgrace01';
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbered = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true; // the other sender's write lands last and wins — our entry is gone
+        await origPut(k, JSON.stringify([{ id: 'other00msgid', from: 'carol0001', payload: 'OTHER-MSG', ts: Date.now() }]), o);
+      }
+    };
+    const res = await handleMsgSend(
+      { to: 'msgrace01', from: 'alice001', payload: 'MINE-must-survive', ts: Date.now() },
+      ip, env, req({}),
+    );
+    expect(res.status).toBe(200);
+    expect(clobbered).toBe(true); // the race really happened
+
+    const { messages } = await (await handleMsgPoll({ id: 'msgrace01', lastTs: 0 }, env, req({}))).json();
+    const payloads = messages.map((m) => m.payload);
+    expect(payloads).toContain('MINE-must-survive'); // recovered...
+    expect(payloads).toContain('OTHER-MSG');         // ...without evicting the winner
+  });
+
+  it('does not re-append when the inbox write landed cleanly (no duplicates in the common case)', async () => {
+    const env = makeEnv();
+    await handleMsgSend(
+      { to: 'norace01', from: 'alice001', payload: 'only-once', ts: Date.now() },
+      ip, env, req({}),
+    );
+    const { messages } = await (await handleMsgPoll({ id: 'norace01', lastTs: 0 }, env, req({}))).json();
+    expect(messages.filter((m) => m.payload === 'only-once').length).toBe(1);
+  });
+
   it('assigns a unique server-side message id (same-millisecond cursor groundwork)', async () => {
     const env = makeEnv();
     const ts = Date.now();
