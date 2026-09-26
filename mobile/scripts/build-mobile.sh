@@ -57,9 +57,16 @@ if [ "$PLATFORM" = "android" ]; then
     ALIAS="${KEY_ALIAS:-breeze}"
     PASS="${KEYSTORE_PASS:?KEYSTORE_PASS required}"
 
-    # Write signing config
-    cat >> "$DIR/android/app/build.gradle" << GRADLE
+    # Write signing config. The heredoc previously appended unconditionally, so
+    # a second `release` run left two `android { signingConfigs ... }` blocks in
+    # build.gradle and Gradle failed on the duplicates — now the injected block is
+    # sentinel-marked and any earlier copy is stripped first (idempotent re-runs).
+    GRADLE_FILE="$DIR/android/app/build.gradle"
+    sed -i.bak '/# breeze-release-signing-begin/,/# breeze-release-signing-end/d' "$GRADLE_FILE"
+    rm -f "$GRADLE_FILE.bak"  # the backup would contain the plaintext store password
+    cat >> "$GRADLE_FILE" << GRADLE
 
+# breeze-release-signing-begin
 android {
     signingConfigs {
         release {
@@ -76,6 +83,7 @@ android {
         }
     }
 }
+# breeze-release-signing-end
 GRADLE
     echo "✓ Signing configured"
   fi

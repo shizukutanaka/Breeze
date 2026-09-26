@@ -1,5 +1,15 @@
 # Changelog
 
+## Mobile bundle shipped English-only: prepare.js never copied locales/; signing injection now idempotent (branch devin/1790411492-mobile-locales, 2026-09-26)
+
+vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/mobile-assets.test.js`, `CHANGELOG.md`.
+
+- `mobile/prepare.js` `ASSETS` listed only the app shell — `locales/*.json` was never copied into `www/`, but `index.html` fetches `locales/${LANG}.json` at boot, so the Capacitor Android/iOS build silently forced all 7 shipped locales back to English. Now globs `locales/*.json` (required) so a future locale file can't be left out by a table edit.
+- `mobile/scripts/build-mobile.sh` release path appended an `android { signingConfigs … }` block to `build.gradle` unconditionally — a second release build left duplicate blocks and Gradle failed. Block is now sentinel-marked and stripped before re-injection; the `sed -i.bak` backup (which would contain the plaintext store password) is deleted immediately.
+- `prepare.js` honors `BREEZE_WWW` (test override, defaults unchanged); `tests/mobile-assets.test.js` runs the real copy into a temp dir and asserts every locale + shell file lands and is hashed into `.build-manifest.json`.
+
+---
+
 ## Skipped message keys now expire (I7, the last pending P0) — plus a forged-group-ciphertext could persistently desync a member (branch devin/1790400137-i7-skipped-key-ttl, 2026-09-26)
 
 830 vitest (819 → **830**); Playwright E2E 60 unchanged; `index.html`, `src/crypto/ratchet.js`, `tests/mirror-drift.test.js`, `tests/ratchet.test.js`, `docs/ROADMAP.md`, `CHANGELOG.md`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation).
