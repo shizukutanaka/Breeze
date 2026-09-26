@@ -1619,6 +1619,24 @@ describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
     expect(fetch2.status).toBe(404);
   });
 
+  // devices:{userId} (the signed multi-device registry: root pub + device pubs/names) and
+  // sealed:{userId}:dropped (the sealed-queue overflow counter, 1-week TTL) are user-linked
+  // key material + metadata that previously survived erasure for months.
+  it('erases the device registry and sealed drop counter too', async () => {
+    const env = makeEnv();
+    const userId = 'deluser02';
+    const { ed } = await registeredAccount(env, userId);
+    await env.KV.put(`devices:${userId}`, JSON.stringify({ root: 'R', devices: [{ pub: 'R' }], ts: 1, sig: 's' }));
+    await env.KV.put(`sealed:${userId}:dropped`, '3');
+    const ts = Date.now();
+    const res = await handleAccountDelete({ userId, ts, sig: await signDelete(ed, userId, ts) }, env, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.erased).toContain('devices');
+    expect(await env.KV.get(`devices:${userId}`)).toBeNull();
+    expect(await env.KV.get(`sealed:${userId}:dropped`)).toBeNull();
+  });
+
   // The relay has no reverse index from a user to their @alias or their groups, so a wipe
   // that omits them leaves the alias squatting forever and the account readable in every
   // group roster for the full 30-day TTL. The Worker built the release path and documented
@@ -3820,6 +3838,62 @@ describe('signal relay', () => {
     // After the poll the KV should be cleaned. Carol polls the same room → empty.
     const r2 = await handleSignal({ room: 'testroom-nots', sender: 'carol', type: 'poll' }, '1.2.3.6', e, req({}));
     expect((await r2.json()).messages).toHaveLength(0);
+  });
+
+  // Same lost-write class as sealed/msg send: offer and answer race in parallel during
+  // call setup — two concurrent writes, last-write-wins, and the dropped SDP or ICE
+  // candidate fails the call with no error surfaced. The store path now reads back and
+  // re-appends its own signal when missing.
+  it('recovers a signal clobbered by a concurrent signal write (lost-write)', async () => {
+    const e = makeEnv();
+    const key = 'sig:r-race';
+    const origPut = e.KV.put.bind(e.KV);
+    let clobbered = false;
+    e.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true; // the peer's racing write lands last and wins
+        await origPut(k, JSON.stringify([{ sender: 'bob', type: 'answer', data: 'THEIR-SDP', ts: Date.now() }]), o);
+      }
+    };
+    const res = await handleSignal({ room: 'r-race', sender: 'alice', type: 'offer', data: 'MY-SDP' }, '1.2.3.4', e, req({}));
+    expect(res.status).toBe(200);
+    expect(clobbered).toBe(true);
+    const stored = JSON.parse(await e.KV.get(key));
+    const datas = stored.map(s => s.data).sort();
+    expect(datas).toEqual(['MY-SDP', 'THEIR-SDP']); // both signals survive
+  });
+
+  // The poll cleanup rewrote the keep-list computed on the value it first READ: a signal
+  // landing in the gap was clobbered — lost offer/answer/ICE. The rewrite now re-filters
+  // the freshest value. Injects the racing signal at the poll's first get.
+  it('poll cleanup does not clobber a signal that lands in the read->write window', async () => {
+    const e = makeEnv();
+    const key = 'sig:r-prace';
+    // One malformed signal (no ts) forces the cleanup-rewrite path; one fresh peer signal.
+    await e.KV.put(key, JSON.stringify([
+      { sender: 'alice', type: 'offer', data: 'old-no-ts' },   // dropped by the ts guard
+      { sender: 'alice', type: 'offer', data: 'freshest' , ts: Date.now() },
+    ]));
+    const origGet = e.KV.get.bind(e.KV);
+    const origPut = e.KV.put.bind(e.KV);
+    let raced = false;
+    e.KV.get = async (k) => {
+      const v = await origGet(k);
+      if (k === key && !raced) {
+        raced = true; // an ICE candidate lands between the poll's read and cleanup write
+        const q = JSON.parse(v);
+        q.push({ sender: 'alice', type: 'ice', data: 'RACING-CAND', ts: Date.now() });
+        await origPut(k, JSON.stringify(q));
+      }
+      return v;
+    };
+    await handleSignal({ room: 'r-prace', sender: 'bob', type: 'poll' }, '1.2.3.5', e, req({}));
+    expect(raced).toBe(true);
+    const stored = JSON.parse(await origGet(key));
+    const datas = stored.map(s => s.data);
+    expect(datas).toContain('RACING-CAND'); // the racing candidate survives the cleanup
+    expect(datas).not.toContain('old-no-ts'); // while the malformed entry is still pruned
   });
 });
 
