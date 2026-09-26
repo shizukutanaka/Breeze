@@ -1,6 +1,6 @@
 # Changelog
 
-## Gate-suite self-audit: shared maskJs() fixes unreachable-branch's regex blind spot; validate.sh uses mktemp (branch devin/<ts>-gate-audit, 2026-09-26)
+## Gate-suite self-audit: shared maskJs() fixes unreachable-branch's regex blind spot; validate.sh uses mktemp (branch devin/1790408765-gate-audit, 2026-09-26)
 
 vitest 819 → **824**; `tools/lib/mask-js.mjs` (new shared lib), `tools/unreachable-branch.mjs`, `tools/closure-boundary.mjs`, `validate.sh`, `tests/tools-hygiene.test.js` (new) — dev-tree only, no deployed code.
 
