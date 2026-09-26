@@ -1,6 +1,6 @@
 # Changelog
 
-## Desktop CSP fallback now fails CLOSED; mobile allowNavigation narrowed to the real host (branch devin/<ts>-shell-hardening, 2026-09-26)
+## Desktop CSP fallback now fails CLOSED; mobile allowNavigation narrowed to the real host (branch devin/1790409387-shell-hardening, 2026-09-26)
 
 vitest 832 → **834**; `desktop/csp-guard.js`, `mobile/capacitor.config.json`, `tests/csp-guard.test.js`, `tests/version-sync.test.js`, `CHANGELOG.md` — no web-app files.
 
