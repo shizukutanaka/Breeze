@@ -565,8 +565,20 @@ async function handleMsgPoll(body, env, request) {
   // Remove delivered messages older than 10 seconds (grace period for multi-tab)
   const keep = all.filter(m => { if (isExpired(m)) return false; const t = Number.isFinite(m.ts) ? m.ts : 0; return t > cutoff || (nowPoll - t) < TIMEOUT_MS.MULTITAB_GRACE; });
   if (keep.length < all.length) {
-    if (keep.length === 0) await kvDel(env, key);
-    else await kvPut(env, key, JSON.stringify(keep), { expirationTtl: TTL.WEEK });
+    // Last-write-wins guard: a send landing between our read and this put would be
+    // clobbered by a rewrite of the stale snapshot — AFTER the sender's own read-back
+    // recovery already reported success. Re-read and re-run the filter on the current
+    // value instead; the grace clause keeps any racing arrival (fresh ts > cutoff or
+    // within MULTITAB_GRACE), so a merge is just the filter applied to fresher data.
+    const freshRaw = await kvGet(env, key);
+    const freshAll = freshRaw ? safeJsonParse(freshRaw, []) : [];
+    if (Array.isArray(freshAll)) {
+      const freshKeep = freshAll.filter(m => { if (isExpired(m)) return false; const t = Number.isFinite(m.ts) ? m.ts : 0; return t > cutoff || (nowPoll - t) < TIMEOUT_MS.MULTITAB_GRACE; });
+      if (freshKeep.length === 0) await kvDel(env, key);
+      else if (freshKeep.length < freshAll.length) await kvPut(env, key, JSON.stringify(freshKeep), { expirationTtl: TTL.WEEK });
+      // freshKeep.length === freshAll.length: a concurrent writer already rewrote to a
+      // superset — nothing pruned, skip the write entirely (one less racing put).
+    }
   }
 
   return json({ messages: newMsgs }, 200, request);
@@ -834,6 +846,21 @@ async function handleAliasSet(body, env, request) {
   // Store (no TTL — aliases are permanent)
   const aliasSaved = await kvPut(env, `alias:${clean}`, JSON.stringify({ pub, name: sanitizeString(name, 64), setAt: Date.now() }));
   if (!aliasSaved) return json({ error: 'Failed to store alias', code: 'STORE_FAILED' }, 500, request);
+  // Check-then-act race guard: the alias-taken check above reads, then this writes,
+  // and KV has no compare-and-swap — two concurrent registrations of the same alias
+  // both pass the check and both write, so last-write-wins silently hands the handle
+  // to one registrant while BOTH get `ok` (the loser believes they own a handle that
+  // resolves to someone else's identity key — a silent impersonation-prone state).
+  // Read the record back: if a different pub landed, tell this caller the truth
+  // (conflict) instead of a false success. The whoever-reads-later caller always
+  // reports accurately; the residual sub-ms window before the winner's own write
+  // lands is the same honest limit the inbox/sealed read-back recovery accepts —
+  // CAS-correct claim requires Durable Objects (C10), but silent loss is now
+  // impossible: at least one of the two racers is told the alias was taken.
+  const aliasVerify = await kvGet(env, `alias:${clean}`);
+  const aliasData = aliasVerify ? safeJsonParse(aliasVerify) : null;
+  if (aliasData && aliasData.pub !== pub)
+    return json({ error: 'Alias already taken', code: 'ALIAS_TAKEN' }, 409, request);
   return json({ ok: true, alias: clean }, 200, request);
 }
 
@@ -2452,7 +2479,16 @@ async function handleSealedPoll(body, env, request) {
   // v3.6: Grace period — set short TTL instead of immediate delete
   // If client crashes after poll but before processing, messages survive 5 min
   // Client-side _replayCache + IDB dedup prevents re-rendering on re-poll
-  await kvPut(env, key, data, { expirationTtl: TTL.MIN * 5 }); // 5 min grace
+  // Re-read right before rewriting: putting back the stale `data` snapshot would
+  // clobber an envelope that arrived between our get and this put (same lost-write
+  // class as the send path) — AFTER that sender's read-back recovery already
+  // answered 200. Applying the TTL shrink to the freshest value keeps the grace
+  // semantics while narrowing the window to sub-ms (and lets the sender's own
+  // recovery still catch anything that survives the overlap).
+  const graceRaw = await kvGet(env, key);
+  if (graceRaw) await kvPut(env, key, graceRaw, { expirationTtl: TTL.MIN * 5 }); // 5 min grace
+  // graceRaw null: the queue vanished between our reads (expired/deleted) — nothing
+  // to grace; the messages snapshot we already returned stays correct regardless.
   // Record a high-water mark (max ts returned) so the later ACK clears ONLY what was
   // actually polled. handleSealedAck previously blind-deleted the whole queue, so any
   // envelope appended by handleSealedSend in the poll→ack window was destroyed

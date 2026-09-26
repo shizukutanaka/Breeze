@@ -2141,6 +2141,35 @@ describe('sealed sender send / poll / ack', () => {
     expect(polled.messages.filter((m) => m.envelope === 'only-once').length).toBe(1);
   });
 
+  // The poll's 5-minute grace rewrite used to put back the value it first READ — a
+  // stale snapshot. An envelope sent between that read and the rewrite was clobbered
+  // after the sender's own read-back recovery had already reported success. The grace
+  // write now re-reads and refreshes the CURRENT value. This injects the racing send
+  // at the moment of the poll's first get.
+  it('poll grace-rewrite does not clobber a send that lands in the read->put window', async () => {
+    const env = makeEnv();
+    const key = 'sealed:grace001';
+    await handleSealedSend({ to: 'grace001', envelope: 'm1-polled' }, env, req({}));
+    const origGet = env.KV.get.bind(env.KV);
+    const origPut = env.KV.put.bind(env.KV);
+    let raced = false;
+    env.KV.get = async (k) => {
+      const v = await origGet(k);
+      if (k === key && !raced) {
+        raced = true; // the racing send's write lands between poll-read and grace-put
+        const q = JSON.parse(v);
+        q.push({ envelope: 'm2-racing-send', ts: Date.now() + 1 });
+        await origPut(k, JSON.stringify(q));
+      }
+      return v;
+    };
+    const { messages } = await (await handleSealedPoll({ id: 'grace001' }, env, req({}))).json();
+    expect(raced).toBe(true);
+    expect(messages.map((m) => m.envelope)).toEqual(['m1-polled']); // pre-race snapshot — m2 arrives next poll
+    const stored = JSON.parse(await origGet(key));
+    expect(stored.map((m) => m.envelope)).toEqual(['m1-polled', 'm2-racing-send']); // both survive
+  });
+
   it('a queue that never overflows reports no drops', async () => {
     const env = makeEnv();
     await handleSealedSend({ to: 'quietone', envelope: 'just-one' }, env, req({}));
@@ -2451,6 +2480,37 @@ describe('msg send / poll (1:1 relay path)', () => {
     // instead of sitting out the 7-day inbox TTL).
     const kept = JSON.parse(await env.KV.get('inbox:bob00001'));
     expect(kept.some((m) => m.payload === 'EXPIRED')).toBe(false);
+  });
+
+  // The poll's keep-rewrite used to put back a keep-list computed on the value it
+  // first READ — a stale snapshot. A send landing between that read and the rewrite
+  // was clobbered (after the sender's read-back recovery had already said ok). The
+  // rewrite now re-reads and re-filters the CURRENT value. This injects the racing
+  // send at the moment of the poll's first get.
+  it('poll keep-rewrite does not clobber a send that lands in the read->put window', async () => {
+    const env = makeEnv();
+    const key = 'inbox:mpollrc1';
+    const now = Date.now();
+    // One message old enough to be pruned (>10s past the cursor): forces the rewrite path.
+    await env.KV.put(key, JSON.stringify([{ id: 'old000000001', from: 'alice001', payload: 'OLD', ts: now - 20000 }]));
+    const origGet = env.KV.get.bind(env.KV);
+    const origPut = env.KV.put.bind(env.KV);
+    let raced = false;
+    env.KV.get = async (k) => {
+      const v = await origGet(k);
+      if (k === key && !raced) {
+        raced = true; // the racing send's write lands between poll-read and keep-put
+        const q = JSON.parse(v);
+        q.push({ id: 'new000000002', from: 'alice001', payload: 'NEW-RACING', ts: Date.now() });
+        await origPut(k, JSON.stringify(q));
+      }
+      return v;
+    };
+    await (await handleMsgPoll({ id: 'mpollrc1', lastTs: now - 10000 }, env, req({}))).json();
+    expect(raced).toBe(true);
+    const stored = JSON.parse(await origGet(key));
+    // OLD is pruned; the racing NEW survives the rewrite.
+    expect(stored.map((m) => m.payload)).toEqual(['NEW-RACING']);
   });
 
   it('rejects a message with a timestamp outside ±5 min (replay guard)', async () => {
@@ -2868,6 +2928,43 @@ describe('alias set / get (PoW anti-spam)', () => {
     expect(results.alice.pub).toBe('PUBA');
     expect(Object.keys(results).length).toBeLessThanOrEqual(50);
   });
+
+  // The alias-taken check is check-then-act on one KV value (no compare-and-swap):
+  // two concurrent registrations of the same alias both pass the check and both
+  // write — last-write-wins, and BOTH used to get `ok`, leaving the loser believing
+  // they own a handle that resolves to someone else's identity key. The handler now
+  // reads the record back after its put and reports ALIAS_TAKEN when a different
+  // pub landed. This test simulates the losing race by clobbering the write.
+  it('reports ALIAS_TAKEN when a concurrent registration wins the alias (read-back)', async () => {
+    const env = makeEnv();
+    const pub = 'MYPUBKEY001';
+    const pow = await solvePoW(pub, 16, `${pub}:breeze-test`);
+    const key = 'alias:racealias1';
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbered = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true; // the other registrant's write lands last and wins
+        await origPut(k, JSON.stringify({ pub: 'OTHER_PUB', name: 'other', setAt: Date.now() }), o);
+      }
+    };
+    const res = await handleAliasSet({ alias: 'racealias1', pub, name: 'me', pow }, env, req({}));
+    expect(clobbered).toBe(true); // the race really happened
+    expect(res.status).toBe(409);
+    expect((await res.json()).code).toBe('ALIAS_TAKEN');
+  }, 60000); // PoW solve is probabilistic
+
+  it('still returns ok for a normal (unraced) alias registration', async () => {
+    const env = makeEnv();
+    const pub = 'MYPUBKEY002';
+    const pow = await solvePoW(pub, 16, `${pub}:breeze-test`);
+    const res = await handleAliasSet({ alias: 'cleanrace1', pub, name: 'me', pow }, env, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).ok).toBe(true);
+    const stored = JSON.parse(await env.KV.get('alias:cleanrace1'));
+    expect(stored.pub).toBe(pub);
+  }, 60000);
 });
 
 // Item 61 — optional Ed25519 ownership binding for alias registration (anti-impersonation).

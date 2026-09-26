@@ -24,6 +24,20 @@ Sources: Signal Double Ratchet spec §8.4 (deletion of skipped message keys) + �
 
 ---
 
+## Three more last-write-wins windows closed — alias registration, sealed-poll grace rewrite, msg-poll keep rewrite (branch devin/1790402200-kv-race-siblings, 2026-09-26)
+
+823 vitest (819→823: two new alias-race tests + a sealed-poll grace race + a msg-poll keep race, all deterministic KV clobber injection); `_worker.js`, `tests/worker.test.js` — Cloudflare Workers + KV only; index.html untouched.
+
+Cloudflare KV has no transactions and no compare-and-swap, so every read-modify-write in the worker is a potential lost-write window; the codebase's doctrine is read-back recovery ("recovery, not exactly-once" — the real fix, Durable Objects, is roadmap C10). After sealed-send and msg-send got their read-back guards, three sibling paths still rewrote stale snapshots or lied about the outcome:
+
+- **`handleAliasSet` (check-then-act):** two concurrent registrations of the same alias both passed the alias-taken check, both wrote, last-write-wins — and BOTH returned `ok`, so the loser believed they owned a handle that now resolves to someone else's identity key (an impersonation foothold). Now: after the write, the record is read back and a different `pub` → `409 ALIAS_TAKEN`. A sub-millisecond residual window remains (same caveat as the sealed-send fix); only Durable Objects give true CAS.
+- **`handleSealedPoll` grace rewrite:** the 5-minute grace extension put back the queue as first READ. An envelope sent between the read and the rewrite was overwritten *after* the sender's own read-back recovery had already reported success — delivery silently lost. Now re-reads the current value and only refreshes its TTL.
+- **`handleMsgPoll` keep rewrite:** same shape — the multi-tab keep-filter rewrote a keep-list computed on the stale snapshot, deleting any send that landed in the gap. Now re-reads the inbox and re-filters the freshest value; falls back to plain delete when nothing is being kept anyway.
+
+The no-hwm `handleSealedAck` blind-delete was reviewed and deliberately left alone: "ack without a prior poll clears the queue" is a tested backward-compat contract for pre-high-water-mark clients.
+
+---
+
 ## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
 ## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
 ## The plain /msg relay path lost racing writes that the sealed queue already recovered from (branch devin/1790401233-msg-send-lost-write, 2026-09-26)
