@@ -1,5 +1,15 @@
 # Changelog
 
+## Gate-suite self-audit: shared maskJs() fixes unreachable-branch's regex blind spot; validate.sh uses mktemp (branch devin/<ts>-gate-audit, 2026-09-26)
+
+vitest 819 → **824**; `tools/lib/mask-js.mjs` (new shared lib), `tools/unreachable-branch.mjs`, `tools/closure-boundary.mjs`, `validate.sh`, `tests/tools-hygiene.test.js` (new) — dev-tree only, no deployed code.
+
+- **unreachable-branch.mjs could silently stop checking inside any block containing a regex with an unbalanced brace** — its private `mask()` blanked strings/comments but not regex literals, so `/\}/` or `/[{}]/` inside an `if`-guard corrupted the depth counter and ended the guard early, hiding every nested-impossibility below it. `closure-boundary.mjs` had already solved this with a `lastSignificant` division-vs-regex heuristic — the two hand-maintained mask copies had drifted, the exact mirror-drift hazard this codebase exists to fight. Both tools now import one shared `maskJs` from `tools/lib/mask-js.mjs`.
+- **validate.sh wrote index.html's JS to the predictable path `/tmp/brz-validate.js`** — a symlink-attack target on shared machines. Now `mktemp` + `trap` cleanup.
+- New `tests/tools-hygiene.test.js` pins the mask contract: regex contents (incl. lone `{`/`}`, char classes, quantifiers) blanked, division preserved, template interpolations wholesale-blanked, live-code/object braces intact.
+
+---
+
 ## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
 
 819 vitest unchanged; Playwright E2E 60 unchanged; `docs/ROADMAP.md`, `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation) — dead-code removal only, no runtime behavior change.

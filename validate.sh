@@ -26,8 +26,12 @@ echo ""
 
 # ═══ Gate 1: Syntax (CRITICAL — blocks deploy) ═══
 echo "Gate 1: Syntax"
-JS=$(node -e "const h=require('fs').readFileSync('index.html','utf8');const m=h.match(/<script>([\s\S]*?)<\/script>/);if(m)require('fs').writeFileSync('/tmp/brz-validate.js',m[1]);else process.exit(1)" 2>&1)
-if node -c /tmp/brz-validate.js 2>/dev/null; then pass "index.html JS syntax" 10; else fail "index.html JS syntax BROKEN" 10; fi
+# Extract to a private temp file — a predictable /tmp name is a symlink-attack
+# target on any shared machine (writeFileSync follows symlinks).
+TMPJS=$(mktemp "${TMPDIR:-/tmp}/brz-validate.XXXXXX.js")
+trap 'rm -f "$TMPJS"' EXIT
+JS=$(node -e "const h=require('fs').readFileSync('index.html','utf8');const m=h.match(/<script>([\s\S]*?)<\/script>/);if(m)require('fs').writeFileSync(process.argv[1],m[1]);else process.exit(1)" "$TMPJS" 2>&1)
+if node -c "$TMPJS" 2>/dev/null; then pass "index.html JS syntax" 10; else fail "index.html JS syntax BROKEN" 10; fi
 if node -c _worker.js 2>/dev/null; then pass "_worker.js syntax" 5; else fail "_worker.js syntax BROKEN" 5; fi
 if node -c sw.js 2>/dev/null; then pass "sw.js syntax" 5; else fail "sw.js syntax BROKEN" 5; fi
 echo ""
@@ -35,7 +39,7 @@ echo ""
 # ═══ Gate 2: Security ═══
 echo "Gate 2: Security"
 H=$(cat index.html)
-JS_CONTENT=$(cat /tmp/brz-validate.js)
+JS_CONTENT=$(cat "$TMPJS")
 
 # No eval() usage
 EVALS=$(echo "$JS_CONTENT" | grep -c '\beval\b(' || true)
