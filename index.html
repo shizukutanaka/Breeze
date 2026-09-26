@@ -9986,6 +9986,11 @@ async function initMessenger(dbName) {
       }
     };
 
+    // Pending delivered-ACKs per channel — see _queueAck below. Entries self-delete on
+    // flush (≤15 s), and sends are guarded by readyState, so closed channels and account
+    // switches need no explicit teardown.
+    const _pendingAcks = new Map(); // dc -> { ids: Set<string>, timer }
+
     function setupDC(ch) {
       ch.binaryType = 'arraybuffer'; // v3: required for binary file chunks
       // v3.6: Backpressure — event-based resume instead of polling
@@ -10015,6 +10020,24 @@ async function initMessenger(dbName) {
           } catch {}
         };
         peerState.stateDC.onopen = () => { _dbg(null, 'State channel open for ' + contact.id.slice(0,8)); };
+      }
+
+      // I5: delivered-ACK timing channel. An instant 'st:0' on every inbound message
+      // leaks exact receive times to the sender (and to channel-timing observers) —
+      // the NDSS'21 receipt-correlation class that readReceiptDelay already blunts on
+      // the read side. Queue per channel and flush after uniform 0–15 s jitter;
+      // bursts coalesce into one flush.
+      function _queueAck(ch, i) {
+        let p = _pendingAcks.get(ch);
+        if (!p) { p = { ids: new Set(), timer: null }; _pendingAcks.set(ch, p); }
+        p.ids.add(i);
+        if (p.timer) return;
+        p.timer = setTimeout(() => {
+          _pendingAcks.delete(ch);
+          for (const id of p.ids) {
+            try { if (ch.readyState === 'open') ch.send(JSON.stringify({ type: 'ack', i: id, st: 0 })); } catch(e) { _dbg(e); }
+          }
+        }, Math.floor(Math.random() * 15 * MS.SEC));
       }
 
       ch.onmessage = async (e) => {
@@ -10083,12 +10106,11 @@ async function initMessenger(dbName) {
           }
           if (msg.type === 'msg') {
             await handleIncoming({ from: contact.id, fromPub: contact.pubB64, fromName: contact.name, payload: msg.payload, ts: msg.ts, sig: msg.sig, sigPub: msg.sigPub });
-            // Send ACK back
-            try { ch.send(JSON.stringify({ type: 'ack', i: msg.ts + '', st: 0 })); } catch(e) { _dbg(e); }
+            _queueAck(ch, msg.ts + '');
           }
           if (msg.type === 'file') {
             await handleIncoming({ from: contact.id, fromPub: contact.pubB64, fromName: contact.name, payload: msg.payload, ts: msg.ts, isFile: true });
-            try { ch.send(JSON.stringify({ type: 'ack', i: msg.ts + '', st: 0 })); } catch(e) { _dbg(e); }
+            _queueAck(ch, msg.ts + '');
           }
           // v3.6: P2P direct group message (dual-path: P2P instant + sealed sender reliable)
           if (msg.type === 'group_msg' && msg.groupId) {
@@ -10103,7 +10125,7 @@ async function initMessenger(dbName) {
                 groupId: msg.groupId, groupName: msg.groupName, isGroupSK: msg.isGroupSK,
                 replyTo: msg.replyTo, disappearAt: msg.disappearAt });
               _replayCache.add(gmsgId);
-              try { ch.send(JSON.stringify({ type: 'ack', i: msg.ts + '', st: 0 })); } catch(e) { _dbg(e); }
+              _queueAck(ch, msg.ts + '');
             }
           }
         } catch(e) { _dbg(e); }

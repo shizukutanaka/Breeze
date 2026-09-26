@@ -1,5 +1,11 @@
 # Changelog
 
+## Jitter + coalesce delivered-ACKs on the P2P data channel (I5 receipt timing) (branch devin/1790421208-round17, 2026-09-26)
+
+vitest 868 (+0); `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json`, `CHANGELOG.md`.
+
+- Every inbound P2P `msg`/`file`/`group_msg` fired a `st:0` ACK the instant it was handled — a per-message timing oracle for the sender (and for channel-timing observers): exact receive timestamps make online/offline correlation and sealed-sender deanonymization trivial (NDSS'21 receipt-timing class). `_queueAck` now holds ACKs per channel and flushes after uniform 0–15 s jitter; bursts coalesce into one flush. Mirrors the existing `readReceiptDelay` rationale on the read-receipt side (which stays unchanged).
+
 ## Mobile bundle shipped English-only: prepare.js never copied locales/; signing injection now idempotent (branch devin/1790411492-mobile-locales, 2026-09-26)
 
 vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/mobile-assets.test.js`, `CHANGELOG.md`.
