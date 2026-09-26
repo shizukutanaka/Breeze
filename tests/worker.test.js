@@ -69,6 +69,7 @@ beforeEach(() => {
   globalThis._msgDedup      = new Map();
   globalThis._sealedDedup   = new Map();
   globalThis._frankWebhookFired = new Map();
+  globalThis._queueAuthKey  = new Map();
 });
 
 describe('routing & request validation (export default fetch)', () => {
@@ -3721,6 +3722,138 @@ describe('backup BACKUP_REQUIRE_AUTH enforcement (item 54)', () => {
     await e.KV.put('backup:bakflg05', 'blob');
     const dl = await handleBackupDownload({ userId: 'bakflg05' }, e, dlReq({}));
     expect(dl.status).toBe(200);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Queue-read auth — QUEUE_REQUIRE_AUTH gates msg/poll, sealed/poll, sealed/ack.
+// Without auth, knowing a userId is enough to READ the undelivered queue's
+// ciphertext AND delete it (ack / cleanup) — a drain-or-wipe attack on the queue
+// Sealed Sender exists to protect. userIds are not secrets (shared with contacts).
+// ─────────────────────────────────────────────────────────────────────────────
+describe('queue auth — QUEUE_REQUIRE_AUTH (msg/sealed poll + sealed ack)', () => {
+  const req = (body) => apiRequest('/api/x', body);
+
+  // Register an edIdentityKey for userId directly in KV (same shape handlePreKeyUpload
+  // stores), then sign `breeze-<op>:<userId>:<ts>` with the matching private key.
+  async function registerKey(env, userId) {
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const pubRaw = await crypto.subtle.exportKey('raw', ed.publicKey);
+    const edIdentityKey = toB64(new Uint8Array(pubRaw));
+    await env.KV.put(`prekey:${userId}`, JSON.stringify({ identityKey: 'x', signedPreKey: 'x', edIdentityKey }));
+    return ed;
+  }
+  async function signOp(ed, op, userId) {
+    const ts = Date.now();
+    const msg = new TextEncoder().encode(`breeze-${op}:${userId}:${ts}`);
+    const sigBytes = await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, msg);
+    return { ts, sig: toB64(new Uint8Array(sigBytes)) };
+  }
+
+  it('rejects unsigned msg/poll, sealed/poll and sealed/ack when the flag is on', async () => {
+    const e = makeEnv({ QUEUE_REQUIRE_AUTH: 'true' });
+    await e.KV.put('inbox:qautha01', JSON.stringify([{ from: 'x', payload: 'ct', ts: Date.now() }]));
+    await e.KV.put('sealed:qautha01', JSON.stringify([{ envelope: 'env1', ts: Date.now() }]));
+    for (const [handler, body] of [
+      [handleMsgPoll,    { id: 'qautha01' }],
+      [handleSealedPoll, { id: 'qautha01' }],
+      [handleSealedAck,  { id: 'qautha01' }],
+    ]) {
+      const res = await handler(body, e, req({}));
+      expect(res.status).toBe(403);
+      expect((await res.json()).code).toBe('AUTH_REQUIRED');
+    }
+    // And critically: nothing was read or deleted — the queues are intact.
+    expect(await e.KV.get('inbox:qautha01')).toBeTruthy();
+    expect(await e.KV.get('sealed:qautha01')).toBeTruthy();
+  });
+
+  it('accepts a validly-signed poll/ack for each op domain when the flag is on', async () => {
+    const e = makeEnv({ QUEUE_REQUIRE_AUTH: 'true' });
+    await e.KV.put('inbox:qautha02', JSON.stringify([{ from: 'a', payload: 'm1', ts: Date.now() }]));
+    await e.KV.put('sealed:qautha02', JSON.stringify([{ envelope: 's1', ts: Date.now() }]));
+    const ed = await registerKey(e, 'qautha02');
+    // msg/poll
+    let a = await signOp(ed, 'msg-poll', 'qautha02');
+    let r = await handleMsgPoll({ id: 'qautha02', ts: a.ts, sig: a.sig }, e, req({}));
+    expect(r.status).toBe(200);
+    expect((await r.json()).messages).toHaveLength(1);
+    // sealed/poll (fresh ts — the prior sig is a different domain anyway)
+    a = await signOp(ed, 'sealed-poll', 'qautha02');
+    r = await handleSealedPoll({ id: 'qautha02', ts: a.ts, sig: a.sig }, e, req({}));
+    expect(r.status).toBe(200);
+    expect((await r.json()).messages).toHaveLength(1);
+    // sealed/ack — clears the polled queue
+    a = await signOp(ed, 'sealed-ack', 'qautha02');
+    r = await handleSealedAck({ id: 'qautha02', ts: a.ts, sig: a.sig }, e, req({}));
+    expect(r.status).toBe(200);
+  });
+
+  it('domain separation: a msg-poll signature cannot be replayed as sealed-ack', async () => {
+    const e = makeEnv({ QUEUE_REQUIRE_AUTH: 'true' });
+    await e.KV.put('sealed:qautha03', JSON.stringify([{ envelope: 's1', ts: Date.now() }]));
+    const a = await signOp(await registerKey(e, 'qautha03'), 'msg-poll', 'qautha03'); // signed for the wrong op
+    const res = await handleSealedAck({ id: 'qautha03', ts: a.ts, sig: a.sig }, e, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+    expect(await e.KV.get('sealed:qautha03')).toBeTruthy(); // queue untouched
+  });
+
+  it('partial auth (ts without sig) is 400 even when the flag is off', async () => {
+    const e = makeEnv();
+    const res = await handleMsgPoll({ id: 'qautha04', ts: Date.now() }, e, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('PARTIAL_AUTH');
+  });
+
+  it('rejects a stale-ts signature when the flag is on', async () => {
+    const e = makeEnv({ QUEUE_REQUIRE_AUTH: 'true' });
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign']);
+    const edIdentityKey = toB64(new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey)));
+    await e.KV.put('prekey:qautha05', JSON.stringify({ identityKey: 'x', signedPreKey: 'x', edIdentityKey }));
+    const ts = Date.now() - 10 * 60 * 1000; // 10min ago — outside the ±5min window
+    const sig = toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey,
+      new TextEncoder().encode(`breeze-msg-poll:qautha05:${ts}`))));
+    const res = await handleMsgPoll({ id: 'qautha05', ts, sig }, e, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_TIMESTAMP');
+  });
+
+  it('returns NO_IDENTITY_KEY when the flag is on but the user never registered', async () => {
+    const e = makeEnv({ QUEUE_REQUIRE_AUTH: 'true' });
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign']);
+    const ts = Date.now();
+    const sig = toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey,
+      new TextEncoder().encode(`breeze-sealed-poll:qautha06:${ts}`))));
+    const res = await handleSealedPoll({ id: 'qautha06', ts, sig }, e, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('NO_IDENTITY_KEY');
+  });
+
+  it('unsigned polls still work when the flag is unset (backward-compat)', async () => {
+    const e = makeEnv();
+    await e.KV.put('inbox:qautha07', JSON.stringify([{ from: 'a', payload: 'm1', ts: Date.now() }]));
+    const r = await handleMsgPoll({ id: 'qautha07' }, e, req({}));
+    expect(r.status).toBe(200);
+    expect((await r.json()).messages).toHaveLength(1);
+  });
+
+  it('key-rotation self-heal: a cached stale key is evicted on SIG_INVALID and re-read', async () => {
+    const e = makeEnv({ QUEUE_REQUIRE_AUTH: 'true' });
+    // Register key A, poll once to populate the identity-key cache.
+    const edA = await registerKey(e, 'qautha08');
+    const a = await signOp(edA, 'msg-poll', 'qautha08');
+    expect((await handleMsgPoll({ id: 'qautha08', ts: a.ts, sig: a.sig }, e, req({}))).status).toBe(200);
+    // Rotate: overwrite prekey with a NEW ed key and sign with it — the cached stale key
+    // must SIG_INVALID + evict, then the retry re-reads the fresh key and passes.
+    const edB = await registerKey(e, 'qautha08'); // rewrites prekey:qautha08
+    const b = await signOp(edB, 'msg-poll', 'qautha08');
+    const r1 = await handleMsgPoll({ id: 'qautha08', ts: b.ts, sig: b.sig }, e, req({}));
+    expect(r1.status).toBe(403); // cached key A → SIG_INVALID, entry evicted
+    expect((await r1.json()).code).toBe('SIG_INVALID');
+    const b2 = await signOp(edB, 'msg-poll', 'qautha08');
+    const r2 = await handleMsgPoll({ id: 'qautha08', ts: b2.ts, sig: b2.sig }, e, req({}));
+    expect(r2.status).toBe(200); // healed: fresh key B verified
   });
 });
 

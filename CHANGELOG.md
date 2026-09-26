@@ -24,6 +24,17 @@ Sources: Signal Double Ratchet spec §8.4 (deletion of skipped message keys) + �
 
 ---
 
+||||||| parent of 64b852e (feat: QUEUE_REQUIRE_AUTH — Ed25519 ownership proof for queue read/delete)
+## Queue-read auth: msg/poll, sealed/poll, sealed/ack learn Ed25519 ownership proof (branch devin/1790404900-queue-read-auth, 2026-09-26)
+
+827 vitest (819→827: eight queue-auth tests — flag on/off, per-op domain separation, partial-auth, stale-ts, unregistered, backward-compat, key-rotation self-heal); `_worker.js`, `tests/worker.test.js`, `wrangler.toml` — Cloudflare Workers only; index.html untouched (client signing fields are the follow-up once the pending index.html PR lands).
+
+**The gap:** `/api/msg/poll`, `/api/sealed/poll`, and `/api/sealed/ack` were authenticated by nothing but knowledge of a `userId`. That id is not a secret — it's handed to every contact and rides in presence records — so any party who learned one could read the undelivered queue's ciphertext (defeating the metadata purpose of Sealed Sender, which hides everything except the recipient id) or ack-wipe undelivered messages, a silent drain-or-destroy attack.
+
+**The fix (same doctrine as `BACKUP_REQUIRE_AUTH`/`GROUP_REQUIRE_AUTH`):** callers may sign `breeze-<op>:<id>:<ts>` with the account's registered Ed25519 identity key (`prekey:{id}.edIdentityKey`). Verified-when-present today; `QUEUE_REQUIRE_AUTH=true` makes it mandatory once clients ship the signing fields. Three per-op domains (`msg-poll`, `sealed-poll`, `sealed-ack`) so a captured poll signature can't be replayed as a destructive ack. The registered key is cached per-isolate (polls are the hottest path) with positive-only caching + evict-on-verify-failure so identity-key rotation self-heals; `handleAccountDelete` evicts the cached key alongside `_presenceCache`. Health advertises `queue-auth` for capability detection.
+
+---
+
 ## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
 
 819 vitest unchanged; Playwright E2E 60 unchanged; `docs/ROADMAP.md`, `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation) — dead-code removal only, no runtime behavior change.

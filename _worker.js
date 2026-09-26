@@ -132,7 +132,7 @@ export default {
           'account-delete', 'group-leave', 'group-delete', 'group-admin',
           'group-transfer', 'group-rename', 'msg-disappear-enforce',
           'sealed-sender', 'franking', 'prekey-x3dh',
-          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'alias-auth', 'backup-auth', 'push-auth', 'drop-server-id', 'group-auth', 'group-ban',
+          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'alias-auth', 'backup-auth', 'push-auth', 'drop-server-id', 'group-auth', 'group-ban', 'queue-auth',
         ],
         crypto: ['X25519', 'Ed25519', 'AES-256-GCM', 'HKDF-SHA256', 'Double Ratchet', 'Sender Key O(1)'],
         ts: Date.now(),
@@ -518,10 +518,64 @@ async function handleMsgSend(body, ip, env, request) {
   return json({ ok: true, ack: Date.now() }, 200, request);
 }
 
+// Queue-read auth (msg/poll, sealed/poll, sealed/ack). These three endpoints expose one
+// capability — READ a user's undelivered queue and (via ack/cleanup) DELETE it — and were
+// historically gated by nothing but knowledge of the userId. That id is NOT a secret: it's
+// handed to every contact and appears in presence records, so any party who learns one could
+// drain the ciphertext inbox (defeating the metadata purpose of Sealed Sender) or ack-wipe
+// undelivered messages — a silent availability attack.
+//
+// Same rollout doctrine as BACKUP/GROUP/PUSH_REQUIRE_AUTH: callers may sign
+// `breeze-<op>:<id>:<ts>` with the account's registered Ed25519 identity key; the signature
+// is verified when present, and QUEUE_REQUIRE_AUTH=true makes it mandatory once clients
+// ship the signing fields. Per-op domain separation so a captured poll signature can't be
+// replayed as a destructive ack.
+async function checkQueueAuth(body, env, request, op) {
+  const { id, ts, sig } = body;
+  const hasSig = ts !== undefined || sig !== undefined;
+  if (!hasSig) {
+    if (env.QUEUE_REQUIRE_AUTH === 'true')
+      return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+    return null;
+  }
+  if (ts === undefined || sig === undefined)
+    return json({ error: 'ts and sig must both be provided together', code: 'PARTIAL_AUTH' }, 400, request);
+  if (typeof sig !== 'string' || sig.length > 500)
+    return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
+  if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS)
+    return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
+  // Cache the registered identity key per isolate — polls are the hottest read path in the
+  // worker (every few seconds per device), so a KV read per request would double poll cost.
+  // Only positive results are cached (an unregistered id may register next request), and a
+  // signature-verification FAILURE drops the entry so an identity-key rotation self-heals on
+  // the next attempt instead of wedging the owner until the isolate recycles.
+  const keyCache = (globalThis._queueAuthKey ||= new Map());
+  let edKey = keyCache.get(id) || null;
+  if (!edKey) {
+    const data = await kvGet(env, `prekey:${id}`);
+    const bundle = data ? safeJsonParse(data) : null;
+    edKey = (bundle && typeof bundle.edIdentityKey === 'string' && bundle.edIdentityKey) || null;
+    if (edKey) {
+      if (keyCache.size > 2000) globalThis._queueAuthKey = new Map([...keyCache.entries()].slice(-1000));
+      globalThis._queueAuthKey.set(id, edKey);
+    }
+  }
+  if (!edKey) return json({ error: 'No registered identity key', code: 'NO_IDENTITY_KEY' }, 403, request);
+  const ok = await verifyEd25519(edKey, utf8ToB64(`breeze-${op}:${id}:${ts}`), sig);
+  if (!ok) {
+    // Delete via the global (the local `keyCache` may be a Map the overflow-prune replaced).
+    globalThis._queueAuthKey.delete(id);
+    return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
+  }
+  return null;
+}
+
 async function handleMsgPoll(body, env, request) {
   const { id, lastTs } = body;
   if (!id) return json({ error: 'id required', code: 'MISSING_ID' }, 400, request);
   if (!validateUserId(id)) return json({ error: 'invalid id', code: 'INVALID_ID' }, 400, request);
+  const authErr = await checkQueueAuth(body, env, request, 'msg-poll');
+  if (authErr) return authErr;
 
   const key = `inbox:${id}`;
   const data = await kvGet(env, key);
@@ -1882,6 +1936,7 @@ async function handleAccountDelete(body, env, request) {
   // would keep answering "online" from stale cached data after erasure.
   globalThis._presenceCache?.delete(`presence:${userId}`);
   globalThis._presenceCache?.delete(`presence:${userId}:data`);
+  globalThis._queueAuthKey?.delete(userId); // cached queue-auth identity key (else a re-registered account's new key could be rejected until isolate eviction)
 
   // Optional group membership cleanup. There is no reverse index (user → groups),
   // so without the client supplying the tokens, a deleted account's id/pub/name
@@ -2427,6 +2482,8 @@ async function handleSealedPoll(body, env, request) {
   const { id } = body;
   if (!id) return json({ error: 'id required', code: 'MISSING_ID' }, 400, request);
   if (!validateUserId(id)) return json({ error: 'invalid id', code: 'INVALID_ID' }, 400, request);
+  const authErr = await checkQueueAuth(body, env, request, 'sealed-poll');
+  if (authErr) return authErr;
   const key = `sealed:${id}`;
   const data = await kvGet(env, key);
   if (!data) return json({ messages: [] }, 200, request);
@@ -2456,6 +2513,8 @@ async function handleSealedAck(body, env, request) {
   const { id } = body;
   if (!id || typeof id !== 'string') return json({ error: 'id required', code: 'MISSING_ID' }, 400, request);
   if (!validateUserId(id)) return json({ error: 'invalid id', code: 'INVALID_ID' }, 400, request);
+  const authErr = await checkQueueAuth(body, env, request, 'sealed-ack');
+  if (authErr) return authErr;
   // Clear only what the client actually polled. handleSealedPoll records a high-water mark
   // (max ts of the returned batch); here we keep any envelope with ts > hwm, i.e. one that
   // arrived in the poll→ack window, instead of blind-deleting the whole queue and losing it.
