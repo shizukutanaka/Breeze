@@ -3791,6 +3791,19 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'sign'); return null; }
   }
 
+  // Queue read/delete ownership proof (rollout for the Worker's QUEUE_REQUIRE_AUTH):
+  // sign `breeze-<op>:<id>:<ts>` with this install's Ed25519 identity key — the same
+  // key the registered prekey bundle advertises as edIdentityKey, which is what
+  // checkQueueAuth verifies against. Returns {} when signing is unavailable (no
+  // Ed25519 support, or initSigning still in flight — the fields are optional until
+  // the operator flips the flag, so an early {} is self-healing on the next poll).
+  async function queueAuth(op) {
+    if (!_signingKey?.privateKey || !myId) return {};
+    const ts = Date.now();
+    const sig = await signMessage(`breeze-${op}:${myId}:${ts}`);
+    return sig ? { ts, sig } : {};
+  }
+
   async function verifySignature(text, sigB64, pubKeyB64) {
     if (!_hasEd25519 || !sigB64 || !pubKeyB64) return null; // null = cannot verify
     try {
@@ -4341,7 +4354,7 @@ async function initMessenger(dbName) {
   async function checkRemoteWipe() {
     if (!API || !myId) return;
     try {
-      const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: 0 });
+      const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: 0, ...(await queueAuth('msg-poll')) });
       if (!resp.ok) return;
       const data = await resp.json();
       for (const msg of (data.messages || [])) {
@@ -9262,7 +9275,7 @@ async function initMessenger(dbName) {
     _pollTimer = setTimeout(async () => {
       if (!_isOffline && API) {
         try {
-          const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: _lastPollTs });
+          const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: _lastPollTs, ...(await queueAuth('msg-poll')) });
           if (resp.ok) {
             const data = await resp.json();
             for (const msg of (data.messages || [])) {
@@ -9270,7 +9283,7 @@ async function initMessenger(dbName) {
               if (typeof msg.ts === 'number' && Number.isFinite(msg.ts) && msg.ts > _lastPollTs && msg.ts <= Date.now() + MS.DAY) _lastPollTs = msg.ts;
             }
           }
-          const sResp = await postAPIRaw('/sealed/poll', { id: myId });
+          const sResp = await postAPIRaw('/sealed/poll', { id: myId, ...(await queueAuth('sealed-poll')) });
           if (sResp.ok) {
             const sData = await sResp.json();
             // Honesty over silence: the relay counts envelopes its queue caps forced it to
@@ -9298,7 +9311,7 @@ async function initMessenger(dbName) {
               } catch(e) { _dbg(e, 'sealed-parse'); }
             }
             // v3.6: ACK after successful processing (crash-safe: server keeps 5min grace)
-            if (sealedProcessed > 0) postAPIRaw('/sealed/ack', { id: myId }).catch(e => _dbg(e, 'sealed-ack'));
+            if (sealedProcessed > 0) queueAuth('sealed-ack').then(a => postAPIRaw('/sealed/ack', { id: myId, ...a })).catch(e => _dbg(e, 'sealed-ack'));
           }
           checkAndReplenishPreKeys();
         } catch(e) { _dbg(e); }
