@@ -367,8 +367,18 @@ async function handleSignal(body, ip, env, request) {
     const now = Date.now();
     const remaining = signals.filter(s => s.sender === sender || (typeof s.ts === 'number' && Number.isFinite(s.ts) && now - s.ts < 30000));
     if (remaining.length < signals.length) {
-      if (remaining.length > 0) await kvPut(env, `sig:${room}`, JSON.stringify(remaining), { expirationTtl: TTL.MIN * 5 });
-      else await kvDel(env, `sig:${room}`);
+      // Re-read before the cleanup write: a signal landing between our get and this put
+      // would be clobbered by a rewrite of the stale snapshot — a lost offer/answer/ICE
+      // candidate fails call setup silently. Re-filter the freshest value; the peer's
+      // just-arrived signal is <30s old so it survives on its own.
+      const freshRaw = await kvGet(env, `sig:${room}`);
+      const freshParsed = freshRaw ? safeJsonParse(freshRaw, []) : [];
+      const freshSignals = Array.isArray(freshParsed) ? freshParsed : [];
+      const freshRemaining = freshSignals.filter(s => s.sender === sender || (typeof s.ts === 'number' && Number.isFinite(s.ts) && now - s.ts < 30000));
+      if (freshRemaining.length < freshSignals.length) {
+        if (freshRemaining.length > 0) await kvPut(env, `sig:${room}`, JSON.stringify(freshRemaining), { expirationTtl: TTL.MIN * 5 });
+        else await kvDel(env, `sig:${room}`);
+      }
     }
     return json({ messages: filtered }, 200, request);
   }
@@ -377,10 +387,24 @@ async function handleSignal(body, ip, env, request) {
   const raw = await kvGet(env, `sig:${room}`);
   const parsed = safeJsonParse(raw, []);
   const signals = Array.isArray(parsed) ? parsed : [];
-  signals.push({ sender, type, data, ts: Date.now() });
+  const mine = { sender, type, data, ts: Date.now() };
+  signals.push(mine);
   // Keep last 50 signals, expire in 5 min (allow slow NAT traversal)
   const trimmed = signals.slice(-50);
   await kvPut(env, `sig:${room}`, JSON.stringify(trimmed), { expirationTtl: TTL.MIN * 5 });
+
+  // Lost-write recovery (same doctrine as sealed/msg send): offer and answer race in
+  // parallel during call setup — two concurrent writes, last-write-wins, and the lost
+  // SDP or ICE candidate fails the call with no error surfaced anywhere. Read back and
+  // re-append our signal if it's missing. Identity pins ts+data so a burst of same-type
+  // ICE candidates in one ms can't false-match a sibling's entry.
+  const verifyRaw = await kvGet(env, `sig:${room}`);
+  const verifyParsed = verifyRaw ? safeJsonParse(verifyRaw, []) : [];
+  const verifySignals = Array.isArray(verifyParsed) ? verifyParsed : [];
+  if (!verifySignals.some(s => s.sender === mine.sender && s.type === mine.type && s.ts === mine.ts && s.data === mine.data)) {
+    verifySignals.push(mine);
+    await kvPut(env, `sig:${room}`, JSON.stringify(verifySignals.slice(-50)), { expirationTtl: TTL.MIN * 5 });
+  }
 
   return json({ ok: true }, 200, request);
 }
@@ -1975,6 +1999,13 @@ async function handleAccountDelete(body, env, request) {
     kvDel(env, `backup:${userId}`),
     kvDel(env, `presence:${userId}`),
     kvDel(env, `slots:${userId}`),
+    // The multi-device registry is keyed by accountId (= this userId): root pub, device
+    // pubs and device names signed by the root. Leaving it behind keeps user-linked key
+    // material readable (and touch-refreshed) for the 3-month TTL after erasure.
+    kvDel(env, `devices:${userId}`),
+    // Drop counter written by sealed-poll overflow — survives a week and leaks how many
+    // sealed envelopes overflowed the queue for this user.
+    kvDel(env, `sealed:${userId}:dropped`),
   ];
   if (customerId) dels.push(kvDel(env, `cust:${customerId}`));
   await Promise.all(dels);
@@ -1982,6 +2013,7 @@ async function handleAccountDelete(body, env, request) {
   // would keep answering "online" from stale cached data after erasure.
   globalThis._presenceCache?.delete(`presence:${userId}`);
   globalThis._presenceCache?.delete(`presence:${userId}:data`);
+  globalThis._devTouch?.delete(userId); // device-list TTL-touch throttle marker
 
   // Optional group membership cleanup. There is no reverse index (user → groups),
   // so without the client supplying the tokens, a deleted account's id/pub/name
@@ -2020,7 +2052,7 @@ async function handleAccountDelete(body, env, request) {
     }
   }
 
-  const erased = ['inbox', 'sealed', 'prekeys', 'ktlog', 'push', 'backup', 'presence', 'slots'];
+  const erased = ['inbox', 'sealed', 'prekeys', 'ktlog', 'push', 'backup', 'presence', 'slots', 'devices'];
   if (customerId) erased.push('cust');
   return json({
     ok: true,

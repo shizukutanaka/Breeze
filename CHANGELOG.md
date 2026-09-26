@@ -54,6 +54,18 @@ Deferred, same as before: group kick/leave/rename rewrites and OTP consumption (
 
 ---
 
+## Signaling-path races closed + account deletion erases the device registry and drop counter (branch devin/1790403400-signal-race-and-erasure, 2026-09-26)
+
+822 vitest (819→822: two signaling-path race tests + one erasure-completeness test, deterministic KV injection); `_worker.js`, `tests/worker.test.js` — Cloudflare Workers + KV only; index.html untouched.
+
+Two threads, one theme: the last-write-wins sweep reaches the ephemeral signaling path, and the erasure sweep reaches two user-keyed records the delete handler missed.
+
+- **`handleSignal` store:** offer and answer race in parallel during call setup — two concurrent writes to `sig:{room}`, last-write-wins, and the lost SDP or ICE candidate fails the call with no error surfaced anywhere. Now reads the list back and re-appends its own signal if missing (identity pins `ts+data` so a burst of same-type ICE candidates in one ms can't false-match a sibling's entry).
+- **`handleSignal` poll cleanup:** the consumed/stale-signal rewrite wrote a keep-list computed on the stale read — a signal landing in the gap was clobbered. Now re-reads and re-filters the freshest value (the just-arrived signal is <30s old, so it survives on its own).
+- **`handleAccountDelete` completeness:** `devices:{userId}` — the signed multi-device registry holding the root pub, device pubs, and human-readable device names — was never erased and (worse) kept being TTL-refreshed by every touch-on-read for up to 3 months. `sealed:{userId}:dropped` — the overflow counter — lingered a week and leaked how many sealed envelopes the user lost to queue overflow. Both now deleted; the `devices` entry joins the `erased` response list, and the in-memory `_devTouch` throttle marker is cleared alongside the existing `_presenceCache` evictions.
+
+---
+
 ## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
 ## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
 ## The plain /msg relay path lost racing writes that the sealed queue already recovered from (branch devin/1790401233-msg-send-lost-write, 2026-09-26)
