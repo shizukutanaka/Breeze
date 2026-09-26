@@ -1395,7 +1395,17 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
     const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
     const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
     await env.KV.put('prekey:creator1', JSON.stringify({ identityKey: 'IK', edIdentityKey: toB64(edPub), uploadedAt: Date.now() }));
-    const { token } = await (await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    // group/create is itself auth-gated under GROUP_REQUIRE_AUTH — sign it (empty token
+    // slot, bind = digest of the stored creator fields) so the fixture exercises the real
+    // handler rather than seeding grp: directly.
+    const createBody = { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' };
+    const tsC = Date.now();
+    const bindBuf = await crypto.subtle.digest('SHA-256',
+      new TextEncoder().encode(JSON.stringify(['cpub', 'g', '', []])));
+    const bind = Array.from(new Uint8Array(bindBuf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
+    const createSig = toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey,
+      new TextEncoder().encode(`breeze-group-create::creator1:${tsC}:${bind}`))));
+    const { token } = await (await handleGroupCreate({ ...createBody, ts: tsC, sig: createSig }, env, req({}))).json();
     await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
     return { token, ed };
   }
@@ -1513,6 +1523,81 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('PARTIAL_AUTH');
   });
+
+  // group/create is wired through the same checkGroupAuth — the token slot is empty
+  // (none exists yet) and bind = sha256Short(JSON.stringify([creatorPub, name,
+  // creatorName||'', caps||[]])), matching the worker's signed format.
+  const digestCreate = async (creatorPub, name, creatorName, caps) => {
+    const buf = await crypto.subtle.digest('SHA-256',
+      new TextEncoder().encode(JSON.stringify([creatorPub, name, creatorName || '', caps || []])));
+    return Array.from(new Uint8Array(buf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
+  };
+  const createSig = async (ed, creatorId, b) => {
+    const ts = Date.now();
+    const bind = await digestCreate(b.creatorPub, b.name, b.creatorName, b.caps);
+    return { ts, sig: await signGroup(ed, 'create', '', creatorId, ts, bind) };
+  };
+
+  it('rejects an unsigned group/create when GROUP_REQUIRE_AUTH is enabled', async () => {
+    const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
+    const res = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
+  });
+
+  it('accepts a validly signed group/create (flag on)', async () => {
+    const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
+    await env.KV.put('prekey:creator1', JSON.stringify({ identityKey: 'IK', edIdentityKey: toB64(edPub) }));
+    const b = { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'Alice', caps: ['seal-v2'] };
+    const s = await createSig(ed, 'creator1', b);
+    const res = await handleGroupCreate({ ...b, ...s }, env, req({}));
+    expect(res.status).toBe(201);
+    const { token } = await res.json();
+    const stored = JSON.parse(await env.KV.get(`grp:${token}`));
+    expect(stored.creatorId).toBe('creator1');
+  });
+
+  it('rejects a create signed by a different key than the claimed creatorId', async () => {
+    const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
+    // Victim registered an identity; attacker signs with THEIR OWN key but claims creatorId=victim01.
+    const edV = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    await env.KV.put('prekey:victim01', JSON.stringify({ identityKey: 'IK', edIdentityKey: toB64(new Uint8Array(await crypto.subtle.exportKey('raw', edV.publicKey))) }));
+    const edA = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const b = { name: 'g', creatorId: 'victim01', creatorPub: 'attackerpub' };
+    const s = await createSig(edA, 'victim01', b);
+    const res = await handleGroupCreate({ ...b, ...s }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+  });
+
+  it('rejects a captured create signature replayed with a swapped creatorPub', async () => {
+    const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    await env.KV.put('prekey:creator1', JSON.stringify({ identityKey: 'IK', edIdentityKey: toB64(new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey))) }));
+    const b = { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' };
+    const s = await createSig(ed, 'creator1', b);
+    // Relay/observer swaps the stored pub but reuses the signature — bind covers it.
+    const res = await handleGroupCreate({ ...b, ...s, creatorPub: 'EVILPUB' }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+  });
+
+  it('unsigned group/create still works when the flag is unset (backward compat)', async () => {
+    const env = makeEnv();
+    const res = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}));
+    expect(res.status).toBe(201);
+  });
+
+  it('a signed create with a bad signature is rejected even when the flag is off', async () => {
+    const env = makeEnv();
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    await env.KV.put('prekey:creator1', JSON.stringify({ identityKey: 'IK', edIdentityKey: toB64(new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey))) }));
+    const res = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub', ts: Date.now(), sig: toB64(new Uint8Array(64)) }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+  });
 });
 
 // Item 49 (Socratic new perspective — system-level auth invariant): every signed operation
@@ -1558,7 +1643,14 @@ describe('cross-protocol signature replay rejection (item 49)', () => {
   it('a group-rename signature is rejected by group-delete (cannot replay rename-auth to delete)', async () => {
     const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
     const ed = await registerEd(env, 'creator1');
-    const { token } = await (await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, apiRequest('/api/group/create', {}))).json();
+    // group/create is auth-gated under the flag: sign breeze-group-create::<id>:<ts>:<bind>
+    // where bind = sha256Short(JSON.stringify([creatorPub, name, creatorName||'', caps||[]])).
+    const tsC = Date.now();
+    const bindC = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',
+      new TextEncoder().encode(JSON.stringify(['cpub', 'g', '', []])))))
+      .slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
+    const createSig = await sign(ed, `breeze-group-create::creator1:${tsC}:${bindC}`);
+    const { token } = await (await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub', ts: tsC, sig: createSig }, env, apiRequest('/api/group/create', {}))).json();
     const ts = Date.now();
     const renameSig = await sign(ed, `breeze-group-rename:${token}:creator1:${ts}`);
     const res = await handleGroupDelete({ token, adminId: 'creator1', ts, sig: renameSig }, env, apiRequest('/api/group/delete', {}));

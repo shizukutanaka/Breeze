@@ -1,5 +1,17 @@
 # Changelog
 
+## group/create joins GROUP_REQUIRE_AUTH — group creation can no longer be attributed to arbitrary identities (branch devin/1790407400-group-create-auth, 2026-09-26)
+
+398 vitest (392 → **398**, +6); `_worker.js`, `tests/worker.test.js`, `wrangler.toml`.
+
+Symmetric audit of the `*_REQUIRE_AUTH` rollout: `GROUP_REQUIRE_AUTH` covered every group *mutation* (kick/rename/admin/leave/delete/transfer) but not group *creation* — and `handleGroupCreate` didn't even carry join's `memberPub.startsWith(memberId)` self-binding. `creatorId` and `creatorPub` were both attacker-chosen, and the victim's real pub is public via `prekey/fetch`, so anyone could register a group that `group/info` attributes — creator role included — to someone else's identity. Members joining such a group see the victim as creator; sender-key distribution to the "creator" then runs over whatever channels the attacker set up.
+
+Fix wires the existing `checkGroupAuth` helper: callers may sign `breeze-group-create::{creatorId}:{ts}:{bind}` (empty token slot — none exists yet) where `bind = sha256Short(JSON.stringify([creatorPub, name, creatorName, caps]))` covers the stored creator fields, so a captured signature can't be replayed with a swapped pub or renamed attribution. Verified-when-present (a signed create with a bad signature is rejected even with the flag off), mandatory under `GROUP_REQUIRE_AUTH=true` — same env flag, no new config; wrangler.toml comment updated to list create.
+
+Tests: unsigned create rejected under the flag (403 AUTH_REQUIRED); validly signed create accepted and attributes correctly; a create signed by a *different* Ed25519 key while claiming the victim's creatorId rejected (verification is against the claimed id's registered key); a captured signature replayed with a swapped `creatorPub` rejected (bind covers the stored fields); unsigned create still works flag-off; bad signature rejected flag-off. The two pre-existing fixtures that exercise group ops under the flag now sign their setup `handleGroupCreate` call — a fixture satisfying the new precondition, not a weakened assertion.
+
+---
+
 ## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
 
 819 vitest unchanged; Playwright E2E 60 unchanged; `docs/ROADMAP.md`, `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation) — dead-code removal only, no runtime behavior change.
