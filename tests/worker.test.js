@@ -673,6 +673,42 @@ describe('prekey key-history audit log (I11 precursor)', () => {
     const result = await verifyChain(crypto.subtle, tampered);
     expect(result.ok).toBe(false);
   });
+
+  // Same lost-write class as sealed/msg send: two devices uploading prekeys concurrently
+  // both append to the audit log — last-write-wins drops one entry and the tamper-evident
+  // chain gains a silent gap where a key change was never recorded. The handler reads the
+  // log back and re-appends, recomputing c over the freshest tail (a stale entry can't be
+  // replayed verbatim — c binds to prev).
+  it('recovers an audit entry clobbered by a concurrent upload (re-linked to fresh tail)', async () => {
+    const { verifyChain } = await import('../src/crypto/ktlog.js');
+    const env = makeEnv();
+    const key = 'ktlog:chainrace1';
+    // Build the racing write in a throwaway env: a real single-entry chain for a different IK.
+    const env2 = makeEnv();
+    await handlePreKeyUpload(
+      { userId: 'chainrace1', identityKey: 'chainrace1IK-B', signedPreKey: 'SPK' },
+      env2, apiRequest('/api/prekey/upload', {}),
+    );
+    const racingLog = await env2.KV.get(key);
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbered = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true; // the other device's upload raced: its own chain overwrites ours
+        await origPut(k, racingLog);
+      }
+    };
+    await handlePreKeyUpload(
+      { userId: 'chainrace1', identityKey: 'chainrace1IK-A', signedPreKey: 'SPK' },
+      env, apiRequest('/api/prekey/upload', {}),
+    );
+    expect(clobbered).toBe(true);
+    const log = JSON.parse(await env.KV.get(key));
+    expect(log.length).toBe(2); // both IKs recorded — ours re-appended onto the winner's tail
+    const result = await verifyChain(crypto.subtle, log);
+    expect(result.ok).toBe(true); // and the re-appended entry is correctly re-linked
+  });
 });
 
 describe('prekey signed-prekey signature verification (I1/G2)', () => {
@@ -1077,6 +1113,67 @@ describe('group durable kick + unban (item 64)', () => {
     await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
     const res = await handleGroupAdmin({ token, adminId: 'carol001', targetId: 'carol001', action: 'unban' }, env, req({}));
     expect(res.status).toBe(403);
+  });
+});
+
+// Same lost-write class as sealed/msg send: two members joining concurrently both read
+// the same group snapshot — last-write-wins silently drops one membership (that member
+// got `ok` but isn't in the group). The join handler reads the record back and re-appends
+// ONLY its own member entry — safe direction: it cannot resurrect a kicked member, and a
+// ban that raced past the banned-check is still honored at verify time.
+describe('group join — lost-write recovery', () => {
+  const req = (b) => apiRequest('/api/group/x', b);
+
+  it('a join whose write lost the race is re-appended (both members land)', async () => {
+    const env = makeEnv();
+    const create = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+    const { token } = await create.json();
+    const key = `grp:${token}`;
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbered = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true; // the other joiner's write lands last and wins
+        const winner = JSON.parse(v);
+        winner.members = winner.members.filter(m => m.id !== 'loser001');
+        winner.members.push({ id: 'winner001', pub: 'winner001wpub', name: 'W' });
+        await origPut(k, JSON.stringify(winner), o);
+      }
+    };
+    const res = await handleGroupJoin({ token, memberId: 'loser001', memberPub: 'loser001lpub', memberName: 'L' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect(clobbered).toBe(true);
+    const stored = JSON.parse(await env.KV.get(key));
+    const ids = stored.members.map(m => m.id);
+    expect(ids).toContain('loser001');  // recovered...
+    expect(ids).toContain('winner001'); // ...without evicting the winner
+  });
+
+  it('honors a ban that raced in during the join write (does not resurrect)', async () => {
+    const env = makeEnv();
+    const create = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+    const { token } = await create.json();
+    const key = `grp:${token}`;
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbered = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true; // a ban lands between our banned-check and our write
+        const winner = JSON.parse(v);
+        winner.members = winner.members.filter(m => m.id !== 'banned01');
+        winner.banned = [...(winner.banned || []), 'banned01'];
+        await origPut(k, JSON.stringify(winner), o);
+      }
+    };
+    const res = await handleGroupJoin({ token, memberId: 'banned01', memberPub: 'banned01bpub' }, env, req({}));
+    expect(res.status).toBe(200);
+    const stored = JSON.parse(await env.KV.get(key));
+    expect(stored.members.map(m => m.id)).not.toContain('banned01'); // racing ban wins
+    expect(stored.banned).toContain('banned01');
   });
 });
 
@@ -3215,6 +3312,52 @@ describe('push subscribe SSRF guard', () => {
     expect(saved.keys.auth.length).toBeLessThanOrEqual(50);
     expect(saved.keys).not.toHaveProperty('extra');
   });
+
+  // Same lost-write class as sealed/msg send: two devices subscribing concurrently both
+  // read the same list — last-write-wins drops one subscription and that device silently
+  // never receives notifications. The handler reads the list back and re-appends our
+  // endpoint onto the winner's write.
+  it('recovers a subscription clobbered by a concurrent subscribe (lost-write)', async () => {
+    const env = makeEnv();
+    const req = apiRequest('/api/push/subscribe', {});
+    const key = 'push:racepush1';
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbered = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true; // the racing device's write lands last and wins
+        await origPut(k, JSON.stringify(
+          [{ endpoint: 'https://fcm.googleapis.com/fcm/send/THEIRS', keys: { p256dh: 'p', auth: 'a' } }]), o);
+      }
+    };
+    const res = await handlePushSubscribe(
+      { userId: 'racepush1', subscription: { endpoint: 'https://fcm.googleapis.com/fcm/send/MINE' } }, env, req);
+    expect(res.status).toBe(200);
+    expect(clobbered).toBe(true);
+    const stored = JSON.parse(await env.KV.get(key));
+    expect(stored.map(s => s.endpoint).sort()).toEqual(
+      ['https://fcm.googleapis.com/fcm/send/MINE', 'https://fcm.googleapis.com/fcm/send/THEIRS'].sort());
+  });
+
+  it('reports the true device count after a recovered subscribe', async () => {
+    const env = makeEnv();
+    const req = apiRequest('/api/push/subscribe', {});
+    const key = 'push:racepush2';
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbered = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true;
+        await origPut(k, JSON.stringify(
+          [{ endpoint: 'https://fcm.googleapis.com/fcm/send/THEIRS', keys: { p256dh: 'p', auth: 'a' } }]), o);
+      }
+    };
+    const res = await handlePushSubscribe(
+      { userId: 'racepush2', subscription: { endpoint: 'https://fcm.googleapis.com/fcm/send/MINE' } }, env, req);
+    expect((await res.json()).devices).toBe(2);
+  });
 });
 
 // Item 62 — optional Ed25519 ownership auth for push subscribe (anti-eavesdrop / anti-evict).
@@ -3369,6 +3512,36 @@ describe('push delivery dead-subscription cleanup (item 39)', () => {
       expect(await env.KV.get('push:race0003')).toBeNull();
     } finally { vi.unstubAllGlobals(); }
   });
+
+  // The dead-endpoint prune used to rewrite the list it first READ: a subscribe landing
+  // mid-delivery was clobbered by the prune write. The prune now re-reads the list and
+  // removes only the endpoints the push service reported dead.
+  it('does not clobber a subscription added while the delivery cycle runs', async () => {
+    const env = await pushEnv();
+    const keys = await clientSubKeys();
+    const key = 'push:race0004';
+    const dead = sub('https://fcm.googleapis.com/fcm/send/DEAD', keys);
+    await env.KV.put(key, JSON.stringify([dead]));
+    const origGet = env.KV.get.bind(env.KV);
+    const origPut = env.KV.put.bind(env.KV);
+    let raced = false;
+    env.KV.get = async (k) => {
+      const v = await origGet(k);
+      if (k === key && !raced) {
+        raced = true; // a fresh subscribe lands between our list-read and the prune write
+        const q = JSON.parse(v);
+        q.push(sub('https://fcm.googleapis.com/fcm/send/JUSTSUBBED', keys));
+        await origPut(k, JSON.stringify(q));
+      }
+      return v;
+    };
+    vi.stubGlobal('fetch', async (url) => ({ status: String(url).includes('DEAD') ? 410 : 201 }));
+    try {
+      await sendPushToUser('race0004', { title: 'x', body: 'y' }, env);
+      const stored = JSON.parse(await origGet(key));
+      expect(stored.map(s => s.endpoint)).toEqual(['https://fcm.googleapis.com/fcm/send/JUSTSUBBED']);
+    } finally { vi.unstubAllGlobals(); }
+  });
 });
 
 describe('push unsubscribe', () => {
@@ -3407,6 +3580,37 @@ describe('push unsubscribe', () => {
     expect(r1.status).toBe(400);
     const r2 = await handlePushUnsubscribe({ userId: 'bad id!', endpoint: FCM }, makeEnv(), req);
     expect(r2.status).toBe(400);
+  });
+
+  // The removal write used to rewrite the keep-list computed on the value it first READ:
+  // a subscribe landing in the gap was clobbered — deleted without ever receiving a
+  // notification. The rewrite now re-filters the freshest value. Injects the racing
+  // subscribe at the moment of the unsubscribe's first get.
+  it('does not clobber a subscribe that lands in the unsub read->write window', async () => {
+    const env = makeEnv();
+    const req = apiRequest('/api/push/unsubscribe', {});
+    const key = 'push:unsubrace1';
+    const OLD = 'https://fcm.googleapis.com/fcm/send/OLD';
+    const NEW = 'https://fcm.googleapis.com/fcm/send/NEW';
+    await env.KV.put(key, JSON.stringify([{ endpoint: OLD, keys: { p256dh: 'p', auth: 'a' } }]));
+    const origGet = env.KV.get.bind(env.KV);
+    const origPut = env.KV.put.bind(env.KV);
+    let raced = false;
+    env.KV.get = async (k) => {
+      const v = await origGet(k);
+      if (k === key && !raced) {
+        raced = true; // a subscribe lands between the unsubscribe's read and its write
+        const q = JSON.parse(v);
+        q.push({ endpoint: NEW, keys: { p256dh: 'p', auth: 'a' } });
+        await origPut(k, JSON.stringify(q));
+      }
+      return v;
+    };
+    const res = await handlePushUnsubscribe({ userId: 'unsubrace1', endpoint: OLD }, env, req);
+    expect(res.status).toBe(200);
+    expect((await res.json()).removed).toBe(1);
+    const stored = JSON.parse(await origGet(key));
+    expect(stored.map(s => s.endpoint)).toEqual([NEW]); // OLD removed, racing NEW survives
   });
 });
 
@@ -5245,5 +5449,33 @@ describe('device registry (/api/device/set + /api/device/list)', () => {
     expect(puts).toBe(1); // first read refreshes the TTL...
     await handleDeviceList({ accountId: 'touchacct01' }, env, rq());
     expect(puts).toBe(1); // ...and the next read inside the throttle window does not
+  });
+
+  // The touch rewrote the value it first READ — a stale snapshot — so a /link or /unlink
+  // landing between the read and the rewrite was silently reverted to the older device
+  // list. The refresh now re-reads and skips itself when the record changed (the newer
+  // write already carries a fresh TTL).
+  it('touch-rewrite does not revert a concurrent /link write (stale-snapshot guard)', async () => {
+    const env = makeEnv();
+    globalThis._devTouch = new Map(); // isolate throttle state
+    const key = 'devices:touchrace1';
+    const oldRec = JSON.stringify({ root: 'R', devices: [{ pub: 'R' }], ts: 1, sig: 's' });
+    env.KV.store.set(key, oldRec);
+    const newRec = JSON.stringify({ root: 'R', devices: [{ pub: 'R' }, { pub: 'D2' }], ts: 2, sig: 's2' });
+    const origGet = env.KV.get.bind(env.KV);
+    const origPut = env.KV.put.bind(env.KV);
+    let raced = false;
+    env.KV.get = async (k) => {
+      const v = await origGet(k);
+      if (k === key && !raced) {
+        raced = true; // a /link write lands between our read and the TTL-refresh put
+        await origPut(k, newRec);
+      }
+      return v;
+    };
+    const res = await handleDeviceList({ accountId: 'touchrace1' }, env, rq());
+    expect(res.status).toBe(200);
+    expect(raced).toBe(true);
+    expect(await origGet(key)).toBe(newRec); // the newer record must not be reverted
   });
 });

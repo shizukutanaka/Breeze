@@ -38,6 +38,22 @@ The no-hwm `handleSealedAck` blind-delete was reviewed and deliberately left alo
 
 ---
 
+## Six more last-write-wins windows closed — push subscribe/unsubscribe/delivery-prune, device-list touch, group join, ktlog append (branch devin/1790402800-kv-race-presence-paths, 2026-09-26)
+
+827 vitest (819→827: eight new deterministic KV race tests via get/put injection); `_worker.js`, `tests/worker.test.js` — Cloudflare Workers + KV only; index.html untouched.
+
+Same bug class as the sealed/msg/alias/poll fixes — a KV read-modify-write or stale-snapshot rewrite where a concurrent write gets silently clobbered — applied to the remaining safe-direction paths. All re-apply only the caller's own intent, so recovery can never resurrect a kicked member or a deliberately removed subscription:
+
+- **`handlePushSubscribe`:** two devices subscribing at once both read the same list; last-write-wins dropped one subscription — that device silently never received notifications. Read-back + re-append own endpoint (dedup + 5-device cap re-run). Response now reports the true post-merge count.
+- **`handlePushUnsubscribe` / `sendPushToUser` dead-endpoint prune:** the removal write rewrote a filter computed on the stale read, clobbering a subscribe that landed in the gap. Both now re-read and re-filter the freshest value, removing only their own endpoint / provably-dead endpoints.
+- **`handleDeviceList` touch-on-read:** the TTL refresh rewrote the snapshot it read — a `/link` or `/unlink` landing in the gap was reverted to the older device list. Now re-reads and skips the touch when the record changed (the newer write already refreshed the TTL).
+- **`handleGroupJoin`:** concurrent joins dropped one membership — the loser got `ok` but wasn't in the group. Read-back re-appends only our own member record; a ban that raced past the banned-check is still honored at verify time (removal direction stays on plain last-write-wins pending C10 — re-applying a deletion could resurrect a kicked member).
+- **`handlePreKeyUpload` ktlog append:** a concurrent upload's append clobbered ours — a silent gap in the tamper-evident key-history chain. Read-back detects the missing entry and re-appends with `c` recomputed over the freshest tail (chain hashes bind to prev, so stale entries can't be replayed verbatim; `verifyChain` still passes).
+
+Deferred, same as before: group kick/leave/rename rewrites and OTP consumption (blind re-apply is unsafe in the removal direction — needs Durable Objects, roadmap C10).
+
+---
+
 ## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
 ## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
 ## The plain /msg relay path lost racing writes that the sealed queue already recovered from (branch devin/1790401233-msg-send-lost-write, 2026-09-26)

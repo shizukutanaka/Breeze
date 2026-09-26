@@ -984,7 +984,12 @@ async function handleDeviceList(body, env, request) {
       const entries = [...globalThis._devTouch.entries()];
       globalThis._devTouch = new Map(entries.slice(-1000));
     }
-    await kvPut(env, `devices:${accountId}`, raw, { expirationTtl: TTL.MONTH * 3 });
+    // Re-read before the TTL refresh: rewriting `raw` here would revert a /link or
+    // /unlink write that landed between our get and this put (stale-snapshot
+    // last-write-wins). If the record changed, the newer write already refreshed
+    // the TTL, so the touch can just be skipped.
+    const fresh = await kvGet(env, `devices:${accountId}`);
+    if (fresh === raw) await kvPut(env, `devices:${accountId}`, raw, { expirationTtl: TTL.MONTH * 3 });
   }
   // Include the root's registered Ed25519 key so a LINKING device can TOFU-pin it in the same
   // gesture that carries the root pub out-of-band. Established clients ignore this field and
@@ -1148,6 +1153,22 @@ async function handleGroupJoin(body, env, request) {
   group.members.push(memberRecord);
   const joined = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
   if (!joined) return json({ error: 'Failed to join group', code: 'STORE_FAILED' }, 500, request);
+  // Lost-write recovery (same doctrine as handleSealedSend / handleMsgSend): two members
+  // joining concurrently both read the same group snapshot — last-write-wins silently
+  // drops one membership. Read back and re-append our own record if it's missing.
+  // Re-applying only our own join is safe in the presence direction (it cannot resurrect
+  // a kicked member — kick/leave stay on plain last-write-wins pending C10 Durable
+  // Objects), and a ban that raced past the banned-check is still honored here.
+  {
+    const verifyRaw = await kvGet(env, `grp:${token}`);
+    const verifyGroup = verifyRaw ? safeJsonParse(verifyRaw) : null;
+    if (verifyGroup && Array.isArray(verifyGroup.members) && !verifyGroup.members.some(m => m.id === memberId)
+        && !(Array.isArray(verifyGroup.banned) && verifyGroup.banned.includes(memberId))) {
+      verifyGroup.members.push(memberRecord);
+      await kvPut(env, `grp:${token}`, JSON.stringify(verifyGroup), { expirationTtl: TTL.MONTH });
+      group.members = verifyGroup.members;
+    }
+  }
 
   return json({ ok: true, name: group.name, members: group.members, epoch: group.epoch | 0 }, 200, request);
 }
@@ -1661,7 +1682,24 @@ async function handlePushSubscribe(body, env, request) {
   if (subs.length > 5) subs = subs.slice(-5);
   const stored = await kvPut(env, key, JSON.stringify(subs), { expirationTtl: TTL.MONTH });
   if (!stored) return json({ error: 'Failed to store subscription', code: 'STORE_FAILED' }, 500, request);
-  return json({ ok: true, devices: subs.length }, 200, request);
+  // Lost-write recovery (same doctrine as handleSealedSend / handleMsgSend): two devices
+  // subscribing concurrently both read the same list — last-write-wins silently drops one
+  // subscription and that device simply never receives push notifications. Read the list
+  // back; if our endpoint is missing, re-append onto the freshest value (re-running
+  // dedup + the 5-device cap so a triple race can't overflow it). The recovery adds only
+  // our own entry, so it cannot resurrect a subscription the user deliberately removed.
+  let reported = subs.length;
+  const verifyRaw = await kvGet(env, key);
+  let verifySubs = verifyRaw ? (safeJsonParse(verifyRaw, []) || []) : [];
+  if (!Array.isArray(verifySubs)) verifySubs = [];
+  if (!verifySubs.some(s => s.endpoint === safeSub.endpoint)) {
+    verifySubs = verifySubs.filter(s => s.endpoint !== safeSub.endpoint);
+    verifySubs.push(safeSub);
+    if (verifySubs.length > 5) verifySubs = verifySubs.slice(-5);
+    reported = verifySubs.length;
+    await kvPut(env, key, JSON.stringify(verifySubs), { expirationTtl: TTL.MONTH });
+  }
+  return json({ ok: true, devices: reported }, 200, request);
 }
 
 async function handlePushUnsubscribe(body, env, request) {
@@ -1701,8 +1739,18 @@ async function handlePushUnsubscribe(body, env, request) {
   const filtered = subs.filter(s => s.endpoint !== endpoint);
   const removed = subs.length - filtered.length;
   if (removed > 0) {
-    if (filtered.length === 0) await kvDel(env, key);
-    else await kvPut(env, key, JSON.stringify(filtered), { expirationTtl: TTL.MONTH });
+    // Re-read before the removal write: a subscribe landing between our get and this
+    // put would be clobbered by a rewrite of the stale snapshot (the new subscription
+    // would be deleted without ever receiving a notification). Re-filter the freshest
+    // value — this only ever removes our own endpoint, never another device's.
+    const freshRaw = await kvGet(env, key);
+    const freshSubs = freshRaw ? safeJsonParse(freshRaw, []) : [];
+    const freshList = Array.isArray(freshSubs) ? freshSubs : [];
+    const freshFiltered = freshList.filter(s => s.endpoint !== endpoint);
+    if (freshFiltered.length !== freshList.length) {
+      if (freshFiltered.length === 0) await kvDel(env, key);
+      else await kvPut(env, key, JSON.stringify(freshFiltered), { expirationTtl: TTL.MONTH });
+    }
   }
   return json({ ok: true, removed }, 200, request);
 }
@@ -1745,9 +1793,17 @@ async function sendPushToUser(userId, payload, env) {
     } catch(e) { console.error('[push]', e?.message ?? e); }
   }
   if (stale.size > 0) {
-    const remaining = subs.filter(s => !stale.has(s.endpoint));
-    if (remaining.length === 0) await kvDel(env, key);
-    else await kvPut(env, key, JSON.stringify(remaining), { expirationTtl: TTL.MONTH });
+    // Re-read before the prune write: a subscribe landing between our get and this put
+    // would be clobbered by a rewrite of the stale snapshot. Filter the freshest value —
+    // this only removes endpoints the push service itself reported dead.
+    const curRaw = await kvGet(env, key);
+    const cur = curRaw ? safeJsonParse(curRaw, []) : [];
+    const curList = Array.isArray(cur) ? cur : [];
+    const remaining = curList.filter(s => !stale.has(s.endpoint));
+    if (remaining.length !== curList.length) {
+      if (remaining.length === 0) await kvDel(env, key);
+      else await kvPut(env, key, JSON.stringify(remaining), { expirationTtl: TTL.MONTH });
+    }
   }
 }
 
@@ -2091,6 +2147,29 @@ async function handlePreKeyUpload(body, env, request) {
     // 11 times to evict the oldest entry and hide the initial key compromise.
     const trimmed = log.slice(-100);
     await kvPut(env, logKey, JSON.stringify(trimmed), { expirationTtl: TTL.QUARTER });
+    // Lost-write recovery: a concurrent upload (e.g. a second device registering keys)
+    // can clobber this append — the tamper-evident chain then shows a gap where a key
+    // change was never recorded. Read back; if our entry is missing, recompute it
+    // against the freshest tail (c binds to prev, so a stale entry can't be replayed
+    // verbatim) and re-append once.
+    const ourC = trimmed[trimmed.length - 1]?.c;
+    const verifyRaw = await kvGet(env, logKey);
+    const vParsed = verifyRaw ? safeJsonParse(verifyRaw, []) : [];
+    const vLog = Array.isArray(vParsed) ? vParsed : [];
+    if (!vLog.some(e => e && e.c === ourC)) {
+      const vTail = vLog[vLog.length - 1];
+      if (vTail && vTail.h === ikHash) {
+        vTail.ts = Date.now();
+        await kvPut(env, logKey, JSON.stringify(vLog.slice(-100)), { expirationTtl: TTL.QUARTER });
+      } else {
+        const pB = vTail?.c ? Uint8Array.from(atob(vTail.c), c => c.charCodeAt(0)) : new Uint8Array(32);
+        const hB2 = Uint8Array.from(atob(ikHash), c => c.charCodeAt(0));
+        const buf2 = new Uint8Array(pB.length + hB2.length); buf2.set(pB, 0); buf2.set(hB2, pB.length);
+        const c2 = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.digest('SHA-256', buf2))));
+        vLog.push({ ts: Date.now(), h: ikHash, c: c2 });
+        await kvPut(env, logKey, JSON.stringify(vLog.slice(-100)), { expirationTtl: TTL.QUARTER });
+      }
+    }
   } catch (e) { console.error('[ktlog] append failed (non-fatal, upload already saved):', e?.message ?? e); }
 
   // Store one-time prekeys individually; cap each entry to prevent KV inflation.
