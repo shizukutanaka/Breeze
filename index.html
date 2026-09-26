@@ -5456,7 +5456,13 @@ async function initMessenger(dbName) {
           const resp = await postAPIRaw('/sealed/send', { to: item.to, envelope: JSON.stringify(item.payload) });
           if (resp.ok) sent = true;
         } catch {}
-        if (!sent) await postAPIRaw('/msg/send', item.payload);
+        if (!sent) {
+          try {
+            const r2 = await postAPIRaw('/msg/send', item.payload);
+            sent = r2.ok; // HTTP errors resolve, not throw — unchecked .ok would silently drop the message
+          } catch {}
+        }
+        if (!sent) { _retryQueue.push(item); _saveRetryQueue(); }
       } catch(e) { _retryQueue.push(item); _saveRetryQueue(); }
       _updateOutboxBadge(); _saveRetryQueue();
       if (_retryQueue.length > 0) scheduleRetry();
@@ -5684,16 +5690,33 @@ async function initMessenger(dbName) {
   }
 
   // On a group_kick notice: drop the kicked member, rotate our key to the announced epoch, and re-share it. Epoch-guarded so a duplicate/replayed notice is a no-op.
+  // The notice is only a HINT — any group member can forge one: a fabricated kickedId shrinks the
+  // victim's roster (and key redistribution) for a member who never left, and an inflated epoch
+  // permanently desyncs them (every subsequent real epoch is below the forged mark). The worker is
+  // authoritative for membership + epoch, so verify against /group/info before mutating state.
   async function rotateGroupKeyOnKickNotice(groupId, kickedId, epoch) {
     if (!CONFIG.GROUP_RATCHET_V5 || typeof epoch !== 'number') return;
     try {
       const current = await dbGet('identity', 'gsk:' + groupId);
       if (current && (current.epoch || 0) >= epoch) return;
       const group = await dbGet('contacts', groupId);
-      if (group) {
-        group.members = (group.members || []).filter(m => m.id !== kickedId);
-        await dbPut('contacts', group);
-      }
+      // You never learn of your OWN kick via a peer notice (the kicker excludes you from the
+      // recipients), and without a join token there is no authoritative source to check against —
+      // in both cases the safe move is to ignore the notice rather than rotate on faith.
+      if (!group || kickedId === myId || !API || !group.joinToken) return;
+      let info = null;
+      try {
+        const r = await postAPIRaw('/group/info', { token: group.joinToken });
+        if (r.ok) info = await r.json().catch(() => null);
+      } catch(e) { _dbg(e, 'kick-info'); return; }
+      // Fail closed on a bad/absent roster. Exact epoch match: when a later kick has already
+      // bumped it, that notice verifies on its own instead. A claimed member still present on
+      // the server means the "kick" never happened.
+      if (!info || !Array.isArray(info.members) || (info.epoch | 0) !== epoch ||
+          info.members.some(m => m && m.id === kickedId)) return;
+      group.members = (group.members || []).filter(m => m.id !== kickedId);
+      group.groupV5 = _computeGroupV5(group);
+      await dbPut('contacts', group);
       const freshChain = Array.from(crypto.getRandomValues(new Uint8Array(32)));
       await dbPut('identity', { chainKey: freshChain, counter: 0, epoch, v: 5, skipped: {} }, 'gsk:' + groupId);
       const targets = (group?.members || []).filter(m => m.id !== myId && m.id !== kickedId && m.pubB64);

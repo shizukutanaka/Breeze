@@ -1,5 +1,14 @@
 # Changelog
 
+## Client audit: forged `group_kick` notices could desync a victim's group; retry queue silently dropped messages on HTTP errors (branch devin/1790418192-round7, 2026-09-26)
+
+vitest 868 (+0, client-side logic has no harness coverage); `index.html`, `_headers`, `tauri.conf.json` (CSP re-pin), `CHANGELOG.md`.
+
+- **Forged `isGroupKick` notice → group-state poisoning**: any contact sharing a group could send an encrypted `group_kick` notice the receiver applied on faith — a fabricated `kickedId` shrank the victim's local roster (and their key-redistribution set) for a member who never left, and an inflated `epoch` permanently desynced the victim: every later legitimate epoch read as below the forged mark, muting the victim's sends to peers still on the real epoch. `rotateGroupKeyOnKickNotice` now treats the notice as a hint only: it fetches `/api/group/info` (the authoritative roster + epoch), requires an exact epoch match (a superseded kick's own notice verifies later instead), and requires the claimed member to be genuinely absent from the server roster. Notices claiming `kickedId === myId` are ignored (you never learn your own kick from peers — the kicker excludes you), and any fetch/parse failure fails closed — the group keeps working on the old epoch; the next valid notice re-syncs.
+- **Retry queue silent drop**: the `/msg/send` fallback inside `scheduleRetry` ignored `resp.ok` — fetch resolves (not rejects) on HTTP error responses, so a persistent 4xx/5xx consumed the queued item without re-queueing or dead-lettering it. Now both sends must return `.ok` before the item leaves the queue; failures re-queue and still reach the dead-letter queue after 3 attempts.
+
+---
+
 ## Mobile bundle shipped English-only: prepare.js never copied locales/; signing injection now idempotent (branch devin/1790411492-mobile-locales, 2026-09-26)
 
 vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/mobile-assets.test.js`, `CHANGELOG.md`.
