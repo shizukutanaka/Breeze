@@ -3026,7 +3026,12 @@ async function fetchRetry(url, opts = {}, { maxRetries = 3, baseDelay = 1000, ti
   }
 }
 
-function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+// esc() output is embedded in BOTH text and attribute contexts (value=, data-emoji=,
+// title=, alt=...). textContent→innerHTML only encodes < > & — a peer-supplied "
+// would break out of a double-quoted attribute (e.g. a reaction emoji), so encode
+// quotes too. Round-trip is preserved: &quot;/&#39; decode back in text and in
+// dataset reads (see renderReactions' data-emoji mechanism).
+function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML.replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 // Grapheme-aware avatar truncator: takes up to `max` grapheme clusters so compound emoji (ZWJ sequences, skin-tone modifiers) aren't split into half-surrogates.
 function avatarSlice(s, max = 2) {
   if (!s) return '';
@@ -6803,8 +6808,10 @@ async function initMessenger(dbName) {
 
   function renderLinks(text) {
     return text
-      // URLs
-      .replace(/(https?:\/\/[^\s<]+)/g, (url) => {
+      // URLs — the character class MUST exclude " and ' (esc() encodes <>& but not
+      // quotes): a peer URL ending in a quote otherwise breaks out of href= and
+      // smuggles a handler attribute into the rendered message (stored XSS shape).
+      .replace(/(https?:\/\/[^\s<>"']+)/g, (url) => {
         return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="md-link">${url}</a>`;
       })
       // v3.1: Auto-link email addresses
@@ -6970,9 +6977,13 @@ async function initMessenger(dbName) {
           href = URL.createObjectURL(blob);
           _blobUrls.add(href);
         } else if (f.blobUrl) {
-          // v3.6: P2P binary received files — blob URL created in handleBinaryChunk
-          href = f.blobUrl;
-          _blobUrls.add(href);
+          // v3.6: P2P binary received files — blob URL created in handleBinaryChunk.
+          // fileData is peer-supplied JSON: without the scheme check a crafted
+          // blobUrl (e.g. javascript:) lands verbatim in href= / src= (click XSS).
+          if (typeof f.blobUrl === 'string' && f.blobUrl.startsWith('blob:')) {
+            href = f.blobUrl;
+            _blobUrls.add(href);
+          }
         }
         if (href) {
           if (f.mime && f.mime.startsWith('image/')) {

@@ -1,5 +1,15 @@
 # Changelog
 
+## Harden XSS sinks: esc() quote-encoding, renderLinks quote exclusion, blobUrl scheme check (branch devin/1790419768-round12, 2026-09-26)
+
+vitest 871 (+3); `index.html`, `tests/xss-sinks.test.js`, `_headers`, `tauri/src-tauri/tauri.conf.json`, `CHANGELOG.md`.
+
+- `esc()` now encodes `"` and `'` — it is embedded in attribute contexts (`value=`, `data-emoji=`, `title=`, `alt=`, `data-lightbox=`) where textContent→innerHTML alone (`<>&`) leaves a quote able to break the attribute boundary. renderReactions' own comment claimed esc() covered `"` — it did not.
+- `renderLinks` URL pattern `[^\s<]` → `[^\s<>"']`: a peer URL ending in a quote could smuggle a handler attribute into the generated `<a>`.
+- File bubble `f.blobUrl` (peer-decrypted JSON) now requires `blob:` scheme before becoming `href`/`src` — a `javascript:` value would otherwise have been a click-XSS.
+- Severity context: all three sinks already sit behind `safeSetHTML`'s `sanitize()` (on* attrs stripped, href/src scheme-allowlisted) — this is defense-in-depth against mXSS/policy gaps, not a live exploit path.
+- `tests/xss-sinks.test.js`: source-level tripwires pinning all three invariants.
+
 ## Mobile bundle shipped English-only: prepare.js never copied locales/; signing injection now idempotent (branch devin/1790411492-mobile-locales, 2026-09-26)
 
 vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/mobile-assets.test.js`, `CHANGELOG.md`.
