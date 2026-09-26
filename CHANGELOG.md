@@ -1,5 +1,20 @@
 # Changelog
 
+## Worker dispatch hygiene pinned as permanent gates: every endpoint rate-limited, every response security-headed, unknown paths 404 (branch devin/<ts>-worker-hygiene, 2026-09-26)
+
+vitest 819 → **823**; `tests/worker-hygiene.test.js` (new), `_worker.js`, `CHANGELOG.md` — worker-only, no index.html.
+
+The last rounds' audit invariants were verified by hand and are now enforced so a future endpoint can't quietly regress them:
+
+- **Rate-limit coverage** — a source-scanning test parses every `case '/api/…'` out of the dispatch switch and requires an explicit `limits` entry. An endpoint missing from the map silently falls back to the shared 30 rpm default — which the map's own comments call out as too loose for KV-writing endpoints.
+- **Security headers on every response** — each route is POSTed `{}` through the real `worker.fetch` pipeline; every response must carry nosniff / X-Frame-Options DENY / no-store / no-referrer / lockdown CSP / `application/json`, and must return a structured error (never a 500) for empty input.
+- **Validate-before-write** — the `{}` sweep shares one KV mock and asserts zero keys were persisted; a handler that writes before validating (e.g. storing `presence:undefined`) now fails a test.
+- Unknown `/api/*` → 404 `NOT_FOUND`; GET → 405.
+
+Removed two stale comments in `_worker.js` while auditing: a dead "OGP link preview" section header (no such endpoint exists) and the `ogp:` key reference inside `sha256Short` — leftovers pointing readers at a feature that was never shipped.
+
+---
+
 ## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
 
 819 vitest unchanged; Playwright E2E 60 unchanged; `docs/ROADMAP.md`, `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation) — dead-code removal only, no runtime behavior change.
