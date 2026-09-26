@@ -1,5 +1,18 @@
 # Changelog
 
+## Strict auth continuity on the remaining flag-gated endpoints — unsigned calls rejected once an account has a registered auth root (branch devin/1790416688-strict-auth-continuity, 2026-09-26)
+
+vitest 870 (+4); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
+
+- Every `*_REQUIRE_AUTH` endpoint was verified-when-present + flag-gated: the signature was checked when supplied, but an attacker could simply omit `ts`/`sig` and still mutate a keyed account whenever the flag was unset (the default). Round 3 (`devin/1790416313-prekey-auth-root`) applied strict continuity to `prekey/upload`; this change extends it to **queue poll/ack, group create + every group op, push subscribe/unsubscribe, alias/set, and backup upload/download** — a registered `edIdentityKey` in `prekey:{userId}` now makes unsigned requests fail closed with 403 `AUTH_REQUIRED` on those endpoints. The flags still govern *keyless* accounts (first-registration TOFU and accounts that never uploaded a key).
+- New `authRootOf(env, userId)` helper centralizes the `prekey:{userId}` → `edIdentityKey` read; `checkQueueAuth`'s verification-key cache now caches the auth root itself (not per-sig), so the unsigned path still costs one KV read at most.
+- Group ops additionally hoist the actor's bundle read into `checkGroupAuth` — the per-handler duplicate reads are gone, and the signed path is byte-identical (`breeze-group-${action}:${token}:${actorId}:${ts}:${bind}`).
+- `alias/set` strictens only when the *implied* account (`prekey:{pub.slice(0,12)}`) exists and `identityKey === pub` — unsigned squatting on an unregistered pub still works (that's its purpose), but once the pub belongs to a keyed account the handle can't be silently bound by anyone else.
+- Deliberately NOT strictened: `msg/send`, `sealed/send`, `group/join` (senders/members are strangers by design — no stored root), presence heartbeat and TURN (client genuinely doesn't sign), `alias/delete`, `device/set`, `account/delete`, inst-binding (already strict — unsigned is rejected regardless).
+- Tests: unsigned kick by a keyed actor now asserts 403 (was the bypass); the old "legacy unauthenticated kick" test now exercises a keyless creator (the preserved residual path); account-delete and backup fixtures sign their setup calls since the accounts are keyed. Net +4 assertions over 869.
+
+---
+
 ## Mobile bundle shipped English-only: prepare.js never copied locales/; signing injection now idempotent (branch devin/1790411492-mobile-locales, 2026-09-26)
 
 vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/mobile-assets.test.js`, `CHANGELOG.md`.

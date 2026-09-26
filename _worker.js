@@ -518,6 +518,14 @@ async function handleMsgSend(body, ip, env, request) {
   return json({ ok: true, ack: Date.now() }, 200, request);
 }
 
+// The account's stored Ed25519 auth root (edIdentityKey) — the key every signed
+// endpoint verifies against, or null for accounts that never registered one.
+async function authRootOf(env, userId) {
+  const raw = await kvGet(env, `prekey:${userId}`);
+  const b = raw ? safeJsonParse(raw) : null;
+  return (b && typeof b.edIdentityKey === 'string' && b.edIdentityKey) || null;
+}
+
 // Queue-read auth (msg/poll, sealed/poll, sealed/ack). These three endpoints expose one
 // capability — READ a user's undelivered queue and (via ack/cleanup) DELETE it — and were
 // historically gated by nothing but knowledge of the userId. That id is NOT a secret: it's
@@ -530,11 +538,30 @@ async function handleMsgSend(body, ip, env, request) {
 // is verified when present, and QUEUE_REQUIRE_AUTH=true makes it mandatory once clients
 // ship the signing fields. Per-op domain separation so a captured poll signature can't be
 // replayed as a destructive ack.
+//
+// STRICT CONTINUITY: verified-when-present alone leaves a bypass — the attacker simply
+// omits ts/sig. Once an account has a registered auth root, unsigned queue reads/deletes
+// for it are rejected outright; the flag then only governs the residual keyless-account
+// window (legacy clients that never uploaded an Ed25519 key keep unsigned access).
 async function checkQueueAuth(body, env, request, op) {
   const { id, ts, sig } = body;
   const hasSig = ts !== undefined || sig !== undefined;
+  // Cache the registered identity key per isolate — polls are the hottest read path in the
+  // worker (every few seconds per device), so a KV read per request would double poll cost.
+  // Only positive results are cached (an unregistered id may register next request), and a
+  // signature-verification FAILURE drops the entry so an identity-key rotation self-heals on
+  // the next attempt instead of wedging the owner until the isolate recycles.
+  const keyCache = (globalThis._queueAuthKey ||= new Map());
+  let edKey = keyCache.get(id) || null;
+  if (!edKey) {
+    edKey = await authRootOf(env, id);
+    if (edKey) {
+      if (keyCache.size > 2000) globalThis._queueAuthKey = new Map([...keyCache.entries()].slice(-1000));
+      globalThis._queueAuthKey.set(id, edKey);
+    }
+  }
   if (!hasSig) {
-    if (env.QUEUE_REQUIRE_AUTH === 'true')
+    if (env.QUEUE_REQUIRE_AUTH === 'true' || edKey)
       return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
     return null;
   }
@@ -544,22 +571,6 @@ async function checkQueueAuth(body, env, request, op) {
     return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
   if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS)
     return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
-  // Cache the registered identity key per isolate — polls are the hottest read path in the
-  // worker (every few seconds per device), so a KV read per request would double poll cost.
-  // Only positive results are cached (an unregistered id may register next request), and a
-  // signature-verification FAILURE drops the entry so an identity-key rotation self-heals on
-  // the next attempt instead of wedging the owner until the isolate recycles.
-  const keyCache = (globalThis._queueAuthKey ||= new Map());
-  let edKey = keyCache.get(id) || null;
-  if (!edKey) {
-    const data = await kvGet(env, `prekey:${id}`);
-    const bundle = data ? safeJsonParse(data) : null;
-    edKey = (bundle && typeof bundle.edIdentityKey === 'string' && bundle.edIdentityKey) || null;
-    if (edKey) {
-      if (keyCache.size > 2000) globalThis._queueAuthKey = new Map([...keyCache.entries()].slice(-1000));
-      globalThis._queueAuthKey.set(id, edKey);
-    }
-  }
   if (!edKey) return json({ error: 'No registered identity key', code: 'NO_IDENTITY_KEY' }, 403, request);
   const ok = await verifyEd25519(edKey, utf8ToB64(`breeze-${op}:${id}:${ts}`), sig);
   if (!ok) {
@@ -857,8 +868,16 @@ async function handleAliasSet(body, env, request) {
       return json({ error: 'alias target pub does not match the account identity key', code: 'PUB_MISMATCH' }, 403, request);
     const ok = await verifyEd25519(bundle.edIdentityKey, btoa(`breeze-alias-set:${clean}:${aliasTs}`), aliasSig);
     if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
-  } else if (env.ALIAS_REQUIRE_AUTH === 'true') {
-    return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+  } else {
+    if (env.ALIAS_REQUIRE_AUTH === 'true')
+      return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+    // Strict continuity: the target identity's implied account slot may already hold
+    // an auth root — unsigned binding would then point that account's @handle at an
+    // arbitrary display name (or squat it for another account). Only applies when the
+    // stored bundle actually belongs to this pub (identityKey match).
+    const implied = safeJsonParse(await kvGet(env, `prekey:${pub.slice(0, 12)}`) || 'null');
+    if (implied && implied.identityKey === pub && typeof implied.edIdentityKey === 'string' && implied.edIdentityKey)
+      return json({ error: 'alias target is a registered account — signature required', code: 'AUTH_REQUIRED' }, 403, request);
   }
 
   // Check if taken
@@ -1226,20 +1245,25 @@ async function handleGroupInfo(body, env, request) {
 // the signature still verified (within the 5-min window). Since no client signs yet, the
 // canonical signed format is fixed here before signing goes live. Returns a Response on
 // failure, or null to proceed.
+// STRICT CONTINUITY: once the actor's account has a registered Ed25519 auth root,
+// unsigned group ops (kick/leave/admin/transfer/rename/delete/create) are rejected
+// even with GROUP_REQUIRE_AUTH unset — otherwise an attacker just omits ts/sig to act
+// as any registered member. Accounts that never registered a key keep the legacy
+// unsigned path (there is no root to prove against); the flag makes auth mandatory
+// for them too.
 async function checkGroupAuth(env, request, action, token, actorId, ts, sig, bind = '') {
   const hasSig = ts !== undefined || sig !== undefined;
+  const actorEd = await authRootOf(env, actorId);
   if (hasSig) {
     if (ts === undefined || sig === undefined) return json({ error: 'ts and sig must both be provided', code: 'PARTIAL_AUTH' }, 400, request);
     if (typeof sig !== 'string' || sig.length > 500) return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
     if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS) return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
-    const pkRaw = await kvGet(env, `prekey:${actorId}`);
-    const bundle = pkRaw ? safeJsonParse(pkRaw) : null;
-    if (!bundle || typeof bundle.edIdentityKey !== 'string' || !bundle.edIdentityKey) return json({ error: 'No registered identity key', code: 'NO_IDENTITY_KEY' }, 403, request);
-    const ok = await verifyEd25519(bundle.edIdentityKey, utf8ToB64(`breeze-group-${action}:${token}:${actorId}:${ts}:${bind}`), sig);
+    if (!actorEd) return json({ error: 'No registered identity key', code: 'NO_IDENTITY_KEY' }, 403, request);
+    const ok = await verifyEd25519(actorEd, utf8ToB64(`breeze-group-${action}:${token}:${actorId}:${ts}:${bind}`), sig);
     if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
     return null;
   }
-  if (env.GROUP_REQUIRE_AUTH === 'true') return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+  if (env.GROUP_REQUIRE_AUTH === 'true' || actorEd) return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
   return null;
 }
 
@@ -1627,6 +1651,9 @@ async function handlePushSubscribe(body, env, request) {
   {
     const { ts, sig } = body;
     const hasSig = ts !== undefined || sig !== undefined;
+    // Strict continuity: a registered auth root makes unsigned subscribe attempts fail
+    // closed — otherwise the attacker just omits ts/sig to inject their own endpoint.
+    const priorEd = await authRootOf(env, userId);
     if (hasSig) {
       if (ts === undefined || sig === undefined)
         return json({ error: 'ts and sig must both be provided', code: 'PARTIAL_AUTH' }, 400, request);
@@ -1634,18 +1661,16 @@ async function handlePushSubscribe(body, env, request) {
         return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
       if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS)
         return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
-      const pkRaw = await kvGet(env, `prekey:${userId}`);
-      const bundle = pkRaw ? safeJsonParse(pkRaw) : null;
-      if (!bundle || typeof bundle.edIdentityKey !== 'string' || !bundle.edIdentityKey)
+      if (!priorEd)
         return json({ error: 'No registered identity key', code: 'NO_IDENTITY_KEY' }, 403, request);
       // Bind the SUBSCRIPTION (endpoint + keys), not just userId+ts: otherwise a captured
       // push-subscribe signature could be replayed with the attacker's own endpoint/p256dh
       // swapped in — exactly the "register their own device" attack this auth exists to stop.
       // The client signs the same raw fields it sends (pre-sanitization).
       const subBind = `${subscription.endpoint || ''}:${subscription.keys?.p256dh || ''}:${subscription.keys?.auth || ''}`;
-      const ok = await verifyEd25519(bundle.edIdentityKey, utf8ToB64(`breeze-push-subscribe:${userId}:${ts}:${subBind}`), sig);
+      const ok = await verifyEd25519(priorEd, utf8ToB64(`breeze-push-subscribe:${userId}:${ts}:${subBind}`), sig);
       if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
-    } else if (env.PUSH_REQUIRE_AUTH === 'true') {
+    } else if (env.PUSH_REQUIRE_AUTH === 'true' || priorEd) {
       return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
     }
   }
@@ -1696,6 +1721,8 @@ async function handlePushUnsubscribe(body, env, request) {
   {
     const { ts, sig } = body;
     const hasSig = ts !== undefined || sig !== undefined;
+    // Strict continuity: same as subscribe — a keyed account can't be unsubscribed unsigned.
+    const priorEd = await authRootOf(env, userId);
     if (hasSig) {
       if (ts === undefined || sig === undefined)
         return json({ error: 'ts and sig must both be provided', code: 'PARTIAL_AUTH' }, 400, request);
@@ -1703,14 +1730,12 @@ async function handlePushUnsubscribe(body, env, request) {
         return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
       if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS)
         return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
-      const pkRaw = await kvGet(env, `prekey:${userId}`);
-      const bundle = pkRaw ? safeJsonParse(pkRaw) : null;
-      if (!bundle || typeof bundle.edIdentityKey !== 'string' || !bundle.edIdentityKey)
+      if (!priorEd)
         return json({ error: 'No registered identity key', code: 'NO_IDENTITY_KEY' }, 403, request);
       // Bind the specific endpoint being removed so a subscribe signature cannot be replayed here.
-      const ok = await verifyEd25519(bundle.edIdentityKey, utf8ToB64(`breeze-push-unsubscribe:${userId}:${ts}:${endpoint}`), sig);
+      const ok = await verifyEd25519(priorEd, utf8ToB64(`breeze-push-unsubscribe:${userId}:${ts}:${endpoint}`), sig);
       if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
-    } else if (env.PUSH_REQUIRE_AUTH === 'true') {
+    } else if (env.PUSH_REQUIRE_AUTH === 'true' || priorEd) {
       return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
     }
   }
@@ -2602,9 +2627,12 @@ async function handleBackupUpload(body, env, request) {
   if (typeof backup !== 'string') return json({ error: 'backup must be a string', code: 'INVALID_FIELD' }, 400, request);
 
   // Optional Ed25519 auth: callers may include { ts, sig } to prove ownership of the
-  // account's identity key before overwriting the backup. When omitted the upload is
-  // unauthenticated (backward-compat). Both fields must be present or both absent.
+  // account's identity key before overwriting the backup. Both fields must be present
+  // or both absent. Strict continuity: once the account has a registered auth root,
+  // unsigned uploads are rejected — otherwise an attacker overwrites the victim's
+  // backup blob (its ciphertext is theirs to watch users restore later).
   const hasSig = ts !== undefined || sig !== undefined;
+  const priorEd = await authRootOf(env, userId);
   if (hasSig) {
     if (ts === undefined || sig === undefined)
       return json({ error: 'ts and sig must both be provided together', code: 'PARTIAL_AUTH' }, 400, request);
@@ -2612,14 +2640,12 @@ async function handleBackupUpload(body, env, request) {
       return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
     if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS)
       return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
-    const data = await kvGet(env, `prekey:${userId}`);
-    const bundle = data ? safeJsonParse(data) : null;
-    if (!bundle || typeof bundle.edIdentityKey !== 'string' || !bundle.edIdentityKey)
+    if (!priorEd)
       return json({ error: 'No registered identity key', code: 'NO_IDENTITY_KEY' }, 403, request);
     const challenge = `breeze-backup-upload:${userId}:${ts}`;
-    const ok = await verifyEd25519(bundle.edIdentityKey, btoa(challenge), sig);
+    const ok = await verifyEd25519(priorEd, btoa(challenge), sig);
     if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
-  } else if (env.BACKUP_REQUIRE_AUTH === 'true') {
+  } else if (env.BACKUP_REQUIRE_AUTH === 'true' || priorEd) {
     return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
   }
 
@@ -2647,6 +2673,9 @@ async function handleBackupDownload(body, env, request) {
   // PRESENCE_REQUIRE_AUTH, etc.). Without it, knowing a userId is enough to download the
   // encrypted blob and brute-force the passphrase offline.
   const hasSig = ts !== undefined || sig !== undefined;
+  // Strict continuity: a registered auth root makes unsigned downloads fail closed —
+  // a userId alone was never authorization to pull the (brute-forceable) blob.
+  const priorEd = await authRootOf(env, userId);
   if (hasSig) {
     if (ts === undefined || sig === undefined)
       return json({ error: 'ts and sig must both be provided together', code: 'PARTIAL_AUTH' }, 400, request);
@@ -2654,14 +2683,12 @@ async function handleBackupDownload(body, env, request) {
       return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
     if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS)
       return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
-    const data = await kvGet(env, `prekey:${userId}`);
-    const bundle = data ? safeJsonParse(data) : null;
-    if (!bundle || typeof bundle.edIdentityKey !== 'string' || !bundle.edIdentityKey)
+    if (!priorEd)
       return json({ error: 'No registered identity key', code: 'NO_IDENTITY_KEY' }, 403, request);
     const challenge = `breeze-backup-download:${userId}:${ts}`;
-    const ok = await verifyEd25519(bundle.edIdentityKey, btoa(challenge), sig);
+    const ok = await verifyEd25519(priorEd, btoa(challenge), sig);
     if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
-  } else if (env.BACKUP_REQUIRE_AUTH === 'true') {
+  } else if (env.BACKUP_REQUIRE_AUTH === 'true' || priorEd) {
     return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
   }
 

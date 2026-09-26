@@ -1415,11 +1415,27 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
   const signGroup = async (ed, action, token, actorId, ts, bind = '') =>
     toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, new TextEncoder().encode(`breeze-group-${action}:${token}:${actorId}:${ts}:${bind}`))));
 
-  it('legacy unauthenticated kick still works when GROUP_REQUIRE_AUTH is unset (backward compat)', async () => {
+  it('legacy unauthenticated kick still works for a KEYLESS actor when GROUP_REQUIRE_AUTH is unset (backward compat)', async () => {
     const env = makeEnv();
-    const { token } = await setup(env);
-    const res = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' }, env, req({}));
+    // Creator never registered an Ed25519 key → no auth root exists to prove against,
+    // so the residual unsigned path strict-continuity preserves applies.
+    await env.KV.put('grp:keylesstok', JSON.stringify({
+      name: 'g', creatorId: 'keylesscr1', epoch: 0,
+      members: [{ id: 'keylesscr1', pub: 'kpub' }, { id: 'member01', pub: 'mpub' }],
+    }));
+    const res = await handleGroupKick({ token: 'keylesstok', kickId: 'member01', adminId: 'keylesscr1' }, env, req({}));
     expect(res.status).toBe(200);
+  });
+
+  it('unsigned kick by a KEYED actor is AUTH_REQUIRED even with the flag unset (strict continuity)', async () => {
+    // Verified-when-present alone left the bypass: the attacker just omits ts/sig.
+    const env = makeEnv(); // flag OFF
+    const { token } = await setup(env); // creator1 has a registered edIdentityKey
+    const res = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
+    const g = JSON.parse(await env.KV.get(`grp:${token}`));
+    expect(g.members.some((m) => m.id === 'member01')).toBe(true); // kick did NOT happen
   });
 
   it('rejects unauthenticated group ops with 403 when GROUP_REQUIRE_AUTH is enabled', async () => {
@@ -1880,9 +1896,17 @@ describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
     const memberToken = (await created.json()).token;
     await handleGroupJoin({ token: memberToken, memberId: userId, memberPub: userId + 'mpub', memberName: 'Me' }, env, gReq({}));
 
-    // A group the user created.
+    // A group the user created — group/create is auth-gated for keyed accounts
+    // (strict continuity), so sign breeze-group-create::<id>:<ts>:<bind> where
+    // bind = sha256Short(JSON.stringify([creatorPub, name, creatorName||'', caps||[]])).
+    const tsC = Date.now();
+    const bindC = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',
+      new TextEncoder().encode(JSON.stringify(['mpub', 'mine', 'Me', []])))))
+      .slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
+    const createSig = toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey,
+      new TextEncoder().encode(`breeze-group-create::${userId}:${tsC}:${bindC}`))));
     const ownCreate = await handleGroupCreate(
-      { name: 'mine', creatorId: userId, creatorPub: 'mpub', creatorName: 'Me' }, env, gReq({}));
+      { name: 'mine', creatorId: userId, creatorPub: 'mpub', creatorName: 'Me', ts: tsC, sig: createSig }, env, gReq({}));
     const ownToken = (await ownCreate.json()).token;
     await handleGroupJoin({ token: ownToken, memberId: 'friend01', memberPub: 'friend01fpub', memberName: 'F' }, env, gReq({}));
 
@@ -3681,7 +3705,8 @@ describe('backup upload / download', () => {
     const e = makeEnv();
     const userId = 'bakauth02';
     const ed = await registerForBackup(e, userId);
-    await handleBackupUpload({ userId, backup: 'my-backup' }, e, req({}));
+    const upTs = Date.now();
+    await handleBackupUpload({ userId, backup: 'my-backup', ts: upTs, sig: await signBackup(ed, 'upload', userId, upTs) }, e, req({}));
     const ts = Date.now();
     const sig = await signBackup(ed, 'download', userId, ts);
     const res = await handleBackupDownload({ userId, ts, sig }, e, dlReq({}));
