@@ -1,5 +1,14 @@
 # Changelog
 
+## Client: relay-supplied group rosters now enforce the id↔pub binding (safeMemberList) (branch devin/1790423647-round26, 2026-09-26)
+
+vitest 889 (+5); `index.html`, `tests/group-roster.test.js`, `CHANGELOG.md`, CSP hash re-pinned.
+
+- `safeMemberList` cleaned field sizes on rosters returned by `/group/join`, `/group/info` and the member poll — all untrusted relay output — but never verified that `id === pub.slice(0,12)`. Member entries are `(id, pubB64)` bindings and every group fan-out (sender-key distribution, message sends, kick notices) encrypts to `pubB64` under `id`'s identity, so a tampered roster could bind a member's id to an attacker's pub and silently redirect that member's encrypted share. Entries now require `m.id` string (≤128), `pubB64` base64 (12–200 chars), and `pubB64.slice(0,12) === m.id`; unknown fields dropped.
+- `tests/group-roster.test.js` compiles the real `safeMemberList` extracted from index.html and runs crafted rosters through it (binding mismatch, missing/malformed pubs, cap, caps sanitization).
+
+---
+
 ## Lost-write recovery sweeps the rest of the worker's multi-actor KV mutations (branch devin/1790415615-grp-sig-push-lost-write, 2026-09-26)
 
 vitest 849 (+16); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
