@@ -19,8 +19,12 @@
 const fs = require('fs');
 const path = require('path');
 
-const FALLBACK_CSP = "default-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: stun: turn:; "
-  + "img-src 'self' blob: data: https:; media-src 'self' blob:; worker-src 'self' blob:;";
+// A missing/unreadable _headers is a packaging bug: build.sh's WEB_FILES and
+// package.json's extraResources both ship it, so reaching here means the bundle
+// is broken. Fail CLOSED — deny everything — rather than silently resurrect the
+// 'unsafe-inline' hole this module exists to close. A blank app is loudly broken
+// and gets fixed; a quietly permissive CSP is invisible.
+const FALLBACK_CSP = "default-src 'none'";
 
 // Extracted for its own test coverage — the file-reading half (readWebCSP) can't easily
 // be exercised without touching the filesystem, but the parsing rule itself easily can.

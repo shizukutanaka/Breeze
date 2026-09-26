@@ -59,6 +59,14 @@ describe('readWebCSP', () => {
     });
   });
 
+  it('the fallback is fail-CLOSED — no scripts, no unsafe-inline', () => {
+    // Only reachable on a packaging bug (_headers ships in extraResources), and a
+    // permissive fallback there would silently re-open the exact XSS-to-key-
+    // exfiltration hole hash-pinning exists to close. Broken-loud beats unsafe-quiet.
+    expect(FALLBACK_CSP).not.toContain('unsafe-inline');
+    expect(FALLBACK_CSP).toBe("default-src 'none'"); // blocks scripts, styles, everything
+  });
+
   it('matches the real repo _headers file end to end (regression against real content)', () => {
     // Reads the actual, checked-in _headers this project ships — proves the parser
     // agrees with reality, not just a hand-crafted fixture.
