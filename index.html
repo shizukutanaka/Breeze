@@ -13538,7 +13538,9 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
             if (oldAlias && oldAlias !== newAlias) {
               try {
                 const delTs = Date.now();
-                const delSig = await signMessage(`breeze-alias-delete:${oldAlias}:${delTs}`);
+                // Worker signs over `clean` — lowercase + charset strip + 20-char cap —
+                // so a raw alias with uppercase/invalid chars never verifies (SIG_INVALID).
+                const delSig = await signMessage(`breeze-alias-delete:${oldAlias.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20)}:${delTs}`);
                 if (delSig) await postAPIRaw('/alias/delete', { alias: oldAlias, userId: myId, ts: delTs, sig: delSig });
               } catch(relErr) { _dbg(relErr, 'alias-release'); }
             }
