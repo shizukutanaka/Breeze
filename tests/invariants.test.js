@@ -17,7 +17,7 @@ describe('mutation-binding invariants (cross-conversation tampering)', () => {
     expect(html).toContain('stored.contactId === contact.id');
   });
   it('P2P poll_vote binds to the sender\'s conversation poll only', () => {
-    expect(html).toContain('pollMsg.contactId === contact.id');
+    expect(html).toContain('m.contactId === contact.id');
   });
   it('group edit/delete enforce author-only + this-group binding', () => {
     expect(html).toContain('targetMsgId.startsWith(msg.from');
