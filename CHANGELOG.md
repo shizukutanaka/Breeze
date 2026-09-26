@@ -1,5 +1,14 @@
 # Changelog
 
+## Move P2P outbox off localStorage → IDB settings store (plaintext-at-rest fix) (branch devin/1790420155-round13, 2026-09-26)
+
+vitest 868 (+0); `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json`, `CHANGELOG.md`.
+
+- `_outbox` (pending P2P messages) persisted its queue — plaintext message text — under `localStorage['brz-outbox-<myId>']`, bypassing the app's at-rest storage discipline (rules: IndexedDB for sensitive data). It now lives in the IDB settings store as `outbox:<myId>`.
+- Hook indirection: `_outboxPersistHook`/`_outboxRestoreHook` are installed by `_installOutboxPersistence()` inside `initMessenger` (the module-level `queueOutbox()` can't cross the closure to reach `dbPut`); both `_outboxKey` assignment sites call it, and `_messengerCleanup` nulls the hooks on account switch so a stale hook can't write under the old account's key.
+- One-shot migration: a legacy `brz-outbox-<myId>` localStorage queue is imported when the IDB entry is empty, then removed.
+- Degradation: before hooks install (or after cleanup) the legacy localStorage path remains as a last-resort stash so a queue is never silently dropped.
+
 ## Mobile bundle shipped English-only: prepare.js never copied locales/; signing injection now idempotent (branch devin/1790411492-mobile-locales, 2026-09-26)
 
 vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/mobile-assets.test.js`, `CHANGELOG.md`.

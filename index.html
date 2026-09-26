@@ -3289,17 +3289,26 @@ function queueOutbox(peerId, text, meta) {
   _dbg(null, `Outbox: queued for ${peerId.slice(0, 8)} (${queue.length} pending)`);
 }
 
+// Persistence is delegated to hooks installed by initMessenger once IDB and myId
+// exist: the outbox holds PLAINTEXT pending messages, so it belongs in the IDB
+// settings store ('outbox:<myId>') — localStorage keeps them outside the app's
+// at-rest storage discipline. Before the hook is installed (or after account
+// cleanup clears it) the legacy localStorage key remains as a last-resort stash
+// so a queue is never silently dropped.
+let _outboxPersistHook = null, _outboxRestoreHook = null;
 function _persistOutbox() {
   try {
     const obj = {};
     for (const [k, v] of _outbox) {
       if (v.length > 0) obj[k] = v.slice(-50);
     }
+    if (_outboxPersistHook) { _outboxPersistHook(obj); return; }
     localStorage.setItem(_outboxKey, JSON.stringify(obj));
   } catch(e) { /* quota */ }
 }
-function _restoreOutbox() {
+async function _restoreOutbox() {
   try {
+    if (_outboxRestoreHook) { await _restoreOutboxHook(); return; }
     const raw = localStorage.getItem(_outboxKey);
     if (!raw) return;
     const obj = JSON.parse(raw);
@@ -5745,6 +5754,7 @@ async function initMessenger(dbName) {
       // the old account would be sent under the new account's identity if both accounts
       // share a contact by public key. Messages were already persisted to _outboxKey.
       _outbox.clear();
+      _outboxPersistHook = _outboxRestoreHook = null; // stale hooks would write under the old account's key
       Object.values(peers).forEach(p => {
         if (p._healthTimer) clearInterval(p._healthTimer);
         // Leak fix: pc.close() does NOT fire connectionstatechange (per spec), so the
@@ -5940,6 +5950,28 @@ async function initMessenger(dbName) {
   // This is the SECOND occurrence of this class here; see the _perf note near the top.
   // Keep boot last, and keep it a function: that is what makes the ordering safe rather than
   // lucky. tests/e2e/smoke.spec.js guards both symptoms.
+  // IDB-backed outbox persistence — the queue holds PLAINTEXT pending messages, so
+  // it lives in the settings store as 'outbox:<myId>' rather than localStorage
+  // (rules: no localStorage for sensitive data). Hook shape keeps the module-level
+  // queueOutbox() usable without crossing the initMessenger closure; the legacy
+  // brz-outbox-<id> localStorage key is imported once, then removed.
+  function _installOutboxPersistence() {
+    const idbKey = 'outbox:' + myId;
+    _outboxPersistHook = obj => dbPut('settings', obj, idbKey).catch(e => _dbg(e, 'outbox-persist'));
+    _outboxRestoreHook = async () => {
+      let obj = await dbGet('settings', idbKey);
+      if (!obj || typeof obj !== 'object' || Object.keys(obj).length === 0) {
+        const legacy = localStorage.getItem(_outboxKey);
+        if (legacy) { try { obj = JSON.parse(legacy); } catch {} }
+      }
+      localStorage.removeItem(_outboxKey);
+      if (!obj || typeof obj !== 'object') return;
+      for (const [k, v] of Object.entries(obj)) {
+        if (Array.isArray(v) && v.length > 0) _outbox.set(k, v.slice(-50));
+      }
+      if (_outbox.size > 0) _dbg(null, `Outbox: restored ${_outbox.size} peer queues`);
+    };
+  }
   async function _boot() {
   const hasId = await loadIdentity();
   if (hasId) {
@@ -5948,7 +5980,8 @@ async function initMessenger(dbName) {
     // and could be delivered under B's identity to a shared contact.
     _outboxKey = 'brz-outbox-' + myId;
     _outbox.clear();
-    _restoreOutbox();
+    _installOutboxPersistence();
+    await _restoreOutbox();
     _DOM.get('msg-setup').classList.add('hidden');
     _DOM.get('msg-main').classList.remove('hidden');
     _DOM.get('msg-input-bar').classList.remove('hidden');
@@ -6003,6 +6036,7 @@ async function initMessenger(dbName) {
     await createIdentity(name, alias);
     _outboxKey = 'brz-outbox-' + myId;
     _outbox.clear();
+    _installOutboxPersistence();
     _DOM.get('msg-setup').classList.add('hidden');
     _DOM.get('msg-main').classList.remove('hidden');
     _DOM.get('msg-input-bar').classList.remove('hidden');
