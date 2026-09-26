@@ -1,5 +1,13 @@
 # Changelog
 
+## /linkto TOFU gap: pinned relay-supplied rootEd without verifying the registry signature (branch devin/1790422190-round20, 2026-09-26)
+
+vitest 868 (+0); `index.html`, `locales/ja.json`, `_headers`, `tauri/src-tauri/tauri.conf.json`.
+
+- `/linkto <rootPub>` pinned `rec.rootEd` — the account's Ed25519 signing key — straight from `/device/list`, a relay-served field, and never verified the registry's signature against it. The physically-carried X25519 root pub authenticates the account id, but not the Ed key: a malicious relay could substitute its own `rootEd` at link time, after which every `_fetchDeviceList` signature check verifies against the RELAY's key — letting it inject a listening device into the registry. Self-sync fan-out would then encrypt copies of sent messages to the injected device, and a stranger pub in the registry would pass the selfSync membership gate.
+- Now: `/linkto` recomputes the signed digest over `rec.devices` and requires `verifySignature('breeze-device-set:<id>:<ts>:<digest>', rec.sig, rec.rootEd) === true` BEFORE pinning `rootEd`. The signature can only be produced by the root's real Ed key, so a substituted `rootEd` fails and the link is refused (`devBadSig`, EN+JA added).
+- Residual: the pin remains TOFU — a relay that serves a self-consistent record (real sig + real rootEd, which it cannot forge) is still trusted to show the current registry; verified-elsewhere root keys would need an out-of-band Ed-key channel (same class as contact TOFU).
+
 ## Mobile bundle shipped English-only: prepare.js never copied locales/; signing injection now idempotent (branch devin/1790411492-mobile-locales, 2026-09-26)
 
 vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/mobile-assets.test.js`, `CHANGELOG.md`.
