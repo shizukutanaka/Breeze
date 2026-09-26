@@ -1,5 +1,12 @@
 # Changelog
 
+## Bound P2P file-chunk sizes + sanitize ACK msgId selector (memory-DoS + selector-injection) (branch devin/1790420395-round14, 2026-09-26)
+
+vitest 868 (+0); `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json`, `CHANGELOG.md`.
+
+- `handleBinaryChunk`: `total ≤ MAX_CHUNKS` bounded the *count* but each chunk's `data` carried whatever bytes followed the header — ~3201 oversized chunks ≈ 3 GB reachable at reassembly, crashing the tab. Per-chunk `data.length > CONFIG.CHUNK_SIZE` now rejected, plus a final `fullSize > FILE_MAX` guard before the `new Uint8Array` allocation.
+- `updateDeliveryState`: peer-controlled `msg.i` from state-channel ACKs was interpolated raw into `querySelector([data-msgid="…"])` — the only `data-msgid` lookup missing the `safeMsgId` guard used everywhere else. Now sanitized.
+
 ## Mobile bundle shipped English-only: prepare.js never copied locales/; signing injection now idempotent (branch devin/1790411492-mobile-locales, 2026-09-26)
 
 vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/mobile-assets.test.js`, `CHANGELOG.md`.

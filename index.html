@@ -11070,7 +11070,9 @@ async function initMessenger(dbName) {
   // v3: DELIVERY STATE (ACK)
   function updateDeliveryState(msgId, state) {
     // state: 0=delivered, 1=read, 2=deleted
-    const el = document.querySelector(`[data-msgid="${msgId}"] .ts`);
+    // Sanitize peer-supplied msgId (state-channel ACKs carry raw msg.i) — the same
+    // CSS-selector-injection guard applied everywhere else we query by msgId.
+    const el = document.querySelector(`[data-msgid="${safeMsgId(msgId || '')}"] .ts`);
     if (!el) return;
     const existing = el.querySelector('.delivery-state');
     if (existing) existing.remove();
@@ -11108,6 +11110,11 @@ async function initMessenger(dbName) {
     // Reject unreasonably large metadata (255 bytes is plenty for a filename/MIME type).
     if (nameLen > 255 || mimeLen > 128) return;
     const data = new Uint8Array(buffer, 28 + nameLen + mimeLen);
+    // Bound each chunk: total ≤ MAX_CHUNKS alone leaves 3+ GB reachable when every
+    // peer-supplied chunk is oversized — the reassembly allocation then crashes the
+    // tab. Senders never exceed CHUNK_SIZE per chunk (last one is smaller, never
+    // larger), so anything bigger is malformed.
+    if (data.length > CONFIG.CHUNK_SIZE) return;
     if (!_fileChunks[fileId]) {
       // Prune transfers idle for > 60 s before checking the slot limit — prevents an
       // attacker from starting 10 incomplete transfers and permanently blocking new ones.
@@ -11148,6 +11155,9 @@ async function initMessenger(dbName) {
     }
     if (fc.received.size === fc.total) {
       const fullSize = fc.chunks.reduce((s, c) => s + c.length, 0);
+      // Belt-and-suspenders final bound before the allocation (a craftier sequence
+      // of individually-legal chunks could still overshoot FILE_MAX).
+      if (fullSize > CONFIG.FILE_MAX) { delete _fileChunks[fileId]; if (progEl) progEl.remove(); return; }
       const full = new Uint8Array(fullSize);
       let offset = 0;
       for (const chunk of fc.chunks) { full.set(chunk, offset); offset += chunk.length; }
