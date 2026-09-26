@@ -1,5 +1,13 @@
 # Changelog
 
+## Sealed poll: ACK every received envelope (poison-envelope redelivery loop) (branch devin/1790419045-round10, 2026-09-26)
+
+vitest 868 (+0); `index.html`, `_headers`, `tauri.conf.json` (CSP re-pin), `CHANGELOG.md`.
+
+- The sealed-poll ACK fired only when `sealedProcessed > 0`, and the counter skipped envelopes that threw during `JSON.parse`/`unsealMeta` — a batch of malformed envelopes was therefore never acked and re-delivered on every 5s poll for the whole 5-minute server-side grace window (a wasted decrypt attempt per envelope per poll, ~60× per poison envelope). The worker's high-water mark already keeps envelopes that arrived mid-poll, so acking the whole received batch is safe: the grace window exists for crashes mid-processing, not for retries of deterministically-unreadable blobs.
+
+---
+
 ## Mobile bundle shipped English-only: prepare.js never copied locales/; signing injection now idempotent (branch devin/1790411492-mobile-locales, 2026-09-26)
 
 vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/mobile-assets.test.js`, `CHANGELOG.md`.

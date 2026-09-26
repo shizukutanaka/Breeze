@@ -9325,15 +9325,15 @@ async function initMessenger(dbName) {
             // Honesty over silence: the relay counts envelopes its queue caps forced it to
             // drop while we were offline — tell the user instead of losing them wordlessly.
             if (Number.isInteger(sData.dropped) && sData.dropped > 0) showToast(t('toastMsgsDropped', sData.dropped), 'error');
-            let sealedProcessed = 0;
-            for (const sealed of (sData.messages || [])) {
+            const sealedBatch = sData.messages || [];
+            for (const sealed of sealedBatch) {
               try {
                 let env = JSON.parse(sealed.envelope);
-                if (!env || typeof env !== 'object') { sealedProcessed++; continue; } // malformed: ACK+skip to avoid infinite retry
+                if (!env || typeof env !== 'object') continue; // malformed: ACK+skip to avoid infinite retry
                 if (env.sv === 2 && env.se) {
                   // Sealed Sender v2: sender metadata is encrypted to OUR identity key.
                   const meta = await unsealMeta(myKeys.privateKey, env.se, env.to, env.ts);
-                  if (!meta || typeof meta !== 'object') { sealedProcessed++; continue; } // not ours/tampered: ACK+skip
+                  if (!meta || typeof meta !== 'object') continue; // not ours/tampered: ACK+skip
                   let pl = env.payload;
                   if (meta._pkik) {
                     // Re-inject the X3DH identity key the sender relocated into the sealed block.
@@ -9343,11 +9343,13 @@ async function initMessenger(dbName) {
                   env = { to: env.to, ts: env.ts, payload: pl, ...meta };
                 }
                 await handleIncoming(env);
-                sealedProcessed++;
               } catch(e) { _dbg(e, 'sealed-parse'); }
             }
-            // v3.6: ACK after successful processing (crash-safe: server keeps 5min grace)
-            if (sealedProcessed > 0) queueAuth('sealed-ack').then(a => postAPIRaw('/sealed/ack', { id: myId, ...a })).catch(e => _dbg(e, 'sealed-ack'));
+            // v3.6: ACK whenever the poll returned envelopes (crash-safe: the worker keeps a
+            // 5-min grace). Every received envelope gets acked — including parse/unseal failures,
+            // which are unrecoverable forever, so without the ack a poison envelope would
+            // redeliver every poll for the whole grace window.
+            if (sealedBatch.length > 0) queueAuth('sealed-ack').then(a => postAPIRaw('/sealed/ack', { id: myId, ...a })).catch(e => _dbg(e, 'sealed-ack'));
           }
           checkAndReplenishPreKeys();
         } catch(e) { _dbg(e); }
