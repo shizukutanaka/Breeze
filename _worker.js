@@ -132,7 +132,7 @@ export default {
           'account-delete', 'group-leave', 'group-delete', 'group-admin',
           'group-transfer', 'group-rename', 'msg-disappear-enforce',
           'sealed-sender', 'franking', 'prekey-x3dh',
-          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'alias-auth', 'backup-auth', 'push-auth', 'drop-server-id', 'group-auth', 'group-ban',
+          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'alias-auth', 'backup-auth', 'push-auth', 'drop-server-id', 'group-auth', 'group-ban', 'queue-auth', 'prekey-auth',
         ],
         crypto: ['X25519', 'Ed25519', 'AES-256-GCM', 'HKDF-SHA256', 'Double Ratchet', 'Sender Key O(1)'],
         ts: Date.now(),
@@ -549,10 +549,64 @@ async function handleMsgSend(body, ip, env, request) {
   return json({ ok: true, ack: Date.now() }, 200, request);
 }
 
+// Queue-read auth (msg/poll, sealed/poll, sealed/ack). These three endpoints expose one
+// capability — READ a user's undelivered queue and (via ack/cleanup) DELETE it — and were
+// historically gated by nothing but knowledge of the userId. That id is NOT a secret: it's
+// handed to every contact and appears in presence records, so any party who learns one could
+// drain the ciphertext inbox (defeating the metadata purpose of Sealed Sender) or ack-wipe
+// undelivered messages — a silent availability attack.
+//
+// Same rollout doctrine as BACKUP/GROUP/PUSH_REQUIRE_AUTH: callers may sign
+// `breeze-<op>:<id>:<ts>` with the account's registered Ed25519 identity key; the signature
+// is verified when present, and QUEUE_REQUIRE_AUTH=true makes it mandatory once clients
+// ship the signing fields. Per-op domain separation so a captured poll signature can't be
+// replayed as a destructive ack.
+async function checkQueueAuth(body, env, request, op) {
+  const { id, ts, sig } = body;
+  const hasSig = ts !== undefined || sig !== undefined;
+  if (!hasSig) {
+    if (env.QUEUE_REQUIRE_AUTH === 'true')
+      return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+    return null;
+  }
+  if (ts === undefined || sig === undefined)
+    return json({ error: 'ts and sig must both be provided together', code: 'PARTIAL_AUTH' }, 400, request);
+  if (typeof sig !== 'string' || sig.length > 500)
+    return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
+  if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS)
+    return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
+  // Cache the registered identity key per isolate — polls are the hottest read path in the
+  // worker (every few seconds per device), so a KV read per request would double poll cost.
+  // Only positive results are cached (an unregistered id may register next request), and a
+  // signature-verification FAILURE drops the entry so an identity-key rotation self-heals on
+  // the next attempt instead of wedging the owner until the isolate recycles.
+  const keyCache = (globalThis._queueAuthKey ||= new Map());
+  let edKey = keyCache.get(id) || null;
+  if (!edKey) {
+    const data = await kvGet(env, `prekey:${id}`);
+    const bundle = data ? safeJsonParse(data) : null;
+    edKey = (bundle && typeof bundle.edIdentityKey === 'string' && bundle.edIdentityKey) || null;
+    if (edKey) {
+      if (keyCache.size > 2000) globalThis._queueAuthKey = new Map([...keyCache.entries()].slice(-1000));
+      globalThis._queueAuthKey.set(id, edKey);
+    }
+  }
+  if (!edKey) return json({ error: 'No registered identity key', code: 'NO_IDENTITY_KEY' }, 403, request);
+  const ok = await verifyEd25519(edKey, utf8ToB64(`breeze-${op}:${id}:${ts}`), sig);
+  if (!ok) {
+    // Delete via the global (the local `keyCache` may be a Map the overflow-prune replaced).
+    globalThis._queueAuthKey.delete(id);
+    return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
+  }
+  return null;
+}
+
 async function handleMsgPoll(body, env, request) {
   const { id, lastTs } = body;
   if (!id) return json({ error: 'id required', code: 'MISSING_ID' }, 400, request);
   if (!validateUserId(id)) return json({ error: 'invalid id', code: 'INVALID_ID' }, 400, request);
+  const authErr = await checkQueueAuth(body, env, request, 'msg-poll');
+  if (authErr) return authErr;
 
   const key = `inbox:${id}`;
   const data = await kvGet(env, key);
@@ -1063,6 +1117,17 @@ async function handleGroupCreate(body, env, request) {
   const creatorRecord = { id: creatorId, pub: creatorPub, name: (creatorName || 'Creator').slice(0, 30) };
   const creatorCaps = sanitizeCaps(caps);
   if (creatorCaps) creatorRecord.caps = creatorCaps;
+
+  // Optional Ed25519 auth (checkGroupAuth; mandatory under GROUP_REQUIRE_AUTH — same
+  // verified-when-present rollout as the other group ops this flag already covers).
+  // creatorId + creatorPub are both attacker-chosen and the victim's real pub is public
+  // via prekey/fetch, so unsigned create can attribute a group — and its creator role —
+  // to anyone's identity. No invite token exists yet, so the challenge's token slot is
+  // empty; `bind` carries the stored creator fields so a captured signature can't be
+  // replayed with a swapped pub or renamed attribution.
+  const cAuth = await checkGroupAuth(env, request, 'create', '', creatorId, body.ts, body.sig,
+    await sha256Short(JSON.stringify([creatorPub, name, creatorName || '', creatorCaps || []])));
+  if (cAuth) return cAuth;
 
   const group = {
     name: name.slice(0, 50),
@@ -1920,6 +1985,7 @@ async function handleAccountDelete(body, env, request) {
   // would keep answering "online" from stale cached data after erasure.
   globalThis._presenceCache?.delete(`presence:${userId}`);
   globalThis._presenceCache?.delete(`presence:${userId}:data`);
+  globalThis._queueAuthKey?.delete(userId); // cached queue-auth identity key (else a re-registered account's new key could be rejected until isolate eviction)
 
   // Optional group membership cleanup. There is no reverse index (user → groups),
   // so without the client supplying the tokens, a deleted account's id/pub/name
@@ -2004,7 +2070,7 @@ async function verifyEd25519(edPubB64, msgB64, sigB64) {
 }
 
 async function handlePreKeyUpload(body, env, request) {
-  const { userId, identityKey, edIdentityKey, signedPreKey, signedPreKeySig, oneTimePreKeys, caps, x3dh } = body;
+  const { userId, identityKey, edIdentityKey, signedPreKey, signedPreKeySig, oneTimePreKeys, caps, x3dh, ts, sig } = body;
   if (!userId || !identityKey || !signedPreKey) return json({ error: 'userId, identityKey, signedPreKey required', code: 'MISSING_FIELDS' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   // Type guard: public key fields must be strings. An object/array passes the !x
@@ -2040,6 +2106,42 @@ async function handlePreKeyUpload(body, env, request) {
   if (signedPreKeySig && edIdentityKey) {
     const ok = await verifyEd25519(edIdentityKey, signedPreKey, signedPreKeySig);
     if (!ok) return json({ error: 'Invalid signed pre-key signature', code: 'PREKEY_SIG_INVALID' }, 400, request);
+  }
+
+  // Upload ownership proof (same doctrine as QUEUE/BACKUP/GROUP_REQUIRE_AUTH):
+  // identityKey.startsWith(userId) binds a NEW account's key to its id, but does nothing
+  // for an EXISTING userId — anyone could overwrite the bundle (keys, OTP list, caps) of a
+  // registered account, the exact "unexpected key change" the ktlog exists to detect. Callers
+  // may sign `breeze-prekey-upload:{userId}:{ts}:{digest}` where digest binds every
+  // attacker-malleable field (keys, signedPreKeySig, oneTimePreKeys, caps, x3dh); verified
+  // when present, mandatory when PREKEY_REQUIRE_AUTH=true.
+  // Continuity: the verifier is the STORED bundle's edIdentityKey — the root of identity
+  // continuity — so rotation requires the previous key's signature (recovery path when it is
+  // lost: account delete + re-register). A first-time upload (or a legacy bundle that never
+  // stored an edIdentityKey) verifies against the bundle's own edIdentityKey — self-binding,
+  // same trust level as today for that corner.
+  const hasPkAuth = ts !== undefined || sig !== undefined;
+  if (hasPkAuth) {
+    if (ts === undefined || sig === undefined)
+      return json({ error: 'ts and sig must both be provided together', code: 'PARTIAL_AUTH' }, 400, request);
+    if (typeof sig !== 'string' || sig.length > 500)
+      return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
+    if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS)
+      return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
+    const existingRaw = await kvGet(env, `prekey:${userId}`);
+    const existing = existingRaw ? safeJsonParse(existingRaw) : null;
+    const edRoot = (existing && typeof existing.edIdentityKey === 'string' && existing.edIdentityKey)
+      || (typeof edIdentityKey === 'string' && edIdentityKey) || null;
+    if (!edRoot) return json({ error: 'No Ed25519 identity key to verify against', code: 'NO_IDENTITY_KEY' }, 403, request);
+    const digest = await sha256Short(JSON.stringify([
+      identityKey, edIdentityKey || '', signedPreKey, signedPreKeySig || '',
+      Array.isArray(oneTimePreKeys) ? oneTimePreKeys : [], Array.isArray(caps) ? caps : [],
+      typeof x3dh === 'string' ? x3dh : '',
+    ]));
+    const okAuth = await verifyEd25519(edRoot, utf8ToB64(`breeze-prekey-upload:${userId}:${ts}:${digest}`), sig);
+    if (!okAuth) return json({ error: 'Invalid upload signature', code: 'SIG_INVALID' }, 403, request);
+  } else if (env.PREKEY_REQUIRE_AUTH === 'true') {
+    return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
   }
   const bundle = { identityKey, edIdentityKey, signedPreKey, signedPreKeySig, uploadedAt: Date.now() };
   // N3: persist capability set so the initiator can call parsePeerCaps(bundle) and
@@ -2465,6 +2567,8 @@ async function handleSealedPoll(body, env, request) {
   const { id } = body;
   if (!id) return json({ error: 'id required', code: 'MISSING_ID' }, 400, request);
   if (!validateUserId(id)) return json({ error: 'invalid id', code: 'INVALID_ID' }, 400, request);
+  const authErr = await checkQueueAuth(body, env, request, 'sealed-poll');
+  if (authErr) return authErr;
   const key = `sealed:${id}`;
   const data = await kvGet(env, key);
   if (!data) return json({ messages: [] }, 200, request);
@@ -2494,6 +2598,8 @@ async function handleSealedAck(body, env, request) {
   const { id } = body;
   if (!id || typeof id !== 'string') return json({ error: 'id required', code: 'MISSING_ID' }, 400, request);
   if (!validateUserId(id)) return json({ error: 'invalid id', code: 'INVALID_ID' }, 400, request);
+  const authErr = await checkQueueAuth(body, env, request, 'sealed-ack');
+  if (authErr) return authErr;
   // Clear only what the client actually polled. handleSealedPoll records a high-water mark
   // (max ts of the returned batch); here we keep any envelope with ts > hwm, i.e. one that
   // arrived in the poll→ack window, instead of blind-deleting the whole queue and losing it.
