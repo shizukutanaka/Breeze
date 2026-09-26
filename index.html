@@ -5499,12 +5499,17 @@ async function initMessenger(dbName) {
       scheduleRetry();
     }
     // v3.6: Handle notification quick-reply action
+    // SECURITY: the push payload's contactId is the sender-CLAIMED `from` (the relay
+    // can't verify ciphertext), so auto-sending the typed reply would let a crafted
+    // notification redirect the message to a different roster contact. Open the
+    // conversation and prefill the draft — the recipient name is visible — but the
+    // user must hit send.
     if (e.data?.type === 'quick-reply' && e.data.contactId && e.data.text) {
       dbGet('contacts', e.data.contactId).then(contact => {
         if (contact && e.data.text.trim()) {
           openConversation(contact).then(() => {
             _DOM.get('msg-input').value = e.data.text;
-            sendMessage();
+            _DOM.get('msg-input').focus();
           }).catch(err => _dbg(err, 'quick-reply'));
         }
       }).catch(err => _dbg(err, 'quick-reply'));
@@ -10852,7 +10857,12 @@ async function initMessenger(dbName) {
       // Cap payload size — an encrypted 1:1 message is ≤32 KB including overhead; anything
       // larger is malformed and would waste memory in the relay queue.
       if (typeof req.payload !== 'string' || req.payload.length > 65536) return;
-      if (!Object.prototype.hasOwnProperty.call(_peerRelayQueue, targetId)) _peerRelayQueue[targetId] = [];
+      // Bound the queue globally, not just per target: targetIds are attacker-choosable,
+      // so per-target caps alone still allowed unbounded memory (spray distinct ids).
+      if (!Object.prototype.hasOwnProperty.call(_peerRelayQueue, targetId)) {
+        if (Object.keys(_peerRelayQueue).length >= 32) return;
+        _peerRelayQueue[targetId] = [];
+      }
       _peerRelayQueue[targetId].push({ payload: req.payload, ts: Date.now(), from: contact.id });
       // Limit: 20 messages per target, 1 hour TTL
       _peerRelayQueue[targetId] = _peerRelayQueue[targetId]

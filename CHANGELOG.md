@@ -1,5 +1,12 @@
 # Changelog
 
+## Bound peer-relay queue globally; quick-reply prefills draft instead of auto-send (branch devin/1790420646-round15, 2026-09-26)
+
+vitest 868 (+0); `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json`, `CHANGELOG.md`.
+
+- `handlePeerRelayRequest`: per-target caps (≤20 msgs, 1 h TTL) existed but `targetId`s are attacker-choosable — a contact could spray distinct ids for unbounded memory. Distinct targets now capped at 32 (~640 slots, ~40 MB worst case).
+- Notification **quick-reply** no longer auto-sends: the push `contactId` is the sender-claimed `from` (the relay can't verify ciphertext), so a crafted notification could turn a typed reply into a message to a different roster contact. Now opens the conversation and prefills the draft — recipient visible — and the user hits send.
+
 ## Mobile bundle shipped English-only: prepare.js never copied locales/; signing injection now idempotent (branch devin/1790411492-mobile-locales, 2026-09-26)
 
 vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/mobile-assets.test.js`, `CHANGELOG.md`.
