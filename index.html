@@ -9706,13 +9706,15 @@ async function initMessenger(dbName) {
         }
       } catch(e) { _dbg(e, 'device-attribution'); }
     }
-    if (!contact && msg.fromPub) {
-      await addContact(msg.fromPub, msg.fromName || t('unknown'));
-      contact = await dbGet('contacts', contactId);
-    }
-    if (!contact) return;
-    // Session peer key: the attributed device's own pub, else the contact's.
-    const _peerPub = _attribPub || contact.pubB64;
+    // Stranger auto-add is DEFERRED until a payload actually decrypts (was: added before
+    // decryption — anyone who knows this public id could force-add attacker-named contacts
+    // with junk that never decrypts; relay rate limits just throttle the spam).
+    let _pendingStranger = null;
+    if (!contact && msg.fromPub) _pendingStranger = msg.fromPub;
+    if (!contact && !_pendingStranger) return;
+    // Session peer key: the attributed device's own pub, else the contact's — for a stranger,
+    // the claimed fromPub (used for decrypt; addContact still derives the id from it below).
+    const _peerPub = _attribPub || (contact ? contact.pubB64 : _pendingStranger);
 
     // Mutation signals are handled BEFORE the new-message dedup below: a signal envelope
     // carries the ORIGINAL message's ts, so `${from}:${ts}` collides with the stored message
@@ -9721,6 +9723,9 @@ async function initMessenger(dbName) {
     // reason remote mutations never worked over the relay).
     // v3.6: Encrypted signal (edit/delete) — decrypt and process
     if (msg.isSignal && msg.payload) {
+      // Strangers get no signal path: mutation signals reference `${senderId}:${ts}` ids of
+      // messages in THIS conversation, which a stranger has no standing to touch.
+      if (!contact) return;
       try {
         const signalJson = await decryptFrom(msg.payload, _peerPub);
         if (!signalJson) return;
@@ -9795,6 +9800,7 @@ async function initMessenger(dbName) {
       try {
         const fileMsg = await decryptFrom(msg.payload, _peerPub);
         if (!fileMsg) return;
+        if (_pendingStranger) { await addContact(_pendingStranger, msg.fromName || t('unknown')); contact = await dbGet('contacts', contactId); if (!contact) return; }
         const _fp = JSON.parse(fileMsg);
         // Cap file data: reject oversized base64 payloads before IDB write and atob() decode.
         // Voice messages use the same 350 000-char cap (line above); relay caps at 256 KB but
@@ -9812,6 +9818,9 @@ async function initMessenger(dbName) {
       // Reject oversized text: the relay caps payloads at 256 KB but the P2P DataChannel has no server check.
       // 64 KB is generous for chat text while preventing memory/render DoS from a malicious peer.
       if (text.length > 65536) return;
+      // Stranger proved key possession — materialize the contact now (TOFU sig-pin below works
+      // on the freshly-created record). msg.from ≠ pubB64-derived id drops here, same as before.
+      if (_pendingStranger) { await addContact(_pendingStranger, msg.fromName || t('unknown')); contact = await dbGet('contacts', contactId); if (!contact) return; }
       // v3.3: Verify Ed25519 signature if present.
       // TOFU: a contact's signing key must stay stable. Verifying a signature
       // against the sigPub carried in the same message proves only that the

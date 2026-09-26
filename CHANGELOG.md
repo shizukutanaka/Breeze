@@ -1,5 +1,14 @@
 # Changelog
 
+## Stranger contact spam: auto-add now requires a successful decrypt (branch devin/1790418840-round9, 2026-09-26)
+
+vitest 868 (+0); `index.html`, `_headers`, `tauri.conf.json` (CSP re-pin), `CHANGELOG.md`.
+
+- `handleIncoming` added an unknown `msg.from` to the contacts DB *before* attempting decryption — any sender who knows the public id could POST undecryptable junk and still force-add an attacker-named contact entry, one per message, bound only by relay rate limits. The add is now deferred until `decryptFrom` succeeds (proves key possession); undecryptable stranger traffic adds nothing. Mutation signals (`isSignal` edit/delete/reaction) are additionally gated to existing contacts — a stranger has no standing to touch this conversation's message ids either way.
+- Ordering kept: dedup/`msgId` still forms before the decrypt (unchanged relay dedup semantics), the sig/TOFU pin block runs against the freshly-materialized contact record, and `msg.from` ≠ `pubB64`-derived id still drops exactly where it did before.
+
+---
+
 ## Mobile bundle shipped English-only: prepare.js never copied locales/; signing injection now idempotent (branch devin/1790411492-mobile-locales, 2026-09-26)
 
 vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/mobile-assets.test.js`, `CHANGELOG.md`.
