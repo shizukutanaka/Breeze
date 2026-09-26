@@ -377,10 +377,25 @@ async function handleSignal(body, ip, env, request) {
   const raw = await kvGet(env, `sig:${room}`);
   const parsed = safeJsonParse(raw, []);
   const signals = Array.isArray(parsed) ? parsed : [];
-  signals.push({ sender, type, data, ts: Date.now() });
+  const signal = { sender, type, data, ts: Date.now() };
+  signals.push(signal);
   // Keep last 50 signals, expire in 5 min (allow slow NAT traversal)
   const trimmed = signals.slice(-50);
-  await kvPut(env, `sig:${room}`, JSON.stringify(trimmed), { expirationTtl: TTL.MIN * 5 });
+  const stored = await kvPut(env, `sig:${room}`, JSON.stringify(trimmed), { expirationTtl: TTL.MIN * 5 });
+  if (!stored) return json({ error: 'Failed to store signal', code: 'STORE_FAILED' }, 500, request);
+
+  // Lost-write verify (same KV last-write-wins class as the message queues): two
+  // signaling writes to the same room in the same instant clobber each other —
+  // offer+answer crossing, or offer+ICE burst — and the loser got ok while their
+  // signal never existed. A lost offer is a call that silently never connects.
+  // Re-append if absent; identity is sender+type+ts+data (the ts is ours, so the
+  // tuple is unique even when a racer's signal shares the field values).
+  const verifyRaw = await kvGet(env, `sig:${room}`);
+  const seen = verifyRaw ? safeJsonParse(verifyRaw, []) : [];
+  if (Array.isArray(seen) && !seen.some(s => s && s.sender === signal.sender && s.type === signal.type && s.ts === signal.ts && s.data === signal.data)) {
+    seen.push(signal);
+    await kvPut(env, `sig:${room}`, JSON.stringify(seen.slice(-50)), { expirationTtl: TTL.MIN * 5 });
+  }
 
   return json({ ok: true }, 200, request);
 }
@@ -817,6 +832,17 @@ async function handleAliasSet(body, env, request) {
   // Store (no TTL — aliases are permanent)
   const aliasSaved = await kvPut(env, `alias:${clean}`, JSON.stringify({ pub, name: sanitizeString(name, 64), setAt: Date.now() }));
   if (!aliasSaved) return json({ error: 'Failed to store alias', code: 'STORE_FAILED' }, 500, request);
+
+  // Lost-write verify: the taken-check above is check-then-act — two concurrent
+  // registrations for the SAME handle both see it free, both write, and the second
+  // write wins while the first caller is told ok:true and believes they own an
+  // alias that now points at someone else's key. Re-read and confess the loss with
+  // 409 instead of silently signing it (deliberately NOT repaired by rewriting —
+  // the winner's claim is a valid registration; ours is the collision loser).
+  const verifyRaw = await kvGet(env, `alias:${clean}`);
+  const winner = verifyRaw ? safeJsonParse(verifyRaw) : null;
+  if (winner && winner.pub !== pub)
+    return json({ error: 'Alias already taken', code: 'ALIAS_TAKEN' }, 409, request);
   return json({ ok: true, alias: clean }, 200, request);
 }
 
@@ -993,6 +1019,38 @@ async function handleAliasGet(body, env, request) {
   return json(aliasData, 200, request);
 }
 
+// Lost-write recovery for grp:{token} mutations — the same KV last-write-wins race
+// class as the message queues (see handleSealedSend for the full discussion). Every
+// group mutation is one object mutated read-modify-write: two handlers touching the
+// same group in the same instant each read the old object, and the loser's write is
+// clobbered while BOTH callers get success. For kick/leave that silence is a PCS
+// regression, not a roster nit: everyone who looked between write and clobber saw the
+// member gone and rotated sender keys, but the final state still lists them — and
+// since the epoch bump was lost too, they keep decrypting.
+// After a successful store: re-read, and run `check` on the just-read object.
+// Mutation present → done. Absent → `reapply` it onto the fresh object and write
+// once more. Bounded to ONE repair write: this is recovery, not exactly-once — a
+// third writer in the same tick can still clobber the repair; closing that window
+// needs Durable Objects (roadmap C10), not retries.
+// `check` tests the semantic postcondition (member gone / admin present / name
+// equal), not "did my exact write land" — so a stale read-back (KV is eventually
+// consistent) that triggers a repair just rewrites the same state, never a
+// double-apply (e.g. kick re-bumps to the same target epoch, not +2).
+// `reapply` may veto by leaving the object unchanged (a concurrent ban beating a
+// join, a transfer target who just left). Returns the post-verify group object
+// (after repair), or null when the group vanished between our write and the
+// verify read — callers that must report honestly check the result.
+async function grpVerifyRepair(env, token, check, reapply) {
+  const verifyRaw = await kvGet(env, `grp:${token}`);
+  const seen = verifyRaw ? safeJsonParse(verifyRaw) : null;
+  if (!seen || !Array.isArray(seen.members)) return null;
+  if (!check(seen)) {
+    reapply(seen);
+    await kvPut(env, `grp:${token}`, JSON.stringify(seen), { expirationTtl: TTL.MONTH });
+  }
+  return seen;
+}
+
 async function handleGroupCreate(body, env, request) {
   const { name: rawName, creatorId, creatorPub: rawCreatorPub, creatorName: rawCreatorName, members, ttl, caps } = body;
   const name = sanitizeString(rawName, 50);
@@ -1090,6 +1148,13 @@ async function handleGroupJoin(body, env, request) {
     if (changed) {
       const saved = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
       if (!saved) return json({ error: 'Failed to update group', code: 'STORE_FAILED' }, 500, request);
+      // Lost-write verify (grpVerifyRepair header): a concurrent mutation can clobber
+      // the refreshed record. Repair merges our fields onto the winner's object; if
+      // the member is gone from `seen` entirely (concurrent kick/leave) we do NOT
+      // resurrect them — the leave is the newer, authorized intent.
+      await grpVerifyRepair(env, token,
+        g => { const m = g.members.find(mm => mm.id === memberId); return !!m && m.pub === memberPub && m.name === newName && JSON.stringify(m.caps || null) === JSON.stringify(newCaps || null); },
+        g => { const m = g.members.find(mm => mm.id === memberId); if (!m) return; m.pub = memberPub; m.name = newName; if (newCaps) m.caps = newCaps; });
     }
     return json({ ok: true, name: group.name, members: group.members, epoch: group.epoch | 0, alreadyMember: true, refreshed: changed }, 200, request);
   }
@@ -1104,6 +1169,25 @@ async function handleGroupJoin(body, env, request) {
   group.members.push(memberRecord);
   const joined = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
   if (!joined) return json({ error: 'Failed to join group', code: 'STORE_FAILED' }, 500, request);
+
+  // Lost-write verify (grpVerifyRepair header): two joins in the same instant clobber
+  // each other — the loser thinks they joined but isn't in the stored roster, so they
+  // never receive sender keys. Reapply vetoes when a concurrent ban or the 100-member
+  // cap won the race; report the true outcome instead of a silent non-join.
+  const afterJoin = await grpVerifyRepair(env, token,
+    g => g.members.some(m => m.id === memberId),
+    g => {
+      if (Array.isArray(g.banned) && g.banned.includes(memberId)) return;
+      if (g.members.length >= 100) return;
+      g.members.push(memberRecord);
+    });
+  if (afterJoin === null) return json({ error: 'Invite link expired or invalid', code: 'EXPIRED' }, 404, request);
+  if (!afterJoin.members.some(m => m.id === memberId)) {
+    const bannedWon = Array.isArray(afterJoin.banned) && afterJoin.banned.includes(memberId);
+    return bannedWon
+      ? json({ error: 'You have been removed from this group', code: 'BANNED' }, 403, request)
+      : json({ error: 'Group is full', code: 'GROUP_FULL' }, 400, request);
+  }
 
   return json({ ok: true, name: group.name, members: group.members, epoch: group.epoch | 0 }, 200, request);
 }
@@ -1232,6 +1316,20 @@ async function handleGroupKick(body, env, request) {
   const kicked = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
   if (!kicked) return json({ error: 'Failed to save group state', code: 'STORE_FAILED' }, 500, request);
 
+  // Lost-write verify (grpVerifyRepair header): a clobbered kick is the worst outcome
+  // this pattern can hide — the member is still in the roster AND the epoch bump that
+  // would have rotated them out of new traffic is lost too.
+  await grpVerifyRepair(env, token,
+    g => !g.members.some(m => m.id === kickId) && Array.isArray(g.banned) && g.banned.includes(kickId),
+    g => {
+      g.members = g.members.filter(m => m.id !== kickId);
+      if (g.admins) g.admins = g.admins.filter(id => id !== kickId);
+      const rb = Array.isArray(g.banned) ? g.banned.filter(id => typeof id === 'string') : [];
+      if (!rb.includes(kickId)) rb.push(kickId);
+      g.banned = rb.slice(-200);
+      g.epoch = (g.epoch | 0) + 1;
+    });
+
   return json({ ok: true, remaining: group.members.length, epoch: group.epoch }, 200, request);
 }
 
@@ -1271,6 +1369,11 @@ async function handleGroupAdmin(body, env, request) {
     group.banned = banned;
     const unbanSaved = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
     if (!unbanSaved) return json({ error: 'Failed to save unban', code: 'STORE_FAILED' }, 500, request);
+    // Lost-write verify: a clobbered unban leaves the target banned while the creator
+    // sees success — they re-allow nobody.
+    await grpVerifyRepair(env, token,
+      g => !(Array.isArray(g.banned) && g.banned.includes(targetId)),
+      g => { g.banned = (Array.isArray(g.banned) ? g.banned : []).filter(id => id !== targetId); });
     return json({ ok: true, banned }, 200, request);
   }
 
@@ -1291,6 +1394,19 @@ async function handleGroupAdmin(body, env, request) {
   group.admins = admins;
   const adminSaved = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
   if (!adminSaved) return json({ error: 'Failed to save admin changes', code: 'STORE_FAILED' }, 500, request);
+  // Lost-write verify (grpVerifyRepair header): a clobbered promote silently leaves
+  // the target without moderation rights the creator believes they have; a clobbered
+  // demote leaves them with rights they should have lost.
+  await grpVerifyRepair(env, token,
+    g => { const ga = Array.isArray(g.admins) ? g.admins : []; return action === 'promote' ? ga.includes(targetId) : !ga.includes(targetId); },
+    g => {
+      const ga = Array.isArray(g.admins) ? g.admins.filter(id => typeof id === 'string') : [];
+      const i = ga.indexOf(targetId);
+      // Veto promote when a concurrent kick/leave removed the target — granting
+      // admin to a non-member would re-arm someone the group just expelled.
+      if (action === 'promote') { if (i < 0 && g.members.some(m => m.id === targetId)) ga.push(targetId); } else if (i >= 0) ga.splice(i, 1);
+      g.admins = ga;
+    });
   return json({ ok: true, admins }, 200, request);
 }
 
@@ -1334,6 +1450,24 @@ async function handleGroupTransfer(body, env, request) {
 
   const transferred = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
   if (!transferred) return json({ error: 'Failed to save ownership transfer', code: 'STORE_FAILED' }, 500, request);
+  // Lost-write verify (grpVerifyRepair header): a clobbered transfer leaves the OLD
+  // creator in charge while the relay told them they handed off — and the intended
+  // owner can't manage admins. Repair vetoes if the target was concurrently removed:
+  // crowning a departed member would orphan the group. Report that truthfully.
+  const afterTransfer = await grpVerifyRepair(env, token,
+    g => g.creatorId === newCreatorId,
+    g => {
+      if (!g.members.some(m => m.id === newCreatorId)) return;
+      g.creatorId = newCreatorId;
+      if (typeof newCreator.pub === 'string') g.creatorPub = newCreator.pub;
+      g.creatorName = (typeof newCreator.name === 'string' && newCreator.name) ? newCreator.name.slice(0, 30) : 'Creator';
+      const ga = Array.isArray(g.admins) ? g.admins.filter(id => typeof id === 'string' && id !== newCreatorId) : [];
+      if (!ga.includes(oldCreatorId)) ga.push(oldCreatorId);
+      g.admins = ga;
+    });
+  if (afterTransfer === null) return json({ error: 'Group not found', code: 'NOT_FOUND' }, 404, request);
+  if (afterTransfer.creatorId !== newCreatorId)
+    return json({ error: 'Member not found', code: 'NOT_MEMBER' }, 404, request);
   return json({ ok: true, creatorId: newCreatorId, admins }, 200, request);
 }
 
@@ -1369,6 +1503,11 @@ async function handleGroupRename(body, env, request) {
   group.name = name.slice(0, 50);
   const renamed = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
   if (!renamed) return json({ error: 'Failed to save group name', code: 'STORE_FAILED' }, 500, request);
+  // Lost-write verify (grpVerifyRepair header): a clobbered rename leaves the old
+  // name on record while the admin saw success.
+  await grpVerifyRepair(env, token,
+    g => g.name === group.name,
+    g => { g.name = group.name; });
   return json({ ok: true, name: group.name }, 200, request);
 }
 
@@ -1401,6 +1540,18 @@ async function handleGroupLeave(body, env, request) {
   group.epoch = (group.epoch | 0) + 1;
   const left = await kvPut(env, `grp:${token}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
   if (!left) return json({ error: 'Failed to save group state', code: 'STORE_FAILED' }, 500, request);
+
+  // Lost-write verify (grpVerifyRepair header): same defect as kick — a clobbered
+  // leave keeps the departed member in the roster AND loses the epoch bump, so
+  // they retain their seat and keep decrypting current traffic while believing
+  // they left.
+  await grpVerifyRepair(env, token,
+    g => !g.members.some(m => m.id === memberId),
+    g => {
+      g.members = g.members.filter(m => m.id !== memberId);
+      if (g.admins) g.admins = g.admins.filter(id => id !== memberId);
+      g.epoch = (g.epoch | 0) + 1;
+    });
 
   return json({ ok: true, remaining: group.members.length, epoch: group.epoch }, 200, request);
 }
@@ -1617,6 +1768,16 @@ async function handlePushSubscribe(body, env, request) {
   if (subs.length > 5) subs = subs.slice(-5);
   const stored = await kvPut(env, key, JSON.stringify(subs), { expirationTtl: TTL.MONTH });
   if (!stored) return json({ error: 'Failed to store subscription', code: 'STORE_FAILED' }, 500, request);
+
+  // Lost-write verify (same class): a user's two devices subscribing in the same
+  // instant clobber each other — the loser got ok but their endpoint was erased,
+  // so one device silently stops receiving pushes. Re-merge our sub if absent.
+  const verifyRaw = await kvGet(env, key);
+  const seen = verifyRaw ? safeJsonParse(verifyRaw, []) : [];
+  if (Array.isArray(seen) && !seen.some(s => s && s.endpoint === safeSub.endpoint)) {
+    seen.push(safeSub);
+    await kvPut(env, key, JSON.stringify(seen.slice(-5)), { expirationTtl: TTL.MONTH });
+  }
   return json({ ok: true, devices: subs.length }, 200, request);
 }
 
@@ -1659,6 +1820,16 @@ async function handlePushUnsubscribe(body, env, request) {
   if (removed > 0) {
     if (filtered.length === 0) await kvDel(env, key);
     else await kvPut(env, key, JSON.stringify(filtered), { expirationTtl: TTL.MONTH });
+    // Lost-write verify (same class): two concurrent unsubs clobber each other and
+    // one removed endpoint silently resurrects — the user keeps getting pushes on a
+    // device they believe is detached. If our endpoint is back, re-filter once.
+    const verifyRaw = await kvGet(env, key);
+    const seen = verifyRaw ? safeJsonParse(verifyRaw, []) : [];
+    if (Array.isArray(seen) && seen.some(s => s && s.endpoint === endpoint)) {
+      const refiltered = seen.filter(s => s && s.endpoint !== endpoint);
+      if (refiltered.length === 0) await kvDel(env, key);
+      else await kvPut(env, key, JSON.stringify(refiltered), { expirationTtl: TTL.MONTH });
+    }
   }
   return json({ ok: true, removed }, 200, request);
 }
