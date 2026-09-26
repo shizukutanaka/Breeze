@@ -24,6 +24,22 @@ Sources: Signal Double Ratchet spec §8.4 (deletion of skipped message keys) + �
 
 ---
 
+||||||| 0f93fe1
+## /api/signal loses call-setup messages to last-write-wins races (branch devin/1790409000-signal-kv-races, 2026-09-26)
+
+395 vitest (392 → **395**, +3); `_worker.js`, `tests/worker.test.js`.
+
+The last two unguarded read-modify-write windows in the relay (the same bug class closed for msg/sealed queues, aliases, push subs, device lists, group join, and the ktlog in earlier rounds) live in `handleSignal` — the WebRTC call-setup path where a dropped `call-offer`/`call-ice` means the call never connects:
+
+- **Store** (`sig:{room}` append): two posts to the same room race `get → push → put`; the loser's signal returns `{ok: true}` but silently vanished. New: each stored entry gets a server-assigned `id` (`crypto.randomUUID()` — sender/ts can't distinguish two same-sender posts in one ms), then a read-back re-appends ours by id if it lost the race. The extra field is ignored by the poll filter, and a rare duplicate is harmless (callers poll-and-discard).
+- **Poll cleanup rewrite**: the "keep own + <30s" filter wrote back the *stale* snapshot, deleting any signal that arrived between the get and the put. Now re-reads the fresh value and applies the same keep predicate before writing — identical shape to the msg-poll keep fix.
+
++3 deterministic race tests (KV get/put hook injection): racing same-room write → both signals survive; no-race control → no duplicate; poll cleanup preserves a signal injected in the gap while still dropping the stale entry.
+
+Still deferred (needs index.html, which conflicts with open #278): `call-end` is sent raw — anyone who knows two public userIds can forge a hangup. The SDP/ICE payloads are already E2E-wrapped (`CALL_E2E_SIGNAL`); call-end needs the same treatment client-side.
+
+---
+
 ## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
 
 819 vitest unchanged; Playwright E2E 60 unchanged; `docs/ROADMAP.md`, `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation) — dead-code removal only, no runtime behavior change.
