@@ -500,7 +500,7 @@ export function createRatchet(opts = {}) {
   // ── Group Sender Key — v5 hash ratchet (Phase 2b) ────────────────────────────
   //
   // State: { chainKey: number[], counter: number, epoch: number, v: 5,
-  //          skipped: { [counter]: number[] } }
+  //          skipped: { [counter]: { k: number[], t: ms } } }  // t = TTL timestamp (I7)
   //
   // Forward secrecy: the chain key is advanced (HKDF one-way) after each message;
   // the old chain key is replaced and is not retained — knowing the current state
@@ -542,21 +542,32 @@ export function createRatchet(opts = {}) {
     const maxSkip = cfg.GROUP_MAX_SKIP || 50;
     const targetC = p.c | 0;
     const skipped = { ...(peerSk.skipped || {}) };
+    // I7 (group): expire stale cached message keys by age — indefinite retention is
+    // a forward-secrecy leak and a DoS amplifier (Signal DR spec §8.4).
+    {
+      const cutoff = now() - cfg.skippedKeyTTL;
+      for (const k of Object.keys(skipped)) {
+        if ((skipped[k]?.t ?? 0) < cutoff) delete skipped[k];
+      }
+    }
     let msgKeyBits;
     let chainKey = new Uint8Array(peerSk.chainKey);
     let counter = peerSk.counter | 0;
 
     if (targetC < counter) {
       // Out-of-order (arrived late): look up the cached key derived when we skipped ahead.
+      // Entries are { k: number[], t: ms } since I7; tolerate legacy bare arrays.
       const cached = skipped[targetC];
       if (!cached) return null; // key already evicted or never computed
-      msgKeyBits = new Uint8Array(cached);
-      delete skipped[targetC];
-      // chainKey / counter unchanged — only the skip cache entry is consumed.
-      const nextPeerSk = { ...peerSk, skipped };
+      msgKeyBits = cached.k !== undefined ? new Uint8Array(cached.k) : new Uint8Array(cached);
       const importedKey = await subtle.importKey('raw', msgKeyBits, { name: 'AES-GCM' }, false, ['decrypt']);
       const padded = new Uint8Array(await subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, importedKey, u8(p.d)));
       const textLen = new DataView(padded.buffer).getUint16(0);
+      // Consume the key only after a successful decrypt — a forged replay must not
+      // burn the cached key the legitimate delayed message still needs.
+      delete skipped[targetC];
+      // chainKey / counter unchanged — only the skip cache entry is consumed.
+      const nextPeerSk = { ...peerSk, skipped };
       return { plaintext: new TextDecoder().decode(padded.slice(2, 2 + textLen)), nextPeerSk };
     }
 
@@ -565,7 +576,7 @@ export function createRatchet(opts = {}) {
     while (counter < targetC) {
       const skMsgKey = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-msg-v5', 32);
       chainKey = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-chain-v5', 32);
-      skipped[counter] = Array.from(skMsgKey);
+      skipped[counter] = { k: Array.from(skMsgKey), t: now() };
       counter++;
       // Evict oldest entries when cache exceeds maxSkip
       const keys = Object.keys(skipped).map(Number).sort((a, b) => a - b);

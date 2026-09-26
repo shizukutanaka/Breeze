@@ -1,5 +1,19 @@
 # Changelog
 
+## Skipped message keys now expire (I7, the last pending P0) — plus a forged-group-ciphertext could persistently desync a member (branch devin/1790400137-i7-skipped-key-ttl, 2026-09-26)
+
+830 vitest (819 → **830**); Playwright E2E 60 unchanged; `index.html`, `src/crypto/ratchet.js`, `tests/mirror-drift.test.js`, `tests/ratchet.test.js`, `docs/ROADMAP.md`, `CHANGELOG.md`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation).
+
+The last session's roadmap sweep confirmed I7 — the Signal Double Ratchet spec §8.4 requirement to delete skipped message keys rather than retain them indefinitely — as the only P0 item still pending its index.html port: the reference modules (`src/crypto/ratchet.js` 1:1, `src/crypto/group.js` group) already stored timestamped `{k,t}` entries and expired them on a configurable TTL, but the deployed inline paths kept bare arrays with only a count bound (`MAX_SKIP`/`GROUP_MAX_SKIP`). Skipped keys in production never aged out — a forward-secrecy leak (old message keys sitting in IndexedDB forever) and a DoS amplifier (unbounded retention by age).
+
+Porting it surfaced a second, worse bug in the group path only: `decryptGroupMsg()` wrote the advanced ratchet state (`dbPut` on `gsk-peer:*`) **before** verifying the AES-GCM tag. A forged group message with a valid epoch and a counter jump inside `GROUP_MAX_SKIP` persisted a chain position derived from garbage ciphertext — the real gap-filling messages that followed could never decrypt, permanently desyncing that member. Same for the replay side: a forged packet targeting a cached skipped counter `dbPut` the key's deletion before the AEAD check, burning the key the legitimate delayed message still needed. Neither could happen in the 1:1 path (its session object is only persisted on success), but the group path committed eagerly.
+
+The fix mirrors the reference ordering on both paths: expire skipped entries older than `MS.WEEK` (7 days) at the top of decrypt; store `{ k, t }` timestamped entries while tolerating legacy bare arrays; stage the gap advance / cached-key consumption in locals; and commit state only **after** the key commitment + AEAD checks pass. Also ported the reference's `Number.isFinite(p.c)` guard — the counter sits outside the AEAD, so a relay can send NaN/string counters that bypassed the replay and gap checks. New mirror-drift tests drive the real inline `decryptFrom`/`decryptGroupMsg` end-to-end: TTL expiry and within-TTL recovery on both paths, forged-advance rejection with persisted state verified untouched, and forged replays not burning cached keys.
+
+Sources: Signal Double Ratchet spec §8.4 (deletion of skipped message keys) + §2.6 (out-of-order handling), libsignal's timestamped `SkippedKey` LRU-eviction structure, ePrint 2018/1037 (skipped-key retention as an FS/DoS concern). `docs/ROADMAP.md` marks I7 fully deployed — P0 is now complete.
+
+---
+
 ## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
 
 819 vitest unchanged; Playwright E2E 60 unchanged; `docs/ROADMAP.md`, `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation) — dead-code removal only, no runtime behavior change.

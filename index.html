@@ -4940,6 +4940,18 @@ async function initMessenger(dbName) {
       if (!sess) { sess = await initSessionResponder(peerPubB64); }
       // v3/v4 ratchet message
       if ((p.v === 3 || p.v === 4) && p.rk) {
+        // The counter `c` is not inside the AEAD, so a relay can tamper with it:
+        // non-finite/NaN counters bypass the replay/gap checks and corrupt recvCounter,
+        // and c=0 is never legitimate (senders start at c=1). Reject before any state work.
+        if (!Number.isFinite(p.c) || p.c < 1) return null;
+        // I7: expire stale skipped message keys by age (MS.WEEK). Retaining them
+        // indefinitely is a forward-secrecy leak and a DoS amplifier (Signal DR spec §8.4).
+        if (sess.skippedKeys) {
+          const cutoff = Date.now() - MS.WEEK;
+          for (const k of Object.keys(sess.skippedKeys)) {
+            if ((sess.skippedKeys[k]?.t ?? 0) < cutoff) delete sess.skippedKeys[k];
+          }
+        }
         const peerRK = new Uint8Array(p.rk);
         if (!sess.peerRatchetPub || JSON.stringify(p.rk) !== JSON.stringify(sess.peerRatchetPub)) {
           if (!sess.ratchetPriv) {
@@ -4953,14 +4965,21 @@ async function initMessenger(dbName) {
         if (p.c <= sess.recvCounter && sess.recvCounter > 0) {
           // v3.6: Try skipped message keys (out-of-order delivery)
           const skKey = peerId + ':' + p.c;
-          if (sess.skippedKeys?.[skKey]) {
-            const mkData = sess.skippedKeys[skKey];
+          const skEntry = sess.skippedKeys?.[skKey];
+          if (skEntry) {
+            // Entries are { k: number[], t: ms } since I7; tolerate legacy bare arrays.
+            const mkData = skEntry.k !== undefined ? u8(skEntry.k) : u8(skEntry);
+            if (!(await _cmOk(p, mkData))) { _dbg(null, 'key commitment mismatch (skipped key)'); return null; }
+            const importedKey = await crypto.subtle.importKey('raw', mkData, { name: 'AES-GCM' }, false, ['decrypt']);
+            let padded;
+            try {
+              padded = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, importedKey, u8(p.d)));
+            } catch { _dbg(null, 'AEAD auth failure (skipped key)'); return null; }
+            // Consume the key only after a successful decrypt — a forged replay must
+            // not burn the cached key the legitimate delayed message still needs.
             delete sess.skippedKeys[skKey];
-            if (!(await _cmOk(p, u8(mkData)))) { _dbg(null, 'key commitment mismatch (skipped key)'); return null; }
-            if (frank && p.fi) { frank.frankId = p.fi; frank.opening = bufToB64(await _frankKey(u8(mkData))); }
-            const importedKey = await crypto.subtle.importKey('raw', u8(mkData), { name: 'AES-GCM' }, false, ['decrypt']);
-            const padded = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, importedKey, u8(p.d)));
-            const text = _unpadAndDecompress(padded, p.v);
+            if (frank && p.fi) { frank.frankId = p.fi; frank.opening = bufToB64(await _frankKey(mkData)); }
+            const text = await _unpadAndDecompress(padded, p.v);
             await saveSession(peerId, sess);
             delete _decryptFailures[peerId];
             return text;
@@ -4972,45 +4991,60 @@ async function initMessenger(dbName) {
         // v3.6: Store skipped message keys for out-of-order delivery (Signal spec §3.4)
         const MAX_SKIP = 100;
         const MAX_GAP = 2000; // hard bound: prevents a forged huge counter from forcing unbounded KDF work
+        // Stage the gap advance into locals — receive state is committed only after
+        // the key commitment + AEAD checks pass, so a forged ciphertext cannot move
+        // the chain or plant replay-cache entries.
+        let stagedChain = sess.recvChainKey;
+        let stagedSkipped = null;
         if (p.c > sess.recvCounter + 1) {
           const gap = p.c - sess.recvCounter - 1;
           // Reject absurd gaps rather than desyncing the chain. (Previously the
           // advance was capped at MAX_SKIP while recvCounter still jumped to p.c,
           // permanently misaligning the receive chain so every later message failed.)
           if (gap > MAX_GAP) { _dbg(null, 'ratchet gap too large (' + gap + '), rejecting'); return null; }
-          if (!sess.skippedKeys) sess.skippedKeys = {};
+          stagedSkipped = {};
           let tmpChain = sess.recvChainKey;
           for (let i = 0; i < gap; i++) {
             const { msgKey: skMk, nextChain: skNext } = await kdfChain(tmpChain);
             const skIdx = sess.recvCounter + 1 + i;
-            // Advance the full gap, but only retain the most recent MAX_SKIP keys.
-            if (gap - i <= MAX_SKIP) sess.skippedKeys[peerId + ':' + skIdx] = arr(skMk);
+            // Advance the full gap, but only retain the most recent MAX_SKIP keys,
+            // each timestamped for the TTL expiry pass above.
+            if (gap - i <= MAX_SKIP) stagedSkipped[peerId + ':' + skIdx] = { k: arr(skMk), t: Date.now() };
             tmpChain = skNext;
           }
-          sess.recvChainKey = tmpChain;
+          stagedChain = tmpChain;
+        }
+        // Derive message key for current counter
+        const { msgKey, nextChain } = await kdfChain(stagedChain);
+        if (!(await _cmOk(p, msgKey))) { _dbg(null, 'key commitment mismatch'); return null; }
+        const importedKey = await crypto.subtle.importKey('raw', msgKey, { name: 'AES-GCM' }, false, ['decrypt']);
+        let padded;
+        try {
+          const wResult = await workerCrypto('decrypt', msgKey, u8(p.i), u8(p.d).buffer.slice(u8(p.d).byteOffset, u8(p.d).byteOffset + u8(p.d).byteLength));
+          if (wResult) {
+            padded = new Uint8Array(wResult);
+          } else {
+            padded = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, importedKey, u8(p.d)));
+          }
+        } catch { _dbg(null, 'AEAD auth failure'); return null; }
+        // Decrypt succeeded — NOW commit all receive state (skipped-key merge +
+        // prune, chain advance, counter, replay cache). A forged ciphertext exits
+        // above with the session untouched.
+        if (stagedSkipped) {
+          if (!sess.skippedKeys) sess.skippedKeys = {};
+          Object.assign(sess.skippedKeys, stagedSkipped);
           // Prune oldest skipped keys if too many
           const skKeys = Object.keys(sess.skippedKeys);
           if (skKeys.length > MAX_SKIP * 2) {
             for (const k of skKeys.slice(0, skKeys.length - MAX_SKIP)) delete sess.skippedKeys[k];
           }
         }
-        // Derive message key for current counter
-        const { msgKey, nextChain } = await kdfChain(sess.recvChainKey);
         sess.recvChainKey = nextChain;
         sess.recvCounter = p.c;
         if (!sess.seenMsgIds) sess.seenMsgIds = [];
         sess.seenMsgIds.push(msgId);
         if (sess.seenMsgIds.length > CONFIG.REPLAY_CACHE_SIZE) sess.seenMsgIds = sess.seenMsgIds.slice(-CONFIG.REPLAY_CACHE_SIZE);
-        if (!(await _cmOk(p, msgKey))) { _dbg(null, 'key commitment mismatch'); return null; }
         if (frank && p.fi) { frank.frankId = p.fi; frank.opening = bufToB64(await _frankKey(msgKey)); }
-        const importedKey = await crypto.subtle.importKey('raw', msgKey, { name: 'AES-GCM' }, false, ['decrypt']);
-        let padded;
-        const wResult = await workerCrypto('decrypt', msgKey, u8(p.i), u8(p.d).buffer.slice(u8(p.d).byteOffset, u8(p.d).byteOffset + u8(p.d).byteLength));
-        if (wResult) {
-          padded = new Uint8Array(wResult);
-        } else {
-          padded = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, importedKey, u8(p.d)));
-        }
         zeroBuffer(msgKey);
         const text = await _unpadAndDecompress(padded, p.v);
         await saveSession(peerId, sess);
@@ -5513,29 +5547,37 @@ async function initMessenger(dbName) {
       if (!peerSK) return null;
 
       let msgKeyBits;
+      let stashedPeerSK = null; // v5 state staged here; committed to IDB only after AEAD success
       if (p.v === 5 && peerSK.v === 5) {
         // v5 hash ratchet
         if ((peerSK.epoch | 0) !== (p.ep | 0)) return null; // epoch mismatch — wait for new key
+        if (!Number.isFinite(p.c)) return null; // c is outside the AEAD — a relay can tamper it
         const targetC = p.c | 0;
         const skipped = { ...(peerSK.skipped || {}) };
+        // I7 (group): expire stale cached message keys by age (MS.WEEK) — indefinite
+        // retention is a forward-secrecy leak and a DoS amplifier.
+        const cutoff = Date.now() - MS.WEEK;
+        for (const k of Object.keys(skipped)) {
+          if ((skipped[k]?.t ?? 0) < cutoff) delete skipped[k];
+        }
         let counter = peerSK.counter | 0;
         let chainKey = new Uint8Array(peerSK.chainKey);
 
         if (targetC < counter) {
-          // Out-of-order: use cached key from a previous ratchet-forward pass
+          // Out-of-order: use cached key from a previous ratchet-forward pass.
+          // Entries are { k: number[], t: ms } since I7; tolerate legacy bare arrays.
           const cached = skipped[targetC];
           if (!cached) return null;
-          msgKeyBits = new Uint8Array(cached);
+          msgKeyBits = cached.k !== undefined ? new Uint8Array(cached.k) : new Uint8Array(cached);
           delete skipped[targetC];
-          peerSK.skipped = skipped;
-          await dbPut('identity', peerSK, skKey);
+          stashedPeerSK = { ...peerSK, skipped };
         } else {
           // Ratchet forward from `counter` to `targetC`, caching intermediate keys
           if (targetC - counter > CONFIG.GROUP_MAX_SKIP) return null;
           while (counter < targetC) {
             const skMsgKey = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-msg-v5', 32);
             chainKey = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-chain-v5', 32);
-            skipped[counter] = Array.from(skMsgKey);
+            skipped[counter] = { k: Array.from(skMsgKey), t: Date.now() };
             counter++;
             // Evict oldest when skip cache exceeds GROUP_MAX_SKIP
             const keys = Object.keys(skipped).map(Number).sort((a, b) => a - b);
@@ -5544,10 +5586,7 @@ async function initMessenger(dbName) {
           msgKeyBits = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-msg-v5', 32);
           chainKey = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-chain-v5', 32);
           counter++;
-          peerSK.chainKey = Array.from(chainKey);
-          peerSK.counter = counter;
-          peerSK.skipped = skipped;
-          await dbPut('identity', peerSK, skKey);
+          stashedPeerSK = { ...peerSK, chainKey: Array.from(chainKey), counter, skipped };
         }
       } else {
         // v3 fallback: static raw key, counter (from payload) as HKDF salt
@@ -5557,7 +5596,14 @@ async function initMessenger(dbName) {
 
       if (!(await _cmOk(p, msgKeyBits))) { _dbg(null, 'group key commitment mismatch'); return null; }
       const importedKey = await crypto.subtle.importKey('raw', msgKeyBits, { name: 'AES-GCM' }, false, ['decrypt']);
-      const padded = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, importedKey, u8(p.d)));
+      let padded;
+      try {
+        padded = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u8(p.i) }, importedKey, u8(p.d)));
+      } catch { _dbg(null, 'group AEAD auth failure'); return null; }
+      // Commit ratchet state only now — a forged ciphertext must not advance the
+      // chain or burn a cached skipped key (previously dbPut ran before the AEAD
+      // check, so one forged packet permanently desynced this member).
+      if (stashedPeerSK) await dbPut('identity', stashedPeerSK, skKey);
       const textLen = new DataView(padded.buffer).getUint16(0);
       return new TextDecoder().decode(padded.slice(2, 2 + textLen));
     } catch(e) { _dbg(e, 'group-decrypt'); return null; }
