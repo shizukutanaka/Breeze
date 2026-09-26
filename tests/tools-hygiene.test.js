@@ -3,7 +3,7 @@
 // These tests pin its contract directly — a mask regression turns a real gate
 // into a false positive storm or a silent no-op.
 import { describe, it, expect } from 'vitest';
-import { maskJs } from '../tools/lib/mask-js.mjs';
+import { maskJs, extractBraceBlock } from '../tools/lib/mask-js.mjs';
 
 const bracesOf = (masked) => masked.replace(/[^{}]/g, '');
 
@@ -51,5 +51,19 @@ describe('maskJs — shared source masker for the structural gates', () => {
     const src = 'if (x) { const o = { a: 1 }; f({ g: /re/ }); }';
     const masked = maskJs(src);
     expect(bracesOf(masked)).toBe('{{}{}}'); // if{ obj{} arg{} } — regex adds none
+  });
+});
+
+describe('extractBraceBlock — masked balanced-brace extraction (i18n-check)', () => {
+  it('returns the full raw block; string braces cannot truncate it', () => {
+    // i18n-check's old naive walk ended `const _I = {` early on any lone `}` inside
+    // a string value — the EN table truncated, every check ran on a subset.
+    const src = 'const _I = { en: { a: "} x", b: "{0}" }, ja: { a: "}" } };';
+    expect(extractBraceBlock(src, 'const _I = ')).toBe('{ en: { a: "} x", b: "{0}" }, ja: { a: "}" } }');
+  });
+
+  it('returns null on a missing marker and throws on unbalanced braces', () => {
+    expect(extractBraceBlock('const x = {a:1};', 'const NOPE = ')).toBeNull();
+    expect(() => extractBraceBlock('const x = {a: 1;', 'const x = ')).toThrow(/unbalanced/);
   });
 });

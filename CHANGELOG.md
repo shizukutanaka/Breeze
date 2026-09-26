@@ -1,5 +1,15 @@
 # Changelog
 
+## Gate hardening round 2: i18n-check extracts _I on a masked walk; dead-wiring scans both quote styles (branch devin/<ts>-gate-masked-extract, 2026-09-26)
+
+vitest 824 → **826**; `tools/lib/mask-js.mjs`, `tools/i18n-check.mjs`, `tools/dead-wiring.mjs`, `tests/tools-hygiene.test.js`, `CHANGELOG.md` — dev-tree only, no deployed code.
+
+- **`i18n-check`'s `_I` extraction ran an unmasked brace count** — the same blind-spot class the shared masker was built for: a lone `}` inside ANY English string value would end the walk early, silently truncating the reference table, and checks 6/7/8 (dead/missing/misused keys, coverage %) would then pass on a subset. New shared `extractBraceBlock()` walks the masked copy — indices stay 1:1 so the returned slice is raw.
+- **`dead-wiring` skipped `getElementById("x")`** (double-quoted literals) — asymmetric scan coverage for the banned-API detector; both quote styles now scanned.
+- +2 tools-hygiene tests pin the new extractor's contract (string braces can't truncate; missing marker → null, unbalanced → throw).
+
+---
+
 ## Gate-suite self-audit: shared maskJs() fixes unreachable-branch's regex blind spot; validate.sh uses mktemp (branch devin/1790408765-gate-audit, 2026-09-26)
 
 vitest 819 → **824**; `tools/lib/mask-js.mjs` (new shared lib), `tools/unreachable-branch.mjs`, `tools/closure-boundary.mjs`, `validate.sh`, `tests/tools-hygiene.test.js` (new) — dev-tree only, no deployed code.

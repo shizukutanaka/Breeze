@@ -55,3 +55,24 @@ export function maskJs(src) {
   }
   return out.join('');
 }
+
+// Find `marker` in src, then return the raw text of the balanced {...} block that
+// follows it — from the opening brace to its matching close, inclusive.
+// The walk runs on the MASKED copy (indices are 1:1 with the raw text) so braces
+// inside strings/comments/regexes can't corrupt the depth count: a string value
+// like "} trailing" ends a naive walk early and silently truncates whatever table
+// the caller was extracting — the failure mode this module exists to prevent.
+// Returns null when the marker or its '{' is absent; throws when unbalanced.
+export function extractBraceBlock(src, marker) {
+  const m = src.indexOf(marker);
+  if (m < 0) return null;
+  const open = src.indexOf('{', m + marker.length);
+  if (open < 0) return null;
+  const masked = maskJs(src);
+  let depth = 0;
+  for (let i = open; i < masked.length; i++) {
+    if (masked[i] === '{') depth++;
+    else if (masked[i] === '}') { depth--; if (depth === 0) return src.slice(open, i + 1); }
+  }
+  throw new Error(`extractBraceBlock: unbalanced braces after "${marker}"`);
+}
