@@ -10,6 +10,18 @@ vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/m
 
 ---
 
+## Client signs prekey/upload + group/create — every Worker-side Ed25519 check now has a signer (branch devin/1790412600-auth-final, 2026-09-26)
+
+vitest 830 unchanged; `index.html`, `_headers`, `tauri.conf.json` (CSP hash propagation).
+
+- `prekey/upload` (initial registration + OTP/SPK replenish) signs `breeze-prekey-upload:{userId}:{ts}:{digest}` where the digest covers every mutable bundle field (identityKey, edIdentityKey, signedPreKey, signedPreKeySig, oneTimePreKeys, caps, x3dh) — the PREKEY_REQUIRE_AUTH (#284) counterpart that stops a registered account's bundle being overwritten by anyone who knows its userId.
+- `group/create` (invite link + ephemeral room) signs `breeze-group-create::{id}:{ts}:{bind}` with an empty token slot and bind = digest of the stored creator fields — the GROUP_REQUIRE_AUTH (#285) counterpart that stops groups being attributed to arbitrary identities.
+- `createEphemeralRoom`'s `/group/create` call was silently 400ing: it never sent `creatorPub`/`creatorName` (MISSING_FIELDS), so rooms were never registered server-side. Now sends both, plus the signature.
+- New helpers next to `authFields`: `digestHex16` (worker's sha256Short twin — SHA-256 → 16 bytes → hex) and `sanStr` (worker's sanitizeString twin — the binds hash the *sanitized* values, so the client must apply the identical transform before hashing).
+- With this, the verified-when-present rollout covers every auth scheme the Worker implements: queue, backup, alias, device, group (mutations + create), prekey, push. Flipping any flag in wrangler.toml no longer breaks clients.
+
+---
+
 ## Client signs the remaining *_REQUIRE_AUTH surfaces — alias/set + push subscribe/unsubscribe (branch devin/1790411749-auth-rollout, 2026-09-26)
 
 vitest 830 unchanged; `index.html`, `_headers`, `tauri.conf.json` (CSP hash propagation).
