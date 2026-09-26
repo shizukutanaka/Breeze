@@ -3821,6 +3821,71 @@ describe('signal relay', () => {
     const r2 = await handleSignal({ room: 'testroom-nots', sender: 'carol', type: 'poll' }, '1.2.3.6', e, req({}));
     expect((await r2.json()).messages).toHaveLength(0);
   });
+
+  it('recovers a stored signal that loses a last-write-wins race (same-room concurrent posts)', async () => {
+    const e = makeEnv();
+    const room = 'race-room';
+    await e.KV.put(`sig:${room}`, JSON.stringify([{ sender: 'old', type: 'offer', data: 'd0', ts: Date.now(), id: 'old-1' }]));
+    // The racing write lands AFTER our kvPut and contains only the attacker's signal —
+    // exactly what a second concurrent post would store. The read-back must notice our
+    // entry (by server-assigned id) is missing and re-append it.
+    let raced = false;
+    const origPut = e.KV.put.bind(e.KV);
+    e.KV.put = async (k, v, o) => {
+      const r = await origPut(k, v, o);
+      if (k === `sig:${room}` && !raced) {
+        raced = true;
+        await origPut(k, JSON.stringify([{ sender: 'bob', type: 'call-offer', data: 'theirs', ts: Date.now(), id: 'b-1' }]), { expirationTtl: 300 });
+      }
+      return r;
+    };
+    const res = await handleSignal({ room, sender: 'alice', type: 'call-answer', data: 'ours' }, '1.2.3.4', e, req({}));
+    expect(res.status).toBe(200);
+    const final = JSON.parse(await e.KV.get(`sig:${room}`));
+    // Both writes survive: the racing entry plus our re-appended one (server id, not 'old-1').
+    expect(final.some(s => s.id === 'b-1')).toBe(true);
+    expect(final.filter(s => s.sender === 'alice' && s.type === 'call-answer')).toHaveLength(1);
+    expect(final.find(s => s.sender === 'alice').id).toBeTruthy();
+  });
+
+  it('does not duplicate the signal when no race occurs (read-back finds own id)', async () => {
+    const e = makeEnv();
+    const room = 'norace';
+    await handleSignal({ room, sender: 'alice', type: 'offer', data: 'd' }, '1.2.3.4', e, req({}));
+    const final = JSON.parse(await e.KV.get(`sig:${room}`));
+    expect(final.filter(s => s.sender === 'alice')).toHaveLength(1);
+  });
+
+  it('poll cleanup re-reads before rewriting, preserving a signal stored in the read/put gap', async () => {
+    const e = makeEnv();
+    const room = 'poll-race';
+    const now = Date.now();
+    // Stale other-sender signal (>30s) so the cleanup path triggers a rewrite.
+    await e.KV.put(`sig:${room}`, JSON.stringify([{ sender: 'alice', type: 'offer', data: 'stale', ts: now - 40000, id: 'stale-1' }]));
+    // A fresh signal lands between our initial get and the cleanup put.
+    let reads = 0;
+    const origGet = e.KV.get.bind(e.KV);
+    e.KV.get = async (k) => {
+      if (k === `sig:${room}`) {
+        reads += 1;
+        // Second read = the handler's fresh re-read inside the read→put gap: a new signal
+        // has landed since the first snapshot.
+        if (reads === 2) {
+          return JSON.stringify([
+            { sender: 'alice', type: 'offer', data: 'stale', ts: now - 40000, id: 'stale-1' },
+            { sender: 'carol', type: 'call-offer', data: 'new', ts: now, id: 'new-1' },
+          ]);
+        }
+      }
+      return origGet(k);
+    };
+    const r = await handleSignal({ room, sender: 'bob', type: 'poll' }, '1.2.3.5', e, req({}));
+    expect(r.status).toBe(200);
+    const final = JSON.parse(await e.KV.get(`sig:${room}`) || '[]');
+    // The newcomer must survive the cleanup; the stale entry may be dropped.
+    expect(final.some(s => s.id === 'new-1')).toBe(true);
+    expect(final.some(s => s.id === 'stale-1')).toBe(false);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -367,7 +367,15 @@ async function handleSignal(body, ip, env, request) {
     const now = Date.now();
     const remaining = signals.filter(s => s.sender === sender || (typeof s.ts === 'number' && Number.isFinite(s.ts) && now - s.ts < 30000));
     if (remaining.length < signals.length) {
-      if (remaining.length > 0) await kvPut(env, `sig:${room}`, JSON.stringify(remaining), { expirationTtl: TTL.MIN * 5 });
+      // KV is last-write-wins and another poll/post may have written between our get and
+      // this put — rewriting the stale filtered snapshot would silently delete a signal
+      // that arrived in the gap (a dropped call-offer/candidate = the call never
+      // connects). Re-read, apply the same keep predicate to the FRESH value, then write.
+      const freshRaw = await kvGet(env, `sig:${room}`);
+      const fresh = safeJsonParse(freshRaw, []);
+      const freshArr = Array.isArray(fresh) ? fresh : [];
+      const rem = freshArr.filter(s => s.sender === sender || (typeof s.ts === 'number' && Number.isFinite(s.ts) && now - s.ts < 30000));
+      if (rem.length > 0) await kvPut(env, `sig:${room}`, JSON.stringify(rem), { expirationTtl: TTL.MIN * 5 });
       else await kvDel(env, `sig:${room}`);
     }
     return json({ messages: filtered }, 200, request);
@@ -377,10 +385,23 @@ async function handleSignal(body, ip, env, request) {
   const raw = await kvGet(env, `sig:${room}`);
   const parsed = safeJsonParse(raw, []);
   const signals = Array.isArray(parsed) ? parsed : [];
-  signals.push({ sender, type, data, ts: Date.now() });
+  // Server-assigned id: the read-back below identifies OUR entry without relying on
+  // sender/ts (two same-sender posts in one ms would be indistinguishable otherwise).
+  const entry = { sender, type, data, ts: Date.now(), id: crypto.randomUUID() };
+  signals.push(entry);
   // Keep last 50 signals, expire in 5 min (allow slow NAT traversal)
   const trimmed = signals.slice(-50);
   await kvPut(env, `sig:${room}`, JSON.stringify(trimmed), { expirationTtl: TTL.MIN * 5 });
+  // Last-write-wins recovery (same doctrine as handleMsgSend/handleSealedSend): two posts
+  // to the same room race; the loser's signal returns 200 but silently vanished, and a
+  // lost call-offer/ICE candidate means the call never connects. Re-read and re-append
+  // our entry by id if it lost the race. Poll's `sender !== sender` filter ignores the
+  // extra field, and a rare true duplicate is harmless (callers poll-and-discard).
+  const check = safeJsonParse(await kvGet(env, `sig:${room}`), []);
+  if (Array.isArray(check) && !check.some(s => s && s.id === entry.id)) {
+    const merged = [...check, entry].slice(-50);
+    await kvPut(env, `sig:${room}`, JSON.stringify(merged), { expirationTtl: TTL.MIN * 5 });
+  }
 
   return json({ ok: true }, 200, request);
 }
