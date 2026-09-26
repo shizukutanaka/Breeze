@@ -1,5 +1,14 @@
 # Changelog
 
+## Worker env-var documentation gate: every env.* the Worker reads must exist in wrangler.toml (branch devin/<ts>-env-docs-gate, 2026-09-26)
+
+vitest 819 → **836**; `tests/worker-env-docs.test.js` (new), `CHANGELOG.md` — test only.
+
+- `wrangler.toml`'s commented secret-put lines are the ONLY place a self-hoster learns a knob exists — an undocumented flag is undiscoverable. New gate: every `env.NAME` the Worker reads must appear in wrangler.toml (ASSETS/KV excluded — platform bindings), plus an inline snapshot of the full set so a new env read is a deliberate diff, not an accident.
+- Verified the pending auth PRs already carry their doc lines (QUEUE_REQUIRE_AUTH on #283, PREKEY_REQUIRE_AUTH on #284, `create` in GROUP_REQUIRE_AUTH on #285) — post-merge main stays green; the gate prevents recurrence.
+
+---
+
 ## docs/ROADMAP.md claimed 8 deployed security items were still "pending an index.html port" — they'd all shipped (branch claude/nice-ride-T6yb0, 2026-09-18)
 
 819 vitest unchanged; Playwright E2E 60 unchanged; `docs/ROADMAP.md`, `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash propagation) — dead-code removal only, no runtime behavior change.
