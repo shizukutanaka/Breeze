@@ -1,5 +1,16 @@
 # Changelog
 
+## Signal rooms authenticated: dm:/call: poll+store now require room membership and a fresh signature (branch devin/1790423241-round25, 2026-09-26)
+
+vitest 891 (+6); `_worker.js`, `index.html`, `tests/worker.test.js`, `tests/auth-parity.test.js`, `CHANGELOG.md`, CSP hash re-pinned.
+
+- `/api/signal` was world-readable and world-writable: `dm:<idA>:<idB>` and `call:<idA>:<idB>` room names are derivable from public account ids, so anyone could `poll` a room and read every typing/read indicator, SDP offer/answer, ICE candidate and call timing — and since poll *consumes* what it returns, the same request starved the real members of their signals.
+- Both directions now authorize: `sender` must be one of the two ids embedded in the room name (`NOT_ROOM_MEMBER`), and when that account has a registered auth root (`prekey:{sender}.edIdentityKey`) the request must carry `ts` + a `breeze-sig:<room>:<sender>:<ts>` Ed25519 signature (strict-continuity pattern — unsigned only for senders with no registered root, i.e. nothing to impersonate). Non dm:/call: rooms keep legacy behavior.
+- Client `_signal`/`_signalAwait` and the pre-connection ICE post all attach `ts`+`sig` via a new `_signalAuth(room)` helper; `signMessage` absent → ts only → still accepted while the account is unsigned (Ed25519 unavailable).
+- `tests/auth-parity.test.js`: `breeze-sig:{}:{}:{}` added to `MAIN_VERIFIED`.
+
+---
+
 ## Lost-write recovery sweeps the rest of the worker's multi-actor KV mutations (branch devin/1790415615-grp-sig-push-lost-write, 2026-09-26)
 
 vitest 849 (+16); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
