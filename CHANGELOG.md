@@ -1,6 +1,6 @@
 # Changelog
 
-## SPEC↔code drift gate + remaining stale counts fixed (branch devin/<ts>-spec-drift-gate, 2026-09-26)
+## SPEC↔code drift gate + remaining stale counts fixed (branch devin/1790411115-spec-drift-gate, 2026-09-26)
 
 vitest 841 (+22); `tests/spec-docs.test.js`, `SPEC.md`, `docs/CRYPTO-SPEC.md`, `CHANGELOG.md`.
 
