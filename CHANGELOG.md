@@ -24,7 +24,6 @@ Sources: Signal Double Ratchet spec §8.4 (deletion of skipped message keys) + �
 
 ---
 
-||||||| parent of 64b852e (feat: QUEUE_REQUIRE_AUTH — Ed25519 ownership proof for queue read/delete)
 ## Queue-read auth: msg/poll, sealed/poll, sealed/ack learn Ed25519 ownership proof (branch devin/1790404900-queue-read-auth, 2026-09-26)
 
 827 vitest (819→827: eight queue-auth tests — flag on/off, per-op domain separation, partial-auth, stale-ts, unregistered, backward-compat, key-rotation self-heal); `_worker.js`, `tests/worker.test.js`, `wrangler.toml` — Cloudflare Workers only; index.html untouched (client signing fields are the follow-up once the pending index.html PR lands).
@@ -32,6 +31,18 @@ Sources: Signal Double Ratchet spec §8.4 (deletion of skipped message keys) + �
 **The gap:** `/api/msg/poll`, `/api/sealed/poll`, and `/api/sealed/ack` were authenticated by nothing but knowledge of a `userId`. That id is not a secret — it's handed to every contact and rides in presence records — so any party who learned one could read the undelivered queue's ciphertext (defeating the metadata purpose of Sealed Sender, which hides everything except the recipient id) or ack-wipe undelivered messages, a silent drain-or-destroy attack.
 
 **The fix (same doctrine as `BACKUP_REQUIRE_AUTH`/`GROUP_REQUIRE_AUTH`):** callers may sign `breeze-<op>:<id>:<ts>` with the account's registered Ed25519 identity key (`prekey:{id}.edIdentityKey`). Verified-when-present today; `QUEUE_REQUIRE_AUTH=true` makes it mandatory once clients ship the signing fields. Three per-op domains (`msg-poll`, `sealed-poll`, `sealed-ack`) so a captured poll signature can't be replayed as a destructive ack. The registered key is cached per-isolate (polls are the hottest path) with positive-only caching + evict-on-verify-failure so identity-key rotation self-heals; `handleAccountDelete` evicts the cached key alongside `_presenceCache`. Health advertises `queue-auth` for capability detection.
+
+---
+
+## PREKEY_REQUIRE_AUTH — Ed25519 ownership proof for prekey bundle uploads (branch devin/1790405800-prekey-upload-auth, 2026-09-26)
+
+399 vitest (392 → **399**, +7); `_worker.js`, `tests/worker.test.js`, `wrangler.toml`.
+
+The symmetric audit to QUEUE_REQUIRE_AUTH: the queue read/delete endpoints were unauthenticated, and so was the *write* endpoint that feeds them — `prekey/upload`. `identityKey.startsWith(userId)` binds a new account's key to its id, but for an **existing** userId anyone who knows the id could overwrite the entire stored bundle — a new `identityKey` with the same prefix plus the attacker's signed prekey and OTP list. Every subsequent X3DH initiation to that user would key to attacker-controlled material (silent MITM/identity hijack), with the ktlog recording the anomaly only if clients bother to audit. userIds are not secrets — they're shared with contacts and leaked by alias lookups.
+
+Same doctrine as QUEUE/BACKUP/GROUP_REQUIRE_AUTH: callers may include `{ts, sig}` signing `breeze-prekey-upload:{userId}:{ts}:{digest}` where the digest is `sha256Short(JSON.stringify([identityKey, edIdentityKey, signedPreKey, signedPreKeySig, oneTimePreKeys, caps, x3dh]))` — binding every attacker-malleable field so a captured signed request can't swap the OTP list or downgrade caps. **Continuity**: the verifier is the *stored* bundle's `edIdentityKey`, the root of identity continuity — rotation requires the previous key's signature (recovery when it's lost: account delete + re-register). A first upload, or a legacy bundle that never stored an `edIdentityKey`, verifies against the bundle's own `edIdentityKey` — self-binding, same trust level as today for that corner. Verified-when-present today (a signed request with a bad signature is rejected even with the flag off), mandatory once `wrangler pages secret put PREKEY_REQUIRE_AUTH=true`; advertised as `prekey-auth` in `/api/health` capabilities. Backward-compatible: the deployed client's `postAPIRaw` sends the body verbatim with no `ts`/`sig`, so nothing changes until the flag is set and clients start signing.
+
+Tests: unsigned rejected when flag on (403 AUTH_REQUIRED); signed first upload + same-key rotation accepted; **overwrite by a different ed key rejected even though the signature itself is valid** (stored key is the root); captured signature replayed with a tampered OTP list rejected (digest binding); partial auth 400; unsigned still accepted with flag off; bad signature rejected with flag off.
 
 ---
 

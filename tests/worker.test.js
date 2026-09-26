@@ -3725,6 +3725,127 @@ describe('backup BACKUP_REQUIRE_AUTH enforcement (item 54)', () => {
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────────
+// Prekey-upload auth — PREKEY_REQUIRE_AUTH gates /api/prekey/upload.
+// identityKey.startsWith(userId) only binds a NEW id↔key pair; for an EXISTING
+// userId anyone could overwrite the whole bundle (keys, OTPs, caps) — the exact
+// "unexpected key change" the ktlog exists to detect. The upload signature
+// verifies against the STORED edIdentityKey (identity-continuity root).
+// ─────────────────────────────────────────────────────────────────────────────
+describe('prekey upload auth — PREKEY_REQUIRE_AUTH', () => {
+  const req = (body) => apiRequest('/api/prekey/upload', body);
+
+  // Replicates the Worker's sha256Short (16-byte hex of SHA-256).
+  async function digestFields(...fields) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(fields)));
+    return Array.from(new Uint8Array(buf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  async function makeBundle(ed, userId) {
+    const identityKey = userId + '-IK';          // startsWith(userId) as required
+    const spk = crypto.getRandomValues(new Uint8Array(32));
+    const signedPreKey = toB64(spk);
+    const signedPreKeySig = toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, spk)));
+    const edIdentityKey = toB64(new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey)));
+    return { identityKey, edIdentityKey, signedPreKey, signedPreKeySig };
+  }
+  async function signUpload(ed, userId, b, extra = {}) {
+    const ts = Date.now();
+    const digest = await digestFields(
+      b.identityKey, b.edIdentityKey || '', b.signedPreKey, b.signedPreKeySig || '',
+      b.oneTimePreKeys || [], b.caps || [], typeof b.x3dh === 'string' ? b.x3dh : '',
+    );
+    const msg = new TextEncoder().encode(`breeze-prekey-upload:${userId}:${ts}:${digest}`);
+    const sig = toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, msg)));
+    return { ts, sig, ...extra };
+  }
+  const baseBody = (userId, b) => ({
+    userId, identityKey: b.identityKey, edIdentityKey: b.edIdentityKey,
+    signedPreKey: b.signedPreKey, signedPreKeySig: b.signedPreKeySig,
+    oneTimePreKeys: ['otp-a', 'otp-b'],
+  });
+
+  it('rejects an unsigned upload when the flag is on', async () => {
+    const e = makeEnv({ PREKEY_REQUIRE_AUTH: 'true' });
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const b = await makeBundle(ed, 'pkflga01');
+    const res = await handlePreKeyUpload(baseBody('pkflga01', b), e, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
+  });
+
+  it('accepts a signed first upload, then enforces continuity on overwrite', async () => {
+    const e = makeEnv({ PREKEY_REQUIRE_AUTH: 'true' });
+    const edA = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    // First upload: no stored bundle → verified against the bundle's own edIdentityKey.
+    const b1 = await makeBundle(edA, 'pkflga02');
+    const s1 = await signUpload(edA, 'pkflga02', { ...baseBody('pkflga02', b1) });
+    const r1 = await handlePreKeyUpload({ ...baseBody('pkflga02', b1), ...s1 }, e, req({}));
+    expect(r1.status).toBe(200);
+    // Rotation: new SPK signed by the SAME edIdentityKey → passes continuity.
+    const b2 = await makeBundle(edA, 'pkflga02');
+    const s2 = await signUpload(edA, 'pkflga02', { ...baseBody('pkflga02', b2) });
+    const r2 = await handlePreKeyUpload({ ...baseBody('pkflga02', b2), ...s2 }, e, req({}));
+    expect(r2.status).toBe(200);
+  });
+
+  it('rejects a signed overwrite by a DIFFERENT ed key (takeover)', async () => {
+    const e = makeEnv({ PREKEY_REQUIRE_AUTH: 'true' });
+    const edA = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const edEvil = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const b1 = await makeBundle(edA, 'pkflga03');
+    const s1 = await signUpload(edA, 'pkflga03', baseBody('pkflga03', b1));
+    expect((await handlePreKeyUpload({ ...baseBody('pkflga03', b1), ...s1 }, e, req({}))).status).toBe(200);
+    // Attacker overwrites with their own edIdentityKey + self-signed — the stored edA is
+    // the continuity root, so this must fail even though the signature itself is valid.
+    const bEvil = await makeBundle(edEvil, 'pkflga03');
+    const sEvil = await signUpload(edEvil, 'pkflga03', baseBody('pkflga03', bEvil));
+    const rEvil = await handlePreKeyUpload({ ...baseBody('pkflga03', bEvil), ...sEvil }, e, req({}));
+    expect(rEvil.status).toBe(403);
+    expect((await rEvil.json()).code).toBe('SIG_INVALID');
+    // Stored bundle untouched.
+    const stored = JSON.parse(await e.KV.get('prekey:pkflga03'));
+    expect(stored.edIdentityKey).toBe(b1.edIdentityKey);
+  });
+
+  it('rejects a signed request replayed with a tampered OTP list', async () => {
+    const e = makeEnv({ PREKEY_REQUIRE_AUTH: 'true' });
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const b = await makeBundle(ed, 'pkflga04');
+    const body = { ...baseBody('pkflga04', b) };
+    const s = await signUpload(ed, 'pkflga04', body);
+    // Attacker swaps the OTP array but reuses the captured signature — digest binds it.
+    const res = await handlePreKeyUpload({ ...body, ...s, oneTimePreKeys: ['ATTACKER-OTP'] }, e, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+  });
+
+  it('partial auth (ts without sig) is 400 even when the flag is off', async () => {
+    const e = makeEnv();
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const b = await makeBundle(ed, 'pkflga05');
+    const res = await handlePreKeyUpload({ ...baseBody('pkflga05', b), ts: Date.now() }, e, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('PARTIAL_AUTH');
+  });
+
+  it('unsigned uploads still work when the flag is unset (backward-compat)', async () => {
+    const e = makeEnv();
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const b = await makeBundle(ed, 'pkflga06');
+    const res = await handlePreKeyUpload(baseBody('pkflga06', b), e, req({}));
+    expect(res.status).toBe(200);
+  });
+
+  it('verified-when-present: a signed upload with a BAD signature is rejected even with flag off', async () => {
+    const e = makeEnv();
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const b = await makeBundle(ed, 'pkflga07');
+    const res = await handlePreKeyUpload({ ...baseBody('pkflga07', b), ts: Date.now(), sig: toB64(new Uint8Array(64)) }, e, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+  });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Queue-read auth — QUEUE_REQUIRE_AUTH gates msg/poll, sealed/poll, sealed/ack.
 // Without auth, knowing a userId is enough to READ the undelivered queue's

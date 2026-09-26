@@ -49,4 +49,5 @@ id = ""  # ← REQUIRED: paste your KV namespace ID here
 # wrangler pages secret put PUSH_REQUIRE_AUTH          # true — reject unsigned push subscribe/unsubscribe
 # wrangler pages secret put TURN_REQUIRE_AUTH          # true — reject unsigned TURN credential requests
 # wrangler pages secret put QUEUE_REQUIRE_AUTH         # true — reject unsigned msg/sealed poll + sealed ack (queue read/delete)
+# wrangler pages secret put PREKEY_REQUIRE_AUTH        # true — reject unsigned prekey uploads (bundle overwrite = identity takeover)
 # wrangler pages secret put BACKUP_REQUIRE_AUTH        # true — without this, knowing a userId is enough to download that user's encrypted backup blob
