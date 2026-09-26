@@ -1,6 +1,6 @@
 # Changelog
 
-## Gate hardening round 2: i18n-check extracts _I on a masked walk; dead-wiring scans both quote styles (branch devin/<ts>-gate-masked-extract, 2026-09-26)
+## Gate hardening round 2: i18n-check extracts _I on a masked walk; dead-wiring scans both quote styles (branch devin/1790409698-gate-masked-extract, 2026-09-26)
 
 vitest 824 → **826**; `tools/lib/mask-js.mjs`, `tools/i18n-check.mjs`, `tools/dead-wiring.mjs`, `tests/tools-hygiene.test.js`, `CHANGELOG.md` — dev-tree only, no deployed code.
 
