@@ -75,9 +75,26 @@ wrangler pages secret put VAPID_PRIVATE_KEY
 wrangler pages secret put TURN_KEY_ID
 wrangler pages secret put TURN_KEY_API_TOKEN
 
-# Option B: No config → free Open Relay (20GB/month)
+# Option B: Self-hosted coturn (your own quota + logs)
+wrangler pages secret put TURN_SECRET   # coturn static-auth-secret
+wrangler pages secret put TURN_URL      # e.g. turn:turn.example.com:3478
+# Minimal coturn.conf: listening-port=3478, use-auth-secret,
+# static-auth-secret=<TURN_SECRET>, realm=turn.example.com
+
+# Option C: Static credentials (metered.ca, Twilio, etc.)
+wrangler pages secret put TURN_URL
+wrangler pages secret put TURN_USERNAME
+wrangler pages secret put TURN_CREDENTIAL
+
+# Option D: No config → free Open Relay (20GB/month)
 # (This is the default — no action needed)
 ```
+
+**Privacy note:** with A/B/C configured, clients that never touched the
+"Relay-only mode" checkbox default to relay-only ICE (`iceTransportPolicy:
+'relay'`) — srflx candidates carrying the public IP are never sent to the peer.
+On the shared Open Relay fallback the default stays opt-in so the free quota
+isn't burned by every client.
 
 ### Custom Domain
 

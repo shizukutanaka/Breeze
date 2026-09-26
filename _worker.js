@@ -1940,14 +1940,24 @@ async function handleAccountDelete(body, env, request) {
     kvDel(env, `backup:${userId}`),
     kvDel(env, `presence:${userId}`),
     kvDel(env, `slots:${userId}`),
+    kvDel(env, `devices:${userId}`), // multi-device registry — a re-registered account must not inherit the dead one's device list or its pinned rootEd
   ];
   if (customerId) dels.push(kvDel(env, `cust:${customerId}`));
+  // Per-IP OTP-drain locks are keyed otp_lock:{userId}:{ipHash} — enumerate by prefix.
+  // (TTL'd at 1 day regardless; swept here so erasure is complete, not eventual.)
+  try {
+    const locks = await env.KV.list({ prefix: `otp_lock:${userId}:` });
+    for (const k of (locks && locks.keys) || []) dels.push(kvDel(env, k.name));
+  } catch { /* list unsupported — locks still expire on their own TTL */ }
   await Promise.all(dels);
   // Evict the in-memory presence cache too, or a same-isolate presence check
   // would keep answering "online" from stale cached data after erasure.
   globalThis._presenceCache?.delete(`presence:${userId}`);
   globalThis._presenceCache?.delete(`presence:${userId}:data`);
   globalThis._queueAuthKey?.delete(userId); // cached queue-auth identity key (else a re-registered account's new key could be rejected until isolate eviction)
+  globalThis._presenceVerified?.delete(userId); // PRESENCE_REQUIRE_AUTH mark — else a zombie keeps heartbeating a deleted account
+  globalThis._presencePin?.delete(userId);     // pinned pub/caps for the dead account (cache lands with the presence-pinning change; no-op until then)
+  globalThis._devTouch?.delete(userId);        // devices:{id} touch-on-read throttle
 
   // Optional group membership cleanup. There is no reverse index (user → groups),
   // so without the client supplying the tokens, a deleted account's id/pub/name
@@ -1986,7 +1996,7 @@ async function handleAccountDelete(body, env, request) {
     }
   }
 
-  const erased = ['inbox', 'sealed', 'prekeys', 'ktlog', 'push', 'backup', 'presence', 'slots'];
+  const erased = ['inbox', 'sealed', 'prekeys', 'ktlog', 'push', 'backup', 'presence', 'slots', 'devices', 'otpLocks'];
   if (customerId) erased.push('cust');
   return json({
     ok: true,

@@ -42,7 +42,7 @@ all run on the deployed path.
 | I4 | Encrypt identity/signing keys at rest (app-lock) | M | Plaintext JWK in IndexedDB → XSS/forensics (ePrint 2024/887). | — | ✅ **fully deployed** in `src/crypto/atrest.js` (PBKDF2≥600k, btoa/atob browser-compat, wrapJWK/unwrapJWK/migrate/zeroBuffer, +10 tests); **index.html**: `loadIdentity()`/`_atRestIsWrapped()` wired in, opt-in via `/keywrap` (off by default — surfaced once via the `keywrapSuggestion` toast on first boot) |
 | C8 | Web-app integrity ("Code Verify" / SW hash-pin) | M | Biggest *unaddressed* web-E2EE threat: host can serve malicious JS. SW is the pin point. | — |
 | C13 | QR **scan-to-verify** as default ceremony | S–M | Human out-of-band channel closes the I1 MITM gap *before* key transparency. | — |
-| I19 | WebRTC: relay-only privacy default + STUN self-host | S | srflx still leaks public IP to peer by default (arXiv 2510.16168). | — |
+| I19 | WebRTC: relay-only privacy default + STUN self-host | S | srflx still leaks public IP to peer by default (arXiv 2510.16168). | — | 🟡 **partial**: `_relayOnlyNow()` defaults relay-only ON when `/api/turn` reports a dedicated provider (cloudflare/custom/static) and the user never chose; the shared `openrelay` fallback stays opt-in. All ICE paths (data PC + both call PCs) + stats label + checkbox honor the effective state; coturn/STUN self-host documented in SELF_HOSTING.md. Still open: relay-only for DataChannel when no dedicated TURN (needs opt-in UX) |
 
 ---
 

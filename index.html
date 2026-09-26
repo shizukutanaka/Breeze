@@ -2863,6 +2863,18 @@ function show(id) {
 
 let _userId = '';
 let _turnCredential = null; // v3.6: { iceServers: [...], ttl, provider } — from /api/turn
+
+// I19: effective relay-only decision for ICE setup. An explicit checkbox/localStorage
+// choice always wins; when the user never chose, relay-only defaults ON only while the
+// deployment serves its OWN TURN credentials (providers cloudflare/custom/static) —
+// the shared 'openrelay' free fallback stays opt-in so default-on can't burn a
+// community 20GB/mo quota. Otherwise every call leaks the public IP to the peer via
+// srflx candidates (arXiv 2510.16168).
+function _relayOnlyNow() {
+  if (_settings.relayOnly) return true;
+  if (localStorage.getItem('brz-relay-only') !== null) return false;
+  return !!(_turnCredential && _turnCredential.provider && _turnCredential.provider !== 'openrelay');
+}
 try { _userId = localStorage.getItem('brz-uid') || ''; } catch(e) { _dbg(e); }
 
 // If arriving via ?join=token, show group info on setup screen
@@ -7664,7 +7676,7 @@ async function initMessenger(dbName) {
           }
         });
         const isTurn = localType === 'relay';
-        const isRelayOnly = _settings.relayOnly;
+        const isRelayOnly = _relayOnlyNow();
         const icon = isTurn ? '🟡' : '🟢';
         const label = isRelayOnly ? t('connTURNRelay') : isTurn ? t('connTURN') : (localType === 'srflx' ? t('connSTUN') : t('connDirect'));
         const rttQ = rtt > 300 ? '🔴' : rtt > 100 ? '🟡' : '';
@@ -8641,7 +8653,7 @@ async function initMessenger(dbName) {
       cfg.iceServers.push({ urls: _turnCredential.urls, username: _turnCredential.username, credential: _turnCredential.credential });
     }
     // v3.6: Privacy mode — force relay to hide both peers' IPs
-    if (_settings.relayOnly) {
+    if (_relayOnlyNow()) {
       cfg.iceTransportPolicy = 'relay';
       _dbg(null, 'ICE: relay-only mode (IP hidden from peers)');
     }
@@ -8727,7 +8739,7 @@ async function initMessenger(dbName) {
         if (e.candidate && API) {
           // v3.6: IP privacy — filter host + srflx in relay-only mode
           if (e.candidate.type === 'host' && e.candidate.address && !e.candidate.address.includes('.local')) return;
-          if (_settings.relayOnly && (e.candidate.type === 'srflx' || e.candidate.type === 'prflx')) return;
+          if (_relayOnlyNow() && (e.candidate.type === 'srflx' || e.candidate.type === 'prflx')) return;
           const room = 'call:' + [myId, contact.id].sort().join(':');
           _wrapCallSignal(contact.pubB64, e.candidate).then(d => { if (d != null) _signal(room, 'call-ice', d); }).catch(err => _dbg(null, 'ICE signal wrap failed:', err?.message));
         }
@@ -8810,7 +8822,7 @@ async function initMessenger(dbName) {
         if (e.candidate && API) {
           // v3.6: IP privacy — filter host + srflx in relay-only mode
           if (e.candidate.type === 'host' && e.candidate.address && !e.candidate.address.includes('.local')) return;
-          if (_settings.relayOnly && (e.candidate.type === 'srflx' || e.candidate.type === 'prflx')) return;
+          if (_relayOnlyNow() && (e.candidate.type === 'srflx' || e.candidate.type === 'prflx')) return;
           const room = 'call:' + [myId, pending.contact.id].sort().join(':');
           _wrapCallSignal(pending.contact.pubB64, e.candidate).then(d => { if (d != null) _signal(room, 'call-ice', d); }).catch(err => _dbg(null, 'ICE signal wrap failed (incoming):', err?.message));
         }
@@ -9934,7 +9946,7 @@ async function initMessenger(dbName) {
           return;
         }
         // v3.6: Relay-only mode — also strip srflx (public IP via STUN)
-        if (_settings.relayOnly && (c.type === 'srflx' || c.type === 'prflx')) {
+        if (_relayOnlyNow() && (c.type === 'srflx' || c.type === 'prflx')) {
           _dbg(null, 'ICE: filtered srflx/prflx candidate (relay-only mode)');
           return;
         }
@@ -12878,7 +12890,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         '',
         '<b>' + t('cmdSectionNetwork') + '</b>',
         t('secIceCandFilter'),
-        t('secLblRelayOnly') + ': ' + (_settings.relayOnly ? '<span class="i-g">✓ ON</span> ' + t('secRelayEnabled') : t('secRelayDisabled')),
+        t('secLblRelayOnly') + ': ' + (_relayOnlyNow() ? '<span class="i-g">✓ ON</span> ' + t('secRelayEnabled') : t('secRelayDisabled')),
         'TURN: ' + (_turnCredential ? '✓ ' + t('secActive') : '✗ ' + t('secNotConfigured')),
         t('secLblRTCCert') + ': ' + (_rtcCert ? '✓ Per-session ECDSA P-256' : '✗ ' + t('secDefault')),
         'DataChannel: negotiated:true (DCEP skip)',
@@ -13615,7 +13627,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         <label class="i-cur"><input type="checkbox" data-setting="hide-rr" ${_privacyHideReadReceipts ? 'checked' : ''}> ${t('hideReadReceipts')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="rr-delay" ${_settings.readReceiptDelay ? 'checked' : ''}> ${t('rrDelayLabel')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="hide-typing" ${_privacyHideTyping ? 'checked' : ''}> ${t('hideTyping')}</label><br>
-        <label class="i-cur"><input type="checkbox" data-setting="relay-only" ${_settings.relayOnly ? 'checked' : ''}> ${t('relayOnly')}</label><br>
+        <label class="i-cur"><input type="checkbox" data-setting="relay-only" ${_relayOnlyNow() ? 'checked' : ''}> ${t('relayOnly')}</label><br>
         <br><b class="i-g">${t('settingsSound')}</b><br>
         <label class="i-cur"><input type="checkbox" data-setting="notif-sound" ${_notifSoundEnabled ? 'checked' : ''}> ${t('notifSound')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="send-sound" ${_sendSoundEnabled ? 'checked' : ''}> ${t('sendSound')}</label><br>

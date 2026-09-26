@@ -1,5 +1,15 @@
 # Changelog
 
+## Account-erasure completeness (devices + OTP-drain locks + pin caches) + I19 relay-only privacy default when a dedicated TURN exists (branch devin/1790417839-erasure-relay-only, 2026-09-26)
+
+vitest 868 (+0, extended the erasure test); `_worker.js`, `index.html`, `_headers`, `tauri.conf.json` (CSP re-pin), `tests/worker.test.js`, `docs/SELF_HOSTING.md`, `docs/ROADMAP.md`, `CHANGELOG.md`.
+
+- `account/delete` now also sweeps `devices:{userId}` (the multi-device registry — previously a re-registered id inherited the dead account's device list and its TOFU-pinned `rootEd`) and every `otp_lock:{userId}:*` per-IP OTP-drain lock via `KV.list` prefix enumeration, and evicts the `_presenceVerified` / `_presencePin` / `_devTouch` in-memory marks so a zombie heartbeat can't keep a deleted account "online" or republish its pinned pub/caps within the isolate.
+- I19 (`docs/ROADMAP.md` → 🟡): new `_relayOnlyNow()` — the stored checkbox/`localStorage` choice always wins; when the user never chose, relay-only ICE (`iceTransportPolicy:'relay'` + srflx/prflx candidate filtering) defaults ON only while `/api/turn` serves a dedicated provider (`cloudflare`/`custom`/`static`). The unconditional `openrelay` free-tier fallback stays opt-in so default-on can't exhaust the shared 20GB/mo quota for every user on unconfigured deploys. All ICE paths (data PC onicecandidate, both call PCs, stats label, security panel, settings checkbox) read the effective state, so the UI tells the truth. Coturn/static-credential self-host documented in SELF_HOSTING.md.
+- Test: the erasure test now seeds `devices:` + `otp_lock:` and asserts both are gone (plus the `erased` list). `_relayOnlyNow` is client-side logic with no harness coverage — its guard semantics are documented inline.
+
+---
+
 ## Mobile bundle shipped English-only: prepare.js never copied locales/; signing injection now idempotent (branch devin/1790411492-mobile-locales, 2026-09-26)
 
 vitest 833 (+3); `mobile/prepare.js`, `mobile/scripts/build-mobile.sh`, `tests/mobile-assets.test.js`, `CHANGELOG.md`.

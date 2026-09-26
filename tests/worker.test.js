@@ -1695,15 +1695,23 @@ describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
     const env = makeEnv();
     const userId = 'deluser01';
     const { ed } = await registeredAccount(env, userId);
+    // Multi-device registry + per-IP OTP-drain locks are userId-keyed too — a re-registered
+    // account must not inherit the dead one's device list/pinned rootEd, and erasure should
+    // be complete rather than waiting out the locks' 1-day TTL.
+    await env.KV.put(`devices:${userId}`, JSON.stringify({ devices: [{ id: 'dev1' }] }));
+    await env.KV.put(`otp_lock:${userId}:deadbeef`, '1');
     const ts = Date.now();
     const res = await handleAccountDelete({ userId, ts, sig: await signDelete(ed, userId, ts) }, env, req({}));
     expect(res.status).toBe(200);
     const j = await res.json();
     expect(j.ok).toBe(true);
+    expect(j.erased).toContain('devices');
+    expect(j.erased).toContain('otpLocks');
     for (const key of [`inbox:${userId}`, `sealed:${userId}`, `sealed:${userId}:hwm`,
       `prekey:${userId}`,
       `ktlog:${userId}`, `push:${userId}`, `backup:${userId}`,
-      `presence:${userId}`, `slots:${userId}`,
+      `presence:${userId}`, `slots:${userId}`, `devices:${userId}`,
+      `otp_lock:${userId}:deadbeef`,
       `prekey:otp:${userId}:0`, `prekey:otp:${userId}:1`, `prekey:otp:${userId}:count`]) {
       expect(await env.KV.get(key)).toBeNull();
     }
