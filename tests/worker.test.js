@@ -5454,3 +5454,222 @@ describe('device registry (/api/device/set + /api/device/list)', () => {
     expect(puts).toBe(1); // ...and the next read inside the throttle window does not
   });
 });
+
+// ============================================================
+// Lost-write recovery on the remaining multi-actor KV mutations — the same
+// last-write-wins clobber class the inbox/sealed queues got, extended to
+// grp:{token} (a lost kick/leave is a silent PCS regression: the member stays
+// in the roster AND the epoch bump that would rotate them out is lost),
+// sig:{room} (a lost offer = a call that never connects), push:{id} subs, and
+// alias claims (check-then-act double-claim). Each test wraps env.KV.put so the
+// handler's own write is immediately followed by a "racing" write of a stale
+// object — deterministically landing the clobber between write and verify-read.
+// ============================================================
+describe('lost-write recovery — grp/sig/push/alias (KV last-write-wins)', () => {
+  const req = (b) => apiRequest('/api/group/x', b);
+  async function setupGroup(env) {
+    const create = await handleGroupCreate(
+      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+    const { token } = await create.json();
+    await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', memberName: 'B' }, env, req({}));
+    await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
+    return token;
+  }
+  // Wrap env.KV.put: the FIRST write to `key` is followed by a write of
+  // `clobberValue` — the racing writer's version, winning last. Later writes
+  // (the repair pass) go through unclobbered. Returns a fn reporting whether
+  // the clobber actually fired so each test proves the race really happened.
+  function raceKV(env, key, clobberValue) {
+    const origPut = env.KV.put.bind(env.KV);
+    let fired = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !fired) { fired = true; await origPut(k, clobberValue, o); }
+    };
+    return () => fired;
+  }
+  const getGroup = async (env, token) => JSON.parse(await env.KV.get(`grp:${token}`));
+
+  it('kick survives a clobber: member removed + banned + epoch bumped on the winning object', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const didClobber = raceKV(env, `grp:${token}`, await env.KV.get(`grp:${token}`)); // pre-kick roster wins
+    const res = await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect(didClobber()).toBe(true); // the race really happened
+    const g = await getGroup(env, token);
+    expect(g.members.some(m => m.id === 'carol001')).toBe(false);
+    expect(g.banned).toContain('carol001');
+    expect(g.epoch).toBe(1); // one bump — repaired onto the winner, not +2
+  });
+
+  it('join survives a clobber: the joining member is still in the stored roster', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const didClobber = raceKV(env, `grp:${token}`, await env.KV.get(`grp:${token}`));
+    const res = await handleGroupJoin({ token, memberId: 'dave0001', memberPub: 'dave0001dpub', memberName: 'D' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect(didClobber()).toBe(true);
+    expect((await getGroup(env, token)).members.some(m => m.id === 'dave0001')).toBe(true);
+  });
+
+  it('join loses honestly to a concurrent ban (repair vetoed → 403, not a silent non-join)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const bannedWinner = await getGroup(env, token);
+    bannedWinner.banned = ['dave0001'];
+    const didClobber = raceKV(env, `grp:${token}`, JSON.stringify(bannedWinner));
+    const res = await handleGroupJoin({ token, memberId: 'dave0001', memberPub: 'dave0001dpub', memberName: 'D' }, env, req({}));
+    expect(didClobber()).toBe(true);
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('BANNED');
+    expect((await getGroup(env, token)).members.some(m => m.id === 'dave0001')).toBe(false);
+  });
+
+  it('leave survives a clobber: departed member gone + epoch bumped', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const didClobber = raceKV(env, `grp:${token}`, await env.KV.get(`grp:${token}`));
+    const res = await handleGroupLeave({ token, memberId: 'carol001' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect(didClobber()).toBe(true);
+    const g = await getGroup(env, token);
+    expect(g.members.some(m => m.id === 'carol001')).toBe(false);
+    expect(g.epoch).toBe(1);
+  });
+
+  it('admin promote survives a clobber', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const didClobber = raceKV(env, `grp:${token}`, await env.KV.get(`grp:${token}`));
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect(didClobber()).toBe(true);
+    expect((await getGroup(env, token)).admins).toContain('bob00001');
+  });
+
+  it('promote is vetoed when the target was kicked in the racing write (no admin rights for a non-member)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const kickedWon = await getGroup(env, token);
+    kickedWon.members = kickedWon.members.filter(m => m.id !== 'bob00001'); // the racing kick's roster
+    const didClobber = raceKV(env, `grp:${token}`, JSON.stringify(kickedWon));
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'bob00001', action: 'promote' }, env, req({}));
+    expect(didClobber()).toBe(true);
+    expect(res.status).toBe(200);
+    const g = await getGroup(env, token);
+    expect(g.admins || []).not.toContain('bob00001'); // vetoed — not crowned post-removal
+  });
+
+  it('unban survives a clobber', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupKick({ token, kickId: 'carol001', adminId: 'creator1' }, env, req({}));
+    const didClobber = raceKV(env, `grp:${token}`, await env.KV.get(`grp:${token}`)); // still-banned object wins
+    const res = await handleGroupAdmin({ token, adminId: 'creator1', targetId: 'carol001', action: 'unban' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect(didClobber()).toBe(true);
+    expect((await getGroup(env, token)).banned || []).not.toContain('carol001');
+  });
+
+  it('transfer survives a clobber', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const didClobber = raceKV(env, `grp:${token}`, await env.KV.get(`grp:${token}`));
+    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'bob00001' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect(didClobber()).toBe(true);
+    const g = await getGroup(env, token);
+    expect(g.creatorId).toBe('bob00001');
+    expect(g.admins).toContain('creator1'); // outgoing creator retained as admin
+  });
+
+  it('transfer vetoes crowning a departed member (concurrent leave won the race)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const leftWon = await getGroup(env, token);
+    leftWon.members = leftWon.members.filter(m => m.id !== 'bob00001');
+    raceKV(env, `grp:${token}`, JSON.stringify(leftWon));
+    const res = await handleGroupTransfer({ token, adminId: 'creator1', newCreatorId: 'bob00001' }, env, req({}));
+    expect(res.status).toBe(404); // honest NOT_MEMBER — not a silent non-transfer
+    expect((await getGroup(env, token)).creatorId).toBe('creator1');
+  });
+
+  it('rename survives a clobber', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    const didClobber = raceKV(env, `grp:${token}`, await env.KV.get(`grp:${token}`));
+    const res = await handleGroupRename({ token, adminId: 'creator1', name: 'Renamed Group' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect(didClobber()).toBe(true);
+    expect((await getGroup(env, token)).name).toBe('Renamed Group');
+  });
+
+  it('clean writes are not re-applied (no duplicate member / no phantom epoch)', async () => {
+    const env = makeEnv();
+    const token = await setupGroup(env);
+    await handleGroupJoin({ token, memberId: 'dave0001', memberPub: 'dave0001dpub' }, env, req({}));
+    const g = await getGroup(env, token);
+    expect(g.members.filter(m => m.id === 'dave0001').length).toBe(1);
+    expect(g.epoch).toBe(0);
+  });
+
+  it('signal survives a clobber: our signal re-appended alongside the winning one', async () => {
+    const env = makeEnv();
+    const room = 'sigroom01';
+    const didClobber = raceKV(env, `sig:${room}`, JSON.stringify([{ sender: 'otherpeer', type: 'answer', data: 'd-other', ts: 1 }]));
+    const res = await handleSignal({ room, sender: 'me000001', type: 'offer', data: 'offer-data' }, '1.2.3.4', env, req({}));
+    expect(res.status).toBe(200);
+    expect(didClobber()).toBe(true);
+    const signals = JSON.parse(await env.KV.get(`sig:${room}`));
+    expect(signals.some(s => s.sender === 'me000001' && s.type === 'offer')).toBe(true);  // recovered
+    expect(signals.some(s => s.sender === 'otherpeer')).toBe(true);                        // winner kept
+  });
+
+  it('signal store failure now returns 500 instead of a silent ok', async () => {
+    const env = makeEnv();
+    env.KV.put = async () => { throw new Error('KV down'); };
+    const res = await handleSignal({ room: 'sigroom02', sender: 'me000001', type: 'offer' }, '1.2.3.4', env, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_FAILED');
+  });
+
+  it('push subscribe survives a clobber: both devices end up registered', async () => {
+    const env = makeEnv();
+    const sub = (ep) => ({ userId: 'pushusr01', subscription: { endpoint: `https://fcm.googleapis.com/fcm/send/${ep}`, keys: { p256dh: 'p', auth: 'a' } } });
+    await handlePushSubscribe(sub('epA'), env, apiRequest('/api/push/subscribe', {}));
+    const didClobber = raceKV(env, 'push:pushusr01', JSON.stringify([{ endpoint: 'https://fcm.googleapis.com/fcm/send/epA', keys: { p256dh: 'p', auth: 'a' } }]));
+    const res = await handlePushSubscribe(sub('epB'), env, apiRequest('/api/push/subscribe', {}));
+    expect(res.status).toBe(200);
+    expect(didClobber()).toBe(true);
+    const subs = JSON.parse(await env.KV.get('push:pushusr01'));
+    expect(subs.map(s => s.endpoint)).toEqual(expect.arrayContaining([
+      expect.stringContaining('epA'), expect.stringContaining('epB'),
+    ]));
+  });
+
+  it('push unsubscribe survives a clobber: the removed endpoint stays gone', async () => {
+    const env = makeEnv();
+    const mk = (ep) => ({ endpoint: `https://fcm.googleapis.com/fcm/send/${ep}`, keys: { p256dh: 'p', auth: 'a' } });
+    env.KV.store.set('push:unsubr01', JSON.stringify([mk('epA'), mk('epB')]));
+    const didClobber = raceKV(env, 'push:unsubr01', JSON.stringify([mk('epA'), mk('epB')])); // pre-unsub list wins
+    const res = await handlePushUnsubscribe({ userId: 'unsubr01', endpoint: 'https://fcm.googleapis.com/fcm/send/epA' }, env, apiRequest('/api/push/unsubscribe', {}));
+    expect(res.status).toBe(200);
+    expect(didClobber()).toBe(true);
+    const subs = JSON.parse(await env.KV.get('push:unsubr01'));
+    expect(subs.some(s => s.endpoint.endsWith('/epA'))).toBe(false);
+    expect(subs.some(s => s.endpoint.endsWith('/epB'))).toBe(true);
+  });
+
+  it('alias double-claim: the clobbered claimant gets an honest 409, the winner keeps the record', async () => {
+    const env = makeEnv();
+    const pub1 = 'pub-racer-a1', pub2 = 'pub-racer-b2';
+    const didClobber = raceKV(env, 'alias:racedup', JSON.stringify({ pub: pub2, setAt: Date.now() }));
+    const res = await handleAliasSet({ alias: 'racedup', pub: pub1, pow: await solvePoW(pub1) }, env, apiRequest('/api/alias/set', {}));
+    expect(didClobber()).toBe(true);
+    expect(res.status).toBe(409);
+    expect((await res.json()).code).toBe('ALIAS_TAKEN');
+    const stored = JSON.parse(await env.KV.get('alias:racedup'));
+    expect(stored.pub).toBe(pub2); // confessed, not stolen back
+  });
+});
