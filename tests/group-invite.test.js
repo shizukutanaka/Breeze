@@ -61,6 +61,16 @@ describe('group invite member binding', () => {
     expect(out[0].evil).toBeUndefined();
   });
 
+  it('keeps sanitized caps so invitees can negotiate group-v5', () => {
+    const pub = 'ABCDEFGHIJKL' + 'x'.repeat(30);
+    const out = runFilter([
+      { id: 'ABCDEFGHIJKL', pubB64: pub, caps: ['group-v5', 7, 'c'.repeat(40)] },
+      { id: 'ABCDEFGHIJKL', pubB64: pub, caps: 'group-v5' },
+    ]);
+    expect(out[0].caps).toEqual(['group-v5', 'c'.repeat(32)]);
+    expect(out[1].caps).toBeUndefined();
+  });
+
   it('enforces the GROUP_MAX cap', () => {
     const pub = 'ABCDEFGHIJKL' + 'x'.repeat(30);
     const many = Array.from({ length: 50 }, () => ({ id: 'ABCDEFGHIJKL', pubB64: pub }));
