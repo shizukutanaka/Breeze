@@ -6087,15 +6087,27 @@ async function initMessenger(dbName) {
 
   // ═══ DRY: Signal helper (13 calls → 1 helper) ═══
   // _signal(room, type, data) — fire-and-forget POST to /signal
+  // The relay authenticates dm:/call: rooms: sender must be one of the two ids embedded
+  // in the room name, and when that account has a registered auth root the request must
+  // carry a fresh `breeze-sig:<room>:<sender>:<ts>` signature — so attach one whenever
+  // signing is available.
+  async function _signalAuth(room) {
+    const ts = Date.now();
+    try {
+      const sig = await signMessage(`breeze-sig:${room}:${myId}:${ts}`);
+      return sig ? { ts, sig } : { ts };
+    } catch(_e) { _dbg(_e, 'signal-auth'); return { ts }; }
+  }
   function _signal(room, type, data) {
-    return fetchT(API + '/signal', { method: 'POST', headers: _H,
-      body: JSON.stringify({ room, sender: myId, type, data: data || '' })
-    }).catch(e => _dbg(e, 'signal:' + type));
+    return _signalAuth(room).then(auth => fetchT(API + '/signal', { method: 'POST', headers: _H,
+      body: JSON.stringify({ room, sender: myId, type, data: data || '', ...auth })
+    })).catch(e => _dbg(e, 'signal:' + type));
   }
   // _signalAwait — same but returns response for poll pattern
-  function _signalAwait(room, type, data) {
+  async function _signalAwait(room, type, data) {
+    const auth = await _signalAuth(room);
     return fetchT(API + '/signal', { method: 'POST', headers: _H,
-      body: JSON.stringify({ room, sender: myId, type, data: data || '' })
+      body: JSON.stringify({ room, sender: myId, type, data: data || '', ...auth })
     });
   }
   // DRY: DM room key
@@ -7626,9 +7638,10 @@ async function initMessenger(dbName) {
     }
     // ICE signaling (pre-connection, unencrypted by necessity — only SDP/candidates)
     if (API && !persistentTypes.includes(data.type) && data.type !== 'typing' && data.type !== 'read-receipt') {
-      fetchT(API + '/signal', { method: 'POST', headers: _H,
-        body: JSON.stringify({ room: 'dm:' + [myId, activeContact.id].sort().join(':'), sender: myId, ...data })
-      }).catch(e => _dbg(e));
+      const sigRoomIce = 'dm:' + [myId, activeContact.id].sort().join(':');
+      _signalAuth(sigRoomIce).then(auth => fetchT(API + '/signal', { method: 'POST', headers: _H,
+        body: JSON.stringify({ room: sigRoomIce, sender: myId, ...data, ...auth })
+      })).catch(e => _dbg(e));
     }
   }
 

@@ -356,6 +356,30 @@ async function handleSignal(body, ip, env, request) {
   if (!room || !sender || !type) return json({ error: 'room, sender, type required', code: 'MISSING_FIELDS' }, 400, request);
   if (data !== undefined && (typeof data !== 'string' || data.length > 64 * 1024)) return json({ error: 'data too large (max 64KB)', code: 'PAYLOAD_TOO_LARGE' }, 400, request);
 
+  // dm:/call: rooms embed their two member ids sorted — anyone who knows the pair (both
+  // are public account ids) could otherwise poll the room and read every typing/read/SDP
+  // signal, and a world-readable poll also DELETES what it returns (read = consume), so
+  // this was both a metadata leak and a starvation primitive. Require sender to be one of
+  // the embedded ids, and when that id has a registered auth root require a fresh
+  // signature; unregistered senders stay unsigned for compat — they can only claim an id
+  // that has no identity to impersonate.
+  const roomM = /^(?:dm|call):([^:]{1,64}):([^:]{1,64})$/.exec(room);
+  if (roomM) {
+    if (sender !== roomM[1] && sender !== roomM[2])
+      return json({ error: 'sender is not a room member', code: 'NOT_ROOM_MEMBER' }, 403, request);
+    const pkRaw = await kvGet(env, `prekey:${sender}`);
+    const bundle = pkRaw ? safeJsonParse(pkRaw) : null;
+    const edKey = (bundle && typeof bundle.edIdentityKey === 'string' && bundle.edIdentityKey) || null;
+    if (edKey) {
+      const ts = body.ts;
+      const sig = body.sig;
+      if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS || typeof sig !== 'string' || !sig)
+        return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+      const ok = await verifyEd25519(edKey, utf8ToB64(`breeze-sig:${room}:${sender}:${ts}`), sig);
+      if (ok !== true) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
+    }
+  }
+
   if (type === 'poll') {
     // Return all signaling messages for this room (excluding own)
     const raw = await kvGet(env, `sig:${room}`);

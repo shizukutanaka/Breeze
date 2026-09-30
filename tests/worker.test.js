@@ -4169,6 +4169,79 @@ describe('signal relay', () => {
   });
 });
 
+// dm:/call: rooms embed their member ids — poll previously served (and consumed)
+// any room's signals to anyone who knew the derivable pair of account ids.
+describe('signal room auth', () => {
+  const req = (body) => apiRequest('/api/signal', body);
+  async function seedSender(e, id) {
+    const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const edPub = toB64(new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey)));
+    await e.KV.put(`prekey:${id}`, JSON.stringify({ edIdentityKey: edPub }));
+    return ed;
+  }
+  async function sigBody(ed, room, sender, type, extra = {}) {
+    const ts = Date.now();
+    const ch = `breeze-sig:${room}:${sender}:${ts}`;
+    const sig = toB64(new Uint8Array(await crypto.subtle.sign(
+      { name: 'Ed25519' }, ed.privateKey, new TextEncoder().encode(ch))));
+    return { room, sender, type, ts, sig, ...extra };
+  }
+
+  it('unsigned poll on a dm room whose sender is registered → 403 AUTH_REQUIRED', async () => {
+    const e = makeEnv();
+    await seedSender(e, 'alice001');
+    const r = await handleSignal({ room: 'dm:alice001:bob001', sender: 'alice001', type: 'poll' }, '1.2.3.4', e, req({}));
+    expect(r.status).toBe(403);
+    expect((await r.json()).code).toBe('AUTH_REQUIRED');
+  });
+
+  it('signed poll by a room member succeeds and excludes own signals', async () => {
+    const e = makeEnv();
+    const edA = await seedSender(e, 'alice001');
+    const edB = await seedSender(e, 'bob001');
+    await handleSignal(await sigBody(edA, 'dm:alice001:bob001', 'alice001', 'offer', { data: 'sdp' }), '1.2.3.4', e, req({}));
+    const r = await handleSignal(await sigBody(edB, 'dm:alice001:bob001', 'bob001', 'poll'), '1.2.3.5', e, req({}));
+    expect(r.status).toBe(200);
+    const msgs = (await r.json()).messages;
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0].sender).toBe('alice001');
+  });
+
+  it('sender not embedded in the room name → 403 NOT_ROOM_MEMBER', async () => {
+    const e = makeEnv();
+    const edE = await seedSender(e, 'eve00001');
+    const r = await handleSignal(await sigBody(edE, 'dm:alice001:bob001', 'eve00001', 'poll'), '1.2.3.6', e, req({}));
+    expect(r.status).toBe(403);
+    expect((await r.json()).code).toBe('NOT_ROOM_MEMBER');
+  });
+
+  it('attacker claiming a registered room member without their key → 403', async () => {
+    const e = makeEnv();
+    await seedSender(e, 'alice001');
+    // Attacker signs with THEIR key but claims sender=alice001 (registered).
+    const edAttacker = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const body = await sigBody(edAttacker, 'dm:alice001:bob001', 'alice001', 'poll');
+    const r = await handleSignal(body, '1.2.3.7', e, req({}));
+    expect(r.status).toBe(403);
+    expect((await r.json()).code).toBe('SIG_INVALID');
+  });
+
+  it('unregistered room member stays unsigned-compatible (legacy)', async () => {
+    const e = makeEnv();
+    const r = await handleSignal({ room: 'dm:anon0001:anon0002', sender: 'anon0001', type: 'poll' }, '1.2.3.4', e, req({}));
+    expect(r.status).toBe(200);
+    expect((await r.json()).messages).toEqual([]);
+  });
+
+  it('non dm:/call: room names keep legacy behavior', async () => {
+    const e = makeEnv();
+    await handleSignal({ room: 'r9', sender: 'alice', type: 'offer', data: 'd' }, '1.2.3.4', e, req({}));
+    const r = await handleSignal({ room: 'r9', sender: 'bob', type: 'poll' }, '1.2.3.5', e, req({}));
+    expect(r.status).toBe(200);
+    expect((await r.json()).messages).toHaveLength(1);
+  });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Presence heartbeat + check
 // ─────────────────────────────────────────────────────────────────────────────
