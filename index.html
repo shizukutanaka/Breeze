@@ -9149,16 +9149,21 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e,'grp'); showToast(t('toastGroupInviteFail'), 'error'); }
   }
 
-  // Sanitize a server-returned member list to known-safe field sizes
+  // Sanitize a server-returned member list to known-safe field sizes. The roster is
+  // relay-supplied (untrusted): an account id is defined as the pub's first 12 base64
+  // chars, so require pubB64.slice(0,12) === id — otherwise a tampered roster can bind a
+  // member's id to an attacker's pub and every fan-out (sender keys, group sends, kick
+  // notices) silently encrypts that member's share to the attacker.
   function safeMemberList(raw) {
-    return (Array.isArray(raw) ? raw : []).slice(0, CONFIG.GROUP_MAX)
-      .filter(m => typeof m.id === 'string' && m.id && m.id.length <= 128)
-      .map(m => ({
-        id: m.id,
+    return (Array.isArray(raw) ? raw : [])
+      .map(m => (m && typeof m === 'object') ? {
+        id: typeof m.id === 'string' ? m.id.slice(0, 128) : '',
         pubB64: typeof m.pub === 'string' ? m.pub.slice(0, 200) : (typeof m.pubB64 === 'string' ? m.pubB64.slice(0, 200) : ''),
         name: typeof m.name === 'string' ? m.name.slice(0, 64) : 'Member',
         caps: Array.isArray(m.caps) ? m.caps.filter(c => typeof c === 'string').slice(0, 20).map(c => String(c).slice(0, 32)) : undefined,
-      }));
+      } : { id: '', pubB64: '', name: 'Member' })
+      .filter(m => m.id && /^[A-Za-z0-9+/=]{12,200}$/.test(m.pubB64) && m.pubB64.slice(0, 12) === m.id)
+      .slice(0, CONFIG.GROUP_MAX);
   }
 
   // Process ?join=token — join an existing group
