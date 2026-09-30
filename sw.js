@@ -95,16 +95,29 @@ function cachePut(request, response) {
 
 // Web Push
 self.addEventListener('push', (e) => {
-  let data = { title: 'Breeze', body: 'New message' };
-  try { data = e.data.json(); } catch {}
+  let data = {};
+  try { data = e.data.json() || {}; } catch {}
+  // The payload is relay-supplied and cannot be trusted — the worker caps title at 50
+  // chars, but a self-hosted/compromised relay is under no such obligation, and a
+  // non-string field can make showNotification throw (silently swallowing the push).
+  // Coerce + cap everything we render before it reaches the notification.
+  const s = (v, n) => (typeof v === 'string' ? v : String(v ?? '')).slice(0, n);
+  const title = s(data.title, 100) || 'Breeze';
+  const body = s(data.body, 300) || 'New message';
+  const tag = s(data.tag, 64) || 'breeze-msg';
+  const url = s(data.url, 300);
+  // contactId reaches the client's quick-reply/mark-read handlers — same charset and
+  // length class as the worker's validateUserId, so a hostile payload can't smuggle a
+  // value the client would mistake for a different shape of identifier.
+  const contactId = /^[A-Za-z0-9+/=_-]{8,128}$/.test(data.contactId || '') ? data.contactId : undefined;
   e.waitUntil(
-    self.registration.showNotification(data.title || 'Breeze', {
-      body: data.body || 'New message',
-      tag: data.tag || 'breeze-msg',
+    self.registration.showNotification(title, {
+      body,
+      tag,
       icon: '/icon-192.png',
       badge: '/icon-192.png',
       vibrate: [100, 50, 100],
-      data: { url: data.url || '/', contactId: data.contactId },
+      data: { url: url || '/', contactId },
       renotify: true,
       // v3.6: Notification action buttons (Chrome 48+, Firefox 44+)
       actions: (navigator.language || '').startsWith('ja') ? [

@@ -9,6 +9,25 @@ vitest 889 (+5); `index.html`, `tests/group-roster.test.js`, `CHANGELOG.md`, CSP
 
 ---
 
+## Client: group invites now enforce id === pubB64 binding (crafted-invite key redirection closed) (branch devin/1790422860-round24, 2026-09-26)
+
+vitest 878 (+5); `index.html`, `tests/group-invite.test.js`, `CHANGELOG.md`, CSP hash re-pinned.
+
+- The `group_invite` handler stored `invite.members` into the group contact with only a count cap. Member entries are `(id, pubB64)` bindings — every group fan-out (sender-key distribution, message sends, kick notices) encrypts to `member.pubB64` under `member.id`'s identity — so a crafted invite could list `{ id: <victim member id>, pubB64: <attacker pub> }` and the victim's copy of the group would encrypt that member's share to the attacker. The filter now requires `typeof m.id === 'string'`, `typeof m.pubB64 === 'string'`, length caps (64/128), and `m.pubB64.slice(0, 12) === m.id`; member objects are re-materialized as `{id, pubB64, name}` only, dropping unexpected fields.
+- `tests/group-invite.test.js` extracts the real filter expression from `index.html` and runs it against crafted invites (mismatched binding, non-string/oversized fields, cap enforcement, field stripping) so the check can't silently regress.
+
+---
+
+## Service worker sanitizes the push payload before rendering it (branch devin/1790424447-round29, 2026-09-26)
+
+vitest 890 (+6, new `tests/sw-push.test.js`); `sw.js`, `tests/`, `CHANGELOG.md`.
+
+- The `push` handler rendered relay-supplied fields straight into `showNotification`: title, body, tag, url, and `contactId` (which reaches the client's quick-reply/mark-read handlers). The worker caps title at 50 chars, but a self-hosted or compromised relay owes the SW nothing — an oversized body or a non-string field could bloat the notification or make `showNotification` throw inside `waitUntil`, silently swallowing the push.
+- Every rendered field is now coerced to string and capped (title 100 / body 300 / tag 64 / url 300); `contactId` must match the worker's userId charset+length or it's dropped. Non-JSON payloads and missing fields still fall back to the Breeze defaults.
+- First test coverage for `sw.js`: the suite evaluates the real file under a mocked SW scope (`self`, `caches`, `clients`, `navigator`) and fires the captured `push`/`notificationclick` listeners — verbatim render, truncation, type coercion, non-JSON fallback, contactId rejection, and `safeAppUrl` collapsing a cross-origin click URL to `/`.
+
+---
+
 ## Lost-write recovery sweeps the rest of the worker's multi-actor KV mutations (branch devin/1790415615-grp-sig-push-lost-write, 2026-09-26)
 
 vitest 849 (+16); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
