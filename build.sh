@@ -3,10 +3,12 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"; cd "$SCRIPT_DIR"
 
 VERSION="3.6.1"
-WEB_FILES=(index.html sw.js manifest.json icon-192.png icon-512.png _headers)
+WEB_FILES=(index.html sw.js manifest.json icon-192.png icon-512.png _headers _routes.json _redirects)
 # _headers ships alongside index.html so desktop/main.js's setupCSP() can read the SAME
 # hash-pinned Content-Security-Policy the web deployment enforces via Cloudflare Pages,
 # instead of duplicating a hardcoded (and driftable) fallback policy of its own.
+# _routes.json + _redirects are Pages-only knobs (function scoping; .well-known pass-
+# through): harmless inside desktop/mobile bundles, required in the deployable zip.
 # ESM crypto reference modules. index.html loads these via `import './src/crypto/*.js'`
 # once the browser port lands (docs/INTEGRATION.md §0), so packaged builds must ship the
 # directory — flattening into the app root would break the relative import path.

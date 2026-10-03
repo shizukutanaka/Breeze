@@ -1,4 +1,8 @@
 # Changelog
+## Infra: _routes.json scopes the Worker to /api/* — static assets stop paying a function invocation (branch devin/1791055180-round179, 2026-10-03)
+
+vitest 931 (+5); `_routes.json`, `build.sh`, `tests/routes-contract.test.js`, `CHANGELOG.md`.
+
 ## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
 
 vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.
