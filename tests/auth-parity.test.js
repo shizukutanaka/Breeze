@@ -42,6 +42,8 @@ const MAIN_VERIFIED = [
   'breeze-account-delete:{}:{}',
   'breeze-inst:{}:{}',
   'breeze-sig:{}:{}:{}',
+  'breeze-{}:{}:{}',               // queue ops: breeze-<op>:<id>:<ts> (checkQueueAuth)
+  'breeze-prekey-upload:{}:{}:{}',
 ];
 
 // push/subscribe: the worker composes the last slot from a subBind variable —
@@ -79,11 +81,11 @@ describe('auth-challenge parity (index.html ↔ _worker.js)', () => {
     }
   });
 
-  // Challenges the client signs but whose verifier lives on an unmerged Worker
-  // branch — move each into MAIN_VERIFIED parity when its branch lands.
+  // Challenges the client signs but whose verifier is NOT on main — move each
+  // into MAIN_VERIFIED parity when its worker-side check lands. (Queue ops
+  // #283 and prekey-upload #284 graduated; group-create's verifier was never
+  // merged.)
   const PENDING = [
-    'breeze-{}:{}:{}',               // queue ops: breeze-<op>:<id>:<ts> (#283)
-    'breeze-prekey-upload:{}:{}:{}', // #284
     'breeze-group-create::{}:{}:{}', // #285 (empty token slot)
   ];
 
@@ -98,6 +100,17 @@ describe('auth-challenge parity (index.html ↔ _worker.js)', () => {
       if (/^breeze-group-(?!create)/.test(skel)) continue;
       expect(PENDING, `unverified client challenge: ${skel}`).toContain(skel);
     }
+  });
+
+  // The op literal is part of the signed challenge but a slot on both sides,
+  // so skeleton parity cannot see a typo'd op at a call site — pin the op-name
+  // sets used by queueAuth('...') (signer) and checkQueueAuth(..., '...')
+  // (verifier) to exactly the same values.
+  it('queue ops: client queueAuth op names == worker checkQueueAuth op names', () => {
+    const clientOps = [...INDEX.matchAll(/queueAuth\('([^']+)'\)/g)].map(m => m[1]);
+    const workerOps = [...WORKER.matchAll(/checkQueueAuth\([^)]*'([^']+)'\)/g)].map(m => m[1]);
+    expect(clientOps.length).toBeGreaterThan(0);
+    expect([...new Set(clientOps)].sort()).toEqual([...new Set(workerOps)].sort());
   });
 
   it('alias/delete signs the sanitized alias (worker hashes clean, not raw)', () => {
