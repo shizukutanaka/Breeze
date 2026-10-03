@@ -180,4 +180,27 @@ describe('webCryptoKem — ML-KEM adapter', () => {
   it('refuses to encapsulate when unavailable rather than returning a weak key', async () => {
     await expect(webCryptoKem({ subtle: {} }).encapsulate(PQPK)).rejects.toThrow(/unavailable/);
   });
+
+  it('actually calls the older draft names it advertises support for', async () => {
+    // Bug class the probe created: available() accepted encapsulateKey/decapsulateKey,
+    // but the ops unconditionally called *Bits — a bare TypeError on exactly the
+    // runtimes it claimed to support.
+    const CT = new Uint8Array([9, 8, 7]), SS = new Uint8Array([1, 2, 3]);
+    const draftSubtle = {
+      encapsulateKey: async () => ({ ciphertext: CT, sharedKey: SS }),
+      decapsulateKey: async () => ({ sharedKey: SS }),
+    };
+    const k = webCryptoKem({ subtle: draftSubtle });
+    expect(k.available()).toBe(true);
+    const { ct, ss } = await k.encapsulate(PQPK);
+    expect(Array.from(ct)).toEqual([9, 8, 7]);
+    expect(Array.from(ss)).toEqual([1, 2, 3]);
+    expect(Array.from(await k.decapsulate(PQPK, ct))).toEqual([1, 2, 3]);
+  });
+
+  it('fails closed (unavailable, not TypeError) on an asymmetric enc-only runtime', async () => {
+    const k = webCryptoKem({ subtle: { encapsulateBits: async () => ({ ciphertext: new Uint8Array(1), sharedKey: new Uint8Array(1) }) } });
+    expect(k.available()).toBe(true); // encapsulation alone is supported
+    await expect(k.decapsulate(PQPK, new Uint8Array(1))).rejects.toThrow(/unavailable/);
+  });
 });

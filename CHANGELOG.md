@@ -1,4 +1,19 @@
 # Changelog
+## PQ adapter: call the draft-name primitives the probe advertises (branch devin/1791049115-round149, 2026-10-03)
+
+Reference code + tests; `src/crypto/pq.js`, `tests/pq.test.js`, `CHANGELOG.md`.
+
+- `webCryptoKem().available()` deliberately accepts the older WICG-draft names
+  `encapsulateKey`/`decapsulateKey` (the primitive was renamed to `*Bits` across
+  draft revisions), but `encapsulate`/`decapsulate` then called `*Bits`
+  unconditionally — a bare TypeError on exactly the runtimes the probe claimed
+  to support. The ops now use whichever name the runtime exposes.
+- Asymmetric runtimes (enc present, dec absent) now fail closed with the same
+  `unavailable` contract instead of a TypeError.
+- +2 tests: an encapsulateKey/decapsulateKey-only subtle now round-trips, and an
+  enc-only subtle rejects decapsulate cleanly. Reference-only module — no
+  deployed code path touched.
+||||||| e46e325
 ## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
 
 vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.
