@@ -7,25 +7,10 @@
 // from a real browser exchange and asserts the sender is cryptographically absent — while
 // the messages still deliver.
 import { test, expect } from '@playwright/test';
+import { createIdentity } from './helpers.mjs';
 
 const ip = (n) => ({ extraHTTPHeaders: { 'CF-Connecting-IP': `203.0.113.${n}` } });
 
-async function createIdentity(page, name) {
-  await page.goto('/');
-  await page.locator('#msg-name').fill(name);
-  await page.locator('#b-msg-setup').click();
-  await expect(page.locator('#msg-main')).toBeVisible();
-  return page.evaluate(() => new Promise((resolve, reject) => {
-    const req = indexedDB.open('breeze-messenger', 5);
-    req.onerror = () => reject(req.error);
-    req.onsuccess = () => {
-      const tx = req.result.transaction('identity', 'readonly');
-      const getReq = tx.objectStore('identity').get('keys');
-      getReq.onsuccess = () => resolve(getReq.result?.pubB64);
-      getReq.onerror = () => reject(getReq.error);
-    };
-  }));
-}
 
 async function addAndOpen(page, pubB64) {
   await page.locator('#b-msg-add').click();

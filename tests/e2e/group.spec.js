@@ -4,6 +4,7 @@
 // screen, contact click, compose, send). Exercises createGroup/createGroupInviteLink/
 // processJoinToken/startGroupMemberPoll/encryptGroupMsg/distributeSenderKey end to end.
 import { test, expect } from '@playwright/test';
+import { createIdentity } from './helpers.mjs';
 import { createHash } from 'node:crypto';
 
 // Distinct synthetic CF-Connecting-IP per context — see messaging.spec.js for why: without
@@ -12,11 +13,6 @@ function ctxOpts(ip) {
   return { extraHTTPHeaders: { 'CF-Connecting-IP': ip } };
 }
 
-async function createIdentity(page, name) {
-  await page.locator('#msg-name').fill(name);
-  await page.locator('#b-msg-setup').click();
-  await expect(page.locator('#msg-main')).toBeVisible();
-}
 
 // Creates a server-backed group via the add-contact prompt's "group:<name>" syntax, leaving
 // the members prompt empty to route to the invite-link path (createGroupInviteLink), and
@@ -41,7 +37,7 @@ async function createGroupWithInviteLink(page, name) {
 // processJoinToken opens the group conversation automatically — no click needed afterward.
 async function joinGroup(page, name, joinUrl, groupName) {
   await page.goto(joinUrl);
-  await createIdentity(page, name);
+  await createIdentity(page, name, { navigate: false });
   await expect(page.locator('#msg-conv-name')).toContainText(groupName);
 }
 
