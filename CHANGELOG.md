@@ -1,4 +1,8 @@
 # Changelog
+## Test harness: mockKV enforces TTLs like real KV (expiry-dependent paths were untestable) (branch devin/1791052794-round162, 2026-10-03)
+
+vitest 926 (+4); `tests/helpers/mockKV.js`, `tests/mockkv-ttl.test.js`, `CHANGELOG.md`.
+
 ## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
 
 vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.
