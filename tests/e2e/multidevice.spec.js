@@ -7,28 +7,10 @@
 //
 // Three real browser contexts: A = primary device, B = linked secondary, C = a contact.
 import { test, expect } from '@playwright/test';
+import { createIdentity } from './helpers.mjs';
 
 const ip = (n) => ({ extraHTTPHeaders: { 'CF-Connecting-IP': `203.0.113.${n}` } });
 
-async function createIdentity(page, name) {
-  // Pre-accept the consent banner: it renders bottom-fixed and intercepts clicks on the
-  // context menu this spec drives (consent UX is not under test here).
-  await page.addInitScript(() => { try { localStorage.setItem('brz-consent', String(Date.now())); } catch {} });
-  await page.goto('/');
-  await page.locator('#msg-name').fill(name);
-  await page.locator('#b-msg-setup').click();
-  await expect(page.locator('#msg-main')).toBeVisible();
-  return page.evaluate(() => new Promise((resolve, reject) => {
-    const req = indexedDB.open('breeze-messenger', 5);
-    req.onerror = () => reject(req.error);
-    req.onsuccess = () => {
-      const tx = req.result.transaction('identity', 'readonly');
-      const getReq = tx.objectStore('identity').get('keys');
-      getReq.onsuccess = () => resolve(getReq.result?.pubB64);
-      getReq.onerror = () => reject(getReq.error);
-    };
-  }));
-}
 
 async function addAndOpen(page, pubB64) {
   await page.locator('#b-msg-add').click();

@@ -6,6 +6,7 @@
 // manual check. Two isolated browser contexts share the same in-memory Worker KV, so Bob's
 // prekey upload actually populates the ktlog:<id> entry Alice's audit then fetches.
 import { test, expect } from '@playwright/test';
+import { createIdentity } from './helpers.mjs';
 
 // Distinct synthetic CF-Connecting-IP per context — without it both contexts share the local
 // harness's single 'unknown'-IP rate-limit bucket (see messaging.spec.js).
@@ -13,22 +14,6 @@ function ctxOpts(ip) {
   return { extraHTTPHeaders: { 'CF-Connecting-IP': ip } };
 }
 
-async function createIdentity(page, name) {
-  await page.goto('/');
-  await page.locator('#msg-name').fill(name);
-  await page.locator('#b-msg-setup').click();
-  await expect(page.locator('#msg-main')).toBeVisible();
-  return page.evaluate(() => new Promise((resolve, reject) => {
-    const req = indexedDB.open('breeze-messenger', 5);
-    req.onerror = () => reject(req.error);
-    req.onsuccess = () => {
-      const tx = req.result.transaction('identity', 'readonly');
-      const getReq = tx.objectStore('identity').get('keys');
-      getReq.onsuccess = () => resolve(getReq.result?.pubB64);
-      getReq.onerror = () => reject(getReq.error);
-    };
-  }));
-}
 
 async function addAndOpen(page, pubB64) {
   await page.locator('#b-msg-add').click();
