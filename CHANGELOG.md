@@ -1,4 +1,11 @@
 # Changelog
+## SPEC.md endpoint table resynced to the Worker's limits map (branch devin/1791048971-round148, 2026-10-03)
+
+Docs only; `SPEC.md`, `CHANGELOG.md`.
+
+- §3.2 said "(32)" and listed 26 endpoints with several stale rate limits — the table had drifted behind the code: it predates the limits-map additions (group/* caps, alias/delete, device/set|list, prekey/fetch/batch|status, ktlog/get, account/delete, push/unsubscribe) and mislabeled 16 explicit limits as "default". The /api/health handler itself reports `endpoints: 38`, matching 37 routed cases + health.
+- Table regenerated from the authoritative `limits` map (all 38 rows incl. correct per-endpoint values and the 30/min default note), and a header line now names the map as the source of truth so the next drift is obvious.
+
 
 ## Lost-write recovery, part 2: ktlog append + device-registry touch-on-read (branch devin/1791046818-round142, 2026-10-03)
 

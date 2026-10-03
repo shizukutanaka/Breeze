@@ -118,7 +118,12 @@ Sender                          Server                         Receiver
   └──────┘                               └─────────┘
 ```
 
-### 3.2 Worker API Endpoints (32)
+### 3.2 Worker API Endpoints (38)
+
+Rate limits are per-IP per-minute; "default" means the 30/min fallback for paths not
+in the Worker's `limits` map. The authoritative list is that map in _worker.js —
+this table is generated from it (37 routed endpoints + /api/health, which bypasses
+the limiter entirely since it is handled before the rate-limit block).
 
 | Endpoint | Rate Limit | Purpose |
 |----------|------------|---------|
@@ -127,26 +132,39 @@ Sender                          Server                         Receiver
 | /api/msg/poll | 40/min | Poll for relay messages |
 | /api/sealed/send | 30/min | Sealed Sender message |
 | /api/sealed/poll | 40/min | Poll sealed messages |
+| /api/sealed/ack | 40/min | Acknowledge sealed message delivery |
 | /api/presence | 20/min | Online presence heartbeat |
-| /api/alias/set | default | Register @username |
-| /api/alias/get | default | Resolve @username to public key |
+| /api/alias/set | 10/min | Register @username |
+| /api/alias/get | 30/min | Resolve @username to public key |
+| /api/alias/delete | 5/min | Release @username |
 | /api/prekey/upload | 5/min | Upload PreKeys |
-| /api/prekey/fetch | default | Fetch target's PreKeys |
-| /api/group/create | default | Create group |
-| /api/group/join | default | Join group via token |
-| /api/group/info | default | Get group metadata |
-| /api/group/kick | default | Remove group member |
-| /api/push/subscribe | default | Web Push subscription |
-| /api/turn | default | TURN credential request |
-| /api/online | default | Online user count |
+| /api/prekey/fetch | 10/min | Fetch target's PreKeys |
+| /api/prekey/fetch/batch | 5/min | Fetch several users' PreKeys at once |
+| /api/prekey/status | 20/min | Non-destructive OTP/SPK health check |
+| /api/ktlog/get | 20/min | Fetch a user's key-transparency log |
+| /api/device/set | 5/min | Register/update a device (multi-device) |
+| /api/device/list | 30/min | List account devices (touch-on-read TTL refresh) |
+| /api/group/create | 5/min | Create group |
+| /api/group/join | 10/min | Join group via token |
+| /api/group/info | 20/min | Get group metadata |
+| /api/group/kick | 5/min | Remove group member |
+| /api/group/admin | 10/min | Promote/demote group admin |
+| /api/group/transfer | 5/min | Transfer group ownership |
+| /api/group/rename | 10/min | Rename group |
+| /api/group/leave | 10/min | Leave group |
+| /api/group/delete | 5/min | Delete group |
+| /api/account/delete | 3/min | Erase account and all its data |
+| /api/push/subscribe | 5/min | Web Push subscription |
+| /api/push/unsubscribe | 5/min | Remove Web Push subscription |
+| /api/turn | 10/min | TURN credential request |
+| /api/online | 20/min | Online user count |
 | /api/backup/upload | 2/min | Encrypted backup upload |
 | /api/backup/download | 5/min | Encrypted backup download |
-| /api/sealed/ack | default | Acknowledge sealed message delivery |
-| /api/drop/create | default | Create file drop (encrypted transfer) |
-| /api/drop/read | default | Download file drop |
-| /api/abuse/record | default | Record abuse metadata for reporting |
-| /api/abuse/report | default | Submit abuse report |
-| /api/health | unlimited | Health check (no auth) |
+| /api/drop/create | 10/min | Create file drop (encrypted transfer) |
+| /api/drop/read | 20/min | Download file drop |
+| /api/abuse/record | 30/min | Record abuse metadata for reporting |
+| /api/abuse/report | 10/min | Submit abuse report |
+| /api/health | unlimited | Health check (no auth; bypasses limiter) |
 
 ### 3.3 Worker Environment Variables
 
