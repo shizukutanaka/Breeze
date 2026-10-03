@@ -1,4 +1,8 @@
 # Changelog
+## E2E: default page fixture gets a CF-Connecting-IP (headerless tests hit the 5-req/min 'unknown' bucket) (branch devin/1791052996-round163, 2026-10-03)
+
+vitest 922 (unchanged — e2e harness only); `playwright.config.js`, `CHANGELOG.md`.
+
 ## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
 
 vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.
