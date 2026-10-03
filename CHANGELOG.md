@@ -1,5 +1,14 @@
 # Changelog
 
+## Account deletion: erase the device registry + sealed dropped-counter (branch devin/1791047701-round144, 2026-10-03)
+
+vitest 911 (+0 — existing erasure test's key list extended); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
+
+- `handleAccountDelete` erased every userId-keyed store **except** `devices:{userId}`. That key is worse than ordinary residue: `handleDeviceList`'s touch-on-read rewrites it with a fresh 90-day TTL on every GET, so a registry left behind is *self-refreshing* — as long as any peer keeps fanning out to the deleted account (senders don't know it's gone), the device list can outlive the account indefinitely, and peers keep encrypting fan-out copies to phantom devices. It's now in the deletion list, and the response's `erased` array reports `devices`.
+- `sealed:{userId}:dropped` (the dropped-message counter) joins the wipe too — same residue class as the `hwm` sibling already being deleted.
+- Not done — tombstone: a `deleted:{userId}` marker that rejects sealed/plain sends to deleted accounts was considered and rejected on privacy grounds — it makes account deletion externally observable, and a deleted account should be indistinguishable from a never-registered one. TTL'd residue from in-flight sends is the honest bound.
+- The account-deletion test's "every userId-keyed store" seed/assertion list now covers both keys — it would fail on the old handler.
+
 ## Auth-parity gate tightened: queue + prekey-upload challenges graduate to byte parity, op names pinned (branch devin/1791046399-round141, 2026-10-03)
 
 vitest 911 (+3); `tests/auth-parity.test.js`, `CHANGELOG.md`.
