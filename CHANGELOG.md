@@ -1,4 +1,20 @@
 # Changelog
+## Gate tool: closure-boundary scopes tail-local shadows (was whole-tail) (branch devin/1791049777-round151, 2026-10-03)
+
+Tooling only; `tools/closure-boundary.mjs`, `CHANGELOG.md`.
+
+- The checker skipped a closure name whenever ANY tail declaration shared it —
+  but a tail-local binding only shadows inside its own scope. 24 initMessenger
+  names (msg, db, el, contacts, unread, e, input, ...) collide with tail-local
+  params/arrow args/catch vars today, so a bare ReferenceError use elsewhere in
+  the tail would have been skipped wholesale — the exact bug class the gate
+  exists to catch (a misplaced-brace refugee landing outside initMessenger).
+- Shadows are now scoped: whole-tail spans for depth-0 declarations, the
+  following brace pair for function/method params, catch vars and for-vars,
+  the enclosing brace pair for nested const/let, `=>`..EOL for expression
+  arrows. Binding-name decl sites are inside their own span (they are refRe
+  hits too). Real file: 0 violations; the pre-fix 9 hits were decl-site false
+  positives.
 
 ## ktlog tail-reconciliation is append-only (restatement, not splice) — fixes a self-inflicted 'tampered' verdict (branch devin/1791048364-round146, 2026-10-03)
 
