@@ -1,4 +1,8 @@
 # Changelog
+## Metadata: robots.txt Sitemap was relative (ignored); dist manifests pinned dead v3.5.0 (branch devin/1791054046-round170, 2026-10-03)
+
+vitest 922 (unchanged); `robots.txt`, `dist/*`, `CHANGELOG.md`.
+
 ## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
 
 vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.

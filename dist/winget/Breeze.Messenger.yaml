@@ -3,7 +3,7 @@
 # After building .exe, update InstallerUrl and InstallerSha256
 
 PackageIdentifier: Breeze.Messenger
-PackageVersion: 3.5.0
+PackageVersion: 3.6.1
 PackageLocale: en-US
 Publisher: Breeze Project
 PackageName: Breeze
