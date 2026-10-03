@@ -2,7 +2,7 @@
   "name": "breeze",
   "version": "3.6.1",
   "private": true,
-  "description": "Breeze — P2P E2E-encrypted messenger. Test harness for the Cloudflare worker and crypto primitives.",
+  "description": "Breeze \u2014 P2P E2E-encrypted messenger. Test harness for the Cloudflare worker and crypto primitives.",
   "type": "module",
   "scripts": {
     "test": "vitest run",
@@ -12,5 +12,12 @@
   "devDependencies": {
     "@playwright/test": "^1.61.1",
     "vitest": "^2.1.9"
-  }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shizukutanaka/Breeze.git"
+  },
+  "homepage": "https://breeze.pages.dev",
+  "bugs": "https://github.com/shizukutanaka/Breeze/issues"
 }
