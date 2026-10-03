@@ -1044,7 +1044,16 @@ async function handleDeviceList(body, env, request) {
       const entries = [...globalThis._devTouch.entries()];
       globalThis._devTouch = new Map(entries.slice(-1000));
     }
-    await kvPut(env, `devices:${accountId}`, raw, { expirationTtl: TTL.MONTH * 3 });
+    // Write back only what we read: a /link or /unlink landing between the GET
+    // above and this PUT would otherwise be clobbered by the stale copy — a
+    // READ path resurrecting a device the owner just removed. If the record
+    // changed, the concurrent writer already refreshed the TTL, so skipping
+    // the rewrite costs nothing (same bounded-race doctrine as the other
+    // lost-write verifiers: narrows the window, does not eliminate it).
+    const current = await kvGet(env, `devices:${accountId}`);
+    if (current === raw) {
+      await kvPut(env, `devices:${accountId}`, raw, { expirationTtl: TTL.MONTH * 3 });
+    }
   }
   // Include the root's registered Ed25519 key so a LINKING device can TOFU-pin it in the same
   // gesture that carries the root pub out-of-band. Established clients ignore this field and
@@ -2325,6 +2334,7 @@ async function handlePreKeyUpload(body, env, request) {
     const logParsed = existing ? safeJsonParse(existing, []) : [];
     const log = Array.isArray(logParsed) ? logParsed : [];
     const latest = log[log.length - 1];
+    let appended = null;
     if (!latest || latest.h !== ikHash) {
       // New IK (or first upload): compute chain hash and append.
       const prevC = latest?.c ?? null;
@@ -2335,7 +2345,9 @@ async function handlePreKeyUpload(body, env, request) {
       const c = btoa(String.fromCharCode(...new Uint8Array(
         await crypto.subtle.digest('SHA-256', buf)
       )));
-      log.push({ ts: Date.now(), h: ikHash, c });
+      const entry = { ts: Date.now(), h: ikHash, c };
+      log.push(entry);
+      appended = entry;
     } else {
       // Same IK: just refresh the timestamp of the last entry.
       latest.ts = Date.now();
@@ -2344,6 +2356,31 @@ async function handlePreKeyUpload(body, env, request) {
     // 11 times to evict the oldest entry and hide the initial key compromise.
     const trimmed = log.slice(-100);
     await kvPut(env, logKey, JSON.stringify(trimmed), { expirationTtl: TTL.QUARTER });
+    // Lost-write verify (grpVerifyRepair doctrine): a concurrent upload's
+    // read-append-write between our GET and PUT erases this entry — and the
+    // surviving chain still verifies, so the gap is invisible to verifyChain.
+    // Re-read; the entry counts as recorded when our exact chain hash is
+    // present OR the tail already logs the same IK transition (a winner that
+    // appended the identical h — an old same-h entry mid-log does not count).
+    // On a miss, rebuild the entry against the winning tail and re-append
+    // once. The same-IK ts-refresh path is idempotent metadata — no repair.
+    if (appended) {
+      const vParsed = safeJsonParse(await kvGet(env, logKey), []);
+      const vLog = Array.isArray(vParsed) ? vParsed : [];
+      const tailH = vLog.length ? vLog[vLog.length - 1].h : null;
+      if (!vLog.some(e => e && e.c === appended.c) && tailH !== appended.h) {
+        const wC = vLog.length ? vLog[vLog.length - 1].c : null;
+        const wB = wC ? Uint8Array.from(atob(wC), ch => ch.charCodeAt(0)) : new Uint8Array(32);
+        const hB2 = Uint8Array.from(atob(ikHash), ch => ch.charCodeAt(0));
+        const re = new Uint8Array(wB.length + hB2.length);
+        re.set(wB, 0); re.set(hB2, wB.length);
+        const c2 = btoa(String.fromCharCode(...new Uint8Array(
+          await crypto.subtle.digest('SHA-256', re)
+        )));
+        vLog.push({ ts: Date.now(), h: ikHash, c: c2 });
+        await kvPut(env, logKey, JSON.stringify(vLog.slice(-100)), { expirationTtl: TTL.QUARTER });
+      }
+    }
   } catch (e) { console.error('[ktlog] append failed (non-fatal, upload already saved):', e?.message ?? e); }
 
   // Store one-time prekeys individually; cap each entry to prevent KV inflation.
