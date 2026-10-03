@@ -1,4 +1,8 @@
 # Changelog
+## Config: .env.example was missing 2 of 8 *_REQUIRE_AUTH hardening flags (branch devin/1791054685-round175, 2026-10-03)
+
+vitest 924 (+2); `.env.example`, `tests/env-docs.test.js`, `CHANGELOG.md`.
+
 ## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
 
 vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.
