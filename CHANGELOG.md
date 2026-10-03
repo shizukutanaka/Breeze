@@ -1,4 +1,8 @@
 # Changelog
+## Test: pin meta-CSP ↔ header-CSP directive parity (branch devin/1791054922-round177, 2026-10-03)
+
+vitest 926 (+2); `tests/csp-parity.test.js`, `CHANGELOG.md`.
+
 ## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
 
 vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.
