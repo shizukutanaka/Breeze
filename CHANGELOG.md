@@ -1,5 +1,5 @@
 # Changelog
-## Metadata: robots.txt Sitemap was relative (ignored); dist manifests pinned dead v3.5.0 (branch devin/round170, 2026-10-03)
+## Metadata: robots.txt Sitemap was relative (ignored); dist manifests pinned dead v3.5.0 (branch devin/1791054046-round170, 2026-10-03)
 
 vitest 922 (unchanged); `robots.txt`, `dist/*`, `CHANGELOG.md`.
 
