@@ -1,4 +1,8 @@
 # Changelog
+## Test: pin the remaining version literals (worker health/header + build scripts) (branch devin/1791055342-round181, 2026-10-03)
+
+vitest 928 (+4); `tests/app-version.test.js`, `CHANGELOG.md`.
+
 ## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
 
 vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.
