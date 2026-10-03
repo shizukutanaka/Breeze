@@ -1,4 +1,13 @@
 # Changelog
+## deploy.sh: retire the Stripe billing walkthrough; prompt the secrets that exist (branch devin/1791050791-round156, 2026-10-03)
+
+`deploy.sh` only — script audit of the interactive first-deploy assistant.
+
+- Section 6 walked the operator through creating Lite/Plus/Pro Stripe products, webhooking them at `/api/webhook`, and setting 5 `STRIPE_*` secrets — all dead guidance: billing was removed in v3.6.1, the endpoint doesn't exist, and no `STRIPE_*` var is read by the Worker. Replaced with optional `ABUSE_WEBHOOK_URL` + `MIN_POW_DIFFICULTY` prompts and a pointer to wrangler.toml's `*_REQUIRE_AUTH` hardening flags.
+- Section 2 (特定商取引法 legal placeholders) was dead code — index.html no longer contains the `[Your Name / Company]` placeholders the guard greps for, so it always printed "Already set". Removed; sections renumbered 1–7.
+- Banner bumped v3.5 → v3.6; closing echo no longer advertises `/?pricing` or a Stripe test card.
+
+
 ## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
 
 vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.
