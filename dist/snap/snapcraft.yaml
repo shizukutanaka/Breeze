@@ -20,6 +20,8 @@ apps:
       - network
       - network-bind
       - audio-playback
+      - audio-record
+      - camera
       - desktop
       - desktop-legacy
       - home
@@ -37,6 +39,7 @@ parts:
     override-build: |
       cd desktop
       npm ci
-      cp ../index.html ../sw.js ../manifest.json .
+      cp ../index.html ../sw.js ../manifest.json ../_headers ../icon-192.png ../icon-512.png .
+      cp -r ../locales .
       npx electron-builder --linux dir
       cp -r dist/linux-unpacked $SNAPCRAFT_PART_INSTALL/breeze

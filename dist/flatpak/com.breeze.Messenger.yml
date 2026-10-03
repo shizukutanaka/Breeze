@@ -11,6 +11,7 @@ finish-args:
   - --socket=x11
   - --socket=wayland
   - --socket=pulseaudio
+  - --socket=pipewire
   - --device=dri
   - --talk-name=org.freedesktop.Notifications
   - --talk-name=org.kde.StatusNotifierWatcher
@@ -22,7 +23,8 @@ modules:
         path: ../..
     build-commands:
       - install -d /app/share/breeze
-      - cp index.html sw.js manifest.json /app/share/breeze/
+      - cp index.html sw.js manifest.json _headers icon-192.png icon-512.png /app/share/breeze/
+      - cp -r locales /app/share/breeze/
       - cp -r desktop/* /app/share/breeze/
       - cd /app/share/breeze && npm install --production
       - install -Dm644 dist/flatpak/com.breeze.Messenger.desktop /app/share/applications/com.breeze.Messenger.desktop
