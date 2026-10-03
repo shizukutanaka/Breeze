@@ -5827,13 +5827,63 @@ describe('lost-write recovery — ktlog append + device touch-on-read', () => {
     await upload(IK2);
     expect(fired).toBe(true);
     const log = JSON.parse(await env.KV.get(key));
-    // Both transitions preserved, but the registered IK (IK3) ends the chain —
-    // the clobbered upload is history, never the apparent current key.
-    expect(log.length).toBe(3);
-    expect(log[1].h).toBe(await hOf(IK2));
-    expect(log[2].h).toBe(h3);
+    // Both transitions preserved in order, then an append-only restatement of
+    // the registered IK (IK3) ends the chain — the clobbered upload is history,
+    // never the apparent current key, and nothing is reordered.
+    expect(log.length).toBe(4);
+    expect(log[1].h).toBe(h3);
+    expect(log[2].h).toBe(await hOf(IK2));
+    expect(log[3].h).toBe(h3);
     const { verifyChain } = await import('../src/crypto/ktlog.js');
     expect((await verifyChain(crypto.subtle, log)).ok).toBe(true);
+  });
+
+  it('ktlog repair verifies when the registered IK was logged EARLY (no reorder)', async () => {
+    // Regression: the previous fix spliced the registered IK's existing entry to
+    // the tail, but verifyChain re-sorts by ts — a moved entry whose ts predates
+    // the entries it was moved past slides back mid-log and its recomputed c
+    // fails the chain. The repair itself manufactured a 'tampered' verdict.
+    // (The sibling test above only passed because every entry landed in the
+    // same millisecond and the stable sort preserved array order.) Scenario:
+    // IK3 registered first (early entry), winner appends IK_W, our IK2 is
+    // clobbered — repair must append a restatement, not move e3.
+    const env = makeEnv();
+    const uid = 'ktlost04';
+    const IKW = uid + 'IK-W', IK2 = uid + 'IK-B', IK3 = uid + 'IK-C';
+    const upload = (ik) => handlePreKeyUpload(
+      { userId: uid, identityKey: ik, signedPreKey: 'SPK' }, env, rq({}));
+    await upload(IK3); // the registered IK — logged EARLY (oldest ts)
+    const e3 = JSON.parse(await env.KV.get(`ktlog:${uid}`))[0];
+    const h3 = await hOf(IK3), hW = await hOf(IKW);
+    const p3 = Uint8Array.from(atob(e3.c), ch => ch.charCodeAt(0));
+    const hWb = Uint8Array.from(atob(hW), ch => ch.charCodeAt(0));
+    const buf = new Uint8Array(p3.length + hWb.length);
+    buf.set(p3, 0); buf.set(hWb, p3.length);
+    const cW = Buffer.from(await crypto.subtle.digest('SHA-256', buf)).toString('base64');
+    const winnerLog = JSON.stringify([e3, { ts: Date.now(), h: hW, c: cW }]);
+    const key = `ktlog:${uid}`;
+    const origPut = env.KV.put.bind(env.KV);
+    let fired = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === `prekey:${uid}`) await origPut(k, JSON.stringify({ identityKey: IK3, edIdentityKey: 'x', signedPreKey: 'SPK', uploadedAt: Date.now() }), o);
+      if (k === key && !fired) { fired = true; await origPut(k, winnerLog, o); }
+    };
+    await upload(IK2);
+    expect(fired).toBe(true);
+    const log = JSON.parse(await env.KV.get(key));
+    // e3 stays in place UNMODIFIED (original c and ts — history not rewritten),
+    // then the winner, our rebuilt transition, and the restatement — all
+    // append-only so ts order == array order and the chain verifies.
+    expect(log.length).toBe(4);
+    expect(log[0]).toEqual(e3);
+    expect(log[1].h).toBe(hW);
+    expect(log[2].h).toBe(await hOf(IK2));
+    expect(log[3].h).toBe(h3);
+    const { verifyChain } = await import('../src/crypto/ktlog.js');
+    const v = await verifyChain(crypto.subtle, log);
+    expect(v.ok).toBe(true); // no reorder → no false 'tampered'
+    expect(log[log.length - 1].h).toBe(h3); // tail still names the registered IK
   });
 
   it('ktlog verify-read failure skips repair (never rewrites history from an unconfirmed read)', async () => {
