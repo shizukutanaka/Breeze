@@ -58,12 +58,22 @@ export function webCryptoKem(opts = {}) {
     },
     async encapsulate(pk) {
       if (!this.available()) throw new Error('ML-KEM unavailable in this runtime');
-      const r = await subtle.encapsulateBits(alg, pk);
+      // available() deliberately accepts the older draft names (encapsulateKey)
+      // — so calling encapsulateBits unconditionally would crash on exactly the
+      // runtimes the probe admits. Use whichever name this runtime exposes.
+      const fn = typeof subtle.encapsulateBits === 'function' ? 'encapsulateBits' : 'encapsulateKey';
+      const r = await subtle[fn](alg, pk);
       return { ct: u8(r.ciphertext), ss: u8(r.sharedKey ?? r.sharedSecret) };
     },
     async decapsulate(sk, ct) {
       if (!this.available()) throw new Error('ML-KEM unavailable in this runtime');
-      const r = await subtle.decapsulateBits(alg, sk, u8(ct));
+      // Asymmetric runtimes (enc without dec) fail closed here rather than with a
+      // bare TypeError — same 'unavailable' contract as the gate above.
+      const fn = typeof subtle.decapsulateBits === 'function'
+        ? 'decapsulateBits'
+        : (typeof subtle.decapsulateKey === 'function' ? 'decapsulateKey' : null);
+      if (!fn) throw new Error('ML-KEM unavailable in this runtime');
+      const r = await subtle[fn](alg, sk, u8(ct));
       return u8(r.sharedKey ?? r.sharedSecret ?? r);
     },
   };

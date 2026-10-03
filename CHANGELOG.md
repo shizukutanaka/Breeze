@@ -1,4 +1,18 @@
 # Changelog
+## PQ adapter: call the draft-name primitives the probe advertises (branch devin/1791049115-round149, 2026-10-03)
+
+Reference code + tests; `src/crypto/pq.js`, `tests/pq.test.js`, `CHANGELOG.md`.
+
+- `webCryptoKem().available()` deliberately accepts the older WICG-draft names
+  `encapsulateKey`/`decapsulateKey` (the primitive was renamed to `*Bits` across
+  draft revisions), but `encapsulate`/`decapsulate` then called `*Bits`
+  unconditionally — a bare TypeError on exactly the runtimes the probe claimed
+  to support. The ops now use whichever name the runtime exposes.
+- Asymmetric runtimes (enc present, dec absent) now fail closed with the same
+  `unavailable` contract instead of a TypeError.
+- +2 tests: an encapsulateKey/decapsulateKey-only subtle now round-trips, and an
+  enc-only subtle rejects decapsulate cleanly. Reference-only module — no
+  deployed code path touched.
 
 ## Lost-write recovery, part 2: ktlog append + device-registry touch-on-read (branch devin/1791046818-round142, 2026-10-03)
 
