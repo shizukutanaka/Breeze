@@ -1,4 +1,8 @@
 # Changelog
+## Presence: check freshness window matches the 5-min KV write throttle (60s reported online users offline) (branch devin/1791052537-round161, 2026-10-03)
+
+vitest 923 (+1); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
+
 ## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
 
 vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.

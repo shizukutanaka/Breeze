@@ -4257,6 +4257,22 @@ describe('presence heartbeat and check', () => {
     expect((await res.json()).ok).toBe(true);
   });
 
+  it('check returns online for a KV record flushed within the write-throttle window', async () => {
+    // KV records are flushed only once per PRESENCE_WRITE (5min): a checker that lands on
+    // a DIFFERENT isolate than the heartbeats reads a record whose `at` can be up to ~5min
+    // stale for a user who is online right now. The freshness window therefore matches the
+    // 6-min KV TTL, not the 30s heartbeat — the old 60s check reported online users offline.
+    const e = makeEnv();
+    globalThis._presenceCache = new Map(); // cold isolate: no in-memory data
+    await e.KV.put('presence:stillalive', JSON.stringify({ at: Date.now() - 240000, pub: 'p', name: 'X' }));
+    const r = await handlePresence({ id: 'stillalive', check: true }, e, req({}));
+    expect((await r.json()).online).toBe(true);
+    // ... but a record from a user who actually left (older than the KV TTL) is offline.
+    await e.KV.put('presence:reallygone', JSON.stringify({ at: Date.now() - 420000, pub: 'p', name: 'X' }));
+    const r2 = await handlePresence({ id: 'reallygone', check: true }, e, req({}));
+    expect((await r2.json()).online).toBe(false);
+  });
+
   it('check returns online=true immediately after heartbeat (in-memory cache)', async () => {
     const e = makeEnv();
     await handlePresence({ id: 'user00002', pub: 'p', name: 'Bob' }, e, req({}));
@@ -4460,14 +4476,18 @@ describe('presence heartbeat and check', () => {
     expect(j.online['noexist11']).toBe(false);
   });
 
-  it('batch check correctly reports offline for users whose cached heartbeat is stale (>60s)', async () => {
+  it('batch check correctly reports offline only for users whose cached heartbeat is past the TTL', async () => {
     const e = makeEnv();
     globalThis._presenceCache = new Map();
-    // Manually seed a stale cache entry (at = 2 minutes ago)
+    // 2 min stale is still within the 5-min write-throttle window — the user is most
+    // likely heartbeating on another isolate (see the single-check throttle test).
     globalThis._presenceCache.set('presence:staleuser1:data', JSON.stringify({ at: Date.now() - 120000, name: 'Bob', pub: 'p' }));
-    const r = await handlePresence({ ids: ['staleuser1'], check: true }, e, req({}));
+    // 7 min stale is beyond the 6-min KV TTL — the user is gone.
+    globalThis._presenceCache.set('presence:goneuser1:data', JSON.stringify({ at: Date.now() - 420000, name: 'G', pub: 'p' }));
+    const r = await handlePresence({ ids: ['staleuser1', 'goneuser1'], check: true }, e, req({}));
     const j = await r.json();
-    expect(j.online['staleuser1']).toBe(false);
+    expect(j.online['staleuser1']).toBe(true);
+    expect(j.online['goneuser1']).toBe(false);
   });
 
   it('PRESENCE_REQUIRE_AUTH: rejects heartbeat from unregistered userId', async () => {
