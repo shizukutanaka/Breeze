@@ -5,7 +5,7 @@
 # After building .dmg, update url, sha256, and version.
 
 cask "breeze-messenger" do
-  version "3.5.0"
+  version "3.6.1"
   sha256 "" # UPDATE after build
 
   url "https://github.com/shizukutanaka/breeze/releases/download/v#{version}/Breeze-#{version}.dmg"

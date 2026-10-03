@@ -1,5 +1,5 @@
 name: breeze-messenger
-version: '3.5.0'
+version: '3.6.1'
 summary: P2P Encrypted Messenger
 description: |
   Peer-to-peer encrypted messenger. No phone number. No registration.

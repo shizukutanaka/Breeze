@@ -35,9 +35,9 @@ RepoType: git
 Repo: https://github.com/shizukutanaka/breeze.git
 
 Builds:
-  - versionName: 3.5.0
+  - versionName: 3.6.0
     versionCode: 1
-    commit: v3.5.0
+    commit: v3.6.0
     subdir: mobile
     sudo:
       - apt-get install -y npm
@@ -48,5 +48,5 @@ Builds:
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
-CurrentVersion: 3.5.0
+CurrentVersion: 3.6.0
 CurrentVersionCode: 1
