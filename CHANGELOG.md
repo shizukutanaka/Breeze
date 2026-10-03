@@ -1,4 +1,8 @@
 # Changelog
+## Desktop: signed macOS build had camera denied + no TCC usage strings (calls dead) (branch devin/1791055261-round180, 2026-10-03)
+
+vitest 934 (+3); `desktop/entitlements.mac.plist`, `desktop/package.json`, `tests/desktop-entitlements.test.js`, `CHANGELOG.md`.
+
 ## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
 
 vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.
