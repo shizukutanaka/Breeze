@@ -1,4 +1,8 @@
 # Changelog
+## Test: pin rate-limit parity + the _headers security baseline (branch devin/1791054398-round173, 2026-10-03)
+
+vitest 928 (+6); `tests/ratelimit-parity.test.js`, `tests/headers-contract.test.js`, `CHANGELOG.md`.
+
 ## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
 
 vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.
