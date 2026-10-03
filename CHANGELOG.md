@@ -95,6 +95,25 @@ The endpoint-side verified-when-present auth was inert while clients never sent 
 
 # Changelog
 
+## Sharing text to Breeze threw a ReferenceError; five "typeof" guards were silently dead (branch claude/nice-ride-T6yb0, 2026-10-03)
+
+vitest 1041 unchanged; `index.html` +1 line (14,990 → 14,991), `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash), `tools/closure-boundary.mjs`.
+
+`tools/closure-boundary.mjs` only scanned code *after* `initMessenger()`, and it treated any `typeof X` guard as safe. Widening it to the code *before* the closure, and treating a `typeof` guard on a closure-only name as dead unless `window.X` is assigned, found six real problems in the head of the script:
+- **Live bug:** the Web Share Target handler (`?text=`/`?url=` from an OS share sheet) ran `if (input && activeContact)` in a top-level `setTimeout`. `activeContact` exists only inside the closure, so one second after every share launch it threw an uncaught `ReferenceError`. The global handler then showed the user an error toast, and "paste into the open chat" never worked.
+- **Five guards that could never be true** (always `'undefined'` at top level):
+  - The retry queue was never flushed on network restore.
+  - `beforeunload`'s "emergency save" always took its *else* branch and **removed** the `brz-retry-queue` fallback that `_loadRetryQueue` reads, instead of writing it.
+  - Account switch was never blocked during an active call.
+  - JS errors and unhandled rejections were never audit-logged.
+  - Network restore never refreshed the conversation status.
+
+The fix follows the closure's existing convention: values are exposed on `window` right before `await _boot()` (next to `window._getActiveContact`), and the call sites read `window.X?.()`. A `window` property can't be in a temporal dead zone, which matters because the error handler is registered before any later top-level `let` would run. The unload save no longer removes the fallback when no messenger has booted yet, so a previous session's queue survives an early close.
+
+The gate is teeth-tested: it flags all six on the pre-fix `index.html` and passes on the fix. Two false positives were fixed in the tool as well: HTML tag names inside nested template literals, and object method definitions.
+
+---
+
 ## One member leaving silently converted a mixed group to v5 — one epoch-rotation rule for all four paths (branch claude/nice-ride-T6yb0, 2026-09-24)
 
 vitest 1037 → **1041**; `index.html` −3 lines (14,993 → 14,990), `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash), `tests/mirror-drift.test.js`.

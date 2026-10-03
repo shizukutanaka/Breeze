@@ -102,8 +102,16 @@ if (bodyEnd < 0) {
 
 const body = js.slice(openBrace + 1, bodyEnd);
 const bodyMasked = masked.slice(openBrace + 1, bodyEnd);
-const tail = js.slice(bodyEnd + 1);
-const tailMasked = masked.slice(bodyEnd + 1);
+// Scan EVERYTHING outside initMessenger's body — the head (top-level code before it, e.g.
+// switchAccount and the network/unload listeners) as well as the tail after it. The body is
+// blanked (newlines kept) so offsets and line numbers stay those of the real script. Scanning
+// only the tail once hid three dead guards that all sat in the head.
+const blankBody = (s) => s.slice(0, openBrace + 1) + s.slice(openBrace + 1, bodyEnd).replace(/[^\n]/g, ' ') + s.slice(bodyEnd);
+const tail = blankBody(js);
+const tailMasked = blankBody(masked);
+// A top-level `typeof X` on a closure-only X is always 'undefined' — the guarded code can
+// never run — UNLESS initMessenger also assigns window.X, which typeof then resolves.
+const windowExposed = new Set([...js.matchAll(/\bwindow\.([A-Za-z_$][\w$]*)\s*=(?!=)/g)].map((m) => m[1]));
 
 // Every top-level-within-the-closure name: const/let and named function declarations.
 // (var is not used in this codebase's style; arrow functions assigned to const are
@@ -166,23 +174,32 @@ for (const name of closureNames) {
     // exposure pattern already used elsewhere in this file.
     const before = tail.slice(Math.max(0, idx - 40), idx);
     if (/window\.\s*$/.test(before)) continue;
+    // Not references: an HTML tag name inside a nested template literal the masker can't see
+    // into (`<div`, `</div`), and a method/function DEFINITION shape (`size() {` — a call is
+    // never directly followed by `{` outside control keywords, which aren't closure names).
+    if (/<\/?\s*$/.test(before)) continue;
+    if (/^\s*\([^()]*\)\s*\{/.test(tailMasked.slice(idx + name.length, idx + name.length + 120))) continue;
     // Skip if inside a `typeof NAME` check on this exact name anywhere on the same
     // logical guard — the _selectMode/togglePicker pattern.
     const lineStart = tail.lastIndexOf('\n', idx) + 1;
     const lineEnd = tail.indexOf('\n', idx);
     const line = tail.slice(lineStart, lineEnd < 0 ? tail.length : lineEnd);
-    if (new RegExp(`typeof\\s+${name}\\b`).test(line)) continue;
-    problems.push({ name, line: lineOf(bodyEnd + 1 + idx), context: line.trim().slice(0, 100) });
+    if (new RegExp(`typeof\\s+${name}\\b`).test(line)) {
+      if (windowExposed.has(name)) continue; // typeof sees the window property — a live guard
+      problems.push({ name, line: lineOf(idx), context: line.trim().slice(0, 100), dead: true });
+      break;
+    }
+    problems.push({ name, line: lineOf(idx), context: line.trim().slice(0, 100) });
     break; // one report per name is enough to act on; avoid spamming every occurrence
   }
 }
 
 if (problems.length) {
   console.error(`closure-boundary: FAIL — ${problems.length} name(s) referenced outside initMessenger() but declared only inside it`);
-  for (const p of problems) console.error(`  - index.html:${p.line}  \`${p.name}\`  ${p.context}`);
+  for (const p of problems) console.error(`  - index.html:${p.line}  \`${p.name}\`  ${p.dead ? '[DEAD typeof guard — always undefined here, guarded code never runs] ' : ''}${p.context}`);
   console.error('  Fix: expose via window.<name> = <name>; inside initMessenger (see the exposures');
-  console.error('  near its `await _boot();` line) and reference window.<name> at the call site, OR');
-  console.error('  guard with `typeof <name> !== \'undefined\'` if a missing value is a valid no-op.');
+  console.error('  near its `await _boot();` line) or via a module-level hook object initMessenger');
+  console.error('  assigns, and reference that at the call site. A bare typeof guard does NOT fix it.');
   process.exit(1);
 }
 console.log(`closure-boundary: OK — ${closureNames.size} closure-local name(s) checked, none referenced unguarded outside initMessenger()`);

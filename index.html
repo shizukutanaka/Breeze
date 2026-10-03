@@ -2235,7 +2235,7 @@ window.addEventListener('error', (event) => {
   _fatalErrors++;
   _errorCount++;
   if (typeof _dbg === 'function') _dbg(event.error || event.message, 'UNCAUGHT');
-  if (typeof auditLog === 'function') auditLog('error', 'JS Error: ' + (event.message || '').slice(0, 200), 'error');
+  window.auditLog?.('error', 'JS Error: ' + (event.message || '').slice(0, 200), 'error');
   if (_errorCount <= _ERROR_FLOOD_LIMIT && typeof showToast === 'function') {
     showToast((event.message || t('errUnknown')).slice(0, 80), 'error');
   }
@@ -2264,7 +2264,7 @@ window.addEventListener('unhandledrejection', (event) => {
   _errorCount++;
   const msg = event.reason?.message || String(event.reason || 'Promise rejected');
   if (typeof _dbg === 'function') _dbg(event.reason, 'UNHANDLED_PROMISE');
-  if (typeof auditLog === 'function') auditLog('error', 'Unhandled: ' + msg.slice(0, 200), 'error');
+  window.auditLog?.('error', 'Unhandled: ' + msg.slice(0, 200), 'error');
   // Skip toast for expected network errors
   if (msg.includes('AbortError') || msg.includes('Failed to fetch') || msg.includes('NetworkError')) return;
   if (_errorCount <= _ERROR_FLOOD_LIMIT && typeof showToast === 'function') {
@@ -2579,9 +2579,7 @@ if (navigator.connection) {
       _adaptiveConfig.update(_effectiveType, false); // Force reset to defaults
       if (typeof _reconnectAllPeers === 'function') _reconnectAllPeers();
       // Flush retry queue on network restore
-      if (typeof scheduleRetry === 'function' && typeof _retryQueue !== 'undefined' && _retryQueue.length > 0) {
-        scheduleRetry();
-      }
+      if (window._retryQueue?.length > 0) window.scheduleRetry?.();
     } else if (_effectiveType === '3g') {
       if (typeof _reconnectAllPeers === 'function') _reconnectAllPeers();
     }
@@ -2602,7 +2600,7 @@ window.addEventListener('online', () => {
     banner.classList.remove('hidden');
     setTimeout(() => banner.classList.add('hidden'), CONFIG.BANNER_HIDE_MS);
   }
-  if (typeof updateConvStatus === 'function') updateConvStatus();
+  window.updateConvStatus?.();
   // v3.5: Aggressive P2P reconnection on network restore (Spec v6 §15)
   if (typeof _reconnectAllPeers === 'function') {
     setTimeout(() => _reconnectAllPeers(), MS.SEC / 2);
@@ -2621,11 +2619,9 @@ window.addEventListener('offline', () => {
 window.addEventListener('beforeunload', () => {
   // v3.6: Emergency save retry queue (sync — beforeunload can't await)
   try {
-    if (typeof _retryQueue !== 'undefined' && _retryQueue.length > 0) {
-      localStorage.setItem('brz-retry-queue', JSON.stringify(_retryQueue.slice(0, 50)));
-    } else {
-      localStorage.removeItem('brz-retry-queue');
-    }
+    const q = window._retryQueue;
+    if (q?.length > 0) localStorage.setItem('brz-retry-queue', JSON.stringify(q.slice(0, 50)));
+    else if (q) localStorage.removeItem('brz-retry-queue'); // no messenger booted: keep a prior session's fallback for _loadRetryQueue
   } catch {}
 });
 // (The dead {ids, offline} visibilitychange beacon was removed — see beforeunload note.)
@@ -2912,7 +2908,7 @@ if (P.get('text') || P.get('url') || P.get('title')) {
     // If already in a conversation, paste immediately
     setTimeout(() => {
       const input = _DOM.get('msg-input');
-      if (input && activeContact) { input.value = sharedText; input.focus(); }
+      if (input && window._getActiveContact?.()) { input.value = sharedText; input.focus(); }
     }, 1000);
   }
 }
@@ -3452,7 +3448,7 @@ async function switchAccount(accountId) {
     try {  
     _perf.mark('switchAccount');
     // Block switch during active call
-    if (typeof _callState !== 'undefined' && _callState !== 'idle') {
+    if ((window._getCallState?.() || 'idle') !== 'idle') {
       showToast(t('noSwitchCall'), 'error');
       return;
     }
@@ -14578,6 +14574,11 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
   window.exitSelectMode = exitSelectMode;
   window._getActiveContact = () => activeContact;
   window._isSelectMode = () => _selectMode;
+  // Same for the top-level network/unload/error/account-switch handlers: they used `typeof X`
+  // guards on these closure-only names — always 'undefined' there, so the guarded code never ran.
+  window._retryQueue = _retryQueue; window.scheduleRetry = scheduleRetry;
+  window.auditLog = auditLog; window.updateConvStatus = updateConvStatus;
+  window._getCallState = () => _callState;
 
   // Boot LAST — see the _boot definition for why this line's position is load-bearing.
   await _boot();
