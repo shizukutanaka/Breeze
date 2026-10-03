@@ -1,4 +1,8 @@
 # Changelog
+## Scripts: add missing test:e2e — the documented `npm run test:e2e` failed with 'Missing script' (branch devin/1791053692-round167, 2026-10-03)
+
+vitest 922 (unchanged); `package.json`, `CHANGELOG.md`.
+
 ## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
 
 vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.
