@@ -13,6 +13,15 @@ Both tests monkey-patch `env.KV` to land the clobber deterministically and asser
 
 ---
 
+## Auth-parity gate tightened: queue + prekey-upload challenges graduate to byte parity, op names pinned (branch devin/1791046399-round141, 2026-10-03)
+
+vitest 911 (+3); `tests/auth-parity.test.js`, `CHANGELOG.md`.
+
+- `MAIN_VERIFIED` still listed the queue-read challenges (`breeze-<op>:<id>:<ts>`, #283) and `breeze-prekey-upload` (#284) as PENDING — "verifier lives on an unmerged Worker branch" — but both verifiers are long on main: `checkQueueAuth` covers `msg-poll`/`sealed-poll`/`sealed-ack`, and `handlePreKeyUpload` verifies `breeze-prekey-upload:{userId}:{ts}:{digest}`. They now sit in `MAIN_VERIFIED`, so a drift between the client's signed challenge and the worker's verification template fails the byte-parity assertion instead of being silently tolerated. `breeze-group-create` stays PENDING: its worker-side verifier never merged.
+- New op-name pin: `op` is a template *slot* on both sides (`queueAuth('…')` → `breeze-${op}:…`, `checkQueueAuth(…, '…')`), so skeleton parity cannot see a typo'd op literal — e.g. `queueAuth('sealed-akk')` signs `breeze-sealed-akk:…`, a challenge the worker can never match, producing a real-world SIG_INVALID with green tests. The new test asserts the `queueAuth('…')` op-name set equals the `checkQueueAuth(…, '…')` op-name set (currently `{msg-poll, sealed-poll, sealed-ack}`), keeping per-op domain separation intact.
+
+---
+
 ## Signal rooms authenticated: dm:/call: poll+store now require room membership and a fresh signature (branch devin/1790423241-round25, 2026-09-26)
 
 vitest 891 (+6); `_worker.js`, `index.html`, `tests/worker.test.js`, `tests/auth-parity.test.js`, `CHANGELOG.md`, CSP hash re-pinned.
