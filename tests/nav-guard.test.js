@@ -93,6 +93,12 @@ describe('isAllowedExternalUrl — scheme allowlist for shell.openExternal', () 
     expect(isAllowedExternalUrl('breeze://join=ABC123')).toBe(true);
   });
 
+  it('allows mailto: (renderMarkdown linkifies email addresses in chat)', () => {
+    // Regression guard: the first allowlist draft forgot mailto:, which dead-ended
+    // every email link in a chat — a feature the message renderer actively creates.
+    expect(isAllowedExternalUrl('mailto:alice@example.com')).toBe(true);
+  });
+
   it('rejects file:// (would launch Finder/Explorer at a path)', () => {
     expect(isAllowedExternalUrl('file:///etc/passwd')).toBe(false);
     expect(isAllowedExternalUrl('file:///C:/Windows/system32/cmd.exe')).toBe(false);

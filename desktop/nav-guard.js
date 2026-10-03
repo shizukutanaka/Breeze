@@ -41,12 +41,15 @@ function isAllowedNavigation(currentUrlString, targetUrlString) {
 // a path, custom scheme handlers run third-party apps, e.g. a crafted `zoommtg://` or
 // `ms-appx:` link fires a real executable with no further confirmation).
 //   - http:/https: — chat links, the intended UX.
+//   - mailto: — renderMarkdown turns email addresses into mailto: anchors; the OS
+//     handler is the user's own mail client (compose window), same class as the
+//     browser handoff. Refusing it silently dead-ends an existing feature.
 //   - breeze: — our protocol handler resolves back into this app (join/add deep links
 //     pasted in chat legitimately round-trip through the OS).
 // String-prefix checks are NOT a substitute ("httpx://evil" passes startsWith('http')).
 // Protocol-relative "//host" and bare hostnames parse as path-less → treated as denied:
 // openExternal can't resolve those meaningfully anyway.
-const EXTERNAL_ALLOWED_SCHEMES = new Set(['http:', 'https:', 'breeze:']);
+const EXTERNAL_ALLOWED_SCHEMES = new Set(['http:', 'https:', 'mailto:', 'breeze:']);
 
 function isAllowedExternalUrl(urlString) {
   try {
