@@ -474,6 +474,36 @@ describe('prekey upload + fetch (OTP consumption)', () => {
     expect((await res.json()).replenishOTP).toBe(true);
   });
 
+  it('a skipped OTP slot clears the STALE key an earlier upload left in it', async () => {
+    // Interior gaps still fall inside the new count window (count = maxStoredIdx+1),
+    // so without clearing, fetch would serve a rotated-out key as if freshly uploaded.
+    const env = makeEnv();
+    const uid = 'otpstal001';
+    const req = () => apiRequest('/api/prekey/upload', {});
+    await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK',
+        oneTimePreKeys: ['old0', 'old1', 'old2'] },
+      env, req()
+    );
+    await handlePreKeyUpload(
+      { userId: uid, identityKey: uid + 'IK', signedPreKey: 'SPK',
+        oneTimePreKeys: ['new0', null, 'new2'] },
+      env, req()
+    );
+    expect(await env.KV.get(`prekey:otp:${uid}:1`)).toBeNull(); // stale 'old1' cleared
+    // Fetch pops the highest index first: new2, then skips the cleared gap to new0 —
+    // 'old1' must never be delivered. Distinct IPs per fetch: the per-IP OTP drain
+    // lock would otherwise let only the first fetch consume a key.
+    const fetchAs = (ip) => handlePreKeyFetch({ userId: uid }, env,
+      apiRequest('/api/prekey/fetch', {}, { 'CF-Connecting-IP': ip }));
+    const f1 = await (await fetchAs('203.0.113.201')).json();
+    expect(f1.oneTimePreKey).toBe('new2');
+    const f2 = await (await fetchAs('203.0.113.202')).json();
+    expect(f2.oneTimePreKey).toBe('new0');
+    const f3 = await (await fetchAs('203.0.113.203')).json();
+    expect(f3.oneTimePreKey).toBeUndefined();
+  });
+
   // ── OTP delete-failure safety (item 28) ──────────────────────────────────────
   it('OTP not attached when kvDel fails — prevents OTP reuse / X3DH forward-secrecy degradation', async () => {
     // If the delete of the OTP KV slot fails, the OTP should NOT be included in the
