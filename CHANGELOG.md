@@ -1,4 +1,8 @@
 # Changelog
+## Test: pin client↔worker wire contracts (PoW difficulty, challenge shape, body cap) (branch devin/1791054547-round174, 2026-10-03)
+
+vitest 929 (+3); `tests/wire-contract.test.js`, `CHANGELOG.md`.
+
 ## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
 
 vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.
