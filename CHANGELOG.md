@@ -1,4 +1,12 @@
 # Changelog
+## Attack-surface trim: deny Payment API; scope Capacitor allowNavigation to the canonical host (branch devin/1791050895-round157, 2026-10-03)
+
+`_headers` + `mobile/capacitor.config.json` — two dead/lax grants tightened.
+
+- `Permissions-Policy` granted `payment=(self)` — the Payment Request API for the app's own origin — although nothing calls `PaymentRequest` (billing removed v3.6.1). Now `payment=()` (denied outright), consistent with the already-denied usb/bluetooth/sensors.
+- Capacitor `allowNavigation` whitelisted `*.pages.dev` — any pages.dev subdomain could top-level-navigate inside the app's own WebView via a `?add=` link. QR add-contact flows encode the hosted origin only (`https://breeze.pages.dev/?add=…`), so the entry is narrowed to `breeze.pages.dev`; self-hosted builds set their own origin in this file anyway.
+
+
 ## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
 
 vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.
