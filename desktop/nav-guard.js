@@ -35,4 +35,25 @@ function isAllowedNavigation(currentUrlString, targetUrlString) {
   }
 }
 
-module.exports = { isAllowedNavigation };
+// Gate for shell.openExternal() — the only URLs the renderer may hand to the OS are
+// web links and our own deep-link scheme. Everything else is refused: an unvalidated
+// openExternal is a renderer→OS launch primitive (file:/// launches Finder/Explorer at
+// a path, custom scheme handlers run third-party apps, e.g. a crafted `zoommtg://` or
+// `ms-appx:` link fires a real executable with no further confirmation).
+//   - http:/https: — chat links, the intended UX.
+//   - breeze: — our protocol handler resolves back into this app (join/add deep links
+//     pasted in chat legitimately round-trip through the OS).
+// String-prefix checks are NOT a substitute ("httpx://evil" passes startsWith('http')).
+// Protocol-relative "//host" and bare hostnames parse as path-less → treated as denied:
+// openExternal can't resolve those meaningfully anyway.
+const EXTERNAL_ALLOWED_SCHEMES = new Set(['http:', 'https:', 'breeze:']);
+
+function isAllowedExternalUrl(urlString) {
+  try {
+    return EXTERNAL_ALLOWED_SCHEMES.has(new URL(urlString).protocol);
+  } catch {
+    return false;
+  }
+}
+
+module.exports = { isAllowedNavigation, isAllowedExternalUrl };

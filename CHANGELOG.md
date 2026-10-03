@@ -1,5 +1,13 @@
 # Changelog
 
+## Desktop: scheme allowlist on every shell.openExternal call (branch devin/1791048080-round145, 2026-10-03)
+
+vitest 917 (+6); `desktop/nav-guard.js`, `desktop/main.js`, `tests/nav-guard.test.js`, `CHANGELOG.md`.
+
+- `shell.openExternal` is a renderer→OS launch primitive, and both call sites under-gated it. `setWindowOpenHandler` used `url.startsWith('http')` — which passes `httpx://…`/`httpfoo://…` — and the `will-navigate` fallback handed **every** blocked navigation to the OS unconditionally, so a crafted `file:///…` or third-party scheme link (`zoommtg:`, `ms-appx:`, `javascript:`) could reach real OS handlers from the renderer with no further confirmation.
+- New `isAllowedExternalUrl` in nav-guard.js (the testable sibling module — main.js can't be imported without Electron): parsed-protocol allowlist `http:`/`https:`/`breeze:` only. `breeze:` stays so join/add deep links pasted in chat keep round-tripping through the OS into this app.
+- Tests cover the allowlist, the file:///file-launch class, third-party scheme handlers, the original `startsWith('http')` bypass shape, and malformed/scheme-relative input.
+
 ## Auth-parity gate tightened: queue + prekey-upload challenges graduate to byte parity, op names pinned (branch devin/1791046399-round141, 2026-10-03)
 
 vitest 911 (+3); `tests/auth-parity.test.js`, `CHANGELOG.md`.
