@@ -2065,15 +2065,10 @@ async function handleTurn(body, env, request) {
   return json({ iceServers, ttl: TTL.DAY, provider: 'openrelay' }, 200, request);
 }
 
-// ============================================================
-// OGP — Fetch link preview metadata (title, description, image)
-// Server-side fetch to bypass CORS restrictions
-// ============================================================
-
-// ============================================================
-// MULTI-ACCOUNT — Plan-based subscription
-// Free=1, Lite($0.99)=2, Plus($5.99)=4, Pro($19.99)=unlimited
-// ============================================================
+// ACCOUNT — erases every userId-keyed record (incl. the legacy slots: billing
+// scaffold — plan billing was removed; the key is cleanup-only, see SECURITY.md).
+// The server-side link-preview (OGP) endpoint this section used to head was
+// removed in v3.6.1 (SECURITY.md); the SSRF blocklist it needed went with it.
 
 async function handleAccountDelete(body, env, request) {
   const { userId, ts, sig, alias, groups } = body;
@@ -2986,11 +2981,6 @@ async function handleDropRead(body, env, request) {
   return json({ ct: data.ct, createdAt: data.createdAt }, 200, request);
 }
 
-// SSRF host/scheme blocklist (RFC 1918, loopback, link-local, cloud metadata).
-// Returns true when the given parsed URL must NOT be fetched. Shared by the initial
-// OGP request AND every redirect hop — validating only the initial URL is a bypass:
-// a public URL can 302-redirect to http://169.254.169.254/ (metadata) or an internal
-// host, and `redirect: 'follow'` would chase it past the guard.
 function json(data, status, request, _rid) {
   // v3.3: Auto-inject reqId into error responses for enterprise traceability
   if (status >= 400 && _rid && !data.reqId) data.reqId = _rid;
@@ -3007,8 +2997,8 @@ function json(data, status, request, _rid) {
 
 async function sha256Short(text) {
   // 16 bytes (32 hex chars) → 2^64 birthday-collision resistance, up from 8 bytes (2^32).
-  // KV cache keys are 'ogp:' prefixed; the extra 16 chars are negligible
-  // vs. the 512-byte KV key limit and removes the theoretically-breakable 2^32 window.
+  // Used for ipHash and device/pubset digests; well under the 512-byte KV key limit,
+  // and removes the theoretically-breakable 2^32 window.
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return Array.from(new Uint8Array(buf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
 }

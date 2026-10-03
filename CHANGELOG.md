@@ -1,4 +1,19 @@
 # Changelog
+## Worker: drop stale comments for features removed in v3.6.1 (branch devin/1791049290-round150, 2026-10-03)
+
+Comment-only; `_worker.js`, `CHANGELOG.md`.
+
+- The OGP link-preview endpoint and its SSRF blocklist were deleted in v3.6.1
+  (SECURITY.md), and plan billing (Free/Lite/Plus/Pro) was removed earlier — but
+  three comment blocks still described them as live: the "OGP — Fetch link
+  preview" section header, the "MULTI-ACCOUNT — Plan-based subscription" header
+  (now heads handleAccountDelete), and an orphaned SSRF-blocklist doc dangling
+  above json(). Stale comments describing removed code are worse than none —
+  they invite readers to hunt for functions that don't exist and make the
+  file's security posture look different from reality.
+- Replaced with one accurate header (account deletion + the legacy slots:
+  cleanup note) and deleted the orphans; sha256Short's comment no longer cites
+  'ogp:' cache keys (it now serves ipHash and device/pubset digests).
 
 ## Lost-write recovery, part 2: ktlog append + device-registry touch-on-read (branch devin/1791046818-round142, 2026-10-03)
 
