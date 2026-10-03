@@ -23,7 +23,7 @@ PackageUrl: https://github.com/shizukutanaka/breeze
 InstallerType: nsis
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/shizukutanaka/breeze/releases/latest/download/Breeze-Setup.exe
+    InstallerUrl: https://github.com/shizukutanaka/breeze/releases/download/v3.6.1/Breeze-3.6.1-win-x64.exe
     InstallerSha256: # UPDATE after build
 ManifestType: singleton
 ManifestVersion: 1.6.0

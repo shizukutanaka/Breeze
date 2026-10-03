@@ -1,4 +1,8 @@
 # Changelog
+## dist: packaged Linux builds could not place calls; winget URL unpinnable (branch devin/1791055643-round183, 2026-10-03)
+
+vitest 929 (+5); `dist/snap/snapcraft.yaml`, `dist/flatpak/com.breeze.Messenger.yml`, `dist/winget/Breeze.Messenger.yaml`, `tests/packaged-media.test.js`, `CHANGELOG.md`.
+
 ## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
 
 vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.
