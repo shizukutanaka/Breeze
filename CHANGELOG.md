@@ -1,4 +1,13 @@
 # Changelog
+## unreachable-branch gate: paren-matched conditions — guards containing calls were unscanned (branch devin/1791050292-round153, 2026-10-03)
+
+vitest 930 (+8); `tools/unreachable-branch.mjs`, `tests/unreachable-branch.test.js`, `CHANGELOG.md`.
+
+- The `if (cond) {` collector used `\bif\s*\(([^)]{0,120})\)\s*\{` — any condition containing a `)` (a call, a nested group) or longer than 120 chars silently failed the match, and 132 real `if (...) {` blocks in index.html went unscanned. A misplaced brace inside a compound platform guard — e.g. `if (PLATFORM === 'electron' && readyNow())` — would have produced exactly the dead-code regression this gate exists for, invisibly. Guards are now found by paren-matching forward on the masked source (strings/comments already blanked), then checking the `)` is followed by `{`.
+- Scanners extracted as pure exports (`mask`, `findGuards`, `deadBranches`) so verdicts are unit-testable — same shape as csp-hash/dead-wiring.
+- Header now also documents the two deliberate non-flags (mobile guards inside web/capacitor are reachable — a phone browser is both) and the remaining known limit (regex literals inside conditions aren't masked; none exist today).
+- +8 tests: capacitor-inside-electron flagged incl. the compound-condition case, mobile-inside-electron flagged, else-branch and web/capacitor-parent cases correctly NOT flagged, string-brace masking can't create phantom guards, live file zero-dead pin, and a live-file scan asserting every platform/mobile `if (...) {` is collected.
+
 ## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
 
 vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.
