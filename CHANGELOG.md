@@ -9,6 +9,19 @@ vitest 917 (+6); `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json`, `t
 - Account switch/delete semantics unchanged: the wipe already clears all IDB stores, so queued plaintext is covered by the same lifecycle as message history — better than before, where `brz-outbox-*` only died on a full `localStorage.clear()`.
 - `tests/outbox-idb.test.js` executes the extracted functions against mock IDB/localStorage: snapshot persist, no-DB no-op, restore, one-time migration + key cleanup, IDB-preferred-no-merge, plus a static guard that no `localStorage.setItem` path can reintroduce the outbox.
 
+## Lost-write recovery, part 2: ktlog append + device-registry touch-on-read (branch devin/1791046818-round142, 2026-10-03)
+
+vitest 915 (+4); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
+
+The grp/sig/push/alias sweep left two read-modify-write sites uncovered:
+
+- **`ktlog:{userId}` append** — two concurrent prekey uploads each read the log, append, and write; the loser's audit entry is erased while both uploads report success. Worse than the other sites: the surviving chain still verifies, so `verifyChain` can't see the gap — a key-rotation event silently never recorded. The handler now re-reads after a successful store; when neither our chain hash nor a tail entry for the same IK transition is present, it rebuilds the entry against the winning tail and re-appends once. An old same-`h` entry mid-log does not satisfy the check (only the tail records current state), and the same-IK timestamp-refresh path is idempotent metadata needing no repair. Two repair-safety rules learned from review: a null verify-read (KV error ≡ absent key) skips repair entirely — an unconfirmed read may never overwrite stored history with a singleton; and the repair reconciles the tail against `prekey:{userId}` — since the bundle write lands before the log write, the registered IK is the authority on "current", so when the clobbered upload isn't registered, the registered IK's logged transition is moved back to the tail (chain hashes recomputed) instead of letting the audit name a superseded key as current.
+- **`devices:{accountId}` touch-on-read** — `handleDeviceList` rewrites the record it read to refresh the 3-month TTL; a `/link` or `/unlink` landing between the GET and the PUT was clobbered by the stale copy — a READ path resurrecting a device the owner just removed. The touch now re-reads and writes back only when the record is unchanged; if it changed, the concurrent writer already refreshed the TTL, so skipping is free.
+
+Both tests monkey-patch `env.KV` to land the clobber deterministically and assert the semantic postcondition (winner kept + our transition rebuilt, chain still verifies; no stale rewrite).
+
+---
+
 ## Auth-parity gate tightened: queue + prekey-upload challenges graduate to byte parity, op names pinned (branch devin/1791046399-round141, 2026-10-03)
 
 vitest 911 (+3); `tests/auth-parity.test.js`, `CHANGELOG.md`.
