@@ -75,3 +75,7 @@ __pycache__/
 
 # Secrets
 *.secret
+
+# Rust / Tauri build artifacts
+tauri/src-tauri/target/
+tauri/src-tauri/gen/
