@@ -82,6 +82,28 @@ for (const [src, dst, required] of ASSETS) {
   console.log(`  ✓ ${dst.padEnd(20)} ${kb.padStart(8)} KB`);
 }
 
+// ── API origin rewrite ────────────────────────────────────
+// index.html computes `const API = location.origin + '/api'`. Inside Capacitor the
+// WebView's origin is the virtual `app.breeze.local` hostname (capacitor.config.json),
+// so the packaged app would send EVERY worker call — prekey upload, sealed send, group
+// ops — to a host that does not exist. The app renders but is silently non-functional.
+// Rewrite the line to the real backend, exactly the way tests/e2e/server.mjs already
+// anchors and rewrites it for the local harness. Self-hosted mobile builds set
+// BREEZE_API_ORIGIN; the hosted default is breeze.pages.dev (README).
+const API_ORIGIN = (process.env.BREEZE_API_ORIGIN || 'https://breeze.pages.dev').replace(/\/+$/, '');
+const idxPath = path.join(WWW, 'index.html');
+let idxText = fs.readFileSync(idxPath, 'utf8');
+const API_LINE_RE = /^const API = location\.hostname === 'localhost' \|\| location\.hostname === '127\.0\.0\.1' \? '' : location\.origin \+ '\/api';$/m;
+if (!API_LINE_RE.test(idxText)) {
+  console.error("  ✗ index.html's `const API` line moved/changed — update prepare.js's rewrite, or the packaged app's API calls hit the virtual app.breeze.local host and fail");
+  process.exit(1);
+}
+const idxSizeBefore = fs.statSync(idxPath).size;
+idxText = idxText.replace(API_LINE_RE, `const API = ${JSON.stringify(API_ORIGIN + '/api')};`);
+fs.writeFileSync(idxPath, idxText);
+totalBytes += fs.statSync(idxPath).size - idxSizeBefore;
+console.log(`  ✓ API origin → ${API_ORIGIN}/api`);
+
 // ── Integrity check: verify index.html contains <script> ───
 const idx = fs.readFileSync(path.join(WWW, 'index.html'), 'utf8');
 if (!idx.includes('<script>') || !idx.includes('</script>')) {
