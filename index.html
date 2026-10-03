@@ -3190,6 +3190,16 @@ const _replayCache = {
   size() { return this._map.size; },
 };
 
+// Purged tombstone — the dedup identity with no recoverable content. Delivery is
+// at-least-once by design (sender retry resends the same ts → same `from:ts` msgId;
+// lost ACK → relay re-delivers; dual-path lands a second copy late), so a hard
+// delete frees the msgId and the copy resurrects as a fresh render + notification.
+// No contactId: dedup uses the primary key, so the row is invisible to contact-index
+// queries and rejects every `stored.contactId === contactId`-bound mutation.
+function _purgeTombstone(m) {
+  return { msgId: m.msgId, mine: !!m.mine, ts: m.ts, deleted: true, purged: true, text: '' };
+}
+
 // API helper (DRY for 48+ POST calls): returns Response, not auto-parsed, so callers can check .ok/.status; opts forwarded for signal etc.
 function postAPIRaw(path, body, opts = {}) {
   return fetchT(API + path, { method: 'POST', headers: _H, body: JSON.stringify(body), ...opts }).catch(() => null);
@@ -4136,6 +4146,26 @@ async function initMessenger(dbName) {
       }
     });
   }
+  // Deleted content's derivative: the contact-row preview keeps up to 40 chars of erased
+  // plaintext in the chat list + contacts store until a newer message lands. Refresh when
+  // the tombstoned message WAS the preview (every write sets lastMsgAt = its ts). Recompute
+  // from the newest LIVE message — never a "deleted" marker, which is state, not text.
+  async function _refreshPreview(contactId, deletedTs) {
+    try {
+      const c = await dbGet('contacts', contactId);
+      if (!c || c.lastMsgAt !== deletedTs) return;
+      const msgs = await dbGetByIndex('messages', 'contact', contactId);
+      let latest = null;
+      for (const m of msgs) if (!m.deleted && !m.purged && (!latest || m.ts > latest.ts)) latest = m;
+      c.lastMsgSender = latest ? (latest.senderName || (latest.mine ? myName : '')) : '';
+      c.lastMsgAt = latest ? latest.ts : 0;
+      if (!latest) c.lastMsg = '';
+      else if (latest.isPoll) { try { c.lastMsg = '📊 ' + String(JSON.parse(latest.text).question || '').slice(0, 30); } catch(e) { c.lastMsg = '📊'; } }
+      else c.lastMsg = (latest.text || '').slice(0, 40);
+      await dbPut('contacts', c);
+      _renderContactsThrottled();
+    } catch(e) { _dbg(e, 'preview-refresh'); }
+  }
   // v3.4: Count all messages for a contact (for "N older messages" hint)
   async function dbCountMsgs(contactId) {
     return new Promise(r => {
@@ -4289,13 +4319,9 @@ async function initMessenger(dbName) {
   }
 
   // ═══ Quiet messenger: one decision point for "should this interrupt the human?" ═══
-  // The premise, from the product's own first principles: a messenger's job is to carry a
-  // message, not to manufacture obligation. Focus mode suppresses the interruption while
-  // still accruing the unread badge — information is never withheld, only the demand for
-  // your attention. Importance is judged ENTIRELY on-device: an @mention of you, or a
-  // contact you marked VIP. It is a RULE, not an AI. This product deleted server-side AI
-  // because it sent plaintext off the device; dressing a heuristic up as intelligence would
-  // be the same kind of claim the code cannot keep.
+  // Focus mode suppresses the interruption while still accruing the unread badge —
+  // information is never withheld, only the demand for attention. Importance is judged
+  // ENTIRELY on-device (an @mention of you, or a VIP contact): a RULE, not an AI.
   function _focusActive() { return (_settings.focusUntil || 0) > Date.now(); }
   function _focusRemainingMin() { return Math.max(0, Math.ceil(((_settings.focusUntil || 0) - Date.now()) / MS.MIN)); }
   function _isImportant(contact, text) {
@@ -4321,14 +4347,14 @@ async function initMessenger(dbName) {
     try {
       const cutoff = Date.now() - (_settings.retentionDays * MS.DAY);
       const allMsgs = await dbGetAll('messages');
-      const toDelete = allMsgs.filter(m => m.ts < cutoff && !m.pinned);
+      const toDelete = allMsgs.filter(m => m.ts < cutoff && !m.pinned && !m.purged);
       if (toDelete.length === 0) return;
       // v3.3: PERFORMANCE — Batch delete in single transaction
       await new Promise((resolve) => {
         try {
           const tx = db.transaction('messages', 'readwrite');
           const os = tx.objectStore('messages');
-          for (const m of toDelete) { os.delete(m.msgId); _replayCache.delete(m.msgId); }
+          for (const m of toDelete) { os.put(_purgeTombstone(m)); _replayCache.delete(m.msgId); _refreshPreview(m.contactId, m.ts); }
           tx.oncomplete = () => resolve(true);
           tx.onerror = () => resolve(false);
         } catch(e) { _dbg(e, 'retention-batch'); resolve(false); }
@@ -6055,17 +6081,11 @@ async function initMessenger(dbName) {
   }
 
   // ===== Setup or Load =====
-  // DELIBERATELY a function, invoked at the very END of initMessenger (grep "_boot()").
-  // Running this inline here was a Temporal Dead Zone crash: renderContacts() reads
-  // _activeFolder/_activeLabel/_contactSort/_contactFilter/_drafts/activeContact, every one of
-  // them a `let` declared FURTHER DOWN this function. The first access threw ReferenceError,
-  // so on any load with an existing identity boot aborted at its first line and everything
-  // after it — including startPolling() — never ran: a returning user saw an empty contact
-  // list and received no messages at all. It only worked in the session that created the
-  // identity, which is why every E2E passed (they all start from a fresh identity).
-  // This is the SECOND occurrence of this class here; see the _perf note near the top.
-  // Keep boot last, and keep it a function: that is what makes the ordering safe rather than
-  // lucky. tests/e2e/smoke.spec.js guards both symptoms.
+  // DELIBERATELY a function invoked at the very END of initMessenger: inline here it
+  // hit the TDZ (renderContacts reads `let`s declared further down) and boot aborted —
+  // a returning user saw an empty contact list and received nothing. Keep boot last,
+  // and keep it a function: that is what makes the ordering safe rather than lucky.
+  // tests/e2e/smoke.spec.js guards both symptoms.
   async function _boot() {
   if (_ac.signal.aborted) return; const hasId = await loadIdentity();
   if (hasId) {
@@ -6853,9 +6873,11 @@ async function initMessenger(dbName) {
     const now = Date.now();
     // Filter expired disappearing messages
     const msgs = recentMsgs.filter(m => {
+      if (m.purged) return false; // invisible tombstone — dedup marker only, never rendered
       if (m.disappearAt && m.disappearAt < now) {
         const tx = db.transaction('messages', 'readwrite');
-        tx.objectStore('messages').delete(m.msgId);
+        tx.objectStore('messages').put(_purgeTombstone(m));
+        _refreshPreview(m.contactId, m.ts);
         return false;
       }
       return true;
@@ -6925,6 +6947,7 @@ async function initMessenger(dbName) {
         if (newBatch.length === 0) return;
         const frag = document.createDocumentFragment();
         for (const m of newBatch) {
+          if (m.purged) continue; // invisible tombstone — never rendered
           const d = document.createElement('div');
           d.className = 'msg ' + (m.mine ? 'me' : 'them');
           safeSetHTML(d, `${esc(m.text || '')}<span class="ts">${new Date(m.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>`);
@@ -7560,6 +7583,18 @@ async function initMessenger(dbName) {
     return html;
   }
 
+  // One vote applier for every poll_vote path (relay signal / P2P / selfSync): voterId is
+  // the AUTHENTICATED sender (contact.id / member pub prefix / myId), never the peer-claimed
+  // signal.userId. Replaces the voter's prior vote; an invalid optionIndex only clears it.
+  async function _applyPollVote(pollMsg, voterId, optionIndex) {
+    const poll = JSON.parse(pollMsg.text);
+    for (const opt of poll.options) opt.votes = opt.votes.filter(v => v !== voterId);
+    if (Number.isInteger(optionIndex) && poll.options[optionIndex]) poll.options[optionIndex].votes.push(voterId);
+    pollMsg.text = JSON.stringify(poll); await dbPut('messages', pollMsg);
+    const el = document.querySelector(`[data-msgid="${safeMsgId(pollMsg.msgId)}"]`);
+    if (el) safeSetHTML(el, renderPollHtml(poll, pollMsg.msgId));
+  }
+
   // MESSAGE CONTEXT MENU (reply, edit, delete, forward, pin, react)
 
   function showMsgMenu(el, msg) {
@@ -7682,8 +7717,10 @@ async function initMessenger(dbName) {
       fab.querySelector('#select-del').onclick = async () => {
         if (_selectedMsgs.size === 0) return;
         if (!await showConfirm(t('confirmDeleteN', _selectedMsgs.size), { danger: true })) return;
+        const recs = [];
+        for (const msgId of _selectedMsgs) { const r = await dbGet('messages', msgId); if (r) recs.push(r); }
         const tx = db.transaction('messages', 'readwrite');
-        for (const msgId of _selectedMsgs) { tx.objectStore('messages').delete(msgId); _replayCache.delete(msgId); document.querySelector(`[data-msgid="${msgId}"]`)?.remove(); }
+        for (const m of recs) { tx.objectStore('messages').put(_purgeTombstone(m)); _replayCache.delete(m.msgId); document.querySelector(`[data-msgid="${m.msgId}"]`)?.remove(); _refreshPreview(m.contactId, m.ts); }
         const count = _selectedMsgs.size;
         exitSelectMode();
         showToast(t('toastDeleted', count), 'success');
@@ -7770,7 +7807,7 @@ async function initMessenger(dbName) {
       if (!await showConfirm(t('confirmDeleteMsg'), { danger: true, okText: t('delete') })) return;
       const stored = await dbGet('messages', msg.msgId);
       // A tombstone must drop isPoll — else isPoll+'' makes every JSON.parse(m.text) poll lookup throw.
-      if (stored) { stored.deleted = true; stored.text = ''; delete stored.isPoll; delete stored.poll; delete stored.fileData; delete stored.voice; await dbPut('messages', stored); }
+      if (stored) { stored.deleted = true; stored.text = ''; delete stored.isPoll; delete stored.poll; delete stored.fileData; delete stored.voice; await dbPut('messages', stored); await _refreshPreview(stored.contactId, stored.ts); }
       auditLog('message', 'Deleted message ' + msg.msgId.slice(0, 12));
       const el = document.querySelector(`[data-msgid="${msg.msgId}"]`);
       if (el) { el.dataset.deleted = '1'; safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>'); }
@@ -8421,19 +8458,11 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, '_sendFile'); }
   }
 
-  // A slash command is never a message — but only the Enter key knew that. Its keydown
-  // handler skips sendMessage() for '/' text and lets the command listener take it
-  // (see the "used to send them as literal text first" note there); the send button —
-  // the big obvious ↑ affordance a beginner reaches for — called sendMessage() directly
-  // and TRANSMITTED the command to the contact as plaintext chat. E2E-confirmed end to
-  // end: the peer's IndexedDB held a message whose text was "/help". The same click sends
-  // '/note <private note about that contact>' to that very contact, and '/drop <secret>'
-  // — a feature whose entire purpose is not putting a secret in a chat — straight into
-  // the chat. Synthesise the Enter the command listener is already waiting for, so one
-  // dispatcher serves both affordances instead of a second copy of the command table.
-  // Deliberately wired here and not inside sendMessage(): its other callers (notification
-  // quick-reply, and /reply, which itself runs inside that listener) must keep calling it
-  // directly, or a '/'-leading reply body would re-enter the listener.
+  // A slash command is never a message — but only the Enter key knew that: its keydown
+  // skips sendMessage() for '/' text, while the send button TRANSMITTED commands like
+  // '/note' and '/drop <secret>' to the contact as plaintext chat. Synthesise the Enter
+  // the command listener waits for, so one dispatcher serves both affordances. Wired
+  // here, not inside sendMessage(): its other callers must keep calling it directly.
   _DOM.get('b-msg-send')?.addEventListener('click', () => {
     const input = _DOM.get('msg-input');
     if (input?.value.trim().startsWith('/')) {
@@ -8986,7 +9015,7 @@ async function initMessenger(dbName) {
     if (!await showConfirm(t('confirmClearChat', activeContact.name), { danger: true, okText: t('deleteAllConfirm') })) return;
     const msgs = await dbGetByIndex('messages', 'contact', activeContact.id);
     const tx = db.transaction('messages', 'readwrite');
-    for (const m of msgs) tx.objectStore('messages').delete(m.msgId);
+    for (const m of msgs) tx.objectStore('messages').put(_purgeTombstone(m));
     activeContact.lastMsg = '';
     activeContact.lastMsgAt = 0;
     await dbPut('contacts', activeContact);
@@ -9860,18 +9889,30 @@ async function initMessenger(dbName) {
           // sender is registry-verified as me, so the `stored.mine` guard that (correctly)
           // stops a CONTACT from mutating my messages does not apply — my other device IS me.
           const signal = JSON.parse(syncText);
+          if (signal.type === 'poll_vote' && typeof signal.pollId === 'string') {
+            // Votes target the poll by pollId, not a msgId — apply before the stored gate.
+            const pv = (await dbGetAll('messages')).find(m => m.isPoll && (() => { try { return JSON.parse(m.text).pollId === signal.pollId; } catch { return false; } })());
+            if (pv) await _applyPollVote(pv, myId, signal.optionIndex); // voter = me (registry-verified sibling)
+            return;
+          }
           const smId = safeMsgId(signal.msgId || '');
           const stored = await dbGet('messages', smId);
-          if (!stored) return; // mutation for a message this device never had
-          if (signal.type === 'edit' && typeof signal.text === 'string') {
+          if (!stored) {
+            // A delete can race its own message: a sibling device erased it before this
+            // device ever received it. Tombstone the unknown id so the late original is
+            // dropped by dedup instead of resurrecting what I already erased elsewhere.
+            if (signal.type === 'delete') await dbPut('messages', _purgeTombstone({ msgId: smId, mine: smId.startsWith(myId + ':') || mine.some(p => smId.startsWith(String(p || '').slice(0, 12) + ':')), ts: Number(smId.split(':')[1]) || msg.ts }));
+            return; // mutation for a message this device never had
+          }
+          if (signal.type === 'edit' && typeof signal.text === 'string' && !stored.deleted) {
             stored.text = signal.text.slice(0, 65536); stored.edited = true; await dbPut('messages', stored);
             const el = document.querySelector(`[data-msgid="${smId}"]`);
             if (el) { const tm = new Date(signal.ts || msg.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); safeSetHTML(el, renderLinks(renderMarkdown(esc(stored.text))) + ' <span class="i-edited">' + t('edited') + '</span><span class="ts">' + tm + '</span>'); }
           } else if (signal.type === 'delete') {
-            stored.deleted = true; stored.text = ''; delete stored.isPoll; delete stored.poll; delete stored.fileData; delete stored.voice; await dbPut('messages', stored);
+            stored.deleted = true; stored.text = ''; delete stored.isPoll; delete stored.poll; delete stored.fileData; delete stored.voice; await dbPut('messages', stored); await _refreshPreview(stored.contactId, stored.ts);
             const el = document.querySelector(`[data-msgid="${smId}"]`);
             if (el) { el.dataset.deleted = '1'; safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>'); }
-          } else if (signal.type === 'reaction' && typeof signal.emoji === 'string' && signal.emoji.length <= 64) {
+          } else if (signal.type === 'reaction' && typeof signal.emoji === 'string' && signal.emoji.length <= 64 && !stored.deleted) {
             stored.reactions = _ownArrayMap(stored.reactions);
             if (!stored.reactions[signal.emoji] && Object.keys(stored.reactions).length < 20) stored.reactions[signal.emoji] = [];
             if (signal.add) { if (!stored.reactions[signal.emoji]?.includes(myId) && (stored.reactions[signal.emoji]?.length ?? 100) < 100) stored.reactions[signal.emoji].push(myId); }
@@ -10102,7 +10143,9 @@ async function initMessenger(dbName) {
           // msg.from + ':')` enforces author-only edit/delete, and `stored.contactId ===
           // msg.groupId` binds the target to THIS group (otherwise a member could mutate
           // messages in another conversation by guessing msgIds).
-          const _ownGroupMsg = (m) => m && !m.mine && m.contactId === msg.groupId && targetMsgId.startsWith(msg.from + ':');
+          // Tombstones are immutable — !m.deleted stops an edit/reaction writing
+          // content back into a record the user already erased.
+          const _ownGroupMsg = (m) => m && !m.mine && !m.deleted && m.contactId === msg.groupId && targetMsgId.startsWith(msg.from + ':');
           if (signal.type === 'edit') {
             const stored = await dbGet('messages', targetMsgId);
             // Cap edit text to 64 KB to prevent storage DoS via the P2P signal path (no server-side check).
@@ -10113,14 +10156,17 @@ async function initMessenger(dbName) {
           } else if (signal.type === 'delete') {
             const stored = await dbGet('messages', targetMsgId);
             const _ok = _ownGroupMsg(stored);
-            if (_ok) { stored.deleted = true; stored.text = ''; delete stored.isPoll; delete stored.poll; delete stored.fileData; delete stored.voice; await dbPut('messages', stored); }
+            if (_ok) { stored.deleted = true; stored.text = ''; delete stored.isPoll; delete stored.poll; delete stored.fileData; delete stored.voice; await dbPut('messages', stored); await _refreshPreview(stored.contactId, stored.ts); }
+            // Delete raced its own message (dual-path reorder): tombstone the unknown id
+            // under the same author-only binding, so the late original drops via dedup.
+            else if (!stored && targetMsgId.startsWith(msg.from + ':')) await dbPut('messages', _purgeTombstone({ msgId: targetMsgId, mine: false, ts: Number(targetMsgId.split(':')[1]) || msg.ts }));
             const el = document.querySelector(`[data-msgid="${targetMsgId}"]`);
             if (el && _ok) { el.dataset.deleted = '1'; safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>'); }
           } else if (signal.type === 'reaction') {
             const stored = await dbGet('messages', targetMsgId);
             // Any member may react — but only to a message inside THIS group.
             // Reject oversized emoji strings (DoS/storage guard — legitimate emoji ≤ ~30 UTF-16 chars)
-            if (stored && stored.contactId === msg.groupId && typeof signal.emoji === 'string' && signal.emoji.length <= 64) {
+            if (stored && !stored.deleted && stored.contactId === msg.groupId && typeof signal.emoji === 'string' && signal.emoji.length <= 64) {
               stored.reactions = _ownArrayMap(stored.reactions);
               // Initialize reaction list for new emoji; cap unique emoji per message at 20
               if (!stored.reactions[signal.emoji]) {
@@ -10138,18 +10184,7 @@ async function initMessenger(dbName) {
             // Same binding as the 1:1 path: poll must live in THIS group; voter = verified sender.
             const allMsgs = await dbGetAll('messages');
             const pollMsg = allMsgs.find(m => m.isPoll && m.contactId === msg.groupId && (() => { try { return JSON.parse(m.text).pollId === signal.pollId; } catch { return false; } })());
-            if (pollMsg) {
-              const poll = JSON.parse(pollMsg.text);
-              const voterId = (senderPub || '').slice(0, 12);
-              for (const opt of poll.options) opt.votes = opt.votes.filter(v => v !== voterId);
-              if (Number.isInteger(signal.optionIndex) && signal.optionIndex >= 0 && poll.options[signal.optionIndex]) {
-                poll.options[signal.optionIndex].votes.push(voterId);
-                pollMsg.text = JSON.stringify(poll);
-                await dbPut('messages', pollMsg);
-                const el = document.querySelector(`[data-msgid="${safeMsgId(pollMsg.msgId)}"]`);
-                if (el) safeSetHTML(el, renderPollHtml(poll, pollMsg.msgId));
-              }
-            }
+            if (pollMsg) await _applyPollVote(pollMsg, (senderPub || '').slice(0, 12), signal.optionIndex);
           }
         } catch(e) { _dbg(e, 'group-decrypt-signal'); }
         return;
@@ -10298,7 +10333,7 @@ async function initMessenger(dbName) {
           // contact could rewrite/delete another contact's messages by guessing their msgId
           // (`senderId:ms` — the id half is public, the timestamp half is guessable).
           // Cap edit text to 64 KB to prevent storage DoS via the P2P signal path (no server-side check).
-          const _okEdit = stored && !stored.mine && stored.contactId === contactId && typeof signal.text === 'string';
+          const _okEdit = stored && !stored.mine && !stored.deleted && stored.contactId === contactId && typeof signal.text === 'string';
           if (_okEdit) { stored.text = signal.text.slice(0, 65536); stored.edited = true; await dbPut('messages', stored); }
           const el = document.querySelector(`[data-msgid="${_smId}"]`);
           // DOM update gated on the same predicate — else a peer could paint an
@@ -10308,14 +10343,17 @@ async function initMessenger(dbName) {
           const stored = await dbGet('messages', _smId);
           // Only allow deleting messages not authored by us — contact cannot remote-delete our outgoing messages
           const _okDel = stored && !stored.mine && stored.contactId === contactId;
-          if (_okDel) { stored.deleted = true; stored.text = ''; delete stored.isPoll; delete stored.poll; delete stored.fileData; delete stored.voice; await dbPut('messages', stored); }
+          if (_okDel) { stored.deleted = true; stored.text = ''; delete stored.isPoll; delete stored.poll; delete stored.fileData; delete stored.voice; await dbPut('messages', stored); await _refreshPreview(stored.contactId, stored.ts); }
+          // Delete raced its own message (dual-path reorder): tombstone the unknown id
+          // under the same author-only binding, so the late original drops via dedup.
+          else if (!stored && _smId.startsWith(contactId + ':')) await dbPut('messages', _purgeTombstone({ msgId: _smId, mine: false, ts: Number(_smId.split(':')[1]) || msg.ts }));
           const el = document.querySelector(`[data-msgid="${_smId}"]`);
           if (el && _okDel) { el.dataset.deleted = '1'; safeSetHTML(el, '<span class="i-dim-it">' + t('deleted') + '</span>'); }
         } else if (signal.type === 'reaction') {
           // v3.6: Encrypted reaction from relay
           const stored = await dbGet('messages', _smId);
           // Reject oversized emoji strings (DoS/storage guard — legitimate emoji ≤ ~30 UTF-16 chars)
-          if (stored && stored.contactId === contactId && typeof signal.emoji === 'string' && signal.emoji.length <= 64) {
+          if (stored && !stored.deleted && stored.contactId === contactId && typeof signal.emoji === 'string' && signal.emoji.length <= 64) {
             stored.reactions = _ownArrayMap(stored.reactions);
             // Same caps as the group path (≤20 unique emoji, ≤100 reactors) — repeated signals would otherwise grow the record unboundedly.
             if (!stored.reactions[signal.emoji] && Object.keys(stored.reactions).length < 20) stored.reactions[signal.emoji] = [];
@@ -10336,18 +10374,10 @@ async function initMessenger(dbName) {
       return;
     }
 
-    // SECURITY (removed): the deprecated PLAINTEXT signal handlers (type 'edit' /
-    // 'delete' / 'reaction' / 'poll_vote') were processed here with NO decryption and
-    // NO sender authentication. A sealed envelope is opaque attacker-controlled JSON
-    // (handleSealedSend stores `envelope` verbatim; /sealed/poll → handleIncoming(JSON.parse(envelope))),
-    // so any sender could POST {type:'edit', msgId, text} for any recipient and silently
-    // rewrite/delete a stored message in the victim's DB — message-integrity tampering
-    // with zero compensating control. The standard /msg relay strips these fields and the
-    // P2P DataChannel routes them inline, so these handlers had no legitimate relay sender:
-    // current clients send edit/delete/reaction via the ENCRYPTED isSignal path (handled
-    // above, gated by a successful decryptFrom that proves session-key possession) and
-    // poll_vote over the authenticated P2P DataChannel only. Removed outright — the
-    // encrypted path is the sole authority for mutating an existing message.
+    // SECURITY (removed): PLAINTEXT signal handlers (edit/delete/reaction/poll_vote)
+    // were processed here with no decryption or sender authentication — a sealed
+    // envelope is attacker-controlled JSON, so anyone could rewrite victim records.
+    // The ENCRYPTED isSignal path above is now the sole authority for mutations.
 
     // New message (text or file)
     // Identity by the ACTUAL sender (msg.from), not the conversation id: for device-
@@ -10637,7 +10667,7 @@ async function initMessenger(dbName) {
             const stored = await dbGet('messages', _rmId);
             // Bind the target to THIS conversation — otherwise a contact could react on
             // another conversation's messages by guessing their `senderId:ms` msgId.
-            if (stored && stored.contactId === contact.id) {
+            if (stored && !stored.deleted && stored.contactId === contact.id) {
               stored.reactions = _ownArrayMap(stored.reactions);
               // Cap unique emoji per message at 20 (matches group path); cap users per emoji at 100
               if (!stored.reactions[msg.emoji]) {
@@ -10656,21 +10686,11 @@ async function initMessenger(dbName) {
           // v3.1: Poll vote
           if (msg.type === 'poll_vote') {
             const allMsgs = await dbGetAll('messages');
-            const pollMsg = allMsgs.find(m => m.isPoll && JSON.parse(m.text).pollId === msg.pollId);
             // Same conversation binding as reactions — a peer must not vote on a poll
-            // that lives in a different conversation (pollId is self-reported).
-            if (pollMsg && pollMsg.contactId === contact.id) {
-              const poll = JSON.parse(pollMsg.text);
-              // Use contact.id (authenticated sender) — not msg.userId (peer-claimed, unverified)
-              const voterId = contact.id;
-              for (const opt of poll.options) opt.votes = opt.votes.filter(v => v !== voterId);
-              // Validate optionIndex: must be a non-negative integer (guards non-integer/symbol keys that could access array properties)
-              if (Number.isInteger(msg.optionIndex) && msg.optionIndex >= 0 && poll.options[msg.optionIndex]) poll.options[msg.optionIndex].votes.push(voterId);
-              pollMsg.text = JSON.stringify(poll);
-              await dbPut('messages', pollMsg);
-              const el = document.querySelector(`[data-msgid="${pollMsg.msgId}"]`);
-              if (el) safeSetHTML(el, renderPollHtml(poll, pollMsg.msgId));
-            }
+            // that lives in a different conversation (pollId is self-reported). The
+            // try/catch matches the group path — an isPoll flag on non-JSON text must not crash.
+            const pollMsg = allMsgs.find(m => m.isPoll && m.contactId === contact.id && (() => { try { return JSON.parse(m.text).pollId === msg.pollId; } catch { return false; } })());
+            if (pollMsg) await _applyPollVote(pollMsg, contact.id, msg.optionIndex);
             return;
           }
           if (msg.type === 'msg') {
@@ -12090,29 +12110,11 @@ async function initMessenger(dbName) {
     }
   });
 
-  // The v3.5 delegated right-click handler that used to live here is deleted, not fixed
-  // in place. Every `.msg[data-msgid]` already gets its own `oncontextmenu` (above,
-  // `showMsgMenu`) which is a strict superset: react, reply, copy, edit/delete, forward,
-  // pin, bookmark, select, report — vs. this one's reply/forward/copy/pin/edit/delete.
-  // Both fired on the SAME right-click (this one via bubbling from the message up to
-  // #msg-messages), and since showContextMenu() clears any existing `.ctx-menu` before
-  // building its own, whichever ran SECOND won — which was always this one, so
-  // showMsgMenu's menu was created and destroyed in the same synchronous event dispatch,
-  // before a single paint. The user only ever saw THIS menu, and it was strictly worse:
-  // - React, Bookmark, Select (multi-select mode had no other entry point at all) and
-  //   Report (the ONLY way to file an abuse report on desktop) were unreachable — not
-  //   degraded, unreachable, since showMsgMenu's DOM never survived to be clicked.
-  // - Its own "forward" action didn't forward anything — it stuffed
-  //   `/reply <text>` into YOUR OWN composer, unrelated to forwardMsg()'s real
-  //   multi-contact picker that showMsgMenu's "forward" already calls.
-  // - Its pin/edit/delete needed a hand-rolled re-fetch from IndexedDB to work at all
-  //   (a comment here explained a msgId-shape bug an earlier session had to patch).
-  //   showMsgMenu never had that bug: it already builds the full message object once,
-  //   at showMsgMenu(el, msg)'s call site, instead of re-deriving it from a bare id.
-  // - Its reply action duplicated startReply()'s body inline instead of calling it — the
-  //   same function the swipe-to-reply gesture already uses — so this handler's reply UI
-  //   could drift from the gesture's over time even though both claim to do the same thing.
-  // Nothing here was worth carrying forward; showMsgMenu already does all of it, correctly.
+  // The v3.5 delegated right-click handler that lived here was deleted, not fixed: both
+  // handlers fired on the same right-click and showContextMenu() cleared .ctx-menu before
+  // building, so whichever ran second won — always this one, so showMsgMenu's superset
+  // menu (react/bookmark/select/report/multi-select) never survived to be clicked.
+  // showMsgMenu already does all of it, correctly — nothing here was worth carrying.
 
   // v3.5: Global delegation — overlay close buttons (data-close="overlay")
   document.addEventListener('click', (e) => {
@@ -12275,9 +12277,13 @@ async function initMessenger(dbName) {
       }
       const imported = batch.length;
       if (imported) await dbPutMany('messages', batch);
-      contact.lastMsg = msgs[msgs.length - 1]?.text?.slice(0, 40) || '';
-      contact.lastMsgAt = msgs[msgs.length - 1]?.ts || Date.now();
-      await dbPut('contacts', contact);
+      // Preview follows only what LANDED, monotone in ts — a dup or forged-ts last line
+      // can't rewind or pin it; guard on the freshest record, not the stale snapshot.
+      const lastNew = batch[batch.length - 1];
+      const _prevC = lastNew ? await dbGet('contacts', contact.id) : null;
+      if (_prevC && lastNew.ts > (_prevC.lastMsgAt || 0) && lastNew.ts <= Date.now() + MS.DAY) {
+        _prevC.lastMsg = (lastNew.text || '').slice(0, 40); _prevC.lastMsgAt = lastNew.ts; await dbPut('contacts', _prevC);
+      }
       // Refresh conversation — only if the user is still on it (they may have switched
       // away mid-import; the messages landed in the right chat either way).
       if (activeContact?.id === contact.id) await openConversation(contact);
@@ -14503,7 +14509,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       if (!await showConfirm(`${t('clear')} ${activeContact.name}?`, { danger: true, okText: t('clear') })) return;
       const msgs = await dbGetByIndex('messages', 'contact', activeContact.id);
       const tx = db.transaction('messages', 'readwrite');
-      for (const m of msgs) { tx.objectStore('messages').delete(m.msgId); _replayCache.delete(m.msgId); }
+      for (const m of msgs) { tx.objectStore('messages').put(_purgeTombstone(m)); _replayCache.delete(m.msgId); }
       activeContact.lastMsg = '';
       await dbPut('contacts', activeContact);
       _DOM.get('msg-messages').replaceChildren();
