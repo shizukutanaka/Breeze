@@ -44,6 +44,10 @@
         "to": "manifest.json"
       },
       {
+        "from": "../locales",
+        "to": "locales"
+      },
+      {
         "from": "../icon-192.png",
         "to": "icon-192.png"
       },
