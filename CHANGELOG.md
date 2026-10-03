@@ -1,4 +1,8 @@
 # Changelog
+## Mobile: res/ overlay pipeline was dead — implemented NSC + iOS plist additions (branch devin/1791055916-round185, 2026-10-03)
+
+vitest 930 (+5); `mobile/res/*`, `mobile/scripts/build-mobile.sh`, `tests/mobile-overlays.test.js`, `CHANGELOG.md`.
+
 ## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
 
 vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.
