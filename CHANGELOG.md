@@ -1,4 +1,8 @@
 # Changelog
+## Build: missing package-lock.json in desktop/ + mobile/ — npm ci died on every clean build (branch devin/1791055812-round184, 2026-10-03)
+
+vitest 929 (+5); `desktop/package-lock.json`, `mobile/package-lock.json`, `tauri/package-lock.json`, `tests/lockfile-parity.test.js`, `CHANGELOG.md`.
+
 ## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
 
 vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.
