@@ -14,6 +14,14 @@ vitest 916 (+1); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
 
 Post-merge review on the lost-write ktlog repair found the tail-reconciliation was itself corrupt: it spliced the registered IK's existing entry to the tail and recomputed suffix `c` values, but `verifyChain` re-sorts by `ts` — a moved entry whose timestamp predates the entries it was moved past slides back mid-log and its recomputed hash fails the chain. The repair manufactured a `tampered` audit verdict (the sibling test only passed by accident: same-millisecond timestamps + stable sort preserved array order). And the move distorted the recorded rotation sequence. The fix is an append-only **restatement** entry `{ts: now, h: curH}`: it records "this key is current as of now" — true — keeps history order and ts monotonicity so the chain verifies, and works whether or not the registered IK was ever logged. New regression test covers the early-registered-IK scenario; the existing test's assertions updated for the +1 restatement entry.
 
+## Desktop: scheme allowlist on every shell.openExternal call (branch devin/1791048080-round145, 2026-10-03)
+
+vitest 917 (+6); `desktop/nav-guard.js`, `desktop/main.js`, `tests/nav-guard.test.js`, `CHANGELOG.md`.
+
+- `shell.openExternal` is a renderer→OS launch primitive, and both call sites under-gated it. `setWindowOpenHandler` used `url.startsWith('http')` — which passes `httpx://…`/`httpfoo://…` — and the `will-navigate` fallback handed **every** blocked navigation to the OS unconditionally, so a crafted `file:///…` or third-party scheme link (`zoommtg:`, `ms-appx:`, `javascript:`) could reach real OS handlers from the renderer with no further confirmation.
+- New `isAllowedExternalUrl` in nav-guard.js (the testable sibling module — main.js can't be imported without Electron): parsed-protocol allowlist `http:`/`https:`/`mailto:`/`breeze:` only. `breeze:` stays so join/add deep links pasted in chat keep round-tripping through the OS into this app; `mailto:` stays because renderMarkdown linkifies email addresses — refusing it would dead-end an existing feature (found by review).
+- Tests cover the allowlist, the file:///file-launch class, third-party scheme handlers, the original `startsWith('http')` bypass shape, and malformed/scheme-relative input.
+
 ## Lost-write recovery, part 2: ktlog append + device-registry touch-on-read (branch devin/1791046818-round142, 2026-10-03)
 
 vitest 915 (+4); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
