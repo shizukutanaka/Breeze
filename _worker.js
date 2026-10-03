@@ -2365,20 +2365,59 @@ async function handlePreKeyUpload(body, env, request) {
     // On a miss, rebuild the entry against the winning tail and re-append
     // once. The same-IK ts-refresh path is idempotent metadata — no repair.
     if (appended) {
-      const vParsed = safeJsonParse(await kvGet(env, logKey), []);
-      const vLog = Array.isArray(vParsed) ? vParsed : [];
-      const tailH = vLog.length ? vLog[vLog.length - 1].h : null;
-      if (!vLog.some(e => e && e.c === appended.c) && tailH !== appended.h) {
-        const wC = vLog.length ? vLog[vLog.length - 1].c : null;
-        const wB = wC ? Uint8Array.from(atob(wC), ch => ch.charCodeAt(0)) : new Uint8Array(32);
-        const hB2 = Uint8Array.from(atob(ikHash), ch => ch.charCodeAt(0));
-        const re = new Uint8Array(wB.length + hB2.length);
-        re.set(wB, 0); re.set(hB2, wB.length);
-        const c2 = btoa(String.fromCharCode(...new Uint8Array(
-          await crypto.subtle.digest('SHA-256', re)
-        )));
-        vLog.push({ ts: Date.now(), h: ikHash, c: c2 });
-        await kvPut(env, logKey, JSON.stringify(vLog.slice(-100)), { expirationTtl: TTL.QUARTER });
+      // kvGet conflates "key absent" with "KV error" (both null). An
+      // unconfirmed read must never justify overwriting stored history with
+      // a singleton — that erases the very log this verifies. Same doctrine
+      // as grpVerifyRepair: no verified object → no repair.
+      const verifyRaw = await kvGet(env, logKey);
+      if (verifyRaw !== null) {
+        const vParsed = safeJsonParse(verifyRaw, []);
+        const vLog = Array.isArray(vParsed) ? vParsed : [];
+        const tailH = vLog.length ? vLog[vLog.length - 1].h : null;
+        if (!vLog.some(e => e && e.c === appended.c) && tailH !== appended.h) {
+          const wC = vLog.length ? vLog[vLog.length - 1].c : null;
+          const wB = wC ? Uint8Array.from(atob(wC), ch => ch.charCodeAt(0)) : new Uint8Array(32);
+          const hB2 = Uint8Array.from(atob(ikHash), ch => ch.charCodeAt(0));
+          const re = new Uint8Array(wB.length + hB2.length);
+          re.set(wB, 0); re.set(hB2, wB.length);
+          const c2 = btoa(String.fromCharCode(...new Uint8Array(
+            await crypto.subtle.digest('SHA-256', re)
+          )));
+          vLog.push({ ts: Date.now(), h: ikHash, c: c2 });
+          // Reconcile the tail with the actually-registered identity. The bundle
+          // write lands BEFORE the log write, so `prekey:{userId}` is the
+          // authority on which upload is current: if the registered IK is not
+          // ours, appending our transition at the tail makes the audit name the
+          // wrong current key (checkRollover reads the tail). When the
+          // registered IK's own transition is in the log, it must end the
+          // chain — move it to the tail and recompute the chain hashes of the
+          // suffix after its old position. If it was never logged (its append
+          // was itself clobbered), nothing better exists than our entry.
+          const bundleRaw = await kvGet(env, `prekey:${userId}`);
+          const curBundle = bundleRaw ? safeJsonParse(bundleRaw) : null;
+          if (curBundle && typeof curBundle.identityKey === 'string') {
+            const curH = btoa(String.fromCharCode(...new Uint8Array(
+              await crypto.subtle.digest('SHA-256', new TextEncoder().encode(curBundle.identityKey))
+            )));
+            if (curH !== ikHash) {
+              const curIdx = vLog.map(e => e && e.h).lastIndexOf(curH);
+              if (curIdx >= 0 && curIdx !== vLog.length - 1) {
+                vLog.push(vLog.splice(curIdx, 1)[0]);
+                for (let j = curIdx; j < vLog.length; j++) {
+                  const prevC = j > 0 ? vLog[j - 1].c : null;
+                  const pb = prevC ? Uint8Array.from(atob(prevC), ch => ch.charCodeAt(0)) : new Uint8Array(32);
+                  const hb = Uint8Array.from(atob(vLog[j].h), ch => ch.charCodeAt(0));
+                  const rb = new Uint8Array(pb.length + hb.length);
+                  rb.set(pb, 0); rb.set(hb, pb.length);
+                  vLog[j] = { ...vLog[j], c: btoa(String.fromCharCode(...new Uint8Array(
+                    await crypto.subtle.digest('SHA-256', rb)
+                  ))) };
+                }
+              }
+            }
+          }
+          await kvPut(env, logKey, JSON.stringify(vLog.slice(-100)), { expirationTtl: TTL.QUARTER });
+        }
       }
     }
   } catch (e) { console.error('[ktlog] append failed (non-fatal, upload already saved):', e?.message ?? e); }

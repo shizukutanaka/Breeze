@@ -5798,6 +5798,72 @@ describe('lost-write recovery — ktlog append + device touch-on-read', () => {
     expect((await verifyChain(crypto.subtle, log)).ok).toBe(true); // chain still verifies
   });
 
+  it('ktlog repair keeps the registered IK at the tail (clobbered upload is history, not current)', async () => {
+    const env = makeEnv();
+    const uid = 'ktlost02';
+    const IK1 = uid + 'IK-A', IK2 = uid + 'IK-B', IK3 = uid + 'IK-C';
+    const upload = (ik) => handlePreKeyUpload(
+      { userId: uid, identityKey: ik, signedPreKey: 'SPK' }, env, rq({}));
+    await upload(IK1);
+    const e1 = JSON.parse(await env.KV.get(`ktlog:${uid}`))[0];
+    const h3 = await hOf(IK3);
+    const p1 = Uint8Array.from(atob(e1.c), ch => ch.charCodeAt(0));
+    const h3b = Uint8Array.from(atob(h3), ch => ch.charCodeAt(0));
+    const buf = new Uint8Array(p1.length + h3b.length);
+    buf.set(p1, 0); buf.set(h3b, p1.length);
+    const c3 = Buffer.from(await crypto.subtle.digest('SHA-256', buf)).toString('base64');
+    const winnerLog = JSON.stringify([e1, { ts: Date.now(), h: h3, c: c3 }]);
+    // Winner owns BOTH the log tail AND the registered bundle: C's bundle write
+    // lands after ours, so prekey:{uid} ends up C's while our log entry is the
+    // one being clobbered — the exact audit-vs-bundle divergence from review.
+    const key = `ktlog:${uid}`;
+    const origPut = env.KV.put.bind(env.KV);
+    let fired = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === `prekey:${uid}`) await origPut(k, JSON.stringify({ identityKey: IK3, edIdentityKey: 'x', signedPreKey: 'SPK', uploadedAt: Date.now() }), o);
+      if (k === key && !fired) { fired = true; await origPut(k, winnerLog, o); }
+    };
+    await upload(IK2);
+    expect(fired).toBe(true);
+    const log = JSON.parse(await env.KV.get(key));
+    // Both transitions preserved, but the registered IK (IK3) ends the chain —
+    // the clobbered upload is history, never the apparent current key.
+    expect(log.length).toBe(3);
+    expect(log[1].h).toBe(await hOf(IK2));
+    expect(log[2].h).toBe(h3);
+    const { verifyChain } = await import('../src/crypto/ktlog.js');
+    expect((await verifyChain(crypto.subtle, log)).ok).toBe(true);
+  });
+
+  it('ktlog verify-read failure skips repair (never rewrites history from an unconfirmed read)', async () => {
+    const env = makeEnv();
+    const uid = 'ktlost03';
+    const IK1 = uid + 'IK-A', IK2 = uid + 'IK-B';
+    const upload = (ik) => handlePreKeyUpload(
+      { userId: uid, identityKey: ik, signedPreKey: 'SPK' }, env, rq({}));
+    await upload(IK1);
+    const key = `ktlog:${uid}`;
+    const winner = JSON.stringify(JSON.parse(await env.KV.get(key))); // pre-upload log
+    const origPut = env.KV.put.bind(env.KV);
+    let fired = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !fired) { fired = true; await origPut(k, winner, o); }
+    };
+    // The verify-read hits a transient KV error — kvGet maps it to null.
+    const origGet = env.KV.get.bind(env.KV);
+    let logGets = 0;
+    env.KV.get = async (k) => {
+      if (k === key && ++logGets >= 2) throw new Error('KV down');
+      return origGet(k);
+    };
+    const res = await upload(IK2);
+    expect(res.status).toBe(200);
+    // No singleton rewrite: the stored history is exactly what the winner left.
+    expect(JSON.parse(env.KV.store.get(key))).toEqual(JSON.parse(winner));
+  });
+
   it('device-list touch does not rewrite a stale registry over a concurrent write', async () => {
     const env = makeEnv();
     globalThis._devTouch = new Map(); // reset the once-per-day throttle
