@@ -1,4 +1,12 @@
 # Changelog
+## Group bug: creator never learned of joiners — navigator.share() suspended the member poll forever (branch devin/1791051989-round159, 2026-10-03)
+
+`index.html` — 4-line reorder in createGroupInviteLink; `_headers`/`tauri.conf.json` CSP re-pin.
+
+- `startGroupMemberPoll` was called AFTER `await navigator.share()`. A pending Web Share sheet suspends the function until the user dismisses it — and where share() never resolves (headless, no gesture) the poll **never starts**: the group creator's `members` list stays at 1 forever, joiners are never added as contacts, and every group send silently excludes them until the page is reloaded.
+- Found via the e2e suite (run locally for the first time via PW_CHROMIUM): 6 join-dependent specs failed identically on unmodified main; all 10 pass after the reorder. The product bug itself — share() pending blocks poll start — reproduces on any Web-Share-capable browser (desktop Chrome, mobile Safari) whenever the sheet stays open.
+
+
 ## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
 
 vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.

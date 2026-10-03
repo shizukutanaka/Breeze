@@ -9155,10 +9155,12 @@ async function initMessenger(dbName) {
       box.replaceChildren();
       box.appendChild(d);
 
+      startGroupMemberPoll(data.token, groupId); // creator otherwise only learns of joiners on next boot —
+      // MUST precede the navigator.share await: a pending share sheet suspends this function,
+      // and on browsers where share() never resolves (no gesture, headless) the poll never starts.
       if (navigator.share) {
         try { await navigator.share({ title: t('groupInviteShareTitle', name), url: joinUrl }); } catch(e) { _dbg(e); }
       }
-      startGroupMemberPoll(data.token, groupId); // creator otherwise only learns of joiners on next boot
     } catch(e) { _dbg(e,'grp'); showToast(t('toastGroupInviteFail'), 'error'); }
   }
 
