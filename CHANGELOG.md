@@ -1,5 +1,5 @@
 # Changelog
-## Test: pin release-metadata sync — version parity + packaged-file existence (branch devin/1791054272-round172, 2026-10-03)
+## Test: pin release-metadata sync — version parity + packaged-file existence (branch devin/1791054327-round172, 2026-10-03)
 
 vitest 926 (+4); `tests/release-sync.test.js`, `CHANGELOG.md`.
 
