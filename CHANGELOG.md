@@ -1,4 +1,8 @@
 # Changelog
+## Tauri: linux.deb.desktopTemplate pointed at a missing breeze.desktop — .deb bundle dead (branch devin/1791056330-round189, 2026-10-03)
+
+vitest 938 (+6); `tauri/src-tauri/breeze.desktop`, `tests/tauri-bundle.test.js`, `CHANGELOG.md`.
+
 ## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
 
 vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.
