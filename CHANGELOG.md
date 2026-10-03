@@ -1,5 +1,14 @@
 # Changelog
 
+## Outbox moved off localStorage into the per-account IndexedDB (branch devin/1791046973-round143, 2026-10-03)
+
+vitest 917 (+6); `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json`, `tests/outbox-idb.test.js`, `CHANGELOG.md`.
+
+- `queueOutbox` entries hold **plaintext** until flushed to a reconnecting peer — and `_persistOutbox` wrote them to `localStorage['brz-outbox-<id>']`, the exact "sensitive data in localStorage" pattern AGENTS.md forbids ("use IndexedDB"). Persistence now lives in the per-account IndexedDB `settings` store under `'outbox'`: `_currentAccountDb` is already scoped to the active account, which retires the manual account-suffixed key entirely. `_persistOutbox`/`_restoreOutbox` are module-level, so they use `_currentAccountDb` directly rather than the closure-local `dbPut`/`dbGet` (tools/closure-boundary.mjs enforces that boundary).
+- Restore is one-shot migratory: when IDB has no outbox record, a legacy `brz-outbox-*` localStorage value is adopted (IDB record preferred — no merge, no resurrecting stale drafts), every `brz-outbox*` key is then removed so plaintext stops lingering there, and the migrated map is re-persisted **after** `_outbox` is filled (the new test caught an ordering bug where persisting first would have written an empty snapshot over the record being migrated).
+- Account switch/delete semantics unchanged: the wipe already clears all IDB stores, so queued plaintext is covered by the same lifecycle as message history — better than before, where `brz-outbox-*` only died on a full `localStorage.clear()`.
+- `tests/outbox-idb.test.js` executes the extracted functions against mock IDB/localStorage: snapshot persist, no-DB no-op, restore, one-time migration + key cleanup, IDB-preferred-no-merge, plus a static guard that no `localStorage.setItem` path can reintroduce the outbox.
+
 ## Auth-parity gate tightened: queue + prekey-upload challenges graduate to byte parity, op names pinned (branch devin/1791046399-round141, 2026-10-03)
 
 vitest 911 (+3); `tests/auth-parity.test.js`, `CHANGELOG.md`.
