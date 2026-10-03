@@ -51,6 +51,14 @@ if [ "$PLATFORM" = "android" ]; then
     echo "✓ Android overlays applied"
   fi
 
+  # Wire the network security config into the generated manifest (idempotent —
+  # cap sync regenerates the manifest each run).
+  MANIFEST="$DIR/android/app/src/main/AndroidManifest.xml"
+  if [ -f "$MANIFEST" ] && ! grep -q networkSecurityConfig "$MANIFEST"; then
+    sed -i.bak 's|<application |<application android:networkSecurityConfig="@xml/network_security_config" |' "$MANIFEST" && rm -f "$MANIFEST.bak"
+    echo "✓ network_security_config wired into AndroidManifest"
+  fi
+
   # Release keystore from CI
   if [ "$MODE" = "release" ] && [ -n "${KEYSTORE_BASE64:-}" ]; then
     echo "$KEYSTORE_BASE64" | base64 -d > "$DIR/android/app/release.keystore"
@@ -107,6 +115,18 @@ if [ "$PLATFORM" = "ios" ]; then
 
   npx cap add ios 2>/dev/null || true
   npx cap sync ios
+
+  # Apply Info.plist additions (format: KEY TYPE VALUE per line; e.g.
+  # ITSAppUsesNonExemptEncryption — the App Store export-compliance declaration).
+  ADDITIONS="$DIR/res/ios/Info.plist.additions"
+  PLIST="$DIR/ios/App/App/Info.plist"
+  if [ -f "$ADDITIONS" ] && [ -f "$PLIST" ]; then
+    while read -r K T V; do
+      case "$K" in ''|'#'*) continue;; esac
+      /usr/libexec/PlistBuddy -c "Add :$K $T $V" "$PLIST" 2>/dev/null || /usr/libexec/PlistBuddy -c "Set :$K $V" "$PLIST"
+    done < "$ADDITIONS"
+    echo "✓ iOS Info.plist additions applied"
+  fi
   echo "✓ iOS synced → Open: npx cap open ios"
 fi
 
