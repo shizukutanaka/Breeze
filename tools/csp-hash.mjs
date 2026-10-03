@@ -67,6 +67,23 @@ function rewriteScriptSrc(csp, hashes) {
   return csp.replace(/script-src [^;]+/, `script-src 'self' ${hashes.join(' ')}`);
 }
 
+// The --check verdict on one CSP string vs the freshly computed hash set.
+// Exported for tests. `wantHeader` is only meaningfully different from `headerLine`
+// when a script-src directive exists to rewrite — hence the first rule: a CSP with
+// NO script-src at all must fail too, otherwise removing the directive would make
+// wantHeader === headerLine and the gate would print OK over an unpinned policy.
+export function cspProblems(headerLine, wantHeader) {
+  const problems = [];
+  const dir = headerLine.match(/script-src ([^;]+)/);
+  if (!dir) {
+    problems.push('_headers CSP has no script-src directive — nothing pins the inline scripts');
+    return problems;
+  }
+  if (headerLine !== wantHeader) problems.push('_headers CSP script-src is stale');
+  if (dir[1].includes("'unsafe-inline'")) problems.push("_headers script-src still allows 'unsafe-inline'");
+  return problems;
+}
+
 function main() {
   const mode = process.argv[2] || '--check';
   const html = readFileSync(HTML, 'utf8');
@@ -110,10 +127,7 @@ function main() {
     return;
   }
 
-  const problems = [];
-  if (headerMatch[2] !== wantHeader) problems.push('_headers CSP script-src is stale');
-  const dir = headerMatch[2].match(/script-src ([^;]+)/);
-  if (dir && dir[1].includes("'unsafe-inline'")) problems.push("_headers script-src still allows 'unsafe-inline'");
+  const problems = cspProblems(headerMatch[2], wantHeader);
   if (!tauriMatch) problems.push('could not locate "csp" in tauri/src-tauri/tauri.conf.json');
   else {
     const tauriCsp = tauriMatch[2].replace(/\\"/g, '"');

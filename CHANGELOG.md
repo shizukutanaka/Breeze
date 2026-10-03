@@ -15,6 +15,15 @@ Tooling only; `tools/closure-boundary.mjs`, `CHANGELOG.md`.
   arrows. Binding-name decl sites are inside their own span (they are refRe
   hits too). Real file: 0 violations; the pre-fix 9 hits were decl-site false
   positives.
+||||||| e46e325
+## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
+
+vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.
+
+- csp-hash --check had a false negative: with NO `script-src` directive in _headers at all, rewriteScriptSrc no-ops so want === current and the gate printed OK over an unpinned CSP. New `cspProblems` (exported, pure) reports a missing directive as a problem.
+- i18n-check's missing-key (7) and called-as-function (8) scans matched only single-quoted `t('k')` — a future `t("key")` would bypass both gates. Now scans both quote styles.
+- +6 tests pinning the verdict rules (stale / unsafe-inline / missing directive) and computeHashes' byte-faithfulness.
+
 
 ## ktlog tail-reconciliation is append-only (restatement, not splice) — fixes a self-inflicted 'tampered' verdict (branch devin/1791048364-round146, 2026-10-03)
 
