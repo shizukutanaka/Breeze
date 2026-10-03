@@ -1,4 +1,8 @@
 # Changelog
+## Tauri: updater plugin registered with zero config — app aborts at plugin init (branch devin/1791056254-round188, 2026-10-03)
+
+vitest 935 (+3); `tauri/src-tauri/Cargo.toml`, `tauri/src-tauri/src/lib.rs`, `tests/tauri-plugins.test.js`, `CHANGELOG.md`.
+
 ## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
 
 vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.
