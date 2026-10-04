@@ -1157,6 +1157,12 @@ async function handleGroupCreate(body, env, request) {
   const creatorPub = rawCreatorPub.slice(0, 200);
   if (!name || !creatorId || !creatorPub) return json({ error: 'name, creatorId, creatorPub required', code: 'MISSING_FIELDS' }, 400, request);
   if (!validateUserId(creatorId)) return json({ error: 'invalid creatorId', code: 'INVALID_USER_ID' }, 400, request);
+  // Ownership proof (same binding as handleGroupJoin): creatorId = creatorPub.slice(0,12),
+  // so the pub must start with the claimed id. Without it an unsigned create can mint a
+  // member record whose pub doesn't belong to its claimed id — and safeMemberList on every
+  // client filters exactly that record out, leaving the group apparently creator-less.
+  if (!creatorPub.startsWith(creatorId))
+    return json({ error: 'creatorPub does not match creatorId', code: 'KEY_MISMATCH' }, 400, request);
   // v3.1: Validate name length
   if (name.length > 50) return json({ error: 'Group name max 50 chars', code: 'INVALID_NAME' }, 400, request);
   // v3.1: Validate initial member count
@@ -2146,6 +2152,10 @@ async function handleAccountDelete(body, env, request) {
     kvDel(env, `inbox:${userId}`),
     kvDel(env, `sealed:${userId}`),
     kvDel(env, `sealed:${userId}:hwm`), // sealed-poll high-water mark (else lingers ~5min, leaking last-delivery ts)
+    kvDel(env, `sealed:${userId}:dropped`), // dropped-msg counter — same residue class as hwm
+    kvDel(env, `devices:${userId}`), // device registry: handleDeviceList's touch-on-read refreshes
+    // its 90-day TTL on every read, so a registry left behind can outlive the account
+    // indefinitely — and peers keep fanning out to phantom devices of a deleted account
     kvDel(env, `prekey:${userId}`),
     kvDel(env, `ktlog:${userId}`),
     kvDel(env, `push:${userId}`),
@@ -2198,7 +2208,7 @@ async function handleAccountDelete(body, env, request) {
     }
   }
 
-  const erased = ['inbox', 'sealed', 'prekeys', 'ktlog', 'push', 'backup', 'presence', 'slots'];
+  const erased = ['inbox', 'sealed', 'prekeys', 'ktlog', 'push', 'backup', 'presence', 'slots', 'devices'];
   if (customerId) erased.push('cust');
   return json({
     ok: true,
@@ -2440,10 +2450,19 @@ async function handlePreKeyUpload(body, env, request) {
   if (Array.isArray(oneTimePreKeys)) {
     let maxStoredIdx = -1;
     for (let i = 0; i < Math.min(oneTimePreKeys.length, 100); i++) {
-      if (typeof oneTimePreKeys[i] !== 'string') continue; // skip non-string entries
-      const otpStr = JSON.stringify(oneTimePreKeys[i]);
-      if (otpStr.length > 5000) continue; // silently skip oversized entries
-      await kvPut(env, `prekey:otp:${userId}:${i}`, otpStr, { expirationTtl: TTL.MONTH });
+      if (typeof oneTimePreKeys[i] !== 'string' ||
+          JSON.stringify(oneTimePreKeys[i]).length > 5000) {
+        // A skipped entry still sits inside the scan window (count = maxStoredIdx+1),
+        // so a leftover slot from an earlier upload would be served to fetchers as a
+        // fresh key — delivering rotated-out OTP material the responder may no longer
+        // hold privately (message loss) or meant to retire (rotation violated).
+        await kvDel(env, `prekey:otp:${userId}:${i}`);
+        continue;
+      }
+      const stored = await kvPut(env, `prekey:otp:${userId}:${i}`, JSON.stringify(oneTimePreKeys[i]), { expirationTtl: TTL.MONTH });
+      // On a failed write the OLD value (if any) stays in place and would be served
+      // as current — same stale-key hazard as a skipped entry. Best-effort clear.
+      if (!stored) { await kvDel(env, `prekey:otp:${userId}:${i}`); continue; }
       maxStoredIdx = i;
     }
     // Store count only when at least one key was stored (highest index + 1).
