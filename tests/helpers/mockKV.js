@@ -1,24 +1,52 @@
 // Minimal in-memory stand-in for a Cloudflare KV namespace, sufficient for the
 // worker handlers under test. Values are stored as strings (the worker always
 // JSON.stringify's before put), matching real KV semantics closely enough for
-// unit tests. TTLs are accepted but not enforced.
+// unit tests.
+//
+// TTLs ARE enforced (unlike the original mock): puts record the absolute expiry
+// in `exp`, and expired keys behave exactly like real KV — invisible to get(),
+// absent from list(), and lazily purged. `store` values stay raw strings so
+// tests can keep seeding/inspecting fixtures directly; tests advance the clock
+// by writing a past timestamp into `exp` rather than sleeping. list() entries
+// carry real-KV `expiration` metadata (unix seconds) so TTL-aware code paths
+// like the /api/health sig: cleanup are exercisable.
 export function makeKV(initial = {}) {
   const store = new Map(Object.entries(initial));
+  const exp = new Map(); // key → absolute expiry ms; absent = no expiry
+  const purge = (k) => {
+    const e = exp.get(k);
+    if (e !== undefined && Date.now() >= e) { store.delete(k); exp.delete(k); return true; }
+    return false;
+  };
   return {
-    store,
+    store, exp,
     async get(key) {
-      return store.has(key) ? store.get(key) : null;
+      if (!store.has(key)) return null;
+      if (purge(key)) return null;
+      return store.get(key);
     },
-    async put(key, value, _opts) {
+    async put(key, value, opts) {
       store.set(key, String(value));
+      const ttl = opts && Number.isFinite(opts.expirationTtl) ? opts.expirationTtl
+        : opts && Number.isFinite(opts.expiration) ? opts.expiration - Date.now() / 1000
+        : null;
+      // An overwrite WITHOUT a TTL clears any prior expiry — real KV semantics.
+      // A past/zero expiry is stored as already-expired (purged on next access).
+      if (ttl !== null) exp.set(key, Date.now() + Math.max(ttl, 0) * 1000);
+      else exp.delete(key);
     },
     async delete(key) {
+      exp.delete(key);
       store.delete(key);
     },
     async list({ prefix = '', limit = 1000 } = {}) {
       const keys = [];
       for (const k of store.keys()) {
-        if (k.startsWith(prefix)) keys.push({ name: k });
+        if (purge(k)) continue;
+        if (k.startsWith(prefix)) {
+          const e = exp.get(k);
+          keys.push(e !== undefined ? { name: k, expiration: Math.floor(e / 1000) } : { name: k });
+        }
         if (keys.length >= limit) break;
       }
       return { keys, list_complete: true };
@@ -45,4 +73,3 @@ export function apiRequest(path, body, headers = {}) {
     body: JSON.stringify(body),
   });
 }
-

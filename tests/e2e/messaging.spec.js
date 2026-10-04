@@ -15,28 +15,9 @@
 // IndexedDB (a standard Web API, unlike the app's own closure state) and every other
 // step is driven through real clicks/inputs against the shipped UI.
 import { test, expect } from '@playwright/test';
+import { createIdentity } from './helpers.mjs';
 import { createHash } from 'node:crypto';
 
-async function createIdentity(page, name) {
-  await page.goto('/');
-  await page.locator('#msg-name').fill(name);
-  await page.locator('#b-msg-setup').click();
-  await expect(page.locator('#msg-main')).toBeVisible();
-
-  // Mirrors initMessenger's own IndexedDB open (dbName defaults to 'breeze-messenger',
-  // DB_VER 5) and the 'identity' store's 'keys' record written by createIdentity().
-  return page.evaluate(() => new Promise((resolve, reject) => {
-    const req = indexedDB.open('breeze-messenger', 5);
-    req.onerror = () => reject(req.error);
-    req.onsuccess = () => {
-      const db = req.result;
-      const tx = db.transaction('identity', 'readonly');
-      const getReq = tx.objectStore('identity').get('keys');
-      getReq.onsuccess = () => resolve(getReq.result?.pubB64);
-      getReq.onerror = () => reject(getReq.error);
-    };
-  }));
-}
 
 // Drives the real add-contact dialog (#b-msg-add -> showPrompt -> resolveAndAdd ->
 // addContact -> renderContacts) and opens the resulting contact-list item by clicking it,

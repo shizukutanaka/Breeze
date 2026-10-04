@@ -6,23 +6,10 @@
 // (per-account databases, switching, cross-account unread, Ctrl+1..9) was complete and
 // unreachable. Settings now carries the entry point, and these tests keep the door open.
 import { test, expect } from '@playwright/test';
+import { createIdentity } from './helpers.mjs';
 
 const ctxOpts = (ip) => ({ extraHTTPHeaders: { 'CF-Connecting-IP': ip } });
 
-async function createIdentity(page, name) {
-  await page.addInitScript(() => { try { localStorage.setItem('brz-consent', String(Date.now())); } catch {} });
-  await page.goto('/');
-  await page.locator('#msg-name').fill(name);
-  await page.locator('#b-msg-setup').click();
-  await expect(page.locator('#msg-main')).toBeVisible();
-  return page.evaluate(() => new Promise((resolve) => {
-    const req = indexedDB.open('breeze-messenger', 5);
-    req.onsuccess = () => {
-      req.result.transaction('identity', 'readonly').objectStore('identity').get('keys')
-        .onsuccess = (e) => resolve(e.target.result?.pubB64);
-    };
-  }));
-}
 
 test('a second account is reachable, isolated, and switching back restores the first', async ({ browser }) => {
   test.setTimeout(90_000);
