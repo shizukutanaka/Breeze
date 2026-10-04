@@ -27,6 +27,16 @@ vitest 917 (+6); `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json`, `t
 - Account switch/delete semantics unchanged: the wipe already clears all IDB stores, so queued plaintext is covered by the same lifecycle as message history — better than before, where `brz-outbox-*` only died on a full `localStorage.clear()`.
 - `tests/outbox-idb.test.js` executes the extracted functions against mock IDB/localStorage: snapshot persist, no-DB no-op, restore, one-time migration + key cleanup, IDB-preferred-no-merge, plus a static guard that no `localStorage.setItem` path can reintroduce the outbox.
 
+
+## Account deletion: erase the device registry + sealed dropped-counter (branch devin/1791047701-round144, 2026-10-03)
+
+vitest 911 (+0 — existing erasure test's key list extended); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
+
+- `handleAccountDelete` erased every userId-keyed store **except** `devices:{userId}`. That key is worse than ordinary residue: `handleDeviceList`'s touch-on-read rewrites it with a fresh 90-day TTL on every GET, so a registry left behind is *self-refreshing* — as long as any peer keeps fanning out to the deleted account (senders don't know it's gone), the device list can outlive the account indefinitely, and peers keep encrypting fan-out copies to phantom devices. It's now in the deletion list, and the response's `erased` array reports `devices`.
+- `sealed:{userId}:dropped` (the dropped-message counter) joins the wipe too — same residue class as the `hwm` sibling already being deleted.
+- Not done — tombstone: a `deleted:{userId}` marker that rejects sealed/plain sends to deleted accounts was considered and rejected on privacy grounds — it makes account deletion externally observable, and a deleted account should be indistinguishable from a never-registered one. TTL'd residue from in-flight sends is the honest bound.
+- The account-deletion test's "every userId-keyed store" seed/assertion list now covers both keys — it would fail on the old handler.
+
 ## Lost-write recovery, part 2: ktlog append + device-registry touch-on-read (branch devin/1791046818-round142, 2026-10-03)
 
 vitest 915 (+4); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.

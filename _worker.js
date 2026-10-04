@@ -2138,6 +2138,10 @@ async function handleAccountDelete(body, env, request) {
     kvDel(env, `inbox:${userId}`),
     kvDel(env, `sealed:${userId}`),
     kvDel(env, `sealed:${userId}:hwm`), // sealed-poll high-water mark (else lingers ~5min, leaking last-delivery ts)
+    kvDel(env, `sealed:${userId}:dropped`), // dropped-msg counter — same residue class as hwm
+    kvDel(env, `devices:${userId}`), // device registry: handleDeviceList's touch-on-read refreshes
+    // its 90-day TTL on every read, so a registry left behind can outlive the account
+    // indefinitely — and peers keep fanning out to phantom devices of a deleted account
     kvDel(env, `prekey:${userId}`),
     kvDel(env, `ktlog:${userId}`),
     kvDel(env, `push:${userId}`),
@@ -2190,7 +2194,7 @@ async function handleAccountDelete(body, env, request) {
     }
   }
 
-  const erased = ['inbox', 'sealed', 'prekeys', 'ktlog', 'push', 'backup', 'presence', 'slots'];
+  const erased = ['inbox', 'sealed', 'prekeys', 'ktlog', 'push', 'backup', 'presence', 'slots', 'devices'];
   if (customerId) erased.push('cust');
   return json({
     ok: true,
