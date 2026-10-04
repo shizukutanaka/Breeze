@@ -193,5 +193,13 @@
         ]
       }
     ]
-  }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shizukutanaka/Breeze.git"
+  },
+  "homepage": "https://breeze.pages.dev",
+  "bugs": "https://github.com/shizukutanaka/Breeze/issues",
+  "author": "Breeze Project"
 }

@@ -1,4 +1,8 @@
 # Changelog
+## Metadata: package.json files lacked license/repository — npm reported UNLICENSED vs MIT LICENSE (branch devin/1791056158-round187, 2026-10-03)
+
+vitest 938 (+14); `package.json`, `desktop/package.json`, `mobile/package.json`, `tauri/package.json`, `tests/package-metadata.test.js`, `CHANGELOG.md`.
+
 ## Desktop: breeze:// deep links dead on Windows + AppImage/rpm — unify on electron-builder protocols (branch devin/1791055497-round182, 2026-10-03)
 
 vitest 928 (+4); `desktop/package.json`, `tests/deeplink-registration.test.js`, `CHANGELOG.md`.
