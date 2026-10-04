@@ -2,7 +2,7 @@
   "name": "breeze-tauri",
   "version": "3.6.1",
   "private": true,
-  "description": "Breeze Desktop (Tauri — lightweight Rust binary)",
+  "description": "Breeze Desktop (Tauri \u2014 lightweight Rust binary)",
   "scripts": {
     "dev": "cargo tauri dev",
     "build": "cargo tauri build",
@@ -13,5 +13,12 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0"
-  }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shizukutanaka/Breeze.git"
+  },
+  "homepage": "https://breeze.pages.dev",
+  "bugs": "https://github.com/shizukutanaka/Breeze/issues"
 }
