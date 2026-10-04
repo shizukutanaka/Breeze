@@ -46,16 +46,16 @@ if [ "$PLATFORM" = "android" ]; then
   TARGET="$DIR/android/app/src/main/res"
   if [ -d "$OVERLAY" ]; then
     for d in "$OVERLAY"/*/; do
-      [ -d "$d" ] && cp -r "$d" "$TARGET/" 2>/dev/null || true
+      [ -d "$d" ] && cp -R "${d%/}" "$TARGET/"
     done
     echo "✓ Android overlays applied"
   fi
 
-  # Wire the network security config into the generated manifest (idempotent —
-  # cap sync regenerates the manifest each run).
+  # Wire the network security config into the generated manifest (idempotent).
   MANIFEST="$DIR/android/app/src/main/AndroidManifest.xml"
   if [ -f "$MANIFEST" ] && ! grep -q networkSecurityConfig "$MANIFEST"; then
-    sed -i.bak 's|<application |<application android:networkSecurityConfig="@xml/network_security_config" |' "$MANIFEST" && rm -f "$MANIFEST.bak"
+    sed -i.bak 's|<application|<application android:networkSecurityConfig="@xml/network_security_config"|' "$MANIFEST" && rm -f "$MANIFEST.bak"
+    grep -q 'android:networkSecurityConfig=' "$MANIFEST"
     echo "✓ network_security_config wired into AndroidManifest"
   fi
 
