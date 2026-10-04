@@ -26,6 +26,15 @@ describe('every packaging path ships locales/ next to index.html', () => {
     expect(src).toMatch(/cp\s+locales\/\*\.json/);
   });
 
+  it('desktop/package.json extraResources includes ../locales → locales', () => {
+    const pkg = JSON.parse(readFileSync(join(root, 'desktop/package.json'), 'utf8'));
+    const res = pkg.build?.extraResources || [];
+    expect(
+      res.some(r => r.from === '../locales' && r.to === 'locales'),
+      'extraResources lacks a ../locales → locales entry'
+    ).toBe(true);
+  });
+
   it('tauri frontendDist covers the repo root (locales/ ships with it)', () => {
     const conf = JSON.parse(readFileSync(join(root, 'tauri/src-tauri/tauri.conf.json'), 'utf8'));
     expect(conf.build?.frontendDist).toBe('../../');
