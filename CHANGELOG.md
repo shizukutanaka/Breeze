@@ -1,4 +1,8 @@
 # Changelog
+## SEO/funding: sitemap.xml used relative <loc> (spec-invalid — file ignored); drop dead ?pricing entries (branch devin/1791053941-round169, 2026-10-03)
+
+vitest 922 (unchanged); `sitemap.xml`, `.github/FUNDING.yml`, `CHANGELOG.md`.
+
 ## build.sh: packaged desktop bundles shipped English-only — copy_web never copied locales/ (branch devin/1791053853-round168, 2026-10-03)
 
 vitest 922 (unchanged); `build.sh`, `CHANGELOG.md`.
