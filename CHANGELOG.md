@@ -1,4 +1,8 @@
 # Changelog
+## 404: move the SPA redirect out of an inline script — the pinned CSP blocked it (deep-link recovery was dead) (branch devin/1791053389-round165, 2026-10-03)
+
+vitest 922 (unchanged — static files); `404.html`, `404.js` (new), `CHANGELOG.md`.
+
 ## Presence: check freshness window matches the 5-min KV write throttle (60s reported online users offline) (branch devin/1791052537-round161, 2026-10-03)
 
 vitest 923 (+1); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
