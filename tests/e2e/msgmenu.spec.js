@@ -27,22 +27,8 @@
 // clips ALL descendants (fixed-positioned ones included) to the bubble's own small box,
 // so only the first item or two of a 7-9 item menu ever rendered or were clickable.
 import { test, expect } from '@playwright/test';
+import { createIdentity } from './helpers.mjs';
 
-async function createIdentity(page, name) {
-  await page.goto('/');
-  await page.locator('#msg-name').fill(name);
-  await page.locator('#b-msg-setup').click();
-  await expect(page.locator('#msg-main')).toBeVisible();
-  return page.evaluate(() => new Promise((resolve, reject) => {
-    const req = indexedDB.open('breeze-messenger', 5);
-    req.onerror = () => reject(req.error);
-    req.onsuccess = () => {
-      const getReq = req.result.transaction('identity', 'readonly').objectStore('identity').get('keys');
-      getReq.onsuccess = () => resolve(getReq.result?.pubB64);
-      getReq.onerror = () => reject(getReq.error);
-    };
-  }));
-}
 
 async function addAndOpen(page, pubB64) {
   await page.locator('#b-msg-add').click();
