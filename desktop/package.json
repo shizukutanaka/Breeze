@@ -27,6 +27,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "bounds-guard.js",
       "icon.*",
       "tray*.png"
     ],
@@ -42,6 +43,10 @@
       {
         "from": "../manifest.json",
         "to": "manifest.json"
+      },
+      {
+        "from": "../locales",
+        "to": "locales"
       },
       {
         "from": "../icon-192.png",
@@ -110,16 +115,7 @@
       "gatekeeperAssess": false,
       "entitlements": "entitlements.mac.plist",
       "entitlementsInherit": "entitlements.mac.plist",
-      "extendInfo": {
-        "CFBundleURLTypes": [
-          {
-            "CFBundleURLName": "Breeze Protocol",
-            "CFBundleURLSchemes": [
-              "breeze"
-            ]
-          }
-        ]
-      }
+      "extendInfo": {}
     },
     "dmg": {
       "artifactName": "${productName}-${version}-mac.${ext}",
@@ -172,22 +168,52 @@
     },
     "deb": {
       "depends": [
+        "libgtk-3-0",
         "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libuuid1",
         "libsecret-1-0",
-        "libappindicator3-1"
+        "libayatana-appindicator3-1 | libappindicator3-1"
       ],
       "priority": "optional",
       "afterInstall": "scripts/postinst.sh"
     },
     "rpm": {
       "depends": [
+        "gtk3",
         "libnotify",
+        "nss",
+        "libXScrnSaver",
+        "libXtst",
+        "xdg-utils",
+        "at-spi2-atk",
+        "libuuid",
         "libsecret",
         "libappindicator-gtk3"
       ]
     },
     "appImage": {
       "artifactName": "${productName}-${version}-linux-${arch}.${ext}"
-    }
-  }
+    },
+    "protocols": [
+      {
+        "name": "Breeze Protocol",
+        "schemes": [
+          "breeze"
+        ]
+      }
+    ]
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shizukutanaka/Breeze.git"
+  },
+  "homepage": "https://breeze.pages.dev",
+  "bugs": "https://github.com/shizukutanaka/Breeze/issues",
+  "author": "Breeze Project"
 }
