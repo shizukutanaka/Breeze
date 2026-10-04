@@ -18,6 +18,15 @@ vitest 916 (+1); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
 
 Post-merge review on the lost-write ktlog repair found the tail-reconciliation was itself corrupt: it spliced the registered IK's existing entry to the tail and recomputed suffix `c` values, but `verifyChain` re-sorts by `ts` — a moved entry whose timestamp predates the entries it was moved past slides back mid-log and its recomputed hash fails the chain. The repair manufactured a `tampered` audit verdict (the sibling test only passed by accident: same-millisecond timestamps + stable sort preserved array order). And the move distorted the recorded rotation sequence. The fix is an append-only **restatement** entry `{ts: now, h: curH}`: it records "this key is current as of now" — true — keeps history order and ts monotonicity so the chain verifies, and works whether or not the registered IK was ever logged. New regression test covers the early-registered-IK scenario; the existing test's assertions updated for the +1 restatement entry.
 
+## Account deletion: erase the device registry + sealed dropped-counter (branch devin/1791047701-round144, 2026-10-03)
+
+vitest 911 (+0 — existing erasure test's key list extended); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
+
+- `handleAccountDelete` erased every userId-keyed store **except** `devices:{userId}`. That key is worse than ordinary residue: `handleDeviceList`'s touch-on-read rewrites it with a fresh 90-day TTL on every GET, so a registry left behind is *self-refreshing* — as long as any peer keeps fanning out to the deleted account (senders don't know it's gone), the device list can outlive the account indefinitely, and peers keep encrypting fan-out copies to phantom devices. It's now in the deletion list, and the response's `erased` array reports `devices`.
+- `sealed:{userId}:dropped` (the dropped-message counter) joins the wipe too — same residue class as the `hwm` sibling already being deleted.
+- Not done — tombstone: a `deleted:{userId}` marker that rejects sealed/plain sends to deleted accounts was considered and rejected on privacy grounds — it makes account deletion externally observable, and a deleted account should be indistinguishable from a never-registered one. TTL'd residue from in-flight sends is the honest bound.
+- The account-deletion test's "every userId-keyed store" seed/assertion list now covers both keys — it would fail on the old handler.
+
 ## Lost-write recovery, part 2: ktlog append + device-registry touch-on-read (branch devin/1791046818-round142, 2026-10-03)
 
 vitest 915 (+4); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
