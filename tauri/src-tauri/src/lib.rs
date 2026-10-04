@@ -3,9 +3,10 @@
 
 use tauri::{
     menu::{Menu, MenuItem},
-    tray::{TrayIcon, TrayIconBuilder},
+    tray::TrayIconBuilder,
     Manager, RunEvent, WindowEvent,
 };
+use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 #[tauri::command]
 fn get_platform() -> String {
@@ -24,7 +25,6 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![get_platform, get_version])
         .setup(|app| {
             // System tray
@@ -90,8 +90,17 @@ pub fn run() {
                     }
                 }
             }
-            RunEvent::ExitRequested { api, .. } => {
-                api.prevent_exit();
+            RunEvent::ExitRequested { api, code, .. } => {
+                // Keep running in the tray on USER-initiated quits (Cmd+Q, close-all):
+                // those carry `code: None`. A programmatic exit carries a code —
+                // critically `app.restart()`, which the updater plugin calls after
+                // downloadAndInstall(). Preventing it unconditionally made the whole
+                // auto-update path dead: the new build was downloaded but could never
+                // relaunch into it. Tray "Quit" calls app.exit() directly, which emits
+                // RunEvent::Exit (not ExitRequested) and stays unaffected.
+                if code.is_none() {
+                    api.prevent_exit();
+                }
             }
             _ => {}
         });

@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // ============================================================================
 // Unreachable platform-branch checker.
 //
@@ -20,26 +21,30 @@
 // has no judgement calls and no false positives to argue about.
 //
 // Mobile guards (IS_IOS / IS_ANDROID) inside an electron guard are flagged for the same
-// reason: an Electron desktop build is neither.
+// reason: an Electron desktop build is neither. They are NOT flagged inside a web or
+// capacitor guard — a web browser on a phone is legitimately both, and Capacitor IS
+// mobile.
 //
-// Braces are matched against a MASKED copy of the source with string, template-literal,
-// comment and regex contents blanked out. Naive brace counting mis-parses this file —
-// it has template literals containing HTML braces and significant leading whitespace —
-// and produced confidently wrong answers twice while this bug was being diagnosed.
+// Extraction details: braces (and the `if (` condition's own parens) are matched against
+// a MASKED copy of the source with string, template-literal and comment contents
+// blanked out. Naive brace counting mis-parses this file — it has template literals
+// containing HTML braces and significant leading whitespace — and produced confidently
+// wrong answers twice while this bug was being diagnosed. Conditions are found by
+// paren-matching forward from each `if (`, NOT by a `[^)]` regex — the earlier regex
+// form silently skipped every guard whose condition contained a call or nested parens
+// (132 such `if (...) {` blocks went unscanned), so a misplaced brace inside a compound
+// platform guard like `if (PLATFORM === 'electron' && ready())` would have recurred
+// invisibly. Regex literals inside conditions are not masked — none exist today; a
+// `{` inside one would need extending mask().
 // ============================================================================
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const html = readFileSync(join(ROOT, 'index.html'), 'utf8');
-const js = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
-if (!js) {
-  console.error('unreachable-branch: no inline <script> found in index.html');
-  process.exit(1);
-}
+const HTML = join(ROOT, 'index.html');
 
-function mask(src) {
+export function mask(src) {
   const out = src.split('');
   const blank = (a, b) => { for (let k = a; k < b && k < out.length; k++) if (out[k] !== '\n') out[k] = ' '; };
   let i = 0;
@@ -57,22 +62,41 @@ function mask(src) {
   return out.join('');
 }
 
-const masked = mask(js);
-const lineOf = (idx) => js.slice(0, idx).split('\n').length;
+const SKIP_WS = (s, k) => { while (s[k] === ' ' || s[k] === '\n' || s[k] === '\t') k++; return k; };
 
-const guards = [];
-for (const m of masked.matchAll(/\bif\s*\(([^)]{0,120})\)\s*\{/g)) {
-  const open = m.index + m[0].lastIndexOf('{');
-  let depth = 0, end = -1;
+// Pair-match from `open` (which must be a '(' or '{') to its closer in masked source.
+function pairEnd(masked, open) {
+  const OPEN = masked[open], CLOSE = OPEN === '(' ? ')' : '}';
+  let depth = 0;
   for (let k = open; k < masked.length; k++) {
-    if (masked[k] === '{') depth++;
-    else if (masked[k] === '}') { depth--; if (depth === 0) { end = k; break; } }
+    if (masked[k] === OPEN) depth++;
+    else if (masked[k] === CLOSE) { depth--; if (depth === 0) return k; }
   }
-  if (end < 0) continue;
-  guards.push({
-    cond: js.slice(m.index + m[0].indexOf('(') + 1, m.index + m[0].lastIndexOf(')')).trim(),
-    start: m.index, end, line: lineOf(m.index),
-  });
+  return -1;
+}
+
+// Every `if (cond) { ... }` block: condition text (from the UNmasked source), the
+// matched-paren end of the condition, and the brace-pair end of the body. Blocks whose
+// `)` is not followed by `{` (`if (x) return;`) carry no nesting information and are
+// skipped; they cannot contain a dead nested guard.
+export function findGuards(js) {
+  const masked = mask(js);
+  const lineOf = (idx) => js.slice(0, idx).split('\n').length;
+  const guards = [];
+  for (const m of masked.matchAll(/\bif\s*\(/g)) {
+    const openParen = m.index + m[0].length - 1;
+    const closeParen = pairEnd(masked, openParen);
+    if (closeParen < 0) continue;
+    const openBrace = SKIP_WS(masked, closeParen + 1);
+    if (masked[openBrace] !== '{') continue;
+    const end = pairEnd(masked, openBrace);
+    if (end < 0) continue;
+    guards.push({
+      cond: js.slice(openParen + 1, closeParen).trim(),
+      start: m.index, end, line: lineOf(m.index),
+    });
+  }
+  return guards;
 }
 
 // Which mutually exclusive predicate, if any, does this condition assert?
@@ -92,24 +116,39 @@ const exclusive = (a, b) => {
   return false;
 };
 
-const dead = [];
-for (const outer of guards) {
-  const po = predicate(outer.cond);
-  if (!po) continue;
-  for (const inner of guards) {
-    if (inner.start <= outer.start || inner.end >= outer.end) continue;
-    const pi = predicate(inner.cond);
-    if (pi && exclusive(po, pi)) dead.push({ inner, outer });
+export function deadBranches(js) {
+  const guards = findGuards(js);
+  const dead = [];
+  for (const outer of guards) {
+    const po = predicate(outer.cond);
+    if (!po) continue;
+    for (const inner of guards) {
+      if (inner.start <= outer.start || inner.end >= outer.end) continue;
+      const pi = predicate(inner.cond);
+      if (pi && exclusive(po, pi)) dead.push({ inner, outer });
+    }
   }
+  return { dead, guardCount: guards.length };
 }
 
-if (dead.length) {
-  console.error(`unreachable-branch: FAIL — ${dead.length} branch(es) can never run`);
-  for (const { inner, outer } of dead) {
-    console.error(`  - index.html:${inner.line}  if (${inner.cond})`);
-    console.error(`    nested inside index.html:${outer.line}  if (${outer.cond}) — the two can never both be true`);
+export function main() {
+  const html = readFileSync(HTML, 'utf8');
+  const js = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+  if (!js) {
+    console.error('unreachable-branch: no inline <script> found in index.html');
+    process.exit(1);
   }
-  console.error('  Usually a misplaced closing brace: check where the OUTER block actually ends.');
-  process.exit(1);
+  const { dead, guardCount } = deadBranches(js);
+  if (dead.length) {
+    console.error(`unreachable-branch: FAIL — ${dead.length} branch(es) can never run`);
+    for (const { inner, outer } of dead) {
+      console.error(`  - index.html:${inner.line}  if (${inner.cond})`);
+      console.error(`    nested inside index.html:${outer.line}  if (${outer.cond}) — the two can never both be true`);
+    }
+    console.error('  Usually a misplaced closing brace: check where the OUTER block actually ends.');
+    process.exit(1);
+  }
+  console.log(`unreachable-branch: OK — ${guardCount} if-blocks scanned, no impossible platform nesting`);
 }
-console.log(`unreachable-branch: OK — ${guards.length} if-blocks scanned, no impossible platform nesting`);
+
+if (import.meta.url === `file://${process.argv[1]}`) main();

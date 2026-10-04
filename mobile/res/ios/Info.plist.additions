@@ -1,0 +1,8 @@
+# Info.plist additions — applied by scripts/build-mobile.sh (iOS path) via
+# /usr/libexec/PlistBuddy after `cap sync ios`. Format: one `KEY TYPE VALUE`
+# per line; # comments and blank lines ignored.
+#
+# ITSAppUsesNonExemptEncryption=false — App Store export-compliance declaration.
+# E2E messaging encryption qualifies as mass-market/exempt under EAR, so
+# declaring this key removes the per-submission export questionnaire.
+ITSAppUsesNonExemptEncryption bool false
