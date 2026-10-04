@@ -1,4 +1,8 @@
 # Changelog
+## Tauri: icons/ directory shipped empty — cargo tauri build could not bundle (branch devin/1791056045-round186, 2026-10-03)
+
+vitest 932 (+8); `tauri/src-tauri/icons/*`, `tests/tauri-icons.test.js`, `CHANGELOG.md`.
+
 ## Mobile: res/ overlay pipeline was dead — implemented NSC + iOS plist additions (branch devin/1791055916-round185, 2026-10-03)
 
 vitest 930 (+5); `mobile/res/*`, `mobile/scripts/build-mobile.sh`, `tests/mobile-overlays.test.js`, `CHANGELOG.md`.
