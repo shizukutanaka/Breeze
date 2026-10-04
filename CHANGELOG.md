@@ -1,4 +1,10 @@
 # Changelog
+## Mobile: packaged app now points API calls at the real backend, not the virtual app.breeze.local host (branch devin/1791050681-round155, 2026-10-03)
+
+vitest 922 (unchanged); `mobile/prepare.js`, `CHANGELOG.md`.
+
+`index.html` computes `const API = location.origin + '/api'`. Inside Capacitor the WebView's origin is the virtual `app.breeze.local` hostname (mobile/capacitor.config.json `server.hostname`), so the packaged app sent EVERY worker call — prekey upload, sealed send/poll, group ops — to a host that does not exist: it rendered fine but was silently non-functional (nothing failed loudly; `postAPIRaw` just got network errors forever). prepare.js now rewrites the `const API` line during the www/ copy to the real backend — the same anchored rewrite tests/e2e/server.mjs has always done, including the fail-loudly-if-the-line-drifts guard. `BREEZE_API_ORIGIN` overrides the default `https://breeze.pages.dev` (README's hosted instance) for self-hosted builds. The `.build-manifest.json` hash is computed on the rewritten bytes, so it stays honest. Verified: `node prepare.js` and `BREEZE_API_ORIGIN=... node prepare.js` both produce `const API = "<origin>/api"`; `--check` untouched.
+
 ## Tauri: the desktop build actually compiles now — icons/, missing trait import, updater restart no longer swallowed (branch devin/1791050530-round154, 2026-10-03)
 
 vitest 922 (unchanged); `tauri/src-tauri/src/lib.rs`, `tauri/src-tauri/icons/*`, `tauri/src-tauri/Cargo.lock`, `.gitignore`, `CHANGELOG.md`.
