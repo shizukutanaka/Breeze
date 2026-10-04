@@ -1,4 +1,8 @@
 # Changelog
+## Desktop: rpm.depends had the same replaced-defaults defect as deb — .rpm could not launch (branch devin/1791056467-round191, 2026-10-03)
+
+vitest 944 (+10); `desktop/package.json`, `tests/rpm-depends.test.js`, `CHANGELOG.md`.
+
 ## Desktop: deb.depends replaced the Electron default set — .deb could not launch (branch devin/1791056414-round190, 2026-10-03)
 
 vitest 944 (+10); `desktop/package.json`, `tests/deb-depends.test.js`, `CHANGELOG.md`.
