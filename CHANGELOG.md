@@ -37,6 +37,14 @@ vitest 911 (+0 — existing erasure test's key list extended); `_worker.js`, `te
 - Not done — tombstone: a `deleted:{userId}` marker that rejects sealed/plain sends to deleted accounts was considered and rejected on privacy grounds — it makes account deletion externally observable, and a deleted account should be indistinguishable from a never-registered one. TTL'd residue from in-flight sends is the honest bound.
 - The account-deletion test's "every userId-keyed store" seed/assertion list now covers both keys — it would fail on the old handler.
 
+## Desktop: scheme allowlist on every shell.openExternal call (branch devin/1791048080-round145, 2026-10-03)
+
+vitest 917 (+6); `desktop/nav-guard.js`, `desktop/main.js`, `tests/nav-guard.test.js`, `CHANGELOG.md`.
+
+- `shell.openExternal` is a renderer→OS launch primitive, and both call sites under-gated it. `setWindowOpenHandler` used `url.startsWith('http')` — which passes `httpx://…`/`httpfoo://…` — and the `will-navigate` fallback handed **every** blocked navigation to the OS unconditionally, so a crafted `file:///…` or third-party scheme link (`zoommtg:`, `ms-appx:`, `javascript:`) could reach real OS handlers from the renderer with no further confirmation.
+- New `isAllowedExternalUrl` in nav-guard.js (the testable sibling module — main.js can't be imported without Electron): parsed-protocol allowlist `http:`/`https:`/`mailto:`/`breeze:` only. `breeze:` stays so join/add deep links pasted in chat keep round-tripping through the OS into this app; `mailto:` stays because renderMarkdown linkifies email addresses — refusing it would dead-end an existing feature (found by review).
+- Tests cover the allowlist, the file:///file-launch class, third-party scheme handlers, the original `startsWith('http')` bypass shape, and malformed/scheme-relative input.
+
 ## Lost-write recovery, part 2: ktlog append + device-registry touch-on-read (branch devin/1791046818-round142, 2026-10-03)
 
 vitest 915 (+4); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
