@@ -3,10 +3,12 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"; cd "$SCRIPT_DIR"
 
 VERSION="3.6.1"
-WEB_FILES=(index.html sw.js manifest.json icon-192.png icon-512.png _headers)
+WEB_FILES=(index.html sw.js manifest.json icon-192.png icon-512.png _headers 404.html 404.js _routes.json _redirects)
 # _headers ships alongside index.html so desktop/main.js's setupCSP() can read the SAME
 # hash-pinned Content-Security-Policy the web deployment enforces via Cloudflare Pages,
 # instead of duplicating a hardcoded (and driftable) fallback policy of its own.
+# _routes.json + _redirects are Pages-only knobs (function scoping; .well-known pass-
+# through): harmless inside desktop/mobile bundles, required in the deployable zip.
 # ESM crypto reference modules. index.html loads these via `import './src/crypto/*.js'`
 # once the browser port lands (docs/INTEGRATION.md §0), so packaged builds must ship the
 # directory — flattening into the app root would break the relative import path.
@@ -26,6 +28,14 @@ copy_web() {
     mkdir -p "$dst/$CRYPTO_DIR"
     cp "$CRYPTO_DIR"/*.js "$dst/$CRYPTO_DIR/"
     echo "✓ Crypto modules copied to $dst/$CRYPTO_DIR/"
+  fi
+  # locales/*.json are fetched at boot by _loadLocale() — skip them and the packaged
+  # app silently renders English for every non-EN user (same class of bug fixed for
+  # the Capacitor bundle in bf771a2).
+  if [ -d locales ]; then
+    mkdir -p "$dst/locales"
+    cp locales/*.json "$dst/locales/"
+    echo "✓ Locales copied to $dst/locales/"
   fi
   echo "✓ Web files copied to $dst/"
 }
