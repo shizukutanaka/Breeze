@@ -1,4 +1,8 @@
 # Changelog
+## Test: pin meta-CSP ↔ header-CSP directive parity (branch devin/1791054922-round177, 2026-10-03)
+
+vitest 926 (+2); `tests/csp-parity.test.js`, `CHANGELOG.md`.
+
 ## Desktop: Electron bundle shipped English-only — extraResources lacked locales/ (branch devin/1791054799-round176, 2026-10-03)
 
 vitest 924 (+3); `desktop/package.json`, `tests/packaged-locales.test.js`, `CHANGELOG.md`.
