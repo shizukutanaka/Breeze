@@ -28,8 +28,8 @@ playwright-report/
 *.flatpak
 
 # Capacitor generated
-android/
-ios/
+mobile/android/
+mobile/ios/
 
 # Test files
 test.js
@@ -75,3 +75,7 @@ __pycache__/
 
 # Secrets
 *.secret
+
+# Rust / Tauri build artifacts
+tauri/src-tauri/target/
+tauri/src-tauri/gen/

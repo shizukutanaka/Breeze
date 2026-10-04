@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Overlay for android/app/src/main/res/values/strings.xml — copied by
+  scripts/build-mobile.sh after `cap sync`. Capacitor generates these from
+  capacitor.config.json; keep them in sync (appName: "Breeze").
+-->
+<resources>
+    <string name="app_name">Breeze</string>
+    <string name="title_activity_main">Breeze</string>
+</resources>
