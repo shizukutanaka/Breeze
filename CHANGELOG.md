@@ -1,4 +1,8 @@
 # Changelog
+## Test: pin wrapper-manifest version + app-id parity (branch devin/1791055057-round178, 2026-10-03)
+
+vitest 931 (+7); `tests/wrapper-versions.test.js`, `CHANGELOG.md`.
+
 ## Test: pin meta-CSP ↔ header-CSP directive parity (branch devin/1791054922-round177, 2026-10-03)
 
 vitest 926 (+2); `tests/csp-parity.test.js`, `CHANGELOG.md`.
