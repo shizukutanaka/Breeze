@@ -1,4 +1,8 @@
 # Changelog
+## Test: pin rate-limit parity + the _headers security baseline (branch devin/1791054398-round173, 2026-10-03)
+
+vitest 928 (+6); `tests/ratelimit-parity.test.js`, `tests/headers-contract.test.js`, `CHANGELOG.md`.
+
 ## Test: pin release-metadata sync — version parity + packaged-file existence (branch devin/1791054327-round172, 2026-10-03)
 
 vitest 926 (+4); `tests/release-sync.test.js`, `CHANGELOG.md`.
