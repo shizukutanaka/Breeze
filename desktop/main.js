@@ -16,11 +16,12 @@
  *   - Linux: AppIndicator tray
  */
 const { app, BrowserWindow, Tray, Menu, nativeImage, Notification,
-        globalShortcut, shell, ipcMain, session } = require('electron');
+        globalShortcut, shell, ipcMain, session, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { isAllowedNavigation, isAllowedExternalUrl } = require('./nav-guard');
 const { readWebCSP } = require('./csp-guard');
+const { isVisibleBounds } = require('./bounds-guard');
 
 // ── Constants ───────────────────────────────────────────────
 const APP_NAME = 'Breeze';
@@ -48,6 +49,12 @@ let isQuitting = false;
 function createWindow() {
   let bounds = { width: 960, height: 720, x: undefined, y: undefined };
   try { bounds = { ...bounds, ...JSON.parse(fs.readFileSync(BOUNDS_FILE(), 'utf8')) }; } catch {}
+  // Off-screen restore: a saved x/y points where a monitor no longer exists
+  // (laptop undocked, display rearranged) and the window opens invisible —
+  // the app looks dead (tray icon only) until bounds.json is deleted by hand.
+  // Keep the saved position only when it still overlaps a connected display's
+  // work area; otherwise fall back to the OS default placement.
+  if (!isVisibleBounds(bounds, screen.getAllDisplays())) { bounds.x = undefined; bounds.y = undefined; }
 
   win = new BrowserWindow({
     ...bounds,

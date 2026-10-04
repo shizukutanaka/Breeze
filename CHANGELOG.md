@@ -1,4 +1,8 @@
 # Changelog
+## Desktop: saved window bounds are checked against connected displays — undocking no longer opens the app off-screen (branch devin/1791053542-round166, 2026-10-03)
+
+vitest 929 (+7); `desktop/bounds-guard.js` (new), `desktop/main.js`, `tests/bounds-guard.test.js`, `CHANGELOG.md`.
+
 ## Worker: skipped/failed OTP slots clear the stale key an earlier upload left (rotated-out OTP was served as fresh) (branch devin/1791053211-round164, 2026-10-03)
 
 vitest 923 (+1); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.

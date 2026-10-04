@@ -27,6 +27,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "bounds-guard.js",
       "icon.*",
       "tray*.png"
     ],
