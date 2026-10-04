@@ -16,11 +16,12 @@
  *   - Linux: AppIndicator tray
  */
 const { app, BrowserWindow, Tray, Menu, nativeImage, Notification,
-        globalShortcut, shell, ipcMain, session } = require('electron');
+        globalShortcut, shell, ipcMain, session, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { isAllowedNavigation } = require('./nav-guard');
+const { isAllowedNavigation, isAllowedExternalUrl } = require('./nav-guard');
 const { readWebCSP } = require('./csp-guard');
+const { isVisibleBounds } = require('./bounds-guard');
 
 // ── Constants ───────────────────────────────────────────────
 const APP_NAME = 'Breeze';
@@ -48,6 +49,12 @@ let isQuitting = false;
 function createWindow() {
   let bounds = { width: 960, height: 720, x: undefined, y: undefined };
   try { bounds = { ...bounds, ...JSON.parse(fs.readFileSync(BOUNDS_FILE(), 'utf8')) }; } catch {}
+  // Off-screen restore: a saved x/y points where a monitor no longer exists
+  // (laptop undocked, display rearranged) and the window opens invisible —
+  // the app looks dead (tray icon only) until bounds.json is deleted by hand.
+  // Keep the saved position only when it still overlaps a connected display's
+  // work area; otherwise fall back to the OS default placement.
+  if (!isVisibleBounds(bounds, screen.getAllDisplays())) { bounds.x = undefined; bounds.y = undefined; }
 
   win = new BrowserWindow({
     ...bounds,
@@ -93,9 +100,12 @@ function createWindow() {
     if (!isQuitting) { e.preventDefault(); win.hide(); }
   });
 
-  // Block new window/tab creation — open external URLs in default browser
+  // Block new window/tab creation — open external URLs in default browser.
+  // isAllowedExternalUrl (nav-guard.js) gates the handoff: the old startsWith('http')
+  // let 'httpx://…' through, and an ungated openExternal is a renderer→OS launch
+  // primitive for file:// and third-party scheme handlers.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('http')) shell.openExternal(url);
+    if (isAllowedExternalUrl(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
 
@@ -110,7 +120,10 @@ function createWindow() {
   win.webContents.on('will-navigate', (e, url) => {
     if (!isAllowedNavigation(win.webContents.getURL(), url)) {
       e.preventDefault();
-      shell.openExternal(url);
+      // A blocked navigation must not become an unconditional OS launch either —
+      // the same scheme allowlist applies (file://, javascript:, third-party
+      // handlers are refused; breeze:// round-trips into this app by design).
+      if (isAllowedExternalUrl(url)) shell.openExternal(url);
     }
   });
 }
