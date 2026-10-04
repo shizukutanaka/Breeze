@@ -1,4 +1,13 @@
 # Changelog
+## PQ adapter: call the draft-name primitives the probe advertises (branch devin/1791049115-round149, 2026-10-03)
+
+Reference code + tests; `src/crypto/pq.js`, `tests/pq.test.js`, `CHANGELOG.md`.
+
+- The WICG Key and Bits operations are distinct APIs: Key takes five arguments and
+  returns a CryptoKey, while Bits returns ArrayBuffers. Both are now normalized to
+  bytes correctly; malformed shared secrets fail closed unless exactly 32 bytes.
+- +5 tests pin both API shapes, required arguments and short-secret rejection.
+  Reference-only module — no deployed code path touched.
 ## Desktop: rpm.depends had the same replaced-defaults defect as deb — .rpm could not launch (branch devin/1791056467-round191, 2026-10-03)
 
 vitest 944 (+10); `desktop/package.json`, `tests/rpm-depends.test.js`, `CHANGELOG.md`.
