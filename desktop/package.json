@@ -27,6 +27,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "bounds-guard.js",
       "icon.*",
       "tray*.png"
     ],
@@ -42,6 +43,10 @@
       {
         "from": "../manifest.json",
         "to": "manifest.json"
+      },
+      {
+        "from": "../locales",
+        "to": "locales"
       },
       {
         "from": "../icon-192.png",
@@ -110,16 +115,7 @@
       "gatekeeperAssess": false,
       "entitlements": "entitlements.mac.plist",
       "entitlementsInherit": "entitlements.mac.plist",
-      "extendInfo": {
-        "CFBundleURLTypes": [
-          {
-            "CFBundleURLName": "Breeze Protocol",
-            "CFBundleURLSchemes": [
-              "breeze"
-            ]
-          }
-        ]
-      }
+      "extendInfo": {}
     },
     "dmg": {
       "artifactName": "${productName}-${version}-mac.${ext}",
@@ -195,6 +191,22 @@
     },
     "appImage": {
       "artifactName": "${productName}-${version}-linux-${arch}.${ext}"
-    }
-  }
+    },
+    "protocols": [
+      {
+        "name": "Breeze Protocol",
+        "schemes": [
+          "breeze"
+        ]
+      }
+    ]
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shizukutanaka/Breeze.git"
+  },
+  "homepage": "https://breeze.pages.dev",
+  "bugs": "https://github.com/shizukutanaka/Breeze/issues",
+  "author": "Breeze Project"
 }
