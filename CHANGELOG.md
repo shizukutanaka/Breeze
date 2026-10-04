@@ -1,4 +1,8 @@
 # Changelog
+## Worker: skipped/failed OTP slots clear the stale key an earlier upload left (rotated-out OTP was served as fresh) (branch devin/1791053211-round164, 2026-10-03)
+
+vitest 923 (+1); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
+
 ## Desktop postinst guessed one .desktop filename — breeze:// registration silently no-oped (branch devin/1791085647-round192, 2026-10-04)
 
 vitest 926 (+4); `desktop/scripts/postinst.sh`, `tests/postinst.test.js`, `CHANGELOG.md`.
