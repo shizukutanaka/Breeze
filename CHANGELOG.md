@@ -1,4 +1,8 @@
 # Changelog
+## Tauri: updater plugin registered with zero config — app aborts at plugin init (branch devin/1791056254-round188, 2026-10-03)
+
+vitest 935 (+3); `tauri/src-tauri/Cargo.toml`, `tauri/src-tauri/src/lib.rs`, `tests/tauri-plugins.test.js`, `CHANGELOG.md`.
+
 ## Tauri: icons/ directory shipped empty — cargo tauri build could not bundle (branch devin/1791056045-round186, 2026-10-03)
 
 vitest 932 (+8); `tauri/src-tauri/icons/*`, `tests/tauri-icons.test.js`, `CHANGELOG.md`.
