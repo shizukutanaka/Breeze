@@ -7,7 +7,7 @@
 // file:// URLs (comparing pathnames with the same startsWith approach one directory
 // level down) had the identical flaw.
 import { describe, it, expect } from 'vitest';
-import { isAllowedNavigation } from '../desktop/nav-guard.js';
+import { isAllowedNavigation, isAllowedExternalUrl } from '../desktop/nav-guard.js';
 
 describe('isAllowedNavigation — remote (https) mode', () => {
   const current = 'https://breeze.pages.dev/index.html';
@@ -76,5 +76,48 @@ describe('isAllowedNavigation — mixed protocols and malformed input', () => {
   it('returns false rather than throwing on an unparseable URL', () => {
     expect(isAllowedNavigation('https://breeze.pages.dev/', 'not a url at all')).toBe(false);
     expect(isAllowedNavigation('not a url at all', 'https://breeze.pages.dev/')).toBe(false);
+  });
+});
+
+// shell.openExternal() is a renderer→OS launch primitive: an ungated call lets a
+// crafted URL reach file handlers and third-party scheme executables. The gate used
+// to be `url.startsWith('http')` on the windowOpenHandler and nothing at all on the
+// will-navigate fallback — these pin the real allowlist.
+describe('isAllowedExternalUrl — scheme allowlist for shell.openExternal', () => {
+  it('allows http and https links (chat-link UX)', () => {
+    expect(isAllowedExternalUrl('https://example.com/page')).toBe(true);
+    expect(isAllowedExternalUrl('http://example.com/page')).toBe(true);
+  });
+
+  it('allows our own deep-link scheme (breeze:// round-trips into this app)', () => {
+    expect(isAllowedExternalUrl('breeze://join=ABC123')).toBe(true);
+  });
+
+  it('allows mailto: (renderMarkdown linkifies email addresses in chat)', () => {
+    // Regression guard: the first allowlist draft forgot mailto:, which dead-ended
+    // every email link in a chat — a feature the message renderer actively creates.
+    expect(isAllowedExternalUrl('mailto:alice@example.com')).toBe(true);
+  });
+
+  it('rejects file:// (would launch Finder/Explorer at a path)', () => {
+    expect(isAllowedExternalUrl('file:///etc/passwd')).toBe(false);
+    expect(isAllowedExternalUrl('file:///C:/Windows/system32/cmd.exe')).toBe(false);
+  });
+
+  it('rejects third-party scheme handlers (executable launch vector)', () => {
+    expect(isAllowedExternalUrl('zoommtg://zoom.us/join?confno=1')).toBe(false);
+    expect(isAllowedExternalUrl('ms-appx://x')).toBe(false);
+    expect(isAllowedExternalUrl('javascript:alert(1)')).toBe(false);
+  });
+
+  it('rejects schemes that merely start with "http" (the old startsWith bug)', () => {
+    expect(isAllowedExternalUrl('httpx://evil.example/')).toBe(false);
+    expect(isAllowedExternalUrl('httpfoo://evil.example/')).toBe(false);
+  });
+
+  it('rejects malformed and scheme-relative input rather than throwing', () => {
+    expect(isAllowedExternalUrl('not a url')).toBe(false);
+    expect(isAllowedExternalUrl('//evil.example/')).toBe(false);
+    expect(isAllowedExternalUrl('')).toBe(false);
   });
 });
