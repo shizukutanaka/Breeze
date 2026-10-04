@@ -1,4 +1,16 @@
 # Changelog
+## Tauri: the desktop build actually compiles now — icons/, missing trait import, updater restart no longer swallowed (branch devin/1791050530-round154, 2026-10-03)
+
+vitest 922 (unchanged); `tauri/src-tauri/src/lib.rs`, `tauri/src-tauri/icons/*`, `tauri/src-tauri/Cargo.lock`, `.gitignore`, `CHANGELOG.md`.
+
+`cargo check` on the Tauri crate failed in three independent ways — the entire `tauri/` build was dead, not just untested:
+
+- `tauri::generate_context!` panicked opening `icons/32x32.png`: the whole `tauri/src-tauri/icons/` directory referenced by `tauri.conf.json` (bundle icons + `trayIcon.iconPath`) was never committed, so a clean checkout could not build at all. Icons generated from the existing `desktop/` assets (iconset PNGs, `iconutil -c icns`, copied `icon.ico`).
+- `app.global_shortcut()` needed `tauri_plugin_global_shortcut::GlobalShortcutExt` in scope (E0599) — added; dropped the unused `TrayIcon` import alongside.
+- `RunEvent::ExitRequested` called `api.prevent_exit()` **unconditionally** — the intended hide-to-tray behavior also swallowed `app.restart()`, which is how `tauri-plugin-updater` relaunches after `downloadAndInstall()`: updates could download but never apply, and every programmatic exit was refused. User-initiated quits carry `code: None`; only those are prevented now (the documented tray-app pattern). Tray "Quit" uses `app.exit()` → `RunEvent::Exit`, unaffected.
+
+Verified: `cargo check` finishes clean in 1s with zero warnings. `Cargo.lock` committed (binary-app convention) and `target/`/`gen/` gitignored.
+
 ## Gate tool: closure-boundary scopes tail-local shadows (was whole-tail) (branch devin/1791049777-round151, 2026-10-03)
 
 Tooling only; `tools/closure-boundary.mjs`, `CHANGELOG.md`.
