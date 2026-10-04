@@ -1,4 +1,8 @@
 # Changelog
+## Desktop: breeze:// deep links dead on Windows + AppImage/rpm — unify on electron-builder protocols (branch devin/1791055497-round182, 2026-10-03)
+
+vitest 928 (+4); `desktop/package.json`, `tests/deeplink-registration.test.js`, `CHANGELOG.md`.
+
 ## Test: pin the remaining version literals (worker health/header + build scripts) (branch devin/1791055342-round181, 2026-10-03)
 
 vitest 928 (+4); `tests/app-version.test.js`, `CHANGELOG.md`.

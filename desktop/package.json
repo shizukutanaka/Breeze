@@ -115,16 +115,7 @@
       "gatekeeperAssess": false,
       "entitlements": "entitlements.mac.plist",
       "entitlementsInherit": "entitlements.mac.plist",
-      "extendInfo": {
-        "CFBundleURLTypes": [
-          {
-            "CFBundleURLName": "Breeze Protocol",
-            "CFBundleURLSchemes": [
-              "breeze"
-            ]
-          }
-        ]
-      }
+      "extendInfo": {}
     },
     "dmg": {
       "artifactName": "${productName}-${version}-mac.${ext}",
@@ -193,6 +184,14 @@
     },
     "appImage": {
       "artifactName": "${productName}-${version}-linux-${arch}.${ext}"
-    }
+    },
+    "protocols": [
+      {
+        "name": "Breeze Protocol",
+        "schemes": [
+          "breeze"
+        ]
+      }
+    ]
   }
 }
