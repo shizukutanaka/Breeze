@@ -1,4 +1,8 @@
 # Changelog
+## Desktop: deb.depends replaced the Electron default set — .deb could not launch (branch devin/1791056414-round190, 2026-10-03)
+
+vitest 944 (+10); `desktop/package.json`, `tests/deb-depends.test.js`, `CHANGELOG.md`.
+
 ## Metadata: package.json files lacked license/repository — npm reported UNLICENSED vs MIT LICENSE (branch devin/1791056158-round187, 2026-10-03)
 
 vitest 938 (+14); `package.json`, `desktop/package.json`, `mobile/package.json`, `tauri/package.json`, `tests/package-metadata.test.js`, `CHANGELOG.md`.
