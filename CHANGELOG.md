@@ -1,4 +1,8 @@
 # Changelog
+## Desktop postinst guessed one .desktop filename — breeze:// registration silently no-oped (branch devin/1791085647-round192, 2026-10-04)
+
+vitest 926 (+4); `desktop/scripts/postinst.sh`, `tests/postinst.test.js`, `CHANGELOG.md`.
+
 ## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
 
 vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.
