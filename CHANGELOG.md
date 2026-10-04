@@ -1,4 +1,8 @@
 # Changelog
+## Infra: _routes.json scopes the Worker to /api/* — static assets stop paying a function invocation (branch devin/1791055180-round179, 2026-10-03)
+
+vitest 931 (+5); `_routes.json`, `build.sh`, `tests/routes-contract.test.js`, `CHANGELOG.md`.
+
 ## Config: .env.example was missing 2 of 8 *_REQUIRE_AUTH hardening flags (branch devin/1791054685-round175, 2026-10-03)
 
 vitest 924 (+2); `.env.example`, `tests/env-docs.test.js`, `CHANGELOG.md`.
