@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Network security config — applied to the generated AndroidManifest.xml by
+  scripts/build-mobile.sh (android:networkSecurityConfig="@xml/network_security_config").
+
+  The app only talks to https://breeze.pages.dev (API + relay) and WebRTC —
+  cleartext HTTP is never legitimate, so deny it globally. Android already
+  defaults to denying cleartext for targetSdk >= 28; pinning it here keeps
+  that posture explicit and blocks a future default/overlay regression.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

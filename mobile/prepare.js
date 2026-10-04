@@ -30,6 +30,7 @@ const ASSETS = [
   ['icon-192.png',  'icon-192.png',  true],
   ['icon-512.png',  'icon-512.png',  true],
   ['404.html',      '404.html',      false],
+  ['404.js',        '404.js',        false],
 ];
 
 // Every locales/<lang>.json the app may fetch at boot — _loadLocale() does a

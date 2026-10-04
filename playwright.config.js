@@ -42,7 +42,11 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         // This environment preinstalls Chromium outside Playwright's managed cache
         // (PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 is set so npm install doesn't refetch it).
-        launchOptions: { executablePath: '/opt/pw-browsers/chromium' },
+        // PW_CHROMIUM overrides the binary (or 'chrome' to use the system-installed
+        // Chrome channel) for boxes without that path, e.g. PW_CHROMIUM=chrome.
+        ...(process.env.PW_CHROMIUM === 'chrome'
+          ? { channel: 'chrome' }
+          : { launchOptions: { executablePath: process.env.PW_CHROMIUM || '/opt/pw-browsers/chromium' } }),
       },
     },
   ],

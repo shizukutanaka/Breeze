@@ -5,6 +5,194 @@ vitest 922 (unchanged); `mobile/prepare.js`, `CHANGELOG.md`.
 
 `index.html` computes `const API = location.origin + '/api'`. Inside Capacitor the WebView's origin is the virtual `app.breeze.local` hostname (mobile/capacitor.config.json `server.hostname`), so the packaged app sent EVERY worker call — prekey upload, sealed send/poll, group ops — to a host that does not exist: it rendered fine but was silently non-functional (nothing failed loudly; `postAPIRaw` just got network errors forever). prepare.js now rewrites the `const API` line during the www/ copy to the real backend — the same anchored rewrite tests/e2e/server.mjs has always done, including the fail-loudly-if-the-line-drifts guard. `BREEZE_API_ORIGIN` overrides the default `https://breeze.pages.dev` (README's hosted instance) for self-hosted builds. The `.build-manifest.json` hash is computed on the rewritten bytes, so it stays honest. Verified: `node prepare.js` and `BREEZE_API_ORIGIN=... node prepare.js` both produce `const API = "<origin>/api"`; `--check` untouched.
 
+## Tauri: the desktop build actually compiles now — icons/, missing trait import, updater restart no longer swallowed (branch devin/1791050530-round154, 2026-10-03)
+
+vitest 922 (unchanged); `tauri/src-tauri/src/lib.rs`, `tauri/src-tauri/icons/*`, `tauri/src-tauri/Cargo.lock`, `.gitignore`, `CHANGELOG.md`.
+
+`cargo check` on the Tauri crate failed in three independent ways — the entire `tauri/` build was dead, not just untested:
+
+- `tauri::generate_context!` panicked opening `icons/32x32.png`: the whole `tauri/src-tauri/icons/` directory referenced by `tauri.conf.json` (bundle icons + `trayIcon.iconPath`) was never committed, so a clean checkout could not build at all. Icons generated from the existing `desktop/` assets (iconset PNGs, `iconutil -c icns`, copied `icon.ico`).
+- `app.global_shortcut()` needed `tauri_plugin_global_shortcut::GlobalShortcutExt` in scope (E0599) — added; dropped the unused `TrayIcon` import alongside.
+- `RunEvent::ExitRequested` called `api.prevent_exit()` **unconditionally** — the intended hide-to-tray behavior also swallowed `app.restart()`, which is how `tauri-plugin-updater` relaunches after `downloadAndInstall()`: updates could download but never apply, and every programmatic exit was refused. User-initiated quits carry `code: None`; only those are prevented now (the documented tray-app pattern). Tray "Quit" uses `app.exit()` → `RunEvent::Exit`, unaffected.
+
+Verified: `cargo check` finishes clean in 1s with zero warnings. `Cargo.lock` committed (binary-app convention) and `target/`/`gen/` gitignored.
+
+## Gate tool: closure-boundary scopes tail-local shadows (was whole-tail) (branch devin/1791049777-round151, 2026-10-03)
+
+Tooling only; `tools/closure-boundary.mjs`, `CHANGELOG.md`.
+
+- The checker skipped a closure name whenever ANY tail declaration shared it —
+  but a tail-local binding only shadows inside its own scope. 24 initMessenger
+  names (msg, db, el, contacts, unread, e, input, ...) collide with tail-local
+  params/arrow args/catch vars today, so a bare ReferenceError use elsewhere in
+  the tail would have been skipped wholesale — the exact bug class the gate
+  exists to catch (a misplaced-brace refugee landing outside initMessenger).
+- Shadows are now scoped: whole-tail spans for depth-0 declarations, the
+  following brace pair for function/method params, catch vars and for-vars,
+  the enclosing brace pair for nested const/let, `=>`..EOL for expression
+  arrows. Binding-name decl sites are inside their own span (they are refRe
+  hits too). Real file: 0 violations; the pre-fix 9 hits were decl-site false
+  positives.
+## Tauri: linux.deb.desktopTemplate pointed at a missing breeze.desktop — .deb bundle dead (branch devin/1791056330-round189, 2026-10-03)
+
+vitest 938 (+6); `tauri/src-tauri/breeze.desktop`, `tests/tauri-bundle.test.js`, `CHANGELOG.md`.
+
+## Tauri: updater plugin registered with zero config — app aborts at plugin init (branch devin/1791056254-round188, 2026-10-03)
+
+vitest 935 (+3); `tauri/src-tauri/Cargo.toml`, `tauri/src-tauri/src/lib.rs`, `tests/tauri-plugins.test.js`, `CHANGELOG.md`.
+
+## Tauri: icons/ directory shipped empty — cargo tauri build could not bundle (branch devin/1791056045-round186, 2026-10-03)
+
+vitest 932 (+8); `tauri/src-tauri/icons/*`, `tests/tauri-icons.test.js`, `CHANGELOG.md`.
+
+## Mobile: res/ overlay pipeline was dead — implemented NSC + iOS plist additions (branch devin/1791055916-round185, 2026-10-03)
+
+vitest 930 (+5); `mobile/res/*`, `mobile/scripts/build-mobile.sh`, `tests/mobile-overlays.test.js`, `CHANGELOG.md`.
+
+## Desktop: signed macOS build had camera denied + no TCC usage strings (calls dead) (branch devin/1791055261-round180, 2026-10-03)
+
+vitest 934 (+3); `desktop/entitlements.mac.plist`, `desktop/package.json`, `tests/desktop-entitlements.test.js`, `CHANGELOG.md`.
+
+## Infra: _routes.json scopes the Worker to /api/* — static assets stop paying a function invocation (branch devin/1791055180-round179, 2026-10-03)
+
+vitest 931 (+5); `_routes.json`, `build.sh`, `tests/routes-contract.test.js`, `CHANGELOG.md`.
+
+## Config: .env.example was missing 2 of 8 *_REQUIRE_AUTH hardening flags (branch devin/1791054685-round175, 2026-10-03)
+
+vitest 924 (+2); `.env.example`, `tests/env-docs.test.js`, `CHANGELOG.md`.
+
+## SEO/funding: sitemap.xml used relative <loc> (spec-invalid — file ignored); drop dead ?pricing entries (branch devin/1791053941-round169, 2026-10-03)
+
+vitest 922 (unchanged); `sitemap.xml`, `.github/FUNDING.yml`, `CHANGELOG.md`.
+
+## build.sh: packaged desktop bundles shipped English-only — copy_web never copied locales/ (branch devin/1791053853-round168, 2026-10-03)
+
+vitest 922 (unchanged); `build.sh`, `CHANGELOG.md`.
+
+## 404: move the SPA redirect out of an inline script — the pinned CSP blocked it (deep-link recovery was dead) (branch devin/1791053389-round165, 2026-10-03)
+
+vitest 922 (unchanged — static files); `404.html`, `404.js` (new), `CHANGELOG.md`.
+
+## Presence: check freshness window matches the 5-min KV write throttle (60s reported online users offline) (branch devin/1791052537-round161, 2026-10-03)
+
+vitest 923 (+1); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
+
+## Worker: group/create binds creatorPub to creatorId (same ownership proof as join) (branch devin/1791052291-round160, 2026-10-03)
+
+vitest 923 (+1); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
+
+## e2e: single canonical createIdentity helper (was 11 drifted copies); PW_CHROMIUM override (branch devin/1791051523-round158, 2026-10-03)
+
+`tests/e2e/helpers.mjs` (new) + 11 spec files + `playwright.config.js`.
+
+- Every spec needing an identity copy-pasted `createIdentity` — and the copies drifted: some seeded `brz-consent` (the consent banner intercepts the clicks these specs drive), some didn't; some rejected IndexedDB errors, some silently resolved. One canonical helper in tests/e2e/helpers.mjs: consent seed + real setup-UI flow + pubB64 read, with `navigate:false` for deep-link flows (`?join=`). 166 lines deleted, 12 added.
+- playwright.config.js hardcoded `executablePath: '/opt/pw-browsers/chromium'` — the whole e2e suite was un-runnable on any box without that path. `PW_CHROMIUM` env now overrides (or `PW_CHROMIUM=chrome` for the system Chrome channel); default unchanged.
+- Ran the suite in this env for the first time (`PW_CHROMIUM=chrome`): 24 changed-spec tests pass except a pre-existing group-join failure signature (6 tests, identical on unmodified main — joiner never reaches member count 2; environmental or product drift, not caused by this change — flagged for a dedicated fix round).
+
+
+## unreachable-branch gate: paren-matched conditions — guards containing calls were unscanned (branch devin/1791050292-round153, 2026-10-03)
+
+vitest 930 (+8); `tools/unreachable-branch.mjs`, `tests/unreachable-branch.test.js`, `CHANGELOG.md`.
+
+- The `if (cond) {` collector used `\bif\s*\(([^)]{0,120})\)\s*\{` — any condition containing a `)` (a call, a nested group) or longer than 120 chars silently failed the match, and 132 real `if (...) {` blocks in index.html went unscanned. A misplaced brace inside a compound platform guard — e.g. `if (PLATFORM === 'electron' && readyNow())` — would have produced exactly the dead-code regression this gate exists for, invisibly. Guards are now found by paren-matching forward on the masked source (strings/comments already blanked), then checking the `)` is followed by `{`.
+- Scanners extracted as pure exports (`mask`, `findGuards`, `deadBranches`) so verdicts are unit-testable — same shape as csp-hash/dead-wiring.
+- Header now also documents the two deliberate non-flags (mobile guards inside web/capacitor are reachable — a phone browser is both) and the remaining known limit (regex literals inside conditions aren't masked; none exist today).
+- +8 tests: capacitor-inside-electron flagged incl. the compound-condition case, mobile-inside-electron flagged, else-branch and web/capacitor-parent cases correctly NOT flagged, string-brace masking can't create phantom guards, live file zero-dead pin, and a live-file scan asserting every platform/mobile `if (...) {` is collected.
+
+## dead-wiring gate: export pure scanners, cover getElementById + all quote styles (branch devin/1791050013-round152, 2026-10-03)
+
+vitest 927 (+5); `tools/dead-wiring.mjs`, `tests/dead-wiring.test.js`, `CHANGELOG.md`.
+
+- The lookup scanner matched only single-quoted `_DOM.get('x')` — a lone `getElementById("x")`, a raw `getElementById('x')` of ANY spelling (the convention says _DOM.get, but nothing blocked a raw call), or a backticked `_DOM.get(``x``)` call was invisible to the gate — the same blind spot i18n-check had for `t("key")` until last round. One unified `(['"`])…\1` regex now covers both functions in all three spellings.
+- Id-declaration scanning gained the `id=\`x\`` (template-literal) and `.id = "x"`/backtick spellings it was already treating as legal for the first three forms.
+- Scanners extracted as pure exported functions (`collectDeclaredIds`, `collectLookups`, `deadWirings`) so the verdicts are unit-testable — same shape as csp-hash after round 147.
+- +5 tests: all six lookup spellings flag a missing id; dynamic ``_DOM.get(`dur-${x}`)`` and non-literal args stay skipped by design; all declaration forms counted; the live file pins zero dead lookups.
+
+## PQ adapter: call the draft-name primitives the probe advertises (branch devin/1791049115-round149, 2026-10-03)
+
+Reference code + tests; `src/crypto/pq.js`, `tests/pq.test.js`, `CHANGELOG.md`.
+
+- The WICG Key and Bits operations are distinct APIs: Key takes five arguments and
+  returns a CryptoKey, while Bits returns ArrayBuffers. Both are now normalized to
+  bytes correctly; malformed shared secrets fail closed unless exactly 32 bytes.
+- +5 tests pin both API shapes, required arguments and short-secret rejection.
+  Reference-only module — no deployed code path touched.
+## Desktop: rpm.depends had the same replaced-defaults defect as deb — .rpm could not launch (branch devin/1791056467-round191, 2026-10-03)
+
+vitest 944 (+10); `desktop/package.json`, `tests/rpm-depends.test.js`, `CHANGELOG.md`.
+
+## Desktop: deb.depends replaced the Electron default set — .deb could not launch (branch devin/1791056414-round190, 2026-10-03)
+
+vitest 944 (+10); `desktop/package.json`, `tests/deb-depends.test.js`, `CHANGELOG.md`.
+
+## Metadata: package.json files lacked license/repository — npm reported UNLICENSED vs MIT LICENSE (branch devin/1791056158-round187, 2026-10-03)
+
+vitest 938 (+14); `package.json`, `desktop/package.json`, `mobile/package.json`, `tauri/package.json`, `tests/package-metadata.test.js`, `CHANGELOG.md`.
+
+## Desktop: breeze:// deep links dead on Windows + AppImage/rpm — unify on electron-builder protocols (branch devin/1791055497-round182, 2026-10-03)
+
+vitest 928 (+4); `desktop/package.json`, `tests/deeplink-registration.test.js`, `CHANGELOG.md`.
+
+## Test: pin the remaining version literals (worker health/header + build scripts) (branch devin/1791055342-round181, 2026-10-03)
+
+vitest 928 (+4); `tests/app-version.test.js`, `CHANGELOG.md`.
+
+## Test: pin wrapper-manifest version + app-id parity (branch devin/1791055057-round178, 2026-10-03)
+
+vitest 931 (+7); `tests/wrapper-versions.test.js`, `CHANGELOG.md`.
+
+## Test: pin meta-CSP ↔ header-CSP directive parity (branch devin/1791054922-round177, 2026-10-03)
+
+vitest 926 (+2); `tests/csp-parity.test.js`, `CHANGELOG.md`.
+
+## Desktop: Electron bundle shipped English-only — extraResources lacked locales/ (branch devin/1791054799-round176, 2026-10-03)
+
+vitest 924 (+3); `desktop/package.json`, `tests/packaged-locales.test.js`, `CHANGELOG.md`.
+
+## Test: pin client↔worker wire contracts (PoW difficulty, challenge shape, body cap) (branch devin/1791054547-round174, 2026-10-03)
+
+vitest 929 (+3); `tests/wire-contract.test.js`, `CHANGELOG.md`.
+
+## Test: pin rate-limit parity + the _headers security baseline (branch devin/1791054398-round173, 2026-10-03)
+
+vitest 928 (+6); `tests/ratelimit-parity.test.js`, `tests/headers-contract.test.js`, `CHANGELOG.md`.
+
+## Test: pin release-metadata sync — version parity + packaged-file existence (branch devin/1791054327-round172, 2026-10-03)
+
+vitest 926 (+4); `tests/release-sync.test.js`, `CHANGELOG.md`.
+
+## Test: pin manifest deep-link contract — every advertised ?param must have a handler (branch devin/1791054235-round171, 2026-10-03)
+
+vitest 924 (+2); `tests/manifest-deeplink.test.js`, `CHANGELOG.md`.
+
+## Test harness: mockKV enforces TTLs like real KV (expiry-dependent paths were untestable) (branch devin/1791052794-round162, 2026-10-03)
+
+vitest 926 (+4); `tests/helpers/mockKV.js`, `tests/mockkv-ttl.test.js`, `CHANGELOG.md`.
+
+## Scripts: add missing test:e2e — the documented `npm run test:e2e` failed with 'Missing script' (branch devin/1791053692-round167, 2026-10-03)
+
+vitest 922 (unchanged); `package.json`, `CHANGELOG.md`.
+
+## Group bug: creator never learned of joiners — navigator.share() suspended the member poll forever (branch devin/1791051989-round159, 2026-10-03)
+
+`index.html` — 4-line reorder in createGroupInviteLink; `_headers`/`tauri.conf.json` CSP re-pin.
+
+- `startGroupMemberPoll` was called AFTER `await navigator.share()`. A pending Web Share sheet suspends the function until the user dismisses it — and where share() never resolves (headless, no gesture) the poll **never starts**: the group creator's `members` list stays at 1 forever, joiners are never added as contacts, and every group send silently excludes them until the page is reloaded.
+- Found via the e2e suite (run locally for the first time via PW_CHROMIUM): 6 join-dependent specs failed identically on unmodified main; all 10 pass after the reorder. The product bug itself — share() pending blocks poll start — reproduces on any Web-Share-capable browser (desktop Chrome, mobile Safari) whenever the sheet stays open.
+
+
+## Desktop: saved window bounds are checked against connected displays — undocking no longer opens the app off-screen (branch devin/1791053542-round166, 2026-10-03)
+
+vitest 929 (+7); `desktop/bounds-guard.js` (new), `desktop/main.js`, `tests/bounds-guard.test.js`, `CHANGELOG.md`.
+
+## Worker: skipped/failed OTP slots clear the stale key an earlier upload left (rotated-out OTP was served as fresh) (branch devin/1791053211-round164, 2026-10-03)
+
+vitest 923 (+1); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
+
+## Desktop postinst guessed one .desktop filename — breeze:// registration silently no-oped (branch devin/1791085647-round192, 2026-10-04)
+
+vitest 926 (+4); `desktop/scripts/postinst.sh`, `tests/postinst.test.js`, `CHANGELOG.md`.
+
 ## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
 
 vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.
@@ -19,6 +207,33 @@ vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.t
 vitest 916 (+1); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
 
 Post-merge review on the lost-write ktlog repair found the tail-reconciliation was itself corrupt: it spliced the registered IK's existing entry to the tail and recomputed suffix `c` values, but `verifyChain` re-sorts by `ts` — a moved entry whose timestamp predates the entries it was moved past slides back mid-log and its recomputed hash fails the chain. The repair manufactured a `tampered` audit verdict (the sibling test only passed by accident: same-millisecond timestamps + stable sort preserved array order). And the move distorted the recorded rotation sequence. The fix is an append-only **restatement** entry `{ts: now, h: curH}`: it records "this key is current as of now" — true — keeps history order and ts monotonicity so the chain verifies, and works whether or not the registered IK was ever logged. New regression test covers the early-registered-IK scenario; the existing test's assertions updated for the +1 restatement entry.
+
+## Outbox moved off localStorage into the per-account IndexedDB (branch devin/1791046973-round143, 2026-10-03)
+
+vitest 917 (+6); `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json`, `tests/outbox-idb.test.js`, `CHANGELOG.md`.
+
+- `queueOutbox` entries hold **plaintext** until flushed to a reconnecting peer — and `_persistOutbox` wrote them to `localStorage['brz-outbox-<id>']`, the exact "sensitive data in localStorage" pattern AGENTS.md forbids ("use IndexedDB"). Persistence now lives in the per-account IndexedDB `settings` store under `'outbox'`: `_currentAccountDb` is already scoped to the active account, which retires the manual account-suffixed key entirely. `_persistOutbox`/`_restoreOutbox` are module-level, so they use `_currentAccountDb` directly rather than the closure-local `dbPut`/`dbGet` (tools/closure-boundary.mjs enforces that boundary).
+- Restore is one-shot migratory: when IDB has no outbox record, a legacy `brz-outbox-*` localStorage value is adopted (IDB record preferred — no merge, no resurrecting stale drafts), every `brz-outbox*` key is then removed so plaintext stops lingering there, and the migrated map is re-persisted **after** `_outbox` is filled (the new test caught an ordering bug where persisting first would have written an empty snapshot over the record being migrated).
+- Account switch/delete semantics unchanged: the wipe already clears all IDB stores, so queued plaintext is covered by the same lifecycle as message history — better than before, where `brz-outbox-*` only died on a full `localStorage.clear()`.
+- `tests/outbox-idb.test.js` executes the extracted functions against mock IDB/localStorage: snapshot persist, no-DB no-op, restore, one-time migration + key cleanup, IDB-preferred-no-merge, plus a static guard that no `localStorage.setItem` path can reintroduce the outbox.
+
+
+## Account deletion: erase the device registry + sealed dropped-counter (branch devin/1791047701-round144, 2026-10-03)
+
+vitest 911 (+0 — existing erasure test's key list extended); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
+
+- `handleAccountDelete` erased every userId-keyed store **except** `devices:{userId}`. That key is worse than ordinary residue: `handleDeviceList`'s touch-on-read rewrites it with a fresh 90-day TTL on every GET, so a registry left behind is *self-refreshing* — as long as any peer keeps fanning out to the deleted account (senders don't know it's gone), the device list can outlive the account indefinitely, and peers keep encrypting fan-out copies to phantom devices. It's now in the deletion list, and the response's `erased` array reports `devices`.
+- `sealed:{userId}:dropped` (the dropped-message counter) joins the wipe too — same residue class as the `hwm` sibling already being deleted.
+- Not done — tombstone: a `deleted:{userId}` marker that rejects sealed/plain sends to deleted accounts was considered and rejected on privacy grounds — it makes account deletion externally observable, and a deleted account should be indistinguishable from a never-registered one. TTL'd residue from in-flight sends is the honest bound.
+- The account-deletion test's "every userId-keyed store" seed/assertion list now covers both keys — it would fail on the old handler.
+
+## Desktop: scheme allowlist on every shell.openExternal call (branch devin/1791048080-round145, 2026-10-03)
+
+vitest 917 (+6); `desktop/nav-guard.js`, `desktop/main.js`, `tests/nav-guard.test.js`, `CHANGELOG.md`.
+
+- `shell.openExternal` is a renderer→OS launch primitive, and both call sites under-gated it. `setWindowOpenHandler` used `url.startsWith('http')` — which passes `httpx://…`/`httpfoo://…` — and the `will-navigate` fallback handed **every** blocked navigation to the OS unconditionally, so a crafted `file:///…` or third-party scheme link (`zoommtg:`, `ms-appx:`, `javascript:`) could reach real OS handlers from the renderer with no further confirmation.
+- New `isAllowedExternalUrl` in nav-guard.js (the testable sibling module — main.js can't be imported without Electron): parsed-protocol allowlist `http:`/`https:`/`mailto:`/`breeze:` only. `breeze:` stays so join/add deep links pasted in chat keep round-tripping through the OS into this app; `mailto:` stays because renderMarkdown linkifies email addresses — refusing it would dead-end an existing feature (found by review).
+- Tests cover the allowlist, the file:///file-launch class, third-party scheme handlers, the original `startsWith('http')` bypass shape, and malformed/scheme-relative input.
 
 ## Lost-write recovery, part 2: ktlog append + device-registry touch-on-read (branch devin/1791046818-round142, 2026-10-03)
 
