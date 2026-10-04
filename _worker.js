@@ -2388,32 +2388,32 @@ async function handlePreKeyUpload(body, env, request) {
           // write lands BEFORE the log write, so `prekey:{userId}` is the
           // authority on which upload is current: if the registered IK is not
           // ours, appending our transition at the tail makes the audit name the
-          // wrong current key (checkRollover reads the tail). When the
-          // registered IK's own transition is in the log, it must end the
-          // chain — move it to the tail and recompute the chain hashes of the
-          // suffix after its old position. If it was never logged (its append
-          // was itself clobbered), nothing better exists than our entry.
+          // wrong current key (checkRollover reads the tail). The fix is an
+          // append-only RESTATEMENT entry `{ts: now, h: curH}` — it records
+          // "curH is the current key as of now", which is true, and keeps both
+          // history order and ts monotonicity. The earlier splice-to-tail was
+          // wrong twice over: verifyChain re-sorts by ts, so a moved old-ts
+          // entry slides back mid-log and its recomputed c fails the chain
+          // (the repair manufactured a 'tampered' verdict — only hidden in
+          // tests by same-millisecond ts collisions and stable sort); and it
+          // distorted the original rotation sequence. If the registered IK was
+          // never logged (its append clobbered), the restatement is still
+          // truthful and is the only record of it becoming current.
           const bundleRaw = await kvGet(env, `prekey:${userId}`);
           const curBundle = bundleRaw ? safeJsonParse(bundleRaw) : null;
           if (curBundle && typeof curBundle.identityKey === 'string') {
             const curH = btoa(String.fromCharCode(...new Uint8Array(
               await crypto.subtle.digest('SHA-256', new TextEncoder().encode(curBundle.identityKey))
             )));
-            if (curH !== ikHash) {
-              const curIdx = vLog.map(e => e && e.h).lastIndexOf(curH);
-              if (curIdx >= 0 && curIdx !== vLog.length - 1) {
-                vLog.push(vLog.splice(curIdx, 1)[0]);
-                for (let j = curIdx; j < vLog.length; j++) {
-                  const prevC = j > 0 ? vLog[j - 1].c : null;
-                  const pb = prevC ? Uint8Array.from(atob(prevC), ch => ch.charCodeAt(0)) : new Uint8Array(32);
-                  const hb = Uint8Array.from(atob(vLog[j].h), ch => ch.charCodeAt(0));
-                  const rb = new Uint8Array(pb.length + hb.length);
-                  rb.set(pb, 0); rb.set(hb, pb.length);
-                  vLog[j] = { ...vLog[j], c: btoa(String.fromCharCode(...new Uint8Array(
-                    await crypto.subtle.digest('SHA-256', rb)
-                  ))) };
-                }
-              }
+            const tail = vLog[vLog.length - 1];
+            if (curH !== tail.h) {
+              const pb = Uint8Array.from(atob(tail.c), ch => ch.charCodeAt(0));
+              const hb = Uint8Array.from(atob(curH), ch => ch.charCodeAt(0));
+              const rb = new Uint8Array(pb.length + hb.length);
+              rb.set(pb, 0); rb.set(hb, pb.length);
+              vLog.push({ ts: Date.now(), h: curH, c: btoa(String.fromCharCode(...new Uint8Array(
+                await crypto.subtle.digest('SHA-256', rb)
+              ))) });
             }
           }
           await kvPut(env, logKey, JSON.stringify(vLog.slice(-100)), { expirationTtl: TTL.QUARTER });

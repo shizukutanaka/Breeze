@@ -1,4 +1,22 @@
 # Changelog
+## Desktop postinst guessed one .desktop filename — breeze:// registration silently no-oped (branch devin/1791085647-round192, 2026-10-04)
+
+vitest 926 (+4); `desktop/scripts/postinst.sh`, `tests/postinst.test.js`, `CHANGELOG.md`.
+
+## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
+
+vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.
+
+- csp-hash --check had a false negative: with NO `script-src` directive in _headers at all, rewriteScriptSrc no-ops so want === current and the gate printed OK over an unpinned CSP. New `cspProblems` (exported, pure) reports a missing directive as a problem.
+- i18n-check's missing-key (7) and called-as-function (8) scans matched only single-quoted `t('k')` — a future `t("key")` would bypass both gates. Now scans both quote styles.
+- +6 tests pinning the verdict rules (stale / unsafe-inline / missing directive) and computeHashes' byte-faithfulness.
+
+
+## ktlog tail-reconciliation is append-only (restatement, not splice) — fixes a self-inflicted 'tampered' verdict (branch devin/1791048364-round146, 2026-10-03)
+
+vitest 916 (+1); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
+
+Post-merge review on the lost-write ktlog repair found the tail-reconciliation was itself corrupt: it spliced the registered IK's existing entry to the tail and recomputed suffix `c` values, but `verifyChain` re-sorts by `ts` — a moved entry whose timestamp predates the entries it was moved past slides back mid-log and its recomputed hash fails the chain. The repair manufactured a `tampered` audit verdict (the sibling test only passed by accident: same-millisecond timestamps + stable sort preserved array order). And the move distorted the recorded rotation sequence. The fix is an append-only **restatement** entry `{ts: now, h: curH}`: it records "this key is current as of now" — true — keeps history order and ts monotonicity so the chain verifies, and works whether or not the registered IK was ever logged. New regression test covers the early-registered-IK scenario; the existing test's assertions updated for the +1 restatement entry.
 
 ## Outbox moved off localStorage into the per-account IndexedDB (branch devin/1791046973-round143, 2026-10-03)
 

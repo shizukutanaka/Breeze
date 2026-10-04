@@ -3292,19 +3292,23 @@ function queueOutbox(peerId, text, meta) {
 // _currentAccountDb is already scoped to the active account, which retires the old
 // 'brz-outbox-<id>' localStorage key. Uses _currentAccountDb directly because dbPut/dbGet live
 // inside initMessenger's closure (tools/closure-boundary.mjs forbids reaching in from here).
-function _persistOutbox() {
+function _persistOutbox(d = _currentAccountDb) {
   try {
     const obj = {};
     for (const [k, v] of _outbox) {
       if (v.length > 0) obj[k] = v.slice(-50);
     }
-    const d = _currentAccountDb;
-    if (!d || !d.objectStoreNames.contains('settings')) return;
+    if (!d || !d.objectStoreNames.contains('settings')) return Promise.resolve(false);
     // Each call writes a complete snapshot; readwrite transactions on one connection run
     // in request order, so an earlier persist still in flight can't clobber a later one.
     const tx = d.transaction('settings', 'readwrite', { durability: 'relaxed' });
     tx.objectStore('settings').put(obj, 'outbox');
-  } catch(e) { _dbg(e, 'outbox-persist'); }
+    return new Promise(r => {
+      tx.oncomplete = () => r(true);
+      tx.onerror = () => { _dbg(tx.error, 'outbox-persist'); r(false); };
+      tx.onabort = () => { _dbg(tx.error, 'outbox-persist'); r(false); };
+    });
+  } catch(e) { _dbg(e, 'outbox-persist'); return Promise.resolve(false); }
 }
 async function _restoreOutbox(accountId) {
   try {
@@ -3314,17 +3318,14 @@ async function _restoreOutbox(accountId) {
       obj = await new Promise(r => {
         try {
           const req = d.transaction('settings').objectStore('settings').get('outbox');
-          req.onsuccess = () => r(req.result || null); req.onerror = () => r(null);
-        } catch(e) { _dbg(e, 'outbox-restore'); r(null); }
+          req.onsuccess = () => r(req.result || null); req.onerror = () => r(undefined);
+        } catch(e) { _dbg(e, 'outbox-restore'); r(undefined); }
       });
+      if (obj === undefined) return;
     }
     // One-time migration: an outbox persisted by the old localStorage path is adopted when
-    // IDB has none, then every legacy key is removed so plaintext stops lingering there.
-    const legacyKeys = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith('brz-outbox')) legacyKeys.push(k);
-    }
+    // IDB has none. Other accounts retain their keys until their own migration.
+    const legacyKeys = ['brz-outbox-' + accountId, 'brz-outbox'];
     let migrated = false;
     if (!obj && legacyKeys.length) {
       try {
@@ -3332,14 +3333,14 @@ async function _restoreOutbox(accountId) {
         if (raw) { const parsed = JSON.parse(raw); if (parsed && typeof parsed === 'object') { obj = parsed; migrated = true; } }
       } catch(e) { _dbg(e, 'outbox-legacy'); }
     }
-    for (const k of legacyKeys) { try { localStorage.removeItem(k); } catch(e) { _dbg(e); } }
     if (!obj) return;
     for (const [k, v] of Object.entries(obj)) {
       if (Array.isArray(v) && v.length > 0) _outbox.set(k, v);
     }
     // Persist AFTER filling the map — _persistOutbox snapshots _outbox, so calling it
     // before this loop would write an empty object over the record being migrated.
-    if (migrated) _persistOutbox();
+    if (migrated && !await _persistOutbox(d)) return;
+    for (const k of legacyKeys) { try { localStorage.removeItem(k); } catch(e) { _dbg(e); } }
     if (_outbox.size > 0) _dbg(null, `Outbox: restored ${_outbox.size} peer queues`);
   } catch(e) { _dbg(e, 'outbox-restore'); }
 }

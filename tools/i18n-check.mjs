@@ -149,7 +149,9 @@ for (const k of deadKeys) problems.push(`EN."${k}": defined but never referenced
 //    was reached, and check 6 could not see it — it only looks at keys that exist. Both
 //    directions are now covered. Only literal t('...') calls are checked; a computed key
 //    cannot be resolved statically and is out of scope by design.
-const referenced = new Set([...html.matchAll(/\bt\(\s*'([A-Za-z][A-Za-z0-9_]*)'/g)].map((m) => m[1]));
+// Both quote styles: a future `t("key")` is the same call and must not slip past
+// the missing-key gate just because every call site happens to use ' today.
+const referenced = new Set([...html.matchAll(/\bt\(\s*['"]([A-Za-z][A-Za-z0-9_]*)['"]/g)].map((m) => m[1]));
 for (const el of html.matchAll(/data-i18n(?:-ph|-aria|-title|-html)?="([A-Za-z][A-Za-z0-9_]*)"/g)) {
   referenced.add(el[1]);
 }
@@ -162,7 +164,7 @@ for (const k of [...referenced].sort()) {
 //    a function and throws. The correct form passes the interpolation args directly to t()
 //    itself: `t('key', args)`. A literal-key call followed immediately by a parenthesised
 //    argument list is unambiguous — nothing else in this codebase calls t()'s return value.
-for (const m of html.matchAll(/\bt\(\s*'([A-Za-z][A-Za-z0-9_]*)'\s*\)\(/g)) {
+for (const m of html.matchAll(/\bt\(\s*['"]([A-Za-z][A-Za-z0-9_]*)['"]\s*\)\(/g)) {
   problems.push(`t('${m[1]}')(...) calls the returned STRING as a function (TypeError at runtime) — use t('${m[1]}', ...) instead`);
 }
 

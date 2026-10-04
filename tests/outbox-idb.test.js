@@ -25,7 +25,7 @@ function mockDb(backing = {}) {
     _backing: backing,
     objectStoreNames: { contains: s => s === 'settings' },
     transaction() {
-      return {
+      const tx = {
         objectStore: () => ({
           put(val, key) { backing[key] = val; },
           get(key) {
@@ -35,6 +35,8 @@ function mockDb(backing = {}) {
           },
         }),
       };
+      queueMicrotask(() => { if (tx.oncomplete) tx.oncomplete(); });
+      return tx;
     },
   };
 }
@@ -92,10 +94,11 @@ describe('outbox persistence — IndexedDB, not localStorage', () => {
     expect(_outboxProbe.get('peerA')[0].text).toBe('pending');
   });
 
-  it('migrates a legacy localStorage outbox once, then removes every brz-outbox key', async () => {
+  it('migrates only the active account and preserves other accounts until they migrate', async () => {
     const backing = {};
     const legacy = { peerA: [{ text: 'old draft', ts: 2, attempts: 0 }] };
-    const ls = mockLocalStorage({ 'brz-outbox-acct1': JSON.stringify(legacy), 'brz-outbox-stale': '{}' });
+    const other = JSON.stringify({ peerB: [{ text: 'another account draft' }] });
+    const ls = mockLocalStorage({ 'brz-outbox-acct1': JSON.stringify(legacy), 'brz-outbox-acct2': other });
     const _outboxProbe = new Map();
     const src = extractOutbox();
     const fn = new Function(
@@ -106,7 +109,52 @@ describe('outbox persistence — IndexedDB, not localStorage', () => {
     await _restoreOutbox('acct1');
     expect(_outboxProbe.get('peerA')[0].text).toBe('old draft');
     expect(backing.outbox).toEqual(legacy); // adopted into IDB
-    expect(Object.keys(ls._m).some(k => k.startsWith('brz-outbox'))).toBe(false);
+    expect(ls._m['brz-outbox-acct1']).toBeUndefined();
+    expect(ls._m['brz-outbox-acct2']).toBe(other);
+  });
+
+  it('keeps legacy drafts if the migration transaction aborts', async () => {
+    const legacy = JSON.stringify({ peerA: [{ text: 'recoverable draft' }] });
+    const ls = mockLocalStorage({ 'brz-outbox-acct1': legacy });
+    const db = mockDb();
+    const readTransaction = db.transaction;
+    db.transaction = (store, mode) => {
+      if (mode !== 'readwrite') return readTransaction();
+      const tx = { objectStore: () => ({ put() {} }) };
+      queueMicrotask(() => { if (tx.onabort) tx.onabort(); });
+      return tx;
+    };
+    const { _restoreOutbox } = build({ db, ls });
+    await _restoreOutbox('acct1');
+    expect(ls._m['brz-outbox-acct1']).toBe(legacy);
+  });
+
+  it('keeps legacy drafts when the account DB is unavailable', async () => {
+    const legacy = JSON.stringify({ peerA: [{ text: 'recoverable draft' }] });
+    const ls = mockLocalStorage({ 'brz-outbox-acct1': legacy });
+    const { _restoreOutbox } = build({ db: null, ls });
+    await _restoreOutbox('acct1');
+    expect(ls._m['brz-outbox-acct1']).toBe(legacy);
+  });
+
+  it('does not overwrite a saved outbox with legacy data after a failed IDB read', async () => {
+    const legacy = JSON.stringify({ peerA: [{ text: 'stale draft' }] });
+    const ls = mockLocalStorage({ 'brz-outbox-acct1': legacy });
+    const backing = { outbox: { peerB: [{ text: 'new draft' }] } };
+    const db = mockDb(backing);
+    const writeTransaction = db.transaction;
+    db.transaction = (store, mode) => {
+      if (mode === 'readwrite') return writeTransaction();
+      return { objectStore: () => ({ get() {
+        const req = {};
+        queueMicrotask(() => { if (req.onerror) req.onerror(); });
+        return req;
+      } }) };
+    };
+    const { _restoreOutbox } = build({ db, ls });
+    await _restoreOutbox('acct1');
+    expect(backing.outbox).toEqual({ peerB: [{ text: 'new draft' }] });
+    expect(ls._m['brz-outbox-acct1']).toBe(legacy);
   });
 
   it('prefers the IDB record over a stale legacy key (no merge)', async () => {
