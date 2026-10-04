@@ -6,11 +6,16 @@
 // deleted by hand. These pin the overlap rule the restore relies on.
 import { describe, it, expect } from 'vitest';
 import { isVisibleBounds } from '../desktop/bounds-guard.js';
+import { readFileSync } from 'node:fs';
 
 const PRIMARY = { workArea: { x: 0, y: 0, width: 1920, height: 1080 } };
 const LEFT = { workArea: { x: -1920, y: 0, width: 1920, height: 1080 } };
 
 describe('isVisibleBounds', () => {
+  it('ships the new boot dependency in packaged desktop builds', () => {
+    const pkg = JSON.parse(readFileSync('desktop/package.json', 'utf8'));
+    expect(pkg.build.files).toContain('bounds-guard.js');
+  });
   it('accepts a rectangle fully inside the primary display', () => {
     expect(isVisibleBounds({ x: 100, y: 100, width: 960, height: 720 }, [PRIMARY])).toBe(true);
   });
