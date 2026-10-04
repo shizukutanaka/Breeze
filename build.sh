@@ -27,6 +27,14 @@ copy_web() {
     cp "$CRYPTO_DIR"/*.js "$dst/$CRYPTO_DIR/"
     echo "✓ Crypto modules copied to $dst/$CRYPTO_DIR/"
   fi
+  # locales/*.json are fetched at boot by _loadLocale() — skip them and the packaged
+  # app silently renders English for every non-EN user (same class of bug fixed for
+  # the Capacitor bundle in bf771a2).
+  if [ -d locales ]; then
+    mkdir -p "$dst/locales"
+    cp locales/*.json "$dst/locales/"
+    echo "✓ Locales copied to $dst/locales/"
+  fi
   echo "✓ Web files copied to $dst/"
 }
 

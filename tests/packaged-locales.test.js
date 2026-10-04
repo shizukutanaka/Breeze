@@ -2,8 +2,8 @@
 // fetch — every packaging path must ship the locales/ directory next to
 // index.html, or the packaged app silently degrades to English-only.
 // This bug class has hit THREE manifests already (mobile www/ bf771a2,
-// build.sh copy_web — the build.sh assertion lives on its fix branch,
-// and desktop extraResources — fixed alongside this test).
+// build.sh copy_web, and desktop extraResources — this file rides
+// both fix branches; each branch pins the surfaces its own fix covers).
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
@@ -18,6 +18,12 @@ describe('every packaging path ships locales/ next to index.html', () => {
     const src = readFileSync(join(root, 'mobile/prepare.js'), 'utf8');
     expect(src).toMatch(/ASSETS\.push.*locales/s);
     expect(src).toContain('locales/${f}');
+  });
+
+  it('build.sh copy_web copies locales/ into the packaged bundle', () => {
+    const src = readFileSync(join(root, 'build.sh'), 'utf8');
+    expect(src).toContain('locales/');
+    expect(src).toMatch(/cp\s+locales\/\*\.json/);
   });
 
   it('desktop/package.json extraResources includes ../locales → locales', () => {

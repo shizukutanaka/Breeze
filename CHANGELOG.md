@@ -1,4 +1,8 @@
 # Changelog
+## build.sh: packaged desktop bundles shipped English-only — copy_web never copied locales/ (branch devin/1791053853-round168, 2026-10-03)
+
+vitest 922 (unchanged); `build.sh`, `CHANGELOG.md`.
+
 ## 404: move the SPA redirect out of an inline script — the pinned CSP blocked it (deep-link recovery was dead) (branch devin/1791053389-round165, 2026-10-03)
 
 vitest 922 (unchanged — static files); `404.html`, `404.js` (new), `CHANGELOG.md`.
