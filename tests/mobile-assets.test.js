@@ -37,6 +37,14 @@ describe('mobile/prepare.js copies everything the app fetches', () => {
     }
   });
 
+  it('ships 404.html AND its external script — without 404.js the packaged 404 page shows but never redirects', () => {
+    // 404.html loads /404.js (the pinned production CSP forbids inline scripts), so
+    // shipping the page without the script silently kills deep-link recovery in the app.
+    for (const f of ['404.html', '404.js']) {
+      expect(existsSync(join(www, f)), `${f} missing from www/`).toBe(true);
+    }
+  });
+
   it('hashes every copied file into .build-manifest.json', () => {
     const manifest = JSON.parse(readFileSync(join(www, '.build-manifest.json'), 'utf8'));
     for (const f of readdirSync(join(root, 'locales')).filter(f => f.endsWith('.json'))) {
