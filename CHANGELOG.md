@@ -1,4 +1,8 @@
 # Changelog
+## Desktop: signed macOS build had camera denied + no TCC usage strings (calls dead) (branch devin/1791055261-round180, 2026-10-03)
+
+vitest 934 (+3); `desktop/entitlements.mac.plist`, `desktop/package.json`, `tests/desktop-entitlements.test.js`, `CHANGELOG.md`.
+
 ## Infra: _routes.json scopes the Worker to /api/* — static assets stop paying a function invocation (branch devin/1791055180-round179, 2026-10-03)
 
 vitest 931 (+5); `_routes.json`, `build.sh`, `tests/routes-contract.test.js`, `CHANGELOG.md`.

@@ -115,7 +115,10 @@
       "gatekeeperAssess": false,
       "entitlements": "entitlements.mac.plist",
       "entitlementsInherit": "entitlements.mac.plist",
-      "extendInfo": {}
+      "extendInfo": {
+        "NSCameraUsageDescription": "Breeze uses the camera for end-to-end encrypted video calls.",
+        "NSMicrophoneUsageDescription": "Breeze uses the microphone for end-to-end encrypted voice and video calls."
+      }
     },
     "dmg": {
       "artifactName": "${productName}-${version}-mac.${ext}",
