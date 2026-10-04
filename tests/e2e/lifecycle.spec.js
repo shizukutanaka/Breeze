@@ -10,23 +10,10 @@
 // today — the worst failure an encrypted messenger can have, and one that is invisible in any
 // test that starts from a fresh identity.
 import { test, expect } from '@playwright/test';
+import { createIdentity } from './helpers.mjs';
 
 const ip = (n) => ({ extraHTTPHeaders: { 'CF-Connecting-IP': `203.0.113.${n}` } });
 
-async function createIdentity(page, name) {
-  await page.addInitScript(() => { try { localStorage.setItem('brz-consent', String(Date.now())); } catch {} });
-  await page.goto('/');
-  await page.locator('#msg-name').fill(name);
-  await page.locator('#b-msg-setup').click();
-  await expect(page.locator('#msg-main')).toBeVisible();
-  return page.evaluate(() => new Promise((resolve) => {
-    const req = indexedDB.open('breeze-messenger', 5);
-    req.onsuccess = () => {
-      req.result.transaction('identity', 'readonly').objectStore('identity').get('keys')
-        .onsuccess = (e) => resolve(e.target.result?.pubB64);
-    };
-  }));
-}
 
 async function addAndOpen(page, pubB64) {
   await page.locator('#b-msg-add').click();
