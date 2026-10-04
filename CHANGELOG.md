@@ -1,4 +1,8 @@
 # Changelog
+## E2E: default page fixture gets a CF-Connecting-IP (headerless tests hit the 5-req/min 'unknown' bucket) (branch devin/1791052996-round163, 2026-10-03)
+
+vitest 922 (unchanged — e2e harness only); `playwright.config.js`, `CHANGELOG.md`.
+
 ## Attack-surface trim: deny Payment API; scope Capacitor allowNavigation to the canonical host (branch devin/1791050895-round157, 2026-10-03)
 
 `_headers` + `mobile/capacitor.config.json` — two dead/lax grants tightened.

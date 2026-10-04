@@ -27,6 +27,14 @@ export default defineConfig({
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
     trace: 'retain-on-failure',
+    // Tests using the default `page` fixture send no CF-Connecting-IP, so the Worker
+    // buckets them as ip 'unknown' — capped at 5 req/min PER PATH and shared across
+    // every headerless context (real users each get their own per-path limit).
+    // Background presence/sealed polls alone exceed that inside one test, so
+    // headerless specs flaked on 429s, not on app behavior. Give the default context
+    // its own TEST-NET-3 (RFC 5737) IP; specs that drive two+ clients already pass
+    // per-context IPs via browser.newContext(extraHTTPHeaders), which is unaffected.
+    extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.250' },
   },
   webServer: {
     command: `node tests/e2e/server.mjs`,
