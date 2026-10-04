@@ -1,4 +1,13 @@
 # Changelog
+## dead-wiring gate: export pure scanners, cover getElementById + all quote styles (branch devin/1791050013-round152, 2026-10-03)
+
+vitest 927 (+5); `tools/dead-wiring.mjs`, `tests/dead-wiring.test.js`, `CHANGELOG.md`.
+
+- The lookup scanner matched only single-quoted `_DOM.get('x')` — a lone `getElementById("x")`, a raw `getElementById('x')` of ANY spelling (the convention says _DOM.get, but nothing blocked a raw call), or a backticked `_DOM.get(``x``)` call was invisible to the gate — the same blind spot i18n-check had for `t("key")` until last round. One unified `(['"`])…\1` regex now covers both functions in all three spellings.
+- Id-declaration scanning gained the `id=\`x\`` (template-literal) and `.id = "x"`/backtick spellings it was already treating as legal for the first three forms.
+- Scanners extracted as pure exported functions (`collectDeclaredIds`, `collectLookups`, `deadWirings`) so the verdicts are unit-testable — same shape as csp-hash after round 147.
+- +5 tests: all six lookup spellings flag a missing id; dynamic ``_DOM.get(`dur-${x}`)`` and non-literal args stay skipped by design; all declaration forms counted; the live file pins zero dead lookups.
+
 ## PQ adapter: call the draft-name primitives the probe advertises (branch devin/1791049115-round149, 2026-10-03)
 
 Reference code + tests; `src/crypto/pq.js`, `tests/pq.test.js`, `CHANGELOG.md`.
