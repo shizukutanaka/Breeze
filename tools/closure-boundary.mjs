@@ -122,22 +122,110 @@ for (const m of bodyMasked.matchAll(/\bconst\s*\{([^}]*)\}\s*=/g)) {
 // Names declared in the tail itself are legitimate siblings, not the bug class this
 // checks for — a name can be BOTH closure-local (shadowed) and tail-local; only flag
 // names that resolve EXCLUSIVELY to the closure.
-const tailOwnNames = new Set();
-for (const m of tailMasked.matchAll(/\b(?:const|let)\s+([A-Za-z_$][\w$]*)/g)) tailOwnNames.add(m[1]);
-for (const m of tailMasked.matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)\s*\(/g)) tailOwnNames.add(m[1]);
-// Function parameters in the tail are also legitimately local to their own function.
-// `[^()]` (not just `[^)]`) so a param list can't span past an OUTER call's opening
-// paren when there's no closing paren in between (e.g. `addListener('x', (info) => {`
-// — `[^)]*` would greedily swallow `'x', (info` as if it were all one parameter list).
+//
+// SCOPED shadowing: a tail-local declaration only masks references that fall inside
+// its own scope. Treating every tail declaration as a whole-tail shadow (the earlier
+// flat-Set model) created a real false-negative hole — 24 closure names (msg, db, el,
+// contacts, unread, ...) collide with tail-local params/arrow args/catch vars TODAY,
+// so a bare ReferenceError reference anywhere else in the tail would have been
+// skipped wholesale. Model: whole-tail spans for depth-0 declarations; the following
+// brace pair for function params, catch vars, for-vars and method params; the
+// enclosing brace pair for nested const/let; from `=>` to end-of-line for
+// expression-bodied arrows.
+const depthAt = new Int32Array(tailMasked.length + 1);
+{
+  let d = 0;
+  for (let i = 0; i < tailMasked.length; i++) {
+    depthAt[i] = d;
+    if (tailMasked[i] === '{') d++;
+    else if (tailMasked[i] === '}') d--;
+  }
+  depthAt[tailMasked.length] = d;
+}
+// Innermost enclosing '{' for an index (stack-free: walk back to depth-1's last '{').
+function enclosingBrace(idx) {
+  const want = depthAt[idx]; // depth just before idx == enclosing depth + 1
+  for (let k = idx; k >= 0; k--) {
+    if (tailMasked[k] === '{' && depthAt[k] === want - 1) return k;
+  }
+  return -1;
+}
+function pairEnd(open) {
+  if (open < 0) return tailMasked.length;
+  let d = 0;
+  for (let k = open; k < tailMasked.length; k++) {
+    if (tailMasked[k] === '{') d++;
+    else if (tailMasked[k] === '}') { d--; if (d === 0) return k; }
+  }
+  return tailMasked.length;
+}
+// First '{' after idx (the body a param/catch/for header introduces).
+function nextBrace(idx) {
+  for (let k = idx; k < tailMasked.length; k++) if (tailMasked[k] === '{') return k;
+  return -1;
+}
+function lineEnd(idx) {
+  const e = tailMasked.indexOf('\n', idx);
+  return e < 0 ? tailMasked.length : e;
+}
+
+// name -> list of [start, end) spans where the tail-local declaration legitimately binds
+const shadows = new Map();
+const addShadow = (name, s, e) => {
+  if (!/^[A-Za-z_$][\w$]*$/.test(name)) return;
+  if (!shadows.has(name)) shadows.set(name, []);
+  shadows.get(name).push([s, e]);
+};
+const wholeTail = () => [0, tailMasked.length];
+// Scope of a header-introduced binding (params, catch, for-vars): the following block.
+const headerScope = (matchEnd) => { const o = nextBrace(matchEnd); return [matchEnd, pairEnd(o)]; };
+// Scope of a nested declaration: its enclosing block.
+const nestedScope = (idx) => { const o = enclosingBrace(idx); return [o < 0 ? 0 : o, pairEnd(o)]; };
+// Scope of an arrow param: brace body if `{` follows `=>`, else to end of line.
+const arrowScope = (matchEnd) => {
+  const o = nextBrace(matchEnd);
+  // `{` on the same line after `=>` means a brace body; otherwise expression body.
+  if (o >= 0 && o < lineEnd(matchEnd)) return [matchEnd, pairEnd(o)];
+  return [matchEnd, lineEnd(matchEnd)];
+};
+
+// Depth-0 const/let and named function declarations → whole-tail siblings.
+for (const m of tailMasked.matchAll(/\b(?:const|let)\s+([A-Za-z_$][\w$]*)/g)) {
+  const [s, e] = depthAt[m.index] === 0 ? wholeTail() : nestedScope(m.index);
+  addShadow(m[1], s, e);
+}
+for (const m of tailMasked.matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)\s*\(/g)) {
+  const [s, e] = depthAt[m.index] === 0 ? wholeTail() : nestedScope(m.index);
+  addShadow(m[1], s, e);
+}
+// Function parameters in the tail are legitimately local to their own function — but
+// ONLY inside its body. `[^()]` (not just `[^)]`) so a param list can't span past an
+// OUTER call's opening paren when there's no closing paren in between (e.g.
+// `addListener('x', (info) => {` — `[^)]*` would greedily swallow `'x', (info` as if
+// it were all one parameter list).
+// Span start = the binding NAME's own index (the decl site itself is also a refRe
+// hit — starting spans at match end would flag `m => m.use()`'s param `m`).
+const namePos = (m, n) => { const i = m[0].indexOf(n); return m.index + (i < 0 ? m[0].length : i); };
 for (const m of tailMasked.matchAll(/\bfunction\s*[A-Za-z_$]*\s*\(([^()]*)\)/g)) {
-  for (const part of m[1].split(',')) { const n = part.trim().split('=')[0].trim(); if (/^[A-Za-z_$][\w$]*$/.test(n)) tailOwnNames.add(n); }
+  const [, e] = headerScope(m.index + m[0].length);
+  for (const part of m[1].split(',')) { const n = part.trim().split('=')[0].trim(); addShadow(n, namePos(m, n), e); }
 }
 for (const m of tailMasked.matchAll(/\(([^()]*)\)\s*=>/g)) {
-  for (const part of m[1].split(',')) { const n = part.trim().split('=')[0].trim(); if (/^[A-Za-z_$][\w$]*$/.test(n)) tailOwnNames.add(n); }
+  const [, e] = arrowScope(m.index + m[0].length);
+  for (const part of m[1].split(',')) { const n = part.trim().split('=')[0].trim(); addShadow(n, namePos(m, n), e); }
 }
-for (const m of tailMasked.matchAll(/\b([A-Za-z_$][\w$]*)\s*=>/g)) tailOwnNames.add(m[1]); // single-arg arrow, no parens
-for (const m of tailMasked.matchAll(/\bcatch\s*\(\s*([A-Za-z_$][\w$]*)/g)) tailOwnNames.add(m[1]);
-for (const m of tailMasked.matchAll(/\bfor\s*\(\s*(?:const|let)\s+([A-Za-z_$][\w$]*)/g)) tailOwnNames.add(m[1]);
+for (const m of tailMasked.matchAll(/\b([A-Za-z_$][\w$]*)\s*=>/g)) { // single-arg arrow, no parens
+  const [, e] = arrowScope(m.index + m[0].length);
+  addShadow(m[1], m.index, e);
+}
+for (const m of tailMasked.matchAll(/\bcatch\s*\(\s*([A-Za-z_$][\w$]*)/g)) {
+  const [, e] = headerScope(m.index + m[0].length);
+  addShadow(m[1], namePos(m, m[1]), e);
+}
+for (const m of tailMasked.matchAll(/\bfor\s*\(\s*(?:const|let)\s+([A-Za-z_$][\w$]*)/g)) {
+  const [, e] = headerScope(m.index + m[0].length);
+  addShadow(m[1], namePos(m, m[1]), e);
+}
 // Class method / constructor / object-literal shorthand-method params (`constructor(title, opts) {`,
 // `get permission() {`, `foo(a, b) {`). A bare call expression is never followed
 // directly by `{` in valid JS outside this shape, EXCEPT for control-flow statements
@@ -148,12 +236,18 @@ for (const m of tailMasked.matchAll(/\bfor\s*\(\s*(?:const|let)\s+([A-Za-z_$][\w
 const CONTROL_KEYWORDS = /^(if|while|for|switch|catch|with|return|typeof|in|of|instanceof|new|delete|void|yield|await)$/;
 for (const m of tailMasked.matchAll(/\b([A-Za-z_$][\w$]*)\s*\(([^()]*)\)\s*\{/g)) {
   if (CONTROL_KEYWORDS.test(m[1])) continue;
-  for (const part of m[2].split(',')) { const n = part.trim().split('=')[0].trim(); if (/^[A-Za-z_$][\w$]*$/.test(n)) tailOwnNames.add(n); }
+  // The match already consumed the method body's '{' (it is the last char) — scope
+  // is THAT pair, not the next brace after it.
+  const bodyOpen = m.index + m[0].length - 1;
+  const e = pairEnd(bodyOpen);
+  const paramStart = m.index + m[0].indexOf('(');
+  for (const part of m[2].split(',')) { const n = part.trim().split('=')[0].trim(); addShadow(n, paramStart + Math.max(0, m[0].slice(m[0].indexOf('(')).indexOf(n)), e); }
 }
+
+const shadowedAt = (name, idx) => (shadows.get(name) || []).some(([s, e]) => idx >= s && idx < e);
 
 const problems = [];
 for (const name of closureNames) {
-  if (tailOwnNames.has(name)) continue; // shadowed locally in the tail — not this bug
   // A reference: the name NOT preceded by `.` (property access) or `function`/const/let
   // (a declaration, already excluded from closureNames-in-tail by construction, but a
   // parameter default or similar could still match) and not followed immediately by a
@@ -162,6 +256,8 @@ for (const name of closureNames) {
   const refRe = new RegExp(`(?<![.\\w$])${name}(?![\\w$:])`, 'g');
   for (const m of [...tailMasked.matchAll(refRe)]) {
     const idx = m.index;
+    // Inside a tail-local declaration's scope the name binds locally — skip.
+    if (shadowedAt(name, idx)) continue;
     // Skip if immediately preceded (ignoring whitespace) by `window.` — the sanctioned
     // exposure pattern already used elsewhere in this file.
     const before = tail.slice(Math.max(0, idx - 40), idx);

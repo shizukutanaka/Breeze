@@ -1,0 +1,10 @@
+[Desktop Entry]
+Comment={{comment}}
+Exec={{exec}}
+Icon={{icon}}
+Name={{name}}
+Categories=Network;InstantMessaging;Chat;
+Keywords=messenger;encrypted;p2p;chat;privacy;
+Terminal=false
+Type=Application
+StartupWMClass=breeze

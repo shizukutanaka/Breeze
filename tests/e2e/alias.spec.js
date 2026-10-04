@@ -14,21 +14,8 @@
 // (worse, in the sibling /schedule command bitten by the identical typo) the throw landed
 // BEFORE the delivery timer was armed. tools/i18n-check.mjs gate 8 now catches this class.
 import { test, expect } from '@playwright/test';
+import { createIdentity } from './helpers.mjs';
 
-async function createIdentity(page, name) {
-  await page.addInitScript(() => { try { localStorage.setItem('brz-consent', String(Date.now())); } catch {} });
-  await page.goto('/');
-  await page.locator('#msg-name').fill(name);
-  await page.locator('#b-msg-setup').click();
-  await expect(page.locator('#msg-main')).toBeVisible();
-  return page.evaluate(() => new Promise((resolve) => {
-    const req = indexedDB.open('breeze-messenger', 5);
-    req.onsuccess = () => {
-      req.result.transaction('identity', 'readonly').objectStore('identity').get('keys')
-        .onsuccess = (e) => resolve(e.target.result?.pubB64);
-    };
-  }));
-}
 
 // Cheap PoW solve for TEST SETUP only — seeding a pre-existing alias directly via the Worker
 // API. The E2E harness's MIN_POW_DIFFICULTY floor is 8 (tests/helpers/mockKV.js), well below
