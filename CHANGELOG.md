@@ -1,4 +1,8 @@
 # Changelog
+## Tauri: linux.deb.desktopTemplate pointed at a missing breeze.desktop — .deb bundle dead (branch devin/1791056330-round189, 2026-10-03)
+
+vitest 938 (+6); `tauri/src-tauri/breeze.desktop`, `tests/tauri-bundle.test.js`, `CHANGELOG.md`.
+
 ## Tauri: updater plugin registered with zero config — app aborts at plugin init (branch devin/1791056254-round188, 2026-10-03)
 
 vitest 935 (+3); `tauri/src-tauri/Cargo.toml`, `tauri/src-tauri/src/lib.rs`, `tests/tauri-plugins.test.js`, `CHANGELOG.md`.
