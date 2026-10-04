@@ -42,39 +42,47 @@ import { u8, concatBytes, ctEqual } from './bytes.js';
 export const PQ_INFO = 'breeze-pqxdh-v1';
 
 // A KEM adapter over WebCrypto's ML-KEM, per the WICG modern-algos draft. The
-// primitive name moved across draft revisions (encapsulateKey -> encapsulateBits),
-// so probe both; SubtleCrypto.supports() is the spec'd feature-detection entry.
+// Key operations return CryptoKeys; Bits operations return ArrayBuffers.
 export function webCryptoKem(opts = {}) {
   const subtle = opts.subtle || globalThis.crypto?.subtle;
   const alg = opts.algorithm || 'ML-KEM-768';
+  async function secretBytes(value, key) {
+    const raw = key ? await subtle.exportKey('raw', value) : value;
+    const ss = raw instanceof ArrayBuffer ? new Uint8Array(raw) : u8(raw);
+    if (ss.length !== 32) throw new Error('Invalid ML-KEM shared secret');
+    return ss;
+  }
   return {
     name: alg,
     available() {
       if (!subtle) return false;
       try {
-        if (typeof subtle.supports === 'function') return !!subtle.supports('encapsulateBits', alg);
+        if (typeof subtle.supports === 'function') {
+          const operation = typeof subtle.encapsulateBits === 'function' || typeof subtle.encapsulateKey !== 'function' ? 'encapsulateBits' : 'encapsulateKey';
+          return !!subtle.supports(operation, alg);
+        }
         return typeof subtle.encapsulateBits === 'function' || typeof subtle.encapsulateKey === 'function';
       } catch { return false; }
     },
     async encapsulate(pk) {
       if (!this.available()) throw new Error('ML-KEM unavailable in this runtime');
-      // available() deliberately accepts the older draft names (encapsulateKey)
-      // — so calling encapsulateBits unconditionally would crash on exactly the
-      // runtimes the probe admits. Use whichever name this runtime exposes.
-      const fn = typeof subtle.encapsulateBits === 'function' ? 'encapsulateBits' : 'encapsulateKey';
-      const r = await subtle[fn](alg, pk);
-      return { ct: u8(r.ciphertext), ss: u8(r.sharedKey ?? r.sharedSecret) };
+      if (typeof subtle.encapsulateBits === 'function') {
+        const r = await subtle.encapsulateBits(alg, pk);
+        return { ct: new Uint8Array(r.ciphertext), ss: await secretBytes(r.sharedKey ?? r.sharedSecret, false) };
+      }
+      if (typeof subtle.encapsulateKey !== 'function' || typeof subtle.exportKey !== 'function') throw new Error('ML-KEM unavailable in this runtime');
+      const r = await subtle.encapsulateKey(alg, pk, { name: 'AES-GCM', length: 256 }, true, ['encrypt']);
+      return { ct: new Uint8Array(r.ciphertext), ss: await secretBytes(r.sharedKey, true) };
     },
     async decapsulate(sk, ct) {
       if (!this.available()) throw new Error('ML-KEM unavailable in this runtime');
-      // Asymmetric runtimes (enc without dec) fail closed here rather than with a
-      // bare TypeError — same 'unavailable' contract as the gate above.
-      const fn = typeof subtle.decapsulateBits === 'function'
-        ? 'decapsulateBits'
-        : (typeof subtle.decapsulateKey === 'function' ? 'decapsulateKey' : null);
-      if (!fn) throw new Error('ML-KEM unavailable in this runtime');
-      const r = await subtle[fn](alg, sk, u8(ct));
-      return u8(r.sharedKey ?? r.sharedSecret ?? r);
+      if (typeof subtle.decapsulateBits === 'function') {
+        const r = await subtle.decapsulateBits(alg, sk, u8(ct));
+        return secretBytes(r.sharedKey ?? r.sharedSecret ?? r, false);
+      }
+      if (typeof subtle.decapsulateKey !== 'function' || typeof subtle.exportKey !== 'function') throw new Error('ML-KEM unavailable in this runtime');
+      const r = await subtle.decapsulateKey(alg, sk, u8(ct), { name: 'AES-GCM', length: 256 }, true, ['encrypt']);
+      return secretBytes(r, true);
     },
   };
 }
