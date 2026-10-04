@@ -7,6 +7,18 @@
 - Found via the e2e suite (run locally for the first time via PW_CHROMIUM): 6 join-dependent specs failed identically on unmodified main; all 10 pass after the reorder. The product bug itself — share() pending blocks poll start — reproduces on any Web-Share-capable browser (desktop Chrome, mobile Safari) whenever the sheet stays open.
 
 
+## Desktop: saved window bounds are checked against connected displays — undocking no longer opens the app off-screen (branch devin/1791053542-round166, 2026-10-03)
+
+vitest 929 (+7); `desktop/bounds-guard.js` (new), `desktop/main.js`, `tests/bounds-guard.test.js`, `CHANGELOG.md`.
+
+## Worker: skipped/failed OTP slots clear the stale key an earlier upload left (rotated-out OTP was served as fresh) (branch devin/1791053211-round164, 2026-10-03)
+
+vitest 923 (+1); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
+
+## Desktop postinst guessed one .desktop filename — breeze:// registration silently no-oped (branch devin/1791085647-round192, 2026-10-04)
+
+vitest 926 (+4); `desktop/scripts/postinst.sh`, `tests/postinst.test.js`, `CHANGELOG.md`.
+
 ## Gate tools: csp-hash fails on a missing script-src; i18n-check scans double-quoted t() (branch devin/1791048804-round147, 2026-10-03)
 
 vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.test.js`, `CHANGELOG.md`.
@@ -21,6 +33,33 @@ vitest 921 (+6); `tools/csp-hash.mjs`, `tools/i18n-check.mjs`, `tests/csp-hash.t
 vitest 916 (+1); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
 
 Post-merge review on the lost-write ktlog repair found the tail-reconciliation was itself corrupt: it spliced the registered IK's existing entry to the tail and recomputed suffix `c` values, but `verifyChain` re-sorts by `ts` — a moved entry whose timestamp predates the entries it was moved past slides back mid-log and its recomputed hash fails the chain. The repair manufactured a `tampered` audit verdict (the sibling test only passed by accident: same-millisecond timestamps + stable sort preserved array order). And the move distorted the recorded rotation sequence. The fix is an append-only **restatement** entry `{ts: now, h: curH}`: it records "this key is current as of now" — true — keeps history order and ts monotonicity so the chain verifies, and works whether or not the registered IK was ever logged. New regression test covers the early-registered-IK scenario; the existing test's assertions updated for the +1 restatement entry.
+
+## Outbox moved off localStorage into the per-account IndexedDB (branch devin/1791046973-round143, 2026-10-03)
+
+vitest 917 (+6); `index.html`, `_headers`, `tauri/src-tauri/tauri.conf.json`, `tests/outbox-idb.test.js`, `CHANGELOG.md`.
+
+- `queueOutbox` entries hold **plaintext** until flushed to a reconnecting peer — and `_persistOutbox` wrote them to `localStorage['brz-outbox-<id>']`, the exact "sensitive data in localStorage" pattern AGENTS.md forbids ("use IndexedDB"). Persistence now lives in the per-account IndexedDB `settings` store under `'outbox'`: `_currentAccountDb` is already scoped to the active account, which retires the manual account-suffixed key entirely. `_persistOutbox`/`_restoreOutbox` are module-level, so they use `_currentAccountDb` directly rather than the closure-local `dbPut`/`dbGet` (tools/closure-boundary.mjs enforces that boundary).
+- Restore is one-shot migratory: when IDB has no outbox record, a legacy `brz-outbox-*` localStorage value is adopted (IDB record preferred — no merge, no resurrecting stale drafts), every `brz-outbox*` key is then removed so plaintext stops lingering there, and the migrated map is re-persisted **after** `_outbox` is filled (the new test caught an ordering bug where persisting first would have written an empty snapshot over the record being migrated).
+- Account switch/delete semantics unchanged: the wipe already clears all IDB stores, so queued plaintext is covered by the same lifecycle as message history — better than before, where `brz-outbox-*` only died on a full `localStorage.clear()`.
+- `tests/outbox-idb.test.js` executes the extracted functions against mock IDB/localStorage: snapshot persist, no-DB no-op, restore, one-time migration + key cleanup, IDB-preferred-no-merge, plus a static guard that no `localStorage.setItem` path can reintroduce the outbox.
+
+
+## Account deletion: erase the device registry + sealed dropped-counter (branch devin/1791047701-round144, 2026-10-03)
+
+vitest 911 (+0 — existing erasure test's key list extended); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
+
+- `handleAccountDelete` erased every userId-keyed store **except** `devices:{userId}`. That key is worse than ordinary residue: `handleDeviceList`'s touch-on-read rewrites it with a fresh 90-day TTL on every GET, so a registry left behind is *self-refreshing* — as long as any peer keeps fanning out to the deleted account (senders don't know it's gone), the device list can outlive the account indefinitely, and peers keep encrypting fan-out copies to phantom devices. It's now in the deletion list, and the response's `erased` array reports `devices`.
+- `sealed:{userId}:dropped` (the dropped-message counter) joins the wipe too — same residue class as the `hwm` sibling already being deleted.
+- Not done — tombstone: a `deleted:{userId}` marker that rejects sealed/plain sends to deleted accounts was considered and rejected on privacy grounds — it makes account deletion externally observable, and a deleted account should be indistinguishable from a never-registered one. TTL'd residue from in-flight sends is the honest bound.
+- The account-deletion test's "every userId-keyed store" seed/assertion list now covers both keys — it would fail on the old handler.
+
+## Desktop: scheme allowlist on every shell.openExternal call (branch devin/1791048080-round145, 2026-10-03)
+
+vitest 917 (+6); `desktop/nav-guard.js`, `desktop/main.js`, `tests/nav-guard.test.js`, `CHANGELOG.md`.
+
+- `shell.openExternal` is a renderer→OS launch primitive, and both call sites under-gated it. `setWindowOpenHandler` used `url.startsWith('http')` — which passes `httpx://…`/`httpfoo://…` — and the `will-navigate` fallback handed **every** blocked navigation to the OS unconditionally, so a crafted `file:///…` or third-party scheme link (`zoommtg:`, `ms-appx:`, `javascript:`) could reach real OS handlers from the renderer with no further confirmation.
+- New `isAllowedExternalUrl` in nav-guard.js (the testable sibling module — main.js can't be imported without Electron): parsed-protocol allowlist `http:`/`https:`/`mailto:`/`breeze:` only. `breeze:` stays so join/add deep links pasted in chat keep round-tripping through the OS into this app; `mailto:` stays because renderMarkdown linkifies email addresses — refusing it would dead-end an existing feature (found by review).
+- Tests cover the allowlist, the file:///file-launch class, third-party scheme handlers, the original `startsWith('http')` bypass shape, and malformed/scheme-relative input.
 
 ## Lost-write recovery, part 2: ktlog append + device-registry touch-on-read (branch devin/1791046818-round142, 2026-10-03)
 
