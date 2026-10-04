@@ -1,4 +1,8 @@
 # Changelog
+## Test: pin release-metadata sync — version parity + packaged-file existence (branch devin/1791054327-round172, 2026-10-03)
+
+vitest 926 (+4); `tests/release-sync.test.js`, `CHANGELOG.md`.
+
 ## Test: pin manifest deep-link contract — every advertised ?param must have a handler (branch devin/1791054235-round171, 2026-10-03)
 
 vitest 924 (+2); `tests/manifest-deeplink.test.js`, `CHANGELOG.md`.
