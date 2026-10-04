@@ -11,22 +11,8 @@
 // <secret>' — a feature that exists so a secret does NOT sit in a chat log — puts it
 // straight into one. So this asserts the peer's own database, not just the sender's UI.
 import { test, expect } from '@playwright/test';
+import { createIdentity } from './helpers.mjs';
 
-async function createIdentity(page, name) {
-  await page.goto('/');
-  await page.locator('#msg-name').fill(name);
-  await page.locator('#b-msg-setup').click();
-  await expect(page.locator('#msg-main')).toBeVisible();
-  return page.evaluate(() => new Promise((resolve, reject) => {
-    const req = indexedDB.open('breeze-messenger', 5);
-    req.onerror = () => reject(req.error);
-    req.onsuccess = () => {
-      const getReq = req.result.transaction('identity', 'readonly').objectStore('identity').get('keys');
-      getReq.onsuccess = () => resolve(getReq.result?.pubB64);
-      getReq.onerror = () => reject(getReq.error);
-    };
-  }));
-}
 
 const messageTexts = (page) => page.evaluate(() => new Promise((resolve) => {
   const req = indexedDB.open('breeze-messenger', 5);

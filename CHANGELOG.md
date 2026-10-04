@@ -1,4 +1,13 @@
 # Changelog
+## e2e: single canonical createIdentity helper (was 11 drifted copies); PW_CHROMIUM override (branch devin/1791051523-round158, 2026-10-03)
+
+`tests/e2e/helpers.mjs` (new) + 11 spec files + `playwright.config.js`.
+
+- Every spec needing an identity copy-pasted `createIdentity` — and the copies drifted: some seeded `brz-consent` (the consent banner intercepts the clicks these specs drive), some didn't; some rejected IndexedDB errors, some silently resolved. One canonical helper in tests/e2e/helpers.mjs: consent seed + real setup-UI flow + pubB64 read, with `navigate:false` for deep-link flows (`?join=`). 166 lines deleted, 12 added.
+- playwright.config.js hardcoded `executablePath: '/opt/pw-browsers/chromium'` — the whole e2e suite was un-runnable on any box without that path. `PW_CHROMIUM` env now overrides (or `PW_CHROMIUM=chrome` for the system Chrome channel); default unchanged.
+- Ran the suite in this env for the first time (`PW_CHROMIUM=chrome`): 24 changed-spec tests pass except a pre-existing group-join failure signature (6 tests, identical on unmodified main — joiner never reaches member count 2; environmental or product drift, not caused by this change — flagged for a dedicated fix round).
+
+
 ## unreachable-branch gate: paren-matched conditions — guards containing calls were unscanned (branch devin/1791050292-round153, 2026-10-03)
 
 vitest 930 (+8); `tools/unreachable-branch.mjs`, `tests/unreachable-branch.test.js`, `CHANGELOG.md`.
