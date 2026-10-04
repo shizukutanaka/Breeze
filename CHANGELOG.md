@@ -1,4 +1,8 @@
 # Changelog
+## Test: pin the remaining version literals (worker health/header + build scripts) (branch devin/1791055342-round181, 2026-10-03)
+
+vitest 928 (+4); `tests/app-version.test.js`, `CHANGELOG.md`.
+
 ## Test: pin wrapper-manifest version + app-id parity (branch devin/1791055057-round178, 2026-10-03)
 
 vitest 931 (+7); `tests/wrapper-versions.test.js`, `CHANGELOG.md`.
