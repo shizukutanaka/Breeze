@@ -1,4 +1,8 @@
 # Changelog
+## Presence: check freshness window matches the 5-min KV write throttle (60s reported online users offline) (branch devin/1791052537-round161, 2026-10-03)
+
+vitest 923 (+1); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
+
 ## Worker: group/create binds creatorPub to creatorId (same ownership proof as join) (branch devin/1791052291-round160, 2026-10-03)
 
 vitest 923 (+1); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.

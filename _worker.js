@@ -34,6 +34,14 @@ const TIMEOUT_MS = { // fetchWithTimeout values (milliseconds)
   POW_FUT:        300000, // 5-min PoW future clock-skew tolerance
   MULTITAB_GRACE:   10000,  // multi-tab delivery grace period in handleMsgPoll keep filter
   PRESENCE_WRITE:  300000,  // minimum interval between KV presence writes (throttle)
+  // Freshness window for presence checks. MUST be >= PRESENCE_WRITE: KV presence records
+  // are flushed only once per PRESENCE_WRITE (5min) and expire at the 6-min TTL, so the
+  // old 60s window reported a heartbeating user OFFLINE for ~4 of every 5 minutes whenever
+  // the checker landed on a different isolate than the heartbeats — and background-tab
+  // users (120s heartbeat) failed even same-isolate reads half the time. 360s = the KV
+  // TTL: a live user's record is always re-flushed before expiry, so an existing record
+  // means online; a departed user's record can no longer be read once it expires.
+  PRESENCE_FRESH:  360000,
 };
 
 function sanitizeString(val, maxLen = MAX_STRING_LEN) {
@@ -675,7 +683,7 @@ async function handlePresence(body, env, request) {
       const memRaw = memCache ? memCache.get(`presence:${cid}:data`) : null;
       if (memRaw) {
         const p = safeJsonParse(memRaw);
-        online[cid] = p ? (Date.now() - p.at) < 60000 : false;
+        online[cid] = p ? (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH : false;
       } else {
         misses.push(cid);
       }
@@ -684,7 +692,7 @@ async function handlePresence(body, env, request) {
       const data = await kvGet(env, `presence:${cid}`);
       if (data) {
         const p = safeJsonParse(data);
-        online[cid] = p ? (Date.now() - p.at) < 60000 : false;
+        online[cid] = p ? (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH : false;
       } else {
         online[cid] = false;
       }
@@ -708,13 +716,13 @@ async function handlePresence(body, env, request) {
     if (memData) {
       const p = safeJsonParse(memData);
       if (!p) return json({ online: false }, 200, request);
-      return json({ online: (Date.now() - p.at) < 60000, caps: p.caps }, 200, request);
+      return json({ online: (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH, caps: p.caps }, 200, request);
     }
     const data = await kvGet(env, `presence:${id}`);
     if (!data) return json({ online: false }, 200, request);
     const p = safeJsonParse(data);
     if (!p) return json({ online: false }, 200, request);
-    return json({ online: (Date.now() - p.at) < 60000, caps: p.caps }, 200, request);
+    return json({ online: (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH, caps: p.caps }, 200, request);
   }
 
   // Store presence heartbeat
