@@ -1,4 +1,8 @@
 # Changelog
+## Test harness: mockKV enforces TTLs like real KV (expiry-dependent paths were untestable) (branch devin/1791052794-round162, 2026-10-03)
+
+vitest 926 (+4); `tests/helpers/mockKV.js`, `tests/mockkv-ttl.test.js`, `CHANGELOG.md`.
+
 ## Scripts: add missing test:e2e — the documented `npm run test:e2e` failed with 'Missing script' (branch devin/1791053692-round167, 2026-10-03)
 
 vitest 922 (unchanged); `package.json`, `CHANGELOG.md`.
