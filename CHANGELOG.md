@@ -1,4 +1,8 @@
 # Changelog
+## Test: pin manifest deep-link contract — every advertised ?param must have a handler (branch devin/1791054235-round171, 2026-10-03)
+
+vitest 924 (+2); `tests/manifest-deeplink.test.js`, `CHANGELOG.md`.
+
 ## Test harness: mockKV enforces TTLs like real KV (expiry-dependent paths were untestable) (branch devin/1791052794-round162, 2026-10-03)
 
 vitest 926 (+4); `tests/helpers/mockKV.js`, `tests/mockkv-ttl.test.js`, `CHANGELOG.md`.
