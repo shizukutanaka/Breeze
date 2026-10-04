@@ -19,7 +19,7 @@ const { app, BrowserWindow, Tray, Menu, nativeImage, Notification,
         globalShortcut, shell, ipcMain, session, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { isAllowedNavigation } = require('./nav-guard');
+const { isAllowedNavigation, isAllowedExternalUrl } = require('./nav-guard');
 const { readWebCSP } = require('./csp-guard');
 const { isVisibleBounds } = require('./bounds-guard');
 
@@ -100,9 +100,12 @@ function createWindow() {
     if (!isQuitting) { e.preventDefault(); win.hide(); }
   });
 
-  // Block new window/tab creation — open external URLs in default browser
+  // Block new window/tab creation — open external URLs in default browser.
+  // isAllowedExternalUrl (nav-guard.js) gates the handoff: the old startsWith('http')
+  // let 'httpx://…' through, and an ungated openExternal is a renderer→OS launch
+  // primitive for file:// and third-party scheme handlers.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('http')) shell.openExternal(url);
+    if (isAllowedExternalUrl(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
 
@@ -117,7 +120,10 @@ function createWindow() {
   win.webContents.on('will-navigate', (e, url) => {
     if (!isAllowedNavigation(win.webContents.getURL(), url)) {
       e.preventDefault();
-      shell.openExternal(url);
+      // A blocked navigation must not become an unconditional OS launch either —
+      // the same scheme allowlist applies (file://, javascript:, third-party
+      // handlers are refused; breeze:// round-trips into this app by design).
+      if (isAllowedExternalUrl(url)) shell.openExternal(url);
     }
   });
 }
