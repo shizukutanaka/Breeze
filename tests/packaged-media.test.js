@@ -2,7 +2,7 @@
 // the same web assets as the other channels. Two observed defect classes:
 // 1. Missing camera/mic grants — macOS entitlements (#373) had the same class;
 //    snap strict confinement needs camera+audio-record plugs and flatpak needs
-//    the pipewire socket for the camera portal. Without them calls are dead.
+//    direct camera device access and the pulseaudio socket. Without them calls are dead.
 // 2. Partial asset copies — every packaging path that hand-picks files must
 //    carry index.html + sw.js + manifest.json + _headers + icons + locales/
 //    (locales omission = English-only; _headers omission = CSP-guard falls back
@@ -22,9 +22,12 @@ describe('snap camera/mic plugs (calls dead without them)', () => {
   });
 });
 
-describe('flatpak camera/mic (portal needs pipewire)', () => {
-  it('finish-args grant pipewire + pulseaudio', () => {
-    expect(flatpak).toContain('--socket=pipewire');
+describe('flatpak camera/mic', () => {
+  it('finish-args grant camera devices + pulseaudio using valid socket names', () => {
+    const sockets = [...flatpak.matchAll(/--socket=([a-z0-9-]+)/g)].map(m => m[1]);
+    const supported = ['x11', 'wayland', 'fallback-x11', 'pulseaudio', 'session-bus', 'system-bus', 'ssh-auth', 'pcsc', 'cups', 'gpg-agent', 'inherit-wayland-socket'];
+    expect(sockets.every(s => supported.includes(s))).toBe(true);
+    expect(flatpak).toContain('--device=all');
     expect(flatpak).toContain('--socket=pulseaudio');
   });
 });
