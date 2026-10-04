@@ -180,4 +180,54 @@ describe('webCryptoKem — ML-KEM adapter', () => {
   it('refuses to encapsulate when unavailable rather than returning a weak key', async () => {
     await expect(webCryptoKem({ subtle: {} }).encapsulate(PQPK)).rejects.toThrow(/unavailable/);
   });
+
+  it('exports the CryptoKey returned by the Key API with all required arguments', async () => {
+    const CT = new Uint8Array([9, 8, 7]), SS = new Uint8Array(32).fill(3);
+    const sharedKey = await crypto.subtle.importKey('raw', SS, 'AES-GCM', true, ['encrypt']);
+    const sharedAlgorithm = { name: 'AES-GCM', length: 256 };
+    const draftSubtle = {
+      encapsulateKey: async (...args) => {
+        expect(args).toEqual(['ML-KEM-768', PQPK, sharedAlgorithm, true, ['encrypt']]);
+        return { ciphertext: CT.buffer, sharedKey };
+      },
+      decapsulateKey: async (...args) => {
+        expect(args).toEqual(['ML-KEM-768', PQPK, CT, sharedAlgorithm, true, ['encrypt']]);
+        return sharedKey;
+      },
+      exportKey: (...args) => crypto.subtle.exportKey(...args),
+    };
+    const k = webCryptoKem({ subtle: draftSubtle });
+    expect(k.available()).toBe(true);
+    const { ct, ss } = await k.encapsulate(PQPK);
+    expect(Array.from(ct)).toEqual([9, 8, 7]);
+    expect(ss).toEqual(SS);
+    expect(await k.decapsulate(PQPK, ct)).toEqual(SS);
+  });
+
+  it('accepts the ArrayBuffer results specified by the Bits API', async () => {
+    const CT = new Uint8Array([9, 8, 7]), SS = new Uint8Array(32).fill(3);
+    const k = webCryptoKem({ subtle: {
+      encapsulateBits: async () => ({ ciphertext: CT.buffer, sharedKey: SS.buffer }),
+      decapsulateBits: async () => SS.buffer,
+    } });
+    expect(await k.encapsulate(PQPK)).toEqual({ ct: CT, ss: SS });
+    expect(await k.decapsulate(PQPK, CT)).toEqual(SS);
+  });
+
+  it('rejects empty or short shared secrets instead of dropping the PQ contribution', async () => {
+    for (const size of [0, 1, 31]) {
+      const k = webCryptoKem({ subtle: {
+        encapsulateBits: async () => ({ ciphertext: new Uint8Array(3), sharedKey: new Uint8Array(size) }),
+        decapsulateBits: async () => new Uint8Array(size),
+      } });
+      await expect(k.encapsulate(PQPK)).rejects.toThrow(/shared secret/);
+      await expect(k.decapsulate(PQPK, new Uint8Array(3))).rejects.toThrow(/shared secret/);
+    }
+  });
+
+  it('fails closed (unavailable, not TypeError) on an asymmetric enc-only runtime', async () => {
+    const k = webCryptoKem({ subtle: { encapsulateBits: async () => ({ ciphertext: new Uint8Array(1), sharedKey: new Uint8Array(1) }) } });
+    expect(k.available()).toBe(true); // encapsulation alone is supported
+    await expect(k.decapsulate(PQPK, new Uint8Array(1))).rejects.toThrow(/unavailable/);
+  });
 });
