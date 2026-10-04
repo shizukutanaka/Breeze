@@ -1,4 +1,8 @@
 # Changelog
+## Config: .env.example was missing 2 of 8 *_REQUIRE_AUTH hardening flags (branch devin/1791054685-round175, 2026-10-03)
+
+vitest 924 (+2); `.env.example`, `tests/env-docs.test.js`, `CHANGELOG.md`.
+
 ## SEO/funding: sitemap.xml used relative <loc> (spec-invalid — file ignored); drop dead ?pricing entries (branch devin/1791053941-round169, 2026-10-03)
 
 vitest 922 (unchanged); `sitemap.xml`, `.github/FUNDING.yml`, `CHANGELOG.md`.
