@@ -1,4 +1,8 @@
 # Changelog
+## Mobile: res/ overlay pipeline was dead — implemented NSC + iOS plist additions (branch devin/1791055916-round185, 2026-10-03)
+
+vitest 930 (+5); `mobile/res/*`, `mobile/scripts/build-mobile.sh`, `tests/mobile-overlays.test.js`, `CHANGELOG.md`.
+
 ## Desktop: signed macOS build had camera denied + no TCC usage strings (calls dead) (branch devin/1791055261-round180, 2026-10-03)
 
 vitest 934 (+3); `desktop/entitlements.mac.plist`, `desktop/package.json`, `tests/desktop-entitlements.test.js`, `CHANGELOG.md`.
