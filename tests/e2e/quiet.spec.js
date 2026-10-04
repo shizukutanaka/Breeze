@@ -5,26 +5,10 @@
 // actually suppress. None of those throw — they just quietly restore the pressure the
 // features exist to remove. So they are asserted in a real browser, end to end.
 import { test, expect } from '@playwright/test';
+import { createIdentity } from './helpers.mjs';
 
 const ip = (n) => ({ extraHTTPHeaders: { 'CF-Connecting-IP': `203.0.113.${n}` } });
 
-async function createIdentity(page, name) {
-  await page.addInitScript(() => { try { localStorage.setItem('brz-consent', String(Date.now())); } catch {} });
-  await page.goto('/');
-  await page.locator('#msg-name').fill(name);
-  await page.locator('#b-msg-setup').click();
-  await expect(page.locator('#msg-main')).toBeVisible();
-  return page.evaluate(() => new Promise((resolve, reject) => {
-    const req = indexedDB.open('breeze-messenger', 5);
-    req.onerror = () => reject(req.error);
-    req.onsuccess = () => {
-      const tx = req.result.transaction('identity', 'readonly');
-      const getReq = tx.objectStore('identity').get('keys');
-      getReq.onsuccess = () => resolve(getReq.result?.pubB64);
-      getReq.onerror = () => reject(getReq.error);
-    };
-  }));
-}
 
 // Add a contact WITHOUT opening it: unread only accrues while you are not looking at the
 // conversation, so the badge assertions need a contact that was never opened.
