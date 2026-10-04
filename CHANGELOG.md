@@ -1,4 +1,8 @@
 # Changelog
+## Scripts: add missing test:e2e — the documented `npm run test:e2e` failed with 'Missing script' (branch devin/1791053692-round167, 2026-10-03)
+
+vitest 922 (unchanged); `package.json`, `CHANGELOG.md`.
+
 ## Group bug: creator never learned of joiners — navigator.share() suspended the member poll forever (branch devin/1791051989-round159, 2026-10-03)
 
 `index.html` — 4-line reorder in createGroupInviteLink; `_headers`/`tauri.conf.json` CSP re-pin.
