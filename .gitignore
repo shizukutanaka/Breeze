@@ -28,8 +28,8 @@ playwright-report/
 *.flatpak
 
 # Capacitor generated
-android/
-ios/
+mobile/android/
+mobile/ios/
 
 # Test files
 test.js
