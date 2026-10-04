@@ -986,7 +986,7 @@ describe('group epoch lifecycle (I3/G3 — bump on kick)', () => {
   const req = (b) => apiRequest('/api/group/x', b);
   async function setupGroup(env) {
     const create = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub', creatorName: 'C' }, env, req({}));
     const { token } = await create.json();
     await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', memberName: 'B' }, env, req({}));
     await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
@@ -1057,7 +1057,7 @@ describe('group durable kick + unban (item 64)', () => {
   const req = (b) => apiRequest('/api/group/x', b);
   async function setupGroup(env) {
     const create = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub', creatorName: 'C' }, env, req({}));
     const { token } = await create.json();
     await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
     return token;
@@ -1115,7 +1115,7 @@ describe('group multi-admin management (completes the half-built admins array)',
   const req = (b) => apiRequest('/api/group/admin', b);
   async function setupGroup(env) {
     const create = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub', creatorName: 'C' }, env, req({}));
     const { token } = await create.json();
     await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', memberName: 'B' }, env, req({}));
     await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
@@ -1221,7 +1221,7 @@ describe('group ownership transfer (companion to multi-admin)', () => {
   const req = (b) => apiRequest('/api/group/transfer', b);
   async function setupGroup(env) {
     const create = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub', creatorName: 'C' }, env, req({}));
     const { token } = await create.json();
     await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', memberName: 'Bob' }, env, req({}));
     await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
@@ -1296,7 +1296,7 @@ describe('group rename (lifecycle CRUD — name was frozen at create)', () => {
   const req = (b) => apiRequest('/api/group/rename', b);
   async function setupGroup(env) {
     const create = await handleGroupCreate(
-      { name: 'Old Name', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+      { name: 'Old Name', creatorId: 'creator1', creatorPub: 'creator1pub', creatorName: 'C' }, env, req({}));
     const { token } = await create.json();
     await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', memberName: 'B' }, env, req({}));
     return token;
@@ -1349,7 +1349,7 @@ describe('group leave / delete (lifecycle completion)', () => {
   const req = (b) => apiRequest('/api/group/x', b);
   async function setupGroup(env) {
     const create = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub', creatorName: 'C' }, env, req({}));
     const { token } = await create.json();
     await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', memberName: 'B' }, env, req({}));
     await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));
@@ -1429,10 +1429,10 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
     // group/create is itself auth-gated under GROUP_REQUIRE_AUTH — sign it (empty token
     // slot, bind = digest of the stored creator fields) so the fixture exercises the real
     // handler rather than seeding grp: directly.
-    const createBody = { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' };
+    const createBody = { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' };
     const tsC = Date.now();
     const bindBuf = await crypto.subtle.digest('SHA-256',
-      new TextEncoder().encode(JSON.stringify(['cpub', 'g', '', []])));
+      new TextEncoder().encode(JSON.stringify(['creator1pub', 'g', '', []])));
     const bind = Array.from(new Uint8Array(bindBuf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
     const createSig = toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey,
       new TextEncoder().encode(`breeze-group-create::creator1:${tsC}:${bind}`))));
@@ -1571,7 +1571,7 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
 
   it('rejects an unsigned group/create when GROUP_REQUIRE_AUTH is enabled', async () => {
     const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
-    const res = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}));
+    const res = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}));
     expect(res.status).toBe(403);
     expect((await res.json()).code).toBe('AUTH_REQUIRED');
   });
@@ -1581,7 +1581,7 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
     const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
     const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
     await env.KV.put('prekey:creator1', JSON.stringify({ identityKey: 'IK', edIdentityKey: toB64(edPub) }));
-    const b = { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'Alice', caps: ['seal-v2'] };
+    const b = { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub', creatorName: 'Alice', caps: ['seal-v2'] };
     const s = await createSig(ed, 'creator1', b);
     const res = await handleGroupCreate({ ...b, ...s }, env, req({}));
     expect(res.status).toBe(201);
@@ -1596,7 +1596,7 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
     const edV = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
     await env.KV.put('prekey:victim01', JSON.stringify({ identityKey: 'IK', edIdentityKey: toB64(new Uint8Array(await crypto.subtle.exportKey('raw', edV.publicKey))) }));
     const edA = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
-    const b = { name: 'g', creatorId: 'victim01', creatorPub: 'attackerpub' };
+    const b = { name: 'g', creatorId: 'victim01', creatorPub: 'victim01attacker' };
     const s = await createSig(edA, 'victim01', b);
     const res = await handleGroupCreate({ ...b, ...s }, env, req({}));
     expect(res.status).toBe(403);
@@ -1607,17 +1607,17 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
     const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
     const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
     await env.KV.put('prekey:creator1', JSON.stringify({ identityKey: 'IK', edIdentityKey: toB64(new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey))) }));
-    const b = { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' };
+    const b = { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' };
     const s = await createSig(ed, 'creator1', b);
     // Relay/observer swaps the stored pub but reuses the signature — bind covers it.
-    const res = await handleGroupCreate({ ...b, ...s, creatorPub: 'EVILPUB' }, env, req({}));
+    const res = await handleGroupCreate({ ...b, ...s, creatorPub: 'creator1EVIL' }, env, req({}));
     expect(res.status).toBe(403);
     expect((await res.json()).code).toBe('SIG_INVALID');
   });
 
   it('unsigned group/create still works when the flag is unset (backward compat)', async () => {
     const env = makeEnv();
-    const res = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}));
+    const res = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}));
     expect(res.status).toBe(201);
   });
 
@@ -1625,7 +1625,7 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
     const env = makeEnv();
     const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
     await env.KV.put('prekey:creator1', JSON.stringify({ identityKey: 'IK', edIdentityKey: toB64(new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey))) }));
-    const res = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub', ts: Date.now(), sig: toB64(new Uint8Array(64)) }, env, req({}));
+    const res = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub', ts: Date.now(), sig: toB64(new Uint8Array(64)) }, env, req({}));
     expect(res.status).toBe(403);
     expect((await res.json()).code).toBe('SIG_INVALID');
   });
@@ -1678,10 +1678,10 @@ describe('cross-protocol signature replay rejection (item 49)', () => {
     // where bind = sha256Short(JSON.stringify([creatorPub, name, creatorName||'', caps||[]])).
     const tsC = Date.now();
     const bindC = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',
-      new TextEncoder().encode(JSON.stringify(['cpub', 'g', '', []])))))
+      new TextEncoder().encode(JSON.stringify(['creator1pub', 'g', '', []])))))
       .slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
     const createSig = await sign(ed, `breeze-group-create::creator1:${tsC}:${bindC}`);
-    const { token } = await (await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub', ts: tsC, sig: createSig }, env, apiRequest('/api/group/create', {}))).json();
+    const { token } = await (await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub', ts: tsC, sig: createSig }, env, apiRequest('/api/group/create', {}))).json();
     const ts = Date.now();
     const renameSig = await sign(ed, `breeze-group-rename:${token}:creator1:${ts}`);
     const res = await handleGroupDelete({ token, adminId: 'creator1', ts, sig: renameSig }, env, apiRequest('/api/group/delete', {}));
@@ -1909,13 +1909,13 @@ describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
 
     // A group the user only joined (someone else is creator).
     const created = await handleGroupCreate(
-      { name: 'theirs', creatorId: 'owner001', creatorPub: 'opub', creatorName: 'O' }, env, gReq({}));
+      { name: 'theirs', creatorId: 'owner001', creatorPub: 'owner001pub', creatorName: 'O' }, env, gReq({}));
     const memberToken = (await created.json()).token;
     await handleGroupJoin({ token: memberToken, memberId: userId, memberPub: userId + 'mpub', memberName: 'Me' }, env, gReq({}));
 
     // A group the user created.
     const ownCreate = await handleGroupCreate(
-      { name: 'mine', creatorId: userId, creatorPub: 'mpub', creatorName: 'Me' }, env, gReq({}));
+      { name: 'mine', creatorId: userId, creatorPub: userId + 'mpub', creatorName: 'Me' }, env, gReq({}));
     const ownToken = (await ownCreate.json()).token;
     await handleGroupJoin({ token: ownToken, memberId: 'friend01', memberPub: 'friend01fpub', memberName: 'F' }, env, gReq({}));
 
@@ -1942,7 +1942,7 @@ describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
     const { ed } = await registeredAccount(env, userId);
     // A group the user is NOT in.
     const created = await handleGroupCreate(
-      { name: 'other', creatorId: 'owner002', creatorPub: 'opub', creatorName: 'O' }, env, gReq({}));
+      { name: 'other', creatorId: 'owner002', creatorPub: 'owner002pub', creatorName: 'O' }, env, gReq({}));
     const otherToken = (await created.json()).token;
 
     const ts = Date.now();
@@ -3583,7 +3583,7 @@ describe('rate limiting — group create / join explicit limits (item 55)', () =
     let last;
     for (let i = 0; i < 6; i++) {
       last = await worker.fetch(apiRequest('/api/group/create', {
-        name: 'g', creatorId: 'creator1', creatorPub: 'pub',
+        name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub',
       }), env);
     }
     expect(last.status).toBe(429);
@@ -3595,7 +3595,7 @@ describe('rate limiting — group create / join explicit limits (item 55)', () =
     let last;
     for (let i = 0; i < 5; i++) {
       last = await worker.fetch(apiRequest('/api/group/create', {
-        name: `g${i}`, creatorId: 'creator1', creatorPub: 'pub',
+        name: `g${i}`, creatorId: 'creator1', creatorPub: 'creator1pub',
       }), env);
     }
     expect(last.status).not.toBe(429);
@@ -4666,7 +4666,7 @@ describe('group member capability negotiation (N3 — unblocks negotiate.js nego
   it('stores creator + member caps and surfaces them via group/info', async () => {
     const env = makeEnv();
     const create = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C',
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub', creatorName: 'C',
         caps: ['x3dh-v5', 'group-v5', 'franking'] }, env, req({}));
     const { token } = await create.json();
     await handleGroupJoin(
@@ -4683,7 +4683,7 @@ describe('group member capability negotiation (N3 — unblocks negotiate.js nego
   it('the surfaced caps drive negotiateGroup: group-v5 floor holds, franking floor does not', async () => {
     const env = makeEnv();
     const create = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub',
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub',
         caps: ['group-v5', 'franking'] }, env, req({}));
     const { token } = await create.json();
     // One member supports group-v5 but NOT franking.
@@ -4701,7 +4701,7 @@ describe('group member capability negotiation (N3 — unblocks negotiate.js nego
   it('drops non-string / oversized caps and omits the field for legacy clients', async () => {
     const env = makeEnv();
     const create = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub',
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub',
         caps: ['ok', 42, { x: 1 }, 'y'.repeat(50)] }, env, req({}));
     const { token } = await create.json();
     // Legacy member: no caps field at all.
@@ -4717,7 +4717,7 @@ describe('group member capability negotiation (N3 — unblocks negotiate.js nego
   it('a rejoin refreshes a member\'s caps so an upgraded client can raise the floor', async () => {
     const env = makeEnv();
     const create = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', caps: ['group-v5'] }, env, req({}));
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub', caps: ['group-v5'] }, env, req({}));
     const { token } = await create.json();
     // Bob first joins as a legacy client (no group-v5).
     await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', caps: [] }, env, req({}));
@@ -4737,7 +4737,7 @@ describe('group member capability negotiation (N3 — unblocks negotiate.js nego
 
   it('a legacy rejoin (no caps) does not erase a previously recorded capability set', async () => {
     const env = makeEnv();
-    const create = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}));
+    const create = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}));
     const { token } = await create.json();
     await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', caps: ['group-v5', 'franking'] }, env, req({}));
     // Reconnect without advertising caps (e.g. an older code path) must not wipe them.
@@ -4760,7 +4760,7 @@ describe('group create / join / info validation', () => {
   it('create returns a token and memberCount 1', async () => {
     const env = makeEnv();
     const res = await handleGroupCreate(
-      { name: 'TestGroup', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'Alice' },
+      { name: 'TestGroup', creatorId: 'creator1', creatorPub: 'creator1pub', creatorName: 'Alice' },
       env, req({}));
     expect(res.status).toBe(201);
     const j = await res.json();
@@ -4778,7 +4778,7 @@ describe('group create / join / info validation', () => {
     // Generate 20 tokens and verify all are exactly 12 chars of [0-9a-z].
     for (let i = 0; i < 20; i++) {
       const res = await handleGroupCreate(
-        { name: `G${i}`, creatorId: `cre${String(i).padStart(5,'0')}`, creatorPub: 'p', creatorName: 'C' },
+        { name: `G${i}`, creatorId: `cre${String(i).padStart(5,'0')}`, creatorPub: `cre${String(i).padStart(5,'0')}p`, creatorName: 'C' },
         makeEnv(), req({}));
       const { token } = await res.json();
       expect(token).toMatch(/^[0-9a-z]{12}$/); // exactly 12 base-36 chars
@@ -4815,7 +4815,7 @@ describe('group create / join / info validation', () => {
   it('join returns alreadyMember:true for duplicate join without adding again', async () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     // creator1 joins again
     const res = await handleGroupJoin(
       { token, memberId: 'creator1', memberPub: 'creator1cpub' }, env, req({}));
@@ -4829,7 +4829,7 @@ describe('group create / join / info validation', () => {
   it('info returns epoch 0 on a freshly created group', async () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     const res = await handleGroupInfo({ token }, env, req({}));
     expect(res.status).toBe(200);
     const j = await res.json();
@@ -4852,7 +4852,7 @@ describe('group create / join / info validation', () => {
   it('join rejects when group is full (100 members)', async () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
-      { name: 'big', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+      { name: 'big', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     // Fill to 100 members (creator is already 1, add 99 more).
     for (let i = 0; i < 99; i++) {
       await handleGroupJoin(
@@ -4867,7 +4867,7 @@ describe('group create / join / info validation', () => {
 
   it('create rejects array members with more than 100 entries', async () => {
     const res = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', members: new Array(101).fill({ id: 'x', pub: 'p' }) },
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub', members: new Array(101).fill({ id: 'x', pub: 'p' }) },
       makeEnv(), req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).error).toMatch(/Max 100/);
@@ -4878,14 +4878,14 @@ describe('group create / join / info validation', () => {
     // have triggered the "Max 100 members" guard (falsy .length property match on
     // a string). After the fix, only genuine arrays are checked.
     const res = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', members: 'x'.repeat(200) },
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub', members: 'x'.repeat(200) },
       makeEnv(), req({}));
     expect(res.status).toBe(201);
   });
 
   it('create rejects malformed creatorId (KV member injection guard)', async () => {
     const res = await handleGroupCreate(
-      { name: 'g', creatorId: 'bad id!', creatorPub: 'cpub' }, makeEnv(), req({}));
+      { name: 'g', creatorId: 'bad id!', creatorPub: 'creator1pub' }, makeEnv(), req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_USER_ID');
   });
@@ -4902,10 +4902,20 @@ describe('group create / join / info validation', () => {
     expect(r2.status).toBe(400);
   });
 
+  it('create rejects a creatorPub that does not match creatorId (KEY_MISMATCH)', async () => {
+    // Same pub↔id binding as join: creatorId = creatorPub.slice(0,12). Without it an
+    // unsigned create mints a member record that safeMemberList filters out on every
+    // client, leaving the group apparently creator-less.
+    const res = await handleGroupCreate(
+      { name: 'g', creatorId: 'victim001', creatorPub: 'attacker0pub' }, makeEnv(), req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('KEY_MISMATCH');
+  });
+
   it('join rejects malformed memberId (KV member injection guard)', async () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     const res = await handleGroupJoin({ token, memberId: 'bad id!', memberPub: 'mpub' }, env, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_USER_ID');
@@ -4914,7 +4924,7 @@ describe('group create / join / info validation', () => {
   it('join rejects non-string memberPub (type guard)', async () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     const r1 = await handleGroupJoin({ token, memberId: 'member01', memberPub: { key: 'x' } }, env, req({}));
     expect(r1.status).toBe(400);
     expect((await r1.json()).code).toBe('INVALID_TYPE');
@@ -4929,7 +4939,7 @@ describe('group create / join / info validation', () => {
   it('kick returns 403 when the adminId is not the group creator', async () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
     const res = await handleGroupKick({ token, kickId: 'member01', adminId: 'member01' }, env, req({}));
     expect(res.status).toBe(403);
@@ -4939,7 +4949,7 @@ describe('group create / join / info validation', () => {
   it('kick returns 400 when adminId tries to kick the creator (self-kick guard)', async () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
     const res = await handleGroupKick({ token, kickId: 'creator1', adminId: 'creator1' }, env, req({}));
     expect(res.status).toBe(400);
@@ -4949,7 +4959,7 @@ describe('group create / join / info validation', () => {
   it('kick returns 404 when kickId is not a member of the group', async () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     const res = await handleGroupKick({ token, kickId: 'notamember', adminId: 'creator1' }, env, req({}));
     expect(res.status).toBe(404);
     expect((await res.json()).code).toBe('NOT_MEMBER');
@@ -4958,7 +4968,7 @@ describe('group create / join / info validation', () => {
   it('kick rejects malformed adminId or kickId (member injection guard)', async () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
     const r1 = await handleGroupKick({ token, kickId: 'bad id!', adminId: 'creator1' }, env, req({}));
     expect(r1.status).toBe(400);
@@ -4975,7 +4985,7 @@ describe('group create / join / info validation', () => {
     // corrupted) and that the returned epoch is incremented.
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
-      { name: 'ratchet-group', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+      { name: 'ratchet-group', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
     const kick = await handleGroupKick({ token, kickId: 'member01', adminId: 'creator1' }, env, req({}));
     expect(kick.status).toBe(200);
@@ -4999,7 +5009,7 @@ describe('group create / join / info validation', () => {
     // The fix uses (group.epoch | 0) + 1 which coerces strings to integers.
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
-      { name: 'ep-test', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+      { name: 'ep-test', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
     // Corrupt the epoch: write '5' (a string) into the stored group record.
     const raw = await env.KV.get(`grp:${token}`);
@@ -5075,7 +5085,7 @@ describe('group mutation KV failure propagation (item 33)', () => {
   const req = (b) => apiRequest('/api/x', b);
 
   async function makeGroup(env) {
-    const r = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}));
+    const r = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}));
     const { token } = await r.json();
     await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
     return token;
@@ -5092,14 +5102,14 @@ describe('group mutation KV failure propagation (item 33)', () => {
   it('handleGroupCreate returns 500 STORE_FAILED when KV put throws', async () => {
     const env = makeEnv();
     failOnGroupPut(env);
-    const res = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}));
+    const res = await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}));
     expect(res.status).toBe(500);
     expect((await res.json()).code).toBe('STORE_FAILED');
   });
 
   it('handleGroupJoin returns 500 STORE_FAILED when KV put throws', async () => {
     const env = makeEnv();
-    const { token } = await (await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+    const { token } = await (await handleGroupCreate({ name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     failOnGroupPut(env);
     const res = await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
     expect(res.status).toBe(500);
@@ -5261,7 +5271,7 @@ describe('kvDel failure propagation (item 34)', () => {
   it('handleGroupDelete returns 500 STORE_FAILED when kvDel throws', async () => {
     const env = makeEnv();
     const { token } = await (await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub' }, env, req({}))).json();
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub' }, env, req({}))).json();
     failOnDelete(env, 'grp:');
     const res = await handleGroupDelete({ token, adminId: 'creator1' }, env, req({}));
     expect(res.status).toBe(500);
@@ -5392,7 +5402,7 @@ describe('signed group rename — UTF-8 signing contract', () => {
   async function signedRename(name) {
     const env = makeEnv();
     const created = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, rq());
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub', creatorName: 'C' }, env, rq());
     const { token } = await created.json();
     const sign = await registerSigner(env, 'creator1');
     const ts = Date.now();
@@ -5427,7 +5437,7 @@ describe('signed group rename — UTF-8 signing contract', () => {
   it('still rejects a forged signature on a non-ASCII name', async () => {
     const env = makeEnv();
     const created = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, rq());
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub', creatorName: 'C' }, env, rq());
     const { token } = await created.json();
     await registerSigner(env, 'creator1');
     const res = await handleGroupRename(
@@ -5575,7 +5585,7 @@ describe('lost-write recovery — grp/sig/push/alias (KV last-write-wins)', () =
   const req = (b) => apiRequest('/api/group/x', b);
   async function setupGroup(env) {
     const create = await handleGroupCreate(
-      { name: 'g', creatorId: 'creator1', creatorPub: 'cpub', creatorName: 'C' }, env, req({}));
+      { name: 'g', creatorId: 'creator1', creatorPub: 'creator1pub', creatorName: 'C' }, env, req({}));
     const { token } = await create.json();
     await handleGroupJoin({ token, memberId: 'bob00001', memberPub: 'bob00001bpub', memberName: 'B' }, env, req({}));
     await handleGroupJoin({ token, memberId: 'carol001', memberPub: 'carol001cpub2', memberName: 'Ca' }, env, req({}));

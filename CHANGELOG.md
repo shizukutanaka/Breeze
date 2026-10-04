@@ -1,4 +1,8 @@
 # Changelog
+## Worker: group/create binds creatorPub to creatorId (same ownership proof as join) (branch devin/1791052291-round160, 2026-10-03)
+
+vitest 923 (+1); `_worker.js`, `tests/worker.test.js`, `CHANGELOG.md`.
+
 ## e2e: single canonical createIdentity helper (was 11 drifted copies); PW_CHROMIUM override (branch devin/1791051523-round158, 2026-10-03)
 
 `tests/e2e/helpers.mjs` (new) + 11 spec files + `playwright.config.js`.

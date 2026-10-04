@@ -1149,6 +1149,12 @@ async function handleGroupCreate(body, env, request) {
   const creatorPub = rawCreatorPub.slice(0, 200);
   if (!name || !creatorId || !creatorPub) return json({ error: 'name, creatorId, creatorPub required', code: 'MISSING_FIELDS' }, 400, request);
   if (!validateUserId(creatorId)) return json({ error: 'invalid creatorId', code: 'INVALID_USER_ID' }, 400, request);
+  // Ownership proof (same binding as handleGroupJoin): creatorId = creatorPub.slice(0,12),
+  // so the pub must start with the claimed id. Without it an unsigned create can mint a
+  // member record whose pub doesn't belong to its claimed id — and safeMemberList on every
+  // client filters exactly that record out, leaving the group apparently creator-less.
+  if (!creatorPub.startsWith(creatorId))
+    return json({ error: 'creatorPub does not match creatorId', code: 'KEY_MISMATCH' }, 400, request);
   // v3.1: Validate name length
   if (name.length > 50) return json({ error: 'Group name max 50 chars', code: 'INVALID_NAME' }, 400, request);
   // v3.1: Validate initial member count
