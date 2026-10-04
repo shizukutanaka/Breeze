@@ -1,4 +1,8 @@
 # Changelog
+## Desktop: Electron bundle shipped English-only — extraResources lacked locales/ (branch devin/1791054799-round176, 2026-10-03)
+
+vitest 924 (+3); `desktop/package.json`, `tests/packaged-locales.test.js`, `CHANGELOG.md`.
+
 ## Test: pin client↔worker wire contracts (PoW difficulty, challenge shape, body cap) (branch devin/1791054547-round174, 2026-10-03)
 
 vitest 929 (+3); `tests/wire-contract.test.js`, `CHANGELOG.md`.
