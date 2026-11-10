@@ -1,4 +1,7 @@
 # Changelog
+
+## [Unreleased]
+
 ## E2E: default page fixture gets a CF-Connecting-IP (headerless tests hit the 5-req/min 'unknown' bucket) (branch devin/1791052996-round163, 2026-10-03)
 
 vitest 922 (unchanged — e2e harness only); `playwright.config.js`, `CHANGELOG.md`.
@@ -4148,7 +4151,7 @@ Signal's.
 - `docs/CATEGORY-RESEARCH.md` / `docs/CATEGORY-RESEARCH-2.md`: 20 product categories,
   10 arxiv/GitHub references each.
 
-## v3.6.0 (2026-03-15)
+## [3.6.0] - 2026-03-15
 
 ### P2P Core (Session 2)
 - **DC heartbeat**: ping/pong via state channel every 10s, 3 miss → ICE restart

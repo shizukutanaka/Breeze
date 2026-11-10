@@ -1,0 +1,71 @@
+# CI for Breeze — activates the quality gates described in docs/CI-SETUP.md.
+# Content follows the canonical ci.yml preserved in that runbook, with two
+# deliberate adjustments:
+#   * Node 22 (the runbook notes the suite is verified locally on Node 22 and
+#     to bump from 20 if CI ever fails on a curve primitive).
+#   * Playwright e2e (`npm run test:e2e`) is NOT run here: playwright.config.js
+#     defaults to a local-only Chromium path (/opt/pw-browsers/chromium), so the
+#     e2e harness is a local tool for now. The vitest unit suite (`npm test`,
+#     which excludes tests/e2e by config), the syntax checks and validate.sh
+#     are the CI gate.
+# Note: .github/workflows/ is listed in .gitignore (the automation account that
+# historically committed here lacks the `workflows` permission); this file is
+# force-added intentionally, as the runbook's activation step 2 prescribes.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Syntax check
+        run: |
+          node -e "
+            const h = require('fs').readFileSync('index.html','utf8');
+            const js = h.match(/<script>([\s\S]*?)<\/script>/)[1];
+            require('fs').writeFileSync('/tmp/t.js', js);
+          "
+          node -c /tmp/t.js
+          node -c _worker.js
+          node -c sw.js
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Quality gates
+        run: |
+          chmod +x validate.sh
+          ./validate.sh
+
+      - name: File size check
+        run: |
+          SIZE=$(wc -c < index.html)
+          echo "index.html: $SIZE bytes"
+          if [ "$SIZE" -gt 600000 ]; then
+            echo "WARNING: index.html exceeds 600KB ($SIZE bytes)"
+          fi
+
+      - name: Build breeze.zip artifact
+        run: bash build.sh zip
+
+      - name: Upload breeze.zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: breeze-zip
+          path: breeze.zip
+          if-no-files-found: error
