@@ -1,5 +1,1 @@
 github: shizukutanaka
-ko_fi: breeze_messenger
-# The hosted ?pricing view was removed with billing in v3.6.1 — pointing sponsors
-# at it lands them on the bare app shell. ko_fi above remains the donation target.
-custom: ["https://ko-fi.com/breeze_messenger"]

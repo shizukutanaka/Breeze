@@ -202,7 +202,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 Breeze is built and maintained by volunteers. If you find it useful, please consider sponsoring:
 
 - [GitHub Sponsors](https://github.com/sponsors/shizukutanaka)
-- [Ko-fi](https://ko-fi.com/breeze_messenger)
 - Use the hosted version at [breeze.pages.dev](https://breeze.pages.dev/?pricing)
 
 ## License
