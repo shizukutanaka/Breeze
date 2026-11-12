@@ -1,7 +1,6 @@
 # Breeze Messenger
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![GitHub Sponsors](https://img.shields.io/github/sponsors/shizukutanaka?style=flat&logo=github)](https://github.com/sponsors/shizukutanaka)
 [![Deploy to Cloudflare](https://img.shields.io/badge/Deploy-Cloudflare%20Pages-F38020?logo=cloudflare)](https://dash.cloudflare.com/?to=/:account/pages/new/provider/polaris)
 
 End-to-end encrypted P2P messenger. No phone number. No registration. No app store. No paywall — every feature is free.
@@ -196,13 +195,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 - Report bugs: [Issue Tracker](https://github.com/shizukutanaka/Breeze/issues)
 - Security: [SECURITY.md](SECURITY.md) (private disclosure)
 - Code of Conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
-
-## Sponsors
-
-Breeze is built and maintained by volunteers. If you find it useful, please consider sponsoring:
-
-- [GitHub Sponsors](https://github.com/sponsors/shizukutanaka)
-- Use the hosted version at [breeze.pages.dev](https://breeze.pages.dev/?pricing)
 
 ## License
 
