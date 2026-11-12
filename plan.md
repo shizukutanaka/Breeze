@@ -1,8 +1,9 @@
 # Breeze — Hardening Plan
 
-Living plan for the code-review follow-up work. The app ships as a single
-bundle inside `breeze.zip` (the only tracked file); fixes are made by extracting
-the zip, editing the source, and re-packing it.
+Living plan for the code-review follow-up work. The app source (`index.html`,
+`_worker.js`, `sw.js`, plus the `src/crypto/*` references) is tracked in this
+repo and edited in place; `build.sh` packages the shipped `breeze.zip` from it.
+(An earlier version of this plan described a zip-only workflow — superseded.)
 
 **Status legend:** ✅ done · 🛠️ in this iteration · ⏸️ deferred (needs protocol
 version bump or design/validation) · 🔎 needs more investigation
@@ -24,10 +25,39 @@ version bump or design/validation) · 🔎 needs more investigation
 
 ---
 
-## 2. This iteration — 🛠️
+## 2. This iteration — ✅
 
 Contained, backward-compatible fixes (no wire-format change). Verified by static
 reasoning + targeted Node harnesses; **full E2E validation still pending** (see §5).
+
+**Status (audited 2026-11-12):** all five items were found already implemented
+in the deployed code — they landed with the source import and the v3.6
+hardening passes, before this plan was updated. This iteration therefore did
+not rewrite working crypto/lifecycle code; it verified each item against the
+approach below and pinned the behaviours with regression tests
+(`tests/hardening-iteration2.test.js`; A is additionally covered behaviourally
+by `tests/ratchet.test.js` against the reference port in `src/crypto/ratchet.js`).
+The two-device manual pass in §5 is still outstanding.
+
+Where each item lives now:
+
+- **A** — `index.html` `_decryptFromRaw`: `MAX_GAP = 2000` reject, staged
+  full-gap advance (receive state committed only after the key-commitment and
+  AEAD checks pass), retention of the most recent `MAX_SKIP = 100` skipped
+  keys, timestamped for the TTL expiry pass.
+- **B** — `index.html` `peerState.transition`: the `CLOSED` branch clears
+  `_healthTimer` / `_heartbeat` / `_sigPoll`; all three intervals are stored
+  on `peerState` at creation (`peerState._sigPoll = sigPoll`).
+- **C** — `index.html` service-worker registration: `hadController` captured
+  at load; `controllerchange` reloads only when the page was already
+  controlled (plus a `refreshing` re-entry guard).
+- **D** — `index.html` error boundary: `_FATAL_WINDOW_MS` (60 s) sliding-window
+  reset of `_fatalErrors`/`_errorCount` in both the `error` and
+  `unhandledrejection` handlers.
+- **E** — `index.html` `handleIncoming`: TOFU pin of `contact.sigPub` on first
+  sighting; a mismatch flags `meta.tampered` and raises the key-change
+  warning, and verification runs only when not tampered. The signed-SDP path
+  in the signaling poll enforces the same pin.
 
 | # | File / anchor | Issue | Approach |
 |---|---------------|-------|----------|
@@ -87,6 +117,6 @@ the TOFU badge behaviour (E).
 ## 6. Sequencing
 
 1. ✅ PR #1 (§1) — merged.
-2. 🛠️ This iteration (§2 A–E) — contained, no wire change.
+2. ✅ This iteration (§2 A–E) — audited: already deployed; regression tests added, no wire change.
 3. ⏸️ §4 cursor redesign — separate, well-tested change.
 4. ⏸️ §3 protocol items — only behind a negotiated protocol-version bump.
