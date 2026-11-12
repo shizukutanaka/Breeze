@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## plan.md §2 (A–E) audited: all five hardening items already deployed — regression tests pin them (branch feat/hardening-iteration-2, 2026-11-12)
+
+`tests/hardening-iteration2.test.js`, `plan.md`, `CHANGELOG.md` only — no shipped code changed.
+
+- The §2 iteration (ratchet-desync fix A, per-peer interval cleanup B, SW `controllerchange` guard C, error-boundary sliding window D, signature TOFU pin E) was written as planned work, but auditing the deployed `index.html` against each item found all five already implemented — they landed with the source import / v3.6 hardening passes and plan.md was never updated. Rewriting working crypto/lifecycle code to match a stale plan would have added risk, not fixes, so none was rewritten.
+- The real gap was coverage: B–E exist only inline in `index.html` (the mirror-drift hazard — vitest otherwise exercises the `src/crypto` references), and A was pinned only at toy parameters. New suite (17 tests): A behaviourally at the production constants (MAX_SKIP=100 / MAX_GAP=2000 — a 149-message gap recovers, exactly the last 100 skipped keys are retained, a forged gap of 2001 is rejected with receive state untouched) plus the inline invariants as scoped source contracts (reject-before-advance, commit-after-AEAD staged commit); B/C/D/E as scoped source contracts over the exact inline regions, marker-sliced so they fail loudly if the code moves.
+- plan.md §2 marked ✅ with the per-item locations of each fix; the stale "breeze.zip is the only tracked file" workflow note corrected (source is tracked in-repo; `build.sh` packages the zip). The §5 two-device manual pass remains outstanding.
+
+vitest 1084 → 1101 (+17, all passing; the 3 at-rest mirror tests that timed out at the default 5 s on constrained hardware in the baseline run pass with a raised timeout — pre-existing, unrelated). `validate.sh` PASSED 160/166 (unchanged).
+
 ## E2E: default page fixture gets a CF-Connecting-IP (headerless tests hit the 5-req/min 'unknown' bucket) (branch devin/1791052996-round163, 2026-10-03)
 
 vitest 922 (unchanged — e2e harness only); `playwright.config.js`, `CHANGELOG.md`.
