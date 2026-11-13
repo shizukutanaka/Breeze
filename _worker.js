@@ -33,7 +33,7 @@ const TIMEOUT_MS = { // fetchWithTimeout values (milliseconds)
   POW_AGE:        600000, // 10-min PoW freshness window
   POW_FUT:        300000, // 5-min PoW future clock-skew tolerance
   MULTITAB_GRACE:   10000,  // multi-tab delivery grace period in handleMsgPoll keep filter
-  PRESENCE_WRITE:  300000,  // minimum interval between KV presence writes (throttle)
+  PRESENCE_WRITE:  300000,  // minimum interval between presence store writes (throttle)
   // Freshness window for presence checks. MUST be >= PRESENCE_WRITE: KV presence records
   // are flushed only once per PRESENCE_WRITE (5min) and expire at the 6-min TTL, so the
   // old 60s window reported a heartbeating user OFFLINE for ~4 of every 5 minutes whenever
@@ -482,9 +482,10 @@ function capQueueBytes(items, sizeOf, maxBytes = 16 * 1024 * 1024) {
 // consistent reads (a committed write is always visible to the
 // read-back) instead of racing eventual consistency. The staged
 // remainder is in docs/MAILBOX_STAGE1_PLAN.md.
-// Non-mailbox storage (prekey bundles, groups, presence, …) stays on
-// the kv* helpers by design: demoting KV to the key directory alone is
-// the LAST stage-1 step, not this one.
+// Non-mailbox storage (prekey bundles, groups, …) stays on the kv*
+// helpers by design. Presence was the one other write-budget consumer
+// of the same class; it got its own seam in step 4 (PRESENCE STORE,
+// below the MailboxDO class) rather than joining this one.
 // ============================================================
 function mailboxBackend(env) {
   return env.MAILBOX_BACKEND === 'do' && env.MAILBOX_DO ? 'do' : 'kv';
@@ -644,6 +645,7 @@ export class MailboxDO {
     this.state = state;
     this.env = env;
     this._seedPromise = null;
+    this._presenceSeedPromise = null;
   }
 
   // Copy this recipient's KV mailbox (both families, all slots) into
@@ -686,15 +688,61 @@ export class MailboxDO {
     return this._seedPromise;
   }
 
+  // Copy this user's KV presence record into DO storage exactly once,
+  // INDEPENDENTLY of the mailbox drain above. PRESENCE_BACKEND and
+  // MAILBOX_BACKEND are separate flags: a presence first-access must
+  // never drain (and delete) mailbox copies the KV mailbox backend still
+  // serves from, and a mailbox first-access must never move the presence
+  // record the KV presence backend still serves from. Same ordering
+  // doctrine as _seed — copy, marker, then delete the KV copy — so a
+  // failure before the marker retries against the intact KV record on
+  // the next access. The seeded entry gets a fresh TTL.MIN*6 expiry:
+  // that is the presence record's own KV TTL (mailbox slots seed with
+  // TTL.WEEK because that is THEIR TTL). Freshness is judged from the
+  // record's own `at`, so a seeded record can never make a departed
+  // user look online past the normal window.
+  async _seedPresence(userId) {
+    const st = this.state.storage;
+    if (await st.get('presenceSeeded')) return;
+    const val = await kvGet(this.env, `presence:${userId}`);
+    if (val !== null) {
+      await st.put('presence', { v: val, exp: Date.now() + TTL.MIN * 6 * 1000 });
+    }
+    await st.put('presenceSeeded', 1);
+    await kvDel(this.env, `presence:${userId}`);
+  }
+
+  _ensurePresenceSeeded(userId) {
+    if (!this._presenceSeedPromise) {
+      this._presenceSeedPromise = (async () => {
+        try {
+          await this._seedPresence(userId);
+        } catch (e) {
+          console.error('[presence-do] seed failed:', e?.message ?? e);
+          this._presenceSeedPromise = null; // retry the drain on the next access
+        }
+      })();
+    }
+    return this._presenceSeedPromise;
+  }
+
   async fetch(request) {
     let body;
     try { body = await request.json(); } catch { return Response.json({ ok: false }, { status: 400 }); }
     const { op, family, slot, userId } = body || {};
-    if (family !== 'inbox' && family !== 'sealed') return Response.json({ ok: false }, { status: 400 });
-    if (slot !== 'queue' && slot !== 'hwm' && slot !== 'dropped') return Response.json({ ok: false }, { status: 400 });
-    if (typeof userId === 'string' && userId) await this._ensureSeeded(userId);
+    // family 'presence' (stage-1 step 4) is this recipient's single
+    // presence record, stored under the key 'presence'; its only slot
+    // is 'record'. It shares the { v, exp } entry shape and the
+    // get/put/del ops with the mailbox families below.
+    const isPresence = family === 'presence';
+    if (!isPresence && family !== 'inbox' && family !== 'sealed') return Response.json({ ok: false }, { status: 400 });
+    if (isPresence ? slot !== 'record' : (slot !== 'queue' && slot !== 'hwm' && slot !== 'dropped')) return Response.json({ ok: false }, { status: 400 });
+    if (typeof userId === 'string' && userId) {
+      if (isPresence) await this._ensurePresenceSeeded(userId);
+      else await this._ensureSeeded(userId);
+    }
     const st = this.state.storage;
-    const key = `${family}:${slot}`;
+    const key = isPresence ? 'presence' : `${family}:${slot}`;
     try {
       if (op === 'get') {
         const entry = await st.get(key);
@@ -723,6 +771,101 @@ export class MailboxDO {
     }
     return Response.json({ ok: false }, { status: 400 });
   }
+}
+
+// ============================================================
+// PRESENCE STORE (stage-1 step 4, 2026-11-13)
+//
+// Presence is not a mailbox, but it was the same write-budget problem:
+// with mailboxes behind the MailboxStore, the throttled heartbeat flush
+// (one KV write per PRESENCE_WRITE per user, ~288/day/user worst case)
+// was the largest remaining consumer of the free tier's 1,000 KV
+// writes/day — a ~3-user ceiling all by itself. This seam gives the
+// presence record the same treatment as the mailboxes, one step later:
+//
+// - kv (default): byte-for-byte the pre-step-4 behaviour — one KV value
+//   `presence:{id}`, flushed through kvPut with a TTL.MIN*6 TTL.
+// - do: the record lives in the RECIPIENT'S OWN MailboxDO instance
+//   (storage key 'presence'), selected by PRESENCE_BACKEND=do and only
+//   when the MAILBOX_DO binding is present; anything else stays on KV,
+//   the same misconfiguration doctrine as MAILBOX_BACKEND. A separate
+//   PresenceDO class was evaluated and rejected: presence is a single
+//   overwritten record per user — no queue, no ordering, no satellite
+//   slots — so a new class + binding + migration would add deployment
+//   surface for zero capability the recipient's existing DO lacks.
+//
+// The two flags are independent and their migrations are too: the DO
+// drains the presence record through its own seeded marker
+// (_seedPresence), never as a side effect of a mailbox access, so an
+// operator can move presence without touching mailboxes or vice versa.
+//
+// The 5-minute write throttle is KEPT on both backends. Its job changes
+// (under DO it no longer protects the KV ceiling), but DO storage
+// writes are metered too: an unthrottled 30 s heartbeat would spend
+// ~2,880 DO writes/day/user instead of ≤288 — the same budget problem
+// one layer down — and PRESENCE_FRESH (360 s) plus the 6-minute record
+// lifetime were tuned around 5-minute flushes. Storage and cadence do
+// not change in the same step.
+//
+// Surface (the MailboxStore contract shape): read() → string|null,
+// write(value, ttlSec) → boolean, delete() → boolean; failures surface
+// as null/false, never a throw into a handler.
+// ============================================================
+function presenceBackend(env) {
+  return env.PRESENCE_BACKEND === 'do' && env.MAILBOX_DO ? 'do' : 'kv';
+}
+
+function presenceStore(env, userId) {
+  if (presenceBackend(env) !== 'do') {
+    const key = `presence:${userId}`;
+    return {
+      read: () => kvGet(env, key),
+      write: (value, ttlSec) => kvPut(env, key, value, { expirationTtl: ttlSec }),
+      delete: () => kvDel(env, key),
+    };
+  }
+  const call = async (op, value, ttlSec) => {
+    try {
+      const stub = env.MAILBOX_DO.get(env.MAILBOX_DO.idFromName(userId));
+      const res = await stub.fetch('https://mailbox.internal/op', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ op, family: 'presence', slot: 'record', value, ttlSec, userId }),
+      });
+      if (!res || !res.ok) return null;
+      return await res.json();
+    } catch (e) {
+      console.error('[presence-do] RPC failed:', e?.message ?? e);
+      return null;
+    }
+  };
+  return {
+    read: async () => {
+      const r = await call('get');
+      return r && typeof r.value === 'string' ? r.value : null;
+    },
+    write: async (value, ttlSec) => {
+      const r = await call('put', value, ttlSec);
+      return !!(r && r.ok);
+    },
+    delete: async () => {
+      const r = await call('del');
+      return !!(r && r.ok);
+    },
+  };
+}
+
+// In-flight presence deletions for account deletion, mirroring
+// eraseMailboxes: under the DO backend the store erases the DO copy,
+// and the KV key is deleted too — a record that was never drained
+// lives only in KV, and deletion must not leave that pre-migration
+// copy behind. Returned as promises for the caller's Promise.all.
+function erasePresence(env, userId) {
+  const dels = [presenceStore(env, userId).delete()];
+  if (presenceBackend(env) === 'do') {
+    dels.push(kvDel(env, `presence:${userId}`));
+  }
+  return dels;
 }
 
 // ============================================================
@@ -1045,7 +1188,7 @@ async function handlePresence(body, env, request) {
       }
     }
     await Promise.all(misses.map(async (cid) => {
-      const data = await kvGet(env, `presence:${cid}`);
+      const data = await presenceStore(env, cid).read();
       if (data) {
         const p = safeJsonParse(data);
         online[cid] = p ? (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH : false;
@@ -1074,7 +1217,7 @@ async function handlePresence(body, env, request) {
       if (!p) return json({ online: false }, 200, request);
       return json({ online: (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH, caps: p.caps }, 200, request);
     }
-    const data = await kvGet(env, `presence:${id}`);
+    const data = await presenceStore(env, id).read();
     if (!data) return json({ online: false }, 200, request);
     const p = safeJsonParse(data);
     if (!p) return json({ online: false }, 200, request);
@@ -1105,7 +1248,7 @@ async function handlePresence(body, env, request) {
     }
   }
 
-  // v3.6: In-memory presence cache — only writes to KV every 5 minutes (saves ~90% KV writes)
+  // v3.6: In-memory presence cache — only writes through to the store every 5 minutes (saves ~90% of store writes)
   // Free tier: 1000 writes/day. 30s heartbeat = 2880/day per user = over limit!
   // 5min write interval = 288/day per user = safe for 3 users on free tier
   if (!globalThis._presenceCache) globalThis._presenceCache = new Map();
@@ -1143,15 +1286,15 @@ async function handlePresence(body, env, request) {
   let conflict = false;
   if (safeInst) {
     let prevRaw = globalThis._presenceCache.get(presKey + ':data');
-    if (!prevRaw) prevRaw = await kvGet(env, presKey);
+    if (!prevRaw) prevRaw = await presenceStore(env, id).read();
     const prev = prevRaw ? safeJsonParse(prevRaw) : null;
     if (prev?.inst && prev.inst !== safeInst && Date.now() - prev.at < 90000) conflict = true;
   }
   const presData = { pub: safePub, name: sanitizeString(name, 64), at: Date.now() };
   if (safeInst) presData.inst = safeInst;
   if (safeCaps) presData.caps = safeCaps;
-  if (Date.now() - lastWrite > TIMEOUT_MS.PRESENCE_WRITE) { // throttle KV writes
-    await kvPut(env, presKey, JSON.stringify(presData), { expirationTtl: TTL.MIN * 6 }); // 6min TTL (covers 5min interval + slack)
+  if (Date.now() - lastWrite > TIMEOUT_MS.PRESENCE_WRITE) { // throttle store writes (see PRESENCE STORE: the throttle now bounds DO writes too)
+    await presenceStore(env, id).write(JSON.stringify(presData), TTL.MIN * 6); // 6min TTL (covers 5min interval + slack)
     globalThis._presenceCache.set(presKey, Date.now());
   }
   // Always update in-memory for fast reads within same isolate
@@ -2509,7 +2652,10 @@ async function handleAccountDelete(body, env, request) {
     kvDel(env, `ktlog:${userId}`),
     kvDel(env, `push:${userId}`),
     kvDel(env, `backup:${userId}`),
-    kvDel(env, `presence:${userId}`),
+    // Presence via its store: under PRESENCE_BACKEND=do the record may
+    // live in the user's DO, the KV copy, or both (never drained) —
+    // erasePresence covers all three (see PRESENCE STORE).
+    ...erasePresence(env, userId),
     kvDel(env, `slots:${userId}`),
   ];
   if (customerId) dels.push(kvDel(env, `cust:${customerId}`));
@@ -3559,6 +3705,8 @@ export {
   mailboxStoreForKey,
   listMailboxKeys,
   eraseMailboxes,
+  presenceStore,
+  erasePresence,
   kvGet,
   kvPut,
   kvDel,

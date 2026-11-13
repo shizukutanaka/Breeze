@@ -86,3 +86,11 @@ new_sqlite_classes = ["MailboxDO"]
 # Rollback = set it back to kv (mailboxes not yet drained are unaffected;
 # drained ones keep serving from KV's remaining state — see the plan doc).
 # wrangler pages secret put MAILBOX_BACKEND            # do — serve mailboxes from MailboxDO (default: kv)
+#
+# --- Presence storage backend (stage-1 step 4) ---
+# Same binding, separate flag: the presence record can live in the
+# user's own MailboxDO instead of KV (it drains on first access, like
+# the mailboxes, but independently — either flag can move without the
+# other). With mailboxes moved, presence heartbeats were the largest
+# remaining consumer of the free tier's 1,000 KV writes/day.
+# wrangler pages secret put PRESENCE_BACKEND           # do — serve presence from MailboxDO (default: kv)
