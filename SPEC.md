@@ -123,8 +123,8 @@ Sender                          Server                         Receiver
 | Endpoint | Rate Limit | Purpose |
 |----------|------------|---------|
 | /api/signal | 60/min | WebRTC signaling relay |
-| /api/msg/send | 30/min | Relay message (fallback when P2P unavailable) |
-| /api/msg/poll | 40/min | Poll for relay messages |
+| /api/msg/send | 30/min | Relay message (fallback when P2P unavailable) — **deprecated** plain path: responses carry `Deprecation: true`; removable via `PLAIN_PATH_DISABLED=true` |
+| /api/msg/poll | 40/min | Poll for relay messages — **deprecated**, see /api/msg/send |
 | /api/sealed/send | 30/min | Sealed Sender message |
 | /api/sealed/poll | 40/min | Poll sealed messages |
 | /api/presence | 20/min | Online presence heartbeat |
@@ -138,7 +138,6 @@ Sender                          Server                         Receiver
 | /api/group/kick | default | Remove group member |
 | /api/push/subscribe | default | Web Push subscription |
 | /api/turn | default | TURN credential request |
-| /api/online | default | Online user count |
 | /api/backup/upload | 2/min | Encrypted backup upload |
 | /api/backup/download | 5/min | Encrypted backup download |
 | /api/sealed/ack | default | Acknowledge sealed message delivery |

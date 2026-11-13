@@ -120,7 +120,7 @@ export default {
         ok: kvOk,
         version: '3.6.1',
         protocol: 4,
-        endpoints: 38,
+        endpoints: 37,
         reqId,
         serverTime: Date.now(), // v3.6: Client can detect clock drift
         kv: kvOk,
@@ -140,7 +140,7 @@ export default {
           'account-delete', 'group-leave', 'group-delete', 'group-admin',
           'group-transfer', 'group-rename', 'msg-disappear-enforce',
           'sealed-sender', 'franking', 'prekey-x3dh',
-          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'alias-auth', 'backup-auth', 'push-auth', 'drop-server-id', 'group-auth', 'group-ban', 'queue-auth', 'prekey-auth',
+          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'alias-auth', 'backup-auth', 'push-auth', 'drop-server-id', 'group-auth', 'group-ban', 'queue-auth', 'prekey-auth', 'plain-deprecation', 'delete-sweep',
         ],
         crypto: ['X25519', 'Ed25519', 'AES-256-GCM', 'HKDF-SHA256', 'Double Ratchet', 'Sender Key O(1)'],
         ts: Date.now(),
@@ -200,7 +200,6 @@ export default {
         '/api/push/subscribe': 5,
         '/api/push/unsubscribe': 5,
         '/api/turn': 10,
-        '/api/online': 20,
       };
       // Cap 'unknown' IP (no CF-Connecting-IP) at 5 rpm regardless of path —
       // prevents a shared bucket from being monopolized in non-CF deployments.
@@ -299,8 +298,8 @@ export default {
       }
       switch (path) {
         case '/api/signal':    return await handleSignal(body, ip, env, request);
-        case '/api/msg/send':  return await handleMsgSend(body, ip, env, request);
-        case '/api/msg/poll':  return await handleMsgPoll(body, env, request);
+        case '/api/msg/send':  return plainDeprecated(await handleMsgSend(body, ip, env, request));
+        case '/api/msg/poll':  return plainDeprecated(await handleMsgPoll(body, env, request));
         case '/api/presence':  return await handlePresence(body, env, request);
         case '/api/alias/set': return await handleAliasSet(body, env, request);
         case '/api/alias/get': return await handleAliasGet(body, env, request);
@@ -318,7 +317,6 @@ export default {
         case '/api/prekey/fetch/batch': return await handlePreKeyFetchBatch(body, env, request);
         case '/api/prekey/status':      return await handlePreKeyStatus(body, env, request);
         case '/api/ktlog/get':        return await handleKtLogGet(body, env, request);
-        case '/api/online':           return await handleOnlineCount(body, env, request);
         case '/api/sealed/send':      return await handleSealedSend(body, env, request);
         case '/api/sealed/poll':      return await handleSealedPoll(body, env, request);
         case '/api/sealed/ack':       return await handleSealedAck(body, env, request);
@@ -453,7 +451,30 @@ function capQueueBytes(items, sizeOf, maxBytes = 16 * 1024 * 1024) {
   return items;
 }
 
+// ============================================================
+// PLAIN RELAY PATH — DEPRECATED (stage-0 notice, 2026-11-13)
+//
+// /api/msg/send + /api/msg/poll are the legacy unsealed relay: the relay stores
+// sender id, display name, public key, group name and message-type flags in
+// plaintext (see SECURITY.md, metadata table). The sealed path (/api/sealed/*)
+// has been the preferred route for every current client — the plain path only
+// carries fallback traffic (sealed failure, pre-seal-v2 peers, the offline
+// retry queue's legacy envelopes). Deprecation plan:
+//   1. (this change) Every plain-path response carries a `Deprecation: true`
+//      header (router wraps both routes — see plainDeprecated), and operators
+//      can kill the path outright with PLAIN_PATH_DISABLED=true (410 below).
+//   2. Removal of these handlers is safe once an operator has run with
+//      PLAIN_PATH_DISABLED=true for a full inbox TTL (7 days) with no
+//      delivery failures — proof no live client still depends on the fallback
+//      — and the client's legacy-envelope retry resend has aged out.
+// Until then the handlers stay, byte-for-byte behaviour included.
+// ============================================================
+function plainPathDisabled(request) {
+  return json({ error: 'Plain relay path is disabled on this server — sealed sender required', code: 'PLAIN_PATH_DISABLED' }, 410, request);
+}
+
 async function handleMsgSend(body, ip, env, request) {
+  if (env.PLAIN_PATH_DISABLED === 'true') return plainPathDisabled(request);
   const { to, from, fromPub, fromName, payload, ts, isFile, isGroupInvite, isVoice, isCall, isVideoCall, isSenderKey, isGroupSK, isGroupKick, groupId, groupName, replyTo, disappearAt, sig, sigPub } = body;
   if (!to || !from || !payload) return json({ error: 'to, from, payload required', code: 'MISSING_FIELDS' }, 400, request);
   // v3.3: Input type validation
@@ -662,6 +683,7 @@ async function checkQueueAuth(body, env, request, op) {
 }
 
 async function handleMsgPoll(body, env, request) {
+  if (env.PLAIN_PATH_DISABLED === 'true') return plainPathDisabled(request);
   const { id, lastTs } = body;
   if (!id) return json({ error: 'id required', code: 'MISSING_ID' }, 400, request);
   if (!validateUserId(id)) return json({ error: 'invalid id', code: 'INVALID_ID' }, 400, request);
@@ -788,9 +810,17 @@ async function handlePresence(body, env, request) {
   }
 
   // Store presence heartbeat
-  // When PRESENCE_REQUIRE_AUTH=true, verify the caller owns this userId before writing.
-  // The check is cached in-memory per isolate so a single KV read covers many heartbeats.
-  if (env.PRESENCE_REQUIRE_AUTH === 'true') {
+  // Registration gate (PRESENCE_REQUIRE_AUTH): only ids with a registered prekey
+  // bundle may write presence. This check involves NO signature — the bundle's
+  // existence is the whole test — so it is ON BY DEFAULT (stage-0 hardening,
+  // 2026-11-13): every client class registers its bundle at identity creation
+  // and the client re-uploads automatically when the record expires
+  // (checkAndReplenishPreKeys, incl. the 404-expiry path), while the heartbeat
+  // itself is fire-and-forget, so a transient rejection degrades presence
+  // display only and self-heals. Set PRESENCE_REQUIRE_AUTH=false to restore the
+  // legacy unauthenticated writes. The check is cached in-memory per isolate so
+  // a single KV read covers many heartbeats.
+  if (env.PRESENCE_REQUIRE_AUTH !== 'false') {
     if (!globalThis._presenceVerified) globalThis._presenceVerified = new Map();
     if (!globalThis._presenceVerified.has(id)) {
       const pkData = await kvGet(env, `prekey:${id}`);
@@ -854,29 +884,7 @@ async function handlePresence(body, env, request) {
   }
   // Always update in-memory for fast reads within same isolate
   globalThis._presenceCache.set(presKey + ':data', JSON.stringify(presData));
-  // v3.6: In-memory online counter (saves 1 KV read + 1 KV write per heartbeat)
-  if (!globalThis._onlineCounter) globalThis._onlineCounter = { minute: 0, count: 0, prev: 0 };
-  const currentMinute = Math.floor(Date.now() / 60000);
-  if (globalThis._onlineCounter.minute !== currentMinute) {
-    // Preserve the previous minute's count as a fallback so handleOnlineCount does not
-    // report 0 at the start of each minute before the first heartbeat arrives.
-    globalThis._onlineCounter = { minute: currentMinute, count: 0, prev: globalThis._onlineCounter.count };
-  }
-  globalThis._onlineCounter.count++;
   return json(conflict ? { ok: true, conflict: true } : { ok: true }, 200, request);
-}
-
-// v3.3: Online user count (approximate)
-async function handleOnlineCount(body, env, request) {
-  // v3.6: In-memory counter (no KV read needed)
-  if (!globalThis._onlineCounter) globalThis._onlineCounter = { minute: 0, count: 0, prev: 0 };
-  const minuteKey = Math.floor(Date.now() / 60000);
-  // At a minute boundary the new minute's count is 0 until the first heartbeat. Return
-  // the previous minute's count as a fallback to avoid a false "0 online" spike.
-  const count = (globalThis._onlineCounter.minute === minuteKey)
-    ? globalThis._onlineCounter.count
-    : globalThis._onlineCounter.prev;
-  return json({ online: count, ts: Date.now() }, 200, request);
 }
 
 // ============================================================
@@ -2069,11 +2077,16 @@ async function handleTurn(body, env, request) {
   const { userId } = body;
   if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
-  // When TURN_REQUIRE_AUTH=true, only registered users (completed PoW + prekey upload) receive
-  // TURN credentials. Prevents unauthenticated bots from draining paid TURN quota
-  // (Cloudflare Calls TURN: $0.05/GB). Rate-limit alone (10 rpm) does not eliminate
-  // the risk when TURN_KEY_ID is configured.
-  if (env.TURN_REQUIRE_AUTH === 'true') {
+  // Only registered users (completed PoW + prekey upload) receive TURN
+  // credentials. Prevents unauthenticated bots from draining paid TURN quota
+  // (Cloudflare Calls TURN: $0.05/GB). Rate-limit alone (10 rpm) does not
+  // eliminate the risk when TURN_KEY_ID is configured. Like presence, this gate
+  // needs NO signature (bundle existence only), so it is ON BY DEFAULT
+  // (stage-0 hardening, 2026-11-13): TURN is only ever requested with a live
+  // identity, and a lapsed bundle self-heals via the client's replenish cycle
+  // (worst case one call runs STUN-only until then). Set
+  // TURN_REQUIRE_AUTH=false to restore unauthenticated credential issuance.
+  if (env.TURN_REQUIRE_AUTH !== 'false') {
     if (!(await kvGet(env, `prekey:${userId}`))) return json({ error: 'User not registered', code: 'UNREGISTERED' }, 401, request);
   }
 
@@ -2152,7 +2165,7 @@ async function handleTurn(body, env, request) {
 // ============================================================
 
 async function handleAccountDelete(body, env, request) {
-  const { userId, ts, sig, alias, groups } = body;
+  const { userId, ts, sig, alias, groups, frankIds } = body;
   if (!userId || !sig || ts === undefined) return json({ error: 'userId, ts, sig required', code: 'MISSING_FIELDS' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   if (typeof sig !== 'string' || sig.length > 500) return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
@@ -2234,40 +2247,90 @@ async function handleAccountDelete(body, env, request) {
   globalThis._presenceCache?.delete(`presence:${userId}:data`);
   globalThis._queueAuthKey?.delete(userId); // cached queue-auth identity key (else a re-registered account's new key could be rejected until isolate eviction)
 
-  // Optional group membership cleanup. There is no reverse index (user → groups),
-  // so without the client supplying the tokens, a deleted account's id/pub/name
-  // lingers in every group it joined for the 30-day group TTL — the same residual
-  // data the rest of this handler erases. The request is already authenticated by
-  // the Ed25519 signature over userId, so removing *this* user from the groups it
-  // names is legitimate self-removal. Per token:
+  // Group membership cleanup. There is no reverse index (user → groups), so a
+  // deleted account's id/pub/name would linger in every group it joined for
+  // the 30-day group TTL — the same residual data the rest of this handler
+  // erases. The request is already authenticated by the Ed25519 signature over
+  // userId, so removing *this* user from a roster is legitimate self-removal.
+  // Per group:
   //   - creator → delete the whole group (a creator-less group is unmoderatable;
   //     the proper survival path is /api/group/transfer BEFORE deletion).
   //   - member  → remove + epoch bump (PCS: the departed account can't decrypt new
   //     traffic), mirroring handleGroupLeave.
+  // The client still names its groups (fast path), and the sweep below then
+  // scans EVERY roster for this userId, so groups the deleting device never
+  // knew about (joined on another device, local contact record gone) are
+  // scrubbed too (stage-0 residue sweep, 2026-11-13).
   const groupsLeft = [];
   const groupsDeleted = [];
+  const scrubbedTokens = new Set();
+  const scrubGroup = async (tok) => {
+    if (scrubbedTokens.has(tok)) return;
+    scrubbedTokens.add(tok);
+    const graw = await kvGet(env, `grp:${tok}`);
+    if (!graw) return;
+    const group = safeJsonParse(graw);
+    if (!group || !Array.isArray(group.members)) return;
+    if (!group.members.some(m => m.id === userId)) return; // not a member — ignore
+    if (group.creatorId === userId) {
+      await kvDel(env, `grp:${tok}`);
+      groupsDeleted.push(tok);
+    } else {
+      group.members = group.members.filter(m => m.id !== userId);
+      if (Array.isArray(group.admins)) group.admins = group.admins.filter(id => id !== userId);
+      group.epoch = (group.epoch | 0) + 1;
+      await kvPut(env, `grp:${tok}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
+      groupsLeft.push(tok);
+    }
+  };
   if (Array.isArray(groups)) {
     // Cap at 50 to bound KV operations on a single request (KV write budget guard).
     const tokens = groups
       .map(g => (typeof g === 'string' ? g : (g && typeof g.token === 'string' ? g.token : null)))
       .filter(tok => typeof tok === 'string' && tok.length > 0 && tok.length <= 128)
       .slice(0, 50);
-    for (const tok of tokens) {
-      const graw = await kvGet(env, `grp:${tok}`);
-      if (!graw) continue;
-      const group = safeJsonParse(graw);
-      if (!group || !Array.isArray(group.members)) continue;
-      if (!group.members.some(m => m.id === userId)) continue; // not a member — ignore
-      if (group.creatorId === userId) {
-        await kvDel(env, `grp:${tok}`);
-        groupsDeleted.push(tok);
-      } else {
-        group.members = group.members.filter(m => m.id !== userId);
-        if (Array.isArray(group.admins)) group.admins = group.admins.filter(id => id !== userId);
-        group.epoch = (group.epoch | 0) + 1;
-        await kvPut(env, `grp:${tok}`, JSON.stringify(group), { expirationTtl: TTL.MONTH });
-        groupsLeft.push(tok);
-      }
+    for (const tok of tokens) await scrubGroup(tok);
+  }
+  for (const name of await kvListNames(env, 'grp:')) {
+    await scrubGroup(name.slice('grp:'.length));
+  }
+
+  // Sent plain-path copies: messages this account sent that still sit in OTHER
+  // users' inboxes. Plain entries carry `from` in the clear, so they can be
+  // filtered out per inbox. Sealed-queue copies are deliberately NOT swept:
+  // sealed sender exists so the relay cannot tell who sent an envelope, so
+  // there is nothing to match on — undelivered sealed copies expire with the
+  // 7-day queue TTL, and delivered copies are the recipient's own data.
+  let sentCopiesRemoved = 0;
+  for (const name of await kvListNames(env, 'inbox:')) {
+    if (name === `inbox:${userId}` || name.endsWith(':hwm')) continue;
+    const raw = await kvGet(env, name);
+    if (!raw) continue;
+    const queue = safeJsonParse(raw, []);
+    if (!Array.isArray(queue)) continue;
+    const kept = queue.filter(m => !(m && m.from === userId));
+    if (kept.length === queue.length) continue;
+    sentCopiesRemoved += queue.length - kept.length;
+    if (kept.length === 0) await kvDel(env, name);
+    else await kvPut(env, name, JSON.stringify(kept), { expirationTtl: TTL.WEEK });
+  }
+
+  // Franking residue: frank:{frankId} commitments and report:{frankId} records
+  // are keyed by frankId with NO user link (by design — the relay must not know
+  // whose messages they bind), so the only way deletion can reach them is the
+  // client naming the ids of messages this account sent (persisted on the
+  // sender's local copies for exactly this purpose). Field rules mirror
+  // handleAbuseRecord. The moderation webhook for an already-filed report has
+  // fired by now and lives outside KV; this erases the relay-side records.
+  let frankRecordsRemoved = 0;
+  if (Array.isArray(frankIds)) {
+    const ids = [...new Set(frankIds.filter(f => typeof f === 'string'
+      && f.length >= 8 && f.length <= 128 && /^[A-Za-z0-9+/=_-]+$/.test(f)))].slice(0, 200);
+    for (const fid of ids) {
+      if (await kvGet(env, `frank:${fid}`)) frankRecordsRemoved++;
+      await kvDel(env, `frank:${fid}`);
+      await kvDel(env, `report:${fid}`);
+      globalThis._frankWebhookFired?.delete(fid);
     }
   }
 
@@ -2279,6 +2342,8 @@ async function handleAccountDelete(body, env, request) {
     aliasDeleted,
     groupsLeft: groupsLeft.length,
     groupsDeleted: groupsDeleted.length,
+    sentCopiesRemoved,
+    frankRecordsRemoved,
   }, 200, request);
 }
 
@@ -3106,6 +3171,18 @@ function json(data, status, request, _rid) {
   });
 }
 
+// Deprecation signal for the legacy plain relay path (see the PLAIN RELAY PATH
+// note above handleMsgSend). The router wraps both plain-path routes with
+// this so EVERY response — success, error, even the 410 from
+// PLAIN_PATH_DISABLED — announces the path's status, per RFC 8594's
+// Deprecation header. Rebuilt via `new Response(res.body, res)` because a
+// constructed response's headers are the safe, portable mutation path.
+function plainDeprecated(res) {
+  const r = new Response(res.body, res);
+  r.headers.set('Deprecation', 'true');
+  return r;
+}
+
 async function sha256Short(text) {
   // 16 bytes (32 hex chars) → 2^64 birthday-collision resistance, up from 8 bytes (2^32).
   // KV cache keys are 'ogp:' prefixed; the extra 16 chars are negligible
@@ -3144,6 +3221,24 @@ async function kvPut(env, key, value, opts) {
 }
 async function kvDel(env, key) {
   try { await env.KV.delete(key); return true; } catch(e) { console.error('[kv] DEL failed:', e?.message ?? e); return false; }
+}
+// List every key name under a prefix, following KV cursors. Bounded by
+// maxNames so a pathological namespace can't turn one request into an
+// unbounded scan (account deletion sweeps grp:/inbox: with this). Returns []
+// when the binding has no list().
+async function kvListNames(env, prefix, maxNames = 10000) {
+  if (typeof env.KV?.list !== 'function') return [];
+  const names = [];
+  let cursor;
+  try {
+    while (names.length < maxNames) {
+      const page = await env.KV.list({ prefix, limit: 1000, ...(cursor ? { cursor } : {}) });
+      for (const k of page.keys || []) { names.push(k.name); if (names.length >= maxNames) break; }
+      if (page.list_complete || !page.cursor) break;
+      cursor = page.cursor;
+    }
+  } catch (e) { console.error('[kv] LIST failed:', e?.message ?? e); }
+  return names;
 }
 
 // ================================================================
@@ -3201,7 +3296,6 @@ export {
   handleBackupDownload,
   handleSignal,
   handlePresence,
-  handleOnlineCount,
   handleTurn,
 };
 

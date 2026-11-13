@@ -43,7 +43,6 @@ import worker, {
   handleBackupDownload,
   handleSignal,
   handlePresence,
-  handleOnlineCount,
   handleTurn,
   validateUserId,
   handleKtLogGet,
@@ -65,7 +64,6 @@ const toB64 = (bytes) => Buffer.from(bytes).toString('base64');
 beforeEach(() => {
   globalThis._rateLimitMap  = new Map();
   globalThis._presenceCache = new Map();
-  globalThis._onlineCounter = null;
   globalThis._msgDedup      = new Map();
   globalThis._sealedDedup   = new Map();
   globalThis._frankWebhookFired = new Map();
@@ -1957,6 +1955,77 @@ describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
     // The other user's group is untouched.
     expect(await env.KV.get(`grp:${otherToken}`)).not.toBeNull();
   });
+
+  // ── Stage-0 residue sweeps (2026-11-13) ──────────────────────────────────
+  // Three residue classes are keyed by something other than the userId, so the
+  // userId-keyed erasure above never reached them: rosters of groups the
+  // deleting device did not declare, plain-path copies of messages the account
+  // SENT (still in other users' inboxes), and frank/report records (keyed by
+  // frankId, user link nonexistent by design).
+  it('sweep scrubs groups the request never declared', async () => {
+    const env = makeEnv();
+    const userId = 'deluser08';
+    const { ed } = await registeredAccount(env, userId);
+    await env.KV.put('grp:tokhidden', JSON.stringify({
+      creatorId: 'someoneelse', epoch: 5,
+      members: [{ id: 'someoneelse', pub: 'x' }, { id: userId, pub: 'y', name: 'Ghost' }],
+    }));
+    await env.KV.put('grp:tokhiddenown', JSON.stringify({
+      creatorId: userId, epoch: 1, members: [{ id: userId, pub: 'y' }, { id: 'other', pub: 'z' }],
+    }));
+    const ts = Date.now();
+    const res = await handleAccountDelete({ userId, ts, sig: await signDelete(ed, userId, ts) }, env, req({}));
+    const j = await res.json();
+    expect(res.status).toBe(200);
+    expect(j.groupsLeft).toBe(1);
+    expect(j.groupsDeleted).toBe(1);
+    const left = JSON.parse(await env.KV.get('grp:tokhidden'));
+    expect(left.members.some((m) => m.id === userId)).toBe(false);
+    expect(left.epoch).toBe(6);
+    expect(await env.KV.get('grp:tokhiddenown')).toBeNull();
+  });
+
+  it('sweep removes sent plain-path copies from other inboxes, and only those', async () => {
+    const env = makeEnv();
+    const userId = 'deluser09';
+    const { ed } = await registeredAccount(env, userId);
+    await env.KV.put('inbox:friend001', JSON.stringify([
+      { from: userId, payload: 'a', ts: 1 },
+      { from: 'someoneelse', payload: 'b', ts: 2 },
+      { from: userId, payload: 'c', ts: 3 },
+    ]));
+    await env.KV.put('inbox:friend002', JSON.stringify([{ from: userId, payload: 'only', ts: 4 }]));
+    // Sealed queue of a recipient must survive untouched: sealed copies carry
+    // no sender identity to match on (by design), so deletion cannot guess.
+    await env.KV.put('sealed:friend001', JSON.stringify([{ envelope: 'ct', ts: 5 }]));
+    const ts = Date.now();
+    const res = await handleAccountDelete({ userId, ts, sig: await signDelete(ed, userId, ts) }, env, req({}));
+    const j = await res.json();
+    expect(j.sentCopiesRemoved).toBe(3);
+    const friend = JSON.parse(await env.KV.get('inbox:friend001'));
+    expect(friend).toHaveLength(1);
+    expect(friend[0].from).toBe('someoneelse');
+    expect(await env.KV.get('inbox:friend002')).toBeNull();
+    expect(await env.KV.get('sealed:friend001')).not.toBeNull();
+  });
+
+  it('deletes frank/report records for client-supplied frankIds; ignores malformed ones', async () => {
+    const env = makeEnv();
+    const userId = 'deluser10';
+    const { ed } = await registeredAccount(env, userId);
+    await env.KV.put('frank:frankid-aaa1', JSON.stringify({ c: 'x' }));
+    await env.KV.put('report:frankid-aaa1', JSON.stringify({ reason: 'spam' }));
+    await env.KV.put('frank:frankid-bbb2', JSON.stringify({ c: 'y' })); // never declared — must survive
+    const ts = Date.now();
+    const res = await handleAccountDelete(
+      { userId, ts, sig: await signDelete(ed, userId, ts),
+        frankIds: ['frankid-aaa1', 'bad id!', 'x', 42, 'frankid-aaa1'] }, env, req({}));
+    const j = await res.json();
+    expect(j.frankRecordsRemoved).toBe(1);
+    expect(await env.KV.get('frank:frankid-aaa1')).toBeNull();
+    expect(await env.KV.get('report:frankid-aaa1')).toBeNull();
+    expect(await env.KV.get('frank:frankid-bbb2')).not.toBeNull();
+  });
 });
 
 describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => {
@@ -2523,6 +2592,46 @@ describe('sealed sender send / poll / ack', () => {
     expect(ackJson.kept).toBe(1);
     const remaining = JSON.parse(await origGet(key));
     expect(remaining.map(m => m.envelope)).toEqual(['A-REAPPENDED']);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Plain relay path — deprecation notice + PLAIN_PATH_DISABLED (stage-0, 2026-11-13)
+// ─────────────────────────────────────────────────────────────────────────────
+describe('plain relay path deprecation', () => {
+  const req = (b) => apiRequest('/api/msg/x', b);
+
+  it('PLAIN_PATH_DISABLED=true: send and poll both answer 410 and store nothing', async () => {
+    const env = makeEnv({ PLAIN_PATH_DISABLED: 'true' });
+    const send = await handleMsgSend(
+      { to: 'bob00001', from: 'alice001', payload: 'ENCRYPTED', ts: Date.now() }, '10.0.0.1', env, req({}));
+    expect(send.status).toBe(410);
+    expect((await send.json()).code).toBe('PLAIN_PATH_DISABLED');
+    const poll = await handleMsgPoll({ id: 'bob00001', lastTs: 0 }, env, req({}));
+    expect(poll.status).toBe(410);
+    expect((await poll.json()).code).toBe('PLAIN_PATH_DISABLED');
+    expect(await env.KV.get('inbox:bob00001')).toBeNull();
+  });
+
+  it('router wraps plain-path responses with a Deprecation: true header', async () => {
+    const env = makeEnv();
+    const sendRes = await worker.fetch(apiRequest('/api/msg/send',
+      { to: 'bob00001', from: 'alice001', payload: 'ENCRYPTED', ts: Date.now() }), env);
+    expect(sendRes.status).toBe(200);
+    expect(sendRes.headers.get('Deprecation')).toBe('true');
+    const pollRes = await worker.fetch(apiRequest('/api/msg/poll', { id: 'bob00001', lastTs: 0 }), env);
+    expect(pollRes.status).toBe(200);
+    expect(pollRes.headers.get('Deprecation')).toBe('true');
+    // A non-plain route must NOT carry the marker.
+    const health = await worker.fetch(new Request('https://breeze.test/api/health'), env);
+    expect(health.headers.get('Deprecation')).toBeNull();
+  });
+
+  it('health advertises the plain-deprecation and delete-sweep capabilities', async () => {
+    const res = await worker.fetch(new Request('https://breeze.test/api/health'), makeEnv());
+    const j = await res.json();
+    expect(j.capabilities).toContain('plain-deprecation');
+    expect(j.capabilities).toContain('delete-sweep');
   });
 });
 
@@ -4417,6 +4526,7 @@ describe('presence heartbeat and check', () => {
 
   it('stores a heartbeat and returns ok', async () => {
     const e   = makeEnv();
+    await e.KV.put('prekey:user00001', JSON.stringify({ spkPub: 'x' })); // registered (presence gate is default-on)
     const res = await handlePresence(
       { id: 'user00001', pub: 'mypub', name: 'Alice' }, e, req({})
     );
@@ -4442,6 +4552,7 @@ describe('presence heartbeat and check', () => {
 
   it('check returns online=true immediately after heartbeat (in-memory cache)', async () => {
     const e = makeEnv();
+    await e.KV.put('prekey:user00002', JSON.stringify({ spkPub: 'x' }));
     await handlePresence({ id: 'user00002', pub: 'p', name: 'Bob' }, e, req({}));
     const r = await handlePresence({ id: 'user00002', check: true }, e, req({}));
     expect(r.status).toBe(200);
@@ -4516,6 +4627,7 @@ describe('presence heartbeat and check', () => {
   // chosen DISPLAY NAME to anyone holding a 12-char id.
   it('single presence check never discloses the display name', async () => {
     const e = makeEnv();
+    await e.KV.put('prekey:privacyusr', JSON.stringify({ spkPub: 'x' }));
     await handlePresence({ id: 'privacyusr', pub: 'p', name: 'Real Human Name' }, e, req({}));
     const j = await (await handlePresence({ id: 'privacyusr', check: true }, e, req({}))).json();
     expect(j.online).toBe(true);
@@ -4524,6 +4636,7 @@ describe('presence heartbeat and check', () => {
 
   it('round-trips advertised capabilities (N3 negotiation before bundle fetch)', async () => {
     const e = makeEnv();
+    await e.KV.put('prekey:capsuser1', JSON.stringify({ spkPub: 'x' }));
     // advertise() output: a heartbeat carrying the supported protocol caps.
     await handlePresence(
       { id: 'capsuser1', pub: 'p', name: 'Caro', caps: ['x3dh-v5', 'group-v5', 'franking'] }, e, req({}),
@@ -4535,6 +4648,7 @@ describe('presence heartbeat and check', () => {
 
   it('sanitizes advertised caps (≤20 string entries, ≤32 chars; non-strings dropped)', async () => {
     const e = makeEnv();
+    await e.KV.put('prekey:capsuser2', JSON.stringify({ spkPub: 'x' }));
     await handlePresence(
       { id: 'capsuser2', pub: 'p', name: 'X', caps: ['ok', 123, { a: 1 }, 'y'.repeat(50), ...Array(30).fill('z')] },
       e, req({}),
@@ -4548,6 +4662,7 @@ describe('presence heartbeat and check', () => {
 
   it('omits caps for a heartbeat that advertised none (legacy v4 client)', async () => {
     const e = makeEnv();
+    await e.KV.put('prekey:capsuser3', JSON.stringify({ spkPub: 'x' }));
     await handlePresence({ id: 'capsuser3', pub: 'p', name: 'Z' }, e, req({}));
     const j = await (await handlePresence({ id: 'capsuser3', check: true }, e, req({}))).json();
     expect(j.online).toBe(true);
@@ -4589,15 +4704,6 @@ describe('presence heartbeat and check', () => {
     expect((await res.json()).code).toBe('MISSING_ID');
   });
 
-  it('increments online counter on each heartbeat', async () => {
-    const e = makeEnv();
-    await handlePresence({ id: 'user00010', pub: 'p1', name: 'A' }, e, req({}));
-    await handlePresence({ id: 'user00011', pub: 'p2', name: 'B' }, e, req({}));
-    const countRes = await handleOnlineCount({}, e, req({}));
-    const j = await countRes.json();
-    expect(j.online).toBe(2);
-  });
-
   it('rejects malformed id on heartbeat (KV key injection guard)', async () => {
     const e   = makeEnv();
     const res = await handlePresence({ id: 'bad id!!' }, e, req({}));
@@ -4631,6 +4737,7 @@ describe('presence heartbeat and check', () => {
     // Heartbeat writes to _presenceCache (in-memory) and to KV (after 5-min window).
     // The test forces the write by resetting _presenceCache so the TTL guard is reset.
     globalThis._presenceCache = new Map();
+    await e.KV.put('prekey:cacheuser1', JSON.stringify({ spkPub: 'x' }));
     await handlePresence({ id: 'cacheuser1', pub: 'p', name: 'Alice' }, e, req({}));
     // Now _presenceCache has the data. Remove the KV entry to prove the batch check
     // does NOT fall through to KV for this user.
@@ -4681,56 +4788,23 @@ describe('presence heartbeat and check', () => {
     expect(res.status).toBe(200);
     expect((await res.json()).online).toBe(false);
   });
-});
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Online count
-// ─────────────────────────────────────────────────────────────────────────────
-describe('online count', () => {
-  const req = () => apiRequest('/api/online', {});
+  // Stage-0 (2026-11-13): the registration gate is ON BY DEFAULT — it needs no
+  // signature (bundle existence only), and every client registers at identity
+  // creation and self-heals bundle expiry via the replenish cycle.
+  it('presence gate is ON by default: unregistered heartbeat is rejected', async () => {
+    globalThis._presenceVerified = new Map();
+    const e = makeEnv(); // no flag set
+    const res = await handlePresence({ id: 'unreg00003', pub: 'p', name: 'X' }, e, req({}));
+    expect(res.status).toBe(401);
+    expect((await res.json()).code).toBe('UNREGISTERED');
+  });
 
-  it('returns zero when no heartbeats recorded', async () => {
-    const e   = makeEnv();
-    const res = await handleOnlineCount({}, e, req());
+  it('PRESENCE_REQUIRE_AUTH=false opts back out to legacy unauthenticated writes', async () => {
+    const e = makeEnv({ PRESENCE_REQUIRE_AUTH: 'false' });
+    const res = await handlePresence({ id: 'unreg00004', pub: 'p', name: 'X' }, e, req({}));
     expect(res.status).toBe(200);
-    const j = await res.json();
-    expect(j.online).toBe(0);
-    expect(typeof j.ts).toBe('number');
-  });
-
-  // ── Minute-boundary fallback (item 30) ───────────────────────────────────────
-  it('returns previous minute count at minute boundary instead of 0', async () => {
-    const e = makeEnv();
-    // Simulate 3 heartbeats in minute M
-    globalThis._onlineCounter = { minute: 999, count: 3, prev: 0 };
-    // Advance to minute M+1 — current counter is now for a different minute
-    globalThis._onlineCounter = { minute: 1000, count: 0, prev: 3 };
-    const res = await handleOnlineCount({}, e, req());
-    const j = await res.json();
-    // Current minute count is 0, but prev=3 should be returned as fallback
-    expect(j.online).toBe(3);
-  });
-
-  it('returns current minute count when heartbeats exist in the current minute', async () => {
-    const e = makeEnv();
-    const minuteKey = Math.floor(Date.now() / 60000);
-    globalThis._onlineCounter = { minute: minuteKey, count: 7, prev: 2 };
-    const res = await handleOnlineCount({}, e, req());
-    const j = await res.json();
-    expect(j.online).toBe(7); // current minute wins over prev
-  });
-
-  it('handlePresence records prev count when minute rolls over', async () => {
-    const e = makeEnv();
-    const minuteKey = Math.floor(Date.now() / 60000);
-    // Prime with count=5 in the current minute
-    globalThis._onlineCounter = { minute: minuteKey, count: 5, prev: 0 };
-    // Simulate rollover by resetting to an old minute and calling handlePresence
-    globalThis._onlineCounter.minute = minuteKey - 1; // force rollover on next heartbeat
-    await handlePresence({ id: 'user00001', pub: 'IK' }, e, apiRequest('/api/presence', {}));
-    // After rollover: prev should be the old count (5), new count should be 1
-    expect(globalThis._onlineCounter.prev).toBe(5);
-    expect(globalThis._onlineCounter.count).toBe(1);
+    expect((await res.json()).ok).toBe(true);
   });
 });
 
@@ -4755,6 +4829,7 @@ describe('TURN credentials', () => {
 
   it('falls back to free open-relay when no env vars are set', async () => {
     const e   = makeEnv(); // no TURN_* vars
+    await e.KV.put('prekey:user00001', JSON.stringify({ spkPub: 'x' })); // registered (TURN gate is default-on)
     const res = await handleTurn({ userId: 'user00001' }, e, req({}));
     expect(res.status).toBe(200);
     const j   = await res.json();
@@ -4768,6 +4843,7 @@ describe('TURN credentials', () => {
 
   it('uses HMAC custom TURN when TURN_SECRET + TURN_URL are set', async () => {
     const e = { ...makeEnv(), TURN_SECRET: 'supersecret', TURN_URL: 'turn:turn.example.com:3478' };
+    await e.KV.put('prekey:user00001', JSON.stringify({ spkPub: 'x' }));
     const res = await handleTurn({ userId: 'user00001' }, e, req({}));
     expect(res.status).toBe(200);
     const j = await res.json();
@@ -4788,6 +4864,7 @@ describe('TURN credentials', () => {
       TURN_USERNAME:   'staticuser',
       TURN_CREDENTIAL: 'staticpass',
     };
+    await e.KV.put('prekey:user00001', JSON.stringify({ spkPub: 'x' }));
     const res = await handleTurn({ userId: 'user00001' }, e, req({}));
     expect(res.status).toBe(200);
     const j = await res.json();
@@ -4809,6 +4886,23 @@ describe('TURN credentials', () => {
     const e = makeEnv({ TURN_REQUIRE_AUTH: 'true' });
     await e.KV.put('prekey:reguser0001', JSON.stringify({ spkPub: 'x' }));
     const res = await handleTurn({ userId: 'reguser0001' }, e, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).provider).toBe('openrelay');
+  });
+
+  // Stage-0 (2026-11-13): the registration gate is ON BY DEFAULT — bundle
+  // existence only, no signature; paid TURN quota is no longer issued to
+  // arbitrary unregistered ids out of the box.
+  it('TURN gate is ON by default: unregistered userId is rejected', async () => {
+    const e = makeEnv(); // no flag set
+    const res = await handleTurn({ userId: 'unreg00009' }, e, req({}));
+    expect(res.status).toBe(401);
+    expect((await res.json()).code).toBe('UNREGISTERED');
+  });
+
+  it('TURN_REQUIRE_AUTH=false opts back out to unauthenticated issuance', async () => {
+    const e = makeEnv({ TURN_REQUIRE_AUTH: 'false' });
+    const res = await handleTurn({ userId: 'unreg00010' }, e, req({}));
     expect(res.status).toBe(200);
     expect((await res.json()).provider).toBe('openrelay');
   });
