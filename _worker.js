@@ -135,7 +135,7 @@ export default {
         ok: kvOk,
         version: '3.6.1',
         protocol: 4,
-        endpoints: 37,
+        endpoints: 38,
         reqId,
         serverTime: Date.now(), // v3.6: Client can detect clock drift
         kv: kvOk,
@@ -146,6 +146,11 @@ export default {
           push: !!(env.VAPID_PUBLIC_KEY),
           turn: !!(env.TURN_URL),
           backup: kvOk,
+          // Stage-1 step 5: WebSocket delivery is live only when the
+          // operator enabled it AND mailboxes run on the DO backend —
+          // the exact predicate the route itself serves under, so a
+          // client that sees ws:true can rely on the upgrade working.
+          ws: mailboxWsEnabled(env),
         },
         // Always-on endpoint capabilities (independent of env config) so a client can
         // feature-detect during a staged rollout — e.g. show the delete-account /
@@ -161,6 +166,16 @@ export default {
         ts: Date.now(),
         responseMs: Date.now() - _startMs,
       }, kvOk ? 200 : 503, request);
+    }
+
+    // WebSocket delivery (stage-1 step 5): the one non-POST API route.
+    // A WebSocket handshake is a GET carrying an Upgrade header by
+    // protocol, so it is served here, ahead of the POST-only gate. With
+    // the feature off (mailboxWsEnabled false) this branch is skipped
+    // entirely and the path keeps its pre-step-5 behaviour exactly
+    // (GET → 405 below, POST → 404 in the switch).
+    if (path === '/api/mailbox/ws' && mailboxWsEnabled(env)) {
+      return await handleMailboxWs(request, env, url);
     }
 
     // All other API routes: POST only
@@ -769,7 +784,62 @@ export class MailboxDO {
     return this._presenceSeedPromise;
   }
 
+  // Wake every socket attached to this mailbox (stage-1 step 5). The
+  // frame is content-free by design — no envelope, no sender, no
+  // count: the client's poll stays the only path that moves message
+  // data, so a frame lost to hibernation or a dead socket changes
+  // nothing about what polling would reveal or recover. Sockets are
+  // enumerated from the runtime registry at send time, never from
+  // instance state, so a DO that hibernated between attach and
+  // deposit still notifies exactly the sockets the runtime holds.
+  _notifyQueueChanged(family) {
+    if (typeof this.state.getWebSockets !== 'function') return;
+    let sockets;
+    try { sockets = this.state.getWebSockets(); } catch { return; }
+    if (!sockets || sockets.length === 0) return;
+    const frame = JSON.stringify({ type: 'mail', family });
+    for (const ws of sockets) {
+      try { ws.send(frame); } catch { /* socket already gone; the runtime drops it from the registry */ }
+    }
+  }
+
+  // Hibernation event handlers (stage-1 step 5). The runtime owns the
+  // socket registry — closed/errored sockets leave getWebSockets() on
+  // their own — and the DO stores no per-socket state, so there is
+  // nothing to clean up and nothing a wake can find missing. Inbound
+  // frames carry no commands; only a keepalive ping is answered.
+  async webSocketMessage(ws, message) {
+    if (message === 'ping') {
+      try { ws.send('pong'); } catch { /* peer vanished mid-reply */ }
+    }
+  }
+
+  async webSocketClose(ws, code, reason, wasClean) {
+    // No-op by design: no per-socket state exists to release.
+  }
+
+  async webSocketError(ws, error) {
+    try { ws.close(); } catch { /* already closed */ }
+  }
+
   async fetch(request) {
+    // WebSocket attach (stage-1 step 5). The worker forwards a
+    // recipient's upgrade here only after verifying that recipient's
+    // ownership signature (handleMailboxWs) — the DO does no auth of
+    // its own and is reachable solely through the worker's binding.
+    // This instance IS the recipient (idFromName(userId)), so every
+    // socket accepted here subscribes to this mailbox and no other.
+    // acceptWebSocket (not the legacy accept()) is what makes the
+    // socket hibernatable: the DO may be evicted while the connection
+    // lives, and deposits after the wake still find it registered.
+    if ((request.headers.get('Upgrade') || '').toLowerCase() === 'websocket') {
+      if (typeof this.state.acceptWebSocket !== 'function') {
+        return Response.json({ ok: false }, { status: 501 });
+      }
+      const pair = new WebSocketPair();
+      this.state.acceptWebSocket(pair[1]);
+      return new Response(null, { status: 101, webSocket: pair[0] });
+    }
     let body;
     try { body = await request.json(); } catch { return Response.json({ ok: false }, { status: 400 }); }
     const { op, family, slot, userId } = body || {};
@@ -832,6 +902,13 @@ export class MailboxDO {
           v: String(body.value),
           exp: ttl !== null ? Date.now() + Math.max(ttl, 0) * 1000 : null,
         });
+        // A queue rewrite is a deposit landing (a send, or the send
+        // path's read-back re-append): wake the mailbox's sockets so
+        // a foreground client polls now instead of at its next timer
+        // tick (stage-1 step 5). Poll-cleanup writes also pass here;
+        // the extra wake costs the owner one empty poll, and a poll
+        // that changes nothing writes nothing back — no notify loop.
+        if (slot === 'queue') this._notifyQueueChanged(family);
         return Response.json({ ok: true });
       }
       if (op === 'del') {
@@ -1131,11 +1208,18 @@ async function handleMsgSend(body, ip, env, request) {
 // is verified when present, and QUEUE_REQUIRE_AUTH=true makes it mandatory once clients
 // ship the signing fields. Per-op domain separation so a captured poll signature can't be
 // replayed as a destructive ack.
+//
+// One op is the exception: 'mailbox-ws' (the WebSocket subscription,
+// stage-1 step 5) requires the proof unconditionally, independent of
+// QUEUE_REQUIRE_AUTH. A subscription is a standing channel rather
+// than a one-shot read, and the capability has no legacy fleet to
+// stay compatible with, so the proof is mandatory from day one.
+// Clients that cannot sign keep the (fully supported) polling path.
 async function checkQueueAuth(body, env, request, op) {
   const { id, ts, sig } = body;
   const hasSig = ts !== undefined || sig !== undefined;
   if (!hasSig) {
-    if (env.QUEUE_REQUIRE_AUTH === 'true')
+    if (op === 'mailbox-ws' || env.QUEUE_REQUIRE_AUTH === 'true')
       return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
     return null;
   }
@@ -1169,6 +1253,78 @@ async function checkQueueAuth(body, env, request, op) {
     return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
   }
   return null;
+}
+
+// ============================================================
+// WEBSOCKET DELIVERY (stage-1 step 5)
+//
+// GET /api/mailbox/ws?id=<userId>&ts=<ms>&sig=<b64> attaches a
+// hibernatable WebSocket to the recipient's OWN MailboxDO. The socket
+// is a WAKE-UP channel only: when a deposit rewrites a queue, the DO
+// sends one content-free frame ({ type: 'mail', family }) and the
+// client runs its ordinary poll cycle to fetch. Delivery never
+// depends on the socket — a lost frame, a hibernated DO or a dropped
+// connection all degrade to the pre-step-5 polling cadence, and the
+// (re)connect poll drains whatever arrived meanwhile. Correctness
+// therefore never rests on socket state, which is what makes
+// hibernation safe: the DO stores nothing per socket; the runtime's
+// registry (state.getWebSockets()) is the subscriber list.
+//
+// Auth: the same Ed25519 ownership proof as the queue reads
+// (checkQueueAuth, op domain 'mailbox-ws'), carried in the query
+// string because the browser WebSocket API can set neither headers
+// nor a body. A captured handshake URL replays only inside the same
+// ±5-minute ts window as every other signed op, and what it buys is
+// notifications for one's own mailbox — no content ever crosses the
+// socket. The proof is mandatory (see checkQueueAuth): there is no
+// legacy WS fleet, and an id alone must not be enough to stand in
+// someone else's wake-up channel.
+//
+// Gating: MAILBOX_WS_ENABLED=true AND the DO mailbox backend — the
+// wake-up is emitted inside the DO as it stores a deposit, so on the
+// KV backend there is nothing to subscribe to. With either off, the
+// route is not served at all (the router skips its branch) and
+// clients keep polling. The handshake carries its own per-IP
+// in-memory limit below rather than an entry in the router's limits
+// map: that map is POST-switch parity-checked, and connections are
+// long-lived, so this budget guards reconnect churn, not traffic.
+// ============================================================
+function mailboxWsEnabled(env) {
+  return env.MAILBOX_WS_ENABLED === 'true' && mailboxBackend(env) === 'do';
+}
+
+async function handleMailboxWs(request, env, url) {
+  if (request.method !== 'GET' || (request.headers.get('Upgrade') || '').toLowerCase() !== 'websocket') {
+    return json({ error: 'WebSocket upgrade required', code: 'UPGRADE_REQUIRED' }, 426, request);
+  }
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const limit = ip === 'unknown' ? 5 : 10;
+  const minute = Math.floor(Date.now() / 60000);
+  const rlMap = (globalThis._rateLimitMap ||= new Map());
+  const rlKey = `${ip}:/api/mailbox/ws:${minute}`;
+  const rlCount = rlMap.get(rlKey) || 0;
+  if (rlCount >= limit) {
+    const retryAfter = Math.max(1, Math.ceil(60 - (Date.now() / 1000) % 60));
+    return json({ error: 'Rate limited', code: 'RATE_LIMITED', retryAfter }, 429, request);
+  }
+  rlMap.set(rlKey, rlCount + 1);
+
+  const id = url.searchParams.get('id') || '';
+  if (!validateUserId(id)) return json({ error: 'invalid id', code: 'INVALID_ID' }, 400, request);
+  const tsParam = url.searchParams.get('ts');
+  const wsAuthBody = {
+    id,
+    ts: tsParam === null ? undefined : Number(tsParam),
+    sig: url.searchParams.get('sig') ?? undefined,
+  };
+  const authErr = await checkQueueAuth(wsAuthBody, env, request, 'mailbox-ws');
+  if (authErr) return authErr;
+
+  // The verified id selects the DO instance (idFromName): sockets
+  // attached inside it can only ever be woken by THIS mailbox's
+  // deposits — there is no cross-mailbox subscription to abuse.
+  const stub = env.MAILBOX_DO.get(env.MAILBOX_DO.idFromName(id));
+  return stub.fetch(request);
 }
 
 async function handleMsgPoll(body, env, request) {

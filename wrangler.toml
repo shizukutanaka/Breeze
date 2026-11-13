@@ -94,3 +94,13 @@ new_sqlite_classes = ["MailboxDO"]
 # other). With mailboxes moved, presence heartbeats were the largest
 # remaining consumer of the free tier's 1,000 KV writes/day.
 # wrangler pages secret put PRESENCE_BACKEND           # do — serve presence from MailboxDO (default: kv)
+#
+# --- WebSocket delivery (stage-1 step 5) ---
+# A hibernatable WebSocket per recipient wakes the client when a
+# deposit lands, replacing the 3s foreground poll with a push + slow
+# safety poll. Wake-up only: message data always moves via the poll
+# endpoints, and clients that never connect (or cannot produce the
+# required Ed25519 ownership signature) keep polling unchanged.
+# Takes effect only together with MAILBOX_BACKEND=do — the wake-up is
+# emitted inside the recipient's MailboxDO as it stores a deposit.
+# wrangler pages secret put MAILBOX_WS_ENABLED         # true — serve GET /api/mailbox/ws (default: off, route not served)
