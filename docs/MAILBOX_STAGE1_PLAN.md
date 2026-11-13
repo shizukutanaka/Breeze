@@ -81,7 +81,7 @@ readDropped() / writeDropped(value, ttlSec) / deleteDropped()
   or accept ≤7-day-old queue state as the rollback window (document the
   choice at rollout time, not here).
 
-## Step 3 — sealed sender completion
+## Step 3 — sealed sender completion (server-side parts implemented, 2026-11-13)
 
 Independent of step 2's backend, in the mailbox layer:
 
@@ -101,6 +101,58 @@ Independent of step 2's backend, in the mailbox layer:
   sizes via queue JSON framing, and bucket-pad at the store layer if it
   does. Constant-rate cover traffic stays out of scope (battery/bandwidth
   cost; no mainstream messenger ships it always-on).
+
+- **Outcome (2026-11-13).** The three bullets live in different places,
+  and only the first could be completed from the server side:
+
+  1. *Per-mailbox limits — implemented (frequency half).* The
+     MailboxStore gains `checkDeposit()`; the DO backend enforces
+     `DEPOSIT_LIMIT` (120 deposits/minute, 1,200/hour — one window
+     spanning both families, per step 2's "per-mailbox limits span the
+     whole mailbox") atomically inside the recipient's DO, and
+     `handleSealedSend` answers 429 `MAILBOX_RATE_LIMITED` past the
+     cap, un-marking the dedup key on denial so a retry is judged by
+     the gate rather than swallowed as a duplicate of a message that
+     was never stored. The KV backend is a documented no-op: a KV
+     counter would spend the scarce write quota on a check eventual
+     consistency makes racy — enforcement exists exactly when
+     `MAILBOX_BACKEND=do`. The gate fails open on DO RPC failure (a
+     mitigation layer, not a correctness invariant; the queue caps
+     still bound storage). The plain path is deliberately not gated —
+     stage 0 froze it byte-for-byte pending removal. The *size* half
+     of the bullet needed no new mechanism: the per-message cap
+     (256 KB per envelope) and the queue caps (100 entries / 16 MB via
+     `capQueueBytes`, FIFO eviction with the loss surfaced to the
+     recipient through the `dropped` counter) already bind every
+     mailbox on both backends — audited, not rebuilt.
+  2. *Padding audit — done; one Low finding; the fix is client-side.*
+     The queue JSON framing itself is clean: per-entry overhead is
+     constant (field names plus a 13-digit `ts`), so framing does not
+     re-leak sizes, and the message payload stays bucketed as designed
+     (ratchet v4 / group v5 pad plaintext to 256-byte boundaries
+     before encryption). But the sealed *metadata* block is not
+     padded: `sealMeta` encrypts `JSON.stringify(meta)` directly and
+     `se.ct` travels as a number array, so the stored record reveals
+     the exact metadata length (array length = JSON byte length + the
+     16-byte GCM tag) — display-name length and the presence/length of
+     optional fields such as a replyTo preview are inferable by the
+     relay. **Severity Low**: length only, the observer is the relay
+     (which already sees recipient, timing, and volume), no content
+     and no sender identity. Store-layer padding cannot fix it
+     without breaking the send path's byte-equality read-back check
+     and the dedup key; the real fix pads the metadata before
+     encryption in `sealMeta` (both mirrors — index.html and
+     `src/crypto/seal.js` — with a framing the decrypt side can
+     strip). Recorded here as a client follow-up; not done in this
+     step.
+  3. *Delivery tokens — client-required, unchanged.* Nothing
+     server-side can begin: the token derives from recipient key
+     material only contacts hold, senders must attach it and the
+     recipient side must expect it, so a client release leads (the
+     bullet above already says so). The server continues to accept
+     tokenless deposits; the flag flip comes after the fleet ships
+     token support. In the meantime the frequency gate above makes
+     unauthenticated deposit at least rate-accountable per mailbox.
 
 ## Step 4 — KV demoted to the key directory (implemented, 2026-11-13)
 
