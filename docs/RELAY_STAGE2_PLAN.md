@@ -693,6 +693,148 @@ recorded where the plan met the code:
   mid-session and the account still receives via the second,
   and default installs show zero behavioural diff in the suite.
 
+**Outcome (2026-11-14).** Landed, with eight readings recorded
+where the plan met the code:
+
+- **What shipped.** `index.html` only (plus CSP re-pins, locales
+  and tests; no worker, endpoint or CONFIG change): a "Home
+  relays" block next to step 4's pin code — `homeRelays()` (the
+  resolver's source list), `relayApiBase()` (relay → API base),
+  `postAPIRelay()` (the funnel, addressed per relay),
+  `ensureRelayVerified()` (per-relay pin verdicts),
+  `attestNewRelay()` / `addHomeRelay()` / `removeHomeRelay()`,
+  and the `/settings` Relays section with the add-flow (paste
+  URL → attestation → fingerprint → confirm). Fan-out covers
+  the plan's list in full: poll + sealed ACK, presence beat,
+  prekey status/upload (initial registration included), backup
+  upload/download, push subscribe/unsubscribe, one mailbox
+  wake-up socket per relay, and per-relay health.
+- **Reading 1 — the stored list vs the effective list.** The
+  plan's "`_settings.relays`: an ordered list … default exactly
+  one entry — the serving origin" is realised as: storage holds
+  only the ADDED relays (`relays: []` by default, entries
+  `{ url, pin, label }` as planned), and `homeRelays()` resolves
+  the effective list with the serving origin always first — an
+  untouched install resolves to exactly one entry, as required.
+  The origin's pin is NOT migrated into a list entry: it stays
+  in step 4's `_settings.relayPin` (step-4 storage, tests and
+  `/security` untouched); a stored entry naming the origin
+  merges into the first slot (label; pin only if `relayPin` is
+  unset). Storing the origin in the list would have made the
+  default a migration instead of a constant.
+- **Reading 2 — the resolver returns the legacy const for the
+  origin, which also closes the plan's Unverified item.**
+  `relayApiBase(origin)` returns the existing `API` value
+  untouched — never `location.origin + '/api'` — so the
+  localhost derivation (API is `''` on localhost) and every
+  other shell keep byte-identical behaviour. The desktop check
+  the plan required before merge: Tauri serves the app from
+  `tauri://localhost` (Windows `http://tauri.localhost`) with
+  `frontendDist ../../`, Electron loads a remote `BREEZE_URL`
+  or the file — in both shells the origin entry IS today's
+  derivation by construction, and both shells' CSP
+  (`connect-src https: wss:`) admits added relays, which are
+  addressed `<origin>/api` (the only prefix the worker
+  routes).
+- **Reading 3 — pins per relay, and step 4's boot window.**
+  Verdict rules are step 4's, scoped per relay: a differing
+  advertised key, a failing attestation, or a pinned key no
+  longer presented at all latch THAT relay off for the session
+  (`_relayBlockedUrls`; warning toast + announcement + audit,
+  its socket closed, pin never rewritten); an unreachable relay
+  latches nothing and is re-checked on the next call. Added
+  relays are verified LAZILY, inside the resolver, before their
+  first call of the session — which closes step 4's recorded
+  boot window for them by construction: an added relay exists
+  only via `_settings` (loaded inside the session), and its
+  first call awaits the verdict. The origin's window is
+  unchanged and still recorded: the primary path is the legacy
+  path byte for byte, and reordering `_boot()` remains out of
+  scope.
+- **Reading 4 — a keyless relay cannot be added.** The
+  add-flow's attestation classifies `keyless` as a refusal, not
+  a pin-less entry: step 4's asymmetry (implicit trust is the
+  serving origin's legacy role only) becomes a product rule —
+  a relay that cannot be pinned cannot be a home relay.
+- **Reading 5 — push fan-out is bounded by the VAPID binding.**
+  The plan says "subscribes per home relay (each relay's
+  health publishes its own VAPID key)"; the code fact is that
+  a browser push subscription is bound to exactly ONE
+  `applicationServerKey`, so a subscription created against
+  the primary's key can only be REGISTERED with added relays
+  whose health publishes that same key — a different-key relay
+  could never wake this browser with it (the push service
+  rejects a mismatched sender), and for those relays the
+  mailbox socket/poll remains the wake-up path, push being
+  only a hint as the plan itself notes. When the bound key
+  cannot be read back (`sub.options.applicationServerKey`
+  unsupported), registration is primary-only — the pre-step-5
+  behaviour. Unsubscribe fans out to all home relays (the
+  account-switch call site snapshots the list first, before
+  `_settings` becomes the next account's).
+- **Reading 6 — a bundle rotation lands on ALL home relays,
+  and a straggler is healed with the SAME bundle.** The
+  worker's upload REPLACES the stored bundle, and
+  `generatePreKeyBundle()` replaces the local private halves —
+  so the plan's "retries across relays" has a hard form: a
+  rotation triggered by any one relay (404/expiry, OTP drain,
+  SPK age) must be uploaded to every home relay, or the others
+  keep serving prekeys whose private halves this device just
+  discarded. A relay whose upload fails is recorded in
+  `_pendingBundle` and retried with that exact bundle on the
+  next replenish cycle, before any new rotation. Recorded
+  bound: the pending state is in-memory — if the app closes
+  first, the straggler keeps the older bundle until the next
+  natural rotation trigger (its own OTP drain / SPK age /
+  expiry), never a wrong-key state, just a staleness window.
+- **Reading 7 — per-relay cursors and sockets.** The plain
+  poll cursor is per relay (`_pollCursorByUrl`): a relay's
+  queue ts is its own clock (the step-2 fact the plan's
+  design rests on), so a single shared cursor would silently
+  skip messages on the other relay. The single mailbox socket
+  became one per relay (`_mailWsByRelay`); `schedulePoll`'s
+  cadence reads "any socket open", and an added relay's socket
+  gates on ITS OWN health's `features.ws` (captured during its
+  pin verification) plus its pin verdict — a relay without WS
+  is simply polled, as planned.
+- **Reading 8 — what stayed primary-only.** The funnel gained
+  the resolver (`postAPIRelay` delegates to `postAPIRaw` for
+  the origin, inheriting the step-4 gate), but the calls the
+  plan leaves to step 6 stayed put, and the code showed more
+  of them than the plan named: `_signal` / `_signalAwait`
+  (contact rendezvous), sealed/plain send, prekey fetch
+  (+batch), a PEER's prekey status, contacts' presence check,
+  `/alias/*`, `/group/*`, `/turn`, `/drop/*`, `/device/*`,
+  `/account/delete`, and the remote-wipe poll (whose sender
+  side is likewise primary-only, so the pair stays coherent).
+  Removals are local-only: removing a relay deletes nothing on
+  it — it keeps what it holds and stops receiving copies (the
+  remove confirmation says so).
+- **Verification.** vitest 1260 → **1277 passed / 65 files**
+  (new `tests/relay-multirelay.test.js`, 17 tests: default
+  resolution + byte-identical legacy calls; stored-origin
+  merge; the add-flow verdict matrix and its confirm gate;
+  removal bookkeeping; pin independence — B's key change and
+  B going keyless latch B only, an unreachable B latches
+  nothing and recovers, a wrong origin pin cannot break B;
+  poll merging two real workers' queues with per-relay ACKs
+  draining both; a 500-ing relay starving nobody and latching
+  nothing; one rotation landing one bundle on both relays and
+  a failed upload healed with the same bundle; presence and
+  push-unsubscribe fan-out; the per-relay WS gate). The plan's
+  done-when drill is an automated test in the same file: two
+  real Node hosts (`createRelayServer`), one account homed on
+  both, deposits on both received, the PRIMARY stopped
+  mid-session, and delivery continuing via the second relay.
+  `./validate.sh` **PASSED (165/171 — identical to baseline)**;
+  CSP re-pinned via `node tools/csp-hash.mjs --write`,
+  `--check` OK. i18n: 15 keys, EN + JA at 100%, and the six
+  partial locales (es, id, ko, pt-BR, th, zh-TW) translated
+  too, holding their 95% core-coverage floor. **Recorded
+  gap:** no browser E2E exists in this environment — the
+  extracted client against real workers, plus the live
+  two-host drill, stand in for it (step 4's precedent).
+
 ## Step 6 — Contact home relays and redundant deposit
 
 - **Purpose.** The recommendation's payoff: a message is

@@ -1605,6 +1605,20 @@ const _I = {
     keyChanged: "⚠️ Security key changed for {0}. Verify their identity with /verify.",
     relayKeyChanged: "⚠️ This relay's security key has changed — relay communication is paused. Verify the relay fingerprint with the operator before trusting it again.",
     relayPinned: "Relay identity pinned — fingerprint {0}. Compare it with the fingerprint your relay operator published.",
+    settingsRelays: 'Home relays',
+    relayOriginTag: '(this relay)',
+    relayAddBtn: 'Add relay',
+    relayRemoveBtn: 'Remove',
+    relayAddPrompt: 'Relay URL to add as a home relay',
+    relayAddConfirm: 'Add {0} as a home relay? Fingerprint: {1} — add it only if this matches the fingerprint the relay operator published.',
+    relayAddInvalid: 'That is not a valid relay URL.',
+    relayAddSelf: 'That URL is this relay itself — it is already your home relay.',
+    relayAddDuplicate: 'That relay is already in your home relays.',
+    relayAddKeyless: 'That relay has no identity key, so it cannot be pinned — it cannot be added as a home relay.',
+    relayAddUnreachable: 'That relay could not be verified — check the URL and try again.',
+    relayAdded: 'Home relay added: {0}',
+    relayRemoved: 'Home relay removed: {0}',
+    relayRemoveConfirm: 'Remove {0} from your home relays? The relay keeps the data it already holds; it just stops receiving new copies.',
     p2pOnlyMode: 'P2P-only mode: server unreachable. Direct connections still work.',
     storageWarning: "Storage {0}% full. Old messages may be auto-deleted.",
     toastDeleted: "{0} messages deleted",
@@ -4032,6 +4046,237 @@ async function initMessenger(dbName) {
     finally { _relayPinGate.checking = false; }
   }
 
+  // ===== Home relays (stage-2 step 5) =====
+  // The relays this account calls home: where its mailbox, prekey
+  // bundle, presence and backup live (design in
+  // docs/RELAY_STAGE2_PLAN.md). _settings.relays stores the ADDED
+  // relays as { url, pin, label }; the effective list homeRelays()
+  // resolves always starts with the serving origin (whose pin is
+  // step 4's _settings.relayPin), so an untouched install resolves
+  // to exactly one relay — this one — and behaves exactly as before
+  // this step. Only OWN-account traffic fans out (poll + ack,
+  // presence, prekey upload/status, backup, push subscribe, mailbox
+  // WS, health); everything addressed to a contact — sends, prekey
+  // fetches, groups, signal rendezvous — stays on the primary
+  // (first) relay until step 6 teaches senders about home relays.
+  //
+  // Pins are PER RELAY: the origin keeps step 4's session check and
+  // its global gate; an added relay is verified lazily, inside the
+  // resolver, before its first call of the session — which also
+  // closes step 4's recorded boot window for added relays, because
+  // an added relay can only enter the list via _settings (loaded
+  // before any fan-out can name it) and its first call waits for
+  // the verdict. The verdict rules are step 4's: a key that differs
+  // from the pin, an attestation signature that fails against the
+  // advertised key, or a key that was pinned and is no longer
+  // presented at all are POSITIVE evidence — that relay (and only
+  // that relay) is latched off for the session and the key-change
+  // warning fires; the pin is never silently re-written. An
+  // unreachable relay is no evidence: the call is refused (nothing
+  // goes to an unverified relay) but nothing latches, and the next
+  // call re-checks.
+  const _relayBlockedUrls = new Set(); // added relays latched off by a verified pin failure (this session)
+  const _relayVerifyMemo = new Map();  // url -> Promise<boolean>: the session's conclusive verdicts
+  const _relayHealthByUrl = new Map(); // url -> last health JSON seen (per-relay features / VAPID key)
+  const _pollCursorByUrl = new Map();  // url -> plain-queue cursor (queue ts is a per-relay cursor)
+  // A freshly rotated prekey bundle some home relays have not
+  // accepted yet (see checkAndReplenishPreKeys): retried AS-IS on
+  // the next replenish cycle — the bundle is one identity, so a
+  // relay that missed a rotation must receive THAT bundle, not a
+  // newer one, or it keeps serving prekeys this device has already
+  // discarded the private halves of.
+  let _pendingBundle = null; // { bundle, relays: Set<url> }
+
+  function _servingRelayUrl() {
+    try { return location.origin; } catch(_e) { return ''; }
+  }
+  // Canonical form of a relay URL: its origin (scheme + host +
+  // port, no path). Anything that is not an http(s) URL is not a
+  // relay. http is allowed for localhost/LAN self-hosts; the pin —
+  // not the transport — is what authenticates an added relay.
+  function _normalizeRelayUrl(raw) {
+    if (typeof raw !== 'string') return null;
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    try {
+      const u = new URL(trimmed);
+      if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+      return u.origin;
+    } catch(_e) { return null; }
+  }
+  function homeRelays() {
+    const origin = _servingRelayUrl();
+    const stored = Array.isArray(_settings.relays) ? _settings.relays : [];
+    let originPin = typeof _settings.relayPin === 'string' ? _settings.relayPin : '';
+    let originLabel = '';
+    const added = [];
+    const seen = new Set();
+    for (const e of stored) {
+      if (!e || typeof e !== 'object') continue;
+      const url = _normalizeRelayUrl(e.url);
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      const pin = typeof e.pin === 'string' ? e.pin : '';
+      const label = typeof e.label === 'string' ? e.label.slice(0, 64) : '';
+      if (url === origin) { if (pin && !originPin) originPin = pin; originLabel = label; continue; }
+      added.push({ url, pin, label });
+    }
+    return [{ url: origin, pin: originPin, label: originLabel }, ...added];
+  }
+  function isOriginRelay(relay) { return !!relay && relay.url === _servingRelayUrl(); }
+  // The resolver: a relay entry -> the base its API paths hang off.
+  // The serving origin resolves to the legacy API const UNTOUCHED —
+  // that is what keeps every shell (web, localhost dev, desktop) on
+  // exactly the derivation it has today, including the localhost
+  // special case; an added relay is addressed as <origin>/api, the
+  // only prefix the worker routes.
+  function relayApiBase(relay) {
+    if (!relay || isOriginRelay(relay)) return API;
+    return relay.url + '/api';
+  }
+  // One attestation round against a relay base, classified for the
+  // pin rules above. expectedKey is the pin to match, or null on a
+  // first contact (the advertised key is then the candidate pin and
+  // the round proves its presenter HOLDS it). An inconsistent
+  // answer (attestation naming a different key than health) counts
+  // as no evidence, exactly as in step 4's check.
+  async function _relayAttestCheck(base, expectedKey) {
+    let health = null;
+    try {
+      const r = await fetchT(base + '/health').catch(() => null);
+      health = r?.ok ? await r.json().catch(() => null) : null;
+    } catch(e) { _dbg(e, 'relay-attest-check'); }
+    if (!health) return { verdict: 'unreachable', relayKey: null, health: null };
+    const relayKey = typeof health.relayKey === 'string' && health.relayKey ? health.relayKey : null;
+    if (!relayKey) return { verdict: 'keyless', relayKey: null, health };
+    if (expectedKey && relayKey !== expectedKey) return { verdict: 'mismatch', relayKey, health };
+    try {
+      const nonce = [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
+      const resp = await fetchT(base + '/relay/attest', { method: 'POST', headers: _H, body: JSON.stringify({ nonce }) }).catch(() => null);
+      const data = resp?.ok ? await resp.json().catch(() => null) : null;
+      if (!data) return { verdict: 'unreachable', relayKey, health };
+      const verified = data.relayKey === relayKey && typeof data.sig === 'string'
+        ? await verifySignature(`breeze-relay-attest:${relayKey}:${nonce}`, data.sig, relayKey)
+        : null;
+      if (verified === true) return { verdict: 'ok', relayKey, health };
+      if (verified === false) return { verdict: 'mismatch', relayKey, health };
+      return { verdict: 'unreachable', relayKey, health };
+    } catch(e) { _dbg(e, 'relay-attest-check'); return { verdict: 'unreachable', relayKey, health }; }
+  }
+  function _blockAddedRelay(relay, verdict) {
+    _relayBlockedUrls.add(relay.url);
+    _closeRelayWs(relay.url);
+    showToast(t('relayKeyChanged'), 'error', 10000);
+    announceToSR(t('relayKeyChanged'));
+    auditLog('security', `Added relay ${relay.url} ${verdict === 'keyless' ? 'no longer presents the identity key it was pinned with' : 'presented an identity key that does not match its pin'} — calls to it are paused for this session.`);
+  }
+  // The session verdict for one added relay: true = verified
+  // against its pin, calls may proceed. Conclusive verdicts are
+  // memoized for the session (the origin's check is session-scoped
+  // too); an inconclusive one is not — the next call re-checks.
+  function ensureRelayVerified(relay) {
+    const url = relay.url;
+    if (_relayBlockedUrls.has(url)) return Promise.resolve(false);
+    let p = _relayVerifyMemo.get(url);
+    if (p) return p;
+    p = (async () => {
+      const r = await _relayAttestCheck(relayApiBase(relay), relay.pin || null);
+      if (r.health) _relayHealthByUrl.set(url, r.health);
+      if (r.verdict === 'ok') return true;
+      if (r.verdict === 'mismatch' || r.verdict === 'keyless') { _blockAddedRelay(relay, r.verdict); return false; }
+      _relayVerifyMemo.delete(url); // unreachable: no evidence — re-check on the next call
+      return false;
+    })();
+    _relayVerifyMemo.set(url, p);
+    return p;
+  }
+  // postAPIRaw's multi-relay sibling: same contract (Response, or
+  // null on failure/refusal), addressed to ONE relay. The origin
+  // delegates to postAPIRaw itself, gate and all, so the primary
+  // path is the pre-step-5 code path byte for byte.
+  async function postAPIRelay(relay, path, body, opts = {}) {
+    if (!relay || isOriginRelay(relay)) return postAPIRaw(path, body, opts);
+    if (_relayBlockedUrls.has(relay.url)) return null;
+    if (!await ensureRelayVerified(relay)) return null;
+    return fetchT(relayApiBase(relay) + path, { method: 'POST', headers: _H, body: JSON.stringify(body), ...opts }).catch(() => null);
+  }
+  // The add-flow's probe (settings UI): classify a pasted URL
+  // before anything is stored. An added relay must attest — a
+  // keyless relay keeps its legacy role as a serving origin only
+  // (step 4's asymmetry), so 'keyless' is a refusal here, never a
+  // pin-less entry.
+  async function attestNewRelay(rawUrl) {
+    const url = _normalizeRelayUrl(rawUrl);
+    if (!url) return { error: 'invalid' };
+    if (url === _servingRelayUrl()) return { error: 'self' };
+    if (homeRelays().some(r => r.url === url)) return { error: 'duplicate' };
+    const r = await _relayAttestCheck(url + '/api', null);
+    if (r.verdict === 'keyless') return { error: 'keyless' };
+    if (r.verdict !== 'ok') return { error: 'unreachable' };
+    return { url, relayKey: r.relayKey, health: r.health, fingerprint: await relayFingerprint(r.relayKey) };
+  }
+  async function addHomeRelay(entry) {
+    const list = (Array.isArray(_settings.relays) ? _settings.relays : [])
+      .filter(e => e && _normalizeRelayUrl(e.url) !== entry.url);
+    list.push({ url: entry.url, pin: entry.pin, label: typeof entry.label === 'string' ? entry.label.slice(0, 64) : '' });
+    _settings.relays = list;
+    await saveSettings();
+    // The add-flow just verified this relay end to end — that IS
+    // this session's verdict, and its health is already known.
+    _relayVerifyMemo.set(entry.url, Promise.resolve(true));
+    if (entry.health) _relayHealthByUrl.set(entry.url, entry.health);
+  }
+  async function removeHomeRelay(url) {
+    if (Array.isArray(_settings.relays)) {
+      _settings.relays = _settings.relays.filter(e => !e || _normalizeRelayUrl(e.url) !== url);
+    }
+    await saveSettings();
+    _relayVerifyMemo.delete(url);
+    _relayBlockedUrls.delete(url);
+    _relayHealthByUrl.delete(url);
+    _pollCursorByUrl.delete(url);
+    _closeRelayWs(url);
+  }
+  // The /settings add-flow: paste URL -> attestation + fingerprint
+  // -> confirm. Nothing is stored before the user confirms the
+  // fingerprint, and the pin stored is the key whose holder just
+  // proved possession — never a string copied off a health page.
+  async function _addRelayFlow() {
+    const raw = await showPrompt(t('relayAddPrompt'), '', { placeholder: 'https://relay.example.com' });
+    if (!raw) return;
+    const res = await attestNewRelay(raw);
+    if (res.error) {
+      const errKey = { invalid: 'relayAddInvalid', self: 'relayAddSelf', duplicate: 'relayAddDuplicate', keyless: 'relayAddKeyless', unreachable: 'relayAddUnreachable' }[res.error] || 'relayAddUnreachable';
+      showToast(t(errKey), 'error', 8000);
+      return;
+    }
+    const ok = await showConfirm(t('relayAddConfirm', res.url, res.fingerprint), { okText: t('relayAddBtn') });
+    if (!ok) return;
+    let label = '';
+    try { label = new URL(res.url).host; } catch(_e) { label = res.url; }
+    await addHomeRelay({ url: res.url, pin: res.relayKey, label, health: res.health });
+    showToast(t('relayAdded', res.url), 'success');
+    auditLog('security', `Home relay added: ${res.url} — fingerprint ${res.fingerprint}.`);
+    // Take effect now, not at the next timer tick: the replenish
+    // path sees the new relay's missing bundle (status 404) and
+    // uploads; polling, presence and the wake-up socket pick the
+    // relay up from their next cycles.
+    _lastPreKeyCheck = 0;
+    checkAndReplenishPreKeys();
+    maybeStartMailboxWs();
+  }
+  // Remove this account's push registration from every home relay
+  // (account switch / account delete). Best-effort like the call
+  // sites it replaces; `relays` may be passed as a snapshot taken
+  // before an account switch replaces _settings.
+  async function _unsubscribePushAll(sub, relays) {
+    try {
+      const body = { userId: myId, endpoint: sub.endpoint,
+        ...(await authFields(ts => `breeze-push-unsubscribe:${myId}:${ts}:${sub.endpoint}`)) };
+      await Promise.all((relays || homeRelays()).map(r => postAPIRelay(r, '/push/unsubscribe', body).catch(() => null)));
+    } catch(e) { _dbg(e, 'push-unsubscribe'); }
+  }
+
   // v3.6: Proactive storage quota check (warn before IDB fails)
   if (navigator.storage?.estimate) {
     try {
@@ -4349,6 +4594,7 @@ async function initMessenger(dbName) {
     focusUntil: 0,           // epoch ms; while in the future, notifications are suppressed
     focusStrict: false,      // focus mode: true = silence everything, false = let VIPs through
     relayPin: '',            // stage-2 step 4: TOFU pin of the serving relay's Ed25519 identity key ('' = none pinned)
+    relays: [],              // stage-2 step 5: ADDED home relays [{ url, pin, label }] — the serving origin is implicit (always first in homeRelays(), its pin is relayPin above), so the default [] resolves to exactly one relay
   };
   let _settings = { ..._defaultSettings };
 
@@ -4669,8 +4915,13 @@ async function initMessenger(dbName) {
       try {
         await initSigning(); // must precede generatePreKeyBundle() or edIdentityKey/signedPreKeySig get omitted (E2E-found)
         const bundle = await generatePreKeyBundle();
-        await postAPIRaw('/prekey/upload', { userId: myId, identityKey: pubB64, ...bundle,
-          ...(await prekeyUploadAuth(myId, pubB64, bundle)) });
+        // Stage-2 step 5: the bundle is ONE identity — it lands on
+        // every home relay (for a fresh account that is the serving
+        // origin alone, exactly as before this step).
+        for (const relay of homeRelays()) {
+          await postAPIRelay(relay, '/prekey/upload', { userId: myId, identityKey: pubB64, ...bundle,
+            ...(await prekeyUploadAuth(myId, pubB64, bundle)) });
+        }
         _dbg(null, 'PreKeys uploaded: 1 SPK + ' + bundle.oneTimePreKeys.length + ' OTP');
       } catch(e) { _dbg(e, 'prekey-upload'); }
     }
@@ -5950,10 +6201,14 @@ async function initMessenger(dbName) {
       // device does not receive push payloads (which may contain message snippets) for
       // the previous account's userId. Best-effort: not awaited.
       if (API && myId) {
+        // Stage-2 step 5: the registration lives on every home relay,
+        // so it is removed from every home relay. The relay list is
+        // snapshotted NOW — _settings belongs to the next account
+        // within moments, and the promise chain below resolves later.
+        const _homeRelaysSnapshot = homeRelays();
         navigator.serviceWorker?.ready
           .then(r => r.pushManager?.getSubscription())
-          .then(async sub => { if (sub) postAPIRaw('/push/unsubscribe', { userId: myId, endpoint: sub.endpoint,
-            ...(await authFields(ts => `breeze-push-unsubscribe:${myId}:${ts}:${sub.endpoint}`)) }).catch(() => {}); })
+          .then(async sub => { if (sub) _unsubscribePushAll(sub, _homeRelaysSnapshot); })
           .catch(() => {});
       }
       // Save unread count for cross-account badge
@@ -9473,44 +9728,82 @@ async function initMessenger(dbName) {
       _DOM.get('msg-my-name').textContent = stored.avatar + ' ' + myName;
     }
   })();
-  let _lastPollTs = 0;
   // v3: PreKey auto-replenish (check every 5 minutes)
   let _lastPreKeyCheck = 0;
   async function checkAndReplenishPreKeys() {
     if (!API || Date.now() - _lastPreKeyCheck < MS.MIN * 5) return;
     _lastPreKeyCheck = Date.now();
     try {
+      const relays = homeRelays();
+      // A rotation some home relays have not accepted yet is retried
+      // AS-IS before anything else: that bundle's private halves are
+      // the ones this device holds, so the stragglers must receive
+      // THAT bundle — a fresh rotation would strand them again.
+      if (_pendingBundle) {
+        const stillPending = new Set();
+        for (const url of _pendingBundle.relays) {
+          const relay = relays.find(r => r.url === url);
+          if (!relay) continue; // removed since — nothing left to heal
+          const upResp = await postAPIRelay(relay, '/prekey/upload', { userId: myId, identityKey: myPubB64, ..._pendingBundle.bundle,
+            ...(await prekeyUploadAuth(myId, myPubB64, _pendingBundle.bundle)) });
+          if (!upResp?.ok) stillPending.add(url);
+        }
+        _pendingBundle = stillPending.size ? { bundle: _pendingBundle.bundle, relays: stillPending } : null;
+        if (_pendingBundle) _lastPreKeyCheck = Date.now() - MS.MIN * 4; // retry in ~1 min
+      }
       // Ask /prekey/status, not /prekey/fetch: fetch CONSUMES a one-time prekey (that is its
       // job — handing one to a new contact), so self-checking with it burned our own OTPs.
       // status is the purpose-built read: it reports otpCount/replenishOTP/replenishSPK and
-      // touches no OTP entry (Socratic lifecycle lens).
-      const resp = await postAPIRaw('/prekey/status', { userId: myId });
-      // 404 = the record itself EXPIRED (relay TTL) — the one lapse the old code could never
-      // recover from: it returned on !ok, so a 30-day-quiet identity stayed permanently
-      // unreachable to every new contact. Re-upload is exactly the cure.
-      const expired = resp && resp.status === 404;
-      const st = (resp && resp.ok) ? await resp.json().catch(() => null) : null;
-      if (!expired && !st) return; // network/other error: try again next cycle
-      if (expired || st.replenishOTP || st.replenishSPK) {
-        const freshBundle = await generatePreKeyBundle();
-        const upResp = await postAPIRaw('/prekey/upload', { userId: myId, identityKey: myPubB64, ...freshBundle,
-          ...(await prekeyUploadAuth(myId, myPubB64, freshBundle)) });
-        if (!upResp?.ok) { _lastPreKeyCheck = Date.now() - MS.MIN * 4; return; } // retry in ~1 min
-        _dbg(null, (expired ? 'PreKey record had EXPIRED — re-registered: ' : 'PreKeys replenished: ') + freshBundle.oneTimePreKeys.length + ' OTPs');
+      // touches no OTP entry (Socratic lifecycle lens). Stage-2 step 5: EVERY home relay is
+      // asked — a relay whose record is missing (just added, or lapsed) is how the bundle
+      // reaches it. An unreachable relay's state is simply unknown: not a rotation trigger.
+      let needsUpload = false;
+      let anyExpired = false;
+      for (const relay of relays) {
+        const resp = await postAPIRelay(relay, '/prekey/status', { userId: myId });
+        // 404 = the record itself EXPIRED (relay TTL) — the one lapse the old code could never
+        // recover from: it returned on !ok, so a 30-day-quiet identity stayed permanently
+        // unreachable to every new contact. Re-upload is exactly the cure.
+        const expired = resp && resp.status === 404;
+        const st = (resp && resp.ok) ? await resp.json().catch(() => null) : null;
+        if (!expired && !st) continue; // network/other error on this relay: try again next cycle
+        if (expired || st.replenishOTP || st.replenishSPK) { needsUpload = true; anyExpired = anyExpired || expired; }
       }
+      if (!needsUpload) return;
+      // ONE bundle identity per device: an upload REPLACES the stored bundle (and this
+      // device replaces the private halves it keeps) — so a rotation lands on ALL home
+      // relays, never just the one that asked. Uploading only to the drained relay would
+      // strand the others serving prekeys whose private halves were just discarded.
+      const freshBundle = await generatePreKeyBundle();
+      const failed = new Set();
+      for (const relay of relays) {
+        const upResp = await postAPIRelay(relay, '/prekey/upload', { userId: myId, identityKey: myPubB64, ...freshBundle,
+          ...(await prekeyUploadAuth(myId, myPubB64, freshBundle)) });
+        if (!upResp?.ok) failed.add(relay.url);
+      }
+      if (failed.size) {
+        _pendingBundle = { bundle: freshBundle, relays: failed };
+        _lastPreKeyCheck = Date.now() - MS.MIN * 4; // retry in ~1 min
+      }
+      _dbg(null, (anyExpired ? 'PreKey record had EXPIRED — re-registered: ' : 'PreKeys replenished: ') + freshBundle.oneTimePreKeys.length + ' OTPs'
+        + (failed.size ? ` (${failed.size} home relay(s) pending retry)` : ''));
     } catch(e) { _lastPreKeyCheck = Date.now() - MS.MIN * 4; _dbg(e, 'prekey-replenish'); } // retry in ~1 min on network error
   }
 
   // v3.3: Adaptive polling — fast when active, slow when background
   let _pollTimer = null;
   // Mailbox WebSocket state (stage-1 step 5), declared with the poll
-  // state: schedulePoll's cadence reads _mailWsOpen. The manager
-  // itself lives below startPolling.
-  let _mailWs = null;
-  let _mailWsOpen = false;
-  let _mailWsId = null;
-  let _mailWsRetry = 0;
-  let _mailWsNextTry = 0;
+  // state: schedulePoll's cadence reads whether ANY socket is open.
+  // Stage-2 step 5: one wake-up socket per home relay, so the state
+  // is a per-relay record; the manager itself lives below
+  // startPolling. The single-relay install is the one-entry case.
+  const _mailWsByRelay = new Map(); // relay url -> { ws, open, id, retry, nextTry }
+  function _mailWsState(url) {
+    let s = _mailWsByRelay.get(url);
+    if (!s) { s = { ws: null, open: false, id: null, retry: 0, nextTry: 0 }; _mailWsByRelay.set(url, s); }
+    return s;
+  }
+  function _anyMailWsOpen() { for (const s of _mailWsByRelay.values()) if (s.open) return true; return false; }
   let _pollInFlight = false;
   let _pollAgain = false;
   // One poll cycle — schedulePoll's timer body, extracted unchanged
@@ -9518,25 +9811,45 @@ async function initMessenger(dbName) {
   // on a deposit notification instead of a second, drifting copy of
   // it. Coalesced: a wake-up that lands mid-cycle queues ONE
   // follow-up cycle rather than overlapping two polls.
+  // Stage-2 step 5: the cycle runs _pollRelayOnce once per home
+  // relay and merges the queues. The serving origin goes first, so
+  // a slow or dead added relay never delays the primary path, and
+  // each relay's failure is contained to that relay.
   async function pollOnce() {
     if (_pollInFlight) { _pollAgain = true; return; }
     if (_isOffline || !API) return;
     _pollInFlight = true;
     try {
-      const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: _lastPollTs, ...(await queueAuth('msg-poll')) });
-      if (resp.headers.get('Deprecation') && !window._plainDepLogged) {
-        window._plainDepLogged = 1;
-        _dbg(null, 'relay: server marks the plain path deprecated (sealed-only migration in progress)');
+      for (const relay of homeRelays()) {
+        try { await _pollRelayOnce(relay); } catch(e) { _dbg(e, 'poll-relay'); }
       }
-      if (resp.ok) {
-        const data = await resp.json();
-        for (const msg of (data.messages || [])) {
-          try { await handleIncoming(msg); } catch(e) { _dbg(e, 'msg-process'); }
-          if (typeof msg.ts === 'number' && Number.isFinite(msg.ts) && msg.ts > _lastPollTs && msg.ts <= Date.now() + MS.DAY) _lastPollTs = msg.ts;
-        }
+      checkAndReplenishPreKeys();
+    } catch(e) { _dbg(e); }
+    _pollInFlight = false;
+    if (_pollAgain) { _pollAgain = false; pollOnce(); }
+  }
+  // One relay's half of a poll cycle: the pre-step-5 cycle body,
+  // addressed to that relay. The plain cursor is PER RELAY (a
+  // relay's queue ts is its own clock — the step-2 plan's fact), and
+  // the sealed ACK goes back to the relay the envelopes came from.
+  async function _pollRelayOnce(relay) {
+    const cursorKey = relay.url;
+    const resp = await postAPIRelay(relay, '/msg/poll', { id: myId, lastTs: _pollCursorByUrl.get(cursorKey) || 0, ...(await queueAuth('msg-poll')) });
+    if (resp?.headers.get('Deprecation') && !window._plainDepLogged) {
+      window._plainDepLogged = 1;
+      _dbg(null, 'relay: server marks the plain path deprecated (sealed-only migration in progress)');
+    }
+    if (resp?.ok) {
+      const data = await resp.json();
+      for (const msg of (data.messages || [])) {
+        try { await handleIncoming(msg); } catch(e) { _dbg(e, 'msg-process'); }
+        const cur = _pollCursorByUrl.get(cursorKey) || 0;
+        if (typeof msg.ts === 'number' && Number.isFinite(msg.ts) && msg.ts > cur && msg.ts <= Date.now() + MS.DAY) _pollCursorByUrl.set(cursorKey, msg.ts);
       }
-      const sResp = await postAPIRaw('/sealed/poll', { id: myId, ...(await queueAuth('sealed-poll')) });
-      if (sResp.ok) {
+    }
+    { // sealed queue, same relay (block keeps the pre-step-5 body untouched below)
+      const sResp = await postAPIRelay(relay, '/sealed/poll', { id: myId, ...(await queueAuth('sealed-poll')) });
+      if (sResp?.ok) {
         const sData = await sResp.json();
         // Honesty over silence: the relay counts envelopes its queue caps forced it to
         // drop while we were offline — tell the user instead of losing them wordlessly.
@@ -9563,22 +9876,19 @@ async function initMessenger(dbName) {
           } catch(e) { _dbg(e, 'sealed-parse'); }
         }
         // v3.6: ACK after successful processing (crash-safe: server keeps 5min grace)
-        if (sealedProcessed > 0) queueAuth('sealed-ack').then(a => postAPIRaw('/sealed/ack', { id: myId, ...a })).catch(e => _dbg(e, 'sealed-ack'));
+        if (sealedProcessed > 0) queueAuth('sealed-ack').then(a => postAPIRelay(relay, '/sealed/ack', { id: myId, ...a })).catch(e => _dbg(e, 'sealed-ack'));
       }
-      checkAndReplenishPreKeys();
-    } catch(e) { _dbg(e); }
-    _pollInFlight = false;
-    if (_pollAgain) { _pollAgain = false; pollOnce(); }
+    }
   }
   function schedulePoll() {
     if (_pollTimer) clearTimeout(_pollTimer);
     // v3.5: Adaptive interval — slower on poor connections (Skill Guide Pattern 4)
-    // While the mailbox WebSocket is open, deposits wake pollOnce()
+    // While a mailbox WebSocket is open, deposits wake pollOnce()
     // directly, so the timer drops to the slow cadence as a pure
     // safety net: a missed wake-up is at most POLL_SLOW_MS stale,
     // and polling stays the recovery path for anything the socket
     // lost (hibernation gaps, dropped connections).
-    const baseInterval = (document.hidden || _mailWsOpen) ? CONFIG.POLL_SLOW_MS : CONFIG.POLL_FAST_MS;
+    const baseInterval = (document.hidden || _anyMailWsOpen()) ? CONFIG.POLL_SLOW_MS : CONFIG.POLL_FAST_MS;
     const interval = Math.max(baseInterval, _adaptiveConfig.pollInterval);
     _pollTimer = setTimeout(async () => {
       await pollOnce();
@@ -9618,28 +9928,44 @@ async function initMessenger(dbName) {
   // 'mailbox-ws') and the server requires it (a standing channel has
   // no legacy fleet to stay compatible with) — a client that cannot
   // sign simply never connects and keeps polling.
-  function mailboxWsWanted() {
+  // Stage-2 step 5: the wake-up gate is per relay. The serving
+  // origin's formula is the pre-step-5 one untouched (global server
+  // features + the step-4 gate). An added relay gates on ITS OWN
+  // health's feature flag and on not being pin-blocked — and its
+  // socket additionally waits for its pin verdict inside
+  // _maybeStartRelayWs, so no connection of any kind precedes
+  // verification.
+  function mailboxWsWanted(relay) {
     // A relay under a verified key mismatch gets no socket either (step 4):
     // the wake-up channel is a relay connection like any other.
-    return !!(API && _isLeaderTab && !document.hidden && window._serverFeatures?.ws && !_relayPinGate.blocked);
+    if (!relay || isOriginRelay(relay)) return !!(API && _isLeaderTab && !document.hidden && window._serverFeatures?.ws && !_relayPinGate.blocked);
+    return !!(API && _isLeaderTab && !document.hidden && !_relayBlockedUrls.has(relay.url) && _relayHealthByUrl.get(relay.url)?.features?.ws);
   }
   async function maybeStartMailboxWs() {
+    for (const relay of homeRelays()) {
+      try { await _maybeStartRelayWs(relay); } catch(e) { _dbg(e, 'mailbox-ws'); }
+    }
+  }
+  async function _maybeStartRelayWs(relay) {
+    const state = _mailWsState(relay.url);
     try {
-      if (_mailWs && _mailWsId !== myId) closeMailboxWs(); // account switched under a live socket
-      if (_mailWs || !mailboxWsWanted()) return;
-      if (Date.now() < _mailWsNextTry) return;
+      if (state.ws && state.id !== myId) _closeRelayWs(relay.url); // account switched under a live socket
+      if (state.ws || !mailboxWsWanted(relay)) return;
+      if (Date.now() < state.nextTry) return;
+      if (!isOriginRelay(relay) && !await ensureRelayVerified(relay)) return; // unverified added relay: polling only
+      if (state.ws || !mailboxWsWanted(relay)) return; // gates may have closed while verifying
       const a = await queueAuth('mailbox-ws');
-      if (!a.sig) { _mailWsNextTry = Date.now() + MS.MIN; return; } // cannot sign (yet): polling is the path
-      if (!mailboxWsWanted()) return; // gates may have closed while signing
-      const url = API.replace(/^http/, 'ws') + '/mailbox/ws?id=' + encodeURIComponent(myId)
+      if (!a.sig) { state.nextTry = Date.now() + MS.MIN; return; } // cannot sign (yet): polling is the path
+      if (state.ws || !mailboxWsWanted(relay)) return; // gates may have closed while signing
+      const url = relayApiBase(relay).replace(/^http/, 'ws') + '/mailbox/ws?id=' + encodeURIComponent(myId)
         + '&ts=' + a.ts + '&sig=' + encodeURIComponent(a.sig);
       const ws = new WebSocket(url);
-      _mailWs = ws;
-      _mailWsId = myId;
+      state.ws = ws;
+      state.id = myId;
       ws.onopen = () => {
-        if (_mailWs !== ws) return;
-        _mailWsOpen = true;
-        _mailWsRetry = 0;
+        if (state.ws !== ws) return;
+        state.open = true;
+        state.retry = 0;
         _dbg(null, 'mailbox ws: connected — push wake-up on, poll at safety cadence');
         pollOnce();     // catch up on deposits made while disconnected
         schedulePoll(); // re-time the safety poll at the slow cadence
@@ -9651,24 +9977,29 @@ async function initMessenger(dbName) {
         } catch(e) { _dbg(e, 'mailbox-ws'); }
       };
       ws.onclose = () => {
-        if (_mailWs !== ws) return;
-        _mailWs = null;
-        _mailWsOpen = false;
-        _mailWsRetry++;
+        if (state.ws !== ws) return;
+        state.ws = null;
+        state.open = false;
+        state.retry++;
         // Exponential backoff (1s doubling, 30s cap); reconnects are
         // re-driven by the poll timer and by visibility changes.
-        _mailWsNextTry = Date.now() + Math.min(MS.SEC * (2 ** Math.min(_mailWsRetry, 5)), MS.SEC * 30);
+        state.nextTry = Date.now() + Math.min(MS.SEC * (2 ** Math.min(state.retry, 5)), MS.SEC * 30);
         schedulePoll(); // restore the fast cadence — polling is in charge again
       };
       ws.onerror = () => { try { ws.close(); } catch(e) { _dbg(e, 'mailbox-ws'); } };
-    } catch(e) { _dbg(e, 'mailbox-ws'); _mailWsNextTry = Date.now() + MS.SEC * 30; }
+    } catch(e) { _dbg(e, 'mailbox-ws'); state.nextTry = Date.now() + MS.SEC * 30; }
+  }
+  function _closeRelayWs(url) {
+    const state = _mailWsByRelay.get(url);
+    if (!state || !state.ws) return;
+    const ws = state.ws;
+    state.ws = null;
+    state.open = false;
+    state.id = null;
+    try { ws.close(); } catch(e) { _dbg(e, 'mailbox-ws'); }
   }
   function closeMailboxWs() {
-    if (!_mailWs) return;
-    const ws = _mailWs;
-    _mailWs = null;
-    _mailWsOpen = false;
-    try { ws.close(); } catch(e) { _dbg(e, 'mailbox-ws'); }
+    for (const url of [..._mailWsByRelay.keys()]) _closeRelayWs(url);
   }
 
   async function handleIncoming(msg) {
@@ -10636,9 +10967,17 @@ async function initMessenger(dbName) {
         // Sign the instance id: the relay only honours a SIGNED inst, so a stranger cannot
         // POST a fake one for our id and manufacture a clone warning on our screen.
         const instSig = await signMessage(`breeze-inst:${myId}:${inst.v}`);
-        const resp = await postAPIRaw('/presence', { id: myId, pub: myPubB64, name: myName, inst: inst.v, instSig });
-        const data = resp?.ok ? await resp.json().catch(() => null) : null;
-        if (data?.conflict && Date.now() - _cloneWarnedAt > 5 * MS.MIN) {
+        // Stage-2 step 5: the beat lands on every home relay — presence is
+        // per-relay state, and a contact homed elsewhere can only see us
+        // online if the beat reached their relay too. The clone verdict
+        // is per relay as well; the warning stays once per window.
+        let conflict = false;
+        for (const relay of homeRelays()) {
+          const resp = await postAPIRelay(relay, '/presence', { id: myId, pub: myPubB64, name: myName, inst: inst.v, instSig });
+          const data = resp?.ok ? await resp.json().catch(() => null) : null;
+          if (data?.conflict) conflict = true;
+        }
+        if (conflict && Date.now() - _cloneWarnedAt > 5 * MS.MIN) {
           _cloneWarnedAt = Date.now();
           showToast(t('toastIdentityClone'), 'error', 10000);
         }
@@ -11101,28 +11440,47 @@ async function initMessenger(dbName) {
     if (!API || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
     try {
       const reg = await navigator.serviceWorker.ready;
-      const existing = await reg.pushManager.getSubscription();
-      if (existing) {
-        // Already subscribed, sync with server
-        const subJson = existing.toJSON();
-        await postAPIRaw('/push/subscribe', { userId: myId, subscription: subJson,
-          ...(await authFields(ts => `breeze-push-subscribe:${myId}:${ts}:${subJson.endpoint || ''}:${subJson.keys?.p256dh || ''}:${subJson.keys?.auth || ''}`)) }).catch(e => _dbg(e));
-        return;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        // Request permission and subscribe — against the PRIMARY relay's
+        // VAPID key: a browser subscription is bound to exactly one
+        // applicationServerKey, so the primary's key is the only one
+        // this subscription can ever be registered under.
+        const perm = await Notification.requestPermission();
+        if (perm !== 'granted') return;
+        // VAPID public key from server health endpoint
+        const healthResp = await fetchT(API + '/health').catch(() => null);
+        const health = healthResp?.ok ? await healthResp.json().catch(() => null) : null;
+        if (!health?.vapidPublicKey) { _dbg(null, 'No VAPID key'); return; }
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(health.vapidPublicKey),
+        });
       }
-      // Request permission and subscribe
-      const perm = await Notification.requestPermission();
-      if (perm !== 'granted') return;
-      // VAPID public key from server health endpoint
-      const healthResp = await fetchT(API + '/health').catch(() => null);
-      const health = healthResp?.ok ? await healthResp.json().catch(() => null) : null;
-      if (!health?.vapidPublicKey) { _dbg(null, 'No VAPID key'); return; }
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(health.vapidPublicKey),
-      });
-      const subJsonNew = sub.toJSON();
-      await postAPIRaw('/push/subscribe', { userId: myId, subscription: subJsonNew,
-        ...(await authFields(ts => `breeze-push-subscribe:${myId}:${ts}:${subJsonNew.endpoint || ''}:${subJsonNew.keys?.p256dh || ''}:${subJsonNew.keys?.auth || ''}`)) }).catch(e => _dbg(e));
+      // Register (or re-sync) the subscription with the home relays.
+      // Stage-2 step 5: an added relay only receives the registration
+      // when ITS VAPID key is the one this subscription is bound to —
+      // a relay holding a different key could never wake this browser
+      // with it (the push service rejects the send), and for those
+      // relays the mailbox socket and polling remain the wake-up
+      // path. The primary always registers (pre-step-5 behavior), and
+      // when the bound key cannot be read back, only the primary
+      // does — again exactly the pre-step-5 behavior.
+      const subJson = sub.toJSON();
+      let boundKey = null;
+      try {
+        const ask = sub.options?.applicationServerKey;
+        if (ask) boundKey = btoa(String.fromCharCode(...new Uint8Array(ask))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      } catch(e) { _dbg(e, 'push'); }
+      for (const relay of homeRelays()) {
+        if (!isOriginRelay(relay)) {
+          if (!boundKey) break;
+          if (!await ensureRelayVerified(relay)) continue;
+          if (_relayHealthByUrl.get(relay.url)?.vapidPublicKey !== boundKey) continue;
+        }
+        await postAPIRelay(relay, '/push/subscribe', { userId: myId, subscription: subJson,
+          ...(await authFields(ts => `breeze-push-subscribe:${myId}:${ts}:${subJson.endpoint || ''}:${subJson.keys?.p256dh || ''}:${subJson.keys?.auth || ''}`)) }).catch(e => _dbg(e));
+      }
     } catch(e) { _dbg(e, 'push'); }
   }
 
@@ -11217,13 +11575,22 @@ async function initMessenger(dbName) {
         const upBody = { userId: myId, backup: JSON.stringify(backup), ts: upTs };
         const upSig = await signMessage(`breeze-backup-upload:${myId}:${upTs}`);
         if (upSig) upBody.sig = upSig;
-        const resp = await postAPIRaw('/backup/upload', upBody);
-        if (resp.ok) {
+        // Stage-2 step 5: the same signed body lands on every home relay —
+        // the backup's whole point is surviving the loss of one relay, and
+        // the upload signature is relay-independent. One success is enough
+        // (the toast still reports failure when NO relay took it), and the
+        // retention date shown is the first success's.
+        let firstOk = null;
+        for (const relay of homeRelays()) {
+          const resp = await postAPIRelay(relay, '/backup/upload', upBody);
+          if (resp?.ok && !firstOk) firstOk = resp;
+        }
+        if (firstOk) {
           // Surface the retention deadline the relay just told us: a cloud backup is deleted
           // 90 days after its last upload and nothing renews it, so "I have a backup" quietly
           // stops being true. Say the date instead of letting the user find out on the day
           // they actually need it.
-          const info = await resp.json().catch(() => null);
+          const info = await firstOk.json().catch(() => null);
           showToast(info?.expiresAt
             ? t('backupCreatedUntil', new Date(info.expiresAt).toLocaleDateString())
             : t('backupCreated'), 'success');
@@ -11241,8 +11608,15 @@ async function initMessenger(dbName) {
       const dlBody = { userId: myId, ts: dlTs };
       const dlSig = await signMessage(`breeze-backup-download:${myId}:${dlTs}`);
       if (dlSig) dlBody.sig = dlSig;
-      const resp = await postAPIRaw('/backup/download', dlBody);
-      if (!resp.ok) { showToast(t('backupFailed'), 'error'); return; }
+      // Stage-2 step 5: the first home relay that HOLDS a backup serves
+      // it — the primary may be gone (that is the scenario this feature
+      // exists for) while an added relay still has its copy.
+      let resp = null;
+      for (const relay of homeRelays()) {
+        resp = await postAPIRelay(relay, '/backup/download', dlBody);
+        if (resp?.ok) break;
+      }
+      if (!resp?.ok) { showToast(t('backupFailed'), 'error'); return; }
       const { backup } = await resp.json();
       const b = JSON.parse(backup);
       const salt = u8(b.s); const iv = u8(b.i); const ct = u8(b.d);
@@ -12921,8 +13295,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         try {
           const reg = await navigator.serviceWorker?.ready.catch(() => null);
           const sub = await reg?.pushManager?.getSubscription().catch(() => null);
-          if (sub) { postAPIRaw('/push/unsubscribe', { userId: myId, endpoint: sub.endpoint,
-            ...(await authFields(ts => `breeze-push-unsubscribe:${myId}:${ts}:${sub.endpoint}`)) }).catch(() => {}); await sub.unsubscribe().catch(() => {}); }
+          if (sub) { _unsubscribePushAll(sub); await sub.unsubscribe().catch(() => {}); }
         } catch(e) { _dbg(e); }
       }
       // Local wipe
@@ -13913,6 +14286,16 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       d.className = 'cmd-panel-mono';
       const _sendSoundEnabled = localStorage.getItem('brz-send-sound') !== '0';
       const _notifSoundEnabled = localStorage.getItem('brz-notif-sound') !== '0';
+      // Stage-2 step 5: the home-relay rows, built by concatenation —
+      // a template literal nested inside the panel's template literal
+      // is exactly what this file's tooling (and a tired reader) loses
+      // track of.
+      const _relayRows = homeRelays().map(r =>
+        '<span>' + esc(r.label || r.url) + (isOriginRelay(r) ? ' ' + esc(t('relayOriginTag')) : '')
+        + ' <span class="i-t3-10" data-relay-fp="' + esc(r.url) + '">…</span>'
+        + (_relayBlockedUrls.has(r.url) ? ' ⚠' : '')
+        + (isOriginRelay(r) ? '' : ' <button class="btn btn-o btn-sm" data-action="remove-relay" data-url="' + esc(r.url) + '">' + t('relayRemoveBtn') + '</button>')
+        + '</span><br>').join('');
       safeSetHTML(d, `<b class="i-g">${t('settingsPrivacy')}</b><br>
         <label class="i-cur"><input type="checkbox" data-setting="hide-rr" ${_privacyHideReadReceipts ? 'checked' : ''}> ${t('hideReadReceipts')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="rr-delay" ${_settings.readReceiptDelay ? 'checked' : ''}> ${t('rrDelayLabel')}</label><br>
@@ -13928,6 +14311,9 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         <br><b class="i-g">${t('settingsAccounts')}</b><br>
         <button class="btn btn-o btn-sm" data-action="add-account">${t('addAccountBtn')}</button><br>
         <label class="i-cur"><input type="checkbox" data-setting="auto-lock" ${localStorage.getItem('brz-autolock') === '1' ? 'checked' : ''}> ${t('autoLockLabel')}</label><br>
+        <br><b class="i-g">${t('settingsRelays')}</b><br>
+        ${_relayRows}
+        <button class="btn btn-o btn-sm" data-action="add-relay">${t('relayAddBtn')}</button><br>
         <br><span class="i-t3-10">${t('settingsImmediate')}</span>`);
       // Multi-account was UNREACHABLE: the "+" that creates a second account lives inside the
       // account tab bar, and renderAccountTabs() only builds that bar once you already have
@@ -13941,6 +14327,22 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         if (!btn) return;
         haptic.tap();
         if (typeof addAccount === 'function') addAccount();
+      });
+      // Stage-2 step 5: home-relay management. Adding a relay is the
+      // step-4 pin ceremony pointed at a second relay (attest, show
+      // the fingerprint, confirm, then pin); removal is local
+      // bookkeeping — the relay keeps whatever it already holds, it
+      // simply stops being called home.
+      d.addEventListener('click', async (ev) => {
+        const addBtn = ev.target.closest('[data-action="add-relay"]');
+        if (addBtn) { haptic.tap(); await _addRelayFlow(); return; }
+        const rmBtn = ev.target.closest('[data-action="remove-relay"]');
+        if (!rmBtn) return;
+        haptic.tap();
+        const url = rmBtn.dataset.url;
+        if (!await showConfirm(t('relayRemoveConfirm', url), { danger: true, okText: t('relayRemoveBtn') })) return;
+        await removeHomeRelay(url);
+        showToast(t('relayRemoved', url), 'success');
       });
       // v3.6: Event delegation for settings toggles (no inline onchange)
       d.addEventListener('change', (ev) => {
@@ -13967,6 +14369,16 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         else if (s === 'auto-lock') { localStorage.setItem('brz-autolock', cb.checked ? '1' : '0'); }
       });
       box.appendChild(d); box.scrollTop = box.scrollHeight;
+      // Relay fingerprints fill in async (a pin is a public key; the
+      // fingerprint is derived from it). A keyless entry — a legacy
+      // origin with no relay identity key — keeps the placeholder.
+      for (const r of homeRelays()) {
+        if (!r.pin) continue;
+        relayFingerprint(r.pin).then(fp => {
+          const el = d.querySelector(`[data-relay-fp="${r.url}"]`);
+          if (el) el.textContent = fp;
+        }).catch(e => _dbg(e, 'relay-fp'));
+      }
     }
 
     // v3.1: /clear — Clear chat history with active contact
