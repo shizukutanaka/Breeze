@@ -102,7 +102,7 @@ Independent of step 2's backend, in the mailbox layer:
   does. Constant-rate cover traffic stays out of scope (battery/bandwidth
   cost; no mainstream messenger ships it always-on).
 
-## Step 4 — KV demoted to the key directory
+## Step 4 — KV demoted to the key directory (implemented, 2026-11-13)
 
 - After step 2, KV holds only directory/control data: `prekey:*`,
   `ktlog:`, `alias:`, `devices:`, `grp:`, `push:`, `backup:`, `frank:`/
@@ -112,6 +112,20 @@ Independent of step 2's backend, in the mailbox layer:
 - Presence is not a mailbox, but it is the same write-budget problem:
   evaluate moving presence into the recipient's DO (or a presence DO)
   in this step, keeping the 5-minute KV write throttle until then.
+- **Outcome:** presence moved into the recipient's own MailboxDO
+  behind a `PresenceStore` seam and a separate `PRESENCE_BACKEND`
+  flag (default `kv`, binding-gated fallback, drain migration through
+  an independent `presenceSeeded` marker so the two flags' migrations
+  never touch each other's data). A dedicated presence DO was
+  evaluated and rejected — a single overwritten record per user needs
+  nothing the recipient's DO lacks, and a new class + binding +
+  migration is deployment surface for zero capability. The 5-minute
+  write throttle is kept on both backends: DO storage writes are
+  metered too, so the throttle now bounds DO writes instead of KV
+  writes. With both flags at `do`, KV holds the directory/control
+  plane plus the two one-shot shapes step 1 deferred by name
+  (`sig:{room}`, `drop:{id}`). Details in CHANGELOG.md (stage-1
+  step 4 entry) and `tests/presence-store-do.test.js`.
 
 ## Step 5 — WebSocket delivery (client work, planned here only)
 

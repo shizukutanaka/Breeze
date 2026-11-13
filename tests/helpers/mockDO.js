@@ -52,3 +52,12 @@ export function makeDOEnv(extra = {}) {
   env.MAILBOX_DO = makeMailboxNamespace(env);
   return env;
 }
+
+// Same wiring for the stage-1 step-4 presence backend: PRESENCE_BACKEND=do
+// with the mailbox backend left at its KV default unless overridden — the
+// two flags (and their drain migrations) are independent by design.
+export function makePresenceDOEnv(extra = {}) {
+  const env = makeEnv({ PRESENCE_BACKEND: 'do', ...extra });
+  env.MAILBOX_DO = makeMailboxNamespace(env);
+  return env;
+}
