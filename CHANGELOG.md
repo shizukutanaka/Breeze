@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## Server rethink stage-1 step 2: Durable Object mailbox backend behind the MailboxStore seam (branch feat/stage1-mailbox-do, 2026-11-13)
+
+`_worker.js`, `wrangler.toml`, `.env.example`, `tests/mailbox-store-do.test.js`, `tests/helpers/mockDO.js`. No behaviour change on the default backend, no crypto protocol changes, no client changes.
+
+- **MailboxDO backend.** A new Durable Object class holds one mailbox per recipient — BOTH queue families (`inbox` + `sealed`, each with queue / hwm / dropped) in DO storage — so every store operation is a single serialized, strongly consistent step instead of a read-modify-write over an eventually consistent KV value. Entries carry their own expiry (DO storage has no TTL), mirroring the caller TTLs. The worker-side store handle speaks a tiny JSON RPC to the DO and honours the exact MailboxStore contract, including failure semantics (RPC/DO failure → read `null`, write/delete `false`, never a throw into a handler). Handlers are unchanged: their read-back recovery logic now operates on strongly consistent reads, so a committed write is always visible to the read-back instead of racing eventual consistency.
+- **Flag-selected, KV by default.** `MAILBOX_BACKEND=do` selects the DO backend, and only when the `MAILBOX_DO` binding is present — anything else (unset, other values, missing binding) stays on KV, so a misconfigured deploy degrades to the pre-step-2 behaviour instead of losing queues. Migration is drain-based per mailbox: on first DO access the DO seeds itself from the recipient's KV copies (both families, all slots, funnelled through one memoized promise per instance so concurrent first accesses wait for the same drain), marks itself seeded, and only then deletes the KV copies. No dual-write window, no client-visible change. Seeded entries get a fresh 7-day expiry (KV's plain get does not expose remaining TTL; queues are TTL-bounded by design). `wrangler.toml` gains the `MAILBOX_DO` binding and the `v1-mailbox-do` migration (`new_sqlite_classes`).
+- **Account deletion covers both stores.** Under the DO backend `eraseMailboxes` erases the DO copy via the store AND still deletes the five KV keys: a mailbox that was never drained lives only in KV, and deletion must not leave that pre-migration copy behind.
+- **Documented sweep limit.** The account-deletion sent-copies sweep lists KV keys, so under the DO backend it reaches only not-yet-drained mailboxes (DO instances cannot be enumerated); sent copies inside drained mailboxes are bounded by the 7-day queue TTL — the same doctrine the sweep already applies to sealed copies. Noted in code at `listMailboxKeys` and in `docs/MAILBOX_STAGE1_PLAN.md` terms this is a step-2 trade-off, not a silent gap.
+- **Tests.** `tests/helpers/mockDO.js` runs the REAL `MailboxDO` class on in-memory storage behind a namespace fake (only transport/storage are faked), and `tests/mailbox-store-do.test.js` (13 tests) pins the DO store contract, one-instance-per-recipient across families, TTL semantics, backend selection and fallback, drain migration (store-level and handler-level: a message queued under KV is delivered after the flag flips), dual-store erasure, and the sealed/plain handler round-trips on the DO backend — the plan's "suite must pass on both backends" at the layers this step touches.
+
+vitest and validate.sh results are recorded in the PR body.
+
 ## Server rethink stage-1 step 1: mailbox storage behind the MailboxStore seam (branch feat/stage1-mailbox-store, 2026-11-13)
 
 `_worker.js`, `tests/mailbox-store.test.js`, `docs/MAILBOX_STAGE1_PLAN.md`, `.env.example`. No behaviour change, no crypto protocol changes, no client changes.

@@ -9,6 +9,18 @@ compatibility_date = "2024-12-01"
 binding = "KV"
 id = ""  # ← REQUIRED: paste your KV namespace ID here
 
+# Durable Object mailbox backend (stage-1 step 2, 2026-11-13). MailboxDO
+# lives in _worker.js: one instance per recipient holds both queue families
+# (inbox + sealed) in DO storage once MAILBOX_BACKEND=do (see below and
+# docs/MAILBOX_STAGE1_PLAN.md). KV stays the default backend.
+[[durable_objects.bindings]]
+name = "MAILBOX_DO"
+class_name = "MailboxDO"
+
+[[migrations]]
+tag = "v1-mailbox-do"
+new_sqlite_classes = ["MailboxDO"]
+
 # === SECRETS (set via CLI — never commit values) ===
 #
 # --- Web Push ---
@@ -66,3 +78,11 @@ id = ""  # ← REQUIRED: paste your KV namespace ID here
 # Operators who have confirmed no live client still needs the fallback can
 # disable the path outright (requests get 410 PLAIN_PATH_DISABLED):
 # wrangler pages secret put PLAIN_PATH_DISABLED        # true — disable the legacy plain relay path
+#
+# --- Mailbox storage backend (stage-1 step 2) ---
+# Mailboxes live in KV by default. Setting MAILBOX_BACKEND=do serves them
+# from the per-recipient MailboxDO instead (binding above); each mailbox
+# drains from KV into its DO on first access, then the KV copy is deleted.
+# Rollback = set it back to kv (mailboxes not yet drained are unaffected;
+# drained ones keep serving from KV's remaining state — see the plan doc).
+# wrangler pages secret put MAILBOX_BACKEND            # do — serve mailboxes from MailboxDO (default: kv)

@@ -452,26 +452,51 @@ function capQueueBytes(items, sizeOf, maxBytes = 16 * 1024 * 1024) {
 }
 
 // ============================================================
-// MAILBOX STORE (stage-1 step 1, 2026-11-13)
+// MAILBOX STORE (stage-1 steps 1–2, 2026-11-13)
 //
 // Every read/write of a recipient's message queues goes through this
 // handle — never kvGet/kvPut/kvDel with a hand-built key. The two queue
 // families (plain `inbox:{id}` and sealed `sealed:{id}`), each with its
 // `:hwm` high-water mark, plus the sealed family's `:dropped` overflow
-// counter, form ONE mailbox per (family, recipient): exactly the unit
-// the stage-1 redesign moves into a per-recipient Durable Object
-// (strong consistency + ordering, which retires the read-back recovery
-// protocols in the send handlers below). Until that step lands this
-// KV-backed handle is the only implementation, and it is deliberately
-// behaviour-identical to the raw helper calls it replaced: same keys,
-// same TTLs, same contracts (read → string|null, write/delete →
-// boolean). A future DO-backed store only has to honour this surface —
-// the staged remainder is in docs/MAILBOX_STAGE1_PLAN.md.
+// counter, form ONE mailbox per (family, recipient).
+//
+// Two backends honour this surface, selected by MAILBOX_BACKEND:
+//
+// - kv (default): the step-1 implementation — one KV value per queue,
+//   deliberately behaviour-identical to the raw helper calls it
+//   replaced: same keys, same TTLs, same contracts (read →
+//   string|null, write/delete → boolean).
+// - do (step 2): one MailboxDO instance per recipient (see the class
+//   below) holding BOTH families in Durable Object storage — strong
+//   consistency and per-mailbox serialization instead of KV's
+//   read-modify-write on an eventually-consistent value. Migration is
+//   drain-based: on first DO access for a recipient the DO seeds
+//   itself from the KV copies, then the KV copies are deleted; no
+//   dual-write window. MAILBOX_BACKEND only takes effect when the
+//   MAILBOX_DO binding is present; anything else stays on KV, so a
+//   misconfigured deploy degrades to the pre-step-2 behaviour instead
+//   of losing queues.
+//
+// The handlers above the seam are backend-agnostic — they keep their
+// read-back recovery logic, which against the DO operates on strongly
+// consistent reads (a committed write is always visible to the
+// read-back) instead of racing eventual consistency. The staged
+// remainder is in docs/MAILBOX_STAGE1_PLAN.md.
 // Non-mailbox storage (prekey bundles, groups, presence, …) stays on
 // the kv* helpers by design: demoting KV to the key directory alone is
 // the LAST stage-1 step, not this one.
 // ============================================================
+function mailboxBackend(env) {
+  return env.MAILBOX_BACKEND === 'do' && env.MAILBOX_DO ? 'do' : 'kv';
+}
+
 function mailboxStoreForKey(env, queueKey) {
+  return mailboxBackend(env) === 'do'
+    ? doMailboxStoreForKey(env, queueKey)
+    : kvMailboxStoreForKey(env, queueKey);
+}
+
+function kvMailboxStoreForKey(env, queueKey) {
   const hwmKey = `${queueKey}:hwm`;
   const droppedKey = `${queueKey}:dropped`;
   return {
@@ -496,6 +521,12 @@ function mailboxStore(env, kind, userId) {
 // Key names of every stored entry in a queue family, satellite keys
 // (`:hwm`) included — account deletion's sent-copies sweep lists the
 // 'inbox' family and skips the satellites by suffix.
+// NOTE (step 2): this lists the KV namespace only. Under
+// MAILBOX_BACKEND=do a drained mailbox no longer exists in KV and DO
+// instances cannot be enumerated, so the sweep reaches only
+// not-yet-drained mailboxes; sent copies inside drained mailboxes are
+// bounded by the 7-day queue TTL — the same doctrine the sweep already
+// applies to sealed copies, which it deliberately never touches.
 async function listMailboxKeys(env, kind) {
   return kvListNames(env, `${kind}:`);
 }
@@ -507,16 +538,191 @@ async function listMailboxKeys(env, kind) {
 // anchor a re-registered id to a stale delivery cursor (and a leftover
 // sealed hwm leaks the last-delivery ts), so satellites are erased
 // with the queues, not left to their TTLs.
+// Under the DO backend the five calls above erase the DO copy (the
+// store routes there), and the SAME five keys are additionally deleted
+// from KV: a mailbox that was never drained lives only in KV, and
+// account deletion must not leave that pre-migration copy behind.
 function eraseMailboxes(env, userId) {
   const plain = mailboxStore(env, 'inbox', userId);
   const sealed = mailboxStore(env, 'sealed', userId);
-  return [
+  const dels = [
     plain.deleteQueue(),
     plain.deleteHwm(),
     sealed.deleteQueue(),
     sealed.deleteHwm(),
     sealed.deleteDropped(),
   ];
+  if (mailboxBackend(env) === 'do') {
+    const kvPlain = kvMailboxStoreForKey(env, `inbox:${userId}`);
+    const kvSealed = kvMailboxStoreForKey(env, `sealed:${userId}`);
+    dels.push(
+      kvPlain.deleteQueue(),
+      kvPlain.deleteHwm(),
+      kvSealed.deleteQueue(),
+      kvSealed.deleteHwm(),
+      kvSealed.deleteDropped(),
+    );
+  }
+  return dels;
+}
+
+// ============================================================
+// MAILBOX DURABLE OBJECT (stage-1 step 2)
+//
+// One instance per recipient (idFromName(userId)) holding BOTH queue
+// families — queue, hwm and dropped for 'inbox' and 'sealed' — in DO
+// storage, so every store operation is a single serialized, strongly
+// consistent step instead of a read-modify-write over an eventually
+// consistent KV value. Entries carry their own expiry (DO storage has
+// no TTL): a write stores { v, exp } and an expired entry reads as
+// absent, mirroring KV semantics for the caller TTLs.
+//
+// The worker-side handle speaks to the DO over a tiny JSON RPC
+// ({ op: 'get'|'put'|'del', family, slot, value?, ttlSec?, userId });
+// the surface honoured is exactly the MailboxStore contract, including
+// failure semantics (RPC/DO failure → read null, write/delete false,
+// never a throw into a handler).
+//
+// Drain migration: the first RPC for a recipient seeds the DO from
+// that recipient's KV copies (both families, all slots), marks itself
+// seeded, and only then deletes the KV copies — the DO never serves a
+// queue it has not first taken over, and there is no dual-write
+// window. Seeding is funnelled through one memoized promise per
+// instance, so concurrent first accesses wait for the same drain
+// instead of racing it. Seeded entries get a fresh TTL.WEEK expiry:
+// KV's plain get does not expose the remaining TTL, and queues are
+// TTL-bounded by design (the plan's migration-safety argument), so a
+// drained entry lives at most one extra week.
+// ============================================================
+function doMailboxStoreForKey(env, queueKey) {
+  const idx = queueKey.indexOf(':');
+  const kind = queueKey.slice(0, idx);
+  const userId = queueKey.slice(idx + 1);
+  const call = async (op, slot, value, ttlSec) => {
+    try {
+      const stub = env.MAILBOX_DO.get(env.MAILBOX_DO.idFromName(userId));
+      const res = await stub.fetch('https://mailbox.internal/op', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ op, family: kind, slot, value, ttlSec, userId }),
+      });
+      if (!res || !res.ok) return null;
+      return await res.json();
+    } catch (e) {
+      console.error('[mailbox-do] RPC failed:', e?.message ?? e);
+      return null;
+    }
+  };
+  const read = (slot) => async () => {
+    const r = await call('get', slot);
+    return r && typeof r.value === 'string' ? r.value : null;
+  };
+  const write = (slot) => async (value, ttlSec) => {
+    const r = await call('put', slot, value, ttlSec);
+    return !!(r && r.ok);
+  };
+  const del = (slot) => async () => {
+    const r = await call('del', slot);
+    return !!(r && r.ok);
+  };
+  return {
+    queueKey,
+    readQueue: read('queue'),
+    writeQueue: write('queue'),
+    deleteQueue: del('queue'),
+    readHwm: read('hwm'),
+    writeHwm: write('hwm'),
+    deleteHwm: del('hwm'),
+    readDropped: read('dropped'),
+    writeDropped: write('dropped'),
+    deleteDropped: del('dropped'),
+  };
+}
+
+export class MailboxDO {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+    this._seedPromise = null;
+  }
+
+  // Copy this recipient's KV mailbox (both families, all slots) into
+  // DO storage exactly once. The KV copies are deleted only after the
+  // seeded marker is stored, so a failure mid-drain retries against an
+  // intact KV mailbox on the next access instead of a half-moved one.
+  async _seed(userId) {
+    const st = this.state.storage;
+    if (await st.get('seeded')) return;
+    for (const fam of ['inbox', 'sealed']) {
+      const base = `${fam}:${userId}`;
+      const slots = [['queue', base], ['hwm', `${base}:hwm`], ['dropped', `${base}:dropped`]];
+      for (const [slot, kvKey] of slots) {
+        const val = await kvGet(this.env, kvKey);
+        if (val !== null) {
+          await st.put(`${fam}:${slot}`, { v: val, exp: Date.now() + TTL.WEEK * 1000 });
+        }
+      }
+    }
+    await st.put('seeded', 1);
+    for (const fam of ['inbox', 'sealed']) {
+      const base = `${fam}:${userId}`;
+      await kvDel(this.env, base);
+      await kvDel(this.env, `${base}:hwm`);
+      await kvDel(this.env, `${base}:dropped`);
+    }
+  }
+
+  _ensureSeeded(userId) {
+    if (!this._seedPromise) {
+      this._seedPromise = (async () => {
+        try {
+          await this._seed(userId);
+        } catch (e) {
+          console.error('[mailbox-do] seed failed:', e?.message ?? e);
+          this._seedPromise = null; // retry the drain on the next access
+        }
+      })();
+    }
+    return this._seedPromise;
+  }
+
+  async fetch(request) {
+    let body;
+    try { body = await request.json(); } catch { return Response.json({ ok: false }, { status: 400 }); }
+    const { op, family, slot, userId } = body || {};
+    if (family !== 'inbox' && family !== 'sealed') return Response.json({ ok: false }, { status: 400 });
+    if (slot !== 'queue' && slot !== 'hwm' && slot !== 'dropped') return Response.json({ ok: false }, { status: 400 });
+    if (typeof userId === 'string' && userId) await this._ensureSeeded(userId);
+    const st = this.state.storage;
+    const key = `${family}:${slot}`;
+    try {
+      if (op === 'get') {
+        const entry = await st.get(key);
+        if (!entry || typeof entry.v !== 'string') return Response.json({ ok: true, value: null });
+        if (entry.exp !== null && entry.exp !== undefined && Date.now() >= entry.exp) {
+          await st.delete(key);
+          return Response.json({ ok: true, value: null });
+        }
+        return Response.json({ ok: true, value: entry.v });
+      }
+      if (op === 'put') {
+        const ttl = Number.isFinite(body.ttlSec) ? body.ttlSec : null;
+        await st.put(key, {
+          v: String(body.value),
+          exp: ttl !== null ? Date.now() + Math.max(ttl, 0) * 1000 : null,
+        });
+        return Response.json({ ok: true });
+      }
+      if (op === 'del') {
+        await st.delete(key);
+        return Response.json({ ok: true });
+      }
+    } catch (e) {
+      console.error('[mailbox-do] storage op failed:', e?.message ?? e);
+      return Response.json({ ok: false }, { status: 500 });
+    }
+    return Response.json({ ok: false }, { status: 400 });
+  }
 }
 
 // ============================================================
