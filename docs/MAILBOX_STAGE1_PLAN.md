@@ -237,7 +237,9 @@ Independent of step 2's backend, in the mailbox layer:
      account switch. With this step, stage 1 is complete: steps
      1–5 are all implemented, and the remaining sealed-sender item
      (delivery tokens) stays a client-led follow-up recorded in
-     step 3.
+     step 3. Stage 2 — relay placement (self-hosted Node/Docker
+     relay, client-chosen home relays, redundant deposit) — is
+     planned in docs/RELAY_STAGE2_PLAN.md, built on these seams.
 
 ## Later (stage 2 of the recommendation, not this plan)
 
