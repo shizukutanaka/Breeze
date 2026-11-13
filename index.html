@@ -5334,6 +5334,32 @@ async function initMessenger(dbName) {
   // and fall back to the legacy envelope for un-upgraded peers — delivery over privacy,
   // and the /msg fallback + offline retry queue stay legacy (documented in SECURITY.md).
   const SEAL_INFO = 'breeze-seal-v2';
+  // Metadata padding frame (mirror of src/crypto/seal.js): the message body has
+  // always been bucket-padded to 256-byte boundaries, but the sealed metadata was
+  // encrypted as raw JSON, so se.ct's length revealed the exact metadata byte
+  // length (+16 GCM tag) to the relay — display-name length and replyTo-preview
+  // presence/length were inferable (step-3 padding audit, Low). The frame lives
+  // inside the plaintext, so key/AAD derivation is unchanged and pre-padding
+  // blobs still open: legacy plaintext is raw JSON and always starts with '{'
+  // (0x7B); the frame starts with marker 0x01 instead.
+  //   framed = [0x01][len:2 BE][JSON bytes][0x00 …], total a multiple of 256.
+  const SEAL_PAD_MARKER = 0x01;
+  const SEAL_PAD_BOUNDARY = 256;
+  function padSealMeta(jsonBytes) {
+    if (jsonBytes.length > 0xffff) return jsonBytes; // too long to length-prefix: seal legacy-shaped
+    const total = Math.ceil((jsonBytes.length + 3) / SEAL_PAD_BOUNDARY) * SEAL_PAD_BOUNDARY;
+    const framed = new Uint8Array(total);
+    framed[0] = SEAL_PAD_MARKER;
+    new DataView(framed.buffer).setUint16(1, jsonBytes.length);
+    framed.set(jsonBytes, 3);
+    return framed;
+  }
+  function unpadSealMeta(ptBytes) {
+    if (ptBytes[0] !== SEAL_PAD_MARKER) return ptBytes; // legacy blob: raw JSON
+    const len = new DataView(ptBytes.buffer, ptBytes.byteOffset).getUint16(1);
+    if (3 + len > ptBytes.length) throw new Error('seal frame length out of range');
+    return ptBytes.slice(3, 3 + len);
+  }
   async function sealMeta(recipPubB64, meta, to, ts) {
     try {
       const recipRaw = Uint8Array.from(atob(recipPubB64), c => c.charCodeAt(0));
@@ -5344,7 +5370,7 @@ async function initMessenger(dbName) {
       const iv = crypto.getRandomValues(new Uint8Array(CONFIG.IV_BYTES));
       const aad = new TextEncoder().encode(`${SEAL_INFO}:${to}:${ts}`);
       const k = await crypto.subtle.importKey('raw', key, { name: 'AES-GCM' }, false, ['encrypt']);
-      const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: aad }, k, new TextEncoder().encode(JSON.stringify(meta)));
+      const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: aad }, k, padSealMeta(new TextEncoder().encode(JSON.stringify(meta))));
       zeroBuffer(key);
       return { ek: btoa(String.fromCharCode(...new Uint8Array(eph.pub))), iv: arr(iv), ct: arr(new Uint8Array(ct)) };
     } catch(e) { _dbg(e, 'seal'); return null; }
@@ -5359,7 +5385,7 @@ async function initMessenger(dbName) {
       const k = await crypto.subtle.importKey('raw', key, { name: 'AES-GCM' }, false, ['decrypt']);
       const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: new Uint8Array(se.iv), additionalData: aad }, k, new Uint8Array(se.ct));
       zeroBuffer(key);
-      return JSON.parse(new TextDecoder().decode(pt));
+      return JSON.parse(new TextDecoder().decode(unpadSealMeta(new Uint8Array(pt))));
     } catch(e) { _dbg(e, 'unseal'); return null; }
   }
   // ═══ end inline mirror of src/crypto/seal.js ═══

@@ -1359,4 +1359,43 @@ describe('Sealed Sender v2 mirror — inline sealMeta/unsealMeta (index.html) vs
     expect(await inlineUnsealMeta(r.kp.privateKey, blob, 'zzzzyyyyxxxx', S_TS)).toBeNull();
     expect(await refUnsealMeta(subtle, r.kp.privateKey, blob, S_TO, S_TS + 1)).toBeNull();
   });
+
+  it('PADDING PARITY: both impls bucket ct to the same 256-boundary length (exact length no longer leaks)', async () => {
+    const r = await mkRecipient();
+    const inlineBlob = await inlineSealMeta(r.pubB64, S_META, S_TO, S_TS);
+    const refBlob = await refSealMeta(subtle, r.pubB64, S_META, S_TO, S_TS);
+    const jsonLen = new TextEncoder().encode(JSON.stringify(S_META)).length;
+    const bucketed = Math.ceil((jsonLen + 3) / 256) * 256 + 16; // frame + GCM tag
+    expect(inlineBlob.ct.length).toBe(bucketed);
+    expect(refBlob.ct.length).toBe(bucketed);
+    expect(inlineBlob.ct.length).not.toBe(jsonLen + 16);
+  });
+
+  it('BACKWARD COMPAT: a legacy pre-padding blob (raw JSON plaintext) opens with BOTH impls', async () => {
+    const r = await mkRecipient();
+    // Mint a blob in the exact pre-padding format: same ECIES/HKDF/AAD, raw JSON in.
+    const recipRaw = Uint8Array.from(atob(r.pubB64), (c) => c.charCodeAt(0));
+    const eph = await subtle.generateKey({ name: 'X25519' }, true, ['deriveBits']);
+    const ephPubRaw = new Uint8Array(await subtle.exportKey('raw', eph.publicKey));
+    const peerPub = await subtle.importKey('raw', recipRaw, { name: 'X25519' }, false, []);
+    const shared = new Uint8Array(await subtle.deriveBits({ name: 'X25519', public: peerPub }, eph.privateKey, 256));
+    const hk = await subtle.importKey('raw', shared, 'HKDF', false, ['deriveBits']);
+    const key = new Uint8Array(await subtle.deriveBits(
+      { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(32), info: new TextEncoder().encode('breeze-seal-v2') },
+      hk, 256));
+    const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
+    const k = await subtle.importKey('raw', key, { name: 'AES-GCM' }, false, ['encrypt']);
+    const ct = await subtle.encrypt(
+      { name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(`breeze-seal-v2:${S_TO}:${S_TS}`) },
+      k, new TextEncoder().encode(JSON.stringify(S_META)));
+    const legacy = {
+      ek: Buffer.from(ephPubRaw).toString('base64'),
+      iv: Array.from(iv),
+      ct: Array.from(new Uint8Array(ct)),
+    };
+    const jsonLen = new TextEncoder().encode(JSON.stringify(S_META)).length;
+    expect(legacy.ct.length).toBe(jsonLen + 16); // the old wire shape: exact length + tag
+    expect(await refUnsealMeta(subtle, r.kp.privateKey, legacy, S_TO, S_TS)).toEqual(S_META);
+    expect(await inlineUnsealMeta(r.kp.privateKey, legacy, S_TO, S_TS)).toEqual(S_META);
+  });
 });

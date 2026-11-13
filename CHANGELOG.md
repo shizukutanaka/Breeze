@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## Sealed-metadata padding: sealMeta frames and bucket-pads the metadata plaintext (client fix for the step-3 padding audit's Low finding) (branch fix/seal-meta-padding, 2026-11-13)
+
+`index.html`, `src/crypto/seal.js`, `_headers`, `tauri/src-tauri/tauri.conf.json` (CSP hash re-pinned by tools/csp-hash.mjs), `tests/seal.test.js`, `tests/mirror-drift.test.js`, `docs/MAILBOX_STAGE1_PLAN.md`. No crypto primitive, key-derivation, or AAD changes; no server changes.
+
+- **The leak.** The step-3 padding audit found the sealed metadata was the one unpadded plaintext left: `sealMeta` encrypted `JSON.stringify(meta)` directly and `se.ct` travels as a number array, so a stored record revealed the exact metadata length (array length = JSON byte length + 16-byte GCM tag) — display-name length and the presence/length of optional fields such as a replyTo preview were inferable by the relay. Severity Low: length only, the observer is the relay (which already sees recipient, timing, and volume), no content and no sender identity.
+- **The fix.** Both mirrors now frame the metadata before encryption — `[0x01][len:2 BE][JSON bytes][0x00 …]` zero-padded to a multiple of 256, the same bucket granularity the message body has always used (ratchet v4 / group v5) — so `se.ct` discloses only which 256-byte bucket the metadata falls in. A metadata JSON longer than 0xFFFF (unreachable with today's sanitized fields) seals legacy-shaped rather than failing the send.
+- **Backward compatibility.** The frame lives inside the plaintext, so HKDF info, key derivation, and the AAD binding are untouched and pre-padding blobs still open: legacy plaintext is raw JSON, which always starts with `{` (0x7B), while a framed plaintext starts with marker 0x01 — `unsealMeta` dispatches on the first byte and validates the frame length before slicing. Nothing already queued at a relay becomes unreadable.
+- **Tests.** `tests/seal.test.js` gains the bucket-length formula pin, same-bucket/different-length ct equality, the bucket-boundary step, and opening a byte-exact legacy blob (minted by a pre-padding reimplementation kept in the test). `tests/mirror-drift.test.js` gains cross-mirror bucket parity and legacy-open with BOTH impls. The padding tests fail against the pre-fix implementation; the legacy-open tests pass before and after.
+
+vitest and validate.sh results are recorded in the PR body.
+
 ## Server rethink stage-1 step 3 (server-side parts): per-mailbox deposit limits inside the DO, padding audit, delivery tokens deferred to a client release (branch feat/stage1-sealed-limits, 2026-11-13)
 
 `_worker.js`, `tests/mailbox-deposit-limits.test.js`, `docs/MAILBOX_STAGE1_PLAN.md`. No behaviour change on the default (KV) backend, no crypto protocol changes, no client changes.
