@@ -302,6 +302,84 @@ numbers drift; the shapes are the load-bearing part.
 - **Done when.** The black-box drill passes end to end on a clean
   checkout, and the entry starts with nothing but environment
   variables — no code edits — as configuration.
+- **Outcome (2026-11-13).** Shipped as designed; the open WebSocket
+  question is answered, and three letter-of-the-plan points were
+  resolved against the code and are recorded here:
+  1. *WebSocket mechanism: a minimal hand-rolled RFC 6455 server*
+     (`server/ws-server.js`), zero-dependency. Node ships a
+     WebSocket client but no server, and the relay's socket carries
+     one tiny text protocol, so the server half is just the opening
+     handshake plus a frame codec: masked client frames enforced
+     (unmasked → 1002), fragmented messages reassembled under a
+     1 MiB cap (→ 1009), protocol ping → pong alongside the
+     application-level 'ping'/'pong' the mailbox protocol already
+     had, close echoed and ended. No extensions, no subprotocols —
+     the worker's route negotiates none.
+  2. *No `_worker.js` change at all* — stronger than this step's
+     "export tidying only" allowance. The existing `export default`
+     fetch object is directly callable by a host, so
+     `server/node-host.js` imports it and calls it exactly as the
+     test suite does; the deployed artefact is byte-for-byte
+     untouched. The Cloudflare-only surface is composed around it:
+     `env.KV` is the step-1 SQLite shim, `env.MAILBOX_DO` is an
+     in-process namespace (`server/mailbox-namespace.js`) running
+     one MailboxCore per recipient over the step-1 storage plane,
+     and `env.ASSETS` is a static layer (`server/static-assets.js`)
+     — the worker's own non-`/api/` branch does the routing, so
+     the `_routes.json` split is the production code path, not a
+     reimplementation.
+  3. *The WebSocket attach crosses the host boundary via a marker
+     response.* A Fetch `Response` in Node cannot carry a 101
+     status or hand back a socket, so when the worker's signed
+     handshake (`handleMailboxWs`, run verbatim — per-IP limit and
+     mandatory Ed25519 proof included) reaches the namespace stub
+     with an upgrade, the stub answers `200` +
+     `X-Breeze-Ws-Attach: <userId>`; the host's `upgrade` handler
+     completes the RFC 6455 handshake on the raw socket and
+     registers it in the namespace's per-user socket set, which is
+     where the core's queue-changed callback fans out — the
+     in-process registry this step's scope names, with the DO's
+     exact frame and ping/pong semantics. Gate/auth failures come
+     back as the worker's own HTTP response on the raw socket; no
+     socket is registered. The marker header is stripped from any
+     ordinary (non-upgrade) response.
+  - *Client IP:* the host owns `CF-Connecting-IP` — it is
+    overwritten on every adapted request with the socket's remote
+    address (IPv4-mapped forms normalized). `X-Forwarded-For` is
+    honoured (first hop) only with `TRUST_PROXY` set, i.e. when
+    the operator declares the proxy that sets it.
+  - *Environment composition:* process-environment strings pass
+    through under the same names the worker reads on Cloudflare;
+    the host defaults `MAILBOX_BACKEND=do`, `PRESENCE_BACKEND=do`
+    and `MAILBOX_WS_ENABLED=true` (a self-host's mailboxes are
+    meant to run on the core), each still an ordinary flag the
+    operator can override. Cloudflare's defaults are untouched.
+  - *Static layer:* `_headers` is parsed once (file order; a later
+    matching block wins per header — `/sw.js` ends up `no-cache`,
+    not the `/*.js` immutable rule) and matched per request path.
+    Never served: the Pages platform files, dotfiles/dot-dirs,
+    `node_modules/`, and database files (`*.db`, `*.sqlite*`,
+    WAL/SHM sidecars) plus the configured database path explicitly
+    — the relay's state must never become a download. Missing
+    paths answer the repo's `404.html`. `_headers` is applied by
+    the static layer only; API responses keep the worker's own
+    header set (its cache control is the stricter superset).
+  - *Operator surface:* `server/README.md` documents running the
+    entry, its configuration and the single-process topology
+    (the `docs/SELF_HOSTING.md` rewrite stays step 3's, as
+    planned). `validate.sh` learned one Gate-1 check: syntax of
+    the `server/*.js` files.
+  - *Verification:* the drill is pinned in the suite
+    (`tests/node-host.test.js`, 6 tests): health with `ws:true`,
+    prekey upload/fetch for two identities, sealed
+    deposit → wake-up frame → poll → ack → empty poll, an attach
+    signed by the wrong key refused with zero sockets registered,
+    a process-level restart on the same database file proving
+    queue and bundle durability, and the static contract (`/` and
+    `/index.html` carry the `_headers` security set with
+    `no-cache`; platform/dot/database files 404). The same drill
+    was also run manually against `node server/index.js` itself,
+    including a SIGTERM restart.
 
 
 ## Step 3 — Docker packaging and the closed-by-default operator surface

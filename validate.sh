@@ -30,6 +30,13 @@ JS=$(node -e "const h=require('fs').readFileSync('index.html','utf8');const m=h.
 if node -c /tmp/brz-validate.js 2>/dev/null; then pass "index.html JS syntax" 10; else fail "index.html JS syntax BROKEN" 10; fi
 if node -c _worker.js 2>/dev/null; then pass "_worker.js syntax" 5; else fail "_worker.js syntax BROKEN" 5; fi
 if node -c sw.js 2>/dev/null; then pass "sw.js syntax" 5; else fail "sw.js syntax BROKEN" 5; fi
+# Server-side Node host (stage-2 step 2): not part of the deployed artefact,
+# but a syntax break there would otherwise only surface when an operator boots it.
+SERVER_SYNTAX_OK=1
+for f in server/index.js server/node-host.js server/mailbox-namespace.js server/static-assets.js server/ws-server.js server/sqlite-kv.js server/sqlite-mailbox-storage.js; do
+  node -c "$f" 2>/dev/null || SERVER_SYNTAX_OK=0
+done
+if [ "$SERVER_SYNTAX_OK" -eq 1 ]; then pass "server/*.js syntax (Node host)" 5; else fail "server/*.js syntax BROKEN" 5; fi
 echo ""
 
 # ═══ Gate 2: Security ═══
