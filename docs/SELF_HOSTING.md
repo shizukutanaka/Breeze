@@ -79,6 +79,23 @@ wrangler pages secret put TURN_KEY_API_TOKEN
 # (This is the default — no action needed)
 ```
 
+### Auth Hardening & the Plain Relay Path
+
+Presence writes and TURN credential issuance already require a *registered*
+account (prekey bundle present) by default — no signature is involved, and
+every client registers automatically. The stricter Ed25519-signature flags
+stay opt-in; `wrangler.toml` documents each one and why (clients on runtimes
+without WebCrypto Ed25519 cannot sign at all).
+
+The legacy plain relay (`/api/msg/send`, `/api/msg/poll`) is deprecated: its
+responses carry a `Deprecation: true` header, and the sealed path is the
+default route for every current client. Once you have confirmed no live
+client still needs the fallback, disable it outright:
+
+```bash
+wrangler pages secret put PLAIN_PATH_DISABLED   # set to: true
+```
+
 ### Custom Domain
 
 ```bash

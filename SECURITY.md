@@ -123,6 +123,16 @@ separate, explicitly-scoped future work if it's wanted.
   `/prekey/status` and re-registers, so a long-quiet identity becomes reachable again instead
   of staying permanently unreachable to new contacts. Cloud backups are the deliberate
   exception (see below): they expire on schedule and now say so.
+- **Account deletion erases beyond the userId-keyed stores (stage-0, 2026-11-13).**
+  `/api/account/delete` additionally (a) sweeps every group roster for the deleted id —
+  including groups the deleting device never declared — removing the member (epoch bump)
+  or deleting creator-owned groups; (b) removes the account's *sent* copies from other
+  users' plain-path inboxes (plain entries carry `from` in the clear); and (c) deletes
+  `frank:{id}`/`report:{id}` records for the frankIds the client supplies (senders persist
+  each sent message's frankId locally for this). Two honest limits: sealed-queue copies
+  cannot be swept — sealed sender means the relay cannot tell who sent an envelope, so
+  undelivered sealed copies expire with the 7-day queue TTL instead — and a moderation
+  webhook that already fired for a report lives outside KV and is not recalled.
 - **The sealed queue is a bounded, last-write-wins KV value.** Cloudflare KV offers no
   transactions, so the queue's read-modify-write can lose an envelope if two senders write to
   the same recipient in the same instant from different PoPs — and both senders would be
@@ -148,6 +158,17 @@ separate, explicitly-scoped future work if it's wanted.
   path, and the offline retry queue still use legacy envelopes and remain sender-visible.
   The relay still sees recipient, timing, and message size (padded to 256 B boundaries);
   cover traffic / onion routing are deferred (see SPEC §12).
+- **The plain relay path is deprecated (stage-0, 2026-11-13).** `/api/msg/send` and
+  `/api/msg/poll` store sender id, display name, public key, group name and message-type
+  flags in plaintext — everything sealed v2 exists to hide. Every plain-path response now
+  carries a `Deprecation: true` header, and operators can disable the path outright with
+  `PLAIN_PATH_DISABLED=true` (410 `PLAIN_PATH_DISABLED`). The handlers may be deleted once
+  (1) every client an operator serves negotiates `seal-v2`, (2) the operator has run with
+  `PLAIN_PATH_DISABLED=true` for a full inbox TTL (7 days) with no delivery failures —
+  proof no live client still depends on the fallback — and (3) the client's
+  legacy-envelope resend path has aged out. Note the one functional casualty of disabling:
+  `/wipe`'s self-addressed remote-wipe signal travels the plain path, so with the path
+  disabled that signal silently no-ops (the wipe itself still proceeds locally).
 - **Read-receipt timing.** A receipt fired the instant a conversation opens is a precise
   timestamp of when a specific person looked at their phone, and correlating those against
   sends is a known de-anonymisation route against sealed-sender systems (NDSS'21). `/quiet N`
@@ -163,8 +184,12 @@ separate, explicitly-scoped future work if it's wanted.
   whenever any peer/member is un-upgraded, so first contact is authenticated and group messages
   are forward-secret without breaking older clients. Still opt-in: at-rest key wrapping (needs a
   user passphrase, `/keywrap`) and call-signaling E2E (`CALL_E2E_SIGNAL` has no capability
-  negotiation yet, so enabling it requires both ends). Worker-side `*_REQUIRE_AUTH` flags remain
-  operator choices — see `wrangler.toml`.
+  negotiation yet, so enabling it requires both ends). Worker-side auth gates: the two
+  registration gates (`PRESENCE_REQUIRE_AUTH`, `TURN_REQUIRE_AUTH` — prekey-bundle existence
+  only, no signature) are **on by default** since the 2026-11-13 stage-0 hardening; the
+  Ed25519-signature `*_REQUIRE_AUTH` flags remain operator choices, because clients on
+  runtimes without WebCrypto Ed25519 cannot sign at all and a mandatory default would cut
+  them off — see `wrangler.toml`.
 - **@alias resolution** is answered by the relay, which returns an unsigned `{pub}`. Since
   v3.6.1 an alias add runs the key-transparency audit first: a **tampered** hash chain blocks the
   add outright, a **rolled** key warns. This detects a relay rewriting key *history*; it cannot

@@ -1923,11 +1923,8 @@ const _I = {
     timeCompactHour: "{0}h",
     timeCompactDay: "{0}d",
     timeCompactLt1m: '<1m',
-    uiServerUnavail: 'Server unavailable',
     uiNoServer: 'No server configured',
     uiAuditUnavail: 'Audit store not available.',
-    uiFetchOnlineFail: 'Could not fetch online count',
-    uiOnlineStatus: "Online: ~{0} users on server · {1} P2P connections",
     uiShareId: 'Share your Breeze ID',
     uiInviteCopied: 'Invite message copied to clipboard.',
     inviteMsg: "{0} invited you to Breeze.\\n\\nAn encrypted messenger with no registration required.\\nJust open this link to start chatting:\\n\\n{1}\\n\\nNo phone number. No email. Works in any browser.",
@@ -5443,13 +5440,24 @@ async function initMessenger(dbName) {
         return;
       }
     } catch(e) { _dbg(e, 'sealed'); }
-    // Standard relay fallback
+    // Standard relay fallback (DEPRECATED path — servers announce it via the
+    // Deprecation response header and can disable it with PLAIN_PATH_DISABLED)
     try {
       const resp = await postAPIRaw('/msg/send', payload);
+      if (resp.headers.get('Deprecation') && !window._plainDepLogged) {
+        window._plainDepLogged = 1;
+        _dbg(null, 'relay: server marks the plain path deprecated (sealed-only migration in progress)');
+      }
       if (resp.ok) {
         const data = await resp.json().catch(() => ({}));
         if (data.ack && msgTs) updateMsgStatus(msgTs, 'delivered');
         return;
+      }
+      if (resp.status === 410) {
+        // Plain path disabled server-side. The sealed attempt above already
+        // failed, so fall through to the retry queue below — it retries sealed
+        // first, so the message can still land once sealed recovers.
+        _dbg(null, 'relay: plain path disabled by server (410 PLAIN_PATH_DISABLED)');
       }
       if (resp.status === 429) {
         const retryAfter = (parseInt(resp.headers.get('Retry-After') || '5') || 5) * MS.SEC;
@@ -7903,6 +7911,13 @@ async function initMessenger(dbName) {
         postAPIRaw('/abuse/record', { frankId: _frank.frankId, commitment: _frank.commitment })
           .catch(e => _dbg(e, 'frank-record'));
       }
+      // Persist the frankId on the local copy of this message (msgRecord was stored
+      // BEFORE encryptFor ran, so it carries no frankId yet). /wipe hands these ids to
+      // /account/delete so the relay-side frank/report records — keyed by frankId
+      // alone, with no user link by design — are erased with the account.
+      if (_frank.frankId) {
+        try { await dbPut('messages', { ...msgRecord, frankId: _frank.frankId }); } catch(e) { _dbg(e, 'frank-persist'); }
+      }
       const peer = peers[activeContact.pubB64];
       const envelope = { v: CONFIG.PROTOCOL_VERSION, type: 'msg', payload: encrypted, ts, sender: myPubB64, name: myName };
       if (meta.nrn) envelope.nrn = true; // rides inside the sealed-v2 meta block — invisible to the relay
@@ -9366,6 +9381,10 @@ async function initMessenger(dbName) {
       if (!_isOffline && API) {
         try {
           const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: _lastPollTs, ...(await queueAuth('msg-poll')) });
+          if (resp.headers.get('Deprecation') && !window._plainDepLogged) {
+            window._plainDepLogged = 1;
+            _dbg(null, 'relay: server marks the plain path deprecated (sealed-only migration in progress)');
+          }
           if (resp.ok) {
             const data = await resp.json();
             for (const msg of (data.messages || [])) {
@@ -12655,8 +12674,16 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
           const wipeGroups = (await dbGetAll('contacts').catch(() => []))
             .filter((g) => g?.isGroup && typeof g.joinToken === 'string' && g.joinToken)
             .map((g) => g.joinToken).slice(0, 50);
+          // Same story for franking records: frank:{frankId}/report:{frankId} are keyed
+          // by frankId alone (the relay must not know whose messages they bind), so only
+          // the sender's own local copies — which persist their frankId at send time —
+          // can name them for erasure.
+          const wipeFrankIds = (await dbGetAll('messages').catch(() => []))
+            .filter((m) => m?.mine && typeof m.frankId === 'string' && m.frankId)
+            .map((m) => m.frankId).slice(0, 200);
           if (delSig) await postAPIRaw('/account/delete', { userId: myId, ts: delTs, sig: delSig,
-            ...(myAlias ? { alias: myAlias } : {}), ...(wipeGroups.length ? { groups: wipeGroups } : {}) });
+            ...(myAlias ? { alias: myAlias } : {}), ...(wipeGroups.length ? { groups: wipeGroups } : {}),
+            ...(wipeFrankIds.length ? { frankIds: wipeFrankIds } : {}) });
         } catch(e) { _dbg(e); }
         // Belt-and-suspenders: unsubscribe push explicitly so notifications can't
         // arrive on this device for a wiped account even if /account/delete failed.
@@ -13069,26 +13096,6 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       showToast(t(_settings.focusStrict ? 'focusOnStrict' : 'focusOn', mins), 'success');
       return;
     }
-    // v3.3: /online — Show online user count
-    if (val === '/online') {
-      e.preventDefault();
-      clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'chat-empty';
-      if (API) {
-        try {
-          const resp = await postAPIRaw('/online', {});
-          if (resp.ok) {
-            const data = await resp.json();
-            const peerCount = Object.values(peers).filter(p => p.connected).length;
-            d.textContent = t('uiOnlineStatus', data.online, peerCount);
-          } else { d.textContent = t('uiFetchOnlineFail'); }
-        } catch(e) { d.textContent = t('uiServerUnavail'); _dbg(e); }
-      } else { d.textContent = t('uiNoServer'); }
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
-    }
-
     // v3.6: /wallpaper — Set chat background (color, gradient, or preset)
     if (val.startsWith('/wallpaper ')) {
       e.preventDefault();
