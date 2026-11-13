@@ -2457,6 +2457,67 @@ describe('sealed sender send / poll / ack', () => {
     const after = await (await handleSealedPoll({ id: 'mono0002' }, env, req({}))).json();
     expect(after.messages.map(m => m.envelope)).toEqual(['m2-same-ms']);
   });
+
+  // §4 RESIDUAL, sealed path (audit 2026-11-13) — the lost-write recovery re-append
+  // reuses the ORIGINAL newTs computed from the stale pre-race snapshot. When the
+  // racing winner computed the same newTs (same millisecond, same empty-queue
+  // base), the recovered envelope re-enters the queue with a ts EQUAL to the
+  // winner's. If a poll records hwm from the winner alone (poll lands between the
+  // winner's write and the loser's recovery re-append) and the client then acks,
+  // the ack filter `m.ts > hwm` deletes the recovered envelope even though it was
+  // never polled. Narrow (concurrent same-ms sends to one recipient + poll/ack
+  // inside the recovery window), and the worker already documents recovery as
+  // not exactly-once — this pins the precise remaining hole for the §4 redesign.
+  it('KNOWN LIMITATION (§4 residual): a race-recovered envelope re-appended with ts == hwm is ack-deleted unpolled', async () => {
+    const env = makeEnv();
+    const key = 'sealed:raceack1';
+    const frozenTs = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(frozenTs);
+    const origPut = env.KV.put.bind(env.KV);
+    const origGet = env.KV.get.bind(env.KV);
+    let clobbered = false;
+    let polledEnvelopes = null;
+    let queueGets = 0;
+    let injecting = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true; // racing writer B lands last with the same computed ts
+        await origPut(k, JSON.stringify([{ envelope: 'B-WINNER', ts: frozenTs }]), o);
+      }
+    };
+    env.KV.get = async (k) => {
+      if (k === key && !injecting) {
+        queueGets++;
+        if (queueGets === 2) {
+          // The send's verify-read: a poll lands HERE — after B's write, before
+          // A's recovery re-append — and records hwm = frozenTs from B alone.
+          injecting = true;
+          try {
+            const polled = await (await handleSealedPoll({ id: 'raceack1' }, env, req({}))).json();
+            polledEnvelopes = polled.messages.map(m => m.envelope);
+          } finally { injecting = false; }
+        }
+      }
+      return origGet(k);
+    };
+    try {
+      const res = await handleSealedSend({ to: 'raceack1', envelope: 'A-REAPPENDED' }, env, req({}));
+      expect(res.status).toBe(200);
+    } finally {
+      vi.restoreAllMocks();
+    }
+    expect(clobbered).toBe(true); // the race really happened
+    expect(polledEnvelopes).toEqual(['B-WINNER']); // A had not yet been re-appended
+    // Recovery did re-append A — but with ts == B's ts == hwm (duplicate ts).
+    const queue = JSON.parse(await origGet(key));
+    expect(queue.map(m => m.envelope)).toEqual(['B-WINNER', 'A-REAPPENDED']);
+    expect(queue.map(m => m.ts)).toEqual([frozenTs, frozenTs]);
+    // The client's ack (for the batch it actually polled: B only) deletes A too.
+    const ack = await handleSealedAck({ id: 'raceack1' }, env, req({}));
+    expect((await ack.json()).ok).toBe(true);
+    expect(await origGet(key)).toBeNull(); // A is gone, never polled — silent loss
+  });
 });
 
 describe('msg send / poll (1:1 relay path)', () => {
@@ -2506,6 +2567,42 @@ describe('msg send / poll (1:1 relay path)', () => {
     // With the advanced cursor, SECOND must still be delivered (not dropped as ts == cursor).
     const p2 = await (await handleMsgPoll({ id: 'bob00001', lastTs: cursor }, env, req({}))).json();
     expect(p2.messages.map(m => m.payload)).toEqual(['SECOND']);
+  });
+
+  // §4 RESIDUAL (audit 2026-11-13) — the Item 41 bump compares against the CURRENT
+  // inbox tail only. Once the inbox has fully drained (every delivered message aged
+  // past the 10 s multi-tab grace and the key deleted), the worker keeps no
+  // high-water mark, so a later message whose sender-supplied ts is <= the
+  // recipient's poll cursor is stored UNBUMPED, is invisible to that cursor, and is
+  // then purged by the same poll's cleanup (its age is measured from the old ts).
+  // Reachable when a second sender's clock lags the first sender's by >= ~10 s
+  // (both inside the ±5 min acceptance window) and a poll drains the inbox in
+  // between — or when one sender's clock steps backward. This test pins the
+  // current behaviour as a known limitation: the §4 redesign (per-inbox
+  // high-water mark, or an (ts, id) cursor) must flip these assertions.
+  it('KNOWN LIMITATION (§4 residual): a post-drain message with ts <= the poll cursor is never delivered', async () => {
+    const env = makeEnv();
+    const T = Date.now() - 20000; // 20 s ago: inside the ±5 min window, past the 10 s grace
+    await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'FIRST', ts: T }, ip, env, req({}));
+    const p1 = await (await handleMsgPoll({ id: 'bob00001', lastTs: 0 }, env, req({}))).json();
+    expect(p1.messages.map(m => m.payload)).toEqual(['FIRST']);
+    const cursor = Math.max(...p1.messages.map(m => m.ts)); // == T
+    // Next poll at the advanced cursor: FIRST is delivered + aged out, the inbox
+    // drains completely and the KV key is deleted.
+    const p2 = await (await handleMsgPoll({ id: 'bob00001', lastTs: cursor }, env, req({}))).json();
+    expect(p2.messages).toEqual([]);
+    expect(await env.KV.get('inbox:bob00001')).toBeNull();
+    // A second sender whose clock lags (same client ts T) sends after the drain.
+    await handleMsgSend({ to: 'bob00001', from: 'carol001', payload: 'SECOND-AFTER-DRAIN', ts: T }, ip, env, req({}));
+    // Stored unbumped — the drained inbox had no tail to bump against.
+    const stored = JSON.parse(await env.KV.get('inbox:bob00001'));
+    expect(stored.map(m => m.ts)).toEqual([T]);
+    // The session cursor never sees it…
+    const p3 = await (await handleMsgPoll({ id: 'bob00001', lastTs: cursor }, env, req({}))).json();
+    expect(p3.messages).toEqual([]);
+    // …and that poll's cleanup purges it (age from the old ts exceeds the grace),
+    // so not even a restarted client (cursor 0) can rescue it. Permanent loss.
+    expect(await env.KV.get('inbox:bob00001')).toBeNull();
   });
 
   it('bumps a colliding stored ts by 1ms so inbox timestamps are strictly increasing', async () => {
