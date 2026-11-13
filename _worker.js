@@ -3187,6 +3187,26 @@ async function handlePreKeyUpload(body, env, request) {
   } else if (env.PREKEY_REQUIRE_AUTH === 'true') {
     return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
   }
+  // Registration admission (stage-2 step 3): REGISTRATION_ALLOWLIST, when set,
+  // closes ACCOUNT CREATION on this relay to the listed userIds. It gates only
+  // a prekey upload for a userId with no stored bundle — an existing account's
+  // re-upload (bundle refresh, OTP top-up) is never gated, and deposits,
+  // rendezvous and polls do not pass through here at all, so closing
+  // registration cannot strand anyone already homed on this relay. Unset (the
+  // default everywhere, including the official deployment) registration stays
+  // open exactly as before; set-but-empty closes it to everyone. The list is
+  // operator configuration, not a secret: userIds are the public identifiers
+  // contacts already exchange. Why an allowlist and not invite tokens is
+  // recorded in docs/RELAY_STAGE2_PLAN.md (step-3 outcome).
+  if (typeof env.REGISTRATION_ALLOWLIST === 'string') {
+    const admitted = env.REGISTRATION_ALLOWLIST.split(/[,\s]+/).filter(Boolean);
+    if (!admitted.includes(userId)) {
+      const existingBundle = await kvGet(env, `prekey:${userId}`);
+      if (!existingBundle) {
+        return json({ error: 'Registration is closed on this relay', code: 'REGISTRATION_CLOSED' }, 403, request);
+      }
+    }
+  }
   const bundle = { identityKey, edIdentityKey, signedPreKey, signedPreKeySig, uploadedAt: Date.now() };
   // N3: persist capability set so the initiator can call parsePeerCaps(bundle) and
   // negotiate() to pick the right protocol path (same sanitization as the presence

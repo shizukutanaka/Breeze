@@ -1,0 +1,34 @@
+# Breeze relay — self-hosted quickstart (stage-2 step 3).
+# Full operator guide: docs/SELF_HOSTING.md.
+#
+#   BREEZE_ALLOWLIST=<your Breeze ID> docker compose up -d
+#
+# The relay serves plain HTTP on 8787; put a TLS-terminating reverse
+# proxy in front before exposing it (browsers require HTTPS/WSS).
+services:
+  breeze:
+    build: .
+    image: breeze-relay
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    volumes:
+      # The entire relay state (SQLite file incl. the relay identity
+      # key). Back up this volume and you have backed up the relay.
+      - breeze-data:/data
+    environment:
+      # Registration is CLOSED by default: only the Breeze IDs listed
+      # here may create accounts on this relay. Your ID is the
+      # 12-character identifier in your invite link (the first 12
+      # characters of its pub value) — several IDs, comma-separated.
+      # Empty (the default) = nobody can register yet; deposits and
+      # polls for existing accounts are never gated.
+      REGISTRATION_ALLOWLIST: "${BREEZE_ALLOWLIST:-}"
+      # To run an OPEN relay instead (anyone may create an account),
+      # uncomment — an explicit choice, never the default:
+      # REGISTRATION_OPEN: "1"
+      # Behind a TLS-terminating reverse proxy, also uncomment:
+      # TRUST_PROXY: "true"
+
+volumes:
+  breeze-data:

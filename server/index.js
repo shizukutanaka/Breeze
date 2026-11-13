@@ -14,6 +14,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { buildRelayEnv, createRelayServer, REPO_ROOT } from './node-host.js';
+import { loadOrCreateRelayIdentity } from './relay-identity.js';
 
 const TRUTHY = /^(1|true|yes)$/i;
 
@@ -24,12 +25,28 @@ const trustProxy = TRUTHY.test(process.env.TRUST_PROXY || '');
 
 mkdirSync(dirname(dbPath), { recursive: true });
 const db = new DatabaseSync(dbPath);
+// First-run provisioning (stage-2 step 3): the relay's persistent
+// Ed25519 identity lives inside the database file; generate it if
+// this data volume has never had one. Step 4 publishes the public
+// half and lets clients pin it — until then the fingerprint below is
+// how the operator tells their users which relay is theirs.
+const identity = loadOrCreateRelayIdentity(db);
 const env = buildRelayEnv({ db, rootDir: REPO_ROOT, dbPath });
 const server = createRelayServer({ env, trustProxy });
+
+const allowlist = typeof env.REGISTRATION_ALLOWLIST === 'string'
+  ? env.REGISTRATION_ALLOWLIST.split(/[,\s]+/).filter(Boolean) : null;
+const registrationLine = allowlist === null
+  ? 'registration: open (set REGISTRATION_ALLOWLIST to close it — docs/SELF_HOSTING.md)'
+  : allowlist.length
+    ? `registration: CLOSED — only ${allowlist.length} allowlisted Breeze ID(s) may create an account`
+    : 'registration: CLOSED — REGISTRATION_ALLOWLIST is empty, so nobody can create an account yet (add your users\' Breeze IDs to it)';
 
 server.listen(port, host, () => {
   console.log(`Breeze relay listening on http://${host}:${port}/`);
   console.log(`  state: ${dbPath} (SQLite, single process — see server/README.md)`);
+  console.log(`  relay identity: ${identity.created ? 'NEW key generated — ' : ''}fingerprint ${identity.fingerprint}`);
+  console.log(`  ${registrationLine}`);
   console.log(`  mailbox backend: ${env.MAILBOX_BACKEND}, presence: ${env.PRESENCE_BACKEND}, ws wake-up: ${env.MAILBOX_WS_ENABLED === 'true' && env.MAILBOX_BACKEND === 'do' ? 'on' : 'off'}, trust proxy: ${trustProxy ? 'on' : 'off'}`);
 });
 

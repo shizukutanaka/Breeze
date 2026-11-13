@@ -432,6 +432,70 @@ numbers drift; the shapes are the load-bearing part.
 - **Done when.** The drill passes and SELF_HOSTING.md describes
   the Docker path as it actually behaves, including the closed
   default and the backup story.
+- **Outcome (2026-11-13).** Shipped; the open admission-shape
+  question is decided, and the packaging was verified with one
+  recorded substitution (no Docker on the verification machine):
+  1. *Admission shape: the explicit userId allowlist.* Of the two
+     shapes the scope allowed, the allowlist
+     (`REGISTRATION_ALLOWLIST`, comma/whitespace-separated Breeze
+     IDs) is the one that works with the client as it ships today:
+     an invite token would need a presentation channel the client
+     does not have (adding one is a client change, outside this
+     step's packaging scope), and it would mint a new secret for
+     operators to distribute and users to leak. A userId is a
+     public identifier contacts already exchange — the operator
+     collects IDs out-of-band over the same channel an invite link
+     already travels, and the unmodified client registers as soon
+     as its ID is listed.
+  2. *The mechanism is an env-gated check in `handlePreKeyUpload`;
+     the closed default lives in the packaging, not the worker.*
+     Account creation happens at exactly one place — a prekey
+     upload for a userId with no stored bundle — so the gate sits
+     there: listed IDs and every existing account pass untouched;
+     an unlisted unknown ID gets `403 REGISTRATION_CLOSED` and
+     stores nothing. With the variable unset the handler is
+     behaviour-identical to before (the official relay and a bare
+     `node server/index.js` both stay open, as this step's
+     guarantee requires). The compose file always passes the
+     variable (operator's `BREEZE_ALLOWLIST`, empty by default), so
+     the packaged relay is closed by default; `REGISTRATION_OPEN=1`
+     on the Node host is the explicit opt-in back to open and wins
+     over a packaging-supplied allowlist. One corner, recorded:
+     bundles expire (TTL one month), so a homed user whose bundle
+     has lapsed counts as a *new* registration and must be listed
+     to re-register — operators should list their community, which
+     is what the list is; deposits, rendezvous and polls are never
+     gated either way.
+  3. *The relay identity lives inside the SQLite file* (a
+     dedicated `relay_meta` table), not as a sibling key file in
+     the volume. The volume stays literally one file — backup is
+     copying it — and the table is unreachable through `env.KV`
+     (pinned by test), so no worker surface can read, list or
+     overwrite the private key; the static layer already refuses
+     to serve the database file itself. The fingerprint (SHA-256
+     of the raw public key, first 8 bytes, grouped hex) prints on
+     **every** boot, not just the first — an operator needs it
+     whenever a user asks — with a `NEW key generated` marker on
+     the provisioning boot. Generation and storage are all this
+     step does with the key: no health field, no env entry, no
+     route (that is step 4, as scoped).
+  4. *Docker verification substituted, and recorded as such.*
+     The verification VM has no Docker binary, so the fresh-
+     container drill was replaced by: static checks (the compose
+     file parses; the `node:24-alpine` base tag exists; the
+     image's user/volume/healthcheck contract reviewed; the
+     `.dockerignore` excludes no runtime path), plus the plan's
+     whole drill run against the real entrypoint under the
+     packaging's own environment — first boot provisions the key
+     and announces CLOSED registration, two listed users register,
+     an uninvited third is refused, a sealed message is deposited
+     and polled, a restart on the same volume keeps the
+     fingerprint and the un-acked delivery state, and a restored
+     copy of the volume serves identically with the same
+     fingerprint (14/14). The literal `docker build` + fresh-
+     container run on a clean machine remains the one unverified
+     item; the image runs the identical entrypoint and environment
+     the drill exercised.
 
 ## Step 4 — Relay identity key and client pinning
 
