@@ -493,6 +493,17 @@ async function handleMsgSend(body, ip, env, request) {
   const existing = await kvGet(env, key);
   const inboxParsed = existing ? safeJsonParse(existing, []) : [];
   const inbox = Array.isArray(inboxParsed) ? inboxParsed : [];
+  // §4 residual fix: the recipient's PERSISTENT high-water mark — the highest ts ever
+  // stored to or delivered from this inbox, kept in its own key so it survives the
+  // inbox draining to empty (poll cleanup deletes the inbox key itself). The tail
+  // bump below anchors on the CURRENT queue; once the queue has drained, that anchor
+  // is gone and a later message stamped at or below the recipient's poll cursor was
+  // stored unbumped, invisible to the cursor, and purged by the same poll's cleanup
+  // (audit 2026-11-13 §2.2). The hwm restores the anchor across drains.
+  const hwmKey = `${key}:hwm`;
+  const hwmRaw = await kvGet(env, hwmKey);
+  const hwmParsed = hwmRaw !== null ? parseInt(hwmRaw) : NaN;
+  const inboxHwm = Number.isFinite(hwmParsed) ? hwmParsed : null;
   const safePub  = typeof fromPub  === 'string' ? fromPub.slice(0, 200)  : undefined;
   const safeName = typeof fromName === 'string' ? fromName.slice(0, 64)  : undefined;
   const msg = { from, fromPub: safePub, fromName: safeName, payload, ts: ts || Date.now() };
@@ -541,6 +552,9 @@ async function handleMsgSend(body, ip, env, request) {
     const lastStoredTs = inbox[inbox.length - 1].ts;
     if (Number.isFinite(lastStoredTs) && msg.ts <= lastStoredTs) msg.ts = lastStoredTs + 1;
   }
+  // …and past the persistent high-water mark, so a post-drain arrival stamped at or
+  // below the recipient's poll cursor is still stored strictly above it (see above).
+  if (inboxHwm !== null && msg.ts <= inboxHwm) msg.ts = inboxHwm + 1;
   inbox.push(msg);
   const trimmed = capQueueBytes(inbox.slice(-100), m => (typeof m.payload === 'string' ? m.payload.length : 0) + 1024);
   const stored = await kvPut(env, key, JSON.stringify(trimmed), { expirationTtl: TTL.WEEK });
@@ -551,6 +565,36 @@ async function handleMsgSend(body, ip, env, request) {
     // stored. Deleting it lets the retry actually persist.
     globalThis._msgDedup.delete(dedupKey);
     return json({ error: 'Failed to store message', code: 'STORE_FAILED' }, 500, request);
+  }
+
+  // Lost-write recovery — the plain inbox is the same single-KV-value
+  // read-modify-write as the sealed queue, and until now was the only queue
+  // WITHOUT a read-back: two senders writing to the same recipient in the same
+  // instant both built on the same snapshot, and the later put silently erased
+  // the earlier message while both senders were answered 200 (audit 2026-11-13
+  // §2.4). Mirror handleSealedSend: read the key back and re-append if our entry
+  // is missing. Identity is the server-assigned msg.id — unique per message, so
+  // unlike a ts match it cannot false-positive on the racing writer's entry.
+  // The re-appended ts is recomputed from the CURRENT tail (and the hwm), never
+  // the stale pre-race value, so the recovered message stays strictly above the
+  // recipient's poll cursor. Like the sealed path this is recovery, not
+  // exactly-once: a stale read just skips the retry.
+  let storedTs = msg.ts;
+  const verifyRaw = await kvGet(env, key);
+  const seenInbox = verifyRaw ? safeJsonParse(verifyRaw, []) : [];
+  if (Array.isArray(seenInbox) && !seenInbox.some(m => m && m.id === msg.id)) {
+    const tail = seenInbox.length > 0 ? seenInbox[seenInbox.length - 1] : null;
+    let reTs = msg.ts;
+    if (tail && Number.isFinite(tail.ts)) reTs = Math.max(reTs, tail.ts + 1);
+    if (inboxHwm !== null) reTs = Math.max(reTs, inboxHwm + 1);
+    seenInbox.push({ ...msg, ts: reTs });
+    const reTrimmed = capQueueBytes(seenInbox.slice(-100), m => (typeof m.payload === 'string' ? m.payload.length : 0) + 1024);
+    if (await kvPut(env, key, JSON.stringify(reTrimmed), { expirationTtl: TTL.WEEK })) storedTs = reTs;
+  }
+  // Advance the persistent high-water mark to the newest ts this send stored
+  // (best-effort: a failed hwm write only degrades to the pre-fix behaviour).
+  if (inboxHwm === null || storedTs > inboxHwm) {
+    await kvPut(env, hwmKey, String(storedTs), { expirationTtl: TTL.WEEK });
   }
 
   // Trigger Web Push notification (non-blocking)
@@ -646,6 +690,24 @@ async function handleMsgPoll(body, env, request) {
   // (m.ts || 0) handles NaN (falsy) but not Infinity (truthy): a stored message
   // with ts:Infinity would pass every cutoff check and never be cleaned up.
   const newMsgs = all.filter(m => !isExpired(m) && (Number.isFinite(m.ts) ? m.ts : 0) > cutoff);
+  // §4 residual fix: advance the recipient's persistent high-water mark to the
+  // newest ts this poll returned, BEFORE the cleanup below runs — the cleanup may
+  // drain the inbox and delete its key in this same request, and the mark is what
+  // keeps a later below-cursor arrival visible (see handleMsgSend). Only written
+  // when messages were returned, so idle polls stay write-free (mirrors
+  // handleSealedPoll's hwm). Best-effort like the send-side advance.
+  if (newMsgs.length > 0) {
+    let maxReturned = 0;
+    for (const m of newMsgs) { const t = Number.isFinite(m.ts) ? m.ts : 0; if (t > maxReturned) maxReturned = t; }
+    if (maxReturned > 0) {
+      const hwmKey = `${key}:hwm`;
+      const curRaw = await kvGet(env, hwmKey);
+      const cur = curRaw !== null ? parseInt(curRaw) : NaN;
+      if (!Number.isFinite(cur) || maxReturned > cur) {
+        await kvPut(env, hwmKey, String(maxReturned), { expirationTtl: TTL.WEEK });
+      }
+    }
+  }
   // Remove delivered messages older than 10 seconds (grace period for multi-tab)
   const keep = all.filter(m => { if (isExpired(m)) return false; const t = Number.isFinite(m.ts) ? m.ts : 0; return t > cutoff || (nowPoll - t) < TIMEOUT_MS.MULTITAB_GRACE; });
   if (keep.length < all.length) {
@@ -2150,6 +2212,7 @@ async function handleAccountDelete(body, env, request) {
 
   const dels = [
     kvDel(env, `inbox:${userId}`),
+    kvDel(env, `inbox:${userId}:hwm`), // plain-inbox high-water mark (else a re-registered id inherits a stale delivery cursor anchor)
     kvDel(env, `sealed:${userId}`),
     kvDel(env, `sealed:${userId}:hwm`), // sealed-poll high-water mark (else lingers ~5min, leaking last-delivery ts)
     kvDel(env, `sealed:${userId}:dropped`), // dropped-msg counter — same residue class as hwm
@@ -2815,7 +2878,18 @@ async function handleSealedSend(body, env, request) {
   const mine = (m) => m && typeof m.envelope === 'string'
     && m.envelope.length === envelope.length && m.envelope === envelope;
   if (Array.isArray(seen) && !seen.some(mine)) {
-    seen.push({ envelope, ts: newTs });
+    // §4 residual fix: recompute the re-append ts from the CURRENT tail of the
+    // read-back snapshot instead of reusing the original newTs. The racing winner
+    // computed its ts from the same stale base, so reusing newTs could re-enter
+    // the queue with a ts EQUAL to the winner's; a poll that landed inside the
+    // recovery window recorded hwm from the winner alone, and the ack's
+    // `m.ts > hwm` filter then deleted this envelope unpolled (audit 2026-11-13
+    // §2.3). max(newTs, tail+1) keeps the recovered envelope strictly newer than
+    // everything actually in the queue, so the ack can only clear what was
+    // genuinely polled.
+    const tailTs = seen.length > 0 && Number.isFinite(seen[seen.length - 1].ts) ? seen[seen.length - 1].ts : 0;
+    const reTs = Math.max(newTs, tailTs + 1);
+    seen.push({ envelope, ts: reTs });
     const requeued = capQueueBytes(seen.slice(-100), (m) => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
     await kvPut(env, key, JSON.stringify(requeued), { expirationTtl: TTL.WEEK });
   }

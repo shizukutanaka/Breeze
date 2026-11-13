@@ -76,26 +76,59 @@ which would break communication between updated and not-yet-updated clients of a
 **deployed** messenger. They must ship behind a protocol-version negotiation with
 a coordinated rollout and the project's E2E suite — **not** unilaterally.
 
-- **X3DH not authenticated** (`index.html` ~4452 / 4559): signed pre-key uploaded
-  without `signedPreKeySig`; `initSession` derives the root key from `IK_A×IK_B`
-  with no signed-prekey verification → MITM on first contact. Needs the client to
-  compute/verify the prekey signature and the worker contract already expects
-  `signedPreKeySig`.
-- **Group sender keys never ratchet** (`index.html` ~4969): the 32-byte sender key
-  is generated once and only used as an HKDF salt input by counter → no forward
-  secrecy; a leaked sender key exposes all past/future group messages. Needs an
-  epoch/ratchet scheme for sender keys.
-- **KDF zero-salt** (`index.html` `kdfChain` ~4529): message and chain keys are
+**Status (audited 2026-11-13):** the first two items were found already
+implemented in the deployed code — authenticated X3DH (v5) and the group
+sender-key ratchet (v5) shipped behind the N3 caps negotiation
+(`CONFIG.X3DH_V5_ENABLED` / `CONFIG.GROUP_RATCHET_V5`, both default ON), so the
+"unilateral wire break" this section feared never happened: legacy peers simply
+negotiate down. Only the KDF zero-salt item remains deferred.
+
+- **X3DH not authenticated** — ✅ **implemented (v5).** The client computes and
+  uploads `signedPreKeySig` (`index.html` ~4540), the worker contract accepts it,
+  and the receiving side verifies the signature with Ed25519 before deriving
+  (~4815). Gated by caps negotiation (`X3DH_V5_ENABLED: true`, ~1211): peers
+  without the capability fall back to the legacy agreement instead of breaking.
+- **Group sender keys never ratchet** — ✅ **implemented (v5).** Sender keys now
+  hash-ratchet per message (`src/crypto/group.js` receiver/encrypt chain,
+  ~131–151) with epoch rotation, negotiated by the caps AND rule across all
+  group members (`GROUP_RATCHET_V5: true`, ~1206); a group with a legacy member
+  stays on v3 until every member advertises the capability.
+- **KDF zero-salt** (`index.html` `kdfChain` ~4670): message and chain keys are
   separated only by an `info` label over a constant zero salt. Aligning with the
   Double-Ratchet symmetric-KDF construction changes derived key bytes → wire break.
+  Still ⏸️: no evidence of practical harm (zero salt is the RFC 5869 default and
+  the `info` labels domain-separate), so this is a standardisation decision, not
+  an incident — if taken, it needs the same caps-negotiated migration pattern as
+  the two items above (dual derivation, per-chain attribute, no mid-chain switch).
 
-## 4. Deferred — needs design/validation — 🔎
+## 4. Same-millisecond message loss — ✅ closed worker-side (2026-11-13)
 
-- **Same-millisecond message loss** (`index.html` ~8243 + `_worker.js` ~366): the
-  poll cursor advances on strict `>` ts, so a later message sharing the exact ms
-  is excluded and then GC'd. A correct fix means making the cursor exclusive **by
-  msgId** (not ts) with overlap + client `_replayCache` dedup; risky to change
-  blind because the naive fix causes either duplicate delivery or further loss.
+The original scenario — the poll cursor advances on strict `>` ts, so a later
+message sharing the exact ms was excluded and then GC'd — was first closed by
+server-side ts bumping on both relay paths (`handleMsgSend` `_worker.js` ~456,
+`handleSealedSend` ~2809): every append is stored strictly above the queue tail,
+so the ts cursor stays lossless with **no client change** (pinned by Item 41 /
+Item 66 in `tests/worker.test.js`). The msgId-exclusive cursor redesign once
+planned here is therefore not needed for losslessness; `msg.id` remains what it
+already was — the dedup key.
+
+An audit on 2026-11-13 then found the protection's anchor was the *current
+queue state*, which left a residual class, all fixed worker-side in the same
+pass (regression tests flipped from known-limitation pins to fixed-outcome
+assertions):
+
+- **Post-drain invisibility (plain path).** Once the inbox drained and its KV
+  key was deleted, no high-water mark survived, so a below-cursor arrival was
+  stored unbumped, never delivered, and purged. Fix: a persistent per-inbox
+  high-water mark (`inbox:{id}:hwm`, advanced on send and on poll,
+  `handleMsgPoll` ~664) that send bumps past.
+- **Race-recovered envelope ack-deleted unpolled (sealed path).** The
+  lost-write recovery re-appended with the stale pre-race ts, which could equal
+  the winner's ts and thus the recorded hwm. Fix: the re-append ts is
+  recomputed from the read-back tail (`max(newTs, tail+1)`).
+- **Plain path had no lost-write recovery.** Concurrent sends to one recipient
+  could clobber each other silently. Fix: `handleMsgSend` now reads its write
+  back and re-appends by `msg.id`, mirroring the sealed path.
 
 ---
 
@@ -118,5 +151,8 @@ the TOFU badge behaviour (E).
 
 1. ✅ PR #1 (§1) — merged.
 2. ✅ This iteration (§2 A–E) — audited: already deployed; regression tests added, no wire change.
-3. ⏸️ §4 cursor redesign — separate, well-tested change.
-4. ⏸️ §3 protocol items — only behind a negotiated protocol-version bump.
+3. ✅ §4 same-ms loss — closed worker-side (server ts bump; residual anchor class
+   fixed 2026-11-13). No cursor redesign needed.
+4. ⏸️ §3 KDF zero-salt — the only §3 item left (X3DH v5 and group ratchet v5
+   already deployed behind caps negotiation); only behind a negotiated
+   protocol-version bump.

@@ -2458,17 +2458,18 @@ describe('sealed sender send / poll / ack', () => {
     expect(after.messages.map(m => m.envelope)).toEqual(['m2-same-ms']);
   });
 
-  // §4 RESIDUAL, sealed path (audit 2026-11-13) — the lost-write recovery re-append
-  // reuses the ORIGINAL newTs computed from the stale pre-race snapshot. When the
-  // racing winner computed the same newTs (same millisecond, same empty-queue
-  // base), the recovered envelope re-enters the queue with a ts EQUAL to the
-  // winner's. If a poll records hwm from the winner alone (poll lands between the
-  // winner's write and the loser's recovery re-append) and the client then acks,
-  // the ack filter `m.ts > hwm` deletes the recovered envelope even though it was
-  // never polled. Narrow (concurrent same-ms sends to one recipient + poll/ack
-  // inside the recovery window), and the worker already documents recovery as
-  // not exactly-once — this pins the precise remaining hole for the §4 redesign.
-  it('KNOWN LIMITATION (§4 residual): a race-recovered envelope re-appended with ts == hwm is ack-deleted unpolled', async () => {
+  // §4 RESIDUAL, sealed path (audit 2026-11-13; FIXED) — the lost-write recovery
+  // re-append originally reused the ORIGINAL newTs computed from the stale
+  // pre-race snapshot. When the racing winner computed the same newTs (same
+  // millisecond, same empty-queue base), the recovered envelope re-entered the
+  // queue with a ts EQUAL to the winner's; a poll landing inside the recovery
+  // window recorded hwm from the winner alone, and the ack filter `m.ts > hwm`
+  // then deleted the recovered envelope unpolled. The recovery now recomputes
+  // the re-append ts from the read-back snapshot's tail (max(newTs, tail+1)),
+  // so the recovered envelope is strictly newer than the winner and survives
+  // the ack. This test drives the same deterministic race as the original pin
+  // and asserts the fixed outcome.
+  it('race-recovered envelope is re-appended strictly above the hwm and survives the ack (§4 residual, fixed)', async () => {
     const env = makeEnv();
     const key = 'sealed:raceack1';
     const frozenTs = Date.now();
@@ -2509,14 +2510,19 @@ describe('sealed sender send / poll / ack', () => {
     }
     expect(clobbered).toBe(true); // the race really happened
     expect(polledEnvelopes).toEqual(['B-WINNER']); // A had not yet been re-appended
-    // Recovery did re-append A — but with ts == B's ts == hwm (duplicate ts).
+    // Recovery re-appended A with its ts recomputed from the current tail:
+    // strictly above B's ts (== the recorded hwm), not a duplicate of it.
     const queue = JSON.parse(await origGet(key));
     expect(queue.map(m => m.envelope)).toEqual(['B-WINNER', 'A-REAPPENDED']);
-    expect(queue.map(m => m.ts)).toEqual([frozenTs, frozenTs]);
-    // The client's ack (for the batch it actually polled: B only) deletes A too.
+    expect(queue.map(m => m.ts)).toEqual([frozenTs, frozenTs + 1]);
+    // The client's ack (for the batch it actually polled: B only) clears B and
+    // keeps A — A survives, still queued for its first poll.
     const ack = await handleSealedAck({ id: 'raceack1' }, env, req({}));
-    expect((await ack.json()).ok).toBe(true);
-    expect(await origGet(key)).toBeNull(); // A is gone, never polled — silent loss
+    const ackJson = await ack.json();
+    expect(ackJson.ok).toBe(true);
+    expect(ackJson.kept).toBe(1);
+    const remaining = JSON.parse(await origGet(key));
+    expect(remaining.map(m => m.envelope)).toEqual(['A-REAPPENDED']);
   });
 });
 
@@ -2569,18 +2575,19 @@ describe('msg send / poll (1:1 relay path)', () => {
     expect(p2.messages.map(m => m.payload)).toEqual(['SECOND']);
   });
 
-  // §4 RESIDUAL (audit 2026-11-13) — the Item 41 bump compares against the CURRENT
-  // inbox tail only. Once the inbox has fully drained (every delivered message aged
-  // past the 10 s multi-tab grace and the key deleted), the worker keeps no
-  // high-water mark, so a later message whose sender-supplied ts is <= the
-  // recipient's poll cursor is stored UNBUMPED, is invisible to that cursor, and is
-  // then purged by the same poll's cleanup (its age is measured from the old ts).
+  // §4 RESIDUAL (audit 2026-11-13; FIXED) — the Item 41 bump compared against the
+  // CURRENT inbox tail only. Once the inbox had fully drained (every delivered
+  // message aged past the 10 s multi-tab grace and the key deleted), the worker
+  // kept no high-water mark, so a later message whose sender-supplied ts was <=
+  // the recipient's poll cursor was stored UNBUMPED, invisible to that cursor,
+  // and purged by the same poll's cleanup — permanent loss. The worker now keeps
+  // a PERSISTENT per-inbox high-water mark (inbox:{id}:hwm, advanced on send and
+  // on poll) and bumps a stored ts past it, so the anchor survives the drain.
   // Reachable when a second sender's clock lags the first sender's by >= ~10 s
   // (both inside the ±5 min acceptance window) and a poll drains the inbox in
-  // between — or when one sender's clock steps backward. This test pins the
-  // current behaviour as a known limitation: the §4 redesign (per-inbox
-  // high-water mark, or an (ts, id) cursor) must flip these assertions.
-  it('KNOWN LIMITATION (§4 residual): a post-drain message with ts <= the poll cursor is never delivered', async () => {
+  // between — or when one sender's clock steps backward. Same scenario as the
+  // original known-limitation pin, assertions flipped to the fixed outcome.
+  it('a post-drain message with ts <= the poll cursor is still delivered (persistent hwm, §4 residual fixed)', async () => {
     const env = makeEnv();
     const T = Date.now() - 20000; // 20 s ago: inside the ±5 min window, past the 10 s grace
     await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'FIRST', ts: T }, ip, env, req({}));
@@ -2594,25 +2601,28 @@ describe('msg send / poll (1:1 relay path)', () => {
     expect(await env.KV.get('inbox:bob00001')).toBeNull();
     // A second sender whose clock lags (same client ts T) sends after the drain.
     await handleMsgSend({ to: 'bob00001', from: 'carol001', payload: 'SECOND-AFTER-DRAIN', ts: T }, ip, env, req({}));
-    // Stored unbumped — the drained inbox had no tail to bump against.
+    // Stored bumped above the persistent high-water mark (T) — the drained inbox
+    // had no tail to bump against, but the anchor survived the drain.
     const stored = JSON.parse(await env.KV.get('inbox:bob00001'));
-    expect(stored.map(m => m.ts)).toEqual([T]);
-    // The session cursor never sees it…
+    expect(stored.map(m => m.ts)).toEqual([T + 1]);
+    // The session cursor now sees it…
     const p3 = await (await handleMsgPoll({ id: 'bob00001', lastTs: cursor }, env, req({}))).json();
-    expect(p3.messages).toEqual([]);
-    // …and that poll's cleanup purges it (age from the old ts exceeds the grace),
-    // so not even a restarted client (cursor 0) can rescue it. Permanent loss.
-    expect(await env.KV.get('inbox:bob00001')).toBeNull();
+    expect(p3.messages.map(m => m.payload)).toEqual(['SECOND-AFTER-DRAIN']);
+    // …and the poll's cleanup retains it (its ts is above the cursor, like any
+    // not-yet-acked delivery) instead of purging it.
+    expect(await env.KV.get('inbox:bob00001')).not.toBeNull();
   });
 
-  // ADJACENT GAP (found during the §4 read; not the ts cursor): the plain inbox
-  // is a single KV value mutated read-modify-write with NO lost-write recovery —
-  // unlike handleSealedSend, handleMsgSend never reads its write back. Two
-  // senders writing to the same recipient concurrently both build on the same
-  // snapshot; the later put silently erases the earlier message while both
-  // senders are answered 200. Simulated deterministically with the same
-  // clobber-at-put technique as the sealed lost-write recovery test.
-  it('KNOWN LIMITATION: a concurrent send clobbering the inbox loses the first message (no lost-write recovery on the plain path)', async () => {
+  // ADJACENT GAP (found during the §4 read; FIXED): the plain inbox is a single
+  // KV value mutated read-modify-write, and handleMsgSend originally never read
+  // its write back — two senders writing to the same recipient concurrently
+  // both built on the same snapshot, and the later put silently erased the
+  // earlier message while both senders were answered 200. handleMsgSend now
+  // mirrors the sealed path's lost-write recovery: it reads the inbox back and
+  // re-appends its message (matched by the server-assigned msg.id) if a racing
+  // put clobbered it. Simulated deterministically with the same clobber-at-put
+  // technique as the sealed lost-write recovery test.
+  it('a concurrent send clobbering the inbox recovers the first message (lost-write recovery on the plain path)', async () => {
     const env = makeEnv();
     const key = 'inbox:bob00001';
     const origPut = env.KV.put.bind(env.KV);
@@ -2628,7 +2638,8 @@ describe('msg send / poll (1:1 relay path)', () => {
     expect(res.status).toBe(200);
     expect(clobbered).toBe(true); // the race really happened
     const { messages } = await (await handleMsgPoll({ id: 'bob00001', lastTs: 0 }, env, req({}))).json();
-    expect(messages.map(m => m.payload)).toEqual(['CONCURRENT']); // VICTIM is gone
+    // VICTIM was read back, found missing, and re-appended after the winner.
+    expect(messages.map(m => m.payload)).toEqual(['CONCURRENT', 'VICTIM']);
   });
 
   it('bumps a colliding stored ts by 1ms so inbox timestamps are strictly increasing', async () => {
