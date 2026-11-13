@@ -191,6 +191,65 @@ numbers drift; the shapes are the load-bearing part.
 - **Done when.** Suite + validate green on both fixture families,
   the driver decision and Node baseline are written into this
   step's outcome, and no production path references SQLite yet.
+- **Outcome (2026-11-13).** Shipped as designed; three
+  letter-of-the-plan points were resolved against the code and are
+  recorded here rather than silently adopted, and the open driver
+  question is answered by experiment:
+  1. *The mailbox core is an exported class in `_worker.js`, not a
+     separate file.* The deployed worker is a single self-contained
+     module with zero imports (Pages advanced mode), and a new
+     imported file would change the deployed artefact's shape in
+     the one step whose guarantee is that the deployment stays
+     untouched. `MailboxCore` therefore sits next to `MailboxDO` as
+     a named export — the step-2 host will import it from there,
+     exactly as the test suite already imports the handlers.
+     `MailboxDO` is now the thin adapter D1 describes: it
+     contributes `state.storage`, the hibernation registry (as the
+     core's queue-changed callback) and the two KV drain migrations
+     (as seed hooks). Its storage layout and RPC answers are
+     unchanged, and the full stage-1 suite passes unmodified
+     against it.
+  2. *"Serialized per userId" is one core per recipient, serialized
+     per instance.* The host keeps the per-user registry (as the
+     DO namespace does today) and each core's `execute()` chains
+     its own ops; the raw storage keys stay the DO's per-instance
+     layout, and per-user namespacing becomes the storage
+     adapter's job (`server/sqlite-mailbox-storage.js`, key
+     prefix). The deposit-gate race test — 130 parallel deposits
+     admitting exactly 120 — runs against BOTH the SQLite core and
+     the refactored DO adapter.
+  3. *Contract fixtures are shared scenario suites, not the
+     existing test files re-run.* The stage-1 files are written
+     against surfaces hardwired to their fixtures, so the contract
+     is re-expressed as suites instantiated once per fixture
+     family with identical expectations
+     (`tests/sqlite-kv-contract.test.js`,
+     `tests/mailbox-core-contract.test.js`) — the verdict-diff in
+     executable form. One fixture asymmetry is documented in the
+     suite: mockKV's `list()` ignores cursors (always
+     `list_complete`), so pagination below the page size is pinned
+     against the shim alone.
+  - *Driver decision: `node:sqlite`, zero-dependency; baseline
+    pinned at Node ≥ 24.* Verified by experiment on Node v24.22.1:
+    `node:sqlite` imports unflagged with no warning and
+    `DatabaseSync` covers the shim's needs. `Response.json` exists
+    there too, but the parity question never reaches the op
+    protocol: `execute()` returns `{ status, body }` and only the
+    DO adapter touches `Response`. (Node 22.x ships the module
+    behind `--experimental-sqlite`; nothing older has it.) One
+    harness caveat: vitest 2 / vite 5 cannot resolve a static
+    `node:sqlite` import — its builtin list predates the module —
+    so test fixtures load the driver via `createRequire`; the
+    library modules never import it (hosts pass an open
+    `DatabaseSync` in), and plain `node` resolves it fine.
+  - *SQLite storage values are JSON.* DO storage structured-
+    clones, but the protocol's own values are JSON-shaped by
+    construction (`{ v, exp }` entries, the deposits array), so
+    the adapter's JSON round-trip is lossless for everything the
+    core stores.
+  - No production path references SQLite: Cloudflare bindings,
+    `wrangler.toml` and the client are untouched, and nothing
+    outside the contract tests imports `server/*.js` yet.
 
 ## Step 2 — Node entrypoint (one process: static + API + WSS)
 
