@@ -615,6 +615,148 @@ function eraseMailboxes(env, userId) {
 }
 
 // ============================================================
+// MAILBOX CORE (stage-2 step 1, decision D1 in docs/RELAY_STAGE2_PLAN.md)
+//
+// The execution half of the mailbox op protocol, factored out of
+// MailboxDO.fetch: op dispatch and validation, the { v, exp } entry
+// semantics, the per-mailbox deposit gate, and the queue-changed
+// wake-up signal. One core serves ONE recipient's mailbox — both queue
+// families plus the presence record — exactly like one DO instance,
+// and it lives here rather than in a separate file because the
+// deployed worker is a single self-contained module (zero imports);
+// the step-2 Node host imports it from here, as the tests do.
+//
+// Everything host-specific is injected:
+// - storage: a single-key get/put/delete with Durable Object storage
+//   semantics (get → the stored value, or undefined when absent). The
+//   core's raw keys are the DO's own storage layout ('inbox:queue',
+//   'sealed:hwm', 'presence', 'deposits'), so the DO's stored data is
+//   untouched by the move; a SQLite host namespaces one storage
+//   adapter per recipient (server/sqlite-mailbox-storage.js).
+// - onQueueChanged(family): the wake-up fan-out, invoked after a
+//   queue put lands. The DO adapter maps it to its hibernation socket
+//   registry; other hosts may omit it.
+// - seedMailbox / seedPresence(userId): optional first-access hooks,
+//   awaited after validation and before the op runs. The DO adapter
+//   supplies its KV drain migrations; hosts with nothing to drain
+//   omit them. A hook must not throw (the DO's never do — a failed
+//   drain retries on the next access instead).
+//
+// execute() answers { status, body } — the HTTP status and JSON
+// payload MailboxDO used to build its Response from — and never
+// touches Response or any other host global, so the core runs
+// anywhere. Calls are serialized per core instance through a promise
+// chain: the deposit gate's check-and-record stays atomic even on a
+// host whose storage would interleave the reads and writes across
+// awaits. On the DO the chain merely restates the serialization the
+// runtime already provides.
+// ============================================================
+export class MailboxCore {
+  constructor({ storage, onQueueChanged = null, seedMailbox = null, seedPresence = null }) {
+    this._storage = storage;
+    this._onQueueChanged = onQueueChanged;
+    this._seedMailbox = seedMailbox;
+    this._seedPresence = seedPresence;
+    this._tail = Promise.resolve();
+  }
+
+  // Execute one op-protocol request ({ op, family, slot, value?,
+  // ttlSec?, userId }), in arrival order: an op starts only after the
+  // previous op for this mailbox has settled.
+  async execute(body) {
+    const run = this._tail.then(() => this._execute(body || {}));
+    this._tail = run.then(() => undefined, () => undefined);
+    return run;
+  }
+
+  async _execute(body) {
+    const { op, family, slot, userId } = body;
+    // family 'presence' (stage-1 step 4) is this recipient's single
+    // presence record, stored under the key 'presence'; its only slot
+    // is 'record'. It shares the { v, exp } entry shape and the
+    // get/put/del ops with the mailbox families below.
+    const isPresence = family === 'presence';
+    if (!isPresence && family !== 'inbox' && family !== 'sealed') return { status: 400, body: { ok: false } };
+    // 'deposit' (stage-1 step 3) is a mailbox-wide op: it carries no
+    // slot and is meaningless for the presence record.
+    if (op === 'deposit' && isPresence) return { status: 400, body: { ok: false } };
+    if (op !== 'deposit' && (isPresence ? slot !== 'record' : (slot !== 'queue' && slot !== 'hwm' && slot !== 'dropped'))) return { status: 400, body: { ok: false } };
+    if (typeof userId === 'string' && userId) {
+      if (isPresence) { if (this._seedPresence) await this._seedPresence(userId); }
+      else if (this._seedMailbox) await this._seedMailbox(userId);
+    }
+    const st = this._storage;
+    const key = isPresence ? 'presence' : `${family}:${slot}`;
+    try {
+      if (op === 'deposit') {
+        // Stage-1 step 3: per-mailbox deposit frequency gate. ONE log
+        // per recipient spanning both families (the limits are a
+        // property of the mailbox, not of one queue), pruned to the
+        // hour window on every admitted call, so the stored log never
+        // exceeds HOUR_MAX entries. Check-and-record is atomic here
+        // because execute() serializes this mailbox's ops (on the DO,
+        // the runtime serialized them before this class existed). The
+        // log is deliberately NOT erased by the slot deletes account
+        // deletion performs: it is rate-limit state, not mailbox
+        // content, and a re-registered id inherits at most an hour of
+        // window instead of a reset button.
+        const now = Date.now();
+        const rawLog = await st.get('deposits');
+        const log = Array.isArray(rawLog)
+          ? rawLog.filter(t => Number.isFinite(t) && now - t < DEPOSIT_LIMIT.HOUR_WINDOW_MS)
+          : [];
+        const inMin = log.filter(t => now - t < DEPOSIT_LIMIT.MIN_WINDOW_MS);
+        if (inMin.length >= DEPOSIT_LIMIT.MIN_MAX) {
+          return { status: 200, body: { ok: false, retryAfterSec: Math.max(1, Math.ceil((inMin[0] + DEPOSIT_LIMIT.MIN_WINDOW_MS - now) / 1000)) } };
+        }
+        if (log.length >= DEPOSIT_LIMIT.HOUR_MAX) {
+          return { status: 200, body: { ok: false, retryAfterSec: Math.max(1, Math.ceil((log[0] + DEPOSIT_LIMIT.HOUR_WINDOW_MS - now) / 1000)) } };
+        }
+        log.push(now);
+        await st.put('deposits', log);
+        return { status: 200, body: { ok: true } };
+      }
+      if (op === 'get') {
+        const entry = await st.get(key);
+        if (!entry || typeof entry.v !== 'string') return { status: 200, body: { ok: true, value: null } };
+        if (entry.exp !== null && entry.exp !== undefined && Date.now() >= entry.exp) {
+          await st.delete(key);
+          return { status: 200, body: { ok: true, value: null } };
+        }
+        return { status: 200, body: { ok: true, value: entry.v } };
+      }
+      if (op === 'put') {
+        const ttl = Number.isFinite(body.ttlSec) ? body.ttlSec : null;
+        await st.put(key, {
+          v: String(body.value),
+          exp: ttl !== null ? Date.now() + Math.max(ttl, 0) * 1000 : null,
+        });
+        // A queue rewrite is a deposit landing (a send, or the send
+        // path's read-back re-append): wake the mailbox's sockets so
+        // a foreground client polls now instead of at its next timer
+        // tick (stage-1 step 5). Poll-cleanup writes also pass here;
+        // the extra wake costs the owner one empty poll, and a poll
+        // that changes nothing writes nothing back — no notify loop.
+        // The callback is best-effort: the write has already landed,
+        // so a fan-out failure must not fail the op.
+        if (slot === 'queue' && this._onQueueChanged) {
+          try { this._onQueueChanged(family); } catch { /* socket already gone; polling still delivers */ }
+        }
+        return { status: 200, body: { ok: true } };
+      }
+      if (op === 'del') {
+        await st.delete(key);
+        return { status: 200, body: { ok: true } };
+      }
+    } catch (e) {
+      console.error('[mailbox-core] storage op failed:', e?.message ?? e);
+      return { status: 500, body: { ok: false } };
+    }
+    return { status: 400, body: { ok: false } };
+  }
+}
+
+// ============================================================
 // MAILBOX DURABLE OBJECT (stage-1 step 2)
 //
 // One instance per recipient (idFromName(userId)) holding BOTH queue
@@ -704,6 +846,18 @@ export class MailboxDO {
     this.env = env;
     this._seedPromise = null;
     this._presenceSeedPromise = null;
+    // Stage-2 step 1 (decision D1): the op protocol's execution half
+    // lives in MailboxCore over injected storage. This class is the
+    // Cloudflare adapter around it — it contributes state.storage
+    // itself, the hibernation socket registry (as the core's
+    // queue-changed callback) and the two KV drain migrations (as the
+    // core's seed hooks): the three things only the DO host has.
+    this._core = new MailboxCore({
+      storage: state.storage,
+      onQueueChanged: (family) => this._notifyQueueChanged(family),
+      seedMailbox: (userId) => this._ensureSeeded(userId),
+      seedPresence: (userId) => this._ensurePresenceSeeded(userId),
+    });
   }
 
   // Copy this recipient's KV mailbox (both families, all slots) into
@@ -842,84 +996,13 @@ export class MailboxDO {
     }
     let body;
     try { body = await request.json(); } catch { return Response.json({ ok: false }, { status: 400 }); }
-    const { op, family, slot, userId } = body || {};
-    // family 'presence' (stage-1 step 4) is this recipient's single
-    // presence record, stored under the key 'presence'; its only slot
-    // is 'record'. It shares the { v, exp } entry shape and the
-    // get/put/del ops with the mailbox families below.
-    const isPresence = family === 'presence';
-    if (!isPresence && family !== 'inbox' && family !== 'sealed') return Response.json({ ok: false }, { status: 400 });
-    // 'deposit' (stage-1 step 3) is a mailbox-wide op: it carries no
-    // slot and is meaningless for the presence record.
-    if (op === 'deposit' && isPresence) return Response.json({ ok: false }, { status: 400 });
-    if (op !== 'deposit' && (isPresence ? slot !== 'record' : (slot !== 'queue' && slot !== 'hwm' && slot !== 'dropped'))) return Response.json({ ok: false }, { status: 400 });
-    if (typeof userId === 'string' && userId) {
-      if (isPresence) await this._ensurePresenceSeeded(userId);
-      else await this._ensureSeeded(userId);
-    }
-    const st = this.state.storage;
-    const key = isPresence ? 'presence' : `${family}:${slot}`;
-    try {
-      if (op === 'deposit') {
-        // Stage-1 step 3: per-mailbox deposit frequency gate. ONE log
-        // per recipient spanning both families (the limits are a
-        // property of the mailbox, not of one queue), pruned to the
-        // hour window on every admitted call, so the stored log never
-        // exceeds HOUR_MAX entries. Check-and-record is atomic here
-        // because the DO serializes requests — the property KV could
-        // not give this check. The log is deliberately NOT erased by
-        // the slot deletes account deletion performs: it is rate-limit
-        // state, not mailbox content, and a re-registered id inherits
-        // at most an hour of window instead of a reset button.
-        const now = Date.now();
-        const rawLog = await st.get('deposits');
-        const log = Array.isArray(rawLog)
-          ? rawLog.filter(t => Number.isFinite(t) && now - t < DEPOSIT_LIMIT.HOUR_WINDOW_MS)
-          : [];
-        const inMin = log.filter(t => now - t < DEPOSIT_LIMIT.MIN_WINDOW_MS);
-        if (inMin.length >= DEPOSIT_LIMIT.MIN_MAX) {
-          return Response.json({ ok: false, retryAfterSec: Math.max(1, Math.ceil((inMin[0] + DEPOSIT_LIMIT.MIN_WINDOW_MS - now) / 1000)) });
-        }
-        if (log.length >= DEPOSIT_LIMIT.HOUR_MAX) {
-          return Response.json({ ok: false, retryAfterSec: Math.max(1, Math.ceil((log[0] + DEPOSIT_LIMIT.HOUR_WINDOW_MS - now) / 1000)) });
-        }
-        log.push(now);
-        await st.put('deposits', log);
-        return Response.json({ ok: true });
-      }
-      if (op === 'get') {
-        const entry = await st.get(key);
-        if (!entry || typeof entry.v !== 'string') return Response.json({ ok: true, value: null });
-        if (entry.exp !== null && entry.exp !== undefined && Date.now() >= entry.exp) {
-          await st.delete(key);
-          return Response.json({ ok: true, value: null });
-        }
-        return Response.json({ ok: true, value: entry.v });
-      }
-      if (op === 'put') {
-        const ttl = Number.isFinite(body.ttlSec) ? body.ttlSec : null;
-        await st.put(key, {
-          v: String(body.value),
-          exp: ttl !== null ? Date.now() + Math.max(ttl, 0) * 1000 : null,
-        });
-        // A queue rewrite is a deposit landing (a send, or the send
-        // path's read-back re-append): wake the mailbox's sockets so
-        // a foreground client polls now instead of at its next timer
-        // tick (stage-1 step 5). Poll-cleanup writes also pass here;
-        // the extra wake costs the owner one empty poll, and a poll
-        // that changes nothing writes nothing back — no notify loop.
-        if (slot === 'queue') this._notifyQueueChanged(family);
-        return Response.json({ ok: true });
-      }
-      if (op === 'del') {
-        await st.delete(key);
-        return Response.json({ ok: true });
-      }
-    } catch (e) {
-      console.error('[mailbox-do] storage op failed:', e?.message ?? e);
-      return Response.json({ ok: false }, { status: 500 });
-    }
-    return Response.json({ ok: false }, { status: 400 });
+    // The op protocol's execution — validation, seeding order, the
+    // { v, exp } semantics, the deposit gate, the wake-up fan-out —
+    // lives in MailboxCore (stage-2 step 1, decision D1). This adapter
+    // owns only the HTTP wrap: parse the body, delegate, and turn the
+    // core's { status, body } answer back into a Response.
+    const { status, body: result } = await this._core.execute(body);
+    return Response.json(result, { status });
   }
 }
 
