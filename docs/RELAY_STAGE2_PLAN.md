@@ -907,6 +907,188 @@ where the plan met the code:
   choice, and no single relay's death strands a contact who
   had two homes.
 
+**Outcome (2026-11-14).** Landed, with the open question answered
+first and seven readings recorded where the plan met the code.
+Both drills pass as automated tests against two relay
+*processes* (`tests/relay-fanout.test.js`, 26 tests; suite 1303
+passed, validate.sh PASSED at the same 165/171 as step 5).
+
+*The open question — exact-duplicate ciphertext.* Settled
+against the code before any fan-out was written, and now
+pinned at both layers. (1) On the 1:1 path the duplicate never
+reaches the ratchet: `handleIncoming` checks the replay cache
+and the IDB `messages` store *before* decrypting, and the
+message id is `${from}:${ts}` — identical across copies because
+the payload ts is identical. (2) At the ratchet layer itself
+(`src/crypto/ratchet.js`, pinned by test): the identical
+ciphertext decrypts once; the second `ratchetDecrypt` returns
+null (consumed counter, seen message id) and the session is
+undamaged — the next message still decrypts. Group sends
+decrypt first, but the duplicate then fails the same checks
+(consumed sender key / stored msgId) and is dropped. The ACK
+consequence the plan asked the tests to decide: **the per-copy
+ACK is unconditional** — the first of the plan's two candidate
+behaviours — because a copy the recipient dedups is still a
+copy delivered, and withholding its ACK would make that relay
+hold and re-serve an envelope the recipient already has. The
+implementation needed no recipient-side change at all, exactly
+as scoped; what it adds is the interleave test (identical
+copies on two relays, one store, both queues ACKed dry).
+
+1. *Reading — the plan said "prekey fetch consumes a one-time
+   prekey on exactly the one that answers."* The shipped fetch
+   order is the contact's stored homes in preference order,
+   then the primary, and the first bundle that passes *every*
+   validation (caps, fields, SPK signature) wins — validation
+   failure on one relay falls through to the next instead of
+   aborting the session the way the single-relay code did,
+   because a stale or hostile copy on one relay must not strand
+   a contact whose other copy is good. Fetch *does* consume an
+   OTP on every relay tried (a failed candidate costs one OTP
+   there, bounded by the candidate count ≤ 4); a relay that
+   cannot be reached spends nothing. The drill's "OTP consumed
+   only on the survivor" holds because the dead relay is
+   unreachable, not because consumption is winner-only.
+2. *Reading — the drill found a pre-existing worker bug, fixed
+   here because step 6 makes it load-bearing.* The sealed-send
+   dedup keyed on `(to, length, envelope.slice(0, 32))` — but an
+   envelope's first 32 bytes are routing metadata
+   (`{"to":…,"ts":…}`), not ciphertext, so two *distinct*
+   messages of equal envelope length to the same recipient
+   collided whenever their timestamps shared that prefix (in
+   practice, anything sent within the same ~hour on one
+   isolate), and the second was silently dropped while the
+   sender saw `{ok: true}`. Fan-out puts every message in every
+   home relay's dedup map, so the drill's second message
+   vanished exactly this way. The key is now a SHA-256 hash of
+   the whole envelope (the worker's existing `sha256Short`):
+   identical bytes — retransmissions, and a message's copies —
+   still dedup; distinct messages cannot collide. The plain
+   path's key is unchanged (its prefix *is* ciphertext, unique
+   from the first bytes). Pinned by a regression test with the
+   client's real wire shape.
+3. *Reading — deposit discipline at a contact's relays is a
+   separate funnel, and a pin mismatch withholds rather than
+   owes.* `_contactRelayPost` shares nothing with the step-5
+   funnel for *my* relays: no latch, no toast, no pin rewrite.
+   Verdicts follow step 4 scoped to the contact's pin — mismatch
+   skips the relay, keyless relays receive sealed copies
+   unattested (refusing would strand every contact homed on a
+   legacy relay), unreachable skips without consequence, and
+   conclusive verdicts are memoised per (url, pin) per session.
+   One refinement the code forced: a mismatched copy is
+   *withheld, not owed* — it does not enter the retry queue,
+   because retrying cannot cure a key substitution and would
+   eventually surface a spurious delivery failure for a message
+   the other relays delivered. If every home withholds or
+   fails, no ACK arrives and the message simply never marks
+   delivered, which is the truthful state.
+4. *Reading — the bundle hint bootstraps bare-id contacts via
+   status, not via stored records.* The stored carriers keep
+   the plan's ranking (invite origin / pasted URL at add time;
+   the contact-settings ceremony — attest, fingerprint,
+   confirm, pin stored — replaces at rank 1). The hint is
+   resolved through a `/prekey/status` probe cache (5-minute
+   TTL, seeded for free by every successful fetch) and is
+   *used but never persisted* over a record; the worker stores
+   it sanitized (≤3 http(s) origins, optional bounded pin) and
+   serves it from fetch and status, advertising `'prekey-home'`
+   in health `capabilities`. As the plan directed, `home` is
+   **not** in the signed upload digest — pinned by a test that
+   reuses one signature across two uploads whose hints differ.
+   The client's capability is a client-side constant
+   (`'multi-relay'`, like `'seal-v2'`), advertised in bundle
+   caps under `CONFIG.MULTI_RELAY_ENABLED`; group member caps
+   via `/prekey/fetch-batch` ride the primary as in step 5
+   (the batch stays a primary read — recorded under step 5's
+   deferral list, unchanged here).
+5. *Reading — what stayed primary-only, deliberately.* Signal
+   *deposits* fan out (the signed body is bound to
+   room+sender+ts, not to a relay, so the identical body
+   verifies at every copy) and `_signalAwait` polls merge the
+   peer's home relays with sender|type|data dedup; extra copies
+   are inert for a peer that never polls that relay. The
+   step-5 deferral list otherwise stands: contact *presence
+   checks* and `/alias`, `/group`, `/turn`, `/drop`, `/device`,
+   `/account/delete` remain primary reads/writes — they are
+   directory and rendezvous state, not mailbox placement, and
+   D2 (relays never coordinate) leaves them single-homed by
+   design. Own-account traffic is unchanged from step 5.
+6. *Reading — fan-out wiring is one function deep.* All
+   directed sends already converged on `relaySend`; the fan-out
+   lives there (wire built once via `_buildWire`, extracted
+   verbatim from the legacy body, which now calls it too), with
+   `_fanOut` passing the contact record as a hint for
+   other-device sends (device ids are not contact records).
+   Resolution requires a contact record at all: a linked
+   device's bundle advertises *my* home list, and chasing it
+   would have routed self-sync copies through the contact
+   funnel — a guard in `_resolveSendTargets` keeps every
+   non-contact recipient on the primary path exactly.
+   When resolution names nothing beyond the primary, the
+   legacy body runs *verbatim* — the default-unchanged
+   guarantee is structural, not a promise. Owed copies retry
+   through the existing queue as items carrying the wire bytes
+   and the owed relay list; legacy items are untouched, and a
+   restored fan-out item keeps both fields. "Success on any
+   one marks the message sent" is implemented as: any relay's
+   ACK marks `delivered` (the step-5 poll rule); there is no
+   separate sent state in the outbox today to mark.
+7. *Reading — the line ceiling moved, on the record.* Step 6
+   carried `index.html` past validate.sh's 15,000-line fail
+   bound (15,298 after a comment-tightening pass). Splitting
+   is forbidden by the single-file architecture; the
+   deletion-first audit the project prescribes
+   (docs/FIRST-PRINCIPLES.md) found no dead mass — the
+   unreachable-function and dead-i18n-key gates already pass.
+   The bound is raised to 16K in validate.sh with the history
+   recorded in place, on the stated condition that the *next*
+   crossing is met with a reduction pass, not another raise.
+
+*Recorded gaps.* The drills run the step-3 packaging's
+entrypoint and environment as separate processes on one
+machine; the literal Docker container run remains untested in
+this environment (no Docker binary — the same gap steps 2–5
+record), and "different operators" is modelled by separate
+processes, databases, identity keys and pins rather than
+separate administrative domains. The boot-window note from
+step 4 is unchanged. A relay's 429 defers its copy to the
+retry queue, whose 3-attempt budget then applies — a mailbox
+that stays over its per-minute cap for several minutes can
+dead-letter a copy the other relays already delivered, which
+is visible (dead-letter toast + audit) rather than silent.
+
+## Stage 2 — completion summary
+
+With step 6, stage 2 is complete: steps 1–6 are all
+implemented and merged (step 6 as this PR). What the stage
+set out to prove, in the recommendation's terms:
+
+- **Placement is a user choice.** The relay code runs
+  unchanged on Cloudflare, on a bare Node process, and in the
+  step-3 Docker packaging (steps 1–3); a user picks home
+  relays for their own account (step 5) and their client
+  honours the relays each contact chooses (step 6).
+- **No single relay's death strands anyone.** Own traffic
+  fans out to every home relay (step 5); messages are
+  redundantly deposited at a contact's home relays and calls
+  rendezvous on them too (step 6), with both done-when drills
+  — primary killed mid-conversation, primary's volume
+  destroyed — passing as automated tests.
+- **A relay is recognizable, never trusted.** Identity keys,
+  attestation and TOFU pinning (step 4) authenticate
+  continuity on every placement; E2E, sealed sender and the
+  SECURITY.md metadata limits hold identically everywhere,
+  and the operator surface is closed by default (step 3).
+
+What stage 2 deliberately did not do is recorded above in
+*Out of scope*: PQXDH (stage 3), delivery tokens (a
+client-led follow-up), relay-to-relay anything (excluded by
+D2), and clustered/multi-tenant hosting. The deployment
+flags (`MAILBOX_BACKEND=do`, `PRESENCE_BACKEND=do`,
+`MAILBOX_WS_ENABLED`) remain operator rollout choices, as
+stage 1 left them.
+
 ## Out of scope (stage 3 and other follow-ups own these)
 
 - **PQXDH / SPQR / MLS** — stage 3 of the recommendation; the
@@ -935,7 +1117,10 @@ where the plan met the code:
   zero-dependency preference (step 2 records the choice).
 - Desktop (Tauri) origin handling for the step-5 resolver.
 - Exact-duplicate ciphertext behaviour in the ratchet
-  (step 6's tests decide).
+  (step 6's tests decide). **Resolved in step 6:** the
+  duplicate is deduped before decryption on the 1:1 path, the
+  ratchet itself rejects it without damage, and the per-copy
+  ACK is unconditional — see the step-6 outcome.
 - Umbrel / one-click appliance packaging specifics — a
   stretch goal of step 3's compose example, not a completion
   criterion.
