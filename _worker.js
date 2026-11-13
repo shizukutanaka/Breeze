@@ -43,6 +43,21 @@ const TIMEOUT_MS = { // fetchWithTimeout values (milliseconds)
   // means online; a departed user's record can no longer be read once it expires.
   PRESENCE_FRESH:  360000,
 };
+const DEPOSIT_LIMIT = { // stage-1 step 3: per-mailbox sealed-deposit frequency caps,
+  // enforced inside MailboxDO (see checkDeposit on the MailboxStore). The only
+  // pre-existing frequency control is per-IP (30/min for /api/sealed/send across
+  // ALL recipients), so these caps bind only multi-source floods and extreme
+  // group fan-in: 120/min to ONE mailbox needs ≥4 saturated sender IPs, and
+  // 1200/hour is a sustained 20/min — both far above human correspondence,
+  // while still capping how fast an attacker can churn a victim's 100-entry
+  // queue (evicting undelivered mail) or burn the recipient DO's write quota.
+  // The hour cap is 10× the minute cap (not 60×) so sustained floods are
+  // throttled harder than bursts. Starting values, deliberately permissive.
+  MIN_WINDOW_MS:  60000,
+  MIN_MAX:        120,
+  HOUR_WINDOW_MS: 3600000,
+  HOUR_MAX:       1200,
+};
 
 function sanitizeString(val, maxLen = MAX_STRING_LEN) {
   if (typeof val !== 'string') return '';
@@ -452,13 +467,28 @@ function capQueueBytes(items, sizeOf, maxBytes = 16 * 1024 * 1024) {
 }
 
 // ============================================================
-// MAILBOX STORE (stage-1 steps 1–2, 2026-11-13)
+// MAILBOX STORE (stage-1 steps 1–2, step 3 limits, 2026-11-13)
 //
 // Every read/write of a recipient's message queues goes through this
 // handle — never kvGet/kvPut/kvDel with a hand-built key. The two queue
 // families (plain `inbox:{id}` and sealed `sealed:{id}`), each with its
 // `:hwm` high-water mark, plus the sealed family's `:dropped` overflow
 // counter, form ONE mailbox per (family, recipient).
+//
+// Step 3 adds one method to the surface: checkDeposit() →
+// { ok: true } | { ok: false, retryAfterSec }. It is the per-mailbox
+// deposit frequency gate the router's rate-limit comment long deferred
+// ("a true cross-isolate per-user limit needs a Durable Object"): the
+// DO backend checks-and-records atomically inside the recipient's DO
+// against DEPOSIT_LIMIT, with ONE window spanning both families (step 2:
+// "per-mailbox limits span the whole mailbox"). The KV backend is a
+// documented no-op — a KV counter would spend the scarce write quota on
+// a check that eventual consistency makes racy anyway, so enforcement
+// exists exactly when MAILBOX_BACKEND=do, the same flag doctrine as the
+// backends themselves. RPC failure fails OPEN ({ ok: true }): the gate
+// is a mitigation layer, not a correctness invariant — a DO outage must
+// not take down sealed delivery, and the queue caps (100 entries /
+// 16 MB via capQueueBytes) still bound what a flood can store.
 //
 // Two backends honour this surface, selected by MAILBOX_BACKEND:
 //
@@ -511,6 +541,8 @@ function kvMailboxStoreForKey(env, queueKey) {
     readDropped: () => kvGet(env, droppedKey),
     writeDropped: (value, ttlSec) => kvPut(env, droppedKey, value, { expirationTtl: ttlSec }),
     deleteDropped: () => kvDel(env, droppedKey),
+    // No per-mailbox deposit gate on KV (see the store header): always ok.
+    checkDeposit: async () => ({ ok: true }),
   };
 }
 
@@ -637,6 +669,17 @@ function doMailboxStoreForKey(env, queueKey) {
     readDropped: read('dropped'),
     writeDropped: write('dropped'),
     deleteDropped: del('dropped'),
+    // Per-mailbox deposit frequency gate (stage-1 step 3). The DO
+    // answers 200 { ok: false, retryAfterSec } for a denial and 200
+    // { ok: true } for an admitted (and now recorded) deposit; a null
+    // result here means the RPC itself failed, which fails open — see
+    // the store header for why the gate must not block delivery.
+    checkDeposit: async () => {
+      const r = await call('deposit');
+      if (!r) return { ok: true };
+      if (r.ok) return { ok: true };
+      return { ok: false, retryAfterSec: Number.isFinite(r.retryAfterSec) ? r.retryAfterSec : 60 };
+    },
   };
 }
 
@@ -736,7 +779,10 @@ export class MailboxDO {
     // get/put/del ops with the mailbox families below.
     const isPresence = family === 'presence';
     if (!isPresence && family !== 'inbox' && family !== 'sealed') return Response.json({ ok: false }, { status: 400 });
-    if (isPresence ? slot !== 'record' : (slot !== 'queue' && slot !== 'hwm' && slot !== 'dropped')) return Response.json({ ok: false }, { status: 400 });
+    // 'deposit' (stage-1 step 3) is a mailbox-wide op: it carries no
+    // slot and is meaningless for the presence record.
+    if (op === 'deposit' && isPresence) return Response.json({ ok: false }, { status: 400 });
+    if (op !== 'deposit' && (isPresence ? slot !== 'record' : (slot !== 'queue' && slot !== 'hwm' && slot !== 'dropped'))) return Response.json({ ok: false }, { status: 400 });
     if (typeof userId === 'string' && userId) {
       if (isPresence) await this._ensurePresenceSeeded(userId);
       else await this._ensureSeeded(userId);
@@ -744,6 +790,33 @@ export class MailboxDO {
     const st = this.state.storage;
     const key = isPresence ? 'presence' : `${family}:${slot}`;
     try {
+      if (op === 'deposit') {
+        // Stage-1 step 3: per-mailbox deposit frequency gate. ONE log
+        // per recipient spanning both families (the limits are a
+        // property of the mailbox, not of one queue), pruned to the
+        // hour window on every admitted call, so the stored log never
+        // exceeds HOUR_MAX entries. Check-and-record is atomic here
+        // because the DO serializes requests — the property KV could
+        // not give this check. The log is deliberately NOT erased by
+        // the slot deletes account deletion performs: it is rate-limit
+        // state, not mailbox content, and a re-registered id inherits
+        // at most an hour of window instead of a reset button.
+        const now = Date.now();
+        const rawLog = await st.get('deposits');
+        const log = Array.isArray(rawLog)
+          ? rawLog.filter(t => Number.isFinite(t) && now - t < DEPOSIT_LIMIT.HOUR_WINDOW_MS)
+          : [];
+        const inMin = log.filter(t => now - t < DEPOSIT_LIMIT.MIN_WINDOW_MS);
+        if (inMin.length >= DEPOSIT_LIMIT.MIN_MAX) {
+          return Response.json({ ok: false, retryAfterSec: Math.max(1, Math.ceil((inMin[0] + DEPOSIT_LIMIT.MIN_WINDOW_MS - now) / 1000)) });
+        }
+        if (log.length >= DEPOSIT_LIMIT.HOUR_MAX) {
+          return Response.json({ ok: false, retryAfterSec: Math.max(1, Math.ceil((log[0] + DEPOSIT_LIMIT.HOUR_WINDOW_MS - now) / 1000)) });
+        }
+        log.push(now);
+        await st.put('deposits', log);
+        return Response.json({ ok: true });
+      }
       if (op === 'get') {
         const entry = await st.get(key);
         if (!entry || typeof entry.v !== 'string') return Response.json({ ok: true, value: null });
@@ -3307,6 +3380,24 @@ async function handleSealedSend(body, env, request) {
   if (globalThis._sealedDedup.size > 500) { const e = [...globalThis._sealedDedup.entries()]; globalThis._sealedDedup = new Map(e.slice(-200)); }
 
   const mb = mailboxStore(env, 'sealed', to);
+  // Stage-1 step 3: per-mailbox deposit frequency gate. Deposits to a
+  // sealed mailbox are unauthenticated by design (that is what sealed
+  // sender means), so the per-IP router limit was the only frequency
+  // control — and it does nothing against a flood aimed at ONE
+  // recipient from many IPs, which churns the victim's 100-entry queue
+  // (evicting undelivered mail, counted in `dropped` but lost) and
+  // burns the mailbox's storage writes. checkDeposit enforces
+  // DEPOSIT_LIMIT inside the recipient's DO; on the KV backend it is a
+  // documented no-op (enforcement arrives with MAILBOX_BACKEND=do).
+  const gate = await mb.checkDeposit();
+  if (!gate.ok) {
+    // Un-mark the dedup key (set above) before answering 429: the
+    // envelope was NOT stored, so a client retry must not be swallowed
+    // as a duplicate — the same rule the STORE_FAILED path below
+    // already follows.
+    globalThis._sealedDedup.delete(dedupKey);
+    return json({ error: 'Mailbox deposit rate limited', code: 'MAILBOX_RATE_LIMITED', retryAfter: gate.retryAfterSec }, 429, request);
+  }
   const existing = await mb.readQueue();
   const queueParsed = existing ? safeJsonParse(existing, []) : [];
   const queue = Array.isArray(queueParsed) ? queueParsed : [];
