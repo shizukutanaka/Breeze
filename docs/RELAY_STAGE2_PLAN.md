@@ -542,6 +542,110 @@ numbers drift; the shapes are the load-bearing part.
 - **Done when.** Both drills pass and the pin's threat statement
   (D3) is in SECURITY.md next to the metadata table it extends.
 
+**Outcome (2026-11-13).** Landed as planned, with six readings
+recorded where the plan met the code:
+
+- **Server.** `_worker.js` health gains the additive `relayKey`
+  field (the public half, only when BOTH env halves are set — a
+  half-configured relay advertises nothing, because a key it
+  cannot attest with must never be published) and the
+  `'relay-attest'` capability; `POST /api/relay/attest` is new
+  (endpoint count 38 → 39, limits map 20/min). The signed string
+  is exactly the planned `breeze-relay-attest:{relayKey}:{nonce}`;
+  the nonce accepts 8–128 chars of `[A-Za-z0-9_-]` only (400
+  `INVALID_NONCE` — the charset doubles as the signed fields'
+  separator discipline); no identity → 501
+  `RELAY_IDENTITY_NOT_CONFIGURED`. On the Node host,
+  `buildRelayEnv` loads the step-3 volume key from the database
+  and exposes it as the env pair (the database wins over
+  same-named process env — one source of truth), so a self-host
+  attests with the key its boot log fingerprints. The Cloudflare
+  key-generation procedure (a node one-liner emitting exactly
+  relay-identity.js's formats) is documented in `.env.example`
+  and `wrangler.toml`, and its output was verified end-to-end.
+- **Reading 1 — fingerprint format.** The plan's "same style as
+  the existing safety-number display" is loose; step 4 uses the
+  format step 3 already shipped (SHA-256, first 8 bytes,
+  uppercase grouped hex). The out-of-band comparison only works
+  if the operator's boot log and the client display are
+  byte-identical strings; a test pins the two derivations equal.
+- **Reading 2 — what latches the hard stop.** Positive evidence
+  of substitution only: (a) the advertised key differs from the
+  pin, or (b) an attestation signature is present and fails
+  against the pin. An *unreachable* attestation (network
+  failure, 404/429/5xx — no signature at all) is no evidence:
+  nothing blocks and nothing pins, so an attacker who can only
+  drop packets gains nothing and a flaky network locks nobody
+  out. A first contact whose attestation fails verification
+  pins nothing and blocks nothing (the serving origin keeps its
+  implicit trust; the strict refusal is scoped to *added*
+  relays, which is step 5).
+- **Reading 3 — pin target and storage.** The pin lives in
+  `_settings.relayPin` (per account, settings IDB store), as
+  planned. Scope is the one currently-connected relay (per the
+  step's brief). The plan marked TOFU-pinning the serving
+  origin "allowed but not required": step 4 **does** pin it —
+  first contact pins after a verified attestation, every later
+  session re-verifies, and a mismatch hard-stops. The gate sits
+  at `postAPIRaw` and also covers the direct `_signal` /
+  `_signalAwait` calls and the wake-up socket
+  (`mailboxWsWanted`), so "refuse API calls to that relay" is
+  not funnel-only. `/security` gains a pin-state/fingerprint
+  line; 4 i18n keys were added in EN and JA.
+- **Reading 4 — the boot window.** The pin check runs inside
+  `_startLiveSession` right after `loadSettings()` (the first
+  point the account's settings exist). `_boot()` starts
+  presence and polling before the session, so a few calls in
+  the first moments of the first session after an account
+  switch can precede the verdict. Recorded as a known window —
+  exposure comparable to the implicit trust a keyless relay
+  always had — and left for a later step rather than
+  restructuring the boot order here.
+- **Reading 5 — CSP re-pin procedure.** The brief named
+  `scripts/fix-csp-hashes.mjs` + `npm run check-csp`; neither
+  exists in this repo. The repo's real procedure —
+  `node tools/csp-hash.mjs --write` (rewrites `_headers` and
+  `tauri.conf.json`) with `--check` as the validate.sh gate —
+  was used.
+- **Reading 6 — SECURITY.md placement and the mirror.** There
+  is no literal metadata table in SECURITY.md; the D3
+  statement extends the Metadata bullet under "Other known
+  limitations", its nearest equivalent. The client change is
+  new logic, not a copy of any `src/crypto/*` module, so no
+  mirror pair exists to update. The pin check reads health
+  via `fetchT` directly, following the boot health check's
+  existing precedent (health is a GET; the client has no GET
+  funnel), despite AGENTS.md's general postAPIRaw rule.
+- **Re-trust.** There is deliberately no in-app re-trust
+  button in this step (step 5's relay management owns it). A
+  genuine rotation (volume loss) is a breaking event,
+  documented in SELF_HOSTING.md: announce the new fingerprint
+  out-of-band; users clear the account's stored data and
+  re-pin on first contact.
+- **Verification.** vitest 1243 → **1260 passed / 64 files**
+  (new `tests/relay-attest.test.js`, 17 tests: health
+  advertisement conditions; attestation valid / wrong key /
+  replayed nonce / foreign domain string; 501 and the nonce
+  rejection matrix; the 20/min limit; host wiring and a real-
+  HTTP round trip; the client pin extracted from index.html
+  and run against the real worker — TOFU store, quiet match,
+  key-change block with the funnel refusing offline,
+  advertised-but-unheld key, legacy keyless relay, dead
+  attestation channel). `./validate.sh` **PASSED (165/171 —
+  identical to baseline)**; CSP `--check` OK. The entrypoint
+  drill was re-run for this step (`node server/index.js`):
+  boot-log fingerprint == the fingerprint derived from
+  health's `relayKey` == the client's display derivation;
+  the attestation verified over curl; a restart on the same
+  database served the identical key. **Recorded gaps:** no
+  browser E2E exists in this environment (extraction tests
+  against the real worker stand in for it), and the Docker
+  image was not rebuilt — this step changes no packaging;
+  the host wiring is covered in-process and by the drill.
+  The plan's "rotate the volume key" drill is covered at the
+  client level by the key-change test (a different advertised
+  key is exactly what a rotated volume presents).
+
 ## Step 5 — Client multi-relay configuration (own home relays)
 
 - **Purpose.** The user can name 1+ relays as *their* home relays

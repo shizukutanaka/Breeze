@@ -135,13 +135,19 @@ export default {
         ok: kvOk,
         version: '3.6.1',
         protocol: 4,
-        endpoints: 38,
+        endpoints: 39,
         reqId,
         serverTime: Date.now(), // v3.6: Client can detect clock drift
         kv: kvOk,
         push: !!(env.VAPID_PUBLIC_KEY),
         turn: !!(env.TURN_URL),
         vapidPublicKey: env.VAPID_PUBLIC_KEY || null,
+        // Stage-2 step 4: the relay's persistent Ed25519 identity (public
+        // half), for the client's TOFU pin — null when the operator has not
+        // provisioned one, in which case clients keep the pre-step-4
+        // implicit trust in their serving origin. relayIdentity() requires
+        // BOTH halves, so a relay never advertises a key it cannot attest.
+        relayKey: relayIdentity(env)?.publicKey || null,
         features: {
           push: !!(env.VAPID_PUBLIC_KEY),
           turn: !!(env.TURN_URL),
@@ -160,7 +166,7 @@ export default {
           'account-delete', 'group-leave', 'group-delete', 'group-admin',
           'group-transfer', 'group-rename', 'msg-disappear-enforce',
           'sealed-sender', 'franking', 'prekey-x3dh',
-          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'alias-auth', 'backup-auth', 'push-auth', 'drop-server-id', 'group-auth', 'group-ban', 'queue-auth', 'prekey-auth', 'plain-deprecation', 'delete-sweep',
+          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'alias-auth', 'backup-auth', 'push-auth', 'drop-server-id', 'group-auth', 'group-ban', 'queue-auth', 'prekey-auth', 'plain-deprecation', 'delete-sweep', 'relay-attest',
         ],
         crypto: ['X25519', 'Ed25519', 'AES-256-GCM', 'HKDF-SHA256', 'Double Ratchet', 'Sender Key O(1)'],
         ts: Date.now(),
@@ -202,6 +208,7 @@ export default {
         '/api/prekey/fetch/batch': 5,
         '/api/prekey/status': 20,
         '/api/ktlog/get': 20,
+        '/api/relay/attest': 20,
         '/api/backup/upload': 2,
         '/api/backup/download': 5,
         '/api/drop/create': 10,
@@ -347,6 +354,7 @@ export default {
         case '/api/prekey/fetch/batch': return await handlePreKeyFetchBatch(body, env, request);
         case '/api/prekey/status':      return await handlePreKeyStatus(body, env, request);
         case '/api/ktlog/get':        return await handleKtLogGet(body, env, request);
+        case '/api/relay/attest':     return await handleRelayAttest(body, env, request);
         case '/api/sealed/send':      return await handleSealedSend(body, env, request);
         case '/api/sealed/poll':      return await handleSealedPoll(body, env, request);
         case '/api/sealed/ack':       return await handleSealedAck(body, env, request);
@@ -3111,6 +3119,52 @@ async function verifyEd25519(edPubB64, msgB64, sigB64) {
     const pub = await crypto.subtle.importKey('raw', b64ToBytes(edPubB64), { name: 'Ed25519' }, false, ['verify']);
     return await crypto.subtle.verify({ name: 'Ed25519' }, pub, b64ToBytes(sigB64), b64ToBytes(msgB64));
   } catch { return false; }
+}
+
+// ============================================================
+// RELAY IDENTITY (stage-2 step 4, docs/RELAY_STAGE2_PLAN.md — design D3:
+// the pin authenticates continuity, not virtue)
+//
+// The relay's persistent Ed25519 identity keypair. On the Node host it
+// is the step-3 volume key (server/relay-identity.js), wired into env
+// by the host; on Cloudflare the operator sets the same two names as
+// secrets. Formats match every other Ed25519 key in the system:
+//   RELAY_PUBLIC_KEY  — raw 32-byte public key, base64
+//   RELAY_PRIVATE_KEY — PKCS#8 DER private key, base64
+// BOTH halves are required: a relay must never advertise (health) a
+// key it cannot prove it holds (attest), or pinning clients would
+// strand themselves against a misconfigured deployment.
+// ============================================================
+function relayIdentity(env) {
+  const pub = env.RELAY_PUBLIC_KEY, priv = env.RELAY_PRIVATE_KEY;
+  if (typeof pub !== 'string' || !pub || typeof priv !== 'string' || !priv) return null;
+  return { publicKey: pub, privateKey: priv };
+}
+
+// POST /api/relay/attest { nonce } → { ok, relayKey, sig }
+// Liveness proof for the client pin: sig is the relay's Ed25519
+// signature over `breeze-relay-attest:{relayKey}:{nonce}` — the
+// client-chosen nonce makes it fresh, and embedding the key plus the
+// domain prefix means a signature minted by another relay or for
+// another protocol never verifies here. The nonce is validated to a
+// base64url-ish alphabet so it can never smuggle a ':' into the
+// signed string and blur the field boundaries.
+async function handleRelayAttest(body, env, request) {
+  const id = relayIdentity(env);
+  if (!id) return json({ error: 'Relay identity not configured', code: 'RELAY_IDENTITY_NOT_CONFIGURED' }, 501, request);
+  const { nonce } = body;
+  if (typeof nonce !== 'string' || !/^[A-Za-z0-9_-]{8,128}$/.test(nonce)) {
+    return json({ error: 'nonce required (8-128 chars, base64url alphabet)', code: 'INVALID_NONCE' }, 400, request);
+  }
+  try {
+    const key = await crypto.subtle.importKey('pkcs8', b64ToBytes(id.privateKey), { name: 'Ed25519' }, false, ['sign']);
+    const msg = new TextEncoder().encode(`breeze-relay-attest:${id.publicKey}:${nonce}`);
+    const sig = new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, key, msg));
+    return json({ ok: true, relayKey: id.publicKey, sig: btoa(String.fromCharCode(...sig)) }, 200, request);
+  } catch (e) {
+    console.error('[relay-attest]', e?.message ?? e);
+    return json({ error: 'Attestation failed', code: 'ATTEST_FAILED' }, 500, request);
+  }
 }
 
 async function handlePreKeyUpload(body, env, request) {

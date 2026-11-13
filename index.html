@@ -1603,6 +1603,8 @@ const _I = {
     dropFailed: 'Failed to create Dead Drop',
     outboxPending: 'messages pending',
     keyChanged: "⚠️ Security key changed for {0}. Verify their identity with /verify.",
+    relayKeyChanged: "⚠️ This relay's security key has changed — relay communication is paused. Verify the relay fingerprint with the operator before trusting it again.",
+    relayPinned: "Relay identity pinned — fingerprint {0}. Compare it with the fingerprint your relay operator published.",
     p2pOnlyMode: 'P2P-only mode: server unreachable. Direct connections still work.',
     storageWarning: "Storage {0}% full. Old messages may be auto-deleted.",
     toastDeleted: "{0} messages deleted",
@@ -1833,6 +1835,8 @@ const _I = {
     secLblSecureCtx: 'Secure Context',
     secIceCandFilter: 'ICE Candidate Filter: ✓ (host IP addresses stripped)',
     secLblRelayOnly: 'Relay-only mode',
+    secLblRelayPin: 'Relay identity pin',
+    secRelayPinMismatch: 'KEY CHANGED — relay calls paused',
     secRelayEnabled: '(IP hidden from peers via TURN)',
     secRelayDisabled: '✗ Off (direct P2P, IP visible to peers)',
     secActive: 'Active',
@@ -3154,8 +3158,19 @@ const _replayCache = {
   size() { return this._map.size; },
 };
 
+// Relay identity pin gate (stage-2 step 4, docs/RELAY_STAGE2_PLAN.md): the
+// pin check itself lives inside initMessenger (it needs _settings and the
+// session's verify helpers), but this funnel is top-level, so the verdict
+// travels through this shared object. blocked=true means a VERIFIED key
+// mismatch — every API call is refused with the same null shape a network
+// failure produces, until the session ends; the pin is never silently
+// re-written. checking=true only while the pin check runs, so its own
+// attest call passes the gate it maintains.
+const _relayPinGate = { blocked: false, checking: false };
+
 // API helper (DRY for 48+ POST calls): returns Response, not auto-parsed, so callers can check .ok/.status; opts forwarded for signal etc.
 function postAPIRaw(path, body, opts = {}) {
+  if (_relayPinGate.blocked && !_relayPinGate.checking) return Promise.resolve(null);
   return fetchT(API + path, { method: 'POST', headers: _H, body: JSON.stringify(body), ...opts }).catch(() => null);
 }
 
@@ -3934,6 +3949,89 @@ async function initMessenger(dbName) {
       }
     }
   }
+
+  // ===== Relay identity pin (stage-2 step 4) =====
+  // TOFU pin of the SERVING relay's identity key (design D3 in
+  // docs/RELAY_STAGE2_PLAN.md: the pin authenticates continuity, not
+  // virtue). checkRelayPin() runs at session start, after loadSettings()
+  // — so the pin lives in _settings and is per-account by construction.
+  // It reads the key /api/health advertises, then proves the relay at
+  // the other end HOLDS that key: POST /api/relay/attest returns a live
+  // Ed25519 signature over a fresh nonce, verified with the same
+  // verifySignature() queue auth uses. First contact stores the pin;
+  // the fingerprint (below) is what the user compares out-of-band
+  // against the operator's published one.
+  // A later session that sees a DIFFERENT advertised key, or an
+  // attestation signature that does not verify, has positive evidence
+  // of a substituted relay: the key-change warning pattern fires and
+  // _relayPinGate refuses every API call for the rest of the session.
+  // The pin is NEVER silently re-written. A relay with no key at all
+  // (a pre-step-4 server — including the official deployment until its
+  // operator provisions one) keeps today's implicit serving-origin
+  // trust: no pin, no block (an ADDED relay, step 5, refuses that case
+  // instead). Attestation being merely UNREACHABLE (offline, 429, 5xx,
+  // an inconsistent answer) is not evidence: it neither pins nor
+  // blocks — only a verified answer moves the state.
+  let _relayPinFp = ''; // fingerprint of the trusted relay key, for the /security display
+  async function relayFingerprint(keyB64) {
+    try {
+      const raw = Uint8Array.from(atob(keyB64), c => c.charCodeAt(0));
+      const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', raw));
+      // Same derivation as the relay's own boot log (server/relay-identity.js):
+      // first 8 bytes of SHA-256 over the raw key, grouped uppercase hex.
+      // The two renderings MUST agree byte for byte — the out-of-band
+      // comparison operators hand to their users depends on it.
+      return [...digest.slice(0, 8)].map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase().match(/.{4}/g).join(' ');
+    } catch(_e) { _dbg(_e, 'relay-fingerprint'); return ''; }
+  }
+  function _blockRelayPin(reason) {
+    _relayPinGate.blocked = true;
+    showToast(t('relayKeyChanged'), 'error', 10000);
+    announceToSR(t('relayKeyChanged'));
+    auditLog('security', `Relay key change detected — API calls paused for this session. ${reason}`);
+  }
+  async function checkRelayPin() {
+    if (!API) return;
+    // A fresh verdict for THIS account/session: the gate is re-earned
+    // below (an account switch lands here with the previous account's
+    // verdict still latched, and that account's pin is not this one's).
+    _relayPinGate.blocked = false;
+    _relayPinGate.checking = true;
+    try {
+      const r = await fetchT(API + '/health').catch(() => null);
+      const health = r?.ok ? await r.json().catch(() => null) : null;
+      const relayKey = typeof health?.relayKey === 'string' && health.relayKey ? health.relayKey : null;
+      if (!relayKey) { _relayPinFp = ''; return; } // pre-step-4 relay: legacy trust, nothing to pin
+      _relayPinFp = await relayFingerprint(relayKey);
+      const pinned = typeof _settings.relayPin === 'string' && _settings.relayPin ? _settings.relayPin : null;
+      if (pinned && pinned !== relayKey) {
+        _blockRelayPin('Health advertises a different key than the pinned one.');
+        return;
+      }
+      const nonce = [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
+      const resp = await postAPIRaw('/relay/attest', { nonce });
+      const data = resp?.ok ? await resp.json().catch(() => null) : null;
+      if (!data) return; // attestation unreachable: no evidence either way (see header)
+      const verified = data.relayKey === relayKey && typeof data.sig === 'string'
+        ? await verifySignature(`breeze-relay-attest:${relayKey}:${nonce}`, data.sig, relayKey)
+        : null;
+      if (verified === true) {
+        if (!pinned) {
+          _settings.relayPin = relayKey;
+          await saveSettings();
+          showToast(t('relayPinned', _relayPinFp), 'info', 8000);
+          auditLog('security', `Relay identity pinned — fingerprint ${_relayPinFp}.`);
+        }
+      } else if (verified === false) {
+        // The endpoint answers for this key but cannot sign for it:
+        // whatever is serving us is not the key's holder.
+        if (pinned) _blockRelayPin('Attestation signature did not verify against the pinned key.');
+        else auditLog('security', 'Relay attestation did not verify on first contact — key NOT pinned.');
+      }
+    } catch(e) { _dbg(e, 'relay-pin'); }
+    finally { _relayPinGate.checking = false; }
+  }
+
   // v3.6: Proactive storage quota check (warn before IDB fails)
   if (navigator.storage?.estimate) {
     try {
@@ -4250,6 +4348,7 @@ async function initMessenger(dbName) {
     readReceiptDelay: 0,     // seconds to hold a read receipt (0 = send immediately)
     focusUntil: 0,           // epoch ms; while in the future, notifications are suppressed
     focusStrict: false,      // focus mode: true = silence everything, false = let VIPs through
+    relayPin: '',            // stage-2 step 4: TOFU pin of the serving relay's Ed25519 identity key ('' = none pinned)
   };
   let _settings = { ..._defaultSettings };
 
@@ -5902,6 +6001,7 @@ async function initMessenger(dbName) {
     await renderContacts();
     // v3.3: Enterprise features
     await loadSettings();
+    await checkRelayPin(); // stage-2 step 4: TOFU-pin / re-verify the serving relay's identity key for this account
     _updateFocusBanner(); // focus mode survives a reload — show it, or silence looks like "no messages"
     await _refreshDeviceRole();
     await _loadRetryQueue(); // v3.6: Restore pending messages from IDB
@@ -6167,12 +6267,17 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'signal-auth'); return { ts }; }
   }
   function _signal(room, type, data) {
+    // Stage-2 step 4: a relay under a verified key mismatch gets no
+    // signaling either — the hard stop covers every relay call, not
+    // just the postAPIRaw funnel.
+    if (_relayPinGate.blocked) return Promise.resolve();
     return _signalAuth(room).then(auth => fetchT(API + '/signal', { method: 'POST', headers: _H,
       body: JSON.stringify({ room, sender: myId, type, data: data || '', ...auth })
     })).catch(e => _dbg(e, 'signal:' + type));
   }
   // _signalAwait — same but returns response for poll pattern
   async function _signalAwait(room, type, data) {
+    if (_relayPinGate.blocked) return new Response(null, { status: 503 }); // step 4 hard stop (see _signal)
     const auth = await _signalAuth(room);
     return fetchT(API + '/signal', { method: 'POST', headers: _H,
       body: JSON.stringify({ room, sender: myId, type, data: data || '', ...auth })
@@ -9514,7 +9619,9 @@ async function initMessenger(dbName) {
   // no legacy fleet to stay compatible with) — a client that cannot
   // sign simply never connects and keeps polling.
   function mailboxWsWanted() {
-    return !!(API && _isLeaderTab && !document.hidden && window._serverFeatures?.ws);
+    // A relay under a verified key mismatch gets no socket either (step 4):
+    // the wake-up channel is a relay connection like any other.
+    return !!(API && _isLeaderTab && !document.hidden && window._serverFeatures?.ws && !_relayPinGate.blocked);
   }
   async function maybeStartMailboxWs() {
     try {
@@ -13093,6 +13200,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         '<b>' + t('cmdSectionNetwork') + '</b>',
         t('secIceCandFilter'),
         t('secLblRelayOnly') + ': ' + (_settings.relayOnly ? '<span class="i-g">✓ ON</span> ' + t('secRelayEnabled') : t('secRelayDisabled')),
+        t('secLblRelayPin') + ': ' + (_relayPinGate.blocked ? '<span class="color-y">⚠ ' + t('secRelayPinMismatch') + '</span>' : _relayPinFp ? '<span class="i-g">✓</span> ' + _relayPinFp : '—'),
         'TURN: ' + (_turnCredential ? '✓ ' + t('secActive') : '✗ ' + t('secNotConfigured')),
         t('secLblRTCCert') + ': ' + (_rtcCert ? '✓ Per-session ECDSA P-256' : '✗ ' + t('secDefault')),
         'DataChannel: negotiated:true (DCEP skip)',
