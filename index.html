@@ -9398,59 +9398,86 @@ async function initMessenger(dbName) {
 
   // v3.3: Adaptive polling — fast when active, slow when background
   let _pollTimer = null;
+  // Mailbox WebSocket state (stage-1 step 5), declared with the poll
+  // state: schedulePoll's cadence reads _mailWsOpen. The manager
+  // itself lives below startPolling.
+  let _mailWs = null;
+  let _mailWsOpen = false;
+  let _mailWsId = null;
+  let _mailWsRetry = 0;
+  let _mailWsNextTry = 0;
+  let _pollInFlight = false;
+  let _pollAgain = false;
+  // One poll cycle — schedulePoll's timer body, extracted unchanged
+  // so the WebSocket wake-up (below) runs the exact same fetch path
+  // on a deposit notification instead of a second, drifting copy of
+  // it. Coalesced: a wake-up that lands mid-cycle queues ONE
+  // follow-up cycle rather than overlapping two polls.
+  async function pollOnce() {
+    if (_pollInFlight) { _pollAgain = true; return; }
+    if (_isOffline || !API) return;
+    _pollInFlight = true;
+    try {
+      const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: _lastPollTs, ...(await queueAuth('msg-poll')) });
+      if (resp.headers.get('Deprecation') && !window._plainDepLogged) {
+        window._plainDepLogged = 1;
+        _dbg(null, 'relay: server marks the plain path deprecated (sealed-only migration in progress)');
+      }
+      if (resp.ok) {
+        const data = await resp.json();
+        for (const msg of (data.messages || [])) {
+          try { await handleIncoming(msg); } catch(e) { _dbg(e, 'msg-process'); }
+          if (typeof msg.ts === 'number' && Number.isFinite(msg.ts) && msg.ts > _lastPollTs && msg.ts <= Date.now() + MS.DAY) _lastPollTs = msg.ts;
+        }
+      }
+      const sResp = await postAPIRaw('/sealed/poll', { id: myId, ...(await queueAuth('sealed-poll')) });
+      if (sResp.ok) {
+        const sData = await sResp.json();
+        // Honesty over silence: the relay counts envelopes its queue caps forced it to
+        // drop while we were offline — tell the user instead of losing them wordlessly.
+        if (Number.isInteger(sData.dropped) && sData.dropped > 0) showToast(t('toastMsgsDropped', sData.dropped), 'error');
+        let sealedProcessed = 0;
+        for (const sealed of (sData.messages || [])) {
+          try {
+            let env = JSON.parse(sealed.envelope);
+            if (!env || typeof env !== 'object') { sealedProcessed++; continue; } // malformed: ACK+skip to avoid infinite retry
+            if (env.sv === 2 && env.se) {
+              // Sealed Sender v2: sender metadata is encrypted to OUR identity key.
+              const meta = await unsealMeta(myKeys.privateKey, env.se, env.to, env.ts);
+              if (!meta || typeof meta !== 'object') { sealedProcessed++; continue; } // not ours/tampered: ACK+skip
+              let pl = env.payload;
+              if (meta._pkik) {
+                // Re-inject the X3DH identity key the sender relocated into the sealed block.
+                try { const pkm = JSON.parse(pl); pkm.ik = meta._pkik; pl = JSON.stringify(pkm); } catch(e) { _dbg(e, 'pkik'); }
+                delete meta._pkik;
+              }
+              env = { to: env.to, ts: env.ts, payload: pl, ...meta };
+            }
+            await handleIncoming(env);
+            sealedProcessed++;
+          } catch(e) { _dbg(e, 'sealed-parse'); }
+        }
+        // v3.6: ACK after successful processing (crash-safe: server keeps 5min grace)
+        if (sealedProcessed > 0) queueAuth('sealed-ack').then(a => postAPIRaw('/sealed/ack', { id: myId, ...a })).catch(e => _dbg(e, 'sealed-ack'));
+      }
+      checkAndReplenishPreKeys();
+    } catch(e) { _dbg(e); }
+    _pollInFlight = false;
+    if (_pollAgain) { _pollAgain = false; pollOnce(); }
+  }
   function schedulePoll() {
     if (_pollTimer) clearTimeout(_pollTimer);
     // v3.5: Adaptive interval — slower on poor connections (Skill Guide Pattern 4)
-    const baseInterval = document.hidden ? CONFIG.POLL_SLOW_MS : CONFIG.POLL_FAST_MS;
+    // While the mailbox WebSocket is open, deposits wake pollOnce()
+    // directly, so the timer drops to the slow cadence as a pure
+    // safety net: a missed wake-up is at most POLL_SLOW_MS stale,
+    // and polling stays the recovery path for anything the socket
+    // lost (hibernation gaps, dropped connections).
+    const baseInterval = (document.hidden || _mailWsOpen) ? CONFIG.POLL_SLOW_MS : CONFIG.POLL_FAST_MS;
     const interval = Math.max(baseInterval, _adaptiveConfig.pollInterval);
     _pollTimer = setTimeout(async () => {
-      if (!_isOffline && API) {
-        try {
-          const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: _lastPollTs, ...(await queueAuth('msg-poll')) });
-          if (resp.headers.get('Deprecation') && !window._plainDepLogged) {
-            window._plainDepLogged = 1;
-            _dbg(null, 'relay: server marks the plain path deprecated (sealed-only migration in progress)');
-          }
-          if (resp.ok) {
-            const data = await resp.json();
-            for (const msg of (data.messages || [])) {
-              try { await handleIncoming(msg); } catch(e) { _dbg(e, 'msg-process'); }
-              if (typeof msg.ts === 'number' && Number.isFinite(msg.ts) && msg.ts > _lastPollTs && msg.ts <= Date.now() + MS.DAY) _lastPollTs = msg.ts;
-            }
-          }
-          const sResp = await postAPIRaw('/sealed/poll', { id: myId, ...(await queueAuth('sealed-poll')) });
-          if (sResp.ok) {
-            const sData = await sResp.json();
-            // Honesty over silence: the relay counts envelopes its queue caps forced it to
-            // drop while we were offline — tell the user instead of losing them wordlessly.
-            if (Number.isInteger(sData.dropped) && sData.dropped > 0) showToast(t('toastMsgsDropped', sData.dropped), 'error');
-            let sealedProcessed = 0;
-            for (const sealed of (sData.messages || [])) {
-              try {
-                let env = JSON.parse(sealed.envelope);
-                if (!env || typeof env !== 'object') { sealedProcessed++; continue; } // malformed: ACK+skip to avoid infinite retry
-                if (env.sv === 2 && env.se) {
-                  // Sealed Sender v2: sender metadata is encrypted to OUR identity key.
-                  const meta = await unsealMeta(myKeys.privateKey, env.se, env.to, env.ts);
-                  if (!meta || typeof meta !== 'object') { sealedProcessed++; continue; } // not ours/tampered: ACK+skip
-                  let pl = env.payload;
-                  if (meta._pkik) {
-                    // Re-inject the X3DH identity key the sender relocated into the sealed block.
-                    try { const pkm = JSON.parse(pl); pkm.ik = meta._pkik; pl = JSON.stringify(pkm); } catch(e) { _dbg(e, 'pkik'); }
-                    delete meta._pkik;
-                  }
-                  env = { to: env.to, ts: env.ts, payload: pl, ...meta };
-                }
-                await handleIncoming(env);
-                sealedProcessed++;
-              } catch(e) { _dbg(e, 'sealed-parse'); }
-            }
-            // v3.6: ACK after successful processing (crash-safe: server keeps 5min grace)
-            if (sealedProcessed > 0) queueAuth('sealed-ack').then(a => postAPIRaw('/sealed/ack', { id: myId, ...a })).catch(e => _dbg(e, 'sealed-ack'));
-          }
-          checkAndReplenishPreKeys();
-        } catch(e) { _dbg(e); }
-      }
+      await pollOnce();
+      maybeStartMailboxWs();
       schedulePoll();
     }, interval);
   }
@@ -9460,10 +9487,81 @@ async function initMessenger(dbName) {
       // v3.4: Only leader tab polls the server
       if (!_isLeaderTab) { _dbg(null, 'Follower tab — skipping poll loop'); return; }
       schedulePoll();
-      // Re-schedule on visibility change (fast poll when tab becomes active)
-      document.addEventListener('visibilitychange', () => { if (!document.hidden) schedulePoll(); }, { signal: _ac.signal });
+      maybeStartMailboxWs();
+      // Re-schedule on visibility change (fast poll when tab becomes active).
+      // The mailbox socket follows the same foreground discipline:
+      // closed in the background (polling is the background path),
+      // reopened — with pollOnce's catch-up — when the tab returns.
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) { schedulePoll(); maybeStartMailboxWs(); }
+        else closeMailboxWs();
+      }, { signal: _ac.signal });
     
     } catch(_e) { _dbg(_e, 'startPolling'); }
+  }
+
+  // ===== Mailbox WebSocket delivery (stage-1 step 5) =====
+  // A hibernatable WebSocket to the relay wakes pollOnce() the moment
+  // a deposit lands in our mailbox, so foreground delivery no longer
+  // waits for the 3 s poll tick. The socket is a WAKE-UP channel
+  // only — one content-free {"type":"mail"} frame per deposit, no
+  // message data — so delivery stays poll-based end to end: a lost
+  // frame, a dropped socket, or a relay with the feature disabled
+  // degrades to exactly the pre-step-5 cadence, and the (re)connect
+  // poll drains anything deposited while disconnected. The
+  // subscription is ownership-signed like the queue reads (op
+  // 'mailbox-ws') and the server requires it (a standing channel has
+  // no legacy fleet to stay compatible with) — a client that cannot
+  // sign simply never connects and keeps polling.
+  function mailboxWsWanted() {
+    return !!(API && _isLeaderTab && !document.hidden && window._serverFeatures?.ws);
+  }
+  async function maybeStartMailboxWs() {
+    try {
+      if (_mailWs && _mailWsId !== myId) closeMailboxWs(); // account switched under a live socket
+      if (_mailWs || !mailboxWsWanted()) return;
+      if (Date.now() < _mailWsNextTry) return;
+      const a = await queueAuth('mailbox-ws');
+      if (!a.sig) { _mailWsNextTry = Date.now() + MS.MIN; return; } // cannot sign (yet): polling is the path
+      if (!mailboxWsWanted()) return; // gates may have closed while signing
+      const url = API.replace(/^http/, 'ws') + '/mailbox/ws?id=' + encodeURIComponent(myId)
+        + '&ts=' + a.ts + '&sig=' + encodeURIComponent(a.sig);
+      const ws = new WebSocket(url);
+      _mailWs = ws;
+      _mailWsId = myId;
+      ws.onopen = () => {
+        if (_mailWs !== ws) return;
+        _mailWsOpen = true;
+        _mailWsRetry = 0;
+        _dbg(null, 'mailbox ws: connected — push wake-up on, poll at safety cadence');
+        pollOnce();     // catch up on deposits made while disconnected
+        schedulePoll(); // re-time the safety poll at the slow cadence
+      };
+      ws.onmessage = (ev) => {
+        try {
+          const m = JSON.parse(ev.data);
+          if (m && m.type === 'mail') pollOnce();
+        } catch(e) { _dbg(e, 'mailbox-ws'); }
+      };
+      ws.onclose = () => {
+        if (_mailWs !== ws) return;
+        _mailWs = null;
+        _mailWsOpen = false;
+        _mailWsRetry++;
+        // Exponential backoff (1s doubling, 30s cap); reconnects are
+        // re-driven by the poll timer and by visibility changes.
+        _mailWsNextTry = Date.now() + Math.min(MS.SEC * (2 ** Math.min(_mailWsRetry, 5)), MS.SEC * 30);
+        schedulePoll(); // restore the fast cadence — polling is in charge again
+      };
+      ws.onerror = () => { try { ws.close(); } catch(e) { _dbg(e, 'mailbox-ws'); } };
+    } catch(e) { _dbg(e, 'mailbox-ws'); _mailWsNextTry = Date.now() + MS.SEC * 30; }
+  }
+  function closeMailboxWs() {
+    if (!_mailWs) return;
+    const ws = _mailWs;
+    _mailWs = null;
+    _mailWsOpen = false;
+    try { ws.close(); } catch(e) { _dbg(e, 'mailbox-ws'); }
   }
 
   async function handleIncoming(msg) {

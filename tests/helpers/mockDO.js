@@ -23,6 +23,18 @@ export function makeDOStorage() {
   };
 }
 
+// The hibernation socket registry of one DO instance (stage-1 step 5):
+// acceptWebSocket registers a server-side socket, getWebSockets returns
+// the live set — the two DurableObjectState methods MailboxDO uses for
+// WebSocket delivery. `sockets` is exposed so tests can assert who is
+// attached and read what the DO sent them.
+export function makeDOState(name) {
+  const state = { storage: makeDOStorage(), id: { name }, sockets: new Set() };
+  state.acceptWebSocket = (ws) => { state.sockets.add(ws); };
+  state.getWebSockets = () => [...state.sockets];
+  return state;
+}
+
 // A MAILBOX_DO namespace: idFromName is deterministic per name and get()
 // returns a stub for the single instance of that name (one DO per
 // recipient, like the real runtime). `instances` maps name → MailboxDO so
@@ -35,7 +47,7 @@ export function makeMailboxNamespace(env) {
     get(id) {
       const name = id.name;
       if (!instances.has(name)) {
-        const state = { storage: makeDOStorage(), id: { name } };
+        const state = makeDOState(name);
         instances.set(name, new MailboxDO(state, env));
       }
       const instance = instances.get(name);

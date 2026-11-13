@@ -190,13 +190,54 @@ Independent of step 2's backend, in the mailbox layer:
   (`sig:{room}`, `drop:{id}`). Details in CHANGELOG.md (stage-1
   step 4 entry) and `tests/presence-store-do.test.js`.
 
-## Step 5 — WebSocket delivery (client work, planned here only)
+## Step 5 — WebSocket delivery (implemented, 2026-11-13)
 
 - With mailboxes in DOs, a hibernatable WebSocket per recipient replaces
   the 3 s / 15 s polling loop for foreground delivery; polling stays as
   the fallback for background/PWA contexts. This is a client change and
   ships as its own release; the server side is just the DO upgrade
   protocol.
+
+- **Outcome.** Shipped as designed, with the one-paragraph sketch above
+  resolved into the following decisions (details in CHANGELOG.md,
+  stage-1 step 5 entry):
+  1. *Wake-up channel, not a delivery channel.* The DO emits one
+     content-free frame (`{"type":"mail","family"}`) when a queue
+     write lands; the client responds by running its ordinary poll
+     cycle (`pollOnce()`, extracted verbatim from the poll timer).
+     No message data ever crosses the socket, so no correctness
+     property rests on socket state — a lost frame, a hibernated DO
+     or a dropped connection degrades to the pre-step-5 cadence, the
+     timer keeps a slow safety poll while the socket is open, and
+     the (re)connect poll drains whatever arrived meanwhile. The DO
+     stores nothing per socket; the runtime's `getWebSockets()`
+     registry (via `state.acceptWebSocket`) is the subscriber list,
+     which is what makes hibernation safe.
+  2. *Subscription auth is the queue-auth proof, made mandatory.*
+     The handshake carries checkQueueAuth's Ed25519 ownership
+     signature in the query string (new op domain `mailbox-ws`; the
+     browser WebSocket API can set neither headers nor a body), and
+     — unlike the poll ops — the proof is required from day one,
+     independent of `QUEUE_REQUIRE_AUTH`: a subscription is a
+     standing channel and the capability has no legacy fleet.
+     The verified id selects the DO via `idFromName`, so a socket
+     can only ever be woken by its own mailbox's deposits. Clients
+     that cannot sign keep polling, a fully supported path.
+  3. *Gating.* A new flag, `MAILBOX_WS_ENABLED=true`, on top of
+     `MAILBOX_BACKEND=do` (the wake-up is emitted inside the DO; on
+     KV there is nothing to subscribe to). `/api/health` reports the
+     same predicate as `features.ws` for client feature detection.
+     Flag off → the route is not served at all and the client never
+     attempts a connection: pre-step-5 behaviour exactly.
+  4. *Client discipline mirrors the poll loop's.* Leader tab only,
+     foreground only (closed when hidden — background delivery
+     stays poll/push — reopened with a catch-up poll on return),
+     exponential-backoff reconnect (1 s → 30 s) re-driven by the
+     poll timer and visibility changes, socket re-created on
+     account switch. With this step, stage 1 is complete: steps
+     1–5 are all implemented, and the remaining sealed-sender item
+     (delivery tokens) stays a client-led follow-up recorded in
+     step 3.
 
 ## Later (stage 2 of the recommendation, not this plan)
 
