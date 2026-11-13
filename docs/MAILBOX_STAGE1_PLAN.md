@@ -144,7 +144,18 @@ Independent of step 2's backend, in the mailbox layer:
      encryption in `sealMeta` (both mirrors — index.html and
      `src/crypto/seal.js` — with a framing the decrypt side can
      strip). Recorded here as a client follow-up; not done in this
-     step.
+     step. **Fixed client-side (2026-11-13):** `sealMeta` now frames
+     the metadata plaintext as `[0x01][len:2 BE][JSON][0x00 …]`
+     padded to a 256-byte bucket (the same granularity as the
+     message body) before encryption, in both mirrors. The frame
+     lives inside the plaintext, so key/AAD derivation is unchanged
+     and pre-padding blobs still open — legacy plaintext is raw JSON
+     and always starts with `{` (0x7B), the frame with marker 0x01;
+     `unsealMeta` dispatches on the first byte. What the relay can
+     now see is only the bucket (256-byte granularity), no longer
+     the exact length. Pinned by tests in `tests/seal.test.js`
+     (bucket lengths, legacy open) and `tests/mirror-drift.test.js`
+     (cross-mirror bucket parity, legacy open with both impls).
   3. *Delivery tokens — client-required, unchanged.* Nothing
      server-side can begin: the token derives from recipient key
      material only contacts hold, senders must attach it and the
