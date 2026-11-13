@@ -1,17 +1,22 @@
-# Breeze relay — Node host (stage-2 step 2)
+# Breeze relay — Node host (stage-2 steps 2–3)
 
 A self-host entry for the identical handler code that runs on
 Cloudflare: one Node process on one origin serving the static app,
 the API and the WebSocket wake-up, with all relay state (key/value
-directory, mailboxes, presence) in **one SQLite file**. From the
-client's same-origin API derivation, a self-hosted install behaves
-exactly like the official deployment.
-
-Docker packaging and the closed-by-default operator surface are
-stage-2 step 3 (see `docs/RELAY_STAGE2_PLAN.md`); this directory is
-the runnable entry that step packages.
+directory, mailboxes, presence — and the relay identity key) in
+**one SQLite file**. From the client's same-origin API derivation, a
+self-hosted install behaves exactly like the official deployment.
 
 ## Run
+
+With Docker (the packaged path — registration closed by default,
+data in a volume):
+
+```bash
+BREEZE_ALLOWLIST=<your Breeze ID> docker compose up -d
+```
+
+Bare:
 
 ```bash
 node server/index.js
@@ -21,6 +26,8 @@ node server/index.js
 - **Requires Node ≥ 24** (storage uses the built-in `node:sqlite`).
   There are no npm dependencies to install.
 - Configuration is environment variables only — no code edits.
+- The full operator guide (TLS, registration admission, relay
+  identity, backup/restore) is `docs/SELF_HOSTING.md`.
 
 ## Supported topology: single process
 
@@ -41,6 +48,9 @@ forge when they can reach the entry directly.
 
 Backups are the database file (plus its `-wal`/`-shm` sidecars if
 present while running): stop the process, copy the file, restart.
+The relay identity key lives inside that same file (a dedicated
+`relay_meta` table the worker's KV surface cannot reach), so a
+restored relay keeps its fingerprint.
 
 ## Configuration
 
@@ -52,6 +62,16 @@ Host settings:
 | `HOST` | `127.0.0.1` | Listen address (`0.0.0.0` to serve other machines directly) |
 | `BREEZE_DB_PATH` | `./breeze-relay.db` | SQLite state file (created if absent) |
 | `TRUST_PROXY` | off | Trust `X-Forwarded-For` for the rate limiter's client IP (see above) |
+| `REGISTRATION_ALLOWLIST` | unset (open) | Comma-separated Breeze IDs allowed to *create accounts*; set-but-empty closes registration to everyone. Existing accounts are never gated |
+| `REGISTRATION_OPEN` | off | `1`/`true` re-opens registration, winning over an allowlist (so a Docker operator can re-open without editing the compose file) |
+
+The Docker packaging sets `REGISTRATION_ALLOWLIST` (possibly empty)
+so a packaged relay is **closed by default**; a bare entry sets
+neither variable and keeps registration open unless the operator
+closes it. On first boot the entry also generates the relay's
+persistent Ed25519 identity key into the database (if absent) and
+prints its fingerprint in the boot log — see
+`docs/SELF_HOSTING.md` §"Relay identity".
 
 Worker settings — the same names (and semantics) as the Cloudflare
 deployment; see `wrangler.toml` and `.env.example` for the full list.
@@ -74,7 +94,8 @@ report themselves off in `/api/health`, exactly as on Cloudflare.
 
 | File | Role |
 |---|---|
-| `index.js` | Entrypoint: opens the database, builds the environment, listens |
+| `index.js` | Entrypoint: opens the database, provisions the relay identity, builds the environment, listens |
+| `relay-identity.js` | The relay's persistent Ed25519 identity: generate-on-first-run into the database's `relay_meta` table, fingerprint for the boot log |
 | `node-host.js` | `env` assembly + the `node:http` ↔ worker `fetch` adapter + upgrade dispatch |
 | `mailbox-namespace.js` | The `MAILBOX_DO` binding in process: one MailboxCore per recipient + the socket registry |
 | `static-assets.js` | The `ASSETS` binding: static files with the `_headers` rules applied |

@@ -1,0 +1,17 @@
+# The image is the web relay only: the runtime tree (index.html,
+# _worker.js, server/, locales/, static assets) plus nothing else.
+# Dev/test trees and the desktop/mobile builds are not part of it,
+# and a local database must never leak into an image layer.
+.git
+node_modules
+dist
+desktop
+mobile
+tauri
+tests
+tools
+playwright.config.js
+*.db
+*.db-wal
+*.db-shm
+.env

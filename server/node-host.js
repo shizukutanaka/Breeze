@@ -65,6 +65,14 @@ export function buildRelayEnv({ db, rootDir = REPO_ROOT, source = process.env, d
   if (env.MAILBOX_BACKEND === undefined) env.MAILBOX_BACKEND = 'do';
   if (env.PRESENCE_BACKEND === undefined) env.PRESENCE_BACKEND = 'do';
   if (env.MAILBOX_WS_ENABLED === undefined) env.MAILBOX_WS_ENABLED = 'true';
+  // Registration admission (stage-2 step 3): REGISTRATION_ALLOWLIST passes
+  // through untouched when the operator sets it — an empty string is a
+  // deliberate "closed to everyone", not an unset. A bare entry sets
+  // neither variable and keeps step 2's open default. REGISTRATION_OPEN
+  // is the explicit opt-in to open registration and wins over an
+  // allowlist a packaging file supplied, so a Docker operator can
+  // re-open their relay without editing the compose file.
+  if (TRUTHY.test(env.REGISTRATION_OPEN || '')) delete env.REGISTRATION_ALLOWLIST;
   return env;
 }
 

@@ -79,6 +79,14 @@ new_sqlite_classes = ["MailboxDO"]
 # disable the path outright (requests get 410 PLAIN_PATH_DISABLED):
 # wrangler pages secret put PLAIN_PATH_DISABLED        # true — disable the legacy plain relay path
 #
+# --- Registration admission (stage-2 step 3) ---
+# Setting REGISTRATION_ALLOWLIST (comma-separated Breeze IDs) closes
+# ACCOUNT CREATION to those IDs: only a prekey upload for an ID with no
+# stored bundle is gated, so existing accounts are unaffected. Unset =
+# open registration (the default here); the Docker packaging sets it
+# (possibly empty) so self-hosts are closed by default.
+# wrangler pages secret put REGISTRATION_ALLOWLIST     # id1,id2 — close registration to these IDs
+#
 # --- Mailbox storage backend (stage-1 step 2) ---
 # Mailboxes live in KV by default. Setting MAILBOX_BACKEND=do serves them
 # from the per-recipient MailboxDO instead (binding above); each mailbox
