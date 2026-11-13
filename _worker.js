@@ -452,6 +452,74 @@ function capQueueBytes(items, sizeOf, maxBytes = 16 * 1024 * 1024) {
 }
 
 // ============================================================
+// MAILBOX STORE (stage-1 step 1, 2026-11-13)
+//
+// Every read/write of a recipient's message queues goes through this
+// handle — never kvGet/kvPut/kvDel with a hand-built key. The two queue
+// families (plain `inbox:{id}` and sealed `sealed:{id}`), each with its
+// `:hwm` high-water mark, plus the sealed family's `:dropped` overflow
+// counter, form ONE mailbox per (family, recipient): exactly the unit
+// the stage-1 redesign moves into a per-recipient Durable Object
+// (strong consistency + ordering, which retires the read-back recovery
+// protocols in the send handlers below). Until that step lands this
+// KV-backed handle is the only implementation, and it is deliberately
+// behaviour-identical to the raw helper calls it replaced: same keys,
+// same TTLs, same contracts (read → string|null, write/delete →
+// boolean). A future DO-backed store only has to honour this surface —
+// the staged remainder is in docs/MAILBOX_STAGE1_PLAN.md.
+// Non-mailbox storage (prekey bundles, groups, presence, …) stays on
+// the kv* helpers by design: demoting KV to the key directory alone is
+// the LAST stage-1 step, not this one.
+// ============================================================
+function mailboxStoreForKey(env, queueKey) {
+  const hwmKey = `${queueKey}:hwm`;
+  const droppedKey = `${queueKey}:dropped`;
+  return {
+    queueKey,
+    readQueue: () => kvGet(env, queueKey),
+    writeQueue: (value, ttlSec) => kvPut(env, queueKey, value, { expirationTtl: ttlSec }),
+    deleteQueue: () => kvDel(env, queueKey),
+    readHwm: () => kvGet(env, hwmKey),
+    writeHwm: (value, ttlSec) => kvPut(env, hwmKey, value, { expirationTtl: ttlSec }),
+    deleteHwm: () => kvDel(env, hwmKey),
+    readDropped: () => kvGet(env, droppedKey),
+    writeDropped: (value, ttlSec) => kvPut(env, droppedKey, value, { expirationTtl: ttlSec }),
+    deleteDropped: () => kvDel(env, droppedKey),
+  };
+}
+
+// The mailbox of one recipient in one queue family ('inbox' | 'sealed').
+function mailboxStore(env, kind, userId) {
+  return mailboxStoreForKey(env, `${kind}:${userId}`);
+}
+
+// Key names of every stored entry in a queue family, satellite keys
+// (`:hwm`) included — account deletion's sent-copies sweep lists the
+// 'inbox' family and skips the satellites by suffix.
+async function listMailboxKeys(env, kind) {
+  return kvListNames(env, `${kind}:`);
+}
+
+// In-flight deletions for BOTH of a user's mailboxes: exactly the five
+// keys handleAccountDelete used to enumerate by hand (the plain family
+// has no dropped counter). Returned as promises so the caller folds
+// them into its own Promise.all batch unchanged. A leftover hwm would
+// anchor a re-registered id to a stale delivery cursor (and a leftover
+// sealed hwm leaks the last-delivery ts), so satellites are erased
+// with the queues, not left to their TTLs.
+function eraseMailboxes(env, userId) {
+  const plain = mailboxStore(env, 'inbox', userId);
+  const sealed = mailboxStore(env, 'sealed', userId);
+  return [
+    plain.deleteQueue(),
+    plain.deleteHwm(),
+    sealed.deleteQueue(),
+    sealed.deleteHwm(),
+    sealed.deleteDropped(),
+  ];
+}
+
+// ============================================================
 // PLAIN RELAY PATH — DEPRECATED (stage-0 notice, 2026-11-13)
 //
 // /api/msg/send + /api/msg/poll are the legacy unsealed relay: the relay stores
@@ -510,8 +578,8 @@ async function handleMsgSend(body, ip, env, request) {
     globalThis._msgDedup = new Map(entries.slice(-200));
   }
 
-  const key = `inbox:${to}`;
-  const existing = await kvGet(env, key);
+  const mb = mailboxStore(env, 'inbox', to);
+  const existing = await mb.readQueue();
   const inboxParsed = existing ? safeJsonParse(existing, []) : [];
   const inbox = Array.isArray(inboxParsed) ? inboxParsed : [];
   // §4 residual fix: the recipient's PERSISTENT high-water mark — the highest ts ever
@@ -521,8 +589,7 @@ async function handleMsgSend(body, ip, env, request) {
   // is gone and a later message stamped at or below the recipient's poll cursor was
   // stored unbumped, invisible to the cursor, and purged by the same poll's cleanup
   // (audit 2026-11-13 §2.2). The hwm restores the anchor across drains.
-  const hwmKey = `${key}:hwm`;
-  const hwmRaw = await kvGet(env, hwmKey);
+  const hwmRaw = await mb.readHwm();
   const hwmParsed = hwmRaw !== null ? parseInt(hwmRaw) : NaN;
   const inboxHwm = Number.isFinite(hwmParsed) ? hwmParsed : null;
   const safePub  = typeof fromPub  === 'string' ? fromPub.slice(0, 200)  : undefined;
@@ -578,7 +645,7 @@ async function handleMsgSend(body, ip, env, request) {
   if (inboxHwm !== null && msg.ts <= inboxHwm) msg.ts = inboxHwm + 1;
   inbox.push(msg);
   const trimmed = capQueueBytes(inbox.slice(-100), m => (typeof m.payload === 'string' ? m.payload.length : 0) + 1024);
-  const stored = await kvPut(env, key, JSON.stringify(trimmed), { expirationTtl: TTL.WEEK });
+  const stored = await mb.writeQueue(JSON.stringify(trimmed), TTL.WEEK);
   if (!stored) {
     // Un-mark the dedup key on a failed store: it was set BEFORE this write, so leaving it
     // would make the client's retry of the identical ciphertext hit the dedup short-circuit
@@ -601,7 +668,7 @@ async function handleMsgSend(body, ip, env, request) {
   // recipient's poll cursor. Like the sealed path this is recovery, not
   // exactly-once: a stale read just skips the retry.
   let storedTs = msg.ts;
-  const verifyRaw = await kvGet(env, key);
+  const verifyRaw = await mb.readQueue();
   const seenInbox = verifyRaw ? safeJsonParse(verifyRaw, []) : [];
   if (Array.isArray(seenInbox) && !seenInbox.some(m => m && m.id === msg.id)) {
     const tail = seenInbox.length > 0 ? seenInbox[seenInbox.length - 1] : null;
@@ -610,12 +677,12 @@ async function handleMsgSend(body, ip, env, request) {
     if (inboxHwm !== null) reTs = Math.max(reTs, inboxHwm + 1);
     seenInbox.push({ ...msg, ts: reTs });
     const reTrimmed = capQueueBytes(seenInbox.slice(-100), m => (typeof m.payload === 'string' ? m.payload.length : 0) + 1024);
-    if (await kvPut(env, key, JSON.stringify(reTrimmed), { expirationTtl: TTL.WEEK })) storedTs = reTs;
+    if (await mb.writeQueue(JSON.stringify(reTrimmed), TTL.WEEK)) storedTs = reTs;
   }
   // Advance the persistent high-water mark to the newest ts this send stored
   // (best-effort: a failed hwm write only degrades to the pre-fix behaviour).
   if (inboxHwm === null || storedTs > inboxHwm) {
-    await kvPut(env, hwmKey, String(storedTs), { expirationTtl: TTL.WEEK });
+    await mb.writeHwm(String(storedTs), TTL.WEEK);
   }
 
   // Trigger Web Push notification (non-blocking)
@@ -690,8 +757,8 @@ async function handleMsgPoll(body, env, request) {
   const authErr = await checkQueueAuth(body, env, request, 'msg-poll');
   if (authErr) return authErr;
 
-  const key = `inbox:${id}`;
-  const data = await kvGet(env, key);
+  const mb = mailboxStore(env, 'inbox', id);
+  const data = await mb.readQueue();
   if (!data) return json({ messages: [] }, 200, request);
 
   const all = safeJsonParse(data, []);
@@ -722,19 +789,18 @@ async function handleMsgPoll(body, env, request) {
     let maxReturned = 0;
     for (const m of newMsgs) { const t = Number.isFinite(m.ts) ? m.ts : 0; if (t > maxReturned) maxReturned = t; }
     if (maxReturned > 0) {
-      const hwmKey = `${key}:hwm`;
-      const curRaw = await kvGet(env, hwmKey);
+      const curRaw = await mb.readHwm();
       const cur = curRaw !== null ? parseInt(curRaw) : NaN;
       if (!Number.isFinite(cur) || maxReturned > cur) {
-        await kvPut(env, hwmKey, String(maxReturned), { expirationTtl: TTL.WEEK });
+        await mb.writeHwm(String(maxReturned), TTL.WEEK);
       }
     }
   }
   // Remove delivered messages older than 10 seconds (grace period for multi-tab)
   const keep = all.filter(m => { if (isExpired(m)) return false; const t = Number.isFinite(m.ts) ? m.ts : 0; return t > cutoff || (nowPoll - t) < TIMEOUT_MS.MULTITAB_GRACE; });
   if (keep.length < all.length) {
-    if (keep.length === 0) await kvDel(env, key);
-    else await kvPut(env, key, JSON.stringify(keep), { expirationTtl: TTL.WEEK });
+    if (keep.length === 0) await mb.deleteQueue();
+    else await mb.writeQueue(JSON.stringify(keep), TTL.WEEK);
   }
 
   return json({ messages: newMsgs }, 200, request);
@@ -2224,11 +2290,12 @@ async function handleAccountDelete(body, env, request) {
   }
 
   const dels = [
-    kvDel(env, `inbox:${userId}`),
-    kvDel(env, `inbox:${userId}:hwm`), // plain-inbox high-water mark (else a re-registered id inherits a stale delivery cursor anchor)
-    kvDel(env, `sealed:${userId}`),
-    kvDel(env, `sealed:${userId}:hwm`), // sealed-poll high-water mark (else lingers ~5min, leaking last-delivery ts)
-    kvDel(env, `sealed:${userId}:dropped`), // dropped-msg counter — same residue class as hwm
+    // Both mailboxes, all five keys: plain queue + its high-water mark
+    // (else a re-registered id inherits a stale delivery cursor anchor),
+    // sealed queue + its high-water mark (else it lingers ~5min, leaking
+    // the last-delivery ts) + the dropped-msg counter (same residue
+    // class as hwm) — see eraseMailboxes.
+    ...eraseMailboxes(env, userId),
     kvDel(env, `devices:${userId}`), // device registry: handleDeviceList's touch-on-read refreshes
     // its 90-day TTL on every read, so a registry left behind can outlive the account
     // indefinitely — and peers keep fanning out to phantom devices of a deleted account
@@ -2302,17 +2369,18 @@ async function handleAccountDelete(body, env, request) {
   // there is nothing to match on — undelivered sealed copies expire with the
   // 7-day queue TTL, and delivered copies are the recipient's own data.
   let sentCopiesRemoved = 0;
-  for (const name of await kvListNames(env, 'inbox:')) {
+  for (const name of await listMailboxKeys(env, 'inbox')) {
     if (name === `inbox:${userId}` || name.endsWith(':hwm')) continue;
-    const raw = await kvGet(env, name);
+    const other = mailboxStoreForKey(env, name);
+    const raw = await other.readQueue();
     if (!raw) continue;
     const queue = safeJsonParse(raw, []);
     if (!Array.isArray(queue)) continue;
     const kept = queue.filter(m => !(m && m.from === userId));
     if (kept.length === queue.length) continue;
     sentCopiesRemoved += queue.length - kept.length;
-    if (kept.length === 0) await kvDel(env, name);
-    else await kvPut(env, name, JSON.stringify(kept), { expirationTtl: TTL.WEEK });
+    if (kept.length === 0) await other.deleteQueue();
+    else await other.writeQueue(JSON.stringify(kept), TTL.WEEK);
   }
 
   // Franking residue: frank:{frankId} commitments and report:{frankId} records
@@ -2886,8 +2954,8 @@ async function handleSealedSend(body, env, request) {
   globalThis._sealedDedup.set(dedupKey, 1);
   if (globalThis._sealedDedup.size > 500) { const e = [...globalThis._sealedDedup.entries()]; globalThis._sealedDedup = new Map(e.slice(-200)); }
 
-  const key = `sealed:${to}`;
-  const existing = await kvGet(env, key);
+  const mb = mailboxStore(env, 'sealed', to);
+  const existing = await mb.readQueue();
   const queueParsed = existing ? safeJsonParse(existing, []) : [];
   const queue = Array.isArray(queueParsed) ? queueParsed : [];
   // Guarantee strictly-increasing ts within the sealed queue (mirrors handleMsgSend).
@@ -2907,10 +2975,10 @@ async function handleSealedSend(body, env, request) {
   // recipient's next poll can say "N messages were lost", instead of them never knowing.
   const droppedNow = queue.length - trimmed.length;
   if (droppedNow > 0) {
-    const prev = parseInt(await kvGet(env, `${key}:dropped`) || '0') || 0;
-    await kvPut(env, `${key}:dropped`, String(Math.min(prev + droppedNow, 99999)), { expirationTtl: TTL.WEEK });
+    const prev = parseInt(await mb.readDropped() || '0') || 0;
+    await mb.writeDropped(String(Math.min(prev + droppedNow, 99999)), TTL.WEEK);
   }
-  const stored = await kvPut(env, key, JSON.stringify(trimmed), { expirationTtl: TTL.WEEK });
+  const stored = await mb.writeQueue(JSON.stringify(trimmed), TTL.WEEK);
   if (!stored) {
     // Un-mark the dedup key on a failed store (set before this write): otherwise the
     // client's retry of the identical envelope is swallowed as a duplicate and lost on
@@ -2938,7 +3006,7 @@ async function handleSealedSend(body, env, request) {
   // "mine is present" in exactly the case it exists to detect. The length test short-circuits
   // the string compare for the common case. (Caught by the deterministic race test, which is
   // the point of writing one.)
-  const verifyRaw = await kvGet(env, key);
+  const verifyRaw = await mb.readQueue();
   const seen = verifyRaw ? safeJsonParse(verifyRaw, []) : [];
   const mine = (m) => m && typeof m.envelope === 'string'
     && m.envelope.length === envelope.length && m.envelope === envelope;
@@ -2956,7 +3024,7 @@ async function handleSealedSend(body, env, request) {
     const reTs = Math.max(newTs, tailTs + 1);
     seen.push({ envelope, ts: reTs });
     const requeued = capQueueBytes(seen.slice(-100), (m) => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
-    await kvPut(env, key, JSON.stringify(requeued), { expirationTtl: TTL.WEEK });
+    await mb.writeQueue(JSON.stringify(requeued), TTL.WEEK);
   }
   sendPushToUser(to, { title: 'Breeze', body: 'New message', tag: 'breeze-sealed', contactId: to }, env).catch(() => {});
   return json({ ok: true, ack: Date.now() }, 200, request);
@@ -2968,15 +3036,15 @@ async function handleSealedPoll(body, env, request) {
   if (!validateUserId(id)) return json({ error: 'invalid id', code: 'INVALID_ID' }, 400, request);
   const authErr = await checkQueueAuth(body, env, request, 'sealed-poll');
   if (authErr) return authErr;
-  const key = `sealed:${id}`;
-  const data = await kvGet(env, key);
+  const mb = mailboxStore(env, 'sealed', id);
+  const data = await mb.readQueue();
   if (!data) return json({ messages: [] }, 200, request);
   const messages = safeJsonParse(data, []);
   if (!Array.isArray(messages)) return json({ messages: [] }, 200, request);
   // v3.6: Grace period — set short TTL instead of immediate delete
   // If client crashes after poll but before processing, messages survive 5 min
   // Client-side _replayCache + IDB dedup prevents re-rendering on re-poll
-  await kvPut(env, key, data, { expirationTtl: TTL.MIN * 5 }); // 5 min grace
+  await mb.writeQueue(data, TTL.MIN * 5); // 5 min grace
   // Record a high-water mark (max ts returned) so the later ACK clears ONLY what was
   // actually polled. handleSealedAck previously blind-deleted the whole queue, so any
   // envelope appended by handleSealedSend in the poll→ack window was destroyed
@@ -2984,11 +3052,11 @@ async function handleSealedPoll(body, env, request) {
   // are messages, so idle polls (the common case) still do zero extra KV writes.
   let maxTs = 0;
   for (const m of messages) { if (Number.isFinite(m?.ts) && m.ts > maxTs) maxTs = m.ts; }
-  if (maxTs > 0) await kvPut(env, `${key}:hwm`, String(maxTs), { expirationTtl: TTL.MIN * 5 });
+  if (maxTs > 0) await mb.writeHwm(String(maxTs), TTL.MIN * 5);
   // Surface queue-overflow losses once, then reset the counter (see handleSealedSend).
-  const droppedStr = await kvGet(env, `${key}:dropped`);
+  const droppedStr = await mb.readDropped();
   const dropped = parseInt(droppedStr || '0') || 0;
-  if (dropped > 0) await kvDel(env, `${key}:dropped`);
+  if (dropped > 0) await mb.deleteDropped();
   return json(dropped > 0 ? { messages, dropped } : { messages }, 200, request);
 }
 
@@ -3004,22 +3072,22 @@ async function handleSealedAck(body, env, request) {
   // arrived in the poll→ack window, instead of blind-deleting the whole queue and losing it.
   // kvDel/kvPut return false on a genuine KV API error (not on key-not-found, which is
   // idempotent); report failure so the client retries rather than believing it was cleared.
-  const hwmKey = `sealed:${id}:hwm`;
-  const hwmRaw = await kvGet(env, hwmKey);
+  const mb = mailboxStore(env, 'sealed', id);
+  const hwmRaw = await mb.readHwm();
   const hwm = hwmRaw !== null ? parseInt(hwmRaw) : NaN;
   if (Number.isFinite(hwm)) {
-    const raw = await kvGet(env, `sealed:${id}`);
+    const raw = await mb.readQueue();
     const queue = raw ? safeJsonParse(raw, []) : [];
     const remaining = Array.isArray(queue) ? queue.filter(m => Number.isFinite(m?.ts) && m.ts > hwm) : [];
     let ok;
-    if (remaining.length === 0) ok = await kvDel(env, `sealed:${id}`);
-    else ok = await kvPut(env, `sealed:${id}`, JSON.stringify(remaining), { expirationTtl: TTL.WEEK });
+    if (remaining.length === 0) ok = await mb.deleteQueue();
+    else ok = await mb.writeQueue(JSON.stringify(remaining), TTL.WEEK);
     if (!ok) return json({ error: 'Failed to confirm delivery', code: 'ACK_FAILED' }, 500, request);
-    await kvDel(env, hwmKey); // best-effort marker cleanup (also expires via its own TTL)
+    await mb.deleteHwm(); // best-effort marker cleanup (also expires via its own TTL)
     return json({ ok: true, kept: remaining.length }, 200, request);
   }
   // No high-water mark (client never polled, or a pre-hwm ACK): fall back to full delete.
-  const deleted = await kvDel(env, `sealed:${id}`);
+  const deleted = await mb.deleteQueue();
   if (!deleted) return json({ error: 'Failed to confirm delivery', code: 'ACK_FAILED' }, 500, request);
   return json({ ok: true }, 200, request);
 }
@@ -3281,6 +3349,10 @@ export {
   validateUserId,
   sanitizeString,
   capQueueBytes,
+  mailboxStore,
+  mailboxStoreForKey,
+  listMailboxKeys,
+  eraseMailboxes,
   kvGet,
   kvPut,
   kvDel,

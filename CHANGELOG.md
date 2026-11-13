@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## Server rethink stage-1 step 1: mailbox storage behind the MailboxStore seam (branch feat/stage1-mailbox-store, 2026-11-13)
+
+`_worker.js`, `tests/mailbox-store.test.js`, `docs/MAILBOX_STAGE1_PLAN.md`, `.env.example`. No behaviour change, no crypto protocol changes, no client changes.
+
+- **MailboxStore abstraction.** Every read/write of the two queue families — plain `inbox:{id}` (+`:hwm`) and sealed `sealed:{id}` (+`:hwm`, +`:dropped`) — now goes through a per-recipient `mailboxStore(env, kind, userId)` handle (`readQueue`/`writeQueue`/`deleteQueue`, `readHwm`/`writeHwm`/`deleteHwm`, `readDropped`/`writeDropped`/`deleteDropped`) instead of hand-built KV keys at each call site. Consumers: `handleMsgSend`, `handleMsgPoll`, `handleSealedSend`, `handleSealedPoll`, `handleSealedAck`, and `handleAccountDelete` (both mailboxes erased via `eraseMailboxes`; the sent-copies sweep lists the inbox family via `listMailboxKeys` and binds each listed key via `mailboxStoreForKey`). The KV-backed implementation is deliberately byte-for-byte the old behaviour — same keys, TTLs, and kv*-helper return contracts — because this step only builds the seam the per-recipient Durable Object backend will slot into. Non-mailbox storage (prekey, groups, presence, signal, drop, push, backup, franking) stays on the `kv*` helpers by design.
+- **Staged plan documented.** `docs/MAILBOX_STAGE1_PLAN.md` records the remaining steps: DO backend behind the store (flag-selected, drain-based migration, suite must pass on both backends), sealed-sender completion (delivery tokens, per-mailbox limits, padding audit), KV demoted to the key directory (with the presence write-budget question), and WebSocket delivery as planned client work.
+- **Stage-0 documentation gap closed.** `.env.example` now documents `PLAIN_PATH_DISABLED` (the kill switch stage-0 added); `tests/env-docs.test.js` flagged it as the one env var the Worker reads that was undocumented on main.
+
+vitest and validate.sh results are recorded in the PR body.
+
 ## Server rethink stage-0: registration gates default-on, plain path deprecated, /api/online removed, deletion sweeps residue (branch feat/stage0-server-hardening, 2026-11-13)
 
 `_worker.js`, `index.html`, `locales/*.json`, `wrangler.toml`, `SPEC.md`, `SECURITY.md`, `docs/SELF_HOSTING.md`, `tests/worker.test.js`. No crypto protocol changes.
