@@ -43,7 +43,7 @@ Try the hosted version: **[breeze.pages.dev](https://breeze.pages.dev)**
 - **Voice/video calls**: WebRTC with TURN relay + real-time waveform
 - **Groups**: Sender Key (O(1)) + Sealed Sender + dual-path P2P delivery
 - **Files**: Up to 50MB, encrypted, auto-compress images (WebP), progress bar
-- **Multi-account**: Work/personal separation (Free=1, Lite=2, Plus=4, Pro=unlimited)
+- **Multi-account**: Work/personal separation — unlimited local accounts, free for everyone (no paid plans, no paywall)
 - **8 languages**: English + full translations for ja, ko, zh-TW, es, th, id, pt-BR (auto-detected); RTL layout for Arabic/Hebrew/Persian/Urdu
 - **60+ slash commands**: /help, /search, /export [json|csv|html|all], /schedule [list|cancel], /contacts, /compress, /retry, /security, /alias, /focus, etc.
 - **PWA**: Engagement-gated install, works offline, push notifications
