@@ -2605,6 +2605,32 @@ describe('msg send / poll (1:1 relay path)', () => {
     expect(await env.KV.get('inbox:bob00001')).toBeNull();
   });
 
+  // ADJACENT GAP (found during the §4 read; not the ts cursor): the plain inbox
+  // is a single KV value mutated read-modify-write with NO lost-write recovery —
+  // unlike handleSealedSend, handleMsgSend never reads its write back. Two
+  // senders writing to the same recipient concurrently both build on the same
+  // snapshot; the later put silently erases the earlier message while both
+  // senders are answered 200. Simulated deterministically with the same
+  // clobber-at-put technique as the sealed lost-write recovery test.
+  it('KNOWN LIMITATION: a concurrent send clobbering the inbox loses the first message (no lost-write recovery on the plain path)', async () => {
+    const env = makeEnv();
+    const key = 'inbox:bob00001';
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbered = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true; // the concurrent sender's stale-snapshot put lands last
+        await origPut(k, JSON.stringify([{ from: 'carol001', payload: 'CONCURRENT', ts: Date.now() }]), o);
+      }
+    };
+    const res = await handleMsgSend({ to: 'bob00001', from: 'alice001', payload: 'VICTIM', ts: Date.now() }, ip, env, req({}));
+    expect(res.status).toBe(200);
+    expect(clobbered).toBe(true); // the race really happened
+    const { messages } = await (await handleMsgPoll({ id: 'bob00001', lastTs: 0 }, env, req({}))).json();
+    expect(messages.map(m => m.payload)).toEqual(['CONCURRENT']); // VICTIM is gone
+  });
+
   it('bumps a colliding stored ts by 1ms so inbox timestamps are strictly increasing', async () => {
     const env = makeEnv();
     const T = Date.now();
