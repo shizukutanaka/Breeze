@@ -1210,6 +1210,7 @@ const CONFIG = {
   // BOTH sides negotiate it (else falls back byte-identically). Also runs the KT chain+rollover audit.
   X3DH_V5_ENABLED: true,
   SEAL_V2_ENABLED: true, // Sealed Sender v2: encrypt sender metadata to the recipient (capability-gated)
+  MULTI_RELAY_ENABLED: true, // Stage-2 step 6: advertise 'multi-relay'; contacts that advertise it too get redundant deposit at their home relays
   // v3.6 SECURITY (default OFF — opt-in via /keywrap, run again to disable): wrap the identity
   // ECDH + Ed25519 signing private keys with AES-256-GCM under a PBKDF2 key (600k iter, random
   // salt) before IndexedDB storage. Guards against XSS cookie-theft, device forensics, IDB-reading
@@ -1619,6 +1620,15 @@ const _I = {
     relayAdded: 'Home relay added: {0}',
     relayRemoved: 'Home relay removed: {0}',
     relayRemoveConfirm: 'Remove {0} from your home relays? The relay keeps the data it already holds; it just stops receiving new copies.',
+    relayFanoutLabel: 'Copies per contact (redundant delivery):',
+    contactHomeBtn: 'Home relay…',
+    contactHomePrompt: "This contact's home relay URL (blank clears it)",
+    contactHomeConfirm: "Set {0}'s home relay to {1}? Fingerprint: {2} — set it only if this matches the fingerprint the relay operator published.",
+    contactHomeSetBtn: 'Set home relay',
+    contactHomeSet: 'Home relay set for {0}',
+    contactHomeClearConfirm: "Clear the home relay stored for {0}? Their messages will be delivered via this relay only.",
+    contactHomeClearBtn: 'Clear',
+    contactHomeCleared: 'Home relay cleared',
     p2pOnlyMode: 'P2P-only mode: server unreachable. Direct connections still work.',
     storageWarning: "Storage {0}% full. Old messages may be auto-deleted.",
     toastDeleted: "{0} messages deleted",
@@ -4595,6 +4605,7 @@ async function initMessenger(dbName) {
     focusStrict: false,      // focus mode: true = silence everything, false = let VIPs through
     relayPin: '',            // stage-2 step 4: TOFU pin of the serving relay's Ed25519 identity key ('' = none pinned)
     relays: [],              // stage-2 step 5: ADDED home relays [{ url, pin, label }] — the serving origin is implicit (always first in homeRelays(), its pin is relayPin above), so the default [] resolves to exactly one relay
+    fanout: 2,               // stage-2 step 6: how many of a contact's home relays receive a copy of each message (1–3; 2 = one redundant copy)
   };
   let _settings = { ..._defaultSettings };
 
@@ -4885,7 +4896,16 @@ async function initMessenger(dbName) {
     if (CONFIG.X3DH_V5_ENABLED) caps.push(CAPS_X3DH_V5);
     if (CONFIG.GROUP_RATCHET_V5) caps.push(CAPS_GROUP_V5);
     if (CONFIG.SEAL_V2_ENABLED) caps.push(CAPS_SEAL_V2);
+    if (CONFIG.MULTI_RELAY_ENABLED) caps.push(CAPS_MULTI_RELAY);
     if (caps.length) body.caps = caps;
+    // Stage-2 step 6: the home hint — where this account can be reached.
+    // Attached to EVERY bundle this function builds, so the registration
+    // upload and every replenish rotation carry it (the _pendingBundle
+    // retry re-sends the same object). The worker stores it on the bundle
+    // and serves it from fetch/status; it is deliberately NOT part of the
+    // upload's signed digest (a mutable routing hint, not key material).
+    const homes = homeRelays().map(r => ({ url: r.url, ...(r.pin ? { pin: r.pin } : {}) }));
+    if (homes.length) body.home = homes;
     return body;
   }
 
@@ -5149,19 +5169,45 @@ async function initMessenger(dbName) {
   async function initSessionV5Initiator(peerPubB64) {
     if (!CONFIG.X3DH_V5_ENABLED || !API) return null;
     try {
-      const resp = await postAPIRaw('/prekey/fetch', { userId: peerPubB64.slice(0, 12) });
-      if (!resp.ok) return null;
-      const bundle = await resp.json();
-      if (!_peerSupportsX3dhV5(bundle)) return null;
-      if (!bundle.identityKey || !bundle.edIdentityKey || !bundle.signedPreKey || !bundle.signedPreKeySig) return null;
-      const spkPubPeer = Uint8Array.from(atob(bundle.signedPreKey), c => c.charCodeAt(0));
-      // MUST verify before deriving (catches a relay/MITM swapping in its own SPK). Raw SPK bytes, not verifySignature()'s UTF-8-string convention used for msg sig/sigPub (E2E-found).
-      let sigOk = false;
-      try {
-        const edPub = _hasEd25519 && await crypto.subtle.importKey('raw', Uint8Array.from(atob(bundle.edIdentityKey), c => c.charCodeAt(0)), { name: 'Ed25519' }, false, ['verify']);
-        if (edPub) sigOk = await crypto.subtle.verify({ name: 'Ed25519' }, edPub, Uint8Array.from(atob(bundle.signedPreKeySig), c => c.charCodeAt(0)), spkPubPeer);
-      } catch(e) { _dbg(e, 'verify-spk'); }
-      if (!sigOk) { _dbg(null, 'X3DH: signed pre-key signature INVALID — aborting, falling back'); return null; }
+      // Stage-2 step 6: the bundle may live on any of the contact's home
+      // relays, so candidates are tried in preference order — stored
+      // homes, then the primary — and the first bundle passing EVERY
+      // check below wins. Each candidate is validated exactly as the
+      // single-relay fetch was (caps, fields, SPK signature); a stale
+      // or hostile copy falls through instead of aborting the session.
+      // Fetch consumes an OTP on every relay TRIED (a failed candidate
+      // costs one OTP there, bounded by the candidate count), but a
+      // relay that cannot be reached spends nothing.
+      const peerId = peerPubB64.slice(0, 12);
+      const fetchContact = await dbGet('contacts', peerId).catch(() => null);
+      const fetchHomes = sanitizeHomeList(fetchContact?.home);
+      const candidates = [...fetchHomes];
+      if (!candidates.some(e => isOriginRelay(e))) candidates.push({ url: _servingRelayUrl(), pin: '' });
+      let bundle = null;
+      let spkPubPeer = null;
+      for (const entry of candidates) {
+        const resp = isOriginRelay(entry)
+          ? await postAPIRaw('/prekey/fetch', { userId: peerId })
+          : await _contactRelayPost(entry, '/prekey/fetch', { userId: peerId });
+        if (!resp?.ok) continue;
+        const b = await resp.json().catch(() => null);
+        if (!b) continue;
+        _seedRelayInfo(peerId, b); // caps + advertised home, win or lose
+        if (!_peerSupportsX3dhV5(b)) continue;
+        if (!b.identityKey || !b.edIdentityKey || !b.signedPreKey || !b.signedPreKeySig) continue;
+        const spk = Uint8Array.from(atob(b.signedPreKey), c => c.charCodeAt(0));
+        // MUST verify before deriving (catches a relay/MITM swapping in its own SPK). Raw SPK bytes, not verifySignature()'s UTF-8-string convention used for msg sig/sigPub (E2E-found).
+        let sigOk = false;
+        try {
+          const edPub = _hasEd25519 && await crypto.subtle.importKey('raw', Uint8Array.from(atob(b.edIdentityKey), c => c.charCodeAt(0)), { name: 'Ed25519' }, false, ['verify']);
+          if (edPub) sigOk = await crypto.subtle.verify({ name: 'Ed25519' }, edPub, Uint8Array.from(atob(b.signedPreKeySig), c => c.charCodeAt(0)), spk);
+        } catch(e) { _dbg(e, 'verify-spk'); }
+        if (!sigOk) { _dbg(null, 'X3DH: signed pre-key signature INVALID on one relay — trying the next'); continue; }
+        bundle = b;
+        spkPubPeer = spk;
+        break;
+      }
+      if (!bundle) return null;
       // I11 KT audit: independent MITM signal — warns, doesn't block (no hard-abort flow yet).
       const ktPeerId = peerPubB64.slice(0, 12);
       const audit = await _auditKeyHistory(await dbGet('identity', 'ktIk:' + ktPeerId), bundle.keyHistory);
@@ -5773,26 +5819,176 @@ async function initMessenger(dbName) {
       const acct = await dbGet('identity', 'account').catch(() => null);
       const acctRoot = (acct?.root && acct.root !== myPubB64) ? acct.root : undefined;
       const [peerDevs, myDevs] = await Promise.all([_devicesFor(snapContact), _myOtherDevices()]);
-      const send = async (devPub, extra) => {
+      const send = async (devPub, extra, hint) => {
         const enc = await encryptFor(plaintext, devPub);
         if (!enc) return;
         await relaySend(devPub.slice(0, 12), { to: devPub.slice(0, 12), from: myId,
-          fromPub: myPubB64, fromName: myName, payload: enc, ts, ...extra }, devPub);
+          fromPub: myPubB64, fromName: myName, payload: enc, ts, ...extra }, devPub, hint);
       };
       await Promise.all([
         // The contact's OTHER devices (registry-verified; the primary was already sent to).
-        ...peerDevs.filter((p) => p !== snapContact.pubB64).map((p) => send(p, { ...peerExtra, acctRoot })),
+        // Step 6: they share the contact's home relays — pass the record
+        // as the hint so relaySend resolves targets without a lookup
+        // keyed by a device id (devices are not contact records).
+        ...peerDevs.filter((p) => p !== snapContact.pubB64).map((p) => send(p, { ...peerExtra, acctRoot }, snapContact)),
         // My own siblings — tagged selfSync so they store it as sent, not received.
+        // No hint: sibling device ids have no contact record, so these
+        // stay on the primary relay exactly as before step 6.
         ...myDevs.map((p) => send(p, { ...selfExtra, selfSync: true })),
       ]);
     } catch(e) { _dbg(e, 'fanout'); }
   }
 
-  async function relaySend(to, payload, sealPub) {
-    if (!API) return;
-    if (_isOffline) { if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, attempts: 0 }); _saveRetryQueue(); scheduleRetry(); } registerBackgroundSync(); return; }
-    const msgTs = payload.ts;
-    // Sealed Sender (preferred — and with v2, actually sealed: see sealMeta above)
+  // ============================================================
+  // Stage-2 step 6: contacts' home relays + redundant deposit.
+  //
+  // Step 5 fanned out MY traffic to MY home relays; this step fans a
+  // message OUT to the CONTACT's home relays — the same sealed bytes
+  // at up to _settings.fanout of them (default 2). Safety is the
+  // plan's D4 (id space unchanged, ordering from ratchet counter +
+  // internal ts, recipient dedup by message id), and the plan's one
+  // open question — a duplicated IDENTICAL ciphertext vs the ratchet
+  // — was settled against the code first: handleIncoming checks the
+  // replay cache and the IDB store BEFORE decrypting, and the msgId
+  // embeds the payload ts (identical across copies), so a duplicate
+  // never reaches the ratchet; if one slipped through, ratchetDecrypt
+  // returns null for a consumed counter / seen id and state commits
+  // only after a successful AEAD open (group sends fail the same
+  // checks after decrypt). No double display, no desync — so the
+  // per-copy ACK stays unconditional: a copy the recipient will
+  // dedup is still a copy DELIVERED.
+  //
+  // Discovery: a contact's home list is [{ url, pin }] in preference
+  // order — the carrier that introduced them (invite origin / pasted
+  // URL), the contact settings, or the home hint on their prekey
+  // bundle (served by fetch and by the OTP-free status). A hint is
+  // used for the send but never silently persisted: stored carriers
+  // outrank it. Caps gate the count: no 'multi-relay', first home
+  // only — old clients see no change.
+  const CAPS_MULTI_RELAY = 'multi-relay';
+
+  // Client twin of the worker's sanitizeHomeList (same contract: ≤3
+  // entries, http(s) origins only, pin a bounded string). Applied to
+  // every home list entering the client — stored records, bundle
+  // hints, prompt input — so resolution below can trust the shape.
+  function sanitizeHomeList(list) {
+    if (!Array.isArray(list)) return [];
+    const out = [];
+    for (const e of list) {
+      if (!e || typeof e !== 'object') continue;
+      const url = _normalizeRelayUrl(e.url);
+      if (!url || out.some(x => x.url === url)) continue;
+      out.push({ url, pin: typeof e.pin === 'string' ? e.pin.slice(0, 128) : '' });
+      if (out.length >= 3) break;
+    }
+    return out;
+  }
+
+  function _fanoutCount() {
+    const n = parseInt(_settings.fanout, 10);
+    return Number.isFinite(n) ? Math.min(3, Math.max(1, n)) : 2;
+  }
+
+  // Per-peer negotiation cache (caps + advertised home), 5-minute TTL
+  // like _peerSealV2's. Seeded for free by every successful prekey
+  // fetch; refreshed by a /prekey/status probe that spends no OTP.
+  const _relayInfoCache = new Map(); // peerId -> { info: { caps, home }, ts }
+  function _seedRelayInfo(peerId, src) {
+    if (!peerId || !src) return;
+    _relayInfoCache.set(peerId, { info: { caps: _parsePeerCaps(src), home: sanitizeHomeList(src.home) }, ts: Date.now() });
+  }
+  async function _peerRelayInfo(peerId) {
+    const hit = _relayInfoCache.get(peerId);
+    if (hit && Date.now() - hit.ts < MS.MIN * 5) return hit.info;
+    let info = { caps: [], home: [] };
+    try {
+      const contact = await dbGet('contacts', peerId).catch(() => null);
+      const stored = sanitizeHomeList(contact?.home);
+      const candidates = [...stored];
+      if (!candidates.some(e => isOriginRelay(e))) candidates.push({ url: _servingRelayUrl(), pin: '' });
+      for (const entry of candidates) {
+        const resp = isOriginRelay(entry)
+          ? await postAPIRaw('/prekey/status', { userId: peerId })
+          : await _contactRelayPost(entry, '/prekey/status', { userId: peerId });
+        if (!resp?.ok) continue;
+        const data = await resp.json().catch(() => null);
+        if (!data) continue;
+        info = { caps: _parsePeerCaps(data), home: sanitizeHomeList(data.home) };
+        break; // first relay that answers speaks for the peer
+      }
+    } catch(e) { _dbg(e, 'peer-relay-info'); }
+    _relayInfoCache.set(peerId, { info, ts: Date.now() });
+    return info;
+  }
+
+  // Deposits at a CONTACT's relays are deliberately separate from the
+  // step-5 funnel for MY relays (postAPIRelay): my latch/toast state
+  // must never leak into someone else's delivery. The pin discipline
+  // is step 4's, scoped to the contact's stored/hinted pin: a relay
+  // whose advertised key CONTRADICTS the pin (or fails attestation
+  // against it) is skipped — never latched, never toasted, the pin
+  // never rewritten here. A KEYLESS relay is deposited to unattested:
+  // envelopes are sealed, so it sees only the metadata any relay
+  // sees, and refusing would strand every contact homed on one. An
+  // unreachable relay is skipped without consequence. Conclusive
+  // verdicts are memoised per (url, pin) for the session, so a
+  // fan-out costs one attestation per relay, not one per message.
+  const _contactRelayMemo = new Map(); // url|pin -> Promise<'ok'|'keyless'|'mismatch'|'unreachable'>
+  async function _contactRelayVerdict(entry) {
+    const key = entry.url + '|' + (entry.pin || '');
+    let verdictP = _contactRelayMemo.get(key);
+    if (!verdictP) {
+      verdictP = (async () => {
+        try {
+          const r = await _relayAttestCheck(relayApiBase(entry), entry.pin || null);
+          if (r.verdict === 'unreachable') _contactRelayMemo.delete(key); // not conclusive — re-check next time
+          return r.verdict;
+        } catch(e) { _contactRelayMemo.delete(key); _dbg(e, 'contact-relay-attest'); return 'unreachable'; }
+      })();
+      _contactRelayMemo.set(key, verdictP);
+    }
+    return verdictP;
+  }
+  async function _contactRelayPost(entry, path, body) {
+    try {
+      if (isOriginRelay(entry)) return await postAPIRaw(path, body);
+      const verdict = await _contactRelayVerdict(entry);
+      if (verdict === 'mismatch' || verdict === 'unreachable') return null;
+      return await fetchT(relayApiBase(entry) + path, { method: 'POST', headers: _H, body: JSON.stringify(body) });
+    } catch(e) { _dbg(e, 'contact-relay-post'); return null; }
+  }
+
+  // Resolve where a directed send to `contact`/`peerId` goes:
+  // [] = primary only (the pre-step-6 world — no stored home, no
+  // hint); otherwise the contact's home entries in preference order,
+  // capped at 1 unless the peer advertises 'multi-relay', else at
+  // _settings.fanout. A hint-only resolution still counts: the first
+  // message to a bundle-discovered contact goes where they live.
+  // NO contact record, no fan-out at all: self-sync sends to my own
+  // devices (which have bundles advertising MY home list) and any
+  // other non-contact recipient keep the primary path exactly —
+  // my own relays are governed by the step-5 funnel, not this one.
+  async function _resolveSendTargets(contact, peerId) {
+    if (!contact) return [];
+    try {
+      let stored = sanitizeHomeList(contact?.home);
+      let caps = null;
+      if (peerId) {
+        const info = await _peerRelayInfo(peerId);
+        caps = info.caps;
+        if (!stored.length) stored = info.home;
+      }
+      if (!stored.length) return [];
+      const fan = (caps && caps.includes(CAPS_MULTI_RELAY)) ? _fanoutCount() : 1;
+      return stored.slice(0, fan);
+    } catch(e) { _dbg(e, 'send-targets'); return []; }
+  }
+
+  // The wire bytes for one send, built ONCE so every relay receives
+  // the identical sealed envelope (the fan-out's whole premise).
+  // Extracted verbatim from relaySend's legacy path, which now calls
+  // this too — one seal, however many deposits.
+  async function _buildWire(to, payload, sealPub, msgTs) {
     let wire = payload;
     if (sealPub && CONFIG.SEAL_V2_ENABLED && await _peerSealV2(to)) {
       const { to: _t, ts: _ts, payload: _p, ...meta } = payload;
@@ -5801,13 +5997,102 @@ async function initMessenger(dbName) {
       // envelope would still identify the sender on first contact (wiretap-E2E-found).
       // Relocate ik into the sealed block; the recipient re-injects it before decrypting.
       let wirePayload = payload.payload;
-      try {
-        const pkm = JSON.parse(wirePayload);
-        if (pkm?.t === 'pkm' && pkm.ik) { meta._pkik = pkm.ik; delete pkm.ik; wirePayload = JSON.stringify(pkm); }
-      } catch {}
+      try { const pkm = JSON.parse(wirePayload); if (pkm?.t === 'pkm' && pkm.ik) { meta._pkik = pkm.ik; delete pkm.ik; wirePayload = JSON.stringify(pkm); } } catch {}
       const se = await sealMeta(sealPub, meta, to, msgTs);
       if (se) wire = { to, ts: msgTs, payload: wirePayload, sv: 2, se };
     }
+    return wire;
+  }
+
+  // One copy at one relay, sealed first with the plain fallback —
+  // relaySend's per-relay discipline. A 429 carrying the per-mailbox
+  // gate's code defers THIS relay's copy only: the plain queue would
+  // be a different mailbox path, and the plan's rule is that one
+  // relay's limit never touches the others. Any other sealed failure
+  // falls through to plain exactly like the legacy path.
+  async function _depositCopy(entry, to, wire, payload) {
+    // A pin mismatch is conclusive for the session: the copy is
+    // WITHHELD, not owed — retrying cannot cure a key substitution,
+    // and queueing it would only surface a spurious delivery failure
+    // once the other relays have long since delivered. (If EVERY
+    // home withholds or fails, no ack arrives and the message simply
+    // never marks delivered — the truthful state.)
+    if (!isOriginRelay(entry) && (await _contactRelayVerdict(entry)) === 'mismatch') {
+      return { ok: true, ack: false, withheld: true };
+    }
+    const post = (path, body) => isOriginRelay(entry) ? postAPIRaw(path, body) : _contactRelayPost(entry, path, body);
+    try {
+      const resp = await post('/sealed/send', { to, envelope: JSON.stringify(wire) });
+      if (resp?.ok) { const d = await resp.json().catch(() => ({})); return { ok: true, ack: !!d.ack }; }
+      if (resp?.status === 429) {
+        const d = await resp.json().catch(() => ({}));
+        if (d.code === 'MAILBOX_RATE_LIMITED') return { ok: false, limited: true };
+      }
+    } catch(e) { _dbg(e, 'fanout-sealed'); }
+    try {
+      const resp = await post('/msg/send', payload);
+      if (resp?.ok) { const d = await resp.json().catch(() => ({})); return { ok: true, ack: !!d.ack }; }
+      if (resp?.status === 429) return { ok: false, limited: true };
+    } catch(e) { _dbg(e, 'fanout-plain'); }
+    return { ok: false };
+  }
+
+  // dm:/call: rooms name both endpoints; the OTHER party is the one a
+  // signal fan-out concerns. Anything else (group rooms, malformed)
+  // has no single peer and stays primary-only.
+  function _signalPeerId(room) {
+    const m = /^(?:dm|call):([A-Za-z0-9+/=]{12}):([A-Za-z0-9+/=]{12})$/.exec(room || '');
+    if (!m) return null;
+    return m[1] === myId ? m[2] : (m[2] === myId ? m[1] : null);
+  }
+  async function _fanoutSignal(peerId, full) {
+    const contact = await dbGet('contacts', peerId).catch(() => null);
+    const targets = await _resolveSendTargets(contact, peerId);
+    for (const entry of targets) {
+      if (isOriginRelay(entry)) continue; // the primary copy is _signal's own post
+      await _contactRelayPost(entry, '/signal', full);
+    }
+  }
+
+  async function relaySend(to, payload, sealPub, contactHint) {
+    if (!API) return;
+    if (_isOffline) { if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, attempts: 0 }); _saveRetryQueue(); scheduleRetry(); } registerBackgroundSync(); return; }
+    const msgTs = payload.ts;
+    // Stage-2 step 6: redundant deposit at the contact's home relays.
+    // Resolved per send (stored home outranks the bundle hint; the
+    // caps gate lives in _resolveSendTargets). The fan-out engages
+    // only when the resolution names something beyond "primary only"
+    // — including the single non-primary home of a legacy contact —
+    // and the legacy body below then runs VERBATIM, so an account
+    // whose contacts have no homes sees byte-identical behaviour.
+    let fanTargets = [];
+    try {
+      const contact = contactHint || (to ? await dbGet('contacts', to).catch(() => null) : null);
+      fanTargets = await _resolveSendTargets(contact, to);
+    } catch(e) { _dbg(e, 'relay-targets'); fanTargets = []; }
+    if (!(fanTargets.length === 0 || (fanTargets.length === 1 && isOriginRelay(fanTargets[0])))) {
+      const wire = await _buildWire(to, payload, sealPub, msgTs);
+      let anyAck = false;
+      const owed = [];
+      for (const entry of fanTargets) {
+        const r = await _depositCopy(entry, to, wire, payload);
+        if (r.ok) { if (r.ack) anyAck = true; }
+        else owed.push(entry);
+      }
+      // One ACK from any relay marks delivery (the step-5 poll rule);
+      // a relay that owes a copy gets it from the retry queue with
+      // the SAME wire bytes, so the copies stay identical.
+      if (anyAck && msgTs) updateMsgStatus(msgTs, 'delivered');
+      if (owed.length) {
+        if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, wire: JSON.stringify(wire), relays: owed, attempts: 0 }); _saveRetryQueue(); }
+        scheduleRetry();
+      }
+      return;
+    }
+    // Sealed Sender (preferred — and with v2, actually sealed: see sealMeta above).
+    // The sealing itself lives in _buildWire (step 6) so the fan-out path
+    // deposits the identical bytes at every relay; behaviour here is unchanged.
+    const wire = await _buildWire(to, payload, sealPub, msgTs);
     try {
       const resp = await postAPIRaw('/sealed/send', { to, envelope: JSON.stringify(wire) });
       if (resp.ok) {
@@ -5868,6 +6153,31 @@ async function initMessenger(dbName) {
         _updateOutboxBadge(); _saveRetryQueue(); return;
       }
       item.attempts++;
+      // Stage-2 step 6: a fan-out item owes copies to specific relays
+      // (item.relays) and carries the exact wire bytes (item.wire) so
+      // the retried copies stay identical to the ones already placed.
+      // Each relay succeeds or stays owed independently; the item
+      // leaves the queue when no relay is owed, and the shared
+      // dead-letter path above bounds it at 3 attempts like any item.
+      if (item.wire && Array.isArray(item.relays) && item.relays.length) {
+        let anyAck = false;
+        const still = [];
+        const wireObj = (() => { try { return JSON.parse(item.wire); } catch { return null; } })();
+        if (wireObj) {
+          for (const entry of item.relays) {
+            const r = await _depositCopy(entry, item.to, wireObj, item.payload);
+            if (r.ok) { if (r.ack) anyAck = true; }
+            else still.push(entry);
+          }
+        } else {
+          still.push(...item.relays); // unparseable wire: keep owing rather than drop a copy
+        }
+        if (anyAck && item.payload?.ts) updateMsgStatus(item.payload.ts, 'delivered');
+        if (still.length) { item.relays = still; _retryQueue.push(item); }
+        _updateOutboxBadge(); _saveRetryQueue();
+        if (_retryQueue.length > 0) scheduleRetry();
+        return;
+      }
       try {
         // v3.6: Retry via sealed sender first (privacy-preserving), fall back to standard relay
         let sent = false;
@@ -6406,7 +6716,9 @@ async function initMessenger(dbName) {
       if (addKey.startsWith('@')) {
         await resolveAndAdd(addKey);
       } else {
-        await addContact(addKey, P.get('name') || t('newContact'));
+        // Step 6: an invite link is served BY the contact's home relay —
+        // its origin is the rank-1 home carrier.
+        await addContact(addKey, P.get('name') || t('newContact'), [{ url: _servingRelayUrl() }]);
       }
     }
     // Auto-join group from URL (?join=token)
@@ -6462,7 +6774,7 @@ async function initMessenger(dbName) {
     const addKey = P.get('add');
     if (addKey && addKey !== myPubB64) {
       if (addKey.startsWith('@')) { await resolveAndAdd(addKey); }
-      else { await addContact(addKey, P.get('name') || t('newContact')); }
+      else { await addContact(addKey, P.get('name') || t('newContact'), [{ url: _servingRelayUrl() }]); }
     }
     // Auto-join group
     if (joinToken) await processJoinToken(joinToken);
@@ -6526,17 +6838,55 @@ async function initMessenger(dbName) {
     // signaling either — the hard stop covers every relay call, not
     // just the postAPIRaw funnel.
     if (_relayPinGate.blocked) return Promise.resolve();
-    return _signalAuth(room).then(auth => fetchT(API + '/signal', { method: 'POST', headers: _H,
-      body: JSON.stringify({ room, sender: myId, type, data: data || '', ...auth })
-    })).catch(e => _dbg(e, 'signal:' + type));
+    return _signalAuth(room).then(auth => {
+      const full = { room, sender: myId, type, data: data || '', ...auth };
+      const posts = [fetchT(API + '/signal', { method: 'POST', headers: _H, body: JSON.stringify(full) })];
+      // Stage-2 step 6: the callee polls the rendezvous on THEIR home
+      // relays, so a dm:/call: signal is deposited there too. The
+      // signed body is bound to room+sender+ts, not to a relay, so
+      // the identical body verifies at every copy. Extra copies are
+      // inert for a peer that never polls that relay.
+      const peerId = _signalPeerId(room);
+      if (peerId) posts.push(_fanoutSignal(peerId, full).catch(e => _dbg(e, 'signal-fanout')));
+      return Promise.all(posts);
+    }).catch(e => _dbg(e, 'signal:' + type));
   }
   // _signalAwait — same but returns response for poll pattern
   async function _signalAwait(room, type, data) {
     if (_relayPinGate.blocked) return new Response(null, { status: 503 }); // step 4 hard stop (see _signal)
     const auth = await _signalAuth(room);
-    return fetchT(API + '/signal', { method: 'POST', headers: _H,
-      body: JSON.stringify({ room, sender: myId, type, data: data || '', ...auth })
-    });
+    const body = { room, sender: myId, type, data: data || '', ...auth };
+    const primary = () => fetchT(API + '/signal', { method: 'POST', headers: _H, body: JSON.stringify(body) });
+    // Stage-2 step 6: a 'poll' also drains the peer's home relays —
+    // a signal deposited there (by a step-6 peer calling us) is only
+    // visible if we look. Every other type is a plain deposit and
+    // keeps the single primary fetch, exactly as before.
+    if (type !== 'poll') return primary();
+    const peerId = _signalPeerId(room);
+    if (!peerId) return primary();
+    const contact = await dbGet('contacts', peerId).catch(() => null);
+    const targets = await _resolveSendTargets(contact, peerId);
+    const extra = targets.filter(e => !isOriginRelay(e));
+    if (!extra.length) return primary();
+    // Merge like step 5's poll merge: per-relay success/failure is
+    // independent, and identical signals (the same signed body
+    // deposited at several relays) are deduped on sender|type|data —
+    // each relay stamps its own ts, so ts cannot be part of the key.
+    const seen = new Set();
+    const messages = [];
+    const collect = async (resp) => {
+      if (!resp?.ok) return;
+      const d = await resp.json().catch(() => null);
+      for (const s of (d?.messages || [])) {
+        const k = s.sender + '|' + s.type + '|' + (typeof s.data === 'string' ? s.data : '');
+        if (seen.has(k)) continue;
+        seen.add(k);
+        messages.push(s);
+      }
+    };
+    const results = await Promise.allSettled([primary(), ...extra.map(e => _contactRelayPost(e, '/signal', body))]);
+    for (const r of results) { if (r.status === 'fulfilled') await collect(r.value); }
+    return new Response(JSON.stringify({ messages }), { status: 200, headers: _H });
   }
   // DRY: DM room key
   function _dmRoom(peerId) { return 'dm:' + [myId, peerId].sort().join(':'); }
@@ -6576,19 +6926,76 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'unwrapCallSignal'); return null; }
   }
 
-  async function addContact(pubB64, name) {
+  async function addContact(pubB64, name, homeHint) {
     try {
       const safePub = typeof pubB64 === 'string' ? pubB64.slice(0, 200) : '';
       if (!safePub) return;
       const id = safePub.slice(0, 12);
+      // Stage-2 step 6: the carrier that introduced this contact may
+      // name their home relay (an invite link's origin, a pasted relay
+      // URL). It is the FIRST stored home — the plan's rank-1 carrier.
+      const home = sanitizeHomeList(homeHint);
       const existing = await dbGet('contacts', id);
-      if (existing) return;
+      if (existing) {
+        // An existing record keeps its stored home (user-confirmed
+        // values outrank a fresh carrier); only a record with NO home
+        // yet adopts the hint.
+        if (home.length && !sanitizeHomeList(existing.home).length) {
+          existing.home = home;
+          await dbPut('contacts', existing);
+        }
+        return;
+      }
       const safeName = typeof name === 'string' ? name.slice(0, 64) : 'Contact';
-      await dbPut('contacts', { id, pubB64: safePub, name: safeName, addedAt: Date.now(), unread: 0 });
+      await dbPut('contacts', { id, pubB64: safePub, name: safeName, addedAt: Date.now(), unread: 0, ...(home.length ? { home } : {}) });
       auditLog('contact', 'Added: ' + name + ' (' + id + ')');
       await renderContacts();
-    
+
     } catch(_e) { _dbg(_e, 'addContact'); }
+  }
+
+  // Stage-2 step 6: the contact-settings carrier for a home relay
+  // (plan rank 2 — a value the user confirmed). Setting runs the
+  // step-4 ceremony against the candidate relay BEFORE anything is
+  // stored: attestation first, fingerprint shown, explicit confirm,
+  // and the verified key stored as the entry's pin. A keyless relay
+  // can be set too (deposits there are sealed; continuity simply
+  // cannot be pinned — the audit entry says so), an unreachable one
+  // cannot. The chosen relay becomes the FIRST home; any others keep
+  // their order behind it. Blank input clears the stored list after
+  // a confirm, returning the contact to primary-only delivery.
+  async function _setContactHomeFlow(contact) {
+    try {
+      const current = sanitizeHomeList(contact.home);
+      const raw = await showPrompt(t('contactHomePrompt'), current[0]?.url || '', { placeholder: 'https://relay.example.com' });
+      if (raw === null) return;
+      const trimmed = String(raw).trim();
+      if (!trimmed) {
+        if (!current.length) return;
+        if (!await showConfirm(t('contactHomeClearConfirm', contact.name), { danger: true, okText: t('contactHomeClearBtn') })) return;
+        delete contact.home;
+        await dbPut('contacts', contact);
+        _relayInfoCache.delete(contact.id);
+        auditLog('contact', 'Home relay cleared for ' + contact.name);
+        showToast(t('contactHomeCleared'), 'success');
+        return;
+      }
+      const url = _normalizeRelayUrl(trimmed);
+      if (!url) { showToast(t('relayAddInvalid'), 'error'); return; }
+      const r = await _relayAttestCheck(url + '/api', null);
+      if (r.verdict === 'unreachable') { showToast(t('relayAddUnreachable'), 'error'); return; }
+      let pin = '';
+      if (r.verdict === 'ok') {
+        const fp = await relayFingerprint(r.relayKey);
+        if (!await showConfirm(t('contactHomeConfirm', contact.name, url, fp), { okText: t('contactHomeSetBtn') })) return;
+        pin = r.relayKey;
+      }
+      contact.home = [{ url, pin }, ...current.filter(e => e.url !== url)].slice(0, 3);
+      await dbPut('contacts', contact);
+      _relayInfoCache.delete(contact.id);
+      auditLog('contact', 'Home relay set for ' + contact.name + ': ' + url + (pin ? ' (pinned)' : ' (unpinned — relay has no identity key)'));
+      showToast(t('contactHomeSet', contact.name), 'success');
+    } catch(e) { _dbg(e, 'contact-home'); }
   }
 
   // v3.1: Chat folder filtering
@@ -6852,6 +7259,7 @@ async function initMessenger(dbName) {
         ] : [
           { label: t('rename'), action: 'rename' },
           { label: t('safetyNumber'), action: 'safety' },
+          { label: t('contactHomeBtn'), action: 'home' },
           { label: pinLabel, action: 'pin' },
           { label: muteLabel, action: 'mute' },
           { label: vipLabel, action: 'vip' },
@@ -6906,6 +7314,8 @@ async function initMessenger(dbName) {
           renderContacts();
         } else if (action === 'safety') {
           showSafetyNumber(c);
+        } else if (action === 'home') {
+          await _setContactHomeFlow(c);
         } else if (action === 'pin') {
           c.pinned = !c.pinned;
           await dbPut('contacts', c);
@@ -11293,10 +11703,11 @@ async function initMessenger(dbName) {
   async function resolveAndAdd(input) {
     let pubB64, name = 'Contact', aliasResolved = false;
     // Parse URL
+    let homeHint = null;
     try {
       const url = new URL(input);
       const raw = url.searchParams.get('add');
-      if (raw) { input = raw; name = url.searchParams.get('name') || name; }
+      if (raw) { input = raw; name = url.searchParams.get('name') || name; homeHint = [{ url: url.origin }]; }
     } catch(e) { _dbg(e); }
 
     // Resolve @alias
@@ -11322,7 +11733,9 @@ async function initMessenger(dbName) {
       if (audit?.verdict === 'tampered') { showToast(t('toastAliasTampered'), 'error', 10000); return; }
       if (audit?.verdict === 'rolled') showToast(t('toastAliasRolled'), 'warn', 8000);
     }
-    await addContact(pubB64, name);
+    // Step 6: a pasted invite URL names the contact's home relay by its
+    // origin (null for bare keys/aliases — no carrier, no hint).
+    await addContact(pubB64, name, homeHint);
   }
   // PRESENCE POLLING — single batch check (P2 FIX: no rate limit issue)
   const _presenceCache = {};
@@ -14296,6 +14709,9 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         + (_relayBlockedUrls.has(r.url) ? ' ⚠' : '')
         + (isOriginRelay(r) ? '' : ' <button class="btn btn-o btn-sm" data-action="remove-relay" data-url="' + esc(r.url) + '">' + t('relayRemoveBtn') + '</button>')
         + '</span><br>').join('');
+      // Stage-2 step 6: the fan-out count, same concatenation discipline.
+      const _fanoutOpts = [1, 2, 3].map(n =>
+        '<option value="' + n + '"' + (_fanoutCount() === n ? ' selected' : '') + '>' + n + '</option>').join('');
       safeSetHTML(d, `<b class="i-g">${t('settingsPrivacy')}</b><br>
         <label class="i-cur"><input type="checkbox" data-setting="hide-rr" ${_privacyHideReadReceipts ? 'checked' : ''}> ${t('hideReadReceipts')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="rr-delay" ${_settings.readReceiptDelay ? 'checked' : ''}> ${t('rrDelayLabel')}</label><br>
@@ -14314,6 +14730,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         <br><b class="i-g">${t('settingsRelays')}</b><br>
         ${_relayRows}
         <button class="btn btn-o btn-sm" data-action="add-relay">${t('relayAddBtn')}</button><br>
+        <label class="i-cur">${t('relayFanoutLabel')} <select data-setting="fanout">${_fanoutOpts}</select></label><br>
         <br><span class="i-t3-10">${t('settingsImmediate')}</span>`);
       // Multi-account was UNREACHABLE: the "+" that creates a second account lives inside the
       // account tab bar, and renderAccountTabs() only builds that bar once you already have
@@ -14353,6 +14770,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         // One sensible default each — a menu of durations was a requirement nobody asked for.
         // `/focus N` still exists for anyone who wants an exact number of minutes.
         if (s === 'rr-delay') { _settings.readReceiptDelay = cb.checked ? 120 : 0; saveSettings(); return; }
+        if (s === 'fanout') { const n = parseInt(cb.value, 10); _settings.fanout = [1, 2, 3].includes(n) ? n : 2; saveSettings(); return; }
         if (s === 'focus') {
           _settings.focusUntil = cb.checked ? Date.now() + 60 * MS.MIN : 0;
           if (!cb.checked) _settings.focusStrict = false;

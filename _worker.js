@@ -81,6 +81,28 @@ function sanitizeCaps(caps) {
   return caps.slice(0, 20).filter((c) => typeof c === 'string').map((c) => c.slice(0, 32));
 }
 
+// Stage-2 step 6: sanitize a bundle's home hint — at most 3 entries, each an
+// http(s) ORIGIN (paths/queries are dropped: a home is an origin, not a URL)
+// plus an optional pin (the relay's advertised Ed25519 identity key, which
+// senders verify by attestation before trusting — see the step-4 design).
+// Returns undefined when nothing usable remains, so the bundle simply
+// carries no hint (the pre-step-6 shape).
+function sanitizeHomeList(home) {
+  if (!Array.isArray(home)) return undefined;
+  const out = [];
+  for (const e of home) {
+    if (out.length >= 3) break; // the cap binds the SANITIZED list, not the raw input
+    if (!e || typeof e !== 'object' || typeof e.url !== 'string') continue;
+    let u;
+    try { u = new URL(e.url); } catch { continue; }
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') continue;
+    const entry = { url: u.origin };
+    if (typeof e.pin === 'string' && e.pin) entry.pin = e.pin.slice(0, 128);
+    if (!out.some(x => x.url === entry.url)) out.push(entry);
+  }
+  return out.length ? out : undefined;
+}
+
 // Defensive JSON.parse: returns fallback instead of throwing on corrupt KV data.
 function safeJsonParse(str, fallback = null) {
   try { return JSON.parse(str); } catch { return fallback; }
@@ -166,7 +188,7 @@ export default {
           'account-delete', 'group-leave', 'group-delete', 'group-admin',
           'group-transfer', 'group-rename', 'msg-disappear-enforce',
           'sealed-sender', 'franking', 'prekey-x3dh',
-          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'alias-auth', 'backup-auth', 'push-auth', 'drop-server-id', 'group-auth', 'group-ban', 'queue-auth', 'prekey-auth', 'plain-deprecation', 'delete-sweep', 'relay-attest',
+          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'alias-auth', 'backup-auth', 'push-auth', 'drop-server-id', 'group-auth', 'group-ban', 'queue-auth', 'prekey-auth', 'plain-deprecation', 'delete-sweep', 'relay-attest', 'prekey-home',
         ],
         crypto: ['X25519', 'Ed25519', 'AES-256-GCM', 'HKDF-SHA256', 'Double Ratchet', 'Sender Key O(1)'],
         ts: Date.now(),
@@ -3168,7 +3190,7 @@ async function handleRelayAttest(body, env, request) {
 }
 
 async function handlePreKeyUpload(body, env, request) {
-  const { userId, identityKey, edIdentityKey, signedPreKey, signedPreKeySig, oneTimePreKeys, caps, x3dh, ts, sig } = body;
+  const { userId, identityKey, edIdentityKey, signedPreKey, signedPreKeySig, oneTimePreKeys, caps, x3dh, home, ts, sig } = body;
   if (!userId || !identityKey || !signedPreKey) return json({ error: 'userId, identityKey, signedPreKey required', code: 'MISSING_FIELDS' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   // Type guard: public key fields must be strings. An object/array passes the !x
@@ -3271,6 +3293,16 @@ async function handlePreKeyUpload(body, env, request) {
   // fallback path (bundle.x3dh === 'v5') works for transition-period clients that
   // don't yet understand the `caps` array. Only 'v4'/'v5' are meaningful; cap to 4.
   if (typeof x3dh === 'string') bundle.x3dh = x3dh.slice(0, 4);
+  // Stage-2 step 6: the home hint — the relays this account calls home, in
+  // preference order. Stored on the bundle and served back by fetch (the
+  // whole bundle is returned) and by status (which spends no OTP), so a
+  // sender can resolve where a contact wants redundant copies WITHOUT
+  // burning a one-time prekey. Deliberately NOT part of the signed upload
+  // digest above: the hint is routing metadata the account may change at
+  // any re-upload, not key material — senders never trust it beyond the
+  // step-4 pin check they run per relay before depositing.
+  const homeList = sanitizeHomeList(home);
+  if (homeList) bundle.home = homeList;
   const prekeySaved = await kvPut(env, `prekey:${userId}`, JSON.stringify(bundle), { expirationTtl: TTL.MONTH });
   if (!prekeySaved) return json({ error: 'Failed to store prekeys', code: 'STORE_FAILED' }, 500, request);
 
@@ -3556,6 +3588,9 @@ async function handlePreKeyStatus(body, env, request) {
   // way prekey/fetch does. This handler already reads the full bundle and touches no OTP entry.
   if (Array.isArray(bundle.caps)) result.caps = bundle.caps;
   if (typeof bundle.x3dh === 'string') result.x3dh = bundle.x3dh;
+  // Stage-2 step 6: the stored home hint rides along (see handlePreKeyUpload)
+  // so senders can resolve a contact's relays without consuming an OTP.
+  if (Array.isArray(bundle.home)) result.home = bundle.home;
   return json(result, 200, request);
 }
 
@@ -3683,11 +3718,19 @@ async function handleSealedSend(body, env, request) {
   if (!validateUserId(to)) return json({ error: 'invalid recipient id', code: 'INVALID_USER_ID' }, 400, request);
   if (typeof envelope !== 'string' || envelope.length > 256 * 1024) return json({ error: 'Envelope too large', code: 'PAYLOAD_TOO_LARGE' }, 400, request);
   // v3.6: In-memory dedup (saves 1 KV read + 1 KV write per sealed send)
-  // Include envelope.length in the dedup key (mirrors handleMsgSend). Two envelopes
-  // with identical first 32 bytes but different total sizes are distinct messages;
-  // without length the second would be silently dropped as a false duplicate.
+  // The key is a hash of the WHOLE envelope (plus length, mirroring
+  // handleMsgSend). It used to be the first 32 bytes — but an envelope's
+  // head is routing metadata ({"to":…,"ts":…}), not ciphertext, so two
+  // DISTINCT messages to the same recipient with equal envelope length
+  // collided whenever their timestamps shared a 32-byte prefix (in
+  // practice: anything sent within the same ~hour), and the second was
+  // silently dropped as a false duplicate while the sender saw ok.
+  // Found by the stage-2 step-6 fan-out drill, whose second message to
+  // a relay that already held the first one's copy vanished this way.
+  // Identical bytes — a retransmission, or the same message's copy on
+  // its way to another mailbox — hash identically and still dedup.
   if (!globalThis._sealedDedup) globalThis._sealedDedup = new Map();
-  const dedupKey = `${to}:${envelope.length}:${envelope.slice(0, 32)}`;
+  const dedupKey = `${to}:${envelope.length}:${await sha256Short(envelope)}`;
   if (globalThis._sealedDedup.has(dedupKey)) return json({ ok: true, dedup: true }, 200, request);
   globalThis._sealedDedup.set(dedupKey, 1);
   if (globalThis._sealedDedup.size > 500) { const e = [...globalThis._sealedDedup.entries()]; globalThis._sealedDedup = new Map(e.slice(-200)); }
