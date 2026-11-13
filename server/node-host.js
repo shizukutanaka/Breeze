@@ -41,6 +41,7 @@ import { pipeline } from 'node:stream/promises';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import worker from '../_worker.js';
+import { loadOrCreateRelayIdentity } from './relay-identity.js';
 import { makeSqliteKV } from './sqlite-kv.js';
 import { makeMailboxNamespace } from './mailbox-namespace.js';
 import { makeAssets } from './static-assets.js';
@@ -58,6 +59,20 @@ export function buildRelayEnv({ db, rootDir = REPO_ROOT, source = process.env, d
   env.KV = makeSqliteKV(db);
   env.MAILBOX_DO = makeMailboxNamespace(db);
   env.ASSETS = makeAssets({ rootDir, extraBlocked: dbPath ? [dbPath] : [] });
+  // Relay identity (stage-2 step 4): the step-3 volume key becomes the
+  // worker's RELAY_PUBLIC_KEY / RELAY_PRIVATE_KEY pair, so /api/health
+  // can publish the public half and /api/relay/attest can sign with it.
+  // This wiring (and relay-identity.js itself) is the only host code
+  // that touches the private half; on Cloudflare the operator sets the
+  // same two names as secrets instead. The database key deliberately
+  // wins over same-named process variables: the fingerprint in the
+  // boot log (index.js loads the same record) and the key clients pin
+  // must be one and the same key.
+  if (db) {
+    const identity = loadOrCreateRelayIdentity(db);
+    env.RELAY_PUBLIC_KEY = identity.publicKey;
+    env.RELAY_PRIVATE_KEY = identity.privateKey;
+  }
   // Host defaults: the self-host's mailboxes run on the core (the
   // whole point of the exercise), presence with them, and the WS
   // wake-up on — each still an ordinary worker flag the operator can

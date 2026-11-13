@@ -158,6 +158,20 @@ separate, explicitly-scoped future work if it's wanted.
   path, and the offline retry queue still use legacy envelopes and remain sender-visible.
   The relay still sees recipient, timing, and message size (padded to 256 B boundaries);
   cover traffic / onion routing are deferred (see SPEC §12).
+- **Relay identity (stage-2 step 4)**: the relay holds a persistent Ed25519 key
+  (`relayKey` in `/api/health`). On first contact a client verifies the key by
+  challenge — the relay must sign `breeze-relay-attest:{relayKey}:{nonce}` for
+  a client-chosen nonce (`POST /api/relay/attest`) — and pins the verified key
+  per account. Later contacts re-verify; a changed key or a signature that
+  fails against the pinned key stops all relay calls for that account (API,
+  signaling, and the wake-up socket) until the user re-trusts it out-of-band.
+  The threat this answers is a *substituted* relay: someone who controls the
+  address a user was handed can present a well-formed fake, but cannot hold
+  the pinned key. **The pin authenticates continuity, not virtue** — a pinned
+  but hostile relay still sees everything the Metadata bullet above lists;
+  pinning never makes a relay trustworthy, only recognizable. Relays that
+  predate step 4 advertise no key and are used exactly as before (implicit
+  trust, no pin).
 - **The plain relay path is deprecated (stage-0, 2026-11-13).** `/api/msg/send` and
   `/api/msg/poll` store sender id, display name, public key, group name and message-type
   flags in plaintext — everything sealed v2 exists to hide. Every plain-path response now

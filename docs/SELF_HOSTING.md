@@ -82,8 +82,20 @@ out-of-band (in person, over another channel) so they can recognize
 the relay they were handed as the one you run. The same fingerprint
 prints on every boot; if it ever changes, the data volume was
 replaced — investigate before telling users to trust the new one.
-(A future update lets clients verify and pin this key
-automatically; until then it is an operator-to-user check.)
+
+Clients verify and pin this key automatically (stage-2 step 4): on
+first contact a client challenges the relay to sign with the key
+(`/api/relay/attest`), stores the verified key with the account, and
+re-verifies on every later session. The fingerprint the client shows
+(under `/security`, and in the toast on first pin) is derived from
+the same key — compare it with the boot-log line above. If the key
+ever changes, clients **stop talking to the relay** and warn the
+user; they never re-pin silently. Treat a fingerprint change as a
+breaking event: there is no in-app "trust the new key" button in
+step 4, so after a genuine volume loss your users must clear the
+app's stored data for their account and re-pin on first contact —
+announce the new fingerprint out-of-band first, or they cannot tell
+your new key from an attacker's.
 
 ### Backup & restore
 

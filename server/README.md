@@ -50,7 +50,12 @@ Backups are the database file (plus its `-wal`/`-shm` sidecars if
 present while running): stop the process, copy the file, restart.
 The relay identity key lives inside that same file (a dedicated
 `relay_meta` table the worker's KV surface cannot reach), so a
-restored relay keeps its fingerprint.
+restored relay keeps its fingerprint. Since stage-2 step 4 the host
+also hands the pair to the worker as its `RELAY_PUBLIC_KEY` /
+`RELAY_PRIVATE_KEY` env, so `/api/health` advertises the key and
+`/api/relay/attest` can prove possession to pinning clients — the
+database stays the single source; no separate key configuration
+exists on the host.
 
 ## Configuration
 

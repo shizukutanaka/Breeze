@@ -79,6 +79,18 @@ new_sqlite_classes = ["MailboxDO"]
 # disable the path outright (requests get 410 PLAIN_PATH_DISABLED):
 # wrangler pages secret put PLAIN_PATH_DISABLED        # true — disable the legacy plain relay path
 #
+# --- Relay identity (stage-2 step 4) ---
+# A persistent Ed25519 keypair lets clients pin THIS relay and detect
+# substitution (see SECURITY.md, "Relay identity"). Both halves must
+# be set: /api/health advertises the public half as `relayKey` and
+# POST /api/relay/attest proves possession. Unset = no key advertised
+# and clients keep the pre-step-4 implicit trust. Generate a pair:
+#   node -e "const c=require('node:crypto');const k=c.generateKeyPairSync('ed25519');console.log('RELAY_PUBLIC_KEY='+Buffer.from(k.publicKey.export({format:'jwk'}).x,'base64url').toString('base64'));console.log('RELAY_PRIVATE_KEY='+k.privateKey.export({format:'der',type:'pkcs8'}).toString('base64'))"
+# wrangler pages secret put RELAY_PUBLIC_KEY          # raw Ed25519 public key, base64
+# wrangler pages secret put RELAY_PRIVATE_KEY         # PKCS#8 DER private key, base64 (secret!)
+# Treat the private half like a password: anyone holding it can
+# impersonate your relay to every client that pinned it.
+#
 # --- Registration admission (stage-2 step 3) ---
 # Setting REGISTRATION_ALLOWLIST (comma-separated Breeze IDs) closes
 # ACCOUNT CREATION to those IDs: only a prekey upload for an ID with no
