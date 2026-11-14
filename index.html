@@ -12029,13 +12029,15 @@ async function initMessenger(dbName) {
   // and the one write-back phrase restore performs via adoptRestoredSigning.
   // Absent module ⇒ inert no-op entries (the pq-facade doctrine).
   const _backupTools = globalThis.__breezeBackup?.createBackupTools({
-    db, dbGet, dbPut, dbGetAll, authFields, homeRelays, postAPIRelay, signMessage,
+    db, dbGet, dbPut, dbGetAll, authFields, homeRelays, postAPIRelay, signMessage, renderContacts, auditLog,
     myId: () => myId,
     adoptRestoredSigning: (m) => { _signingKey = m.signingKeyPair; _signingPubB64 = m.signingRecord.pubB64; myId = m.identityPubB64.slice(0, 12); },
   });
   const backupToFile = _backupTools?.backupToFile || (async () => {});
   const restoreFromFilePicker = _backupTools?.restoreFromFilePicker || (() => {});
   const restoreBackup = _backupTools?.restoreBackup || (async () => {});
+  const exportContactsEncrypted = _backupTools?.exportContactsEncrypted || (async () => {});
+  const importContactsFile = _backupTools?.importContactsFile || (async () => {});
   const createRecoveryKit = _backupTools?.createRecoveryKit || (async () => {});
   const restoreFromPhrase = _backupTools?.restoreFromPhrase || (async () => {});
   const createCloudBackup = _backupTools?.createCloudBackup || (async () => {});
@@ -13237,64 +13239,24 @@ async function initMessenger(dbName) {
       return;
     }
 
-    // v3.6: /contacts export|import — backup/restore contact list
+    // /contacts export|import — backup/restore the contact list. Recovery
+    // plan step 6: the export is the ENCRYPTED backup envelope now (the
+    // plaintext JSON export that used to be built here is removed — an
+    // address book with names, notes and rosters no longer leaves the
+    // device readable by whoever finds the file). The bodies live with
+    // the backup subsystem (src/app/backup.js): exportContactsEncrypted /
+    // importContactsFile (the latter still reads legacy plaintext exports
+    // as a migration path).
     if (val === '/contacts export' || val === '/contacts backup') {
       e.preventDefault(); clearInput();
-      const contacts = await dbGetAll('contacts');
-      const exportData = contacts.map(c => ({
-        id: c.id, name: c.name, alias: c.alias || null, pubB64: c.pubB64,
-        isGroup: c.isGroup || false, members: c.members || [],
-        labels: c.labels || [], notes: c.notes || null,
-        addedAt: c.addedAt, pinned: c.pinned || false,
-      }));
-      const blob = new Blob([JSON.stringify({ version: CONFIG.VERSION, type: 'contacts', exportedAt: new Date().toISOString(), contacts: exportData }, null, 2)], { type: 'application/json' });
-      downloadBlob(blob, 'breeze-contacts-' + new Date().toISOString().slice(0, 10) + '.json');
-      showToast(t('toastExportedContacts', contacts.length), 'success');
-      auditLog('settings', 'Contact export: ' + contacts.length);
+      await exportContactsEncrypted();
       return;
     }
     if (val === '/contacts import' || val === '/contacts restore') {
       e.preventDefault(); clearInput();
       const input = document.createElement('input');
       input.type = 'file'; input.accept = '.json';
-      input.onchange = async (ev) => {
-        try {
-          const text = await ev.target.files[0].text();
-          const data = JSON.parse(text);
-          if (!data.contacts || !Array.isArray(data.contacts)) { showToast(t('toastInvalidFile'), 'error'); return; }
-          let added = 0, skipped = 0;
-          for (const c of data.contacts) {
-            // Validate required fields: pubB64 must be a valid base64 string for non-groups
-            if (!c?.isGroup) {
-              if (typeof c?.pubB64 !== 'string' || !c.pubB64 || c.pubB64.length > 128 ||
-                  !/^[A-Za-z0-9+/=]+$/.test(c.pubB64)) { skipped++; continue; }
-            }
-            // id must be a non-empty string of safe length
-            const rawId = c.id || c.pubB64 || c.name;
-            if (typeof rawId !== 'string' || !rawId || rawId.length > 128) { skipped++; continue; }
-            // Use exported id when present (preserves group IDs); fall back to pubB64 for older exports
-            const contactId = rawId;
-            const existing = await dbGet('contacts', contactId);
-            if (existing) { skipped++; continue; }
-            // Cap every field to the same limits enforced at normal add/edit time
-            const safeName = typeof c.name === 'string' ? c.name.slice(0, 64) : 'Contact';
-            const safeAlias = typeof c.alias === 'string' ? c.alias.slice(0, 32) : null;
-            const safeNotes = typeof c.notes === 'string' ? c.notes.slice(0, 1024) : null;
-            const safeLabels = Array.isArray(c.labels)
-              ? c.labels.filter(l => typeof l === 'string').map(l => l.slice(0, 32)).slice(0, 20) : [];
-            const safeMembers = Array.isArray(c.members) ? c.members.slice(0, CONFIG.GROUP_MAX) : [];
-            const safeAddedAt = (typeof c.addedAt === 'number' && Number.isFinite(c.addedAt)) ? c.addedAt : Date.now();
-            await dbPut('contacts', { id: contactId, pubB64: c.pubB64, name: safeName,
-              alias: safeAlias, isGroup: !!c.isGroup, members: safeMembers,
-              labels: safeLabels, notes: safeNotes, addedAt: safeAddedAt,
-              pinned: !!c.pinned, unread: 0 });
-            added++;
-          }
-          await renderContacts();
-          showToast(t('toastContactsImported', added, skipped), 'success');
-          auditLog('settings', `Contact import: ${added} added, ${skipped} skipped`);
-        } catch(e) { _dbg(e); showToast(t('toastImportFail'), 'error'); }
-      };
+      input.onchange = async (ev) => { if (ev.target.files[0]) await importContactsFile(ev.target.files[0]); };
       input.click();
       return;
     }

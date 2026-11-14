@@ -18,7 +18,7 @@
 // ============================================================================
 
 export function createBackupTools(D) {
-  const { db, dbGet, dbPut, dbGetAll, authFields, homeRelays, postAPIRelay, signMessage } = D;
+  const { db, dbGet, dbPut, dbGetAll, authFields, homeRelays, postAPIRelay, signMessage, renderContacts, auditLog } = D;
 
   // ===== Backup & Restore =====
   // Recovery plan step 1 (docs/IDENTITY_RECOVERY_PLAN.md §1.6 defect 2): a backup that
@@ -173,6 +173,97 @@ export function createBackupTools(D) {
       if (legacy) showToast(t('toastRestoredLegacy'), 'warn', 9000);
       setTimeout(() => location.reload(), legacy ? 6 * MS.SEC : 1.5 * MS.SEC);
     } catch(e) { _dbg(e,'restore'); showToast(t('toastWrongPassphrase'), 'error'); }
+  }
+
+  // ===== Contacts-only export / import (recovery plan step 6) =====
+  //
+  // /contacts export used to download the address book as PLAINTEXT JSON —
+  // names, @aliases, public keys, group rosters, labels and private notes,
+  // readable by anyone who later finds the file. Step 6 folds the export
+  // into the encrypted backup format: the file is the same {s,i,d}
+  // PBKDF2 + AES-256-GCM envelope encrypt() writes for the full backup,
+  // carrying a contacts-only payload ({ backupV, contactsOnly: true,
+  // contacts, exportedAt }). It holds NO identity and NO key material, so
+  // a contacts file can never become a recovery artefact — which is also
+  // why the disposable ('none') refusal guarding backupToFile does not
+  // apply here: there is no account-recovery promise in it.
+  async function exportContactsEncrypted() {
+    const contacts = await dbGetAll('contacts');
+    const pass = await showPrompt(t('backupPassSet'), '', { type: 'password', okText: t('encrypt'), autocomplete: 'new-password' });
+    // Same creation-side floor as the file backup (step 3): the minimum
+    // IS the security of an exported address book.
+    if (!pass || pass.length < 6) { showToast(t('backupPassMin'), 'error'); return; }
+    const exportData = contacts.map(c => ({
+      id: c.id, name: c.name, alias: c.alias || null, pubB64: c.pubB64,
+      isGroup: c.isGroup || false, members: c.members || [],
+      labels: c.labels || [], notes: c.notes || null,
+      addedAt: c.addedAt, pinned: c.pinned || false,
+    }));
+    const data = JSON.stringify({ backupV: BACKUP_FORMAT_V, contactsOnly: true, contacts: exportData, exportedAt: new Date().toISOString() });
+    const enc = await encrypt(pass, data);
+    const blob = new Blob([JSON.stringify(enc)], { type: 'application/json' });
+    downloadBlob(blob, 'breeze-contacts-' + new Date().toISOString().slice(0, 10) + '.json');
+    showToast(t('toastExportedContacts', contacts.length), 'success');
+    auditLog('settings', 'Contact export (encrypted): ' + contacts.length);
+  }
+
+  // Import counterpart. Accepts the encrypted backup envelope — a
+  // contacts-only export, or a full backup (only its contact list is
+  // read; identity/key material is restoreBackup's job, never imported
+  // here) — and, as a migration path for files exported before step 6,
+  // the legacy plaintext shape. Importing creates no new plaintext: the
+  // export above is encrypted-only, and the plaintext branch exists so
+  // an old export remains usable, not as a format anything produces.
+  // Per-contact validation is the pre-step-6 importer's, unchanged.
+  async function importContactsFile(file) {
+    try {
+      const text = await file.text();
+      let parsed;
+      try { parsed = JSON.parse(text); } catch(e) { _dbg(e, 'contacts-import'); showToast(t('toastInvalidFile'), 'error'); return; }
+      let list = null;
+      if (parsed && Array.isArray(parsed.s) && Array.isArray(parsed.i) && Array.isArray(parsed.d)) {
+        const pass = await showPrompt(t('backupPassEnter'), '', { type: 'password', okText: t('decrypt'), autocomplete: 'current-password' });
+        if (!pass) return;
+        let data;
+        try { data = JSON.parse(await decrypt(pass, parsed)); }
+        catch(e) { _dbg(e, 'contacts-import'); showToast(t('toastWrongPassphrase'), 'error'); return; }
+        if (!data || !Array.isArray(data.contacts)) { showToast(t('toastInvalidFile'), 'error'); return; }
+        list = data.contacts;
+      } else if (parsed && Array.isArray(parsed.contacts)) {
+        list = parsed.contacts; // legacy plaintext export (pre-step-6)
+      } else { showToast(t('toastInvalidFile'), 'error'); return; }
+      let added = 0, skipped = 0;
+      for (const c of list) {
+        // Validate required fields: pubB64 must be a valid base64 string for non-groups
+        if (!c?.isGroup) {
+          if (typeof c?.pubB64 !== 'string' || !c.pubB64 || c.pubB64.length > 128 ||
+              !/^[A-Za-z0-9+/=]+$/.test(c.pubB64)) { skipped++; continue; }
+        }
+        // id must be a non-empty string of safe length
+        const rawId = c.id || c.pubB64 || c.name;
+        if (typeof rawId !== 'string' || !rawId || rawId.length > 128) { skipped++; continue; }
+        // Use exported id when present (preserves group IDs); fall back to pubB64 for older exports
+        const contactId = rawId;
+        const existing = await dbGet('contacts', contactId);
+        if (existing) { skipped++; continue; }
+        // Cap every field to the same limits enforced at normal add/edit time
+        const safeName = typeof c.name === 'string' ? c.name.slice(0, 64) : 'Contact';
+        const safeAlias = typeof c.alias === 'string' ? c.alias.slice(0, 32) : null;
+        const safeNotes = typeof c.notes === 'string' ? c.notes.slice(0, 1024) : null;
+        const safeLabels = Array.isArray(c.labels)
+          ? c.labels.filter(l => typeof l === 'string').map(l => l.slice(0, 32)).slice(0, 20) : [];
+        const safeMembers = Array.isArray(c.members) ? c.members.slice(0, CONFIG.GROUP_MAX) : [];
+        const safeAddedAt = (typeof c.addedAt === 'number' && Number.isFinite(c.addedAt)) ? c.addedAt : Date.now();
+        await dbPut('contacts', { id: contactId, pubB64: c.pubB64, name: safeName,
+          alias: safeAlias, isGroup: !!c.isGroup, members: safeMembers,
+          labels: safeLabels, notes: safeNotes, addedAt: safeAddedAt,
+          pinned: !!c.pinned, unread: 0 });
+        added++;
+      }
+      await renderContacts();
+      showToast(t('toastContactsImported', added, skipped), 'success');
+      auditLog('settings', `Contact import: ${added} added, ${skipped} skipped`);
+    } catch(e) { _dbg(e, 'contacts-import'); showToast(t('toastImportFail'), 'error'); }
   }
 
   // Recovery plan step 3 (docs/IDENTITY_RECOVERY_PLAN.md §3.1/§4): create a
@@ -699,6 +790,6 @@ export function createBackupTools(D) {
     } catch(e) { _dbg(e, 'restore'); showToast(t('backupWrongPass'), 'error'); }
   }
   // ===== Backup & Restore (module end) =====
-  return { backupToFile, restoreFromFilePicker, restoreBackup, createRecoveryKit, restoreFromPhrase, createCloudBackup, restoreCloudBackup,
+  return { backupToFile, restoreFromFilePicker, restoreBackup, exportContactsEncrypted, importContactsFile, createRecoveryKit, restoreFromPhrase, createCloudBackup, restoreCloudBackup,
     enrollSimpleRecovery, simpleBackupAction, updateSimpleBackup, restoreSimpleBackup, restoreSimpleBackupLive, restoreBackupSmart, eraseSimpleBackup };
 }

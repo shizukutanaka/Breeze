@@ -312,8 +312,16 @@ describe('backup key material — wiring pins', () => {
     // one payload shape for every mode, never a parallel format.
     // (Modularization: the producers/consumers live in src/app/backup.js
     // now, so the census reads that file — same counts, same pin.)
+    // Updated by step 6 (contacts export encryption): the backupV count
+    // rises to 5, but the keyMaterial counts deliberately do NOT — the
+    // fifth emitter is exportContactsEncrypted, whose contacts-only
+    // payload shares the envelope and the format-version marker yet
+    // carries no identity and no key material by design (a contacts
+    // file must never become a recovery artefact). The asymmetry IS
+    // the pin: a future change that lets the contacts payload collect
+    // key material moves the first count and fails here.
     expect(backupMod.match(/_collectBackupKeyMaterial\(\)/g)).toHaveLength(5); // def + file + cloud + recovery kit + simple
     expect(backupMod.match(/_restoreBackupKeyMaterial\(data\.keyMaterial\)/g)).toHaveLength(4);
-    expect(backupMod.match(/backupV: BACKUP_FORMAT_V/g)).toHaveLength(4);
+    expect(backupMod.match(/backupV: BACKUP_FORMAT_V/g)).toHaveLength(5); // file + cloud + kit + simple + contacts-only (step 6, no keyMaterial)
   });
 });
