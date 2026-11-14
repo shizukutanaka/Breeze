@@ -161,10 +161,16 @@ else fail "mismatched HTML tag nesting (run: node tools/html-balance.mjs)" 3; fi
 if node tools/closure-boundary.mjs >/dev/null 2>&1; then pass "no initMessenger-closure-local name referenced outside it" 3
 else fail "closure-local name referenced outside initMessenger() (run: node tools/closure-boundary.mjs)" 3; fi
 
+# Definitions are collected from index.html, but references are counted across the
+# whole deployed client (index.html + src/app/*.js): modularization moved call
+# sites into the app modules, and a top-level helper referenced only from there
+# (e.g. _promptRecoveryPhraseRestore, called by src/app/backup.js) is not dead.
 DEADFN=$(node -e '
 const fs=require("fs");const h=fs.readFileSync("index.html","utf8");
+const app=fs.readdirSync("src/app").filter(f=>f.endsWith(".js")).map(f=>fs.readFileSync("src/app/"+f,"utf8")).join("\n");
+const corpus=h+"\n"+app;
 const fns=[...h.matchAll(/^\s*(?:async\s+)?function\s+([A-Za-z_][\w]*)\s*\(/gm)].map(m=>m[1]);
-const dead=[...new Set(fns)].filter(f=>(h.match(new RegExp("\\b"+f+"\\b","g"))||[]).length<=1);
+const dead=[...new Set(fns)].filter(f=>(corpus.match(new RegExp("\\b"+f+"\\b","g"))||[]).length<=1);
 process.stdout.write(dead.join(" "));' 2>/dev/null)
 if [ -z "$DEADFN" ]; then pass "no unreachable functions in index.html" 3
 else fail "unreachable function(s) in index.html: $DEADFN" 3; fi

@@ -43,6 +43,15 @@ function slice(from, to) {
   expect(b, `anchor not found: ${to}`).toBeGreaterThan(a);
   return html.slice(a, b);
 }
+const backupMod = readFileSync(join(HERE, '..', 'src', 'app', 'backup.js'), 'utf8');
+function sliceBackup(from, to) {
+  const a = backupMod.indexOf(from);
+  const b = backupMod.indexOf(to);
+  expect(a, `anchor not found in src/app/backup.js: ${from}`).toBeGreaterThan(-1);
+  expect(b, `anchor not found in src/app/backup.js: ${to}`).toBeGreaterThan(a);
+  return backupMod.slice(a, b);
+}
+
 
 // Minimal IndexedDB stand-in (the backup-keymaterial.test.js pattern,
 // plus getAll for dbGetAll).
@@ -231,11 +240,12 @@ function buildRestoreFns(db, { promptResult = null, promptNewAnswer = 'kit-pass'
   let reloads = 0;
   const src = [
     'let _signingKey = null, _signingPubB64 = "", myId = "";',
+    'const D = { myId: () => myId, adoptRestoredSigning: (m) => { _signingKey = m.signingKeyPair; _signingPubB64 = m.signingRecord.pubB64; myId = m.identityPubB64.slice(0, 12); } };',
     slice('function arr(u8a)', 'function uid()'),
     slice('async function dbGet(store, key)', 'async function dbGetAll'),
     slice('async function dbGetAll(store)', 'async function dbGetByIndex'),
-    slice('const BACKUP_FORMAT_V', 'async function backupToFile'),
-    slice('async function createRecoveryKit()', 'async function resolveAndAdd'),
+    sliceBackup('const BACKUP_FORMAT_V', 'async function backupToFile'),
+    sliceBackup('async function createRecoveryKit()', '// ===== Backup & Restore (module end)'),
   ].join('\n');
   const factory = new Function('db', '_dbg', 'showToast', 't', '_DOM', '_promptRecoveryPhraseRestore',
     '_promptRecoveryPhraseNew', 'downloadBlob', 'API', 'postAPIRaw', 'authFields', 'MS', 'location', 'setTimeout',
@@ -455,7 +465,7 @@ describe('recovery step 3 — wiring pins', () => {
   });
 
   it('the file backup passphrase minimum is 6, level with cloud (plan §2 item 8)', () => {
-    const backup = slice('async function backupToFile()', 'function restoreFromFilePicker()');
+    const backup = sliceBackup('async function backupToFile()', 'function restoreFromFilePicker()');
     expect(backup).toContain('pass.length < 6');
     expect(backup).toContain("t('backupPassMin')");
     expect(backup).not.toContain('toastMin4Chars');

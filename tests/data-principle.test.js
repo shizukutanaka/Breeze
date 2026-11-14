@@ -153,11 +153,20 @@ function slice(from, to) {
   expect(b, `anchor not found: ${to}`).toBeGreaterThan(a);
   return html.slice(a, b);
 }
+const backupMod = readFileSync(join(HERE, '..', 'src', 'app', 'backup.js'), 'utf8');
+function sliceBackup(from, to) {
+  const a = backupMod.indexOf(from);
+  const b = backupMod.indexOf(to);
+  expect(a, `anchor not found in src/app/backup.js: ${from}`).toBeGreaterThan(-1);
+  expect(b, `anchor not found in src/app/backup.js: ${to}`).toBeGreaterThan(a);
+  return backupMod.slice(a, b);
+}
+
 
 describe("disposable ('none') identities are refused both backup producers", () => {
   function buildBackupToFile(identity) {
     const calls = { toasts: [], prompts: 0, downloads: 0 };
-    const src = slice('async function backupToFile()', 'function restoreFromFilePicker()');
+    const src = sliceBackup('async function backupToFile()', 'function restoreFromFilePicker()');
     const factory = new Function('dbGet', 'dbGetAll', 'showToast', 't', 'showPrompt',
       '_collectBackupKeyMaterial', 'encrypt', 'downloadBlob', 'BACKUP_FORMAT_V',
       src + '; return { backupToFile };');
@@ -187,9 +196,9 @@ describe("disposable ('none') identities are refused both backup producers", () 
 
   function buildCreateCloudBackup(identity, relayResp) {
     const calls = { toasts: [], prompts: 0 };
-    const src = slice('async function createCloudBackup()', 'async function restoreCloudBackup()');
+    const src = sliceBackup('async function createCloudBackup()', 'async function restoreCloudBackup()');
     const factory = new Function('dbGet', 'dbGetAll', 'showToast', 't', 'showPrompt',
-      '_collectBackupKeyMaterial', 'CONFIG', 'arr', 'signMessage', 'postAPIRelay', 'homeRelays', 'myId', '_dbg', 'API', 'BACKUP_FORMAT_V',
+      '_collectBackupKeyMaterial', 'CONFIG', 'arr', 'signMessage', 'postAPIRelay', 'homeRelays', 'D', '_dbg', 'API', 'BACKUP_FORMAT_V',
       src + '; return { createCloudBackup };');
     const api = factory(
       async () => identity, async () => [],
@@ -198,7 +207,7 @@ describe("disposable ('none') identities are refused both backup producers", () 
       async () => null,
       { PROTOCOL_VERSION: 3, IV_BYTES: 12, PBKDF2_AT_REST_ITERATIONS: 1000, AES_KEY_BITS: 256 },
       (u8a) => [...u8a], async () => 'sig', async () => relayResp,
-      () => [{ url: 'https://relay.test' }], 'user00001', () => {}, 'https://api.test', 2,
+      () => [{ url: 'https://relay.test' }], { myId: () => 'user00001' }, () => {}, 'https://api.test', 2,
     );
     return { ...api, calls };
   }
@@ -230,15 +239,15 @@ describe("disposable ('none') identities are refused both backup producers", () 
 describe('cloud restore names a BACKUP_DISABLED relay', () => {
   function buildRestore(relayResp) {
     const calls = { toasts: [] };
-    const src = slice('async function restoreCloudBackup()', '// v3 PRO: EPHEMERAL ROOMS');
+    const src = sliceBackup('async function restoreCloudBackup()', '// ===== Backup & Restore (module end)');
     const factory = new Function('showPrompt', 'showToast', 't', 'signMessage', 'postAPIRelay',
-      'homeRelays', 'myId', '_dbg', 'dbPut', '_restoreBackupKeyMaterial', 'CONFIG', 'u8', 'setTimeout',
+      'homeRelays', 'D', '_dbg', 'dbPut', '_restoreBackupKeyMaterial', 'CONFIG', 'u8', 'setTimeout',
       src + '; return { restoreCloudBackup };');
     const api = factory(
       async () => 'passphrase-1',
       (msg, type) => calls.toasts.push({ msg, type }), (k) => k,
       async () => 'sig', async () => relayResp,
-      () => [{ url: 'https://relay.test' }], 'user00001', () => {},
+      () => [{ url: 'https://relay.test' }], { myId: () => 'user00001' }, () => {},
       async () => {}, async () => {}, {}, (a) => new Uint8Array(a), () => {},
     );
     return { ...api, calls };

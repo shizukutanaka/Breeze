@@ -11,7 +11,13 @@ const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-51
   // Recovery plan step 3: the account-seed facade and its vendored BIP39
   // wordlist — precached so a first offline boot can still create a
   // seed-derived identity / offer phrase restore instead of degrading.
-  '/src/crypto/seed.js', '/src/crypto/wordlist.js'];
+  '/src/crypto/seed.js', '/src/crypto/wordlist.js',
+  // Modularization: the app-logic subsystems extracted from index.html
+  // (calls, backup/restore, QR, import parsers, notification sound) —
+  // precached so a first offline boot keeps those features instead of
+  // degrading to their inert fallbacks.
+  '/src/app/call.js', '/src/app/backup.js', '/src/app/qr.js',
+  '/src/app/import-parsers.js', '/src/app/sound.js'];
 const MAX_CACHE_ITEMS = 50; // v3.6: Prevent unbounded cache growth
 
 self.addEventListener('install', (e) => {

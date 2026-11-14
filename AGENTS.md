@@ -43,7 +43,8 @@ deploying any is a breaking change). See the deployed-vs-reference table in CLAU
 - don't add external *runtime* npm dependencies (deployed app is zero-dependency; dev-only
   deps like vitest are fine in package.json)
 - don't create separate .css/.js files *in the deployed artifact* — index.html is
-  self-contained (exception: `src/crypto/*.js` ESM references, which are dev/test-only)
+  self-contained (exception: the deployed ESM modules under `src/crypto/` and
+  `src/app/`, runtime-imported via the `window.__breeze*` bridges — INTEGRATION.md §0(A))
 - don't store secrets in code — use Worker environment variables
 - don't use `localStorage` for sensitive data — use IndexedDB (encrypted)
 

@@ -33,6 +33,15 @@ function slice(from, to) {
   expect(b, `anchor not found: ${to}`).toBeGreaterThan(a);
   return html.slice(a, b);
 }
+const backupMod = readFileSync(join(HERE, '..', 'src', 'app', 'backup.js'), 'utf8');
+function sliceBackup(from, to) {
+  const a = backupMod.indexOf(from);
+  const b = backupMod.indexOf(to);
+  expect(a, `anchor not found in src/app/backup.js: ${from}`).toBeGreaterThan(-1);
+  expect(b, `anchor not found in src/app/backup.js: ${to}`).toBeGreaterThan(a);
+  return backupMod.slice(a, b);
+}
+
 
 // Minimal IndexedDB stand-in (the backup-keymaterial.test.js pattern).
 function mockDb() {
@@ -74,8 +83,8 @@ function buildRestore(db, promptResult = PASS) {
     slice('async function deriveKey', '// v3.6 Phase 2c'),
     slice('function _atRestIsWrapped', '// Loads the private JWK'),
     slice('async function dbGet(store, key)', 'async function dbGetAll'),
-    slice('const BACKUP_FORMAT_V', 'async function backupToFile'),
-    slice('async function restoreBackup(file)', 'async function resolveAndAdd'),
+    sliceBackup('const BACKUP_FORMAT_V', 'async function backupToFile'),
+    sliceBackup('async function restoreBackup(file)', '// ===== Backup & Restore (module end)'),
   ].join('\n');
   const factory = new Function('db', 'CONFIG', '_dbg', 'showPrompt', 'showToast', 't', 'MS', 'location', 'setTimeout',
     src + '; return { encrypt, restoreBackup };');

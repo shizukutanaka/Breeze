@@ -36,6 +36,15 @@ function slice(from, to) {
   expect(b, `anchor not found: ${to}`).toBeGreaterThan(a);
   return html.slice(a, b);
 }
+const backupMod = readFileSync(join(HERE, '..', 'src', 'app', 'backup.js'), 'utf8');
+function sliceBackup(from, to) {
+  const a = backupMod.indexOf(from);
+  const b = backupMod.indexOf(to);
+  expect(a, `anchor not found in src/app/backup.js: ${from}`).toBeGreaterThan(-1);
+  expect(b, `anchor not found in src/app/backup.js: ${to}`).toBeGreaterThan(a);
+  return backupMod.slice(a, b);
+}
+
 
 // Minimal IndexedDB stand-in (the recovery-seed.test.js pattern).
 function mockDb() {
@@ -102,8 +111,8 @@ function buildKit(db, { promptNewAnswer = 'kit-pass' } = {}) {
     slice('function arr(u8a)', 'function uid()'),
     slice('async function dbGet(store, key)', 'async function dbGetAll'),
     slice('async function dbGetAll(store)', 'async function dbGetByIndex'),
-    slice('const BACKUP_FORMAT_V', 'async function backupToFile'),
-    slice('async function createRecoveryKit()', 'async function resolveAndAdd'),
+    sliceBackup('const BACKUP_FORMAT_V', 'async function backupToFile'),
+    sliceBackup('async function createRecoveryKit()', '// ===== Backup & Restore (module end)'),
   ].join('\n');
   const factory = new Function('db', '_dbg', 'showToast', 't', '_DOM', '_promptRecoveryPhraseRestore',
     '_promptRecoveryPhraseNew', 'downloadBlob', 'API', 'postAPIRaw', 'authFields', 'MS', 'location', 'setTimeout',
@@ -210,7 +219,7 @@ describe('disposable mode — wiring pins', () => {
   });
 
   it('the kit guard reads the identity record', () => {
-    const kit = slice('async function createRecoveryKit()', 'async function restoreFromPhrase');
+    const kit = sliceBackup('async function createRecoveryKit()', 'async function restoreFromPhrase');
     expect(kit).toContain("identity.recoveryMode === 'none'");
     expect(kit).toContain("t('toastRecoveryNoneKit')");
   });

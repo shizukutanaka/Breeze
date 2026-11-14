@@ -13,6 +13,10 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const INDEX = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+// Modularization: the backup signer challenges moved with the backup
+// subsystem into src/app/backup.js — the client side of the parity is
+// index.html plus that module.
+const BACKUP_MOD = fs.readFileSync(path.join(ROOT, 'src', 'app', 'backup.js'), 'utf8');
 const WORKER = fs.readFileSync(path.join(ROOT, '_worker.js'), 'utf8');
 
 // `breeze-…` template literals with slots normalized to {}. A trailing ':' is
@@ -28,7 +32,7 @@ function skeletons(src) {
   return out;
 }
 
-const clientSkels = skeletons(INDEX);
+const clientSkels = skeletons(INDEX + '\n' + BACKUP_MOD);
 const workerSkels = skeletons(WORKER);
 
 // Ops whose verification lives on main — exact skeleton parity required.
