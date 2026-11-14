@@ -4,7 +4,10 @@ const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-51
   // Stage-3 step 3: the PQ prekey helper module closure index.html imports
   // at runtime (INTEGRATION.md §0(A)) — precached so a first offline boot
   // still mints PQ key material instead of degrading to classical bundles.
-  '/src/crypto/pqkey.js', '/src/crypto/mlkem.js', '/src/crypto/bytes.js'];
+  // Stage-3 step 5 adds the PQXDH session facade and the combiner it wraps
+  // (pqxdh.js → pq.js → mlkem.js/bytes.js, already listed).
+  '/src/crypto/pqkey.js', '/src/crypto/mlkem.js', '/src/crypto/bytes.js',
+  '/src/crypto/pqxdh.js', '/src/crypto/pq.js'];
 const MAX_CACHE_ITEMS = 50; // v3.6: Prevent unbounded cache growth
 
 self.addEventListener('install', (e) => {

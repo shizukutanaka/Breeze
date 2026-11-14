@@ -91,6 +91,25 @@ describe('negotiate', () => {
     expect(res.useGroupV5).toBe(false);
   });
 
+  // Stage-3 D5: PQXDH requires BOTH caps on BOTH sides — pqxdh rides on top
+  // of x3dh-v5, so either cap missing (either side) keeps sessions classical.
+  it('usePqxdh: true only when both sides advertise x3dh-v5 AND pqxdh', () => {
+    expect(negotiate(ALL_V5, ALL_V5).usePqxdh).toBe(true);
+    expect(negotiate([CAPS.X3DH_V5, CAPS.PQXDH], [CAPS.X3DH_V5, CAPS.PQXDH]).usePqxdh).toBe(true);
+  });
+
+  it('usePqxdh: false when pqxdh is advertised without x3dh-v5 (either side)', () => {
+    expect(negotiate([CAPS.PQXDH], [CAPS.X3DH_V5, CAPS.PQXDH]).usePqxdh).toBe(false);
+    expect(negotiate([CAPS.X3DH_V5, CAPS.PQXDH], [CAPS.PQXDH]).usePqxdh).toBe(false);
+  });
+
+  it('usePqxdh: false when x3dh-v5 is mutual but pqxdh is one-sided or absent', () => {
+    expect(negotiate([CAPS.X3DH_V5, CAPS.PQXDH], [CAPS.X3DH_V5]).usePqxdh).toBe(false);
+    expect(negotiate([CAPS.X3DH_V5], [CAPS.X3DH_V5, CAPS.PQXDH]).usePqxdh).toBe(false);
+    expect(negotiate([CAPS.X3DH_V5], [CAPS.X3DH_V5]).usePqxdh).toBe(false);
+    expect(negotiate(ALL_V5, []).usePqxdh).toBe(false);
+  });
+
   it('round-trip: advertise → parsePeerCaps → negotiate', () => {
     const localAd = advertise(ALL_V5);
     const peerAd  = advertise([CAPS.X3DH_V5]); // peer only supports X3DH

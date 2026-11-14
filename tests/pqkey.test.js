@@ -45,7 +45,10 @@ function buildClientAuth(ed, userId) {
 }
 
 // The real generatePreKeyBundle, sliced verbatim, over an in-memory IDB.
-function buildBundleBuilder(ed, signingPubB64) {
+// `configExtra` merges into the CONFIG shim (stage-3 step 5 tests flip
+// PQXDH_ENABLED through it; the default shim leaves it off, which is also
+// what pins the step-3 "no pqxdh cap" assertions below).
+function buildBundleBuilder(ed, signingPubB64, configExtra = {}) {
   const stores = new Map();
   const dbPut = async (store, value, key) => { stores.set(`${store}:${key}`, value); };
   let n = 0;
@@ -55,15 +58,15 @@ function buildBundleBuilder(ed, signingPubB64) {
   });
   const fn = new Function(
     'genRatchetKey', 'dbPut', 'CONFIG', '_signingKey', '_signingPubB64',
-    'CAPS_X3DH_V5', 'CAPS_GROUP_V5', 'CAPS_SEAL_V2', 'CAPS_MULTI_RELAY',
+    'CAPS_X3DH_V5', 'CAPS_GROUP_V5', 'CAPS_SEAL_V2', 'CAPS_MULTI_RELAY', 'CAPS_PQXDH',
     'homeRelays', '_dbg',
     `${sliceBetween('async function generatePreKeyBundle', 'async function createIdentity')}
      return { generatePreKeyBundle };`);
   const { generatePreKeyBundle } = fn(
     genRatchetKey, dbPut,
-    { PREKEY_OTP_COUNT: 3, X3DH_V5_ENABLED: true, GROUP_RATCHET_V5: true, SEAL_V2_ENABLED: true, MULTI_RELAY_ENABLED: true },
+    { PREKEY_OTP_COUNT: 3, X3DH_V5_ENABLED: true, GROUP_RATCHET_V5: true, SEAL_V2_ENABLED: true, MULTI_RELAY_ENABLED: true, ...configExtra },
     { privateKey: ed.privateKey }, signingPubB64,
-    'x3dh-v5', 'group-v5', 'seal-v2', 'multi-relay',
+    'x3dh-v5', 'group-v5', 'seal-v2', 'multi-relay', 'pqxdh',
     () => [], () => {},
   );
   return { generatePreKeyBundle, stores };

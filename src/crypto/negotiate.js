@@ -18,6 +18,7 @@ export const CAPS = {
   X3DH_V5:   'x3dh-v5',   // authenticated X3DH, I1 (sign/verify SPK)
   GROUP_V5:  'group-v5',  // group FS + PCS + per-msg auth, I2/I3/N2
   FRANKING:  'franking',  // message franking send/report, I17
+  PQXDH:     'pqxdh',     // PQXDH hybrid session establishment, stage-3 D5
 };
 
 // The full v5 capability set (pass to advertise() for a fully-upgraded client).
@@ -60,6 +61,11 @@ export function negotiate(localCaps, peerCaps) {
     useX3dhV5:  both(CAPS.X3DH_V5),
     useGroupV5: both(CAPS.GROUP_V5),
     useFranking: both(CAPS.FRANKING),
+    // Stage-3 D5: PQXDH rides ON TOP of v5 — both sides must advertise the
+    // classical v5 cap AND the pqxdh cap. (Presence of the signed pqPreKey
+    // and its signature check are bundle-level conditions the session-init
+    // code adds; caps alone never suffice.)
+    usePqxdh:   both(CAPS.X3DH_V5) && both(CAPS.PQXDH),
   };
 }
 
