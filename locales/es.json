@@ -561,5 +561,21 @@
  "devUnlinkConfirm": "¿Quitar el dispositivo {0} de tu cuenta?",
  "p2pDirect": "Directo",
  "backupFileBtn": "💾 Guardar en archivo",
- "restoreFileBtn": "📂 Restaurar desde archivo"
+ "restoreFileBtn": "📂 Restaurar desde archivo",
+ "setupPhrase": "Recuperar con una frase de recuperación",
+ "recoveryPhraseTitle": "Tu frase de recuperación",
+ "recoveryPhraseDesc": "Se muestra una sola vez. Con esta frase y tu contraseña de recuperación, esta cuenta puede restaurarse en un dispositivo nuevo — y puede hacerlo cualquiera que tenga ambas, así que guárdalas en un lugar seguro. Breeze no puede volver a mostrarla ni recuperarla por ti.",
+ "recoveryPassLabel": "Contraseña de recuperación (opcional, recomendada)",
+ "recoverySaved": "He guardado mi frase de recuperación",
+ "recoveryRestoreTitle": "Restaurar con una frase de recuperación",
+ "recoveryPhraseLabel": "Frase de recuperación (24 palabras)",
+ "recoveryKitFileLabel": "Archivo del kit de recuperación (solo para cuentas creadas antes de las frases de recuperación)",
+ "recoveryKitBtn": "Crear kit de recuperación",
+ "toastRecoveryBadPhrase": "Esa no es una frase de recuperación válida — revisa las palabras e inténtalo de nuevo.",
+ "toastRecoveryKitFailed": "No se pudo abrir el kit de recuperación — la frase o la contraseña no coinciden.",
+ "toastRecoveryInvalidKit": "Ese archivo no es un kit de recuperación.",
+ "toastRecoveryUnavailable": "Las frases de recuperación no están disponibles ahora — recarga la página e inténtalo de nuevo.",
+ "toastRecoveryKitCreated": "Kit de recuperación descargado. Solo se abre con tu frase de recuperación y tu contraseña — guárdalos juntos.",
+ "toastRecoveryHasIdentity": "Este dispositivo ya tiene una identidad — la restauración con frase es solo para empezar de cero.",
+ "toastRecoveryMismatch": "Esa frase y contraseña no pertenecen a este ID de Breeze — no se restauró nada."
 }
