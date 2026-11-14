@@ -89,9 +89,15 @@ describe('@alias TTL (90 days — dead handles recycle)', () => {
   const req = (b) => apiRequest('/api/alias/set', b);
   const PUB_A = 'PUBKEY_OWNER_A';
   const PUB_B = 'PUBKEY_OTHER_B';
+  // These tests pin TTL mechanics with synthetic pubs (no real prekey
+  // bundles exist for them), so they register through the explicit
+  // ALIAS_REQUIRE_AUTH=false legacy opt-out. Step 5 made signed
+  // registration the default; the signed path has its own TTL/renewal
+  // coverage in tests/recovery-step5-alias.test.js.
+  const legacyEnv = () => makeEnv({ ALIAS_REQUIRE_AUTH: 'false' });
 
   it('registration stores the record WITH a ~90-day expiry', async () => {
-    const e = makeEnv();
+    const e = legacyEnv();
     const before = Date.now();
     const pow = await solvePoW(PUB_A);
     const res = await handleAliasSet({ alias: 'alice', pub: PUB_A, name: 'Alice', pow }, e, req({}));
@@ -103,7 +109,7 @@ describe('@alias TTL (90 days — dead handles recycle)', () => {
   });
 
   it('an unlapsed handle still refuses a different claimant', async () => {
-    const e = makeEnv();
+    const e = legacyEnv();
     const powA = await solvePoW(PUB_A);
     await handleAliasSet({ alias: 'alice', pub: PUB_A, pow: powA }, e, req({}));
     const powB = await solvePoW(PUB_B);
@@ -113,7 +119,7 @@ describe('@alias TTL (90 days — dead handles recycle)', () => {
   });
 
   it('the owner re-registering refreshes the TTL', async () => {
-    const e = makeEnv();
+    const e = legacyEnv();
     const pow = await solvePoW(PUB_A);
     await handleAliasSet({ alias: 'alice', pub: PUB_A, pow }, e, req({}));
     const first = e.KV.exp.get('alias:alice');
@@ -125,7 +131,7 @@ describe('@alias TTL (90 days — dead handles recycle)', () => {
   });
 
   it('after expiry the handle stops resolving and someone else can claim it', async () => {
-    const e = makeEnv();
+    const e = legacyEnv();
     const powA = await solvePoW(PUB_A);
     await handleAliasSet({ alias: 'alice', pub: PUB_A, pow: powA }, e, req({}));
     // Advance the clock the mock way: write a past expiry.

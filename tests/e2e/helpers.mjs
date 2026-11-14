@@ -18,10 +18,15 @@ export function seedConsent(page) {
 // (dbName 'breeze-messenger', DB_VER 5) and the 'identity' store's 'keys' record.
 // `navigate: false` for callers that already goto'd a deep link (e.g. ?join= URLs), where
 // re-navigating to '/' would discard the token.
-export async function createIdentity(page, name, { navigate = true } = {}) {
+export async function createIdentity(page, name, { navigate = true, alias = '' } = {}) {
   await seedConsent(page);
   if (navigate) await page.goto('/');
   await page.locator('#msg-name').fill(name);
+  // Optional @alias typed into the setup form: identity creation claims it
+  // through the real client path (bundle upload first, then the signed +
+  // PoW alias claim — recovery-plan step 5), so specs get a genuinely
+  // registered handle without touching the Worker API directly.
+  if (alias) await page.locator('#msg-alias').fill(alias);
   await page.locator('#b-msg-setup').click();
   await expect(page.locator('#msg-main')).toBeVisible();
   return page.evaluate(() => new Promise((resolve, reject) => {

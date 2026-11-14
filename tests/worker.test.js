@@ -3035,7 +3035,8 @@ describe('alias set / get (PoW anti-spam)', () => {
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('POW_INVALID'); // mutation: old code passes PoW check
     // Genuine success: the correct pub still passes (challenge starts with LONG_PUB:).
-    const ok = await handleAliasSet({ alias: 'relaytest', pub: LONG_PUB, pow }, makeEnv(), req({}));
+    // (Legacy opt-out env: this test pins PoW binding, not the step-5 signature default.)
+    const ok = await handleAliasSet({ alias: 'relaytest', pub: LONG_PUB, pow }, makeEnv({ ALIAS_REQUIRE_AUTH: 'false' }), req({}));
     expect((await ok.json()).code).not.toBe('POW_INVALID'); // hash is valid for LONG_PUB
   }, 60000);
 
@@ -3081,7 +3082,7 @@ describe('alias set / get (PoW anti-spam)', () => {
     const pub = 'FRESHPUB02';
     const freshChallenge = `${pub}:${Date.now()}`;
     const pow = await solvePoW(pub, 16, freshChallenge);
-    const res = await handleAliasSet({ alias: 'freshuser', pub, pow }, makeEnv(), req({}));
+    const res = await handleAliasSet({ alias: 'freshuser', pub, pow }, makeEnv({ ALIAS_REQUIRE_AUTH: 'false' }), req({}));
     expect(res.status).toBe(200);
   }, 30000); // PoW solve is probabilistic; allow 30s
 
@@ -3101,13 +3102,13 @@ describe('alias set / get (PoW anti-spam)', () => {
   it('accepts a validly solved PoW and registers the alias', async () => {
     const pub = 'TESTPUB123';
     const pow = await solvePoW(pub);
-    const res = await handleAliasSet({ alias: 'testuser', pub, pow }, makeEnv(), req({}));
+    const res = await handleAliasSet({ alias: 'testuser', pub, pow }, makeEnv({ ALIAS_REQUIRE_AUTH: 'false' }), req({}));
     expect(res.status).toBe(200);
     expect((await res.json()).alias).toBe('testuser');
   });
 
   it('rejects an alias collision from a different pub key', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ ALIAS_REQUIRE_AUTH: 'false' });
     const pub1 = 'PUB1'; const pow1 = await solvePoW(pub1);
     await handleAliasSet({ alias: 'takenname', pub: pub1, pow: pow1 }, env, req({}));
     const pub2 = 'PUB2'; const pow2 = await solvePoW(pub2);
@@ -3117,7 +3118,7 @@ describe('alias set / get (PoW anti-spam)', () => {
   }, 30000);
 
   it('returns the stored pub and name on alias get', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ ALIAS_REQUIRE_AUTH: 'false' });
     const pub = 'PUBFORGET'; const pow = await solvePoW(pub);
     await handleAliasSet({ alias: 'getme', pub, name: 'Alice', pow }, env, req({}));
     const res = await handleAliasGet({ alias: 'getme' }, env, req({}));
@@ -3145,7 +3146,7 @@ describe('alias set / get (PoW anti-spam)', () => {
 
   it('sanitizes alias to lowercase a-z0-9_', async () => {
     const pub = 'SANITIZEPUB'; const pow = await solvePoW(pub);
-    const res = await handleAliasSet({ alias: 'Hello-World!', pub, pow }, makeEnv(), req({}));
+    const res = await handleAliasSet({ alias: 'Hello-World!', pub, pow }, makeEnv({ ALIAS_REQUIRE_AUTH: 'false' }), req({}));
     expect(res.status).toBe(200);
     // After sanitization: 'helloworld' (hyphen and ! stripped)
     expect((await res.json()).alias).toBe('helloworld');
@@ -3160,7 +3161,7 @@ describe('alias set / get (PoW anti-spam)', () => {
   }, 30000);
 
   it('allows the same pub to re-register (update name)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ ALIAS_REQUIRE_AUTH: 'false' });
     const pub = 'SAMEPUB123'; const pow = await solvePoW(pub);
     await handleAliasSet({ alias: 'myalias', pub, name: 'Alice', pow }, env, req({}));
     const pow2 = await solvePoW(pub);
@@ -3197,10 +3198,12 @@ describe('alias set / get (PoW anti-spam)', () => {
   });
 });
 
-// Item 61 — optional Ed25519 ownership binding for alias registration (anti-impersonation).
+// Item 61 — Ed25519 ownership binding for alias registration (anti-impersonation).
 // PoW only rate-limits; it never proves the registrant controls `pub`. Signed registration
-// binds the @handle to the account that owns the identity key; ALIAS_REQUIRE_AUTH enforces it.
-describe('alias set — optional Ed25519 ownership auth (item 61)', () => {
+// binds the @handle to the account that owns the identity key. Since recovery-plan step 5
+// (2026-11-15) the signature is REQUIRED BY DEFAULT; ALIAS_REQUIRE_AUTH=false is the
+// explicit legacy opt-out (the PRESENCE/TURN_REQUIRE_AUTH convention).
+describe('alias set — Ed25519 ownership auth (item 61 + step 5)', () => {
   const req = (b) => apiRequest('/api/alias/set', b);
 
   // Register a prekey bundle whose identityKey === pub (the alias target), and return a
@@ -3215,11 +3218,21 @@ describe('alias set — optional Ed25519 ownership auth (item 61)', () => {
     };
   }
 
-  it('legacy PoW-only registration still works when the flag is unset', async () => {
-    const env = makeEnv();
+  it('legacy PoW-only registration still works under the explicit ALIAS_REQUIRE_AUTH=false opt-out', async () => {
+    const env = makeEnv({ ALIAS_REQUIRE_AUTH: 'false' });
     const pub = 'LEGACYPUB1';
     const res = await handleAliasSet({ alias: 'legacy', pub, pow: await solvePoW(pub) }, env, req({}));
     expect(res.status).toBe(200);
+  }, 30000);
+
+  it('rejects unsigned registration BY DEFAULT when the flag is unset (step 5)', async () => {
+    const env = makeEnv();
+    const pub = 'DEFAULTPUB';
+    const res = await handleAliasSet({ alias: 'bydefault', pub, pow: await solvePoW(pub) }, env, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
+    // Nothing was registered: the handle does not resolve.
+    expect(await env.KV.get('alias:bydefault')).toBeNull();
   }, 30000);
 
   it('rejects unsigned registration when ALIAS_REQUIRE_AUTH=true', async () => {
@@ -3240,6 +3253,12 @@ describe('alias set — optional Ed25519 ownership auth (item 61)', () => {
       env, req({}));
     expect(res.status).toBe(200);
     expect((await (await handleAliasGet({ alias: 'mine' }, env, req({}))).json()).pub).toBe(pub);
+    // Step 5: the verified registration also wrote the reverse record that
+    // activity-linked renewal and account deletion rely on.
+    const reverse = JSON.parse(await env.KV.get('alias-owner:aliasusr1'));
+    expect(reverse.alias).toBe('mine');
+    expect(reverse.pub).toBe(pub);
+    expect(typeof reverse.renewedAt).toBe('number');
   }, 30000);
 
   it('rejects a signed registration whose pub != the account identity key (PUB_MISMATCH)', async () => {
@@ -6026,7 +6045,7 @@ describe('lost-write recovery — grp/sig/push/alias (KV last-write-wins)', () =
   });
 
   it('alias double-claim: the clobbered claimant gets an honest 409, the winner keeps the record', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ ALIAS_REQUIRE_AUTH: 'false' });
     const pub1 = 'pub-racer-a1', pub2 = 'pub-racer-b2';
     const didClobber = raceKV(env, 'alias:racedup', JSON.stringify({ pub: pub2, setAt: Date.now() }));
     const res = await handleAliasSet({ alias: 'racedup', pub: pub1, pow: await solvePoW(pub1) }, env, apiRequest('/api/alias/set', {}));

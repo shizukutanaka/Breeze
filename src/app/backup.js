@@ -12,9 +12,9 @@
 // phrase restore needs (it adopts the restored signing key and id for the
 // immediately following alias claim, exactly as the inline code did).
 // Top-level app globals (t, showToast, showPrompt, _dbg, _DOM, MS, CONFIG,
-// API, postAPIRaw, arr, u8, encrypt, decrypt, downloadBlob and the recovery
-// prompt dialogs) resolve from the global scope, exactly as they did
-// inline. Behaviour is unchanged — this is a move, not a rewrite.
+// API, postAPIRaw, arr, u8, encrypt, decrypt, downloadBlob, generatePoW and
+// the recovery prompt dialogs) resolve from the global scope, exactly as
+// they did inline. Behaviour is unchanged — this is a move, not a rewrite.
 // ============================================================================
 
 export function createBackupTools(D) {
@@ -284,10 +284,17 @@ export function createBackupTools(D) {
     // _signingKey/myId, set only for this call — the reload immediately
     // after hands over to the normal boot). Adopted into the record only
     // when the relay accepts; the phrase, not the handle, restored it.
+    // Step 5: the claim now also carries the PoW the Worker has always
+    // required — without it this call could only ever fail POW_REQUIRED
+    // (and, signature registration being mandatory now, the signature
+    // verifies only where a prekey bundle for the restored identity is
+    // still registered; where it has lapsed too, the claim stays
+    // best-effort and the reloaded boot's ordinary flow owns the handle).
     if (aliasWanted && !aliasAdopted && API) {
       try {
         D.adoptRestoredSigning(m);
-        const resp = await postAPIRaw('/alias/set', { alias: aliasWanted, pub: m.identityPubB64, name, userId: D.myId(),
+        const powToken = await generatePoW(m.identityPubB64 + ':' + aliasWanted + ':' + Date.now(), CONFIG.POW_DIFFICULTY);
+        const resp = await postAPIRaw('/alias/set', { alias: aliasWanted, pub: m.identityPubB64, name, pow: powToken, userId: D.myId(),
           ...(await authFields(ts => `breeze-alias-set:${aliasWanted.toLowerCase().replace(/[^a-z0-9_]/g, '')}:${ts}`)) });
         if (resp.ok) {
           const rec = await dbGet('identity', 'keys');
