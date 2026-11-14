@@ -1991,6 +1991,10 @@ const _I = {
     secMemoryZero: 'Memory zeroing: ✓ Best-effort TypedArray.fill(0) after crypto ops',
     secKeyStorage: 'Key storage: non-extractable CryptoKey objects (IDB)',
     secAntiReplay: 'Anti-replay (Worker): ±5min timestamp validation',
+    secPledgeTitle: 'What Breeze never does',
+    secPledgeNoAds: 'Ads: none. Tracking: none. Analytics: none.',
+    secPledgeE2ee: 'Message content: end-to-end encrypted — the relay only holds sealed envelopes it cannot read',
+    secPledgeRetention: 'Relay storage is temporary: undelivered envelopes ≤ 7 days, aliases ≤ 90 days, all auto-expiring. Relay backup storage: OFF unless its operator enables it',
     toastNotifSound: "Notification sound: {0}",
     toastNoteSavedFor: "Note saved for {0}",
     toastLabelsInfo: "Labels: {0}",
@@ -13851,6 +13855,11 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const _atRestOn = _atRestIsWrapped(_identRec);
       safeSetHTML(d, [
         '<b class="i-g13">' + t('cmdCryptoTitle') + '</b>',
+        '',
+        '<b>' + t('secPledgeTitle') + '</b>',
+        t('secPledgeNoAds'),
+        t('secPledgeE2ee'),
+        t('secPledgeRetention'),
         '',
         '<b>' + t('secActiveProtections') + '</b>',
         t(_atRestOn ? 'secAtRestWrapOn' : 'secAtRestWrapOff'),
