@@ -3188,13 +3188,25 @@ const _replayCache = {
 // travels through this shared object. blocked=true means a VERIFIED key
 // mismatch — every API call is refused with the same null shape a network
 // failure produces, until the session ends; the pin is never silently
-// re-written. checking=true only while the pin check runs, so its own
-// attest call passes the gate it maintains.
-const _relayPinGate = { blocked: false, checking: false };
+// re-written. checking=true only while the pin check runs.
+// verdict (stage-2 step 4 follow-up) is the session's first pin verdict
+// as a promise, armed by _boot() BEFORE startPresence()/startPolling()
+// fire: until it settles, funnel calls HOLD (wait, then proceed or be
+// refused by the landed verdict) — the boot burst used to race ahead
+// of a check that only starts inside _startLiveSession(). attesting
+// marks the check's own attest call, the one call that must pass the
+// gate it maintains while the verdict is still pending.
+const _relayPinGate = { blocked: false, checking: false, attesting: false, verdict: null, _settleVerdict: null };
 
 // API helper (DRY for 48+ POST calls): returns Response, not auto-parsed, so callers can check .ok/.status; opts forwarded for signal etc.
-function postAPIRaw(path, body, opts = {}) {
-  if (_relayPinGate.blocked && !_relayPinGate.checking) return Promise.resolve(null);
+async function postAPIRaw(path, body, opts = {}) {
+  if (!_relayPinGate.attesting) {
+    if (_relayPinGate.blocked) return null;
+    if (_relayPinGate.verdict) {
+      await _relayPinGate.verdict; // boot-window hold: a wait, not a refusal
+      if (_relayPinGate.blocked) return null;
+    }
+  }
   return fetchT(API + path, { method: 'POST', headers: _H, body: JSON.stringify(body), ...opts }).catch(() => null);
 }
 
@@ -4014,6 +4026,27 @@ async function initMessenger(dbName) {
     announceToSR(t('relayKeyChanged'));
     auditLog('security', `Relay key change detected — API calls paused for this session. ${reason}`);
   }
+  // Boot-window hold (stage-2 step 4 follow-up): _boot() arms the
+  // gate before startPresence()/startPolling() fire, so the session's
+  // first calls wait for the verdict checkRelayPin() reaches inside
+  // _startLiveSession() — step 5 closed the same window for added
+  // relays by verifying inside the resolver; the origin's check is
+  // session-scoped, so the funnel holds instead. The hold ALWAYS
+  // settles: checkRelayPin() settles it in its finally, and both
+  // boot paths settle it again when _startLiveSession() returns, so
+  // a session whose check is never reached cannot hang. Arming is a
+  // no-op without an API (nothing to call, nothing to pin).
+  function _armRelayPinGate() {
+    if (!API) return;
+    _relayPinGate.blocked = false;
+    _relayPinGate.verdict = new Promise((resolve) => { _relayPinGate._settleVerdict = resolve; });
+  }
+  function _settleRelayPinGate() {
+    const settle = _relayPinGate._settleVerdict;
+    _relayPinGate._settleVerdict = null;
+    _relayPinGate.verdict = null;
+    if (settle) settle();
+  }
   async function checkRelayPin() {
     if (!API) return;
     // A fresh verdict for THIS account/session: the gate is re-earned
@@ -4033,7 +4066,12 @@ async function initMessenger(dbName) {
         return;
       }
       const nonce = [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
-      const resp = await postAPIRaw('/relay/attest', { nonce });
+      // The check's own funnel call: flagged so postAPIRaw does not
+      // hold it for the verdict it is itself producing (deadlock).
+      _relayPinGate.attesting = true;
+      let resp = null;
+      try { resp = await postAPIRaw('/relay/attest', { nonce }); }
+      finally { _relayPinGate.attesting = false; }
       const data = resp?.ok ? await resp.json().catch(() => null) : null;
       if (!data) return; // attestation unreachable: no evidence either way (see header)
       const verified = data.relayKey === relayKey && typeof data.sig === 'string'
@@ -4053,7 +4091,7 @@ async function initMessenger(dbName) {
         else auditLog('security', 'Relay attestation did not verify on first contact — key NOT pinned.');
       }
     } catch(e) { _dbg(e, 'relay-pin'); }
-    finally { _relayPinGate.checking = false; }
+    finally { _relayPinGate.checking = false; _settleRelayPinGate(); }
   }
 
   // ===== Home relays (stage-2 step 5) =====
@@ -6687,6 +6725,7 @@ async function initMessenger(dbName) {
     _DOM.get('msg-main').classList.remove('hidden');
     _DOM.get('msg-input-bar').classList.remove('hidden');
     _DOM.get('msg-my-name').textContent = myName;
+    _armRelayPinGate(); // step 4 follow-up: this session's first calls hold for the pin verdict (checkRelayPin runs inside _startLiveSession below)
     startPresence();
     startPolling();
     if (Notification && Notification.permission === 'default') {
@@ -6697,6 +6736,7 @@ async function initMessenger(dbName) {
     initPushNotifications();
     initSigning(); // v3.3: Ed25519 message signing
     await _startLiveSession();
+    _settleRelayPinGate(); // guarantee: releases anything still held if this session's check was never reached (no-op once the check settled it)
     renderAccountTabs();
     // Update account name in accounts list
     const accs = getAccounts();
@@ -6742,6 +6782,7 @@ async function initMessenger(dbName) {
     _DOM.get('msg-main').classList.remove('hidden');
     _DOM.get('msg-input-bar').classList.remove('hidden');
     _DOM.get('msg-my-name').textContent = myName;
+    _armRelayPinGate(); // step 4 follow-up: this session's first calls hold for the pin verdict (checkRelayPin runs inside _startLiveSession below)
     startPresence();
     startPolling();
     initTurn();
@@ -6754,6 +6795,7 @@ async function initMessenger(dbName) {
     // the enforceRetentionPolicy()/pruneAuditLog() maintenance intervals. See
     // _startLiveSession()'s own header comment (above _boot()) for the full account.
     await _startLiveSession();
+    _settleRelayPinGate(); // guarantee: releases anything still held if this session's check was never reached (no-op once the check settled it)
     // A freshly-created identity's boot never runs _boot()'s `if (hasId)` branch (that
     // check is false for it), so without this call _messengerCleanup stayed null for
     // this account's entire first session: the first switch AWAY from it found nothing
@@ -6838,6 +6880,10 @@ async function initMessenger(dbName) {
     // signaling either — the hard stop covers every relay call, not
     // just the postAPIRaw funnel.
     if (_relayPinGate.blocked) return Promise.resolve();
+    // Boot-window hold (step 4 follow-up): wait out the session's
+    // first pin verdict, then re-enter — the re-entry sees the
+    // latched block above, if the verdict landed as one.
+    if (_relayPinGate.verdict) return _relayPinGate.verdict.then(() => _signal(room, type, data));
     return _signalAuth(room).then(auth => {
       const full = { room, sender: myId, type, data: data || '', ...auth };
       const posts = [fetchT(API + '/signal', { method: 'POST', headers: _H, body: JSON.stringify(full) })];
@@ -6854,6 +6900,10 @@ async function initMessenger(dbName) {
   // _signalAwait — same but returns response for poll pattern
   async function _signalAwait(room, type, data) {
     if (_relayPinGate.blocked) return new Response(null, { status: 503 }); // step 4 hard stop (see _signal)
+    if (_relayPinGate.verdict) { // boot-window hold (step 4 follow-up, see _signal)
+      await _relayPinGate.verdict;
+      if (_relayPinGate.blocked) return new Response(null, { status: 503 });
+    }
     const auth = await _signalAuth(room);
     const body = { room, sender: myId, type, data: data || '', ...auth };
     const primary = () => fetchT(API + '/signal', { method: 'POST', headers: _H, body: JSON.stringify(body) });
@@ -10363,6 +10413,9 @@ async function initMessenger(dbName) {
       if (state.ws || !mailboxWsWanted(relay)) return;
       if (Date.now() < state.nextTry) return;
       if (!isOriginRelay(relay) && !await ensureRelayVerified(relay)) return; // unverified added relay: polling only
+      if (isOriginRelay(relay) && _relayPinGate.verdict) { // the origin waits for its session verdict the same way (step 4 follow-up)
+        await _relayPinGate.verdict;
+      }
       if (state.ws || !mailboxWsWanted(relay)) return; // gates may have closed while verifying
       const a = await queueAuth('mailbox-ws');
       if (!a.sig) { state.nextTry = Date.now() + MS.MIN; return; } // cannot sign (yet): polling is the path
