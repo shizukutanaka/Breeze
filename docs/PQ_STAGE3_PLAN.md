@@ -693,6 +693,85 @@ left vague).
   a previous-release client and a new client interoperate
   classically in both directions; full suite + validate.sh PASSED.
 
+- **Outcome (2026-11-14).** Done — stage 3 is complete. The flip
+  itself is one line; most of this step is the prerequisite step 5's
+  residual risk (1) demanded, plus the surfacing. **Prerequisite:
+  the keywrap boot unlock (closes step-5 residual (1)).**
+  `loadIdentity`'s passphrase flow now extends to `pq-priv` via a
+  new `_unlockPqSeed`: when the stored record is /keywrap-wrapped,
+  the passphrase `loadIdentity` already collected (or one cancellable
+  prompt in the partial-disable state — plaintext `keys` beside a
+  wrapped `pq-priv`) unwraps the seed into a memory-only variable,
+  and `_pqxdhResponder` answers from it when the stored record is
+  wrapped. A plaintext record (the latest mint — a rotation replaces
+  it) always wins over the boot seed. The stored record is NEVER
+  rewritten by the unlock and the wrap is never read through at
+  session time, so at-rest protection is unchanged (the seed's
+  memory exposure is the `_signingKey` class: held only after the
+  user's own unlock, for the boot's lifetime). A wrong passphrase or
+  a cancelled prompt holds nothing; the unlock never blocks sign-in
+  and PQ simply stays fail-closed for that boot. **The flip.**
+  `CONFIG.PQXDH_ENABLED: true`; negotiation is D5's AND rule
+  unchanged, so non-`pqxdh` peers keep byte-identical classical v5.
+  **Markers + surfacing.** `initSessionV5Initiator` and
+  `_bootstrapResponderSessionV5`'s PQ branch record `pq: true` on
+  the session record (persisted by `saveSession`); `/security`'s PQ
+  section gains a PQXDH line reporting the ACTIVE session's marker,
+  and the stack Status names the software KEM
+  (`secPQSoftware`) instead of "planned" when the browser lacks
+  native ML-KEM — 3 new i18n keys, EN + JA. **Docs.**
+  `docs/CRYPTO-SPEC.md` gains §2a (the PQXDH derivation, negotiation,
+  wire and key-material rules), §3's envelope gains `pqct`, and §9's
+  I8 closes (I9, the PQ ratchet, remains a separate decision);
+  `SPEC.md` §2.4 and its compliance row, and CLAUDE.md's pq.js row,
+  now state the shipped default. **Tests: 1,401 passed (baseline
+  1,390; +11, zero regressions)** — mirror-drift: the DEFAULT-ON
+  DRILL (two fresh inline clients: fetch → verify → PQ session, SK
+  agreement against the reference combiner, `pq` markers both
+  sides, first message decrypts), DEFAULT-ON INTEROP (a
+  previous-release bundle — no cap, no PQ fields — yields a
+  classical session with no marker, no `pqct`, classical SK parity;
+  the reverse direction is step 5's flag-off pin), the KEYWRAP
+  DRILL (wrapped record: locked boot fails closed, boot-unlocked
+  seed derives the initiator's SK, stored record byte-identical
+  afterwards), and the PRECEDENCE pin (plaintext mint wins over a
+  stale boot seed); tests/pqxdh.test.js: the real inline
+  `_unlockPqSeed` sliced and driven (passphrase reuse, wrong
+  passphrase, partial-disable prompt, cancel, plaintext/absent
+  no-ops, seed-length guard) and the shipped-default structural pin
+  flipped to ON. `./validate.sh` PASSED (165/171, baseline score);
+  CSP hash re-pinned; `index.html` 15,469 → 15,529 lines (headroom
+  471 under the 16,000 ceiling). **v1-digest retirement (step 2
+  follow-up, scheduled here as required):** step 2's acceptance of
+  the v1 upload digest is retired in a follow-up once the first
+  release shipping this step has been live for 30 days — the point
+  at which the shipped fleet can be taken to have rotated onto
+  v2-signed uploads; until then both forms stay accepted, as step 2
+  designed. **Security review.** Newly enabled surface: the PQ path
+  step 5 analysed (caps + PQ fields inside the signed upload
+  digest, mandatory initiator-side `pqPreKeySig` verification,
+  responder fail-closed) is now the default for capable peers — no
+  new mechanism, only wider exercise of it. The boot unlock adds
+  no at-rest weakness (above) and no new network surface. The
+  standing D5 caveat is worth restating at rollout: PQXDH here is
+  negotiated, not mandatory — a relay serving a stale or
+  cap-stripped bundle still yields a classical session (the
+  pre-existing stale-SPK trust class, bounded by the KT audit path
+  and rotation cadence). **Residual risks.** (1) The manual
+  two-device run (docs/INTEGRATION.md) extended to the PQ path
+  remains unexecuted — the drills above are inline/unit-level
+  evidence, as with every prior step; the two-device confirmation
+  is still owed and is the first thing to run against a deployment
+  of this build. (2) The step-5 residual (2) (silent classical
+  degradation if the ESM facade fails to load) is now DETECTABLE
+  via the `pq: true` marker and the /security PQXDH line, as step 5
+  anticipated; the degradation behaviour itself is unchanged.
+  **Stage 3 complete:** all six steps landed — vendored ML-KEM-768
+  (ACVP-verified), worker PQ fields with signed-digest binding,
+  client key material, the reduction-pass decision, session wiring
+  behind the flag, and this default-on rollout with the keywrap
+  prerequisite closed.
+
 ## Verification (across all steps)
 
 - **KEM correctness** rests on official vectors, not round-trips:

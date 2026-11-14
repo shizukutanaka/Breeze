@@ -599,19 +599,35 @@ if (x3s < 0 || x3e < 0) {
   );
 }
 
-function makeX3dhInline(myKeys, config, myId) {
+function makeX3dhInline(myKeys, config, myId, opts = {}) {
   const idb = new Map();
   const dbGet = async (_s, key) => (idb.has(key) ? idb.get(key) : null);
   const dbPut = async (_s, val, key) => { idb.set(key, val); };
+  // Stage-3 step 6: the X3DH block now also reads _atRestIsWrapped and the
+  // boot-unlocked PQ seed (_pqxdhResponder's wrapped-record path), and
+  // initSessionV5Initiator joins the exports — its relay/KT/UI dependencies
+  // are inert shims by default; a test that drives it passes opts.net.fetchImpl
+  // to serve a bundle. `inline` below is the at-rest extraction at the top of
+  // this file, so _atRestIsWrapped is the REAL inline implementation.
+  const net = opts.net || {};
   const factory = new Function(
     'crypto', 'CONFIG', '_hasX25519', 'dbGet', 'dbPut', '_dbg', 'hkdf', 'arr', 'u8', 'myKeys', 'myId',
+    '_atRestIsWrapped', '_pqSeedUnlocked',
+    'API', 'postAPIRaw', '_contactRelayPost', '_seedRelayInfo', 'sanitizeHomeList', 'isOriginRelay',
+    '_servingRelayUrl', '_auditKeyHistory', 'showKeyChangeWarning', 'myPubB64',
     html.slice(x3s, x3e) +
-      '\nreturn { genRatchetKey, ecdhBits, _x3dhInitiator, _x3dhResponder, _x3dhInitiatorParts, _x3dhResponderParts, _parsePeerCaps, _peerSupportsX3dhV5, _peerSupportsPqxdh, _pqxdhInitiator, _pqxdhResponder, _negotiateGroupCaps, _computeGroupV5, _importEcdhPriv, _loadSpkPriv, _resolveOtpPriv, _bootstrapResponderSessionV5 };',
+      '\nreturn { genRatchetKey, ecdhBits, _x3dhInitiator, _x3dhResponder, _x3dhInitiatorParts, _x3dhResponderParts, _parsePeerCaps, _peerSupportsX3dhV5, _peerSupportsPqxdh, _pqxdhInitiator, _pqxdhResponder, _negotiateGroupCaps, _computeGroupV5, _importEcdhPriv, _loadSpkPriv, _resolveOtpPriv, _bootstrapResponderSessionV5, initSessionV5Initiator };',
   );
   const api = factory(
     globalThis.crypto, config || {}, false /* P-256, matches refR below for determinism */,
     dbGet, dbPut, () => {}, inlineKdf.hkdf, (a) => Array.from(a), (a) => new Uint8Array(a),
     myKeys || {}, myId || 'me',
+    inline._atRestIsWrapped, opts.pqSeedUnlocked || null,
+    net.api || null,
+    async (path, body) => (net.fetchImpl ? net.fetchImpl(path, body) : null),
+    async () => null, () => {}, () => [], () => true,
+    () => 'https://relay.test', async () => ({ verdict: 'new' }), async () => {},
+    opts.myPubB64 || '',
   );
   return { ...api, idb };
 }
@@ -893,6 +909,170 @@ describe('PQXDH mirror (stage-3 step 5) — inline wiring vs references + deploy
     expect(pqResN1).not.toBeNull();
     const recovered = await bob._bootstrapResponderSessionV5({ ik: ikArr, ek: ekArr, opkId: null, pqct: pqResN1.ct });
     expect(Buffer.from(recovered.rootKey).toString('hex')).toBe(Buffer.from(pqResN1.sk).toString('hex'));
+  });
+
+  // Stage-3 step 6 — the rollout drills. PQCONF here models the NEW shipped
+  // default (CONFIG.PQXDH_ENABLED: true is pinned structurally in
+  // tests/pqxdh.test.js): two PQ-capable clients establish PQ by default,
+  // and a classical peer is completely unaffected.
+  it('DEFAULT-ON DRILL (step 6): two fresh clients establish a PQ session by default — SK agreement, pq markers, first message decrypts', async () => {
+    globalThis.__breezePQXDH = createPQSessionHelper();
+    globalThis._hasEd25519 = true;
+    const ed = await refR.genSigningKey();
+    const bobIk = await refR.genRatchetKey();
+    const bob = makeX3dhInline({ privateKey: bobIk.privateKey }, PQCONF);
+    const bobSpk = await bob.genRatchetKey();
+    bob.idb.set('spk-priv', { priv: bobSpk.priv });
+    const pq = mintPQPreKey();
+    bob.idb.set('pq-priv', pqSeedRecord(pq.seed));
+    const bundle = {
+      identityKey: b64(bobIk.pub), edIdentityKey: b64(ed.pub),
+      // NB: sign the raw SPK BYTES (u8 view) — the inline genRatchetKey hands
+      // back an ArrayBuffer, and signSPK's u8() would sign an empty message
+      // for that form; the real client signs the exported raw bytes.
+      signedPreKey: b64(bobSpk.pub), signedPreKeySig: b64(await refR.signSPK(ed.privateKey, u8(bobSpk.pub))),
+      caps: ['x3dh-v5', 'pqxdh'],
+      pqPreKey: b64(pq.publicKey), pqPreKeySig: b64(await refR.signSPK(ed.privateKey, pq.publicKey)),
+    };
+    const aliceIk = await refR.genRatchetKey();
+    const alice = makeX3dhInline({ privateKey: aliceIk.privateKey }, PQCONF, 'me', {
+      myPubB64: b64(aliceIk.pub),
+      net: { api: 'https://relay.test/api', fetchImpl: async (path) => (path === '/prekey/fetch' ? { ok: true, json: async () => bundle } : null) },
+    });
+    const sessA = await alice.initSessionV5Initiator(b64(bobIk.pub));
+    expect(sessA).not.toBeNull();
+    expect(sessA.pq).toBe(true); // the step-6 marker on the initiator's record
+    expect(sessA._pkm.pqct).toHaveLength(1088);
+    const sessB = await bob._bootstrapResponderSessionV5({
+      ik: sessA._pkm.ik, ek: sessA._pkm.ek, opkId: sessA._pkm.opkId, pqct: sessA._pkm.pqct,
+    });
+    expect(sessB).not.toBeNull();
+    expect(sessB.pq).toBe(true); // …and on the responder's
+    // SK agreement against the independent reference combiner over Bob's
+    // mirror DH parts and Alice's actual ciphertext.
+    const partsB = [
+      await refR.ecdhBits(bobSpk.privateKey, aliceIk.pub),
+      await refR.ecdhBits(bobIk.privateKey, u8(sessA._pkm.ek)),
+      await refR.ecdhBits(bobSpk.privateKey, u8(sessA._pkm.ek)),
+    ];
+    const ref = createPQXDH({ kem: nobleKem768() });
+    const refResp = await ref.respond({
+      dhParts: partsB, pqPreKeyPriv: pqSecretKeyFromSeed(pq.seed),
+      pqPreKeyPub: pqPublicKeyFromSeed(pq.seed), ct: sessA._pkm.pqct,
+    });
+    expect(Buffer.from(sessB.rootKey).toString('hex')).toBe(Buffer.from(refResp.sk).toString('hex'));
+    // First message under the agreed SK decrypts (reference ratchet composition).
+    const aliceRatchet = await refR.initiatorSession(sessB.rootKey, bobSpk.pub);
+    const bobRatchet = refR.responderSession(sessB.rootKey, bobSpk.privateKey);
+    const wire = await refR.ratchetEncrypt(aliceRatchet, 'first contact, post-quantum by default');
+    expect(await refR.ratchetDecrypt(bobRatchet, wire)).toBe('first contact, post-quantum by default');
+  });
+
+  it('DEFAULT-ON INTEROP (step 6): a classical peer (previous release, no pqxdh cap) gets a classical session — no marker, no pqct, classical SK parity', async () => {
+    globalThis.__breezePQXDH = createPQSessionHelper();
+    globalThis._hasEd25519 = true;
+    const ed = await refR.genSigningKey();
+    const bobIk = await refR.genRatchetKey();
+    const bob = makeX3dhInline({ privateKey: bobIk.privateKey }, PQCONF);
+    const bobSpk = await bob.genRatchetKey();
+    bob.idb.set('spk-priv', { priv: bobSpk.priv });
+    // A previous-release bundle: v5 caps only, no PQ fields at all.
+    const bundle = {
+      identityKey: b64(bobIk.pub), edIdentityKey: b64(ed.pub),
+      signedPreKey: b64(bobSpk.pub), signedPreKeySig: b64(await refR.signSPK(ed.privateKey, u8(bobSpk.pub))),
+      caps: ['x3dh-v5'],
+    };
+    const aliceIk = await refR.genRatchetKey();
+    const alice = makeX3dhInline({ privateKey: aliceIk.privateKey }, PQCONF, 'me', {
+      myPubB64: b64(aliceIk.pub),
+      net: { api: 'https://relay.test/api', fetchImpl: async (path) => (path === '/prekey/fetch' ? { ok: true, json: async () => bundle } : null) },
+    });
+    const sessA = await alice.initSessionV5Initiator(b64(bobIk.pub));
+    expect(sessA).not.toBeNull();
+    expect(sessA.pq).toBeUndefined();
+    expect(sessA._pkm.pqct).toBeUndefined(); // envelope byte-identical to the classical one
+    // The new responder bootstraps the old initiator's classical pkm classically.
+    const sessB = await bob._bootstrapResponderSessionV5({ ik: sessA._pkm.ik, ek: sessA._pkm.ek, opkId: sessA._pkm.opkId });
+    expect(sessB).not.toBeNull();
+    expect(sessB.pq).toBeUndefined();
+    const skRef = await refR.x3dhResponder({
+      ikPriv: bobIk.privateKey, spkPriv: bobSpk.privateKey,
+      ikPubPeer: aliceIk.pub, ekPubPeer: u8(sessA._pkm.ek),
+    });
+    expect(Buffer.from(sessB.rootKey).toString('hex')).toBe(Buffer.from(skRef).toString('hex'));
+  });
+
+  // Stage-3 step 6 prerequisite: the keywrap boot unlock. /keywrap wraps
+  // pq-priv with the identity keys (step 3) and the facade refuses a
+  // plaintext read of a wrapped record, so before this step a wrapped device
+  // failed closed on EVERY incoming PQ session. loadIdentity now unwraps
+  // the seed at boot into memory only (the unwrap itself — the real inline
+  // _unlockPqSeed — is drilled in tests/pqxdh.test.js). Here: the responder
+  // side of the contract.
+  it('KEYWRAP DRILL (step 6): a wrapped pq-priv answers only via the boot-unlocked seed; the stored record stays wrapped', async () => {
+    globalThis.__breezePQXDH = createPQSessionHelper();
+    const pq = mintPQPreKey();
+    const wrapped = await inline._atRestWrap({ seed: Array.from(pq.seed) }, PASS, 'pq-priv');
+    const bobIk = await refR.genRatchetKey();
+    const probe = makeX3dhInline({ privateKey: bobIk.privateKey }, PQCONF);
+    const bobSpk = await probe.genRatchetKey();
+    const aliceIk = await refR.genRatchetKey();
+    const ek = await refR.genRatchetKey();
+    const partsA = [
+      await refR.ecdhBits(aliceIk.privateKey, bobSpk.pub),
+      await refR.ecdhBits(ek.privateKey, bobIk.pub),
+      await refR.ecdhBits(ek.privateKey, bobSpk.pub),
+    ];
+    const ref = createPQXDH({ kem: nobleKem768() });
+    const init = await ref.initiate({ dhParts: partsA, pqPreKeyPub: pq.publicKey });
+    const pkm = {
+      ik: Array.from(new Uint8Array(aliceIk.pub)), ek: Array.from(new Uint8Array(ek.pub)),
+      opkId: null, pqct: Array.from(init.ct),
+    };
+    // Locked boot — the record exists but this boot never unlocked it: the
+    // pre-step-6 behaviour, fail closed.
+    const bobLocked = makeX3dhInline({ privateKey: bobIk.privateKey }, PQCONF);
+    bobLocked.idb.set('spk-priv', { priv: bobSpk.priv });
+    bobLocked.idb.set('pq-priv', { wrapped });
+    expect(await bobLocked._bootstrapResponderSessionV5(pkm)).toBeNull();
+    // Boot-unlocked — the seed loadIdentity recovered is in memory: answers
+    // with the initiator's SK, marker set.
+    const bob = makeX3dhInline({ privateKey: bobIk.privateKey }, PQCONF, 'me', { pqSeedUnlocked: Array.from(pq.seed) });
+    bob.idb.set('spk-priv', { priv: bobSpk.priv });
+    bob.idb.set('pq-priv', { wrapped });
+    const sess = await bob._bootstrapResponderSessionV5(pkm);
+    expect(sess).not.toBeNull();
+    expect(Buffer.from(sess.rootKey).toString('hex')).toBe(Buffer.from(init.sk).toString('hex'));
+    expect(sess.pq).toBe(true);
+    // The unlock is memory-only: the stored record is byte-identical, still wrapped.
+    expect(bob.idb.get('pq-priv')).toEqual({ wrapped });
+  });
+
+  it('PRECEDENCE (step 6): a plaintext pq-priv (the latest mint) wins over a stale boot-unlocked seed', async () => {
+    globalThis.__breezePQXDH = createPQSessionHelper();
+    const bobIk = await refR.genRatchetKey();
+    // Boot unlocked the THEN-current seed; a bundle rotation afterwards
+    // replaced pq-priv with a fresh plaintext record (the step-3 mint).
+    const bob = makeX3dhInline({ privateKey: bobIk.privateKey }, PQCONF, 'me', { pqSeedUnlocked: Array.from(mintPQPreKey().seed) });
+    const bobSpk = await bob.genRatchetKey();
+    bob.idb.set('spk-priv', { priv: bobSpk.priv });
+    const pqCurrent = mintPQPreKey();
+    bob.idb.set('pq-priv', pqSeedRecord(pqCurrent.seed));
+    const aliceIk = await refR.genRatchetKey();
+    const ek = await refR.genRatchetKey();
+    const partsA = [
+      await refR.ecdhBits(aliceIk.privateKey, bobSpk.pub),
+      await refR.ecdhBits(ek.privateKey, bobIk.pub),
+      await refR.ecdhBits(ek.privateKey, bobSpk.pub),
+    ];
+    const ref = createPQXDH({ kem: nobleKem768() });
+    const init = await ref.initiate({ dhParts: partsA, pqPreKeyPub: pqCurrent.publicKey });
+    const sess = await bob._bootstrapResponderSessionV5({
+      ik: Array.from(new Uint8Array(aliceIk.pub)), ek: Array.from(new Uint8Array(ek.pub)),
+      opkId: null, pqct: Array.from(init.ct),
+    });
+    expect(sess).not.toBeNull();
+    expect(Buffer.from(sess.rootKey).toString('hex')).toBe(Buffer.from(init.sk).toString('hex'));
   });
 });
 

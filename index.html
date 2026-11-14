@@ -1227,10 +1227,11 @@ const CONFIG = {
   SEAL_V2_ENABLED: true, // Sealed Sender v2: encrypt sender metadata to the recipient (capability-gated)
   MULTI_RELAY_ENABLED: true, // Stage-2 step 6: advertise 'multi-relay'; contacts that advertise it too get redundant deposit at their home relays
   // Stage-3 step 5 (docs/PQ_STAGE3_PLAN.md D5/D6): PQXDH — hybrid X3DH v5 + ML-KEM-768
-  // session establishment via the deployed ESM facade (window.__breezePQXDH). Default OFF:
-  // the 'pqxdh' cap emission, the initiator combine and the responder decapsulation all
-  // gate on this flag, so OFF is byte-identical to classical v5. Step 6 flips it.
-  PQXDH_ENABLED: false,
+  // session establishment via the deployed ESM facade (window.__breezePQXDH). The
+  // 'pqxdh' cap emission, the initiator combine and the responder decapsulation all
+  // gate on this flag. Stage-3 step 6: default ON — negotiation is the D5 AND rule,
+  // so a peer that does not advertise 'pqxdh' still gets byte-identical classical v5.
+  PQXDH_ENABLED: true,
   // v3.6 SECURITY (default OFF — opt-in via /keywrap, run again to disable): wrap the identity
   // ECDH + Ed25519 signing private keys with AES-256-GCM under a PBKDF2 key (600k iter, random
   // salt) before IndexedDB storage. Guards against XSS cookie-theft, device forensics, IDB-reading
@@ -1866,6 +1867,9 @@ const _I = {
     secLblStatus: 'Status',
     secPQNative: 'ML-KEM (native)',
     secPQPlanned: 'Planned (hybrid X25519+ML-KEM)',
+    secPqxdhInUse: 'In use (this session)',
+    secPqxdhClassical: 'Not used (classical session)',
+    secPQSoftware: 'ML-KEM-768 (software, PQXDH)',
     secLblFwdSec: 'Forward Secrecy',
     secLblReplay: 'Replay Protection',
     secInLruCache: 'in LRU cache',
@@ -3710,7 +3714,10 @@ async function initMessenger(dbName) {
     kdf: 'HKDF-SHA256',
     ratchet: 'Double Ratchet',
     groupCrypto: 'Sender Key (O(1))',
-    pqReady: _hasPQ ? t('secPQNative') : t('secPQPlanned'),
+    // Stage-3 step 6: with PQXDH on by default, a browser without native
+    // ML-KEM still runs PQ sessions — on the vendored software KEM — so the
+    // status names that instead of the pre-rollout "planned".
+    pqReady: _hasPQ ? t('secPQNative') : (CONFIG.PQXDH_ENABLED ? t('secPQSoftware') : t('secPQPlanned')),
     protocol: 'v' + CONFIG.PROTOCOL_VERSION,
   };
 
@@ -4855,10 +4862,41 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'generateShortId'); }
   }
 
+  // Stage-3 step 6: the boot-unlocked PQ prekey seed (64-byte array) or null.
+  // /keywrap wraps 'pq-priv' alongside keys/signing (step 3), but the unlock
+  // flow above predates it — and the PQXDH responder facade refuses a plaintext
+  // read of a wrapped record (pqxdh.js), so without a boot-time unwrap a
+  // wrapped device fails closed on every incoming PQ session. The seed is held
+  // in memory ONLY (the _signingKey precedent): the IDB record stays wrapped,
+  // so at-rest protection is exactly as strong as before this step.
+  let _pqSeedUnlocked = null;
+  // Extend loadIdentity's passphrase flow to 'pq-priv'. `passphrase` is the one
+  // loadIdentity already collected for a wrapped 'keys' record, or null when
+  // 'keys' was plaintext — a wrapped 'pq-priv' beside plaintext 'keys' is the
+  // partial-/keywrap-disable state, so prompt once (cancellable) for it here.
+  // A failure NEVER blocks sign-in: classical sessions are unaffected and the
+  // PQ responder simply stays fail-closed for this boot.
+  async function _unlockPqSeed(passphrase) {
+    _pqSeedUnlocked = null;
+    try {
+      const rec = await dbGet('identity', 'pq-priv');
+      if (!_atRestIsWrapped(rec)) return; // absent or plaintext: responder reads IDB directly
+      let pass = passphrase;
+      if (pass == null) {
+        pass = await showPrompt(t('keyWrapUnlockPrompt'), '', { type: 'password', autocomplete: 'current-password' });
+        if (!pass) return;
+      }
+      const payload = await _atRestUnwrap(rec.wrapped || rec, pass, 'pq-priv');
+      if (payload && Array.isArray(payload.seed) && payload.seed.length === 64) _pqSeedUnlocked = payload.seed;
+      else _dbg(null, 'pq-priv boot unwrap failed');
+    } catch(e) { _dbg(e, 'pq-priv-unlock'); }
+  }
+
   async function loadIdentity() {
     const stored = await dbGet('identity', 'keys');
     if (stored) {
       let jwk;
+      let bootPassphrase = null;
       if (_atRestIsWrapped(stored)) {
         // At-rest key wrapping enabled: prompt for passphrase and unwrap (slot-bound AAD)
         const passphrase = await showPrompt(t('keyWrapUnlockPrompt'), '', { type: 'password', autocomplete: 'current-password' });
@@ -4866,6 +4904,7 @@ async function initMessenger(dbName) {
         jwk = await _atRestLoadKey(stored, passphrase, 'keys');
         if (!jwk) { showToast(t('keyWrapWrongPass'), 'error'); return false; }
         _atRestPassphrase = passphrase; // passed to initSigning, cleared after use
+        bootPassphrase = passphrase; // stage-3 step 6: reused for the pq-priv unlock below
       } else {
         jwk = stored.priv;
       }
@@ -4885,6 +4924,9 @@ async function initMessenger(dbName) {
       myShortId = await generateShortId(myPubB64);
       try { localStorage.setItem('brz-uid', myId); } catch(e) { _dbg(e); }
       _userId = myId;
+      // Stage-3 step 6: unlock a /keywrap-wrapped PQ prekey seed for this
+      // boot (no-op when the record is absent or plaintext).
+      await _unlockPqSeed(bootPassphrase);
       return true;
     }
     return false;
@@ -5260,14 +5302,22 @@ async function initMessenger(dbName) {
   }
   // Responder half: decapsulate the pkm's pqct with the seed-derived PQ
   // secret and combine. Returns the session SK, or null when the PQ private
-  // half is unavailable (no pq-priv record, a /keywrap-wrapped record, a
-  // missing facade) — the caller MUST fail closed (plan D6): a classical SK
-  // derived instead could never match the initiator's combined one.
+  // half is unavailable (no pq-priv record, a /keywrap-wrapped record that
+  // this boot did not unlock, a missing facade) — the caller MUST fail
+  // closed (plan D6): a classical SK derived instead could never match the
+  // initiator's combined one.
   async function _pqxdhResponder(dhParts, pqct) {
     try {
       const h = globalThis.__breezePQXDH;
       if (!h) return null;
-      const rec = await dbGet('identity', 'pq-priv');
+      const stored = await dbGet('identity', 'pq-priv');
+      // Stage-3 step 6: a plaintext record is the latest mint (a bundle
+      // rotation replaces it) and always wins. A wrapped record is answered
+      // from the boot-unlocked in-memory seed instead (loadIdentity's
+      // _unlockPqSeed) — the wrap itself is never read through here, and the
+      // stored record is left exactly as wrapped as it was.
+      const rec = (stored && !_atRestIsWrapped(stored)) ? stored
+        : (_pqSeedUnlocked ? { seed: _pqSeedUnlocked } : stored);
       return await h.respondSK(dhParts, rec, pqct);
     } catch(e) { _dbg(e, 'pqxdh-responder'); return null; }
   }
@@ -5345,6 +5395,11 @@ async function initMessenger(dbName) {
         ratchetPriv: rk.privateKey,
         peerRatchetPub: Array.from(spkPubPeer),
         sendCounter: 0, recvCounter: 0, seenMsgIds: [],
+        // Stage-3 step 6: PQ-established sessions carry the marker on the
+        // record itself (saveSession persists it; _pkm below is consumed and
+        // dropped before that save) so support and /security can tell a
+        // post-quantum session apart from a classical one.
+        ...(pqct ? { pq: true } : {}),
         // Consumed once by encryptFor to wrap the first message in a pkm envelope.
         _pkm: {
           ik: Array.from(Uint8Array.from(atob(myPubB64), c => c.charCodeAt(0))),
@@ -5378,7 +5433,7 @@ async function initMessenger(dbName) {
         });
         const sk = await _pqxdhResponder(parts, p.pqct);
         if (!sk) return null;
-        return { rootKey: sk, ratchetPriv: spkPriv, ratchetPub: null, peerRatchetPub: null, sendCounter: 0, recvCounter: 0, seenMsgIds: [] };
+        return { rootKey: sk, ratchetPriv: spkPriv, ratchetPub: null, peerRatchetPub: null, sendCounter: 0, recvCounter: 0, seenMsgIds: [], pq: true };
       }
       const sk = await _x3dhResponder({
         ikPriv: myKeys.privateKey, spkPriv, opkPriv,
@@ -14117,6 +14172,11 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         'ML-KEM: ' + (_hasPQ ? '<span class="i-g">✓ ' + t('secNativeSupport') + '</span>' : '✗ ' + t('secNotYetBrowser')),
         t('cmdCryptoPqHybrid'),
         t('secLblStatus') + ': ' + cs.pqReady,
+        // Stage-3 step 6: the ACTIVE session's own PQ state (the pq:true marker
+        // recorded at establishment), as opposed to the browser-capability
+        // lines above — a PQXDH session runs on the vendored software KEM
+        // regardless of native ML-KEM support.
+        'PQXDH: ' + (sess ? (sess.pq ? '<span class="i-g">✓ ' + t('secPqxdhInUse') + '</span>' : t('secPqxdhClassical')) : '—'),
         '',
         '<b>' + t('cmdSectionSession') + '</b>',
         activeContact ? t('cmdLblPeer') + ': ' + activeContact.name : t('cmdNoContact'),
