@@ -13,6 +13,9 @@ WEB_FILES=(index.html sw.js manifest.json icon-192.png icon-512.png _headers 404
 # once the browser port lands (docs/INTEGRATION.md §0), so packaged builds must ship the
 # directory — flattening into the app root would break the relative import path.
 CRYPTO_DIR="src/crypto"
+# App-logic modules extracted from index.html (modularization): index.html loads
+# these via `import './src/app/*.js'` the same way, so they ship alongside too.
+APP_DIR="src/app"
 
 echo "=== Breeze Build v${VERSION} ==="
 echo ""
@@ -28,6 +31,11 @@ copy_web() {
     mkdir -p "$dst/$CRYPTO_DIR"
     cp "$CRYPTO_DIR"/*.js "$dst/$CRYPTO_DIR/"
     echo "✓ Crypto modules copied to $dst/$CRYPTO_DIR/"
+  fi
+  if [ -d "$APP_DIR" ]; then
+    mkdir -p "$dst/$APP_DIR"
+    cp "$APP_DIR"/*.js "$dst/$APP_DIR/"
+    echo "✓ App modules copied to $dst/$APP_DIR/"
   fi
   # locales/*.json are fetched at boot by _loadLocale() — skip them and the packaged
   # app silently renders English for every non-EN user (same class of bug fixed for

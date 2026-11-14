@@ -31,6 +31,15 @@ function slice(from, to) {
   expect(b, `anchor not found: ${to}`).toBeGreaterThan(a);
   return html.slice(a, b);
 }
+const backupMod = readFileSync(join(HERE, '..', 'src', 'app', 'backup.js'), 'utf8');
+function sliceBackup(from, to) {
+  const a = backupMod.indexOf(from);
+  const b = backupMod.indexOf(to);
+  expect(a, `anchor not found in src/app/backup.js: ${from}`).toBeGreaterThan(-1);
+  expect(b, `anchor not found in src/app/backup.js: ${to}`).toBeGreaterThan(a);
+  return backupMod.slice(a, b);
+}
+
 
 // Minimal IndexedDB stand-in: per-store Maps, request objects resolve on the
 // next microtask like real IDB (the outbox-idb.test.js pattern, extended with
@@ -65,7 +74,7 @@ function build(db) {
     slice('async function deriveKey', '// v3.6 Phase 2c'),
     slice('function _atRestIsWrapped', '// Loads the private JWK'),
     slice('async function dbGet(store, key)', 'async function dbGetAll'),
-    slice('const BACKUP_FORMAT_V', 'async function backupToFile'),
+    sliceBackup('const BACKUP_FORMAT_V', 'async function backupToFile'),
   ].join('\n');
   const factory = new Function('db', 'CONFIG', '_dbg',
     src + '; return { encrypt, decrypt, _collectBackupKeyMaterial, _restoreBackupKeyMaterial, BACKUP_FORMAT_V };');
@@ -297,8 +306,10 @@ describe('backup key material — wiring pins', () => {
     // anchor", so it deliberately reuses these exact helpers rather
     // than growing a parallel payload shape. The counts still pin every
     // call site: removing any producer/consumer fails here.
-    expect(html.match(/_collectBackupKeyMaterial\(\)/g)).toHaveLength(4); // def + file + cloud + recovery kit
-    expect(html.match(/_restoreBackupKeyMaterial\(data\.keyMaterial\)/g)).toHaveLength(3);
-    expect(html.match(/backupV: BACKUP_FORMAT_V/g)).toHaveLength(3);
+    // (Modularization: the producers/consumers live in src/app/backup.js
+    // now, so the census reads that file — same counts, same pin.)
+    expect(backupMod.match(/_collectBackupKeyMaterial\(\)/g)).toHaveLength(4); // def + file + cloud + recovery kit
+    expect(backupMod.match(/_restoreBackupKeyMaterial\(data\.keyMaterial\)/g)).toHaveLength(3);
+    expect(backupMod.match(/backupV: BACKUP_FORMAT_V/g)).toHaveLength(3);
   });
 });

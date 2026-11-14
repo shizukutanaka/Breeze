@@ -39,6 +39,19 @@ Two options (pick one):
 Update `validate.sh`/CI extractor if a second `<script>` tag is added (it greps the
 first literal `<script>` — keep app logic there; see `.github/workflows/ci.yml`).
 
+**Addendum (index.html modularization):** option (A) is also how the app-logic
+subsystems under `src/app/` ship — a second `<script type="module">` block exposes
+`window.__breezeCall` / `__breezeBackup` / `__breezeQR` / `__breezeImportParsers` /
+`__breezeSound`. `call.js` and `backup.js` are factories (not ready-made helpers):
+the classic script instantiates them *inside* `initMessenger`, passing that
+closure's live bindings as a deps object — stable references directly, reassigned
+identity bindings (`myId` etc.) behind getter accessors, and the one write-back
+phrase restore performs behind an explicit `adoptRestoredSigning` dep. Their
+remaining references are top-level globals, resolved exactly as inline. Packaging
+mirrors the crypto closure: `sw.js` precaches the five files and `build.sh`'s
+`copy_web` ships `src/app/` next to `src/crypto/`. Absent module ⇒ the owning
+feature degrades (inert stubs / no QR modal / silent sound), never boot.
+
 ## 1. N1 — fix the DH-ratchet `Nr` bug (do first; tiny, high-value)
 
 `index.html` `dhRatchetStep` (~line 4547-4565) sets `sess.sendCounter = 0` but

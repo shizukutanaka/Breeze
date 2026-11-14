@@ -47,6 +47,13 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const html = readFileSync(join(ROOT, 'index.html'), 'utf8');
+// Modularization: the app-logic modules under src/app/ are part of the deployed
+// client and reference the same t() keys through the global scope — a key used
+// only there is not dead, and a t() call there must pass the same gates below.
+// Checks 6-8 therefore scan the combined app source, not index.html alone.
+const appSrc = html + '\n' + readdirSync(join(ROOT, 'src', 'app'))
+  .filter((f) => f.endsWith('.js'))
+  .map((f) => readFileSync(join(ROOT, 'src', 'app', f), 'utf8')).join('\n');
 
 function extractInline() {
   const start = html.indexOf('const _I = {');
@@ -132,7 +139,7 @@ for (const file of localeFiles) {
   }
 }
 
-// 6. DEAD KEYS — an English key that nothing in index.html references is pure rot: it costs a
+// 6. DEAD KEYS — an English key that nothing in the client source references is pure rot: it costs a
 //    translation obligation in every locale forever and labels a feature that no longer exists.
 //    212 of them had accumulated behind deleted commands before this check existed, and the
 //    only reason anyone noticed was a manual first-principles inventory. Now it is mechanical.
@@ -140,7 +147,7 @@ for (const file of localeFiles) {
 //    own definition line — t('k'), data-i18n="k", or a computed `const key = cond ? 'a' : 'b'`
 //    all leave the bare identifier in the source, so a single textual occurrence means dead.
 const KEY_RE = (k) => new RegExp('\\b' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'g');
-const deadKeys = refKeys.filter((k) => (html.match(KEY_RE(k)) || []).length <= 1);
+const deadKeys = refKeys.filter((k) => (appSrc.match(KEY_RE(k)) || []).length <= 1);
 for (const k of deadKeys) problems.push(`EN."${k}": defined but never referenced (dead key — delete it)`);
 
 // 7. MISSING KEYS — the mirror of check 6, and the more visible failure of the two: `t()`
@@ -151,8 +158,8 @@ for (const k of deadKeys) problems.push(`EN."${k}": defined but never referenced
 //    cannot be resolved statically and is out of scope by design.
 // Both quote styles: a future `t("key")` is the same call and must not slip past
 // the missing-key gate just because every call site happens to use ' today.
-const referenced = new Set([...html.matchAll(/\bt\(\s*['"]([A-Za-z][A-Za-z0-9_]*)['"]/g)].map((m) => m[1]));
-for (const el of html.matchAll(/data-i18n(?:-ph|-aria|-title|-html)?="([A-Za-z][A-Za-z0-9_]*)"/g)) {
+const referenced = new Set([...appSrc.matchAll(/\bt\(\s*['"]([A-Za-z][A-Za-z0-9_]*)['"]/g)].map((m) => m[1]));
+for (const el of appSrc.matchAll(/data-i18n(?:-ph|-aria|-title|-html)?="([A-Za-z][A-Za-z0-9_]*)"/g)) {
   referenced.add(el[1]);
 }
 const known = new Set(refKeys);
@@ -164,7 +171,7 @@ for (const k of [...referenced].sort()) {
 //    a function and throws. The correct form passes the interpolation args directly to t()
 //    itself: `t('key', args)`. A literal-key call followed immediately by a parenthesised
 //    argument list is unambiguous — nothing else in this codebase calls t()'s return value.
-for (const m of html.matchAll(/\bt\(\s*['"]([A-Za-z][A-Za-z0-9_]*)['"]\s*\)\(/g)) {
+for (const m of appSrc.matchAll(/\bt\(\s*['"]([A-Za-z][A-Za-z0-9_]*)['"]\s*\)\(/g)) {
   problems.push(`t('${m[1]}')(...) calls the returned STRING as a function (TypeError at runtime) — use t('${m[1]}', ...) instead`);
 }
 

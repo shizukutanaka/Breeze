@@ -1201,6 +1201,27 @@ window.__breezePQXDH = createPQSessionHelper();
 import { createSeedHelper } from './src/crypto/seed.js';
 window.__breezeSeed = createSeedHelper();
 </script>
+<script type="module">
+// Modularization: app-logic subsystems extracted from the classic script
+// below (index.html carries a hard line budget — validate.sh). Same
+// loading doctrine as the crypto facades above: the bridges are read
+// opportunistically at call/instantiation time, so a module that has not
+// loaded or fails outright degrades its own feature only, never boot.
+// src/app/call.js and src/app/backup.js export factories — the classic
+// script instantiates them inside initMessenger with that closure's live
+// bindings as deps. src/app/qr.js needs no deps and is built here;
+// src/app/import-parsers.js is a set of pure functions.
+import { createCallManager } from './src/app/call.js';
+window.__breezeCall = { createCallManager };
+import { createBackupTools } from './src/app/backup.js';
+window.__breezeBackup = { createBackupTools };
+import { createQRHelper } from './src/app/qr.js';
+window.__breezeQR = createQRHelper();
+import * as importParsers from './src/app/import-parsers.js';
+window.__breezeImportParsers = importParsers;
+import { createSoundHelper } from './src/app/sound.js';
+window.__breezeSound = createSoundHelper();
+</script>
 
 <script>
 
@@ -3511,44 +3532,16 @@ async function waitForBuffer(dc, maxBytes) {
   });
 }
 // ======================== NOTIFICATION SOUND (Web Audio API) ========================
-function playNotif() {
-  if (localStorage.getItem('brz-notif-sound') === '0') return;
-  try {
-    // v3: Improved notification sound (soft chime, two-tone ascending)
-    const ac = new (window.AudioContext || window.webkitAudioContext)();
-    const g = ac.createGain();
-    g.connect(ac.destination);
-    g.gain.setValueAtTime(0.12, ac.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.01, ac.currentTime + 0.3); // Fade out
-    const o1 = ac.createOscillator(); o1.type = 'sine'; o1.frequency.value = 830;
-    o1.connect(g); o1.start(ac.currentTime); o1.stop(ac.currentTime + 0.12);
-    const o2 = ac.createOscillator(); o2.type = 'sine'; o2.frequency.value = 1245;
-    o2.connect(g); o2.start(ac.currentTime + 0.12); o2.stop(ac.currentTime + 0.25);
-    // v3.6: Haptic feedback via unified helper
-    haptic.notify();
-  } catch(e) { _dbg(e); }
-}
-
-// v3.3: Send confirmation sound (soft pop)
-function playSendSound() {
-  try {
-    const ac = new (window.AudioContext || window.webkitAudioContext)();
-    const g = ac.createGain();
-    g.connect(ac.destination);
-    g.gain.setValueAtTime(0.06, ac.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.01, ac.currentTime + 0.15);
-    const o = ac.createOscillator(); o.type = 'sine'; o.frequency.value = 1400;
-    o.connect(g); o.start(ac.currentTime); o.stop(ac.currentTime + 0.1);
-  } catch(e) { _dbg(e); }
-}
-
-// v3.6: Haptic feedback via the Vibration API (mobile browsers); silent no-op on desktop.
+// The implementation lives in src/app/sound.js (modularization); these
+// wrappers read the bridge at call time — absent module ⇒ silent no-ops.
+function playNotif() { globalThis.__breezeSound?.playNotif(); }
+function playSendSound() { globalThis.__breezeSound?.playSendSound(); }
 const haptic = {
-  tap:     () => { try { navigator.vibrate?.(8); } catch {} },           // Light tap (button press)
-  send:    () => { try { navigator.vibrate?.([6, 30, 6]); } catch {} },   // Double-tap (message sent)
-  success: () => { try { navigator.vibrate?.([8, 40, 12]); } catch {} },  // Success pattern
-  error:   () => { try { navigator.vibrate?.([30, 20, 30]); } catch {} }, // Error buzz
-  notify:  () => { try { navigator.vibrate?.([12, 50, 8, 50, 12]); } catch {} }, // Notification
+  tap: () => globalThis.__breezeSound?.haptic.tap(),
+  send: () => globalThis.__breezeSound?.haptic.send(),
+  success: () => globalThis.__breezeSound?.haptic.success(),
+  error: () => globalThis.__breezeSound?.haptic.error(),
+  notify: () => globalThis.__breezeSound?.haptic.notify(),
 };
 
 // Multi-account system: each account is a separate IDB; switching closes the DB and opens another.
@@ -6861,7 +6854,7 @@ async function initMessenger(dbName) {
       }
       if (_recTimer) { clearInterval(_recTimer); _recTimer = null; }
       // End any active voice/video call to release camera/mic and close the peer connection
-      if (_callState && _callState !== 'idle') {
+      if (_callMgr.state() !== 'idle') {
         try { endCall(); } catch(e) { _dbg(e); }
       }
       // Unsubscribe push notifications for this account so the next account on this
@@ -9866,379 +9859,26 @@ async function initMessenger(dbName) {
   //   - ICE config reuses messenger config (STUN + TURN)
   //   - UI: fullscreen overlay with timer + controls
 
-  let _callState = 'idle'; // idle | calling | ringing | connected
-  let _callPC = null;
-  let _callStream = null;    // local media stream
-  let _callRemoteStream = null;
-  let _callContact = null;
-  let _callStartTime = 0;
-  let _callTimerInterval = null;
+  // 1:1 voice/video calls live in src/app/call.js (modularization — the
+  // call state machine moved out of this closure; see that file's header).
+  // Instantiated here, where every dep it needs is in scope: stable
+  // references directly, the reassigned identity bindings via getters.
+  // Absent module ⇒ stubs keep the closure whole (calls unavailable,
+  // everything else boots) — the pq-facade degradation doctrine.
+  const _callMgr = globalThis.__breezeCall?.createCallManager({
+    _wrapCallSignal, _unwrapCallSignal, _signal, _signalAwait, relaySend, _intervals, _ac, _settings,
+    myId: () => myId, myPubB64: () => myPubB64, myName: () => myName,
+  }) || { startCall() {}, handleCallOffer() {}, endCall() {}, pollCallSignals() {},
+    getCallICEConfig: () => ({ iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }, { urls: 'stun:stun.services.mozilla.com' }] }), state: () => 'idle' };
+  const { startCall, handleCallOffer, endCall, pollCallSignals, getCallICEConfig } = _callMgr;
 
-  function getCallICEConfig() {
-    const cfg = {
-      iceServers: [
-        { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
-        { urls: 'stun:stun.services.mozilla.com' },
-      ],
-      iceCandidatePoolSize: CONFIG.ICE_CANDIDATE_POOL_SIZE,
-      bundlePolicy: 'max-bundle',
-      rtcpMuxPolicy: 'require',
-    };
-    if (_turnCredential?.iceServers) {
-      // v3.6: Server returns full iceServers array (STUN + TURN combined)
-      cfg.iceServers = _turnCredential.iceServers;
-    } else if (_turnCredential?.urls) {
-      // Legacy: single TURN server
-      cfg.iceServers.push({ urls: _turnCredential.urls, username: _turnCredential.username, credential: _turnCredential.credential });
-    }
-    // v3.6: Privacy mode — force relay to hide both peers' IPs
-    if (_settings.relayOnly) {
-      cfg.iceTransportPolicy = 'relay';
-      _dbg(null, 'ICE: relay-only mode (IP hidden from peers)');
-    }
-    return cfg;
-  }
+  // Call button handlers
+  _DOM.get('b-msg-call')?.addEventListener('click', () => { if (activeContact) startCall(activeContact, false); });
+  _DOM.get('b-msg-video')?.addEventListener('click', () => { if (activeContact) startCall(activeContact, true); });
 
-  // v3.6: Fresh ECDSA P-256 certificate per session (prevents fingerprinting)
-  let _rtcCert = null;
-  async function getRTCCertificate() {
-    if (_rtcCert) return _rtcCert;
-    try {
-      _rtcCert = await RTCPeerConnection.generateCertificate({
-        name: 'ECDSA', namedCurve: 'P-256'
-      });
-      _dbg(null, 'RTC: fresh ECDSA certificate generated');
-    } catch(e) { _dbg(e, 'rtc-cert'); }
-    return _rtcCert;
-  }
-
-  // v3.6: Detect safe DataChannel message size
-  // v3.4: Screen Wake Lock for calls (prevents screen dimming during calls)
-  let _wakeLock = null;
-  async function acquireWakeLock() {
-    try {
-      if ('wakeLock' in navigator) {
-        _wakeLock = await navigator.wakeLock.request('screen');
-        _wakeLock.addEventListener('release', () => { _wakeLock = null; });
-        _dbg(null, 'Wake lock acquired');
-      }
-    } catch(e) { _dbg(e, 'wake-lock'); }
-  }
-  function releaseWakeLock() {
-    try { _wakeLock?.release(); _wakeLock = null; } catch(e) { _dbg(e, 'wake-release'); }
-  }
-  // Re-acquire wake lock when tab becomes visible again (auto-released on hide)
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && _callState !== 'idle') acquireWakeLock();
-  }, { signal: _ac.signal });
-
-  async function startCall(contact, withVideo) {
-    if (_callState !== 'idle' || !contact || contact.isGroup) return;
-    _callContact = contact;
-    _callState = 'calling';
-    showCallUI('calling', contact.name, withVideo);
-    await acquireWakeLock();
-
-    try {
-      _callStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: withVideo });
-      _callPC = new RTCPeerConnection(getCallICEConfig());
-
-      _callStream.getTracks().forEach(t => _callPC.addTrack(t, _callStream));
-
-      // v3: Prefer Opus for audio, VP9 for video (better quality at lower bitrate)
-      try {
-        for (const transceiver of _callPC.getTransceivers()) {
-          const kind = transceiver.sender.track?.kind;
-          if (kind === 'audio') {
-            const codecs = RTCRtpReceiver.getCapabilities?.('audio')?.codecs || [];
-            const opus = codecs.filter(c => c.mimeType === 'audio/opus');
-            const rest = codecs.filter(c => c.mimeType !== 'audio/opus');
-            if (opus.length && transceiver.setCodecPreferences) transceiver.setCodecPreferences([...opus, ...rest]);
-          }
-          if (kind === 'video') {
-            const codecs = RTCRtpReceiver.getCapabilities?.('video')?.codecs || [];
-            const vp9 = codecs.filter(c => c.mimeType === 'video/VP9');
-            const vp8 = codecs.filter(c => c.mimeType === 'video/VP8');
-            const rest = codecs.filter(c => !['video/VP9','video/VP8'].includes(c.mimeType));
-            if ((vp9.length || vp8.length) && transceiver.setCodecPreferences) transceiver.setCodecPreferences([...vp9, ...vp8, ...rest]);
-          }
-        }
-      } catch(e) { _dbg(e, 'codec-pref'); }
-
-      _callRemoteStream = new MediaStream();
-      _callPC.ontrack = (e) => {
-        e.streams[0].getTracks().forEach(t => _callRemoteStream.addTrack(t));
-        const remoteAudio = _DOM.get('call-remote-audio');
-        const remoteVideo = _DOM.get('call-remote-video');
-        if (remoteVideo && withVideo) { remoteVideo.srcObject = _callRemoteStream; remoteVideo.classList.remove('hidden'); }
-        else if (remoteAudio) remoteAudio.srcObject = _callRemoteStream;
-      };
-
-      _callPC.onicecandidate = (e) => {
-        if (e.candidate && API) {
-          // v3.6: IP privacy — filter host + srflx in relay-only mode
-          if (e.candidate.type === 'host' && e.candidate.address && !e.candidate.address.includes('.local')) return;
-          if (_settings.relayOnly && (e.candidate.type === 'srflx' || e.candidate.type === 'prflx')) return;
-          const room = 'call:' + [myId, contact.id].sort().join(':');
-          _wrapCallSignal(contact.pubB64, e.candidate).then(d => { if (d != null) _signal(room, 'call-ice', d); }).catch(err => _dbg(null, 'ICE signal wrap failed:', err?.message));
-        }
-      };
-
-      _callPC.onconnectionstatechange = () => {
-        if (_callPC.connectionState === 'connected' && _callState === 'calling') {
-          _callState = 'connected';
-          _callStartTime = Date.now();
-          updateCallUI('connected');
-          _callTimerInterval = setInterval(updateCallTimer, MS.SEC);
-        }
-        if (_callPC.connectionState === 'disconnected' || _callPC.connectionState === 'failed') {
-          endCall();
-        }
-      };
-
-      const offer = await _callPC.createOffer();
-      await _callPC.setLocalDescription(offer);
-
-      const room = 'call:' + [myId, contact.id].sort().join(':');
-      const offerSignal = await _wrapCallSignal(contact.pubB64, { sdp: offer, video: withVideo });
-      if (offerSignal == null) { _dbg(null, 'call-offer encrypt failed'); endCall(); return; }
-      await _signal(room, 'call-offer', offerSignal);
-
-      // Also notify via msg relay (so recipient's poll detects the call)
-      const callNotif = await _wrapCallSignal(contact.pubB64, { sdp: offer, video: withVideo });
-      if (callNotif != null) await relaySend(contact.id, { to: contact.id, from: myId, fromPub: myPubB64, fromName: myName,
-        payload: callNotif, ts: Date.now(), isCall: true, isVideoCall: withVideo }, contact.pubB64);
-
-      // Poll for answer
-      pollCallSignals(contact, room);
-
-    } catch(e) {
-      _dbg(e, 'call');
-      showToast(t('micDenied'), 'error');
-      endCall();
-    }
-  }
-
-  async function handleCallOffer(contact, offerData) {
-    try {
-      if (_callState !== 'idle') return; // busy
-      // Authenticate the offer before showing any ringing UI: when CALL_E2E_SIGNAL is ON a
-      // forged/relay-injected offer fails to decrypt → null → silently ignored (no fake ring).
-      const parsed = await _unwrapCallSignal(contact.pubB64, offerData);
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
-      _callContact = contact;
-      _callState = 'ringing';
-      showCallUI('ringing', contact.name, parsed.video);
-  
-      // Store offer for when user accepts
-      window._pendingCallOffer = { contact, sdp: parsed.sdp, video: parsed.video };
-    
-    } catch(_e) { _dbg(_e, 'handleCallOffer'); }
-  }
-
-  async function acceptCall() {
-    const pending = window._pendingCallOffer;
-    if (!pending || _callState !== 'ringing') return;
-    _callState = 'calling';
-    updateCallUI('connecting');
-
-    try {
-      _callStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: pending.video });
-      _callPC = new RTCPeerConnection(getCallICEConfig());
-
-      _callStream.getTracks().forEach(t => _callPC.addTrack(t, _callStream));
-
-      _callRemoteStream = new MediaStream();
-      _callPC.ontrack = (e) => {
-        e.streams[0].getTracks().forEach(t => _callRemoteStream.addTrack(t));
-        const remoteAudio = _DOM.get('call-remote-audio');
-        const remoteVideo = _DOM.get('call-remote-video');
-        if (remoteVideo && pending.video) { remoteVideo.srcObject = _callRemoteStream; remoteVideo.classList.remove('hidden'); }
-        else if (remoteAudio) remoteAudio.srcObject = _callRemoteStream;
-      };
-
-      _callPC.onicecandidate = (e) => {
-        if (e.candidate && API) {
-          // v3.6: IP privacy — filter host + srflx in relay-only mode
-          if (e.candidate.type === 'host' && e.candidate.address && !e.candidate.address.includes('.local')) return;
-          if (_settings.relayOnly && (e.candidate.type === 'srflx' || e.candidate.type === 'prflx')) return;
-          const room = 'call:' + [myId, pending.contact.id].sort().join(':');
-          _wrapCallSignal(pending.contact.pubB64, e.candidate).then(d => { if (d != null) _signal(room, 'call-ice', d); }).catch(err => _dbg(null, 'ICE signal wrap failed (incoming):', err?.message));
-        }
-      };
-
-      _callPC.onconnectionstatechange = () => {
-        if (_callPC.connectionState === 'connected') {
-          _callState = 'connected';
-          _callStartTime = Date.now();
-          updateCallUI('connected');
-          _callTimerInterval = setInterval(updateCallTimer, MS.SEC);
-        }
-        if (_callPC.connectionState === 'disconnected' || _callPC.connectionState === 'failed') endCall();
-      };
-
-      await _callPC.setRemoteDescription(new RTCSessionDescription(pending.sdp));
-      const answer = await _callPC.createAnswer();
-      await _callPC.setLocalDescription(answer);
-
-      const room = 'call:' + [myId, pending.contact.id].sort().join(':');
-      const answerSignal = await _wrapCallSignal(pending.contact.pubB64, answer);
-      if (answerSignal == null) { _dbg(null, 'call-answer encrypt failed'); endCall(); return; }
-      await _signal(room, 'call-answer', answerSignal);
-
-      pollCallSignals(pending.contact, room);
-    } catch(e) {
-      _dbg(e, 'call-accept');
-      endCall();
-    }
-    window._pendingCallOffer = null;
-  }
-
-  function endCall() {
-    if (_callState === 'idle') return; // guard double-call
-    if (_callStream) { _callStream.getTracks().forEach(t => t.stop()); _callStream = null; }
-    if (_callPC) { try { _callPC.close(); } catch(e) { _dbg(e); } _callPC = null; }
-    // Null srcObject before removing elements — without this, the browser keeps a
-    // live MediaStream reference on the detached DOM nodes, leaving the camera/mic
-    // indicator LED on even after getTracks().forEach(t => t.stop()).
-    const remAudio = _DOM.get('call-remote-audio');
-    const remVideo = _DOM.get('call-remote-video');
-    if (remAudio) remAudio.srcObject = null;
-    if (remVideo) remVideo.srcObject = null;
-    _callRemoteStream = null;
-    clearInterval(_callTimerInterval);
-    releaseWakeLock();
-    // Signal end
-    if (_callContact && API) {
-      const room = 'call:' + [myId, _callContact.id].sort().join(':');
-      _signal(room, 'call-end');
-    }
-    _callState = 'idle';
-    _callContact = null;
-    window._pendingCallOffer = null;
-    hideCallUI();
-  }
-
-  function pollCallSignals(contact, room) {
-    const poll = setInterval(async () => {
-      if (_callState === 'idle') { clearInterval(poll); return; }
-      try {
-        const resp = await _signalAwait(room, 'poll');
-        if (!resp.ok) return;
-        const data = await resp.json();
-        for (const s of (data.messages || [])) {
-          if (s.sender === myId) continue;
-          if (s.type === 'call-answer' && _callPC && _callPC.signalingState === 'have-local-offer') {
-            // Authenticate before setRemoteDescription: a forged answer (relay-injected,
-            // carrying the attacker's DTLS fingerprint) fails to decrypt → null → dropped,
-            // so the DTLS handshake can only complete with the pinned peer (closes call MITM).
-            const ans = await _unwrapCallSignal(contact.pubB64, s.data);
-            if (ans && typeof ans === 'object' && !Array.isArray(ans)) await _callPC.setRemoteDescription(new RTCSessionDescription(ans));
-          }
-          if (s.type === 'call-ice' && _callPC) {
-            const cand = await _unwrapCallSignal(contact.pubB64, s.data);
-            if (cand && typeof cand === 'object' && !Array.isArray(cand)) await _callPC.addIceCandidate(cand).catch(e => _dbg(e, 'call-ICE'));
-          }
-          if (s.type === 'call-end') { endCall(); clearInterval(poll); return; }
-          if (s.type === 'call-offer' && _callState === 'idle') { handleCallOffer(contact, s.data); }
-        }
-      } catch(e) { _dbg(e); }
-    }, 1000);
-    _intervals.push(poll);
-    // Timeout: end call after 60s if not connected
-    setTimeout(() => { if (_callState === 'calling' || _callState === 'ringing') endCall(); }, CONFIG.CALL_TIMEOUT_MS);
-  }
-
-  // Call UI
-  function showCallUI(state, name, withVideo) {
-    hideCallUI();
-    const overlay = document.createElement('div');
-    overlay.id = 'call-overlay';
-    overlay.className = 'call-overlay';
-
-    const stateEl = document.createElement('div');
-    stateEl.className = 'call-state'; stateEl.id = 'call-state';
-    stateEl.textContent = state === 'ringing' ? t('incoming') : t('calling');
-
-    const nameEl = document.createElement('div');
-    nameEl.className = 'call-name'; nameEl.textContent = (name || '').slice(0, 64);
-
-    const timerEl = document.createElement('div');
-    timerEl.className = 'call-timer'; timerEl.id = 'call-timer'; timerEl.textContent = '00:00';
-
-    const video = document.createElement('video');
-    video.id = 'call-remote-video'; video.className = 'call-video hidden';
-    video.autoplay = true; video.playsInline = true;
-
-    const audio = document.createElement('audio');
-    audio.id = 'call-remote-audio'; audio.autoplay = true;
-
-    const actions = document.createElement('div');
-    actions.className = 'call-actions';
-    if (state === 'ringing') {
-      const acceptBtn = document.createElement('button');
-      acceptBtn.className = 'call-btn-accept'; acceptBtn.textContent = '📞'; acceptBtn.setAttribute('aria-label', t('incoming'));
-      acceptBtn.onclick = () => acceptCall();
-      actions.appendChild(acceptBtn);
-    }
-    const endBtn = document.createElement('button');
-    endBtn.className = 'call-btn-end'; endBtn.textContent = '✕'; endBtn.setAttribute('aria-label', t('close'));
-    endBtn.onclick = () => endCall();
-    actions.appendChild(endBtn);
-
-    const secondary = document.createElement('div');
-    secondary.className = 'call-actions-secondary';
-    const muteBtn = document.createElement('button');
-    muteBtn.id = 'call-mute-btn'; muteBtn.className = 'call-btn-sm'; muteBtn.textContent = t('mute');
-    muteBtn.onclick = () => toggleCallMute();
-    secondary.appendChild(muteBtn);
-    if (withVideo) {
-      const camBtn = document.createElement('button');
-      camBtn.id = 'call-cam-btn'; camBtn.className = 'call-btn-sm'; camBtn.textContent = t('uiCameraOff');
-      camBtn.onclick = () => toggleCallCamera();
-      secondary.appendChild(camBtn);
-    }
-
-    overlay.append(stateEl, nameEl, timerEl, video, audio, actions, secondary);
-    document.body.appendChild(overlay);
-  }
-
-  function updateCallUI(state) {
-    const el = _DOM.get('call-state');
-    if (el) {
-      if (state === 'connected') el.textContent = t('uiConnected');
-      else if (state === 'connecting') el.textContent = t('uiConnecting');
-    }
-  }
-
-  function updateCallTimer() {
-    const el = _DOM.get('call-timer');
-    if (!el || !_callStartTime) return;
-    const s = Math.floor((Date.now() - _callStartTime) / 1000);
-    el.textContent = String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
-  }
-
-  function hideCallUI() { _DOM.get('call-overlay')?.remove(); }
-
-  // Make global for onclick handlers
-  window.acceptCall = acceptCall;
-  window.endCall = endCall;
-
-  window.toggleCallMute = () => {
-    if (!_callStream) return;
-    const track = _callStream.getAudioTracks()[0];
-    if (track) { track.enabled = !track.enabled; }
-    const btn = _DOM.get('call-mute-btn');
-    if (btn) btn.textContent = track?.enabled ? t('mute') : t('unmute');
-  };
-
-  window.toggleCallCamera = () => {
-    if (!_callStream) return;
-    const track = _callStream.getVideoTracks()[0];
-    if (track) { track.enabled = !track.enabled; }
-    const btn = _DOM.get('call-cam-btn');
-    if (btn) btn.textContent = track?.enabled ? t('camOff') : t('camOn');
-  };
+  // Listen for incoming calls via signal poll (piggyback on existing messenger signal poll)
+  // Incoming calls are detected in the signal poll's message handling
+  // We add 'call-offer' detection to the existing connectPeer signal loop
 
   // Call button handlers
   _DOM.get('b-msg-call')?.addEventListener('click', () => { if (activeContact) startCall(activeContact, false); });
@@ -12031,118 +11671,23 @@ async function initMessenger(dbName) {
   }
 
   // ===== Backup & Restore =====
-  // Recovery plan step 1 (docs/IDENTITY_RECOVERY_PLAN.md §1.6 defect 2): a backup that
-  // carries only the DH identity record restores the address but NOT the authority —
-  // the Ed25519 signing key (device-registry root; bundle/alias/backup signatures),
-  // the account binding, the prekey private halves and the group sender keys were
-  // left behind, so a "successful" restore silently minted a NEW signing key and the
-  // documented recovery path did not heal root loss. Format-v2 payloads carry the
-  // missing key material in `keyMaterial`; v1 payloads (no `keyMaterial`) restore
-  // exactly as before and simply lack it. Records are carried AS STORED — including
-  // /keywrap-wrapped forms for the slots keywrap covers (keys/signing/pq-priv): the
-  // wrapped form is self-contained (KDF parameters and the slot-bound AAD travel
-  // with it, and the AAD binds the slot name, not the device), so it unwraps on the
-  // new install with the at-rest passphrase exactly as on the old one. Sessions
-  // (sess:) are deliberately NOT carried — a restored ratchet would fork (plan §2);
-  // every 1:1 session re-bootstraps from the restored prekey material instead. The
-  // per-install instance id (inst) is clone detection and is likewise excluded.
-  const BACKUP_FORMAT_V = 2;
-  async function _collectBackupKeyMaterial() {
-    const out = {};
-    try {
-      const signing = await dbGet('identity', 'signing');
-      if (signing) out.signing = signing;
-      const account = await dbGet('identity', 'account');
-      if (account) out.account = account;
-      const spkPriv = await dbGet('identity', 'spk-priv');
-      if (spkPriv) out.spkPriv = spkPriv;
-      const otpPriv = await dbGet('identity', 'otp-priv');
-      if (otpPriv) out.otpPriv = otpPriv;
-      const pqPriv = await dbGet('identity', 'pq-priv');
-      if (pqPriv) out.pqPriv = pqPriv;
-      // Group sender keys live under one IDB key per group (gsk:<groupId>) — the
-      // session-pruning enumeration precedent, filtered to that prefix only.
-      const idKeys = await new Promise(r => { try { const req = db.transaction('identity').objectStore('identity').getAllKeys(); req.onsuccess = () => r(req.result || []); req.onerror = () => r([]); } catch(e) { _dbg(e, 'backup-gsk-keys'); r([]); } });
-      const gsk = {};
-      for (const k of idKeys) {
-        if (typeof k !== 'string' || !k.startsWith('gsk:')) continue;
-        const rec = await dbGet('identity', k);
-        if (rec) gsk[k.slice(4)] = rec;
-      }
-      if (Object.keys(gsk).length) out.gsk = gsk;
-    } catch(e) { _dbg(e, 'backup-collect'); }
-    return out;
-  }
-  // Shape guards for restored key material — a malformed or hostile backup entry is
-  // skipped (and logged), never written into the identity store. Mirrors the contact
-  // validation restoreBackup already applies.
-  function _backupRecOk(rec, kind) {
-    const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
-    if (!isObj(rec)) return false;
-    if (kind === 'signing') return typeof rec.pubB64 === 'string' && rec.pubB64.length <= 128 &&
-      (isObj(rec.wrapped) || (isObj(rec.priv) && isObj(rec.pub)));
-    if (kind === 'account') return typeof rec.root === 'string' && rec.root.length <= 128 &&
-      (rec.rootEd == null || (typeof rec.rootEd === 'string' && rec.rootEd.length <= 128)) &&
-      (rec.isPrimary === undefined || typeof rec.isPrimary === 'boolean');
-    if (kind === 'spkPriv') return isObj(rec.priv);
-    if (kind === 'otpPriv') return Array.isArray(rec.keys) && rec.keys.length <= 1000 && rec.keys.every(isObj);
-    if (kind === 'pqPriv') return isObj(rec.wrapped) ||
-      (Array.isArray(rec.seed) && rec.seed.length === 64 && rec.seed.every(b => Number.isInteger(b) && b >= 0 && b <= 255));
-    return false;
-  }
-  async function _restoreBackupKeyMaterial(km) {
-    if (!km || typeof km !== 'object') return 0;
-    let restored = 0;
-    const put = async (rec, kind, slot) => {
-      if (rec === undefined) return;
-      if (!_backupRecOk(rec, kind)) { _dbg(null, 'backup-restore: skipping malformed ' + kind); return; }
-      if (await dbPut('identity', rec, slot)) restored++;
-    };
-    await put(km.signing, 'signing', 'signing');
-    await put(km.account, 'account', 'account');
-    await put(km.spkPriv, 'spkPriv', 'spk-priv');
-    await put(km.otpPriv, 'otpPriv', 'otp-priv');
-    await put(km.pqPriv, 'pqPriv', 'pq-priv');
-    if (km.gsk && typeof km.gsk === 'object' && !Array.isArray(km.gsk)) {
-      let n = 0;
-      for (const [gid, rec] of Object.entries(km.gsk)) {
-        if (n++ >= 500) { _dbg(null, 'backup-restore: gsk entry cap reached'); break; }
-        if (typeof gid !== 'string' || !gid || gid.length > 128 || !rec || typeof rec !== 'object' || Array.isArray(rec)) { _dbg(null, 'backup-restore: skipping malformed gsk entry'); continue; }
-        if (await dbPut('identity', rec, 'gsk:' + gid)) restored++;
-      }
-    }
-    return restored;
-  }
-
-  async function backupToFile() {
-    const identity = await dbGet('identity', 'keys');
-    const contacts = await dbGetAll('contacts');
-    if (!identity) { showToast(t('toastNoIdentityBackup'), 'error'); return; }
-    if (identity.recoveryMode === 'none') { showToast(t('toastRecoveryNoneBackup'), 'error'); return; }
-
-    const pass = await showPrompt(t('backupPassSet'), '', { type: 'password', okText: t('encrypt'), autocomplete: 'new-password' });
-    // Recovery plan §2 item 8 / step 3: the file backup's passphrase
-    // minimum rises 4 → 6, level with the cloud path — the minimum IS the
-    // security of a kit that now carries the full key material (step 1).
-    // Creation-side only: restore accepts whatever opened an old backup.
-    if (!pass || pass.length < 6) { showToast(t('backupPassMin'), 'error'); return; }
-
-    const keyMaterial = await _collectBackupKeyMaterial();
-    const data = JSON.stringify({ backupV: BACKUP_FORMAT_V, identity, contacts, keyMaterial, exportedAt: new Date().toISOString() });
-    const enc = await encrypt(pass, data);
-    const blob = new Blob([JSON.stringify(enc)], { type: 'application/json' });
-    downloadBlob(blob, 'breeze-backup-' + new Date().toISOString().slice(0, 10) + '.json');
-  }
-
-  // Restoring used to require knowing you could drag a file onto the sidebar. Same file, same
-  // decryption path — just an entry point a person can find.
-  function restoreFromFilePicker() {
-    const picker = document.createElement('input');
-    picker.type = 'file';
-    picker.accept = 'application/json,.json';
-    picker.onchange = async () => { const f = picker.files?.[0]; if (f) await restoreBackup(f); };
-    picker.click();
-  }
+  // The subsystem lives in src/app/backup.js (modularization — see that
+  // file's header). Instantiated here, where every dep it needs is in
+  // scope: stable references directly, the live identity id via a getter,
+  // and the one write-back phrase restore performs via adoptRestoredSigning.
+  // Absent module ⇒ inert no-op entries (the pq-facade doctrine).
+  const _backupTools = globalThis.__breezeBackup?.createBackupTools({
+    db, dbGet, dbPut, dbGetAll, authFields, homeRelays, postAPIRelay, signMessage,
+    myId: () => myId,
+    adoptRestoredSigning: (m) => { _signingKey = m.signingKeyPair; _signingPubB64 = m.signingRecord.pubB64; myId = m.identityPubB64.slice(0, 12); },
+  });
+  const backupToFile = _backupTools?.backupToFile || (async () => {});
+  const restoreFromFilePicker = _backupTools?.restoreFromFilePicker || (() => {});
+  const restoreBackup = _backupTools?.restoreBackup || (async () => {});
+  const createRecoveryKit = _backupTools?.createRecoveryKit || (async () => {});
+  const restoreFromPhrase = _backupTools?.restoreFromPhrase || (async () => {});
+  const createCloudBackup = _backupTools?.createCloudBackup || (async () => {});
+  const restoreCloudBackup = _backupTools?.restoreCloudBackup || (async () => {});
 
   // REMOVED: click listeners for #b-msg-panic and #contact-sort. Both elements were deleted
   // from the markup at some point; the registrations survived, silently attached to nothing.
@@ -12162,170 +11707,6 @@ async function initMessenger(dbName) {
     await restoreBackup(file);
   });
 
-  async function restoreBackup(file) {
-    const pass = await showPrompt(t('backupPassEnter'), '', { type: 'password', okText: t('decrypt'), autocomplete: 'current-password' });
-    if (!pass) return;
-    // "Not a Breeze backup at all" (unreadable, not JSON, not the {s,i,d}
-    // envelope encrypt() writes) is a different failure from "a backup whose
-    // passphrase does not open it" — name the one that happened. Either way
-    // nothing is written: every store write below sits behind a successful
-    // decrypt AND the identity check, which is what lets the first-run screen
-    // (step 2) offer this entry with no identity yet — a failed attempt
-    // creates nothing and leaves the setup screen exactly as it was.
-    let enc;
-    try { enc = JSON.parse(await file.text()); } catch(e) { _dbg(e, 'restore'); showToast(t('toastInvalidBackup'), 'error'); return; }
-    if (!enc || !Array.isArray(enc.s) || !Array.isArray(enc.i) || !Array.isArray(enc.d)) { showToast(t('toastInvalidBackup'), 'error'); return; }
-    try {
-      const decrypted = await decrypt(pass, enc);
-      const data = JSON.parse(decrypted);
-      if (!data.identity?.pubB64) { showToast(t('toastInvalidBackup'), 'error'); return; }
-
-      await dbPut('identity', data.identity, 'keys');
-      for (const c of (data.contacts || [])) {
-        // Validate required fields before storing — a malformed backup entry could corrupt the DB
-        if (typeof c?.id !== 'string' || !c.id || c.id.length > 64 ||
-            typeof c?.pubB64 !== 'string' || !c.pubB64 || c.pubB64.length > 128 ||
-            !/^[A-Za-z0-9+/=]+$/.test(c.pubB64)) continue;
-        await dbPut('contacts', c);
-      }
-      // Format v2 only: the key material (signing/account/prekey privates/gsk/pq).
-      // Absent in v1 backups — those restore exactly the pre-step-1 scope.
-      const legacy = !data.keyMaterial;
-      await _restoreBackupKeyMaterial(data.keyMaterial);
-
-      showToast(t('toastRestoredReload'), 'success');
-      // A v1 restore brings back the address and contacts but NOT device
-      // management: initSigning() mints a new signing key at boot (the limit
-      // SECURITY.md records for pre-step-1 backups). Say so before the
-      // reload, and hold the reload long enough for it to be read.
-      if (legacy) showToast(t('toastRestoredLegacy'), 'warn', 9000);
-      setTimeout(() => location.reload(), legacy ? 6 * MS.SEC : 1.5 * MS.SEC);
-    } catch(e) { _dbg(e,'restore'); showToast(t('toastWrongPassphrase'), 'error'); }
-  }
-
-  // Recovery plan step 3 (docs/IDENTITY_RECOVERY_PLAN.md §3.1/§4): create a
-  // recovery kit for an EXISTING identity. Pre-step-3 identities have
-  // random keys that no phrase can re-derive, so the seed takes its other
-  // form: a fresh phrase is minted and shown once, and the step-1 backup
-  // payload (identity record + contacts + the full key material) is
-  // wrapped under a key derived from seed + the recovery passphrase the
-  // user sets in the phrase dialog (src/crypto/seed.js wrapKit). The kit
-  // file alone opens nothing; phrase alone opens nothing; together they
-  // are the account. Available to every recoverable identity (a
-  // seed-derived account may also hold a kit as a second artefact — its
-  // phrase alone already restores it, so for those this is
-  // belt-and-braces, not a requirement). Disposable ('none') identities
-  // are refused below: a kit would silently undo their chosen opt-out.
-  async function createRecoveryKit() {
-    const seedH = globalThis.__breezeSeed;
-    if (!seedH) { showToast(t('toastRecoveryUnavailable'), 'error'); return; }
-    const identity = await dbGet('identity', 'keys');
-    if (!identity) { showToast(t('toastNoIdentityBackup'), 'error'); return; }
-    if (identity.recoveryMode === 'none') { showToast(t('toastRecoveryNoneKit'), 'error'); return; }
-    try {
-      const entropy = seedH.randomEntropy();
-      const phrase = await seedH.entropyToPhrase(entropy);
-      const pass = await _promptRecoveryPhraseNew(phrase, t('recoveryKitBtn'));
-      if (pass === null) return;
-      const contacts = await dbGetAll('contacts');
-      const keyMaterial = await _collectBackupKeyMaterial();
-      const payload = { backupV: BACKUP_FORMAT_V, identity, contacts, keyMaterial, exportedAt: new Date().toISOString() };
-      const kit = await seedH.wrapKit(entropy, pass, payload);
-      downloadBlob(new Blob([JSON.stringify(kit)], { type: 'application/json' }), 'breeze-recovery-kit-' + new Date().toISOString().slice(0, 10) + '.json');
-      showToast(t('toastRecoveryKitCreated'), 'success');
-    } catch(e) { _dbg(e, 'recovery-kit'); showToast(t('toastRecoveryUnavailable'), 'error'); }
-  }
-
-  // Recovery plan step 3: first-run restore from the recovery phrase — the
-  // setup screen's phrase entry (plan §4 step 2 named it as landing here).
-  // Two shapes, one anchor:
-  //   - seed-derived account: the phrase + passphrase RE-DERIVE the
-  //     identity and signing keys byte-for-byte; the records written are
-  //     exactly what creation wrote (name/alias come from the setup
-  //     fields; the alias claim is re-attempted and adopted only when the
-  //     relay accepts it — the relay-side record never stopped pointing
-  //     at this key).
-  //   - legacy account: the phrase + passphrase UNLOCK the recovery-kit
-  //     file the user picks in the same dialog; the payload inside is the
-  //     step-1 backup payload and lands through the same writes
-  //     restoreBackup performs (identity, validated contacts, key
-  //     material via _restoreBackupKeyMaterial).
-  // Every write sits behind a successful derivation or kit open, so a
-  // wrong phrase, wrong passphrase or tampered kit creates NOTHING — the
-  // step-2 doctrine, pinned by test. Success reloads into _boot()'s
-  // normal has-identity flow (the step-2 pattern); prekey material that
-  // is not restored (derived path) is re-minted by that flow, exactly as
-  // after a v1 file restore.
-  async function restoreFromPhrase() {
-    const seedH = globalThis.__breezeSeed;
-    if (!seedH) { showToast(t('toastRecoveryUnavailable'), 'error'); return; }
-    if (await dbGet('identity', 'keys')) { showToast(t('toastRecoveryHasIdentity'), 'error'); return; }
-    const res = await _promptRecoveryPhraseRestore();
-    if (!res) return;
-    const entropy = await seedH.phraseToEntropy(res.phrase || '');
-    if (!entropy) { showToast(t('toastRecoveryBadPhrase'), 'error'); return; }
-    if (res.kitFile) {
-      let kit;
-      try { kit = JSON.parse(await res.kitFile.text()); } catch(e) { _dbg(e, 'kit-parse'); showToast(t('toastRecoveryInvalidKit'), 'error'); return; }
-      const data = await seedH.unwrapKit(entropy, res.passphrase || '', kit);
-      if (!data) { showToast(t('toastRecoveryKitFailed'), 'error'); return; }
-      if (!data.identity?.pubB64) { showToast(t('toastRecoveryInvalidKit'), 'error'); return; }
-      await dbPut('identity', data.identity, 'keys');
-      for (const c of (data.contacts || [])) {
-        if (typeof c?.id !== 'string' || !c.id || c.id.length > 64 ||
-            typeof c?.pubB64 !== 'string' || !c.pubB64 || c.pubB64.length > 128 ||
-            !/^[A-Za-z0-9+/=]+$/.test(c.pubB64)) continue;
-        await dbPut('contacts', c);
-      }
-      await _restoreBackupKeyMaterial(data.keyMaterial);
-      showToast(t('toastRestoredReload'), 'success');
-      setTimeout(() => location.reload(), 1.5 * MS.SEC);
-      return;
-    }
-    let m;
-    try { m = await seedH.deriveIdentityMaterial(entropy, res.passphrase || ''); }
-    catch(e) { _dbg(e, 'phrase-derive'); showToast(t('toastRecoveryUnavailable'), 'error'); return; }
-    const name = _DOM.get('msg-name').value.trim().slice(0, 64) || 'Anonymous';
-    const aliasWanted = (_DOM.get('msg-alias').value.trim() || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
-    // The passphrase guard: BIP39 cannot detect a wrong PASSPHRASE (it
-    // silently derives a different, empty account — every mnemonic wallet
-    // shares this property). But when the user typed their @alias, the
-    // relay's record for it still names the ORIGINAL key: a derived key
-    // that does not match means the phrase/passphrase pair is not the one
-    // that made this account, so refuse BEFORE writing anything. A match
-    // adopts the alias outright (no re-claim needed — the record never
-    // stopped pointing here).
-    let aliasAdopted = '';
-    if (aliasWanted && API) {
-      let resolved = null;
-      try {
-        const r = await postAPIRaw('/alias/get', { alias: aliasWanted });
-        if (r.ok) resolved = (await r.json())?.pub || null;
-      } catch(e) { _dbg(e, 'phrase-alias-resolve'); }
-      if (resolved && resolved !== m.identityPubB64) { showToast(t('toastRecoveryMismatch'), 'error'); return; }
-      if (resolved) aliasAdopted = aliasWanted;
-    }
-    await dbPut('identity', { pub: m.identityPubArr, priv: m.identityPrivJwk, pubB64: m.identityPubB64, name, alias: aliasAdopted, recoveryMode: 'phrase' }, 'keys');
-    await dbPut('identity', m.signingRecord, 'signing');
-    // No alias typed, or the relay could not be asked: best-effort claim,
-    // signed with the just-restored signing key (authFields signs via
-    // _signingKey/myId, set only for this call — the reload immediately
-    // after hands over to the normal boot). Adopted into the record only
-    // when the relay accepts; the phrase, not the handle, restored it.
-    if (aliasWanted && !aliasAdopted && API) {
-      try {
-        _signingKey = m.signingKeyPair; _signingPubB64 = m.signingRecord.pubB64; myId = m.identityPubB64.slice(0, 12);
-        const resp = await postAPIRaw('/alias/set', { alias: aliasWanted, pub: m.identityPubB64, name, userId: myId,
-          ...(await authFields(ts => `breeze-alias-set:${aliasWanted.toLowerCase().replace(/[^a-z0-9_]/g, '')}:${ts}`)) });
-        if (resp.ok) {
-          const rec = await dbGet('identity', 'keys');
-          if (rec) { rec.alias = aliasWanted; await dbPut('identity', rec, 'keys'); }
-        }
-      } catch(e) { _dbg(e, 'phrase-alias'); }
-    }
-    showToast(t('toastRestoredReload'), 'success');
-    setTimeout(() => location.reload(), 1.5 * MS.SEC);
-  }
 
   async function resolveAndAdd(input) {
     let pubB64, name = 'Contact', aliasResolved = false;
@@ -12588,110 +11969,6 @@ async function initMessenger(dbName) {
     _dbg(null, 'Peer relay: delivered ' + queue.length + ' msgs to ' + targetId);
   }
 
-  // v3 PRO: ENCRYPTED CLOUD BACKUP
-  //
-  // Identity + contacts + message history → PBKDF2/AES-256-GCM encrypt
-  // → upload to /api/backup on the home relays. A relay stores the
-  // ciphertext only, and only when its operator enabled backup storage
-  // (BACKUP_STORAGE_ENABLED — the default relay does not); a refusal is
-  // surfaced as such, never as a generic failure. Only the user's
-  // passphrase can decrypt.
-  async function createCloudBackup() {
-    // Disposable identities export nothing (the kit guard's doctrine, extended
-    // to both backup producers): a backup is a recovery promise by construction.
-    const idRec = await dbGet('identity', 'keys');
-    if (idRec?.recoveryMode === 'none') { showToast(t('toastRecoveryNoneBackup'), 'error'); return; }
-    const passphrase = await showPrompt(t('backupPassPrompt'), '', { type: 'password', autocomplete: 'current-password' });
-    if (!passphrase || passphrase.length < 6) { showToast(t('backupPassMin'), 'error'); return; }
-    try {
-      const identity = await dbGet('identity', 'keys');
-      const contacts = await dbGetAll('contacts');
-      const messages = await dbGetAll('messages');
-      const keyMaterial = await _collectBackupKeyMaterial();
-      const data = JSON.stringify({ v: CONFIG.PROTOCOL_VERSION, backupV: BACKUP_FORMAT_V, identity, contacts, messages, keyMaterial, exportedAt: Date.now() });
-      // Encrypt with PBKDF2 + AES-256-GCM
-      const salt = crypto.getRandomValues(new Uint8Array(16));
-      const iv = crypto.getRandomValues(new Uint8Array(CONFIG.IV_BYTES));
-      const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
-      const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: CONFIG.PBKDF2_AT_REST_ITERATIONS, hash: 'SHA-256' }, km, { name: 'AES-GCM', length: CONFIG.AES_KEY_BITS }, false, ['encrypt']);
-      const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(data));
-      const backup = { s: arr(salt), i: arr(iv), d: arr(new Uint8Array(ct)), v: CONFIG.PROTOCOL_VERSION, iter: CONFIG.PBKDF2_AT_REST_ITERATIONS };
-      // Upload. Signs ownership (ts+sig), same convention as group actions — lets an operator enable BACKUP_REQUIRE_AUTH (see wrangler.toml).
-      if (API) {
-        const upTs = Date.now();
-        const upBody = { userId: myId, backup: JSON.stringify(backup), ts: upTs };
-        const upSig = await signMessage(`breeze-backup-upload:${myId}:${upTs}`);
-        if (upSig) upBody.sig = upSig;
-        // Stage-2 step 5: the same signed body lands on every home relay —
-        // the backup's whole point is surviving the loss of one relay, and
-        // the upload signature is relay-independent. One success is enough
-        // (the toast still reports failure when NO relay took it), and the
-        // retention date shown is the first success's.
-        let firstOk = null; let relayDisabled = false;
-        for (const relay of homeRelays()) {
-          const resp = await postAPIRelay(relay, '/backup/upload', upBody);
-          if (resp?.ok && !firstOk) firstOk = resp;
-          else if (resp && !relayDisabled) { const ej = await resp.json().catch(() => null); if (ej?.code === 'BACKUP_DISABLED') relayDisabled = true; }
-        }
-        if (firstOk) {
-          // Surface the retention deadline the relay just told us: a cloud backup is deleted
-          // 90 days after its last upload and nothing renews it, so "I have a backup" quietly
-          // stops being true. Say the date instead of letting the user find out on the day
-          // they actually need it.
-          const info = await firstOk.json().catch(() => null);
-          showToast(info?.expiresAt
-            ? t('backupCreatedUntil', new Date(info.expiresAt).toLocaleDateString())
-            : t('backupCreated'), 'success');
-        }
-        else showToast(t(relayDisabled ? 'backupRelayDisabled' : 'backupFailed'), 'error');
-      }
-    } catch(e) { _dbg(e, 'backup'); showToast(t('backupFailed') + ': ' + e.message, 'error'); }
-  }
-
-  async function restoreCloudBackup() {
-    const passphrase = await showPrompt(t('backupPassPrompt'), '', { type: 'password', autocomplete: 'current-password' });
-    if (!passphrase) return;
-    try {
-      const dlTs = Date.now();
-      const dlBody = { userId: myId, ts: dlTs };
-      const dlSig = await signMessage(`breeze-backup-download:${myId}:${dlTs}`);
-      if (dlSig) dlBody.sig = dlSig;
-      // Stage-2 step 5: the first home relay that HOLDS a backup serves
-      // it — the primary may be gone (that is the scenario this feature
-      // exists for) while an added relay still has its copy.
-      let resp = null;
-      for (const relay of homeRelays()) {
-        resp = await postAPIRelay(relay, '/backup/download', dlBody);
-        if (resp?.ok) break;
-      }
-      if (!resp?.ok) { const ej = resp ? await resp.json().catch(() => null) : null; showToast(t(ej?.code === 'BACKUP_DISABLED' ? 'backupRelayDisabled' : 'backupFailed'), 'error'); return; }
-      const { backup } = await resp.json();
-      const b = JSON.parse(backup);
-      const salt = u8(b.s); const iv = u8(b.i); const ct = u8(b.d);
-      // Read iteration count from the backup. New backups store 600k; old backups have no
-      // field and fall back to 100k. Enforce a floor of PBKDF2_ITERATIONS so a compromised
-      // server cannot inject iter:1 and make offline brute-force nearly free.
-      const bIter = (typeof b.iter === 'number' && b.iter >= CONFIG.PBKDF2_ITERATIONS && b.iter <= 10000000) ? b.iter : CONFIG.PBKDF2_ITERATIONS;
-      const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
-      const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: bIter, hash: 'SHA-256' }, km, { name: 'AES-GCM', length: CONFIG.AES_KEY_BITS }, false, ['decrypt']);
-      const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
-      const data = JSON.parse(new TextDecoder().decode(pt));
-      // Restore
-      if (data.identity) await dbPut('identity', data.identity, 'keys');
-      // Format v2 only: the key material (signing/account/prekey privates/gsk/pq).
-      await _restoreBackupKeyMaterial(data.keyMaterial);
-      if (data.contacts) for (const c of data.contacts) {
-        // Validate required fields before storing — a malformed backup entry could corrupt the DB
-        if (typeof c?.id !== 'string' || !c.id || c.id.length > 64 ||
-            typeof c?.pubB64 !== 'string' || !c.pubB64 || c.pubB64.length > 128 ||
-            !/^[A-Za-z0-9+/=]+$/.test(c.pubB64)) continue;
-        await dbPut('contacts', c);
-      }
-      if (data.messages) for (const m of data.messages) await dbPut('messages', m);
-      showToast(t('backupRestored'), 'success');
-      setTimeout(() => location.reload(), CONFIG.TOAST_DURATION_MS);
-    } catch(e) { _dbg(e, 'restore'); showToast(t('backupWrongPass'), 'error'); }
-  }
 
   // v3 PRO: EPHEMERAL ROOMS — URL = chat
   //
@@ -13280,68 +12557,10 @@ async function initMessenger(dbName) {
 
   // v1 INTEGRATION: Message Search
 
-  // MIGRATION: Import from LINE / WhatsApp / Telegram
-
-  function parseLINE(text) {
-    const msgs = [];
-    const lines = text.split('\n');
-    let currentDate = '';
-    for (const line of lines) {
-      // Date line: 2024/01/15 Mon
-      const dateMatch = line.match(/^(\d{4}\/\d{2}\/\d{2})/);
-      if (dateMatch) { currentDate = dateMatch[1]; continue; }
-      // Message: 14:23\tAlice\tHello!
-      const msgMatch = line.match(/^(\d{1,2}:\d{2})\t([^\t]+)\t(.+)/);
-      if (msgMatch && currentDate) {
-        const [, time, sender, text] = msgMatch;
-        const ts = new Date(currentDate.replace(/\//g, '-') + 'T' + time.padStart(5, '0') + ':00').getTime();
-        if (!isNaN(ts)) msgs.push({ sender, text, ts });
-      }
-    }
-    return msgs;
-  }
-
-  function parseWhatsApp(text) {
-    const msgs = [];
-    const re = /^(\d{1,2}\/\d{1,2}\/\d{2,4}),?\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)\s*-\s*([^:]+):\s*(.+)/;
-    for (const line of text.split('\n')) {
-      const m = line.match(re);
-      if (m) {
-        const [, date, time, sender, text] = m;
-        const ts = new Date(date + ' ' + time).getTime();
-        if (!isNaN(ts)) msgs.push({ sender: sender.trim(), text: text.trim(), ts });
-      }
-    }
-    return msgs;
-  }
-
-  function parseTelegram(jsonStr) {
-    try {
-      const data = JSON.parse(jsonStr);
-      const msgs = (data.messages || [])
-        .filter(m => m.type === 'message' && m.text)
-        .map(m => ({
-          sender: m.from || m.from_id || t('unknown'),
-          text: typeof m.text === 'string' ? m.text : m.text.map?.(seg => typeof seg === 'string' ? seg : seg.text || '').join('') || '',
-          ts: new Date(m.date).getTime(),
-        }))
-        .filter(m => !isNaN(m.ts) && m.text);
-      return msgs;
-    } catch { return []; }
-  }
-
-  function detectAndParse(text) {
-    // Auto-detect format
-    if (text.startsWith('{') || text.startsWith('[')) return { source: 'Telegram', msgs: parseTelegram(text) };
-    if (text.includes('[LINE]') || /^\d{4}\/\d{2}\/\d{2}/.test(text)) return { source: 'LINE', msgs: parseLINE(text) };
-    if (/^\d{1,2}\/\d{1,2}\/\d{2,4},/.test(text)) return { source: 'WhatsApp', msgs: parseWhatsApp(text) };
-    // Try all
-    let msgs = parseLINE(text);
-    if (msgs.length > 0) return { source: 'LINE', msgs };
-    msgs = parseWhatsApp(text);
-    if (msgs.length > 0) return { source: 'WhatsApp', msgs };
-    return { source: 'Unknown', msgs: [] };
-  }
+  // MIGRATION: Import from LINE / WhatsApp / Telegram — the format parsers
+  // live in src/app/import-parsers.js (modularization); read through the
+  // bridge — absent ⇒ the parsers' own Unknown result.
+  const detectAndParse = (text) => globalThis.__breezeImportParsers?.detectAndParse(text) || { source: 'Unknown', msgs: [] };
 
   async function importChat(file) {
     try {  
@@ -13378,253 +12597,10 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'importChat'); }
   }
 
-  // QR CODE: Real ISO 18004 encoder (0 dependencies, byte mode, EC level L)
-  // Supports URLs up to ~270 chars (Version 1-10). Fully scannable.
-  function generateQR(text) {
-    const data = new TextEncoder().encode(text);
-    // Version selection (byte mode, EC level L)
-    const caps = [0,17,32,53,78,106,134,154,192,230,271]; // max bytes per version, EC-L
-    let ver = 1;
-    while (ver <= 10 && data.length > caps[ver]) ver++;
-    if (ver > 10) ver = 10; // truncate silently
-    const size = 17 + ver * 4;
-    const grid = Array.from({length: size}, () => new Uint8Array(size));
-    const used = Array.from({length: size}, () => new Uint8Array(size));
-
-    // ── Finder patterns ──
-    function putFinder(cx, cy) {
-      for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
-        const x = cx + dx, y = cy + dy;
-        if (x < 0 || x >= size || y < 0 || y >= size) continue;
-        const ring = Math.max(Math.abs(dx), Math.abs(dy));
-        grid[y][x] = ring === 1 ? 0 : 1;
-        used[y][x] = 1;
-      }
-      // Separators
-      for (let i = -4; i <= 4; i++) {
-        for (const [dx, dy] of [[i, -4],[-4, i],[i, 4],[4, i]]) {
-          const x = cx + dx, y = cy + dy;
-          if (x >= 0 && x < size && y >= 0 && y < size) used[y][x] = 1;
-        }
-      }
-    }
-    putFinder(3, 3); putFinder(size - 4, 3); putFinder(3, size - 4);
-
-    // ── Alignment pattern (ver >= 2) ──
-    if (ver >= 2) {
-      const pos = [6, size - 7]; // simplified for v2-10
-      for (const ay of pos) for (const ax of pos) {
-        if (used[ay]?.[ax]) continue;
-        for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
-          const ring = Math.max(Math.abs(dx), Math.abs(dy));
-          grid[ay + dy][ax + dx] = ring === 1 ? 0 : 1;
-          used[ay + dy][ax + dx] = 1;
-        }
-      }
-    }
-
-    // ── Timing patterns ──
-    for (let i = 8; i < size - 8; i++) {
-      if (!used[6][i]) { grid[6][i] = i % 2 === 0 ? 1 : 0; used[6][i] = 1; }
-      if (!used[i][6]) { grid[i][6] = i % 2 === 0 ? 1 : 0; used[i][6] = 1; }
-    }
-    // Dark module
-    grid[ver * 4 + 9][8] = 1; used[ver * 4 + 9][8] = 1;
-
-    // ── Reserve format info areas ──
-    for (let i = 0; i < 8; i++) { used[8][i] = 1; used[8][size - 1 - i] = 1; used[i][8] = 1; used[size - 1 - i][8] = 1; }
-    used[8][8] = 1;
-
-    // ── Data encoding (byte mode) ──
-    const ecL = [[0],[7,10],[10,16],[15,26],[20,36],[26,46],[36,60],[40,66],[48,86],[60,100],[72,122]]; // [numEC, totalCW] per version
-    const numEC = ecL[ver][0], totalCW = ecL[ver][1];
-    const numData = totalCW - numEC;
-    const bits = [];
-    const pushBits = (val, len) => { for (let i = len - 1; i >= 0; i--) bits.push((val >> i) & 1); };
-    pushBits(0b0100, 4); // byte mode indicator
-    pushBits(data.length, ver <= 9 ? 8 : 16); // char count
-    for (const b of data) pushBits(b, 8);
-    pushBits(0, 4); // terminator
-    while (bits.length % 8) bits.push(0);
-    while (bits.length < numData * 8) {
-      pushBits(0xEC, 8);
-      if (bits.length < numData * 8) pushBits(0x11, 8);
-    }
-    const codewords = [];
-    for (let i = 0; i < bits.length; i += 8) {
-      codewords.push(bits.slice(i, i + 8).reduce((a, b) => (a << 1) | b, 0));
-    }
-
-    // ── Reed-Solomon EC (GF(256), primitive 0x11D) ──
-    const gfExp = new Uint8Array(512), gfLog = new Uint8Array(256);
-    let val = 1;
-    for (let i = 0; i < 255; i++) { gfExp[i] = val; gfLog[val] = i; val = (val << 1) ^ (val >= 128 ? 0x11D : 0); }
-    for (let i = 255; i < 512; i++) gfExp[i] = gfExp[i - 255];
-    const gfMul = (a, b) => a === 0 || b === 0 ? 0 : gfExp[gfLog[a] + gfLog[b]];
-    // Generator polynomial
-    let gen = [1];
-    for (let i = 0; i < numEC; i++) {
-      const ng = new Array(gen.length + 1).fill(0);
-      for (let j = 0; j < gen.length; j++) { ng[j] ^= gen[j]; ng[j + 1] ^= gfMul(gen[j], gfExp[i]); }
-      gen = ng;
-    }
-    const ecCW = new Array(numEC).fill(0);
-    const msg = [...codewords.slice(0, numData), ...ecCW];
-    for (let i = 0; i < numData; i++) {
-      const coef = msg[i]; if (coef === 0) continue;
-      for (let j = 0; j < gen.length; j++) msg[i + j] ^= gfMul(gen[j], coef);
-    }
-    const allCW = [...codewords.slice(0, numData), ...msg.slice(numData)];
-
-    // ── Place data bits ──
-    const allBits = [];
-    for (const cw of allCW) for (let i = 7; i >= 0; i--) allBits.push((cw >> i) & 1);
-    let bi = 0;
-    for (let right = size - 1; right >= 1; right -= 2) {
-      if (right === 6) right = 5;
-      for (let vert = 0; vert < size; vert++) {
-        const y = ((Math.floor((size - 1 - right) / 2)) % 2 === 0) ? size - 1 - vert : vert;
-        for (const dx of [0, -1]) {
-          const x = right + dx;
-          if (x < 0 || x >= size || used[y][x]) continue;
-          grid[y][x] = bi < allBits.length ? allBits[bi++] : 0;
-          used[y][x] = 1;
-        }
-      }
-    }
-
-    // ── Mask (pattern 0: (y+x)%2==0) ──
-    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-      if (used[y][x] && !(x <= 8 && y === 8) && !(y <= 8 && x === 8) && !(x >= size - 8 && y === 8) && !(y >= size - 8 && x === 8)) continue;
-      // Only mask data/EC modules
-    }
-    // Apply mask to data area
-    const masked = grid.map(r => new Uint8Array(r));
-    const isData = (x, y) => {
-      if (x < 0 || x >= size || y < 0 || y >= size) return false;
-      // Check if this is a data module (not finder, timing, alignment, format)
-      if (x <= 8 && y <= 8) return false; if (x >= size - 8 && y <= 8) return false; if (x <= 8 && y >= size - 8) return false;
-      if (x === 6 || y === 6) return false;
-      if (y === ver * 4 + 9 && x === 8) return false;
-      return true;
-    };
-    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-      if (isData(x, y) && (y + x) % 2 === 0) masked[y][x] ^= 1;
-    }
-
-    // ── Format info (EC-L=01, mask 0=000 → 01000 → BCH) ──
-    const fmtBits = [1,1,1,0,1,1,1,1,1,0,0,0,1,0,0]; // pre-computed for L + mask0
-    const putFmt = (i, val) => {
-      if (i < 8) { masked[8][i < 6 ? i : i + 1] = val; masked[size - 1 - i][8] = val; }
-      else { masked[i < 9 ? 15 - i : 14 - i + 1][8] = val; masked[8][size - 15 + i] = val; }
-    };
-    for (let i = 0; i < 15; i++) putFmt(i, fmtBits[i]);
-
-    // ── Render to canvas ──
-    const canvas = document.createElement('canvas');
-    const scale = Math.max(4, Math.floor(200 / size));
-    const margin = 4;
-    const total = (size + margin * 2) * scale;
-    canvas.width = total; canvas.height = total;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, total, total);
-    ctx.fillStyle = '#000000';
-    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-      if (masked[y][x]) ctx.fillRect((x + margin) * scale, (y + margin) * scale, scale, scale);
-    }
-    return canvas;
-  }
-
-  function showQRModal(url) {
-    // Remove existing modal
-    document.querySelectorAll('.qr-modal').forEach(m => m.remove());
-
-    const modal = document.createElement('div');
-    modal.className = 'qr-modal';
-    modal.className = 'upgrade-overlay';
-
-    const card = document.createElement('div');
-    card.className = 'qr-modal';
-
-    const title = document.createElement('div');
-    title.textContent = t('uiShareId');
-    title.className = 'cmd-title';
-
-    const qr = generateQR(url);
-    qr.className = 'upgrade-img';
-
-    const urlDiv = document.createElement('div');
-    urlDiv.textContent = url;
-    urlDiv.className = 'qr-url';
-
-    const copyBtn = document.createElement('button');
-    copyBtn.className = 'btn btn-g';
-    copyBtn.textContent = t('uiCopyLink');
-    copyBtn.className = 'btn btn-g'; copyBtn.classList.add('i-w100', 'i-mb8');
-    copyBtn.onclick = () => {
-      navigator.clipboard?.writeText(url);
-      copyBtn.textContent = t('uiCopied');
-      setTimeout(() => { copyBtn.textContent = t('uiCopyLink'); }, CONFIG.TOAST_DURATION_MS);
-    };
-
-    const closeBtn = document.createElement('button');
-    closeBtn.className = 'btn btn-o';
-    closeBtn.textContent = t('uiClose');
-    closeBtn.className = 'btn btn-o'; closeBtn.classList.add('i-w100');
-    closeBtn.onclick = () => modal.remove();
-
-    // v3.6: Scan QR button (BarcodeDetector API — Chrome 83+, Safari 17.2+)
-    const scanSupported = typeof BarcodeDetector !== 'undefined';
-    if (scanSupported) {
-      const scanBtn = document.createElement('button');
-      scanBtn.className = 'btn btn-o';
-      scanBtn.classList.add('i-w100', 'i-mb8');
-      scanBtn.textContent = '📷 ' + (t('scanQR'));
-      scanBtn.setAttribute('aria-label', t('scanQR'));
-      scanBtn.onclick = async () => {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-          const video = document.createElement('video');
-          video.srcObject = stream;
-          video.autoplay = true; video.playsInline = true;
-          video.className = 'scan-video';
-          card.insertBefore(video, closeBtn);
-          scanBtn.textContent = '⏳ ' + (t('scanning'));
-          scanBtn.disabled = true;
-          const detector = new BarcodeDetector({ formats: ['qr_code'] });
-          const scanLoop = async () => {
-            try {
-              const barcodes = await detector.detect(video);
-              if (barcodes.length > 0) {
-                const value = barcodes[0].rawValue;
-                stream.getTracks().forEach(t => t.stop());
-                video.remove();
-                modal.remove();
-                if (value.includes('?add=')) {
-                  window.location.href = value;
-                } else {
-                  showToast(t('toastInvalidQR'), 'error');
-                }
-                return;
-              }
-            } catch {}
-            if (video.parentNode) requestAnimationFrame(scanLoop);
-          };
-          video.onloadedmetadata = () => scanLoop();
-        } catch(e) {
-          _dbg(e, 'qr-scan');
-          showToast(t('toastCameraFail'), 'error');
-        }
-      };
-      card.append(title, qr, urlDiv, copyBtn, scanBtn, closeBtn);
-    } else {
-      card.append(title, qr, urlDiv, copyBtn, closeBtn);
-    }
-    modal.appendChild(card);
-    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
-    document.body.appendChild(modal);
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') modal.remove(); }, { once: true });
-  }
+  // QR CODE: the ISO 18004 encoder and the share-ID modal live in
+  // src/app/qr.js (modularization); read opportunistically through the
+  // bridge — absent ⇒ no modal (the share link itself is shown as text).
+  const showQRModal = (url) => { globalThis.__breezeQR?.showQRModal(url); };
 
   // BULK INVITE: Send one link to invite multiple people
 
