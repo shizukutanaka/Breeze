@@ -17,65 +17,34 @@ import { test, expect } from '@playwright/test';
 import { createIdentity } from './helpers.mjs';
 
 
-// Cheap PoW solve for TEST SETUP only — seeding a pre-existing alias directly via the Worker
-// API. The E2E harness's MIN_POW_DIFFICULTY floor is 8 (tests/helpers/mockKV.js), well below
-// the shipped client's hardcoded CONFIG.POW_DIFFICULTY of 20, so this setup solve is near-
-// instant. It is NOT a substitute for exercising the real client path — see below.
-async function solveCheapPoW(challenge, difficulty) {
-  const target = Math.pow(2, 32 - difficulty) >>> 0;
-  let nonce = 0;
-  for (;;) {
-    const hash = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${challenge}:${nonce}`));
-    if (new DataView(hash).getUint32(0, false) < target) return { challenge, nonce, difficulty };
-    nonce++;
-  }
-}
-
 test('renaming your @alias releases the OLD handle instead of squatting it forever', async ({ browser }) => {
-  // The one REAL cost here is the client's actual difficulty-20 PoW solve for the rename
-  // itself (measured ~16s on a fast machine, more with variance) — that is the exact code a
-  // user's browser runs, so it is exercised for real rather than faked.
-  test.setTimeout(120_000);
+  // The REAL cost here is the client's actual difficulty-20 PoW solves — one for the
+  // setup claim, one for the rename itself (measured ~16s each on a fast machine, more
+  // with variance) — that is the exact code a user's browser runs, so it is exercised
+  // for real rather than faked.
+  test.setTimeout(180_000);
   // Own context with a dedicated IP: /api/alias/set is rate-limited (10/min) and this test
   // makes two set calls plus several get calls, so sharing the suite's default IP with other
   // alias-touching tests risks a 429 that looks like a product failure but is only test
   // cross-contamination — the same reason every other spec in this suite picks its own IP.
   const ctx = await browser.newContext({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.97' } });
   const page = await ctx.newPage();
-  const pub = await createIdentity(page, 'Renamer');
 
+  // The old handle is claimed the way a real user gets one: typed into the setup form
+  // at identity creation. Since recovery-plan step 5 the Worker requires an Ed25519
+  // ownership signature for registration, so the previous setup trick — an unsigned
+  // direct /api/alias/set from the test — is refused by design (AUTH_REQUIRED); the
+  // client's own claim path (bundle upload, then signed + PoW claim) is the only way
+  // in, which also makes this spec cover the step-5 creation-time claim for real.
   const oldAlias = 'oldh' + Date.now().toString(36).slice(-8);
-  const seedChallenge = `${pub}:${oldAlias}:${Date.now()}`;
-  const seedPow = await solveCheapPoW(seedChallenge, 8);
-  const seedResp = await page.request.post('/api/alias/set', {
-    data: { alias: oldAlias, pub, name: 'Renamer', pow: seedPow },
-  });
-  expect(seedResp.ok()).toBe(true);
+  await createIdentity(page, 'Renamer', { alias: oldAlias });
 
-  // Point the running client at the seeded alias — mirrors how a real user would have gotten
-  // there (set once in an earlier session, persisted to identity.keys.alias, reloaded).
-  await page.evaluate((alias) => new Promise((resolve, reject) => {
-    const req = indexedDB.open('breeze-messenger', 5);
-    req.onerror = () => reject(req.error);
-    req.onsuccess = () => {
-      const store = req.result.transaction('identity', 'readwrite').objectStore('identity');
-      const getReq = store.get('keys');
-      getReq.onsuccess = () => {
-        const id = getReq.result;
-        id.alias = alias;
-        const putReq = store.put(id, 'keys');
-        putReq.onsuccess = () => resolve();
-        putReq.onerror = () => reject(putReq.error);
-      };
-      getReq.onerror = () => reject(getReq.error);
-    };
-  }), oldAlias);
-  await page.reload();
-  await expect(page.locator('#msg-main')).toBeVisible();
-
-  // Sanity: the old alias genuinely resolves server-side before the rename.
-  const before = await page.request.post('/api/alias/get', { data: { alias: oldAlias } });
-  expect(before.status()).toBe(200);
+  // Sanity: the old alias genuinely resolves server-side before the rename, and the
+  // identity record the client persisted names it (the claim actually landed).
+  await expect.poll(async () => {
+    const r = await page.request.post('/api/alias/get', { data: { alias: oldAlias } });
+    return r.status();
+  }, { timeout: 15_000 }).toBe(200);
 
   // The fix under test: rename through the ACTUAL client command (real 20-bit PoW solve).
   const newAlias = 'newh' + Date.now().toString(36).slice(-8);

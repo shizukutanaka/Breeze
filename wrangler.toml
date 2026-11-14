@@ -58,6 +58,7 @@ new_sqlite_classes = ["MailboxDO"]
 # serve clients that never register.
 # wrangler pages secret put PRESENCE_REQUIRE_AUTH      # false — opt out: allow presence writes from unregistered ids (default: registered only)
 # wrangler pages secret put TURN_REQUIRE_AUTH          # false — opt out: issue TURN credentials to unregistered ids (default: registered only)
+# wrangler pages secret put ALIAS_REQUIRE_AUTH         # false — opt out: allow unsigned @alias registration (default: Ed25519 signature required, since recovery-plan step 5)
 #
 # The remaining flags reject requests that omit/fail an Ed25519 ownership
 # signature. Every current client already signs these actions; the flags stay
@@ -66,7 +67,6 @@ new_sqlite_classes = ["MailboxDO"]
 # those clients off (for QUEUE: total receive loss). Enable once you're not
 # also serving such clients (check CHANGELOG.md for when each call started
 # signing).
-# wrangler pages secret put ALIAS_REQUIRE_AUTH         # true — reject unsigned @alias registration
 # wrangler pages secret put GROUP_REQUIRE_AUTH         # true — reject unsigned group create/kick/rename/admin/leave/delete/transfer
 # wrangler pages secret put PUSH_REQUIRE_AUTH          # true — reject unsigned push subscribe/unsubscribe
 # wrangler pages secret put QUEUE_REQUIRE_AUTH         # true — reject unsigned msg/sealed poll + sealed ack (queue read/delete)

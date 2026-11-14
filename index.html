@@ -5268,16 +5268,6 @@ async function initMessenger(dbName) {
     const privJwk = await crypto.subtle.exportKey('jwk', keys.privateKey);
     const pubB64 = btoa(String.fromCharCode(...new Uint8Array(pubRaw)));
 
-    // Register alias on server
-    let registeredAlias = '';
-    if (alias && API) {
-      try {
-        const resp = await postAPIRaw('/alias/set', { alias, pub: pubB64, name, userId: pubB64.slice(0, 12),
-          ...(await authFields(ts => `breeze-alias-set:${alias.toLowerCase().replace(/[^a-z0-9_]/g, '')}:${ts}`)) });
-        if (resp.ok) registeredAlias = alias;
-      } catch(e) { _dbg(e); }
-    }
-
     // Recovery plan step 3: a seed-derived identity carries its recovery
     // mode on the record ('phrase' — the first of the three recovery modes
     // the owner chose between on 2026-11-14). The disposable mode takes
@@ -5289,17 +5279,20 @@ async function initMessenger(dbName) {
     // Pre-step-3 random identities carry no field (absence == legacy,
     // still kit-eligible — unlike 'none', which is a chosen, permanent
     // opt-out).
-    await dbPut('identity', { pub: arr(new Uint8Array(pubRaw)), priv: privJwk, pubB64, name, alias: registeredAlias, ...(seedMat ? { recoveryMode: 'phrase' } : disposable === true ? { recoveryMode: 'none' } : {}) }, 'keys');
+    // The record's alias starts EMPTY and is filled in only after the
+    // step-5 claim below actually lands (see there) — the record must
+    // never name a @handle the relay did not grant.
+    const identityRecord = { pub: arr(new Uint8Array(pubRaw)), priv: privJwk, pubB64, name, alias: '', ...(seedMat ? { recoveryMode: 'phrase' } : disposable === true ? { recoveryMode: 'none' } : {}) };
     // The derived signing record is stored BEFORE the initSigning() call
     // below, which loads a stored record rather than minting a random one
     // — that load is what makes the derived Ed25519 key the account's
     // signing key (and a later phrase restore byte-identical authority).
     if (seedMat) await dbPut('identity', seedMat.signingRecord, 'signing');
-    myKeys = keys; myPubB64 = pubB64; myName = name; myAlias = registeredAlias; myId = pubB64.slice(0, 12);
+    myKeys = keys; myPubB64 = pubB64; myName = name; myAlias = ''; myId = pubB64.slice(0, 12);
     myShortId = await generateShortId(pubB64);
     try { localStorage.setItem('brz-uid', myId); } catch(e) { _dbg(e); }
     _userId = myId;
-    auditLog('auth', 'Identity created: ' + myShortId + (registeredAlias ? ' @' + registeredAlias : ''));
+    let registeredAlias = '';
     if (API) { // v3: Generate and upload PreKeys for X3DH
       try {
         await initSigning(); // must precede generatePreKeyBundle() or edIdentityKey/signedPreKeySig get omitted (E2E-found)
@@ -5312,8 +5305,30 @@ async function initMessenger(dbName) {
             ...(await prekeyUploadAuth(myId, pubB64, bundle)) });
         }
         _dbg(null, 'PreKeys uploaded: 1 SPK + ' + bundle.oneTimePreKeys.length + ' OTP');
+        // Recovery plan step 5: claim the @alias only NOW. Alias
+        // registration is signature-mandatory on the Worker, and the
+        // signature verifies against the prekey bundle — so the claim is
+        // only possible after the signing key exists AND the bundle is
+        // registered. (This block used to run before either existed: no
+        // PoW, and authFields inertly returned {} because _signingKey and
+        // myId were still unset — the claim silently never landed, and
+        // the identity record named an alias the relay had never granted.
+        // A failed claim now leaves the alias empty rather than lying;
+        // the user can claim later via /alias.)
+        if (alias) {
+          try {
+            const powToken = await generatePoW(pubB64 + ':' + alias + ':' + Date.now(), CONFIG.POW_DIFFICULTY);
+            const resp = await postAPIRaw('/alias/set', { alias, pub: pubB64, name, pow: powToken, userId: myId,
+              ...(await authFields(ts => `breeze-alias-set:${alias.toLowerCase().replace(/[^a-z0-9_]/g, '')}:${ts}`)) });
+            if (resp.ok) registeredAlias = alias;
+          } catch(e) { _dbg(e, 'alias-claim'); }
+        }
       } catch(e) { _dbg(e, 'prekey-upload'); }
     }
+    identityRecord.alias = registeredAlias;
+    myAlias = registeredAlias;
+    await dbPut('identity', identityRecord, 'keys');
+    auditLog('auth', 'Identity created: ' + myShortId + (registeredAlias ? ' @' + registeredAlias : ''));
     return true;
   }
 

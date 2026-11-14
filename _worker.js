@@ -1798,12 +1798,87 @@ async function handlePresence(body, env, request) {
   }
   // Always update in-memory for fast reads within same isolate
   globalThis._presenceCache.set(presKey + ':data', JSON.stringify(presData));
+  // Step 5 activity-linked alias renewal: only a heartbeat whose install
+  // signature VERIFIED above counts as the owner's activity (safeInst is
+  // undefined for unsigned/badly-signed insts, and the pub must match the
+  // reverse record inside the helper). Best-effort and internally
+  // throttled; a failure here never fails the heartbeat.
+  if (safeInst) {
+    try { await renewAliasForActivity(env, id, safePub); } catch { /* renewal is best-effort */ }
+  }
   return json(conflict ? { ok: true, conflict: true } : { ok: true }, 200, request);
 }
 
 // ============================================================
 // ALIAS — Short Breeze IDs (e.g. @alice → pubkey)
 // ============================================================
+
+// Step 5 (recovery plan §4): activity-linked renewal. A signed alias
+// registration also writes a reverse record alias-owner:{userId} →
+// { alias, pub, renewedAt }. Ordinary account activity whose ownership the
+// Worker has cryptographically verified — a signature-verified prekey
+// upload, or a presence heartbeat carrying a verified install signature —
+// may then extend the alias record's 90-day TTL, so an active user's
+// @handle never lapses mid-use while an abandoned one still expires.
+// Renewal NEVER creates or resurrects a record: a missing/expired alias
+// record stays gone (re-claim is the owner's explicit act, via a fresh
+// signed registration), and both records must agree on `pub` or nothing
+// is touched. Throttled twice — an in-isolate check cache (~6h) and the
+// persisted renewedAt (~24h) — because presence heartbeats arrive every
+// ~30s and a KV write per heartbeat would burn the free-tier write quota
+// exactly like the presence store's own throttle guards against.
+// Honest limit: aliases registered before this step (or under the
+// ALIAS_REQUIRE_AUTH=false opt-out) have no reverse record, so activity
+// cannot renew them until their next signed registration.
+const ALIAS_RENEW_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const _aliasRenewChecked = new Map(); // userId → last check ms (isolate-local)
+
+function aliasOwnerKey(userId) { return `alias-owner:${userId}`; }
+
+async function renewAliasForActivity(env, userId, pub) {
+  if (!env || !env.KV || typeof userId !== 'string' || !userId || typeof pub !== 'string' || !pub) return false;
+  const now = Date.now();
+  const lastCheck = _aliasRenewChecked.get(userId) || 0;
+  if (now - lastCheck < ALIAS_RENEW_MIN_INTERVAL_MS / 4) return false;
+  _aliasRenewChecked.set(userId, now);
+  if (_aliasRenewChecked.size > 5000) {
+    for (const k of [..._aliasRenewChecked.keys()].slice(0, 2500)) _aliasRenewChecked.delete(k);
+  }
+  try {
+    const reverseRaw = await kvGet(env, aliasOwnerKey(userId));
+    if (!reverseRaw) return false;
+    const reverse = safeJsonParse(reverseRaw);
+    if (!reverse || typeof reverse.alias !== 'string') return false;
+    if (reverse.pub !== pub) {
+      // Stale reverse record (identity rotated / alias re-registered under a
+      // different key): drop it so it can never renew a stranger's handle.
+      await kvDel(env, aliasOwnerKey(userId));
+      return false;
+    }
+    if (now - (Number(reverse.renewedAt) || 0) < ALIAS_RENEW_MIN_INTERVAL_MS) return false;
+    const aliasKey = `alias:${reverse.alias}`;
+    const aliasRaw = await kvGet(env, aliasKey);
+    if (!aliasRaw) return false; // expired/gone — renewal must not resurrect
+    const current = safeJsonParse(aliasRaw);
+    if (!current || current.pub !== pub) return false;
+    // Content-identical rewrite: only the KV expiration moves. setAt is
+    // preserved so renewal cannot launder a claim's age.
+    const renewed = await kvPut(env, aliasKey, aliasRaw, { expirationTtl: TTL.QUARTER });
+    if (!renewed) return false;
+    // Lost-write guard: if the reverse record moved on while we rewrote
+    // (rename / alias delete / account delete landed in between), undo our
+    // rewrite when the record is still exactly the bytes we renewed.
+    const reverse2 = safeJsonParse(await kvGet(env, aliasOwnerKey(userId)));
+    if (!reverse2 || reverse2.alias !== reverse.alias || reverse2.pub !== pub) {
+      const nowRaw = await kvGet(env, aliasKey);
+      if (nowRaw === aliasRaw) await kvDel(env, aliasKey);
+      return false;
+    }
+    reverse2.renewedAt = now;
+    await kvPut(env, aliasOwnerKey(userId), JSON.stringify(reverse2), { expirationTtl: TTL.QUARTER });
+    return true;
+  } catch { return false; }
+}
 
 async function handleAliasSet(body, env, request) {
   const { alias, pub, name, pow } = body;
@@ -1860,17 +1935,23 @@ async function handleAliasSet(body, env, request) {
   const clean = alias.toLowerCase().replace(/[^a-z0-9_]/g, '');
   if (clean.length < 3 || clean.length > 20) return json({ error: 'Alias must be 3-20 chars (a-z, 0-9, _)', code: 'INVALID_ALIAS' }, 400, request);
 
-  // Optional Ed25519 ownership binding (anti-impersonation). The PoW above only rate-limits;
-  // it does NOT prove the registrant controls `pub`, so a first-come registrant could point an
-  // unclaimed @handle at someone else's identity key (impersonation) or squat handles. When the
-  // caller supplies { userId, ts, sig }, require that the signer's registered identity key
-  // equals the alias target `pub` and that the signature is valid — binding the @handle to the
-  // account that owns the key (the same ownership check handleAliasDelete enforces). Enforced
-  // outright when ALIAS_REQUIRE_AUTH is set; otherwise verified-when-present and skipped when
-  // absent (backward-compatible with PoW-only clients). Challenge is distinct from alias-delete
-  // to prevent cross-endpoint replay.
+  // Ed25519 ownership binding (anti-impersonation) — MANDATORY by default
+  // since recovery-plan step 5 (2026-11-15). The PoW above only rate-limits;
+  // it does NOT prove the registrant controls `pub`, so a first-come
+  // registrant could point an unclaimed @handle at someone else's identity
+  // key (impersonation) or squat handles. The caller must supply
+  // { userId, ts, sig } proving the signer's registered identity key equals
+  // the alias target `pub` (the same ownership check handleAliasDelete
+  // enforces). A supplied-but-invalid signature is always rejected.
+  // ALIAS_REQUIRE_AUTH=false is the explicit legacy opt-out (PoW-only
+  // registration), following the PRESENCE/TURN_REQUIRE_AUTH convention:
+  // required unless set to the string 'false'. Every shipped client signs
+  // (rename, identity creation, phrase restore), so the default breaks no
+  // current client. Challenge is distinct from alias-delete to prevent
+  // cross-endpoint replay.
   const { userId: aliasUserId, ts: aliasTs, sig: aliasSig } = body;
   const hasAliasSig = aliasTs !== undefined || aliasSig !== undefined;
+  let aliasVerified = false;
   if (hasAliasSig) {
     if (aliasTs === undefined || aliasSig === undefined)
       return json({ error: 'ts and sig must both be provided', code: 'PARTIAL_AUTH' }, 400, request);
@@ -1888,7 +1969,8 @@ async function handleAliasSet(body, env, request) {
       return json({ error: 'alias target pub does not match the account identity key', code: 'PUB_MISMATCH' }, 403, request);
     const ok = await verifyEd25519(bundle.edIdentityKey, btoa(`breeze-alias-set:${clean}:${aliasTs}`), aliasSig);
     if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
-  } else if (env.ALIAS_REQUIRE_AUTH === 'true') {
+    aliasVerified = true;
+  } else if (env.ALIAS_REQUIRE_AUTH !== 'false') {
     return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
   }
 
@@ -1899,14 +1981,14 @@ async function handleAliasSet(body, env, request) {
     if (data && data.pub !== pub) return json({ error: 'Alias already taken', code: 'ALIAS_TAKEN' }, 409, request);
   }
 
-  // Store with a 90-day TTL (recovery plan §2 item 4; step 5 implemented in
-  // part, 2026-11-14): the alias table is an identifier mapping at rest on the
+  // Store with a 90-day TTL (recovery plan §2 item 4; step 5 completed
+  // 2026-11-15): the alias table is an identifier mapping at rest on the
   // operator's storage, and a handle whose owner is gone must not burn
   // forever. Expiry is read-through (KV), so a lapsed record never blocks a
   // new claim — by a stranger OR by the owner's own re-registration, which
-  // also refreshes the TTL. Renewal from ordinary account activity (prekey
-  // upload / presence) and signature-mandatory registration remain with
-  // step 5 proper.
+  // also refreshes the TTL. Between registrations, verified ordinary
+  // account activity renews the TTL via renewAliasForActivity (the reverse
+  // record written just below is what authorizes that).
   const aliasSaved = await kvPut(env, `alias:${clean}`, JSON.stringify({ pub, name: sanitizeString(name, 64), setAt: Date.now() }), { expirationTtl: TTL.QUARTER });
   if (!aliasSaved) return json({ error: 'Failed to store alias', code: 'STORE_FAILED' }, 500, request);
 
@@ -1920,6 +2002,14 @@ async function handleAliasSet(body, env, request) {
   const winner = verifyRaw ? safeJsonParse(verifyRaw) : null;
   if (winner && winner.pub !== pub)
     return json({ error: 'Alias already taken', code: 'ALIAS_TAKEN' }, 409, request);
+  // Step 5: a signature-verified registration records the reverse mapping
+  // userId → alias that activity-linked renewal (renewAliasForActivity)
+  // and account deletion use. Best-effort: the registration itself already
+  // succeeded, and a missing reverse record only means activity cannot
+  // renew this handle until the next signed registration.
+  if (aliasVerified) {
+    await kvPut(env, aliasOwnerKey(aliasUserId), JSON.stringify({ alias: clean, pub, renewedAt: Date.now() }), { expirationTtl: TTL.QUARTER });
+  }
   return json({ ok: true, alias: clean }, 200, request);
 }
 
@@ -1967,6 +2057,12 @@ async function handleAliasDelete(body, env, request) {
 
   const aliasDeleted = await kvDel(env, `alias:${clean}`);
   if (!aliasDeleted) return json({ error: 'Failed to delete alias', code: 'STORE_FAILED' }, 500, request);
+  // Drop the step-5 reverse record too when it points at this handle, or
+  // activity renewal would keep a stale mapping around (it could never
+  // resurrect the alias — renewal requires the record to exist — but the
+  // reverse entry is this account's data and dies with the claim).
+  const reverse = safeJsonParse(await kvGet(env, aliasOwnerKey(userId)));
+  if (reverse && reverse.alias === clean) await kvDel(env, aliasOwnerKey(userId));
   return json({ ok: true, removed: true }, 200, request);
 }
 
@@ -3129,6 +3225,17 @@ async function handleAccountDelete(body, env, request) {
       }
     }
   }
+  // Step 5 reverse record: release the alias it names even when the client
+  // did not pass `alias` (older clients, another device claimed it) — same
+  // ownership rule (the record's pub must be this account's identity key) —
+  // and erase the reverse record itself with the rest of the account.
+  const aliasReverse = safeJsonParse(await kvGet(env, aliasOwnerKey(userId)));
+  if (aliasReverse && aliasReverse.pub === bundle.identityKey && typeof aliasReverse.alias === 'string') {
+    const reverseRec = safeJsonParse(await kvGet(env, `alias:${aliasReverse.alias}`));
+    if (reverseRec && reverseRec.pub === bundle.identityKey) {
+      aliasDeleted = (await kvDel(env, `alias:${aliasReverse.alias}`)) || aliasDeleted;
+    }
+  }
 
   // Read the billing record BEFORE deleting it so the reverse cust:{customerId} → userId
   // mapping can be erased too. Otherwise that mapping (Stripe payment identity linked to
@@ -3156,6 +3263,7 @@ async function handleAccountDelete(body, env, request) {
     // its 90-day TTL on every read, so a registry left behind can outlive the account
     // indefinitely — and peers keep fanning out to phantom devices of a deleted account
     kvDel(env, `prekey:${userId}`),
+    kvDel(env, aliasOwnerKey(userId)), // step-5 alias reverse record
     kvDel(env, `ktlog:${userId}`),
     kvDel(env, `push:${userId}`),
     kvDel(env, `backup:${userId}`),
@@ -3663,6 +3771,13 @@ async function handlePreKeyUpload(body, env, request) {
     if (maxStoredIdx >= 0) {
       await kvPut(env, `prekey:otp:${userId}:count`, String(maxStoredIdx + 1), { expirationTtl: TTL.MONTH });
     }
+  }
+  // Step 5 activity-linked alias renewal: only a signature-VERIFIED upload
+  // counts as the owner's activity (hasPkAuth means {ts,sig} were supplied
+  // AND verified above — an invalid signature already returned 403).
+  // Best-effort and internally throttled; never fails the upload.
+  if (hasPkAuth) {
+    try { await renewAliasForActivity(env, userId, identityKey); } catch { /* renewal is best-effort */ }
   }
   return json({ ok: true }, 200, request);
 }
@@ -4514,6 +4629,7 @@ export {
   handleMsgPoll,
   handleAliasSet,
   handleAliasGet,
+  renewAliasForActivity,
   handleDeviceSet,
   handleDeviceList,
   handleAliasDelete,

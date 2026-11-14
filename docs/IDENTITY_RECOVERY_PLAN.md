@@ -404,8 +404,9 @@ Each step ships independently and records its outcome in §5.
    expiry (§2 item 4). **TTL + re-claim landed early
    (2026-11-14, data-principle correction, §5):** alias
    records now expire after 90 days and a lapsed handle is
-   claimable again. Signature-mandatory registration and
-   activity-based renewal remain with this step proper.
+   claimable again. **Done (2026-11-15):** signature-mandatory
+   registration and activity-based renewal landed with this
+   step proper (outcome in §5).
 6. **Contacts export encryption** — `/contacts export` folds
    into the encrypted backup format; the plaintext JSON export
    is removed (§2 item 6).
@@ -722,7 +723,8 @@ delete → shorten → keep-with-reason:
   never blocks a new claim, the owner's re-registration
   refreshes the TTL, and an unlapsed handle still refuses a
   different claimant. Signature-mandatory registration and
-  renewal from ordinary account activity remain step 5's.
+  renewal from ordinary account activity remain step 5's
+  (both landed 2026-11-15 — see the step-5 outcome in §5).
 - **Stripe `customerId` (item 3): audited — nothing to
   delete, because nothing retains it.** Billing was removed
   in v3.6.1; no route writes `slots:{userId}` or
@@ -875,3 +877,81 @@ weak passphrases remain weak, which is why the floor is 8
 and the phrase mode remains the recommended default. A
 `'none'` identity cannot enroll (the data-principle rule: no
 recovery artefacts for the mode that promises none exist).
+
+### Step 5 — Alias minimization (DONE)
+
+The two remainders of §2 item 4 landed 2026-11-15.
+
+**Signature-mandatory registration.** `handleAliasSet` now
+requires the Ed25519 ownership signature **by default**:
+`ALIAS_REQUIRE_AUTH` follows the `PRESENCE_REQUIRE_AUTH` /
+`TURN_REQUIRE_AUTH` convention — registration is refused with
+`403 AUTH_REQUIRED` unless the flag is set to the string
+`'false'`, which remains as the explicit legacy opt-out for
+deployments serving PoW-only clients. A supplied-but-invalid
+signature was and is always rejected. Making this the default
+was safe only because every shipped client already signs —
+and auditing the three client claim paths found one that did
+not, in effect:
+
+- `/alias` rename — signed + PoW already. Unchanged.
+- **Identity creation was silently broken.** It claimed the
+  alias *before* the identity's signing key existed and
+  before any prekey bundle was registered: no PoW, and
+  `authFields` inertly returned `{}` (`_signingKey`/`myId`
+  unset), so the claim could never verify — against a
+  signature-mandatory relay it is refused outright, and the
+  identity record went on to name an alias the relay had
+  never granted. `createIdentity` now claims **after**
+  `initSigning()` and the bundle upload, with PoW + signature,
+  and the identity record is written with the alias only when
+  the relay accepted (a refused claim leaves the alias empty
+  rather than lying; the user can claim later via `/alias`).
+- Phrase restore — signed, but carried **no PoW**, so it
+  could only ever fail `POW_REQUIRED`; it now solves the PoW
+  too. It remains best-effort: the signature verifies only
+  while a prekey bundle for the restored identity is still
+  registered, and where that has lapsed the reloaded boot's
+  ordinary flow owns the handle.
+
+**Activity-linked renewal.** A signature-verified
+registration now also writes a reverse record
+`alias-owner:{userId}` → `{ alias, pub, renewedAt }` (90-day
+TTL). `renewAliasForActivity` extends the alias record's TTL
+— content-identical rewrite, `setAt` preserved — only from
+activity whose ownership the Worker cryptographically
+verified: a signature-verified prekey upload, or a presence
+heartbeat whose install signature verified. Renewal never
+creates or resurrects a record (a lapsed handle stays
+claimable by anyone until the owner re-registers), never
+extends a handle whose stored `pub` differs, and drops a
+stale reverse record whose `pub` no longer matches. It is
+throttled twice (an isolate-local check cache ≈6h and the
+persisted `renewedAt` ≈24h) so 30-second heartbeats cannot
+turn into a KV write per beat. Alias delete and account
+delete both erase the reverse record; account delete also
+releases the alias the reverse record names, under the same
+pub-ownership rule, even when the client did not pass
+`alias`.
+
+**Honest limit.** Aliases registered before this step (or
+under the opt-out) have no reverse record, so activity cannot
+renew them until their next signed registration — they keep
+the behaviour recorded in the data-principle outcome (lapse
+at 90 days, re-claimable, owner's re-registration refreshes).
+
+Evidence: `tests/recovery-step5-alias.test.js` (new) — the
+real worker handlers against the mock KV: reverse record +
+TTL on signed registration, renewal from verified presence
+and verified prekey upload, no renewal from unsigned/forged
+activity, no resurrection, no foreign-handle extension,
+stale-reverse cleanup, throttling, and reverse cleanup on
+both delete paths. The item-61 describe in
+`tests/worker.test.js` now pins the mandatory default (and
+the explicit opt-out keeps the legacy path covered); the
+PoW/TTL describes register through the opt-out where they pin
+mechanics orthogonal to the signature. The E2E alias spec
+now claims its setup handle through the real creation path
+(the unsigned direct-API seed it used before is refused by
+design). Full suite and validate.sh results are recorded in
+the PR.
