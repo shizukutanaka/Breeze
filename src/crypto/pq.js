@@ -21,8 +21,9 @@
 // vectors), and this repo forbids new runtime deps. The KEM is therefore
 // INJECTED. Supply either:
 //   - webCryptoKem() — uses crypto.subtle's ML-KEM once browsers ship it (the
-//     WICG "Modern Algorithms in the Web Cryptography API" draft; expected ~2027,
-//     which is why this module is reference-only today), or
+//     WICG "Modern Algorithms in the Web Cryptography API" draft; expected ~2027),
+//   - nobleKem768() — the vendored @noble/post-quantum ML-KEM-768 in
+//     src/crypto/mlkem.js (stage 3 step 1; pure JS, runs anywhere), or
 //   - any object shaped { name, encapsulate(pk), decapsulate(sk, ct) }.
 //
 // FAIL-CLOSED: there is deliberately no "PQ if available, classical otherwise"
@@ -38,8 +39,31 @@
 // swapped ciphertext yields a different SK instead of a silently shared one.
 // ============================================================================
 import { u8, concatBytes, ctEqual } from './bytes.js';
+import { ml_kem768 } from './mlkem.js';
 
 export const PQ_INFO = 'breeze-pqxdh-v1';
+
+// A KEM adapter over the vendored @noble/post-quantum ML-KEM-768
+// (src/crypto/mlkem.js — pinned 0.7.1, NIST ACVP-verified in
+// tests/mlkem.test.js). Noble is synchronous pure JS, so this runs in any
+// runtime the reference runs in; no WebCrypto ML-KEM is required. The field
+// mapping is one-to-one (stage-3 plan D2): noble's
+// encapsulate(publicKey) → { cipherText, sharedSecret }, and its
+// decapsulate takes (cipherText, secretKey) — the reverse of this
+// interface's (sk, ct) order.
+export function nobleKem768() {
+  return {
+    name: 'ML-KEM-768',
+    available: () => true,
+    async encapsulate(pk) {
+      const { cipherText, sharedSecret } = ml_kem768.encapsulate(u8(pk));
+      return { ct: cipherText, ss: sharedSecret };
+    },
+    async decapsulate(sk, ct) {
+      return ml_kem768.decapsulate(u8(ct), u8(sk));
+    },
+  };
+}
 
 // A KEM adapter over WebCrypto's ML-KEM, per the WICG modern-algos draft. The
 // Key operations return CryptoKeys; Bits operations return ArrayBuffers.
