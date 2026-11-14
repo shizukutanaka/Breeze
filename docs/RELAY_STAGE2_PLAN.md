@@ -646,6 +646,57 @@ recorded where the plan met the code:
   client level by the key-change test (a different advertised
   key is exactly what a rotated volume presents).
 
+**Follow-up (2026-11-14) — Reading 4's boot window is closed.**
+The window was first re-proven against the current code, path
+by path: in `_boot()`'s existing-identity branch (and, with the
+same statement order, the setup-completion handler and every
+account switch, which re-enters `_boot()` via `initMessenger`),
+`startPresence()` fires its first beat immediately,
+`startPolling()` attempts the origin mailbox socket at once,
+and `initTurn()` / `initPushNotifications()` issue funnel calls
+— all before `_startLiveSession()` is even awaited, let alone
+reaches `checkRelayPin()`; the first scheduled poll (3 s) also
+raced the two-round-trip verdict. A replay of that exact order
+against the extracted gate failed 6 of 7 scenarios on the
+pre-fix code (burst delivered pre-verdict, mismatch burst
+released, socket connected pre-verdict). The fix holds rather
+than blocks: `_boot()` arms `_relayPinGate.verdict` (a promise)
+before `startPresence()`/`startPolling()` at both boot sites —
+in the setup path, after `createIdentity()`, so account
+registration is byte-identical — and `postAPIRaw`, `_signal`,
+`_signalAwait` and the origin branch of `_maybeStartRelayWs`
+await it, re-checking the latched block afterwards. The check's
+own attest call is flagged (`attesting`) so it cannot deadlock
+on its own verdict; the health read already bypassed the
+funnel. Settling is guaranteed twice over (the check's
+`finally`, and again when `_startLiveSession()` returns at both
+boot sites), so a session whose check is never reached cannot
+hang. Nothing changes for the cases step 4 carved out: a
+keyless relay settles the hold at its health answer (legacy
+trust, no block), a first contact still TOFU-pins, an
+unreachable attestation still proves nothing, and unarmed
+(pre-session) calls pass exactly as before. Added relays are
+untouched (their resolver-side verification already waited).
+Deadlock was checked by construction and by test:
+`renderContacts()`/`loadSettings()` — the two awaits before
+the check inside `_startLiveSession()` — make no funnel calls
+on their awaited paths (the one `postAPIRaw` inside
+`renderContacts` sits in a user-triggered context-menu
+handler), and the check's own round trip completes while
+calls are held. **Verification:** new
+`tests/relay-boot-window.test.js` (7 tests replaying the boot
+order against the real worker: hold-then-release on a match,
+never-release on a verified mismatch with the pin untouched,
+TOFU first contact, keyless legacy, unarmed pass-through,
+settle-without-a-check, and the socket's wait); full suite
+1303 → **1310 passed / 67 files**, zero regressions;
+`./validate.sh` **PASSED (165/171 — identical to the step 5/6
+baseline)**; CSP re-pinned with the Reading-5 procedure
+(`--write`, `--check` OK). **Recorded gap:** as elsewhere in
+this stage, no browser E2E exists in this environment — the
+boot order is replayed against the extracted production code
+and the real worker, not driven through a live page.
+
 ## Step 5 — Client multi-relay configuration (own home relays)
 
 - **Purpose.** The user can name 1+ relays as *their* home relays
