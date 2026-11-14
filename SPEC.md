@@ -92,8 +92,14 @@ Sender                          Server                         Receiver
 ### 2.4 Post-Quantum Readiness
 
 - ML-KEM detection: `crypto.subtle.encapsulateKey` (future browser API)
-- Planned hybrid: X25519 + ML-KEM-768
-- Status: monitoring, no runtime dependency
+- Hybrid: X25519 + ML-KEM-768 (PQXDH) — **shipped and on by default**
+  (stage 3, docs/PQ_STAGE3_PLAN.md; derivation in docs/CRYPTO-SPEC.md §2a).
+  The KEM is a pinned, NIST-ACVP-verified pure-JS implementation
+  (vendored @noble/post-quantum), so there is no browser-support
+  dependency; native ML-KEM, when browsers ship it, remains a
+  performance upgrade path only.
+- Negotiation: the `pqxdh` capability is ANDed with `x3dh-v5`; a peer
+  without it gets byte-identical classical X3DH v5 sessions.
 
 ---
 
@@ -535,7 +541,7 @@ Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline';
 | MLS TreeKEM | △ Deferred | Large group scaling |
 | Key transparency | △ Deferred | Public audit log |
 | Onion routing | △ Deferred | Metadata protection |
-| Post-quantum (ML-KEM) | △ Deferred | Browser support ~2027 |
+| Post-quantum (ML-KEM) | ✓ Shipped | PQXDH hybrid on by default (stage 3); vendored pure-JS ML-KEM-768, no browser dependency |
 
 ---
 

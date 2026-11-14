@@ -221,14 +221,105 @@ describe('stage-3 step 5 — pqxdh cap emission (real generatePreKeyBundle, slic
   });
 });
 
+// Stage-3 step 6 prerequisite: the boot-time unlock of a /keywrap-wrapped
+// pq-priv. The REAL inline _unlockPqSeed is sliced verbatim (the pqkey.test.js
+// harness pattern) and driven against reference at-rest records: the contract
+// is that the seed loadIdentity already authenticated (or one prompt, in the
+// partial-disable state) lands in memory — and nothing else changes. The
+// responder side (the unlocked seed actually answering a session, the stored
+// record staying wrapped) is drilled in tests/mirror-drift.test.js.
+function buildUnlocker(records, promptAnswers = []) {
+  const atRest = createAtRest({ iterations: 600000 });
+  const answers = [...promptAnswers];
+  let promptCalls = 0;
+  const fn = new Function(
+    'dbGet', '_atRestIsWrapped', '_atRestUnwrap', 'showPrompt', 't', '_dbg',
+    `${sliceBetween('  let _pqSeedUnlocked = null;', '  async function loadIdentity()')}
+     return { _unlockPqSeed, getUnlocked: () => _pqSeedUnlocked };`);
+  const api = fn(
+    async (_store, key) => (records.has(key) ? records.get(key) : null),
+    atRest.isWrapped,
+    (record, pass, ctx) => atRest.unwrapJWK(record, pass, ctx),
+    async () => { promptCalls++; return answers.length ? answers.shift() : null; },
+    (k) => k, () => {},
+  );
+  return { ...api, promptCalls: () => promptCalls };
+}
+
+describe('stage-3 step 6 — _unlockPqSeed (real inline code, sliced)', () => {
+  const PASS = 'correct horse battery staple';
+  const wrapSeed = async (seed, pass = PASS) => {
+    const atRest = createAtRest({ iterations: 600000 });
+    return { wrapped: await atRest.wrapJWK({ seed: Array.from(seed) }, pass, 'pq-priv') };
+  };
+
+  it('wrapped record + the passphrase loadIdentity collected: seed held in memory, NO extra prompt', async () => {
+    const pq = mintPQPreKey();
+    const records = new Map([['pq-priv', await wrapSeed(pq.seed)]]);
+    const u = buildUnlocker(records);
+    await u._unlockPqSeed(PASS);
+    expect(u.getUnlocked()).toEqual(Array.from(pq.seed));
+    expect(u.promptCalls()).toBe(0);
+  });
+
+  it('wrapped record + wrong passphrase: nothing held, no throw (PQ stays fail-closed, sign-in unaffected)', async () => {
+    const pq = mintPQPreKey();
+    const records = new Map([['pq-priv', await wrapSeed(pq.seed)]]);
+    const u = buildUnlocker(records);
+    await u._unlockPqSeed('not the passphrase');
+    expect(u.getUnlocked()).toBeNull();
+  });
+
+  it('partial-disable state (keys plaintext, pq-priv wrapped): prompts once and unlocks', async () => {
+    const pq = mintPQPreKey();
+    const records = new Map([['pq-priv', await wrapSeed(pq.seed)]]);
+    const u = buildUnlocker(records, [PASS]);
+    await u._unlockPqSeed(null);
+    expect(u.getUnlocked()).toEqual(Array.from(pq.seed));
+    expect(u.promptCalls()).toBe(1);
+  });
+
+  it('partial-disable state + prompt cancelled: nothing held', async () => {
+    const pq = mintPQPreKey();
+    const records = new Map([['pq-priv', await wrapSeed(pq.seed)]]);
+    const u = buildUnlocker(records, [null]);
+    await u._unlockPqSeed(null);
+    expect(u.getUnlocked()).toBeNull();
+    expect(u.promptCalls()).toBe(1);
+  });
+
+  it('plaintext record: no-op (the responder reads IDB directly), never prompts', async () => {
+    const pq = mintPQPreKey();
+    const records = new Map([['pq-priv', pqSeedRecord(pq.seed)]]);
+    const u = buildUnlocker(records);
+    await u._unlockPqSeed(null);
+    expect(u.getUnlocked()).toBeNull();
+    expect(u.promptCalls()).toBe(0);
+  });
+
+  it('absent record: no-op, never prompts', async () => {
+    const u = buildUnlocker(new Map());
+    await u._unlockPqSeed(PASS);
+    expect(u.getUnlocked()).toBeNull();
+    expect(u.promptCalls()).toBe(0);
+  });
+
+  it('a wrapped payload that is not a 64-byte seed is refused (length guard)', async () => {
+    const records = new Map([['pq-priv', await wrapSeed(new Uint8Array([1, 2, 3]))]]);
+    const u = buildUnlocker(records);
+    await u._unlockPqSeed(PASS);
+    expect(u.getUnlocked()).toBeNull();
+  });
+});
+
 describe('stage-3 step 5 — deployment shape (structural pins)', () => {
   it('index.html runtime-imports the facade and exposes it as window.__breezePQXDH', () => {
     expect(html).toContain("import { createPQSessionHelper } from './src/crypto/pqxdh.js';");
     expect(html).toContain('window.__breezePQXDH = createPQSessionHelper();');
   });
 
-  it('the shipped flag default is OFF', () => {
-    expect(html).toContain('PQXDH_ENABLED: false');
+  it('the shipped flag default is ON (stage-3 step 6 rollout)', () => {
+    expect(html).toContain('PQXDH_ENABLED: true');
   });
 
   it('sw.js precaches the facade closure for offline boots', () => {

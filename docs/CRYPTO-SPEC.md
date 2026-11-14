@@ -46,6 +46,57 @@ missing `signedPreKeySig` still aborts). Worker `handlePreKeyFetch` returns
 `oneTimePreKeyId` (the consumed OTP index → the initiator's `opkId`).
 **Implemented (module).** Gap: index.html init (worker verify-on-upload already shipped).
 
+## 2a. PQXDH — post-quantum hybrid key agreement (stage 3)
+
+X3DH v5 (§2) with an ML-KEM-768 secret folded into the same derivation, so a
+session survives the break of *either* primitive (harvest-now/decrypt-later
+resistance). Design record: `docs/PQ_STAGE3_PLAN.md` (D1–D7); shipped in
+stage-3 steps 1–5 and **on by default since step 6**
+(`CONFIG.PQXDH_ENABLED: true`).
+
+1. **Bundle.** The responder's bundle gains two fields alongside the SPK:
+   `pqPreKey` (ML-KEM-768 public key, 1,184 bytes) and
+   `pqPreKeySig = Ed25519(EdIK_B, pqPreKey)` over the RAW public-key bytes —
+   the SPK construction exactly. Both ride inside the signed upload digest
+   (the v2 9-field form; a v1-signed upload carrying PQ fields is refused,
+   so a captured v1 request cannot be replayed with PQ material attached).
+2. **Negotiation (AND rule).** PQ is used iff ALL of: the local flag is on,
+   the peer's caps include both `x3dh-v5` and `pqxdh`, `pqPreKey` is
+   present, and `pqPreKeySig` verifies. Anything else ⇒ §2 classical,
+   byte-identical — negotiation choosing classical explicitly, never a
+   silent downgrade inside the crypto.
+3. **Derivation.** The initiator encapsulates to `pqPreKey` → `SS`
+   (32 bytes) and computes
+   `SK = HKDF(DH1‖DH2‖DH3‖[DH4]‖SS, salt=0^32, info='breeze-pqxdh-v1:' + hex(SHA-256(pqpk‖ct)), 32)`
+   — the KEM secret LAST, the info transcript-bound to the PQ public key
+   and the ciphertext. The classical path keeps `info='breeze-x3dh-v5'`,
+   so the two session types can never derive-collide. The responder
+   decapsulates and combines identically; a `pqct`-carrying first message
+   whose PQ private half is unavailable FAILS CLOSED (no classical
+   fallback — it could never match the initiator's SK).
+4. **Wire.** The §3 first-message envelope gains one optional field,
+   `pqct` — the 1,088-byte KEM ciphertext in the envelope's `arr()` byte
+   encoding. Absent ⇒ the envelope is byte-identical to §3.
+5. **Key material.** Only the 64-byte ML-KEM keygen **seed** persists
+   (IDB `identity` store, key `pq-priv`); the expanded secret key is
+   re-derived on demand and never stored or sent. Rotation inherits the
+   SPK cadence (one bundle construction). `/keywrap` wraps the seed with
+   the identity keys; at boot the passphrase flow unwraps it into memory
+   ONLY (step 6) — the stored record stays wrapped, so a wrapped device
+   answers PQ sessions without weakening at-rest protection.
+6. **Implementation.** The KEM is vendored `@noble/post-quantum`
+   ML-KEM-768 (pinned; correctness rests on the NIST ACVP vectors in
+   `tests/mlkem.test.js`, not on round-trips), deployed as the ESM facade
+   `src/crypto/pqxdh.js` over the single-sourced combiner
+   `src/crypto/pq.js` — injected, never hand-rolled, never inlined.
+   Sessions established via PQXDH carry `pq: true` on the session record
+   (surfaced by `/security`). Groups are unchanged (§5): sender-key
+   distribution rides the 1:1 sessions, so it inherits this protection;
+   a PQ group ratchet (SPQR-class) is a separate decision (§9, I9).
+
+**Implemented and deployed** (client wiring in `index.html`; worker
+storage/verification shipped in stage-3 step 2).
+
 ## 3. Session establishment (X3DH → Double Ratchet)
 
 - Initiator seeds the ratchet using `SPK_B` as the first DH-ratchet partner:
@@ -54,7 +105,8 @@ missing `signedPreKeySig` still aborts). Worker `handlePreKeyFetch` returns
   message (carrying `rk_A`) triggers the matching DH step → responder's recv chain.
 - **First-message ("prekey message") envelope:** the initiator's FIRST message is
   wrapped so the responder can derive `SK` before decrypting:
-  `{ v:5, t:'pkm', ik:[IK_A], ek:[EK_A], opkId:<id|null>, msg:<ratchet JSON> }`.
+  `{ v:5, t:'pkm', ik:[IK_A], ek:[EK_A], opkId:<id|null>, [pqct:[ML-KEM ct]], msg:<ratchet JSON> }`.
+  `pqct` is present only on a PQXDH-negotiated session (§2a).
   `opkId` identifies the consumed one-time pre-key (`null` when OPKs are exhausted).
   Every subsequent message is a plain ratchet message.
 
@@ -261,7 +313,11 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   `index.html` and call `negotiate()` before session init.
 - N4. **Franking core** (I17) — ✅ implemented (§6a); remaining: sealed-sender
   sender-binding (asymmetric franking / Hecate) + relay record/report endpoints (§8).
-  **PQXDH / PQ ratchet** (I8/I9) — backlog; pending vetted WASM ML-KEM.
+  **PQXDH** (I8) — ✅ implemented and deployed (§2a; stage 3, on by
+  default since step 6 — the vetted-ML-KEM premise was met by the pinned
+  pure-JS @noble/post-quantum, ACVP-verified, not WASM). **PQ ratchet**
+  (I9, SPQR-class per-message PQ ratcheting) — still backlog, a separate
+  decision with its own plan.
 
 - N5. **Key transparency** (I11) — ✅ `src/crypto/ktlog.js` module done with full
   hash-chained log (`chainHash`/`appendChainEntry`/`verifyChain`, 34 tests). Each
