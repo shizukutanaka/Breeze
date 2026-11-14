@@ -99,6 +99,19 @@ new_sqlite_classes = ["MailboxDO"]
 # (possibly empty) so self-hosts are closed by default.
 # wrangler pages secret put REGISTRATION_ALLOWLIST     # id1,id2 — close registration to these IDs
 #
+# --- Usage quota / fair use (2026-11-14, docs/COST_MODEL.md §10) ---
+# The default relay is a free entrance with a bounded frame: per
+# mailbox, deposits are capped per UTC day/month (defaults 10,000 /
+# 200,000 — ~50x a heavy user's measured traffic). Past the cap the
+# sender gets 429 USAGE_QUOTA_EXCEEDED with the window and limit.
+# Enforced only together with MAILBOX_BACKEND=do (it rides the
+# per-mailbox deposit gate). A relay run for its owner's own accounts
+# should set USAGE_QUOTA_ENABLED=false — the frame is for the shared
+# default entrance, not for your own frame (docs/SELF_HOSTING.md).
+# wrangler pages secret put USAGE_QUOTA_ENABLED        # false — disable the quota (default: enabled)
+# wrangler pages secret put USAGE_QUOTA_DAILY          # 10000 — deposits per mailbox per UTC day
+# wrangler pages secret put USAGE_QUOTA_MONTHLY        # 200000 — deposits per mailbox per UTC month
+#
 # --- Mailbox storage backend (stage-1 step 2) ---
 # Mailboxes live in KV by default. Setting MAILBOX_BACKEND=do serves them
 # from the per-recipient MailboxDO instead (binding above); each mailbox
