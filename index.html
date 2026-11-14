@@ -1223,6 +1223,8 @@ import * as importParsers from './src/app/import-parsers.js';
 window.__breezeImportParsers = importParsers;
 import { createSoundHelper } from './src/app/sound.js';
 window.__breezeSound = createSoundHelper();
+import { createShareTools } from './src/app/share.js';
+window.__breezeShare = { createShareTools };
 </script>
 
 <script>
@@ -2063,6 +2065,13 @@ const _I = {
     uiAuditUnavail: 'Audit store not available.',
     uiShareId: 'Share your Breeze ID',
     uiInviteCopied: 'Invite message copied to clipboard.',
+    btnInviteFriend: 'Invite a friend',
+    btnMigrateApps: 'Migrate from LINE / WhatsApp / Telegram',
+    btnCopyInvite: 'Copy invite message',
+    btnInviteQr: 'Show invite QR code',
+    btnGroupInvite: 'Create a group invite link',
+    btnImportHistory: 'Import a chat history file',
+    settingsShare: 'Invite & migrate',
     inviteMsg: "{0} invited you to Breeze.\\n\\nAn encrypted messenger with no registration required.\\nJust open this link to start chatting:\\n\\n{1}\\n\\nNo phone number. No email. Works in any browser.",
     migrateHtml: '<div class="i-title">Migrate from LINE / WhatsApp / Telegram</div><div class="i-heading">Step 1: Invite contacts (1-on-1)</div>Type <code>/invite</code> to copy an invite message → paste in LINE/WhatsApp<br>Type <code>/qr</code> to show a QR code → let them scan it<div class="i-heading">Step 1b: Move a whole group</div>Type <code>/newgroup Your Group Name</code> → generates an invite link<br>→ Paste the link in your LINE/WhatsApp group<br>→ Members just open the link to join automatically<div class="i-heading">Step 2: Import chat history</div><b>LINE:</b> Chat → Settings → Send chat history → save .txt file<br><b>WhatsApp:</b> Chat → More → Export chat → .txt<br><b>Telegram:</b> Settings → Advanced → Export data → JSON<br>Type <code>/import</code> and select the file, or drag-drop onto the chat area<div class="i-heading">Step 3: Set up notifications</div>Allow browser notifications to get alerts for new messages<br>Add to Home Screen for an app-like experience',
     uiNameLength: 'Name must be 1-50 characters',
@@ -7895,12 +7904,34 @@ async function initMessenger(dbName) {
       const empty = document.createElement('div');
       empty.className = 'cmd-center';
       const folder = _activeFolder;
+      let emptyDoors = null;
       if (_contactFilter) empty.textContent = t('uiNoMatches', '"' + _contactFilter + '"');
       else if (folder === 'unread') empty.textContent = t('uiAllCaughtUp');
       else if (folder === 'groups') empty.textContent = t('uiNoGroups');
       else if (folder === 'labels') empty.textContent = _activeLabel ? t('labelFilterEmpty', _activeLabel) : t('labelNoneContacts');
-      else empty.textContent = t('uiAddFirst');
+      else {
+        empty.textContent = t('uiAddFirst');
+        // SHARE_PLAN stage 4 step 1: a brand-new user (no contacts at all)
+        // gets the two growth doors right here — invite and migrate —
+        // instead of having to discover /invite and /migrate. Shown only
+        // in this state; once the list grows past it, the same doors live
+        // in the settings panel.
+        if (contacts.length === 0) {
+          emptyDoors = document.createElement('div');
+          emptyDoors.className = 'cmd-center i-flex-c';
+          const invBtn = document.createElement('button');
+          invBtn.className = 'btn btn-g btn-sm';
+          invBtn.textContent = t('btnInviteFriend');
+          invBtn.onclick = () => { shareInvite(); };
+          const migBtn = document.createElement('button');
+          migBtn.className = 'btn btn-o btn-sm';
+          migBtn.textContent = t('btnMigrateApps');
+          migBtn.onclick = () => { showMigratePanel(); };
+          emptyDoors.append(invBtn, migBtn);
+        }
+      }
       frag.appendChild(empty);
+      if (emptyDoors) frag.appendChild(emptyDoors);
     }
     // v3.3: PERFORMANCE — Single DOM mutation (replaceChildren flushes layout once)
     el.replaceChildren(frag);
@@ -12762,6 +12793,16 @@ async function initMessenger(dbName) {
     return { url, msg };
   }
 
+  // SHARE / MIGRATE SURFACING (SHARE_PLAN stage 4 step 1): the invite and
+  // migration flows behind UI doors (contacts empty state, settings panel)
+  // instead of slash commands only — src/app/share.js, instantiated here
+  // where its closure deps are in scope. Absent module ⇒ inert stubs.
+  const _shareTools = globalThis.__breezeShare?.createShareTools({
+    generateInviteMessage, showQRModal, createGroupInviteLink, importChat,
+  });
+  const shareInvite = _shareTools?.shareInvite || (async () => {});
+  const showMigratePanel = _shareTools?.showMigratePanel || (() => {});
+
   // Slash command: /search query
   _DOM.get('msg-input')?.addEventListener('keydown', async (e) => {
     if (e.key !== 'Enter') return;
@@ -14527,6 +14568,9 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         <br><b class="i-g">${t('settingsAccounts')}</b><br>
         <button class="btn btn-o btn-sm" data-action="add-account">${t('addAccountBtn')}</button><br>
         <label class="i-cur"><input type="checkbox" data-setting="auto-lock" ${localStorage.getItem('brz-autolock') === '1' ? 'checked' : ''}> ${t('autoLockLabel')}</label><br>
+        <br><b class="i-g">${t('settingsShare')}</b><br>
+        <button class="btn btn-o btn-sm" data-action="invite-friend">${t('btnInviteFriend')}</button>
+        <button class="btn btn-o btn-sm" data-action="migrate-apps">${t('btnMigrateApps')}</button><br>
         <br><b class="i-g">${t('settingsRelays')}</b><br>
         ${_relayRows}
         <button class="btn btn-o btn-sm" data-action="add-relay">${t('relayAddBtn')}</button><br>
@@ -14544,6 +14588,12 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         if (!btn) return;
         haptic.tap();
         if (typeof addAccount === 'function') addAccount();
+      });
+      // SHARE_PLAN stage 4 step 1: the invite / migrate doors — the same
+      // flows as /invite and /migrate, on buttons (src/app/share.js).
+      d.addEventListener('click', (ev) => {
+        if (ev.target.closest('[data-action="invite-friend"]')) { haptic.tap(); shareInvite(); return; }
+        if (ev.target.closest('[data-action="migrate-apps"]')) { haptic.tap(); showMigratePanel(); }
       });
       // Stage-2 step 5: home-relay management. Adding a relay is the
       // step-4 pin ceremony pointed at a second relay (attest, show
