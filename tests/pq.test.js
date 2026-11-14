@@ -5,7 +5,8 @@
 // combiner, the transcript binding, and the failure modes. The real security argument
 // rests on ML-KEM itself, which is why this module never implements one.
 import { describe, it, expect } from 'vitest';
-import { createPQXDH, webCryptoKem, PQ_INFO } from '../src/crypto/pq.js';
+import { createPQXDH, webCryptoKem, nobleKem768, PQ_INFO } from '../src/crypto/pq.js';
+import { ml_kem768 } from '../src/crypto/mlkem.js';
 import { createRatchet } from '../src/crypto/ratchet.js';
 import { u8, concatBytes } from '../src/crypto/bytes.js';
 
@@ -229,5 +230,37 @@ describe('webCryptoKem — ML-KEM adapter', () => {
     const k = webCryptoKem({ subtle: { encapsulateBits: async () => ({ ciphertext: new Uint8Array(1), sharedKey: new Uint8Array(1) }) } });
     expect(k.available()).toBe(true); // encapsulation alone is supported
     await expect(k.decapsulate(PQPK, new Uint8Array(1))).rejects.toThrow(/unavailable/);
+  });
+});
+
+// Stage 3 step 1 (docs/PQ_STAGE3_PLAN.md D1/D2): the same combiner, now
+// driven by the REAL vendored ML-KEM-768 (nobleKem768 over src/crypto/
+// mlkem.js) instead of the test double. mlkem.js itself is pinned to the
+// NIST ACVP vectors in tests/mlkem.test.js; these tests pin the ADAPTER —
+// that the combiner + noble KEM compose into matching session keys.
+describe('PQXDH — real ML-KEM-768 via nobleKem768 (stage 3 step 1)', () => {
+  const seed = new Uint8Array(64).fill(0x2a);
+  const { publicKey: PQ_PUB, secretKey: PQ_PRIV } = ml_kem768.keygen(seed);
+
+  it('adapter shape: ML-KEM-768, available without WebCrypto', () => {
+    const kem = nobleKem768();
+    expect(kem.name).toBe('ML-KEM-768');
+    expect(kem.available()).toBe(true);
+  });
+
+  it('initiator and responder derive the SAME SK through the real KEM', async () => {
+    const P = createPQXDH({ kem: nobleKem768() });
+    const { sk, ct } = await P.initiate({ dhParts: DHS, pqPreKeyPub: PQ_PUB });
+    expect(ct.length).toBe(1088);
+    const { sk: sk2 } = await P.respond({ dhParts: DHS, pqPreKeyPriv: PQ_PRIV, pqPreKeyPub: PQ_PUB, ct });
+    expect(Array.from(sk2)).toEqual(Array.from(sk));
+  });
+
+  it('a tampered ciphertext derives a DIFFERENT SK (implicit rejection, transcript-bound)', async () => {
+    const P = createPQXDH({ kem: nobleKem768() });
+    const { sk, ct } = await P.initiate({ dhParts: DHS, pqPreKeyPub: PQ_PUB });
+    const bad = Uint8Array.from(ct); bad[100] ^= 1;
+    const { sk: skBad } = await P.respond({ dhParts: DHS, pqPreKeyPriv: PQ_PRIV, pqPreKeyPub: PQ_PUB, ct: bad });
+    expect(Array.from(skBad)).not.toEqual(Array.from(sk));
   });
 });

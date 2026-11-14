@@ -351,6 +351,26 @@ agreement through `createPQXDH`, tampered-ct ⇒ different SK.
   (it sizes step 4's reduction target); suite baseline grows from
   1,303 with zero regressions.
 
+- **Outcome (2026-11-14).** Done. `src/crypto/mlkem.js` vendors ML-KEM-768
+  from @noble/post-quantum 0.7.1 (closure: @noble/hashes 2.4.0,
+  @noble/curves 2.4.0) — **2,243 lines / 89,348 bytes** as committed, the
+  exact figure in its header; the header also records all three tarball
+  sha512s (post-quantum's matches D1's record verbatim; all three were
+  re-verified against the npm registry AND the tarballs actually used),
+  the full prune list per source file, and the only local changes
+  (import rewiring: `_1n`→`_1nFft` and `aobjectC` disambiguation, the
+  `abytes_` alias binding, four documented judgment-call prunes).
+  `nobleKem768()` adapter added to `src/crypto/pq.js` (D2 mapping;
+  noble's decapsulate argument order is (ct, sk), reversed at the
+  boundary). `tests/mlkem.test.js` runs the NIST ACVP ML-KEM-768
+  vectors — keyGen 25 / encapsulation 25 / decapsulation 10, extracted
+  verbatim into `tests/vectors/mlkem768-acvp.json` — plus deterministic
+  keygen, size pins and implicit-rejection properties; `tests/pq.test.js`
+  gains the real-KEM agreement and tamper cases. Suite: **1,310 → 1,321
+  passed** (the plan's 1,303 baseline had already grown), zero
+  regressions; `./validate.sh` PASSED unchanged. `index.html` /
+  `_worker.js` untouched, as specified.
+
 ### Step 2 — Worker: store, serve, and authenticate the PQ fields
 
 `handlePreKeyUpload` accepts optional `pqPreKey` / `pqPreKeySig`:
