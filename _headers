@@ -7,7 +7,7 @@
   X-XSS-Protection: 0
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Resource-Policy: same-origin
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-6Z80/7wo9P47eUUWkTF9c8HfUl7/oDSOH5oFss8tzUI=' 'sha256-Rg3SDclMLUk/903y/dLY9b6HHib12Nc6/tx6fDreJVI='; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: stun: turn:; img-src 'self' blob: data: https:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; trusted-types breeze-sanitizer default; require-trusted-types-for 'script'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-6Z80/7wo9P47eUUWkTF9c8HfUl7/oDSOH5oFss8tzUI=' 'sha256-K7IkaQnRoxKIoHPgGdeF7o7NJoaLrX7Oe1yqB+dCjTs=' 'sha256-gfSYOV9wWEoGI0YLMy0Ijb/7J4Dr2SkeCqAj6qW6vvs='; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: stun: turn:; img-src 'self' blob: data: https:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; trusted-types breeze-sanitizer default; require-trusted-types-for 'script'; upgrade-insecure-requests
 
 /
   Cache-Control: no-cache

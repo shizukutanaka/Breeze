@@ -1174,6 +1174,16 @@ del.md-del { opacity: .6 }
 
 <footer><div class="wrap">Breeze v3.6.1 — P2P encrypted messenger. <a href="?terms">Terms</a> · <a href="?privacy">Privacy</a></div></footer>
 
+<script type="module">
+// Stage-3 step 3 (docs/PQ_STAGE3_PLAN.md): load the PQ prekey helper
+// (src/crypto/pqkey.js) per INTEGRATION.md §0(A). The classic script below
+// reads window.__breezePQKey opportunistically — if this module has not
+// loaded or fails outright, bundle building proceeds classically and
+// self-heals on the next rotation; nothing here is on the boot path.
+import { createPQKeyHelper } from './src/crypto/pqkey.js';
+window.__breezePQKey = createPQKeyHelper();
+</script>
+
 <script>
 
 'use strict';
@@ -3906,6 +3916,15 @@ async function initMessenger(dbName) {
       Array.isArray(b.oneTimePreKeys) ? b.oneTimePreKeys : [],
       Array.isArray(b.caps) ? b.caps : [],
       typeof b.x3dh === 'string' ? b.x3dh : '',
+      // Stage-3 step 3 (docs/PQ_STAGE3_PLAN.md D3): the PQ pair is key
+      // material, so it joins the digest — APPENDED, never inserted, so
+      // the v1 seven fields stay a prefix. The append is conditional: a
+      // bundle WITHOUT the pair keeps the exact v1 digest (pre-step-2
+      // relays still verify it, and step-2 relays accept v1 for
+      // field-less bodies), while a bundle WITH the pair is signed under
+      // this v2 form only — the form step 2's Worker requires there,
+      // because v1 does not bind the pair at all.
+      ...(b.pqPreKey || b.pqPreKeySig ? [b.pqPreKey || '', b.pqPreKeySig || ''] : []),
     ]))}`);
   }
   // group/create: breeze-group-create::{creatorId}:{ts}:{bind} — empty token slot
@@ -4929,6 +4948,25 @@ async function initMessenger(dbName) {
       // Raw SPK bytes, not the base64 string via signMessage() — the Worker's verifyEd25519 base64-decodes signedPreKey first, so a signMessage() sig always failed (E2E-found).
       const spkSig = await crypto.subtle.sign({ name: 'Ed25519' }, _signingKey.privateKey, spk.pub);
       body.signedPreKeySig = btoa(String.fromCharCode(...new Uint8Array(spkSig)));
+      // Stage-3 step 3 (docs/PQ_STAGE3_PLAN.md D3/D4): mint the ML-KEM-768
+      // prekey pair alongside the SPK, signed the same way (raw public-key
+      // bytes). The helper is the ESM loaded above (window.__breezePQKey);
+      // if it has not loaded or minting fails, the bundle stays classical —
+      // a PQ failure must never break registration or a rotation. Only the
+      // 64-byte keygen SEED is stored ('pq-priv', the spk-priv pattern);
+      // the expanded secret key is re-derived on demand and never leaves
+      // the device. NO pqxdh cap is advertised yet (negotiation is step
+      // 5): the pair is served but inert until a responder can decapsulate.
+      try {
+        const pqh = globalThis.__breezePQKey;
+        if (pqh) {
+          const minted = pqh.mintPQPreKey();
+          const pqSig = await crypto.subtle.sign({ name: 'Ed25519' }, _signingKey.privateKey, minted.publicKey);
+          await dbPut('identity', pqh.pqSeedRecord(minted.seed), 'pq-priv');
+          body.pqPreKey = minted.pqPreKey;
+          body.pqPreKeySig = btoa(String.fromCharCode(...new Uint8Array(pqSig)));
+        }
+      } catch(e) { _dbg(e, 'pqkey-mint'); }
     }
     const caps = [];
     if (CONFIG.X3DH_V5_ENABLED) caps.push(CAPS_X3DH_V5);
@@ -14468,6 +14506,14 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
             await dbPut('identity', { ...restSig, priv: sigPrivJwk }, 'signing');
           } else { _dbg(null, 'signing-unwrap-disable failed'); }
         }
+        // Restore plaintext PQ prekey seed record (if wrapped) — stage-3
+        // step 3: pq-priv is in the /keywrap enumeration (see enable path).
+        const storedPq = await dbGet('identity', 'pq-priv');
+        if (_atRestIsWrapped(storedPq)) {
+          const pqPayload = await _atRestUnwrap(storedPq.wrapped || storedPq, pass, 'pq-priv');
+          if (pqPayload?.seed) await dbPut('identity', { seed: pqPayload.seed }, 'pq-priv');
+          else { _dbg(null, 'pq-priv-unwrap-disable failed'); }
+        }
         auditLog('security', 'At-rest key wrapping disabled');
         showToast(t('keyWrapDisabled'), 'success');
         return;
@@ -14484,6 +14530,13 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const storedSig2 = await dbGet('identity', 'signing');
       if (storedSig2 && !_atRestIsWrapped(storedSig2)) {
         await dbPut('identity', await _atRestMigrate(storedSig2, pass, 'signing'), 'signing');
+      }
+      // Migrate PQ prekey seed (stage-3 step 3: pq-priv joins the /keywrap
+      // enumeration — its payload is the { seed } object itself rather than
+      // a { priv } JWK, so it wraps directly, AAD bound to 'pq-priv')
+      const storedPq2 = await dbGet('identity', 'pq-priv');
+      if (storedPq2 && !_atRestIsWrapped(storedPq2) && Array.isArray(storedPq2.seed)) {
+        await dbPut('identity', { wrapped: await _atRestWrap({ seed: storedPq2.seed }, pass, 'pq-priv') }, 'pq-priv');
       }
       auditLog('security', 'At-rest key wrapping enabled (PBKDF2 x' + CONFIG.PBKDF2_AT_REST_ITERATIONS / 1000 + 'k)');
       showToast(t('keyWrapEnabled'), 'success');

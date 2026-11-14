@@ -439,6 +439,47 @@ covers the new `pq-priv` record; if it enumerates records, add it.
   a pre-stage-3 client fetching the same account's bundle behaves
   exactly as before; suite + validate green.
 
+- **Outcome (2026-11-14).** Done. `src/crypto/pqkey.js` (new, 183
+  lines) is the identity-level helper: `mintPQPreKey` (fresh 64-byte
+  seed → `ml_kem768.keygen`), `signPQPreKey` (Ed25519 over the RAW
+  public-key bytes, injected signer), `buildPQBundleFields`, the
+  `pq-priv` record pair (`pqSeedRecord` / `pqSeedFromRecord` — a
+  wrapped record refuses a plaintext read), seed-only re-derivation,
+  and the D3 digest tail. index.html loads it at runtime per
+  INTEGRATION.md §0(A) (an inline module script assigns
+  `window.__breezePQKey`; CSP re-pinned — three hashes now) and
+  `generatePreKeyBundle` mints inside the existing signing branch:
+  sign → store the seed → attach the fields, all inside try/catch, so
+  an absent or failing helper yields the classical bundle unchanged
+  and self-heals on the next rotation. **No `pqxdh` cap is
+  advertised** and no session code changed — the pair is served but
+  inert. `prekeyUploadAuth` appends the pair to the digest ONLY when
+  the bundle carries it: field-less bundles keep the exact v1 digest
+  (pre-step-2 relays still verify them), PQ bundles sign v2, the only
+  form step 2 accepts for them. AT_REST_KEY_WRAP: the /keywrap
+  enumeration DID enumerate records (`keys`, `signing`), so `pq-priv`
+  joined it — enable wraps the `{ seed }` payload under AAD context
+  `'pq-priv'`, disable restores it (spk-priv/otp-priv remain outside
+  the wrap — the pre-existing scope, unchanged). `sw.js` precaches
+  the module closure (pqkey/mlkem/bytes) so a first offline boot
+  still mints. One real bug the new tests caught pre-merge:
+  WebCrypto `sign()` resolves to an ArrayBuffer, which byte coercion
+  silently empties — `signPQPreKey` now normalizes and pins the
+  64-byte signature size, so a mangled signer throws instead of
+  emitting a pair the Worker would file as "unsigned". Tests:
+  `tests/pqkey.test.js`, 18 cases — helper shapes and seed
+  determinism, raw-byte signature (and the base64-text trap), seed
+  record + at-rest wrap interplay incl. slot binding, the REAL
+  sliced `prekeyUploadAuth` → real Worker round-trip under
+  `PREKEY_REQUIRE_AUTH` (the seed and the expanded secret asserted
+  absent from the wire in every encoding; pair swap ⇒ `SIG_INVALID`;
+  field-less v1 parity), and the REAL sliced `generatePreKeyBundle`
+  in helper-present / absent / throwing worlds incl. rotation and the
+  no-`pqxdh` cap pin. Suite: **1,333 → 1,351 passed**, zero
+  regressions; `./validate.sh` PASSED (165/171, unchanged).
+  index.html 15,356 → 15,409 lines (+53; headroom 591 under the
+  ceiling — step 4's reduction target is unaffected in kind).
+
 ### Step 4 — Reduction pass: buy the line budget for the inline KEM
 
 Deletion-first audit of `index.html` (the FIRST-PRINCIPLES pass
