@@ -74,7 +74,7 @@ describe('worker — health advertises relayKey only for a complete identity', (
     const j = await getHealth(envWith(id));
     expect(j.relayKey).toBe(id.publicKey);
     expect(j.capabilities).toContain('relay-attest');
-    expect(j.endpoints).toBe(39);
+    expect(j.endpoints).toBe(42); // +3: the backup simple-* endpoints (recovery plan step 4)
   });
 
   it('stays null when only one half is set — never advertise an unattestable key', async () => {

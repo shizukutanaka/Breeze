@@ -1081,8 +1081,10 @@ del.md-del { opacity: .6 }
     <input type="text" id="msg-name" class="setup-input" data-i18n-ph="yourName" data-i18n-aria="ariaDisplayName" maxlength="64" autocomplete="off" autocapitalize="words" enterkeyhint="next">
     <input type="text" id="msg-alias" class="setup-input-alt" data-i18n-ph="breezeId" data-i18n-aria="ariaBreezeId" maxlength="20" pattern="[a-z0-9_]+" autocomplete="off" autocapitalize="none" enterkeyhint="done" spellcheck="false">
     <button class="btn btn-g setup-cta" id="b-msg-setup" data-i18n="createFree"></button>
+    <button class="btn btn-o setup-restore hidden" id="b-msg-setup-simple" data-i18n="setupSimple"></button>
     <button class="btn btn-o setup-restore" id="b-msg-setup-restore" data-i18n="setupRestore"></button>
     <button class="btn btn-o setup-restore" id="b-msg-setup-phrase" data-i18n="setupPhrase"></button>
+    <button class="btn btn-o setup-restore hidden" id="b-msg-setup-simple-restore" data-i18n="setupSimpleRestore"></button>
     <button class="btn btn-o setup-restore" id="b-msg-setup-none" data-i18n="setupDisposable"></button>
     <div class="setup-footer">
       <span data-i18n="noCreditCard"></span><br>
@@ -1396,6 +1398,8 @@ const _I = {
     setupRestore: 'Restore from a backup file',
     setupPhrase: 'Recover with a recovery phrase',
     setupDisposable: 'Disposable identity (no recovery)',
+    setupSimple: 'Simple recovery (account + passphrase)',
+    setupSimpleRestore: 'Restore with account + passphrase',
     noCreditCard: 'No credit card. No email. Just a name.',
     searchPh: 'Search...',
     searchEmojiPh: 'Search emoji...',
@@ -1864,6 +1868,26 @@ const _I = {
     disposableDesc: 'If this device is lost, reset, or this browser data is cleared, this identity is gone forever. There is no recovery phrase and no way to get it back. Your contacts will see a brand-new person when you start over.',
     disposableOk: 'I understand — no recovery',
     toastRecoveryNoneKit: 'This identity is disposable (no recovery), so a recovery kit cannot be created.',
+    simpleTitle: 'Simple recovery',
+    simpleDesc: 'Your encrypted backup will be stored on a relay you run or contract — this is never offered on the default relay. On a new device, your account name + passphrase bring the whole account back, with no phrase to write down. It is weaker than the recovery phrase: whoever runs that relay holds the ciphertext and can see that this account has a backup and when it changes, and a guessed passphrase opens it. The relay can never read it — only the passphrase can. Choose a long one.',
+    simpleOk: 'Use simple recovery',
+    simpleNewDesc: 'Pick a recovery account name — like an email address, and you must remember it exactly — and a recovery passphrase of at least 8 characters. Together they fetch and open your backup on a new device. Neither is sent to the relay; only what they unlock is.',
+    simpleAccountLabel: 'Recovery account name',
+    simplePassLabel: 'Recovery passphrase',
+    simpleSaved: 'I have noted the account name and passphrase',
+    simplePassEnter: 'Enter your recovery passphrase:',
+    simpleAccountMin: 'Recovery account name must be at least 3 characters (letters, numbers, _ or -).',
+    simplePassMin: 'Recovery passphrase must be at least 8 characters.',
+    simpleEnrolled: 'Simple recovery is on. Your encrypted backup is stored on your relay.',
+    simpleEnrolledUntil: 'Simple recovery is on. The relay keeps the backup until {0} — update it from /backup before then.',
+    simpleNotFound: 'No backup found for that account name and passphrase. Check both exactly and try again.',
+    simpleNotEnrolled: 'Simple recovery is not set up for this identity.',
+    simpleBackupBtn: 'Simple recovery backup',
+    simpleRestoreTitle: 'Restore with simple recovery',
+    simpleRestoreDesc: 'Enter the recovery account name and passphrase you chose. The backup is fetched from this relay and opened on this device only.',
+    simplePassChangeTitle: 'Change recovery passphrase?',
+    simplePassChangeDesc: 'This passphrase names a different backup slot than the one your current backup sits in. The old backup stays under the old passphrase until it expires (90 days); restoring will need the NEW passphrase. Continue only if this change was deliberate.',
+    simplePassChangeOk: 'Change passphrase',
     toastWrongPassphrase: 'Wrong passphrase or corrupted file',
     toastAliasNotFound: 'Alias not found',
     toastAliasResolveFail: 'Could not resolve alias',
@@ -1928,6 +1952,7 @@ const _I = {
     secRecoveryPhrase: 'recovery phrase',
     secRecoveryNone: 'NONE — this identity can never be recovered',
     secRecoveryLegacy: 'recovery kit (created before recovery phrases)',
+    secRecoverySimple: 'simple recovery (account + passphrase, your own relay)',
     secPQNative: 'ML-KEM (native)',
     secPQPlanned: 'Planned (hybrid X25519+ML-KEM)',
     secPqxdhInUse: 'In use (this session)',
@@ -2553,6 +2578,85 @@ function _promptRecoveryPhraseRestore() {
       phrase: dlg.querySelector('.rp-phrase').value,
       passphrase: dlg.querySelector('.rp-pass').value || '',
       kitFile: dlg.querySelector('.rp-kit').files?.[0] || null,
+    });
+    dlg.querySelector('[value="cancel"]').onclick = () => close(null);
+    dlg.addEventListener('close', () => close(null));
+    dlg.addEventListener('click', (e) => {
+      const rect = dlg.getBoundingClientRect();
+      if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) close(null);
+    });
+  });
+}
+
+// Recovery plan step 4 (the simple mode): enrollment dialog. Collects
+// the recovery account name (the public clue — half of the cold-fetch
+// capability) and the recovery passphrase (the other half, and the
+// backup's encryption secret). OK stays disabled until the user
+// confirms they noted BOTH: losing either is losing the backup, which
+// is this mode's honest price for having no phrase to write down.
+// Resolves { account, passphrase } (raw — normalisation and the
+// length floors live in enrollSimpleRecovery) or null on cancel.
+function _promptSimpleRecoveryNew() {
+  return new Promise(resolve => {
+    const dlg = document.createElement('dialog');
+    const titleId = 'mdl-' + uid();
+    dlg.setAttribute('aria-labelledby', titleId);
+    safeSetHTML(dlg, `<div class="modal-title" id="${titleId}">${esc(t('simpleTitle'))}</div>
+      <div class="modal-desc">${esc(t('simpleNewDesc'))}</div>
+      <input class="modal-input rp-account" type="text" placeholder="${esc(t('simpleAccountLabel'))}" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="${esc(t('simpleAccountLabel'))}">
+      <input class="modal-input rp-pass" type="password" placeholder="${esc(t('simplePassLabel'))}" autocomplete="new-password" aria-label="${esc(t('simplePassLabel'))}">
+      <label class="modal-desc"><input type="checkbox" class="rp-saved"> ${esc(t('simpleSaved'))}</label>
+      <div class="modal-actions">
+        <button class="btn btn-o btn-sm" value="cancel">${t('cancel')}</button>
+        <button class="btn btn-g btn-sm" value="ok" disabled>${t('simpleOk')}</button>
+      </div>`);
+    document.body.appendChild(dlg);
+    dlg.showModal();
+    const okBtn = dlg.querySelector('[value="ok"]');
+    dlg.querySelector('.rp-saved').addEventListener('change', (e) => { okBtn.disabled = !e.target.checked; });
+    dlg.querySelector('.rp-account').focus();
+    let settled = false;
+    const close = (val) => { if (settled) return; settled = true; dlg.close(); dlg.remove(); resolve(val); };
+    okBtn.onclick = () => close({
+      account: dlg.querySelector('.rp-account').value,
+      passphrase: dlg.querySelector('.rp-pass').value || '',
+    });
+    dlg.querySelector('[value="cancel"]').onclick = () => close(null);
+    dlg.addEventListener('close', () => close(null));
+    dlg.addEventListener('click', (e) => {
+      const rect = dlg.getBoundingClientRect();
+      if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) close(null);
+    });
+  });
+}
+
+// Recovery plan step 4: the cold-restore dialog on the first-run
+// screen. Account name + passphrase, nothing else — that pair IS the
+// fetch capability (src/app/backup.js restoreSimpleBackup derives the
+// locator from it). Resolves { account, passphrase } or null on
+// cancel. Validation and all writes live in restoreSimpleBackup —
+// this dialog only collects.
+function _promptSimpleRecoveryRestore() {
+  return new Promise(resolve => {
+    const dlg = document.createElement('dialog');
+    const titleId = 'mdl-' + uid();
+    dlg.setAttribute('aria-labelledby', titleId);
+    safeSetHTML(dlg, `<div class="modal-title" id="${titleId}">${esc(t('simpleRestoreTitle'))}</div>
+      <div class="modal-desc">${esc(t('simpleRestoreDesc'))}</div>
+      <input class="modal-input rp-account" type="text" placeholder="${esc(t('simpleAccountLabel'))}" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="${esc(t('simpleAccountLabel'))}">
+      <input class="modal-input rp-pass" type="password" placeholder="${esc(t('simplePassLabel'))}" autocomplete="current-password" aria-label="${esc(t('simplePassLabel'))}">
+      <div class="modal-actions">
+        <button class="btn btn-o btn-sm" value="cancel">${t('cancel')}</button>
+        <button class="btn btn-g btn-sm" value="ok">${t('restoreBtn')}</button>
+      </div>`);
+    document.body.appendChild(dlg);
+    dlg.showModal();
+    dlg.querySelector('.rp-account').focus();
+    let settled = false;
+    const close = (val) => { if (settled) return; settled = true; dlg.close(); dlg.remove(); resolve(val); };
+    dlg.querySelector('[value="ok"]').onclick = () => close({
+      account: dlg.querySelector('.rp-account').value,
+      passphrase: dlg.querySelector('.rp-pass').value || '',
     });
     dlg.querySelector('[value="cancel"]').onclick = () => close(null);
     dlg.addEventListener('close', () => close(null));
@@ -5159,11 +5263,15 @@ async function initMessenger(dbName) {
     // Recovery plan step 3: a seed-derived identity carries its recovery
     // mode on the record ('phrase' — the first of the three recovery modes
     // the owner chose between on 2026-11-14). The disposable mode takes
-    // 'none' here; the account-linked mode lands in a later step with its
-    // own value. Pre-step-3 random identities carry no field (absence ==
-    // legacy, still kit-eligible — unlike 'none', which is a chosen,
-    // permanent opt-out).
-    await dbPut('identity', { pub: arr(new Uint8Array(pubRaw)), priv: privJwk, pubB64, name, alias: registeredAlias, ...(seedMat ? { recoveryMode: 'phrase' } : disposable ? { recoveryMode: 'none' } : {}) }, 'keys');
+    // 'none' here (disposable === true). The simple mode (step 4) passes
+    // disposable === 'simple': the seed branch above is skipped (random
+    // keys, no phrase), but NO mode is recorded here — enrollSimpleRecovery
+    // writes 'simple' only after the backup has actually landed on the
+    // user's relay, so a refused upload never leaves a paper-only mode.
+    // Pre-step-3 random identities carry no field (absence == legacy,
+    // still kit-eligible — unlike 'none', which is a chosen, permanent
+    // opt-out).
+    await dbPut('identity', { pub: arr(new Uint8Array(pubRaw)), priv: privJwk, pubB64, name, alias: registeredAlias, ...(seedMat ? { recoveryMode: 'phrase' } : disposable === true ? { recoveryMode: 'none' } : {}) }, 'keys');
     // The derived signing record is stored BEFORE the initSigning() call
     // below, which loads a stored record rather than minting a random one
     // — that load is what makes the derived Ed25519 key the account's
@@ -7082,10 +7190,18 @@ async function initMessenger(dbName) {
   } else {
     _DOM.get('msg-setup').classList.remove('hidden');
     _DOM.get('msg-main').classList.add('hidden');
+    // Recovery plan step 4: the simple-mode entries exist only where
+    // the connected relay stores backups (the health check above ran
+    // before _boot, so the features are already known). Both buttons
+    // ship hidden; anything but an explicit opt-in report keeps them
+    // unoffered — the creator's default relay never enables storage.
+    const _sbOk = !!window._serverFeatures?.backupStorage;
+    _DOM.get('b-msg-setup-simple')?.classList.toggle('hidden', !_sbOk);
+    _DOM.get('b-msg-setup-simple-restore')?.classList.toggle('hidden', !_sbOk);
   }
   } // end _boot
 
-  async function _runSetupCreate(disposable) {
+  async function _runSetupCreate(disposable, simpleCreds = null) {
     const name = _DOM.get('msg-name').value.trim().slice(0, 64) || 'Anonymous';
     const alias = (_DOM.get('msg-alias').value.trim() || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
     // Recovery plan step 3: createIdentity returns false when the user
@@ -7116,6 +7232,13 @@ async function initMessenger(dbName) {
     // this account's entire first session: the first switch AWAY from it found nothing
     // to call and left every _ac-scoped listener attached forever.
     _registerMessengerCleanup();
+    // Recovery plan step 4 (simple mode): the identity is live and its
+    // signing key can authorise the upload — enrol now. The credentials
+    // were collected BEFORE creation (cancelling created nothing, the
+    // step-2/3 doctrine). enrollSimpleRecovery records the mode only
+    // once the backup has actually landed; a refusal leaves the
+    // identity modeless (kit-eligible) with the refusal named.
+    if (disposable === 'simple' && simpleCreds) await enrollSimpleRecovery(simpleCreds.account, simpleCreds.passphrase);
     // /keywrap is opt-in and off by default — surface it once, right after setup,
     // instead of relying on the user to discover the command themselves.
     if (!_atRestIsWrapped(await dbGet('identity', 'keys'))) {
@@ -7158,6 +7281,26 @@ async function initMessenger(dbName) {
   // write sits behind a successful derivation or kit open, so a failed
   // attempt leaves the fresh install exactly as empty as it was.
   _DOM.get('b-msg-setup-phrase')?.addEventListener('click', () => { restoreFromPhrase(); });
+  // Recovery plan step 4 (simple mode): the create + cold-restore
+  // entries. Both buttons ship hidden and are unhidden by _boot ONLY
+  // when the serving relay reports backup storage (the health
+  // features' backupStorage flag) — the mode exists solely on the
+  // user's own placement,
+  // so on the creator's default relay the choice is not offered at
+  // all. The create path mirrors the disposable gate: the honest
+  // comparison first, then the credentials, and only then creation —
+  // declining either creates nothing. The length floors are checked
+  // here (before an identity exists) and again in enrollSimpleRecovery.
+  _DOM.get('b-msg-setup-simple')?.addEventListener('click', async () => {
+    if (!await showConfirm(t('simpleTitle'), { desc: t('simpleDesc'), okText: t('simpleOk') })) return;
+    const creds = await _promptSimpleRecoveryNew();
+    if (!creds) return;
+    const account = creds.account.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 32);
+    if (account.length < 3) { showToast(t('simpleAccountMin'), 'error'); return; }
+    if (!creds.passphrase || creds.passphrase.length < 8) { showToast(t('simplePassMin'), 'error'); return; }
+    _runSetupCreate('simple', { account, passphrase: creds.passphrase });
+  });
+  _DOM.get('b-msg-setup-simple-restore')?.addEventListener('click', () => { restoreSimpleBackup(); });
   // Enter on name field → move focus to alias (matches enterkeyhint="next")
   _DOM.get('msg-name')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); _DOM.get('msg-alias')?.focus(); }
@@ -11688,6 +11831,11 @@ async function initMessenger(dbName) {
   const restoreFromPhrase = _backupTools?.restoreFromPhrase || (async () => {});
   const createCloudBackup = _backupTools?.createCloudBackup || (async () => {});
   const restoreCloudBackup = _backupTools?.restoreCloudBackup || (async () => {});
+  const enrollSimpleRecovery = _backupTools?.enrollSimpleRecovery || (async () => false);
+  const simpleBackupAction = _backupTools?.simpleBackupAction || (async () => {});
+  const restoreSimpleBackup = _backupTools?.restoreSimpleBackup || (async () => {});
+  const restoreBackupSmart = _backupTools?.restoreBackupSmart || (async () => {});
+  const eraseSimpleBackup = _backupTools?.eraseSimpleBackup || (async () => {});
 
   // REMOVED: click listeners for #b-msg-panic and #contact-sort. Both elements were deleted
   // from the markup at some point; the registrations survived, silently attached to nothing.
@@ -12536,7 +12684,8 @@ async function initMessenger(dbName) {
     }
     // Backup/Restore
     if (e.target.closest('[data-action="backup"]')) { createCloudBackup(); return; }
-    if (e.target.closest('[data-action="restore"]')) { restoreCloudBackup(); return; }
+    if (e.target.closest('[data-action="restore"]')) { restoreBackupSmart(); return; }
+    if (e.target.closest('[data-action="backup-simple"]')) { simpleBackupAction(); return; }
     // Local file backup/restore. The download half was wired to #b-msg-backup — a button that
     // does not exist in the markup — so you could RESTORE a local backup (by dragging the file
     // onto the sidebar) that you had no way to CREATE. An asymmetric dead end, and the half
@@ -13326,6 +13475,11 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
           const sub = await reg?.pushManager?.getSubscription().catch(() => null);
           if (sub) { _unsubscribePushAll(sub); await sub.unsubscribe().catch(() => {}); }
         } catch(e) { _dbg(e); }
+        // Recovery plan step 4: the simple-mode backup slot is keyed by
+        // its locator, not the userId, so /account/delete cannot find
+        // it — erase it explicitly (owner-signed) or the ciphertext
+        // would outlive the wipe until its 90-day TTL.
+        try { await eraseSimpleBackup(); } catch(e) { _dbg(e); }
       }
       // Local wipe
       try {
@@ -13443,12 +13597,20 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const d = document.createElement('div');
       d.className = 'chat-empty';
       d.className = 'cmd-panel-mono';
+      // Recovery plan step 4: the simple-mode button exists only where
+      // it can work — the connected relay stores backups, or this
+      // identity is already enrolled (its updates fan out to every
+      // home relay, not just the serving one).
+      const _bkRec = await dbGet('identity', 'keys').catch(() => null);
+      const _simpleBtn = (window._serverFeatures?.backupStorage || _bkRec?.recoveryMode === 'simple')
+        ? `<button data-action="backup-simple" class="btn btn-o btn-sm i-m4">${t('simpleBackupBtn')}</button><br>` : '';
       safeSetHTML(d, `<b class="i-g">${t('cmdBackupTitle')}</b><br>
         <button data-action="backup" class="btn btn-g btn-sm i-m4">${t('backupBtn')}</button>
         <button data-action="restore" class="btn btn-o btn-sm i-m4">${t('restoreBtn')}</button><br>
         <button data-action="backup-file" class="btn btn-o btn-sm i-m4">${t('backupFileBtn')}</button>
         <button data-action="restore-file" class="btn btn-o btn-sm i-m4">${t('restoreFileBtn')}</button><br>
         <button data-action="recovery-kit" class="btn btn-o btn-sm i-m4">${t('recoveryKitBtn')}</button><br>
+        ${_simpleBtn}
         <span class="text-xs color-t3">${t('backupNote')}</span>`);
       box.appendChild(d);
       box.scrollTop = box.scrollHeight;
@@ -13567,7 +13729,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         '',
         '<b>' + t('secActiveProtections') + '</b>',
         t(_atRestOn ? 'secAtRestWrapOn' : 'secAtRestWrapOff'),
-        t('secLblRecovery') + ': ' + (_identRec?.recoveryMode === 'none' ? '✗ ' + t('secRecoveryNone') : _identRec?.recoveryMode === 'phrase' ? '<span class="i-g">✓ ' + t('secRecoveryPhrase') + '</span>' : t('secRecoveryLegacy')),
+        t('secLblRecovery') + ': ' + (_identRec?.recoveryMode === 'none' ? '✗ ' + t('secRecoveryNone') : _identRec?.recoveryMode === 'phrase' ? '<span class="i-g">✓ ' + t('secRecoveryPhrase') + '</span>' : _identRec?.recoveryMode === 'simple' ? '<span class="i-g">✓ ' + t('secRecoverySimple') + '</span>' : t('secRecoveryLegacy')),
         t(CONFIG.GROUP_RATCHET_V5 ? 'secGroupFSOn' : 'secGroupFSOff'),
         t(CONFIG.CALL_E2E_SIGNAL ? 'secCallSignalOn' : 'secCallSignalOff'),
         '',

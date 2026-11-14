@@ -10,7 +10,7 @@
   "app": {
     "withGlobalTauri": false,
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'sha256-6Z80/7wo9P47eUUWkTF9c8HfUl7/oDSOH5oFss8tzUI=' 'sha256-v1qebErT0t6uxWB/1cAzopgKYlwqJHnRegMhauSisdM=' 'sha256-6u1ZDbuEEXL9GmIhdBGc9lBHW0XDGQoq47K/csxwyBI=' 'sha256-V/9yfx99qSRH56YjFepWecptQV7LjgQWxauzEFYtgz4='; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: stun: turn:; img-src 'self' blob: data: https:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; trusted-types breeze-sanitizer default; require-trusted-types-for 'script'; upgrade-insecure-requests"
+      "csp": "default-src 'self'; script-src 'self' 'sha256-6Z80/7wo9P47eUUWkTF9c8HfUl7/oDSOH5oFss8tzUI=' 'sha256-v1qebErT0t6uxWB/1cAzopgKYlwqJHnRegMhauSisdM=' 'sha256-6u1ZDbuEEXL9GmIhdBGc9lBHW0XDGQoq47K/csxwyBI=' 'sha256-Ed1Jjzkwf5MuNO5O3u+d9KNEa+i4fvjtsg+mUImGJ88='; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: stun: turn:; img-src 'self' blob: data: https:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; trusted-types breeze-sanitizer default; require-trusted-types-for 'script'; upgrade-insecure-requests"
     },
     "windows": [
       {

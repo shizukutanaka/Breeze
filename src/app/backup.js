@@ -299,6 +299,294 @@ export function createBackupTools(D) {
     setTimeout(() => location.reload(), 1.5 * MS.SEC);
   }
 
+  // ===== Simple-mode backup (recovery plan step 4 — the third mode) =====
+  //
+  // The account-linked simple mode. The backup is the cloud backup's own
+  // payload and envelope (format v2: identity + contacts + messages +
+  // full key material, PBKDF2/AES-256-GCM under the passphrase), but it
+  // is ADDRESSED differently: not by userId — which a cold client does
+  // not have and a stranger can derive from a public key — but by a
+  // LOCATOR derived from the two things the person remembers, the
+  // recovery account name and the recovery passphrase (CRYPTO-SPEC
+  // §2c). A fresh install recomputes the locator and fetches cold; a
+  // wrong passphrase derives a different locator and finds nothing, so
+  // the relay is never an offline-guessing oracle for this mode
+  // (plan §1.6 defect 1, §2 item 9). Uploads are signed with the
+  // account's signing key and the worker binds the slot to that key:
+  // overwriting someone else's recovery net takes their key, not just
+  // their locator. Storage exists only on relays whose operator opted
+  // in (BACKUP_STORAGE_ENABLED) — the user's own placement, never the
+  // creator's default relay, which is also why the setup//backup
+  // entries are gated on the relay's health features.
+  const SIMPLE_MIN_PASSPHRASE = 8; // the passphrase is this mode's ONLY secret — longer floor than the file/cloud 6
+
+  // The account clue: a public, alias-shaped name the user picks (and
+  // must remember — it is half of the fetch capability). Normalised
+  // exactly one way everywhere it is used, so the locator derived at
+  // enrollment is the locator derived at cold restore.
+  function _simpleAccount(v) {
+    return (typeof v === 'string' ? v : '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 32);
+  }
+
+  // locator = base64( HMAC-SHA256( K, 'breeze-simple-locator' ) ) with
+  // K = PBKDF2-HMAC-SHA256(passphrase, 'breeze-simple-locator-v1:' +
+  // account, 600k). Domain-separated from the blob's own encryption
+  // key (which uses a random per-backup salt): the locator can name
+  // the slot and nothing more — it neither decrypts nor is derivable
+  // from the ciphertext.
+  async function _simpleLocator(account, passphrase) {
+    const te = new TextEncoder();
+    const km = await crypto.subtle.importKey('raw', te.encode(passphrase), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits(
+      { name: 'PBKDF2', salt: te.encode('breeze-simple-locator-v1:' + account), iterations: CONFIG.PBKDF2_AT_REST_ITERATIONS, hash: 'SHA-256' },
+      km, 256);
+    const hkey = await crypto.subtle.importKey('raw', bits, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const mac = await crypto.subtle.sign('HMAC', hkey, te.encode('breeze-simple-locator'));
+    return btoa(String.fromCharCode(...new Uint8Array(mac)));
+  }
+
+  // The payload + envelope, byte-for-byte the cloud backup's (kept as
+  // a twin rather than a refactor of createCloudBackup: that function's
+  // body is slice-pinned by the data-principle suite, and the two
+  // producers must not drift in format — the restore side below reads
+  // both).
+  async function _simpleEncryptPayload(passphrase) {
+    const identity = await dbGet('identity', 'keys');
+    const contacts = await dbGetAll('contacts');
+    const messages = await dbGetAll('messages');
+    const keyMaterial = await _collectBackupKeyMaterial();
+    const data = JSON.stringify({ v: CONFIG.PROTOCOL_VERSION, backupV: BACKUP_FORMAT_V, identity, contacts, messages, keyMaterial, exportedAt: Date.now() });
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(CONFIG.IV_BYTES));
+    const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+    const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: CONFIG.PBKDF2_AT_REST_ITERATIONS, hash: 'SHA-256' }, km, { name: 'AES-GCM', length: CONFIG.AES_KEY_BITS }, false, ['encrypt']);
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(data));
+    return JSON.stringify({ s: arr(salt), i: arr(iv), d: arr(new Uint8Array(ct)), v: CONFIG.PROTOCOL_VERSION, iter: CONFIG.PBKDF2_AT_REST_ITERATIONS });
+  }
+
+  // Upload one encrypted payload under its locator to every home relay
+  // (the createCloudBackup fan-out: one signed body, relay-independent;
+  // one success is enough). Returns the locator with the verdict.
+  async function _uploadSimpleBackup(account, passphrase) {
+    const locator = await _simpleLocator(account, passphrase);
+    const backup = await _simpleEncryptPayload(passphrase);
+    const signing = await dbGet('identity', 'signing');
+    const pub = signing?.pubB64 || '';
+    const ts = Date.now();
+    const sig = await signMessage(`breeze-backup-simple-upload:${locator}:${ts}`);
+    if (!pub || !sig) return { ok: false, locator, relayDisabled: false };
+    const body = { locator, backup, pub, ts, sig };
+    let firstOk = null; let relayDisabled = false;
+    for (const relay of homeRelays()) {
+      const resp = await postAPIRelay(relay, '/backup/simple-upload', body);
+      if (resp?.ok && !firstOk) firstOk = resp;
+      else if (resp && !relayDisabled) { const ej = await resp.json().catch(() => null); if (ej?.code === 'BACKUP_DISABLED') relayDisabled = true; }
+    }
+    if (!firstOk) return { ok: false, locator, relayDisabled };
+    const info = await firstOk.json().catch(() => null);
+    return { ok: true, locator, expiresAt: info?.expiresAt || null };
+  }
+
+  // Enrollment: the mode is recorded ONLY after the backup actually
+  // landed (a refused upload leaves the identity modeless and
+  // kit-eligible, with the refusal named — never 'simple' on paper and
+  // nothing on the relay).
+  async function enrollSimpleRecovery(accountRaw, passphrase) {
+    const identity = await dbGet('identity', 'keys');
+    if (!identity) { showToast(t('toastNoIdentityBackup'), 'error'); return false; }
+    if (identity.recoveryMode === 'none') { showToast(t('toastRecoveryNoneBackup'), 'error'); return false; }
+    const account = _simpleAccount(accountRaw);
+    if (account.length < 3) { showToast(t('simpleAccountMin'), 'error'); return false; }
+    if (!passphrase || passphrase.length < SIMPLE_MIN_PASSPHRASE) { showToast(t('simplePassMin'), 'error'); return false; }
+    try {
+      const up = await _uploadSimpleBackup(account, passphrase);
+      if (!up.ok) { showToast(t(up.relayDisabled ? 'backupRelayDisabled' : 'backupFailed'), 'error'); return false; }
+      identity.recoveryMode = 'simple';
+      identity.recoveryAccount = account;
+      identity.recoveryLocator = up.locator;
+      await dbPut('identity', identity, 'keys');
+      showToast(up.expiresAt ? t('simpleEnrolledUntil', new Date(up.expiresAt).toLocaleDateString()) : t('simpleEnrolled'), 'success');
+      return true;
+    } catch(e) { _dbg(e, 'simple-enroll'); showToast(t('backupFailed'), 'error'); return false; }
+  }
+
+  // The /backup entry: enroll (any recoverable identity) or update
+  // (an identity already in the simple mode). Disposable identities
+  // are refused — a backup is a recovery promise, and 'none' is the
+  // promise that none exists (the kit guard's doctrine).
+  async function simpleBackupAction() {
+    const identity = await dbGet('identity', 'keys');
+    if (!identity) { showToast(t('toastNoIdentityBackup'), 'error'); return; }
+    if (identity.recoveryMode === 'none') { showToast(t('toastRecoveryNoneBackup'), 'error'); return; }
+    if (identity.recoveryMode === 'simple') { await updateSimpleBackup(); return; }
+    const creds = await _promptSimpleRecoveryNew();
+    if (!creds) return;
+    await enrollSimpleRecovery(creds.account, creds.passphrase);
+  }
+
+  // Update: re-upload under the SAME locator (same account + same
+  // passphrase). A different passphrase derives a different locator —
+  // that is a passphrase CHANGE (the old backup stays under the old
+  // locator until its 90-day TTL), and it is confirmed as one rather
+  // than happening by typo.
+  async function updateSimpleBackup() {
+    const identity = await dbGet('identity', 'keys');
+    if (!identity?.recoveryAccount) { showToast(t('simpleNotEnrolled'), 'error'); return; }
+    const passphrase = await showPrompt(t('simplePassEnter'), '', { type: 'password', autocomplete: 'current-password' });
+    if (!passphrase) return;
+    try {
+      const locator = await _simpleLocator(identity.recoveryAccount, passphrase);
+      if (identity.recoveryLocator && locator !== identity.recoveryLocator) {
+        if (!await showConfirm(t('simplePassChangeTitle'), { desc: t('simplePassChangeDesc'), okText: t('simplePassChangeOk'), danger: true })) return;
+      }
+      const up = await _uploadSimpleBackup(identity.recoveryAccount, passphrase);
+      if (!up.ok) { showToast(t(up.relayDisabled ? 'backupRelayDisabled' : 'backupFailed'), 'error'); return; }
+      identity.recoveryLocator = up.locator;
+      await dbPut('identity', identity, 'keys');
+      showToast(up.expiresAt ? t('simpleEnrolledUntil', new Date(up.expiresAt).toLocaleDateString()) : t('simpleEnrolled'), 'success');
+    } catch(e) { _dbg(e, 'simple-update'); showToast(t('backupFailed'), 'error'); }
+  }
+
+  // Decrypt one simple/cloud envelope and parse its payload — the
+  // restoreCloudBackup decryption, shared by both simple restore
+  // paths (the iteration floor is the same anti-downgrade guard).
+  async function _simpleDecryptPayload(passphrase, backupStr) {
+    const b = JSON.parse(backupStr);
+    const salt = u8(b.s); const iv = u8(b.i); const ct = u8(b.d);
+    const bIter = (typeof b.iter === 'number' && b.iter >= CONFIG.PBKDF2_ITERATIONS && b.iter <= 10000000) ? b.iter : CONFIG.PBKDF2_ITERATIONS;
+    const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+    const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: bIter, hash: 'SHA-256' }, km, { name: 'AES-GCM', length: CONFIG.AES_KEY_BITS }, false, ['decrypt']);
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+    return JSON.parse(new TextDecoder().decode(pt));
+  }
+
+  // The restore writes, shared by the cold and live simple paths —
+  // restoreCloudBackup's scope (identity, key material, validated
+  // contacts, messages), behind the caller's identity check.
+  async function _applySimplePayload(data) {
+    if (data.identity) await dbPut('identity', data.identity, 'keys');
+    await _restoreBackupKeyMaterial(data.keyMaterial);
+    if (data.contacts) for (const c of data.contacts) {
+      if (typeof c?.id !== 'string' || !c.id || c.id.length > 64 ||
+          typeof c?.pubB64 !== 'string' || !c.pubB64 || c.pubB64.length > 128 ||
+          !/^[A-Za-z0-9+/=]+$/.test(c.pubB64)) continue;
+      await dbPut('contacts', c);
+    }
+    if (data.messages) for (const m of data.messages) await dbPut('messages', m);
+  }
+
+  // The shared tail of both simple restores: decrypt, check, write,
+  // reload. The identity check sits before ANY write (the step-2
+  // doctrine): a payload that is not a Breeze account backup — or whose
+  // signing record does not match the key that owns the slot — creates
+  // nothing. ownerPub may be null (then only the envelope's own GCM
+  // authentication gates, exactly as the legacy restore). `mode` is
+  // the { account, locator } this restore just proved knowledge of:
+  // the enrollment-time payload predates the mode patch on the record
+  // (the mode is recorded only once the upload lands), so the restore
+  // writes the mode back onto the restored record itself — a device
+  // restored BY the simple path is a simple-mode device.
+  async function _finishSimpleRestore(passphrase, backupStr, ownerPub, mode) {
+    let data;
+    try { data = await _simpleDecryptPayload(passphrase, backupStr); }
+    catch(e) { _dbg(e, 'simple-restore-decrypt'); showToast(t('backupWrongPass'), 'error'); return; }
+    if (!data?.identity?.pubB64) { showToast(t('toastInvalidBackup'), 'error'); return; }
+    const slotPub = data.keyMaterial?.signing?.pubB64;
+    if (ownerPub && slotPub && ownerPub !== slotPub) { showToast(t('toastInvalidBackup'), 'error'); return; }
+    await _applySimplePayload(data);
+    if (mode) {
+      const rec = await dbGet('identity', 'keys');
+      if (rec) {
+        rec.recoveryMode = 'simple';
+        rec.recoveryAccount = mode.account;
+        rec.recoveryLocator = mode.locator;
+        await dbPut('identity', rec, 'keys');
+      }
+    }
+    showToast(t('backupRestored'), 'success');
+    setTimeout(() => location.reload(), CONFIG.TOAST_DURATION_MS);
+  }
+
+  // COLD restore — the setup screen's simple entry, and this step's
+  // reason to exist. No identity, no signing key, nothing but the
+  // account name + passphrase the person remembers: derive the
+  // locator, ask the serving relay (a fresh install knows no other),
+  // and land the account whole. Failures create NOTHING.
+  async function restoreSimpleBackup() {
+    if (await dbGet('identity', 'keys')) { showToast(t('toastRecoveryHasIdentity'), 'error'); return; }
+    const creds = await _promptSimpleRecoveryRestore();
+    if (!creds) return;
+    const account = _simpleAccount(creds.account);
+    if (account.length < 3 || !creds.passphrase) { showToast(t('simpleNotFound'), 'error'); return; }
+    try {
+      const locator = await _simpleLocator(account, creds.passphrase);
+      const resp = await postAPIRaw('/backup/simple-download', { locator });
+      if (!resp?.ok) {
+        const ej = resp ? await resp.json().catch(() => null) : null;
+        showToast(t(ej?.code === 'BACKUP_DISABLED' ? 'backupRelayDisabled' : 'simpleNotFound'), 'error');
+        return;
+      }
+      const { backup, pub } = await resp.json();
+      await _finishSimpleRestore(creds.passphrase, backup, pub, { account, locator });
+    } catch(e) { _dbg(e, 'simple-restore'); showToast(t('backupFailed'), 'error'); }
+  }
+
+  // LIVE restore for a simple-mode identity (the /backup restore
+  // button routes here): the account name comes from the record, only
+  // the passphrase is prompted, and the home relays are asked in turn.
+  // A passphrase that does not reproduce the recorded locator is the
+  // wrong one — it names a different (empty) slot — and is refused
+  // before any fetch.
+  async function restoreSimpleBackupLive() {
+    const identity = await dbGet('identity', 'keys');
+    if (!identity?.recoveryAccount) { showToast(t('simpleNotEnrolled'), 'error'); return; }
+    const passphrase = await showPrompt(t('simplePassEnter'), '', { type: 'password', autocomplete: 'current-password' });
+    if (!passphrase) return;
+    try {
+      const locator = await _simpleLocator(identity.recoveryAccount, passphrase);
+      if (identity.recoveryLocator && locator !== identity.recoveryLocator) { showToast(t('simpleNotFound'), 'error'); return; }
+      let resp = null;
+      for (const relay of homeRelays()) {
+        resp = await postAPIRelay(relay, '/backup/simple-download', { locator });
+        if (resp?.ok) break;
+      }
+      if (!resp?.ok) {
+        const ej = resp ? await resp.json().catch(() => null) : null;
+        showToast(t(ej?.code === 'BACKUP_DISABLED' ? 'backupRelayDisabled' : 'simpleNotFound'), 'error');
+        return;
+      }
+      const { backup, pub } = await resp.json();
+      await _finishSimpleRestore(passphrase, backup, pub, { account: identity.recoveryAccount, locator });
+    } catch(e) { _dbg(e, 'simple-restore-live'); showToast(t('backupFailed'), 'error'); }
+  }
+
+  // The /backup restore button's dispatch: a simple-mode identity
+  // restores through its own path; every other identity keeps the
+  // legacy cloud restore, byte for byte.
+  async function restoreBackupSmart() {
+    const identity = await dbGet('identity', 'keys').catch(() => null);
+    if (identity?.recoveryMode === 'simple') { await restoreSimpleBackupLive(); return; }
+    await restoreCloudBackup();
+  }
+
+  // Erasure (called by /wipe): the slot is locator-keyed, so account
+  // deletion cannot find it from the userId — only this device knows
+  // the locator, and the owner signature authorises the delete.
+  // Best-effort and silent: the wipe proceeds regardless.
+  async function eraseSimpleBackup() {
+    try {
+      const identity = await dbGet('identity', 'keys');
+      if (identity?.recoveryMode !== 'simple' || !identity.recoveryLocator) return;
+      const locator = identity.recoveryLocator;
+      const ts = Date.now();
+      const sig = await signMessage(`breeze-backup-simple-delete:${locator}:${ts}`);
+      if (!sig) return;
+      for (const relay of homeRelays()) {
+        await postAPIRelay(relay, '/backup/simple-delete', { locator, ts, sig }).catch(() => null);
+      }
+    } catch(e) { _dbg(e, 'simple-erase'); }
+  }
+
   // v3 PRO: ENCRYPTED CLOUD BACKUP
   //
   // Identity + contacts + message history → PBKDF2/AES-256-GCM encrypt
@@ -404,5 +692,6 @@ export function createBackupTools(D) {
     } catch(e) { _dbg(e, 'restore'); showToast(t('backupWrongPass'), 'error'); }
   }
   // ===== Backup & Restore (module end) =====
-  return { backupToFile, restoreFromFilePicker, restoreBackup, createRecoveryKit, restoreFromPhrase, createCloudBackup, restoreCloudBackup };
+  return { backupToFile, restoreFromFilePicker, restoreBackup, createRecoveryKit, restoreFromPhrase, createCloudBackup, restoreCloudBackup,
+    enrollSimpleRecovery, simpleBackupAction, updateSimpleBackup, restoreSimpleBackup, restoreSimpleBackupLive, restoreBackupSmart, eraseSimpleBackup };
 }

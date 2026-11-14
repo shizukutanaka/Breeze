@@ -393,7 +393,12 @@ Each step ships independently and records its outcome in §5.
    recovery is therefore scoped to **the user's own placement**
    (a relay/storage the user runs or contracts): the anchor
    fetches from there. On the default relay there is nothing
-   to fetch, and the client says so plainly.
+   to fetch, and the client says so plainly. **Done** — as
+   the **simple mode**, the third of the owner's three
+   recovery modes: the anchor is a user-chosen account name +
+   passphrase (≥8 chars) rather than the seed; the backup is
+   addressed by a locator derived from that pair, and upload
+   is owner-signed from day one (outcome in §5).
 5. **Alias minimization** — signature-mandatory registration
    by default, TTL with activity renewal, re-claim after
    expiry (§2 item 4). **TTL + re-claim landed early
@@ -771,3 +776,102 @@ presence). Existing backup describes in `tests/worker.test.js`
 now run with storage explicitly enabled — they pin the
 enabled path, as they always intended. Full suite and
 validate.sh results are recorded in the PR.
+
+### Step 4 — Cloud cold recovery + the simple mode (DONE)
+
+The owner's three-mode decision (recorded in the step-3 outcome)
+left one mode unbuilt: the account-linked simple mode, whose
+account and backup live **only on the user's own placement**.
+This step builds it, on the re-scoped premise above: nothing
+about it exists on the creator's default relay, because that
+relay never enables backup storage.
+
+**The shape.** The user picks a recovery account name
+(normalised: lowercase, `[a-z0-9_-]`, 3–32 chars) and a
+passphrase (≥8 chars — longer than the file/cloud floor of 6,
+because here the passphrase is the mode's *only* secret). From
+that pair the client derives a **locator**
+(`PBKDF2-HMAC-SHA256(passphrase, 'breeze-simple-locator-v1:' +
+account, 600k)` → `HMAC-SHA256(K, 'breeze-simple-locator')`,
+base64; spec in `docs/CRYPTO-SPEC.md` §2c). The backup itself
+is the step-1 cloud payload, byte for byte — the same v2
+format, the same envelope (fresh random-salt PBKDF2 600k +
+AES-256-GCM) — stored on the relay as `sbackup:{locator}`,
+never under the userId or the public key. The identity record
+carries `recoveryMode: 'simple'` with `recoveryAccount` and
+`recoveryLocator`, recorded **only after the first upload
+lands**: an identity whose enrollment failed stays modeless
+(and kit-eligible), because a marker without a backup behind
+it is a false promise. The locator derivation is domain-
+separated from the blob key, so the relay-visible address
+reveals nothing about the encryption key, and the blob key
+never depends on the (low-entropy, user-chosen) account name
+beyond the passphrase work factor itself.
+
+**Authentication (§2 item 9, both defects closed).** The
+legacy cloud path's paired defects — restore demanded the
+very keys that were lost, while fetch demanded nothing — have
+no counterpart here:
+
+- **Upload/delete are owner-signed from day one** (not the
+  legacy verified-when-present): the request carries an
+  Ed25519 signature over
+  `breeze-backup-simple-{upload,delete}:{locator}:{ts}` under
+  the identity's signing key. The first upload binds the slot
+  to the proven public key (TOFU); every later overwrite or
+  deletion must sign as that key. Knowing a locator — or
+  deriving one — grants no write access to anyone else's
+  recovery net.
+- **Download takes the locator alone.** There is no
+  userId-shaped path to the blob at all: no locator, no fetch
+  (400); a malformed locator is a 400; a well-formed but
+  unknown locator — which is exactly what a *wrong*
+  passphrase derives — is the same 404 as a nonexistent
+  account, so the endpoint is not an existence oracle. The
+  locator is itself the capability: it can only be computed
+  by someone who knows the account name and passphrase, at
+  600k PBKDF2 per guess. The response also returns the slot's
+  bound owner key, and the client refuses (before any write)
+  a payload whose signing record does not match it.
+- **Cold restore needs no live identity.** The setup screen
+  offers the simple restore next to Create; it prompts for
+  account + passphrase, derives the locator, fetches, decrypts
+  and applies the payload through the same write-after-verify
+  tail as every other restore (a payload that is not a Breeze
+  account backup — or whose signing record mismatches the
+  slot owner — creates nothing). The restore writes the mode
+  back onto the restored record (the enrollment-time payload
+  predates the mode patch): a device restored *by* the simple
+  path is a simple-mode device. A live identity uses the same
+  path from `/backup` via the mode dispatch
+  (`restoreBackupSmart`).
+
+**The gate.** The mode is offered only where it can work:
+the setup entries ship hidden and are unhidden only when the
+connected relay's health report advertises
+`features.backupStorage` (the exact `BACKUP_STORAGE_ENABLED`
+opt-in predicate); the `/backup` update button appears under
+the same report, or for an already-enrolled identity (its
+updates fan out to every home relay). The worker endpoints
+(`/api/backup/simple-upload|download|delete`) sit behind the
+same opt-in and refuse with `403 BACKUP_DISABLED` before any
+other validation; slots store with `TTL.QUARTER` (90 days,
+refreshed by each update). Passphrase change is locator
+change: the update flow confirms it as such, uploads under
+the new locator, and the old slot decays on its TTL under the
+old passphrase. Erasure: the slot key is locator-shaped, so
+`/account/delete` cannot reach it — `/wipe` performs an
+owner-signed simple delete instead, and the 90-day TTL is
+the backstop for every other loss path.
+
+**Honest limits (also in SECURITY.md).** The phrase mode is
+stronger, and the setup copy says so before anything is
+created: the placement's operator sees the ciphertext, the
+owner public key, the blob size and update times (never the
+plaintext, never the passphrase, never the account name —
+only its HMAC). Brute force against a captured blob or a
+probed locator costs one 600k-iteration PBKDF2 per guess;
+weak passphrases remain weak, which is why the floor is 8
+and the phrase mode remains the recommended default. A
+`'none'` identity cannot enroll (the data-principle rule: no
+recovery artefacts for the mode that promises none exist).

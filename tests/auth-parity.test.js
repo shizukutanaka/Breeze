@@ -42,6 +42,8 @@ const MAIN_VERIFIED = [
   'breeze-push-unsubscribe:{}:{}:{}',
   'breeze-backup-upload:{}:{}',
   'breeze-backup-download:{}:{}',
+  'breeze-backup-simple-upload:{}:{}',   // recovery plan step 4 (simple mode)
+  'breeze-backup-simple-delete:{}:{}',   // recovery plan step 4 (simple mode)
   'breeze-device-set:{}:{}:{}',
   'breeze-account-delete:{}:{}',
   'breeze-inst:{}:{}',

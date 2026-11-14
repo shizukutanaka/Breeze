@@ -298,7 +298,7 @@ describe('backup key material — compatibility and rejection', () => {
 });
 
 describe('backup key material — wiring pins', () => {
-  it('both backup producers emit backupV + keyMaterial; both restore paths consume it', () => {
+  it('every backup producer emits backupV + keyMaterial; every restore path consumes it', () => {
     // Census, updated by recovery plan step 3: the recovery kit
     // (createRecoveryKit) is a THIRD producer of the same payload and
     // restoreFromPhrase a THIRD consumer — plan §3.1 defines the kit as
@@ -306,10 +306,14 @@ describe('backup key material — wiring pins', () => {
     // anchor", so it deliberately reuses these exact helpers rather
     // than growing a parallel payload shape. The counts still pin every
     // call site: removing any producer/consumer fails here.
+    // Updated again by step 4 (the simple mode): _simpleEncryptPayload
+    // is a FOURTH producer — the cloud payload itself, re-addressed by
+    // locator — and _applySimplePayload a FOURTH consumer. Same rule:
+    // one payload shape for every mode, never a parallel format.
     // (Modularization: the producers/consumers live in src/app/backup.js
     // now, so the census reads that file — same counts, same pin.)
-    expect(backupMod.match(/_collectBackupKeyMaterial\(\)/g)).toHaveLength(4); // def + file + cloud + recovery kit
-    expect(backupMod.match(/_restoreBackupKeyMaterial\(data\.keyMaterial\)/g)).toHaveLength(3);
-    expect(backupMod.match(/backupV: BACKUP_FORMAT_V/g)).toHaveLength(3);
+    expect(backupMod.match(/_collectBackupKeyMaterial\(\)/g)).toHaveLength(5); // def + file + cloud + recovery kit + simple
+    expect(backupMod.match(/_restoreBackupKeyMaterial\(data\.keyMaterial\)/g)).toHaveLength(4);
+    expect(backupMod.match(/backupV: BACKUP_FORMAT_V/g)).toHaveLength(4);
   });
 });
