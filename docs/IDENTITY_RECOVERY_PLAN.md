@@ -238,15 +238,169 @@ Each component, the three questions, and the verdict.
      upload / presence), so dead handles recycle instead of
      burning (§1.3);
    - exact-match only, forever — no prefix search (enumeration
-     defence, agreeing with SHARE_PLA
-...[truncated 9113 chars]
-## 3. Implementation outcomes
+     defence, agreeing with SHARE_PLAN group B).
+
+> **Restoration note (2026-11-14).** The original draft of this
+> plan ended mid-sentence at the bullet above: the file as
+> merged in PR #413 carried a literal truncation marker, and
+> the rest of §2, the §3 design and the step list were never
+> committed. The original working clone was checked for a
+> surviving draft (working tree clean, no stash, no uncommitted
+> diff, no dangling git objects) — none exists. Everything from
+> this note through the end of §4 is therefore a
+> **reconstruction** from the decisions recorded when the plan
+> was commissioned, not the original wording. §5
+> (implementation outcomes) is original.
+
+5. **A relay-side address book — never build one.** §1.2 notes
+   the absence exists today by accident of implementation; this
+   makes it a rule. The relay holds routing and verification
+   state (alias table, device registry, prekey bundles,
+   presence, group rosters) and nothing that resembles a social
+   graph. A user's contacts exist on their devices only; no
+   feature may upload them as an address book, however
+   convenient sync would be. Any proposal that needs one must
+   argue against this invariant first.
+6. **Contacts — keep device-local; retire the plaintext
+   export.** The list itself stays (§1.4). What goes is
+   `/contacts export` as plaintext JSON — the one place the
+   social graph leaves the device unprotected. The export folds
+   into the encrypted backup format (step 6), so a contacts
+   file at rest is exactly as protected as a backup.
+7. **Device linking — keep the root-signed registry; delete
+   the copy-paste key transport.** The registry's shape is
+   right (§1.5): authority is a key, changes are signed,
+   verifiers fail closed. The transport is the defect — humans
+   pasting raw keys is the "address" anti-pattern of item 2 in
+   its worst form. `/link` / `/linkto` copy-paste is replaced
+   by QR exchange (SHARE_PLAN stage 4 is the canonical
+   schedule); the registry and its signatures do not change.
+8. **Backups — the scope is the identity, all of it.** A backup
+   that omits the signing key is not a backup of the account;
+   it is a backup of the address (§1.6 defect 2). Both
+   producers carry the full key material — signing key,
+   `account`, `spk-priv`, `otp-priv`, group sender keys, the
+   stage-3 PQ seed — inside the existing encrypted envelope
+   (step 1, done). The file backup's 4-character passphrase
+   minimum (§1.6 defect 5) belongs to this item's honesty: the
+   minimum is the security of the kit, and is raised with the
+   seed work (step 3), not silently.
+9. **Cloud backup — cold restore must be possible, and the
+   blob must not be a stranger's oracle.** §1.6 defect 1 is two
+   defects wearing one coat: restore requires the lost keys
+   (so the owner is locked out), while fetch requires nothing
+   (so anyone holding a derivable userId gets an offline
+   passphrase-guessing oracle). The fix pairs them: fetch is
+   authenticated by the recovery anchor of §3 — knowledge of
+   the seed/passphrase, not possession of the lost keys — and
+   `BACKUP_REQUIRE_AUTH` stops being an operator option that
+   defaults to open (step 4).
+10. **Sessions — keep them out of backups, deliberately.** A
+    restored ratchet forks: two live branches of the same
+    chain are worse than a fresh handshake, for correctness and
+    for forward secrecy. Sessions re-bootstrap from restored
+    prekey material; with `spk-priv` / `otp-priv` in the kit
+    (item 8) the offline window of §1.6 defect 3 closes for
+    mail sealed to current prekeys. `inst` stays out for the
+    reason it was excluded before: it is clone detection, and
+    a restore must look like a migration, not a copy.
+
+## 3. The design — the recovery anchor
+
+The base case is §1.7's worst column: every device gone,
+nothing left but what the person can carry in their head or
+keep on paper. Recovery must work from that column, not from a
+surviving device (a surviving device is the easy case —
+re-link and transfer, §3.3).
+
+### 3.1 The anchor: a seed, not an account
+
+What replaces the phone number's recovery role is a **32-byte
+account seed**, shown to the user once as a recovery phrase,
+plus the passphrase they already use for at-rest wrapping. The
+seed is the only secret that lives outside the key store; it
+is never sent to a relay, and possession of it is never proved
+to anyone — it *derives* or *unlocks* keys locally, and the
+keys do the proving.
+
+- **New identities** are derived deterministically from the
+  seed: both key pairs (X25519 identity, Ed25519 signing) are
+  regenerated byte-for-byte from the phrase, so a fresh
+  install plus the phrase *is* the account — same key, same
+  address, same root authority, nothing to restore from
+  anyone.
+- **Existing identities** cannot be re-derived (their keys are
+  random, §1.1), so the seed takes the other form: a
+  **recovery kit** — the full key material of item 8, wrapped
+  under a key derived from seed + passphrase. The phrase the
+  user keeps unlocks the kit; the kit is the backup of §2
+  item 8 with its passphrase replaced by the anchor. One
+  artefact to keep, one secret to remember, for both
+  generations of account.
+
+### 3.2 What the anchor does not touch
+
+- **Sessions are not recoverable, by design** (§2 item 10).
+  Recovery restores identity, contacts, keys and history —
+  conversations re-handshake.
+- **The relay learns nothing new.** No seed-derived value is
+  an identifier: userId, alias and registry stay keyed by the
+  public key exactly as today. The anchor exists only on the
+  client; a relay compromise yields no recovery material.
+- **Addressing does not come back.** Recovery restores the
+  key; it does not reintroduce anything a user must type
+  (§2 item 2). The first-run screen gains a restore entry
+  (step 2) that accepts the phrase or a kit/backup file —
+  that is the only new surface.
+
+### 3.3 History: two layers, neither sufficient alone
+
+- **Live transfer**: with a surviving device, history moves
+  device-to-device over the existing encrypted channel when
+  the new device links — the answer to "I got a new phone".
+- **Encrypted backup**: with no surviving device, history is
+  whatever the last backup held (cloud messages, or the kit's
+  file). The layers compose: the backup restores the account
+  and the older history; sessions still re-bootstrap (§2
+  item 10).
+
+## 4. Steps
+
+Each step ships independently and records its outcome in §5.
+
+1. **Fix the backup scope** — both producers emit the full key
+   material inside the existing envelope (§2 item 8). **Done**
+   (PR #418; outcome in §5).
+2. **First-run recovery entry** — the setup screen
+   (`#msg-setup`) offers restore (file / cloud / phrase)
+   alongside Create, so recovery is reachable without an
+   existing identity (§1.6).
+3. **Seed and deterministic derivation** — new identities
+   derive from the account seed and show the recovery phrase
+   once; existing identities get the recovery-kit wrap (§3.1).
+   The file backup's passphrase minimum is raised as part of
+   this step (§2 item 8).
+4. **Cloud cold recovery + auth defaults** — cloud
+   fetch/restore runs from the anchor on a fresh install (no
+   live identity required), and backup fetch authentication is
+   mandatory by default (§2 item 9).
+5. **Alias minimization** — signature-mandatory registration
+   by default, TTL with activity renewal, re-claim after
+   expiry (§2 item 4).
+6. **Contacts export encryption** — `/contacts export` folds
+   into the encrypted backup format; the plaintext JSON export
+   is removed (§2 item 6).
+
+## 5. Implementation outcomes
 
 > Note (2026-11-14, step-1 implementer): the plan text above as committed
 > ends mid-sentence in §2 item 4 — the merged file carries a literal
 > truncation marker, and the §3 design / step list were never committed.
 > The steps below are implemented from the tasking record, which
 > summarises the full design; outcomes are recorded here as they land.
+> (Update: the missing text has since been reconstructed from that
+> same record — see the restoration note in §2. The truncation
+> described here is the pre-restoration state.)
 
 ### Step 1 — Fix the backup scope (DONE)
 
