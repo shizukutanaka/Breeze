@@ -563,6 +563,7 @@
  "backupFileBtn": "💾 Guardar en archivo",
  "restoreFileBtn": "📂 Restaurar desde archivo",
  "setupPhrase": "Recuperar con una frase de recuperación",
+ "setupDisposable": "Identidad desechable (sin recuperación)",
  "recoveryPhraseTitle": "Tu frase de recuperación",
  "recoveryPhraseDesc": "Se muestra una sola vez. Con esta frase y tu contraseña de recuperación, esta cuenta puede restaurarse en un dispositivo nuevo — y puede hacerlo cualquiera que tenga ambas, así que guárdalas en un lugar seguro. Breeze no puede volver a mostrarla ni recuperarla por ti.",
  "recoveryPassLabel": "Contraseña de recuperación (opcional, recomendada)",
@@ -577,5 +578,9 @@
  "toastRecoveryUnavailable": "Las frases de recuperación no están disponibles ahora — recarga la página e inténtalo de nuevo.",
  "toastRecoveryKitCreated": "Kit de recuperación descargado. Solo se abre con tu frase de recuperación y tu contraseña — guárdalos juntos.",
  "toastRecoveryHasIdentity": "Este dispositivo ya tiene una identidad — la restauración con frase es solo para empezar de cero.",
- "toastRecoveryMismatch": "Esa frase y contraseña no pertenecen a este ID de Breeze — no se restauró nada."
+ "toastRecoveryMismatch": "Esa frase y contraseña no pertenecen a este ID de Breeze — no se restauró nada.",
+ "disposableTitle": "Identidad desechable: sin recuperación",
+ "disposableDesc": "Si pierdes este dispositivo, lo restableces o borras los datos de este navegador, esta identidad desaparecerá para siempre. No hay frase de recuperación ni forma de recuperarla. Tus contactos verán a una persona completamente nueva cuando empieces de nuevo.",
+ "disposableOk": "Lo entiendo: sin recuperación",
+ "toastRecoveryNoneKit": "Esta identidad es desechable (sin recuperación), por lo que no se puede crear un kit de recuperación."
 }

@@ -556,6 +556,7 @@
  "backupFileBtn": "💾 파일로 저장",
  "restoreFileBtn": "📂 파일에서 복원",
  "setupPhrase": "복구 문구로 복구",
+ "setupDisposable": "일회용 신원 (복구 불가)",
  "recoveryPhraseTitle": "내 복구 문구",
  "recoveryPhraseDesc": "한 번만 표시됩니다. 이 문구와 복구 암호가 있으면 새 기기에서 이 계정을 복원할 수 있습니다. 둘 다 가진 누구나 복원할 수 있으니 안전한 곳에 보관하세요. Breeze는 이를 다시 표시하거나 대신 복구해 드릴 수 없습니다.",
  "recoveryPassLabel": "복구 암호 (선택, 권장)",
@@ -570,5 +571,9 @@
  "toastRecoveryUnavailable": "지금은 복구 문구를 사용할 수 없습니다 — 새로고침 후 다시 시도하세요.",
  "toastRecoveryKitCreated": "복구 키트를 다운로드했습니다. 복구 문구와 암호가 있어야 열 수 있으니 함께 보관하세요.",
  "toastRecoveryHasIdentity": "이 기기에는 이미 신원이 있습니다 — 문구 복원은 초기 상태에서만 사용할 수 있습니다.",
- "toastRecoveryMismatch": "그 문구와 암호는 이 Breeze ID의 것이 아닙니다 — 아무것도 복원되지 않았습니다."
+ "toastRecoveryMismatch": "그 문구와 암호는 이 Breeze ID의 것이 아닙니다 — 아무것도 복원되지 않았습니다.",
+ "disposableTitle": "일회용 신원 — 복구 불가",
+ "disposableDesc": "이 기기를 잃거나, 초기화하거나, 이 브라우저 데이터를 지우면 이 신원은 영원히 사라집니다. 복구 문구가 없으며 되돌릴 방법도 없습니다. 다시 시작하면 연락처에는 완전히 새로운 사람으로 보입니다.",
+ "disposableOk": "이해했습니다 — 복구 없이 계속",
+ "toastRecoveryNoneKit": "이 신원은 일회용(복구 불가)이므로 복구 키트를 만들 수 없습니다."
 }
