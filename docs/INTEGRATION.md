@@ -42,16 +42,20 @@ first literal `<script>` — keep app logic there; see `.github/workflows/ci.yml
 **Addendum (index.html modularization):** option (A) is also how the app-logic
 subsystems under `src/app/` ship — a second `<script type="module">` block exposes
 `window.__breezeCall` / `__breezeBackup` / `__breezeQR` / `__breezeImportParsers` /
-`__breezeSound` / `__breezeShare`. `call.js`, `backup.js` and `share.js` are
+`__breezeSound` / `__breezeShare` / `__breezeDirectAck`. `call.js`, `backup.js` and `share.js` are
 factories (not ready-made helpers):
 the classic script instantiates them *inside* `initMessenger`, passing that
 closure's live bindings as a deps object — stable references directly, reassigned
 identity bindings (`myId` etc.) behind getter accessors, and the one write-back
 phrase restore performs behind an explicit `adoptRestoredSigning` dep. Their
 remaining references are top-level globals, resolved exactly as inline. Packaging
-mirrors the crypto closure: `sw.js` precaches the six files and `build.sh`'s
+mirrors the crypto closure: `sw.js` precaches the files and `build.sh`'s
 `copy_web` ships `src/app/` next to `src/crypto/`. Absent module ⇒ the owning
 feature degrades (inert stubs / no QR modal / silent sound), never boot.
+`src/app/direct-ack.js` (P2P_PLAN step 2) follows the same bridge pattern but
+is a new factory rather than an extraction: the classic script instantiates
+the ack waiter beside `peers`, and an absent module means every send keeps
+the pre-Step-2 deposit — the degradation is the old behaviour itself.
 
 ## 1. N1 — fix the DH-ratchet `Nr` bug (do first; tiny, high-value)
 

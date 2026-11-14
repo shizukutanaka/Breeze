@@ -1225,6 +1225,8 @@ import { createSoundHelper } from './src/app/sound.js';
 window.__breezeSound = createSoundHelper();
 import { createShareTools } from './src/app/share.js';
 window.__breezeShare = { createShareTools };
+import { createDirectAckWaiter } from './src/app/direct-ack.js';
+window.__breezeDirectAck = { createDirectAckWaiter };
 </script>
 
 <script>
@@ -7322,6 +7324,22 @@ async function initMessenger(dbName) {
   // ===== Contacts =====
   let activeContact = null;
   const peers = {}; // pubB64 → { pc, dc, connected }
+  // P2P_PLAN Step 2 (direct-first): the ack waiter that lets a sender
+  // skip the mailbox deposit when the peer's post-persistence ack
+  // arrives. Module absent ⇒ null ⇒ every send deposits exactly as
+  // before Step 2 (the feature degrades, boot never does).
+  const _directAck = globalThis.__breezeDirectAck?.createDirectAckWaiter({ timeoutMs: 5 * MS.SEC }) || null;
+  // Step 1 seed counters (on-device only, never transmitted — the
+  // no-telemetry rule): Step 1's display will read these aggregates to
+  // show the direct rate. directAck = deposit skipped on ack;
+  // directNoAck = direct send attempted, deposit still made.
+  function _p2pDirectStat(field) {
+    try {
+      const s = JSON.parse(localStorage.getItem('brz-p2p-direct') || '{}');
+      s[field] = (s[field] || 0) + 1;
+      localStorage.setItem('brz-p2p-direct', JSON.stringify(s));
+    } catch {}
+  }
   // v3.6: Flush queued outbox on reconnect (needs closure-local peers/encryptFor/myPubB64/myName).
   async function flushOutbox(peerId) {
     const queue = _outbox.get(peerId);
@@ -9237,18 +9255,36 @@ async function initMessenger(dbName) {
       const groupCiphertext = await encryptGroupMsg(groupId, text);
         if (!groupCiphertext) { showToast(t('toastSendFail'), 'error'); _isSending = false; return; }
       // Send same ciphertext to all members (no per-member re-encryption)
+      // P2P_PLAN Step 2 (direct-first): every direct copy goes out
+      // first and each ack wait starts together, so one silent member's
+      // timeout never delays the others; the sealed-sender deposit then
+      // runs ONLY for members whose post-persistence ack did not
+      // arrive. Pre-Step-2 this was unconditional dual-path (plan W1).
+      const _groupAckWaits = new Map(); // member id -> ack promise
       for (const m of members) {
-        // v3.6: Dual-path delivery: P2P direct (fast) + sealed sender (reliable)
-        // P2P direct to connected members (instant, zero server dependency)
         const peer = peers[m.pubB64];
         if (peer?.connected && peer.dc?.readyState === 'open') {
+          const ackWait = _directAck?.expect(m.pubB64, ts);
           try {
             peer.dc.send(JSON.stringify({ v: CONFIG.PROTOCOL_VERSION, type: 'group_msg',
               msgId, payload: groupCiphertext, ts, groupId, groupName: activeContact.name,
               sender: myPubB64, name: myName, isGroupSK: true,
               replyTo: meta.replyTo, disappearAt: meta.disappearAt }));
-          } catch(e) { _dbg(e, 'group-p2p-send'); }
+            if (ackWait) _groupAckWaits.set(m.id, ackWait);
+          } catch(e) { _dbg(e, 'group-p2p-send'); if (ackWait) _directAck.cancel(m.pubB64, ts); }
         }
+      }
+      for (const m of members) {
+        let directAcked = false;
+        const ackWait = _groupAckWaits.get(m.id);
+        if (ackWait) {
+          directAcked = await ackWait;
+          _p2pDirectStat(directAcked ? 'directAck' : 'directNoAck');
+          // The deposit's ack used to be what marked this delivered;
+          // the direct ack now carries that side effect instead.
+          if (directAcked) updateMsgStatus(ts, 'delivered');
+        }
+        if (directAcked) continue;
         // Sealed sender relay (ensures delivery even if P2P drops)
         try {
           await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName,
@@ -9301,9 +9337,24 @@ async function initMessenger(dbName) {
       await timingDelay();
 
       // P2P direct (preferred)
+      let directAcked = false;
       if (peer?.connected && peer.dc?.readyState === 'open') {
         await waitForBuffer(peer.dc); // v3.5 SPEC: Backpressure
-        peer.dc.send(JSON.stringify(envelope));
+        // P2P_PLAN Step 2 (direct-first): register the ack expectation
+        // BEFORE the send so a fast ack cannot slip past; the deposit
+        // below then runs only if the peer's post-persistence ack does
+        // not arrive in time.
+        const ackWait = _directAck?.expect(activeContact.pubB64, ts);
+        try {
+          peer.dc.send(JSON.stringify(envelope));
+        } catch(e) { if (ackWait) _directAck.cancel(activeContact.pubB64, ts); throw e; }
+        if (ackWait) {
+          directAcked = await ackWait;
+          _p2pDirectStat(directAcked ? 'directAck' : 'directNoAck');
+          // The deposit's ack used to be what marked this delivered;
+          // the direct ack now carries that side effect instead.
+          if (directAcked) updateMsgStatus(ts, 'delivered');
+        }
         // REMOVED (Socratic concurrency lens): a "forced session rekey after 500 msgs / 1 h"
         // block used to sit here. It called dhRatchetStep(activeContact.pubB64) — a base64
         // STRING — where the signature is (sess, peerPubRaw), so it threw on every single
@@ -9331,10 +9382,17 @@ async function initMessenger(dbName) {
           }
         }
       }
-      // Relay: Sealed Sender (Worker doesn't see sender)
-      await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName,
-        payload: encrypted, ts, replyTo: envelope.replyTo, disappearAt: envelope.disappearAt,
-        sig: envelope.sig, sigPub: envelope.sigPub, acctRoot: envelope.acctRoot, nrn: envelope.nrn }, activeContact.pubB64);
+      // Relay: Sealed Sender (Worker doesn't see sender). Step 2: the
+      // deposit is the offline guarantee, so it is skipped ONLY when
+      // the direct ack confirmed persistence on the peer's primary
+      // device — never on a mere send. The multi-device fan-out below
+      // is a separate path (the contact's other devices hold their own
+      // mailboxes) and runs either way.
+      if (!directAcked) {
+        await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName,
+          payload: encrypted, ts, replyTo: envelope.replyTo, disappearAt: envelope.disappearAt,
+          sig: envelope.sig, sigPub: envelope.sigPub, acctRoot: envelope.acctRoot, nrn: envelope.nrn }, activeContact.pubB64);
+      }
 
       // Multi-device fan-out (see _fanOut). Fire-and-forget: it must never fail the send.
       // sfPub/sfName let a sibling device CREATE a conversation it has never seen, so messages
@@ -10622,7 +10680,13 @@ async function initMessenger(dbName) {
     for (const url of [..._mailWsByRelay.keys()]) _closeRelayWs(url);
   }
 
-  async function handleIncoming(msg) {
+  // ackOut (optional, P2P_PLAN Step 2): when the caller is the
+  // DataChannel handler, it passes an object whose `stored` flag this
+  // function sets at the exact points where the message is confirmed
+  // persisted (freshly written, or already in the store). The DC ack —
+  // on which a Step-2 sender stakes its mailbox deposit — is sent only
+  // when the flag is set. Relay-path callers pass nothing.
+  async function handleIncoming(msg, ackOut) {
     // Normalize msg.ts to a safe integer. P2P DataChannel messages carry a peer-supplied
     // ts field that is never validated by the relay; a non-numeric value would be
     // concatenated into msgId (contactId + ':' + msg.ts) and later break querySelector
@@ -10896,9 +10960,10 @@ async function initMessenger(dbName) {
       const msgId = msg.from + ':' + msg.ts;
       if (_replayCache.has(msgId)) return; // Fast in-memory dedup
       _replayCache.add(msgId); // Speculative mark before first await — blocks concurrent-path duplicates
-      if (await dbGet('messages', msgId)) return; // Already persisted
+      if (await dbGet('messages', msgId)) { if (ackOut) ackOut.stored = true; return; } // Already persisted
       const meta = { msgId, senderName: msg.fromName, replyTo: msg.replyTo, disappearAt: msg.disappearAt };
       await dbPut('messages', { msgId, contactId: msg.groupId, text, mine: false, ts: msg.ts, ...meta });
+      if (ackOut) ackOut.stored = true;
       group.lastMsg = text.slice(0, 30);
       group.lastMsgSender = msg.fromName;
       group.lastMsgAt = msg.ts;
@@ -11048,7 +11113,7 @@ async function initMessenger(dbName) {
     const msgId = msg.from + ':' + msg.ts;
     if (_replayCache.has(msgId)) return; // Fast in-memory dedup
     _replayCache.add(msgId); // Speculative mark before first await — blocks concurrent-path duplicates
-    if (await dbGet('messages', msgId)) return; // Already persisted
+    if (await dbGet('messages', msgId)) { if (ackOut) ackOut.stored = true; return; } // Already persisted
 
     let text, storedFileData = null;
     const meta = { msgId, replyTo: msg.replyTo, disappearAt: msg.disappearAt, senderName: msg.fromName,
@@ -11109,6 +11174,10 @@ async function initMessenger(dbName) {
       }
       await dbPut('messages', { msgId, contactId, text, mine: false, ts: msg.ts, ...meta, ...(_frank.frankId ? { frankId: _frank.frankId, frankOpening: _frank.opening } : {}) });
     }
+    // Both branches above persisted the message (file and text alike);
+    // every drop path returned earlier. Step 2: this is the point the
+    // DataChannel ack is allowed to mean "stored".
+    if (ackOut) ackOut.stored = true;
 
     contact.lastMsg = text.slice(0, 40);
     contact.lastMsgAt = msg.ts;
@@ -11296,7 +11365,7 @@ async function initMessenger(dbName) {
           if (msg.type === 'typing') { showTyping(contact.id, msg.senderName || contact.name); return; }
           if (msg.type === 'read') { showReadReceipt(contact.id, msg.ts); return; }
           // v3 ACK
-          if (msg.type === 'ack') { updateDeliveryState(msg.i, msg.st); return; }
+          if (msg.type === 'ack') { updateDeliveryState(msg.i, msg.st); _directAck?.resolve(contact.pubB64, msg.i); return; }
           // v3.1: Emoji reaction
           if (msg.type === 'reaction') {
             // Sanitize peer-supplied msgId before querySelector (CSS selector injection guard).
@@ -11346,28 +11415,43 @@ async function initMessenger(dbName) {
             return;
           }
           if (msg.type === 'msg') {
-            await handleIncoming({ from: contact.id, fromPub: contact.pubB64, fromName: contact.name, payload: msg.payload, ts: msg.ts, sig: msg.sig, sigPub: msg.sigPub });
-            // Send ACK back
-            try { ch.send(JSON.stringify({ type: 'ack', i: msg.ts + '', st: 0 })); } catch(e) { _dbg(e); }
+            // P2P_PLAN Step 2: the ack now carries a delivery guarantee
+            // (a Step-2 sender skips its mailbox deposit on it), so it
+            // is sent ONLY when handleIncoming confirms the message is
+            // persisted on this device (ackOut.stored) — a copy dropped
+            // inside (decrypt failure, oversize) must not ack, or the
+            // sender would skip the deposit that would have saved it.
+            const ackOut = {};
+            await handleIncoming({ from: contact.id, fromPub: contact.pubB64, fromName: contact.name, payload: msg.payload, ts: msg.ts, sig: msg.sig, sigPub: msg.sigPub }, ackOut);
+            if (ackOut.stored) { try { ch.send(JSON.stringify({ type: 'ack', i: msg.ts + '', st: 0 })); } catch(e) { _dbg(e); } }
           }
           if (msg.type === 'file') {
-            await handleIncoming({ from: contact.id, fromPub: contact.pubB64, fromName: contact.name, payload: msg.payload, ts: msg.ts, isFile: true });
-            try { ch.send(JSON.stringify({ type: 'ack', i: msg.ts + '', st: 0 })); } catch(e) { _dbg(e); }
+            const ackOut = {};
+            await handleIncoming({ from: contact.id, fromPub: contact.pubB64, fromName: contact.name, payload: msg.payload, ts: msg.ts, isFile: true }, ackOut);
+            if (ackOut.stored) { try { ch.send(JSON.stringify({ type: 'ack', i: msg.ts + '', st: 0 })); } catch(e) { _dbg(e); } }
           }
           // v3.6: P2P direct group message (dual-path: P2P instant + sealed sender reliable)
           if (msg.type === 'group_msg' && msg.groupId) {
             // v3.6: Dedup — dual-path (P2P + sealed) may deliver same message twice
             const gmsgId = msg.msgId || (msg.sender + ':' + msg.ts);
             if (_replayCache.has(gmsgId)) return;
-            if (await dbGet('messages', gmsgId)) { _replayCache.add(gmsgId); return; }
+            if (await dbGet('messages', gmsgId)) {
+              _replayCache.add(gmsgId);
+              // Step 2: already persisted IS delivery — ack it, so the
+              // sender can skip a deposit copy we would only dedup.
+              try { ch.send(JSON.stringify({ type: 'ack', i: msg.ts + '', st: 0 })); } catch(e) { _dbg(e); }
+              return;
+            }
             const group = (await dbGetAll('contacts')).find(c => c.id === msg.groupId);
             if (group) {
+              const ackOut = {};
               await handleIncoming({ from: msg.sender || contact.pubB64, fromPub: msg.sender || contact.pubB64,
                 fromName: msg.name || contact.name, payload: msg.payload, ts: msg.ts,
                 groupId: msg.groupId, groupName: msg.groupName, isGroupSK: msg.isGroupSK,
-                replyTo: msg.replyTo, disappearAt: msg.disappearAt });
+                replyTo: msg.replyTo, disappearAt: msg.disappearAt }, ackOut);
               _replayCache.add(gmsgId);
-              try { ch.send(JSON.stringify({ type: 'ack', i: msg.ts + '', st: 0 })); } catch(e) { _dbg(e); }
+              // Step 2: ack only on confirmed persistence (see 'msg').
+              if (ackOut.stored) { try { ch.send(JSON.stringify({ type: 'ack', i: msg.ts + '', st: 0 })); } catch(e) { _dbg(e); } }
             }
           }
         } catch(e) { _dbg(e); }
