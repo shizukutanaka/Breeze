@@ -495,6 +495,56 @@ decision in this step's PR, not an assumption of this plan.
   requirement under the 16,000 ceiling; full suite + validate.sh
   PASSED; the diff contains no logic change.
 
+- **Outcome (2026-11-14).** STOPPED per this step's own condition —
+  the audit cannot find the mass. The step's PR lands the provable
+  deletions and records the decision Step 5 now needs; it does not
+  reach for another ceiling raise, and Step 5 must not be sized on
+  the assumption that the budget exists. Requirement: headroom ≥
+  2,443 (Step 1's measured 2,243 vendored-KEM lines + ~200 wiring),
+  i.e. `index.html` ≤ 13,557 lines, i.e. ≥ 1,852 lines of pure
+  deletion from the 15,409-line start. Measured yield of a
+  deletion-first audit (transitive reachability over all 380
+  inventoried functions in the main script — masking-aware,
+  cross-checked by grep over the whole tree and the full suite):
+  **50 lines** (15,409 → 15,359; headroom 591 → 641; shortfall
+  1,802). Per category: unreachable functions — `fetchRetry`
+  (20 lines incl. its header comment; never called, only its own
+  log string names it) and the `safeRedirect`/`safeOpen` pair plus
+  `SAFE_REDIRECT_DOMAINS` (24 lines; sole consumer billing is gone
+  and the allowlist is empty, so the pair guarded nothing — a
+  future redirect re-adds them with its consumer); dead i18n keys —
+  0 unreferenced (gate-enforced), but 4 shadowed duplicate EN keys
+  (`copy`/`forward`/`unmute`/`read`, identical values, first
+  occurrence dead) that `tools/i18n-check.mjs` cannot see because
+  it collapses the object literal; duplicated helpers — 0
+  same-scope duplicate declarations; dead CSS — `.i-abs` and
+  `.i-search-hl` (2 lines; three further candidates,
+  `.toast-success/-error/-info`, proved live via the dynamic
+  `'toast-' + type` construction). Explicitly NOT deleted:
+  `dcSend` (unreachable in production but pinned as the extraction
+  landmark of `tests/outbox-idb.test.js`), and two audit false
+  positives verified live by inspection (the
+  `migrateToMultiAccount` IIFE, which executes at load; the
+  Electron `window.Notification` class constructor). Considered
+  and rejected as mass: the script's 2,350 comment-only and 645
+  blank lines — deleting documentation to hit a numeric target
+  would gut the audit trail the house style deliberately keeps,
+  and comments on live code are not dead mass in this step's
+  categories; reachable feature code (deletion = behaviour change,
+  forbidden here). Verification: full suite **1,351 passed**
+  (baseline re-run on the identical tree after one flaked run),
+  `./validate.sh` PASSED (165/171, unchanged), CSP hash re-pinned
+  (`tools/csp-hash.mjs --write`, `_headers` + tauri.conf.json
+  synced), the diff is 50 deletions / 0 insertions in `index.html`
+  — no logic change. **Decision Step 5 needs (explicit, not
+  assumed):** (a) re-measure the inline requirement (an
+  inline-specific minimized KEM form is unmeasured; the 2,243
+  figure is the reference module's), or (b) an owner decision on
+  the 16,000 ceiling, or (c) re-scope Step 5's "inline" in light
+  of Step 3's deployed module-loading precedent
+  (`src/crypto/pqkey.js`). Until one is taken, Step 5 does not
+  start.
+
 ### Step 5 — Client session wiring + inline KEM (flag off)
 
 Inline mirrors land in `index.html` (vendored KEM + pq combiner),

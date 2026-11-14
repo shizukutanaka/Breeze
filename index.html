@@ -435,7 +435,6 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .i-id-small { font-size: 9px; word-break: break-all; color: var(--g) }
 .i-m4 { margin: 4px 0 }
 .i-rel { position: relative }
-.i-abs { position: absolute }
 .i-pad8 { padding: 8px }
 .i-w100 { width: 100% }
 .i-flex-col { display: flex; flex-direction: column; gap: 16px }
@@ -449,7 +448,6 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .i-min-touch { min-width: 24px; min-height: 24px }
 .i-fatal { padding: 40px; text-align: center; font-family: system-ui }
 .i-no-touch { touch-action: none; cursor: grab; transition: none }
-.i-search-hl { outline: 2px solid var(--g) }
 .i-search-hl-current { outline: 3px solid var(--g); background: rgba(52,211,153,.15); border-radius: 4px }
 /* R95: State utility classes (replace .style.X) */
 .i-color-g { color: var(--g) }
@@ -1363,9 +1361,7 @@ const _I = {
     // Actions
     send: 'Send',
     clear: 'Clear',
-    copy: 'Copy',
     close: 'Close',
-    forward: 'Forward',
     open: 'Open',
     reply: 'Reply',
     edit: 'Edit',
@@ -1380,7 +1376,6 @@ const _I = {
     incoming: 'Incoming call',
     connecting: 'Connecting...',
     mute: 'Mute',
-    unmute: 'Unmute',
     camOff: 'Camera Off',
     camOn: 'Camera On',
     micDenied: 'Microphone access denied',
@@ -1402,7 +1397,6 @@ const _I = {
     ktTampered: '🚨 The server\'s key log looks tampered — do not trust this safety number',
     ktUnavailable: 'Key-transparency check unavailable (offline or no server)',
     delivered: 'Delivered',
-    read: 'Read',
     backupCreated: 'Backup complete! Remember your passphrase.',
     backupCreatedUntil: 'Backup complete! Remember your passphrase. The relay keeps it until {0} — re-upload before then.',
     backupFailed: 'Backup failed',
@@ -3040,26 +3034,6 @@ function fetchT(url, opts = {}, timeoutMs = 10000) {
   }
   return fetch(url, opts);
 }
-// v3.5: fetchT with automatic retry + exponential backoff
-async function fetchRetry(url, opts = {}, { maxRetries = 3, baseDelay = 1000, timeoutMs = 10000 } = {}) {
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const resp = await fetchT(url, { ...opts }, timeoutMs);
-      if (resp.status === 429) {
-        // Rate limited — wait and retry
-        const retryAfter = parseInt(resp.headers.get('Retry-After') || '5') || 5;
-        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, retryAfter * MS.SEC)); continue; }
-      }
-      return resp;
-    } catch(e) {
-      if (attempt === maxRetries) throw e;
-      if (e.name === 'AbortError') throw e; // Don't retry user-cancelled
-      const delay = baseDelay * Math.pow(2, attempt) + Math.random() * (MS.SEC / 2);
-      _dbg(null, `fetchRetry attempt ${attempt + 1}/${maxRetries}, delay ${Math.round(delay)}ms`);
-      await new Promise(r => setTimeout(r, delay));
-    }
-  }
-}
 
 function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
 // Grapheme-aware avatar truncator: takes up to `max` grapheme clusters so compound emoji (ZWJ sequences, skin-tone modifiers) aren't split into half-surrogates.
@@ -3228,30 +3202,6 @@ function _updateTitle(unreadCount) {
   document.title = (unreadCount > 0 ? `(${unreadCount}) ` : '') + 'Breeze' + accName;
 }
 
-// v3.5: SECURITY — Safe redirect (prevents open redirect via server response)
-// Billing was the only consumer of safeRedirect/safeOpen; with it gone the allowlist is empty,
-// so any future external redirect fails closed until a domain is deliberately added.
-const SAFE_REDIRECT_DOMAINS = [];
-function safeRedirect(url) {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== 'https:') { _dbg(null, 'redirect blocked: non-https ' + url); return false; }
-    if (!SAFE_REDIRECT_DOMAINS.some(d => parsed.hostname === d || parsed.hostname.endsWith('.' + d))) {
-      _dbg(null, 'redirect blocked: untrusted domain ' + parsed.hostname); return false;
-    }
-    window.location.href = url;
-    return true;
-  } catch(e) { _dbg(e, 'redirect blocked: invalid URL'); return false; }
-}
-function safeOpen(url) {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== 'https:') return false;
-    if (!SAFE_REDIRECT_DOMAINS.some(d => parsed.hostname === d || parsed.hostname.endsWith('.' + d))) return false;
-    window.open(url, '_blank', 'noopener,noreferrer');
-    return true;
-  } catch(e) { return false; }
-}
 
 // v3.5: SECURITY — Validate URL scheme for OGP/external content
 
