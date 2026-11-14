@@ -545,16 +545,37 @@ decision in this step's PR, not an assumption of this plan.
   (`src/crypto/pqkey.js`). Until one is taken, Step 5 does not
   start.
 
-### Step 5 — Client session wiring + inline KEM (flag off)
+  **Decision taken (2026-11-14, technical judgment): option (c).**
+  Step 5 is implemented in Step 3's module-deployment shape, not as
+  an inline mirror. Grounds: Step 1's `src/crypto/mlkem.js` and
+  Step 3's `src/crypto/pqkey.js` are already deployed as ESM with no
+  inline mirror (recorded as such in CLAUDE.md's deployed-vs-
+  reference table), and Step 3 connects to the app body through the
+  `window.__breezePQKey` bridge — the deployment route is proven in
+  production shape, and pq.js's combiner follows it through a new
+  facade (`src/crypto/pqxdh.js`). Step 5's `index.html` change is
+  therefore session wiring only (measured +110 lines against the
+  641-line headroom), and neither (a)'s re-measurement nor (b)'s
+  ceiling decision is needed. Step 5's premise below is updated to
+  this route.
 
-Inline mirrors land in `index.html` (vendored KEM + pq combiner),
-cross-tested against the references by the mirror-drift harness.
-`CONFIG.PQXDH_ENABLED: false`. With the flag on in tests:
+### Step 5 — Client session wiring (flag off)
+
+Per the Step 4 decision above, the KEM + combiner are NOT inlined:
+`src/crypto/pqxdh.js` — a small facade over pq.js's combiner and
+the `nobleKem768()` adapter — is deployed as ESM and runtime-
+imported by `index.html` (exposed as `window.__breezePQXDH`, the
+`__breezePQKey` precedent); `index.html` carries session wiring
+only. `CONFIG.PQXDH_ENABLED: false`. With the flag on in tests:
 `initSessionV5Initiator` encapsulates and combines per D6 and puts
 `pqct` in the pkm; `_bootstrapResponderSessionV5` decapsulates per
 D6; cap emission joins `generatePreKeyBundle`'s caps assembly
 behind the flag. With the flag off — the shipped default of this
-step — behaviour is byte-identical to today.
+step — behaviour is byte-identical to today. Parity is pinned at
+the seams that can drift (the inline negotiation/signature gate
+and the responder bootstrap, against negotiate.js + the pq.js
+combiner with the real KEM) by the mirror-drift harness's PQXDH
+block; the combiner itself stays single-sourced in pq.js.
 
 - **Done when.** The interop drill matrix passes: (flag on/off) ×
   (peer bundle PQ / classical / cap-stripped / bad `pqPreKeySig`),
@@ -566,6 +587,92 @@ step — behaviour is byte-identical to today.
   low-end profile and recorded (session setup is one-shot; no
   per-message cost); suite + validate green; CSP hash re-pinned.
 
+- **Outcome (2026-11-14).** Landed in the module-deployment shape
+  decided at Step 4. What changed: **new `src/crypto/pqxdh.js`**
+  (~110 lines) — the session facade over pq.js's combiner +
+  `nobleKem768()`: `initiateSK(dhParts, pqPreKeyPub)` and
+  `respondSK(dhParts, pqPrivRecord, pqct)`, fail-closed by
+  construction (a missing/wrapped seed record or a wrong-size
+  ciphertext returns `null`, never a classical secret; DH-part
+  counts outside 3–4 throw, so a DH mix-up is an error, not a
+  weaker SK). **`src/crypto/negotiate.js`**: `CAPS.PQXDH` and
+  `negotiate().usePqxdh` (the D5 AND rule). **`src/crypto/
+  ratchet.js`**: `buildPreKeyMessage`/`parsePreKeyMessage` carry
+  the optional `pqct` in the same `arr()` byte encoding as `ik`/
+  `ek`, present only when set (classical envelopes are
+  byte-identical in shape). **`index.html`** (+110 lines, 15,359 →
+  15,469; headroom 531): the module import +
+  `window.__breezePQXDH`; `CONFIG.PQXDH_ENABLED: false`;
+  `generatePreKeyBundle` advertises `pqxdh` only when the flag is
+  on AND the bundle actually minted its pair; the X3DH block gains
+  `CAPS_PQXDH`, `_peerSupportsPqxdh` (AND rule), parts-returning
+  refactors of the two X3DH derivations (classical outputs
+  unchanged — the pre-existing parity guard pins byte equality),
+  `_pqxdhInitiator` (presence → size → Ed25519 verification of
+  `pqPreKeySig` over the raw public-key bytes → encapsulate; any
+  failure degrades to classical `null`), and `_pqxdhResponder`;
+  `initSessionV5Initiator` recomputes the DH parts and swaps the
+  SK + carries `pqct` in `_pkm` → the sealed pkm envelope;
+  `_bootstrapResponderSessionV5` branches on `flag && pqct`: a PQ
+  private half that cannot answer returns `null` (fail-closed
+  into the existing decrypt-failure path) instead of deriving
+  classically; with the flag off a `pqct` is ignored and the
+  classical derivation runs byte-identically (pinned). **`sw.js`**
+  precaches the facade closure (`pqxdh.js`, `pq.js`). **Tests:
+  1,390 passed (baseline 1,364; +26, zero regressions)** —
+  `tests/pqxdh.test.js` (new, 16: facade agreement with the real
+  KEM in both cross directions, fail-closed shapes, first-message
+  composition incl. swapped-`pqct` failure, sliced-bundle cap
+  emission, structural pins), mirror-drift's new 'PQXDH mirror'
+  block (7: negotiation parity over the flag × caps matrix,
+  real-KEM SK agreement both directions, the initiator downgrade
+  matrix — swapped key / foreign signature / incomplete pair /
+  missing facade — fail-closed bootstrap, flag-off classical
+  bootstrap, and the fetch-rotate-recover drill), negotiate +3,
+  x3dh +2 (envelope round-trip; malformed `pqct` parses as
+  absent); the two pq.js reference-only pins retired with a
+  graduation note (the markers never appear in the single-file
+  artifacts by design of this deployment route, exactly as with
+  `mlkem.js`). `./validate.sh` PASSED (165/171); CSP hash
+  re-pinned (`_headers` + tauri.conf.json). **Timings** (this
+  development VM — 1.5 shared vCPUs, the low-end proxy; Node 24,
+  n=60): keygen-from-seed ≈ 1.8 ms, encapsulate ≈ 1.23 ms,
+  decapsulate ≈ 0.66 ms — orders under D4's 50/20 ms bars, and
+  session setup is one-shot (no per-message cost). **Security
+  review.** Downgrade surface: the `pqxdh` cap and the PQ fields
+  ride inside the step-2 signed upload digest, so a relay cannot
+  strip or alter them on a v2 upload without invalidating the
+  signature (a v1-signed replay carrying PQ fields is refused at
+  upload — step 2); a network attacker between two PQ-capable
+  peers can at most withhold delivery. Stripping the cap from a
+  *served* bundle makes the initiator classical for that attempt —
+  the same trust class as today's stale-SP K handling (bounded by
+  the KT audit path + SPK/PQ rotation cadence), not a new class.
+  Signature verification is mandatory on the initiator path (every
+  failure is a classical degrade, never an unverified
+  encapsulation); the responder is fail-closed rather than
+  fail-classical when a `pqct` arrives. Flag default OFF verified
+  in the shipped CONFIG and pinned by test. No new runtime
+  dependencies; no new user-facing strings; the new CONFIG
+  constant is the one D5 itself specifies. **Residual risks /
+  known limitations:** (1) a device whose `pq-priv` is
+  /keywrap-wrapped cannot answer PQ sessions until a boot-time
+  unwrap exists — `loadIdentity` unwraps `keys`/`signing` only,
+  so such devices fail closed on PQ pkms (classical sessions
+  unaffected); follow-up: extend the at-rest unlock path to
+  `pq-priv`. (2) If the ESM facade fails to load, the client
+  degrades to classical bundles/sessions — the module ships
+  same-origin (precached by sw.js) so a relay cannot strip it,
+  but the degradation is silent by the step-3 doctrine; support
+  can distinguish via the session record once Step 6 records
+  `pq: true`. (3) Old-bundle staleness: initiating against a
+  rotated bundle yields an SK mismatch that surfaces as a
+  first-message decrypt failure and recovers through the existing
+  reset/re-fetch flow — drilled at unit level; the manual
+  two-device run (docs/INTEGRATION.md) remains the end-to-end
+  confirmation, extended to the PQ path once Step 6 flips the
+  flag.
+
 ### Step 6 — Rollout: PQXDH by default
 
 Flip `CONFIG.PQXDH_ENABLED` to `true`. Record `pq: true` on the
@@ -574,8 +681,9 @@ session types; surface it where /security already reports the
 crypto stack (`_hasPQ` display becomes "in use" for PQ sessions),
 with EN+JA i18n keys for any new user-facing string. Update
 docs/CRYPTO-SPEC.md (§2 gains the PQXDH derivation, §9's I8 closes)
-and CLAUDE.md's table (pq.js row: reference-only → deployed),
-CHANGELOG entry per house practice. Note in this step's outcome:
+and CLAUDE.md's table (pq.js row: reference-only → deployed —
+done early in step 5, which deployed the code path behind the
+flag), CHANGELOG entry per house practice. Note in this step's outcome:
 the v1-digest acceptance from step 2 is retired in a follow-up
 once the shipped fleet is confirmed (date/trigger recorded, not
 left vague).

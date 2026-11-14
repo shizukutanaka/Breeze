@@ -1,5 +1,8 @@
 // ============================================================================
-// Breeze — Post-quantum hybrid key agreement (roadmap R1, reference-only)
+// Breeze — Post-quantum hybrid key agreement (roadmap R1). Since stage-3
+// step 5 this combiner is DEPLOYED — single-sourced here, never copied into
+// index.html, and reached through the src/crypto/pqxdh.js ESM facade
+// (window.__breezePQXDH; flag-gated, default off until step 6).
 //
 // WHY: X25519 is broken by a CRQC (cryptographically-relevant quantum computer),
 // and a relay that stores sealed envelopes today can decrypt them later once one

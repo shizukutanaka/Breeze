@@ -390,7 +390,11 @@ export function createRatchet(opts = {}) {
   // Shape: { v:5, t:'pkm', ik:[IK_A], ek:[EK_A], opkId:<number|string|null>, msg:<ratchet JSON> }
   // opkId is the index/identifier of the consumed one-time pre-key, or null when the
   // responder's OPKs were exhausted (X3DH still completes via SPK, see x3dhResponder).
-  function buildPreKeyMessage({ ikPub, ekPub, opkId = null, ratchetMessage }) {
+  // Stage-3 D6: a PQXDH first message adds ONE optional field, pqct — the ML-KEM-768
+  // ciphertext in this envelope's same arr() byte encoding. Absent pqct is byte-identical
+  // to the classical envelope; a responder that sees pqct MUST complete the PQ half
+  // (fail closed if it cannot), never derive a classical SK for it.
+  function buildPreKeyMessage({ ikPub, ekPub, opkId = null, pqct = null, ratchetMessage }) {
     if (ikPub == null || ekPub == null) throw new Error('buildPreKeyMessage: ikPub and ekPub required');
     if (typeof ratchetMessage !== 'string') throw new Error('buildPreKeyMessage: ratchetMessage must be the ratchetEncrypt() JSON string');
     return JSON.stringify({
@@ -398,14 +402,16 @@ export function createRatchet(opts = {}) {
       ik: arr(u8(ikPub)),
       ek: arr(u8(ekPub)),
       opkId: opkId ?? null,
+      ...(pqct != null ? { pqct: arr(u8(pqct)) } : {}),
       msg: ratchetMessage,
     });
   }
 
-  // Parse a prekey-message envelope. Returns { ikPub, ekPub, opkId, ratchetMessage }
-  // or null if the payload is not a well-formed v5 prekey message (so a caller can
-  // fall back to treating it as a plain ratchet message). Never throws on bad input —
-  // the payload arrives over the untrusted relay.
+  // Parse a prekey-message envelope. Returns { ikPub, ekPub, opkId, pqct, ratchetMessage }
+  // (pqct is a Uint8Array, or null when the field is absent or not a byte array) or null
+  // if the payload is not a well-formed v5 prekey message (so a caller can fall back to
+  // treating it as a plain ratchet message). Never throws on bad input — the payload
+  // arrives over the untrusted relay.
   function parsePreKeyMessage(payload) {
     let p;
     try { p = typeof payload === 'string' ? JSON.parse(payload) : payload; }
@@ -416,6 +422,7 @@ export function createRatchet(opts = {}) {
       ikPub: u8(p.ik),
       ekPub: u8(p.ek),
       opkId: p.opkId ?? null,
+      pqct: Array.isArray(p.pqct) ? u8(p.pqct) : null,
       ratchetMessage: p.msg,
     };
   }

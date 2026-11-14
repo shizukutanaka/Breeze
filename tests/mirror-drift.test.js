@@ -20,7 +20,7 @@
 // To extend to other mirrors (ratchet/group/pow/…), add a block that extracts the
 // inline functions the same way and cross-tests them against their src/crypto module.
 // ============================================================================
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -28,7 +28,10 @@ import { createAtRest } from '../src/crypto/atrest.js';
 import { makeChallengeString, solve as powSolve, verify as powVerify } from '../src/crypto/pow.js';
 import { createRatchet } from '../src/crypto/ratchet.js';
 import { checkRollover, auditBundle, appendChainEntry } from '../src/crypto/ktlog.js';
-import { negotiateGroup } from '../src/crypto/negotiate.js';
+import { negotiateGroup, negotiate } from '../src/crypto/negotiate.js';
+import { createPQSessionHelper } from '../src/crypto/pqxdh.js';
+import { createPQXDH, nobleKem768 } from '../src/crypto/pq.js';
+import { mintPQPreKey, pqSeedRecord, pqPublicKeyFromSeed, pqSecretKeyFromSeed } from '../src/crypto/pqkey.js';
 import { createFranking } from '../src/crypto/franking.js';
 import { sealMeta as refSealMeta, unsealMeta as refUnsealMeta } from '../src/crypto/seal.js';
 
@@ -603,7 +606,7 @@ function makeX3dhInline(myKeys, config, myId) {
   const factory = new Function(
     'crypto', 'CONFIG', '_hasX25519', 'dbGet', 'dbPut', '_dbg', 'hkdf', 'arr', 'u8', 'myKeys', 'myId',
     html.slice(x3s, x3e) +
-      '\nreturn { genRatchetKey, ecdhBits, _x3dhInitiator, _x3dhResponder, _parsePeerCaps, _peerSupportsX3dhV5, _negotiateGroupCaps, _computeGroupV5, _importEcdhPriv, _loadSpkPriv, _resolveOtpPriv, _bootstrapResponderSessionV5 };',
+      '\nreturn { genRatchetKey, ecdhBits, _x3dhInitiator, _x3dhResponder, _x3dhInitiatorParts, _x3dhResponderParts, _parsePeerCaps, _peerSupportsX3dhV5, _peerSupportsPqxdh, _pqxdhInitiator, _pqxdhResponder, _negotiateGroupCaps, _computeGroupV5, _importEcdhPriv, _loadSpkPriv, _resolveOtpPriv, _bootstrapResponderSessionV5 };',
   );
   const api = factory(
     globalThis.crypto, config || {}, false /* P-256, matches refR below for determinism */,
@@ -674,6 +677,222 @@ describe('X3DH v5 mirror — inline (index.html) vs reference (src/crypto/ratche
     });
     expect(bootstrapped).not.toBeNull();
     expect(Buffer.from(bootstrapped.rootKey).toString('hex')).toBe(Buffer.from(skRef).toString('hex'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PQXDH MIRROR (stage-3 step 5) — the PQ half graduated from reference-only.
+//
+// Deployment route (the step-4 outcome's decision): NOT an inline mirror.
+// index.html runtime-imports src/crypto/pqxdh.js — a facade over pq.js's
+// combiner + the vendored ML-KEM — and the inline wiring calls it as
+// window.__breezePQXDH, exactly the step-3 pqkey.js precedent. So parity is
+// pinned at the two seams that CAN drift: (1) the inline negotiation +
+// signature gate (_peerSupportsPqxdh / _pqxdhInitiator) against
+// negotiate.js and the reference combiner, with the REAL KEM; (2) the
+// inline responder bootstrap against the reference initiator, including
+// the fail-closed and flag-off semantics. The combiner itself stays
+// single-sourced in pq.js (never copied), and its correctness is the ACVP
+// vectors' + tests/pq.test.js + tests/pqxdh.test.js.
+// ---------------------------------------------------------------------------
+describe('PQXDH mirror (stage-3 step 5) — inline wiring vs references + deployed facade', () => {
+  const b64 = (bytes) => Buffer.from(new Uint8Array(bytes)).toString('base64');
+  const PQCONF = { X3DH_V5_ENABLED: true, PQXDH_ENABLED: true };
+  afterEach(() => { delete globalThis.__breezePQXDH; delete globalThis._hasEd25519; });
+
+  // Bob as a relay-served bundle: IK/SPK from the reference ratchet, an
+  // Ed25519 signing identity, and a step-3 PQ pair signed over RAW bytes.
+  async function bobBundle() {
+    const ik = await refR.genRatchetKey();
+    const spk = await refR.genRatchetKey();
+    const ed = await refR.genSigningKey();
+    const pq = mintPQPreKey();
+    const bundle = {
+      identityKey: b64(ik.pub),
+      edIdentityKey: b64(ed.pub),
+      signedPreKey: b64(spk.pub),
+      signedPreKeySig: b64(await refR.signSPK(ed.privateKey, spk.pub)),
+      caps: ['x3dh-v5', 'pqxdh'],
+      pqPreKey: b64(pq.publicKey),
+      pqPreKeySig: b64(await refR.signSPK(ed.privateKey, pq.publicKey)),
+    };
+    return { ik, spk, ed, pq, bundle };
+  }
+
+  it('NEGOTIATION PARITY: inline _peerSupportsPqxdh agrees with negotiate().usePqxdh over the flag × caps matrix', () => {
+    const peerCapsMatrix = [[], ['x3dh-v5'], ['pqxdh'], ['x3dh-v5', 'pqxdh']];
+    for (const v5 of [true, false]) for (const pq of [true, false]) {
+      const inline = makeX3dhInline(null, { X3DH_V5_ENABLED: v5, PQXDH_ENABLED: pq });
+      const localCaps = [...(v5 ? ['x3dh-v5'] : []), ...(pq ? ['pqxdh'] : [])];
+      for (const caps of peerCapsMatrix) {
+        expect(inline._peerSupportsPqxdh({ caps })).toBe(negotiate(localCaps, caps).usePqxdh);
+      }
+    }
+  });
+
+  it('INITIATOR: inline _pqxdhInitiator SK == reference combiner respond (real ML-KEM), and ≠ classical SK', async () => {
+    globalThis.__breezePQXDH = createPQSessionHelper();
+    globalThis._hasEd25519 = true;
+    const { ik, spk, pq, bundle } = await bobBundle();
+    const alice = makeX3dhInline(null, PQCONF);
+    const aliceIk = await alice.genRatchetKey();
+    const ek = await alice.genRatchetKey();
+    const parts = await alice._x3dhInitiatorParts({ ikPriv: aliceIk.privateKey, ekPriv: ek.privateKey, ikPubPeer: ik.pub, spkPubPeer: spk.pub });
+    const r = await alice._pqxdhInitiator(bundle, parts);
+    expect(r).not.toBeNull();
+    expect(r.ct).toHaveLength(1088);
+    const partsB = [
+      await refR.ecdhBits(spk.privateKey, aliceIk.pub),
+      await refR.ecdhBits(ik.privateKey, ek.pub),
+      await refR.ecdhBits(spk.privateKey, ek.pub),
+    ];
+    const ref = createPQXDH({ kem: nobleKem768() });
+    const resp = await ref.respond({
+      dhParts: partsB, pqPreKeyPriv: pqSecretKeyFromSeed(pq.seed),
+      pqPreKeyPub: pqPublicKeyFromSeed(pq.seed), ct: r.ct,
+    });
+    expect(Buffer.from(r.sk).toString('hex')).toBe(Buffer.from(resp.sk).toString('hex'));
+    const classical = await alice._x3dhInitiator({ ikPriv: aliceIk.privateKey, ekPriv: ek.privateKey, ikPubPeer: ik.pub, spkPubPeer: spk.pub });
+    expect(Buffer.from(r.sk).toString('hex')).not.toBe(Buffer.from(classical).toString('hex'));
+  });
+
+  it('INITIATOR DOWNGRADE MATRIX: swapped key / foreign signature / incomplete pair / missing facade ⇒ null (classical)', async () => {
+    globalThis._hasEd25519 = true;
+    const { ik, spk, pq, bundle } = await bobBundle();
+    const alice = makeX3dhInline(null, PQCONF);
+    const aliceIk = await alice.genRatchetKey();
+    const ek = await alice.genRatchetKey();
+    const parts = await alice._x3dhInitiatorParts({ ikPriv: aliceIk.privateKey, ekPriv: ek.privateKey, ikPubPeer: ik.pub, spkPubPeer: spk.pub });
+    globalThis.__breezePQXDH = createPQSessionHelper();
+    expect(await alice._pqxdhInitiator(bundle, parts)).not.toBeNull(); // control: the genuine bundle negotiates PQ
+    // Relay substitution: a different genuine PQ key under the original signature.
+    const other = mintPQPreKey();
+    expect(await alice._pqxdhInitiator({ ...bundle, pqPreKey: b64(other.publicKey) }, parts)).toBeNull();
+    // A signature over the right key but from a DIFFERENT identity.
+    const stranger = await refR.genSigningKey();
+    const forged = { ...bundle, pqPreKeySig: b64(await refR.signSPK(stranger.privateKey, pq.publicKey)) };
+    expect(await alice._pqxdhInitiator(forged, parts)).toBeNull();
+    // Incomplete pair (pre-stage-3 style bundle that somehow carries the cap).
+    expect(await alice._pqxdhInitiator({ ...bundle, pqPreKeySig: undefined }, parts)).toBeNull();
+    expect(await alice._pqxdhInitiator({ ...bundle, pqPreKey: undefined }, parts)).toBeNull();
+    // Facade absent: degrades explicitly (null), never throws into session setup.
+    delete globalThis.__breezePQXDH;
+    expect(await alice._pqxdhInitiator(bundle, parts)).toBeNull();
+  });
+
+  it('RESPONDER BOOTSTRAP: a pqct pkm derives the reference initiator SK', async () => {
+    globalThis.__breezePQXDH = createPQSessionHelper();
+    const bobIk = await refR.genRatchetKey();
+    const bob = makeX3dhInline({ privateKey: bobIk.privateKey }, PQCONF);
+    const bobSpk = await bob.genRatchetKey();
+    bob.idb.set('spk-priv', { priv: bobSpk.priv });
+    const pq = mintPQPreKey();
+    bob.idb.set('pq-priv', pqSeedRecord(pq.seed));
+    const aliceIk = await refR.genRatchetKey();
+    const ek = await refR.genRatchetKey();
+    const partsA = [
+      await refR.ecdhBits(aliceIk.privateKey, bobSpk.pub),
+      await refR.ecdhBits(ek.privateKey, bobIk.pub),
+      await refR.ecdhBits(ek.privateKey, bobSpk.pub),
+    ];
+    const ref = createPQXDH({ kem: nobleKem768() });
+    const init = await ref.initiate({ dhParts: partsA, pqPreKeyPub: pq.publicKey });
+    const pkm = {
+      ik: Array.from(new Uint8Array(aliceIk.pub)), ek: Array.from(new Uint8Array(ek.pub)),
+      opkId: null, pqct: Array.from(init.ct),
+    };
+    const sess = await bob._bootstrapResponderSessionV5(pkm);
+    expect(sess).not.toBeNull();
+    expect(Buffer.from(sess.rootKey).toString('hex')).toBe(Buffer.from(init.sk).toString('hex'));
+  });
+
+  it('RESPONDER FAIL-CLOSED: pqct present but the PQ private half unavailable ⇒ null, never a classical derivation', async () => {
+    globalThis.__breezePQXDH = createPQSessionHelper();
+    const bobIk = await refR.genRatchetKey();
+    const bob = makeX3dhInline({ privateKey: bobIk.privateKey }, PQCONF);
+    const bobSpk = await bob.genRatchetKey();
+    bob.idb.set('spk-priv', { priv: bobSpk.priv });
+    const aliceIk = await refR.genRatchetKey();
+    const ek = await refR.genRatchetKey();
+    const pkm = {
+      ik: Array.from(new Uint8Array(aliceIk.pub)), ek: Array.from(new Uint8Array(ek.pub)),
+      opkId: null, pqct: new Array(1088).fill(7),
+    };
+    // No pq-priv at all (IDB loss / pre-step-3 device).
+    expect(await bob._bootstrapResponderSessionV5(pkm)).toBeNull();
+    // A /keywrap-wrapped record: refused, not silently read.
+    bob.idb.set('pq-priv', { wrapped: { v: 1 } });
+    expect(await bob._bootstrapResponderSessionV5(pkm)).toBeNull();
+    // Facade absent with a good record: still closed.
+    bob.idb.set('pq-priv', pqSeedRecord(mintPQPreKey().seed));
+    delete globalThis.__breezePQXDH;
+    expect(await bob._bootstrapResponderSessionV5(pkm)).toBeNull();
+  });
+
+  it('FLAG OFF: a pqct-carrying pkm bootstraps CLASSICALLY (today’s behaviour, byte-identical)', async () => {
+    const bobIk = await refR.genRatchetKey();
+    const bob = makeX3dhInline({ privateKey: bobIk.privateKey }, { X3DH_V5_ENABLED: true, PQXDH_ENABLED: false });
+    const bobSpk = await bob.genRatchetKey();
+    bob.idb.set('spk-priv', { priv: bobSpk.priv });
+    bob.idb.set('pq-priv', pqSeedRecord(mintPQPreKey().seed)); // present, must be ignored
+    const aliceIk = await refR.genRatchetKey();
+    const ek = await refR.genRatchetKey();
+    const pkm = {
+      ik: Array.from(new Uint8Array(aliceIk.pub)), ek: Array.from(new Uint8Array(ek.pub)),
+      opkId: null, pqct: new Array(1088).fill(3),
+    };
+    const sess = await bob._bootstrapResponderSessionV5(pkm);
+    const skRef = await refR.x3dhResponder({
+      ikPriv: bobIk.privateKey, spkPriv: bobSpk.privateKey,
+      ikPubPeer: aliceIk.pub, ekPubPeer: ek.pub,
+    });
+    expect(Buffer.from(sess.rootKey).toString('hex')).toBe(Buffer.from(skRef).toString('hex'));
+  });
+
+  it('ROTATION DRILL: fetch-then-rotate surfaces as an SK mismatch; re-fetch against the new bundle recovers', async () => {
+    globalThis.__breezePQXDH = createPQSessionHelper();
+    globalThis._hasEd25519 = true;
+    const ed = await refR.genSigningKey();
+    const bobIk = await refR.genRatchetKey();
+    const bundleFor = async (spk, pq) => ({
+      identityKey: b64(bobIk.pub), edIdentityKey: b64(ed.pub),
+      signedPreKey: b64(spk.pub), signedPreKeySig: b64(await refR.signSPK(ed.privateKey, spk.pub)),
+      caps: ['x3dh-v5', 'pqxdh'],
+      pqPreKey: b64(pq.publicKey), pqPreKeySig: b64(await refR.signSPK(ed.privateKey, pq.publicKey)),
+    });
+    const alice = makeX3dhInline(null, PQCONF);
+    const bob = makeX3dhInline({ privateKey: bobIk.privateKey }, PQCONF);
+    const aliceIk = await alice.genRatchetKey();
+    const ek = await alice.genRatchetKey();
+    const ikArr = Array.from(new Uint8Array(aliceIk.pub));
+    const ekArr = Array.from(new Uint8Array(ek.pub));
+    // Generation N: Alice initiates against Bob's served bundle.
+    const spkN = await bob.genRatchetKey();
+    const pqN = mintPQPreKey();
+    bob.idb.set('spk-priv', { priv: spkN.priv });
+    bob.idb.set('pq-priv', pqSeedRecord(pqN.seed));
+    const partsN = await alice._x3dhInitiatorParts({ ikPriv: aliceIk.privateKey, ekPriv: ek.privateKey, ikPubPeer: bobIk.pub, spkPubPeer: spkN.pub });
+    const pqResN = await alice._pqxdhInitiator(await bundleFor(spkN, pqN), partsN);
+    expect(pqResN).not.toBeNull();
+    // Bob rotates BEFORE Alice's first message lands (SPK + PQ halves replaced
+    // together — the generatePreKeyBundle construction). The bootstrap now
+    // combines over rotated halves: decapsulation implicit-rejects, so an SK
+    // comes out but it is NOT Alice's — in the app the first message's AEAD
+    // fails and the existing decrypt-failure/reset flow drives recovery.
+    const spkN1 = await bob.genRatchetKey();
+    const pqN1 = mintPQPreKey();
+    bob.idb.set('spk-priv', { priv: spkN1.priv });
+    bob.idb.set('pq-priv', pqSeedRecord(pqN1.seed));
+    const stale = await bob._bootstrapResponderSessionV5({ ik: ikArr, ek: ekArr, opkId: null, pqct: pqResN.ct });
+    expect(stale).not.toBeNull();
+    expect(Buffer.from(stale.rootKey).toString('hex')).not.toBe(Buffer.from(pqResN.sk).toString('hex'));
+    // Recovery half: Alice re-fetches (bundle N+1) and re-initiates; Bob's
+    // rotated halves now answer with the matching SK.
+    const partsN1 = await alice._x3dhInitiatorParts({ ikPriv: aliceIk.privateKey, ekPriv: ek.privateKey, ikPubPeer: bobIk.pub, spkPubPeer: spkN1.pub });
+    const pqResN1 = await alice._pqxdhInitiator(await bundleFor(spkN1, pqN1), partsN1);
+    expect(pqResN1).not.toBeNull();
+    const recovered = await bob._bootstrapResponderSessionV5({ ik: ikArr, ek: ekArr, opkId: null, pqct: pqResN1.ct });
+    expect(Buffer.from(recovered.rootKey).toString('hex')).toBe(Buffer.from(pqResN1.sk).toString('hex'));
   });
 });
 
@@ -877,10 +1096,19 @@ describe('reference-drift tracking — modules that are tested references, NOT y
     // relay-side verifyReport helper stay reference-only; the deployed relay check is the Worker's
     // hmacVerifyFrank, cross-tested against this reference in tests/worker.test.js.
     { module: 'franking.js (module factory)', marker: 'createFranking' },
-    // pq.js (PQXDH hybrid). Reference-only until browsers ship ML-KEM (WICG modern-algos,
-    // ~2027) — the client currently only DETECTS ML-KEM support, it never key-agrees with it.
-    { module: 'pq.js (PQXDH hybrid X25519+ML-KEM key agreement)', marker: 'createPQXDH' },
-    { module: 'pq.js transcript-bound combiner', marker: 'breeze-pqxdh-v1' },
+    // pq.js (PQXDH hybrid) GRADUATED at stage-3 step 5 — by the alternate
+    // deployment route, not an inline copy: the vendored KEM cannot fit the
+    // 16,000-line index.html cap (step-4 outcome), so pq.js's combiner is
+    // deployed single-sourced, reached through the src/crypto/pqxdh.js ESM
+    // facade (window.__breezePQXDH) — the step-3 pqkey.js route. The marker
+    // strings ('createPQXDH', 'breeze-pqxdh-v1') therefore never appear in
+    // the single-file artifacts BY DESIGN of that route (the same reason the
+    // deployed mlkem.js has no inline copy), and the former absence pins are
+    // retired here like the graduations above, replaced by real parity
+    // guards: the 'PQXDH mirror (stage-3 step 5)' describe above (negotiation
+    // parity, real-KEM SK agreement both directions, downgrade matrix,
+    // fail-closed bootstrap) and tests/pqxdh.test.js for the facade itself.
+    // The combiner stays single-sourced in pq.js — shared, never copied.
     { module: 'franking.js verifyReport path', marker: 'verifyReport' },
     // ktlog.js's audit path (verifyChain + checkRollover) GRADUATED to deployed — the inline
     // _auditKeyHistory now ports the full auditBundle; see the "KTLog audit mirror" block above

@@ -138,6 +138,33 @@ describe('X3DH v5 prekey-message envelope (first-message handshake header)', () 
     expect(R.parsePreKeyMessage(env).opkId).toBe(null);
   });
 
+  // Stage-3 D6: the optional pqct field — same arr() byte encoding as ik/ek,
+  // present only on a PQXDH first message.
+  it('round-trips the optional pqct (stage-3 D6) in the envelope byte encoding', async () => {
+    const alice = await party();
+    const ek = await R.genRatchetKey();
+    const ct = new Uint8Array(1088).map((_, i) => i % 251);
+    const env = R.buildPreKeyMessage({ ikPub: alice.ik.pub, ekPub: ek.pub, opkId: 1, pqct: ct, ratchetMessage: '{}' });
+    const wire = JSON.parse(env);
+    expect(Array.isArray(wire.pqct)).toBe(true);
+    expect(wire.pqct).toHaveLength(1088);
+    const parsed = R.parsePreKeyMessage(env);
+    expect(hex(parsed.pqct)).toBe(hex(ct));
+    expect(parsed.opkId).toBe(1);
+  });
+
+  it('a classical envelope carries NO pqct key at all (byte-identical shape) and parses pqct as null', async () => {
+    const alice = await party();
+    const ek = await R.genRatchetKey();
+    const env = R.buildPreKeyMessage({ ikPub: alice.ik.pub, ekPub: ek.pub, ratchetMessage: '{}' });
+    expect('pqct' in JSON.parse(env)).toBe(false);
+    expect(R.parsePreKeyMessage(env).pqct).toBeNull();
+    // A malformed (non-array) pqct from the untrusted relay parses as absent,
+    // matching the deployed bootstrap's Array.isArray gate — never a throw.
+    const tampered = JSON.stringify({ v: 5, t: 'pkm', ik: [1], ek: [2], opkId: null, pqct: 'x', msg: '{}' });
+    expect(R.parsePreKeyMessage(tampered).pqct).toBeNull();
+  });
+
   it('parsePreKeyMessage returns null for non-pkm / malformed payloads (no throw)', () => {
     expect(R.parsePreKeyMessage('not json')).toBe(null);
     expect(R.parsePreKeyMessage(JSON.stringify({ v: 4, d: [] }))).toBe(null); // a plain ratchet msg
