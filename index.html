@@ -1082,6 +1082,7 @@ del.md-del { opacity: .6 }
     <input type="text" id="msg-alias" class="setup-input-alt" data-i18n-ph="breezeId" data-i18n-aria="ariaBreezeId" maxlength="20" pattern="[a-z0-9_]+" autocomplete="off" autocapitalize="none" enterkeyhint="done" spellcheck="false">
     <button class="btn btn-g setup-cta" id="b-msg-setup" data-i18n="createFree"></button>
     <button class="btn btn-o setup-restore" id="b-msg-setup-restore" data-i18n="setupRestore"></button>
+    <button class="btn btn-o setup-restore" id="b-msg-setup-phrase" data-i18n="setupPhrase"></button>
     <div class="setup-footer">
       <span data-i18n="noCreditCard"></span><br>
       <button class="btn btn-o btn-sm hidden mt-8" id="setup-install-btn" data-i18n="uiInstall">Install App</button>
@@ -1189,6 +1190,15 @@ window.__breezePQKey = createPQKeyHelper();
 // closed in the responder bootstrap instead.
 import { createPQSessionHelper } from './src/crypto/pqxdh.js';
 window.__breezePQXDH = createPQSessionHelper();
+// Recovery plan step 3 (docs/IDENTITY_RECOVERY_PLAN.md §3.1): the account
+// seed / recovery-phrase helper (src/crypto/seed.js), loaded the same way
+// and read as window.__breezeSeed by identity creation and the first-run
+// phrase restore. Absent or failed ⇒ creation keeps the legacy random-key
+// path and the phrase entries stay inert — but a STARTED seed flow never
+// falls back silently (seed.js's fail doctrine, mirrored in
+// _seedIdentityMaterial).
+import { createSeedHelper } from './src/crypto/seed.js';
+window.__breezeSeed = createSeedHelper();
 </script>
 
 <script>
@@ -1362,6 +1372,7 @@ const _I = {
     breezeId: 'Breeze ID (e.g. alice — optional)',
     createFree: 'Create Identity — Free',
     setupRestore: 'Restore from a backup file',
+    setupPhrase: 'Recover with a recovery phrase',
     noCreditCard: 'No credit card. No email. Just a name.',
     searchPh: 'Search...',
     searchEmojiPh: 'Search emoji...',
@@ -1809,6 +1820,21 @@ const _I = {
     toastMsgTooLong: 'Message too long (max 64 KB)',
     toastRestoredReload: 'Restored! Reloading...',
     toastRestoredLegacy: 'Restored from an older backup: it does not include the device-management key, so a new signing key will be created.',
+    recoveryPhraseTitle: 'Your recovery phrase',
+    recoveryPhraseDesc: 'Shown once. With this phrase and your recovery passphrase, this account can be restored on a new device — by anyone who has both, so keep them somewhere safe. Breeze cannot show this again or recover it for you.',
+    recoveryPassLabel: 'Recovery passphrase (optional, recommended)',
+    recoverySaved: 'I have saved my recovery phrase',
+    recoveryRestoreTitle: 'Restore with a recovery phrase',
+    recoveryPhraseLabel: 'Recovery phrase (24 words)',
+    recoveryKitFileLabel: 'Recovery kit file (only for accounts created before recovery phrases)',
+    recoveryKitBtn: 'Create recovery kit',
+    toastRecoveryBadPhrase: 'That is not a valid recovery phrase — check the words and try again.',
+    toastRecoveryKitFailed: 'Could not open the recovery kit — the phrase or passphrase does not match it.',
+    toastRecoveryInvalidKit: 'That file is not a recovery kit.',
+    toastRecoveryUnavailable: 'Recovery phrases are not available right now — reload and try again.',
+    toastRecoveryKitCreated: 'Recovery kit downloaded. It opens only with your recovery phrase and passphrase — keep them together.',
+    toastRecoveryHasIdentity: 'This device already has an identity — phrase restore is only for a fresh start.',
+    toastRecoveryMismatch: 'That phrase and passphrase do not belong to this Breeze ID — nothing was restored.',
     toastWrongPassphrase: 'Wrong passphrase or corrupted file',
     toastAliasNotFound: 'Alias not found',
     toastAliasResolveFail: 'Could not resolve alias',
@@ -2423,6 +2449,83 @@ function showConfirm(title, opts = {}) {
     dlg.addEventListener('click', (e) => {
       const rect = dlg.getBoundingClientRect();
       if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) close(false);
+    });
+  });
+}
+
+// Recovery plan step 3 (docs/IDENTITY_RECOVERY_PLAN.md §3.1): the ONE-TIME
+// recovery-phrase display. The phrase is the account seed in words; it is
+// shown here and never stored, so this dialog is the only copy the user
+// gets. OK stays disabled until the user confirms they saved it. Also
+// collects the optional recovery passphrase (the second factor — BIP39's
+// own optional passphrase). Resolves the passphrase (possibly ''), or
+// null on cancel/ESC/backdrop. Used by BOTH seed-derived creation and
+// recovery-kit creation: same phrase, same promise.
+function _promptRecoveryPhraseNew(phrase, okText) {
+  return new Promise(resolve => {
+    const dlg = document.createElement('dialog');
+    const titleId = 'mdl-' + uid();
+    dlg.setAttribute('aria-labelledby', titleId);
+    safeSetHTML(dlg, `<div class="modal-title" id="${titleId}">${esc(t('recoveryPhraseTitle'))}</div>
+      <div class="modal-desc">${esc(t('recoveryPhraseDesc'))}</div>
+      <textarea class="modal-input" rows="3" readonly aria-labelledby="${titleId}">${esc(phrase)}</textarea>
+      <input class="modal-input" type="password" placeholder="${esc(t('recoveryPassLabel'))}" autocomplete="new-password" aria-label="${esc(t('recoveryPassLabel'))}">
+      <label class="modal-desc"><input type="checkbox" class="rp-saved"> ${esc(t('recoverySaved'))}</label>
+      <div class="modal-actions">
+        <button class="btn btn-o btn-sm" value="cancel">${t('cancel')}</button>
+        <button class="btn btn-g btn-sm" value="ok" disabled>${esc(okText || t('ok'))}</button>
+      </div>`);
+    document.body.appendChild(dlg);
+    dlg.showModal();
+    const okBtn = dlg.querySelector('[value="ok"]');
+    dlg.querySelector('.rp-saved').addEventListener('change', (e) => { okBtn.disabled = !e.target.checked; });
+    let settled = false;
+    const close = (val) => { if (settled) return; settled = true; dlg.close(); dlg.remove(); resolve(val); };
+    okBtn.onclick = () => close(dlg.querySelector('input[type="password"]').value || '');
+    dlg.querySelector('[value="cancel"]').onclick = () => close(null);
+    dlg.addEventListener('close', () => close(null));
+    dlg.addEventListener('click', (e) => {
+      const rect = dlg.getBoundingClientRect();
+      if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) close(null);
+    });
+  });
+}
+
+// Recovery plan step 3: the phrase-restore dialog on the first-run screen.
+// Collects the 24-word phrase, the recovery passphrase, and — only for
+// accounts created before phrases existed — the recovery-kit file those
+// accounts restore from (their keys are random and cannot be re-derived;
+// the phrase + passphrase UNLOCK the kit instead, plan §3.1). Resolves
+// { phrase, passphrase, kitFile } or null on cancel. Validation and all
+// writes live in restoreFromPhrase — this dialog only collects.
+function _promptRecoveryPhraseRestore() {
+  return new Promise(resolve => {
+    const dlg = document.createElement('dialog');
+    const titleId = 'mdl-' + uid();
+    dlg.setAttribute('aria-labelledby', titleId);
+    safeSetHTML(dlg, `<div class="modal-title" id="${titleId}">${esc(t('recoveryRestoreTitle'))}</div>
+      <textarea class="modal-input rp-phrase" rows="3" placeholder="${esc(t('recoveryPhraseLabel'))}" autocomplete="off" autocapitalize="none" spellcheck="false" aria-labelledby="${titleId}"></textarea>
+      <input class="modal-input rp-pass" type="password" placeholder="${esc(t('recoveryPassLabel'))}" autocomplete="current-password" aria-label="${esc(t('recoveryPassLabel'))}">
+      <label class="modal-desc">${esc(t('recoveryKitFileLabel'))}<input class="modal-input rp-kit" type="file" accept="application/json,.json"></label>
+      <div class="modal-actions">
+        <button class="btn btn-o btn-sm" value="cancel">${t('cancel')}</button>
+        <button class="btn btn-g btn-sm" value="ok">${t('restoreBtn')}</button>
+      </div>`);
+    document.body.appendChild(dlg);
+    dlg.showModal();
+    dlg.querySelector('.rp-phrase').focus();
+    let settled = false;
+    const close = (val) => { if (settled) return; settled = true; dlg.close(); dlg.remove(); resolve(val); };
+    dlg.querySelector('[value="ok"]').onclick = () => close({
+      phrase: dlg.querySelector('.rp-phrase').value,
+      passphrase: dlg.querySelector('.rp-pass').value || '',
+      kitFile: dlg.querySelector('.rp-kit').files?.[0] || null,
+    });
+    dlg.querySelector('[value="cancel"]').onclick = () => close(null);
+    dlg.addEventListener('close', () => close(null));
+    dlg.addEventListener('click', (e) => {
+      const rect = dlg.getBoundingClientRect();
+      if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) close(null);
     });
   });
 }
@@ -4998,8 +5101,37 @@ async function initMessenger(dbName) {
     return body;
   }
 
+  // Recovery plan step 3 (docs/IDENTITY_RECOVERY_PLAN.md §3.1): the seed
+  // branch of identity creation. When the seed facade is deployed and both
+  // curves exist, a new identity is DERIVED from a fresh 32-byte account
+  // seed instead of generated randomly: the user is shown the recovery
+  // phrase ONCE (with the save confirmation) and may add a recovery
+  // passphrase; src/crypto/seed.js derives the identity + signing keys
+  // deterministically, so the phrase alone (on a later fresh install) IS
+  // the account again. The seed itself is never stored — only the derived
+  // key records are, exactly as for a random identity.
+  // Returns: the facade's material (proceed derived), null (the user
+  // cancelled at the phrase step — abort creation, nothing was written),
+  // or undefined (no facade / legacy curves — the caller keeps the
+  // historical random path). A derivation FAILURE throws: falling back to
+  // random keys behind a phrase the user believes can restore them would
+  // be a silent betrayal, so createIdentity aborts instead (fail closed).
+  async function _seedIdentityMaterial() {
+    const seedH = globalThis.__breezeSeed;
+    if (!seedH || !_hasX25519 || !_hasEd25519) return undefined;
+    const entropy = seedH.randomEntropy();
+    const phrase = await seedH.entropyToPhrase(entropy);
+    const pass = await _promptRecoveryPhraseNew(phrase, t('createFree'));
+    if (pass === null) return null;
+    return seedH.deriveIdentityMaterial(entropy, pass);
+  }
+
   async function createIdentity(name, alias) {
-    const keys = await genIdentityKey(); // v3.1: use X25519 when available
+    let seedMat;
+    try { seedMat = await _seedIdentityMaterial(); }
+    catch(e) { _dbg(e, 'seed-create'); showToast(t('toastRecoveryUnavailable'), 'error'); return false; }
+    if (seedMat === null) return false; // cancelled at the phrase step — nothing created
+    const keys = seedMat ? seedMat.identityKeyPair : await genIdentityKey(); // v3.1: use X25519 when available
     const pubRaw = await crypto.subtle.exportKey('raw', keys.publicKey);
     const privJwk = await crypto.subtle.exportKey('jwk', keys.privateKey);
     const pubB64 = btoa(String.fromCharCode(...new Uint8Array(pubRaw)));
@@ -5014,7 +5146,17 @@ async function initMessenger(dbName) {
       } catch(e) { _dbg(e); }
     }
 
-    await dbPut('identity', { pub: arr(new Uint8Array(pubRaw)), priv: privJwk, pubB64, name, alias: registeredAlias }, 'keys');
+    // Recovery plan step 3: a seed-derived identity carries its recovery
+    // mode on the record ('phrase' — the first of the three recovery modes
+    // the owner chose between on 2026-11-14; the disposable and
+    // account-linked modes land in later steps and take their own values).
+    // Random-key identities carry no field: absence == pre-step-3.
+    await dbPut('identity', { pub: arr(new Uint8Array(pubRaw)), priv: privJwk, pubB64, name, alias: registeredAlias, ...(seedMat ? { recoveryMode: 'phrase' } : {}) }, 'keys');
+    // The derived signing record is stored BEFORE the initSigning() call
+    // below, which loads a stored record rather than minting a random one
+    // — that load is what makes the derived Ed25519 key the account's
+    // signing key (and a later phrase restore byte-identical authority).
+    if (seedMat) await dbPut('identity', seedMat.signingRecord, 'signing');
     myKeys = keys; myPubB64 = pubB64; myName = name; myAlias = registeredAlias; myId = pubB64.slice(0, 12);
     myShortId = await generateShortId(pubB64);
     try { localStorage.setItem('brz-uid', myId); } catch(e) { _dbg(e); }
@@ -5034,6 +5176,7 @@ async function initMessenger(dbName) {
         _dbg(null, 'PreKeys uploaded: 1 SPK + ' + bundle.oneTimePreKeys.length + ' OTP');
       } catch(e) { _dbg(e, 'prekey-upload'); }
     }
+    return true;
   }
 
   // DOUBLE RATCHET CRYPTO ENGINE (v3)
@@ -6933,7 +7076,10 @@ async function initMessenger(dbName) {
   _DOM.get('b-msg-setup')?.addEventListener('click', async () => {
     const name = _DOM.get('msg-name').value.trim().slice(0, 64) || 'Anonymous';
     const alias = (_DOM.get('msg-alias').value.trim() || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
-    await createIdentity(name, alias);
+    // Recovery plan step 3: createIdentity returns false when the user
+    // cancels at the recovery-phrase step (or derivation failed) — stay on
+    // the setup screen with nothing created.
+    if (!await createIdentity(name, alias)) return;
     _outbox.clear();
     _DOM.get('msg-setup').classList.add('hidden');
     _DOM.get('msg-main').classList.remove('hidden');
@@ -6988,6 +7134,11 @@ async function initMessenger(dbName) {
   // only after a successful decrypt, and a success reloads into _boot()'s
   // normal has-identity flow.
   _DOM.get('b-msg-setup-restore')?.addEventListener('click', () => { restoreFromFilePicker(); });
+  // Recovery plan step 3: the setup screen's phrase entry (§4 step 2 named
+  // it as landing with step 3). Same doctrine as the file entry — every
+  // write sits behind a successful derivation or kit open, so a failed
+  // attempt leaves the fresh install exactly as empty as it was.
+  _DOM.get('b-msg-setup-phrase')?.addEventListener('click', () => { restoreFromPhrase(); });
   // Enter on name field → move focus to alias (matches enterkeyhint="next")
   _DOM.get('msg-name')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); _DOM.get('msg-alias')?.focus(); }
@@ -11943,7 +12094,11 @@ async function initMessenger(dbName) {
     if (!identity) { showToast(t('toastNoIdentityBackup'), 'error'); return; }
 
     const pass = await showPrompt(t('backupPassSet'), '', { type: 'password', okText: t('encrypt'), autocomplete: 'new-password' });
-    if (!pass || pass.length < 4) { showToast(t('toastMin4Chars'), 'error'); return; }
+    // Recovery plan §2 item 8 / step 3: the file backup's passphrase
+    // minimum rises 4 → 6, level with the cloud path — the minimum IS the
+    // security of a kit that now carries the full key material (step 1).
+    // Creation-side only: restore accepts whatever opened an old backup.
+    if (!pass || pass.length < 6) { showToast(t('backupPassMin'), 'error'); return; }
 
     const keyMaterial = await _collectBackupKeyMaterial();
     const data = JSON.stringify({ backupV: BACKUP_FORMAT_V, identity, contacts, keyMaterial, exportedAt: new Date().toISOString() });
@@ -12019,6 +12174,127 @@ async function initMessenger(dbName) {
       if (legacy) showToast(t('toastRestoredLegacy'), 'warn', 9000);
       setTimeout(() => location.reload(), legacy ? 6 * MS.SEC : 1.5 * MS.SEC);
     } catch(e) { _dbg(e,'restore'); showToast(t('toastWrongPassphrase'), 'error'); }
+  }
+
+  // Recovery plan step 3 (docs/IDENTITY_RECOVERY_PLAN.md §3.1/§4): create a
+  // recovery kit for an EXISTING identity. Pre-step-3 identities have
+  // random keys that no phrase can re-derive, so the seed takes its other
+  // form: a fresh phrase is minted and shown once, and the step-1 backup
+  // payload (identity record + contacts + the full key material) is
+  // wrapped under a key derived from seed + the recovery passphrase the
+  // user sets in the phrase dialog (src/crypto/seed.js wrapKit). The kit
+  // file alone opens nothing; phrase alone opens nothing; together they
+  // are the account. Available to every identity (a seed-derived account
+  // may also hold a kit as a second artefact — its phrase alone already
+  // restores it, so for those this is belt-and-braces, not a requirement).
+  async function createRecoveryKit() {
+    const seedH = globalThis.__breezeSeed;
+    if (!seedH) { showToast(t('toastRecoveryUnavailable'), 'error'); return; }
+    const identity = await dbGet('identity', 'keys');
+    if (!identity) { showToast(t('toastNoIdentityBackup'), 'error'); return; }
+    try {
+      const entropy = seedH.randomEntropy();
+      const phrase = await seedH.entropyToPhrase(entropy);
+      const pass = await _promptRecoveryPhraseNew(phrase, t('recoveryKitBtn'));
+      if (pass === null) return;
+      const contacts = await dbGetAll('contacts');
+      const keyMaterial = await _collectBackupKeyMaterial();
+      const payload = { backupV: BACKUP_FORMAT_V, identity, contacts, keyMaterial, exportedAt: new Date().toISOString() };
+      const kit = await seedH.wrapKit(entropy, pass, payload);
+      downloadBlob(new Blob([JSON.stringify(kit)], { type: 'application/json' }), 'breeze-recovery-kit-' + new Date().toISOString().slice(0, 10) + '.json');
+      showToast(t('toastRecoveryKitCreated'), 'success');
+    } catch(e) { _dbg(e, 'recovery-kit'); showToast(t('toastRecoveryUnavailable'), 'error'); }
+  }
+
+  // Recovery plan step 3: first-run restore from the recovery phrase — the
+  // setup screen's phrase entry (plan §4 step 2 named it as landing here).
+  // Two shapes, one anchor:
+  //   - seed-derived account: the phrase + passphrase RE-DERIVE the
+  //     identity and signing keys byte-for-byte; the records written are
+  //     exactly what creation wrote (name/alias come from the setup
+  //     fields; the alias claim is re-attempted and adopted only when the
+  //     relay accepts it — the relay-side record never stopped pointing
+  //     at this key).
+  //   - legacy account: the phrase + passphrase UNLOCK the recovery-kit
+  //     file the user picks in the same dialog; the payload inside is the
+  //     step-1 backup payload and lands through the same writes
+  //     restoreBackup performs (identity, validated contacts, key
+  //     material via _restoreBackupKeyMaterial).
+  // Every write sits behind a successful derivation or kit open, so a
+  // wrong phrase, wrong passphrase or tampered kit creates NOTHING — the
+  // step-2 doctrine, pinned by test. Success reloads into _boot()'s
+  // normal has-identity flow (the step-2 pattern); prekey material that
+  // is not restored (derived path) is re-minted by that flow, exactly as
+  // after a v1 file restore.
+  async function restoreFromPhrase() {
+    const seedH = globalThis.__breezeSeed;
+    if (!seedH) { showToast(t('toastRecoveryUnavailable'), 'error'); return; }
+    if (await dbGet('identity', 'keys')) { showToast(t('toastRecoveryHasIdentity'), 'error'); return; }
+    const res = await _promptRecoveryPhraseRestore();
+    if (!res) return;
+    const entropy = await seedH.phraseToEntropy(res.phrase || '');
+    if (!entropy) { showToast(t('toastRecoveryBadPhrase'), 'error'); return; }
+    if (res.kitFile) {
+      let kit;
+      try { kit = JSON.parse(await res.kitFile.text()); } catch(e) { _dbg(e, 'kit-parse'); showToast(t('toastRecoveryInvalidKit'), 'error'); return; }
+      const data = await seedH.unwrapKit(entropy, res.passphrase || '', kit);
+      if (!data) { showToast(t('toastRecoveryKitFailed'), 'error'); return; }
+      if (!data.identity?.pubB64) { showToast(t('toastRecoveryInvalidKit'), 'error'); return; }
+      await dbPut('identity', data.identity, 'keys');
+      for (const c of (data.contacts || [])) {
+        if (typeof c?.id !== 'string' || !c.id || c.id.length > 64 ||
+            typeof c?.pubB64 !== 'string' || !c.pubB64 || c.pubB64.length > 128 ||
+            !/^[A-Za-z0-9+/=]+$/.test(c.pubB64)) continue;
+        await dbPut('contacts', c);
+      }
+      await _restoreBackupKeyMaterial(data.keyMaterial);
+      showToast(t('toastRestoredReload'), 'success');
+      setTimeout(() => location.reload(), 1.5 * MS.SEC);
+      return;
+    }
+    let m;
+    try { m = await seedH.deriveIdentityMaterial(entropy, res.passphrase || ''); }
+    catch(e) { _dbg(e, 'phrase-derive'); showToast(t('toastRecoveryUnavailable'), 'error'); return; }
+    const name = _DOM.get('msg-name').value.trim().slice(0, 64) || 'Anonymous';
+    const aliasWanted = (_DOM.get('msg-alias').value.trim() || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
+    // The passphrase guard: BIP39 cannot detect a wrong PASSPHRASE (it
+    // silently derives a different, empty account — every mnemonic wallet
+    // shares this property). But when the user typed their @alias, the
+    // relay's record for it still names the ORIGINAL key: a derived key
+    // that does not match means the phrase/passphrase pair is not the one
+    // that made this account, so refuse BEFORE writing anything. A match
+    // adopts the alias outright (no re-claim needed — the record never
+    // stopped pointing here).
+    let aliasAdopted = '';
+    if (aliasWanted && API) {
+      let resolved = null;
+      try {
+        const r = await postAPIRaw('/alias/get', { alias: aliasWanted });
+        if (r.ok) resolved = (await r.json())?.pub || null;
+      } catch(e) { _dbg(e, 'phrase-alias-resolve'); }
+      if (resolved && resolved !== m.identityPubB64) { showToast(t('toastRecoveryMismatch'), 'error'); return; }
+      if (resolved) aliasAdopted = aliasWanted;
+    }
+    await dbPut('identity', { pub: m.identityPubArr, priv: m.identityPrivJwk, pubB64: m.identityPubB64, name, alias: aliasAdopted, recoveryMode: 'phrase' }, 'keys');
+    await dbPut('identity', m.signingRecord, 'signing');
+    // No alias typed, or the relay could not be asked: best-effort claim,
+    // signed with the just-restored signing key (authFields signs via
+    // _signingKey/myId, set only for this call — the reload immediately
+    // after hands over to the normal boot). Adopted into the record only
+    // when the relay accepts; the phrase, not the handle, restored it.
+    if (aliasWanted && !aliasAdopted && API) {
+      try {
+        _signingKey = m.signingKeyPair; _signingPubB64 = m.signingRecord.pubB64; myId = m.identityPubB64.slice(0, 12);
+        const resp = await postAPIRaw('/alias/set', { alias: aliasWanted, pub: m.identityPubB64, name, userId: myId,
+          ...(await authFields(ts => `breeze-alias-set:${aliasWanted.toLowerCase().replace(/[^a-z0-9_]/g, '')}:${ts}`)) });
+        if (resp.ok) {
+          const rec = await dbGet('identity', 'keys');
+          if (rec) { rec.alias = aliasWanted; await dbPut('identity', rec, 'keys'); }
+        }
+      } catch(e) { _dbg(e, 'phrase-alias'); }
+    }
+    showToast(t('toastRestoredReload'), 'success');
+    setTimeout(() => location.reload(), 1.5 * MS.SEC);
   }
 
   async function resolveAndAdd(input) {
@@ -12954,6 +13230,9 @@ async function initMessenger(dbName) {
     // copy, a file on your disk does not expire after 90 days.
     if (e.target.closest('[data-action="backup-file"]')) { backupToFile(); return; }
     if (e.target.closest('[data-action="restore-file"]')) { restoreFromFilePicker(); return; }
+    // Recovery plan step 3: the recovery kit for existing (random-key)
+    // identities — phrase + passphrase wrap of the full key material.
+    if (e.target.closest('[data-action="recovery-kit"]')) { createRecoveryKit(); return; }
   }, { signal: _ac.signal });
   window.toggleCompact = function() {
     document.body.classList.toggle('compact');
@@ -14156,6 +14435,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         <button data-action="restore" class="btn btn-o btn-sm i-m4">${t('restoreBtn')}</button><br>
         <button data-action="backup-file" class="btn btn-o btn-sm i-m4">${t('backupFileBtn')}</button>
         <button data-action="restore-file" class="btn btn-o btn-sm i-m4">${t('restoreFileBtn')}</button><br>
+        <button data-action="recovery-kit" class="btn btn-o btn-sm i-m4">${t('recoveryKitBtn')}</button><br>
         <span class="text-xs color-t3">${t('backupNote')}</span>`);
       box.appendChild(d);
       box.scrollTop = box.scrollHeight;

@@ -97,6 +97,70 @@ stage-3 steps 1–5 and **on by default since step 6**
 **Implemented and deployed** (client wiring in `index.html`; worker
 storage/verification shipped in stage-3 step 2).
 
+## 2b. Account seed and recovery phrase (recovery plan step 3)
+
+The recovery anchor of docs/IDENTITY_RECOVERY_PLAN.md §3.1, implemented
+in `src/crypto/seed.js` (deployed as ESM, `window.__breezeSeed`) over the
+canonical BIP39 English wordlist vendored verbatim as data in
+`src/crypto/wordlist.js`. Standard constructions only; no curve
+arithmetic exists in the codebase — private keys enter WebCrypto as
+PKCS#8 and public keys are read back from the imported key.
+
+1. **Entropy / phrase.** The account seed is 32 bytes from
+   `crypto.getRandomValues`. The phrase is the BIP39 mnemonic: entropy
+   bits followed by the first 8 bits of SHA-256(entropy) (the full
+   checksum byte at 256-bit entropy), split into 24 × 11-bit wordlist
+   indices, space-joined. Parsing reverses it (NFKD, lowercase,
+   whitespace split) and REQUIRES the checksum — a mistyped word is
+   rejected before any key exists.
+2. **Master seed.** PBKDF2-HMAC-SHA512, 2,048 iterations, 64-byte
+   output: password = the mnemonic sentence (NFKD), salt =
+   `"mnemonic" + passphrase` (NFKD). The passphrase is BIP39's optional
+   second factor: an empty passphrase is valid and yields a DIFFERENT
+   master from every non-empty one. A wrong passphrase is therefore
+   undetectable at derivation time (it names a different, empty
+   account) — the client's one check is §5 below.
+3. **Per-key derivation.** HKDF-SHA256 (IKM = master seed, salt =
+   0^32, 32-byte output), one info string per key — domain separation
+   is the info string, and a future key type takes a new one:
+   - identity (X25519): `breeze-seed-v1:x25519-identity`
+   - signing (Ed25519): `breeze-seed-v1:ed25519-signing`
+   - recovery-kit AES key: `breeze-seed-v1:recovery-kit`
+4. **Key construction.** Each 32-byte output is used verbatim as the
+   curve's private seed inside an RFC 8410 PKCS#8 v1 envelope
+   (X25519 OID 1.3.101.110, Ed25519 OID 1.3.101.112) and imported via
+   WebCrypto (`deriveBits` / `sign`); the public half comes from the
+   imported private key's JWK `x`. X25519 clamping happens inside the
+   algorithm (RFC 7748), so stored JWKs have exactly the shapes a
+   generated key's JWKs have — `loadIdentity`/`initSigning` cannot
+   tell a derived record from a generated one. Only the derived key
+   RECORDS are stored; the seed and phrase are never persisted, never
+   sent anywhere, and never proved to a relay — the derived keys do
+   the proving. Seed-derived `keys` records carry
+   `recoveryMode: 'phrase'`.
+5. **The passphrase guard (restore-time).** When the user restores
+   with their @alias typed, the derived identity public key is checked
+   against the relay's alias record BEFORE anything is written: a
+   mismatch (wrong word the checksum cannot catch is impossible —
+   this catches the wrong-PASSPHRASE case) refuses the restore. With
+   no alias typed there is no reference to check against, the BIP39
+   property above applies, and the restore yields whatever account
+   the (phrase, passphrase) pair names.
+6. **Recovery kit (legacy identities).** Accounts whose keys are
+   random cannot be re-derived; their anchor form is the step-1
+   backup payload (identity record + contacts + full key material)
+   encrypted under the kit key of item 3: AES-256-GCM, random 12-byte
+   IV, additionalData = the ASCII string `breeze-recovery-kit-v1`,
+   envelope `{ kitV: 1, iv, data }` (base64). Unwrap returns null on
+   any failure — the kit file alone is an offline oracle for the
+   (phrase, passphrase) PAIR jointly; neither factor alone opens it,
+   and the phrase alone carries 256 bits.
+
+**Implemented and deployed** (creation branch, first-run phrase entry,
+and the kit in `index.html`; drills in `tests/recovery-seed.test.js` —
+BIP39 vectors, node:crypto cross-derivation, create/wipe/restore and
+kit round-trips).
+
 ## 3. Session establishment (X3DH → Double Ratchet)
 
 - Initiator seeds the ratchet using `SPK_B` as the first DH-ratchet partner:

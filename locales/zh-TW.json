@@ -554,5 +554,21 @@
  "devUnlinkConfirm": "要將裝置 {0} 從帳號移除嗎？",
  "p2pDirect": "直連",
  "backupFileBtn": "💾 儲存為檔案",
- "restoreFileBtn": "📂 從檔案還原"
+ "restoreFileBtn": "📂 從檔案還原",
+ "setupPhrase": "以復原片語復原",
+ "recoveryPhraseTitle": "您的復原片語",
+ "recoveryPhraseDesc": "僅顯示一次。憑此片語與復原密碼，此帳號可在新裝置上復原——任何同時持有兩者的人都能復原，請妥善保管。Breeze 無法再次顯示，也無法替您復原。",
+ "recoveryPassLabel": "復原密碼（選填，建議設定）",
+ "recoverySaved": "我已保存復原片語",
+ "recoveryRestoreTitle": "以復原片語復原",
+ "recoveryPhraseLabel": "復原片語（24 個詞）",
+ "recoveryKitFileLabel": "復原工具包檔案（僅適用於復原片語推出前建立的帳號）",
+ "recoveryKitBtn": "建立復原工具包",
+ "toastRecoveryBadPhrase": "這不是有效的復原片語——請檢查單詞後再試一次。",
+ "toastRecoveryKitFailed": "無法開啟復原工具包——片語或密碼不相符。",
+ "toastRecoveryInvalidKit": "該檔案不是復原工具包。",
+ "toastRecoveryUnavailable": "復原片語目前無法使用——請重新載入後再試。",
+ "toastRecoveryKitCreated": "復原工具包已下載。只能以您的復原片語與密碼開啟——請一起保管。",
+ "toastRecoveryHasIdentity": "此裝置已有身分——片語復原僅適用於全新開始。",
+ "toastRecoveryMismatch": "該片語與密碼不屬於此 Breeze ID——未復原任何內容。"
 }

@@ -381,7 +381,7 @@ Each step ships independently and records its outcome in §5.
    derive from the account seed and show the recovery phrase
    once; existing identities get the recovery-kit wrap (§3.1).
    The file backup's passphrase minimum is raised as part of
-   this step (§2 item 8).
+   this step (§2 item 8). **Done** (outcome in §5).
 4. **Cloud cold recovery + auth defaults** — cloud
    fetch/restore runs from the anchor on a fresh install (no
    live identity required), and backup fetch authentication is
@@ -509,3 +509,99 @@ record, legacy warning shown, reload held to 6 s), the four
 failure/no-write cases above, and wiring pins (button present in
 the setup markup with its i18n label, listener drives
 `restoreFromFilePicker`, both new keys present in EN and JA).
+
+### Step 3 — Seed and deterministic derivation (DONE)
+
+§3.1 is implemented as designed. New module `src/crypto/seed.js`,
+deployed as ESM per the stage-3 precedent (runtime import,
+`window.__breezeSeed`, precached in sw.js, CLAUDE.md table row);
+index.html carries only the wiring — phrase dialogs, the creation
+branch, the restore/kit flows — and stays under the line ceiling
+(15,927 of 16,000). The full derivation spec is CRYPTO-SPEC §2b.
+
+- **Phrase form (the plan left the format open; decision recorded
+  here): the canonical BIP39 English mnemonic.** 32-byte entropy →
+  24 words with the standard checksum, the wordlist vendored
+  verbatim as data (`src/crypto/wordlist.js`, via the @scure/bip39
+  1.6.0 tarball, sha512 in the file header, cross-checked against
+  bitcoin/bips). No new wordlist, no new cryptography: the master
+  seed is BIP39's own PBKDF2-HMAC-SHA512 — whose optional
+  passphrase IS the plan's second factor — per-key seeds are
+  HKDF-SHA256 with domain-separating info strings, and keys enter
+  WebCrypto as RFC 8410 PKCS#8 seed imports (public halves read
+  back from the JWK), so no curve arithmetic exists in the code.
+- **New identities derive.** `createIdentity` runs the seed branch
+  first when the facade and both curves are present: fresh entropy,
+  the phrase shown ONCE behind a save confirmation (with the
+  optional recovery passphrase collected in the same dialog), keys
+  derived, the signing record stored before `initSigning()` loads
+  it. The seed itself is never stored — only the derived key
+  records, in the exact shapes a random identity stores. If the
+  user cancels, nothing is created; if derivation itself fails,
+  creation ABORTS rather than falling back to random keys behind a
+  phrase the user believes can restore them (fail closed). With
+  no facade, the historical random path is untouched.
+- **Existing identities get the kit.** `/backup` gains "Create
+  recovery kit": a fresh phrase is minted and shown once, and the
+  step-1 payload (identity + contacts + full key material) is
+  wrapped under the (seed, passphrase) anchor key
+  (AES-256-GCM, AAD `breeze-recovery-kit-v1`) and downloaded. The
+  kit is a third producer/consumer of the step-1 helpers — the
+  step-1 wiring census in `tests/backup-keymaterial.test.js` was
+  updated to count it, with the reason recorded there.
+- **The first-run screen gains the phrase entry** (the landing
+  §4 step 2 reserved): "Recover with a recovery phrase" opens one
+  dialog — phrase, passphrase, optional kit file. Derived accounts
+  re-derive and write exactly the records creation wrote;
+  kit accounts unwrap and land through restoreBackup's own writes.
+  Every write sits behind a successful checksum, derivation or kit
+  open, so a mistyped phrase, a wrong kit passphrase or a tampered
+  kit creates NOTHING. One guard beyond §3.1: BIP39 cannot detect
+  a wrong PASSPHRASE (it derives a different, empty account — a
+  property of every mnemonic wallet), so when the user typed
+  their @alias, the derived public key is checked against the
+  relay's alias record before anything is written; a mismatch
+  refuses the restore. Success reloads into `_boot()`'s normal
+  flow, the step-2 pattern; unrestored prekey material is
+  re-minted there, as after a v1 file restore.
+- **The file backup minimum rose 4 → 6** (§2 item 8), level with
+  the cloud path, reusing its message; creation-side only, so old
+  backups still open. (/lock's separate 4-character minimum is a
+  different feature and is untouched.)
+- **Recovery modes — the owner's three-way decision (2026-11-14)
+  and its correction, recorded as instructed.** Recovery becomes
+  a choice of three modes: (1) phrase + passphrase full recovery
+  — THIS step; (2) a disposable mode with no recovery at all,
+  labelled as such; (3) an account-linked simple mode. Modes (2)
+  and (3) are LATER steps, not this one. Per the owner's
+  correction of the same day — the standing principle is that
+  **the creator holds no user data**: mode (3)'s account and its
+  encrypted backup live ONLY on the user's own placement (their
+  own relay / their own contracted storage), never on the
+  creator's default placement; the default placement does not
+  offer the simple mode at all (disposable and phrase only).
+  What this step lays down for them: seed-derived `keys` records
+  carry **`recoveryMode: 'phrase'`**; random-key records carry no
+  field (absence == pre-step-3), and each later mode takes its
+  own value when it lands.
+- **i18n:** 16 new keys in EN + JA and, because the locale gate
+  holds every other locale to a 95% core-coverage floor, in
+  es/id/ko/pt-BR/th/zh-TW as well (all locales back to ≥96%).
+
+Evidence: `tests/recovery-seed.test.js` (29 tests) — the wordlist
+pins and BIP39 vectors (0x00… → "abandon"×23 + "art"; 0xff… →
+"zoo"×23 + "vote"), the derivation cross-checked against
+node:crypto's independent pbkdf2Sync/hkdfSync/createPrivateKey
+(byte-identical public keys), and the REAL index.html functions
+sliced against a mock IDB: create → wipe → phrase restore
+reproduces the identity record and signing record byte-for-byte;
+dialog cancel creates nothing; a bad phrase creates nothing; a
+wrong passphrase caught by the alias guard creates nothing; the
+kit drill restores a legacy identity whole (identity, signing,
+contacts), and wrong phrase / wrong passphrase / not-a-kit each
+create nothing. Full suite: 1,448 tests (baseline 1,419 + 29
+new); across two full runs the only failures were 5-second
+timeouts in `tests/mirror-drift.test.js` and `tests/pqkey.test.js`
+under shared-CPU load — both files pass in full when run
+individually (93/93 and 18/18), the known flake pattern, so no
+regression. validate.sh: PASSED, 165/171, level with baseline.

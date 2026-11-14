@@ -554,5 +554,21 @@
  "devUnlinkConfirm": "기기 {0} 을(를) 계정에서 제거할까요?",
  "p2pDirect": "직접 연결",
  "backupFileBtn": "💾 파일로 저장",
- "restoreFileBtn": "📂 파일에서 복원"
+ "restoreFileBtn": "📂 파일에서 복원",
+ "setupPhrase": "복구 문구로 복구",
+ "recoveryPhraseTitle": "내 복구 문구",
+ "recoveryPhraseDesc": "한 번만 표시됩니다. 이 문구와 복구 암호가 있으면 새 기기에서 이 계정을 복원할 수 있습니다. 둘 다 가진 누구나 복원할 수 있으니 안전한 곳에 보관하세요. Breeze는 이를 다시 표시하거나 대신 복구해 드릴 수 없습니다.",
+ "recoveryPassLabel": "복구 암호 (선택, 권장)",
+ "recoverySaved": "복구 문구를 저장했습니다",
+ "recoveryRestoreTitle": "복구 문구로 복원",
+ "recoveryPhraseLabel": "복구 문구 (24단어)",
+ "recoveryKitFileLabel": "복구 키트 파일 (복구 문구 도입 전에 만든 계정 전용)",
+ "recoveryKitBtn": "복구 키트 만들기",
+ "toastRecoveryBadPhrase": "유효한 복구 문구가 아닙니다 — 단어를 확인하고 다시 시도하세요.",
+ "toastRecoveryKitFailed": "복구 키트를 열 수 없습니다 — 문구 또는 암호가 일치하지 않습니다.",
+ "toastRecoveryInvalidKit": "복구 키트 파일이 아닙니다.",
+ "toastRecoveryUnavailable": "지금은 복구 문구를 사용할 수 없습니다 — 새로고침 후 다시 시도하세요.",
+ "toastRecoveryKitCreated": "복구 키트를 다운로드했습니다. 복구 문구와 암호가 있어야 열 수 있으니 함께 보관하세요.",
+ "toastRecoveryHasIdentity": "이 기기에는 이미 신원이 있습니다 — 문구 복원은 초기 상태에서만 사용할 수 있습니다.",
+ "toastRecoveryMismatch": "그 문구와 암호는 이 Breeze ID의 것이 아닙니다 — 아무것도 복원되지 않았습니다."
 }

@@ -7,7 +7,11 @@ const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-51
   // Stage-3 step 5 adds the PQXDH session facade and the combiner it wraps
   // (pqxdh.js → pq.js → mlkem.js/bytes.js, already listed).
   '/src/crypto/pqkey.js', '/src/crypto/mlkem.js', '/src/crypto/bytes.js',
-  '/src/crypto/pqxdh.js', '/src/crypto/pq.js'];
+  '/src/crypto/pqxdh.js', '/src/crypto/pq.js',
+  // Recovery plan step 3: the account-seed facade and its vendored BIP39
+  // wordlist — precached so a first offline boot can still create a
+  // seed-derived identity / offer phrase restore instead of degrading.
+  '/src/crypto/seed.js', '/src/crypto/wordlist.js'];
 const MAX_CACHE_ITEMS = 50; // v3.6: Prevent unbounded cache growth
 
 self.addEventListener('install', (e) => {
