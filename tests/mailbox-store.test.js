@@ -76,15 +76,15 @@ describe('MailboxStore (KV-backed)', () => {
 
   it('eraseMailboxes deletes exactly the five mailbox keys', async () => {
     const kv = makeKV({
-      'inbox:u1': '[]', 'inbox:u1:hwm': '9',
+      'inbox:u1': '[]', 'inbox:u1:hwm': '9', 'inbox:u1:dropped': '2',
       'sealed:u1': '[]', 'sealed:u1:hwm': '9', 'sealed:u1:dropped': '3',
       'inbox:u2': '[]', 'prekey:u1': '{}', 'presence:u1': '{}',
     });
     const env = { KV: kv };
     const results = eraseMailboxes(env, 'u1');
-    expect(results).toHaveLength(5);
-    expect(await Promise.all(results)).toEqual([true, true, true, true, true]);
-    for (const k of ['inbox:u1', 'inbox:u1:hwm', 'sealed:u1', 'sealed:u1:hwm', 'sealed:u1:dropped']) {
+    expect(results).toHaveLength(6);
+    expect(await Promise.all(results)).toEqual([true, true, true, true, true, true]);
+    for (const k of ['inbox:u1', 'inbox:u1:hwm', 'inbox:u1:dropped', 'sealed:u1', 'sealed:u1:hwm', 'sealed:u1:dropped']) {
       expect(kv.store.has(k), k).toBe(false);
     }
     // Untouched: another user's mailbox and non-mailbox keys of the same user.

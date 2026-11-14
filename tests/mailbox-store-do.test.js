@@ -152,9 +152,9 @@ describe('drain migration (KV → DO on first access)', () => {
     env.KV.store.set('sealed:undrained:hwm', '9');
 
     const results = eraseMailboxes(env, 'drained');
-    expect(results).toHaveLength(10); // 5 DO + 5 KV belt-and-braces
-    expect(await Promise.all(results)).toEqual(Array(10).fill(true));
-    expect(await Promise.all(eraseMailboxes(env, 'undrained'))).toEqual(Array(10).fill(true));
+    expect(results).toHaveLength(12); // 6 DO + 6 KV belt-and-braces
+    expect(await Promise.all(results)).toEqual(Array(12).fill(true));
+    expect(await Promise.all(eraseMailboxes(env, 'undrained'))).toEqual(Array(12).fill(true));
 
     expect(await mailboxStore(env, 'inbox', 'drained').readQueue()).toBeNull();
     expect(await mailboxStore(env, 'sealed', 'drained').readQueue()).toBeNull();
