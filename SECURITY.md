@@ -240,7 +240,10 @@ separate, explicitly-scoped future work if it's wanted.
     *can withhold* the registry, silently degrading an account to single-device delivery.
   - **Root loss = device-management loss.** Only the root key signs the registry; if the
     primary device is lost, devices can no longer be added or removed (messaging on surviving
-    devices keeps working). Keep a backup of the primary (`/backup`).
+    devices keeps working). Keep a backup of the primary (`/backup`). Since recovery-plan
+    step 1, backups carry the root signing key and the account record, so restoring one
+    on a new device restores device management too; backups written before then carry
+    neither and do not heal root loss.
   - **Revocation lags by the sender-side cache TTL (≤5 min).** After `/unlink`, a contact who
     fetched the registry recently may fan out to the removed device for up to 5 more minutes.
   - **No history sync** (like Signal): a newly linked device starts empty; `/backup`+restore is
