@@ -58,6 +58,53 @@ const DEPOSIT_LIMIT = { // stage-1 step 3: per-mailbox sealed-deposit frequency 
   HOUR_WINDOW_MS: 3600000,
   HOUR_MAX:       1200,
 };
+const USAGE_QUOTA = { // Fair-use budget per mailbox (2026-11-14; the
+  // "API model" cost policy, docs/COST_MODEL.md §10): the default relay
+  // is a free ENTRANCE with a bounded frame, not an unlimited commons —
+  // usage past the frame belongs on the user's own relay/account, and
+  // donations are never the meter that pays everyone's variable cost.
+  // The unit is ONE admitted deposit = one full delivery cycle
+  // (COST_MODEL §2.3: Worker 4 / DO 12 / DO rows 7 read + 6 write /
+  // KV 1 read), counted inside the recipient's DO by the same
+  // serialized 'deposit' op that runs the frequency gate above (see
+  // MailboxCore), so enforcement exists exactly where that gate does:
+  // MAILBOX_BACKEND=do. Measured profiles (COST_MODEL §2.6): a light
+  // user receives ~450 deposits/month (~15/day); a heavy user ~6,000
+  // (~200/day); extreme group fan-in stays in the low thousands/day.
+  // These caps sit far above human use — the daily cap is 50× the
+  // heavy day, the monthly ~33× the heavy month — so ordinary personal
+  // use never touches them, while one mailbox's worst-case metered
+  // cost stays bounded (~200k cycles/month ≈ a few dollars) instead
+  // of scaling with an attacker's patience. The daily cap also binds
+  // BELOW the frequency gate's theoretical maximum (1,200/hour ≈
+  // 28,800/day), which is what makes it a budget rather than a second
+  // rate limit. Operators retune or disable it via the USAGE_QUOTA_*
+  // env vars (usageQuotaConfig below); a relay run for its owner's
+  // own accounts should disable it — the frame exists for the shared
+  // default entrance, not for your own frame.
+  DAILY_MAX:   10000,
+  MONTHLY_MAX: 200000,
+};
+
+// Resolve the fair-use quota an operator configured for this
+// deployment, or null when it is disabled. Read by the worker-side
+// mailbox store on every deposit check and carried in the op body,
+// because MailboxCore is host-agnostic and never sees env itself.
+// Default ON (the deployment this code ships as is the public
+// entrance); USAGE_QUOTA_ENABLED=false turns it off, and non-positive
+// or unparseable limits fall back to the USAGE_QUOTA defaults rather
+// than silently becoming "block everything" or "no limit".
+function usageQuotaConfig(env) {
+  if (!env || env.USAGE_QUOTA_ENABLED === 'false') return null;
+  const parse = (v, fallback) => {
+    const n = Number.parseInt(v, 10);
+    return Number.isFinite(n) && n > 0 ? n : fallback;
+  };
+  return {
+    daily: parse(env.USAGE_QUOTA_DAILY, USAGE_QUOTA.DAILY_MAX),
+    monthly: parse(env.USAGE_QUOTA_MONTHLY, USAGE_QUOTA.MONTHLY_MAX),
+  };
+}
 
 function sanitizeString(val, maxLen = MAX_STRING_LEN) {
   if (typeof val !== 'string') return '';
@@ -521,7 +568,12 @@ function capQueueBytes(items, sizeOf, maxBytes = 16 * 1024 * 1024) {
 // counter, form ONE mailbox per (family, recipient).
 //
 // Step 3 adds one method to the surface: checkDeposit() →
-// { ok: true } | { ok: false, retryAfterSec }. It is the per-mailbox
+// { ok: true } | { ok: false, retryAfterSec }. The fair-use quota
+// (2026-11-14, USAGE_QUOTA above) rides the same method and the same
+// op: a quota denial is { ok: false, retryAfterSec, quotaExceeded:
+// true, quotaScope: 'daily' | 'monthly', quotaLimit }, checked and
+// recorded atomically with the frequency gate, and a denial by either
+// layer records nothing in the other. It is the per-mailbox
 // deposit frequency gate the router's rate-limit comment long deferred
 // ("a true cross-isolate per-user limit needs a Durable Object"): the
 // DO backend checks-and-records atomically inside the recipient's DO
@@ -534,6 +586,21 @@ function capQueueBytes(items, sizeOf, maxBytes = 16 * 1024 * 1024) {
 // is a mitigation layer, not a correctness invariant — a DO outage must
 // not take down sealed delivery, and the queue caps (100 entries /
 // 16 MB via capQueueBytes) still bound what a flood can store.
+//
+// The quota layer counts DEPOSITS ONLY, as the proxy for the whole
+// delivery cycle (COST_MODEL §2.3 counts the cycle as one unit, and
+// polls/acks are bounded by deposits: nothing can be acked that was
+// never deposited, and a poll that returns mail is paid for by the
+// deposit that put it there). Polls themselves are deliberately NOT
+// counted: an idle poll is the cheapest op in the system (1 DO
+// request + 1 row read on the DO backend), its volume is set by
+// online time rather than usage — the fixed-cost problem COST_MODEL
+// §7 and the P2P plan address structurally — and counting it would
+// spend a counter WRITE per poll, i.e. buy the most expensive metered
+// op to meter one of the cheapest. Signal/presence polling is
+// likewise out of scope here: signal rooms are keyed by room, not by
+// identity, so there is no per-identity counter they could honestly
+// charge; their reduction is the P2P plan's step, not a quota's.
 //
 // Two backends honour this surface, selected by MAILBOX_BACKEND:
 //
@@ -586,7 +653,8 @@ function kvMailboxStoreForKey(env, queueKey) {
     readDropped: () => kvGet(env, droppedKey),
     writeDropped: (value, ttlSec) => kvPut(env, droppedKey, value, { expirationTtl: ttlSec }),
     deleteDropped: () => kvDel(env, droppedKey),
-    // No per-mailbox deposit gate on KV (see the store header): always ok.
+    // No per-mailbox deposit gate on KV (see the store header), and
+    // no fair-use quota either — both ride the same op: always ok.
     checkDeposit: async () => ({ ok: true }),
   };
 }
@@ -742,8 +810,46 @@ export class MailboxCore {
         if (log.length >= DEPOSIT_LIMIT.HOUR_MAX) {
           return { status: 200, body: { ok: false, retryAfterSec: Math.max(1, Math.ceil((log[0] + DEPOSIT_LIMIT.HOUR_WINDOW_MS - now) / 1000)) } };
         }
+        // Fair-use usage quota (2026-11-14, USAGE_QUOTA / COST_MODEL
+        // §10): this mailbox's day/month deposit budgets. The limits
+        // arrive in the op body from the worker-side store
+        // (usageQuotaConfig(env)) because the core never sees env;
+        // hosts that send none get no counting at all. Checked BEFORE
+        // anything is recorded, so a quota denial leaves the
+        // frequency log untouched just as a frequency denial leaves
+        // the usage record untouched — neither gate's denial is
+        // itself a billable event. Windows are UTC calendar day and
+        // month; retryAfterSec runs to the window's end. The record
+        // ('usage', { d, dc, m, mc }) is budget state, not mailbox
+        // content — like the log above it is NOT erased by the slot
+        // deletes account deletion performs, so delete-and-re-register
+        // inherits the spent budget instead of a reset button. Cost
+        // of the layer: one extra get + put per admitted deposit
+        // (DO rows 7r/6w → 8r/7w per cycle), the price of the bound.
+        const quota = (body.quota && Number.isFinite(body.quota.daily) && Number.isFinite(body.quota.monthly)
+          && body.quota.daily > 0 && body.quota.monthly > 0) ? body.quota : null;
+        let usageNext = null;
+        if (quota) {
+          const dNow = new Date(now);
+          const dayKey = dNow.toISOString().slice(0, 10);
+          const monthKey = dayKey.slice(0, 7);
+          const rawUsage = await st.get('usage');
+          const u = (rawUsage && typeof rawUsage === 'object') ? rawUsage : {};
+          const dayCount = (u.d === dayKey && Number.isFinite(u.dc)) ? u.dc : 0;
+          const monthCount = (u.m === monthKey && Number.isFinite(u.mc)) ? u.mc : 0;
+          if (dayCount >= quota.daily) {
+            const next = Date.UTC(dNow.getUTCFullYear(), dNow.getUTCMonth(), dNow.getUTCDate() + 1);
+            return { status: 200, body: { ok: false, quotaExceeded: true, quotaScope: 'daily', quotaLimit: quota.daily, retryAfterSec: Math.max(1, Math.ceil((next - now) / 1000)) } };
+          }
+          if (monthCount >= quota.monthly) {
+            const next = Date.UTC(dNow.getUTCFullYear(), dNow.getUTCMonth() + 1, 1);
+            return { status: 200, body: { ok: false, quotaExceeded: true, quotaScope: 'monthly', quotaLimit: quota.monthly, retryAfterSec: Math.max(1, Math.ceil((next - now) / 1000)) } };
+          }
+          usageNext = { d: dayKey, dc: dayCount + 1, m: monthKey, mc: monthCount + 1 };
+        }
         log.push(now);
         await st.put('deposits', log);
+        if (usageNext) await st.put('usage', usageNext);
         return { status: 200, body: { ok: true } };
       }
       if (op === 'get') {
@@ -818,13 +924,13 @@ function doMailboxStoreForKey(env, queueKey) {
   const idx = queueKey.indexOf(':');
   const kind = queueKey.slice(0, idx);
   const userId = queueKey.slice(idx + 1);
-  const call = async (op, slot, value, ttlSec) => {
+  const call = async (op, slot, value, ttlSec, extra) => {
     try {
       const stub = env.MAILBOX_DO.get(env.MAILBOX_DO.idFromName(userId));
       const res = await stub.fetch('https://mailbox.internal/op', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ op, family: kind, slot, value, ttlSec, userId }),
+        body: JSON.stringify({ op, family: kind, slot, value, ttlSec, userId, ...(extra || {}) }),
       });
       if (!res || !res.ok) return null;
       return await res.json();
@@ -856,15 +962,30 @@ function doMailboxStoreForKey(env, queueKey) {
     readDropped: read('dropped'),
     writeDropped: write('dropped'),
     deleteDropped: del('dropped'),
-    // Per-mailbox deposit frequency gate (stage-1 step 3). The DO
-    // answers 200 { ok: false, retryAfterSec } for a denial and 200
-    // { ok: true } for an admitted (and now recorded) deposit; a null
-    // result here means the RPC itself failed, which fails open — see
-    // the store header for why the gate must not block delivery.
+    // Per-mailbox deposit frequency gate (stage-1 step 3) + fair-use
+    // usage quota (2026-11-14). The DO answers 200 { ok: false,
+    // retryAfterSec } for a frequency denial, 200 { ok: false,
+    // quotaExceeded: true, quotaScope, quotaLimit, retryAfterSec }
+    // for a quota denial, and 200 { ok: true } for an admitted (and
+    // now recorded) deposit; a null result here means the RPC itself
+    // failed, which fails open — see the store header for why the
+    // gate must not block delivery. The operator's quota config is
+    // resolved HERE, from env, on every call and carried in the op
+    // body: MailboxCore is host-agnostic and never sees env, and a
+    // config change takes effect without restarting anything.
     checkDeposit: async () => {
-      const r = await call('deposit');
+      const quota = usageQuotaConfig(env);
+      const r = await call('deposit', undefined, undefined, undefined, quota ? { quota } : undefined);
       if (!r) return { ok: true };
       if (r.ok) return { ok: true };
+      if (r.quotaExceeded) {
+        return {
+          ok: false, quotaExceeded: true,
+          quotaScope: r.quotaScope === 'monthly' ? 'monthly' : 'daily',
+          quotaLimit: Number.isFinite(r.quotaLimit) ? r.quotaLimit : null,
+          retryAfterSec: Number.isFinite(r.retryAfterSec) ? r.retryAfterSec : 60,
+        };
+      }
       return { ok: false, retryAfterSec: Number.isFinite(r.retryAfterSec) ? r.retryAfterSec : 60 };
     },
   };
@@ -3813,6 +3934,8 @@ async function handleSealedSend(body, env, request) {
   // burns the mailbox's storage writes. checkDeposit enforces
   // DEPOSIT_LIMIT inside the recipient's DO; on the KV backend it is a
   // documented no-op (enforcement arrives with MAILBOX_BACKEND=do).
+  // The fair-use usage quota (USAGE_QUOTA, docs/COST_MODEL.md §10)
+  // rides the same check: same op, same fail-open, same no-op on KV.
   const gate = await mb.checkDeposit();
   if (!gate.ok) {
     // Un-mark the dedup key (set above) before answering 429: the
@@ -3820,6 +3943,18 @@ async function handleSealedSend(body, env, request) {
     // as a duplicate — the same rule the STORE_FAILED path below
     // already follows.
     globalThis._sealedDedup.delete(dedupKey);
+    if (gate.quotaExceeded) {
+      // A quota denial is NOT a rate limit, and the body says so with
+      // a distinct code: "slow down" (MAILBOX_RATE_LIMITED) is wrong
+      // advice for "this mailbox has spent the relay's free frame
+      // until the window resets". quotaScope/quotaLimit/retryAfter
+      // give clients what they need to say that honestly — and the
+      // recipient stays reachable over P2P and via their home relay,
+      // which this relay's budget does not govern. Nothing was
+      // stored, so nothing is lost: the sender's outbox keeps the
+      // message and a later retry is judged afresh.
+      return json({ error: 'Mailbox usage quota exceeded', code: 'USAGE_QUOTA_EXCEEDED', quotaScope: gate.quotaScope, quotaLimit: gate.quotaLimit, retryAfter: gate.retryAfterSec }, 429, request);
+    }
     return json({ error: 'Mailbox deposit rate limited', code: 'MAILBOX_RATE_LIMITED', retryAfter: gate.retryAfterSec }, 429, request);
   }
   const existing = await mb.readQueue();

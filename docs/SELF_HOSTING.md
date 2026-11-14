@@ -68,6 +68,36 @@ default.
   `REGISTRATION_OPEN: "1"` in `docker-compose.yml`. You own the
   abuse economics if you do.
 
+### Usage quota: turn it off on your own relay
+
+The worker ships with a **fair-use usage quota** enabled: per
+mailbox, at most 10,000 deposits/day and 200,000/month (a deposit is
+one full delivery cycle — see `docs/COST_MODEL.md` §10 for the
+policy and the numbers). That frame exists for the *shared default
+relay*, which is run as a free entrance whose variable costs the
+operator would otherwise carry for everyone. **On a relay you run
+for yourself and your people, the frame is pointless — disable
+it**:
+
+```bash
+USAGE_QUOTA_ENABLED=false
+```
+
+Set it wherever your relay reads its environment (the shell or
+`.env` next to `docker-compose.yml`, the Node process environment,
+or Cloudflare Pages secrets). Two neighbouring knobs exist if you
+run a community relay and *do* want a frame:
+`USAGE_QUOTA_DAILY` and `USAGE_QUOTA_MONTHLY` retune the caps.
+Notes that matter:
+
+- The quota is enforced only when mailboxes live in Durable
+  Objects (`MAILBOX_BACKEND=do`, the default on this host); on the
+  KV backend it is a documented no-op.
+- Past the cap, senders get an explicit `429 USAGE_QUOTA_EXCEEDED`
+  (with the window and its limit) instead of a silent drop — the
+  message stays in the sender's outbox, and the recipient remains
+  reachable over P2P and via any other home relay.
+
 ### Relay identity
 
 On first boot the relay generates a persistent Ed25519 identity key
