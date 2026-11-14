@@ -204,7 +204,7 @@ function buildCreate(db, { promptAnswer = 'drill-pass', api = null } = {}) {
     'let myKeys = null, myPubB64 = "", myName = "", myAlias = "", myId = "", myShortId = "", _userId = "";',
     slice('function arr(u8a)', 'function uid()'),
     slice('async function _seedIdentityMaterial()', 'async function createIdentity'),
-    slice('async function createIdentity(name, alias)', '// DOUBLE RATCHET CRYPTO ENGINE'),
+    slice('async function createIdentity(name, alias, disposable', '// DOUBLE RATCHET CRYPTO ENGINE'),
   ].join('\n');
   const factory = new Function('db', '_dbg', 'showToast', 't', '_hasX25519', '_hasEd25519',
     '_promptRecoveryPhraseNew', 'genIdentityKey', 'dbPut', 'auditLog', 'generateShortId', 'localStorage', 'API',
@@ -445,7 +445,7 @@ describe('recovery step 3 — wiring pins', () => {
 
   it('seed-derived records carry recoveryMode, random ones do not', () => {
     expect(html).toContain("recoveryMode: 'phrase'");
-    const create = slice('async function createIdentity(name, alias)', '// DOUBLE RATCHET CRYPTO ENGINE');
+    const create = slice('async function createIdentity(name, alias, disposable', '// DOUBLE RATCHET CRYPTO ENGINE');
     expect(create).toContain('...(seedMat ? { recoveryMode:');
   });
 

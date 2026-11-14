@@ -556,6 +556,7 @@
  "backupFileBtn": "💾 Simpan ke file",
  "restoreFileBtn": "📂 Pulihkan dari file",
  "setupPhrase": "Pulihkan dengan frasa pemulihan",
+ "setupDisposable": "Identitas sekali pakai (tanpa pemulihan)",
  "recoveryPhraseTitle": "Frasa pemulihan Anda",
  "recoveryPhraseDesc": "Ditampilkan satu kali saja. Dengan frasa ini dan kata sandi pemulihan Anda, akun ini dapat dipulihkan di perangkat baru — oleh siapa pun yang memiliki keduanya, jadi simpanlah di tempat yang aman. Breeze tidak dapat menampilkannya lagi atau memulihkannya untuk Anda.",
  "recoveryPassLabel": "Kata sandi pemulihan (opsional, disarankan)",
@@ -570,5 +571,9 @@
  "toastRecoveryUnavailable": "Frasa pemulihan tidak tersedia saat ini — muat ulang dan coba lagi.",
  "toastRecoveryKitCreated": "Kit pemulihan terunduh. Kit hanya bisa dibuka dengan frasa pemulihan dan kata sandi Anda — simpan bersama-sama.",
  "toastRecoveryHasIdentity": "Perangkat ini sudah memiliki identitas — pemulihan dengan frasa hanya untuk mulai dari awal.",
- "toastRecoveryMismatch": "Frasa dan kata sandi itu bukan milik ID Breeze ini — tidak ada yang dipulihkan."
+ "toastRecoveryMismatch": "Frasa dan kata sandi itu bukan milik ID Breeze ini — tidak ada yang dipulihkan.",
+ "disposableTitle": "Identitas sekali pakai — tanpa pemulihan",
+ "disposableDesc": "Jika perangkat ini hilang, diatur ulang, atau data browser ini dihapus, identitas ini akan hilang selamanya. Tidak ada frasa pemulihan dan tidak ada cara untuk mengembalikannya. Kontak Anda akan melihat orang yang benar-benar baru saat Anda memulai lagi.",
+ "disposableOk": "Saya mengerti — tanpa pemulihan",
+ "toastRecoveryNoneKit": "Identitas ini sekali pakai (tanpa pemulihan), jadi kit pemulihan tidak dapat dibuat."
 }

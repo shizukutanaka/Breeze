@@ -605,3 +605,65 @@ timeouts in `tests/mirror-drift.test.js` and `tests/pqkey.test.js`
 under shared-CPU load — both files pass in full when run
 individually (93/93 and 18/18), the known flake pattern, so no
 regression. validate.sh: PASSED, 165/171, level with baseline.
+
+### Disposable mode — the second recovery mode (DONE)
+
+The middle of the owner's three modes (§5 step-3 outcome): an
+identity that is unrecoverable BY CHOICE, labelled as such at every
+surface it touches.
+
+- **Opt-in only, never the default.** The setup screen gains a
+  fourth entry, "Disposable identity (no recovery)"
+  (`#b-msg-setup-none`), beside Create / file restore / phrase
+  restore. It opens a danger-styled confirmation that says plainly
+  that losing the device or clearing the browser data ends the
+  identity forever, with no phrase and no way back; only an
+  explicit confirm proceeds. The ordinary Create button (and the
+  Enter key that clicks it) still runs the phrase flow — the setup
+  create handler became one shared `_runSetupCreate(disposable)`
+  so the two entries cannot drift apart.
+- **Creation skips the seed branch entirely.**
+  `createIdentity(name, alias, disposable)` with `disposable` set
+  never calls `_seedIdentityMaterial()`: no phrase is minted or
+  shown, keys are the historical random generation, and the keys
+  record carries **`recoveryMode: 'none'`** (seed-derived records
+  carry `'phrase'`; pre-step-3 records carry no field — absence
+  stays legacy, and legacy stays kit-eligible, unlike the chosen,
+  permanent `'none'`).
+- **The mode stays visible.** /security's Active Protections block
+  reads the recorded mode off the identity record: a phrase line
+  for `'phrase'`, "NONE — this identity can never be recovered"
+  for `'none'`, and the kit wording for modeless legacy records.
+- **Outside the recovery machinery, visibly.** `createRecoveryKit`
+  refuses a `'none'` identity with its own toast before any phrase
+  is minted — a kit would silently undo the opt-out. Phrase
+  restore needs no guard: it runs only on a fresh install, and a
+  disposable identity has no phrase that could ever be typed into
+  it. The file/cloud backups are unchanged by this step — they are
+  passphrase-encrypted exports the user makes deliberately from
+  inside the app, not a recovery promise the mode makes; whether
+  'none' should also refuse them is left as an explicit open
+  question for the owner rather than decided silently here.
+- **Line budget.** index.html lands at 15,955 of the 16,000
+  ceiling (+28 net): one button, nine EN keys, the create-branch
+  flag, the gated registration, the kit guard, one /security line.
+  The other locales carry the five user-facing keys (JA at 100%
+  as required; es/id/ko/pt-BR/th/zh-TW core coverage unchanged at
+  96%; the four `sec*` keys are diagnostics-class, EN+JA).
+
+Evidence: `tests/recovery-disposable.test.js` (10 tests) — the
+real sliced `createIdentity`: disposable creation returns true
+with the phrase dialog invoked ZERO times, no derived signing
+record planted, two creations yielding different keys (random,
+not derived), the record labelled `'none'`; the default and
+explicit-false paths still show the 24-word phrase and record
+`'phrase'`. The real sliced `createRecoveryKit`: a `'none'`
+identity is refused with the dedicated toast, no phrase minted,
+no download; a modeless legacy identity still receives its kit
+(control). Wiring pins cover the setup entry, the confirmation
+gate (the one and only `_runSetupCreate(true)` call sits inside
+it), the /security rendering, the kit guard, and EN+JA key
+presence. The two slice anchors in `tests/recovery-seed.test.js`
+followed the `createIdentity` signature change; its assertions
+are unchanged. Full suite and validate.sh results are recorded
+in the PR.

@@ -1083,6 +1083,7 @@ del.md-del { opacity: .6 }
     <button class="btn btn-g setup-cta" id="b-msg-setup" data-i18n="createFree"></button>
     <button class="btn btn-o setup-restore" id="b-msg-setup-restore" data-i18n="setupRestore"></button>
     <button class="btn btn-o setup-restore" id="b-msg-setup-phrase" data-i18n="setupPhrase"></button>
+    <button class="btn btn-o setup-restore" id="b-msg-setup-none" data-i18n="setupDisposable"></button>
     <div class="setup-footer">
       <span data-i18n="noCreditCard"></span><br>
       <button class="btn btn-o btn-sm hidden mt-8" id="setup-install-btn" data-i18n="uiInstall">Install App</button>
@@ -1373,6 +1374,7 @@ const _I = {
     createFree: 'Create Identity — Free',
     setupRestore: 'Restore from a backup file',
     setupPhrase: 'Recover with a recovery phrase',
+    setupDisposable: 'Disposable identity (no recovery)',
     noCreditCard: 'No credit card. No email. Just a name.',
     searchPh: 'Search...',
     searchEmojiPh: 'Search emoji...',
@@ -1835,6 +1837,10 @@ const _I = {
     toastRecoveryKitCreated: 'Recovery kit downloaded. It opens only with your recovery phrase and passphrase — keep them together.',
     toastRecoveryHasIdentity: 'This device already has an identity — phrase restore is only for a fresh start.',
     toastRecoveryMismatch: 'That phrase and passphrase do not belong to this Breeze ID — nothing was restored.',
+    disposableTitle: 'Disposable identity — no recovery',
+    disposableDesc: 'If this device is lost, reset, or this browser data is cleared, this identity is gone forever. There is no recovery phrase and no way to get it back. Your contacts will see a brand-new person when you start over.',
+    disposableOk: 'I understand — no recovery',
+    toastRecoveryNoneKit: 'This identity is disposable (no recovery), so a recovery kit cannot be created.',
     toastWrongPassphrase: 'Wrong passphrase or corrupted file',
     toastAliasNotFound: 'Alias not found',
     toastAliasResolveFail: 'Could not resolve alias',
@@ -1895,6 +1901,10 @@ const _I = {
     secNativeSupport: 'Native support',
     secNotYetBrowser: 'Not yet in browser',
     secLblStatus: 'Status',
+    secLblRecovery: 'Recovery',
+    secRecoveryPhrase: 'recovery phrase',
+    secRecoveryNone: 'NONE — this identity can never be recovered',
+    secRecoveryLegacy: 'recovery kit (created before recovery phrases)',
     secPQNative: 'ML-KEM (native)',
     secPQPlanned: 'Planned (hybrid X25519+ML-KEM)',
     secPqxdhInUse: 'In use (this session)',
@@ -5126,9 +5136,14 @@ async function initMessenger(dbName) {
     return seedH.deriveIdentityMaterial(entropy, pass);
   }
 
-  async function createIdentity(name, alias) {
+  // `disposable` is the second of the owner's three recovery modes: the
+  // user explicitly chose NO recovery (behind the setup screen's warning
+  // confirmation), so the seed branch is skipped entirely — no phrase is
+  // minted or shown — and the random identity is labelled 'none' on its
+  // record. The phrase path stays the default (disposable === false).
+  async function createIdentity(name, alias, disposable = false) {
     let seedMat;
-    try { seedMat = await _seedIdentityMaterial(); }
+    try { seedMat = disposable ? undefined : await _seedIdentityMaterial(); }
     catch(e) { _dbg(e, 'seed-create'); showToast(t('toastRecoveryUnavailable'), 'error'); return false; }
     if (seedMat === null) return false; // cancelled at the phrase step — nothing created
     const keys = seedMat ? seedMat.identityKeyPair : await genIdentityKey(); // v3.1: use X25519 when available
@@ -5148,10 +5163,12 @@ async function initMessenger(dbName) {
 
     // Recovery plan step 3: a seed-derived identity carries its recovery
     // mode on the record ('phrase' — the first of the three recovery modes
-    // the owner chose between on 2026-11-14; the disposable and
-    // account-linked modes land in later steps and take their own values).
-    // Random-key identities carry no field: absence == pre-step-3.
-    await dbPut('identity', { pub: arr(new Uint8Array(pubRaw)), priv: privJwk, pubB64, name, alias: registeredAlias, ...(seedMat ? { recoveryMode: 'phrase' } : {}) }, 'keys');
+    // the owner chose between on 2026-11-14). The disposable mode takes
+    // 'none' here; the account-linked mode lands in a later step with its
+    // own value. Pre-step-3 random identities carry no field (absence ==
+    // legacy, still kit-eligible — unlike 'none', which is a chosen,
+    // permanent opt-out).
+    await dbPut('identity', { pub: arr(new Uint8Array(pubRaw)), priv: privJwk, pubB64, name, alias: registeredAlias, ...(seedMat ? { recoveryMode: 'phrase' } : disposable ? { recoveryMode: 'none' } : {}) }, 'keys');
     // The derived signing record is stored BEFORE the initSigning() call
     // below, which loads a stored record rather than minting a random one
     // — that load is what makes the derived Ed25519 key the account's
@@ -7073,13 +7090,13 @@ async function initMessenger(dbName) {
   }
   } // end _boot
 
-  _DOM.get('b-msg-setup')?.addEventListener('click', async () => {
+  async function _runSetupCreate(disposable) {
     const name = _DOM.get('msg-name').value.trim().slice(0, 64) || 'Anonymous';
     const alias = (_DOM.get('msg-alias').value.trim() || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
     // Recovery plan step 3: createIdentity returns false when the user
     // cancels at the recovery-phrase step (or derivation failed) — stay on
     // the setup screen with nothing created.
-    if (!await createIdentity(name, alias)) return;
+    if (!await createIdentity(name, alias, disposable)) return;
     _outbox.clear();
     _DOM.get('msg-setup').classList.add('hidden');
     _DOM.get('msg-main').classList.remove('hidden');
@@ -7124,6 +7141,13 @@ async function initMessenger(dbName) {
     // Auto-join group
     if (joinToken) await processJoinToken(joinToken);
     _openSettingsFromUrl();
+  }
+  // The default create path: the phrase mode (recovery plan step 3).
+  _DOM.get('b-msg-setup')?.addEventListener('click', () => { _runSetupCreate(false); });
+  // Disposable mode: the same create flow, reachable ONLY behind the
+  // explicit no-recovery confirmation — declining it creates nothing.
+  _DOM.get('b-msg-setup-none')?.addEventListener('click', async () => {
+    if (await showConfirm(t('disposableTitle'), { desc: t('disposableDesc'), okText: t('disposableOk'), danger: true })) _runSetupCreate(true);
   });
   // Recovery plan step 2 (docs/IDENTITY_RECOVERY_PLAN.md §4): the first-run
   // screen's restore entry. Until now restoreBackup was reachable only from
@@ -12184,14 +12208,17 @@ async function initMessenger(dbName) {
   // wrapped under a key derived from seed + the recovery passphrase the
   // user sets in the phrase dialog (src/crypto/seed.js wrapKit). The kit
   // file alone opens nothing; phrase alone opens nothing; together they
-  // are the account. Available to every identity (a seed-derived account
-  // may also hold a kit as a second artefact — its phrase alone already
-  // restores it, so for those this is belt-and-braces, not a requirement).
+  // are the account. Available to every recoverable identity (a
+  // seed-derived account may also hold a kit as a second artefact — its
+  // phrase alone already restores it, so for those this is
+  // belt-and-braces, not a requirement). Disposable ('none') identities
+  // are refused below: a kit would silently undo their chosen opt-out.
   async function createRecoveryKit() {
     const seedH = globalThis.__breezeSeed;
     if (!seedH) { showToast(t('toastRecoveryUnavailable'), 'error'); return; }
     const identity = await dbGet('identity', 'keys');
     if (!identity) { showToast(t('toastNoIdentityBackup'), 'error'); return; }
+    if (identity.recoveryMode === 'none') { showToast(t('toastRecoveryNoneKit'), 'error'); return; }
     try {
       const entropy = seedH.randomEntropy();
       const phrase = await seedH.entropyToPhrase(entropy);
@@ -14554,6 +14581,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         '',
         '<b>' + t('secActiveProtections') + '</b>',
         t(_atRestOn ? 'secAtRestWrapOn' : 'secAtRestWrapOff'),
+        t('secLblRecovery') + ': ' + (_identRec?.recoveryMode === 'none' ? '✗ ' + t('secRecoveryNone') : _identRec?.recoveryMode === 'phrase' ? '<span class="i-g">✓ ' + t('secRecoveryPhrase') + '</span>' : t('secRecoveryLegacy')),
         t(CONFIG.GROUP_RATCHET_V5 ? 'secGroupFSOn' : 'secGroupFSOff'),
         t(CONFIG.CALL_E2E_SIGNAL ? 'secCallSignalOn' : 'secCallSignalOff'),
         '',

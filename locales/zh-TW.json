@@ -556,6 +556,7 @@
  "backupFileBtn": "💾 儲存為檔案",
  "restoreFileBtn": "📂 從檔案還原",
  "setupPhrase": "以復原片語復原",
+ "setupDisposable": "拋棄式身分（無法復原）",
  "recoveryPhraseTitle": "您的復原片語",
  "recoveryPhraseDesc": "僅顯示一次。憑此片語與復原密碼，此帳號可在新裝置上復原——任何同時持有兩者的人都能復原，請妥善保管。Breeze 無法再次顯示，也無法替您復原。",
  "recoveryPassLabel": "復原密碼（選填，建議設定）",
@@ -570,5 +571,9 @@
  "toastRecoveryUnavailable": "復原片語目前無法使用——請重新載入後再試。",
  "toastRecoveryKitCreated": "復原工具包已下載。只能以您的復原片語與密碼開啟——請一起保管。",
  "toastRecoveryHasIdentity": "此裝置已有身分——片語復原僅適用於全新開始。",
- "toastRecoveryMismatch": "該片語與密碼不屬於此 Breeze ID——未復原任何內容。"
+ "toastRecoveryMismatch": "該片語與密碼不屬於此 Breeze ID——未復原任何內容。",
+ "disposableTitle": "拋棄式身分 — 無法復原",
+ "disposableDesc": "如果這台裝置遺失、被重置，或此瀏覽器資料被清除，這個身分將永遠消失。沒有復原詞組，也沒有任何方法可以找回。重新開始時，您的聯絡人會看到一個全然陌生的人。",
+ "disposableOk": "我了解 — 不需復原",
+ "toastRecoveryNoneKit": "這個身分是拋棄式（無法復原），因此無法建立復原套件。"
 }
