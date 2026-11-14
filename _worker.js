@@ -3190,7 +3190,7 @@ async function handleRelayAttest(body, env, request) {
 }
 
 async function handlePreKeyUpload(body, env, request) {
-  const { userId, identityKey, edIdentityKey, signedPreKey, signedPreKeySig, oneTimePreKeys, caps, x3dh, home, ts, sig } = body;
+  const { userId, identityKey, edIdentityKey, signedPreKey, signedPreKeySig, oneTimePreKeys, caps, x3dh, home, pqPreKey, pqPreKeySig, ts, sig } = body;
   if (!userId || !identityKey || !signedPreKey) return json({ error: 'userId, identityKey, signedPreKey required', code: 'MISSING_FIELDS' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   // Type guard: public key fields must be strings. An object/array passes the !x
@@ -3206,6 +3206,10 @@ async function handlePreKeyUpload(body, env, request) {
     return json({ error: 'edIdentityKey must be a string', code: 'INVALID_TYPE' }, 400, request);
   if (signedPreKeySig !== undefined && typeof signedPreKeySig !== 'string')
     return json({ error: 'signedPreKeySig must be a string', code: 'INVALID_TYPE' }, 400, request);
+  if (pqPreKey !== undefined && typeof pqPreKey !== 'string')
+    return json({ error: 'pqPreKey must be a string', code: 'INVALID_TYPE' }, 400, request);
+  if (pqPreKeySig !== undefined && typeof pqPreKeySig !== 'string')
+    return json({ error: 'pqPreKeySig must be a string', code: 'INVALID_TYPE' }, 400, request);
   // Size-guard public key fields. Valid keys are small (P-256 JWK ≤~300 chars,
   // X25519/Ed25519 raw base64 ≤88 chars). Cap here blocks KV inflation via a
   // single huge field bypassing the aggregate body limit.
@@ -3219,6 +3223,14 @@ async function handlePreKeyUpload(body, env, request) {
     return json({ error: 'signedPreKey too large', code: 'FIELD_TOO_LARGE' }, 400, request);
   if (signedPreKeySig && signedPreKeySig.length > _SIG_MAX)
     return json({ error: 'signedPreKeySig too large', code: 'FIELD_TOO_LARGE' }, 400, request);
+  // Stage-3 step 2 (plan D3): the ML-KEM-768 public key base64 is exactly
+  // 1,580 chars — the only valid size class. The 2,000 cap follows the same
+  // headroom pattern as the fields above without admitting a second class.
+  const _PQ_MAX = 2000;
+  if (pqPreKey && pqPreKey.length > _PQ_MAX)
+    return json({ error: 'pqPreKey too large', code: 'FIELD_TOO_LARGE' }, 400, request);
+  if (pqPreKeySig && pqPreKeySig.length > _SIG_MAX)
+    return json({ error: 'pqPreKeySig too large', code: 'FIELD_TOO_LARGE' }, 400, request);
   // I1/G2: authenticated X3DH. If a signature + Ed25519 identity key are supplied,
   // verify the signature over the signed pre-key and REJECT if invalid. Unsigned
   // bundles are still accepted during the v4->v5 transition, but an invalid
@@ -3227,13 +3239,32 @@ async function handlePreKeyUpload(body, env, request) {
     const ok = await verifyEd25519(edIdentityKey, signedPreKey, signedPreKeySig);
     if (!ok) return json({ error: 'Invalid signed pre-key signature', code: 'PREKEY_SIG_INVALID' }, 400, request);
   }
+  // Stage-3 step 2 (plan D3): the PQ prekey pair gets the SPK doctrine
+  // byte-for-byte. pqPreKeySig is an Ed25519 signature over the RAW pqPreKey
+  // bytes (verifyEd25519 base64-decodes the message, so passing the base64
+  // key signs exactly the raw bytes — same as signedPreKey above). Verified
+  // when the pair and the identity signing key are all present; an invalid
+  // signature is never stored. A signature WITHOUT its key can never be
+  // verified by anyone, so it is rejected outright instead of being stored
+  // unverifiable. An UNSIGNED pqPreKey is accepted during the transition
+  // exactly like an unsigned SPK — and is inert: negotiation (plan D5)
+  // requires the signature, and initiators re-verify it themselves, so this
+  // worker-side check is defense-in-depth, not the root of trust.
+  if (pqPreKeySig && !pqPreKey) {
+    return json({ error: 'PQ pre-key signature without pre-key', code: 'PQ_PREKEY_SIG_INVALID' }, 400, request);
+  }
+  if (pqPreKeySig && pqPreKey && edIdentityKey) {
+    const okPq = await verifyEd25519(edIdentityKey, pqPreKey, pqPreKeySig);
+    if (!okPq) return json({ error: 'Invalid PQ pre-key signature', code: 'PQ_PREKEY_SIG_INVALID' }, 400, request);
+  }
 
   // Upload ownership proof (same doctrine as QUEUE/BACKUP/GROUP_REQUIRE_AUTH):
   // identityKey.startsWith(userId) binds a NEW account's key to its id, but does nothing
   // for an EXISTING userId — anyone could overwrite the bundle (keys, OTP list, caps) of a
   // registered account, the exact "unexpected key change" the ktlog exists to detect. Callers
   // may sign `breeze-prekey-upload:{userId}:{ts}:{digest}` where digest binds every
-  // attacker-malleable field (keys, signedPreKeySig, oneTimePreKeys, caps, x3dh); verified
+  // attacker-malleable field (keys, signedPreKeySig, oneTimePreKeys, caps, x3dh — and,
+  // since stage-3 step 2, the PQ key pair under the appended v2 formula below); verified
   // when present, mandatory when PREKEY_REQUIRE_AUTH=true.
   // Continuity: the verifier is the STORED bundle's edIdentityKey — the root of identity
   // continuity — so rotation requires the previous key's signature (recovery path when it is
@@ -3253,12 +3284,36 @@ async function handlePreKeyUpload(body, env, request) {
     const edRoot = (existing && typeof existing.edIdentityKey === 'string' && existing.edIdentityKey)
       || (typeof edIdentityKey === 'string' && edIdentityKey) || null;
     if (!edRoot) return json({ error: 'No Ed25519 identity key to verify against', code: 'NO_IDENTITY_KEY' }, 403, request);
-    const digest = await sha256Short(JSON.stringify([
+    // Stage-3 step 2 (plan D3): two digest formulas exist. v1 is the original
+    // seven fields. v2 APPENDS the PQ pair — key material, unlike the home
+    // hint, so it is bound by the ownership signature; appending (never
+    // inserting) keeps the v1 fields a strict prefix. Acceptance rule:
+    // an upload carrying NO PQ fields verifies under either formula (legacy
+    // v1 clients keep working through the migration; a PQ-aware client that
+    // signs v2 unconditionally also verifies). An upload carrying PQ fields
+    // verifies under v2 ONLY — the v1 formula does not bind them, so
+    // accepting it there would let a captured v1-signed request be replayed
+    // inside its timestamp window with PQ fields attached. No real client
+    // is squeezed by this: step 3 ships the fields and the v2 digest
+    // together (plan step 3), and rollout order stays worker → client, as
+    // with stage 2's additive fields. Dropping v1 acceptance once the fleet
+    // has shipped is the cleanup recorded in plan step 6.
+    const digestFields = [
       identityKey, edIdentityKey || '', signedPreKey, signedPreKeySig || '',
       Array.isArray(oneTimePreKeys) ? oneTimePreKeys : [], Array.isArray(caps) ? caps : [],
       typeof x3dh === 'string' ? x3dh : '',
+    ];
+    const pqPresent = typeof pqPreKey === 'string' || typeof pqPreKeySig === 'string';
+    const digestV2 = await sha256Short(JSON.stringify([
+      ...digestFields,
+      typeof pqPreKey === 'string' ? pqPreKey : '',
+      typeof pqPreKeySig === 'string' ? pqPreKeySig : '',
     ]));
-    const okAuth = await verifyEd25519(edRoot, utf8ToB64(`breeze-prekey-upload:${userId}:${ts}:${digest}`), sig);
+    let okAuth = await verifyEd25519(edRoot, utf8ToB64(`breeze-prekey-upload:${userId}:${ts}:${digestV2}`), sig);
+    if (!okAuth && !pqPresent) {
+      const digestV1 = await sha256Short(JSON.stringify(digestFields));
+      okAuth = await verifyEd25519(edRoot, utf8ToB64(`breeze-prekey-upload:${userId}:${ts}:${digestV1}`), sig);
+    }
     if (!okAuth) return json({ error: 'Invalid upload signature', code: 'SIG_INVALID' }, 403, request);
   } else if (env.PREKEY_REQUIRE_AUTH === 'true') {
     return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
@@ -3293,6 +3348,13 @@ async function handlePreKeyUpload(body, env, request) {
   // fallback path (bundle.x3dh === 'v5') works for transition-period clients that
   // don't yet understand the `caps` array. Only 'v4'/'v5' are meaningful; cap to 4.
   if (typeof x3dh === 'string') bundle.x3dh = x3dh.slice(0, 4);
+  // Stage-3 step 2 (plan D3): persist the PQ prekey pair on the bundle record,
+  // SPK-shaped. Fetch returns the whole stored bundle, so the fields are
+  // served to initiators (and echoed by status below) with no further
+  // plumbing; nothing reads them for negotiation until step 5. Only strings
+  // reach this point — the type/size guards above have already run.
+  if (typeof pqPreKey === 'string') bundle.pqPreKey = pqPreKey;
+  if (typeof pqPreKeySig === 'string') bundle.pqPreKeySig = pqPreKeySig;
   // Stage-2 step 6: the home hint — the relays this account calls home, in
   // preference order. Stored on the bundle and served back by fetch (the
   // whole bundle is returned) and by status (which spends no OTP), so a
@@ -3591,6 +3653,12 @@ async function handlePreKeyStatus(body, env, request) {
   // Stage-2 step 6: the stored home hint rides along (see handlePreKeyUpload)
   // so senders can resolve a contact's relays without consuming an OTP.
   if (Array.isArray(bundle.home)) result.home = bundle.home;
+  // Stage-3 step 2: the stored PQ prekey pair rides along in the same no-OTP
+  // shape, so an owner client can confirm its PQ material is on file. Both
+  // fields are public key material (and its identity signature) — already
+  // served to anyone via fetch; no new exposure.
+  if (typeof bundle.pqPreKey === 'string') result.pqPreKey = bundle.pqPreKey;
+  if (typeof bundle.pqPreKeySig === 'string') result.pqPreKeySig = bundle.pqPreKeySig;
   return json(result, 200, request);
 }
 

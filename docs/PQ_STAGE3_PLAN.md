@@ -391,6 +391,37 @@ by the same tests (stage-2 fixture families).
   still verifies; v2-digest upload verifies; suite + validate
   green.
 
+- **Outcome (2026-11-14).** Done. `handlePreKeyUpload` accepts the
+  optional pair with the SPK doctrine applied byte-for-byte: string
+  type guards, size guards (`pqPreKey` ≤ 2,000 chars — 1,580 is the
+  only valid size class — `pqPreKeySig` ≤ 500), and Ed25519
+  verification over the raw key bytes when the pair and
+  `edIdentityKey` are present, rejecting failures with
+  `PQ_PREKEY_SIG_INVALID`. One corner the SPK never faces — a
+  signature with no key — is rejected under the same code rather
+  than stored unverifiable; an unsigned `pqPreKey` is accepted
+  during transition exactly like an unsigned SPK and is inert
+  (negotiation, D5, requires the signature, and initiators re-verify
+  it themselves). The pair is stored on the bundle record, so fetch
+  serves it with the whole bundle and status echoes it in the same
+  no-OTP shape as caps/home. Caps needed no code: `pqxdh` already
+  rides the generic sanitizer and the signed digest.
+  Digest acceptance is one deliberate tightening of the text above:
+  a body carrying **no** PQ fields verifies under either formula
+  (legacy v1, or a PQ-aware client signing v2 over the empty
+  append), but a body carrying PQ fields verifies under **v2 only**
+  — v1 does not bind them, so accepting it there would let a
+  captured v1-signed request be replayed inside its timestamp
+  window with PQ fields attached. No shipped client is squeezed:
+  step 3 sends the fields and the v2 digest together. Tests:
+  `tests/prekey-pq.test.js`, 12 cases (round-trip through upload →
+  fetch → status with a real ML-KEM-768 key, tampered key, wrong
+  signer, orphan signature, oversized/non-string rejection, and
+  the four digest shapes incl. v1-with-PQ-fields rejection and a
+  swapped-pair replay). Suite: **1,321 → 1,333 passed**, zero
+  regressions; `./validate.sh` PASSED (165/171, unchanged).
+  `index.html` untouched, as specified.
+
 ### Step 3 — Client: generate, store, upload PQ key material
 
 `generatePreKeyBundle()` mints the ML-KEM keypair (fresh seed per
