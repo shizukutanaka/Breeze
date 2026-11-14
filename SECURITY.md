@@ -251,7 +251,11 @@ separate, explicitly-scoped future work if it's wanted.
   - **Secondary-device trust is anchored at link time**: `/linkto` pins the root's signing key
     obtained while physically holding both devices (same TOFU gesture as adding a contact by
     raw key), and the registry must already list the new device before it binds.
-  - **Cloud backups expire.** The relay keeps an uploaded backup for 90 days after its last
+  - **Cloud backups are opt-in, and expire.** A relay stores backups only when its operator
+    enables backup storage (`BACKUP_STORAGE_ENABLED=true` — a relay run for the operator's
+    own accounts); the shared default relay stores none at all, and clients are told so
+    plainly rather than allowed to believe a backup exists there. Where storage is enabled,
+    the relay keeps an uploaded backup for 90 days after its last
     upload and nothing renews it. The upload response now carries `expiresAt` and the client
     shows the date, because a safety net that quietly stopped existing is worse than no
     safety net. Re-upload before the date to keep the recovery path alive.

@@ -27,6 +27,10 @@ services:
       # To run an OPEN relay instead (anyone may create an account),
       # uncomment — an explicit choice, never the default:
       # REGISTRATION_OPEN: "1"
+      # Cloud backup storage is OFF by default (this relay stores no user
+      # backup blobs). To store YOUR accounts' encrypted backups here,
+      # uncomment — an explicit choice, never the default:
+      # BACKUP_STORAGE_ENABLED: "true"
       # Behind a TLS-terminating reverse proxy, also uncomment:
       # TRUST_PROXY: "true"
 

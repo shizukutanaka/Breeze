@@ -385,10 +385,22 @@ Each step ships independently and records its outcome in §5.
 4. **Cloud cold recovery + auth defaults** — cloud
    fetch/restore runs from the anchor on a fresh install (no
    live identity required), and backup fetch authentication is
-   mandatory by default (§2 item 9).
+   mandatory by default (§2 item 9). **Premise changed
+   (2026-11-14, data-principle correction, §5):** backup
+   storage on a relay is now opt-in per deployment and OFF by
+   default — the creator's default relay stores no backups at
+   all (the creator holds no user data). This step's cold
+   recovery is therefore scoped to **the user's own placement**
+   (a relay/storage the user runs or contracts): the anchor
+   fetches from there. On the default relay there is nothing
+   to fetch, and the client says so plainly.
 5. **Alias minimization** — signature-mandatory registration
    by default, TTL with activity renewal, re-claim after
-   expiry (§2 item 4).
+   expiry (§2 item 4). **TTL + re-claim landed early
+   (2026-11-14, data-principle correction, §5):** alias
+   records now expire after 90 days and a lapsed handle is
+   claimable again. Signature-mandatory registration and
+   activity-based renewal remain with this step proper.
 6. **Contacts export encryption** — `/contacts export` folds
    into the encrypted backup format; the plaintext JSON export
    is removed (§2 item 6).
@@ -667,3 +679,95 @@ presence. The two slice anchors in `tests/recovery-seed.test.js`
 followed the `createIdentity` signature change; its assertions
 are unchanged. Full suite and validate.sh results are recorded
 in the PR.
+
+### Data-principle corrections — backup storage opt-in, alias TTL, 'none' exports (DONE)
+
+The owner's estate-wide principle (2026-11-14): **the creator
+holds no user data** — on any product, user data lives on the
+user's device or the user's own placement, never at rest on
+infrastructure the creator operates. The estate data inventory
+measured this relay against it and found the design in breach
+on the operator side. Corrections, judged in the order
+delete → shorten → keep-with-reason:
+
+- **Cloud backup storage is deleted as a default (item 1).**
+  `backup:{userId}` was the largest standing exception: up to
+  5 MB per account, 90-day retention, and since step 1 the blob
+  carries the identity's full key material (encrypted). Both
+  backup endpoints now refuse with `403 BACKUP_DISABLED`
+  unless the operator explicitly sets
+  `BACKUP_STORAGE_ENABLED=true` — a relay run for the
+  operator's own accounts (documented in `wrangler.toml`,
+  `.env.example`, and as a commented opt-in in
+  `docker-compose.yml`). The shared default relay never enables
+  it. The client names the refusal (`backupRelayDisabled` on
+  both the upload and restore paths) instead of reporting a
+  generic failure; file export and own-relay backups are
+  unaffected. Already-stored blobs are not deleted by the
+  gate: they decay on their existing 90-day TTL or are erased
+  by account deletion, and the opt-in re-enables serving them
+  — there is no silent destruction of a recovery net someone
+  may still need. **Step 4's premise changes accordingly**
+  (recorded in §4): cloud cold recovery is a design for the
+  user's own placement only.
+- **Alias records expire (item 2; step 5 in part).** The one
+  no-TTL identifier mapping on the relay now stores with
+  `TTL.QUARTER` (90 days — the device registry's lifetime
+  class). Expiry is read-through KV semantics: a lapsed record
+  never blocks a new claim, the owner's re-registration
+  refreshes the TTL, and an unlapsed handle still refuses a
+  different claimant. Signature-mandatory registration and
+  renewal from ordinary account activity remain step 5's.
+- **Stripe `customerId` (item 3): audited — nothing to
+  delete, because nothing retains it.** Billing was removed
+  in v3.6.1; no route writes `slots:{userId}` or
+  `cust:{customerId}`, and no code calls Stripe. The only
+  remaining touch is `handleAccountDelete`, which reads a
+  *legacy* record solely to erase both keys — a deletion
+  path, kept deliberately: removing it would make legacy
+  payment-identity linkage immortal. The KV schema header now
+  records both keys as legacy/delete-only. (The deletion of a
+  legacy record, including its `cust:` reverse mapping, is
+  pinned by the pre-existing account-erasure tests.)
+- **Operational retention (item 4): audited, kept with
+  reasons — no code change.** Signal rooms 5 min and presence
+  6 min are the functions themselves. Mailbox queues (both
+  families) keep 7 days: the store-and-forward window —
+  shorter would destroy undelivered mail for a user offline
+  over a long weekend, and 7 days is already at the short end
+  for the class. Prekey bundles/OTPs keep 30 days, refreshed
+  by upload: session-start material, decaying a month after
+  the account goes quiet. The device registry keeps 90 days
+  with touch-on-read — active accounts need it, abandoned
+  ones decay (and account deletion erases it outright). Group
+  metadata keeps 30 days, refreshed by mutation: a group's
+  lifetime condition, not an archive. Push subscriptions keep
+  30 days, refreshed by subscription activity — the inventory's
+  "until unsubscribe/erasure" was imprecise; the TTL was
+  already in the code. The key-transparency log keeps 90 days
+  (100-entry cap): it is the rotation audit trail. Dead drops
+  keep ≤7 days with single-read deletion. The two retentions
+  that breached the principle were items 1 and 2 above.
+- **Disposable identities export nothing (item 5).** The
+  disposable outcome above left open whether `'none'` should
+  also refuse the file/cloud backups; the owner-facing answer
+  is yes, settled here. A backup is a recovery promise by
+  construction, and a `'none'` identity's promise is that no
+  such artefact exists. `backupToFile` and `createCloudBackup`
+  now refuse a `'none'` identity with the dedicated toast,
+  before any passphrase prompt — the recovery-kit guard's
+  shape, extended to both producers. Restore paths are
+  untouched (a fresh install has no mode to refuse).
+
+Evidence: `tests/data-principle.test.js` (16 tests) — the real
+worker handlers against the mock KV (default refusal for both
+endpoints with nothing stored and nothing served, exact-'true'
+opt-in round trip with the retention on the record, alias TTL
+presence/refresh/expiry/re-claim plus the unlapsed ALIAS_TAKEN
+control) and the real sliced client functions (both producers
+refusing `'none'` before any prompt, BACKUP_DISABLED named on
+both cloud paths with generic-failure controls, EN+JA key
+presence). Existing backup describes in `tests/worker.test.js`
+now run with storage explicitly enabled — they pin the
+enabled path, as they always intended. Full suite and
+validate.sh results are recorded in the PR.

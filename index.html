@@ -1429,6 +1429,8 @@ const _I = {
     backupCreated: 'Backup complete! Remember your passphrase.',
     backupCreatedUntil: 'Backup complete! Remember your passphrase. The relay keeps it until {0} — re-upload before then.',
     backupFailed: 'Backup failed',
+    backupRelayDisabled: 'This relay does not store backups. Save a backup file instead, or use a relay you run.',
+    toastRecoveryNoneBackup: 'This identity is disposable (no recovery), so backups cannot be created.',
     backupRestored: 'Restore complete! Reloading.',
     backupWrongPass: 'Wrong passphrase or corrupted backup.',
     backupPassPrompt: 'Enter backup passphrase:',
@@ -1443,7 +1445,7 @@ const _I = {
     use1to1: 'Use in a 1:1 chat',
     backupBtn: 'Create Backup',
     restoreBtn: 'Restore Backup',
-    backupNote: 'E2E encrypted. Server stores ciphertext only. Remember your passphrase.',
+    backupNote: 'E2E encrypted. A relay only ever stores ciphertext — and only if its operator enabled backup storage. Remember your passphrase.',
     compactOn: 'Compact mode ON',
     compactOff: 'Normal mode',
     mutedNotif: 'Notifications muted',
@@ -12116,6 +12118,7 @@ async function initMessenger(dbName) {
     const identity = await dbGet('identity', 'keys');
     const contacts = await dbGetAll('contacts');
     if (!identity) { showToast(t('toastNoIdentityBackup'), 'error'); return; }
+    if (identity.recoveryMode === 'none') { showToast(t('toastRecoveryNoneBackup'), 'error'); return; }
 
     const pass = await showPrompt(t('backupPassSet'), '', { type: 'password', okText: t('encrypt'), autocomplete: 'new-password' });
     // Recovery plan §2 item 8 / step 3: the file backup's passphrase
@@ -12588,10 +12591,16 @@ async function initMessenger(dbName) {
   // v3 PRO: ENCRYPTED CLOUD BACKUP
   //
   // Identity + contacts + message history → PBKDF2/AES-256-GCM encrypt
-  // → upload to /api/backup → Cloudflare R2
-  // Server stores ciphertext only. Only the user's passphrase can decrypt.
+  // → upload to /api/backup on the home relays. A relay stores the
+  // ciphertext only, and only when its operator enabled backup storage
+  // (BACKUP_STORAGE_ENABLED — the default relay does not); a refusal is
+  // surfaced as such, never as a generic failure. Only the user's
+  // passphrase can decrypt.
   async function createCloudBackup() {
-    // Cloud backup: available to all users
+    // Disposable identities export nothing (the kit guard's doctrine, extended
+    // to both backup producers): a backup is a recovery promise by construction.
+    const idRec = await dbGet('identity', 'keys');
+    if (idRec?.recoveryMode === 'none') { showToast(t('toastRecoveryNoneBackup'), 'error'); return; }
     const passphrase = await showPrompt(t('backupPassPrompt'), '', { type: 'password', autocomplete: 'current-password' });
     if (!passphrase || passphrase.length < 6) { showToast(t('backupPassMin'), 'error'); return; }
     try {
@@ -12618,10 +12627,11 @@ async function initMessenger(dbName) {
         // the upload signature is relay-independent. One success is enough
         // (the toast still reports failure when NO relay took it), and the
         // retention date shown is the first success's.
-        let firstOk = null;
+        let firstOk = null; let relayDisabled = false;
         for (const relay of homeRelays()) {
           const resp = await postAPIRelay(relay, '/backup/upload', upBody);
           if (resp?.ok && !firstOk) firstOk = resp;
+          else if (resp && !relayDisabled) { const ej = await resp.json().catch(() => null); if (ej?.code === 'BACKUP_DISABLED') relayDisabled = true; }
         }
         if (firstOk) {
           // Surface the retention deadline the relay just told us: a cloud backup is deleted
@@ -12633,7 +12643,7 @@ async function initMessenger(dbName) {
             ? t('backupCreatedUntil', new Date(info.expiresAt).toLocaleDateString())
             : t('backupCreated'), 'success');
         }
-        else showToast(t('backupFailed'), 'error');
+        else showToast(t(relayDisabled ? 'backupRelayDisabled' : 'backupFailed'), 'error');
       }
     } catch(e) { _dbg(e, 'backup'); showToast(t('backupFailed') + ': ' + e.message, 'error'); }
   }
@@ -12654,7 +12664,7 @@ async function initMessenger(dbName) {
         resp = await postAPIRelay(relay, '/backup/download', dlBody);
         if (resp?.ok) break;
       }
-      if (!resp?.ok) { showToast(t('backupFailed'), 'error'); return; }
+      if (!resp?.ok) { const ej = resp ? await resp.json().catch(() => null) : null; showToast(t(ej?.code === 'BACKUP_DISABLED' ? 'backupRelayDisabled' : 'backupFailed'), 'error'); return; }
       const { backup } = await resp.json();
       const b = JSON.parse(backup);
       const salt = u8(b.s); const iv = u8(b.i); const ct = u8(b.d);

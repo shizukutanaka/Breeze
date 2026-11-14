@@ -72,6 +72,7 @@ new_sqlite_classes = ["MailboxDO"]
 # wrangler pages secret put QUEUE_REQUIRE_AUTH         # true — reject unsigned msg/sealed poll + sealed ack (queue read/delete)
 # wrangler pages secret put PREKEY_REQUIRE_AUTH        # true — reject unsigned prekey uploads (bundle overwrite = identity takeover)
 # wrangler pages secret put BACKUP_REQUIRE_AUTH        # true — without this, knowing a userId is enough to download that user's encrypted backup blob
+# wrangler pages secret put BACKUP_STORAGE_ENABLED     # true — opt IN to storing users' encrypted backup blobs on this relay. Default is OFF (the creator holds no user data): /api/backup/* refuses with BACKUP_DISABLED. Enable only on a relay you run for your own accounts.
 #
 # --- Plain relay path (deprecated) ---
 # /api/msg/send + /api/msg/poll responses carry a `Deprecation: true` header.
