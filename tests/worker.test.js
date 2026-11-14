@@ -1647,7 +1647,7 @@ describe('cross-protocol signature replay rejection (item 49)', () => {
   const sign = async (ed, challenge) => toB64u(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, enc(challenge))));
 
   it('a backup-UPLOAD signature is rejected by backup-DOWNLOAD (cannot replay write-auth to read)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
     const ed = await registerEd(env, 'xproto01');
     await env.KV.put('backup:xproto01', 'secret-blob');
     const ts = Date.now();
@@ -3865,7 +3865,7 @@ describe('backup upload / download', () => {
   const dlReq = (body) => apiRequest('/api/backup/download', body);
 
   it('stores a backup and retrieves it', async () => {
-    const e   = makeEnv();
+    const e   = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
     const bak = 'encrypted-backup-data';
     const up  = await handleBackupUpload({ userId: 'user00001', backup: bak }, e, req({}));
     expect(up.status).toBe(200);
@@ -3880,7 +3880,7 @@ describe('backup upload / download', () => {
   });
 
   it('overwrites an existing backup on re-upload', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
     await handleBackupUpload({ userId: 'user00001', backup: 'v1' }, e, req({}));
     await handleBackupUpload({ userId: 'user00001', backup: 'v2' }, e, req({}));
     const dl = await handleBackupDownload({ userId: 'user00001' }, e, dlReq({}));
@@ -3888,7 +3888,7 @@ describe('backup upload / download', () => {
   });
 
   it('rejects backup larger than 5MB', async () => {
-    const e   = makeEnv();
+    const e   = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
     const big = 'x'.repeat(5 * 1024 * 1024 + 1);
     const res = await handleBackupUpload({ userId: 'user00001', backup: big }, e, req({}));
     expect(res.status).toBe(413);
@@ -3896,26 +3896,26 @@ describe('backup upload / download', () => {
   });
 
   it('returns 404 for missing backup', async () => {
-    const e   = makeEnv();
+    const e   = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
     const res = await handleBackupDownload({ userId: 'nobody001' }, e, dlReq({}));
     expect(res.status).toBe(404);
     expect((await res.json()).code).toBe('NOT_FOUND');
   });
 
   it('rejects upload with malformed userId (KV key injection guard)', async () => {
-    const res = await handleBackupUpload({ userId: 'bad id!', backup: 'data' }, makeEnv(), req({}));
+    const res = await handleBackupUpload({ userId: 'bad id!', backup: 'data' }, makeEnv({ BACKUP_STORAGE_ENABLED: 'true' }), req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_USER_ID');
   });
 
   it('rejects download with malformed userId (KV key injection guard)', async () => {
-    const res = await handleBackupDownload({ userId: 'bad id!' }, makeEnv(), dlReq({}));
+    const res = await handleBackupDownload({ userId: 'bad id!' }, makeEnv({ BACKUP_STORAGE_ENABLED: 'true' }), dlReq({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_USER_ID');
   });
 
   it('rejects upload when backup field is not a string (type guard)', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
     const res = await handleBackupUpload({ userId: 'user00001', backup: { data: 'object' } }, e, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_FIELD');
@@ -3941,7 +3941,7 @@ describe('backup upload / download', () => {
   }
 
   it('authenticated upload succeeds and sets authenticated:true in response', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
     const userId = 'bakauth01';
     const ed = await registerForBackup(e, userId);
     const ts = Date.now();
@@ -3954,7 +3954,7 @@ describe('backup upload / download', () => {
   });
 
   it('authenticated download succeeds and sets authenticated:true in response', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
     const userId = 'bakauth02';
     const ed = await registerForBackup(e, userId);
     await handleBackupUpload({ userId, backup: 'my-backup' }, e, req({}));
@@ -3968,7 +3968,7 @@ describe('backup upload / download', () => {
   });
 
   it('upload with tampered sig is rejected with SIG_INVALID', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
     const userId = 'bakauth03';
     await registerForBackup(e, userId);
     const ts = Date.now();
@@ -3978,7 +3978,7 @@ describe('backup upload / download', () => {
   });
 
   it('download with tampered sig is rejected with SIG_INVALID', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
     const userId = 'bakauth04';
     await registerForBackup(e, userId);
     await handleBackupUpload({ userId, backup: 'blob' }, e, req({}));
@@ -3989,7 +3989,7 @@ describe('backup upload / download', () => {
   });
 
   it('upload with sig but no registered ed key → NO_IDENTITY_KEY', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
     const userId = 'bakauth05';
     const ts = Date.now();
     const res = await handleBackupUpload({ userId, backup: 'blob', ts, sig: toB64(new Uint8Array(64)) }, e, req({}));
@@ -3998,28 +3998,28 @@ describe('backup upload / download', () => {
   });
 
   it('upload with only ts provided (no sig) → PARTIAL_AUTH', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
     const res = await handleBackupUpload({ userId: 'user00001', backup: 'blob', ts: Date.now() }, e, req({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('PARTIAL_AUTH');
   });
 
   it('download with only sig provided (no ts) → PARTIAL_AUTH', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
     const res = await handleBackupDownload({ userId: 'user00001', sig: toB64(new Uint8Array(64)) }, e, dlReq({}));
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('PARTIAL_AUTH');
   });
 
   it('unauthenticated upload still works (backward-compat, authenticated:false)', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
     const res = await handleBackupUpload({ userId: 'user00001', backup: 'legacy-blob' }, e, req({}));
     expect(res.status).toBe(200);
     expect((await res.json()).authenticated).toBe(false);
   });
 
   it('stale ts (>5 min ago) rejected on upload with INVALID_TIMESTAMP', async () => {
-    const e = makeEnv();
+    const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
     const userId = 'bakauth06';
     const ed = await registerForBackup(e, userId);
     const ts = Date.now() - 400000; // >5 min
@@ -4052,14 +4052,14 @@ describe('backup BACKUP_REQUIRE_AUTH enforcement (item 54)', () => {
   }
 
   it('unauthenticated upload is rejected when BACKUP_REQUIRE_AUTH=true', async () => {
-    const e = makeEnv({ BACKUP_REQUIRE_AUTH: 'true' });
+    const e = makeEnv({ BACKUP_REQUIRE_AUTH: 'true', BACKUP_STORAGE_ENABLED: 'true' });
     const res = await handleBackupUpload({ userId: 'bakflg01', backup: 'blob' }, e, req({}));
     expect(res.status).toBe(403);
     expect((await res.json()).code).toBe('AUTH_REQUIRED');
   });
 
   it('unauthenticated download is rejected when BACKUP_REQUIRE_AUTH=true', async () => {
-    const e = makeEnv({ BACKUP_REQUIRE_AUTH: 'true' });
+    const e = makeEnv({ BACKUP_REQUIRE_AUTH: 'true', BACKUP_STORAGE_ENABLED: 'true' });
     await e.KV.put('backup:bakflg02', 'encrypted-data');
     const res = await handleBackupDownload({ userId: 'bakflg02' }, e, dlReq({}));
     expect(res.status).toBe(403);
@@ -4067,7 +4067,7 @@ describe('backup BACKUP_REQUIRE_AUTH enforcement (item 54)', () => {
   });
 
   it('valid signed upload succeeds even when BACKUP_REQUIRE_AUTH=true', async () => {
-    const e = makeEnv({ BACKUP_REQUIRE_AUTH: 'true' });
+    const e = makeEnv({ BACKUP_REQUIRE_AUTH: 'true', BACKUP_STORAGE_ENABLED: 'true' });
     const { ts, sig } = await registerAndSign(e, 'bakflg03', 'upload');
     const res = await handleBackupUpload({ userId: 'bakflg03', backup: 'enc-blob', ts, sig }, e, req({}));
     expect(res.status).toBe(200);
@@ -4075,7 +4075,7 @@ describe('backup BACKUP_REQUIRE_AUTH enforcement (item 54)', () => {
   });
 
   it('valid signed download succeeds even when BACKUP_REQUIRE_AUTH=true', async () => {
-    const e = makeEnv({ BACKUP_REQUIRE_AUTH: 'true' });
+    const e = makeEnv({ BACKUP_REQUIRE_AUTH: 'true', BACKUP_STORAGE_ENABLED: 'true' });
     await e.KV.put('backup:bakflg04', 'my-enc-backup');
     const { ts, sig } = await registerAndSign(e, 'bakflg04', 'download');
     const res = await handleBackupDownload({ userId: 'bakflg04', ts, sig }, e, dlReq({}));
@@ -4083,8 +4083,8 @@ describe('backup BACKUP_REQUIRE_AUTH enforcement (item 54)', () => {
     expect((await res.json()).backup).toBe('my-enc-backup');
   });
 
-  it('unauthenticated upload/download still works when flag is unset (backward-compat)', async () => {
-    const e = makeEnv();
+  it('unauthenticated upload/download still works when BACKUP_REQUIRE_AUTH is unset (storage opted in)', async () => {
+    const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
     const up = await handleBackupUpload({ userId: 'bakflg05', backup: 'blob' }, e, req({}));
     expect(up.status).toBe(200);
     await e.KV.put('backup:bakflg05', 'blob');
@@ -5487,7 +5487,7 @@ describe('prekey upload + backup STORE_FAILED propagation (item 33)', () => {
   });
 
   it('handleBackupUpload returns 500 STORE_FAILED when backup KV put throws', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
     const real = env.KV.put.bind(env.KV);
     env.KV.put = async (key, ...rest) => {
       if (key.startsWith('backup:')) throw new Error('KV unavailable');

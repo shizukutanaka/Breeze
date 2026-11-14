@@ -3,15 +3,16 @@
  * 38 API endpoints. Cloudflare Pages Functions.
  *
  * KV schema:
- *   slots:{userId}     → { slots, plan, customerId, updatedAt }
- *   cust:{customerId}  → userId (reverse lookup)
+ *   slots:{userId}     → LEGACY billing record — nothing writes it (billing was
+ *                          removed in v3.6.1); read + deleted only by account erasure
+ *   cust:{customerId}  → LEGACY reverse lookup — same: delete-only, never written
  *   sig:{room}         → signal data (TTL)
  *   msg:{userId}:{ts}  → relay message (TTL)
- *   alias:{name}       → userId
+ *   alias:{name}       → { pub, name, setAt } (TTL 90d — dead handles recycle)
  *   group:{id}         → group metadata
  *   prekey:{userId}    → signed + one-time prekeys
  *   push:{userId}      → push subscription
- *   backup:{userId}    → encrypted backup
+ *   backup:{userId}    → encrypted backup (only when BACKUP_STORAGE_ENABLED=true)
  */
 
 const MAX_BODY_BYTES = 524288; // 512KB max request body
@@ -1863,8 +1864,15 @@ async function handleAliasSet(body, env, request) {
     if (data && data.pub !== pub) return json({ error: 'Alias already taken', code: 'ALIAS_TAKEN' }, 409, request);
   }
 
-  // Store (no TTL — aliases are permanent)
-  const aliasSaved = await kvPut(env, `alias:${clean}`, JSON.stringify({ pub, name: sanitizeString(name, 64), setAt: Date.now() }));
+  // Store with a 90-day TTL (recovery plan §2 item 4; step 5 implemented in
+  // part, 2026-11-14): the alias table is an identifier mapping at rest on the
+  // operator's storage, and a handle whose owner is gone must not burn
+  // forever. Expiry is read-through (KV), so a lapsed record never blocks a
+  // new claim — by a stranger OR by the owner's own re-registration, which
+  // also refreshes the TTL. Renewal from ordinary account activity (prekey
+  // upload / presence) and signature-mandatory registration remain with
+  // step 5 proper.
+  const aliasSaved = await kvPut(env, `alias:${clean}`, JSON.stringify({ pub, name: sanitizeString(name, 64), setAt: Date.now() }), { expirationTtl: TTL.QUARTER });
   if (!aliasSaved) return json({ error: 'Failed to store alias', code: 'STORE_FAILED' }, 500, request);
 
   // Lost-write verify: the taken-check above is check-then-act — two concurrent
@@ -4095,14 +4103,29 @@ async function handleSealedAck(body, env, request) {
 }
 
 // ============================================================
-// ENCRYPTED CLOUD BACKUP (all users)
+// ENCRYPTED CLOUD BACKUP (opt-in per deployment)
 //
-// Stores E2E encrypted backup blob in KV.
-// Server cannot decrypt — only the user's passphrase can.
-// Available to all authenticated users.
+// Stores an E2E encrypted backup blob in KV. The relay cannot
+// decrypt it — only the user's passphrase can.
+//
+// Data principle (owner decision, 2026-11-14): the creator
+// holds no user data. A backup blob is user data at rest on the
+// operator's storage (format v2 carries the identity's key
+// material, encrypted), so this relay stores NONE by default:
+// both endpoints refuse with BACKUP_DISABLED unless the
+// operator explicitly opts in with BACKUP_STORAGE_ENABLED=true.
+// The intended opt-in deployments are relays an operator runs
+// for their OWN accounts (self-hosting); the shared default
+// relay never enables it. Clients surface BACKUP_DISABLED
+// honestly ("this relay does not store backups") and keep the
+// file export and own-relay paths available. Already-stored
+// blobs are untouched by the gate: they decay on their 90-day
+// TTL or are erased by account deletion, and the opt-in
+// re-enables serving them.
 // ============================================================
 
 async function handleBackupUpload(body, env, request) {
+  if (env.BACKUP_STORAGE_ENABLED !== 'true') return json({ error: 'This relay does not store backups', code: 'BACKUP_DISABLED' }, 403, request);
   const { userId, backup, ts, sig } = body;
   if (!userId || !backup) return json({ error: 'userId and backup required', code: 'MISSING_FIELDS' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
@@ -4143,6 +4166,7 @@ async function handleBackupUpload(body, env, request) {
 }
 
 async function handleBackupDownload(body, env, request) {
+  if (env.BACKUP_STORAGE_ENABLED !== 'true') return json({ error: 'This relay does not store backups', code: 'BACKUP_DISABLED' }, 403, request);
   const { userId, ts, sig } = body;
   if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
