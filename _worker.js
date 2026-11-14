@@ -1,6 +1,6 @@
 /**
  * Breeze Worker v3.6.1
- * 38 API endpoints. Cloudflare Pages Functions.
+ * 41 API endpoints. Cloudflare Pages Functions.
  *
  * KV schema:
  *   slots:{userId}     → LEGACY billing record — nothing writes it (billing was
@@ -13,6 +13,10 @@
  *   prekey:{userId}    → signed + one-time prekeys
  *   push:{userId}      → push subscription
  *   backup:{userId}    → encrypted backup (only when BACKUP_STORAGE_ENABLED=true)
+ *   sbackup:{locator}  → simple-mode backup { backup, pub, updatedAt } (TTL 90d;
+ *                          locator = client-derived from account name + recovery
+ *                          passphrase, so a cold client can name its slot without
+ *                          any identity key; only when BACKUP_STORAGE_ENABLED=true)
  */
 
 const MAX_BODY_BYTES = 524288; // 512KB max request body
@@ -205,7 +209,7 @@ export default {
         ok: kvOk,
         version: '3.6.1',
         protocol: 4,
-        endpoints: 39,
+        endpoints: 42,
         reqId,
         serverTime: Date.now(), // v3.6: Client can detect clock drift
         kv: kvOk,
@@ -222,6 +226,11 @@ export default {
           push: !!(env.VAPID_PUBLIC_KEY),
           turn: !!(env.TURN_URL),
           backup: kvOk,
+          // Recovery plan step 4 (the simple mode): backup STORAGE is a
+          // separate, opt-in fact from KV health — clients offer the
+          // simple recovery mode only where the operator enabled it
+          // (the user's own placement; the default relay never does).
+          backupStorage: env.BACKUP_STORAGE_ENABLED === 'true',
           // Stage-1 step 5: WebSocket delivery is live only when the
           // operator enabled it AND mailboxes run on the DO backend —
           // the exact predicate the route itself serves under, so a
@@ -236,7 +245,7 @@ export default {
           'account-delete', 'group-leave', 'group-delete', 'group-admin',
           'group-transfer', 'group-rename', 'msg-disappear-enforce',
           'sealed-sender', 'franking', 'prekey-x3dh',
-          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'alias-auth', 'backup-auth', 'push-auth', 'drop-server-id', 'group-auth', 'group-ban', 'queue-auth', 'prekey-auth', 'plain-deprecation', 'delete-sweep', 'relay-attest', 'prekey-home',
+          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'alias-auth', 'backup-auth', 'push-auth', 'drop-server-id', 'group-auth', 'group-ban', 'queue-auth', 'prekey-auth', 'plain-deprecation', 'delete-sweep', 'relay-attest', 'prekey-home', 'backup-simple',
         ],
         crypto: ['X25519', 'Ed25519', 'AES-256-GCM', 'HKDF-SHA256', 'Double Ratchet', 'Sender Key O(1)'],
         ts: Date.now(),
@@ -281,6 +290,9 @@ export default {
         '/api/relay/attest': 20,
         '/api/backup/upload': 2,
         '/api/backup/download': 5,
+        '/api/backup/simple-upload': 2,
+        '/api/backup/simple-download': 5,
+        '/api/backup/simple-delete': 5,
         '/api/drop/create': 10,
         '/api/drop/read': 20,
         '/api/abuse/record': 30,
@@ -430,6 +442,9 @@ export default {
         case '/api/sealed/ack':       return await handleSealedAck(body, env, request);
         case '/api/backup/upload':    return await handleBackupUpload(body, env, request);
         case '/api/backup/download':  return await handleBackupDownload(body, env, request);
+        case '/api/backup/simple-upload':   return await handleBackupSimpleUpload(body, env, request);
+        case '/api/backup/simple-download': return await handleBackupSimpleDownload(body, env, request);
+        case '/api/backup/simple-delete':   return await handleBackupSimpleDelete(body, env, request);
         case '/api/group/kick':       return await handleGroupKick(body, env, request);
         case '/api/group/admin':      return await handleGroupAdmin(body, env, request);
         case '/api/group/transfer':   return await handleGroupTransfer(body, env, request);
@@ -4201,6 +4216,115 @@ async function handleBackupDownload(body, env, request) {
   return json({ backup, authenticated: hasSig }, 200, request);
 }
 
+// ============================================================
+// SIMPLE-MODE BACKUP (recovery plan step 4 — the third recovery mode)
+//
+// The account-linked simple mode: the encrypted backup (same format-v2
+// payload, same envelope as the cloud backup above) lives ONLY on the
+// user's own placement, addressed by a LOCATOR the client derives from
+// the recovery account name + recovery passphrase (PBKDF2-HMAC-SHA256,
+// 600k iterations, then HMAC — CRYPTO-SPEC §2c). That derivation is
+// the cold-recovery fix for §1.6 defect 1 of the recovery plan:
+//
+//   - The OWNER can fetch cold: a fresh install recomputes the locator
+//     from the two things the person remembers (account name +
+//     passphrase) — no live identity, no lost key, nothing to sign with.
+//   - A STRANGER cannot fetch at all: without the passphrase the slot
+//     cannot even be NAMED. The legacy path serves the blob to anyone
+//     presenting a userId (itself derivable from a public key) unless
+//     the operator set BACKUP_REQUIRE_AUTH; here there is no
+//     unauthenticated fetch to switch off — the endpoint takes only a
+//     locator, and a wrong passphrase derives a different locator and
+//     meets the same 404 as a nonexistent account (no oracle for
+//     which of the two was wrong). The blob itself stays encrypted
+//     under the passphrase, domain-separated from the locator key.
+//
+// Upload and delete are owner operations and ARE authenticated, with
+// the account's Ed25519 signing key — mandatory from day one, not an
+// operator flag: the first upload binds the slot to the signing pub
+// it presents (TOFU, the same trust shape as contacts), and every
+// later overwrite or erasure must sign with that key, so learning a
+// locator (e.g. from a relay database) is not enough to destroy or
+// replace someone's recovery net. Storage stays behind the same
+// BACKUP_STORAGE_ENABLED opt-in as the legacy backup: the creator's
+// default relay stores none of this either.
+// ============================================================
+
+const SIMPLE_LOCATOR_RE = /^[A-Za-z0-9+/]{43}=$/; // base64 of a 32-byte HMAC
+
+function _validLocator(v) { return typeof v === 'string' && SIMPLE_LOCATOR_RE.test(v); }
+function _validSigningPub(v) {
+  if (typeof v !== 'string' || v.length !== 44) return false;
+  try { return b64ToBytes(v).length === 32; } catch { return false; }
+}
+
+// Shared upload/delete authentication: a fresh timestamp plus an
+// Ed25519 signature over the operation challenge, verified against
+// the slot's bound owner pub. Returns an error Response, or null
+// when the caller is authenticated as `ownerPub`. The challenge
+// templates are written literally at the two call sites (not
+// composed here) so the client↔worker template parity gate
+// (tests/auth-parity.test.js) sees the exact shapes the client signs.
+async function _simpleOwnerAuth(body, challenge, ownerPub, request) {
+  const { ts, sig } = body;
+  if (typeof sig !== 'string' || sig.length > 500)
+    return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
+  if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS)
+    return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
+  const ok = await verifyEd25519(ownerPub, btoa(challenge), sig);
+  if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
+  return null;
+}
+
+async function handleBackupSimpleUpload(body, env, request) {
+  if (env.BACKUP_STORAGE_ENABLED !== 'true') return json({ error: 'This relay does not store backups', code: 'BACKUP_DISABLED' }, 403, request);
+  const { locator, backup, pub } = body;
+  if (!locator || !backup || !pub) return json({ error: 'locator, backup and pub required', code: 'MISSING_FIELDS' }, 400, request);
+  if (!_validLocator(locator)) return json({ error: 'invalid locator', code: 'INVALID_FIELD' }, 400, request);
+  if (!_validSigningPub(pub)) return json({ error: 'invalid pub', code: 'INVALID_FIELD' }, 400, request);
+  if (typeof backup !== 'string') return json({ error: 'backup must be a string', code: 'INVALID_FIELD' }, 400, request);
+  if (backup.length > 5 * 1024 * 1024) return json({ error: 'Backup too large', code: 'PAYLOAD_TOO_LARGE' }, 413, request);
+
+  const existing = safeJsonParse(await kvGet(env, `sbackup:${locator}`));
+  // A bound slot answers only to its owner; a fresh slot binds to the
+  // pub the (signature-proven) uploader presents.
+  const ownerPub = existing?.pub || pub;
+  const authErr = await _simpleOwnerAuth(body, `breeze-backup-simple-upload:${locator}:${body.ts}`, ownerPub, request);
+  if (authErr) return authErr;
+
+  const saved = await kvPut(env, `sbackup:${locator}`, JSON.stringify({ backup, pub: ownerPub, updatedAt: Date.now() }), { expirationTtl: TTL.QUARTER }); // 90 day retention, same class as backup:{userId}
+  if (!saved) return json({ error: 'Failed to store backup', code: 'STORE_FAILED' }, 500, request);
+  return json({ ok: true, size: backup.length, expiresAt: Date.now() + TTL.QUARTER * 1000 }, 200, request);
+}
+
+async function handleBackupSimpleDownload(body, env, request) {
+  if (env.BACKUP_STORAGE_ENABLED !== 'true') return json({ error: 'This relay does not store backups', code: 'BACKUP_DISABLED' }, 403, request);
+  const { locator } = body;
+  if (!locator) return json({ error: 'locator required', code: 'MISSING_FIELDS' }, 400, request);
+  if (!_validLocator(locator)) return json({ error: 'invalid locator', code: 'INVALID_FIELD' }, 400, request);
+  // No signature, by design: the locator IS the capability (knowledge
+  // of the passphrase, made unguessable by the 600k-iteration KDF).
+  // The owner's pub rides along so the client can bind the restored
+  // signing record to the key that owns the slot (defence in depth —
+  // the GCM envelope already refuses a swapped blob).
+  const rec = safeJsonParse(await kvGet(env, `sbackup:${locator}`));
+  if (!rec || typeof rec.backup !== 'string') return json({ error: 'No backup found', code: 'NOT_FOUND' }, 404, request);
+  return json({ backup: rec.backup, pub: rec.pub || null }, 200, request);
+}
+
+async function handleBackupSimpleDelete(body, env, request) {
+  if (env.BACKUP_STORAGE_ENABLED !== 'true') return json({ error: 'This relay does not store backups', code: 'BACKUP_DISABLED' }, 403, request);
+  const { locator } = body;
+  if (!locator) return json({ error: 'locator required', code: 'MISSING_FIELDS' }, 400, request);
+  if (!_validLocator(locator)) return json({ error: 'invalid locator', code: 'INVALID_FIELD' }, 400, request);
+  const existing = safeJsonParse(await kvGet(env, `sbackup:${locator}`));
+  if (!existing) return json({ ok: true }, 200, request); // idempotent: nothing to erase
+  const authErr = await _simpleOwnerAuth(body, `breeze-backup-simple-delete:${locator}:${body.ts}`, existing.pub, request);
+  if (authErr) return authErr;
+  await kvDel(env, `sbackup:${locator}`);
+  return json({ ok: true }, 200, request);
+}
+
 // ═══════════════════════════════════════════════════════════
 // DEAD DROP — One-time encrypted secret sharing
 // Strategy: Primary SEO/viral acquisition tool
@@ -4394,6 +4518,9 @@ export {
   handleDropRead,
   handleBackupUpload,
   handleBackupDownload,
+  handleBackupSimpleUpload,
+  handleBackupSimpleDownload,
+  handleBackupSimpleDelete,
   handleSignal,
   handlePresence,
   handleTurn,

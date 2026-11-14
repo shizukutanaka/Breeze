@@ -161,6 +161,67 @@ and the kit in `index.html`; drills in `tests/recovery-seed.test.js` —
 BIP39 vectors, node:crypto cross-derivation, create/wipe/restore and
 kit round-trips).
 
+## 2c. Simple-mode locator (recovery plan step 4)
+
+The third recovery mode's address derivation, implemented in
+`src/app/backup.js` (deployed as ESM, the backup factory). The mode
+stores the step-1 cloud backup payload on the user's own placement,
+addressed by a value derived from the two things the user remembers —
+a self-chosen account name and a passphrase — instead of by userId or
+public key. Standard constructions only.
+
+1. **Inputs.** Account name, normalised before any use: lowercase,
+   characters outside `[a-z0-9_-]` stripped, truncated to 32, minimum
+   3 after normalisation. Passphrase: minimum 8 characters (this
+   mode's only secret, so its floor sits above the file/cloud 6).
+2. **Locator key.** `K = PBKDF2-HMAC-SHA256(password = passphrase,
+   salt = "breeze-simple-locator-v1:" + account,
+   iterations = CONFIG.PBKDF2_AT_REST_ITERATIONS (600,000),
+   32-byte output)`. The account name rides in the salt, so the same
+   passphrase under two account names derives unrelated keys, and a
+   precomputed table would have to be per-account-name.
+3. **Locator.** `locator = base64(HMAC-SHA256(K, "breeze-simple-locator"))`
+   — 44 characters, the slot address (`sbackup:{locator}` in relay
+   KV, 90-day TTL). Domain separation is the point: the locator key
+   is used for nothing else, and the blob's encryption key (item 4)
+   is independent of it, so publishing the locator (it is the fetch
+   address) weakens the blob not at all, and the relay never sees the
+   account name — only its keyed hash.
+4. **Blob.** Byte-identical to the legacy cloud backup: payload =
+   the format-v2 backup (identity record, contacts, messages, full
+   key material), key = PBKDF2-HMAC-SHA256(passphrase, fresh random
+   16-byte salt, 600,000 iterations), AES-256-GCM with a fresh random
+   IV, envelope `{ v: 1, iv, salt, data }` (base64). A changed
+   passphrase changes BOTH the locator and the blob key; the client
+   treats it as a move (confirm, upload under the new locator, the
+   old slot decays on its TTL).
+5. **Owner authentication.** Upload and delete carry an Ed25519
+   signature by the identity's signing key over the literal strings
+   `breeze-backup-simple-upload:{locator}:{unix-ms}` /
+   `breeze-backup-simple-delete:{locator}:{unix-ms}` (freshness
+   window 5 minutes). The first upload binds the slot to the proven
+   public key; later writes must sign as that key. Download is
+   unauthenticated BY DESIGN — the locator is the capability, and
+   deriving it costs one 600k-iteration PBKDF2 per guess; the
+   response includes the bound owner key and the client refuses a
+   payload whose signing record does not match it, before writing
+   anything. A wrong passphrase derives a different locator and is
+   indistinguishable from a nonexistent account (404), so the
+   endpoint is not an account-existence oracle.
+
+**Threat note.** Weaker than §2b by construction, and the setup copy
+says so: the phrase carries 256 bits and is never proved to a relay;
+the simple mode's strength is exactly the passphrase's entropy,
+rate-limited online by the per-guess PBKDF2 cost and the endpoint
+rate limits. The placement's operator sees ciphertext, the owner
+public key, blob size and update times — never plaintext, never the
+passphrase, never the account name.
+
+**Implemented and deployed** (worker endpoints + backup factory +
+setup entries; drills in `tests/recovery-simple.test.js` — worker
+opt-in/auth/TTL pins and a real client↔worker enroll → wipe → cold
+restore round-trip).
+
 ## 3. Session establishment (X3DH → Double Ratchet)
 
 - Initiator seeds the ratchet using `SPK_B` as the first DH-ratchet partner:

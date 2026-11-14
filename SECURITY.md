@@ -259,6 +259,25 @@ separate, explicitly-scoped future work if it's wanted.
     upload and nothing renews it. The upload response now carries `expiresAt` and the client
     shows the date, because a safety net that quietly stopped existing is worse than no
     safety net. Re-upload before the date to keep the recovery path alive.
+  - **Simple-mode recovery (account + passphrase) is the weakest of the three modes, by
+    design and disclosed as such.** On a relay with backup storage enabled, a user may
+    instead recover from a self-chosen account name + passphrase (≥8 chars): the backup
+    (the same encrypted v2 payload) is stored under a locator derived from that pair
+    (PBKDF2-HMAC-SHA256, 600k iterations; spec in `docs/CRYPTO-SPEC.md` §2c), never under
+    the userId or public key. Uploads and deletions require an Ed25519 signature by the
+    identity's signing key — the first upload binds the slot to that key — so knowing a
+    locator grants no write access to anyone else's backup. Download takes the locator
+    alone: it is a capability, computable only by someone who knows the account name and
+    passphrase at one 600k-iteration PBKDF2 per guess, and a wrong passphrase derives a
+    different locator, indistinguishable from a nonexistent account (no existence
+    oracle). Honest limits: the mode's strength is exactly the passphrase's entropy —
+    weaker than the 256-bit recovery phrase, which remains the recommended default, and
+    the setup flow says so before anything is created. The placement's operator sees the
+    ciphertext, the owner public key, the blob size and update times — never the
+    plaintext, the passphrase, or the account name (only its keyed hash). Slots expire
+    after 90 days unless refreshed by an update; `/wipe` deletes the slot with an
+    owner-signed request. The mode is never offered against a relay that has not opted
+    into backup storage, so it does not exist on the shared default relay.
   - **Backup restore is migration, not multi-device.** Restoring a backup clones the
     identity; running the original and the clone simultaneously forks every Double-Ratchet
     session and corrupts conversations — the exact failure `/link` exists to prevent. The
