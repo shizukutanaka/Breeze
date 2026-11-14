@@ -409,7 +409,7 @@ Each step ships independently and records its outcome in §5.
    step proper (outcome in §5).
 6. **Contacts export encryption** — `/contacts export` folds
    into the encrypted backup format; the plaintext JSON export
-   is removed (§2 item 6).
+   is removed (§2 item 6). **Done (2026-11-15)** (outcome in §5).
 
 ## 5. Implementation outcomes
 
@@ -955,3 +955,62 @@ now claims its setup handle through the real creation path
 (the unsigned direct-API seed it used before is refused by
 design). Full suite and validate.sh results are recorded in
 the PR.
+
+### Step 6 — Contacts export encryption (DONE)
+
+`/contacts export` no longer produces a plaintext file. The
+export moved into the backup subsystem
+(`src/app/backup.js`: `exportContactsEncrypted` /
+`importContactsFile`; the `index.html` command handlers now
+only delegate) and produces the encrypted backup envelope —
+the same `{s,i,d}` PBKDF2 + AES-256-GCM format `encrypt()`
+writes for the full backup — carrying a contacts-only payload
+(`{ backupV, contactsOnly: true, contacts, exportedAt }`)
+under a user passphrase (creation-side minimum 6, the file
+backup's floor). The contact field selection is the old
+export's, unchanged. The filename is unchanged
+(`breeze-contacts-YYYY-MM-DD.json`); the content is now an
+envelope, and the import sniffs the shape.
+
+Two deliberate scopings, recorded so they are decisions and
+not oversights:
+
+- **The payload carries no identity and no key material**,
+  so a contacts file can never become a recovery artefact.
+  For the same reason the disposable (`'none'`) refusal that
+  guards `backupToFile` does **not** apply: a backup is a
+  recovery promise, a contacts export is not one — it is the
+  user's own address book, exportable encrypted like any
+  other mode's.
+- **Import still accepts the legacy plaintext shape.** An
+  export made before this step remains a working migration
+  path; importing creates no new plaintext, and nothing in
+  the product produces that shape any more. The import also
+  accepts a full backup file and reads only its contact list
+  (identity/key material is `restoreBackup`'s job and is never
+  imported by this path). Per-contact validation is the
+  pre-step-6 importer's, unchanged.
+
+**Audited and deliberately left alone: `/gdpr`.** It also
+writes contacts (a subset: no pubkeys, no rosters) in
+plaintext — but it is not a contacts transfer format; it is
+the statutory data-portability export (GDPR Art. 15/20) whose
+purpose is a complete, human-readable copy of *all* the
+user's data, messages included. Item 6 names `/contacts
+export` as "the one place the social graph leaves the device
+unprotected" — the backup/migration path — and that is the
+path this step closes. Whether the GDPR export should gain
+an encrypted variant is a product decision beyond this plan;
+it is flagged here rather than silently absorbed.
+
+Evidence: `tests/recovery-step6-contacts.test.js` (new) —
+the real factory + the real `encrypt`/`decrypt` sliced from
+`index.html`: the exported file is envelope-shaped and a
+substring search over its bytes finds no name, pubkey, note
+or label (the plaintext-absence check); round-trip restores
+the address book field-for-field; wrong passphrase imports
+nothing; short/cancelled passphrase downloads nothing; a full
+backup yields contacts only, identity never lands; legacy
+plaintext imports; per-contact validation unchanged; source
+pins that `index.html` builds no plaintext contacts download.
+Full suite and validate.sh results are recorded in the PR.
