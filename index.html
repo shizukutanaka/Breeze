@@ -680,6 +680,7 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 .setup-input { max-width: 280px; margin: 0 auto; border-radius: var(--rad) }
 .setup-input-alt { max-width: 280px; margin: 8px auto 0; font-size: 12px; border-radius: var(--rad) }
 .setup-cta { max-width: 280px; margin: 16px auto 0; padding: 14px }
+.setup-restore { max-width: 280px; margin: 10px auto 0; padding: 12px }
 .setup-footer { color: var(--t3); margin-top: 16px; font-size: 10px }
 .server-banner { background: var(--r); color: #fff; padding: 8px 16px; font-size: 13px; text-align: center; border-radius: var(--rad); margin-bottom: 4px }
 .sidebar-meta { font-size: 10px; color: var(--g); font-family: var(--mono) }
@@ -1080,6 +1081,7 @@ del.md-del { opacity: .6 }
     <input type="text" id="msg-name" class="setup-input" data-i18n-ph="yourName" data-i18n-aria="ariaDisplayName" maxlength="64" autocomplete="off" autocapitalize="words" enterkeyhint="next">
     <input type="text" id="msg-alias" class="setup-input-alt" data-i18n-ph="breezeId" data-i18n-aria="ariaBreezeId" maxlength="20" pattern="[a-z0-9_]+" autocomplete="off" autocapitalize="none" enterkeyhint="done" spellcheck="false">
     <button class="btn btn-g setup-cta" id="b-msg-setup" data-i18n="createFree"></button>
+    <button class="btn btn-o setup-restore" id="b-msg-setup-restore" data-i18n="setupRestore"></button>
     <div class="setup-footer">
       <span data-i18n="noCreditCard"></span><br>
       <button class="btn btn-o btn-sm hidden mt-8" id="setup-install-btn" data-i18n="uiInstall">Install App</button>
@@ -1359,6 +1361,7 @@ const _I = {
     yourName: 'Your name',
     breezeId: 'Breeze ID (e.g. alice — optional)',
     createFree: 'Create Identity — Free',
+    setupRestore: 'Restore from a backup file',
     noCreditCard: 'No credit card. No email. Just a name.',
     searchPh: 'Search...',
     searchEmojiPh: 'Search emoji...',
@@ -1805,6 +1808,7 @@ const _I = {
     toastInvalidBackup: 'Invalid backup file',
     toastMsgTooLong: 'Message too long (max 64 KB)',
     toastRestoredReload: 'Restored! Reloading...',
+    toastRestoredLegacy: 'Restored from an older backup: it does not include the device-management key, so a new signing key will be created.',
     toastWrongPassphrase: 'Wrong passphrase or corrupted file',
     toastAliasNotFound: 'Alias not found',
     toastAliasResolveFail: 'Could not resolve alias',
@@ -6975,6 +6979,15 @@ async function initMessenger(dbName) {
     if (joinToken) await processJoinToken(joinToken);
     _openSettingsFromUrl();
   });
+  // Recovery plan step 2 (docs/IDENTITY_RECOVERY_PLAN.md §4): the first-run
+  // screen's restore entry. Until now restoreBackup was reachable only from
+  // inside the app (the /backup panel, sidebar drag-drop) — i.e. only by
+  // someone who already had an identity, which is never the person who needs
+  // it. This wires the setup screen to the SAME picker + restore path: the
+  // passphrase prompt and every write live in restoreBackup, which writes
+  // only after a successful decrypt, and a success reloads into _boot()'s
+  // normal has-identity flow.
+  _DOM.get('b-msg-setup-restore')?.addEventListener('click', () => { restoreFromFilePicker(); });
   // Enter on name field → move focus to alias (matches enterkeyhint="next")
   _DOM.get('msg-name')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); _DOM.get('msg-alias')?.focus(); }
@@ -11970,9 +11983,17 @@ async function initMessenger(dbName) {
   async function restoreBackup(file) {
     const pass = await showPrompt(t('backupPassEnter'), '', { type: 'password', okText: t('decrypt'), autocomplete: 'current-password' });
     if (!pass) return;
+    // "Not a Breeze backup at all" (unreadable, not JSON, not the {s,i,d}
+    // envelope encrypt() writes) is a different failure from "a backup whose
+    // passphrase does not open it" — name the one that happened. Either way
+    // nothing is written: every store write below sits behind a successful
+    // decrypt AND the identity check, which is what lets the first-run screen
+    // (step 2) offer this entry with no identity yet — a failed attempt
+    // creates nothing and leaves the setup screen exactly as it was.
+    let enc;
+    try { enc = JSON.parse(await file.text()); } catch(e) { _dbg(e, 'restore'); showToast(t('toastInvalidBackup'), 'error'); return; }
+    if (!enc || !Array.isArray(enc.s) || !Array.isArray(enc.i) || !Array.isArray(enc.d)) { showToast(t('toastInvalidBackup'), 'error'); return; }
     try {
-      const text = await file.text();
-      const enc = JSON.parse(text);
       const decrypted = await decrypt(pass, enc);
       const data = JSON.parse(decrypted);
       if (!data.identity?.pubB64) { showToast(t('toastInvalidBackup'), 'error'); return; }
@@ -11987,9 +12008,16 @@ async function initMessenger(dbName) {
       }
       // Format v2 only: the key material (signing/account/prekey privates/gsk/pq).
       // Absent in v1 backups — those restore exactly the pre-step-1 scope.
+      const legacy = !data.keyMaterial;
       await _restoreBackupKeyMaterial(data.keyMaterial);
 
-      showToast(t('toastRestoredReload'), 'success'); setTimeout(() => location.reload(), 1.5 * MS.SEC);
+      showToast(t('toastRestoredReload'), 'success');
+      // A v1 restore brings back the address and contacts but NOT device
+      // management: initSigning() mints a new signing key at boot (the limit
+      // SECURITY.md records for pre-step-1 backups). Say so before the
+      // reload, and hold the reload long enough for it to be read.
+      if (legacy) showToast(t('toastRestoredLegacy'), 'warn', 9000);
+      setTimeout(() => location.reload(), legacy ? 6 * MS.SEC : 1.5 * MS.SEC);
     } catch(e) { _dbg(e,'restore'); showToast(t('toastWrongPassphrase'), 'error'); }
   }
 

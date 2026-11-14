@@ -374,7 +374,9 @@ Each step ships independently and records its outcome in §5.
 2. **First-run recovery entry** — the setup screen
    (`#msg-setup`) offers restore (file / cloud / phrase)
    alongside Create, so recovery is reachable without an
-   existing identity (§1.6).
+   existing identity (§1.6). **Done** for the file entry
+   (outcome in §5); the cloud and phrase entries land with
+   steps 4 and 3 respectively.
 3. **Seed and deterministic derivation** — new identities
    derive from the account seed and show the recovery phrase
    once; existing identities get the recovery-kit wrap (§3.1).
@@ -457,3 +459,53 @@ Not in this step (unchanged, by design): the file backup's
 5), the missing first-run restore entry (step 2), and the cloud
 cold-restore impossibility (§1.6 defect 1 — step 4; restore still
 requires the live identity to fetch the blob).
+
+### Step 2 — First-run recovery entry (DONE)
+
+The setup screen (`#msg-setup`) now offers **Restore from a backup
+file** (`#b-msg-setup-restore`) next to Create, wired to the same
+`restoreFromFilePicker` → `restoreBackup` path the /backup panel
+uses — recovery is reachable with no identity yet, which is the
+only state in which it is ever needed. A successful restore writes
+the identity and reloads into `_boot()`'s normal has-identity flow;
+nothing about the in-app entry points changed.
+
+Supporting changes inside `restoreBackup` (shared by both entry
+points):
+
+- **Failures are named, and create nothing.** A file that is not a
+  Breeze backup at all (unreadable, not JSON, not the `{s,i,d}`
+  envelope) now ends at `toastInvalidBackup` before any decrypt
+  attempt, distinct from a backup whose passphrase does not open
+  it (wrong passphrase / tampered ciphertext →
+  `toastWrongPassphrase`). Every store write still sits behind a
+  successful decrypt AND the identity check, so a failed first-run
+  attempt leaves the device exactly as empty as it was — pinned
+  by test for the wrong-passphrase, tampered, not-a-backup and
+  prompt-cancelled cases.
+- **V1 restores announce their limit.** A backup with no
+  `keyMaterial` restores the pre-step-1 scope, and the user is
+  told so before the reload (`toastRestoredLegacy`: device
+  management is not part of that format, a new signing key will
+  be created — the limit SECURITY.md records), with the reload
+  held to 6 s so the notice can be read. V2 restores keep the
+  established 1.5 s toast-then-reload.
+
+Scope honesty: §4 step 2 says "(file / cloud / phrase)". This
+step ships the **file** entry only — the phrase does not exist
+until step 3 mints the seed, and cloud cold restore is step 4
+(the fetch still requires the live identity, §1.6 defect 1).
+The setup screen gains those entries when those steps land.
+One related gap kept deliberately out of this step:
+`restoreCloudBackup` does not yet show the legacy notice; the
+cloud path is reworked in step 4 and picks it up there.
+
+Evidence: `tests/first-run-restore.test.js` (9 tests) runs the
+real `restoreBackup` sliced from index.html against a mock IDB
+from the empty first-run state: the v2 drill (identity, contacts
+and all five key-material records land; reload scheduled at
+1.5 s), the v1 drill (identity + contacts land, no signing
+record, legacy warning shown, reload held to 6 s), the four
+failure/no-write cases above, and wiring pins (button present in
+the setup markup with its i18n label, listener drives
+`restoreFromFilePicker`, both new keys present in EN and JA).
