@@ -693,10 +693,11 @@ async function listMailboxKeys(env, kind) {
   return kvListNames(env, `${kind}:`);
 }
 
-// In-flight deletions for BOTH of a user's mailboxes: exactly the five
-// keys handleAccountDelete used to enumerate by hand (the plain family
-// has no dropped counter). Returned as promises so the caller folds
-// them into its own Promise.all batch unchanged. A leftover hwm would
+// In-flight deletions for BOTH of a user's mailboxes: exactly the six
+// keys handleAccountDelete used to enumerate by hand (queue, hwm and
+// dropped counter per family — the plain family gained its dropped
+// counter with the D4 honesty fix). Returned as promises so the caller
+// folds them into its own Promise.all batch unchanged. A leftover hwm would
 // anchor a re-registered id to a stale delivery cursor (and a leftover
 // sealed hwm leaks the last-delivery ts), so satellites are erased
 // with the queues, not left to their TTLs.
@@ -710,6 +711,7 @@ function eraseMailboxes(env, userId) {
   const dels = [
     plain.deleteQueue(),
     plain.deleteHwm(),
+    plain.deleteDropped(),
     sealed.deleteQueue(),
     sealed.deleteHwm(),
     sealed.deleteDropped(),
@@ -720,6 +722,7 @@ function eraseMailboxes(env, userId) {
     dels.push(
       kvPlain.deleteQueue(),
       kvPlain.deleteHwm(),
+      kvPlain.deleteDropped(),
       kvSealed.deleteQueue(),
       kvSealed.deleteHwm(),
       kvSealed.deleteDropped(),
@@ -1394,6 +1397,16 @@ async function handleMsgSend(body, ip, env, request) {
   if (inboxHwm !== null && msg.ts <= inboxHwm) msg.ts = inboxHwm + 1;
   inbox.push(msg);
   const trimmed = capQueueBytes(inbox.slice(-100), m => (typeof m.payload === 'string' ? m.payload.length : 0) + 1024);
+  // Queue overflow drops the OLDEST messages. Don't do it silently: count
+  // the drops so the recipient's next poll can say "N messages were lost"
+  // — the same accounting handleSealedSend already keeps for the sealed
+  // queue (D4 honesty fix; the plain family was the one queue without it).
+  const noteDropped = async (n) => {
+    if (n <= 0) return;
+    const prev = parseInt(await mb.readDropped() || '0') || 0;
+    await mb.writeDropped(String(Math.min(prev + n, 99999)), TTL.WEEK);
+  };
+  await noteDropped(inbox.length - trimmed.length);
   const stored = await mb.writeQueue(JSON.stringify(trimmed), TTL.WEEK);
   if (!stored) {
     // Un-mark the dedup key on a failed store: it was set BEFORE this write, so leaving it
@@ -1426,6 +1439,7 @@ async function handleMsgSend(body, ip, env, request) {
     if (inboxHwm !== null) reTs = Math.max(reTs, inboxHwm + 1);
     seenInbox.push({ ...msg, ts: reTs });
     const reTrimmed = capQueueBytes(seenInbox.slice(-100), m => (typeof m.payload === 'string' ? m.payload.length : 0) + 1024);
+    await noteDropped(seenInbox.length - reTrimmed.length);
     if (await mb.writeQueue(JSON.stringify(reTrimmed), TTL.WEEK)) storedTs = reTs;
   }
   // Advance the persistent high-water mark to the newest ts this send stored
@@ -1631,7 +1645,13 @@ async function handleMsgPoll(body, env, request) {
     else await mb.writeQueue(JSON.stringify(keep), TTL.WEEK);
   }
 
-  return json({ messages: newMsgs }, 200, request);
+  // Surface queue-overflow losses once, then reset the counter (mirrors
+  // handleSealedPoll): envelopes the caps dropped while the recipient was
+  // away are reported with this poll, not lost wordlessly.
+  const droppedStr = await mb.readDropped();
+  const dropped = parseInt(droppedStr || '0') || 0;
+  if (dropped > 0) await mb.deleteDropped();
+  return json(dropped > 0 ? { messages: newMsgs, dropped } : { messages: newMsgs }, 200, request);
 }
 
 async function handlePresence(body, env, request) {
@@ -3125,11 +3145,12 @@ async function handleAccountDelete(body, env, request) {
   }
 
   const dels = [
-    // Both mailboxes, all five keys: plain queue + its high-water mark
-    // (else a re-registered id inherits a stale delivery cursor anchor),
-    // sealed queue + its high-water mark (else it lingers ~5min, leaking
-    // the last-delivery ts) + the dropped-msg counter (same residue
-    // class as hwm) — see eraseMailboxes.
+    // Both mailboxes, all six keys: plain queue + its high-water mark
+    // (else a re-registered id inherits a stale delivery cursor anchor)
+    // + its dropped-msg counter, sealed queue + its high-water mark
+    // (else it lingers ~5min, leaking the last-delivery ts) + its
+    // dropped-msg counter (same residue class as hwm) — see
+    // eraseMailboxes.
     ...eraseMailboxes(env, userId),
     kvDel(env, `devices:${userId}`), // device registry: handleDeviceList's touch-on-read refreshes
     // its 90-day TTL on every read, so a registry left behind can outlive the account

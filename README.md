@@ -14,8 +14,8 @@ Try the hosted version: **[breeze.pages.dev](https://breeze.pages.dev)**
 ```
 1. Open in browser → enter your name → identity created (no server involved)
 2. Share your Breeze ID or QR code with a friend
-3. Messages flow directly between devices via WebRTC (P2P)
-4. If P2P fails, sealed sender relay ensures delivery (server cannot read content)
+3. When both of you have the app open and a direct connection succeeds, messages flow device-to-device via WebRTC (P2P)
+4. Otherwise — including whenever the other person doesn't have the app open — a sealed-sender relay mailbox holds the sealed envelope until they open the app and collect it (the relay cannot read the content; unclaimed mail is kept for at most 7 days)
 ```
 
 ## Quick Start

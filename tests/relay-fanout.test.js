@@ -397,8 +397,10 @@ describe('client — redundant deposit at the contact\u2019s home relays', () =>
     expect(sealedPosts(log, B_API)).toHaveLength(0);
     expect(sealedPosts(log, C_API)).toHaveLength(0);
     expect(await sealedQueue(envB, B_API)).toHaveLength(0);
-    // Delivered marking still comes from the primary's ack, as before.
-    expect(w.calls.delivered).toEqual([{ ts: 1700000000001, status: 'delivered' }]);
+    // Deposit marking still comes from the primary's ack, as before —
+    // a relay ack proves the deposit, never the peer's receipt (D4 fix:
+    // 'delivered' is reserved for the recipient device's own ack).
+    expect(w.calls.delivered).toEqual([{ ts: 1700000000001, status: 'deposited' }]);
   });
 
   it('no contact record (a device id, a stranger): the bundle\u2019s hint is NOT chased — primary only', async () => {
@@ -431,7 +433,7 @@ describe('client — redundant deposit at the contact\u2019s home relays', () =>
     expect(sealedPosts(log, API)).toHaveLength(0); // the primary is not a target here
     expect(await sealedQueue(envB, B_API)).toHaveLength(1);
     expect(await sealedQueue(envC, C_API)).toHaveLength(1);
-    expect(w.calls.delivered).toEqual([{ ts: 1700000000002, status: 'delivered' }]); // exactly once
+    expect(w.calls.delivered).toEqual([{ ts: 1700000000002, status: 'deposited' }]); // exactly once
   });
 
   it('legacy peer (no multi-relay cap): first home only', async () => {
@@ -549,7 +551,7 @@ describe('client — redundant deposit at the contact\u2019s home relays', () =>
       Array.from({ length: 120 }, (_, i) => now - 59000 + i * 400));
     await w.relaySend(PEER_ID, payload(1700000000010), null);
     expect(sealedPosts(log, B_API)).toHaveLength(1); // B unaffected
-    expect(w.calls.delivered).toEqual([{ ts: 1700000000010, status: 'delivered' }]); // B's ack counts
+    expect(w.calls.delivered).toEqual([{ ts: 1700000000010, status: 'deposited' }]); // B's ack counts (as a deposit)
     expect(w._retryQueue).toHaveLength(1);
     expect(w._retryQueue[0].relays.map((r) => r.url)).toEqual([C_ORIGIN]); // only C is owed
   });
