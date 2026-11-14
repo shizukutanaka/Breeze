@@ -11841,6 +11841,89 @@ async function initMessenger(dbName) {
   }
 
   // ===== Backup & Restore =====
+  // Recovery plan step 1 (docs/IDENTITY_RECOVERY_PLAN.md §1.6 defect 2): a backup that
+  // carries only the DH identity record restores the address but NOT the authority —
+  // the Ed25519 signing key (device-registry root; bundle/alias/backup signatures),
+  // the account binding, the prekey private halves and the group sender keys were
+  // left behind, so a "successful" restore silently minted a NEW signing key and the
+  // documented recovery path did not heal root loss. Format-v2 payloads carry the
+  // missing key material in `keyMaterial`; v1 payloads (no `keyMaterial`) restore
+  // exactly as before and simply lack it. Records are carried AS STORED — including
+  // /keywrap-wrapped forms for the slots keywrap covers (keys/signing/pq-priv): the
+  // wrapped form is self-contained (KDF parameters and the slot-bound AAD travel
+  // with it, and the AAD binds the slot name, not the device), so it unwraps on the
+  // new install with the at-rest passphrase exactly as on the old one. Sessions
+  // (sess:) are deliberately NOT carried — a restored ratchet would fork (plan §2);
+  // every 1:1 session re-bootstraps from the restored prekey material instead. The
+  // per-install instance id (inst) is clone detection and is likewise excluded.
+  const BACKUP_FORMAT_V = 2;
+  async function _collectBackupKeyMaterial() {
+    const out = {};
+    try {
+      const signing = await dbGet('identity', 'signing');
+      if (signing) out.signing = signing;
+      const account = await dbGet('identity', 'account');
+      if (account) out.account = account;
+      const spkPriv = await dbGet('identity', 'spk-priv');
+      if (spkPriv) out.spkPriv = spkPriv;
+      const otpPriv = await dbGet('identity', 'otp-priv');
+      if (otpPriv) out.otpPriv = otpPriv;
+      const pqPriv = await dbGet('identity', 'pq-priv');
+      if (pqPriv) out.pqPriv = pqPriv;
+      // Group sender keys live under one IDB key per group (gsk:<groupId>) — the
+      // session-pruning enumeration precedent, filtered to that prefix only.
+      const idKeys = await new Promise(r => { try { const req = db.transaction('identity').objectStore('identity').getAllKeys(); req.onsuccess = () => r(req.result || []); req.onerror = () => r([]); } catch(e) { _dbg(e, 'backup-gsk-keys'); r([]); } });
+      const gsk = {};
+      for (const k of idKeys) {
+        if (typeof k !== 'string' || !k.startsWith('gsk:')) continue;
+        const rec = await dbGet('identity', k);
+        if (rec) gsk[k.slice(4)] = rec;
+      }
+      if (Object.keys(gsk).length) out.gsk = gsk;
+    } catch(e) { _dbg(e, 'backup-collect'); }
+    return out;
+  }
+  // Shape guards for restored key material — a malformed or hostile backup entry is
+  // skipped (and logged), never written into the identity store. Mirrors the contact
+  // validation restoreBackup already applies.
+  function _backupRecOk(rec, kind) {
+    const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
+    if (!isObj(rec)) return false;
+    if (kind === 'signing') return typeof rec.pubB64 === 'string' && rec.pubB64.length <= 128 &&
+      (isObj(rec.wrapped) || (isObj(rec.priv) && isObj(rec.pub)));
+    if (kind === 'account') return typeof rec.root === 'string' && rec.root.length <= 128 &&
+      (rec.rootEd == null || (typeof rec.rootEd === 'string' && rec.rootEd.length <= 128)) &&
+      (rec.isPrimary === undefined || typeof rec.isPrimary === 'boolean');
+    if (kind === 'spkPriv') return isObj(rec.priv);
+    if (kind === 'otpPriv') return Array.isArray(rec.keys) && rec.keys.length <= 1000 && rec.keys.every(isObj);
+    if (kind === 'pqPriv') return isObj(rec.wrapped) ||
+      (Array.isArray(rec.seed) && rec.seed.length === 64 && rec.seed.every(b => Number.isInteger(b) && b >= 0 && b <= 255));
+    return false;
+  }
+  async function _restoreBackupKeyMaterial(km) {
+    if (!km || typeof km !== 'object') return 0;
+    let restored = 0;
+    const put = async (rec, kind, slot) => {
+      if (rec === undefined) return;
+      if (!_backupRecOk(rec, kind)) { _dbg(null, 'backup-restore: skipping malformed ' + kind); return; }
+      if (await dbPut('identity', rec, slot)) restored++;
+    };
+    await put(km.signing, 'signing', 'signing');
+    await put(km.account, 'account', 'account');
+    await put(km.spkPriv, 'spkPriv', 'spk-priv');
+    await put(km.otpPriv, 'otpPriv', 'otp-priv');
+    await put(km.pqPriv, 'pqPriv', 'pq-priv');
+    if (km.gsk && typeof km.gsk === 'object' && !Array.isArray(km.gsk)) {
+      let n = 0;
+      for (const [gid, rec] of Object.entries(km.gsk)) {
+        if (n++ >= 500) { _dbg(null, 'backup-restore: gsk entry cap reached'); break; }
+        if (typeof gid !== 'string' || !gid || gid.length > 128 || !rec || typeof rec !== 'object' || Array.isArray(rec)) { _dbg(null, 'backup-restore: skipping malformed gsk entry'); continue; }
+        if (await dbPut('identity', rec, 'gsk:' + gid)) restored++;
+      }
+    }
+    return restored;
+  }
+
   async function backupToFile() {
     const identity = await dbGet('identity', 'keys');
     const contacts = await dbGetAll('contacts');
@@ -11849,7 +11932,8 @@ async function initMessenger(dbName) {
     const pass = await showPrompt(t('backupPassSet'), '', { type: 'password', okText: t('encrypt'), autocomplete: 'new-password' });
     if (!pass || pass.length < 4) { showToast(t('toastMin4Chars'), 'error'); return; }
 
-    const data = JSON.stringify({ identity, contacts, exportedAt: new Date().toISOString() });
+    const keyMaterial = await _collectBackupKeyMaterial();
+    const data = JSON.stringify({ backupV: BACKUP_FORMAT_V, identity, contacts, keyMaterial, exportedAt: new Date().toISOString() });
     const enc = await encrypt(pass, data);
     const blob = new Blob([JSON.stringify(enc)], { type: 'application/json' });
     downloadBlob(blob, 'breeze-backup-' + new Date().toISOString().slice(0, 10) + '.json');
@@ -11901,6 +11985,9 @@ async function initMessenger(dbName) {
             !/^[A-Za-z0-9+/=]+$/.test(c.pubB64)) continue;
         await dbPut('contacts', c);
       }
+      // Format v2 only: the key material (signing/account/prekey privates/gsk/pq).
+      // Absent in v1 backups — those restore exactly the pre-step-1 scope.
+      await _restoreBackupKeyMaterial(data.keyMaterial);
 
       showToast(t('toastRestoredReload'), 'success'); setTimeout(() => location.reload(), 1.5 * MS.SEC);
     } catch(e) { _dbg(e,'restore'); showToast(t('toastWrongPassphrase'), 'error'); }
@@ -12180,7 +12267,8 @@ async function initMessenger(dbName) {
       const identity = await dbGet('identity', 'keys');
       const contacts = await dbGetAll('contacts');
       const messages = await dbGetAll('messages');
-      const data = JSON.stringify({ v: CONFIG.PROTOCOL_VERSION, identity, contacts, messages, exportedAt: Date.now() });
+      const keyMaterial = await _collectBackupKeyMaterial();
+      const data = JSON.stringify({ v: CONFIG.PROTOCOL_VERSION, backupV: BACKUP_FORMAT_V, identity, contacts, messages, keyMaterial, exportedAt: Date.now() });
       // Encrypt with PBKDF2 + AES-256-GCM
       const salt = crypto.getRandomValues(new Uint8Array(16));
       const iv = crypto.getRandomValues(new Uint8Array(CONFIG.IV_BYTES));
@@ -12249,6 +12337,8 @@ async function initMessenger(dbName) {
       const data = JSON.parse(new TextDecoder().decode(pt));
       // Restore
       if (data.identity) await dbPut('identity', data.identity, 'keys');
+      // Format v2 only: the key material (signing/account/prekey privates/gsk/pq).
+      await _restoreBackupKeyMaterial(data.keyMaterial);
       if (data.contacts) for (const c of data.contacts) {
         // Validate required fields before storing — a malformed backup entry could corrupt the DB
         if (typeof c?.id !== 'string' || !c.id || c.id.length > 64 ||

@@ -240,3 +240,66 @@ Each component, the three questions, and the verdict.
    - exact-match only, forever — no prefix search (enumeration
      defence, agreeing with SHARE_PLA
 ...[truncated 9113 chars]
+## 3. Implementation outcomes
+
+> Note (2026-11-14, step-1 implementer): the plan text above as committed
+> ends mid-sentence in §2 item 4 — the merged file carries a literal
+> truncation marker, and the §3 design / step list were never committed.
+> The steps below are implemented from the tasking record, which
+> summarises the full design; outcomes are recorded here as they land.
+
+### Step 1 — Fix the backup scope (DONE)
+
+Both backup producers (file `backupToFile`, cloud `createCloudBackup`)
+now emit format v2: the payload gains `backupV: 2` and a `keyMaterial`
+block holding the records §1.6 defect 2 found missing — `signing`
+(the Ed25519 root key), `account`, `spk-priv`, `otp-priv`, `pq-priv`
+(the stage-3 PQ seed record), and every `gsk:` group sender key.
+Both restore paths validate each entry's shape and write the records
+back into the identity store (`_collectBackupKeyMaterial` /
+`_restoreBackupKeyMaterial` in index.html). The encryption envelope
+is unchanged (file: existing PBKDF2 + AES-256-GCM `encrypt()`; cloud:
+its existing 600k-iteration variant); only the plaintext scope grew.
+
+Decisions worth recording:
+
+- **Records travel as stored**, including /keywrap-wrapped forms for
+  the slots keywrap covers (keys/signing/pq-priv). The wrapped form
+  is self-contained — KDF parameters and the slot-bound AAD travel
+  with it, and the AAD binds the slot name, not the device — so it
+  unwraps on the new install with the at-rest passphrase exactly as
+  on the old one. The backup's own passphrase remains the outer layer.
+- **Sessions (`sess:`) stay out** (§2: a restored ratchet forks).
+  Every 1:1 session re-bootstraps from the restored prekey material;
+  with `spk-priv`/`otp-priv` restored, the offline window of §1.6
+  defect 3 closes for messages sealed to the *current* prekeys.
+  **`inst` stays out** — it is clone detection, and SECURITY.md's
+  "restore is migration" warning depends on it differing.
+- **Backward compatibility**: v1 backups (no `keyMaterial`) restore
+  exactly the pre-step-1 scope — identity, contacts, and (cloud)
+  messages — without error. Honest limit: a v1 restore still does
+  NOT bring back the signing key, account binding, prekey privates,
+  group sender keys or the PQ seed; `initSigning()` mints a new
+  signing key, so device management and TOFU-pinned signatures are
+  not healed by old backups. Only backups written after this step
+  are complete recovery kits.
+- **Tamper rejection** is the envelope's AES-GCM authentication,
+  unchanged: a flipped ciphertext byte or a wrong passphrase yields
+  no plaintext and no writes (pinned by test).
+
+Evidence: `tests/backup-keymaterial.test.js` (9 tests) runs the real
+index.html helpers — the collect/restore pair, the file backup's own
+`encrypt`/`decrypt`, and the real `dbGet`/`dbPut` — through the full
+drill: populate → collect → encrypt → wipe → restore, then verifies
+the restored signing key signs/verifies (device-management
+authority), the restored PQ seed re-derives the same ML-KEM keypair
+and decapsulates a fresh ciphertext, sessions/inst never appear in
+the payload, v1 payloads restore the old scope, malformed entries
+are skipped while valid siblings land, and wrapped forms round-trip
+byte-identical.
+
+Not in this step (unchanged, by design): the file backup's
+4-character passphrase minimum vs the cloud path's 6 (§1.6 defect
+5), the missing first-run restore entry (step 2), and the cloud
+cold-restore impossibility (§1.6 defect 1 — step 4; restore still
+requires the live identity to fetch the blob).
