@@ -15,7 +15,13 @@ import { parseLINE, parseWhatsApp, parseTelegram, detectAndParse } from '../src/
 
 const saved = {};
 beforeAll(() => {
-  for (const k of ['t', '_dbg', 'showToast', 'CONFIG', 'MS', '_DOM', 'API', '_turnCredential', 'document', 'window', 'localStorage', 'navigator']) saved[k] = globalThis[k];
+  // Snapshot property descriptors, not just values: `navigator` is a
+  // getter-only accessor on globalThis (Node >= 21) and the sound suite
+  // below redefines it via Object.defineProperty (non-writable), so a
+  // plain assignment in afterAll cannot put the original back and throws
+  // "Cannot assign to read only property 'navigator'". Restoring by
+  // descriptor handles data and accessor globals alike.
+  for (const k of ['t', '_dbg', 'showToast', 'CONFIG', 'MS', '_DOM', 'API', '_turnCredential', 'document', 'window', 'localStorage', 'navigator']) saved[k] = Object.getOwnPropertyDescriptor(globalThis, k);
   globalThis.t = (k) => k;
   globalThis._dbg = () => {};
   globalThis.showToast = (msg, type) => { (globalThis.__toasts ||= []).push({ msg, type }); };
@@ -28,7 +34,7 @@ beforeAll(() => {
   globalThis.window = globalThis;
   globalThis.localStorage = { getItem: () => null };
 });
-afterAll(() => { for (const k of Object.keys(saved)) { if (saved[k] === undefined) delete globalThis[k]; else globalThis[k] = saved[k]; } });
+afterAll(() => { for (const k of Object.keys(saved)) { if (saved[k]) Object.defineProperty(globalThis, k, saved[k]); else delete globalThis[k]; } });
 
 describe('import parsers (src/app/import-parsers.js)', () => {
   it('parses a LINE export and detects the format', () => {
