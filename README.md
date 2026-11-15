@@ -7,6 +7,8 @@ End-to-end encrypted P2P messenger. No phone number. No registration. No app sto
 
 > **Single HTML file** — deploys to Cloudflare Pages in 60 seconds. Runs at **$0/month**.
 
+![Breeze Messenger screenshot — the main window right after creating an identity](docs/images/screenshot.png)
+
 ## Demo
 
 Try the hosted version: **[breeze.pages.dev](https://breeze.pages.dev)**
