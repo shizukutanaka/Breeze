@@ -50,6 +50,7 @@ const MAIN_VERIFIED = [
   'breeze-sig:{}:{}:{}',
   'breeze-{}:{}:{}',               // queue ops: breeze-<op>:<id>:<ts> (checkQueueAuth)
   'breeze-prekey-upload:{}:{}:{}',
+  'breeze-presence:{}:{}:{}',      // presence heartbeat proof: breeze-presence:<id>:<ts>:<digest> (checkPresenceAuth)
 ];
 
 // push/subscribe: the worker composes the last slot from a subBind variable —

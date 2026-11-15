@@ -27,6 +27,7 @@
 //     account still receives via the second relay.
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import worker from '../_worker.js';
@@ -446,7 +447,7 @@ describe('fan-out — presence + push unsubscribe reach every home relay', () =>
     const presenceFn = new Function(
       'API', 'dbGet', 'dbPut', 'signMessage', 'homeRelays', 'postAPIRelay', 'showToast',
       't', '_dbg', 'MS', 'CONFIG', 'document', '_ac', 'activeContact', 'updateConvStatus',
-      'myId', 'myPubB64', 'myName',
+      'myId', 'myPubB64', 'myName', 'authFields', 'digestHex16', 'sanStr',
       `${sliceBetween('// ===== Presence heartbeat', '// v3.3: Shared lock screen function')}
        return { startPresence };`);
     const presence = presenceFn(
@@ -455,10 +456,25 @@ describe('fan-out — presence + push unsubscribe reach every home relay', () =>
       { MIN: 60000 }, { PRESENCE_INTERVAL_MS: 3600000, PRESENCE_BG_INTERVAL_MS: 3600000 },
       { hidden: false, addEventListener: () => {} }, { signal: undefined }, null, () => {},
       MY_ID, MY_PUB, 'Alice',
+      // Wave 2: the beat signs itself (authFields + digestHex16 + sanStr
+      // are the beat's collaborators now). Faithful stubs: authFields
+      // mirrors its {ts, sig} contract (and still runs the client's
+      // challenge construction through signFn); digestHex16 is the real
+      // SHA-256 prefix; sanStr the real twin.
+      async (signFn) => { const ts = Date.now(); await signFn(ts, MY_ID); return { ts, sig: 'c2ln' }; },
+      async (str) => createHash('sha256').update(str).digest('hex').slice(0, 32),
+      (s, max) => (typeof s === 'string' ? s.replace(/[<>"'&\x00-\x1f\x7f]/g, '').slice(0, max) : ''),
     );
     presence.startPresence();
-    await flush();
-    const beats = log.filter((x) => x.url.endsWith('/presence')).map((x) => x.url);
+    // The beat reaches each relay only after that relay's attestation
+    // (async Ed25519 verification), and wave 2 added the beat's own
+    // signing step before the fan-out — so wait for both posts to land
+    // instead of racing one fixed sleep (the assertion is unchanged).
+    let beats = [];
+    for (let i = 0; i < 100 && beats.length < 2; i++) {
+      await flush();
+      beats = log.filter((x) => x.url.endsWith('/presence')).map((x) => x.url);
+    }
     expect(beats.sort()).toEqual([API + '/presence', B_API + '/presence']);
   });
 
