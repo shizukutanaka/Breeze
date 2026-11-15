@@ -40,6 +40,8 @@ new_sqlite_classes = ["MailboxDO"]
 # wrangler pages secret put TURN_USERNAME              # static username
 # wrangler pages secret put TURN_CREDENTIAL            # static credential
 # Option D: No config → auto-falls to free Open Relay (20GB/month)
+# wrangler pages secret put TURN_OPENRELAY_FALLBACK     # false — opt out of Option D: no A–C configured ⇒ STUN only (provider "none")
+# GET /api/health reports the effective mode as "turnProvider".
 #
 # --- Moderation (optional) ---
 # wrangler pages secret put ABUSE_WEBHOOK_URL          # Notified on verified abuse reports
@@ -67,6 +69,7 @@ new_sqlite_classes = ["MailboxDO"]
 # those clients off (for QUEUE: total receive loss). Enable once you're not
 # also serving such clients (check CHANGELOG.md for when each call started
 # signing).
+# wrangler pages secret put PRESENCE_SIGN_REQUIRE_AUTH # true — reject unsigned presence heartbeats (verified-when-present without it; current clients sign every beat)
 # wrangler pages secret put GROUP_REQUIRE_AUTH         # true — reject unsigned group create/kick/rename/admin/leave/delete/transfer
 # wrangler pages secret put PUSH_REQUIRE_AUTH          # true — reject unsigned push subscribe/unsubscribe
 # wrangler pages secret put QUEUE_REQUIRE_AUTH         # true — reject unsigned msg/sealed poll + sealed ack (queue read/delete)

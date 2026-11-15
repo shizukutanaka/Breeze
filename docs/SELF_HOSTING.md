@@ -246,22 +246,51 @@ wrangler pages secret put VAPID_PRIVATE_KEY
 
 #### TURN Server (for restrictive networks)
 
+TURN is how calls and relay-only (IP-hiding) connections cross
+restrictive NATs. Which TURN your relay hands out is **your** choice as
+operator — the Worker tries, in order:
+
 ```bash
-# Option A: Cloudflare Calls ($0.05/GB)
+# Option A: Cloudflare Calls ($0.05/GB, global anycast)
 wrangler pages secret put TURN_KEY_ID
 wrangler pages secret put TURN_KEY_API_TOKEN
 
-# Option B: No config → free Open Relay (20GB/month)
-# (This is the default — no action needed)
+# Option B: your own coturn (HMAC time-limited credentials — the Worker
+# mints a 24h username/credential per registered user from the secret)
+#   coturn: use-auth-secret, static-auth-secret=<same secret>
+wrangler pages secret put TURN_URL      # turn:your-server:3478
+wrangler pages secret put TURN_SECRET
+
+# Option C: static credentials (metered.ca, Twilio, …)
+wrangler pages secret put TURN_URL
+wrangler pages secret put TURN_USERNAME
+wrangler pages secret put TURN_CREDENTIAL
+
+# Option D: No config → free Open Relay (20GB/month). This is a third
+# party's PUBLIC quota, shared with every unconfigured relay — fine for
+# a first run, not a foundation. Opt out explicitly and callers get
+# STUN only (some restrictive-NAT calls will then fail, visibly):
+wrangler pages secret put TURN_OPENRELAY_FALLBACK   # set to: false
 ```
+
+**Verify what you actually configured:** `GET /api/health` reports the
+effective mode as `turnProvider` (`cloudflare` | `custom` | `static` |
+`openrelay` | `none`). The older `turn` boolean only reflects
+`TURN_URL`, so it reads `false` for the recommended Option A — use
+`turnProvider`. Clients show the same provider in `/security`, so a
+user on the Open Relay fallback can see that a third party relays their
+call media (metadata only — media itself is DTLS-SRTP encrypted).
 
 #### Auth Hardening & the Plain Relay Path
 
 Presence writes and TURN credential issuance already require a *registered*
-account (prekey bundle present) by default — no signature is involved, and
-every client registers automatically. The stricter Ed25519-signature flags
-stay opt-in; `wrangler.toml` documents each one and why (clients on runtimes
-without WebCrypto Ed25519 cannot sign at all).
+account (prekey bundle present) by default, and every client registers
+automatically. Presence heartbeats additionally carry an Ed25519 ownership
+proof (the beat signs the fields it stores), which the Worker verifies
+whenever one is presented — `PRESENCE_SIGN_REQUIRE_AUTH=true` makes that
+proof mandatory. The remaining Ed25519-signature flags stay opt-in;
+`wrangler.toml` documents each one and why (clients on runtimes without
+WebCrypto Ed25519 cannot sign at all).
 
 The legacy plain relay (`/api/msg/send`, `/api/msg/poll`) is deprecated: its
 responses carry a `Deprecation: true` header, and the sealed path is the

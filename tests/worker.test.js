@@ -44,6 +44,7 @@ import worker, {
   handleSignal,
   handlePresence,
   handleTurn,
+  turnProviderMode,
   validateUserId,
   handleKtLogGet,
   handlePushUnsubscribe,
@@ -4828,6 +4829,110 @@ describe('presence heartbeat and check', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Presence heartbeat ownership auth (P2P defect wave 2): the store path was
+// registration-gated only, so knowing a userId was enough to heartbeat AS
+// that user — pin them online and overwrite the caps peers negotiate
+// against. Beats now carry an Ed25519 proof over a digest of the stored
+// fields; verified when present, mandatory under PRESENCE_SIGN_REQUIRE_AUTH.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('presence heartbeat ownership auth (wave 2)', () => {
+  const req = (body) => apiRequest('/api/presence', body);
+  const b64 = (u8) => Buffer.from(u8).toString('base64');
+  async function digest16(text) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  // Register an Ed25519 identity for `id`; return a signer that produces a
+  // fully-signed beat for the given fields (worker's challenge format).
+  async function beatSigner(env, id, bundleExtra = {}) {
+    const kp = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const raw = new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey));
+    await env.KV.put(`prekey:${id}`, JSON.stringify({ edIdentityKey: b64(raw), spkPub: 'x', ...bundleExtra }));
+    return async (beat, ts = Date.now()) => {
+      const digest = await digest16(JSON.stringify([beat.pub || '', beat.name || '', beat.caps ?? null, beat.inst || '']));
+      const sig = b64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, kp.privateKey,
+        new TextEncoder().encode(`breeze-presence:${id}:${ts}:${digest}`))));
+      return { ...beat, ts, sig };
+    };
+  }
+
+  it('accepts a correctly signed heartbeat and stores its caps', async () => {
+    const e = makeEnv();
+    const sign = await beatSigner(e, 'siguser001');
+    const res = await handlePresence(await sign({ id: 'siguser001', pub: 'p', name: 'Sana', caps: ['x3dh-v5', 'pqxdh'] }), e, req({}));
+    expect(res.status).toBe(200);
+    const j = await (await handlePresence({ id: 'siguser001', check: true }, e, req({}))).json();
+    expect(j.online).toBe(true);
+    expect(j.caps).toEqual(['x3dh-v5', 'pqxdh']);
+  });
+
+  it('rejects a forged beat and leaves the stored record untouched (no caps downgrade)', async () => {
+    const e = makeEnv();
+    const sign = await beatSigner(e, 'victim0001');
+    await handlePresence(await sign({ id: 'victim0001', pub: 'p', name: 'Vic', caps: ['x3dh-v5', 'pqxdh'] }), e, req({}));
+    // Attacker knows only the id; signs a caps-stripping beat with THEIR key.
+    const atk = await beatSigner(makeEnv(), 'victim0001'); // separate env: only the keypair matters
+    const forged = await atk({ id: 'victim0001', pub: 'evilpub', name: 'Vic', caps: [] });
+    const res = await handlePresence(forged, e, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+    const j = await (await handlePresence({ id: 'victim0001', check: true }, e, req({}))).json();
+    expect(j.caps).toEqual(['x3dh-v5', 'pqxdh']); // downgrade did not land
+  });
+
+  it('rejects a captured signature replayed with a tampered field', async () => {
+    const e = makeEnv();
+    const sign = await beatSigner(e, 'replay0001');
+    const signed = await sign({ id: 'replay0001', pub: 'p', name: 'Alice' });
+    const res = await handlePresence({ ...signed, name: 'Mallory' }, e, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SIG_INVALID');
+  });
+
+  it('rejects partial auth (ts without sig)', async () => {
+    const e = makeEnv();
+    await beatSigner(e, 'partial001');
+    const res = await handlePresence({ id: 'partial001', pub: 'p', name: 'X', ts: Date.now() }, e, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('PARTIAL_AUTH');
+  });
+
+  it('rejects a stale timestamp even with a valid signature', async () => {
+    const e = makeEnv();
+    const sign = await beatSigner(e, 'stale00001');
+    const signed = await sign({ id: 'stale00001', pub: 'p', name: 'X' }, Date.now() - 10 * 60 * 1000);
+    const res = await handlePresence(signed, e, req({}));
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_TIMESTAMP');
+  });
+
+  it('sig present but the bundle has no identity key → NO_IDENTITY_KEY', async () => {
+    const e = makeEnv();
+    await e.KV.put('prekey:nokey00001', JSON.stringify({ spkPub: 'x' })); // registered, pre-Ed25519 bundle
+    const res = await handlePresence({ id: 'nokey00001', pub: 'p', name: 'X', ts: Date.now(), sig: b64(new Uint8Array(64)) }, e, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('NO_IDENTITY_KEY');
+  });
+
+  it('PRESENCE_SIGN_REQUIRE_AUTH=true: unsigned beat rejected, signed beat accepted', async () => {
+    const e = makeEnv({ PRESENCE_SIGN_REQUIRE_AUTH: 'true' });
+    const sign = await beatSigner(e, 'strict0001');
+    const unsigned = await handlePresence({ id: 'strict0001', pub: 'p', name: 'X' }, e, req({}));
+    expect(unsigned.status).toBe(403);
+    expect((await unsigned.json()).code).toBe('AUTH_REQUIRED');
+    const signed = await handlePresence(await sign({ id: 'strict0001', pub: 'p', name: 'X' }), e, req({}));
+    expect(signed.status).toBe(200);
+  });
+
+  it('check (read) path is unaffected by the signature requirement', async () => {
+    const e = makeEnv({ PRESENCE_SIGN_REQUIRE_AUTH: 'true' });
+    const res = await handlePresence({ id: 'strict0002', check: true }, e, req({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).online).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // OGP link-preview — SSRF guard (URL validation only; no outbound fetch in tests)
 // ─────────────────────────────────────────────────────────────────────────────
 describe('TURN credentials', () => {
@@ -4924,6 +5029,47 @@ describe('TURN credentials', () => {
     const res = await handleTurn({ userId: 'unreg00010' }, e, req({}));
     expect(res.status).toBe(200);
     expect((await res.json()).provider).toBe('openrelay');
+  });
+
+  // P2P_PLAN Step 5 / wave 2: the open-relay fallback is a third party's
+  // shared public quota — an operator-managed relay can opt out, and the
+  // effective mode is published on /api/health (turnProvider) so the
+  // operator can verify what their env actually selects.
+  it('TURN_OPENRELAY_FALLBACK=false: STUN-only response, provider none, no third-party servers', async () => {
+    const e = makeEnv({ TURN_OPENRELAY_FALLBACK: 'false' });
+    await e.KV.put('prekey:user00001', JSON.stringify({ spkPub: 'x' }));
+    const res = await handleTurn({ userId: 'user00001' }, e, req({}));
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.provider).toBe('none');
+    expect(j.iceServers.length).toBeGreaterThan(0);
+    expect(j.iceServers.every(s => String(s.urls).startsWith('stun:'))).toBe(true);
+    expect(j.iceServers.some(s => String(s.urls).includes('metered.ca'))).toBe(false);
+  });
+
+  it('turnProviderMode mirrors the handleTurn priority chain', () => {
+    expect(turnProviderMode({})).toBe('openrelay');
+    expect(turnProviderMode({ TURN_OPENRELAY_FALLBACK: 'false' })).toBe('none');
+    expect(turnProviderMode({ TURN_KEY_ID: 'k', TURN_KEY_API_TOKEN: 't' })).toBe('cloudflare');
+    expect(turnProviderMode({ TURN_SECRET: 's', TURN_URL: 'turn:x:3478' })).toBe('custom');
+    expect(turnProviderMode({ TURN_URL: 'turn:x:3478', TURN_USERNAME: 'u', TURN_CREDENTIAL: 'c' })).toBe('static');
+    // Cloudflare wins over custom when both are configured (handleTurn order).
+    expect(turnProviderMode({ TURN_KEY_ID: 'k', TURN_KEY_API_TOKEN: 't', TURN_SECRET: 's', TURN_URL: 'turn:x:3478' })).toBe('cloudflare');
+    // Partial config does not count as configured.
+    expect(turnProviderMode({ TURN_KEY_ID: 'k' })).toBe('openrelay');
+    expect(turnProviderMode({ TURN_URL: 'turn:x:3478' })).toBe('openrelay');
+  });
+
+  it('health publishes the effective TURN mode as turnProvider', async () => {
+    const plain = await (await worker.fetch(new Request('https://breeze.test/api/health'), makeEnv())).json();
+    expect(plain.turnProvider).toBe('openrelay');
+    const cf = await (await worker.fetch(new Request('https://breeze.test/api/health'),
+      makeEnv({ TURN_KEY_ID: 'k', TURN_KEY_API_TOKEN: 't' }))).json();
+    expect(cf.turnProvider).toBe('cloudflare');
+    // The legacy `turn` boolean reads TURN_URL only — false here even though
+    // Cloudflare Calls TURN is fully configured. turnProvider is the fix.
+    expect(cf.turn).toBe(false);
+    expect(cf.capabilities).toContain('presence-auth');
   });
 });
 

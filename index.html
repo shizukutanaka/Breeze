@@ -1228,6 +1228,8 @@ import { createShareTools } from './src/app/share.js';
 window.__breezeShare = { createShareTools };
 import { createDirectAckWaiter } from './src/app/direct-ack.js';
 window.__breezeDirectAck = { createDirectAckWaiter };
+import { createP2pStats, classifyCandidateType } from './src/app/p2p-stats.js';
+window.__breezeP2pStats = { createP2pStats, classifyCandidateType };
 </script>
 
 <script>
@@ -1980,6 +1982,14 @@ const _I = {
     secRelayDisabled: '✗ Off (direct P2P, IP visible to peers)',
     secActive: 'Active',
     secNotConfigured: 'Not configured',
+    secLblDirectRate: 'Direct delivery rate',
+    secLblConnRoutes: 'Connection routes (this device)',
+    secDirectNoData: 'no data yet',
+    secConnFailed: 'failed',
+    secTurnNone: 'Not configured (STUN only)',
+    secTurnCustom: "relay operator's own TURN",
+    secTurnStatic: 'static TURN credentials',
+    secTurnOpenRelay: 'Open Relay — third-party free tier',
     secLblRTCCert: 'Fresh RTC Certificate',
     secDefault: 'Default',
     secLblPassword: 'Password',
@@ -7354,16 +7364,39 @@ async function initMessenger(dbName) {
   // arrives. Module absent ⇒ null ⇒ every send deposits exactly as
   // before Step 2 (the feature degrades, boot never does).
   const _directAck = globalThis.__breezeDirectAck?.createDirectAckWaiter({ timeoutMs: 5 * MS.SEC }) || null;
-  // Step 1 seed counters (on-device only, never transmitted — the
-  // no-telemetry rule): Step 1's display will read these aggregates to
-  // show the direct rate. directAck = deposit skipped on ack;
-  // directNoAck = direct send attempted, deposit still made.
+  // Step 1 counters (on-device only, never transmitted — the
+  // no-telemetry rule): directAck = deposit skipped on ack;
+  // directNoAck = direct send attempted, deposit still made. The
+  // counting/storage logic lives in src/app/p2p-stats.js (unit-tested);
+  // the localStorage keys and shapes predate the module, so counts
+  // carry over. Module absent ⇒ the original inline bump runs, so the
+  // counters survive a failed module load exactly like the sends do.
+  const _p2pStats = globalThis.__breezeP2pStats?.createP2pStats({
+    load: (k) => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } },
+    save: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  }) || null;
   function _p2pDirectStat(field) {
+    if (_p2pStats) { _p2pStats.noteDelivery(field === 'directAck'); return; }
     try {
       const s = JSON.parse(localStorage.getItem('brz-p2p-direct') || '{}');
       s[field] = (s[field] || 0) + 1;
       localStorage.setItem('brz-p2p-direct', JSON.stringify(s));
     } catch {}
+  }
+  // Step 1: one route count per established peer session, classified by
+  // the selected local ICE candidate. Best-effort — a stats failure
+  // costs a sample, never a connection.
+  function _noteConnRoute(pc) {
+    if (!_p2pStats || !pc) return;
+    try {
+      pc.getStats().then(stats => {
+        let pair = null;
+        stats.forEach(s => { if (s.type === 'candidate-pair' && s.state === 'succeeded') pair = s; });
+        if (!pair) return;
+        const local = [...stats.values()].find(x => x.id === pair.localCandidateId);
+        if (local) _p2pStats.noteConnection(local.candidateType);
+      }).catch(e => _dbg(e, 'p2p-stats'));
+    } catch(e) { _dbg(e, 'p2p-stats'); }
   }
   // v3.6: Flush queued outbox on reconnect (needs closure-local peers/encryptFor/myPubB64/myName).
   async function flushOutbox(peerId) {
@@ -11343,6 +11376,7 @@ async function initMessenger(dbName) {
     // P5 FIX: 30s timeout — if not connected, clean up and allow retry
     const connTimeout = setTimeout(() => {
       if (!peerState.connected) {
+        _p2pStats?.noteConnectionFailed();
         peerState.transition('CLOSED'); try { pc.close(); } catch(e) { _dbg(e); }
         delete peers[contact.pubB64];
         _dbg(null, 'P2P timeout for ' + contact.id);
@@ -11556,6 +11590,7 @@ async function initMessenger(dbName) {
     function onPeerConnected() {
       peerState.connected = true;
       peerState.transition('CONNECTED');
+      _noteConnRoute(pc);
       updateConvStatus();
       renderContacts();
       deliverPeerRelayQueue(contact.id);
@@ -11765,13 +11800,24 @@ async function initMessenger(dbName) {
         // Sign the instance id: the relay only honours a SIGNED inst, so a stranger cannot
         // POST a fake one for our id and manufacture a clone warning on our screen.
         const instSig = await signMessage(`breeze-inst:${myId}:${inst.v}`);
+        // Wave 2: sign the beat itself. Registration alone (bundle exists)
+        // let anyone who learned our id heartbeat AS us — pinning us
+        // "online" and overwriting the caps peers negotiate against. The
+        // challenge digest binds the stored fields in the worker's order
+        // [pub, name, caps, inst] over the worker-sanitized values (name
+        // via the sanStr twin); the caps slot is null because this beat
+        // carries no caps. Verified-when-present on the relay;
+        // PRESENCE_SIGN_REQUIRE_AUTH makes it mandatory. authFields
+        // returns {} while signing is unavailable, and the beat self-heals
+        // on the next 30s cycle.
+        const beatAuth = await authFields(async ts => `breeze-presence:${myId}:${ts}:${await digestHex16(JSON.stringify([myPubB64 || '', sanStr(myName, 64), null, inst.v]))}`);
         // Stage-2 step 5: the beat lands on every home relay — presence is
         // per-relay state, and a contact homed elsewhere can only see us
         // online if the beat reached their relay too. The clone verdict
         // is per relay as well; the warning stays once per window.
         let conflict = false;
         for (const relay of homeRelays()) {
-          const resp = await postAPIRelay(relay, '/presence', { id: myId, pub: myPubB64, name: myName, inst: inst.v, instSig });
+          const resp = await postAPIRelay(relay, '/presence', { id: myId, pub: myPubB64, name: myName, inst: inst.v, instSig, ...beatAuth });
           const data = resp?.ok ? await resp.json().catch(() => null) : null;
           if (data?.conflict) conflict = true;
         }
@@ -13905,6 +13951,26 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       // protecting the user on this device, not just compiled-in capabilities.
       const _identRec = await dbGet('identity', 'keys').catch(() => null);
       const _atRestOn = _atRestIsWrapped(_identRec);
+      // P2P_PLAN Step 1 display: this device's own delivery/route
+      // aggregates (on-device only, never transmitted — src/app/
+      // p2p-stats.js). Fallback reads the delivery counters directly so
+      // the lines still render if the module failed to load.
+      const _p2pSnap = _p2pStats ? _p2pStats.snapshot() : (() => { try { const s = JSON.parse(localStorage.getItem('brz-p2p-direct') || '{}'); const a = s.directAck || 0, n = s.directNoAck || 0; return { directAck: a, directNoAck: n, directTotal: a + n, directRate: (a + n) > 0 ? a / (a + n) : null, conn: null, connTotal: 0, connFailed: 0 }; } catch { return null; } })();
+      const _directRateLine = !_p2pSnap ? '—'
+        : _p2pSnap.directRate === null ? t('secDirectNoData')
+        : Math.round(_p2pSnap.directRate * 100) + '% (' + _p2pSnap.directAck + '/' + _p2pSnap.directTotal + ')';
+      const _connRouteLine = !_p2pSnap?.conn ? '—'
+        : 'Direct ' + _p2pSnap.conn.direct + ' · STUN ' + _p2pSnap.conn.srflx + ' · TURN ' + _p2pSnap.conn.turn + ' · ' + t('secConnFailed') + ' ' + _p2pSnap.connFailed;
+      // TURN provider honesty (Step 5): name WHO relays media when a call
+      // or relay-only connection falls back to TURN — in particular the
+      // third-party free Open Relay an unconfigured relay silently uses.
+      const _turnLine = !_turnCredential ? '✗ ' + t('secNotConfigured')
+        : _turnCredential.provider === 'none' ? '✗ ' + t('secTurnNone')
+        : '✓ ' + t('secActive') + ' (' + (_turnCredential.provider === 'cloudflare' ? 'Cloudflare Calls'
+          : _turnCredential.provider === 'custom' ? t('secTurnCustom')
+          : _turnCredential.provider === 'static' ? t('secTurnStatic')
+          : _turnCredential.provider === 'openrelay' ? t('secTurnOpenRelay')
+          : (_turnCredential.provider || '?')) + ')';
       safeSetHTML(d, [
         '<b class="i-g13">' + t('cmdCryptoTitle') + '</b>',
         '',
@@ -13958,7 +14024,9 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         t('secIceCandFilter'),
         t('secLblRelayOnly') + ': ' + (_settings.relayOnly ? '<span class="i-g">✓ ON</span> ' + t('secRelayEnabled') : t('secRelayDisabled')),
         t('secLblRelayPin') + ': ' + (_relayPinGate.blocked ? '<span class="color-y">⚠ ' + t('secRelayPinMismatch') + '</span>' : _relayPinFp ? '<span class="i-g">✓</span> ' + _relayPinFp : '—'),
-        'TURN: ' + (_turnCredential ? '✓ ' + t('secActive') : '✗ ' + t('secNotConfigured')),
+        'TURN: ' + _turnLine,
+        t('secLblDirectRate') + ': ' + _directRateLine,
+        t('secLblConnRoutes') + ': ' + _connRouteLine,
         t('secLblRTCCert') + ': ' + (_rtcCert ? '✓ Per-session ECDSA P-256' : '✗ ' + t('secDefault')),
         'DataChannel: negotiated:true (DCEP skip)',
         'Negotiation: Perfect Negotiation (glare-safe, MDN spec)',

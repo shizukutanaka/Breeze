@@ -215,6 +215,12 @@ export default {
         kv: kvOk,
         push: !!(env.VAPID_PUBLIC_KEY),
         turn: !!(env.TURN_URL),
+        // P2P_PLAN Step 5: the EFFECTIVE TURN mode (see turnProviderMode) —
+        // `turn` above only reflects TURN_URL, so it read false for the
+        // recommended Cloudflare Calls setup and true-but-meaningless for
+        // the open-relay fallback. Operators verify their configuration
+        // here; clients may surface it for the same reason.
+        turnProvider: turnProviderMode(env),
         vapidPublicKey: env.VAPID_PUBLIC_KEY || null,
         // Stage-2 step 4: the relay's persistent Ed25519 identity (public
         // half), for the client's TOFU pin — null when the operator has not
@@ -245,7 +251,7 @@ export default {
           'account-delete', 'group-leave', 'group-delete', 'group-admin',
           'group-transfer', 'group-rename', 'msg-disappear-enforce',
           'sealed-sender', 'franking', 'prekey-x3dh',
-          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'alias-auth', 'backup-auth', 'push-auth', 'drop-server-id', 'group-auth', 'group-ban', 'queue-auth', 'prekey-auth', 'plain-deprecation', 'delete-sweep', 'relay-attest', 'prekey-home', 'backup-simple',
+          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'alias-auth', 'backup-auth', 'push-auth', 'drop-server-id', 'group-auth', 'group-ban', 'queue-auth', 'prekey-auth', 'plain-deprecation', 'delete-sweep', 'relay-attest', 'prekey-home', 'backup-simple', 'presence-auth',
         ],
         crypto: ['X25519', 'Ed25519', 'AES-256-GCM', 'HKDF-SHA256', 'Double Ratchet', 'Sender Key O(1)'],
         ts: Date.now(),
@@ -1654,6 +1660,47 @@ async function handleMsgPoll(body, env, request) {
   return json(dropped > 0 ? { messages: newMsgs, dropped } : { messages: newMsgs }, 200, request);
 }
 
+// Presence heartbeat ownership proof (P2P defect wave 2). The presence
+// store path was gated on registration only — bundle EXISTENCE — so anyone
+// who learned a userId (it is handed to every contact; it is not a secret)
+// could heartbeat AS that user: pin them "online" forever, and overwrite
+// the presence record's pub / display name / advertised caps — the caps a
+// peer negotiates the protocol floor against before fetching a bundle, so
+// a forged beat was also a downgrade lever. The beat now carries the same
+// class of Ed25519 proof as the other *_REQUIRE_AUTH families. The
+// challenge binds every mutable field the beat stores, over the SANITIZED
+// values (the client sanitizes identically before signing —
+// auth-parity.test.js pins the template byte-for-byte):
+//   breeze-presence:<id>:<ts>:<sha256Short(JSON [pub, name, caps, inst])>
+// Rollout doctrine matches checkQueueAuth: verified when present;
+// PRESENCE_SIGN_REQUIRE_AUTH=true makes it mandatory once clients ship
+// the signing fields. A replay inside the ±5-minute ts window re-stores
+// byte-identical data (heartbeats are idempotent), so the window is the
+// whole replay exposure. `fields` carries the caller's sanitized values.
+async function checkPresenceAuth(body, env, request, fields) {
+  const { id, ts, sig } = body;
+  const hasSig = ts !== undefined || sig !== undefined;
+  if (!hasSig) {
+    if (env.PRESENCE_SIGN_REQUIRE_AUTH === 'true')
+      return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+    return null;
+  }
+  if (ts === undefined || sig === undefined)
+    return json({ error: 'ts and sig must both be provided together', code: 'PARTIAL_AUTH' }, 400, request);
+  if (typeof sig !== 'string' || sig.length > 500)
+    return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
+  if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS)
+    return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
+  const data = await kvGet(env, `prekey:${id}`);
+  const bundle = data ? safeJsonParse(data) : null;
+  const edKey = (bundle && typeof bundle.edIdentityKey === 'string' && bundle.edIdentityKey) || null;
+  if (!edKey) return json({ error: 'No registered identity key', code: 'NO_IDENTITY_KEY' }, 403, request);
+  const digest = await sha256Short(JSON.stringify([fields.pub || '', fields.name || '', fields.caps ?? null, fields.inst || '']));
+  const ok = await verifyEd25519(edKey, utf8ToB64(`breeze-presence:${id}:${ts}:${digest}`), sig);
+  if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
+  return null;
+}
+
 async function handlePresence(body, env, request) {
   const { id, ids, pub, name, caps, check: isCheck } = body;
   // N3: capability advertisement carried in the heartbeat so a peer can negotiate the
@@ -1747,6 +1794,17 @@ async function handlePresence(body, env, request) {
     }
   }
 
+  // Sanitized forms of every field the beat stores — computed once, here,
+  // because the ownership proof below binds exactly these values.
+  // Cap pub to 200 chars (a base64 X25519/P-256 key is ≤88 chars; large values are abuse).
+  const safePub = typeof pub === 'string' ? pub.slice(0, 200) : undefined;
+  const safeName = sanitizeString(name, 64);
+  const rawInst = typeof body.inst === 'string' ? body.inst.slice(0, 32) : undefined;
+  // Ownership proof for the beat itself (see checkPresenceAuth). Runs
+  // before any cache/store mutation, so a rejected beat changes nothing.
+  const presAuthErr = await checkPresenceAuth(body, env, request, { pub: safePub, name: safeName, caps: safeCaps, inst: rawInst });
+  if (presAuthErr) return presAuthErr;
+
   // v3.6: In-memory presence cache — only writes through to the store every 5 minutes (saves ~90% of store writes)
   // Free tier: 1000 writes/day. 30s heartbeat = 2880/day per user = over limit!
   // 5min write interval = 288/day per user = safe for 3 users on free tier
@@ -1760,21 +1818,19 @@ async function handlePresence(body, env, request) {
   }
   const presKey = `presence:${id}`;
   const lastWrite = globalThis._presenceCache.get(presKey) || 0;
-  // Cap pub to 200 chars (a base64 X25519/P-256 key is ≤88 chars; large values are abuse).
-  const safePub = typeof pub === 'string' ? pub.slice(0, 200) : undefined;
   // Identity-clone detection: `inst` is a per-INSTALL random id. Two different live insts
   // heartbeating the same identity within a heartbeat window = the same identity running on
   // two installs at once (e.g. a backup restored while the original device stays active) —
   // a Double-Ratchet-fork hazard the client warns the user about. Best-effort: the previous
   // record may live in another isolate's memory or a ≤5-min-stale KV entry, so a miss is
   // possible; a hit is always real (inst is compared only within the same identity).
-  // The inst must be SIGNED by the identity that owns this id. Presence writes are otherwise
-  // unauthenticated (PRESENCE_REQUIRE_AUTH is off by default), so an unsigned inst let any
-  // stranger POST a random inst for someone else's id and make that user see a scary
+  // The inst must be SIGNED by the identity that owns this id. The beat as a whole is
+  // registration-gated but (until PRESENCE_SIGN_REQUIRE_AUTH) not signature-gated, so an
+  // unsigned inst let any stranger POST a random inst for someone else's id and make that user see a scary
   // "your identity is running on two devices" warning on demand — a spoofable security alarm
   // trains users to ignore the real one (Socratic crypto-edge lens). Unsigned or
   // badly-signed insts are ignored entirely: no conflict raised, nothing stored.
-  let safeInst = typeof body.inst === 'string' ? body.inst.slice(0, 32) : undefined;
+  let safeInst = rawInst;
   if (safeInst) {
     const instSig = typeof body.instSig === 'string' ? body.instSig.slice(0, 200) : '';
     const pk = safeJsonParse(await kvGet(env, `prekey:${id}`) || 'null');
@@ -1789,7 +1845,7 @@ async function handlePresence(body, env, request) {
     const prev = prevRaw ? safeJsonParse(prevRaw) : null;
     if (prev?.inst && prev.inst !== safeInst && Date.now() - prev.at < 90000) conflict = true;
   }
-  const presData = { pub: safePub, name: sanitizeString(name, 64), at: Date.now() };
+  const presData = { pub: safePub, name: safeName, at: Date.now() };
   if (safeInst) presData.inst = safeInst;
   if (safeCaps) presData.caps = safeCaps;
   if (Date.now() - lastWrite > TIMEOUT_MS.PRESENCE_WRITE) { // throttle store writes (see PRESENCE STORE: the throttle now bounds DO writes too)
@@ -3090,6 +3146,22 @@ async function sendPushToUser(userId, payload, env) {
 // STUN: always free (Cloudflare + Google)
 // ============================================================
 
+// Effective TURN provider for this relay's configuration, in handleTurn's
+// priority order. Configuration only (no Cloudflare API call), so the
+// health endpoint can tell the operator which mode their env actually
+// selects — before this, health reported only `!!env.TURN_URL`, which is
+// false for the recommended Cloudflare Calls setup, so an operator could
+// not verify their TURN configuration took effect at all. 'openrelay'
+// means NO operator TURN is configured and callers fall back to the
+// metered.ca public free tier; 'none' is that fallback disabled by the
+// operator (TURN_OPENRELAY_FALLBACK=false) — STUN only.
+function turnProviderMode(env) {
+  if (env.TURN_KEY_ID && env.TURN_KEY_API_TOKEN) return 'cloudflare';
+  if (env.TURN_SECRET && env.TURN_URL) return 'custom';
+  if (env.TURN_URL && env.TURN_USERNAME && env.TURN_CREDENTIAL) return 'static';
+  return env.TURN_OPENRELAY_FALLBACK === 'false' ? 'none' : 'openrelay';
+}
+
 async function handleTurn(body, env, request) {
   const { userId } = body;
   if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
@@ -3162,7 +3234,15 @@ async function handleTurn(body, env, request) {
     return json({ iceServers, ttl: TTL.DAY, provider: 'static' }, 200, request);
   }
 
-  // Option D: Free Open Relay (metered.ca — 20GB/month free, no config needed)
+  // Option D: Free Open Relay (metered.ca — 20GB/month free, no config needed).
+  // Operator-managed relays can opt OUT of this third-party fallback
+  // (TURN_OPENRELAY_FALLBACK=false, P2P_PLAN Step 5): callers then receive
+  // STUN only and the response says so (provider 'none') instead of media
+  // silently routing through a shared public quota the operator never
+  // chose — and whose 20GB/month is shared with every unconfigured relay.
+  if (env.TURN_OPENRELAY_FALLBACK === 'false') {
+    return json({ iceServers, ttl: TTL.DAY, provider: 'none' }, 200, request);
+  }
   iceServers.push(
     { urls: 'turn:a.relay.metered.ca:80', username: 'e8dd65b92f60fae75f5aefab', credential: 'uWdWNmkhvyqTEswO' },
     { urls: 'turn:a.relay.metered.ca:80?transport=tcp', username: 'e8dd65b92f60fae75f5aefab', credential: 'uWdWNmkhvyqTEswO' },
@@ -4660,6 +4740,8 @@ export {
   handleBackupSimpleDelete,
   handleSignal,
   handlePresence,
+  checkPresenceAuth,
   handleTurn,
+  turnProviderMode,
 };
 
