@@ -1140,6 +1140,46 @@ flags (`MAILBOX_BACKEND=do`, `PRESENCE_BACKEND=do`,
 `MAILBOX_WS_ENABLED`) remain operator rollout choices, as
 stage 1 left them.
 
+## Follow-up (2026-11-16) — invite-carried candidates + deposit failover (H3/H4)
+
+Two gaps the stage left open, closed as one follow-up (tests:
+`tests/relay-invite-failover.test.js`, 16 tests):
+
+- **H3 — an invite link now carries the inviter's whole home
+  list.** Step 6 captured only the link's origin as the rank-1
+  carrier; the inviter's added relays (and every pin) were lost.
+  `generateInviteMessage` appends `relays=<base64url JSON>` built
+  from `homeRelays()` whenever there is anything beyond a
+  pin-less origin to say — a single-relay inviter's link stays
+  byte-identical to the pre-H3 one, and old clients ignore the
+  parameter. Recipients decode it through the same
+  `sanitizeHomeList` discipline as every other home list, with
+  the link's origin forced to rank 1; links without the
+  parameter decode to exactly the old hint. The pins carried are
+  relay identity *public* keys (the values `/api/health`
+  advertises); the list travels inside the link only — no extra
+  request, no third party, nothing stored anywhere but the
+  recipient's own contact record.
+- **H4 — deposits fail over within the known list.** The caps
+  gate bounds the copies a healthy send makes, but when every
+  capped target failed, the remaining known homes were never
+  tried — a dead first home stranded the send in the retry queue
+  while a known second home stood idle. `relaySend` now walks
+  the remaining candidates in preference order (both the fan-out
+  branch and the legacy primary-only branch), and a successful
+  failover *is* the delivery: owed copies are discharged rather
+  than queued, so a delivered message can never dead-letter
+  later. Reroutes are surfaced, never silent: an audit entry
+  every time, a toast the first time each (failed → stand-in)
+  pair reroutes in a session. `_fanoutSignal` walks the same
+  way, audit-only. What did **not** need building: own-account
+  traffic (poll / presence / prekey / backup) already fans out
+  to every home relay (step 5, pinned by its drill), and prekey
+  fetch already falls through a contact's relays in order
+  (step 6, pinned). The serving origin's boot/health path is
+  unchanged — the app is served by that origin, so its death is
+  a redeploy concern, not a client failover one.
+
 ## Out of scope (stage 3 and other follow-ups own these)
 
 - **PQXDH / SPQR / MLS** — stage 3 of the recommendation; the

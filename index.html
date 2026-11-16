@@ -1687,6 +1687,7 @@ const _I = {
     relayAddUnreachable: 'That relay could not be verified — check the URL and try again.',
     relayAdded: 'Home relay added: {0}',
     relayRemoved: 'Home relay removed: {0}',
+    relayFailover: "Relay {0} didn't answer — delivered via {1} instead.",
     relayRemoveConfirm: 'Remove {0} from your home relays? The relay keeps the data it already holds; it just stops receiving new copies.',
     relayFanoutLabel: 'Copies per contact (redundant delivery):',
     contactHomeBtn: 'Home relay…',
@@ -6368,6 +6369,42 @@ async function initMessenger(dbName) {
   // only — old clients see no change.
   const CAPS_MULTI_RELAY = 'multi-relay';
 
+  // Invite-carried home lists (H3): an invite link bundles the
+  // inviter's OWN home relays — the serving origin plus any added
+  // relays, with the pins the inviter holds for them — so the
+  // recipient stores the full candidate list as the contact's home,
+  // not just the origin that happened to serve the link. The value
+  // is base64url(JSON [{url, pin?}]); it travels inside the link
+  // only (no extra request, nothing sent anywhere else), and the
+  // pins are relay identity PUBLIC keys — the same values /api/health
+  // advertises to anyone. Decoding is defensive like every other
+  // home-list entry point: sanitizeHomeList decides the shape, and
+  // the link's own origin is forced to rank 1 (the step-6 carrier
+  // rule: an invite link is served BY a home relay of the inviter).
+  // Links without the parameter decode to exactly the pre-H3 hint —
+  // the serving origin alone — so old links behave byte-identically.
+  function _encodeInviteHomeList() {
+    try {
+      const list = homeRelays().map(r => (r.pin ? { url: r.url, pin: r.pin } : { url: r.url }));
+      if (list.length < 2 && !list[0]?.pin) return '';
+      const b64 = btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(list))));
+      return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    } catch(_e) { return ''; }
+  }
+  function _decodeInviteHomeList(raw, linkOrigin) {
+    let list = [];
+    if (typeof raw === 'string' && raw) {
+      try {
+        const b64 = raw.replace(/-/g, '+').replace(/_/g, '/');
+        const json = new TextDecoder().decode(Uint8Array.from(atob(b64), c => c.charCodeAt(0)));
+        list = sanitizeHomeList(JSON.parse(json));
+      } catch(_e) { list = []; }
+    }
+    const origin = _normalizeRelayUrl(linkOrigin);
+    if (origin && !list.some(e => e.url === origin)) list = [{ url: origin, pin: '' }, ...list];
+    return sanitizeHomeList(list);
+  }
+
   // Client twin of the worker's sanitizeHomeList (same contract: ≤3
   // entries, http(s) origins only, pin a bounded string). Applied to
   // every home list entering the client — stored records, bundle
@@ -6459,6 +6496,24 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'contact-relay-post'); return null; }
   }
 
+  // H4 failover surfacing: a delivery that had to reroute around a
+  // dead relay is never silent — the audit log records every
+  // reroute, and the user is told the first time each (failed →
+  // stand-in) pair reroutes in a session (a group send to many
+  // members homed on one dead relay must not toast per member).
+  const _failoverNoted = new Set(); // 'failedUrl>usedUrl' pairs already toasted this session
+  function _noteRelayFailover(failedEntry, usedEntry) {
+    try {
+      const failedUrl = failedEntry?.url || _servingRelayUrl();
+      auditLog('relay', `Delivery rerouted: ${failedUrl} did not answer — deposited via ${usedEntry.url} instead.`);
+      const pair = failedUrl + '>' + usedEntry.url;
+      if (_failoverNoted.has(pair)) return;
+      _failoverNoted.add(pair);
+      showToast(t('relayFailover', failedUrl, usedEntry.url), 'info', 8000);
+      announceToSR(t('relayFailover', failedUrl, usedEntry.url));
+    } catch(e) { _dbg(e, 'relay-failover-note'); }
+  }
+
   // Resolve where a directed send to `contact`/`peerId` goes:
   // [] = primary only (the pre-step-6 world — no stored home, no
   // hint); otherwise the contact's home entries in preference order,
@@ -6469,8 +6524,14 @@ async function initMessenger(dbName) {
   // devices (which have bundles advertising MY home list) and any
   // other non-contact recipient keep the primary path exactly —
   // my own relays are governed by the step-5 funnel, not this one.
-  async function _resolveSendTargets(contact, peerId) {
-    if (!contact) return [];
+  // The full candidate list behind _resolveSendTargets: every home
+  // known for the contact (stored carriers outrank the bundle hint),
+  // in preference order, UNCAPPED — plus the fan-out cap the caps
+  // negotiation allows. The H4 failover in relaySend walks the
+  // entries past the cap when every capped target failed; the cap
+  // still bounds the copies a healthy send makes.
+  async function _resolveHomeCandidates(contact, peerId) {
+    if (!contact) return { homes: [], fan: 1 };
     try {
       let stored = sanitizeHomeList(contact?.home);
       let caps = null;
@@ -6479,10 +6540,13 @@ async function initMessenger(dbName) {
         caps = info.caps;
         if (!stored.length) stored = info.home;
       }
-      if (!stored.length) return [];
       const fan = (caps && caps.includes(CAPS_MULTI_RELAY)) ? _fanoutCount() : 1;
-      return stored.slice(0, fan);
-    } catch(e) { _dbg(e, 'send-targets'); return []; }
+      return { homes: stored, fan };
+    } catch(e) { _dbg(e, 'send-targets'); return { homes: [], fan: 1 }; }
+  }
+  async function _resolveSendTargets(contact, peerId) {
+    const { homes, fan } = await _resolveHomeCandidates(contact, peerId);
+    return homes.slice(0, fan);
   }
 
   // The wire bytes for one send, built ONCE so every relay receives
@@ -6548,10 +6612,28 @@ async function initMessenger(dbName) {
   }
   async function _fanoutSignal(peerId, full) {
     const contact = await dbGet('contacts', peerId).catch(() => null);
-    const targets = await _resolveSendTargets(contact, peerId);
+    const { homes, fan } = await _resolveHomeCandidates(contact, peerId);
+    const targets = homes.slice(0, fan);
+    let landed = false;
     for (const entry of targets) {
       if (isOriginRelay(entry)) continue; // the primary copy is _signal's own post
-      await _contactRelayPost(entry, '/signal', full);
+      const resp = await _contactRelayPost(entry, '/signal', full);
+      if (resp?.ok) landed = true;
+    }
+    // H4 failover, rendezvous edition: if every capped home refused
+    // or was unreachable, walk the remaining known homes — a call
+    // offer that lands nowhere is a call that never rings. Audit
+    // only: signals are frequent and the message path's toast (same
+    // relay pair, throttled there) carries the user-facing word.
+    if (!landed) {
+      for (const entry of homes.slice(targets.length)) {
+        if (isOriginRelay(entry)) continue;
+        const resp = await _contactRelayPost(entry, '/signal', full);
+        if (resp?.ok) {
+          auditLog('relay', `Signal rerouted: deposited via ${entry.url} after the preferred home(s) did not answer.`);
+          break;
+        }
+      }
     }
   }
 
@@ -6567,18 +6649,44 @@ async function initMessenger(dbName) {
     // and the legacy body below then runs VERBATIM, so an account
     // whose contacts have no homes sees byte-identical behaviour.
     let fanTargets = [];
+    let homeCandidates = [];
     try {
       const contact = contactHint || (to ? await dbGet('contacts', to).catch(() => null) : null);
-      fanTargets = await _resolveSendTargets(contact, to);
-    } catch(e) { _dbg(e, 'relay-targets'); fanTargets = []; }
+      const resolved = await _resolveHomeCandidates(contact, to);
+      homeCandidates = resolved.homes;
+      fanTargets = homeCandidates.slice(0, resolved.fan);
+    } catch(e) { _dbg(e, 'relay-targets'); fanTargets = []; homeCandidates = []; }
     if (!(fanTargets.length === 0 || (fanTargets.length === 1 && isOriginRelay(fanTargets[0])))) {
       const wire = await _buildWire(to, payload, sealPub, msgTs);
       let anyAck = false;
+      let anyDeposited = false;
       const owed = [];
       for (const entry of fanTargets) {
         const r = await _depositCopy(entry, to, wire, payload);
-        if (r.ok) { if (r.ack) anyAck = true; }
+        if (r.ok) { if (r.ack) anyAck = true; if (!r.withheld) anyDeposited = true; }
         else owed.push(entry);
+      }
+      // H4 failover: the capped targets are the copies a HEALTHY send
+      // makes — but if none of them landed a copy anywhere (a dead
+      // first home is the common case: the caps gate leaves a legacy
+      // peer exactly one target), walk the contact's remaining known
+      // homes in preference order before owing anything to the retry
+      // queue. A successful failover IS the delivery, so the owed
+      // copies are discharged, not queued — queueing them would
+      // dead-letter a delivered message later and report a failure
+      // that never happened. The reroute is surfaced, never silent.
+      if (!anyDeposited) {
+        for (const entry of homeCandidates.slice(fanTargets.length)) {
+          const r = await _depositCopy(entry, to, wire, payload);
+          if (r.ok && !r.withheld) {
+            if (r.ack) anyAck = true;
+            anyDeposited = true;
+            _noteRelayFailover(fanTargets[0], entry);
+            owed.length = 0;
+            break;
+          }
+          if (!r.ok) owed.push(entry);
+        }
       }
       // One ACK from any relay marks the DEPOSIT (the step-5 poll rule):
       // a relay ack proves the relay holds the envelope, not that the
@@ -6633,6 +6741,21 @@ async function initMessenger(dbName) {
       throw new Error('relay-' + resp.status);
     } catch(e) {
       _dbg(e, 'relay-fail');
+      // H4 failover: the legacy path above speaks only to the primary,
+      // but the contact may have further known homes (the caps gate
+      // selects the origin alone for a legacy peer even when the
+      // record holds three). A dead primary must not strand the send
+      // in the retry queue while a known home is standing — walk the
+      // remaining candidates with the same wire bytes first. Only a
+      // total failure queues, exactly as before.
+      for (const entry of homeCandidates.slice(fanTargets.length)) {
+        const r = await _depositCopy(entry, to, wire, payload);
+        if (r.ok && !r.withheld) {
+          if (r.ack && msgTs) updateMsgStatus(msgTs, 'deposited');
+          _noteRelayFailover(fanTargets[0], entry);
+          return;
+        }
+      }
       if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, attempts: 0 }); _saveRetryQueue(); }
       scheduleRetry();
     }
@@ -7219,12 +7342,14 @@ async function initMessenger(dbName) {
     // Auto-add contact from URL (?add=@alias or ?add=pubkey&name=X)
     const addKey = P.get('add');
     if (addKey && addKey !== myPubB64) {
+      // Step 6 + H3: an invite link is served BY the contact's home
+      // relay (rank-1 carrier), and may carry the inviter's whole
+      // home list in ?relays= — decode both into the stored home.
+      const inviteHome = _decodeInviteHomeList(P.get('relays'), _servingRelayUrl());
       if (addKey.startsWith('@')) {
-        await resolveAndAdd(addKey);
+        await resolveAndAdd(addKey, inviteHome);
       } else {
-        // Step 6: an invite link is served BY the contact's home relay —
-        // its origin is the rank-1 home carrier.
-        await addContact(addKey, P.get('name') || t('newContact'), [{ url: _servingRelayUrl() }]);
+        await addContact(addKey, P.get('name') || t('newContact'), inviteHome);
       }
     }
     // Auto-join group from URL (?join=token)
@@ -7299,8 +7424,9 @@ async function initMessenger(dbName) {
     // BUG 10 fix: process add= parameter after identity creation
     const addKey = P.get('add');
     if (addKey && addKey !== myPubB64) {
-      if (addKey.startsWith('@')) { await resolveAndAdd(addKey); }
-      else { await addContact(addKey, P.get('name') || t('newContact'), [{ url: _servingRelayUrl() }]); }
+      const inviteHome = _decodeInviteHomeList(P.get('relays'), _servingRelayUrl());
+      if (addKey.startsWith('@')) { await resolveAndAdd(addKey, inviteHome); }
+      else { await addContact(addKey, P.get('name') || t('newContact'), inviteHome); }
     }
     // Auto-join group
     if (joinToken) await processJoinToken(joinToken);
@@ -12113,15 +12239,24 @@ async function initMessenger(dbName) {
   });
 
 
-  async function resolveAndAdd(input) {
+  async function resolveAndAdd(input, homeHintOverride) {
     let pubB64, name = 'Contact', aliasResolved = false;
     // Parse URL
     let homeHint = null;
     try {
       const url = new URL(input);
       const raw = url.searchParams.get('add');
-      if (raw) { input = raw; name = url.searchParams.get('name') || name; homeHint = [{ url: url.origin }]; }
+      if (raw) {
+        input = raw; name = url.searchParams.get('name') || name;
+        // H3: an invite link may carry the inviter's full home list;
+        // without one this is the pre-H3 hint — the link's origin.
+        homeHint = _decodeInviteHomeList(url.searchParams.get('relays'), url.origin);
+      }
     } catch(e) { _dbg(e); }
+    // The boot path hands a bare '@alias' (the rest of the query
+    // string never reaches this parser), so it passes the hint it
+    // decoded from the full URL itself.
+    if (!homeHint && Array.isArray(homeHintOverride) && homeHintOverride.length) homeHint = homeHintOverride;
 
     // Resolve @alias
     if (input.startsWith('@') && API) {
@@ -13011,9 +13146,16 @@ async function initMessenger(dbName) {
   // BULK INVITE: Send one link to invite multiple people
 
   function generateInviteMessage() {
+    // H3: bundle this account's home relays into the link (see
+    // _encodeInviteHomeList) so the recipient stores the full
+    // candidate list, not just the serving origin. Empty when there
+    // is nothing beyond the bare origin to say — a single-relay,
+    // pin-less inviter's link stays byte-identical to the pre-H3 one.
+    const relays = _encodeInviteHomeList();
+    const relayParam = relays ? '&relays=' + relays : '';
     const url = myAlias
-      ? location.origin + location.pathname + '?add=@' + myAlias
-      : location.origin + location.pathname + '?add=' + encodeURIComponent(myPubB64) + '&name=' + encodeURIComponent(myName);
+      ? location.origin + location.pathname + '?add=@' + myAlias + relayParam
+      : location.origin + location.pathname + '?add=' + encodeURIComponent(myPubB64) + '&name=' + encodeURIComponent(myName) + relayParam;
 
     const msg = t('inviteMsg', myName, url);
     return { url, msg };
