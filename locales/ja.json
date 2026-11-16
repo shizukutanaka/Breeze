@@ -291,6 +291,7 @@
  "relayAddUnreachable": "そのリレーを検証できませんでした — URLを確認して再試行してください。",
  "relayAdded": "ホームリレーを追加しました: {0}",
  "relayRemoved": "ホームリレーを削除しました: {0}",
+ "relayFailover": "リレー {0} が応答しなかったため、{1} 経由で届けました。",
  "relayRemoveConfirm": "{0} をホームリレーから削除しますか？リレー側にすでに保存されたデータは残りますが、新しいコピーは届かなくなります。",
  "relayFanoutLabel": "連絡先へのコピー数（冗長配送）:",
  "contactHomeBtn": "ホームリレー…",
