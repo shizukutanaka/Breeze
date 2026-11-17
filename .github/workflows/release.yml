@@ -1,0 +1,108 @@
+# Release — tag-driven distribution ZIP for self-hosting.
+#
+# Why this exists: the only Release asset was a ~8-month-old ZIP, because
+# cutting a release was manual. Now it is one action: push a version tag
+# (e.g. `git tag v3.6.1 && git push origin v3.6.1`) and this workflow
+# tests, packages and publishes the Release. The ZIP's contents are the
+# deployable unit defined by tools/package-release.sh (the runtime tree
+# a user drops on their own Cloudflare Pages / Docker / Node host) — the
+# creator operates no official instance, so the Release page is the
+# distribution point and the user's own placement is the runtime.
+#
+# Triggers:
+#   * push of a `v*` tag  → full pipeline + GitHub Release with the ZIP
+#     and SHA256SUMS.txt attached.
+#   * workflow_dispatch   → same packaging, but NO Release is created;
+#     the ZIP is uploaded as a workflow artifact only, so the packaging
+#     can be verified without publishing anything.
+#
+# Note: .github/workflows/ is listed in .gitignore (see ci.yml's header
+# comment); like ci.yml, this file is force-added intentionally.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version label (e.g. v3.6.1). Empty = derive from index.html CONFIG.VERSION.'
+        required: false
+        type: string
+
+permissions:
+  contents: write # creating the Release on tag pushes; unused on dispatch
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Quality gates
+        run: |
+          chmod +x validate.sh
+          ./validate.sh
+
+      - name: Determine version label
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            LABEL="${{ github.ref_name }}"
+          elif [ -n "${{ inputs.version }}" ]; then
+            LABEL="${{ inputs.version }}"
+          else
+            LABEL="v$(grep -o "VERSION: '[^']*'" index.html | head -1 | sed "s/VERSION: '//; s/'//")"
+          fi
+          echo "label=$LABEL" >> "$GITHUB_OUTPUT"
+          echo "Release label: $LABEL"
+
+      - name: Build distribution ZIP + checksums
+        run: bash tools/package-release.sh "${{ steps.version.outputs.label }}" dist-release
+
+      - name: Verify checksum
+        run: |
+          cd dist-release
+          sha256sum -c SHA256SUMS.txt
+          unzip -Z1 "breeze-${{ steps.version.outputs.label }}.zip"
+
+      - name: Upload as workflow artifact (always — this is the dispatch verification path)
+        uses: actions/upload-artifact@v4
+        with:
+          name: breeze-${{ steps.version.outputs.label }}
+          path: dist-release/
+          if-no-files-found: error
+
+      - name: Create GitHub Release (tag pushes only)
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          LABEL="${{ steps.version.outputs.label }}"
+          cat > release-notes.md <<'EOF'
+          Self-hostable release: unzip, then run Breeze on your own placement
+          (Cloudflare Pages, Docker, or bare Node) — see `DEPLOY.txt` inside
+          the ZIP and `docs/SELF_HOSTING.md` for the full guide.
+
+          Verify the download:
+
+          ```
+          sha256sum -c SHA256SUMS.txt
+          ```
+          EOF
+          gh release create "$LABEL" \
+            "dist-release/breeze-$LABEL.zip" \
+            "dist-release/SHA256SUMS.txt" \
+            --title "Breeze $LABEL" \
+            --notes-file release-notes.md
