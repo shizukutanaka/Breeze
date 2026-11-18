@@ -5,13 +5,15 @@
 
 End-to-end encrypted P2P messenger. No phone number. No registration. No app store. No paywall — every feature is free.
 
-> **Single HTML file** — deploys to Cloudflare Pages in 60 seconds. Runs at **$0/month**.
+> **Single HTML file** — deploys to Cloudflare Pages in 60 seconds. The default relay is a free entrance only up to its free tier and fair-use quota; at larger scale a relay costs money, and by design that cost is paid on the user's own placement (their own relay or account), not by one central operator — see [Running Costs](#running-costs) and [docs/SUSTAINABILITY.md](docs/SUSTAINABILITY.md).
 
 ![Breeze Messenger screenshot — the main window right after creating an identity](docs/images/screenshot.png)
 
 ## Demo
 
 Try the hosted version: **[breeze.pages.dev](https://breeze.pages.dev)**
+
+> **Note:** the hosted demo at https://breeze.pages.dev currently returns **404**. Restoring it is an owner-side operations task ([docs/SUSTAINABILITY.md](docs/SUSTAINABILITY.md) §4). Until then, deploy your own copy with the [Quick Start](#quick-start) — self-hosted copies do not depend on it.
 
 ```
 1. Open in browser → enter your name → identity created (no server involved)
@@ -190,7 +192,7 @@ advertised as working).
 
 ## Running Costs
 
-| Component | Free Tier | Paid ($5/mo) |
+| Component | Free Tier | Paid ($5/mo minimum) |
 |-----------|-----------|-------------|
 | Hosting | Cloudflare Pages Free | — |
 | Worker | 100K req/day | 10M req/mo |
@@ -199,7 +201,7 @@ advertised as working).
 | STUN | Cloudflare + Google (free) | — |
 | Push | Web Push VAPID (free) | — |
 | Domain | *.pages.dev (free) | Custom ($10/yr) |
-| **Total** | **$0/month** | **$5/month** |
+| **Total** | **$0/month** — up to ~20–40 light-use DAU (under 10 heavy); free quotas are hard caps | **$5/month minimum** + domain ($10/yr) — covers ~96 light-use MAU (~11 heavy), metered beyond (1,000 MAU: $34 light / $222 heavy) |
 
 That table is the personal / small-community scale. For the measured
 cost curve at larger scales — and why no single operator ever has to
