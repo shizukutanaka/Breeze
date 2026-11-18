@@ -201,6 +201,12 @@ advertised as working).
 | Domain | *.pages.dev (free) | Custom ($10/yr) |
 | **Total** | **$0/month** | **$5/month** |
 
+That table is the personal / small-community scale. For the measured
+cost curve at larger scales — and why no single operator ever has to
+carry the whole network's bill — see
+[docs/SUSTAINABILITY.md](docs/SUSTAINABILITY.md); the full model
+behind the numbers is [docs/COST_MODEL.md](docs/COST_MODEL.md).
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
