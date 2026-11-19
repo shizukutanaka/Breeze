@@ -1237,6 +1237,8 @@ window.__breezeP2pStats = { createP2pStats, classifyCandidateType };
 import { createRendezvous, attachManualPeer } from './src/app/rendezvous.js';
 window.__breezeRendezvous = { createRendezvous, attachManualPeer };
 import { createOfflinePairing } from './src/app/offline-pairing.js';
+import { classifyRelayRejection, createQuotaNotice } from './src/app/quota.js';
+window.__breezeQuota = { classifyRelayRejection, createQuotaNotice };
 window.__breezeOfflinePairing = { createOfflinePairing, blockedPeerIds: new Set() };
 </script>
 
@@ -1854,6 +1856,7 @@ const _I = {
     toastSendFail: 'Send failed — will retry',
     toastVoiceLong: 'Voice too long',
     toastRateLimit: 'Rate limited. Retrying...',
+    toastQuotaExceeded: 'This relay\'s free quota is used up. Messages stay on this device and will send when the quota resets — or add your own relay in Settings → Home relays.',
     toastDbBlocked: 'Database update blocked. Close other Breeze tabs and reload.',
     toastArchived: 'Archived',
     toastUnarchived: 'Unarchived',
@@ -6748,6 +6751,19 @@ async function initMessenger(dbName) {
   // be a different mailbox path, and the plan's rule is that one
   // relay's limit never touches the others. Any other sealed failure
   // falls through to plain exactly like the legacy path.
+  // SHARE_PLAN stage 6, client side of the cost model: when a relay
+  // refuses a deposit because the identity's free quota is spent, say so
+  // once per episode — the particulars go to the audit log, the user
+  // gets the way out (their own relay), not a per-message alarm. The
+  // message itself is never dropped over a quota: it stays in the same
+  // retry queue an ordinary failure uses.
+  const _classifyRejection = (body) => globalThis.__breezeQuota?.classifyRelayRejection(body) || null;
+  const _quotaNotice = globalThis.__breezeQuota?.createQuotaNotice({ cooldownMs: MS.HOUR, notify: (info) => {
+    auditLog('relay', `Deposit refused: free quota used up on this relay (${info.scope || 'window'} limit ${info.limit ?? 'unknown'}). Delivery resumes when the quota resets, or via your own relay.`);
+    showToast(t('toastQuotaExceeded'), 'error');
+  } }) || null;
+  function _noteQuota(r) { if (r && r.quota) _quotaNotice?.note(r.quota); }
+
   async function _depositCopy(entry, to, wire, payload) {
     // A pin mismatch is conclusive for the session: the copy is
     // WITHHELD, not owed — retrying cannot cure a key substitution,
@@ -6764,13 +6780,24 @@ async function initMessenger(dbName) {
       if (resp?.ok) { const d = await resp.json().catch(() => ({})); return { ok: true, ack: !!d.ack }; }
       if (resp?.status === 429) {
         const d = await resp.json().catch(() => ({}));
-        if (d.code === 'MAILBOX_RATE_LIMITED') return { ok: false, limited: true };
+        const rej = _classifyRejection(d);
+        // A spent quota is conclusive for this relay: falling through
+        // to the plain path would only spend a second deposit against
+        // the same exhausted budget, so report the refusal as what it
+        // is and let the caller queue the copy as owed.
+        if (rej?.kind === 'quota') return { ok: false, quota: rej };
+        if (rej?.kind === 'limited') return { ok: false, limited: true };
       }
     } catch(e) { _dbg(e, 'fanout-sealed'); }
     try {
       const resp = await post('/msg/send', payload);
       if (resp?.ok) { const d = await resp.json().catch(() => ({})); return { ok: true, ack: !!d.ack }; }
-      if (resp?.status === 429) return { ok: false, limited: true };
+      if (resp?.status === 429) {
+        const d = await resp.json().catch(() => ({}));
+        const rej = _classifyRejection(d);
+        if (rej?.kind === 'quota') return { ok: false, quota: rej };
+        return { ok: false, limited: true };
+      }
     } catch(e) { _dbg(e, 'fanout-plain'); }
     return { ok: false };
   }
@@ -6836,6 +6863,7 @@ async function initMessenger(dbName) {
       const owed = [];
       for (const entry of fanTargets) {
         const r = await _depositCopy(entry, to, wire, payload);
+        _noteQuota(r);
         if (r.ok) { if (r.ack) anyAck = true; if (!r.withheld) anyDeposited = true; }
         else owed.push(entry);
       }
@@ -6851,6 +6879,7 @@ async function initMessenger(dbName) {
       if (!anyDeposited) {
         for (const entry of homeCandidates.slice(fanTargets.length)) {
           const r = await _depositCopy(entry, to, wire, payload);
+          _noteQuota(r);
           if (r.ok && !r.withheld) {
             if (r.ack) anyAck = true;
             anyDeposited = true;
@@ -6885,6 +6914,20 @@ async function initMessenger(dbName) {
         if (data.ack && msgTs) updateMsgStatus(msgTs, 'deposited');
         return;
       }
+      if (resp.status === 429) {
+        const d = await resp.json().catch(() => ({}));
+        const rej = _classifyRejection(d);
+        if (rej?.kind === 'quota') {
+          // A spent budget, not a broken relay: the plain fallback
+          // below would only spend a second deposit against the same
+          // exhausted quota. Queue the message as owed instead and
+          // tell the user once why delivery is waiting.
+          _quotaNotice?.note(rej);
+          if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, attempts: 0 }); _saveRetryQueue(); }
+          scheduleRetry();
+          return;
+        }
+      }
     } catch(e) { _dbg(e, 'sealed'); }
     // Standard relay fallback (DEPRECATED path — servers announce it via the
     // Deprecation response header and can disable it with PLAIN_PATH_DISABLED)
@@ -6906,6 +6949,17 @@ async function initMessenger(dbName) {
         _dbg(null, 'relay: plain path disabled by server (410 PLAIN_PATH_DISABLED)');
       }
       if (resp.status === 429) {
+        const d = await resp.json().catch(() => ({}));
+        const rej = _classifyRejection(d);
+        if (rej?.kind === 'quota') {
+          // Not a burst limit: the Retry-After toast below would
+          // promise a retry in seconds for a window that resets in
+          // hours. Queue as owed and surface the quota notice instead.
+          _quotaNotice?.note(rej);
+          if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, attempts: 0 }); _saveRetryQueue(); }
+          scheduleRetry();
+          return;
+        }
         const retryAfter = (parseInt(resp.headers.get('Retry-After') || '5') || 5) * MS.SEC;
         showToast(t('toastRateLimit') + ' ' + Math.ceil(retryAfter/MS.SEC) + 's', 'info');
         setTimeout(() => { if (_retryQueue.length < 50) { _retryQueue.unshift({ to, payload, attempts: 0 }); _saveRetryQueue(); scheduleRetry(); } }, retryAfter);
@@ -6923,6 +6977,7 @@ async function initMessenger(dbName) {
       // total failure queues, exactly as before.
       for (const entry of homeCandidates.slice(fanTargets.length)) {
         const r = await _depositCopy(entry, to, wire, payload);
+        _noteQuota(r);
         if (r.ok && !r.withheld) {
           if (r.ack && msgTs) updateMsgStatus(msgTs, 'deposited');
           _noteRelayFailover(fanTargets[0], entry);
@@ -6966,6 +7021,7 @@ async function initMessenger(dbName) {
         if (wireObj) {
           for (const entry of item.relays) {
             const r = await _depositCopy(entry, item.to, wireObj, item.payload);
+            _noteQuota(r);
             if (r.ok) { if (r.ack) anyAck = true; }
             else still.push(entry);
           }

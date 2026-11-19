@@ -432,6 +432,7 @@
  "toastSendFail": "送信失敗 — 再試行します",
  "toastVoiceLong": "音声が長すぎます",
  "toastRateLimit": "レート制限中。再試行します...",
+ "toastQuotaExceeded": "このリレーの無料枠を使い切りました。メッセージはこの端末に残り、枠が回復すれば送信されます。または「設定 → ホームリレー」で自分のリレーを追加してください。",
  "toastDbBlocked": "DB更新がブロックされました。他のタブを閉じてリロードしてください。",
  "toastArchived": "アーカイブしました",
  "toastUnarchived": "アーカイブ解除しました",

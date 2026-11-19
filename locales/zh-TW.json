@@ -398,6 +398,7 @@
  "toastSendFail": "傳送失敗 — 將重試",
  "toastVoiceLong": "語音太長",
  "toastRateLimit": "已達速率限制。重試中...",
+ "toastQuotaExceeded": "此中繼的免費額度已用完。訊息會保留在此裝置上，額度重置後自動送出；或在「設定 → 主中繼」中加入您自己的中繼。",
  "toastDbBlocked": "資料庫更新遭封鎖。請關閉其他 Breeze 分頁後重新載入。",
  "toastArchived": "已封存",
  "toastUnarchived": "已取消封存",

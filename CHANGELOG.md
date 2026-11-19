@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## Relay quota notice (client side of the stage-6 cost model)
+
+- The client now tells USAGE_QUOTA_EXCEEDED apart from MAILBOX_RATE_LIMITED at every deposit path (fan-out copies, the primary sealed path, the primary plain path) via the new pure module `src/app/quota.js`, reached through the `window.__breezeQuota` bridge like the other src/app modules. A spent fair-use budget no longer falls through to the plain fallback (which only spent a second deposit against the same budget) and no longer surfaces as a "retrying in N seconds" toast for a window that resets in hours.
+- On a quota refusal the message is queued as owed exactly like an ordinary failure — nothing is dropped — and the user is told once per hour at most: the relay's free quota is used up, messages stay on this device, delivery resumes when the quota resets, or immediately by adding their own relay under Settings → Home relays. The scope and limit go to the on-device audit log; no telemetry is added. Localized in all eight shipped languages.
+- Regression coverage: `tests/quota-notice.test.js` (classification incl. garbled bodies, notice throttling, deployed-wiring pins for the import, the bridge, the sw.js precache entry and every locale).
+
 ## Bootstrap identity binding
 
 - Reject relay-fetched or offline-injected prekey bundles whose encryption identity differs from the requested contact or whose signing identity differs from an existing pin. A localized warning stops this send without trying another relay or legacy bootstrap; an unpinned relay-bundle signing key is saved only after its SPK signature verifies. Offline bundles still require the pairing's existing signing pin.

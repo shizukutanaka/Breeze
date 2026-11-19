@@ -402,6 +402,7 @@
  "toastSendFail": "Envío fallido — se reintentará",
  "toastVoiceLong": "Audio demasiado largo",
  "toastRateLimit": "Límite de peticiones. Reintentando...",
+ "toastQuotaExceeded": "La cuota gratuita de este relé se agotó. Los mensajes permanecen en este dispositivo y se enviarán cuando la cuota se restablezca, o agrega tu propio relé en Ajustes → Relés principales.",
  "toastDbBlocked": "Actualización de la base de datos bloqueada. Cierra otras pestañas de Breeze y recarga.",
  "toastArchived": "Archivado",
  "toastUnarchived": "Desarchivado",

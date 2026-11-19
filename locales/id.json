@@ -398,6 +398,7 @@
  "toastSendFail": "Pengiriman gagal — akan dicoba lagi",
  "toastVoiceLong": "Suara terlalu panjang",
  "toastRateLimit": "Dibatasi laju. Mencoba lagi...",
+ "toastQuotaExceeded": "Kuota gratis relai ini sudah habis. Pesan tetap ada di perangkat ini dan akan terkirim saat kuota pulih — atau tambahkan relai Anda sendiri di Pengaturan → Relai utama.",
  "toastDbBlocked": "Pembaruan basis data diblokir. Tutup tab Breeze lain lalu muat ulang.",
  "toastArchived": "Diarsipkan",
  "toastUnarchived": "Batal diarsipkan",

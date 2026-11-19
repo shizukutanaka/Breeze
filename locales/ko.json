@@ -398,6 +398,7 @@
  "toastSendFail": "전송 실패 — 재시도합니다",
  "toastVoiceLong": "음성이 너무 깁니다",
  "toastRateLimit": "속도 제한. 재시도 중...",
+ "toastQuotaExceeded": "이 릴레이의 무료 할당량을 모두 사용했습니다. 메시지는 이 기기에 남아 있다가 할당량이 초기화되면 전송됩니다. 또는 설정 → 홈 릴레이에서 자신의 릴레이를 추가하세요.",
  "toastDbBlocked": "데이터베이스 업데이트가 차단되었습니다. 다른 Breeze 탭을 닫고 새로고침하세요.",
  "toastArchived": "보관됨",
  "toastUnarchived": "보관 해제됨",
