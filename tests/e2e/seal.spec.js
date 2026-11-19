@@ -27,6 +27,10 @@ async function addAndOpen(page, pubB64) {
 test('the relay never sees who sent a message (sealed-v2 wiretap)', async ({ browser }) => {
   const ctx1 = await browser.newContext(ip(90));
   const ctx2 = await browser.newContext(ip(91));
+  // Keep this wiretap on the relay path; a direct persistence ACK skips the deposit.
+  for (const ctx of [ctx1, ctx2]) {
+    await ctx.route('**/api/signal', route => route.fulfill({ json: { messages: [] } }));
+  }
   const P = await ctx1.newPage(), Q = await ctx2.newPage();
 
   // The wiretap: every sealed envelope either browser hands the relay.

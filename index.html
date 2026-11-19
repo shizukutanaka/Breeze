@@ -2994,6 +2994,11 @@ const _perf = {
   measure: (name, start) => { try { return performance?.measure?.('brz:' + name, 'brz:' + start); } catch { return null; } },
 };
 
+const _appModulesReady = new Promise(resolve => {
+  if (document.readyState === 'complete') resolve();
+  else document.addEventListener('DOMContentLoaded', () => resolve(), { once: true });
+});
+
 // v3.6: Trusted Types — 'breeze-sanitizer' (named, via safeSetHTML) + 'default' (safety net sanitizing raw innerHTML/outerHTML under require-trusted-types-for 'script'). Fallback: same API, no TT.
 const _ttPolicy = (() => {
   // Sanitizer: strip dangerous tags/attrs while keeping safe markdown output
@@ -3921,6 +3926,7 @@ document.addEventListener('keydown', (e) => {
 
 // ======================== MESSENGER ========================
 async function initMessenger(dbName) {
+  try { await _appModulesReady; } catch(e) { _dbg(e, 'app-modules-ready'); }
   _perf.mark('initMessenger');
   const _ac = new AbortController(); // Abort all listeners on account switch
   dbName = dbName || 'breeze-messenger';
