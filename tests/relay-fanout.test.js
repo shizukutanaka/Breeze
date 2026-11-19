@@ -151,6 +151,7 @@ function buildWorld({ fetchT, settings = {}, origin = ORIGIN, api = API, stubs =
   const dbPut = async (store, value, key) => {
     const s = stores[store];
     if (s) s.set(key ?? value?.id ?? value?.key, value);
+    return true;
   };
   const gateFn = new Function('API', '_H', 'fetchT',
     `${sliceBetween('const _relayPinGate', '// ═══ Title helper')}

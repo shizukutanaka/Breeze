@@ -271,6 +271,7 @@
  "keyWrapDisabled": "キーの暗号化保護が無効になりました",
  "keyWrapAlreadyOff": "キーの暗号化保護は現在有効ではありません",
  "keyWrapWrongPass": "パスフレーズが違います — キーを読み込めませんでした",
+ "keyWrapChangeFailed": "キー保護の変更に失敗しました — 保存済みキーは変更されていません。パスフレーズとストレージを確認して再試行してください。",
  "keyWrapMin": "パスフレーズは8文字以上必要です",
  "keyWrapMismatch": "パスフレーズが一致しません",
  "keyWrapDisableConfirm": "キーの暗号化保護を無効にしますか？",

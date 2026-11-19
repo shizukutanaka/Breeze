@@ -1649,6 +1649,7 @@ const _I = {
     keyWrapDisabled: 'At-rest key wrapping disabled',
     keyWrapAlreadyOff: 'Key wrapping is not currently enabled',
     keyWrapWrongPass: 'Wrong passphrase — keys not loaded',
+    keyWrapChangeFailed: 'Key wrapping change failed — stored keys were not changed. Check the passphrase and storage, then retry.',
     keyWrapMin: 'Passphrase must be at least 8 characters',
     keyWrapMismatch: 'Passphrases do not match',
     keyWrapDisableConfirm: 'Disable at-rest key wrapping?',
@@ -4765,6 +4766,17 @@ async function initMessenger(dbName) {
     return new Promise(r => { try { const tx = db.transaction(store); const req = tx.objectStore(store).get(key); req.onsuccess = () => r(req.result); req.onerror = () => r(null); } catch(e) { _dbg(e, 'db-get'); r(null); } });
   }
   async function dbPut(store, val, key) {
+    if (store === 'identity' && _keywrapSlots.includes(key)) {
+      try {
+        const seed = key === 'pq-priv' ? val.seed : null;
+        const before = await _keywrapRead();
+        if (Object.values(before).some(_atRestIsWrapped) && !_atRestIsWrapped(val)) val = await _keywrapSeal(val, key, before);
+        if (_atRestIsWrapped(val) && (val.priv || val.seed)) throw new Error('keywrap: mixed plaintext record');
+        const saved = await _keywrapCommit(before, { [key]: val });
+        if (saved && seed) _pqSeedUnlocked = _atRestIsWrapped(val) ? seed : null;
+        return saved;
+      } catch(e) { _dbg(e, 'keywrap-write'); return false; }
+    }
     return new Promise(r => { try { const tx = db.transaction(store, 'readwrite', { durability: 'relaxed' }); const req = key !== undefined ? tx.objectStore(store).put(val, key) : tx.objectStore(store).put(val); req.onsuccess = () => r(true); req.onerror = (e) => {
       // v3.1: Handle QuotaExceededError — auto-cleanup old messages
       if (e.target?.error?.name === 'QuotaExceededError') {
@@ -4772,6 +4784,75 @@ async function initMessenger(dbName) {
         cleanupOldMessages().then(() => r(false)).catch(() => r(false));
       } else { _dbg(e.target?.error, 'db-put'); r(false); }
     }; } catch(e) { _dbg(e, 'db-put'); r(false); } });
+  }
+  const _keywrapSlots = ['keys', 'signing', 'pq-priv'];
+  let _keywrapWriter = null;
+  async function _keywrapUnlock(pass, record) {
+    const envelope = record.wrapped || record;
+    const key = await _atRestDeriveKey(pass, _atRestUnb64(envelope.salt), envelope.iter);
+    _keywrapWriter = { key, envelope };
+  }
+  async function _keywrapRead() {
+    return new Promise((resolve, reject) => {
+      try {
+        const tx = db.transaction('identity');
+        const records = {};
+        for (const slot of _keywrapSlots) {
+          const req = tx.objectStore('identity').get(slot);
+          req.onsuccess = () => { records[slot] = req.result; };
+        }
+        tx.oncomplete = () => resolve(records);
+        tx.onabort = tx.onerror = () => reject(tx.error || new Error('keywrap: read failed'));
+      } catch(e) { reject(e); }
+    });
+  }
+  async function _keywrapSeal(record, slot, before) {
+    const writer = _keywrapWriter, current = before.keys?.wrapped;
+    if (!writer || !current || writer.envelope.salt !== current.salt || writer.envelope.iter !== current.iter) throw new Error('keywrap: wrapping key unavailable');
+    const payload = slot === 'pq-priv' ? { seed: record.seed } : record.priv;
+    if (!payload) throw new Error('keywrap: missing private material');
+    const iv = crypto.getRandomValues(new Uint8Array(CONFIG.IV_BYTES));
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: _atRestAad(slot) }, writer.key, new TextEncoder().encode(JSON.stringify(payload)));
+    const { priv: _priv, seed: _seed, ...rest } = record;
+    return { ...rest, wrapped: { ...writer.envelope, iv: _atRestB64(iv), ct: _atRestB64(new Uint8Array(ct)) } };
+  }
+  async function _keywrapCommit(before, after) {
+    return new Promise(resolve => {
+      try {
+        const tx = db.transaction('identity', 'readwrite');
+        const store = tx.objectStore('identity');
+        let pending = _keywrapSlots.length;
+        for (const slot of _keywrapSlots) {
+          const req = store.get(slot);
+          req.onsuccess = () => {
+            try {
+              if (JSON.stringify(req.result) !== JSON.stringify(before[slot])) { tx.abort(); return; }
+              if (--pending === 0) for (const [key, value] of Object.entries(after)) store.put(value, key);
+            } catch(e) { _dbg(e, 'keywrap-put'); tx.abort(); }
+          };
+        }
+        tx.oncomplete = () => resolve(true);
+        tx.onabort = tx.onerror = () => { _dbg(tx.error, 'keywrap-transaction'); resolve(false); };
+      } catch(e) { _dbg(e, 'keywrap-transaction'); resolve(false); }
+    });
+  }
+  async function _keywrapChange(pass, enable) {
+    try {
+      const before = await _keywrapRead(), after = {};
+      for (const slot of _keywrapSlots) {
+        const record = before[slot];
+        if (!record) continue;
+        const payload = _atRestIsWrapped(record) ? await _atRestUnwrap(record.wrapped || record, pass, slot) : slot === 'pq-priv' ? { seed: record.seed } : record.priv;
+        if (!payload || (slot === 'pq-priv' && !Array.isArray(payload.seed))) throw new Error('keywrap: invalid passphrase or record');
+        const { wrapped: _wrapped, priv: _priv, seed: _seed, ...rest } = record;
+        after[slot] = enable ? await _atRestMigrate({ ...rest, priv: payload }, pass, slot) : { ...rest, ...(slot === 'pq-priv' ? payload : { priv: payload }) };
+      }
+      const envelope = after.keys?.wrapped;
+      const writer = enable ? { envelope, key: await _atRestDeriveKey(pass, _atRestUnb64(envelope.salt), envelope.iter) } : null;
+      if (!await _keywrapCommit(before, after)) return false;
+      _keywrapWriter = writer;
+      return true;
+    } catch(e) { _dbg(e, 'keywrap-change'); return false; }
   }
   async function dbGetAll(store) {
     try {  
@@ -5187,6 +5268,7 @@ async function initMessenger(dbName) {
         if (!passphrase) return false;
         jwk = await _atRestLoadKey(stored, passphrase, 'keys');
         if (!jwk) { showToast(t('keyWrapWrongPass'), 'error'); return false; }
+        await _keywrapUnlock(passphrase, stored);
         _atRestPassphrase = passphrase; // passed to initSigning, cleared after use
         bootPassphrase = passphrase; // stage-3 step 6: reused for the pq-priv unlock below
       } else {
@@ -5220,7 +5302,7 @@ async function initMessenger(dbName) {
   async function generatePreKeyBundle() {
     const spk = await genRatchetKey();
     const spkPub = btoa(String.fromCharCode(...new Uint8Array(spk.pub)));
-    await dbPut('identity', { priv: spk.priv }, 'spk-priv');
+    let pqRecord = null;
     const otpKeys = [];
     const otpPrivs = [];
     for (let i = 0; i < CONFIG.PREKEY_OTP_COUNT; i++) {
@@ -5229,7 +5311,6 @@ async function initMessenger(dbName) {
       otpPrivs.push(otp.priv);
     }
     // Indexed 0..N-1 to match the Worker's index-based oneTimePreKeyId echo.
-    await dbPut('identity', { keys: otpPrivs }, 'otp-priv');
     const body = { signedPreKey: spkPub, oneTimePreKeys: otpKeys };
     if (_signingKey?.privateKey) {
       body.edIdentityKey = _signingPubB64;
@@ -5250,12 +5331,15 @@ async function initMessenger(dbName) {
         if (pqh) {
           const minted = pqh.mintPQPreKey();
           const pqSig = await crypto.subtle.sign({ name: 'Ed25519' }, _signingKey.privateKey, minted.publicKey);
-          await dbPut('identity', pqh.pqSeedRecord(minted.seed), 'pq-priv');
+          pqRecord = pqh.pqSeedRecord(minted.seed);
           body.pqPreKey = minted.pqPreKey;
           body.pqPreKeySig = btoa(String.fromCharCode(...new Uint8Array(pqSig)));
         }
       } catch(e) { _dbg(e, 'pqkey-mint'); }
     }
+    if (pqRecord && !await dbPut('identity', pqRecord, 'pq-priv')) { _dbg(null, 'keywrap: prekey rotation skipped'); throw new Error('keywrap: PQ persistence failed'); }
+    await dbPut('identity', { priv: spk.priv }, 'spk-priv');
+    await dbPut('identity', { keys: otpPrivs }, 'otp-priv');
     const caps = [];
     if (CONFIG.X3DH_V5_ENABLED) caps.push(CAPS_X3DH_V5);
     if (CONFIG.GROUP_RATCHET_V5) caps.push(CAPS_GROUP_V5);
@@ -7243,7 +7327,7 @@ async function initMessenger(dbName) {
       } catch(e) { _dbg(e); }
       // Null out cryptographic key material so pending callbacks from this account
       // cannot sign or decrypt under the old identity after the switch.
-      _signingKey = null; myKeys = null;
+      _signingKey = null; myKeys = null; _keywrapWriter = null;
       // Clear the in-memory replay cache: msgId entries from this account's sessions
       // should not be used to deduplicate incoming messages for the next account.
       _replayCache._map.clear();
@@ -14914,28 +14998,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         if (!await showConfirm(t('keyWrapDisableConfirm'), { okText: t('uiRemoved') })) return;
         const pass = await showPrompt(t('keyWrapUnlockPrompt'), '', { type: 'password', autocomplete: 'current-password' });
         if (!pass) return;
-        const identPrivJwk = await _atRestLoadKey(storedIdent, pass, 'keys');
-        if (!identPrivJwk) { showToast(t('keyWrapWrongPass'), 'error'); return; }
-        // Restore plaintext ECDH identity key record
-        const { wrapped: _w1, ...restIdent } = storedIdent;
-        await dbPut('identity', { ...restIdent, priv: identPrivJwk }, 'keys');
-        // Restore plaintext signing key record (if also wrapped)
-        const storedSig = await dbGet('identity', 'signing');
-        if (_atRestIsWrapped(storedSig)) {
-          const sigPrivJwk = await _atRestLoadKey(storedSig, pass, 'signing');
-          if (sigPrivJwk) {
-            const { wrapped: _w2, ...restSig } = storedSig;
-            await dbPut('identity', { ...restSig, priv: sigPrivJwk }, 'signing');
-          } else { _dbg(null, 'signing-unwrap-disable failed'); }
-        }
-        // Restore plaintext PQ prekey seed record (if wrapped) — stage-3
-        // step 3: pq-priv is in the /keywrap enumeration (see enable path).
-        const storedPq = await dbGet('identity', 'pq-priv');
-        if (_atRestIsWrapped(storedPq)) {
-          const pqPayload = await _atRestUnwrap(storedPq.wrapped || storedPq, pass, 'pq-priv');
-          if (pqPayload?.seed) await dbPut('identity', { seed: pqPayload.seed }, 'pq-priv');
-          else { _dbg(null, 'pq-priv-unwrap-disable failed'); }
-        }
+        if (!await _keywrapChange(pass, false)) { showToast(t('keyWrapChangeFailed'), 'error'); return; }
         auditLog('security', 'At-rest key wrapping disabled');
         showToast(t('keyWrapDisabled'), 'success');
         return;
@@ -14946,20 +15009,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       if (!pass || pass.length < 8) { showToast(t('keyWrapMin'), 'error'); return; }
       const pass2 = await showPrompt(t('keyWrapPassConfirm'), '', { type: 'password', okText: t('set') });
       if (pass !== pass2) { showToast(t('keyWrapMismatch'), 'error'); return; }
-      // Migrate ECDH identity key (AAD bound to the 'keys' slot)
-      await dbPut('identity', await _atRestMigrate(storedIdent, pass, 'keys'), 'keys');
-      // Migrate Ed25519 signing key (AAD bound to the 'signing' slot; if not already wrapped)
-      const storedSig2 = await dbGet('identity', 'signing');
-      if (storedSig2 && !_atRestIsWrapped(storedSig2)) {
-        await dbPut('identity', await _atRestMigrate(storedSig2, pass, 'signing'), 'signing');
-      }
-      // Migrate PQ prekey seed (stage-3 step 3: pq-priv joins the /keywrap
-      // enumeration — its payload is the { seed } object itself rather than
-      // a { priv } JWK, so it wraps directly, AAD bound to 'pq-priv')
-      const storedPq2 = await dbGet('identity', 'pq-priv');
-      if (storedPq2 && !_atRestIsWrapped(storedPq2) && Array.isArray(storedPq2.seed)) {
-        await dbPut('identity', { wrapped: await _atRestWrap({ seed: storedPq2.seed }, pass, 'pq-priv') }, 'pq-priv');
-      }
+      if (!await _keywrapChange(pass, true)) { showToast(t('keyWrapChangeFailed'), 'error'); return; }
       auditLog('security', 'At-rest key wrapping enabled (PBKDF2 x' + CONFIG.PBKDF2_AT_REST_ITERATIONS / 1000 + 'k)');
       showToast(t('keyWrapEnabled'), 'success');
       return;

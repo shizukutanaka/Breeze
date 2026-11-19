@@ -46,24 +46,32 @@ function sliceBackup(from, to) {
 // Minimal IndexedDB stand-in (the backup-keymaterial.test.js pattern).
 function mockDb() {
   const stores = { identity: new Map(), contacts: new Map(), messages: new Map() };
-  const req = (produce) => {
+  const req = (produce, done) => {
     const r = {};
-    queueMicrotask(() => { try { r.result = produce(); if (r.onsuccess) r.onsuccess(); } catch (e) { r.error = e; if (r.onerror) r.onerror({ target: r }); } });
+    queueMicrotask(() => { try { r.result = produce(); if (r.onsuccess) r.onsuccess(); } catch (e) { r.error = e; if (r.onerror) r.onerror({ target: r }); } finally { done(); } });
     return r;
   };
   return {
     _stores: stores,
     transaction(store) {
       const m = stores[store];
-      return {
+      let pending = 0;
+      const request = produce => {
+        pending++;
+        return req(produce, () => {
+          if (--pending === 0) queueMicrotask(() => { if (pending === 0) tx.oncomplete?.(); });
+        });
+      };
+      const tx = {
         objectStore: () => ({
-          get: (key) => req(() => m.get(key)),
+          get: (key) => request(() => m.get(key)),
           // The contacts store has keyPath 'id', so dbPut calls put(val) with
           // no explicit key there — key the record by val.id like real IDB.
-          put: (val, key) => req(() => { const k = key !== undefined ? key : val?.id; m.set(k, val); return k; }),
-          getAllKeys: () => req(() => [...m.keys()]),
+          put: (val, key) => request(() => { const k = key !== undefined ? key : val?.id; m.set(k, val); return k; }),
+          getAllKeys: () => request(() => [...m.keys()]),
         }),
       };
+      return tx;
     },
   };
 }
@@ -79,6 +87,7 @@ function buildRestore(db, promptResult = PASS) {
   const timers = [];
   let reloads = 0;
   const src = [
+    'let _pqSeedUnlocked = null;',
     slice('function arr(u8a)', 'function uid()'),
     slice('async function deriveKey', '// v3.6 Phase 2c'),
     slice('function _atRestIsWrapped', '// Loads the private JWK'),

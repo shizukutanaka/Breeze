@@ -57,23 +57,31 @@ function sliceBackup(from, to) {
 // plus getAll for dbGetAll).
 function mockDb() {
   const stores = { identity: new Map(), contacts: new Map(), messages: new Map() };
-  const req = (produce) => {
+  const req = (produce, done) => {
     const r = {};
-    queueMicrotask(() => { try { r.result = produce(); if (r.onsuccess) r.onsuccess(); } catch (e) { r.error = e; if (r.onerror) r.onerror({ target: r }); } });
+    queueMicrotask(() => { try { r.result = produce(); if (r.onsuccess) r.onsuccess(); } catch (e) { r.error = e; if (r.onerror) r.onerror({ target: r }); } finally { done(); } });
     return r;
   };
   return {
     _stores: stores,
     transaction(store) {
       const m = stores[store];
-      return {
+      let pending = 0;
+      const request = produce => {
+        pending++;
+        return req(produce, () => {
+          if (--pending === 0) queueMicrotask(() => { if (pending === 0) tx.oncomplete?.(); });
+        });
+      };
+      const tx = {
         objectStore: () => ({
-          get: (key) => req(() => m.get(key)),
-          put: (val, key) => req(() => { const k = key !== undefined ? key : val?.id; m.set(k, val); return k; }),
-          getAll: () => req(() => [...m.values()]),
-          getAllKeys: () => req(() => [...m.keys()]),
+          get: (key) => request(() => m.get(key)),
+          put: (val, key) => request(() => { const k = key !== undefined ? key : val?.id; m.set(k, val); return k; }),
+          getAll: () => request(() => [...m.values()]),
+          getAllKeys: () => request(() => [...m.keys()]),
         }),
       };
+      return tx;
     },
   };
 }
@@ -239,9 +247,10 @@ function buildRestoreFns(db, { promptResult = null, promptNewAnswer = 'kit-pass'
   const shown = { phrase: null };
   let reloads = 0;
   const src = [
-    'let _signingKey = null, _signingPubB64 = "", myId = "";',
+    'let _signingKey = null, _signingPubB64 = "", myId = "", _pqSeedUnlocked = null;',
     'const D = { myId: () => myId, adoptRestoredSigning: (m) => { _signingKey = m.signingKeyPair; _signingPubB64 = m.signingRecord.pubB64; myId = m.identityPubB64.slice(0, 12); } };',
     slice('function arr(u8a)', 'function uid()'),
+    slice('function _atRestIsWrapped', '// Loads the private JWK'),
     slice('async function dbGet(store, key)', 'async function dbGetAll'),
     slice('async function dbGetAll(store)', 'async function dbGetByIndex'),
     sliceBackup('const BACKUP_FORMAT_V', 'async function backupToFile'),

@@ -20,6 +20,10 @@
 - Check local group membership before Sender-Key or legacy decryption; reject inconsistent sender/public-key claims. Stored, preview, cross-tab and notification attribution uses the local contact/member name.
 - This is not per-message author authentication: a group insider holding another member's distributed Sender Key can still forge that author over the relay with consistent sender fields. Ed25519 author signatures remain a separate protocol change.
 
+### Keywrap persistence
+
+- Preserve `/keywrap` protection on subsequent identity, signing and PQ-seed writes, including prekey replenishment. Reuse only an unlocked, non-extractable wrapping key with fresh IVs; unavailable wrapping material rejects the write and skips the PQ rotation without replacing its old private records.
+- Enable/disable prepares and authenticates every slot before one atomic IndexedDB transaction. Failed writes or concurrent changes abort all slot changes and never report success; boot reloads wrapping capability without retaining the passphrase.
 ## Manual rendezvous: blocked-STUN gathering recovery
 
 - Manual peers disable ICE candidate pooling: a blocked-STUN browser reproduction left the pooled answer gathering without candidates beyond the one-minute cap; disabling only the pool restored immediate host candidates. Relay-mode pooling is unchanged.
