@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## Profiles travel E2EE-only (SHARE_PLAN stage 5 step 4)
+
+- Display name, avatar emoji and a photo avatar now distribute as a ratchet-encrypted control payload (src/app/profile.js) — never in plaintext: the prekey bundle gains only the 'profile-v1' capability string, the relay stores the same opaque ciphertext shape as any message, and the Worker has no profile handling at all (audited in tests/profile.test.js). Sending is capability-gated, so un-upgraded peers are never sent a payload they would render as a chat message; receivers apply only strictly newer profile versions (pv), so a replayed deposit can't roll a contact's face back.
+- /profile opens the editor: display name (syncs the account name), avatar emoji, and a photo picker that center-crops and downscales to a 96×96 JPEG on-device before anything leaves it. Saving distributes to every contact whose bundle advertises the capability, and adding a new contact greets them with the profile the same way. A local rename of a contact is marked nameLocked and is never overwritten by that person's distributed name; the photo renders in the contact list when present.
+- The photo is validated strictly on receipt (data:image/jpeg|png, pure base64, ≤32 KB of data URL) because it lands in an <img src>; anything else is dropped to empty.
+- Line-budget pass (index.html 15,977): group creation, the group member poller, the join flow and safeMemberList moved into src/app/group-create.js (the roster test now imports the real export). One validator note: the "Toast i18n" percentage reads 94% because the scanner only reads index.html — the moved flows still localize every toast via t() inside the module; the metric, not the localization, is what moved.
+
 ## Group cap 1,000, on measured fan-out (SHARE_PLAN stage 5 step 3)
 
 - CONFIG.GROUP_MAX is 1,000 (from 100, via the plan's stages — the drill below was run at each stage size). The measurements came first, and they found the real bottleneck was not the cap: before every group message, the sender redistributed its sender key to EVERY member (n extra deposits per message, sequentially awaited), and the message deposits themselves were deposited one at a time. Per-message deposits were up to 2n, all serial.

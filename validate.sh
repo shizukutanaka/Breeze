@@ -205,6 +205,9 @@ LINES=$(wc -l < index.html)
 # control sender into group-call.js) landed it at 15,994. Stage-5
 # step 3 crossed it a fifth time; a fifth pass (the history sender
 # into history-sync.js as createHistorySender) landed it at 15,990.
+# Stage-5 step 4 crossed it a sixth time; a sixth pass (group
+# creation, the member poller, the join flow and safeMemberList into
+# group-create.js) landed it at 15,977.
 if [ "$LINES" -lt 12000 ]; then pass "Total lines: $LINES (<12K)" 5
 elif [ "$LINES" -lt 16000 ]; then warn "Total lines: $LINES (12-16K)" 5
 else fail "Total lines: $LINES (≥16K) — reduction pass required (see ceiling note above)" 5; fi
