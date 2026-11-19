@@ -311,6 +311,7 @@
  "select": "選取",
  "report": "檢舉",
  "toastAliasTampered": "已封鎖：這個別名的金鑰紀錄遭到竄改。請直接向對方索取公鑰。",
+ "identityBindingFailed": "已封鎖：聯絡人的身分金鑰不一致。請確認聯絡人後再試一次。",
  "toastAliasRolled": "警告：這個別名的金鑰最近變更過。信任前請先核對安全碼。",
  "confirmReport": "要向營運者檢舉這則訊息嗎？系統會傳送訊息內容與一次性證明以供驗證。其他訊息仍保持私密。",
  "toastReported": "已檢舉",

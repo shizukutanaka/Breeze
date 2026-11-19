@@ -311,6 +311,7 @@
  "select": "Pilih",
  "report": "Laporkan",
  "toastAliasTampered": "Diblokir: riwayat kunci alias ini telah dimanipulasi. Minta kunci publik langsung dari orangnya.",
+ "identityBindingFailed": "Diblokir: kunci identitas kontak tidak cocok. Verifikasi kontak lalu coba lagi.",
  "toastAliasRolled": "Peringatan: kunci alias ini baru saja berubah. Verifikasi nomor keamanan sebelum mempercayainya.",
  "confirmReport": "Laporkan pesan ini ke operator? Teks pesan dan bukti sekali pakai dikirim agar bisa diverifikasi. Pesan lain tetap privat.",
  "toastReported": "Dilaporkan",

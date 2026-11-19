@@ -1767,6 +1767,7 @@ const _I = {
     devThis: "this device",
     toastAliasTampered: 'Blocked: this handle\u2019s key history has been tampered with. Ask the person for their public key directly.',
     toastAliasRolled: 'Warning: this handle\u2019s key changed recently. Verify the safety number before trusting it.',
+    identityBindingFailed: 'Blocked: the contact identity keys do not match. Verify the contact and try again.',
     confirmReport: 'Report this message to the operator? The message text and a one-time proof are sent so it can be verified. Other messages stay private.',
     toastReported: 'Reported',
     toastReportFail: 'Report failed',
@@ -5659,19 +5660,24 @@ async function initMessenger(dbName) {
       return await h.respondSK(dhParts, rec, pqct);
     } catch(e) { _dbg(e, 'pqxdh-responder'); return null; }
   }
-  // Fetch+verify the peer's bundle; null (falls back to initSession()) if X3DH is off, there's no server, the peer hasn't advertised v5, or the signature fails.
+  // Fetch+verify relay or offline bundles; false rejects identity binding, null permits legacy fallback.
   async function _fetchSessionBundleV5(peerPubB64, supplied) {
     // Stage-2 step 6: the bundle may live on any of the contact's home
     // relays, so candidates are tried in preference order — stored
     // homes, then the primary — and the first bundle passing EVERY
     // check below wins. Each candidate is validated exactly as the
     // single-relay fetch was (caps, fields, SPK signature); a stale
-    // or hostile copy falls through instead of aborting the session.
+    // copy with an invalid SPK falls through; identity mismatches fail closed.
     // Fetch consumes an OTP on every relay TRIED (a failed candidate
     // costs one OTP there, bounded by the candidate count), but a
     // relay that cannot be reached spends nothing.
     const peerId = peerPubB64.slice(0, 12);
     const fetchContact = await dbGet('contacts', peerId).catch(() => null);
+    const rejectIdentityBinding = (reason) => {
+      _dbg(null, 'X3DH: identity binding rejected for ' + peerId + ': ' + reason);
+      showToast(t('identityBindingFailed'), 'error', 8 * MS.SEC);
+      return false;
+    };
     const fetchHomes = supplied ? [] : sanitizeHomeList(fetchContact?.home);
     const candidates = [...fetchHomes];
     if (supplied) candidates.push(null);
@@ -5685,9 +5691,11 @@ async function initMessenger(dbName) {
       if (!resp?.ok) continue;
       const b = await resp.json().catch(() => null);
       if (!b) continue;
+      if (b.identityKey !== peerPubB64) return rejectIdentityBinding('encryption identity differs from the requested contact');
+      if ((fetchContact?.sigPub && b.edIdentityKey !== fetchContact.sigPub) || (supplied && !fetchContact?.sigPub)) return rejectIdentityBinding('signing identity differs from the pinned contact key');
       if (!supplied) _seedRelayInfo(peerId, b); // caps + advertised home, win or lose
       if (!_peerSupportsX3dhV5(b)) continue;
-      if (supplied && (b.identityKey !== peerPubB64 || b.edIdentityKey !== fetchContact?.sigPub || b.oneTimePreKey || b.oneTimePreKeyId != null)) return null;
+      if (supplied && (b.oneTimePreKey || b.oneTimePreKeyId != null)) return null;
       if (!b.identityKey || !b.edIdentityKey || !b.signedPreKey || !b.signedPreKeySig) continue;
       const spk = Uint8Array.from(atob(b.signedPreKey), c => c.charCodeAt(0));
       // MUST verify before deriving (catches a relay/MITM swapping in its own SPK). Raw SPK bytes, not verifySignature()'s UTF-8-string convention used for msg sig/sigPub (E2E-found).
@@ -5697,6 +5705,10 @@ async function initMessenger(dbName) {
         if (edPub) sigOk = await crypto.subtle.verify({ name: 'Ed25519' }, edPub, Uint8Array.from(atob(b.signedPreKeySig), c => c.charCodeAt(0)), spk);
       } catch(e) { _dbg(e, 'verify-spk'); }
       if (!sigOk) { _dbg(null, 'X3DH: signed pre-key signature INVALID on one relay — trying the next'); continue; }
+      if (fetchContact && !fetchContact.sigPub) {
+        fetchContact.sigPub = b.edIdentityKey;
+        await dbPut('contacts', fetchContact);
+      }
       bundle = b;
       spkPubPeer = spk;
       break;
@@ -5708,6 +5720,7 @@ async function initMessenger(dbName) {
     if (!CONFIG.X3DH_V5_ENABLED || (!API && !supplied)) return null;
     try {
       const fetched = await _fetchSessionBundleV5(peerPubB64, supplied);
+      if (fetched === false) return false;
       if (!fetched) return null;
       const { bundle, spkPubPeer } = fetched;
       // I11 KT audit: independent MITM signal — warns, doesn't block (no hard-abort flow yet).
@@ -5888,7 +5901,11 @@ async function initMessenger(dbName) {
       if (contact?.offlinePairing && contact.offlinePairing.state !== 'paired' && !pairing) return null;
       let sess = await getSession(peerId);
       if (!sess && (await dbGet('contacts', peerId))?.offlineVerified) return null;
-      if (!sess) { sess = (await initSessionV5Initiator(peerPubB64)) || (await initSession(peerPubB64)); }
+      if (!sess) {
+        const v5 = await initSessionV5Initiator(peerPubB64);
+        if (v5 === false) return null;
+        sess = v5 || (await initSession(peerPubB64));
+      }
       // Derive message key from send chain
       const { msgKey, nextChain } = await kdfChain(sess.sendChainKey);
       sess.sendChainKey = nextChain;
@@ -5955,6 +5972,14 @@ async function initMessenger(dbName) {
       try { p = JSON.parse(payload); } catch(parseErr) { _dbg(parseErr, 'malformed-encrypted-msg'); throw new Error('Invalid payload format'); }
       const offline = (await dbGet('contacts', peerId))?.offlinePairing;
       if (offline && !pairing && (!sess || offline.state !== 'paired')) return null;
+      if (!sess && p.v === 5 && p.t === 'pkm') {
+        const expected = Uint8Array.from(atob(peerPubB64), c => c.charCodeAt(0));
+        if (!Array.isArray(p.ik) || p.ik.length !== expected.length || p.ik.some((byte, i) => byte !== expected[i])) {
+          _dbg(null, 'X3DH: first-message identity binding rejected for ' + peerId);
+          showToast(t('identityBindingFailed'), 'error', 8 * MS.SEC);
+          return null;
+        }
+      }
       if (!sess && pairing && !pairingPreKeyMatches(p, Uint8Array.from(atob(peerPubB64), c => c.charCodeAt(0)), !!pairing.pqRecord)) return null;
       // X3DH v5 first-message envelope. Only when we lack a session — a duplicate
       // delivery must reuse the session already bootstrapped (the OTP may be gone now).
@@ -11509,21 +11534,25 @@ async function initMessenger(dbName) {
         if (verified === true) meta.verified = true;
         else if (verified === false) { meta.tampered = true; _dbg(null, 'Signature verification FAILED for device msg from ' + contactId); }
       } else if (msg.sig && msg.sigPub) {
-        if (!contact.sigPub) {
-          contact.sigPub = msg.sigPub; // trust on first use
-        } else if (contact.sigPub !== msg.sigPub) {
+        const verified = await verifySignature(text, msg.sig, msg.sigPub);
+        if (contact.sigPub && contact.sigPub !== msg.sigPub) {
           meta.tampered = true;
           _dbg(null, 'Signing key changed for ' + contactId + ' — possible MITM');
           // A signing-key substitution is a stronger MITM signal than a decrypt failure, so
           // reuse the same prominent banner (not just the subtle ⚠sig badge).
           await showKeyChangeWarning(contactId, contact.pubB64, 'Signing key change — possible MITM.');
         }
-        if (!meta.tampered) {
-          const verified = await verifySignature(text, msg.sig, msg.sigPub);
-          if (verified === true) meta.verified = true;
-          else if (verified === false) { meta.tampered = true; _dbg(null, 'Signature verification FAILED for msg from ' + contactId); }
-          // null = cannot verify (no Ed25519 support)
+        if (verified === true) {
+          if (!contact.sigPub) {
+            contact.sigPub = msg.sigPub; // trust on first verified use
+            await dbPut('contacts', contact);
+          }
+          if (!meta.tampered) meta.verified = true;
+        } else if (verified === false) {
+          meta.tampered = true;
+          _dbg(null, 'Signature verification FAILED for msg from ' + contactId);
         }
+        // null = cannot verify (no Ed25519 support)
       }
       await dbPut('messages', { msgId, contactId, text, mine: false, ts: msg.ts, ...meta, ...(_frank.frankId ? { frankId: _frank.frankId, frankOpening: _frank.opening } : {}) });
     }

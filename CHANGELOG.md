@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## Bootstrap identity binding
+
+- Reject relay-fetched or offline-injected prekey bundles whose encryption identity differs from the requested contact or whose signing identity differs from an existing pin. A localized warning stops this send without trying another relay or legacy bootstrap; an unpinned relay-bundle signing key is saved only after its SPK signature verifies. Offline bundles still require the pairing's existing signing pin.
+- Bind first-message `pkm.ik` to the expected peer before responder bootstrap, including peer-relay forwarding. Mismatches cannot create a session or persist a message. Existing sessions and the classical/PQ wire formats are unchanged.
+- Incoming signed text pins a first signing key only after successful signature verification. Added deployed-inline regression coverage for identity substitution, forwarding, fallback prevention and valid bootstrap controls.
+
 ## Manual rendezvous: blocked-STUN gathering recovery
 
 - Manual peers disable ICE candidate pooling: a blocked-STUN browser reproduction left the pooled answer gathering without candidates beyond the one-minute cap; disabling only the pool restored immediate host candidates. Relay-mode pooling is unchanged.
