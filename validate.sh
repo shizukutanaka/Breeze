@@ -194,7 +194,9 @@ LINES=$(wc -l < index.html)
 # 2026-11-19: the 16K crossing (stage-4 step 2 + stage-6 quota notice)
 # was met with a reduction pass — the six dialog dismiss wirings were
 # consolidated into _wireDialogDismiss — landing back under the ceiling
-# with no raise.
+# with no raise. Stage-4 step 3 crossed it again the same day and was
+# met with a second pass (33 command-panel creations consolidated into
+# _cmdPanelEl; preventDefault/clearInput pairs unified to one line).
 if [ "$LINES" -lt 12000 ]; then pass "Total lines: $LINES (<12K)" 5
 elif [ "$LINES" -lt 16000 ]; then warn "Total lines: $LINES (12-16K)" 5
 else fail "Total lines: $LINES (≥16K) — reduction pass required (see ceiling note above)" 5; fi

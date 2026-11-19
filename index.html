@@ -1239,6 +1239,8 @@ window.__breezeRendezvous = { createRendezvous, attachManualPeer };
 import { createOfflinePairing } from './src/app/offline-pairing.js';
 import { classifyRelayRejection, createQuotaNotice } from './src/app/quota.js';
 window.__breezeQuota = { classifyRelayRejection, createQuotaNotice };
+import { chunkHistoryRecords, parseHistoryChunk, planHistoryImport, HISTORY_MAX_CHUNKS } from './src/app/history-sync.js';
+window.__breezeHistory = { chunkHistoryRecords, parseHistoryChunk, planHistoryImport, HISTORY_MAX_CHUNKS };
 window.__breezeOfflinePairing = { createOfflinePairing, blockedPeerIds: new Set() };
 </script>
 
@@ -1730,6 +1732,11 @@ const _I = {
     devScanRoot: "Scan the primary's code",
     devLinkToTitle: "Link to your primary device",
     devLinkToHint: "Scan the code shown by /link on your PRIMARY device (or paste its key with /linkto <key>). The primary must have added this device first.",
+    histSendAsk: "Send your conversation history to the new device? It travels encrypted, device to device — the relay never sees it.",
+    histSent: "History sent to your other device",
+    histEmpty: "No history to send",
+    histNoDevices: "No linked devices yet — link one with /link first",
+    histReceived: "History received: {0} messages from your other device",
     devLinkConfirm: "Add device {0} to your account? It will receive copies of your new messages.",
     devLinked: "Device linked to the account",
     devAdded: "Device added — it should now run /linkto with your key",
@@ -3513,6 +3520,12 @@ function _updateTitle(unreadCount) {
 
 // v3.5: DRY helpers for slash command output (52x→1x dedup)
 function clearInput() { _DOM.get('msg-input').value = ''; }
+function _cmdPanelEl(cls) {
+    const box = _DOM.get('msg-messages');
+    const d = document.createElement('div');
+    d.className = cls;
+    return [box, d];
+  }
 function cmdOutput(className, html) {
   const box = _DOM.get('msg-messages');
   const d = document.createElement('div');
@@ -6364,6 +6377,13 @@ async function initMessenger(dbName) {
         await dbPut('identity', acct, 'account');
         _myDevCache = null; // bust the cache so self-sync starts immediately
         showToast(t('devAdded'), 'success');
+        // Stage 4 step 3: offer the history transfer right after the
+        // link — the new device has the account but an empty past.
+        // Declining is final for this prompt; /history re-offers it.
+        if (await showConfirm(t('histSendAsk'))) {
+          const r = await _sendHistoryTo(arg);
+          showToast(r.sent ? t('histSent') : t('histEmpty'), r.sent ? 'success' : 'info');
+        }
       } else showToast(t('devSetFail'), 'error');
     } catch(err) { _dbg(err, 'link'); showToast(t('devSetFail'), 'error'); }
   }
@@ -6407,6 +6427,46 @@ async function initMessenger(dbName) {
     };
     wrap.append(btn, status, cam);
     return wrap;
+  }
+  // SHARE_PLAN stage 4 step 3: conversation-history transfer to a linked
+  // device. Chunks ride the self-sync channel (ratchet-encrypted deposits
+  // to a registry-verified sibling), so the relay sees the same envelope
+  // shape as any message. Records travel as stored; expired disappearing
+  // messages stay behind (src/app/history-sync.js has the pure half).
+  async function _collectHistory(contactId) {
+    return new Promise(r => {
+      try {
+        const req = db.transaction('messages').objectStore('messages').index('contact').getAll(contactId);
+        req.onsuccess = () => r(req.result || []); req.onerror = () => r([]);
+      } catch { r([]); }
+    });
+  }
+  async function _sendHistoryTo(devPub) {
+    const H = globalThis.__breezeHistory;
+    if (!H || !devPub) return { sent: 0, skipped: 0 };
+    let sent = 0, skipped = 0, seq = 0;
+    const base = Date.now(); // chunk ts must be unique per run: the inbox dedup keys on from+ts
+    const contacts = (await dbGetAll('contacts').catch(() => [])) || [];
+    for (const c of contacts) {
+      if (!c || c.isGroup || !c.pubB64) continue; // 1:1 only; group history stays per-device for now
+      const now = Date.now();
+      const records = (await _collectHistory(c.id))
+        .filter(r => !(typeof r.disappearAt === 'number' && r.disappearAt <= now))
+        .sort((a, b) => (a.ts - b.ts) || (a.msgId < b.msgId ? -1 : 1));
+      if (!records.length) continue;
+      const packed = H.chunkHistoryRecords(records);
+      skipped += packed.skipped;
+      const tid = now.toString(36) + Math.floor(Math.random() * 1e6).toString(36);
+      for (let i = 0; i < packed.chunks.length; i++) {
+        const enc = await encryptFor(packed.chunks[i], devPub);
+        if (!enc) continue;
+        await relaySend(devPub.slice(0, 12), { to: devPub.slice(0, 12), from: myId, fromPub: myPubB64, fromName: myName,
+          payload: enc, ts: base + (seq++), selfSync: true, historySync: true, sfFor: c.id, sfPub: c.pubB64,
+          sfName: c.name || '', hTid: tid, hIdx: i, hTotal: packed.chunks.length }, devPub);
+        sent++;
+      }
+    }
+    return { sent, skipped };
   }
   // Devices of a CONTACT (for send fan-out). 5-min cache on the contact object.
   async function _devicesFor(contact) {
@@ -10797,9 +10857,7 @@ async function initMessenger(dbName) {
       const joinUrl = location.origin + location.pathname + '?join=' + data.token;
       navigator.clipboard?.writeText(joinUrl);
 
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'import-result';
+      const [box, d] = _cmdPanelEl('import-result');
       safeSetHTML(d, `<div class="i-title-g">${t('groupCreated', esc(name))}</div>
          <div class="i-mb12">${t('shareInvite')}</div>
          <div class="i-mono-box">${esc(joinUrl)}</div>
@@ -11294,6 +11352,52 @@ async function initMessenger(dbName) {
     // (would never expire, silently preventing message cleanup).
     if (msg.disappearAt !== undefined && (typeof msg.disappearAt !== 'number' || !Number.isFinite(msg.disappearAt) || msg.disappearAt <= 0)) {
       msg = { ...msg, disappearAt: undefined };
+    }
+    // SHARE_PLAN stage 4 step 3: a history chunk from one of my own
+    // devices. Same trust gate as self-sync (sender must be in the
+    // signature-verified registry); chunks are buffered in the settings
+    // store so a reload mid-transfer loses nothing, and the completed
+    // conversation is imported as stored, never overwriting local records.
+    if (msg.selfSync && msg.historySync && msg.fromPub && msg.sfFor) {
+      try {
+        const H = globalThis.__breezeHistory;
+        if (!H) return;
+        const mine = await _myOtherDevices();
+        if (!mine.includes(msg.fromPub)) { _dbg(null, 'historySync from non-account device — dropped'); return; }
+        const total = msg.hTotal, idx = msg.hIdx, tid = String(msg.hTid || '');
+        if (!tid || tid.length > 32 || !Number.isInteger(total) || total < 1 || total > H.HISTORY_MAX_CHUNKS
+          || !Number.isInteger(idx) || idx < 0 || idx >= total) return;
+        const text = await decryptFrom(msg.payload, msg.fromPub);
+        const records = text ? H.parseHistoryChunk(text) : null;
+        if (!records) return;
+        const key = 'hist:' + tid;
+        const asm = (await dbGet('settings', key).catch(() => null)) || { sfFor: msg.sfFor, total, parts: {} };
+        if (asm.sfFor !== msg.sfFor || asm.total !== total) return;
+        asm.parts[idx] = records;
+        if (Object.keys(asm.parts).length < total) { await dbPut('settings', asm, key); return; }
+        await dbDel('settings', key);
+        const all = [];
+        for (let i = 0; i < total; i++) all.push(...(asm.parts[i] || []));
+        let target = await dbGet('contacts', String(msg.sfFor).slice(0, 64));
+        if (!target && typeof msg.sfPub === 'string' && msg.sfPub.slice(0, 12) === msg.sfFor) {
+          await addContact(msg.sfPub, typeof msg.sfName === 'string' ? msg.sfName.slice(0, 64) : t('unknown'));
+          target = await dbGet('contacts', msg.sfFor);
+        }
+        if (!target) return;
+        const existing = new Set((await _collectHistory(target.id)).map(r => r.msgId));
+        const toWrite = H.planHistoryImport(all, target.id, existing);
+        for (const r of toWrite) await dbPut('messages', r);
+        if (toWrite.length) {
+          const newest = toWrite[toWrite.length - 1];
+          if (typeof newest.text === 'string' && (target.lastMsgAt || 0) <= newest.ts) {
+            target.lastMsg = newest.text.slice(0, 40); target.lastMsgAt = newest.ts;
+            await dbPut('contacts', target);
+          }
+          showToast(t('histReceived').replace('{0}', String(toWrite.length)), 'success', 6000);
+        }
+        auditLog('history-sync', `Imported ${toWrite.length} records in ${total} chunk(s) from a linked device`);
+      } catch(e) { _dbg(e, 'historySync'); }
+      return;
     }
     // Multi-device self-sync: a copy of a message I SENT from another of my own devices.
     // Handled before contact resolution — the sending device is not a contact and must never
@@ -13690,11 +13794,8 @@ async function initMessenger(dbName) {
 
     // v3.3: ENTERPRISE — /audit — View security audit log
     if (val === '/audit') {
-      e.preventDefault();
-      clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel-mono i-scroll-300';
+      e.preventDefault(); clearInput();
+      const [box, d] = _cmdPanelEl('cmd-panel-mono i-scroll-300');
       try {
         const all = await dbGetAll('audit');
         const recent = all.sort((a, b) => b.ts - a.ts).slice(0, 50);
@@ -13713,13 +13814,10 @@ async function initMessenger(dbName) {
 
     // v3.3: ENTERPRISE — /retention — Set message retention policy
     if (val.startsWith('/retention')) {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       const arg = val.slice(10).trim();
       if (!arg) {
-        const box = _DOM.get('msg-messages');
-        const d = document.createElement('div');
-        d.className = 'chat-empty';
+        const [box, d] = _cmdPanelEl('chat-empty');
         d.textContent = t('uiRetention', (_settings.retentionDays > 0 ? t('uiRetentionDays', _settings.retentionDays) : t('uiRetentionForever'))) +
           '. ' + t('uiUsageRetention');
         box.appendChild(d); box.scrollTop = box.scrollHeight;
@@ -13744,14 +13842,11 @@ async function initMessenger(dbName) {
 
     // v3.3: ENTERPRISE — /admin — Group management (admin-only)
     if (val.startsWith('/admin ')) {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       if (!activeContact?.isGroup) { showToast(t('toastGroupOnly'), 'error'); return; }
       if (!isGroupAdmin(activeContact)) { showToast(t('toastAdminRequired'), 'error'); return; }
       const sub = val.slice(7).trim();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'chat-empty';
+      const [box, d] = _cmdPanelEl('chat-empty');
 
       if (sub === 'help') {
         safeSetHTML(d, [
@@ -13885,9 +13980,7 @@ async function initMessenger(dbName) {
 
     if (val === '/help') {
       e.preventDefault(); clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel';
+      const [box, d] = _cmdPanelEl('cmd-panel');
       safeSetHTML(d, [
         '<b class="i-g13">' + t('helpTitle') + '</b>',
         '',
@@ -13910,7 +14003,7 @@ async function initMessenger(dbName) {
         '<b>' + t('helpSecurity') + '</b>',
         '/security · /verify · /audit · /retention · /backup · /keywrap',
         '/sessions · /wipe · /gdpr · /panic (Ctrl+Shift+Backspace)',
-        '/devices · /link [pub] · /linkto &lt;pub&gt; · /unlink &lt;n&gt; · /migrate',
+        '/devices · /link [pub] · /linkto &lt;pub&gt; · /unlink &lt;n&gt; · /history · /migrate',
         '',
         '<b>' + t('helpDiag') + '</b>',
         '/retry',
@@ -13979,9 +14072,7 @@ async function initMessenger(dbName) {
       e.preventDefault(); clearInput();
       const { msg } = generateInviteMessage();
       navigator.clipboard?.writeText(msg);
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-center';
+      const [box, d] = _cmdPanelEl('cmd-center');
       d.textContent = t('uiInviteCopied');
       box.appendChild(d); box.scrollTop = box.scrollHeight;
 
@@ -14002,9 +14093,7 @@ async function initMessenger(dbName) {
 
     if (val === '/migrate') {
       e.preventDefault(); clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-section';
+      const [box, d] = _cmdPanelEl('cmd-section');
       safeSetHTML(d, t('migrateHtml'));
       box.appendChild(d); box.scrollTop = box.scrollHeight;
       return;
@@ -14216,8 +14305,7 @@ async function initMessenger(dbName) {
     // v3: /export — Export chat history as encrypted JSON
     // v3.3: Unified /export — /export [json|csv|all]
     if (val === '/export' || val.startsWith('/export ')) {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       const sub = val.slice(7).trim() || 'json';
       if (sub === 'all') {
         const allContacts = await dbGetAll('contacts');
@@ -14268,14 +14356,11 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     }
     // /summarize — Local extractive summary
     if (val === '/summarize') {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       if (!activeContact) { showToast(t('toastOpenChat'), 'error'); return; }
       const msgs = await dbGetByIndex('messages', 'contact', activeContact.id);
       const recent = msgs.sort((a, b) => b.ts - a.ts).slice(0, 50).reverse();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel';
+      const [box, d] = _cmdPanelEl('cmd-panel');
       safeSetHTML(d, '<b class="i-g">' + t('aiSummarizing') + '</b>');
       box.appendChild(d); box.scrollTop = box.scrollHeight;
       // Fallback: local summarize
@@ -14287,12 +14372,9 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
         // v3.3: ENTERPRISE — /files — File manager
     if (val === '/files') {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       const files = await getFileList();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel';
+      const [box, d] = _cmdPanelEl('cmd-panel');
       if (files.length === 0) {
         d.textContent = t('uiNoFiles');
       } else {
@@ -14310,8 +14392,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.3: ENTERPRISE — /gdpr — GDPR data export (Art. 15/20)
     if (val === '/gdpr') {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       const data = await gdprExport();
       if (!data) { showToast(t('toastServerError'), 'error'); return; }
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -14322,8 +14403,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.3: ENTERPRISE — /wipe — Remote wipe (send wipe signal to other devices)
     if (val === '/wipe') {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       const choice = await showConfirm(t('wipeTitle'), { okText: t('wipeBtn'), danger: true, desc: t('wipeDesc') });
       if (!choice) { showToast(t('toastCancelled'), 'info'); return; }
       // Send remote wipe signal to own inbox (wakes other devices)
@@ -14382,11 +14462,8 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.3: ENTERPRISE — /sessions — Session info
     if (val === '/sessions') {
-      e.preventDefault();
-      clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel-mono';
+      e.preventDefault(); clearInput();
+      const [box, d] = _cmdPanelEl('cmd-panel-mono');
       const upMs = Date.now() - _appStartTime;
       const h = Math.floor(upMs / MS.HOUR);
       const m = Math.floor((upMs % MS.HOUR) / MS.MIN);
@@ -14451,9 +14528,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         // Copy to clipboard
         try { await navigator.clipboard.writeText(dropUrl); } catch { /* fallback below */ }
         // Show result in chat
-        const box = _DOM.get('msg-messages');
-        const d = document.createElement('div');
-        d.className = 'chat-empty';
+        const [box, d] = _cmdPanelEl('chat-empty');
         safeSetHTML(d, `<div class="i-icon48">🔐</div><b>${t('dropCreated')}</b><br>
           <span class="text-xs color-t3">${t('dropDesc')}</span><br>
           <code class="text-xs i-mono-box" style="word-break:break-all;cursor:pointer" id="drop-url-copy">${esc(dropUrl)}</code><br>
@@ -14479,11 +14554,8 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     }
 
     if (val === '/backup') {
-      e.preventDefault();
-      clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'chat-empty';
+      e.preventDefault(); clearInput();
+      const [box, d] = _cmdPanelEl('chat-empty');
       d.className = 'cmd-panel-mono';
       // Recovery plan step 4: the simple-mode button exists only where
       // it can work — the connected relay stores backups, or this
@@ -14506,15 +14578,12 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.1: /poll — Create a poll
     if (val.startsWith('/poll ')) {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       if (!activeContact) return;
       // Parse: /poll Question? | Option1 | Option2 | Option3
       const parts = val.slice(6).split('|').map(s => s.trim()).filter(Boolean);
       if (parts.length < 2) {
-        const box = _DOM.get('msg-messages');
-        const d = document.createElement('div');
-        d.className = 'chat-empty';
+        const [box, d] = _cmdPanelEl('chat-empty');
         d.textContent = t('uiUsagePoll');
         box.appendChild(d); box.scrollTop = box.scrollHeight;
         return;
@@ -14526,11 +14595,8 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.1: /who — Display own identity info (shareable)
     if (val === '/who') {
-      e.preventDefault();
-      clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel-mono';
+      e.preventDefault(); clearInput();
+      const [box, d] = _cmdPanelEl('cmd-panel-mono');
       const addUrl = location.origin + '/?add=' + myPubB64 + '&name=' + encodeURIComponent(myName);
       const aliasUrl = myAlias ? location.origin + '/?add=' + myAlias : '';
       safeSetHTML(d, [
@@ -14556,11 +14622,8 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.1: /whoami — Show own identity info
     if (val === '/whoami') {
-      e.preventDefault();
-      clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel-mono';
+      e.preventDefault(); clearInput();
+      const [box, d] = _cmdPanelEl('cmd-panel-mono');
       const shareLink = location.origin + '/?add=' + (myAlias ? '@' + myAlias : myPubB64);
       safeSetHTML(d, [
         '<b class="i-green14">' + esc(myName) + '</b>',
@@ -14577,8 +14640,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.1: /theme — Toggle dark/light theme
     if (val === '/theme' || val.startsWith('/theme ')) {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       const arg = val.slice(7).trim().toLowerCase();
       if (arg === 'auto') {
         localStorage.setItem('brz-theme', 'auto');
@@ -14601,11 +14663,8 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.5: /storage — Show storage usage
     if (val === '/security') {
-      e.preventDefault();
-      clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel-mono';
+      e.preventDefault(); clearInput();
+      const [box, d] = _cmdPanelEl('cmd-panel-mono');
       const cs = _cryptoStack;
       const sess = activeContact ? await getSession(activeContact.pubB64?.slice(0, 12)) : null;
       // Honest runtime state of opt-in/flag-gated protections — list what is ACTUALLY
@@ -14723,8 +14782,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.2: /rename — Change your display name
     if (val.startsWith('/rename ')) {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       const newName = val.slice(8).trim();
       if (!newName || newName.length > 30) {
         showToast(t('toastNameInvalid'), 'error');
@@ -14744,21 +14802,17 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     // v3.6: /ai <question> — Ask AI assistant
     // v3.2: /debug — Toggle debug mode
     if (val === '/debug') {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       const current = localStorage.getItem('brz-debug') === '1';
       localStorage.setItem('brz-debug', current ? '0' : '1');
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'chat-empty';
+      const [box, d] = _cmdPanelEl('chat-empty');
       d.textContent = current ? t('debugOff') : t('debugOn');
       box.appendChild(d); box.scrollTop = box.scrollHeight;
     }
 
     // v3.1: /share — Share contact link via native share dialog
     if (val === '/share') {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       const link = location.origin + '/?add=' + (myAlias ? '@' + myAlias : myPubB64);
       const shareData = { title: t('shareDialogTitle'), text: t('shareDialogText', myName), url: link };
       if (navigator.share) {
@@ -14770,8 +14824,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.2: /unblock — Unblock active contact
     if (val === '/unblock') {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       if (!activeContact) return;
       if (!activeContact.blocked) {
         showToast(t('toastNotBlocked'), 'info');
@@ -14788,8 +14841,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.3: /pin — Toggle pin active contact
     if (val === '/pin') {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       if (!activeContact) return;
       activeContact.pinned = !activeContact.pinned;
       await dbPut('contacts', activeContact);
@@ -14822,8 +14874,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     }
     // v3.6: /wallpaper — Set chat background (color, gradient, or preset)
     if (val.startsWith('/wallpaper ')) {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       const color = val.slice(11).trim();
       const presets = {
         ocean: 'linear-gradient(135deg, #0c1445 0%, #0d2137 50%, #0a1628 100%)',
@@ -14844,9 +14895,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         localStorage.setItem('brz-wallpaper', color);
         showToast(t('toastWallpaperSet', color), 'success');
       } else if (color === 'list') {
-        const box = _DOM.get('msg-messages');
-        const d = document.createElement('div');
-        d.className = 'chat-empty';
+        const [box, d] = _cmdPanelEl('chat-empty');
         safeSetHTML(d, '<b class="i-g">' + t('cmdWallpaperTitle') + '</b><br><span class="text-xs color-t3">' + t('cmdWallpaperHelp') + '</span>');
         box.appendChild(d); box.scrollTop = box.scrollHeight;
       } else {
@@ -14857,8 +14906,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     // v3.2: /uptime — Show app uptime
     // v3.3: /keyboard — Keyboard shortcuts reference
     if (val === '/sound') {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       const current = localStorage.getItem('brz-notif-sound') === '0';
       localStorage.setItem('brz-notif-sound', current ? '1' : '0');
       showToast(t('toastNotifSound', current ? 'ON' : 'OFF'), 'info');
@@ -14867,8 +14915,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.6: /compress — Toggle image compression mode (off / lossless / auto)
     if (val === '/compress' || val.startsWith('/compress ')) {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       const arg = val.slice(10).trim().toLowerCase();
       if (arg === 'off' || arg === 'auto' || arg === 'lossless') {
         _imgCompress = arg;
@@ -14885,8 +14932,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.6: /retry — Resend messages from dead letter queue
     if (val === '/retry') {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       try {
         const dlq = (await dbGet('settings', 'deadLetterQueue')) || [];
         if (dlq.length === 0) { showToast(t('retryDLQEmpty'), 'info'); return; }
@@ -14908,8 +14954,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.3: /changelog — Version history
     if (val.startsWith('/note ')) {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       if (!activeContact) return;
       const noteText = val.slice(6).trim();
       if (!noteText) return;
@@ -14920,8 +14965,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.3: /note (no args) — Show contact note
     if (val === '/note' || val.startsWith('/note ')) {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       if (!activeContact) return;
       const arg = val.slice(6).trim();
       if (arg) {
@@ -14930,9 +14974,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         await dbPut('contacts', activeContact);
         showToast(t(arg === 'clear' ? 'toastNoteActionOn' : 'toastNoteActionOff'), 'success');
       } else {
-        const box = _DOM.get('msg-messages');
-        const d = document.createElement('div');
-        d.className = 'chat-empty';
+        const [box, d] = _cmdPanelEl('chat-empty');
         d.textContent = activeContact.notes ? t('noteLabel') + ': ' + activeContact.notes : t('noteEmpty');
         box.appendChild(d); box.scrollTop = box.scrollHeight;
       }
@@ -14940,17 +14982,14 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.4: /sort — Change contact sort order
     if (val === '/sort' || val.startsWith('/sort ')) {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       const arg = val.slice(6).trim().toLowerCase();
       if (['recent', 'name', 'unread'].includes(arg)) {
         _contactSort = arg;
         renderContacts();
         showToast(t('toastSortChanged', arg), 'info');
       } else {
-        const box = _DOM.get('msg-messages');
-        const d = document.createElement('div');
-        d.className = 'chat-empty';
+        const [box, d] = _cmdPanelEl('chat-empty');
         d.textContent = t('uiCurrentSort', _contactSort) + '. ' + t('uiSortOptions');
         box.appendChild(d); box.scrollTop = box.scrollHeight;
       }
@@ -14958,17 +14997,14 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.4: /label — Manage contact labels (Gmail-style)
     if (val === '/label' || val.startsWith('/label ')) {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       if (!activeContact) return;
       const arg = val.slice(7).trim();
       const c = activeContact;
       if (!arg) {
         // Show current labels
         const labels = (c.labels || []);
-        const box = _DOM.get('msg-messages');
-        const d = document.createElement('div');
-        d.className = 'chat-empty';
+        const [box, d] = _cmdPanelEl('chat-empty');
         d.textContent = labels.length > 0 ? t('infoLabels') + ': ' + labels.join(', ') : t('labelNoneCmd');
         box.appendChild(d); box.scrollTop = box.scrollHeight;
       } else if (arg === 'clear') {
@@ -14988,8 +15024,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.3: /info — Contact details
     if (val === '/info') {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       if (!activeContact) return;
       const c = activeContact;
       const msgs = await dbGetByIndex('messages', 'contact', c.id);
@@ -14997,9 +15032,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const theirMsgs = msgs.length - myMsgs;
       const firstMsg = msgs.length > 0 ? new Date(msgs.reduce((a, b) => a.ts < b.ts ? a : b).ts).toLocaleDateString() : 'N/A';
       const peer = peers[c.pubB64];
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel-mono';
+      const [box, d] = _cmdPanelEl('cmd-panel-mono');
       const contactShortId = c.pubB64 ? await generateShortId(c.pubB64) : c.id.slice(0, 12);
       safeSetHTML(d, [
         '<b class="i-g13">' + esc(c.name) + '</b>',
@@ -15028,8 +15061,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.2: /lock — Password lock screen
     if (val === '/lock') {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       const stored = localStorage.getItem('brz-lock-hash');
       if (!stored) {
         const pass = await showPrompt(t('lockPassPrompt'), '', { type: 'password', okText: t('set') });
@@ -15050,8 +15082,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.2: /lock reset — Remove lock password
     if (val === '/lock reset') {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       localStorage.removeItem('brz-lock-hash');
       localStorage.removeItem('brz-autolock');
       localStorage.removeItem('brz-idle-lock');
@@ -15061,8 +15092,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.3: /lock auto — Toggle auto-lock on tab switch
     if (val === '/lock auto') {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       if (!localStorage.getItem('brz-lock-hash')) {
         showToast(t('toastLockFirst'), 'error');
         return;
@@ -15074,8 +15104,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.6: /lock idle <minutes> — auto-lock after N minutes of inactivity (off/0 disables)
     if (val.startsWith('/lock idle')) {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       if (!localStorage.getItem('brz-lock-hash')) { showToast(t('toastLockFirst'), 'error'); return; }
       const arg = val.slice('/lock idle'.length).trim().toLowerCase();
       if (arg === 'off' || arg === '0') {
@@ -15094,8 +15123,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.6: /keywrap — Enable or disable at-rest identity key wrapping
     if (val === '/keywrap' || val === '/keywrap enable' || val === '/keywrap disable') {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       if (!myKeys) { showToast(t('noIdentity'), 'error'); return; }
       const storedIdent = await dbGet('identity', 'keys');
       if (!storedIdent) { showToast(t('noIdentity'), 'error'); return; }
@@ -15140,15 +15168,13 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.2: /print — Print current chat
     if (val === '/print') {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       window.print();
     }
 
     // v3.2: /reactions — Show reaction stats for current chat
     if (val === '/reactions') {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       if (!activeContact) return;
       const msgs = await dbGetByIndex('messages', 'contact', activeContact.id);
       const stats = {};
@@ -15158,9 +15184,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
           stats[emoji] = (stats[emoji] || 0) + users.length;
         }
       }
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel';
+      const [box, d] = _cmdPanelEl('cmd-panel');
       const sorted = Object.entries(stats).sort((a, b) => b[1] - a[1]);
       if (sorted.length === 0) {
         d.textContent = t('uiNoReactions');
@@ -15174,12 +15198,9 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.1: /compact — Toggle compact UI mode
     if (val === '/compact') {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       toggleCompact();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'chat-empty';
+      const [box, d] = _cmdPanelEl('chat-empty');
       d.textContent = document.body.classList.contains('compact') ? (t('compactOn')) : (t('compactOff'));
       box.appendChild(d); box.scrollTop = box.scrollHeight;
     }
@@ -15196,8 +15217,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         // Show my pub as text AND as a QR (stage 4 step 2), with the
         // primary-side scan in the same panel: whichever of the two
         // devices you are holding, one of the two directions is yours.
-        const box = _DOM.get('msg-messages');
-        const d = document.createElement('div'); d.className = 'cmd-panel';
+        const [box, d] = _cmdPanelEl('cmd-panel');
         safeSetHTML(d, '<b class="i-g">' + t('devLinkTitle') + '</b><br>' + t('devLinkHint') + '<br><code class="i-select-all">' + esc(myPubB64) + '</code>');
         try {
           const qr = globalThis.__breezeQR?.generateQR(myPubB64);
@@ -15218,8 +15238,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     if (val === '/linkto') {
       e.preventDefault(); clearInput();
       if (!API) { showToast(t('uiNoServer'), 'error'); return; }
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div'); d.className = 'cmd-panel';
+      const [box, d] = _cmdPanelEl('cmd-panel');
       safeSetHTML(d, '<b class="i-g">' + t('devLinkToTitle') + '</b><br>' + t('devLinkToHint'));
       d.appendChild(_deviceScanButton('devScanRoot', (v) => { _linkToRoot(v); }));
       box.appendChild(d); box.scrollTop = box.scrollHeight;
@@ -15232,10 +15251,19 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       await _linkToRoot(rootPub);
       return;
     }
+    // Stage 4 step 3: (re)send this device's history to my linked devices.
+    if (val === '/history') {
+      e.preventDefault(); clearInput();
+      const devs = await _myOtherDevices();
+      if (!devs.length) { showToast(t('histNoDevices'), 'error'); return; }
+      let sent = 0;
+      for (const d of devs) { const r = await _sendHistoryTo(d); sent += r.sent; }
+      showToast(sent ? t('histSent') : t('histEmpty'), sent ? 'success' : 'info');
+      return;
+    }
     if (val === '/devices') {
       e.preventDefault(); clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div'); d.className = 'cmd-panel';
+      const [box, d] = _cmdPanelEl('cmd-panel');
       const acct = await dbGet('identity', 'account');
       const rootPub = acct?.root || myPubB64;
       const list = await _fetchDeviceList(rootPub.slice(0, 12), rootPub);
@@ -15268,13 +15296,10 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     }
 
     if (val.startsWith('/alias ')) {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       const newAlias = val.slice(7).trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
       if (!newAlias || newAlias.length < 3 || newAlias.length > 20) {
-        const box = _DOM.get('msg-messages');
-        const d = document.createElement('div');
-        d.className = 'chat-empty';
+        const [box, d] = _cmdPanelEl('chat-empty');
         d.textContent = t('uiUsageAlias');
         box.appendChild(d); box.scrollTop = box.scrollHeight;
         return;
@@ -15317,16 +15342,13 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.1: /members — Show group member list
     if (val === '/members') {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       if (!activeContact?.isGroup) {
         const box = _DOM.get('msg-messages');
         const d = document.createElement('div'); d.className = 'chat-empty'; d.textContent = t('uiUseInGroup');
         box.appendChild(d); box.scrollTop = box.scrollHeight; return;
       }
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel-mono';
+      const [box, d] = _cmdPanelEl('cmd-panel-mono');
       const members = activeContact.members || [];
       safeSetHTML(d, '<b class="i-g">' + esc(activeContact.name) + ' — ' + members.length + ' ' + t('cmdMembersLabel') + '</b><br>' +
         members.map(m => {
@@ -15338,13 +15360,11 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.1: /archive — Toggle archive for active contact
     if (val === '/archive') {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       if (!activeContact) return;
       activeContact.archived = !activeContact.archived;
       await dbPut('contacts', activeContact);
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div'); d.className = 'chat-empty';
+      const [box, d] = _cmdPanelEl('chat-empty');
       d.textContent = '📦 ' + (activeContact.archived ? t('toastArchived') : t('toastUnarchived'));
       box.appendChild(d); box.scrollTop = box.scrollHeight;
       renderContacts();
@@ -15352,14 +15372,11 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.1: /stats — Global statistics
     if (val === '/mute') {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       if (!activeContact) return;
       activeContact.muted = !activeContact.muted;
       await dbPut('contacts', activeContact);
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'chat-empty';
+      const [box, d] = _cmdPanelEl('chat-empty');
       d.textContent = activeContact.muted ? (t('mutedNotif')) : (t('unmutedNotif'));
       box.appendChild(d); box.scrollTop = box.scrollHeight;
       renderContacts();
@@ -15367,11 +15384,8 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.1: /settings — Privacy settings toggle
     if (val === '/settings') {
-      e.preventDefault();
-      clearInput();
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'cmd-panel-mono';
+      e.preventDefault(); clearInput();
+      const [box, d] = _cmdPanelEl('cmd-panel-mono');
       const _sendSoundEnabled = localStorage.getItem('brz-send-sound') !== '0';
       const _notifSoundEnabled = localStorage.getItem('brz-notif-sound') !== '0';
       // Stage-2 step 5: the home-relay rows, built by concatenation —
@@ -15485,8 +15499,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.1: /clear — Clear chat history with active contact
     if (val === '/clear') {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       if (!activeContact) return;
       if (!await showConfirm(`${t('clear')} ${activeContact.name}?`, { danger: true, okText: t('clear') })) return;
       const msgs = await dbGetByIndex('messages', 'contact', activeContact.id);
@@ -15500,8 +15513,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3.1: /bookmarks — Show all bookmarked messages
     if (val === '/bookmarks') {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       const allMsgs = await dbGetAll('messages');
       const contacts = await dbGetAll('contacts');
       const contactMap = {};
@@ -15534,17 +15546,14 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
 
     // v3: /room — Create ephemeral room
     if (val.startsWith('/room')) {
-      e.preventDefault();
-      clearInput();
+      e.preventDefault(); clearInput();
       const name = val.slice(6).trim() || t('roomDefault');
       const ttlOptions = [3600, 86400, 604800, 0];
       const ttlLabels = ['1h', '24h', '7d', t('permanent')];
       const ttlChoice = parseInt(await showPrompt(
         t('roomTTLPrompt'), '1', { placeholder: '1-4' }) || '1') - 1;
       const { roomUrl, ttl } = await createEphemeralRoom(name, ttlOptions[Math.min(ttlChoice, ttlOptions.length - 1)]);
-      const box = _DOM.get('msg-messages');
-      const d = document.createElement('div');
-      d.className = 'chat-empty';
+      const [box, d] = _cmdPanelEl('chat-empty');
       safeSetHTML(d, `<b class="i-g">${esc(name)}</b><br>
         <span class="text-xs color-t3">${ttl === 0 ? (t('permanentRoom')) : (t('roomExpires', ttl / 3600))}</span><br>
         <code class="text-xs i-green-break">${esc(roomUrl)}</code><br>

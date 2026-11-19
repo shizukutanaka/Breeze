@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## Conversation-history transfer to a linked device (SHARE_PLAN stage 4 step 3)
+
+- After a device is added with /link, the primary offers to send its conversation history; /history re-sends it to all linked devices at any time. Declining is always an option and nothing is sent without the ask. The transfer rides the existing self-sync channel — ratchet-encrypted deposits addressed to the sibling device — so the relay sees the same envelope shape as an ordinary message: no plaintext, and no metadata beyond the chunk counters. The receiver accepts chunks only from a device in the signature-verified registry, buffers them in the settings store (a reload mid-transfer loses nothing), and imports the records as stored: validation never rebuilds a record, existing local records are never overwritten, and expired disappearing messages are not resurrected. 1:1 conversations only in this step; group history stays per-device. The pure packing/validation half is `src/app/history-sync.js`; its tests include the step's completion condition — a byte-for-byte round trip of a conversation (canonical serialization equal on both sides).
+- The feature crossed the 16K line ceiling again; met with a second reduction pass, not a raise: the 33 hand-rolled command-panel creations now go through one `_cmdPanelEl` helper (next to the existing `cmdOutput`), and the dispatcher's `e.preventDefault(); clearInput();` pairs are written in the single-line form the file already used elsewhere. index.html lands at 15,996 lines.
+
 ## Device link by QR (SHARE_PLAN stage 4 step 2) + line-ceiling reduction pass
 
 - /link now shows the device key as a QR code as well as text, and both link panels carry a camera scan button (same BarcodeDetector availability rule as the rendezvous dialog; the paste commands remain the fallback). The two halves of the ceremony were extracted into `_linkDevicePub` / `_linkToRoot`, called verbatim by the paste commands and the scan callbacks, so a scanned key runs the identical format checks, confirmation, and signed registry write — the root Ed25519 pin remains the trust anchor. `/linkto` with no argument opens the scan panel for the root code. New strings in English and Japanese (the device-link family's existing coverage).
