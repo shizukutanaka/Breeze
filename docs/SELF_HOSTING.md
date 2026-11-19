@@ -283,6 +283,38 @@ call media (metadata only — media itself is DTLS-SRTP encrypted).
 
 #### Auth Hardening & the Plain Relay Path
 
+Prekey uploads now preserve signing ownership separately at
+`prekey-owner:<userId>` with **no TTL**. Existing bundle ownership migrates lazily
+on the next upload, before a replacement is accepted. New Ed25519 bundles also
+establish that record. Keep these records when pruning expired prekey bundles:
+waiting for bundle expiry must not permit a new owner. Rotation requires an
+upload signed by the previous owner, binding the new key in the existing upload
+digest. Authenticated `/account/delete` erases both records and can authenticate
+against the owner even after bundle expiry. There is no lost-owner-key reset.
+
+For accounts with this record, upload and message/sealed poll, sealed ACK and
+mailbox WebSocket proofs must use the durable owner. **Unsigned requests are
+rejected even with `PREKEY_REQUIRE_AUTH=false` or `QUEUE_REQUIRE_AUTH=false`.**
+Those flags retain their existing defaults and legacy semantics for accounts
+without an owner; explicit `false` acceptance of unsigned upload/queue requests
+logs a content-free deprecation warning. Other auth flags are unchanged.
+Mailbox WebSockets still require signatures for everyone.
+
+The client waits for signing initialization before queue activity, including
+returning-account boot, leader promotion and reconnect. The shared wait is
+bounded at five seconds. Unsupported runtimes continue unsigned immediately;
+stuck IDB/key-unwrapping continues unsigned after the bound, then signs when ready.
+This keeps the poll loop alive, **not** a bypass: owner-backed accounts cannot
+receive from the relay until their signing key is usable. Deploy updated client
+assets alongside the Worker to avoid the old startup race.
+
+Migration cannot recover ownership from a bundle that expired **before** its
+owner was preserved. First registration remains TOFU. Ownership records use the
+existing KV backend: eventual consistency and concurrent writes are not made
+linearizable by this change. Proofs retain the existing five-minute freshness
+window and operation/payload binding; identical in-window retries are not a
+one-time nonce protocol.
+
 Presence writes and TURN credential issuance already require a *registered*
 account (prekey bundle present) by default, and every client registers
 automatically. Presence heartbeats additionally carry an Ed25519 ownership

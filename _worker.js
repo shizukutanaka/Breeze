@@ -1508,7 +1508,8 @@ async function handleMsgSend(body, ip, env, request) {
 // Same rollout doctrine as BACKUP/GROUP/PUSH_REQUIRE_AUTH: callers may sign
 // `breeze-<op>:<id>:<ts>` with the account's registered Ed25519 identity key; the signature
 // is verified when present, and QUEUE_REQUIRE_AUTH=true makes it mandatory once clients
-// ship the signing fields. Per-op domain separation so a captured poll signature can't be
+// ship the signing fields. A durable owner makes proof mandatory regardless of the flag.
+// Per-op domain separation so a captured poll signature can't be
 // replayed as a destructive ack.
 //
 // One op is the exception: 'mailbox-ws' (the WebSocket subscription,
@@ -1517,12 +1518,25 @@ async function handleMsgSend(body, ip, env, request) {
 // than a one-shot read, and the capability has no legacy fleet to
 // stay compatible with, so the proof is mandatory from day one.
 // Clients that cannot sign keep the (fully supported) polling path.
+async function readPrekeyOwner(env, id) {
+  const raw = await kvGet(env, `prekey-owner:${id}`, true);
+  if (raw === null) return null;
+  const owner = safeJsonParse(raw);
+  if (!owner || typeof owner.edIdentityKey !== 'string' || !owner.edIdentityKey)
+    throw new Error('Invalid prekey owner record');
+  return owner;
+}
+
 async function checkQueueAuth(body, env, request, op) {
   const { id, ts, sig } = body;
+  let owner;
+  try { owner = await readPrekeyOwner(env, id); }
+  catch { return json({ error: 'Ownership unavailable', code: 'OWNER_UNAVAILABLE' }, 503, request); }
   const hasSig = ts !== undefined || sig !== undefined;
   if (!hasSig) {
-    if (op === 'mailbox-ws' || env.QUEUE_REQUIRE_AUTH === 'true')
+    if (owner || op === 'mailbox-ws' || env.QUEUE_REQUIRE_AUTH === 'true')
       return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+    if (env.QUEUE_REQUIRE_AUTH === 'false') console.warn(`[auth] deprecated unsigned ${op} accepted under QUEUE_REQUIRE_AUTH=false`);
     return null;
   }
   if (ts === undefined || sig === undefined)
@@ -1531,13 +1545,14 @@ async function checkQueueAuth(body, env, request, op) {
     return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
   if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS)
     return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
+  // Only legacy bundles use the cache; a durable owner always overrides it.
   // Cache the registered identity key per isolate — polls are the hottest read path in the
   // worker (every few seconds per device), so a KV read per request would double poll cost.
   // Only positive results are cached (an unregistered id may register next request), and a
   // signature-verification FAILURE drops the entry so an identity-key rotation self-heals on
   // the next attempt instead of wedging the owner until the isolate recycles.
   const keyCache = (globalThis._queueAuthKey ||= new Map());
-  let edKey = keyCache.get(id) || null;
+  let edKey = owner?.edIdentityKey || keyCache.get(id) || null;
   if (!edKey) {
     const data = await kvGet(env, `prekey:${id}`);
     const bundle = data ? safeJsonParse(data) : null;
@@ -3306,15 +3321,20 @@ async function handleAccountDelete(body, env, request) {
     return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
   }
 
+  let owner;
+  try { owner = await readPrekeyOwner(env, userId); }
+  catch { return json({ error: 'Ownership unavailable', code: 'OWNER_UNAVAILABLE' }, 503, request); }
   const data = await kvGet(env, `prekey:${userId}`);
   const bundle = data ? safeJsonParse(data) : null;
-  if (!bundle || typeof bundle.edIdentityKey !== 'string' || !bundle.edIdentityKey) {
+  const edKey = owner?.edIdentityKey || bundle?.edIdentityKey;
+  const identityKey = owner?.identityKey || bundle?.identityKey;
+  if (typeof edKey !== 'string' || !edKey) {
     return json({ error: 'No registered identity key to authenticate deletion', code: 'NO_IDENTITY_KEY' }, 403, request);
   }
   // userId is [A-Za-z0-9+/=_-] (validateUserId) and ts is a number, so the
   // challenge string is pure ASCII — btoa() is safe.
   const challenge = `breeze-account-delete:${userId}:${ts}`;
-  const ok = await verifyEd25519(bundle.edIdentityKey, btoa(challenge), sig);
+  const ok = await verifyEd25519(edKey, btoa(challenge), sig);
   if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
 
   // One-time prekeys first — the count key is needed before the bundle goes away.
@@ -3333,7 +3353,7 @@ async function handleAccountDelete(body, env, request) {
     const clean = alias.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
     if (clean.length >= 3) {
       const aliasRec = safeJsonParse(await kvGet(env, `alias:${clean}`));
-      if (aliasRec && aliasRec.pub === bundle.identityKey) {
+      if (identityKey && aliasRec && aliasRec.pub === identityKey) {
         aliasDeleted = await kvDel(env, `alias:${clean}`);
       }
     }
@@ -3343,9 +3363,9 @@ async function handleAccountDelete(body, env, request) {
   // ownership rule (the record's pub must be this account's identity key) —
   // and erase the reverse record itself with the rest of the account.
   const aliasReverse = safeJsonParse(await kvGet(env, aliasOwnerKey(userId)));
-  if (aliasReverse && aliasReverse.pub === bundle.identityKey && typeof aliasReverse.alias === 'string') {
+  if (identityKey && aliasReverse && aliasReverse.pub === identityKey && typeof aliasReverse.alias === 'string') {
     const reverseRec = safeJsonParse(await kvGet(env, `alias:${aliasReverse.alias}`));
-    if (reverseRec && reverseRec.pub === bundle.identityKey) {
+    if (reverseRec && reverseRec.pub === identityKey) {
       aliasDeleted = (await kvDel(env, `alias:${aliasReverse.alias}`)) || aliasDeleted;
     }
   }
@@ -3376,6 +3396,7 @@ async function handleAccountDelete(body, env, request) {
     // its 90-day TTL on every read, so a registry left behind can outlive the account
     // indefinitely — and peers keep fanning out to phantom devices of a deleted account
     kvDel(env, `prekey:${userId}`),
+    kvDel(env, `prekey-owner:${userId}`),
     kvDel(env, aliasOwnerKey(userId)), // step-5 alias reverse record
     kvDel(env, `ktlog:${userId}`),
     kvDel(env, `push:${userId}`),
@@ -3652,11 +3673,23 @@ async function handlePreKeyUpload(body, env, request) {
   // attacker-malleable field (keys, signedPreKeySig, oneTimePreKeys, caps, x3dh — and,
   // since stage-3 step 2, the PQ key pair under the appended v2 formula below); verified
   // when present, mandatory when PREKEY_REQUIRE_AUTH=true.
-  // Continuity: the verifier is the STORED bundle's edIdentityKey — the root of identity
-  // continuity — so rotation requires the previous key's signature (recovery path when it is
-  // lost: account delete + re-register). A first-time upload (or a legacy bundle that never
+  // Continuity: the verifier is the non-expiring owner's edIdentityKey, migrated from the
+  // stored bundle on upload. The owner survives bundle expiry and overrides legacy flags.
+  // This is the root of identity
+  // continuity — so rotation requires the previous key's signature. A first-time upload (or a legacy bundle that never
   // stored an edIdentityKey) verifies against the bundle's own edIdentityKey — self-binding,
   // same trust level as today for that corner.
+  let owner;
+  let existing;
+  try {
+    owner = await readPrekeyOwner(env, userId);
+    existing = safeJsonParse(await kvGet(env, `prekey:${userId}`, true));
+    if (!owner && typeof existing?.edIdentityKey === 'string' && existing.edIdentityKey) {
+      owner = { edIdentityKey: existing.edIdentityKey, identityKey: existing.identityKey };
+      if (!await kvPut(env, `prekey-owner:${userId}`, JSON.stringify(owner)))
+        return json({ error: 'Failed to preserve ownership', code: 'STORE_FAILED' }, 503, request);
+    }
+  } catch { return json({ error: 'Ownership unavailable', code: 'OWNER_UNAVAILABLE' }, 503, request); }
   const hasPkAuth = ts !== undefined || sig !== undefined;
   if (hasPkAuth) {
     if (ts === undefined || sig === undefined)
@@ -3665,9 +3698,7 @@ async function handlePreKeyUpload(body, env, request) {
       return json({ error: 'invalid sig', code: 'INVALID_FIELD' }, 400, request);
     if (typeof ts !== 'number' || !Number.isFinite(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS)
       return json({ error: 'timestamp out of range', code: 'INVALID_TIMESTAMP' }, 400, request);
-    const existingRaw = await kvGet(env, `prekey:${userId}`);
-    const existing = existingRaw ? safeJsonParse(existingRaw) : null;
-    const edRoot = (existing && typeof existing.edIdentityKey === 'string' && existing.edIdentityKey)
+    const edRoot = owner?.edIdentityKey
       || (typeof edIdentityKey === 'string' && edIdentityKey) || null;
     if (!edRoot) return json({ error: 'No Ed25519 identity key to verify against', code: 'NO_IDENTITY_KEY' }, 403, request);
     // Stage-3 step 2 (plan D3): two digest formulas exist. v1 is the original
@@ -3701,9 +3732,13 @@ async function handlePreKeyUpload(body, env, request) {
       okAuth = await verifyEd25519(edRoot, utf8ToB64(`breeze-prekey-upload:${userId}:${ts}:${digestV1}`), sig);
     }
     if (!okAuth) return json({ error: 'Invalid upload signature', code: 'SIG_INVALID' }, 403, request);
-  } else if (env.PREKEY_REQUIRE_AUTH === 'true') {
+  } else if (owner || env.PREKEY_REQUIRE_AUTH === 'true') {
     return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+  } else if (env.PREKEY_REQUIRE_AUTH === 'false') {
+    console.warn('[auth] deprecated unsigned prekey-upload accepted under PREKEY_REQUIRE_AUTH=false');
   }
+  if (owner && !edIdentityKey)
+    return json({ error: 'Ownership key cannot be removed', code: 'OWNER_KEY_REQUIRED' }, 403, request);
   // Registration admission (stage-2 step 3): REGISTRATION_ALLOWLIST, when set,
   // closes ACCOUNT CREATION on this relay to the listed userIds. It gates only
   // a prekey upload for a userId with no stored bundle — an existing account's
@@ -3718,8 +3753,7 @@ async function handlePreKeyUpload(body, env, request) {
   if (typeof env.REGISTRATION_ALLOWLIST === 'string') {
     const admitted = env.REGISTRATION_ALLOWLIST.split(/[,\s]+/).filter(Boolean);
     if (!admitted.includes(userId)) {
-      const existingBundle = await kvGet(env, `prekey:${userId}`);
-      if (!existingBundle) {
+      if (!existing && !owner) {
         return json({ error: 'Registration is closed on this relay', code: 'REGISTRATION_CLOSED' }, 403, request);
       }
     }
@@ -3751,6 +3785,11 @@ async function handlePreKeyUpload(body, env, request) {
   // step-4 pin check they run per relay before depositing.
   const homeList = sanitizeHomeList(home);
   if (homeList) bundle.home = homeList;
+  if (edIdentityKey && (owner?.edIdentityKey !== edIdentityKey || owner?.identityKey !== identityKey)) {
+    if (!await kvPut(env, `prekey-owner:${userId}`, JSON.stringify({ edIdentityKey, identityKey })))
+      return json({ error: 'Failed to store ownership', code: 'STORE_FAILED' }, 503, request);
+    globalThis._queueAuthKey?.delete(userId);
+  }
   const prekeySaved = await kvPut(env, `prekey:${userId}`, JSON.stringify(bundle), { expirationTtl: TTL.MONTH });
   if (!prekeySaved) return json({ error: 'Failed to store prekeys', code: 'STORE_FAILED' }, 500, request);
 
@@ -4681,8 +4720,8 @@ function corsHeaders(request) {
 }
 
 // v3.5: KV safety helpers (FIXED: was calling itself recursively!)
-async function kvGet(env, key) {
-  try { return await env.KV.get(key); } catch(e) { console.error('[kv] GET failed:', e?.message ?? e); return null; }
+async function kvGet(env, key, strict = false) {
+  try { return await env.KV.get(key); } catch(e) { console.error('[kv] GET failed:', e?.message ?? e); if (strict) throw e; return null; }
 }
 async function kvPut(env, key, value, opts) {
   try { await env.KV.put(key, value, opts); return true; } catch(e) { console.error('[kv] PUT failed:', e?.message ?? e); return false; }

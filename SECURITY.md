@@ -204,6 +204,18 @@ separate, explicitly-scoped future work if it's wanted.
   Ed25519-signature `*_REQUIRE_AUTH` flags remain operator choices, because clients on
   runtimes without WebCrypto Ed25519 cannot sign at all and a mandatory default would cut
   them off — see `wrangler.toml`.
+- **Durable relay ownership:** `prekey-owner:<userId>` retains the Ed25519 owner
+  without expiration. Uploads lazily migrate an existing bundle's key, reject
+  unsigned replacement regardless of flags, and require the old owner's proof
+  to rotate. Owner-backed queue reads/ACKs and mailbox subscriptions verify this
+  key even after bundle expiry; unsigned access is rejected. Unsigned-runtime
+  accounts without an owner keep the previous behavior. Authenticated account
+  erasure removes ownership; loss of the owner private key has no reset path.
+  The client bounds signing initialization to five seconds before continuing
+  unsigned polls: those polls remain unauthorized for owner-backed accounts
+  until signing recovers. First registration and already-expired, unmigrated
+  accounts remain TOFU. KV consistency/concurrent-write limitations and the
+  existing five-minute replay window are unchanged; proofs are not single-use.
 - **@alias resolution** is answered by the relay, which returns an unsigned `{pub}`. Since
   v3.6.1 an alias add runs the key-transparency audit first: a **tampered** hash chain blocks the
   add outright, a **rolled** key warns. This detects a relay rewriting key *history*; it cannot

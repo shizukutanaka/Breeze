@@ -175,7 +175,7 @@ describe('step 5 — activity-linked renewal', () => {
     expect(env.KV.exp.get('alias:upalias')).toBeGreaterThan(Date.now() + 89 * DAY_MS);
   });
 
-  it('an UNSIGNED prekey upload does not renew', async () => {
+  it('an UNSIGNED prekey upload is rejected for an existing owner and does not renew', async () => {
     const env = makeEnv();
     const userId = 'step5usr6';
     const pub = userId + '-IK';
@@ -187,7 +187,7 @@ describe('step 5 — activity-linked renewal', () => {
     const res = await handlePreKeyUpload(
       { userId, identityKey: pub, edIdentityKey, signedPreKey: toB64(spk), oneTimePreKeys: [] },
       env, apiRequest('/api/prekey/upload', {}));
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(403);
     expect(env.KV.exp.get('alias:noupalias')).toBe(expBefore);
   });
 });
