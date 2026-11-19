@@ -28,6 +28,7 @@ test(`Node relay ${wakeEnabled ? 'pauses established polls' : 'retains 15s fallb
   try {
     const pages = [];
     const sockets = [];
+    const ephemeralDeposits = [];
     const offers = new Set();
     let releasePolls;
     const offersReady = new Promise(resolve => { releasePolls = resolve; });
@@ -49,6 +50,7 @@ test(`Node relay ${wakeEnabled ? 'pauses established polls' : 'retains 15s fallb
       // forcing polite glare and exercising the browser's implicit rollback.
       await page.route(base + '/api/signal', async route => {
         const body = route.request().postDataJSON();
+        if (body.type === 'typing' || body.type === 'read') ephemeralDeposits.push(body.type);
         if (body.type === 'poll') await offersReady;
         const response = await route.fetch();
         if (body.type === 'offer' && response.ok()) {
@@ -82,8 +84,6 @@ test(`Node relay ${wakeEnabled ? 'pauses established polls' : 'retains 15s fallb
     const glare = await Promise.all(pages.map(page => page.evaluate(() => window.__sdpGlare)));
     expect(glare.reduce((sum, state) => sum + state.collisions, 0)).toBeGreaterThan(0);
     expect(glare.flatMap(state => state.errors)).toEqual([]);
-    let signalFrames = 0;
-    for (const socket of sockets) socket.on('framereceived', ({ payload }) => { if (JSON.parse(String(payload)).type === 'signal') signalFrames++; });
     // Allow the existing mailbox safety cycle to observe the negotiation's
     // final generation before measuring an idle interval (no extra requests).
     await new Promise(resolve => setTimeout(resolve, 35_000));
@@ -93,16 +93,24 @@ test(`Node relay ${wakeEnabled ? 'pauses established polls' : 'retains 15s fallb
     const delta = after.map((value, i) => value - before[i]);
     expect(delta).toEqual(wakeEnabled ? [0, 0] : [2, 2]);
     console.log(`signal-wake=${wakeEnabled} idle 30s: ${JSON.stringify(before)} -> ${JSON.stringify(after)}; delta ${JSON.stringify(delta)}`);
+    const depositsBefore = ephemeralDeposits.length;
     const text = 'message after signal-poll pause';
     const directAcks = await alice.evaluate(() => JSON.parse(localStorage.getItem('brz-p2p-direct') || '{}').directAck || 0);
     await alice.locator('#msg-input').fill(text);
+    await expect(bob.locator('#typing-indicator')).toHaveClass(/active/);
     await alice.locator('#b-msg-send').click();
     await expect(bob.locator('#msg-messages')).toContainText(text, { timeout: 10_000 });
     await expect(alice.locator('#msg-conv-status')).toContainText('Direct');
     await expect.poll(() => alice.evaluate(() => JSON.parse(localStorage.getItem('brz-p2p-direct') || '{}').directAck || 0)).toBe(directAcks + 1);
-    // Typing/read remain dual-path, so sending also proves the Node namespace
-    // emits the new signal frame after an authenticated HTTP deposit.
-    if (wakeEnabled) await expect.poll(() => signalFrames).toBeGreaterThan(0);
+    const sentStatus = alice.locator('.msg.me').filter({ hasText: text }).locator('.msg-status');
+    await expect(sentStatus).not.toHaveClass(/read/);
+    await bob.locator('#msg-contacts .contact').click();
+    await expect(sentStatus).toHaveClass(/read/);
+    expect(ephemeralDeposits.slice(depositsBefore)).toEqual([]);
+    if (wakeEnabled) {
+      expect(await Promise.all(pages.map(count))).toEqual(after);
+      console.log('typing + read over DC: no signal deposits; post-established counters unchanged');
+    }
   } finally {
     await Promise.all(contexts.map(context => context.close()));
     server.closeAllConnections();

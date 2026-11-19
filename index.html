@@ -8421,11 +8421,12 @@ async function initMessenger(dbName) {
         // delay means the message was never really read.
         if (activeContact?.id !== snap.id) return;
         const peer = peers[snap.pubB64];
-        if (peer?.connected && peer.dc?.readyState === 'open') {
-          // v3.6: Use unreliable state channel for read receipts
-          const rsc = peer.stateDC?.readyState === 'open' ? peer.stateDC : peer.dc;
-          rsc.send(JSON.stringify({ type: 'read', sender: myId, ts: Date.now() }));
-        }
+        try {
+          if (peer?.dc?.readyState === 'open') {
+            peer.dc.send(JSON.stringify({ type: 'read', sender: myId, ts: Date.now() }));
+            return;
+          }
+        } catch(e) { _dbg(e, 'read-send'); }
         if (API) {
           _signal(_dmRoom(snap.id), 'read', String(Date.now()));
         }
@@ -12795,11 +12796,13 @@ async function initMessenger(dbName) {
     if (now - _lastTypingSent < CONFIG.TYPING_THROTTLE_MS) return;
     _lastTypingSent = now;
     const peer = peers[activeContact.pubB64];
-    if (peer?.connected && peer.dc?.readyState === 'open') {
-      // v3.6: Use unreliable state channel for typing (prevents head-of-line blocking)
-      const sc = peer.stateDC?.readyState === 'open' ? peer.stateDC : peer.dc;
-      sc.send(JSON.stringify({ type: 'typing', sender: myId, senderName: myName }));
-    }
+    try {
+      const sc = peer?.stateDC?.readyState === 'open' ? peer.stateDC : peer?.dc;
+      if (sc?.readyState === 'open') {
+        sc.send(JSON.stringify({ type: 'typing', sender: myId, senderName: myName }));
+        return;
+      }
+    } catch(e) { _dbg(e, 'typing-send'); }
     if (API) {
       _signal(_dmRoom(activeContact.id), 'typing');
     }
