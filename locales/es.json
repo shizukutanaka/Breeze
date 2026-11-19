@@ -1,6 +1,8 @@
 {
  "rvTitle": "Conexión manual",
- "rvScope": "Solo contactos verificados con una sesión cifrada existente. Intercambia los códigos por un canal privado; caducan en 10 minutos. Sin QR ni emparejamiento de contactos nuevos.",
+ "rvScope": "Solo contactos verificados con una sesión cifrada existente. Intercambia los códigos por QR o copia y pega en privado; caducan en 10 minutos. Sin emparejamiento de contactos nuevos.",
+ "rvQRTooLarge": "El código es demasiado grande para un QR. Usa copiar y pegar.",
+ "rvScanUnavailable": "Este navegador no permite escanear QR con la cámara. Usa copiar y pegar.",
  "rvCreate": "Crear código de conexión",
  "rvPaste": "Pegar código de conexión",
  "rvOutput": "Tu código de conexión",

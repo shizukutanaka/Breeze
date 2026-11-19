@@ -2,7 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { webcrypto } from 'node:crypto';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { canonical, createEnvelopeCodec, gatherDescription, attachManualPeer, createRendezvous, MAX_CODE_SIZE } from '../src/app/rendezvous.js';
+import { deflateRawSync } from 'node:zlib';
+import { canonical, createEnvelopeCodec, gatherDescription, attachManualPeer, createRendezvous, MAX_CODE_SIZE, MAX_ENVELOPE_SIZE } from '../src/app/rendezvous.js';
 
 const MS = { SEC: 1000, MIN: 60000 };
 const desc = { type: 'offer', sdp: 'v=0\r\na=candidate:1 1 udp 1 abc.local 123 typ host\r\n' };
@@ -23,10 +24,27 @@ async function harness() {
   const read = (code, extra) => codec.parse(code, { kind: 'offer', from: 'alice-full-id', to: 'bob-full-id', sigPub: id.pub, ...extra });
   return { id, codec, make, read, advance: ms => { now += ms; } };
 }
-const unpack = code => JSON.parse(Buffer.from(code.slice('breeze-sdp1:'.length), 'base64url'));
 const pack = e => 'breeze-sdp1:' + Buffer.from(JSON.stringify(e)).toString('base64url');
 
 describe('signed manual SDP envelope', () => {
+  it('imports legacy and compressed envelopes with the same canonical signature checks', async () => {
+    const h = await harness(), result = await h.make();
+    expect(result.code.startsWith('breeze-sdp1z:')).toBe(true);
+    expect(await h.read(pack(result.envelope))).toEqual(result.envelope);
+    await expect(h.read(result.code)).rejects.toThrow('rvReplay');
+    const other = await h.make();
+    expect(await h.read(other.code)).toEqual(other.envelope);
+    const tampered = { ...other.envelope, nonce: 'abcdefghijklmnopqrstuv', desc: { ...desc, sdp: 'tampered' } };
+    const code = 'breeze-sdp1z:' + deflateRawSync(Buffer.from(JSON.stringify(tampered))).toString('base64url');
+    await expect(h.read(code)).rejects.toThrow('rvTrust');
+  });
+  it('rejects decompression bombs and corrupt or truncated compressed data', async () => {
+    const h = await harness();
+    const bomb = 'breeze-sdp1z:' + deflateRawSync(Buffer.alloc(MAX_ENVELOPE_SIZE + 1, 32)).toString('base64url');
+    for (const code of [bomb, 'breeze-sdp1z:abcd', (await h.make()).code.slice(0, -5)]) {
+      await expect(h.read(code)).rejects.toThrow('rvInvalid');
+    }
+  });
   it('round-trips canonical signed offers and bound answers with random 16B nonces', async () => {
     const h = await harness(), offer = await h.make();
     expect(await h.read(offer.code)).toEqual(offer.envelope);

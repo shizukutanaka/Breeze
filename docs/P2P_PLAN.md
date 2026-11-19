@@ -138,6 +138,12 @@ typing の入力 listener は従来からグループと共通だが、グルー
 
 ### Step 4 — ランデブーの分散: SDP の手動交換（サーバーレス接続）
 
+**実施記録 — Step 4 第2弾（接続コードのQR交換）.** `/rendezvous` の署名済み封筒JSONを可逆な `deflate-raw` 圧縮＋base64url の `breeze-sdp1z:` にし、従来の `breeze-sdp1:` も受信する。署名対象・鍵固定・宛先・期限・nonce検査は変更せず、展開後の canonical 封筒で検証する。入力文字列64KiBに加えて、展開ストリームも64KiBで打ち切る（zip bomb対策）。圧縮非対応ブラウザーの送信は従来形式に戻す。
+
+実ブラウザーの収集済みコード測定は offer **1,663–1,675→1,044–1,063 bytes**（host＋srflx）、answer **1,384→1,005–1,016 bytes**（host）。乱数・候補等による差があり、測定したコードは **version 26–27 / ECC M** に収まる。エンコーダーは最小の収容可能versionを選び、最大40 / M（byte mode 2,331 bytes）まで対応する。Mの約15%訂正能力と密度の釣り合いを選択。alignment・version情報・RS block分割/interleave・mask選択も実装し、jsQR（開発時のみ）で実サイズと境界・UTF-8を復号確認する。上限超過時は切り捨てず明示的に拒否し、招待QRもコピペを残す。multipartは行わない。
+
+接続ダイアログはテキストとQRを併記し、Scanからカメラのraw値を同じ検証経路へ渡す。招待の `?add=` ナビゲーションは維持。BarcodeDetectorがなければ非対応の案内とコピペを残し、キャンセル・成功・エラー時はカメラを停止する。リレー全APIをabort／応答なしにしたE2Eで、表示QRそのものを復号し、BarcodeDetectorのstub経由でoffer/answerを取り込み、双方向DC配送＋direct ACK・signal要求ゼロ・成功したリレー応答ゼロを確認する。**実際のカメラでの光学読み取り、実機2台LAN、新規連絡先のオフラインpairingは未確認／未対応**。第1弾の「QR未対応」は本弾で更新するが、Step 4全体の実機Done whenは引き続き残件。
+
 **実施記録 — Step 4 第1弾（コピペによる既存連絡先の再接続）.** `/rendezvous` を1対1チャットに追加。identity 招待とは別のダイアログで offer を作成→相手が貼付して answer 作成→元の端末へ貼付する。対象は **署名鍵 `sigPub` が固定済みで、暗号化セッションも既存の連絡先のみ**。不足時はリレー経由で一度接続・相手を確認するよう案内して拒否する。**QR と新規連絡先のオフライン・ペアリングは未対応**。
 
 配備モジュール `src/app/rendezvous.js` の `breeze-sdp1:` コードは base64url JSON（`v:1, kind, from, to, nonce, exp, desc, sigPub, sig`、answer のみ `offerNonce`）。`from/to` は省略しない完全な identity、nonce は乱数16バイト、期限は10分。`sig` 以外の全フィールドを再帰的キー順の canonical JSON で Ed25519 署名し、固定鍵一致・宛先・手順・期限・セッション中の nonce 再使用・answer の offerNonce 一致・64KiB入力上限を検証する。署名なしの互換受信は手動経路に持ち込まない。

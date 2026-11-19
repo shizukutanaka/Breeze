@@ -1,6 +1,8 @@
 {
  "rvTitle": "Conexão manual",
- "rvScope": "Somente contatos verificados com sessão criptografada existente. Troque os códigos por um canal privado; expiram em 10 minutos. Sem QR ou pareamento de novos contatos.",
+ "rvScope": "Somente contatos verificados com sessão criptografada existente. Troque os códigos em privado por QR ou copiar/colar; expiram em 10 minutos. Sem pareamento de novos contatos.",
+ "rvQRTooLarge": "Código grande demais para um QR. Use copiar e colar.",
+ "rvScanUnavailable": "Este navegador não permite ler QR pela câmera. Use copiar e colar.",
  "rvCreate": "Criar código de conexão",
  "rvPaste": "Colar código de conexão",
  "rvOutput": "Seu código de conexão",

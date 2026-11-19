@@ -1,5 +1,15 @@
 import { test, expect } from '@playwright/test';
 import { createIdentity } from './helpers.mjs';
+import { inflateRawSync } from 'node:zlib';
+import jsQR from 'jsqr';
+
+async function renderedQR(page) {
+  const canvas = page.locator('[data-rv="qr"] canvas');
+  await expect(canvas).toBeVisible();
+  const image = await canvas.evaluate(c => ({ width: c.width, height: c.height, pixels: Array.from(c.getContext('2d').getImageData(0, 0, c.width, c.height).data) }));
+  const code = await page.locator('[data-rv="output"]').inputValue();
+  expect(jsQR(new Uint8ClampedArray(image.pixels), image.width, image.height)?.data).toBe(code);
+}
 
 async function addAndOpen(page, pub) {
   await page.locator('#b-msg-add').click();
@@ -33,7 +43,7 @@ async function trustedSession(page, peer) {
 }
 
 for (const failure of ['abort', 'timeout']) {
-  test(`manual SDP opens and delivers with every relay API ${failure}`, async ({ browser }) => {
+  test(`manual SDP opens and delivers with every relay API ${failure}`, async ({ browser }, testInfo) => {
     test.setTimeout(240_000);
     const contexts = [], pages = [], blocked = [], signalRequests = [], successes = [], timedOut = [];
     const base = `http://127.0.0.1:${process.env.E2E_PORT || 8787}`;
@@ -42,6 +52,17 @@ for (const failure of ['abort', 'timeout']) {
         const context = await browser.newContext({ serviceWorkers: 'block', extraHTTPHeaders: { 'CF-Connecting-IP': `203.0.113.${n + (failure === 'timeout' ? 2 : 0)}` } });
         await context.grantPermissions(['local-network-access'], { origin: base });
         contexts.push(context);
+        await context.addInitScript(() => {
+          window.__scanValue = '';
+          window.BarcodeDetector = class { async detect() { return window.__scanValue ? [{ rawValue: window.__scanValue }] : []; } };
+          window.__detector = window.BarcodeDetector;
+          navigator.mediaDevices.getUserMedia = async () => {
+            const canvas = document.createElement('canvas'); canvas.width = canvas.height = 16;
+            const stream = canvas.captureStream();
+            canvas.getContext('2d').fillRect(0, 0, 16, 16);
+            return stream;
+          };
+        });
         const page = await context.newPage();
         await page.goto(base);
         pages.push(page);
@@ -57,9 +78,19 @@ for (const failure of ['abort', 'timeout']) {
       // Opening the separate manual ceremony tears down the old PC and its
       // signaling scheduler before relay access is blocked. No offer yet.
       for (const page of pages) {
+        if (page === bob) await page.evaluate(() => { delete window.BarcodeDetector; });
         await page.locator('#msg-input').fill('/rendezvous');
         await page.locator('#msg-input').press('Enter');
         await expect(page.locator('.rendezvous-dialog')).toBeVisible();
+        if (page === bob) {
+          await expect(page.locator('[data-rv="scan"]')).toBeDisabled();
+          await expect(page.locator('[data-rv="scan-status"]')).toContainText('copy/paste');
+          await page.locator('[data-rv="close"]').click();
+          await expect(page.locator('.rendezvous-dialog')).toHaveCount(0);
+          await page.evaluate(() => { window.BarcodeDetector = window.__detector; });
+          await page.locator('#msg-input').fill('/rendezvous'); await page.locator('#msg-input').press('Enter');
+          await expect(page.locator('.rendezvous-dialog')).toBeVisible();
+        }
       }
       for (const page of pages) {
         page.on('response', response => { if (new URL(response.url()).pathname.startsWith('/api/') && response.ok()) successes.push(response.url()); });
@@ -73,15 +104,25 @@ for (const failure of ['abort', 'timeout']) {
         });
       }
       await alice.locator('[data-rv="offer"]').click();
-      await expect(alice.locator('[data-rv="output"]')).toHaveValue(/^breeze-sdp1:/, { timeout: 65_000 });
+      await expect(alice.locator('[data-rv="output"]')).toHaveValue(/^breeze-sdp1z:/, { timeout: 65_000 });
+      await renderedQR(alice);
+      await alice.locator('.rendezvous-dialog').screenshot({ path: testInfo.outputPath('offer-qr.png') });
       const offer = await alice.locator('[data-rv="output"]').inputValue();
       await bob.locator('[data-rv="paste"]').click();
-      await bob.locator('[data-rv="input"]').fill(offer);
-      await bob.locator('[data-rv="apply"]').click();
-      await expect(bob.locator('[data-rv="output"]')).toHaveValue(/^breeze-sdp1:/, { timeout: 65_000 });
+      await bob.evaluate(code => { window.__scanValue = code; }, offer);
+      await bob.locator('[data-rv="scan"]').click();
+      await expect(bob.locator('[data-rv="output"]')).toHaveValue(/^breeze-sdp1z:/, { timeout: 65_000 });
+      await renderedQR(bob);
+      await bob.locator('.rendezvous-dialog').screenshot({ path: testInfo.outputPath('answer-qr.png') });
       const answer = await bob.locator('[data-rv="output"]').inputValue();
-      await alice.locator('[data-rv="input"]').fill(answer);
-      await alice.locator('[data-rv="apply"]').click();
+      for (const [kind, code] of Object.entries({ offer, answer })) {
+        const json = inflateRawSync(Buffer.from(code.slice('breeze-sdp1z:'.length), 'base64url'));
+        const version = await (kind === 'offer' ? alice : bob).locator('[data-rv="qr"] canvas').getAttribute('data-version');
+        console.log(`manual ${kind}: raw=${'breeze-sdp1:'.length + json.toString('base64url').length}, compressed=${code.length}; QR v${version}/M; candidates=${JSON.parse(json).desc.sdp.match(/typ \w+/g)}`);
+      }
+      await testInfo.attach('manual-codes', { body: JSON.stringify({ offer, answer }), contentType: 'application/json' });
+      await alice.evaluate(code => { window.__scanValue = code; }, answer);
+      await alice.locator('[data-rv="scan"]').click();
       for (const page of pages) {
         await expect(page.locator('#msg-conv-status')).toContainText('Direct', { timeout: 20_000 });
         await page.locator('[data-rv="close"]').click();
