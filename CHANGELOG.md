@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Pre-release audit (docs/PRE-RELEASE-AUDIT.md) and the 3.7.0 bump itself: two stale README claims fixed, the bump tool extended to all 14 version sites after tests caught two it missed (build.sh, the X-Breeze-Version header), and a same-version bump run now repairs drift.
+
 ## [3.7.0] - 2026-11-20
 
 ## Transparency, on a schedule (SHARE_PLAN stage 7 step 3)
