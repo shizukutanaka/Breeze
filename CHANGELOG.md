@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## P2P_PLAN step 4, first slice: manual rendezvous
+
+- **Copy/paste SDP.** `/rendezvous` opens a separate connection-code dialog for an existing 1:1 contact with a pinned signing key and established encrypted session. Signed v1 offers/answers bind full identities, a random nonce, ten-minute expiry, complete gathered SDP and the pinned Ed25519 key; answers bind the pending offer nonce. Reject unsigned, malformed, oversized, expired, replayed or misaddressed codes.
+- **No relay signaling.** Manual connections reuse the existing certificate, negotiated DataChannels, heartbeat, encrypted message and persistence-ACK machinery without signal deposits, signal polling, trickled ICE or an API prerequisite. Export preserves candidate privacy / relayOnly policy and fails with no usable candidate. Recovery requests a fresh exchange rather than contacting relay signaling. Normal relay negotiation is unchanged.
+- **Scope and limits.** No QR or new-contact offline pairing. Background / auxiliary relay attempts may fail while blocked; franking registration and sibling-device fan-out are not delivered while relays are unreachable. Neither blocks DC sending. Browser regressions cover aborting and hanging relay requests; real two-device LAN verification remains.
+
 ## P2P_PLAN step 3, fifth slice: typing/read DC-first
 
 - **Typing.** Prefer the open state DataChannel, then the message channel; successful sends no longer also deposit a signal. Missing channels or throwing sends fall back to the relay. Existing privacy and throttle gates remain unchanged.

@@ -1230,6 +1230,8 @@ import { createDirectAckWaiter } from './src/app/direct-ack.js';
 window.__breezeDirectAck = { createDirectAckWaiter };
 import { createP2pStats, classifyCandidateType } from './src/app/p2p-stats.js';
 window.__breezeP2pStats = { createP2pStats, classifyCandidateType };
+import { createRendezvous, attachManualPeer } from './src/app/rendezvous.js';
+window.__breezeRendezvous = { createRendezvous, attachManualPeer };
 </script>
 
 <script>
@@ -1390,6 +1392,12 @@ const _H = Object.freeze({ 'Content-Type': 'application/json' }); // Shared JSON
 
 const _I = {
   en: {
+    rvTitle: 'Manual connection', rvScope: 'Existing verified contact and encrypted session only. Exchange these codes privately; they expire in 10 minutes. QR and new-contact pairing are not supported.',
+    rvCreate: 'Create connection code', rvPaste: 'Paste connection code', rvOutput: 'Your connection code', rvInput: 'Peer connection code', rvCopy: 'Copy code', rvApply: 'Apply code',
+    rvWorking: 'Gathering or verifying connection information…', rvReady: 'Code ready / applied. Copy it to your peer, or paste their reply.', rvCopied: 'Code copied.', rvCopyFallback: 'Copy unavailable. Select and copy the code manually.',
+    rvTrust: 'Connect once through a relay and verify this contact first. A pinned signing key and an existing encrypted session are required.',
+    rvInvalid: 'Invalid connection code or wrong exchange step.', rvExpired: 'This connection code has expired. Create a new one.', rvReplay: 'This connection code has already been used.',
+    rvTimeout: 'ICE gathering timed out. Please redo the exchange.', rvCandidates: 'No usable ICE candidates under your privacy settings. Check your network / TURN settings and redo the exchange.', rvRedo: 'Manual connection needs recovery. Redo /rendezvous with your peer.',
     // Landing
     heroTitle: 'Private messaging,<br>without the baggage',
     heroDesc: 'No phone number. No email. No app store. Open a link, start chatting. Everything encrypted end-to-end.',
@@ -11594,8 +11602,10 @@ async function initMessenger(dbName) {
     };
   }
 
-  async function connectPeer(contact) {
+  async function connectPeer(contact, { signalingMode = 'relay' } = {}) {
     if (!contact.pubB64 || peers[contact.pubB64]?.pc) return;
+    const manual = signalingMode === 'manual';
+    if (manual && !globalThis.__breezeRendezvous) return;
     const isInit = myPubB64 > contact.pubB64;
 
     // v3.6: Unified ICE config (relay-only mode, TURN, candidate pool)
@@ -11637,16 +11647,18 @@ async function initMessenger(dbName) {
     // P5 FIX: 30s timeout — if not connected, clean up and allow retry
     const connTimeout = setTimeout(() => {
       if (!peerState.connected) {
+        if (manual) { peerState.manualRecovery(); peerState.transition('CLOSED'); try { pc.close(); } catch(e) { _dbg(e); } return; }
         _p2pStats?.noteConnectionFailed();
         peerState.transition('CLOSED'); try { pc.close(); } catch(e) { _dbg(e); }
         delete peers[contact.pubB64];
         _dbg(null, 'P2P timeout for ' + contact.id);
         // P2P timeout — TURN relay handles NAT traversal automatically
       }
-    }, 30 * MS.SEC);
+    }, manual ? 10 * MS.MIN : 30 * MS.SEC);
 
     pc.onicecandidate = (e) => {
       if (peerState.connState === 'SIGNALING') peerState.transition('ICE');
+      if (manual) return;
       if (e.candidate && API) {
         // v3.6: SECURITY — Filter ICE candidates to prevent IP leak
         const c = e.candidate;
@@ -11670,6 +11682,7 @@ async function initMessenger(dbName) {
       if (peerState.connected) { clearTimeout(connTimeout); peerState.transition('CONNECTED'); }
       updateConvStatus();
       renderContacts();
+      if (manual && (pc.connectionState === 'disconnected' || pc.connectionState === 'failed')) { peerState.manualRecovery(); return; }
       // v3.6: Smart reconnect — restartIce() on disconnected, full teardown on failed
       if (pc.connectionState === 'disconnected') {
         // restartIce() triggers onnegotiationneeded → Perfect Negotiation handles re-offer
@@ -11737,6 +11750,7 @@ async function initMessenger(dbName) {
       ch.onbufferedamountlow = () => { peerState._dcReady = true; };
       ch.onopen = () => { peerState._dcReady = true; onPeerConnected(); };
       ch.onclose = () => {
+        if (manual && peerState.connState !== 'CLOSED') peerState.manualRecovery();
         peerState.connected = false;
         if (peerState._heartbeat) { clearInterval(peerState._heartbeat); peerState._heartbeat = null; }
         peerState.transition('CLOSED');
@@ -11972,6 +11986,10 @@ async function initMessenger(dbName) {
       peerState.stateDC = stateChannel;
       setupDC(dc);
     }
+
+    if (manual) return globalThis.__breezeRendezvous.attachManualPeer(peerState, {
+      MS, relayOnly: _settings.relayOnly, notify: () => showToast(t('rvRedo'), 'info'),
+    });
 
     // Signal
     if (!API) return;
@@ -13359,6 +13377,19 @@ async function initMessenger(dbName) {
   const shareInvite = _shareTools?.shareInvite || (async () => {});
   const showMigratePanel = _shareTools?.showMigratePanel || (() => {});
 
+  const _rendezvous = globalThis.__breezeRendezvous?.createRendezvous({
+    MS, t, esc, safeSetHTML, sign: signMessage, verify: verifySignature,
+    me: () => myPubB64, sigPub: () => _signingPubB64, session: getSession,
+    contact: id => dbGet('contacts', id), root: () => _DOM.get('msg-main'),
+    toast: text => showToast(text, 'info'),
+    closePeer: (contact, peer) => { peer.transition('CLOSED'); try { peer.pc.close(); } catch(e) { _dbg(e); } },
+    connect: async contact => {
+      const old = peers[contact.pubB64];
+      if (old) { old.transition('CLOSED'); try { old.pc.close(); } catch(e) { _dbg(e); } delete peers[contact.pubB64]; }
+      return connectPeer(contact, { signalingMode: 'manual' });
+    },
+  });
+
   // Slash command: /search query
   _DOM.get('msg-input')?.addEventListener('keydown', async (e) => {
     if (e.key !== 'Enter') return;
@@ -13572,7 +13603,7 @@ async function initMessenger(dbName) {
         '/search · /searchall · /pins · /bookmarks · /reply · /poll · /timer',
         '/schedule &lt;time&gt; &lt;msg&gt; · /schedule list · /schedule cancel',
         '/clear · /export [json|csv|html|all] · /import · /summarize · /reactions · /compact',
-        '/files · /print',
+        '/files · /print · /rendezvous',
         '',
         '<b>' + t('helpContacts') + '</b>',
         '/info · /note · /pin · /mute · /archive · /unblock · /members · /admin',
@@ -13634,6 +13665,12 @@ async function initMessenger(dbName) {
       input.type = 'file'; input.accept = '.json';
       input.onchange = async (ev) => { if (ev.target.files[0]) await importContactsFile(ev.target.files[0]); };
       input.click();
+      return;
+    }
+
+    if (val === '/rendezvous') {
+      e.preventDefault(); clearInput();
+      await _rendezvous?.open(activeContact);
       return;
     }
 

@@ -106,7 +106,7 @@ const TS = 1700000000000;
 const PUB1 = 'PUB1PUB1PUB1';
 const PUB2 = 'PUB2PUB2PUB2';
 
-function buildSendMessage({ peers = {}, waiter = null, activeContact }) {
+function buildSendMessage({ peers = {}, waiter = null, activeContact, auxiliaryPending = false }) {
   const calls = { deposits: [], fanOut: 0, outbox: [], stats: [], status: [], dcSent: [], skDist: [] };
   const input = { value: 'hello world' };
   const sendBtn = { disabled: false, classList: { add() {}, remove() {} } };
@@ -135,13 +135,13 @@ function buildSendMessage({ peers = {}, waiter = null, activeContact }) {
     async () => true, async () => null, () => true, false,
     async (gid, pub) => { calls.skDist.push(pub); },
     async () => 'GROUP-CT',
-    async () => 'CT-1TO1',
-    'https://relay.test', async () => ({ ok: true }),
+    async (_text, _pub, frank) => { if (auxiliaryPending) { frank.frankId = 'fi'; frank.commitment = 'cm'; } return 'CT-1TO1'; },
+    'https://relay.test', () => auxiliaryPending ? new Promise(() => {}) : Promise.resolve({ ok: true }),
     null, async () => null, '', { consume: () => true }, async () => {},
     peers, async () => {},
     (pub, text, meta) => { calls.outbox.push({ pub, text }); },
     async (to, payload) => { calls.deposits.push({ to, ts: payload.ts }); },
-    () => { calls.fanOut++; },
+    () => { calls.fanOut++; return auxiliaryPending ? new Promise(() => {}) : undefined; },
     () => {},
     { PROTOCOL_VERSION: 4 },
     waiter,
@@ -156,6 +156,13 @@ function fakePeer(onSend) {
 }
 
 describe('sendMessage direct-first (sliced from index.html)', () => {
+  it('DC delivery and direct ACK do not await hanging franking registration or fan-out', async () => {
+    const waiter = createDirectAckWaiter({ timeoutMs: 50 });
+    const peers = { [PUB1]: fakePeer(() => waiter.resolve(PUB1, TS)) };
+    const { sendMessage, calls } = buildSendMessage({ peers, waiter, activeContact: { id: 'peer', pubB64: PUB1 }, auxiliaryPending: true });
+    await sendMessage();
+    expect(calls.stats).toEqual(['directAck']); expect(calls.deposits).toHaveLength(0); expect(calls.fanOut).toBe(1);
+  });
   it('1:1 ack → deposit skipped (0 deposits), fan-out still runs, delivered marked', async () => {
     const waiter = createDirectAckWaiter({ timeoutMs: 50 });
     const contact = { id: 'c1c1c1c1c1c1', pubB64: PUB1, name: 'Alice' };
