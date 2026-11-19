@@ -1,0 +1,85 @@
+{
+  "description": "Breeze X3DH v5 (authenticated, with OPK) -> Double Ratchet first message. Test-only keys, generated once by tools/gen-session-vectors.mjs. Private keys are JWK (P-256 ECDH / Ed25519) so the derivation can be replayed independently; see tests/session-vectors.test.js.",
+  "curve": "P-256 ECDH (the reference configuration; X25519 where available follows the same KDF schedule)",
+  "alice": {
+    "ikPub": "042e62cebee27728e18bdef690d0572c65c35f142bed15d75805bd9c19f776a2bc6452a0a4e7504a174284f192ef3822825268fa0130077b7e3034fe7455c988b9",
+    "ikPrivJwk": {
+      "key_ops": [
+        "deriveKey",
+        "deriveBits"
+      ],
+      "ext": true,
+      "kty": "EC",
+      "x": "LmLOvuJ3KOGL3vaQ0FcsZcNfFCvtFddYBb2cGfd2orw",
+      "y": "ZFKgpOdQShdChPGS7zgiglJo-gEwB3t-MDT-dFXJiLk",
+      "crv": "P-256",
+      "d": "FM1fmOIr3-ycRXRRV3kCRwIitC_s3NujxVGCNE4CMX0"
+    },
+    "ekPub": "04faaf2eefa09b34ddaf96e8533533d330524e5a37d3b842dc992781fa66b51ab7f506d482780492f6bd41a27351b8b9ecf7da4f34e0297102213698e90ae02618",
+    "ekPrivJwk": {
+      "key_ops": [
+        "deriveKey",
+        "deriveBits"
+      ],
+      "ext": true,
+      "kty": "EC",
+      "x": "-q8u76CbNN2vluhTNTPTMFJOWjfTuELcmSeB-ma1Grc",
+      "y": "9QbUgngEkva9QaJzUbi57PfaTzTgKXECITaY6QrgJhg",
+      "crv": "P-256",
+      "d": "KS1yBUdT2bta3bZdvFlaR8A6uzOB2wkxmLMmfV14oTU"
+    }
+  },
+  "bob": {
+    "ikPub": "0448991d3cd81641b5d13511237eafddfbb0da9195a54dd73896a044c389a09da5b36eb369a1656c2a13aded114c4c70875925ceb2a44f94ac545025fdf117d25b",
+    "ikPrivJwk": {
+      "key_ops": [
+        "deriveKey",
+        "deriveBits"
+      ],
+      "ext": true,
+      "kty": "EC",
+      "x": "SJkdPNgWQbXRNREjfq_d-7DakZWlTdc4lqBEw4mgnaU",
+      "y": "s26zaaFlbCoTre0RTExwh1klzrKkT5SsVFAl_fEX0ls",
+      "crv": "P-256",
+      "d": "zxF7Z8g7bY_5DwJMVR5I2GYLKHQ_JaVTcE7YCtfzU-w"
+    },
+    "spkPub": "049d0c66b81edcb09b90b2695ba38a43964f2c6f14ce347caa23685fda2894a44a4534dbbcc03592806fd6986ad26f75c703e3b808cb19b604fb1f6745302f6b6a",
+    "spkPrivJwk": {
+      "key_ops": [
+        "deriveKey",
+        "deriveBits"
+      ],
+      "ext": true,
+      "kty": "EC",
+      "x": "nQxmuB7csJuQsmlbo4pDlk8sbxTONHyqI2hf2iiUpEo",
+      "y": "RTTbvMA1koBv1phq0m91xwPjuAjLGbYE-x9nRTAva2o",
+      "crv": "P-256",
+      "d": "XDNHU7PsQhhAptSIMsc9CtJma5uyzZZQ482lIw28Wug"
+    },
+    "opkPub": "042f45666a17ce96bc4bc377e994175620eebc2d8af58eb6805b4d328490aa0f147d8c405ffbd6b32abe3885b582a2d1c36bf4246b9bfcc7030815784b8f85c3b0",
+    "opkPrivJwk": {
+      "key_ops": [
+        "deriveKey",
+        "deriveBits"
+      ],
+      "ext": true,
+      "kty": "EC",
+      "x": "L0VmahfOlrxLw3fplBdWIO68LYr1jraAW00yhJCqDxQ",
+      "y": "fYxAX_vWsyq-OIW1gqLRw2v0JGub_McDCBV4S4-Fw7A",
+      "crv": "P-256",
+      "d": "95lS-OdoT_cqneyz-PZ9BOZ7fKzpOOOvlmlsPcRtIcM"
+    },
+    "edPub": "6f9e4363f6aeaaf5bd9fefd34eb065b9fd6caf5c3f0ce623ae487407f3254905",
+    "spkSignature": "f08c2eda00a94eda1c30afae10eea044c4529731325126328135f5776f9f84931511d928193049ef8c72cc0e8ac924dfd8e510bdb8660706182331b54c1ac10c"
+  },
+  "sharedSecret": "05f1d8a4bc85ddd5be598e1c3fff4a9d5ad6cb53be26bb737feb5c7725d5d645",
+  "aliceSession": {
+    "rootKey": "01204a354dd47b18e55d5e1055a9b74bbe5b93829a4c67fd4b881e48557fdba2",
+    "sendChainKey": "5cdb6db4b114f47b0ec961f4f6bfb4bedd2a02a432721f1e4d6cb4a5ee17e94d",
+    "ratchetPub": "04f4af7ae875501283f6b7a85b7bd4d89561332401722fc5be1d0f96fb8b8308629ffcfbd51c14cdbb6486f10974ed2654a47a29079a078126ecaed26e87826e39"
+  },
+  "firstMessageKey": "c0d53e6c4b34356fea85ebc237d9d6be6714b5202070d1fed70a4351d1f4ff00",
+  "chainKeyAfterFirst": "a954f254af48370891e24b5cf0a8c96796fbdaa01ba4844c277b806912dad3e8",
+  "plaintext": "Breeze audit vector #1 — session establishment",
+  "firstWireMessage": "{\"v\":4,\"i\":[6,239,64,151,228,8,15,172,239,79,75,224],\"d\":[62,223,2,57,87,41,1,77,152,244,109,179,225,95,194,191,6,47,39,138,145,188,136,183,103,123,100,235,157,150,76,181,98,167,17,159,101,182,10,30,211,220,62,16,127,26,240,199,200,65,181,84,111,166,123,125,197,77,142,244,217,157,40,254,49,117,191,202,101,177,252,66,251,52,49,106,149,139,25,181,211,77,20,25,85,202,10,38,97,168,225,3,169,143,219,73,146,176,43,172,111,114,176,153,166,14,41,49,80,239,160,240,23,163,162,124,208,156,9,157,108,2,83,6,37,208,204,13,144,88,133,99,241,200,100,4,74,104,163,187,209,174,200,154,68,49,20,2,122,68,226,146,195,223,131,103,154,90,130,76,83,51,230,200,69,172,144,145,232,242,199,57,241,229,41,125,67,52,102,245,162,208,33,71,191,203,249,14,33,109,82,157,10,212,75,222,94,196,5,245,16,88,226,94,19,51,27,69,208,18,229,214,171,98,10,200,125,250,29,44,144,107,209,105,158,190,122,138,232,227,218,213,149,214,142,125,52,220,135,99,100,145,1,29,224,6,25,174,238,22,237,58,49,215,165,204,190,189,111,166,64,32,29,182,62,65,48,134,52,184,154,101],\"rk\":[4,244,175,122,232,117,80,18,131,246,183,168,91,123,212,216,149,97,51,36,1,114,47,197,190,29,15,150,251,139,131,8,98,159,252,251,213,28,20,205,187,100,134,241,9,116,237,38,84,164,122,41,7,154,7,129,38,236,174,210,110,135,130,110,57],\"c\":1,\"cm\":[60,227,118,39,228,102,122,66,183,175,172,113,154,116,54,27,7,86,44,53,243,222,54,76,33,179,166,96,135,148,9,200]}"
+}

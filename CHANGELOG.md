@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## External-audit readiness (SHARE_PLAN stage 7 step 2)
+
+- New docs/AUDIT.md: the auditor's map — reading order, the deployed-vs-reference authority, the module map for all of src/crypto, reproduction commands, scope notes, and the known limitations stated by us.
+- New published vector: tests/vectors/session-kat.json records a full X3DH v5 → Double Ratchet session establishment with test-only keys (JWK), the shared secret, first chain/message keys and a recorded wire message; tests/session-vectors.test.js replays it end-to-end (regenerate with tools/gen-session-vectors.mjs).
+- CRYPTO-SPEC gained §6c (call signalling E2EE + group-call signalling), a status update on the §8 wiring gaps (resolved as the modules deployed; real-device validation remains), the N1 counter-reset note, and a refreshed test-status section. tests/audit-readiness.test.js pins the map to the module directory so it cannot silently rot.
+
 ## A comparison page that can be checked (SHARE_PLAN stage 7 step 1)
 
 - New public document: docs/COMPARISON.md — Breeze vs Signal vs LINE with a verification path for every Breeze claim (the test file or source anchor that proves it), sources for every competitor claim, and a plainly-stated "where Breeze loses" section (scale, continuous PQ re-keying, no external audit yet, everyday-platform thickness, real-device verification). The internal plan table it is drawn from was updated to the shipped facts (groups 1,000, call signalling E2EE by default, PQ on by default, group calls).
