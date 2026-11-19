@@ -1,5 +1,7 @@
 {
  "opTitle": "Pemasangan kontak luring",
+ "secTurnUsage": "Porsi TURN dari lalu lintas panggilan bulan ini",
+ "toastTurnQuota": "Anggaran TURN bulanan relai ini habis — untuk sementara panggilan hanya mencoba koneksi langsung. Tambahkan TURN Anda sendiri di Pengaturan untuk memulihkan panggilan berelai.",
  "opScope": "Tukar undangan ini dua arah secara langsung. Berlaku 30 menit. Bandingkan sidik jari di kedua perangkat dan konfirmasi hanya jika cocok. Biarkan aplikasi terbuka hingga /rendezvous selesai; memuat ulang membatalkan pemasangan tertunda. Tanpa pencarian alias atau verifikasi relai.",
  "opImport": "Impor undangan rekan",
  "opMatches": "Saya sudah membandingkan kedua perangkat: sidik jari cocok",

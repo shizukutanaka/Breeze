@@ -221,6 +221,10 @@ export default {
         // the open-relay fallback. Operators verify their configuration
         // here; clients may surface it for the same reason.
         turnProvider: turnProviderMode(env),
+        // Stage 6 step 3: the operator's TURN issuance budget state —
+        // how much of this month's metered issuance is already used.
+        turnIssueCap: parseInt(env.TURN_MONTHLY_ISSUE_CAP) || 0,
+        turnIssuedThisMonth: await turnIssueCount(env),
         vapidPublicKey: env.VAPID_PUBLIC_KEY || null,
         // Stage-2 step 4: the relay's persistent Ed25519 identity (public
         // half), for the client's TOFU pin — null when the operator has not
@@ -3227,6 +3231,23 @@ function turnProviderMode(env) {
   return env.TURN_OPENRELAY_FALLBACK === 'false' ? 'none' : 'openrelay';
 }
 
+// Stage 6 step 3: the issuance budget for METERED modes (Cloudflare
+// Calls is billed per GB; the open-relay free tier is a shared
+// 20GB/month). The worker cannot see media bytes, so the enforceable
+// lever is credential ISSUANCE, counted per month in KV: one issued
+// credential set serves a day (ttl), so the cap bounds distinct
+// user-days of TURN. Operators set TURN_MONTHLY_ISSUE_CAP; unset or
+// 0 means no cap. Self-hosted modes (custom/static) are the
+// operator's own infrastructure and are never capped here.
+function turnMonthKey() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
+async function turnIssueCount(env) {
+  const n = parseInt(await kvGet(env, 'turn-issue:' + turnMonthKey()));
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+async function noteTurnIssue(env) {
+  await kvPut(env, 'turn-issue:' + turnMonthKey(), String((await turnIssueCount(env)) + 1), { expirationTtl: TTL.MONTH * 2 });
+}
+
 async function handleTurn(body, env, request) {
   const { userId } = body;
   if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
@@ -3262,6 +3283,17 @@ async function handleTurn(body, env, request) {
     { urls: 'stun:stun.l.google.com:19302' },
   ];
 
+  // Stage 6 step 3: the monthly issuance budget for metered modes.
+  // Exceeding it is a NOTIFICATION, not a silent degradation: the
+  // response is STUN-only with provider 'none' PLUS a turnQuota flag
+  // the client surfaces to the user (direct connections still work;
+  // only relay-dependent peers lose their fallback).
+  const issueCap = parseInt(env.TURN_MONTHLY_ISSUE_CAP) || 0;
+  const turnMode = turnProviderMode(env);
+  if (issueCap > 0 && (turnMode === 'cloudflare' || turnMode === 'openrelay') && (await turnIssueCount(env)) >= issueCap) {
+    return json({ iceServers, ttl: TTL.DAY, provider: 'none', turnQuota: { exceeded: true, cap: issueCap, month: turnMonthKey() } }, 200, request);
+  }
+
   // Option A: Cloudflare Calls TURN (recommended — $0.05/GB, global anycast)
   if (env.TURN_KEY_ID && env.TURN_KEY_API_TOKEN) {
     try {
@@ -3274,6 +3306,7 @@ async function handleTurn(body, env, request) {
       if (resp.ok) {
         const data = await resp.json();
         if (data.iceServers) {
+          await noteTurnIssue(env);
           return json({ iceServers: [...iceServers, ...data.iceServers], ttl, provider: 'cloudflare' }, 200, request);
         }
       }
@@ -3313,6 +3346,7 @@ async function handleTurn(body, env, request) {
     { urls: 'turn:a.relay.metered.ca:80?transport=tcp', username: 'e8dd65b92f60fae75f5aefab', credential: 'uWdWNmkhvyqTEswO' },
     { urls: 'turns:a.relay.metered.ca:443', username: 'e8dd65b92f60fae75f5aefab', credential: 'uWdWNmkhvyqTEswO' },
   );
+  await noteTurnIssue(env);
   return json({ iceServers, ttl: TTL.DAY, provider: 'openrelay' }, 200, request);
 }
 

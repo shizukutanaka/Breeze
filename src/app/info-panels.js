@@ -32,6 +32,11 @@ export function createInfoPanels(D) {
       // TURN provider honesty (Step 5): name WHO relays media when a call
       // or relay-only connection falls back to TURN — in particular the
       // third-party free Open Relay an unconfigured relay silently uses.
+      // Stage 6 step 3: this month's measured TURN share of call
+      // traffic (on-device counters; null share = nothing measured).
+      const _turnUse = _p2pSnap?.turn;
+      const _turnUseLine = !_turnUse || _turnUse.mRelayShare === null ? D.t('secTurnUsage') + ': ' + D.t('secDirectNoData')
+        : D.t('secTurnUsage') + ': ' + Math.round(_turnUse.mRelayShare * 100) + '% (' + (_turnUse.mRelayBytes / 1048576).toFixed(1) + ' MB / ' + (_turnUse.mTotalBytes / 1048576).toFixed(1) + ' MB)';
       const _turnLine = !D.turnCredential() ? '✗ ' + D.t('secNotConfigured')
         : D.turnCredential().provider === 'none' ? '✗ ' + D.t('secTurnNone')
         : '✓ ' + D.t('secActive') + ' (' + (D.turnCredential().provider === 'cloudflare' ? 'Cloudflare Calls'
@@ -93,6 +98,7 @@ export function createInfoPanels(D) {
         D.t('secLblRelayOnly') + ': ' + (D.settings().relayOnly ? '<span class="i-g">✓ ON</span> ' + D.t('secRelayEnabled') : D.t('secRelayDisabled')),
         D.t('secLblRelayPin') + ': ' + (D.relayPinGate().blocked ? '<span class="color-y">⚠ ' + D.t('secRelayPinMismatch') + '</span>' : D.relayPinFp() ? '<span class="i-g">✓</span> ' + D.relayPinFp() : '—'),
         'TURN: ' + _turnLine,
+        _turnUseLine,
         D.t('secLblDirectRate') + ': ' + _directRateLine,
         D.t('secLblConnRoutes') + ': ' + _connRouteLine,
         D.t('secLblSignalPolls') + ': ' + _signalPollLine,

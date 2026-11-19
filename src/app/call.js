@@ -317,6 +317,10 @@ export function createCallManager(D) {
   function endCall() {
     if (_callState === 'idle') return; // guard double-call
     if (_callStream) { _callStream.getTracks().forEach(t => t.stop()); _callStream = null; }
+    // Stage 6 step 3: sample the finished call's route/bytes BEFORE
+    // the pc closes (getStats on a closed pc rejects).
+    if (_callPC && _callStartTime) { try { D.noteCallSample?.(_callPC, Math.floor((Date.now() - _callStartTime) / 1000)); } catch(e) { _dbg(e); } }
+    _callStartTime = 0;
     if (_callPC) { try { _callPC.close(); } catch(e) { _dbg(e); } _callPC = null; }
     // Null srcObject before removing elements — without this, the browser keeps a
     // live MediaStream reference on the detached DOM nodes, leaving the camera/mic

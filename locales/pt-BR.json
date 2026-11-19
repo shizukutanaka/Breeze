@@ -1,5 +1,7 @@
 {
  "opTitle": "Pareamento offline de contato",
+ "secTurnUsage": "Parcela TURN do tráfego de chamadas deste mês",
+ "toastTurnQuota": "O orçamento TURN mensal deste relé acabou — por enquanto as chamadas tentam apenas conexão direta. Adicione seu próprio TURN nas Configurações para restaurar as chamadas com relé.",
  "opScope": "Troque os convites nos dois sentidos e pessoalmente. Expiram em 30 minutos. Compare a impressão digital nos dois aparelhos e confirme somente se coincidir. Mantenha o app aberto até concluir /rendezvous; recarregar cancela o pareamento pendente. Sem busca de alias nem verificação por relay.",
  "opImport": "Importar convite do contato",
  "opMatches": "Comparei os dois aparelhos: a impressão digital coincide",

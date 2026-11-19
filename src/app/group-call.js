@@ -139,7 +139,7 @@ export function createGroupCallManager(D) {
       _sig.wrap(member.pubB64, e.candidate).then(d => { if (d != null) D.signal(roomFor(member.id), 'gcall-ice', d); }).catch(err => _dbg(err, 'gcall-ice'));
     };
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'connected') { _hadPeer = true; _updateList(); }
+      if (pc.connectionState === 'connected') { _hadPeer = true; leg.connectedAt = Date.now(); _updateList(); }
       if (pc.connectionState === 'failed' || pc.connectionState === 'closed') _closeLeg(member.id);
     };
     const leg = { pc, audio, offered };
@@ -149,6 +149,8 @@ export function createGroupCallManager(D) {
   function _closeLeg(memberId) {
     const leg = _legs.get(memberId);
     if (!leg) return;
+    // Stage 6 step 3: sample before close, like the 1:1 path.
+    if (leg.connectedAt) { try { D.noteCallSample?.(leg.pc, Math.floor((Date.now() - leg.connectedAt) / 1000)); } catch(e) { _dbg(e, 'gcall-sample'); } }
     try { leg.pc.close(); } catch(e) { _dbg(e, 'gcall-close'); }
     leg.audio?.remove();
     _legs.delete(memberId);

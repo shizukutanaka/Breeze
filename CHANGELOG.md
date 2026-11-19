@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## TURN budget and call-traffic measurement (SHARE_PLAN stage 6 step 3)
+
+- Calls now measure themselves: when a 1:1 or group call (per leg) ends, the selected ICE pair is sampled — route and bytes — into on-device counters (never transmitted, per the no-telemetry rule). /security shows this month's TURN-relayed share of call traffic in MB, so "how much of our calling actually needs TURN" is a number, not a guess.
+- Metered TURN modes (Cloudflare Calls, and the shared open-relay free tier) now have an operator budget: TURN_MONTHLY_ISSUE_CAP counts credential issuances per month (one issuance serves a day, so the cap bounds user-days of TURN). Past the cap the relay answers STUN-only with a turnQuota flag — and the client announces it ("budget used up, direct connections only for now, add your own TURN in Settings") instead of letting relay-dependent calls silently fail. Self-hosted TURN (coturn HMAC / static) is the operator's own infrastructure and is never capped. The health endpoint reports the cap and this month's issuance count.
+
 ## Home-relay discovery, generalized (SHARE_PLAN stage 6 step 2)
 
 - Two users whose only relays are different custom relays can now start a conversation with no invite link and no default relay in the path. An address of the form @alice@relay.example.com resolves the alias on the owner's relay; alias records now publish the owner's home relay list (sanitized to the home-list contract), and resolving a plain @alias adopts the record's list as the contact's home.

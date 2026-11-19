@@ -1246,6 +1246,7 @@ window.__breezeDeviceLink = { createDeviceLink };
 import { CAPS_STICKER as _CAPS_STICKER_STR, BUILTIN_PACK, sanitizeSticker, sanitizePack, parsePackFile, packToFile, buildStickerPayload, parseStickerPayload, groupTextForSticker, parseGroupStickerText, stickerLabel } from './src/app/stickers.js';
 window.__breezeStickers = { BUILTIN_PACK, sanitizeSticker, sanitizePack, parsePackFile, packToFile, buildStickerPayload, parseStickerPayload, groupTextForSticker, parseGroupStickerText, stickerLabel };
 import { parseContactAddress } from './src/app/address.js'; window.__breezeAddress = { parseContactAddress };
+import { createTurnFetcher } from './src/app/turn.js'; window.__breezeTurn = { createTurnFetcher };
 import { createInfoPanels, createDataPanels } from './src/app/info-panels.js';
 window.__breezeInfoPanels = { createInfoPanels, createDataPanels };
 import { CAPS_LOC as _CAPS_LOC_STR, createLocationShare } from './src/app/location.js';
@@ -1263,8 +1264,8 @@ import { createShareTools } from './src/app/share.js';
 window.__breezeShare = { createShareTools };
 import { createDirectAckWaiter } from './src/app/direct-ack.js';
 window.__breezeDirectAck = { createDirectAckWaiter };
-import { createP2pStats, classifyCandidateType } from './src/app/p2p-stats.js';
-window.__breezeP2pStats = { createP2pStats, classifyCandidateType };
+import { createP2pStats, classifyCandidateType, extractPairSample } from './src/app/p2p-stats.js';
+window.__breezeP2pStats = { createP2pStats, classifyCandidateType, extractPairSample };
 import { createRendezvous, attachManualPeer } from './src/app/rendezvous.js';
 window.__breezeRendezvous = { createRendezvous, attachManualPeer };
 import { createOfflinePairing } from './src/app/offline-pairing.js';
@@ -2106,6 +2107,7 @@ const _I = {
     secTurnCustom: "relay operator's own TURN",
     secTurnStatic: 'static TURN credentials',
     secTurnOpenRelay: 'Open Relay — third-party free tier',
+    secTurnUsage: 'TURN share of call traffic this month', toastTurnQuota: "This relay's monthly TURN budget is used up — calls try direct connections only for now. Add your own TURN in Settings to restore relayed calls.",
     secLblRTCCert: 'Fresh RTC Certificate',
     secDefault: 'Default',
     secLblPassword: 'Password',
@@ -10920,6 +10922,7 @@ async function initMessenger(dbName) {
   // everything else boots) — the pq-facade degradation doctrine.
   const _callMgr = globalThis.__breezeCall?.createCallManager({
     encryptFor, decryptFrom, fetchCaps: _fetchMemberCapsBatch, _signal, _signalAwait, relaySend, _intervals, _ac, _settings,
+    noteCallSample: (pc, seconds) => _p2pStats?.sampleCall(pc, seconds),
     myId: () => myId, myPubB64: () => myPubB64, myName: () => myName,
   }) || { startCall() {}, handleCallOffer() {}, endCall() {}, pollCallSignals() {},
     getRTCCertificate: async () => null, hasRTCCertificate: () => false,
@@ -10930,6 +10933,7 @@ async function initMessenger(dbName) {
   const _gcall = globalThis.__breezeGCall?.createGroupCallManager({
     encryptFor, decryptFrom, fetchCaps: _fetchMemberCapsBatch, signal: _signal, signalAwait: _signalAwait,
     distributeSenderKey, encryptGroupMsg, relaySend, iceConfig: () => getCallICEConfig(), intervals: _intervals,
+    noteCallSample: (pc, seconds) => _p2pStats?.sampleCall(pc, seconds),
     myId: () => myId, myPubB64: () => myPubB64, myName: () => myName,
     isBusy: () => _callMgr.state() !== 'idle', isSecondary: () => _isSecondaryDevice,
   }) || { start() {}, route() {}, state: () => 'idle' };
@@ -11032,6 +11036,13 @@ async function initMessenger(dbName) {
     makeDialog: () => _makeDialog(), showDialog: (d) => _showDialog(d), wireDialogDismiss: (d, c) => _wireDialogDismiss(d, c),
     domGet: (id) => _DOM.get(id), dbg: _dbg, downscaleAvatar: (f) => _downscaleAvatar(f),
     myId: () => myId, myName: () => myName, myPubB64: () => myPubB64, setMyName: (v) => { myName = v; },
+  });
+  const _turnFetch = globalThis.__breezeTurn?.createTurnFetcher({
+    apiReady: () => !!API, postTurn: (body) => postAPIRaw('/turn', body),
+    myId: () => myId, setCredential: (c) => { _turnCredential = c; },
+    noticeDay: () => { try { return localStorage.getItem('brz-turn-quota-day'); } catch { return null; } },
+    setNoticeDay: (v) => { try { localStorage.setItem('brz-turn-quota-day', v); } catch {} },
+    auditLog, showToast, t, dbg: _dbg,
   });
   const _locUI = globalThis.__breezeLocationUI?.createLocationShare({
     dbGet, dbPut, encryptFor, relaySend, showToast, t, esc, safeSetHTML, appendMsg,
@@ -13210,7 +13221,7 @@ async function initMessenger(dbName) {
   // inside initTurn(); the billing system is gone but the TURN fetch must remain.
   async function initTurn() {
     if (!API || !_userId) return;
-    fetchTurnCredentials();
+    _turnFetch?.fetchCredentials();
   }
 
   // WEB PUSH NOTIFICATIONS — subscribe for background notifications
@@ -13271,17 +13282,6 @@ async function initMessenger(dbName) {
 
   // TURN CREDENTIALS — available to all users
   // TURN CREDENTIAL — available to all users for NAT traversal
-
-  async function fetchTurnCredentials() {
-    if (!API) return;
-    try {
-      const resp = await postAPIRaw('/turn', { userId: myId });
-      if (resp.ok) {
-        _turnCredential = await resp.json();
-        _dbg(null, 'TURN credentials obtained');
-      }
-    } catch(e) { _dbg(e, 'turn'); }
-  }
 
   // v3: PEER RELAY — All users relay for each other
   //

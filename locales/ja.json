@@ -641,6 +641,8 @@
  "secTurnCustom": "リレー運営者の自前TURN",
  "secTurnStatic": "静的TURN資格情報",
  "secTurnOpenRelay": "Open Relay（第三者の無料枠）",
+ "secTurnUsage": "今月の通話のTURN中継割合",
+ "toastTurnQuota": "このリレーの今月のTURN予算を使い切りました。当面、通話は直接接続のみで試みます。設定で自分のTURNを追加すると中継通話が戻ります。",
  "secLblRTCCert": "RTC証明書（セッション毎）",
  "secDefault": "デフォルト",
  "secLblPassword": "パスワード",
