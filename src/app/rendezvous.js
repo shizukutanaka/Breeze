@@ -89,32 +89,45 @@ export function createEnvelopeCodec({ sign, verify, MS, now = Date.now, random =
 
 export function gatherDescription(pc, { MS, relayOnly, timeout = MS.MIN }) {
   return new Promise((resolve, reject) => {
-    let settled = false;
-    const finish = error => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      pc.removeEventListener('icegatheringstatechange', check);
-      pc.removeEventListener('connectionstatechange', closed);
-      if (error) { reject(new Error(error)); return; }
+    const quietPeriod = 3 * MS.SEC;
+    let settled = false, quietTimer;
+    const filtered = () => {
       const desc = pc.localDescription;
       let candidates = 0;
       const sdp = desc.sdp.split(/\r?\n/).filter(line => {
         if (!line.startsWith('a=candidate:')) return true;
         const parts = line.split(/\s+/), type = parts[7], address = parts[4];
-        if ((type === 'host' && address && !address.includes('.local')) || (relayOnly && (type === 'srflx' || type === 'prflx'))) return false;
+        if ((type === 'host' && (!address?.includes('.local') || relayOnly)) || (relayOnly && type !== 'relay')) return false;
         candidates++;
         return true;
       }).join('\r\n');
-      if (!candidates) { reject(new Error('rvCandidates')); return; }
-      resolve({ type: desc.type, sdp });
+      return { description: { type: desc.type, sdp }, candidates };
     };
+    const finish = error => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      clearTimeout(quietTimer);
+      pc.removeEventListener('icegatheringstatechange', check);
+      pc.removeEventListener('connectionstatechange', closed);
+      pc.removeEventListener('icecandidate', candidate);
+      if (error) { reject(new Error(error)); return; }
+      const { description, candidates } = filtered();
+      if (!candidates) { reject(new Error('rvCandidates')); return; }
+      resolve(description);
+    };
+    const quiet = () => {
+      clearTimeout(quietTimer);
+      if (!settled && filtered().candidates) quietTimer = setTimeout(() => finish(), quietPeriod);
+    };
+    const candidate = event => { if (event.candidate) quiet(); };
     const check = () => { if (pc.iceGatheringState === 'complete') finish(); };
     const closed = () => { if (pc.connectionState === 'closed') finish('rvRedo'); };
     const timer = setTimeout(() => finish('rvTimeout'), timeout);
     pc.addEventListener('icegatheringstatechange', check);
     pc.addEventListener('connectionstatechange', closed);
-    if (pc.connectionState === 'closed') closed(); else check();
+    pc.addEventListener('icecandidate', candidate);
+    if (pc.connectionState === 'closed') closed(); else { check(); if (!settled) quiet(); }
   });
 }
 

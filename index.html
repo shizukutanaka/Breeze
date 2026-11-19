@@ -11647,6 +11647,7 @@ async function initMessenger(dbName) {
 
     // v3.6: Unified ICE config (relay-only mode, TURN, candidate pool)
     const iceConfig = getCallICEConfig();
+    if (manual) iceConfig.iceCandidatePoolSize = 0;
     // v3.6: Fresh ECDSA cert per session (anti-fingerprinting)
     const cert = await getRTCCertificate();
     if (_ac.signal.aborted) return;

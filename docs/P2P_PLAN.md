@@ -154,7 +154,7 @@ typing の入力 listener は従来からグループと共通だが、グルー
 
 配備モジュール `src/app/rendezvous.js` の `breeze-sdp1:` コードは base64url JSON（`v:1, kind, from, to, nonce, exp, desc, sigPub, sig`、answer のみ `offerNonce`）。`from/to` は省略しない完全な identity、nonce は乱数16バイト、期限は10分。`sig` 以外の全フィールドを再帰的キー順の canonical JSON で Ed25519 署名し、固定鍵一致・宛先・手順・期限・セッション中の nonce 再使用・answer の offerNonce 一致・64KiB入力上限を検証する。署名なしの互換受信は手動経路に持ち込まない。
 
-手動モードは既存 PC/DC・証明書・暗号化封筒・保存後 direct ACK を共有するが、`/api/signal`・sigPoll・trickle ICE は使わず API 設定にも依存しない。ICE収集完了（1分上限）後の SDP に従来の候補プライバシー設定を適用し、候補ゼロなら拒否する（relayOnly を迂回しない）。自動復旧でリレー交渉を始めず、再交換を案内する。通常のリレー交渉は維持。
+手動モードは既存 PC/DC・証明書・暗号化封筒・保存後 direct ACK を共有するが、`/api/signal`・sigPoll・trickle ICE は使わず API 設定にも依存しない。ICE収集完了、または公開可能な候補が1つ以上あり新しい候補が3秒間ない時点の SDP を出力する（1分上限は維持）。候補プライバシー設定を適用し、候補ゼロなら拒否する（relayOnly は relay 候補のみ）。到達不能STUNの再現試験では pool=4 の answer が候補なしで1分を超え、pool=0 のみの変更で host 候補・収集完了が直ちに得られたため、手動モードだけ候補poolを無効にする。offer/answer双方に同じ収集規則を使い、自動復旧でリレー交渉を始めず、再交換を案内する。通常のリレー交渉・候補poolは維持。
 
 リレー遮断時も mailbox/presence・補助処理の試行自体は許容し、隔離モードは追加しない。**リレー到達不能中は sibling-device fan-out と abuse commitment 登録は届かない**。これらは既存の fire-and-forget で DC 送信前に await されず、失敗や fetchT のタイムアウト待ちが DC 配送を止めない。通常のメッセージ暗号・署名・ACK は変更しない。2ブラウザのテストは通常接続で pin/session を作成後、旧PCを終了し、全 `/api/*` を abort またはタイムアウトまで応答なしにしてコピペ交換・双方向 direct ACK・手動 signal 要求ゼロ・成功したリレー応答ゼロを検証する。**実機2台の同一LAN確認は残件**であり、Step 4 全体の Done when 完了とはしない。
 

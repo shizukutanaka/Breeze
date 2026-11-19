@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## Manual rendezvous: blocked-STUN gathering recovery
+
+- Manual peers disable ICE candidate pooling: a blocked-STUN browser reproduction left the pooled answer gathering without candidates beyond the one-minute cap; disabling only the pool restored immediate host candidates. Relay-mode pooling is unchanged.
+- Both offer and answer export on gathering complete, or after a privacy-usable candidate and three seconds without a new candidate. The one-minute hard cap and candidate filtering remain; relayOnly requires relay candidates. Diagnostics retain candidate types/timestamps and gathering transitions; offline E2E also covers unreachable STUN.
+
 ## P2P_PLAN step 4, third slice: new-contact offline pairing
 
 - Separate `/offlinepair` identity-invite screen (also reachable by typing the command in contact search), compressed signed `breeze-inv1z:` codes and QR. Mutual exchange, a fingerprint binding both encryption/signing keys and nonces, and explicit comparison confirmation precede contact creation/pinning. Existing keys and sessions are retained; mismatches fail closed.
