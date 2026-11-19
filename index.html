@@ -11243,14 +11243,16 @@ async function initMessenger(dbName) {
     if (msg.groupId) {
       const group = await dbGet('contacts', msg.groupId);
       if (!group) return;
-      const member = (group.members || []).find(m => m.id === msg.from);
+      const senderId = typeof msg.from === 'string' ? msg.from.slice(0, 12) : '';
+      const member = (group.members || []).find(m => m.id === senderId);
+      if (!member || (msg.from !== member.id && msg.from !== member.pubB64) ||
+          (msg.fromPub && msg.fromPub !== member.pubB64)) return;
 
       // v3.6: Encrypted signal for group (edit/delete/reaction)
       if (msg.isSignal && msg.payload) {
         try {
           // Reject signals from non-members — same injection vector as group messages:
           // a contact with a 1:1 session key can forge a signal that decryptFrom accepts.
-          if (!member) return;
           const senderPub = member.pubB64;
           const signalJson = await decryptFrom(msg.payload, senderPub);
           if (!signalJson) return;
@@ -11300,25 +11302,24 @@ async function initMessenger(dbName) {
         text = await decryptGroupMsg(msg.groupId, (msg.from || '').slice(0, 12), msg.payload);
       }
       if (!text) {
-        // Fallback: legacy per-member encryption — only for known group members.
-        // A non-member who is a contact could otherwise inject messages: their shared
-        // ECDH session key lets them produce a ciphertext that decryptFrom accepts,
-        // and msg.fromPub (attacker-supplied) would be used without the member guard.
-        if (!member) return;
+        // Fallback: legacy per-member encryption, using the local member key.
         text = await decryptFrom(msg.payload, member.pubB64);
       }
       if (!text) return;
       // Cap group message text — relay enforces 256 KB but the P2P group path has no server check.
       if (text.length > 65536) return;
-      const msgId = msg.from + ':' + msg.ts;
+      const msgId = member.id + ':' + msg.ts;
       if (_replayCache.has(msgId)) return; // Fast in-memory dedup
       _replayCache.add(msgId); // Speculative mark before first await — blocks concurrent-path duplicates
       if (await dbGet('messages', msgId)) { if (ackOut) ackOut.stored = true; return; } // Already persisted
-      const meta = { msgId, senderName: msg.fromName, replyTo: msg.replyTo, disappearAt: msg.disappearAt };
+      const senderContact = await dbGet('contacts', member.id);
+      const senderName = (senderContact?.pubB64 === member.pubB64 && typeof senderContact.name === 'string')
+        ? senderContact.name : (typeof member.name === 'string' ? member.name : member.id);
+      const meta = { msgId, senderName, replyTo: msg.replyTo, disappearAt: msg.disappearAt };
       await dbPut('messages', { msgId, contactId: msg.groupId, text, mine: false, ts: msg.ts, ...meta });
       if (ackOut) ackOut.stored = true;
       group.lastMsg = text.slice(0, 30);
-      group.lastMsgSender = msg.fromName;
+      group.lastMsgSender = senderName;
       group.lastMsgAt = msg.ts;
       if (activeContact?.id !== msg.groupId) {
         group.unread = (group.unread || 0) + 1;
@@ -11328,7 +11329,7 @@ async function initMessenger(dbName) {
         // mention (or a VIP group) gets through, and never in strict mode.
         if (_shouldAlert(group, mentionsMe ? '@' + myName : text)) playNotif();
         if (mentionsMe && _shouldAlert(group, '@' + myName) && Notification?.permission === 'granted') {
-          new Notification(group.name, { body: `@${msg.fromName}: ${text.slice(0, 80)}`, tag: 'breeze-' + msg.groupId });
+          new Notification(group.name, { body: `@${senderName}: ${text.slice(0, 80)}`, tag: 'breeze-' + msg.groupId });
         }
       }
       await dbPut('contacts', group);
@@ -11898,8 +11899,9 @@ async function initMessenger(dbName) {
           }
           // v3.6: P2P direct group message (dual-path: P2P instant + sealed sender reliable)
           if (msg.type === 'group_msg' && msg.groupId) {
+            if (msg.sender !== contact.pubB64) { _dbg(null, 'group sender does not match connected peer'); return; }
             // v3.6: Dedup — dual-path (P2P + sealed) may deliver same message twice
-            const gmsgId = msg.msgId || (msg.sender + ':' + msg.ts);
+            const gmsgId = contact.id + ':' + msg.ts;
             if (_replayCache.has(gmsgId)) return;
             if (await dbGet('messages', gmsgId)) {
               _replayCache.add(gmsgId);
@@ -11911,11 +11913,10 @@ async function initMessenger(dbName) {
             const group = (await dbGetAll('contacts')).find(c => c.id === msg.groupId);
             if (group) {
               const ackOut = {};
-              await handleIncoming({ from: msg.sender || contact.pubB64, fromPub: msg.sender || contact.pubB64,
-                fromName: msg.name || contact.name, payload: msg.payload, ts: msg.ts,
+              await handleIncoming({ from: contact.id, fromPub: contact.pubB64,
+                fromName: contact.name, payload: msg.payload, ts: msg.ts,
                 groupId: msg.groupId, groupName: msg.groupName, isGroupSK: msg.isGroupSK,
                 replyTo: msg.replyTo, disappearAt: msg.disappearAt }, ackOut);
-              _replayCache.add(gmsgId);
               // Step 2: ack only on confirmed persistence (see 'msg').
               if (ackOut.stored) { try { ch.send(JSON.stringify({ type: 'ack', i: msg.ts + '', st: 0 })); } catch(e) { _dbg(e); } }
             }

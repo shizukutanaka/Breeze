@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## Group sender binding (no wire change)
+
+- Direct group frames must name the peer whose DataChannel delivered them, before dedup or ACK. Sender identifiers and dedup keys come from that peer, not frame metadata.
+- Check local group membership before Sender-Key or legacy decryption; reject inconsistent sender/public-key claims. Stored, preview, cross-tab and notification attribution uses the local contact/member name.
+- This is not per-message author authentication: a group insider holding another member's distributed Sender Key can still forge that author over the relay with consistent sender fields. Ed25519 author signatures remain a separate protocol change.
+
 ## Manual rendezvous: blocked-STUN gathering recovery
 
 - Manual peers disable ICE candidate pooling: a blocked-STUN browser reproduction left the pooled answer gathering without candidates beyond the one-minute cap; disabling only the pool restored immediate host candidates. Relay-mode pooling is unchanged.

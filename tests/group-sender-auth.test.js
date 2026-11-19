@@ -1,0 +1,202 @@
+import { describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+
+const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+function slice(start, end) {
+  const s = html.indexOf(start), e = html.indexOf(end, s);
+  if (s < 0 || e < 0) throw new Error(`Missing inline markers: ${start} / ${end}`);
+  return html.slice(s, e);
+}
+function compile(source, deps) {
+  return new Function(...Object.keys(deps), source)(...Object.values(deps));
+}
+function person(byte, name) {
+  const pubB64 = Buffer.alloc(32, byte).toString('base64');
+  return { id: pubB64.slice(0, 12), pubB64, name };
+}
+const A = person(1, 'Alice (local)'), B = person(2, 'Bob'), C = person(3, 'Charlie (local)');
+const incomingSource = slice('async function handleIncoming(msg, ackOut) {', '// ===== P2P connection per contact =====');
+const dcSource = slice('ch.onmessage = async (e) => {', '\n    }\n\n    // Connection open → deliver peer relay queue');
+const cryptoSource = slice('async function hkdf(ikm, salt, info, length) {', '// I17 message franking.');
+const groupSource = slice('async function encryptGroupMsg(groupId, text) {', '// Distribute sender key to a specific group member');
+
+// Bob receives; Alice and Charlie each have Sender Keys distributed to all members.
+// Run the deployed encrypt/decrypt + receive functions, not the reference group.js
+// (which already contains author signatures that are NOT deployed).
+function harness({ version = 5, members = [A, B, C], localC = true } = {}) {
+  const group = { id: 'group-abc', name: 'Local group', isGroup: true,
+    members: members.map(m => ({ ...m, name: m === C ? 'Charlie (roster)' : m.name })) };
+  const contacts = new Map([group, A, B, ...(localC ? [C] : [])].map(c => [c.id, structuredClone(c)]));
+  const messages = new Map(), identity = new Map(), sendKeys = new Map(), cReceivedKeys = new Map();
+  for (const member of [A, C]) {
+    const bytes = Array.from(crypto.getRandomValues(new Uint8Array(32)));
+    const key = version === 5 ? { v: 5, chainKey: bytes, counter: 0, epoch: 0, skipped: {} }
+      : { raw: bytes, counter: 0, epoch: 0 };
+    sendKeys.set(member.id, key);
+    identity.set(`gsk-peer:${group.id}:${member.id}`, structuredClone(key));
+    cReceivedKeys.set(member.id, structuredClone(key));
+  }
+  const _dbg = vi.fn(), _replayCache = new Set(), ch = { send: vi.fn() };
+  const dbGet = vi.fn(async (store, key) => structuredClone(
+    (store === 'contacts' ? contacts : store === 'messages' ? messages : identity).get(key) ?? null));
+  const dbPut = async (store, value, key) => {
+    (store === 'contacts' ? contacts : store === 'messages' ? messages : identity)
+      .set(key ?? (store === 'contacts' ? value.id : value.msgId), structuredClone(value));
+  };
+  const CONFIG = { GROUP_RATCHET_V5: true, HKDF_HASH: 'SHA-256', IV_BYTES: 12,
+    MSG_PAD_BOUNDARY: 256, GROUP_MAX_SKIP: 100 };
+  const MS = { SEC: 1000, MIN: 60000, WEEK: 604800000 };
+  const cryptoDeps = compile(`${cryptoSource} return { hkdf, _keyCommit, _cmOk };`, {
+    CONFIG, _dbg, arr: a => Array.from(a), u8: a => new Uint8Array(a),
+    timingSafeEqual: async (a, b) => a === b,
+  });
+  const makeCrypto = getGroupSenderKey => compile(`${groupSource} return { encryptGroupMsg, decryptGroupMsg };`, {
+    ...cryptoDeps, CONFIG, MS, _dbg, dbGet, dbPut,
+    arr: a => Array.from(a), u8: a => new Uint8Array(a),
+    getGroupSenderKey,
+  });
+  const crypt = makeCrypto(async id => sendKeys.get(id));
+  const charlie = makeCrypto(async id => cReceivedKeys.get(id));
+  const decryptGroupMsg = vi.fn(crypt.decryptGroupMsg);
+  const decryptFrom = vi.fn(async (payload, pub) => payload === `legacy:${pub}` ? 'legacy hello' : null);
+  const notifications = Object.assign(vi.fn(), { permission: 'granted' });
+  const broadcastToTabs = vi.fn();
+  const deps = { dbGet, dbPut, dbGetAll: async () => [...contacts.values()], _replayCache,
+    decryptGroupMsg, decryptFrom, _dbg, MS, activeContact: null, myName: B.name, myAlias: 'bob',
+    _shouldAlert: () => true, playNotif: vi.fn(), Notification: notifications,
+    appendMsg: vi.fn(), showSmartReplies: vi.fn(), _renderContactsThrottled: vi.fn(),
+    broadcastToTabs, t: k => k, _myOtherDevices: async () => [], _focusActive: () => false,
+    _attribDevCache: new Map(), safeMsgId: s => s,
+  };
+  const handleIncoming = compile(`${incomingSource} return handleIncoming;`, deps);
+  function dc(peer = C, receive = handleIncoming) {
+    return compile(`${dcSource} return ch.onmessage;`, { ...deps, contact: peer, ch,
+      handleIncoming: receive, handleHeartbeat: () => false, _offlinePairing: null });
+  }
+  function relay(sender, payload, extra = {}) {
+    return { from: sender.id, fromPub: sender.pubB64, fromName: 'Alice (forged)',
+      payload, groupId: group.id, groupName: 'Forged group', isGroupSK: true, ts: 123, ...extra };
+  }
+  function frame(sender, payload, extra = {}) {
+    return { type: 'group_msg', sender: sender.pubB64, name: 'Alice (forged)', payload,
+      groupId: group.id, groupName: 'Forged group', isGroupSK: true, ts: 123,
+      msgId: 'untrusted:id', ...extra };
+  }
+  return { group, contacts, messages, identity, dbGet, _replayCache, _dbg, ch,
+    decryptGroupMsg, decryptFrom, notifications, broadcastToTabs, handleIncoming, dc, relay, frame,
+    encrypt: (sender, text = 'hello @Bob') => crypt.encryptGroupMsg(sender.id, text),
+    forgeAsC: (claimed, text = 'hello @Bob') => charlie.encryptGroupMsg(claimed.id, text) };
+}
+const deliverDC = (receive, frame) => receive({ data: JSON.stringify(frame) });
+
+describe.each([3, 5])('deployed group sender binding (Sender Key v%i)', version => {
+  it('drops C claiming A over C’s DC before dedup, decrypt or ACK; then accepts real A', async () => {
+    const h = harness({ version });
+    const payload = await h.forgeAsC(A);
+    await deliverDC(h.dc(C), h.frame(A, payload, { msgId: `${A.id}:123` }));
+    expect(h.messages.size).toBe(0);
+    expect(h._replayCache.size).toBe(0);
+    expect(h.decryptGroupMsg).not.toHaveBeenCalled();
+    expect(h.dbGet).not.toHaveBeenCalled();
+    expect(h.ch.send).not.toHaveBeenCalled();
+    await deliverDC(h.dc(A), h.frame(A, await h.encrypt(A)));
+    expect(h.messages.get(`${A.id}:123`)).toMatchObject({ text: 'hello @Bob', senderName: A.name });
+    expect(h.ch.send).toHaveBeenCalledOnce();
+  });
+
+  it.each([A, C])('accepts legitimate $name DC delivery with local attribution and canonical id', async sender => {
+    const h = harness({ version });
+    await deliverDC(h.dc(sender), h.frame(sender, await h.encrypt(sender)));
+    expect(h.messages.get(`${sender.id}:123`)).toMatchObject({ senderName: sender.name, contactId: h.group.id });
+    expect(h.messages.has('untrusted:id')).toBe(false);
+    expect(h.contacts.get(h.group.id).lastMsgSender).toBe(sender.name);
+    expect(h.notifications).toHaveBeenCalledWith(h.group.name, expect.objectContaining({ body: `@${sender.name}: hello @Bob` }));
+    expect(h.broadcastToTabs).toHaveBeenCalledWith('new-message', expect.objectContaining({ senderName: sender.name }));
+    expect(h.ch.send).toHaveBeenCalledWith(JSON.stringify({ type: 'ack', i: '123', st: 0 }));
+  });
+
+  it.each([A, C])('accepts legitimate $name relay delivery but ignores the supplied name', async sender => {
+    const h = harness({ version });
+    await h.handleIncoming(h.relay(sender, await h.encrypt(sender)));
+    expect(h.messages.get(`${sender.id}:123`)).toMatchObject({ senderName: sender.name, text: 'hello @Bob' });
+  });
+
+  it('drops inconsistent relay sender/pub claims, even with a valid shared A ciphertext', async () => {
+    const h = harness({ version });
+    await h.handleIncoming(h.relay(C, await h.forgeAsC(A), { from: A.id }));
+    expect(h.decryptGroupMsg).not.toHaveBeenCalled();
+    expect(h.decryptFrom).not.toHaveBeenCalled();
+    expect(h.messages.size).toBe(0);
+  });
+
+  it.each(['dc', 'relay'])('rejects a non-member with retained Sender-Key material on %s before any decryption', async route => {
+    const h = harness({ version, members: [A, B] });
+    const payload = await h.encrypt(C), ack = {};
+    if (route === 'dc') await deliverDC(h.dc(C), h.frame(C, payload));
+    else await h.handleIncoming(h.relay(C, payload), ack);
+    expect(h.decryptGroupMsg).not.toHaveBeenCalled();
+    expect(h.decryptFrom).not.toHaveBeenCalled();
+    expect(h.messages.size).toBe(0);
+    expect(h.ch.send).not.toHaveBeenCalled();
+    expect(ack.stored).toBeUndefined();
+  });
+
+  it('documents the remaining relay forgery: C has A’s distributed symmetric key and claims both A fields', async () => {
+    const h = harness({ version });
+    // All members, including C, possess A's distributed key/chain. No Part A
+    // check can distinguish this freshly encrypted ciphertext from A's own.
+    await h.handleIncoming(h.relay(A, await h.forgeAsC(A, 'C authored this')));
+    expect(h.messages.get(`${A.id}:123`)).toMatchObject({ text: 'C authored this', senderName: A.name });
+  });
+});
+
+describe('group receive compatibility and rejection controls', () => {
+  it.each([undefined, null, '', C.id])('drops missing/non-full DC sender %s', async sender => {
+    const h = harness();
+    await deliverDC(h.dc(C), h.frame(C, await h.encrypt(C), { sender }));
+    expect(h.decryptGroupMsg).not.toHaveBeenCalled();
+    expect(h.messages.size).toBe(0);
+    expect(h.ch.send).not.toHaveBeenCalled();
+  });
+
+  it('uses the local member record when there is no separate contact', async () => {
+    const h = harness({ localC: false });
+    await h.handleIncoming(h.relay(C, await h.encrypt(C)));
+    expect(h.messages.get(`${C.id}:123`).senderName).toBe('Charlie (roster)');
+  });
+
+  it.each([{ members: [] }, { members: [B] }])('rejects empty/non-sender membership before either decrypt path', async ({ members }) => {
+    const h = harness({ members });
+    await h.handleIncoming(h.relay(C, await h.encrypt(C)));
+    expect(h.decryptGroupMsg).not.toHaveBeenCalled();
+    expect(h.decryptFrom).not.toHaveBeenCalled();
+    expect(h.messages.size).toBe(0);
+  });
+
+  it('drops unknown groups and corrupted/empty ciphertext without persistence or ACK', async () => {
+    const h = harness();
+    for (const payload of ['', '{bad json', JSON.stringify({ g: true, c: 0, i: [], d: [] })]) {
+      await deliverDC(h.dc(C), h.frame(C, payload));
+    }
+    await deliverDC(h.dc(C), h.frame(C, await h.encrypt(C), { groupId: 'unknown' }));
+    expect(h.messages.size).toBe(0);
+    expect(h._replayCache.size).toBe(0);
+    expect(h.ch.send).not.toHaveBeenCalled();
+  });
+
+  it.each(['dc', 'relay'])('preserves legacy member encryption with local attribution on %s', async route => {
+    const h = harness(), payload = `legacy:${C.pubB64}`;
+    if (route === 'dc') await deliverDC(h.dc(C), h.frame(C, payload, { isGroupSK: false }));
+    else await h.handleIncoming(h.relay(C, payload, { isGroupSK: false, fromPub: undefined }));
+    expect(h.messages.get(`${C.id}:123`)).toMatchObject({ text: 'legacy hello', senderName: C.name });
+    expect(h.decryptFrom).toHaveBeenCalledWith(payload, C.pubB64);
+  });
+
+  it('does not treat explicitly forwarded peer-relay fields as authenticated group authorship', async () => {
+    const h = harness(), receive = vi.fn();
+    await deliverDC(h.dc(C, receive), { type: 'peer_relay_deliver', from: A.id, sender: A.pubB64,
+      name: A.name, groupId: h.group.id, isGroupSK: true, payload: 'opaque envelope', ts: 123 });
+    expect(receive).toHaveBeenCalledWith({ from: A.id, fromPub: '', fromName: '', payload: 'opaque envelope', ts: 123 });
+    expect(h.messages.size).toBe(0);
+  });
+});
