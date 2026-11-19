@@ -79,9 +79,10 @@ describe('stage 5 step 5 wiring + server-blindness audit', () => {
     expect(CAPS_STICKER).toBe('sticker-v1');
   });
 
-  it('the relay never sees sticker fields', () => {
-    expect(worker).not.toContain('isSticker');
+  it('the relay never sees sticker content (the flag alone is ferried, like isVoice)', () => {
     expect(worker).not.toContain('sticker-v1');
+    expect(worker).not.toContain('sanitizeSticker');
+    expect(worker).toContain('if (body.isSticker === true) msg.isSticker = true;');
   });
 
   it('1:1 stickers ride the voice-style envelope flag; groups ride {stk} text', () => {

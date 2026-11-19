@@ -1398,6 +1398,16 @@ async function handleMsgSend(body, ip, env, request) {
   // "No reply needed" marker: opaque to the relay, consumed by the recipient's UI. Passed
   // through on the /msg fallback so the flag survives when sealed sending is unavailable.
   if (body.nrn === true) msg.nrn = true;
+  // Stage 5 flags, same fallback reasoning as nrn: without these the
+  // recipient renders the control payload as raw text.
+  if (body.isSticker === true) msg.isSticker = true;
+  if (body.isProfile === true) msg.isProfile = true;
+  if (body.isLocation === true) msg.isLocation = true;
+  // SHARE_PLAN stage 6 step 2: the sender's asserted home relays, so
+  // the recipient can deposit replies where the sender actually
+  // polls. Sanitized to the home-list contract; opaque beyond that.
+  const fromRelays = sanitizeHomeList(body.fromRelays);
+  if (fromRelays) msg.fromRelays = fromRelays;
   // Server-assigned unique message id — groundwork for an exclusive poll cursor.
   // Two messages stored in the same millisecond share a ts, and the ts-only cursor
   // (`m.ts > lastTs`) drops the second one if a poll lands between them. Current
@@ -2093,7 +2103,14 @@ async function handleAliasSet(body, env, request) {
   // also refreshes the TTL. Between registrations, verified ordinary
   // account activity renews the TTL via renewAliasForActivity (the reverse
   // record written just below is what authorizes that).
-  const aliasSaved = await kvPut(env, `alias:${clean}`, JSON.stringify({ pub, name: sanitizeString(name, 64), setAt: Date.now() }), { expirationTtl: TTL.QUARTER });
+  // SHARE_PLAN stage 6 step 2: a registration may publish the owner's
+  // home relays (sanitized to the home-list contract), so resolving
+  // the alias on ANY relay that holds the record — including the
+  // owner's own, reached via an @alias@relay address — teaches the
+  // resolver where the owner actually lives. The record is returned
+  // whole by handleAliasGet, so the field flows with no get change.
+  const aliasRelays = sanitizeHomeList(body.relays);
+  const aliasSaved = await kvPut(env, `alias:${clean}`, JSON.stringify({ pub, name: sanitizeString(name, 64), setAt: Date.now(), ...(aliasRelays ? { relays: aliasRelays } : {}) }), { expirationTtl: TTL.QUARTER });
   if (!aliasSaved) return json({ error: 'Failed to store alias', code: 'STORE_FAILED' }, 500, request);
 
   // Lost-write verify: the taken-check above is check-then-act — two concurrent

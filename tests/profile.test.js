@@ -71,10 +71,11 @@ describe('stage 5 step 4 wiring + server-blindness audit', () => {
     expect(CAPS_PROFILE).toBe('profile-v1');
   });
 
-  it('the relay never sees profile fields: the worker has no profile handling at all', () => {
+  it('the relay never sees profile fields: only the opaque flag is ferried', () => {
     expect(worker).not.toContain('avatarImg');
-    expect(worker).not.toContain('isProfile');
     expect(worker).not.toContain('profile-v1');
+    expect(worker).not.toContain('sanitizeProfile');
+    expect(worker).toContain('if (body.isProfile === true) msg.isProfile = true;');
   });
 
   it('profiles travel only as ratchet ciphertexts flagged isProfile', () => {

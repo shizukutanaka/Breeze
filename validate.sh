@@ -214,6 +214,8 @@ LINES=$(wc -l < index.html)
 # 15,962. Stage-5 step 6 crossed it an eighth time; an eighth pass
 # (the location engine into location.js as a factory, the profile
 # panel + distribution into profile.js) landed it at 15,967.
+# Stage-6 step 2 crossed it a ninth time; a ninth pass (compacting
+# the step-2 additions themselves) landed it at 15,999.
 if [ "$LINES" -lt 12000 ]; then pass "Total lines: $LINES (<12K)" 5
 elif [ "$LINES" -lt 16000 ]; then warn "Total lines: $LINES (12-16K)" 5
 else fail "Total lines: $LINES (≥16K) — reduction pass required (see ceiling note above)" 5; fi

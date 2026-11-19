@@ -67,9 +67,14 @@ describe('stage 5 step 6 wiring + server-blindness audit', () => {
     expect(CAPS_LOC).toBe('loc-v1');
   });
 
-  it('the relay never sees location fields', () => {
-    expect(worker).not.toContain('isLocation');
+  it('the relay never sees location content (the flag alone is ferried, like isVoice)', () => {
     expect(worker).not.toContain('loc-v1');
+    expect(worker).not.toContain('sanitizeLoc');
+    expect(worker).not.toContain('openstreetmap');
+    // Stage 6 step 2 added the opaque pass-through so the flag
+    // survives the plain fallback; coordinates never leave the
+    // encrypted payload.
+    expect(worker).toContain('if (body.isLocation === true) msg.isLocation = true;');
   });
 
   it('live sessions are in-memory with a stop path that clears the timer first', () => {

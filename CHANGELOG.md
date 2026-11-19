@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## Home-relay discovery, generalized (SHARE_PLAN stage 6 step 2)
+
+- Two users whose only relays are different custom relays can now start a conversation with no invite link and no default relay in the path. An address of the form @alice@relay.example.com resolves the alias on the owner's relay; alias records now publish the owner's home relay list (sanitized to the home-list contract), and resolving a plain @alias adopts the record's list as the contact's home.
+- Every direct message from a multi-relay account asserts its home list inside the envelope — sealed for Sealed-Sender-v2 peers, so relays do not learn it — and the recipient union-merges it into the contact's stored home, so replies are deposited where the sender actually polls. Default-only accounts are byte-identical to before.
+- Found on the way: the stage-5 flags (isSticker / isProfile / isLocation) were not ferried by the plain /msg/send fallback, so a sticker, profile, or location message whose sealed send failed would have arrived as raw payload text. The worker now passes the three flags through opaquely, like isVoice; content stays inside the encrypted payload in all cases. A two-relay drill against the real worker handlers proves the full circle (register → resolve → deposit → reply) with the two relays sharing nothing.
+
 ## Location sharing, one-shot and live (SHARE_PLAN stage 5 step 6 — stage 5 complete)
 
 - A 📍 button (or /location) shares your position end-to-end encrypted: "Send current location" drops a one-shot pin, and live sharing runs for 15 minutes / 1 hour / 8 hours with updates every 30 seconds that collapse into a single message on both sides. The card shows coordinates, accuracy, and an "Open in map" link to OpenStreetMap — no map tiles are embedded, because a tile server would learn the viewer's IP and the shared area.
