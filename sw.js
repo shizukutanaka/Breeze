@@ -1,5 +1,5 @@
 const VERSION = '3.6.1';
-const CACHE = 'breeze-v' + VERSION;
+const CACHE = 'breeze-v' + VERSION + '-rendezvous-qr';
 const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png',
   // Stage-3 step 3: the PQ prekey helper module closure index.html imports
   // at runtime (INTEGRATION.md §0(A)) — precached so a first offline boot

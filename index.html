@@ -650,6 +650,10 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 .delivery-state { font-size: 10px; opacity: .5; margin-left: 2px }
 .overlay-dark { background: rgba(0,0,0,.85) }
 .qr-modal { text-align: center }
+.qr-code { display: block; max-width: 100%; height: auto; margin: 0 auto 12px; image-rendering: pixelated }
+.rendezvous-dialog { max-width: 800px }
+.rv-code { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px }
+@media (max-width: 600px) { .rv-code { grid-template-columns: minmax(0, 1fr) } }
 .qr-url { font-size: 10px; color: var(--t3); word-break: break-all; margin-top: 8px; font-family: var(--mono) }
 .search-hl { background: rgba(16,185,129,.3); border-radius: 2px; padding: 0 1px }
 .drag-active { border: 2px dashed var(--g); opacity: .8 }
@@ -1392,7 +1396,8 @@ const _H = Object.freeze({ 'Content-Type': 'application/json' }); // Shared JSON
 
 const _I = {
   en: {
-    rvTitle: 'Manual connection', rvScope: 'Existing verified contact and encrypted session only. Exchange these codes privately; they expire in 10 minutes. QR and new-contact pairing are not supported.',
+    rvTitle: 'Manual connection', rvScope: 'Existing verified contact and encrypted session only. Exchange these codes privately by QR or copy/paste; they expire in 10 minutes. New-contact pairing is not supported.',
+    rvQRTooLarge: 'This code is too large for one QR. Use copy/paste instead.', rvScanUnavailable: 'Camera QR scanning is unavailable in this browser. Use copy/paste instead.',
     rvCreate: 'Create connection code', rvPaste: 'Paste connection code', rvOutput: 'Your connection code', rvInput: 'Peer connection code', rvCopy: 'Copy code', rvApply: 'Apply code',
     rvWorking: 'Gathering or verifying connection information…', rvReady: 'Code ready / applied. Copy it to your peer, or paste their reply.', rvCopied: 'Code copied.', rvCopyFallback: 'Copy unavailable. Select and copy the code manually.',
     rvTrust: 'Connect once through a relay and verify this contact first. A pinned signing key and an existing encrypted session are required.',
@@ -13378,6 +13383,7 @@ async function initMessenger(dbName) {
   const showMigratePanel = _shareTools?.showMigratePanel || (() => {});
 
   const _rendezvous = globalThis.__breezeRendezvous?.createRendezvous({
+    qr: globalThis.__breezeQR,
     MS, t, esc, safeSetHTML, sign: signMessage, verify: verifySignature,
     me: () => myPubB64, sigPub: () => _signingPubB64, session: getSession,
     contact: id => dbGet('contacts', id), root: () => _DOM.get('msg-main'),

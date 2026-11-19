@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## P2P_PLAN step 4, second slice: QR rendezvous
+
+- **Compressed signed codes.** Manual envelopes use lossless deflate-raw (`breeze-sdp1z:`); import also accepts the original format. Canonical signature verification and contact/session restrictions are unchanged. A streamed 64KiB decompressed limit guards against zip bombs.
+- **Single-symbol QR.** Rendezvous displays text plus QR and scans raw values using BarcodeDetector. Missing camera-scanning support leaves a localized copy/paste fallback. The byte encoder now supports versions 1–40 at ECC M, correct block interleaving/alignment/version information and mask selection, and rejects rather than truncates oversize codes; invite QR retains copy/paste on failure. Measured gathered offers shrink from 1,663–1,675 to 1,044–1,063 bytes (v26–27/M); answers shrink from 1,384 to 1,005–1,016 bytes (v26/M).
+- **Coverage.** Real QR decoder regressions and relay-blocked browser scan-path tests cover both directions. No multipart or new-contact pairing. Physical camera scanning and real two-device LAN checks remain.
+
 ## P2P_PLAN step 4, first slice: manual rendezvous
 
 - **Copy/paste SDP.** `/rendezvous` opens a separate connection-code dialog for an existing 1:1 contact with a pinned signing key and established encrypted session. Signed v1 offers/answers bind full identities, a random nonce, ten-minute expiry, complete gathered SDP and the pinned Ed25519 key; answers bind the pending offer nonce. Reject unsigned, malformed, oversized, expired, replayed or misaddressed codes.

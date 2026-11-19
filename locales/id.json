@@ -1,6 +1,8 @@
 {
  "rvTitle": "Koneksi manual",
- "rvScope": "Hanya untuk kontak terverifikasi dengan sesi terenkripsi yang sudah ada. Tukarkan kode secara privat; berlaku 10 menit. QR dan pemasangan kontak baru belum didukung.",
+ "rvScope": "Hanya untuk kontak terverifikasi dengan sesi terenkripsi yang sudah ada. Tukarkan kode secara privat melalui QR atau salin/tempel; berlaku 10 menit. Pemasangan kontak baru belum didukung.",
+ "rvQRTooLarge": "Kode terlalu besar untuk satu QR. Gunakan salin/tempel.",
+ "rvScanUnavailable": "Pemindaian QR kamera tidak tersedia di peramban ini. Gunakan salin/tempel.",
  "rvCreate": "Buat kode koneksi",
  "rvPaste": "Tempel kode koneksi",
  "rvOutput": "Kode koneksi Anda",
