@@ -138,6 +138,14 @@ typing の入力 listener は従来からグループと共通だが、グルー
 
 ### Step 4 — ランデブーの分散: SDP の手動交換（サーバーレス接続）
 
+**実施記録 — Step 4 第1弾（コピペによる既存連絡先の再接続）.** `/rendezvous` を1対1チャットに追加。identity 招待とは別のダイアログで offer を作成→相手が貼付して answer 作成→元の端末へ貼付する。対象は **署名鍵 `sigPub` が固定済みで、暗号化セッションも既存の連絡先のみ**。不足時はリレー経由で一度接続・相手を確認するよう案内して拒否する。**QR と新規連絡先のオフライン・ペアリングは未対応**。
+
+配備モジュール `src/app/rendezvous.js` の `breeze-sdp1:` コードは base64url JSON（`v:1, kind, from, to, nonce, exp, desc, sigPub, sig`、answer のみ `offerNonce`）。`from/to` は省略しない完全な identity、nonce は乱数16バイト、期限は10分。`sig` 以外の全フィールドを再帰的キー順の canonical JSON で Ed25519 署名し、固定鍵一致・宛先・手順・期限・セッション中の nonce 再使用・answer の offerNonce 一致・64KiB入力上限を検証する。署名なしの互換受信は手動経路に持ち込まない。
+
+手動モードは既存 PC/DC・証明書・暗号化封筒・保存後 direct ACK を共有するが、`/api/signal`・sigPoll・trickle ICE は使わず API 設定にも依存しない。ICE収集完了（1分上限）後の SDP に従来の候補プライバシー設定を適用し、候補ゼロなら拒否する（relayOnly を迂回しない）。自動復旧でリレー交渉を始めず、再交換を案内する。通常のリレー交渉は維持。
+
+リレー遮断時も mailbox/presence・補助処理の試行自体は許容し、隔離モードは追加しない。**リレー到達不能中は sibling-device fan-out と abuse commitment 登録は届かない**。これらは既存の fire-and-forget で DC 送信前に await されず、失敗や fetchT のタイムアウト待ちが DC 配送を止めない。通常のメッセージ暗号・署名・ACK は変更しない。2ブラウザのテストは通常接続で pin/session を作成後、旧PCを終了し、全 `/api/*` を abort またはタイムアウトまで応答なしにしてコピペ交換・双方向 direct ACK・手動 signal 要求ゼロ・成功したリレー応答ゼロを検証する。**実機2台の同一LAN確認は残件**であり、Step 4 全体の Done when 完了とはしない。
+
 招待リンク／QR の仕組みを応用し、offer/answer の SDP を QR コードまたはコピペ文字列で直接交換して、**リレーを一切介さず** DataChannel を開ける経路を足す。対象は「同じ場所にいる2台」「リレーが遮断された環境」。署名つき SDP の検証は既存の仕組みをそのまま使う。identity の交換（招待）と接続情報の交換（本ステップ）は別画面にし、混同させない。
 
 - **Done when.** リレーへの通信を遮断した2端末（同一 LAN）で、QR の往復（またはコピペ往復）のみで接続が開き、メッセージが往復することを実機で確認できる。リレー使用時と暗号の強度が同一であること（同じ封筒・同じ署名検証）。
