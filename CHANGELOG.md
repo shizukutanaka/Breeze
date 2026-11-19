@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## Transparency, on a schedule (SHARE_PLAN stage 7 step 3)
+
+- docs/transparency/ is now the standing transparency record: README.md defines the monthly procedure — every published field with its source of truth (platform analytics for request aggregates, the health endpoint for TURN issuance, KV record counts for registered identities, the platform bill read through COST_MODEL) and the hard rule that content, contacts and per-user data are never published.
+- Report № 001 (2026-11) is published and states the current truth: the default relay is not operating (the demo 404 is an owner-side restoration), so the operational fields say so instead of inventing zeros — and the report publishes anyway, because a quiet month is reported, not skipped.
+- tools/transparency-report.mjs scaffolds the next month's report, prefills what the health endpoint can prove, leaves the rest as explicit TO MEASURE markers, and refuses to overwrite a published report. Deliberate non-feature: the worker keeps no per-request counters of its own — counting the dominant poll operation would roughly double its cost; the platform's analytics already hold those aggregates.
+
 ## External-audit readiness (SHARE_PLAN stage 7 step 2)
 
 - New docs/AUDIT.md: the auditor's map — reading order, the deployed-vs-reference authority, the module map for all of src/crypto, reproduction commands, scope notes, and the known limitations stated by us.
