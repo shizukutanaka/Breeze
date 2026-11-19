@@ -5,6 +5,7 @@
 // a runtime error during boot, a broken DOM id a script references, or the setup flow
 // silently failing in a real Chromium.
 import { test, expect } from '@playwright/test';
+import { submitSetup } from './helpers.mjs';
 
 test('boots to the setup screen with no console errors', async ({ page }) => {
   const errors = [];
@@ -20,7 +21,7 @@ test('boots to the setup screen with no console errors', async ({ page }) => {
 test('creating an identity reveals the main messenger UI', async ({ page }) => {
   await page.goto('/');
   await page.locator('#msg-name').fill('E2E Smoke Test');
-  await page.locator('#b-msg-setup').click();
+  await submitSetup(page);
 
   await expect(page.locator('#msg-main')).toBeVisible();
   await expect(page.locator('#msg-setup')).toBeHidden();
@@ -41,7 +42,7 @@ test('the contact list survives a reload', async ({ browser }) => {
   const idOf = async (page, name) => {
     await page.goto('/');
     await page.locator('#msg-name').fill(name);
-    await page.locator('#b-msg-setup').click();
+    await submitSetup(page);
     await expect(page.locator('#msg-main')).toBeVisible();
     return page.evaluate(() => new Promise((resolve) => {
       const req = indexedDB.open('breeze-messenger', 5);
@@ -83,7 +84,7 @@ test('messages still arrive after a reload (boot runs to completion)', async ({ 
   const idOf = async (page, name) => {
     await page.goto('/');
     await page.locator('#msg-name').fill(name);
-    await page.locator('#b-msg-setup').click();
+    await submitSetup(page);
     await expect(page.locator('#msg-main')).toBeVisible();
     return page.evaluate(() => new Promise((resolve) => {
       const req = indexedDB.open('breeze-messenger', 5);
@@ -139,7 +140,7 @@ test('messages still arrive after a reload (boot runs to completion)', async ({ 
 test('identity persists across a reload (IndexedDB actually wrote)', async ({ page }) => {
   await page.goto('/');
   await page.locator('#msg-name').fill('Persisted Identity');
-  await page.locator('#b-msg-setup').click();
+  await submitSetup(page);
   await expect(page.locator('#msg-main')).toBeVisible();
 
   await page.reload();

@@ -10,7 +10,7 @@
 // today — the worst failure an encrypted messenger can have, and one that is invisible in any
 // test that starts from a fresh identity.
 import { test, expect } from '@playwright/test';
-import { createIdentity } from './helpers.mjs';
+import { createIdentity, submitSetup } from './helpers.mjs';
 
 const ip = (n) => ({ extraHTTPHeaders: { 'CF-Connecting-IP': `203.0.113.${n}` } });
 
@@ -98,7 +98,7 @@ test('a reloaded member still receives group messages (sender-key state survives
   await B.addInitScript(() => { try { localStorage.setItem('brz-consent', String(Date.now())); } catch {} });
   await B.goto(joinUrl);
   await B.locator('#msg-name').fill('Joiner');
-  await B.locator('#b-msg-setup').click();
+  await submitSetup(B);
   await expect(B.locator('#msg-conv-name')).toContainText('Lifecycle Group');
   await B.reload();
   await expect(B.locator('#msg-main')).toBeVisible();

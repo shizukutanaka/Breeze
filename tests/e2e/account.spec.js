@@ -6,7 +6,7 @@
 // (per-account databases, switching, cross-account unread, Ctrl+1..9) was complete and
 // unreachable. Settings now carries the entry point, and these tests keep the door open.
 import { test, expect } from '@playwright/test';
-import { createIdentity } from './helpers.mjs';
+import { createIdentity, submitSetup } from './helpers.mjs';
 
 const ctxOpts = (ip) => ({ extraHTTPHeaders: { 'CF-Connecting-IP': ip } });
 
@@ -111,7 +111,7 @@ test('switching away from a freshly-created account does not leak its event list
   await page.addInitScript(() => { try { localStorage.setItem('brz-consent', String(Date.now())); } catch {} });
   await page.goto('/');
   await page.locator('#msg-name').fill('Leak Check');
-  await page.locator('#b-msg-setup').click();
+  await submitSetup(page);
   await expect(page.locator('#msg-main')).toBeVisible();
 
   // DOMDebugger.getEventListeners is the only reliable way to count real, attached DOM
@@ -138,7 +138,7 @@ test('switching away from a freshly-created account does not leak its event list
   await expect(page.locator('.acc-add')).toBeVisible();
   if (await page.locator('#msg-setup').isVisible().catch(() => false)) {
     await page.locator('#msg-name').fill('Acc2');
-    await page.locator('#b-msg-setup').click();
+    await submitSetup(page);
     await expect(page.locator('#msg-main')).toBeVisible();
   }
 
@@ -178,7 +178,7 @@ test('a freshly-created identity gets its short-ID display and a "Session starte
   await page.addInitScript(() => { try { localStorage.setItem('brz-consent', String(Date.now())); } catch {} });
   await page.goto('/');
   await page.locator('#msg-name').fill('Fresh Session Check');
-  await page.locator('#b-msg-setup').click();
+  await submitSetup(page);
   await expect(page.locator('#msg-main')).toBeVisible();
 
   const shortId = page.locator('#msg-short-id');
@@ -225,7 +225,7 @@ test('turning off /focus, switching accounts, does not leave the old account\'s 
   });
   await page.goto('/');
   await page.locator('#msg-name').fill('Focus A');
-  await page.locator('#b-msg-setup').click();
+  await submitSetup(page);
   await expect(page.locator('#msg-main')).toBeVisible();
 
   // Enable focus mode — this is what schedules the recurring self-rescheduling timer.
@@ -244,7 +244,7 @@ test('turning off /focus, switching accounts, does not leave the old account\'s 
   await avatarPrompt.locator('[value="ok"]').click();
   if (await page.locator('#msg-setup').isVisible().catch(() => false)) {
     await page.locator('#msg-name').fill('Focus B');
-    await page.locator('#b-msg-setup').click();
+    await submitSetup(page);
     await expect(page.locator('#msg-main')).toBeVisible();
   }
 

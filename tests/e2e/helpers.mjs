@@ -12,6 +12,21 @@ export function seedConsent(page) {
   });
 }
 
+// Submits the setup form's default create button. Since recovery-plan step 3 that path
+// first shows the one-time recovery-phrase dialog (OK stays disabled until "I have saved
+// my recovery phrase" is ticked) whenever the browser has X25519 + Ed25519 WebCrypto;
+// browsers without them skip straight to the messenger. Handle both, with the passphrase
+// left empty (optional by design).
+export async function submitSetup(page) {
+  await page.locator('#b-msg-setup').click();
+  const saved = page.locator('dialog[open] .rp-saved');
+  await page.locator('dialog[open] .rp-saved, #msg-main:not(.hidden)').first().waitFor();
+  if (await saved.isVisible()) {
+    await saved.check();
+    await page.locator('dialog[open] button[value="ok"]').click();
+  }
+}
+
 // Drives the real identity-creation UI and returns the new identity's pubB64 read straight
 // from IndexedDB (app internals live inside initMessenger()'s closure — unreachable from
 // page.evaluate — but IndexedDB is a standard Web API). Mirrors initMessenger's own open
@@ -27,7 +42,7 @@ export async function createIdentity(page, name, { navigate = true, alias = '' }
   // PoW alias claim — recovery-plan step 5), so specs get a genuinely
   // registered handle without touching the Worker API directly.
   if (alias) await page.locator('#msg-alias').fill(alias);
-  await page.locator('#b-msg-setup').click();
+  await submitSetup(page);
   await expect(page.locator('#msg-main')).toBeVisible();
   return page.evaluate(() => new Promise((resolve, reject) => {
     const req = indexedDB.open('breeze-messenger', 5);

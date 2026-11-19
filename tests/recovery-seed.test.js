@@ -450,7 +450,7 @@ describe('recovery step 3 — wiring pins', () => {
     const setup = slice('<div id="msg-setup"', '<!-- Main UI -->');
     expect(setup).toContain('id="b-msg-setup-phrase"');
     expect(setup).toContain('data-i18n="setupPhrase"');
-    expect(html).toContain("_DOM.get('b-msg-setup-phrase')?.addEventListener('click', () => { restoreFromPhrase(); });");
+    expect(html).toContain("_DOM.get('b-msg-setup-phrase')?.addEventListener('click', () => { restoreFromPhrase(); }, { signal: _ac.signal });");
   });
 
   it('seed-derived records carry recoveryMode, random ones do not', () => {

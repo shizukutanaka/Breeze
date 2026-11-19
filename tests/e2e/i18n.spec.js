@@ -6,6 +6,7 @@
 // real browser with a real Japanese locale, because the failure mode is silent: a broken
 // loader shows English to everyone and no test that runs in English would ever notice.
 import { test, expect } from '@playwright/test';
+import { submitSetup } from './helpers.mjs';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -37,7 +38,7 @@ test('a Japanese browser gets the full Japanese UI from locales/ja.json', async 
 
   // Dynamic UI reads the merged table too: create an identity and check a post-boot screen.
   await page.locator('#msg-name').fill('花子');
-  await page.locator('#b-msg-setup').click();
+  await submitSetup(page);
   await expect(page.locator('#msg-main')).toBeVisible();
   await expect(page.locator('#msg-input')).toHaveAttribute('placeholder', ja.msgPlaceholder);
 

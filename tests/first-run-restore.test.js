@@ -224,7 +224,7 @@ describe('first-run restore — wiring pins', () => {
   });
 
   it('the setup restore button drives the existing picker + restore path', () => {
-    expect(html).toContain("_DOM.get('b-msg-setup-restore')?.addEventListener('click', () => { restoreFromFilePicker(); });");
+    expect(html).toContain("_DOM.get('b-msg-setup-restore')?.addEventListener('click', () => { restoreFromFilePicker(); }, { signal: _ac.signal });");
   });
 
   it('both new keys exist in EN (inline) and JA (locales/ja.json)', () => {

@@ -11,6 +11,7 @@
 // (the remote-wipe handler, the IDB-connection-lost handler) for the exact same
 // toast-then-reload sequence.
 import { test, expect } from '@playwright/test';
+import { submitSetup } from './helpers.mjs';
 import fs from 'fs';
 
 test('restoring a backup shows its confirmation toast for a real interval before reloading, not a fraction of a second', async ({ page }) => {
@@ -18,7 +19,7 @@ test('restoring a backup shows its confirmation toast for a real interval before
   await page.addInitScript(() => { try { localStorage.setItem('brz-consent', String(Date.now())); } catch {} });
   await page.goto('/');
   await page.locator('#msg-name').fill('Restore Timing');
-  await page.locator('#b-msg-setup').click();
+  await submitSetup(page);
   await expect(page.locator('#msg-main')).toBeVisible();
 
   await page.locator('#msg-input').fill('/backup');
