@@ -234,7 +234,8 @@ function buildPoll(world, { handleIncoming, myId = ME_ID, api = API }) {
     'postAPIRelay', 'homeRelays', '_pollCursorByUrl', 'queueAuth', 'handleIncoming',
     'myId', '_isOffline', 'API', 'window', '_dbg', 'showToast', 't', 'unsealMeta',
     'myKeys', 'checkAndReplenishPreKeys', 'MS',
-    `${sliceBetween('let _pollTimer = null;', 'function schedulePoll')}
+    `const peers = {};
+     ${sliceBetween('let _pollTimer = null;', 'function schedulePoll')}
      return { pollOnce };`);
   return pollFn(
     world.postAPIRelay, world.homeRelays, world._pollCursorByUrl,
@@ -673,6 +674,19 @@ describe('client — signal rendezvous across the peer\u2019s relays', () => {
     const merged = await resp.json();
     expect(merged.messages).toHaveLength(1);
     expect(merged.messages[0].data).toBe('SDP-ANSWER-1');
+  });
+
+  it('flags a failed relay drain without discarding successful relay messages', async () => {
+    const { w, envA, envB } = await setup();
+    await post(envA, API, '/signal', { room, sender: PEER_ID, type: 'answer', data: 'SDP-ANSWER-1' });
+    // A transport failure is simulated by removing the primary storage binding:
+    // the real router returns 503, while the other relay still returns its data.
+    const kv = envB.KV;
+    envB.KV = null;
+    const merged = await (await w._signalAwait(room, 'poll')).json();
+    expect(merged.signalPollFailed).toBe(true);
+    expect(merged.messages.map(s => s.data)).toEqual(['SDP-ANSWER-1']);
+    envB.KV = kv;
   });
 });
 

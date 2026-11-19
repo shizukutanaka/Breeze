@@ -127,8 +127,8 @@ describe('connected DM perfect negotiation (deployed poll callback)', () => {
     const h = await connectedPoll({ polite, state: 'have-local-offer', makingOffer: true });
     await h.poll([await h.offer()]);
     if (polite) {
-      expect(h.pc.setLocalDescription.mock.calls).toEqual([[{ type: 'rollback' }], []]);
-      expect(h.pc.setLocalDescription.mock.invocationCallOrder[0]).toBeLessThan(h.pc.setRemoteDescription.mock.invocationCallOrder[0]);
+      expect(h.pc.setLocalDescription.mock.calls).toEqual([[]]);
+      expect(h.pc.setRemoteDescription.mock.invocationCallOrder[0]).toBeLessThan(h.pc.setLocalDescription.mock.invocationCallOrder[0]);
       expect(h.answer).toHaveBeenCalledOnce();
     } else {
       expect(h.pc.setRemoteDescription).not.toHaveBeenCalled();

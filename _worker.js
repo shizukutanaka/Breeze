@@ -176,7 +176,7 @@ async function fetchWithTimeout(url, opts, timeoutMs = 10000) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/+$/, '') || '/';
     const reqId = crypto.randomUUID?.() || Math.random().toString(36).slice(2);
@@ -242,6 +242,7 @@ export default {
           // the exact predicate the route itself serves under, so a
           // client that sees ws:true can rely on the upgrade working.
           ws: mailboxWsEnabled(env),
+          signalWake: mailboxWsEnabled(env),
         },
         // Always-on endpoint capabilities (independent of env config) so a client can
         // feature-detect during a staged rollout — e.g. show the delete-account /
@@ -422,7 +423,7 @@ export default {
         return json({ error: 'Storage not configured. Bind a KV namespace named "KV" in Pages settings.', code: 'KV_NOT_CONFIGURED' }, 503, request);
       }
       switch (path) {
-        case '/api/signal':    return await handleSignal(body, ip, env, request);
+        case '/api/signal':    return await handleSignal(body, ip, env, request, ctx);
         case '/api/msg/send':  return plainDeprecated(await handleMsgSend(body, ip, env, request));
         case '/api/msg/poll':  return plainDeprecated(await handleMsgPoll(body, env, request));
         case '/api/presence':  return await handlePresence(body, env, request);
@@ -483,7 +484,7 @@ export default {
 // After P2P connects, signaling is no longer needed.
 // ============================================================
 
-async function handleSignal(body, ip, env, request) {
+async function handleSignal(body, ip, env, request, ctx) {
   const room = sanitizeString(body.room, 256);
   const sender = sanitizeString(body.sender, 512);
   const type = sanitizeString(body.type, 32);
@@ -499,6 +500,7 @@ async function handleSignal(body, ip, env, request) {
   // signature; unregistered senders stay unsigned for compat — they can only claim an id
   // that has no identity to impersonate.
   const roomM = /^(?:dm|call):([^:]{1,64}):([^:]{1,64})$/.exec(room);
+  let authenticated = false;
   if (roomM) {
     if (sender !== roomM[1] && sender !== roomM[2])
       return json({ error: 'sender is not a room member', code: 'NOT_ROOM_MEMBER' }, 403, request);
@@ -512,6 +514,7 @@ async function handleSignal(body, ip, env, request) {
         return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
       const ok = await verifyEd25519(edKey, utf8ToB64(`breeze-sig:${room}:${sender}:${ts}`), sig);
       if (ok !== true) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
+      authenticated = true;
     }
   }
 
@@ -556,6 +559,22 @@ async function handleSignal(body, ip, env, request) {
     await kvPut(env, `sig:${room}`, JSON.stringify(seen.slice(-50)), { expirationTtl: TTL.MIN * 5 });
   }
 
+  if (authenticated && room.startsWith('dm:') && mailboxWsEnabled(env)) {
+    const recipient = roomM[1] === sender ? roomM[2] : roomM[1];
+    const notify = async () => {
+      try {
+        const stub = env.MAILBOX_DO.get(env.MAILBOX_DO.idFromName(recipient));
+        const res = await stub.fetch('https://mailbox.internal/op', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ op: 'signal-wake' }),
+        });
+        if (!res.ok) throw new Error('signal wake rejected');
+      } catch(e) { console.error('[signal-wake]', e?.message ?? e); }
+    };
+    if (typeof ctx?.waitUntil === 'function') ctx.waitUntil(notify());
+    else await notify();
+  }
   return json({ ok: true }, 200, request);
 }
 
@@ -794,6 +813,17 @@ export class MailboxCore {
 
   async _execute(body) {
     const { op, family, slot, userId } = body;
+    if (op === 'signal-wake') {
+      try {
+        const sigGen = (await this._storage.get('sigGen') || 0) + 1;
+        await this._storage.put('sigGen', sigGen);
+        if (this._onQueueChanged) this._onQueueChanged('signal');
+        return { status: 200, body: { ok: true } };
+      } catch(e) {
+        console.error('[signal-wake] generation failed:', e?.message ?? e);
+        return { status: 500, body: { ok: false } };
+      }
+    }
     // family 'presence' (stage-1 step 4) is this recipient's single
     // presence record, stored under the key 'presence'; its only slot
     // is 'record'. It shares the { v, exp } entry shape and the
@@ -878,13 +908,14 @@ export class MailboxCore {
         return { status: 200, body: { ok: true } };
       }
       if (op === 'get') {
+        const signalInfo = body.signalGeneration && !isPresence && slot === 'queue' ? { sigGen: await st.get('sigGen') || 0 } : {};
         const entry = await st.get(key);
-        if (!entry || typeof entry.v !== 'string') return { status: 200, body: { ok: true, value: null } };
+        if (!entry || typeof entry.v !== 'string') return { status: 200, body: { ok: true, value: null, ...signalInfo } };
         if (entry.exp !== null && entry.exp !== undefined && Date.now() >= entry.exp) {
           await st.delete(key);
-          return { status: 200, body: { ok: true, value: null } };
+          return { status: 200, body: { ok: true, value: null, ...signalInfo } };
         }
-        return { status: 200, body: { ok: true, value: entry.v } };
+        return { status: 200, body: { ok: true, value: entry.v, ...signalInfo } };
       }
       if (op === 'put') {
         const ttl = Number.isFinite(body.ttlSec) ? body.ttlSec : null;
@@ -964,8 +995,9 @@ function doMailboxStoreForKey(env, queueKey) {
       return null;
     }
   };
-  const read = (slot) => async () => {
-    const r = await call('get', slot);
+  const read = (slot) => async (onSignalGeneration) => {
+    const r = await call('get', slot, undefined, undefined, typeof onSignalGeneration === 'function' ? { signalGeneration: true } : undefined);
+    if (r && typeof onSignalGeneration === 'function' && Number.isSafeInteger(r.sigGen)) onSignalGeneration(r.sigGen);
     return r && typeof r.value === 'string' ? r.value : null;
   };
   const write = (slot) => async (value, ttlSec) => {
@@ -1127,7 +1159,7 @@ export class MailboxDO {
     let sockets;
     try { sockets = this.state.getWebSockets(); } catch { return; }
     if (!sockets || sockets.length === 0) return;
-    const frame = JSON.stringify({ type: 'mail', family });
+    const frame = JSON.stringify(family === 'signal' ? { type: 'signal' } : { type: 'mail', family });
     for (const ws of sockets) {
       try { ws.send(frame); } catch { /* socket already gone; the runtime drops it from the registry */ }
     }
@@ -1606,11 +1638,12 @@ async function handleMsgPoll(body, env, request) {
   if (authErr) return authErr;
 
   const mb = mailboxStore(env, 'inbox', id);
-  const data = await mb.readQueue();
-  if (!data) return json({ messages: [] }, 200, request);
+  const signalInfo = {};
+  const data = await mb.readQueue(mailboxWsEnabled(env) ? sigGen => { signalInfo.sigGen = sigGen; } : undefined);
+  if (!data) return json({ messages: [], ...signalInfo }, 200, request);
 
   const all = safeJsonParse(data, []);
-  if (!Array.isArray(all)) return json({ messages: [] }, 200, request);
+  if (!Array.isArray(all)) return json({ messages: [], ...signalInfo }, 200, request);
   // P4 FIX: Return only messages newer than lastTs, keep rest for other tabs.
   // Coerce a non-numeric lastTs to 0: a string cursor makes every `m.ts > cutoff`
   // comparison NaN→false, which both starves the poller AND (via the same cutoff in
@@ -1657,7 +1690,7 @@ async function handleMsgPoll(body, env, request) {
   const droppedStr = await mb.readDropped();
   const dropped = parseInt(droppedStr || '0') || 0;
   if (dropped > 0) await mb.deleteDropped();
-  return json(dropped > 0 ? { messages: newMsgs, dropped } : { messages: newMsgs }, 200, request);
+  return json({ messages: newMsgs, ...(dropped > 0 ? { dropped } : {}), ...signalInfo }, 200, request);
 }
 
 // Presence heartbeat ownership proof (P2P defect wave 2). The presence
@@ -4278,10 +4311,11 @@ async function handleSealedPoll(body, env, request) {
   const authErr = await checkQueueAuth(body, env, request, 'sealed-poll');
   if (authErr) return authErr;
   const mb = mailboxStore(env, 'sealed', id);
-  const data = await mb.readQueue();
-  if (!data) return json({ messages: [] }, 200, request);
+  const signalInfo = {};
+  const data = await mb.readQueue(mailboxWsEnabled(env) ? sigGen => { signalInfo.sigGen = sigGen; } : undefined);
+  if (!data) return json({ messages: [], ...signalInfo }, 200, request);
   const messages = safeJsonParse(data, []);
-  if (!Array.isArray(messages)) return json({ messages: [] }, 200, request);
+  if (!Array.isArray(messages)) return json({ messages: [], ...signalInfo }, 200, request);
   // v3.6: Grace period — set short TTL instead of immediate delete
   // If client crashes after poll but before processing, messages survive 5 min
   // Client-side _replayCache + IDB dedup prevents re-rendering on re-poll
@@ -4298,7 +4332,7 @@ async function handleSealedPoll(body, env, request) {
   const droppedStr = await mb.readDropped();
   const dropped = parseInt(droppedStr || '0') || 0;
   if (dropped > 0) await mb.deleteDropped();
-  return json(dropped > 0 ? { messages, dropped } : { messages }, 200, request);
+  return json({ messages, ...(dropped > 0 ? { dropped } : {}), ...signalInfo }, 200, request);
 }
 
 // v3.6: Sealed ACK — client confirms processing, worker deletes messages
@@ -4744,4 +4778,3 @@ export {
   handleTurn,
   turnProviderMode,
 };
-

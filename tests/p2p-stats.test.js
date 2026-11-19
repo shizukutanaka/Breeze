@@ -38,8 +38,8 @@ describe('signaling poll statistics', () => {
 
   it('wires one session at poll creation and classifies requests using the live connection and channel', () => {
     const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-    expect(html).toContain('_p2pStats?.noteSignalSession();\n      peerState._sigPoll = startSignalPoll(');
-    expect(html).toContain("const established = peerState.connected && peerState.dc?.readyState === 'open';\n          const resp = await _signalAwait(sigRoom, 'poll', undefined, () => _p2pStats?.noteSignalPoll(established));");
+    expect(html.indexOf('_p2pStats?.noteSignalSession();')).toBeLessThan(html.indexOf('peerState._sigPoll = startSignalPoll('));
+    expect(html).toContain("const established = peerState.connected && peerState.dc?.readyState === 'open';\n          const resp = await _signalAwait(sigRoom, 'poll', undefined, () => _p2pStats?.noteSignalPoll(established), targets => { peerState._sigPollRelays = targets; });");
     expect(html).toContain("t('secLblSignalPolls') + ': ' + _signalPollLine");
   });
 });

@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## P2P_PLAN step 3, fourth slice: WS signal wakes
+
+- **Event-driven established signaling.** Authenticated DM signal deposits wake the other member through their MailboxDO, with a durable per-user generation returned on existing mailbox polls. Content-free `{type:'signal'}` frames and `features.signalWake` keep old clients/relays compatible. Cloudflare schedules notification with `waitUntil`; hosts without a context await a failure-isolated notification. The Node mailbox namespace uses the same frame.
+- **Safe pause / recovery.** Pause the recurring DM signal timer only while PC connected, message DC open, signaling stable, and every polled relay has a live authenticated wake-capable mailbox WS. Coalesced wake/re-attach/generation-change drains still count in `/security`. Missing coverage/backgrounding restores 15s polling; transport recovery retains the fast reset. Typing/read remain dual-path and cause wakes; DC-first is follow-up.
+- **Glare establishment fix.** Bisecting the Node two-context harness reached Direct with `189f9a4`, but failed with `8324d7f`. The third slice's explicit rollback fired `negotiationneeded` between rollback and remote-offer application, queuing a competing local offer and producing Chrome's max-bundle error despite valid incoming BUNDLE SDP. Use atomic implicit rollback in `setRemoteDescription(offer)`; retain signature/key-pin checks and deduplication. Sliced ordering assertions and browser tests that force simultaneous offers guard this path.
+- **Regression coverage and measurement.** Deployed-code Worker/DO and client slices cover authentication, gates, generation persistence, content-free frames, pause/wake/fallback and loss recovery. Two-context Node tests force glare, establish Direct, idle for 30s, then verify message persistence and direct ACK. Measured per-peer post-established counters with wakes disabled: `[2,2] → [4,4]` (delta `[2,2]`); enabled: `[1,1] → [1,1]` (delta `[0,0]`). This is a local single-relay fallback-versus-wake comparison, not a production benchmark.
+
 ## P2P_PLAN step 3, third slice: renegotiation recovery prerequisites
 
 `index.html`, `tests/sdp-auth.test.js`, `tests/p2p-heartbeat.test.js`, `tests/hardening-iteration2.test.js`, `docs/P2P_PLAN.md`; CSP hashes re-pinned.

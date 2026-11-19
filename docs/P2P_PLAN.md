@@ -122,6 +122,14 @@
 
 **実施記録（第3弾）.** 確立後の poll 停止に先立つ復旧条件を修正した。接続中の offer/answer を捨てていたため相手からの ICE restart に応答できず、heartbeat も未応答 ping を欠落として数えていなかった。署名・鍵ピン・TOFU と Perfect Negotiation を維持して再交渉を受け付け、重複 SDP、古い SDP バージョン、待機していない answer は無視する。heartbeat は次の tick までの未応答／送信失敗を数え、3 回で ICE restart する。旧クライアントは状態チャネルの ping/pong を継続し、メッセージチャネルへの heartbeat fallback は対応通知を受信した相手だけに使う。ローカルの restartIce／offer 送信前には poll を 2 秒に戻し、再確立後は 15 秒に戻す。本弾では Worker・確立後の恒常 poll は変更せず、次弾でメールボックス WS のシグナル到着通知と poll 停止を扱う。
 
+**実施記録（第4弾）.** 認証済み `dm:` deposit の成功後、DO バックエンドかつ `MAILBOX_WS_ENABLED` のリレーでは相手の MailboxDO に内部操作で通知する。永続 `sigGen` を増加し、内容・部屋名を含まない `{type:'signal'}` を送る。旧クライアントは未知 type を無視する（`type:'mail'` は未知 family でも通常の mailbox poll を起動するため使わない）。既存 `/msg/poll`・`/sealed/poll` の応答にも `sigGen` を載せ、WS フレーム紛失は既存の安全 poll で回復する。機能は health の `features.signalWake` で広告する。Cloudflare は `ctx.waitUntil`、ctx のない Node ホスト等は通知を await するが通知失敗を記録・吸収し deposit の成功を変えない。Node の WS namespace も同じ frame を送る。
+
+PC connected・メッセージ DC open・signaling stable に加え、その部屋の poll 先**全リレー**に本人認証済みの対応 WS がある場合だけ、確立後の恒常タイマーを停止する。通知・generation 変更・WS 再接続は合流した即時 drain を起動し、実要求は従来の確立後カウンターに算入する。WS 切断、背景化、未対応リレー、coverage 不足なら 15 秒へ戻る。確立前は停止せず、第3弾の transport 障害時 2 秒 reset も維持する。旧リレーでは 15 秒のまま。typing/read は今回 DC-first 化せず、現在の relay deposit が通知と drain を発生させるため後続課題とする。
+
+接続前提の追加修正: 同一 Node リレー・2 context の比較で `189f9a4` は Direct に到達し、`8324d7f` は Chrome の `max-bundle configured but session description has no BUNDLE group` で停止した。原因は第3弾で追加した明示 rollback と remote offer 適用の間に `negotiationneeded` が発火し、別の local offer が割り込むことだった（渡した remote SDP 自体には BUNDLE がある）。`setRemoteDescription(offer)` の暗黙 rollback で一体処理し、署名・鍵ピン・重複排除は維持した。ブラウザ試験は双方の offer 預け入れまで poll を保留して衝突を必ず作り、実際の衝突・エラーなし・Direct 確立を検査する。
+
+第4弾の実測: Node の単一リレーで WS 無効（従来15秒 fallback）と DO+WS 有効を比較した。Direct 確立後35秒待機してから30秒 idle の確立後カウンターを測り、無効時は `[2,2] → [4,4]`（各接続 +2 要求）、有効時は `[1,1] → [1,1]`（各接続 +0 要求）。その後のメッセージは受信画面への保存・表示と送信側の direct ACK 増加まで確認した。本番 NAT・複数リレーの実測値ではない。WS 用のローカルネットワーク権限はテスト context に付与する。
+
 ### Step 4 — ランデブーの分散: SDP の手動交換（サーバーレス接続）
 
 招待リンク／QR の仕組みを応用し、offer/answer の SDP を QR コードまたはコピペ文字列で直接交換して、**リレーを一切介さず** DataChannel を開ける経路を足す。対象は「同じ場所にいる2台」「リレーが遮断された環境」。署名つき SDP の検証は既存の仕組みをそのまま使う。identity の交換（招待）と接続情報の交換（本ステップ）は別画面にし、混同させない。

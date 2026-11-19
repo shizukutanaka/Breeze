@@ -7626,7 +7626,12 @@ async function initMessenger(dbName) {
     }).catch(e => _dbg(e, 'signal:' + type));
   }
   // _signalAwait — same but returns response for poll pattern
-  async function _signalAwait(room, type, data, onRequest) {
+  async function _signalPollTargets(peerId) {
+    const contact = await dbGet('contacts', peerId).catch(() => null);
+    const targets = await _resolveSendTargets(contact, peerId);
+    return [homeRelays()[0], ...targets.filter(e => !isOriginRelay(e))];
+  }
+  async function _signalAwait(room, type, data, onRequest, onTargets) {
     if (_relayPinGate.blocked) return new Response(null, { status: 503 }); // step 4 hard stop (see _signal)
     if (_relayPinGate.verdict) { // boot-window hold (step 4 follow-up, see _signal)
       await _relayPinGate.verdict;
@@ -7645,9 +7650,9 @@ async function initMessenger(dbName) {
     if (type !== 'poll') return primary();
     const peerId = _signalPeerId(room);
     if (!peerId) return primary();
-    const contact = await dbGet('contacts', peerId).catch(() => null);
-    const targets = await _resolveSendTargets(contact, peerId);
-    const extra = targets.filter(e => !isOriginRelay(e));
+    const targets = await _signalPollTargets(peerId);
+    onTargets?.(targets);
+    const extra = targets.slice(1);
     if (!extra.length) return primary();
     // Merge like step 5's poll merge: per-relay success/failure is
     // independent, and identical signals (the same signed body
@@ -7655,9 +7660,11 @@ async function initMessenger(dbName) {
     // each relay stamps its own ts, so ts cannot be part of the key.
     const seen = new Set();
     const messages = [];
+    let signalPollFailed = false;
     const collect = async (resp) => {
-      if (!resp?.ok) return;
+      if (!resp?.ok) { signalPollFailed = true; return; }
       const d = await resp.json().catch(() => null);
+      if (!d) signalPollFailed = true;
       for (const s of (d?.messages || [])) {
         const k = s.sender + '|' + s.type + '|' + (typeof s.data === 'string' ? s.data : '');
         if (seen.has(k)) continue;
@@ -7666,8 +7673,11 @@ async function initMessenger(dbName) {
       }
     };
     const results = await Promise.allSettled([primary(), ...extra.map(e => _contactRelayPost(e, '/signal', body, onRequest))]);
-    for (const r of results) { if (r.status === 'fulfilled') await collect(r.value); }
-    return new Response(JSON.stringify({ messages }), { status: 200, headers: _H });
+    for (const r of results) {
+      if (r.status === 'fulfilled') await collect(r.value);
+      else signalPollFailed = true;
+    }
+    return new Response(JSON.stringify({ messages, ...(signalPollFailed ? { signalPollFailed } : {}) }), { status: 200, headers: _H });
   }
   // DRY: DM room key
   function _dmRoom(peerId) { return 'dm:' + [myId, peerId].sort().join(':'); }
@@ -10737,6 +10747,30 @@ async function initMessenger(dbName) {
     return s;
   }
   function _anyMailWsOpen() { for (const s of _mailWsByRelay.values()) if (s.open) return true; return false; }
+  const _signalGenerationByRelay = new Map();
+  function signalPollCovered(peer) {
+    return !!(peer.pc?.connectionState === 'connected' && peer.dc?.readyState === 'open'
+      && peer.pc.signalingState === 'stable' && peer._sigPollRelays?.length
+      && peer._sigPollRelays.every(relay => {
+        const state = _mailWsByRelay.get(relay.url);
+        const features = isOriginRelay(relay) ? window._serverFeatures : _relayHealthByUrl.get(relay.url)?.features;
+        return state?.open && state.id === myId && features?.signalWake && mailboxWsWanted(relay);
+      }));
+  }
+  function refreshSignalPolls() {
+    for (const peer of Object.values(peers)) peer._sigPoll?.refresh();
+  }
+  function wakeSignalPolls(url) {
+    for (const peer of Object.values(peers)) {
+      if (!peer._sigPollRelays || peer._sigPollRelays.some(relay => relay.url === url)) peer._sigPoll?.wake();
+    }
+  }
+  function noteSignalGeneration(relay, data) {
+    if (!Number.isSafeInteger(data.sigGen) || data.sigGen < 0) return;
+    if (_signalGenerationByRelay.get(relay.url) === data.sigGen) return;
+    _signalGenerationByRelay.set(relay.url, data.sigGen);
+    wakeSignalPolls(relay.url);
+  }
   let _pollInFlight = false;
   let _pollAgain = false;
   // One poll cycle — schedulePoll's timer body, extracted unchanged
@@ -10756,6 +10790,9 @@ async function initMessenger(dbName) {
       for (const relay of homeRelays()) {
         try { await _pollRelayOnce(relay); } catch(e) { _dbg(e, 'poll-relay'); }
       }
+      for (const peer of Object.values(peers)) {
+        if (peer._refreshSignalCoverage) await peer._refreshSignalCoverage();
+      }
       checkAndReplenishPreKeys();
     } catch(e) { _dbg(e); }
     _pollInFlight = false;
@@ -10774,6 +10811,7 @@ async function initMessenger(dbName) {
     }
     if (resp?.ok) {
       const data = await resp.json();
+      noteSignalGeneration(relay, data);
       // Honesty over silence — the same rule the sealed queue below
       // already follows: the relay counts plain-inbox envelopes its
       // queue caps forced it to drop while we were offline, and the
@@ -10790,6 +10828,7 @@ async function initMessenger(dbName) {
       const sResp = await postAPIRelay(relay, '/sealed/poll', { id: myId, ...(await queueAuth('sealed-poll')) });
       if (sResp?.ok) {
         const sData = await sResp.json();
+        noteSignalGeneration(relay, sData);
         // Honesty over silence: the relay counts envelopes its queue caps forced it to
         // drop while we were offline — tell the user instead of losing them wordlessly.
         if (Number.isInteger(sData.dropped) && sData.dropped > 0) showToast(t('toastMsgsDropped', sData.dropped), 'error');
@@ -10908,6 +10947,8 @@ async function initMessenger(dbName) {
         if (state.ws !== ws) return;
         state.open = true;
         state.retry = 0;
+        refreshSignalPolls();
+        wakeSignalPolls(relay.url);
         _dbg(null, 'mailbox ws: connected — push wake-up on, poll at safety cadence');
         pollOnce();     // catch up on deposits made while disconnected
         schedulePoll(); // re-time the safety poll at the slow cadence
@@ -10916,12 +10957,14 @@ async function initMessenger(dbName) {
         try {
           const m = JSON.parse(ev.data);
           if (m && m.type === 'mail') pollOnce();
+          if (m && m.type === 'signal') wakeSignalPolls(relay.url);
         } catch(e) { _dbg(e, 'mailbox-ws'); }
       };
       ws.onclose = () => {
         if (state.ws !== ws) return;
         state.ws = null;
         state.open = false;
+        refreshSignalPolls();
         state.retry++;
         // Exponential backoff (1s doubling, 30s cap); reconnects are
         // re-driven by the poll timer and by visibility changes.
@@ -10938,6 +10981,7 @@ async function initMessenger(dbName) {
     state.ws = null;
     state.open = false;
     state.id = null;
+    refreshSignalPolls();
     try { ws.close(); } catch(e) { _dbg(e, 'mailbox-ws'); }
   }
   function closeMailboxWs() {
@@ -11472,34 +11516,57 @@ async function initMessenger(dbName) {
   }
 
   // ===== P2P connection per contact =====
-  function startSignalPoll(poll) {
+  function startSignalPoll(poll, canPause = () => false) {
     const base = 2 * MS.SEC;
     const maxBackoff = 8 * MS.SEC;
     const connectedInterval = 15 * MS.SEC;
     let timer, running = false, stopped = false, connected = false, phaseChanged = false;
     let delay = base;
+    let wakePending = false;
+    let retryPending = false;
 
     function schedule(wait) {
       clearTimeout(timer);
       timer = setTimeout(tick, wait);
     }
 
+    function refresh() {
+      if (stopped || running) return;
+      if (!wakePending && !retryPending && connected && canPause()) {
+        clearTimeout(timer);
+        timer = null;
+      } else if (!timer) schedule(wakePending ? 0 : retryPending ? base : connected ? connectedInterval : delay);
+    }
+
     async function tick() {
+      timer = null;
       running = true;
       phaseChanged = false;
+      wakePending = false;
       let activity = false;
-      try { activity = await poll(() => stopped); } catch(e) { _dbg(e, 'signal-poll'); }
+      let failed = false;
+      try { activity = await poll(() => stopped); } catch(e) { failed = true; _dbg(e, 'signal-poll'); }
       finally {
         running = false;
+        retryPending = failed;
         if (!stopped) {
           if (!connected) delay = activity || phaseChanged ? base : Math.min(delay * 2, maxBackoff);
-          schedule(connected ? connectedInterval : delay);
+          if (failed) schedule(base);
+          else refresh();
         }
       }
     }
 
     schedule(base);
     return {
+      refresh,
+      wake() {
+        if (stopped) return;
+        wakePending = true;
+        clearTimeout(timer);
+        timer = null;
+        refresh();
+      },
       resetFast() {
         if (stopped) return;
         connected = false;
@@ -11508,11 +11575,16 @@ async function initMessenger(dbName) {
         else schedule(base);
       },
       setConnected(value) {
-        if (stopped || connected === value) return;
+        if (stopped) return;
+        if (connected === value) { refresh(); return; }
         connected = value;
         delay = base;
         if (running) phaseChanged = true;
-        else schedule(connected ? connectedInterval : base);
+        else {
+          clearTimeout(timer);
+          timer = null;
+          refresh();
+        }
       },
       stop() {
         stopped = true;
@@ -11937,12 +12009,18 @@ async function initMessenger(dbName) {
 
       if (_ac.signal.aborted || peerState.connState === 'CLOSED') return;
       _p2pStats?.noteSignalSession();
+      peerState._refreshSignalCoverage = async () => {
+        try { peerState._sigPollRelays = await _signalPollTargets(contact.id); }
+        catch(e) { peerState._sigPollRelays = null; _dbg(e, 'signal-coverage'); }
+        peerState._sigPoll?.refresh();
+      };
       peerState._sigPoll = startSignalPoll(async (isStopped) => {
         let activity = false;
         try {
           const established = peerState.connected && peerState.dc?.readyState === 'open';
-          const resp = await _signalAwait(sigRoom, 'poll', undefined, () => _p2pStats?.noteSignalPoll(established));
-          if (isStopped() || !resp.ok) return false;
+          const resp = await _signalAwait(sigRoom, 'poll', undefined, () => _p2pStats?.noteSignalPoll(established), targets => { peerState._sigPollRelays = targets; });
+          if (isStopped()) return false;
+          if (!resp.ok) throw new Error('signal poll failed');
           const data = await resp.json();
           for (const s of (data.messages || [])) {
             if (isStopped()) break;
@@ -11989,7 +12067,7 @@ async function initMessenger(dbName) {
                 ignoreOffer = !polite && offerCollision;
                 if (ignoreOffer) { _dbg(null, 'P2P: ignoring colliding offer (impolite)'); continue; }
                 peerState._sigPoll?.resetFast();
-                if (offerCollision && pc.signalingState !== 'stable') await pc.setLocalDescription({ type: 'rollback' });
+                // Implicit rollback is atomic; a separate rollback can fire negotiationneeded.
                 await pc.setRemoteDescription(description);
                 if (origin) remoteSDPOrigin = origin;
                 seenSDP.add(sdpJson);
@@ -12009,9 +12087,10 @@ async function initMessenger(dbName) {
               }
             } catch(e) { _dbg(e, 'signal-handle'); }
           }
-        } catch(e) { _dbg(e); }
+          if (data.signalPollFailed) throw new Error('signal relay poll failed');
+        } catch(e) { _dbg(e); throw e; }
         return activity;
-      });
+      }, () => signalPollCovered(peerState));
       peerState._sigPoll.setConnected(peerState.connected && peerState.dc?.readyState === 'open');
     })();
   }

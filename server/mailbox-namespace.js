@@ -36,7 +36,7 @@ export function makeMailboxNamespace(db) {
           // Same content-free wake-up frame the DO sends
           // (MailboxDO._notifyQueueChanged): no envelope, no sender,
           // no count — the client's poll stays the only data path.
-          const frame = JSON.stringify({ type: 'mail', family });
+          const frame = JSON.stringify(family === 'signal' ? { type: 'signal' } : { type: 'mail', family });
           for (const ws of [...sockets]) {
             try { ws.send(frame); } catch { sockets.delete(ws); }
           }

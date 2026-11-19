@@ -142,7 +142,8 @@ function buildPoll(client, { handleIncoming, checkAndReplenishPreKeys }) {
     'postAPIRelay', 'homeRelays', '_pollCursorByUrl', 'queueAuth', 'handleIncoming',
     'myId', '_isOffline', 'API', 'window', '_dbg', 'showToast', 't', 'unsealMeta',
     'myKeys', 'checkAndReplenishPreKeys', 'MS',
-    `${sliceBetween('let _pollTimer = null;', 'function schedulePoll')}
+    `const peers = {};
+     ${sliceBetween('let _pollTimer = null;', 'function schedulePoll')}
      return { pollOnce, _mailWsState, _anyMailWsOpen };`);
   return pollFn(
     client.postAPIRelay, client.homeRelays, client._pollCursorByUrl,
