@@ -11930,9 +11930,9 @@ async function initMessenger(dbName) {
                       _dbg(null, 'P2P: SDP signing key mismatch — rejecting (possible MITM)');
                       continue;
                     }
-                    const valid = await verifyMessage(wrapper.sdp, wrapper.sig, wrapper.sigPub);
+                    const valid = await verifySignature(wrapper.sdp, wrapper.sig, wrapper.sigPub);
                     if (isStopped()) return false;
-                    if (valid === false) { _dbg(null, 'P2P: SDP signature invalid — rejecting'); continue; }
+                    if (valid !== true) { _dbg(null, 'P2P: SDP signature invalid — rejecting'); continue; }
                     // TOFU: pin the peer's signing key on first signed SDP
                     if (!contact.sigPub && wrapper.sigPub && _hasEd25519) {
                       contact.sigPub = wrapper.sigPub;
