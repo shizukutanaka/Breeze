@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## Location sharing, one-shot and live (SHARE_PLAN stage 5 step 6 — stage 5 complete)
+
+- A 📍 button (or /location) shares your position end-to-end encrypted: "Send current location" drops a one-shot pin, and live sharing runs for 15 minutes / 1 hour / 8 hours with updates every 30 seconds that collapse into a single message on both sides. The card shows coordinates, accuracy, and an "Open in map" link to OpenStreetMap — no map tiles are embedded, because a tile server would learn the viewer's IP and the shared area.
+- Stopping is structural, not best-effort: the stop path clears the timer before the final "stopped" update goes out, sessions live only in memory (a reload ends sharing), every share carries its expiry, and a receiver ignores updates for a share that has ended — a silent share renders as ended, never as current. Capability-gated ('loc-v1'): a one-shot share to an un-upgraded peer degrades to a plain E2EE text message with the map link; live sharing refuses with an explanation. Coordinates are validated on receipt (range-checked, 6-decimal rounding) before rendering.
+- Line-budget pass 8 (index.html 15,967): the location engine moved into src/app/location.js as createLocationShare, and the profile panel + distribution into src/app/profile.js as createProfileUI; the group send transport (sender-key distribution, direct-ack, pooled deposits) is now shared by stickers and locations instead of duplicated. The Toast-i18n validator metric reads 94% because its scanner counts showToast calls in index.html only — module call sites use D.t identically, so the real ratio is unchanged.
+- Stage 5 (media and presence) is now complete: call-signal E2EE by default, group voice calls, the 1,000-member group ceiling with measured distribution, E2EE profiles, stickers, and location sharing.
+
 ## Stickers with an authorable pack format (SHARE_PLAN stage 5 step 5)
 
 - Stickers ship: a 🎨 button opens a pack picker (built-in emoji pack plus your own packs), and /stickers manages packs. The pack format is plain documented JSON ({"format":"breeze-stickers","v":1,"id","name","stickers":[{id, emoji|img}]}) — author one in a text editor, import it, export yours to share the file. "Add images" builds a personal pack on-device (downscaled to ≤256px PNG/WebP, transparency kept).

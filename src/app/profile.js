@@ -59,3 +59,96 @@ export function parseProfilePayload(text, now = Date.now()) {
 export function profileNewer(incoming, contact) {
   return !!incoming && incoming.pv > (contact?.profilePv || 0);
 }
+
+// Host-side profile UI + distribution (stage 5 step 4, moved out of
+// index.html in the line-budget pass): the /profile panel and the
+// capability-gated E2EE fan-out live here; the pure shapes above
+// stay host-agnostic.
+export function createProfileUI(D) {
+    async function _myProfile() {
+      const P = { sanitizeProfile, buildProfilePayload };
+      const saved = await D.dbGet('settings', 'profile').catch(() => null);
+      if (saved) return { ...(P?.sanitizeProfile(saved) || { name: D.myName(), emoji: '', img: '' }), pv: saved.pv || 0 };
+      const keys = await D.dbGet('identity', 'keys').catch(() => null);
+      return { name: D.myName(), emoji: keys?.avatar || '', img: '', pv: 0 };
+    }
+    async function _sendProfileTo(contact) {
+      const P = { sanitizeProfile, buildProfilePayload };
+      if (!P || !contact?.pubB64 || contact.isGroup) return false;
+      try {
+        const capsById = await D.fetchMemberCapsBatch([contact.id]);
+        if (!(capsById[contact.id] || []).includes(CAPS_PROFILE)) return false;
+        const prof = await _myProfile();
+        const wire = P.buildProfilePayload(prof, prof.pv || Date.now());
+        if (!wire) return false;
+        const enc = await D.encryptFor(wire, contact.pubB64);
+        if (!enc) return false;
+        await D.relaySend(contact.id, { to: contact.id, from: D.myId(), fromPub: D.myPubB64(), fromName: D.myName(), payload: enc, ts: Date.now(), isProfile: true }, contact.pubB64);
+        return true;
+      } catch(e) { D.dbg(e, 'profile-send'); return false; }
+    }
+    async function _showProfilePanel() {
+      const prof = await _myProfile();
+      const [dlg, titleId] = D.makeDialog();
+      D.safeSetHTML(dlg, `
+        <h3 id="${titleId}" class="i-m-0-12">${D.esc(D.t('profileTitle'))}</h3>
+        <label class="i-tiny-meta">${D.esc(D.t('profileName'))}</label>
+        <input type="text" class="pf-name i-input-full" maxlength="64" value="${D.esc(prof.name)}">
+        <label class="i-tiny-meta">${D.esc(D.t('profileEmoji'))}</label>
+        <input type="text" class="pf-emoji i-input-full" maxlength="16" value="${D.esc(prof.emoji)}">
+        <label class="i-tiny-meta">${D.esc(D.t('profilePhoto'))}</label>
+        <div class="pf-photo-row"><span class="pf-preview"></span>
+          <button type="button" class="btn btn-g btn-sm pf-choose">${D.esc(D.t('profileChoose'))}</button>
+          <button type="button" class="btn btn-g btn-sm pf-remove">${D.esc(D.t('profileRemove'))}</button>
+        </div>
+        <input type="file" class="pf-file hidden" accept="image/*">
+        <div class="dlg-btns">
+          <button class="btn btn-g btn-sm" value="cancel">${D.esc(D.t('cancel'))}</button>
+          <button class="btn btn-p btn-sm" value="ok">${D.esc(D.t('profileSave'))}</button>
+        </div>`);
+      D.showDialog(dlg);
+      let img = prof.img || '';
+      const preview = dlg.querySelector('.pf-preview');
+      const showImg = () => {
+        preview.replaceChildren();
+        if (!img) { preview.textContent = '—'; return; }
+        const im = document.createElement('img'); im.className = 'pf-photo'; im.src = img; preview.appendChild(im);
+      };
+      showImg();
+      const fileInput = dlg.querySelector('.pf-file');
+      dlg.querySelector('.pf-choose').onclick = () => fileInput.click();
+      dlg.querySelector('.pf-remove').onclick = () => { img = ''; showImg(); };
+      fileInput.onchange = async () => {
+        const f = fileInput.files?.[0];
+        if (!f) return;
+        try { img = await D.downscaleAvatar(f); showImg(); } catch(e) { D.dbg(e, 'profile-photo'); }
+      };
+      return new Promise((resolve) => {
+        const close = (val) => { dlg.close(); dlg.remove(); resolve(val); };
+        dlg.querySelector('[value="ok"]').onclick = async () => {
+          const clean = sanitizeProfile({ name: dlg.querySelector('.pf-name').value.trim() || D.myName(), emoji: dlg.querySelector('.pf-emoji').value.trim(), img });
+          if (clean) {
+            await D.dbPut('settings', { ...clean, pv: Date.now() }, 'profile');
+            if (clean.name !== D.myName()) {
+              D.setMyName(clean.name);
+              const stored = await D.dbGet('identity', 'keys');
+              if (stored) { stored.name = clean.name; await D.dbPut('identity', stored, 'keys'); }
+              D.domGet('msg-my-name').textContent = clean.name;
+            }
+            _distributeProfile().catch(e => D.dbg(e, 'profile-dist'));
+            D.showToast(D.t('profileSaved'), 'success');
+          }
+          close(true);
+        };
+        dlg.querySelector('[value="cancel"]').onclick = () => close(false);
+        D.wireDialogDismiss(dlg, close);
+      });
+    }
+    async function _distributeProfile() {
+      const contacts = (await D.dbGetAll('contacts').catch(() => [])) || [];
+      let sent = 0;
+      for (const c of contacts) if (await _sendProfileTo(c)) sent++;
+      return sent;
+    }
+  return { showPanel: _showProfilePanel, sendTo: _sendProfileTo, myProfile: _myProfile };
+}

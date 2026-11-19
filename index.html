@@ -209,6 +209,8 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .sticker-cell:hover { background: var(--s2) }
 .sticker-cell img { width: 56px; height: 56px; object-fit: contain }
 .sticker-cell .stk-emoji { font-size: 40px }
+.msg-loc a { color: var(--g) }
+.live-chip { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: var(--s1); border-top: 1px solid var(--b1); font-size: 13px }
 .contact .info { flex: 1; min-width: 0 }
 .contact .info .name { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
 .contact .info .preview { font-size: 12px; color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px }
@@ -1179,6 +1181,7 @@ del.md-del { opacity: .6 }
           <button id="b-msg-stt" class="tool hidden" data-i18n-aria="ariaDict" aria-pressed="false">🗣</button>
           <textarea id="msg-input" dir="auto" data-i18n-ph="msgPlaceholder" data-i18n-aria="ariaMessage" maxlength="4096" rows="1" enterkeyhint="send"></textarea>
           <span id="msg-char-count" class="char-count hidden"></span>
+          <button id="b-msg-loc" class="tool" data-i18n-aria="ttLocation" data-i18n-title="ttLocation" aria-haspopup="dialog">📍</button>
           <button id="b-msg-sticker" class="tool" data-i18n-aria="ttStickers" data-i18n-title="ttStickers" aria-expanded="false" aria-haspopup="dialog">🎨</button>
           <button id="b-msg-emoji" class="tool" data-i18n-aria="ttEmoji" data-i18n-title="ttEmoji" aria-expanded="false" aria-haspopup="dialog">😀</button>
           <button class="btn btn-o btn-sm" id="b-msg-nrn" data-i18n-aria="nrnAria" data-i18n-title="nrnAria">🕊</button>
@@ -1233,8 +1236,9 @@ import { createCallManager } from './src/app/call.js';
 window.__breezeCall = { createCallManager };
 import { createGroupCallManager, poolMap } from './src/app/group-call.js';
 window.__breezeGCall = { createGroupCallManager, poolMap };
-import { CAPS_PROFILE as _CAPS_PROFILE_STR, sanitizeProfile, buildProfilePayload, parseProfilePayload, profileNewer } from './src/app/profile.js';
+import { CAPS_PROFILE as _CAPS_PROFILE_STR, sanitizeProfile, buildProfilePayload, parseProfilePayload, profileNewer, createProfileUI } from './src/app/profile.js';
 window.__breezeProfile = { sanitizeProfile, buildProfilePayload, parseProfilePayload, profileNewer };
+window.__breezeProfileUI = { createProfileUI };
 import { createGroupCreate } from './src/app/group-create.js';
 window.__breezeGroupCreate = { createGroupCreate };
 import { createDeviceLink } from './src/app/device-link.js';
@@ -1243,6 +1247,9 @@ import { CAPS_STICKER as _CAPS_STICKER_STR, BUILTIN_PACK, sanitizeSticker, sanit
 window.__breezeStickers = { BUILTIN_PACK, sanitizeSticker, sanitizePack, parsePackFile, packToFile, buildStickerPayload, parseStickerPayload, groupTextForSticker, parseGroupStickerText, stickerLabel };
 import { createInfoPanels, createDataPanels } from './src/app/info-panels.js';
 window.__breezeInfoPanels = { createInfoPanels, createDataPanels };
+import { CAPS_LOC as _CAPS_LOC_STR, createLocationShare } from './src/app/location.js';
+window.__breezeLocation = { sanitizeLoc, buildLocationPayload, parseLocationPayload, groupTextForLocation, parseGroupLocationText, osmUrl, locLabel, liveRecordId, LIVE_INTERVAL_MS, LIVE_DURATIONS_MIN };
+window.__breezeLocationUI = { createLocationShare };
 import { createBackupTools } from './src/app/backup.js';
 window.__breezeBackup = { createBackupTools };
 import { createQRHelper } from './src/app/qr.js';
@@ -1511,6 +1518,23 @@ const _I = {
     stickersMyPack: 'My stickers',
     stickersSaved: 'Sticker packs saved',
     stickersBadPack: 'That file is not a valid sticker pack',
+    ttLocation: "Share location",
+    locTitle: "Share location",
+    locSendOnce: "📍 Send current location",
+    locLive15: "🔴 Share live location · 15 min",
+    locLive60: "🔴 Share live location · 1 hour",
+    locLive480: "🔴 Share live location · 8 hours",
+    locOpenMap: "Open in map",
+    locLiveUntil: "Live location · until %s",
+    locLiveStarted: "Live location sharing started",
+    locLiveStopped: "Live location sharing stopped",
+    locLiveEnded: "Live sharing ended",
+    locDenied: "Location permission denied",
+    locUnavailable: "Could not get your location",
+    locPeerNoCap: "This contact's app does not support location sharing yet",
+    locGroupNoCap: "Location sharing needs every group member on a supporting version",
+    locLiveAlready: "You are already sharing live location here",
+    locStop: "Stop",
     voiceCall: 'Voice call',
     videoCall: 'Video call',
     // Errors
@@ -5349,6 +5373,7 @@ async function initMessenger(dbName) {
     if (CONFIG.CALL_E2E_SIGNAL) caps.push(CAPS_CALL_E2E);
     caps.push(CAPS_PROFILE); // stage 5 step 4: E2EE profile distribution is always offered
     caps.push(CAPS_STICKER); // stage 5 step 5: sticker distribution is always offered
+    caps.push(CAPS_LOC); // stage 5 step 6: location sharing is always offered
     // Stage-3 step 5 (plan D5): advertise 'pqxdh' only behind the flag AND only
     // when this bundle actually carries the signed PQ pair — never advertise a
     // capability the served bundle cannot fulfil (a mint failure above degrades
@@ -5605,6 +5630,7 @@ async function initMessenger(dbName) {
   const CAPS_CALL_E2E = 'call-e2e'; // must match the literal in src/app/call.js (createCallSignal)
   const CAPS_PROFILE = 'profile-v1'; // must match src/app/profile.js (CAPS_PROFILE)
   const CAPS_STICKER = 'sticker-v1'; // must match src/app/stickers.js (CAPS_STICKER)
+  const CAPS_LOC = 'loc-v1'; // must match src/app/location.js (CAPS_LOC)
 
   function _parsePeerCaps(bundle) {
     if (!bundle) return [];
@@ -6413,28 +6439,6 @@ async function initMessenger(dbName) {
   // SHARE_PLAN stage 5 step 4: my profile (display name / avatar emoji /
   // photo), distributed ONLY as ratchet ciphertexts to peers whose
   // bundle advertises 'profile-v1' — the relay never sees it in clear.
-  async function _myProfile() {
-    const P = globalThis.__breezeProfile;
-    const saved = await dbGet('settings', 'profile').catch(() => null);
-    if (saved) return { ...(P?.sanitizeProfile(saved) || { name: myName, emoji: '', img: '' }), pv: saved.pv || 0 };
-    const keys = await dbGet('identity', 'keys').catch(() => null);
-    return { name: myName, emoji: keys?.avatar || '', img: '', pv: 0 };
-  }
-  async function _sendProfileTo(contact) {
-    const P = globalThis.__breezeProfile;
-    if (!P || !contact?.pubB64 || contact.isGroup) return false;
-    try {
-      const capsById = await _fetchMemberCapsBatch([contact.id]);
-      if (!(capsById[contact.id] || []).includes(CAPS_PROFILE)) return false;
-      const prof = await _myProfile();
-      const wire = P.buildProfilePayload(prof, prof.pv || Date.now());
-      if (!wire) return false;
-      const enc = await encryptFor(wire, contact.pubB64);
-      if (!enc) return false;
-      await relaySend(contact.id, { to: contact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: enc, ts: Date.now(), isProfile: true }, contact.pubB64);
-      return true;
-    } catch(e) { _dbg(e, 'profile-send'); return false; }
-  }
   // Downscale a chosen photo to a 96×96 center-cropped JPEG data URL —
   // small enough to ride a message deposit, large enough to recognize.
   function _imgFromFile(file) {
@@ -6452,69 +6456,6 @@ async function initMessenger(dbName) {
     const s = Math.min(im.width, im.height);
     cv.getContext('2d').drawImage(im, (im.width - s) / 2, (im.height - s) / 2, s, s, 0, 0, 96, 96);
     return cv.toDataURL('image/jpeg', 0.85);
-  }
-  async function _showProfilePanel() {
-    const prof = await _myProfile();
-    const [dlg, titleId] = _makeDialog();
-    safeSetHTML(dlg, `
-      <h3 id="${titleId}" class="i-m-0-12">${esc(t('profileTitle'))}</h3>
-      <label class="i-tiny-meta">${esc(t('profileName'))}</label>
-      <input type="text" class="pf-name i-input-full" maxlength="64" value="${esc(prof.name)}">
-      <label class="i-tiny-meta">${esc(t('profileEmoji'))}</label>
-      <input type="text" class="pf-emoji i-input-full" maxlength="16" value="${esc(prof.emoji)}">
-      <label class="i-tiny-meta">${esc(t('profilePhoto'))}</label>
-      <div class="pf-photo-row"><span class="pf-preview"></span>
-        <button type="button" class="btn btn-g btn-sm pf-choose">${esc(t('profileChoose'))}</button>
-        <button type="button" class="btn btn-g btn-sm pf-remove">${esc(t('profileRemove'))}</button>
-      </div>
-      <input type="file" class="pf-file hidden" accept="image/*">
-      <div class="dlg-btns">
-        <button class="btn btn-g btn-sm" value="cancel">${esc(t('cancel'))}</button>
-        <button class="btn btn-p btn-sm" value="ok">${esc(t('profileSave'))}</button>
-      </div>`);
-    _showDialog(dlg);
-    let img = prof.img || '';
-    const preview = dlg.querySelector('.pf-preview');
-    const showImg = () => {
-      preview.replaceChildren();
-      if (!img) { preview.textContent = '—'; return; }
-      const im = document.createElement('img'); im.className = 'pf-photo'; im.src = img; preview.appendChild(im);
-    };
-    showImg();
-    const fileInput = dlg.querySelector('.pf-file');
-    dlg.querySelector('.pf-choose').onclick = () => fileInput.click();
-    dlg.querySelector('.pf-remove').onclick = () => { img = ''; showImg(); };
-    fileInput.onchange = async () => {
-      const f = fileInput.files?.[0];
-      if (!f) return;
-      try { img = await _downscaleAvatar(f); showImg(); } catch(e) { _dbg(e, 'profile-photo'); }
-    };
-    return new Promise((resolve) => {
-      const close = (val) => { dlg.close(); dlg.remove(); resolve(val); };
-      dlg.querySelector('[value="ok"]').onclick = async () => {
-        const clean = globalThis.__breezeProfile?.sanitizeProfile({ name: dlg.querySelector('.pf-name').value.trim() || myName, emoji: dlg.querySelector('.pf-emoji').value.trim(), img });
-        if (clean) {
-          await dbPut('settings', { ...clean, pv: Date.now() }, 'profile');
-          if (clean.name !== myName) {
-            myName = clean.name;
-            const stored = await dbGet('identity', 'keys');
-            if (stored) { stored.name = clean.name; await dbPut('identity', stored, 'keys'); }
-            _DOM.get('msg-my-name').textContent = clean.name;
-          }
-          _distributeProfile().catch(e => _dbg(e, 'profile-dist'));
-          showToast(t('profileSaved'), 'success');
-        }
-        close(true);
-      };
-      dlg.querySelector('[value="cancel"]').onclick = () => close(false);
-      _wireDialogDismiss(dlg, close);
-    });
-  }
-  async function _distributeProfile() {
-    const contacts = (await dbGetAll('contacts').catch(() => [])) || [];
-    let sent = 0;
-    for (const c of contacts) if (await _sendProfileTo(c)) sent++;
-    return sent;
   }
   // SHARE_PLAN stage 5 step 5: stickers (src/app/stickers.js holds the
   // pack format and wire shapes). 1:1 stickers ride a dedicated
@@ -6545,6 +6486,41 @@ async function initMessenger(dbName) {
     try { await sendMessage(); } catch(e) { _dbg(e, 'sticker-fallback'); }
     if (input.value === '') input.value = draft;
   }
+  // Shared group transport (stage 5 step 6): distribute the sender
+  // key, encrypt the document, try direct delivery with acks, then
+  // pool the owed relay deposits. onEncrypted runs after a
+  // successful encrypt, before any send — the sticker path stores
+  // and renders its record there, matching its original ordering.
+  async function _sendGroupTransport(contact, wireText, ts, msgId, onEncrypted) {
+    const members = (contact.members || []).filter(m => m.id !== myId);
+    for (const m of members) await distributeSenderKey(contact.id, m.pubB64, false, (contact.members || []).length).catch(e => _dbg(e, 'sk-dist'));
+    const groupCiphertext = await encryptGroupMsg(contact.id, wireText);
+    if (!groupCiphertext) return false;
+    if (onEncrypted) await onEncrypted();
+    const waits = new Map();
+    for (const m of members) {
+      const peer = peers[m.pubB64];
+      if (peer?.connected && peer.dc?.readyState === 'open') {
+        const w = _directAck?.expect(m.pubB64, ts);
+        try {
+          peer.dc.send(JSON.stringify({ v: CONFIG.PROTOCOL_VERSION, type: 'group_msg', msgId, payload: groupCiphertext, ts, groupId: contact.id, groupName: contact.name, sender: myPubB64, name: myName, isGroupSK: true }));
+          if (w) waits.set(m.id, w);
+        } catch(e) { _dbg(e, 'group-p2p-send'); if (w) _directAck.cancel(m.pubB64, ts); }
+      }
+    }
+    const owed = [];
+    for (const m of members) {
+      let acked = false;
+      const w = waits.get(m.id);
+      if (w) { acked = await w; _p2pDirectStat(acked ? 'directAck' : 'directNoAck'); if (acked) updateMsgStatus(ts, 'delivered'); }
+      if (!acked) owed.push(m);
+    }
+    await _poolMap(owed, 8, async (m) => {
+      try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCiphertext, ts, groupId: contact.id, groupName: contact.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
+    });
+    return true;
+  }
+
   async function _sendSticker(sticker) {
     const S = globalThis.__breezeStickers;
     const contact = activeContact;
@@ -6564,32 +6540,11 @@ async function initMessenger(dbName) {
       }
       const wire = S.groupTextForSticker(clean);
       if (!wire) return;
-      for (const m of members) await distributeSenderKey(contact.id, m.pubB64, false, (contact.members || []).length).catch(e => _dbg(e, 'sk-dist'));
-      const groupCiphertext = await encryptGroupMsg(contact.id, wire);
-      if (!groupCiphertext) { showToast(t('toastSendFail'), 'error'); return; }
-      await dbPut('messages', { msgId, contactId: contact.id, text: label, mine: true, ts, sticker: clean, senderName: myName });
-      appendMsg(label, true, ts, null, null, { msgId, sticker: clean, senderName: myName });
-      const waits = new Map();
-      for (const m of members) {
-        const peer = peers[m.pubB64];
-        if (peer?.connected && peer.dc?.readyState === 'open') {
-          const w = _directAck?.expect(m.pubB64, ts);
-          try {
-            peer.dc.send(JSON.stringify({ v: CONFIG.PROTOCOL_VERSION, type: 'group_msg', msgId, payload: groupCiphertext, ts, groupId: contact.id, groupName: contact.name, sender: myPubB64, name: myName, isGroupSK: true }));
-            if (w) waits.set(m.id, w);
-          } catch(e) { _dbg(e, 'group-p2p-send'); if (w) _directAck.cancel(m.pubB64, ts); }
-        }
-      }
-      const owed = [];
-      for (const m of members) {
-        let acked = false;
-        const w = waits.get(m.id);
-        if (w) { acked = await w; _p2pDirectStat(acked ? 'directAck' : 'directNoAck'); if (acked) updateMsgStatus(ts, 'delivered'); }
-        if (!acked) owed.push(m);
-      }
-      await _poolMap(owed, 8, async (m) => {
-        try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCiphertext, ts, groupId: contact.id, groupName: contact.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
+      const sent = await _sendGroupTransport(contact, wire, ts, msgId, async () => {
+        await dbPut('messages', { msgId, contactId: contact.id, text: label, mine: true, ts, sticker: clean, senderName: myName });
+        appendMsg(label, true, ts, null, null, { msgId, sticker: clean, senderName: myName });
       });
+      if (!sent) { showToast(t('toastSendFail'), 'error'); return; }
     } else {
       const capsById = await _fetchMemberCapsBatch([contact.id]);
       if (!(capsById[contact.id] || []).includes(CAPS_STICKER)) {
@@ -8309,7 +8264,7 @@ async function initMessenger(dbName) {
       }
       const safeName = typeof name === 'string' ? name.slice(0, 64) : 'Contact';
       await dbPut('contacts', { id, pubB64: safePub, name: safeName, addedAt: Date.now(), unread: 0, ...(home.length ? { home } : {}) });
-      _sendProfileTo({ id, pubB64: safePub }).catch(e => _dbg(e, 'profile-add')); // stage 5 step 4: greet with my profile (cap-gated inside)
+      _profileUI?.sendTo({ id, pubB64: safePub }).catch(e => _dbg(e, 'profile-add')); // stage 5 step 4: greet with my profile (cap-gated inside)
       auditLog('contact', 'Added: ' + name + ' (' + id + ')');
       await renderContacts();
 
@@ -8823,6 +8778,7 @@ async function initMessenger(dbName) {
     activeContact = contact;
     contact.unread = 0;
     await dbPut('contacts', contact);
+    _locUI?.renderLiveChip();
     const nameEl = _DOM.get('msg-conv-name');
     // v3.6: Show member count for groups in header
     const memberBadge = contact.isGroup && contact.members ? ` <span class="enc-badge">${contact.members.length} ${esc(t('cmdMembersLabel'))}</span>` : '';
@@ -8888,6 +8844,7 @@ async function initMessenger(dbName) {
           msgId: m.msgId, replyTo: m.replyTo, edited: m.edited,
           deleted: m.deleted, pinned: m.pinned, senderName: m.senderName,
           disappearAt: m.disappearAt, voice: m.voice, reactions: m.reactions, sticker: m.sticker,
+          loc: m.loc, liveUntil: m.liveUntil, liveEnded: m.liveEnded,
           forwarded: m.forwarded, bookmarked: m.bookmarked,
           verified: m.verified, tampered: m.tampered,
           replyCount: _replyCounts[m.msgId] || 0,
@@ -9178,6 +9135,9 @@ async function initMessenger(dbName) {
       else if (st?.emoji) content += `<div class="msg-sticker-emoji">${esc(st.emoji)}</div>`;
     }
     // Voice message
+    else if (meta.loc) {
+      content += `<div class="msg-loc">${_locUI?.locCardInner({ loc: meta.loc, liveUntil: meta.liveUntil, liveEnded: meta.liveEnded }) || ''}</div>`;
+    }
     else if (meta.voice) {
       try {
         const bytes = Uint8Array.from(atob(meta.voice), c => c.charCodeAt(0));
@@ -11060,6 +11020,29 @@ async function initMessenger(dbName) {
     dbGet, dbGetAll, fmtSize, downloadBlob, auditLog, showToast, t, esc, safeSetHTML,
     cmdPanel: (id) => _cmdPanelEl(id), db: () => db, config: () => CONFIG, dbg: _dbg,
   });
+  const _profileUI = globalThis.__breezeProfileUI?.createProfileUI({
+    dbGet, dbPut, dbGetAll, encryptFor, relaySend, showToast, t, esc, safeSetHTML,
+    fetchMemberCapsBatch: (ids) => _fetchMemberCapsBatch(ids),
+    makeDialog: () => _makeDialog(), showDialog: (d) => _showDialog(d), wireDialogDismiss: (d, c) => _wireDialogDismiss(d, c),
+    domGet: (id) => _DOM.get(id), dbg: _dbg, downscaleAvatar: (f) => _downscaleAvatar(f),
+    myId: () => myId, myName: () => myName, myPubB64: () => myPubB64, setMyName: (v) => { myName = v; },
+  });
+  const _locUI = globalThis.__breezeLocationUI?.createLocationShare({
+    dbGet, dbPut, encryptFor, relaySend, showToast, t, esc, safeSetHTML, appendMsg,
+    fanOut: (c, wire, ts, extra, sfExtra) => _fanOut(c, wire, ts, extra, sfExtra),
+    sendGroupTransport: (c, wire, ts, mid, cb) => _sendGroupTransport(c, wire, ts, mid, cb),
+    fetchMemberCapsBatch: (ids) => _fetchMemberCapsBatch(ids),
+    sendTextFallback: (text) => _sendTextFallback(text),
+    shouldAlert: (c, text) => _shouldAlert(c, text),
+    renderContactsThrottled: () => _renderContactsThrottled(),
+    playNotif: () => playNotif(), playSendSound: () => playSendSound(), hapticSend: () => haptic.send(),
+    makeDialog: () => _makeDialog(), showDialog: (d) => _showDialog(d), wireDialogDismiss: (d, c) => _wireDialogDismiss(d, c),
+    domGet: (id) => _DOM.get(id), correctedNow: () => correctedNow(), dbg: _dbg, MS,
+    activeContact: () => activeContact, activeId: () => activeContact?.id,
+    myId: () => myId, myName: () => myName, myPubB64: () => myPubB64,
+    isSecondary: () => _isSecondaryDevice, replayCache: () => _replayCache, intervals: () => _intervals,
+    lastSendTs: () => _lastSendTs, setLastSendTs: (v) => { _lastSendTs = v; },
+  });
   const _groupCreate = globalThis.__breezeGroupCreate?.createGroupCreate({
     dbGetAll, dbPut, showPrompt, fetchCaps: _fetchMemberCapsBatch, encryptFor, relaySend, postAPIRaw, groupCreateAuth,
     showToast, t, esc, renderContacts, auditLog, uid, safeSetHTML, dbGet, addContact, openConversation,
@@ -11781,6 +11764,14 @@ async function initMessenger(dbName) {
       const senderName = (senderContact?.pubB64 === member.pubB64 && typeof senderContact.name === 'string')
         ? senderContact.name : (typeof member.name === 'string' ? member.name : member.id);
       const meta = { msgId, senderName, replyTo: msg.replyTo, disappearAt: msg.disappearAt };
+      const locP = globalThis.__breezeLocation?.parseGroupLocationText(text);
+      if (locP) { // Stage 5 step 6: group location — collapses into the live/one-shot record, never text.
+        await _locUI?.applyLocation(msg.groupId, member.id, locP, msg.ts, senderName);
+        const g2 = await dbGet('contacts', msg.groupId).catch(() => null);
+        if (g2) { g2.lastMsgSender = senderName; await dbPut('contacts', g2); }
+        if (ackOut) ackOut.stored = true;
+        return;
+      }
       const stk = globalThis.__breezeStickers?.parseGroupStickerText(text);
       if (stk) { // Stage 5 step 5: group sticker — stored/rendered as a sticker, never as text.
         const label = globalThis.__breezeStickers.stickerLabel(stk);
@@ -11842,6 +11833,19 @@ async function initMessenger(dbName) {
         if (activeContact?.id === msg.from) appendMsg(label, false, msg.ts, null, null, { msgId, sticker });
         _renderContactsThrottled();
       } catch(e) { _dbg(e, 'sticker'); }
+      return;
+    }
+
+    // === Location message (stage 5 step 6) ===
+    if (msg.isLocation) {
+      const contact = await dbGet('contacts', msg.from);
+      if (!contact) return;
+      try {
+        const decrypted = await decryptFrom(msg.payload, contact.pubB64);
+        if (!decrypted) return;
+        const p = globalThis.__breezeLocation?.parseLocationPayload(decrypted);
+        if (p) await _locUI?.applyLocation(msg.from, msg.from, p, msg.ts, null);
+      } catch(e) { _dbg(e, 'location'); }
       return;
     }
 
@@ -14199,7 +14203,7 @@ async function initMessenger(dbName) {
         '<b>' + t('helpSecurity') + '</b>',
         '/security · /verify · /audit · /retention · /backup · /keywrap',
         '/sessions · /wipe · /gdpr · /panic (Ctrl+Shift+Backspace)',
-        '/devices · /link [pub] · /linkto &lt;pub&gt; · /unlink &lt;n&gt; · /history · /migrate · /profile · /stickers',
+        '/devices · /link [pub] · /linkto &lt;pub&gt; · /unlink &lt;n&gt; · /history · /migrate · /profile · /stickers · /location',
         '',
         '<b>' + t('helpDiag') + '</b>',
         '/retry',
@@ -15251,7 +15255,8 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       return;
     }
     if (val === '/stickers') { e.preventDefault(); clearInput(); _showStickersPanel().catch(e2 => _dbg(e2, 'stickers-panel')); return; }
-    if (val === '/profile') { e.preventDefault(); clearInput(); _showProfilePanel().catch(e2 => _dbg(e2, 'profile-panel')); return; }
+    if (val === '/location') { e.preventDefault(); clearInput(); _locUI?.showPanel().catch(e2 => _dbg(e2, 'loc-panel')); return; }
+    if (val === '/profile') { e.preventDefault(); clearInput(); _profileUI?.showPanel().catch(e2 => _dbg(e2, 'profile-panel')); return; }
     if (val === '/history') {
       e.preventDefault(); clearInput();
       const devs = await _myOtherDevices();

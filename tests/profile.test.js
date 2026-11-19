@@ -78,7 +78,9 @@ describe('stage 5 step 4 wiring + server-blindness audit', () => {
   });
 
   it('profiles travel only as ratchet ciphertexts flagged isProfile', () => {
-    expect(html).toContain('isProfile: true }, contact.pubB64)');
+    const mod = readFileSync(new URL('../src/app/profile.js', import.meta.url), 'utf8');
+    expect(mod).toContain('isProfile: true }, contact.pubB64);');
+    expect(html).toContain('if (msg.isProfile) {');
     expect(html).toContain('if (msg.isProfile) {');
     expect(html).toContain('P?.parseProfilePayload(decrypted)');
     expect(html).toContain('P.profileNewer(prof, c)');
@@ -90,15 +92,16 @@ describe('stage 5 step 4 wiring + server-blindness audit', () => {
   });
 
   it('the module is bridged and precached', () => {
-    expect(html).toContain("import { CAPS_PROFILE as _CAPS_PROFILE_STR, sanitizeProfile, buildProfilePayload, parseProfilePayload, profileNewer } from './src/app/profile.js';");
+    expect(html).toContain("import { CAPS_PROFILE as _CAPS_PROFILE_STR, sanitizeProfile, buildProfilePayload, parseProfilePayload, profileNewer, createProfileUI } from './src/app/profile.js';");
     expect(sw).toContain("'/src/app/profile.js'");
   });
 
   it('the panel follows the _makeDialog house pattern (array destructure + safeSetHTML)', () => {
-    const start = html.indexOf('async function _showProfilePanel()');
-    const body = html.slice(start, start + 700);
-    expect(body).toContain('const [dlg, titleId] = _makeDialog();');
-    expect(body).toContain('safeSetHTML(dlg,');
+    const mod = readFileSync(new URL('../src/app/profile.js', import.meta.url), 'utf8');
+    const start = mod.indexOf('async function _showProfilePanel()');
+    const body = mod.slice(start, start + 700);
+    expect(body).toContain('const [dlg, titleId] = D.makeDialog();');
+    expect(body).toContain('D.safeSetHTML(dlg,');
     expect(html).not.toContain("_makeDialog('profile-title'");
   });
 });
