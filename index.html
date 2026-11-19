@@ -1264,9 +1264,11 @@ const CONFIG = {
   // v3.6 SECURITY (default OFF — breaking wire change, both peers must run ON): authenticate+
   // encrypt WebRTC call signaling (offer/answer/ICE) via the 1:1 ratchet. The /signal relay is
   // unauthenticated + SDP is plaintext, so someone who knows both user IDs can inject a
-  // call-answer with their own DTLS fingerprint → call MITM. ON: each signal is encryptFor()'d,
-  // a signal that fails decryptFrom() (forged/not from the pinned peer) is dropped. OFF: byte-identical to legacy.
-  CALL_E2E_SIGNAL: false,
+  // call-answer with their own DTLS fingerprint → call MITM. Default ON since stage 5
+  // step 1, negotiated per peer (src/app/call.js createCallSignal): a peer is encrypted
+  // to when its bundle advertises 'call-e2e' or it has proven it encrypts; plaintext
+  // from a proven peer is dropped as forged, from anyone else it is the legacy format.
+  CALL_E2E_SIGNAL: true,
   // v3.6 SECURITY (default OFF — coordinated rollout, breaking for groups): replace the static
   // group sender-key HKDF (same key all messages, counter as salt) with a hash ratchet that
   // advances the chain key per message and evicts old keys → group forward secrecy. Adds epoch
@@ -5342,6 +5344,7 @@ async function initMessenger(dbName) {
     if (CONFIG.GROUP_RATCHET_V5) caps.push(CAPS_GROUP_V5);
     if (CONFIG.SEAL_V2_ENABLED) caps.push(CAPS_SEAL_V2);
     if (CONFIG.MULTI_RELAY_ENABLED) caps.push(CAPS_MULTI_RELAY);
+    if (CONFIG.CALL_E2E_SIGNAL) caps.push(CAPS_CALL_E2E);
     // Stage-3 step 5 (plan D5): advertise 'pqxdh' only behind the flag AND only
     // when this bundle actually carries the signed PQ pair — never advertise a
     // capability the served bundle cannot fulfil (a mint failure above degrades
@@ -5595,6 +5598,7 @@ async function initMessenger(dbName) {
   const CAPS_X3DH_V5 = 'x3dh-v5';
   const CAPS_SEAL_V2 = 'seal-v2';
   const CAPS_PQXDH = 'pqxdh';
+  const CAPS_CALL_E2E = 'call-e2e'; // must match the literal in src/app/call.js (createCallSignal)
 
   function _parsePeerCaps(bundle) {
     if (!bundle) return [];
@@ -8014,28 +8018,8 @@ async function initMessenger(dbName) {
     return _signal(room, type, data);
   }
 
-  // v3.6 SECURITY: call-signaling authentication (gated by CONFIG.CALL_E2E_SIGNAL).
-  // Wrap: when the flag is ON, encrypt the signal object to the pinned peer via the 1:1
-  // ratchet (the resulting ciphertext is opaque to the unauthenticated /signal relay and
-  // can only be produced by the holder of the peer's session); when OFF, emit the legacy
-  // plaintext JSON so behavior is unchanged. Returns null only if encryption fails (ON path).
-  async function _wrapCallSignal(peerPub, obj) {
-    if (!CONFIG.CALL_E2E_SIGNAL) return JSON.stringify(obj);
-    if (!peerPub) return null;
-    return await encryptFor(JSON.stringify(obj), peerPub);
-  }
-  // Unwrap: when ON, decrypt+authenticate — a forged signal (not from the pinned peer, or a
-  // relay-injected substitute) fails to decrypt and yields null, so the caller drops it,
-  // closing the call-MITM. When OFF, parse the legacy plaintext. Returns null on any failure.
-  async function _unwrapCallSignal(peerPub, data) {
-    try {
-      if (!CONFIG.CALL_E2E_SIGNAL) return JSON.parse(data);
-      if (!peerPub) return null;
-      const pt = await decryptFrom(data, peerPub);
-      if (!pt) return null;
-      return JSON.parse(pt);
-    } catch(_e) { _dbg(_e, 'unwrapCallSignal'); return null; }
-  }
+  // (The call-signal wrap/unwrap live in src/app/call.js since stage 5
+  // step 1 — createCallSignal there holds the negotiated rollout.)
 
   async function addContact(pubB64, name, homeHint) {
     try {
@@ -10688,7 +10672,7 @@ async function initMessenger(dbName) {
   // Absent module ⇒ stubs keep the closure whole (calls unavailable,
   // everything else boots) — the pq-facade degradation doctrine.
   const _callMgr = globalThis.__breezeCall?.createCallManager({
-    _wrapCallSignal, _unwrapCallSignal, _signal, _signalAwait, relaySend, _intervals, _ac, _settings,
+    encryptFor, decryptFrom, fetchCaps: _fetchMemberCapsBatch, _signal, _signalAwait, relaySend, _intervals, _ac, _settings,
     myId: () => myId, myPubB64: () => myPubB64, myName: () => myName,
   }) || { startCall() {}, handleCallOffer() {}, endCall() {}, pollCallSignals() {},
     getRTCCertificate: async () => null, hasRTCCertificate: () => false,

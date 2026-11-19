@@ -18,10 +18,70 @@
 // (acceptCall / endCall / toggleCallMute / toggleCallCamera) are installed
 // by the factory body, at instantiation, as before. Behaviour is
 // unchanged — this is a move, not a rewrite.
+//
+// SHARE_PLAN stage 5 step 1: the call-signal wrap/unwrap moved here too,
+// and grew the mixed-version negotiation the default-ON rollout needs.
+// A peer is encrypted to when its prekey bundle advertises the
+// 'call-e2e' cap (index.html's CAPS_CALL_E2E — the strings must match)
+// or when it has PROVEN it encrypts (one of its signals decrypted).
+// Plaintext from a proven peer is dropped as forged/downgraded; from
+// any other peer it is the legacy format and is accepted, so calls
+// with pre-rollout clients keep working in both directions.
 // ============================================================================
 
+// The envelope test that keeps legacy plaintext out of decryptFrom
+// (which throws on malformed payloads and can surface UI): an
+// encryptFor output is {v:5, t:'pkm', msg:'<inner>'} for a first
+// message or {v:4, i:[...], d:[...]} on an established session.
+// Legacy signals ({sdp,…}, {type,sdp}, ICE candidates) never match.
+export function looksEncryptedSignal(data) {
+  try {
+    const p = JSON.parse(data);
+    return !!p && typeof p === 'object'
+      && ((p.v === 5 && typeof p.msg === 'string') || (p.v === 4 && Array.isArray(p.i) && Array.isArray(p.d)));
+  } catch { return false; }
+}
+
+export function createCallSignal(D) {
+  const capsKnown = new Set(), proven = new Set();
+  function noteCaps(peerPub, caps) {
+    if (peerPub && Array.isArray(caps) && caps.includes('call-e2e')) capsKnown.add(peerPub);
+  }
+  async function wrap(peerPub, obj) {
+    if (!D.enabled()) return JSON.stringify(obj);
+    if (!peerPub) return null;
+    if (!capsKnown.has(peerPub) && !proven.has(peerPub)) return JSON.stringify(obj);
+    return await D.encryptFor(JSON.stringify(obj), peerPub);
+  }
+  async function unwrap(peerPub, data) {
+    try {
+      if (!D.enabled()) return JSON.parse(data);
+      if (!peerPub || typeof data !== 'string') return null;
+      if (looksEncryptedSignal(data)) {
+        const pt = await D.decryptFrom(data, peerPub).catch(() => null);
+        if (!pt) return null; // forged or corrupt ciphertext — dropped
+        proven.add(peerPub);
+        return JSON.parse(pt);
+      }
+      if (proven.has(peerPub)) return null; // proven peer, plaintext: forged or downgraded — dropped
+      return JSON.parse(data); // legacy peer: plaintext, as before the rollout
+    } catch(e) { _dbg(e, 'unwrapCallSignal'); return null; }
+  }
+  return { wrap, unwrap, noteCaps, hasProof: (p) => proven.has(p), knowsCaps: (p) => capsKnown.has(p) };
+}
+
 export function createCallManager(D) {
-  const { _wrapCallSignal, _unwrapCallSignal, _signal, _signalAwait, relaySend, _intervals, _ac, _settings } = D;
+  const { _signal, _signalAwait, relaySend, _intervals, _ac, _settings } = D;
+  const _sig = createCallSignal({ encryptFor: D.encryptFor, decryptFrom: D.decryptFrom, enabled: () => CONFIG.CALL_E2E_SIGNAL });
+  const _wrapCallSignal = _sig.wrap, _unwrapCallSignal = _sig.unwrap;
+  // Learn the peer's advertised caps before the first wrap of a call:
+  // the fetch starts while the mic prompt is up and is awaited before
+  // the offer is built, so a supporting peer is encrypted to from the
+  // very first signal. Failure leaves the peer unknown (legacy path).
+  async function _learnPeerCaps(contact) {
+    try { const byId = await D.fetchCaps([contact.id]); _sig.noteCaps(contact.pubB64, byId?.[contact.id] || []); }
+    catch(e) { _dbg(e, 'call-caps'); }
+  }
 
   let _callState = 'idle'; // idle | calling | ringing | connected
   let _callPC = null;
@@ -91,6 +151,7 @@ export function createCallManager(D) {
 
   async function startCall(contact, withVideo) {
     if (_callState !== 'idle' || !contact || contact.isGroup) return;
+    const capsReady = _learnPeerCaps(contact);
     _callContact = contact;
     _callState = 'calling';
     showCallUI('calling', contact.name, withVideo);
@@ -153,6 +214,7 @@ export function createCallManager(D) {
         }
       };
 
+      await capsReady;
       const offer = await _callPC.createOffer();
       await _callPC.setLocalDescription(offer);
 
@@ -179,6 +241,7 @@ export function createCallManager(D) {
   async function handleCallOffer(contact, offerData) {
     try {
       if (_callState !== 'idle') return; // busy
+      await _learnPeerCaps(contact);
       // Authenticate the offer before showing any ringing UI: when CALL_E2E_SIGNAL is ON a
       // forged/relay-injected offer fails to decrypt → null → silently ignored (no fake ring).
       const parsed = await _unwrapCallSignal(contact.pubB64, offerData);
