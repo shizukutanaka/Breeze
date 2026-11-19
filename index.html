@@ -9378,7 +9378,7 @@ async function initMessenger(dbName) {
       el.classList.add('i-cur');
       el.onclick = () => {
         // Retry P2P connection (ICE restart)
-        if (peer?.pc) { try { peer.pc.restartIce(); } catch(e) { _dbg(e); } }
+        if (peer?.pc) { try { peer._sigPoll?.resetFast(); peer.pc.restartIce(); } catch(e) { _dbg(e); } }
         else connectPeer(activeContact);
       };
     } else {
@@ -11500,6 +11500,13 @@ async function initMessenger(dbName) {
 
     schedule(base);
     return {
+      resetFast() {
+        if (stopped) return;
+        connected = false;
+        delay = base;
+        if (running) phaseChanged = true;
+        else schedule(base);
+      },
       setConnected(value) {
         if (stopped || connected === value) return;
         connected = value;
@@ -11595,6 +11602,7 @@ async function initMessenger(dbName) {
         // restartIce() triggers onnegotiationneeded → Perfect Negotiation handles re-offer
         if (pc.restartIce) {
           _dbg(null, `P2P: ICE restart for ${contact.id}`);
+          peerState._sigPoll?.resetFast();
           pc.restartIce(); // Will fire onnegotiationneeded automatically
         }
         return; // Don't escalate yet — wait for failed
@@ -11629,6 +11637,24 @@ async function initMessenger(dbName) {
       }
     };
 
+    let _missedPongs = 0, _pendingPing = null, _mainPongSupported = false;
+    function handleHeartbeat(ch, msg) {
+      if (msg.type === 'ping') {
+        ch.send(JSON.stringify({ type: 'pong', ts: msg.ts, mainPong: true }));
+        return true;
+      }
+      if (msg.type !== 'pong') return false;
+      if (msg.mainPong === true) _mainPongSupported = true;
+      if (_pendingPing && _pendingPing.ts === msg.ts && _pendingPing.channel === ch) {
+        _pendingPing = null;
+        _missedPongs = 0;
+        const rtt = Date.now() - msg.ts;
+        peerState._heartbeatRtt = rtt;
+        _adaptiveConfig.updateFromRTT(rtt);
+      }
+      return true;
+    }
+
     function setupDC(ch) {
       ch.binaryType = 'arraybuffer'; // v3: required for binary file chunks
       // v3.6: Backpressure — event-based resume instead of polling
@@ -11652,6 +11678,7 @@ async function initMessenger(dbName) {
             // State channel carries only tiny control frames (typing/read/ping/pong); cap at 4KB
             if (typeof e.data !== 'string' || e.data.length > 4 * 1024) return;
             const msg = JSON.parse(e.data);
+            if (handleHeartbeat(peerState.stateDC, msg)) return;
             if (msg.type === 'typing') { showTyping(contact.id, msg.senderName || contact.name); return; }
             if (msg.type === 'read') { showReadReceipt(contact.id, msg.ts); return; }
             if (msg.type === 'presence') { _presenceCache[contact.id] = true; _lastSeenCache[contact.id] = Date.now(); _renderContactsThrottled(); return; }
@@ -11671,6 +11698,7 @@ async function initMessenger(dbName) {
           // an oversized JSON blob from a malicious peer would otherwise hang JSON.parse.
           if (typeof e.data !== 'string' || e.data.length > 512 * 1024) return;
           const msg = JSON.parse(e.data);
+          if (handleHeartbeat(ch, msg)) return;
           // v3.6: Typing/read may still arrive on main DC (backward compat)
           if (msg.type === 'typing') { showTyping(contact.id, msg.senderName || contact.name); return; }
           if (msg.type === 'read') { showReadReceipt(contact.id, msg.ts); return; }
@@ -11784,35 +11812,34 @@ async function initMessenger(dbName) {
         }, MS.SEC / 2);
       }
       // v3.6: DC heartbeat — ping/pong via state channel for liveness detection
-      // Critical for serverless P2P: detect dead connections in 30s (not 5min TCP timeout)
+      // Three unanswered probes trigger recovery on the following tick.
       if (peerState._heartbeat) clearInterval(peerState._heartbeat);
-      let _missedPongs = 0;
+      _missedPongs = 0;
+      _pendingPing = null;
+      // Old peers ignore main-DC pings; advertise support without requiring a reply.
+      try { peerState.dc.send(JSON.stringify({ type: 'pong', mainPong: true })); } catch(e) { _dbg(e, 'heartbeat-cap'); }
       peerState._heartbeat = setInterval(() => {
+        const unanswered = !!_pendingPing;
+        if (unanswered) _missedPongs++;
+        _pendingPing = null;
         const sc = peerState.stateDC?.readyState === 'open' ? peerState.stateDC : peerState.dc;
-        if (!sc || sc.readyState !== 'open') { _missedPongs++; }
-        else {
-          try { sc.send(JSON.stringify({ type: 'ping', ts: Date.now() })); } catch {}
+        if (!sc || sc.readyState !== 'open') { if (!unanswered) _missedPongs++; }
+        else if (_missedPongs < 3 && (sc === peerState.stateDC || _mainPongSupported)) {
+          const ts = Date.now();
+          try {
+            _pendingPing = { ts, channel: sc };
+            sc.send(JSON.stringify({ type: 'ping', ts }));
+          } catch(e) { _pendingPing = null; _missedPongs++; _dbg(e, 'heartbeat-send'); }
         }
         if (_missedPongs >= 3) {
           _dbg(null, `Heartbeat: 3 missed pongs for ${contact.id.slice(0,8)} — triggering ICE restart`);
           _missedPongs = 0;
+          _pendingPing = null;
+          peerState._sigPoll?.resetFast();
           if (pc.restartIce) pc.restartIce();
           else { peerState.transition('CLOSED'); try { pc.close(); } catch {} delete peers[contact.pubB64]; connectPeer(contact); }
         }
       }, 10000);
-      // Handle pong responses
-      const _origOnMsg = peerState.stateDC?.onmessage;
-      if (peerState.stateDC) {
-        const prevHandler = peerState.stateDC.onmessage;
-        peerState.stateDC.onmessage = (e) => {
-          try {
-            const msg = JSON.parse(e.data);
-            if (msg.type === 'pong') { _missedPongs = 0; if (msg.ts) { const rtt = Date.now() - msg.ts; peerState._heartbeatRtt = rtt; _adaptiveConfig.updateFromRTT(rtt); } return; }
-            if (msg.type === 'ping') { peerState.stateDC.send(JSON.stringify({ type: 'pong', ts: msg.ts })); return; }
-          } catch {}
-          if (prevHandler) prevHandler(e);
-        };
-      }
       // v3.5: Connection health monitor (Spec v6 §14,§158)
       // Check RTT/loss every 15s, trigger ICE restart if degraded
       if (peerState._healthTimer) clearInterval(peerState._healthTimer);
@@ -11831,6 +11858,7 @@ async function initMessenger(dbName) {
               // Auto ICE restart if RTT > 5s (likely dead connection)
               if (peerState._lastRtt > 5000 && pc.restartIce) {
                 _dbg(null, `P2P health: RTT ${peerState._lastRtt}ms — triggering ICE restart`);
+                peerState._sigPoll?.resetFast();
                 pc.restartIce();
               }
             }
@@ -11881,10 +11909,13 @@ async function initMessenger(dbName) {
     const polite = !isInit; // Polite peer yields on offer collision
     let makingOffer = false;
     let ignoreOffer = false;
+    const seenSDP = new Set();
+    let remoteSDPOrigin = null;
 
     // onnegotiationneeded: fires when tracks/channels change or initial setup
     pc.onnegotiationneeded = async () => {
       try {
+        peerState._sigPoll?.resetFast();
         makingOffer = true;
         await pc.setLocalDescription(); // auto-generates offer
         await _sendSignedSDP(sigRoom, 'offer', pc.localDescription);
@@ -11920,7 +11951,6 @@ async function initMessenger(dbName) {
             if (s.type === 'typing') { showTyping(contact.id, s.senderName || contact.name); continue; }
             if (s.type === 'read') { showReadReceipt(contact.id, parseInt(s.data) || Date.now()); continue; }
             // WebRTC signaling
-            if (peerState.connected && s.type !== 'ice') continue;
 
             try {
               if (s.type === 'offer' || s.type === 'answer') {
@@ -11949,15 +11979,26 @@ async function initMessenger(dbName) {
                 } catch(_e) { _dbg(_e, 'sdp-auth'); }
                 const description = JSON.parse(sdpJson);
                 if (!description || typeof description !== 'object' || Array.isArray(description)) continue;
+                if (description.type !== s.type || typeof description.sdp !== 'string') continue;
+                if (seenSDP.has(sdpJson)) continue;
+                if (description.type === 'answer' && pc.signalingState !== 'have-local-offer') continue;
+                const origin = description.sdp.match(/^o=\S+ (\d+) (\d+) /m);
+                if (origin && remoteSDPOrigin?.[1] === origin[1] && BigInt(origin[2]) < BigInt(remoteSDPOrigin[2])) continue;
                 // v3.6: Perfect Negotiation collision handling
                 const offerCollision = description.type === 'offer' && (makingOffer || pc.signalingState !== 'stable');
                 ignoreOffer = !polite && offerCollision;
                 if (ignoreOffer) { _dbg(null, 'P2P: ignoring colliding offer (impolite)'); continue; }
+                peerState._sigPoll?.resetFast();
+                if (offerCollision && pc.signalingState !== 'stable') await pc.setLocalDescription({ type: 'rollback' });
                 await pc.setRemoteDescription(description);
+                if (origin) remoteSDPOrigin = origin;
+                seenSDP.add(sdpJson);
+                if (seenSDP.size > 32) seenSDP.delete(seenSDP.values().next().value);
                 if (!isStopped() && description.type === 'offer') {
                   await pc.setLocalDescription(); // auto-answer
                   if (!isStopped()) await _sendSignedSDP(sigRoom, 'answer', pc.localDescription);
                 }
+                peerState._sigPoll?.setConnected(pc.signalingState === 'stable' && peerState.connected && peerState.dc?.readyState === 'open');
               } else if (s.type === 'ice') {
                 activity = true;
                 try {
@@ -12391,7 +12432,7 @@ async function initMessenger(dbName) {
         if (!c.isGroup && _presenceCache[c.id] && !peers[c.pubB64]?.connected) {
           const peer = peers[c.pubB64];
           if (peer?.pc?.iceConnectionState === 'failed' || peer?.pc?.iceConnectionState === 'disconnected') {
-            try { peer.pc.restartIce(); _dbg(null, 'ICE restart for ' + c.id); } catch(e) { _dbg(e); }
+            try { peer._sigPoll?.resetFast(); peer.pc.restartIce(); _dbg(null, 'ICE restart for ' + c.id); } catch(e) { _dbg(e); }
           } else if (!peer?.pc) {
             // No connection at all — try fresh connect
             connectPeer(c);
@@ -12419,7 +12460,7 @@ async function initMessenger(dbName) {
         if (peer?.pc) {
           const state = peer.pc.iceConnectionState;
           if (state === 'failed' || state === 'disconnected') {
-            try { peer.pc.restartIce(); restarted++; } catch(e) { _dbg(e); }
+            try { peer._sigPoll?.resetFast(); peer.pc.restartIce(); restarted++; } catch(e) { _dbg(e); }
           }
         } else {
           // No connection — initiate fresh

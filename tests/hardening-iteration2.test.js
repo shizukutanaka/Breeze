@@ -183,6 +183,49 @@ describe('P2P step 3 — DM signaling poll cadence', () => {
       expect(poll).toHaveBeenCalledTimes(1);
     } finally { vi.useRealTimers(); }
   });
+
+  it('forces fast recovery even while transport is connected and returns to the established cadence', async () => {
+    vi.useFakeTimers();
+    try {
+      const poll = vi.fn(async () => false);
+      const controller = startPoll(poll);
+      controller.setConnected(true);
+      controller.resetFast();
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(poll).toHaveBeenCalledTimes(1);
+      controller.resetFast();
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(poll).toHaveBeenCalledTimes(2);
+      controller.setConnected(true);
+      await vi.advanceTimersByTimeAsync(14_999);
+      expect(poll).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(poll).toHaveBeenCalledTimes(3);
+      controller.stop();
+      controller.resetFast();
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(poll).toHaveBeenCalledTimes(3);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('resets fast in flight without overlap or backing off the first recovery poll', async () => {
+    vi.useFakeTimers();
+    try {
+      let finish;
+      const poll = vi.fn(() => new Promise(resolve => { finish = resolve; }));
+      const controller = startPoll(poll);
+      controller.setConnected(true);
+      await vi.advanceTimersByTimeAsync(15_000);
+      controller.resetFast();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(poll).toHaveBeenCalledTimes(1);
+      finish(false);
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(poll).toHaveBeenCalledTimes(2);
+      controller.stop();
+      finish(false);
+    } finally { vi.useRealTimers(); }
+  });
 });
 
 describe('C — controllerchange reloads only when replacing an existing controller', () => {
