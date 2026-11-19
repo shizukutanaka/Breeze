@@ -336,14 +336,14 @@ Breeze uses the following cryptographic primitives:
 |-------|-----------|---------|
 | Key Exchange (1:1) | X3DH v5: Ed25519-signed SPK, DH(IK,SPK)+DH(EK,IK)+DH(EK,SPK)+DH(EK,OPK) | Authenticated first-contact key agreement (I1) |
 | Key Exchange (DH) | X25519 (preferred), P-256 (fallback) | DH ratchet + X3DH DHs |
-| Signing | Ed25519 | SPK signing (X3DH auth), group per-message auth (N2) |
+| Signing | Ed25519 | SPK signing (X3DH auth), signed 1:1 text |
 | Encryption | AES-256-GCM | Message confidentiality |
 | Key Derivation | HKDF-SHA256 | Root/chain/commitment/ratchet/X3DH KDF |
 | Key Commitment | HKDF(msgKey,'breeze-commit') + constant-time verify | Invisible-salamanders defense (I16) |
 | At-Rest | PBKDF2 ≥600k SHA-256 + AES-256-GCM | App-lock / identity key wrapping (I4) |
 | Protocol (1:1) | Signal Double Ratchet (v4/v5) | Per-message FS; Nr reset on DH step |
 | Protocol (group) | Sender Key chain-ratchet + epoch rotation | Group FS (I2) + PCS/kick (I3) |
-| Group Auth | Ed25519 per-message signature | Forgery resistance within group (N2) |
+| Group Auth | Peer-bound direct frames + symmetric Sender Keys | Membership/transport checks; no deployed per-message author signature (N2) |
 | Franking | HMAC-SHA256 commitment/opening | Verifiable abuse reporting without escrow (I17) |
 | Sealed Sender v2 | Ephemeral X25519 ECDH + HKDF('breeze-seal-v2') + AES-256-GCM (AAD: to+ts) | Sender anonymity vs the relay, incl. first-contact X3DH header |
 | Anti-Replay | Counter + msgId dedup + TTL-expiring skipped-key cache | Replay + stale-key FS (I7) |
@@ -351,6 +351,17 @@ Breeze uses the following cryptographic primitives:
 | File Validation | Magic bytes (PE/ELF/Mach-O/shebang) | Executable upload blocking |
 | Timing | Constant-time ctEqual() | Commitment + MAC comparisons |
 | Memory | zeroBuffer() | Key material erasure after use |
+
+Group receive checks membership before either Sender-Key or legacy decryption. Direct
+`group_msg` frames must match the connected peer's full public key; explicitly forwarded
+frames do not gain group-author authentication from the forwarder's identity. Group
+attribution uses local contact/member names, not received display names. Relay sender
+and public-key fields must be consistent with the local member record, but are not
+an author proof: another member receives the same Sender-Key material and can forge
+a ciphertext as that sender with consistent fields. Sealed Sender does not remove
+this insider attack. The Ed25519 author signatures in reference `src/crypto/group.js`
+are not deployed by these checks; per-message author signatures need a separately
+negotiated protocol upgrade. Local names likewise do not establish a human identity.
 
 ## Security Headers
 
