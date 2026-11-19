@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## P2P_PLAN step 3, fifth slice: typing/read DC-first
+
+- **Typing.** Prefer the open state DataChannel, then the message channel; successful sends no longer also deposit a signal. Missing channels or throwing sends fall back to the relay. Existing privacy and throttle gates remain unchanged.
+- **Read receipts.** Use only the reliable message channel, with relay fallback on absence/failure. Keep privacy, group exclusion, receipt delay/jitter, cancellation and active-conversation checks. Receivers remain compatible with old DC/relay senders.
+- **Coverage.** Sliced deployed-code tests cover channel choice, relay fallback, send failure and gates. Node DO+WS browser coverage checks typing display and read status without signal deposits or post-established counter growth. Group fan-out and other signal paths are unchanged. Step 3 is complete for fully wake-covered connections; old/uncovered relays intentionally retain polling fallback.
+
 ## P2P_PLAN step 3, fourth slice: WS signal wakes
 
 - **Event-driven established signaling.** Authenticated DM signal deposits wake the other member through their MailboxDO, with a durable per-user generation returned on existing mailbox polls. Content-free `{type:'signal'}` frames and `features.signalWake` keep old clients/relays compatible. Cloudflare schedules notification with `waitUntil`; hosts without a context await a failure-isolated notification. The Node mailbox namespace uses the same frame.

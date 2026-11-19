@@ -130,6 +130,12 @@ PC connected・メッセージ DC open・signaling stable に加え、その部�
 
 第4弾の実測: Node の単一リレーで WS 無効（従来15秒 fallback）と DO+WS 有効を比較した。Direct 確立後35秒待機してから30秒 idle の確立後カウンターを測り、無効時は `[2,2] → [4,4]`（各接続 +2 要求）、有効時は `[1,1] → [1,1]`（各接続 +0 要求）。その後のメッセージは受信画面への保存・表示と送信側の direct ACK 増加まで確認した。本番 NAT・複数リレーの実測値ではない。WS 用のローカルネットワーク権限はテスト context に付与する。
 
+**実施記録（第5弾）.** typing は open の状態 DC を優先し、なければメッセージ DC を使い、send 成功なら relay に重ねて預けない。read は欠落が表示に残るため unreliable/unordered の状態 DC を使わず、信頼性のあるメッセージ DC に送る。open チャネルなし／send 例外時だけ従来の `_signal` に fallback する。privacy、typing throttle、read のグループ除外・遅延と jitter・タイマー取り消し・会話一致の条件は維持した。受信側は両 DC と relay を引き続き受理するので旧版とも互換。重複 typing は表示の期限を更新し、重複 read は既存の既読状態を再適用するだけである。
+
+typing の入力 listener は従来からグループと共通だが、グループの送信先／fan-out は追加・変更しない。read は引き続き1:1限定。他の `sendSignal` 経路も変更しない。切り出した実コードの試験で channel 選択・例外・各 gate を固定し、Node DO+WS の2 context試験では Direct 後の typing 表示と会話再オープン時の既読表示が働き、`/api/signal` への typing/read deposit と確立後 poll カウンターの増加がないことを検査する。
+
+**Step 3 Done-when: 対応完了（対応リレーの全経路が WS でカバーされる接続）。** 第2弾の端末内カウンター、第4弾の30秒 before/after実測（各接続 +2 → +0）、第5弾の typing/read 表示の回帰試験で条件を満たす。旧リレー・WS 切断・背景化・coverage 不足では互換性／復旧のため15秒 fallback が残るので、すべての構成で恒常 poll がゼロという意味ではない。本番 NAT・複数リレーのブラウザ実測は未実施。
+
 ### Step 4 — ランデブーの分散: SDP の手動交換（サーバーレス接続）
 
 招待リンク／QR の仕組みを応用し、offer/answer の SDP を QR コードまたはコピペ文字列で直接交換して、**リレーを一切介さず** DataChannel を開ける経路を足す。対象は「同じ場所にいる2台」「リレーが遮断された環境」。署名つき SDP の検証は既存の仕組みをそのまま使う。identity の交換（招待）と接続情報の交換（本ステップ）は別画面にし、混同させない。
