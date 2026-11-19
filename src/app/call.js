@@ -396,5 +396,5 @@ export function createCallManager(D) {
     const btn = _DOM.get('call-cam-btn');
     if (btn) btn.textContent = track?.enabled ? t('camOff') : t('camOn');
   };
-  return { startCall, handleCallOffer, acceptCall, endCall, pollCallSignals, getCallICEConfig, state: () => _callState };
+  return { startCall, handleCallOffer, acceptCall, endCall, pollCallSignals, getCallICEConfig, getRTCCertificate, hasRTCCertificate: () => !!_rtcCert, state: () => _callState };
 }
