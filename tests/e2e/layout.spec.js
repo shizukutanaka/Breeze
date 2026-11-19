@@ -11,11 +11,12 @@
 // user would actually report, and would also catch a CSS regression that broke the
 // same thing without any markup mistake.
 import { test, expect } from '@playwright/test';
+import { submitSetup } from './helpers.mjs';
 
 const boot = async (page, name) => {
   await page.goto('/');
   await page.locator('#msg-name').fill(name);
-  await page.locator('#b-msg-setup').click();
+  await submitSetup(page);
   await expect(page.locator('#msg-main')).toBeVisible();
 };
 
@@ -159,7 +160,7 @@ test('a swiped message bubble does not snap back out after the swipe-back animat
   const identity = async (page, name) => {
     await page.goto('/');
     await page.locator('#msg-name').fill(name);
-    await page.locator('#b-msg-setup').click();
+    await submitSetup(page);
     await expect(page.locator('#msg-main')).toBeVisible();
     return page.evaluate(() => new Promise((r) => {
       const q = indexedDB.open('breeze-messenger', 5);
@@ -285,7 +286,7 @@ test('the scroll-to-bottom FAB counts up when a message arrives while scrolled a
   const identity = async (page, name) => {
     await page.goto('/');
     await page.locator('#msg-name').fill(name);
-    await page.locator('#b-msg-setup').click();
+    await submitSetup(page);
     await expect(page.locator('#msg-main')).toBeVisible();
     return page.evaluate(() => new Promise((r) => {
       const q = indexedDB.open('breeze-messenger', 5);

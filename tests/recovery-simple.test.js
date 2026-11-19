@@ -612,7 +612,7 @@ describe('simple mode — wiring pins', () => {
   });
 
   it('the cold-restore entry on the setup screen calls the real restore', () => {
-    expect(html).toContain("_DOM.get('b-msg-setup-simple-restore')?.addEventListener('click', () => { restoreSimpleBackup(); });");
+    expect(html).toContain("_DOM.get('b-msg-setup-simple-restore')?.addEventListener('click', () => { restoreSimpleBackup(); }, { signal: _ac.signal });");
   });
 
   it('all new user-facing strings exist in EN and JA', () => {

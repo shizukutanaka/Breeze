@@ -200,7 +200,7 @@ describe('disposable mode — wiring pins', () => {
 
   it('creation runs through one flow: default passes false, disposable only behind the confirmation', () => {
     expect(html).toContain("if (!await createIdentity(name, alias, disposable)) return;");
-    expect(html).toContain("_DOM.get('b-msg-setup')?.addEventListener('click', () => { _runSetupCreate(false); });");
+    expect(html).toContain("_DOM.get('b-msg-setup')?.addEventListener('click', () => { _runSetupCreate(false); }, { signal: _ac.signal });");
     const reg = slice("_DOM.get('b-msg-setup-none')?.addEventListener", "_DOM.get('b-msg-setup-restore')?.addEventListener");
     expect(reg).toContain('showConfirm');
     expect(reg).toContain("t('disposableTitle')");

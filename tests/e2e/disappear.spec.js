@@ -17,6 +17,7 @@
 // Playwright's virtual clock does not reliably drive in this environment (confirmed:
 // fast-forwarding past even a 30s TTL left the message showing as still present).
 import { test, expect } from '@playwright/test';
+import { submitSetup } from './helpers.mjs';
 
 test('a message set to disappear in 1h is not deleted within the first 90 seconds', async ({ page }) => {
   // Inherently real-time-bound (see file header for why page.clock can't substitute):
@@ -24,7 +25,7 @@ test('a message set to disappear in 1h is not deleted within the first 90 second
   test.setTimeout(150_000);
   await page.goto('/');
   await page.locator('#msg-name').fill('Disappear Tester');
-  await page.locator('#b-msg-setup').click();
+  await submitSetup(page);
   await expect(page.locator('#msg-main')).toBeVisible();
 
   await page.locator('#b-msg-add').click();

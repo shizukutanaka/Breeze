@@ -7428,12 +7428,12 @@ async function initMessenger(dbName) {
     _openSettingsFromUrl();
   }
   // The default create path: the phrase mode (recovery plan step 3).
-  _DOM.get('b-msg-setup')?.addEventListener('click', () => { _runSetupCreate(false); });
+  _DOM.get('b-msg-setup')?.addEventListener('click', () => { _runSetupCreate(false); }, { signal: _ac.signal });
   // Disposable mode: the same create flow, reachable ONLY behind the
   // explicit no-recovery confirmation — declining it creates nothing.
   _DOM.get('b-msg-setup-none')?.addEventListener('click', async () => {
     if (await showConfirm(t('disposableTitle'), { desc: t('disposableDesc'), okText: t('disposableOk'), danger: true })) _runSetupCreate(true);
-  });
+  }, { signal: _ac.signal });
   // Recovery plan step 2 (docs/IDENTITY_RECOVERY_PLAN.md §4): the first-run
   // screen's restore entry. Until now restoreBackup was reachable only from
   // inside the app (the /backup panel, sidebar drag-drop) — i.e. only by
@@ -7442,12 +7442,12 @@ async function initMessenger(dbName) {
   // passphrase prompt and every write live in restoreBackup, which writes
   // only after a successful decrypt, and a success reloads into _boot()'s
   // normal has-identity flow.
-  _DOM.get('b-msg-setup-restore')?.addEventListener('click', () => { restoreFromFilePicker(); });
+  _DOM.get('b-msg-setup-restore')?.addEventListener('click', () => { restoreFromFilePicker(); }, { signal: _ac.signal });
   // Recovery plan step 3: the setup screen's phrase entry (§4 step 2 named
   // it as landing with step 3). Same doctrine as the file entry — every
   // write sits behind a successful derivation or kit open, so a failed
   // attempt leaves the fresh install exactly as empty as it was.
-  _DOM.get('b-msg-setup-phrase')?.addEventListener('click', () => { restoreFromPhrase(); });
+  _DOM.get('b-msg-setup-phrase')?.addEventListener('click', () => { restoreFromPhrase(); }, { signal: _ac.signal });
   // Recovery plan step 4 (simple mode): the create + cold-restore
   // entries. Both buttons ship hidden and are unhidden by _boot ONLY
   // when the serving relay reports backup storage (the health
@@ -7466,8 +7466,8 @@ async function initMessenger(dbName) {
     if (account.length < 3) { showToast(t('simpleAccountMin'), 'error'); return; }
     if (!creds.passphrase || creds.passphrase.length < 8) { showToast(t('simplePassMin'), 'error'); return; }
     _runSetupCreate('simple', { account, passphrase: creds.passphrase });
-  });
-  _DOM.get('b-msg-setup-simple-restore')?.addEventListener('click', () => { restoreSimpleBackup(); });
+  }, { signal: _ac.signal });
+  _DOM.get('b-msg-setup-simple-restore')?.addEventListener('click', () => { restoreSimpleBackup(); }, { signal: _ac.signal });
   // Enter on name field → move focus to alias (matches enterkeyhint="next")
   _DOM.get('msg-name')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); _DOM.get('msg-alias')?.focus(); }
