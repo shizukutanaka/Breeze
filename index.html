@@ -1236,6 +1236,8 @@ import { createP2pStats, classifyCandidateType } from './src/app/p2p-stats.js';
 window.__breezeP2pStats = { createP2pStats, classifyCandidateType };
 import { createRendezvous, attachManualPeer } from './src/app/rendezvous.js';
 window.__breezeRendezvous = { createRendezvous, attachManualPeer };
+import { createOfflinePairing } from './src/app/offline-pairing.js';
+window.__breezeOfflinePairing = { createOfflinePairing, blockedPeerIds: new Set() };
 </script>
 
 <script>
@@ -1396,11 +1398,12 @@ const _H = Object.freeze({ 'Content-Type': 'application/json' }); // Shared JSON
 
 const _I = {
   en: {
-    rvTitle: 'Manual connection', rvScope: 'Existing verified contact and encrypted session only. Exchange these codes privately by QR or copy/paste; they expire in 10 minutes. New-contact pairing is not supported.',
+    opTitle: "Offline contact pairing", opScope: "Exchange these identity invites BOTH ways in person. They expire in 30 minutes. Compare the fingerprint on both devices and confirm only if it matches. Keep this app open until /rendezvous finishes; reloading cancels pending pairing. No alias lookup or relay verification.", opImport: "Import peer invite", opMatches: "I compared both devices: the fingerprint matches", opConfirm: "Verify and add contact", opCompare: "Compare this fingerprint on both devices. It binds both encryption keys, signing keys and invite nonces.", opConfirmed: "Contact verified. Open their chat and exchange /rendezvous codes. Messaging unlocks after encrypted key confirmation.", opInvalid: "Offline pairing failed: invalid, expired, used or mismatched code/key, or unsupported cryptography. Cancel pending pairing and exchange fresh invites.", opPending: "Finish offline pairing with /rendezvous before sending. Use /offlinepair cancel to cancel.", opCancelled: "Pending offline pairing cancelled. Exchange fresh invites on both devices to retry.", opOutput: "Your offline identity invite", opInput: "Peer offline identity invite",
+    rvTitle: 'Manual connection', rvScope: 'Requires an existing encrypted session or confirmed /offlinepair invitation. Exchange connection codes privately by QR or copy/paste; they expire in 10 minutes.',
     rvQRTooLarge: 'This code is too large for one QR. Use copy/paste instead.', rvScanUnavailable: 'Camera QR scanning is unavailable in this browser. Use copy/paste instead.',
     rvCreate: 'Create connection code', rvPaste: 'Paste connection code', rvOutput: 'Your connection code', rvInput: 'Peer connection code', rvCopy: 'Copy code', rvApply: 'Apply code',
     rvWorking: 'Gathering or verifying connection information…', rvReady: 'Code ready / applied. Copy it to your peer, or paste their reply.', rvCopied: 'Code copied.', rvCopyFallback: 'Copy unavailable. Select and copy the code manually.',
-    rvTrust: 'Connect once through a relay and verify this contact first. A pinned signing key and an existing encrypted session are required.',
+    rvTrust: 'Connect once through a relay and verify this contact, or complete /offlinepair first. A pinned signing key and a session or confirmed pending pairing are required.',
     rvInvalid: 'Invalid connection code or wrong exchange step.', rvExpired: 'This connection code has expired. Create a new one.', rvReplay: 'This connection code has already been used.',
     rvTimeout: 'ICE gathering timed out. Please redo the exchange.', rvCandidates: 'No usable ICE candidates under your privacy settings. Check your network / TURN settings and redo the exchange.', rvRedo: 'Manual connection needs recovery. Redo /rendezvous with your peer.',
     // Landing
@@ -5657,54 +5660,64 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'pqxdh-responder'); return null; }
   }
   // Fetch+verify the peer's bundle; null (falls back to initSession()) if X3DH is off, there's no server, the peer hasn't advertised v5, or the signature fails.
-  async function initSessionV5Initiator(peerPubB64) {
-    if (!CONFIG.X3DH_V5_ENABLED || !API) return null;
+  async function _fetchSessionBundleV5(peerPubB64, supplied) {
+    // Stage-2 step 6: the bundle may live on any of the contact's home
+    // relays, so candidates are tried in preference order — stored
+    // homes, then the primary — and the first bundle passing EVERY
+    // check below wins. Each candidate is validated exactly as the
+    // single-relay fetch was (caps, fields, SPK signature); a stale
+    // or hostile copy falls through instead of aborting the session.
+    // Fetch consumes an OTP on every relay TRIED (a failed candidate
+    // costs one OTP there, bounded by the candidate count), but a
+    // relay that cannot be reached spends nothing.
+    const peerId = peerPubB64.slice(0, 12);
+    const fetchContact = await dbGet('contacts', peerId).catch(() => null);
+    const fetchHomes = supplied ? [] : sanitizeHomeList(fetchContact?.home);
+    const candidates = [...fetchHomes];
+    if (supplied) candidates.push(null);
+    else if (!candidates.some(e => isOriginRelay(e))) candidates.push({ url: _servingRelayUrl(), pin: '' });
+    let bundle = null;
+    let spkPubPeer = null;
+    for (const entry of candidates) {
+      const resp = supplied ? { ok: true, json: async () => supplied } : isOriginRelay(entry)
+        ? await postAPIRaw('/prekey/fetch', { userId: peerId })
+        : await _contactRelayPost(entry, '/prekey/fetch', { userId: peerId });
+      if (!resp?.ok) continue;
+      const b = await resp.json().catch(() => null);
+      if (!b) continue;
+      if (!supplied) _seedRelayInfo(peerId, b); // caps + advertised home, win or lose
+      if (!_peerSupportsX3dhV5(b)) continue;
+      if (supplied && (b.identityKey !== peerPubB64 || b.edIdentityKey !== fetchContact?.sigPub || b.oneTimePreKey || b.oneTimePreKeyId != null)) return null;
+      if (!b.identityKey || !b.edIdentityKey || !b.signedPreKey || !b.signedPreKeySig) continue;
+      const spk = Uint8Array.from(atob(b.signedPreKey), c => c.charCodeAt(0));
+      // MUST verify before deriving (catches a relay/MITM swapping in its own SPK). Raw SPK bytes, not verifySignature()'s UTF-8-string convention used for msg sig/sigPub (E2E-found).
+      let sigOk = false;
+      try {
+        const edPub = _hasEd25519 && await crypto.subtle.importKey('raw', Uint8Array.from(atob(b.edIdentityKey), c => c.charCodeAt(0)), { name: 'Ed25519' }, false, ['verify']);
+        if (edPub) sigOk = await crypto.subtle.verify({ name: 'Ed25519' }, edPub, Uint8Array.from(atob(b.signedPreKeySig), c => c.charCodeAt(0)), spk);
+      } catch(e) { _dbg(e, 'verify-spk'); }
+      if (!sigOk) { _dbg(null, 'X3DH: signed pre-key signature INVALID on one relay — trying the next'); continue; }
+      bundle = b;
+      spkPubPeer = spk;
+      break;
+    }
+    return bundle ? { bundle, spkPubPeer } : null;
+  }
+
+  async function initSessionV5Initiator(peerPubB64, supplied = null) {
+    if (!CONFIG.X3DH_V5_ENABLED || (!API && !supplied)) return null;
     try {
-      // Stage-2 step 6: the bundle may live on any of the contact's home
-      // relays, so candidates are tried in preference order — stored
-      // homes, then the primary — and the first bundle passing EVERY
-      // check below wins. Each candidate is validated exactly as the
-      // single-relay fetch was (caps, fields, SPK signature); a stale
-      // or hostile copy falls through instead of aborting the session.
-      // Fetch consumes an OTP on every relay TRIED (a failed candidate
-      // costs one OTP there, bounded by the candidate count), but a
-      // relay that cannot be reached spends nothing.
-      const peerId = peerPubB64.slice(0, 12);
-      const fetchContact = await dbGet('contacts', peerId).catch(() => null);
-      const fetchHomes = sanitizeHomeList(fetchContact?.home);
-      const candidates = [...fetchHomes];
-      if (!candidates.some(e => isOriginRelay(e))) candidates.push({ url: _servingRelayUrl(), pin: '' });
-      let bundle = null;
-      let spkPubPeer = null;
-      for (const entry of candidates) {
-        const resp = isOriginRelay(entry)
-          ? await postAPIRaw('/prekey/fetch', { userId: peerId })
-          : await _contactRelayPost(entry, '/prekey/fetch', { userId: peerId });
-        if (!resp?.ok) continue;
-        const b = await resp.json().catch(() => null);
-        if (!b) continue;
-        _seedRelayInfo(peerId, b); // caps + advertised home, win or lose
-        if (!_peerSupportsX3dhV5(b)) continue;
-        if (!b.identityKey || !b.edIdentityKey || !b.signedPreKey || !b.signedPreKeySig) continue;
-        const spk = Uint8Array.from(atob(b.signedPreKey), c => c.charCodeAt(0));
-        // MUST verify before deriving (catches a relay/MITM swapping in its own SPK). Raw SPK bytes, not verifySignature()'s UTF-8-string convention used for msg sig/sigPub (E2E-found).
-        let sigOk = false;
-        try {
-          const edPub = _hasEd25519 && await crypto.subtle.importKey('raw', Uint8Array.from(atob(b.edIdentityKey), c => c.charCodeAt(0)), { name: 'Ed25519' }, false, ['verify']);
-          if (edPub) sigOk = await crypto.subtle.verify({ name: 'Ed25519' }, edPub, Uint8Array.from(atob(b.signedPreKeySig), c => c.charCodeAt(0)), spk);
-        } catch(e) { _dbg(e, 'verify-spk'); }
-        if (!sigOk) { _dbg(null, 'X3DH: signed pre-key signature INVALID on one relay — trying the next'); continue; }
-        bundle = b;
-        spkPubPeer = spk;
-        break;
-      }
-      if (!bundle) return null;
+      const fetched = await _fetchSessionBundleV5(peerPubB64, supplied);
+      if (!fetched) return null;
+      const { bundle, spkPubPeer } = fetched;
       // I11 KT audit: independent MITM signal — warns, doesn't block (no hard-abort flow yet).
-      const ktPeerId = peerPubB64.slice(0, 12);
-      const audit = await _auditKeyHistory(await dbGet('identity', 'ktIk:' + ktPeerId), bundle.keyHistory);
-      if (audit.verdict === 'tampered') showKeyChangeWarning(ktPeerId, peerPubB64, 'X3DH key-transparency chain tampered — possible hostile relay.').catch(e => _dbg(e, 'kt-warn'));
-      else if (audit.verdict === 'rolled') showKeyChangeWarning(ktPeerId, peerPubB64, 'X3DH key-history rollover.').catch(e => _dbg(e, 'kt-warn'));
-      if (audit.verdict !== 'tampered') await dbPut('identity', bundle.identityKey, 'ktIk:' + ktPeerId); // don't pin a key vouched for by a broken chain (no silent TOFU baseline from a tampered log)
+      if (!supplied) {
+        const ktPeerId = peerPubB64.slice(0, 12);
+        const audit = await _auditKeyHistory(await dbGet('identity', 'ktIk:' + ktPeerId), bundle.keyHistory);
+        if (audit.verdict === 'tampered') showKeyChangeWarning(ktPeerId, peerPubB64, 'X3DH key-transparency chain tampered — possible hostile relay.').catch(e => _dbg(e, 'kt-warn'));
+        else if (audit.verdict === 'rolled') showKeyChangeWarning(ktPeerId, peerPubB64, 'X3DH key-history rollover.').catch(e => _dbg(e, 'kt-warn'));
+        if (audit.verdict !== 'tampered') await dbPut('identity', bundle.identityKey, 'ktIk:' + ktPeerId); // don't pin a key vouched for by a broken chain (no silent TOFU baseline from a tampered log)
+      }
       const ikPubPeer = Uint8Array.from(atob(bundle.identityKey), c => c.charCodeAt(0));
       const opkPubPeer = bundle.oneTimePreKey ? Uint8Array.from(atob(bundle.oneTimePreKey), c => c.charCodeAt(0)) : null;
       const ek = await genRatchetKey();
@@ -5719,6 +5732,7 @@ async function initMessenger(dbName) {
       if (_peerSupportsPqxdh(bundle)) {
         const pq = await _pqxdhInitiator(bundle, await _x3dhInitiatorParts({ ikPriv: myKeys.privateKey, ekPriv: ek.privateKey, ikPubPeer, spkPubPeer, opkPubPeer }));
         if (pq) { sk = pq.sk; pqct = pq.ct; }
+        else if (supplied) return null;
       }
       const rk = await genRatchetKey();
       const dh = await ecdhBits(rk.privateKey, spkPubPeer);
@@ -5749,11 +5763,18 @@ async function initMessenger(dbName) {
   }
 
   // Derive the X3DH root key from a pkm envelope; peerRatchetPub null triggers decryptFrom's ratchet-key-changed branch to bootstrap the receive chain.
-  async function _bootstrapResponderSessionV5(p) {
+  function pairingPreKeyMatches(p, identityKey, pq) {
+    const bytes = (value, length) => Array.isArray(value) && value.length === length && value.every(n => Number.isInteger(n) && n >= 0 && n <= 255);
+    return !!p && p.v === 5 && p.t === 'pkm' && p.opkId === null && typeof p.msg === 'string' &&
+      bytes(p.ik, identityKey.length) && p.ik.every((n, i) => n === identityKey[i]) && bytes(p.ek, 32) &&
+      (pq ? bytes(p.pqct, 1088) : p.pqct === undefined);
+  }
+
+  async function _bootstrapResponderSessionV5(p, pairing = null) {
     try {
-      const spkPriv = await _loadSpkPriv();
+      const spkPriv = pairing ? pairing.spkPriv : await _loadSpkPriv();
       if (!spkPriv) return null;
-      const opkPriv = await _resolveOtpPriv(p.opkId);
+      const opkPriv = pairing ? null : await _resolveOtpPriv(p.opkId);
       // Stage-3 step 5 (plan D6): a pqct-carrying first message MUST complete
       // the PQ half — decapsulate and combine, or fail closed (return null,
       // which lands in decryptFrom's existing failure/reset flow) when the PQ
@@ -5766,7 +5787,7 @@ async function initMessenger(dbName) {
           ikPriv: myKeys.privateKey, spkPriv, opkPriv,
           ikPubPeer: u8(p.ik), ekPubPeer: u8(p.ek),
         });
-        const sk = await _pqxdhResponder(parts, p.pqct);
+        const sk = pairing ? await globalThis.__breezePQXDH?.respondSK(parts, pairing.pqRecord, p.pqct) : await _pqxdhResponder(parts, p.pqct);
         if (!sk) return null;
         return { rootKey: sk, ratchetPriv: spkPriv, ratchetPub: null, peerRatchetPub: null, sendCounter: 0, recvCounter: 0, seenMsgIds: [], pq: true };
       }
@@ -5857,13 +5878,16 @@ async function initMessenger(dbName) {
     _peerLocks.set(peerId, next.then(() => {}, () => {}));
     return next;
   }
-  function encryptFor(text, peerPubB64, frank) {
-    return _withPeerLock((peerPubB64 || '').slice(0, 12), () => _encryptForRaw(text, peerPubB64, frank));
+  function encryptFor(text, peerPubB64, frank, pairing = false) {
+    return _withPeerLock((peerPubB64 || '').slice(0, 12), () => _encryptForRaw(text, peerPubB64, frank, pairing));
   }
-  async function _encryptForRaw(text, peerPubB64, frank) {
+  async function _encryptForRaw(text, peerPubB64, frank, pairing = false) {
     try {  
       const peerId = peerPubB64.slice(0, 12);
+      const contact = await dbGet('contacts', peerId);
+      if (contact?.offlinePairing && contact.offlinePairing.state !== 'paired' && !pairing) return null;
       let sess = await getSession(peerId);
+      if (!sess && (await dbGet('contacts', peerId))?.offlineVerified) return null;
       if (!sess) { sess = (await initSessionV5Initiator(peerPubB64)) || (await initSession(peerPubB64)); }
       // Derive message key from send chain
       const { msgKey, nextChain } = await kdfChain(sess.sendChainKey);
@@ -5920,19 +5944,22 @@ async function initMessenger(dbName) {
   // Track decrypt failures per peer for auto-reset
   const _decryptFailures = {};
 
-  function decryptFrom(payload, peerPubB64, frank) {
-    return _withPeerLock((peerPubB64 || '').slice(0, 12), () => _decryptFromRaw(payload, peerPubB64, frank));
+  function decryptFrom(payload, peerPubB64, frank, pairing = null) {
+    return _withPeerLock((peerPubB64 || '').slice(0, 12), () => _decryptFromRaw(payload, peerPubB64, frank, pairing));
   }
-  async function _decryptFromRaw(payload, peerPubB64, frank) {
+  async function _decryptFromRaw(payload, peerPubB64, frank, pairing = null) {
     try {
       const peerId = peerPubB64.slice(0, 12);
       let sess = await getSession(peerId);
       let p;
       try { p = JSON.parse(payload); } catch(parseErr) { _dbg(parseErr, 'malformed-encrypted-msg'); throw new Error('Invalid payload format'); }
+      const offline = (await dbGet('contacts', peerId))?.offlinePairing;
+      if (offline && !pairing && (!sess || offline.state !== 'paired')) return null;
+      if (!sess && pairing && !pairingPreKeyMatches(p, Uint8Array.from(atob(peerPubB64), c => c.charCodeAt(0)), !!pairing.pqRecord)) return null;
       // X3DH v5 first-message envelope. Only when we lack a session — a duplicate
       // delivery must reuse the session already bootstrapped (the OTP may be gone now).
       if (!sess && p.v === 5 && p.t === 'pkm' && Array.isArray(p.ik) && Array.isArray(p.ek) && typeof p.msg === 'string') {
-        sess = await _bootstrapResponderSessionV5(p);
+        sess = await _bootstrapResponderSessionV5(p, pairing);
         if (!sess) return null; // no SPK private key on this device — nothing to fall back to
         try { p = JSON.parse(p.msg); } catch(parseErr) { _dbg(parseErr, 'malformed-pkm-inner'); return null; }
       }
@@ -6058,6 +6085,7 @@ async function initMessenger(dbName) {
     } catch(e) {
       _dbg(e, 'decrypt');
       const peerId = peerPubB64.slice(0, 12);
+      if ((await dbGet('contacts', peerId))?.offlineVerified) return null;
       _decryptFailures[peerId] = (_decryptFailures[peerId] || 0) + 1;
       // v3.6: User-friendly notification on decrypt failure (before key change threshold)
       if (_decryptFailures[peerId] === 1) {
@@ -7617,6 +7645,7 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'signal-auth'); return { ts }; }
   }
   function _signal(room, type, data) {
+    if (globalThis.__breezeOfflinePairing?.blockedPeerIds.has(myId + ':' + _signalPeerId(room))) return Promise.resolve();
     // Stage-2 step 4: a relay under a verified key mismatch gets no
     // signaling either — the hard stop covers every relay call, not
     // just the postAPIRaw funnel.
@@ -7888,6 +7917,7 @@ async function initMessenger(dbName) {
   _DOM.get('contact-filter')?.addEventListener('input', debounce((e) => { _contactFilter = e.target.value.trim().toLowerCase(); renderContacts(); }, 150));
   // v3.2: Escape clears filter + blurs
   _DOM.get('contact-filter')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.value.trim() === '/offlinepair') { e.preventDefault(); e.target.value = ''; _contactFilter = ''; renderContacts(); _offlinePairing?.open(); return; }
     if (e.key === 'Escape') { e.target.value = ''; _contactFilter = ''; renderContacts(); e.target.blur(); }
   });
 
@@ -9433,6 +9463,7 @@ async function initMessenger(dbName) {
   let _isSending = false; // v3.3: Double-submit prevention
   async function sendMessage() {
     if (!activeContact) return;
+    if (activeContact.offlinePairing && activeContact.offlinePairing.state !== 'paired') { showToast(t('opPending'), 'info'); return; }
     if (activeContact.blocked) return;
     // v3.3: Announce-only groups — only admins can send
     if (activeContact.isGroup && activeContact.announceOnly && !isGroupAdmin(activeContact)) {
@@ -11609,6 +11640,7 @@ async function initMessenger(dbName) {
 
   async function connectPeer(contact, { signalingMode = 'relay' } = {}) {
     if (!contact.pubB64 || peers[contact.pubB64]?.pc) return;
+    if (contact.offlinePairing?.manualOnly && signalingMode !== 'manual') return;
     const manual = signalingMode === 'manual';
     if (manual && !globalThis.__breezeRendezvous) return;
     const isInit = myPubB64 > contact.pubB64;
@@ -11753,7 +11785,7 @@ async function initMessenger(dbName) {
       peerState.dc = ch;
       peerState._dcReady = false; // Backpressure flag
       ch.onbufferedamountlow = () => { peerState._dcReady = true; };
-      ch.onopen = () => { peerState._dcReady = true; onPeerConnected(); };
+      ch.onopen = () => { peerState._dcReady = true; onPeerConnected(); if (manual) _offlinePairing?.start(contact, ch).catch(e => { _dbg(e, 'offline-pair'); showToast(t('opInvalid'), 'error'); }); };
       ch.onclose = () => {
         if (manual && peerState.connState !== 'CLOSED') peerState.manualRecovery();
         peerState.connected = false;
@@ -11783,6 +11815,7 @@ async function initMessenger(dbName) {
         try {
           // Binary file chunk (v3 ArrayBuffer)
           if (e.data instanceof ArrayBuffer) {
+            if (contact.offlinePairing && (!_offlinePairing || await _offlinePairing.receive(contact, null, ch))) return;
             handleBinaryChunk(contact, e.data);
             return;
           }
@@ -11790,7 +11823,9 @@ async function initMessenger(dbName) {
           // an oversized JSON blob from a malicious peer would otherwise hang JSON.parse.
           if (typeof e.data !== 'string' || e.data.length > 512 * 1024) return;
           const msg = JSON.parse(e.data);
+          if (contact.offlinePairing && contact.offlinePairing.state !== 'paired' && !_offlinePairing) return;
           if (handleHeartbeat(ch, msg)) return;
+          if (await _offlinePairing?.receive(contact, msg, ch)) return;
           // v3.6: Typing/read may still arrive on main DC (backward compat)
           if (msg.type === 'typing') { showTyping(contact.id, msg.senderName || contact.name); return; }
           if (msg.type === 'read') { showReadReceipt(contact.id, msg.ts); return; }
@@ -12987,6 +13022,7 @@ async function initMessenger(dbName) {
   // append-only key log and runs the same _auditKeyHistory the v5 handshake uses. Only pins
   // contact.pubB64 as the new baseline on ok/new: pinning on 'rolled' would launder an unconfirmed key change into a trusted baseline.
   async function _auditKeyTransparency(contact) {
+    if (contact.offlineVerified) return null;
     if (!API) return null;
     try {
       const resp = await postAPIRaw('/ktlog/get', { userId: contact.id });
@@ -13382,8 +13418,21 @@ async function initMessenger(dbName) {
   const shareInvite = _shareTools?.shareInvite || (async () => {});
   const showMigratePanel = _shareTools?.showMigratePanel || (() => {});
 
+  const _offlinePairing = globalThis.__breezeOfflinePairing?.createOfflinePairing({
+    MS, t, esc, safeSetHTML, sign: signMessage, verify: verifySignature,
+    me: () => myPubB64, sigPub: () => _signingPubB64, name: () => myName,
+    caps: () => { if (!_hasX25519 || !CONFIG.X3DH_V5_ENABLED || !_signingKey) throw new Error('opInvalid'); return ['x3dh-v5', ...(CONFIG.PQXDH_ENABLED && globalThis.__breezePQXDH ? ['pqxdh'] : [])]; },
+    signRaw: bytes => crypto.subtle.sign('Ed25519', _signingKey.privateKey, bytes),
+    get: dbGet, put: dbPut, remove: dbDel, contacts: () => dbGetAll('contacts'), session: getSession, saveSession,
+    initiate: initSessionV5Initiator, encrypt: (text, pub) => encryptFor(text, pub, undefined, true), decrypt: (wire, pub, material) => decryptFrom(wire, pub, undefined, material),
+    matchPreKey: pairingPreKeyMatches, blockPeer: id => globalThis.__breezeOfflinePairing.blockedPeerIds.add(myId + ':' + id),
+    closePeer: c => { const p = peers[c.pubB64]; if (p) { p.transition('CLOSED'); p.pc.close(); delete peers[c.pubB64]; } },
+    exclusive: _withPeerLock, signal: _ac.signal, qr: globalThis.__breezeQR, root: () => _DOM.get('msg-main'), log: e => _dbg(e, 'offline-pair'),
+    toast: text => showToast(text, 'info'), changed: c => { if (activeContact?.id === c.id) activeContact = c; renderContacts(); updateConvStatus(); },
+  });
+
   const _rendezvous = globalThis.__breezeRendezvous?.createRendezvous({
-    qr: globalThis.__breezeQR,
+    qr: globalThis.__breezeQR, pending: c => _offlinePairing?.pending(c),
     MS, t, esc, safeSetHTML, sign: signMessage, verify: verifySignature,
     me: () => myPubB64, sigPub: () => _signingPubB64, session: getSession,
     contact: id => dbGet('contacts', id), root: () => _DOM.get('msg-main'),
@@ -13609,7 +13658,7 @@ async function initMessenger(dbName) {
         '/search · /searchall · /pins · /bookmarks · /reply · /poll · /timer',
         '/schedule &lt;time&gt; &lt;msg&gt; · /schedule list · /schedule cancel',
         '/clear · /export [json|csv|html|all] · /import · /summarize · /reactions · /compact',
-        '/files · /print · /rendezvous',
+        '/files · /print · /rendezvous · /offlinepair',
         '',
         '<b>' + t('helpContacts') + '</b>',
         '/info · /note · /pin · /mute · /archive · /unblock · /members · /admin',
@@ -13674,6 +13723,8 @@ async function initMessenger(dbName) {
       return;
     }
 
+    if (val === '/offlinepair cancel') { e.preventDefault(); clearInput(); await _offlinePairing?.cancel(activeContact); showToast(t('opCancelled'), 'info'); return; }
+    if (val === '/offlinepair') { e.preventDefault(); clearInput(); await _offlinePairing?.open(); return; }
     if (val === '/rendezvous') {
       e.preventDefault(); clearInput();
       await _rendezvous?.open(activeContact);

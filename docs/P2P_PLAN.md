@@ -138,6 +138,12 @@ typing の入力 listener は従来からグループと共通だが、グルー
 
 ### Step 4 — ランデブーの分散: SDP の手動交換（サーバーレス接続）
 
+**実施記録 — Step 4 第3弾（新規連絡先のオフライン・ペアリング）.** `/offlinepair` は通常の招待・接続情報とは別画面。連絡先がまだなくても検索欄にこのコマンドを入力して開ける。`breeze-inv1z:`（deflate-raw＋base64url）は v/kind・完全な暗号公開鍵・sigPub・64文字以内の無害化した名前・caps・nonce・30分の期限を canonical Ed25519 署名で保護する。双方で招待を読み込み、双方の暗号鍵／署名鍵／nonceをソートして SHA-256 から表示する96-bit指紋を対面比較し、明示的に一致確認した後だけ連絡先を作成し署名鍵を固定する。自己署名だけでは本人確認にならない。既存の鍵／pin／sessionは上書きせず、不一致・再使用・期限切れは拒否。同じ鍵なら確認情報だけ追加する。
+
+確認済み pending 連絡先だけは session 未作成でも `/rendezvous` を許可。署名済みSDP／DTLSの手動DCが開いてから、双方のnonceを含む完全な本人交換トランスクリプトに束縛した署名済み pair-bundle を交換する。SPK・PQ prekey は既存の置換可能なIDB記録とは別にメモリーで保持し、QRには載せない。暗号公開鍵の辞書順で小さい側のみが開始。既存の v5／PQXDH 計算に検証済みbundleを注入し、明示的 no-OTP（DH4なし）で初期化する。PQ合意時の欠損／署名不正を古典方式へ落とさず拒否し、受信pkm.ikも確認済み本人鍵に一致させる。双方の暗号化 pair-confirm 完了までは通常の送受信を止める。新規オフライン連絡先は手動接続専用で、relay／legacy bootstrapへ自動fallbackしない。KTは `unavailable` としサーバー監査した扱いにしない。既存連絡先の通常経路は維持する。
+
+秘密prekeyは鍵確認・`/offlinepair cancel`・期限切れ・アカウント終了で破棄。未完了の交換を再読み込みした場合も中止し、双方で新しい招待からやり直す（完了済みsessionは保持）。アプリ本体／モジュールは**事前にインストールまたはキャッシュ済み**であること。X25519／Ed25519／deflate-raw対応が必要で、別名検索・初回インストール配信・グローバルなリレー隔離は対象外。背景処理や abuse commitment／sibling fan-out はリレー遮断時に失敗しうる。**物理カメラと実機2台LANは未検証**であり、Step 4全体のDone when完了とはしない。
+
 **実施記録 — Step 4 第2弾（接続コードのQR交換）.** `/rendezvous` の署名済み封筒JSONを可逆な `deflate-raw` 圧縮＋base64url の `breeze-sdp1z:` にし、従来の `breeze-sdp1:` も受信する。署名対象・鍵固定・宛先・期限・nonce検査は変更せず、展開後の canonical 封筒で検証する。入力文字列64KiBに加えて、展開ストリームも64KiBで打ち切る（zip bomb対策）。圧縮非対応ブラウザーの送信は従来形式に戻す。
 
 実ブラウザーの収集済みコード測定は offer **1,663–1,675→1,044–1,063 bytes**（host＋srflx）、answer **1,384→1,005–1,016 bytes**（host）。乱数・候補等による差があり、測定したコードは **version 26–27 / ECC M** に収まる。エンコーダーは最小の収容可能versionを選び、最大40 / M（byte mode 2,331 bytes）まで対応する。Mの約15%訂正能力と密度の釣り合いを選択。alignment・version情報・RS block分割/interleave・mask選択も実装し、jsQR（開発時のみ）で実サイズと境界・UTF-8を復号確認する。上限超過時は切り捨てず明示的に拒否し、招待QRもコピペを残す。multipartは行わない。

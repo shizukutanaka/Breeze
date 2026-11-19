@@ -143,7 +143,7 @@ export function createRendezvous(D) {
     showing = true;
     try {
       const stored = await D.contact(contact.id);
-      if (!stored?.sigPub || !await D.session(contact.id) || !D.sigPub()) fail('rvTrust');
+      if (!stored?.sigPub || (!await D.session(contact.id) && !D.pending?.(stored)) || !D.sigPub()) fail('rvTrust');
       const dlg = document.createElement('dialog');
       dlg.className = 'rendezvous-dialog';
       const titleId = 'rv-' + crypto.randomUUID();
