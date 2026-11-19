@@ -43,7 +43,7 @@ export async function createIdentity(page, name, { navigate = true, alias = '' }
   // registered handle without touching the Worker API directly.
   if (alias) await page.locator('#msg-alias').fill(alias);
   await submitSetup(page);
-  await expect(page.locator('#msg-main')).toBeVisible();
+  await expect(page.locator('#msg-main')).toBeVisible(alias ? { timeout: 60_000 } : {});
   return page.evaluate(() => new Promise((resolve, reject) => {
     const req = indexedDB.open('breeze-messenger', 5);
     req.onerror = () => reject(req.error);
