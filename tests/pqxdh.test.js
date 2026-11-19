@@ -164,7 +164,7 @@ function sliceBetween(startMarker, endMarker) {
 }
 function buildBundleBuilder(ed, signingPubB64, configExtra = {}) {
   const stores = new Map();
-  const dbPut = async (store, value, key) => { stores.set(`${store}:${key}`, value); };
+  const dbPut = async (store, value, key) => { stores.set(`${store}:${key}`, value); return true; };
   let n = 0;
   const genRatchetKey = async () => ({
     priv: { fakeJwk: ++n },

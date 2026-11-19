@@ -50,7 +50,7 @@ function buildClientAuth(ed, userId) {
 // what pins the step-3 "no pqxdh cap" assertions below).
 function buildBundleBuilder(ed, signingPubB64, configExtra = {}) {
   const stores = new Map();
-  const dbPut = async (store, value, key) => { stores.set(`${store}:${key}`, value); };
+  const dbPut = async (store, value, key) => { stores.set(`${store}:${key}`, value); return true; };
   let n = 0;
   const genRatchetKey = async () => ({
     priv: { fakeJwk: ++n },
@@ -309,13 +309,17 @@ describe('stage-3 step 3 — /keywrap covers pq-priv (structural pins)', () => {
   const handler = sliceBetween("if (val === '/keywrap'", '// v3.3: /reply');
 
   it('enable path wraps the seed payload under the pq-priv AAD slot', () => {
-    expect(handler).toContain("await _atRestWrap({ seed: storedPq2.seed }, pass, 'pq-priv')");
-    expect(handler).toContain("dbGet('identity', 'pq-priv')");
+    expect(handler).toContain('await _keywrapChange(pass, true)');
+    const change = sliceBetween('async function _keywrapChange', 'async function dbGetAll');
+    expect(change).toContain("slot === 'pq-priv' ? { seed: record.seed } : record.priv");
+    expect(change).toContain('await _atRestMigrate({ ...rest, priv: payload }, pass, slot)');
   });
 
   it('disable path unwraps it back to the plain { seed } record', () => {
-    expect(handler).toContain("await _atRestUnwrap(storedPq.wrapped || storedPq, pass, 'pq-priv')");
-    expect(handler).toContain("await dbPut('identity', { seed: pqPayload.seed }, 'pq-priv')");
+    expect(handler).toContain('await _keywrapChange(pass, false)');
+    const change = sliceBetween('async function _keywrapChange', 'async function dbGetAll');
+    expect(change).toContain('await _atRestUnwrap(record.wrapped || record, pass, slot)');
+    expect(change).toContain("slot === 'pq-priv' ? payload : { priv: payload }");
   });
 
   it('the runtime-import module script is in place (INTEGRATION.md §0(A))', () => {

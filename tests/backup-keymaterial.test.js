@@ -46,22 +46,30 @@ function sliceBackup(from, to) {
 // put/getAllKeys for the dbPut and gsk:-enumeration paths).
 function mockDb() {
   const stores = { identity: new Map(), contacts: new Map(), messages: new Map() };
-  const req = (produce) => {
+  const req = (produce, done) => {
     const r = {};
-    queueMicrotask(() => { try { r.result = produce(); if (r.onsuccess) r.onsuccess(); } catch (e) { r.error = e; if (r.onerror) r.onerror({ target: r }); } });
+    queueMicrotask(() => { try { r.result = produce(); if (r.onsuccess) r.onsuccess(); } catch (e) { r.error = e; if (r.onerror) r.onerror({ target: r }); } finally { done(); } });
     return r;
   };
   return {
     _stores: stores,
     transaction(store) {
       const m = stores[store];
-      return {
+      let pending = 0;
+      const request = produce => {
+        pending++;
+        return req(produce, () => {
+          if (--pending === 0) queueMicrotask(() => { if (pending === 0) tx.oncomplete?.(); });
+        });
+      };
+      const tx = {
         objectStore: () => ({
-          get: (key) => req(() => m.get(key)),
-          put: (val, key) => req(() => { m.set(key, val); return key; }),
-          getAllKeys: () => req(() => [...m.keys()]),
+          get: (key) => request(() => m.get(key)),
+          put: (val, key) => request(() => { m.set(key, val); return key; }),
+          getAllKeys: () => request(() => [...m.keys()]),
         }),
       };
+      return tx;
     },
   };
 }
@@ -70,6 +78,7 @@ const CONFIG = { PBKDF2_ITERATIONS: 100000, IV_BYTES: 12, AES_KEY_BITS: 256 };
 
 function build(db) {
   const src = [
+    'let _pqSeedUnlocked = null;',
     slice('function arr(u8a)', 'function uid()'),
     slice('async function deriveKey', '// v3.6 Phase 2c'),
     slice('function _atRestIsWrapped', '// Loads the private JWK'),
