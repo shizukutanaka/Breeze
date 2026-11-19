@@ -8,6 +8,12 @@
 - Bind first-message `pkm.ik` to the expected peer before responder bootstrap, including peer-relay forwarding. Mismatches cannot create a session or persist a message. Existing sessions and the classical/PQ wire formats are unchanged.
 - Incoming signed text pins a first signing key only after successful signature verification. Added deployed-inline regression coverage for identity substitution, forwarding, fallback prevention and valid bootstrap controls.
 
+### Durable prekey ownership and queue signing readiness
+
+- Preserve Ed25519 ownership in a separate non-expiring relay record, lazily migrated from an existing bundle on upload. An established owner cannot be overwritten unsigned, even under explicit legacy opt-out or after bundle expiry; signing-key rotation requires the previous owner's signature. Authenticated account deletion erases the owner too, including after bundle expiry.
+- Owner-backed message/sealed polling, sealed ACK and mailbox WebSocket authentication use the durable key; unsigned access is rejected regardless of flags. Accounts without an owner retain the existing unsigned-compatible behavior; no environment defaults changed.
+- Queue signing shares a bounded initialization barrier across boot, leader promotion, reconnect and WebSocket subscription. After five seconds of stuck key loading/unwrapping, polling continues unsigned and automatically signs if initialization later completes. An owner-backed relay rejects those unsigned attempts until signing recovers; this does not bypass ownership protection.
+
 ## Manual rendezvous: blocked-STUN gathering recovery
 
 - Manual peers disable ICE candidate pooling: a blocked-STUN browser reproduction left the pooled answer gathering without candidates beyond the one-minute cap; disabling only the pool restored immediate host candidates. Relay-mode pooling is unchanged.

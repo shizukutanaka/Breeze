@@ -4077,6 +4077,17 @@ async function initMessenger(dbName) {
   // v3.3: Ed25519 message signing (authenticity verification)
   let _signingKey = null;
   let _signingPubB64 = '';
+  let _signingReady = null;
+  let _queueSigningReady = null;
+  function ensureSigningReady() {
+    if (!myId) return Promise.resolve();
+    if (!_signingReady) _signingReady = initSigning().catch(e => _dbg(e, 'signing-ready'));
+    if (!_queueSigningReady) _queueSigningReady = new Promise(resolve => {
+      const timer = setTimeout(() => { _dbg(null, 'signing-ready: timed out; continuing polls'); resolve(); }, 5 * MS.SEC);
+      _signingReady.then(() => { clearTimeout(timer); resolve(); });
+    });
+    return _queueSigningReady;
+  }
   // v3.6: ephemeral passphrase cache (set in loadIdentity, consumed+cleared in initSigning)
   let _atRestPassphrase = null;
   async function initSigning() {
@@ -4140,7 +4151,7 @@ async function initMessenger(dbName) {
     return sig ? { ts, sig } : {};
   }
   // Queue read/delete ops: challenge `breeze-<op>:<id>:<ts>` (checkQueueAuth).
-  function queueAuth(op) { return authFields(ts => `breeze-${op}:${myId}:${ts}`); }
+  async function queueAuth(op) { await ensureSigningReady(); return authFields(ts => `breeze-${op}:${myId}:${ts}`); }
   // sha256Short twin (worker): SHA-256 → first 16 bytes → hex. Several
   // challenges bind a digest of the mutable fields so a captured sig can't be
   // replayed with a tampered payload.
@@ -5334,7 +5345,7 @@ async function initMessenger(dbName) {
     let registeredAlias = '';
     if (API) { // v3: Generate and upload PreKeys for X3DH
       try {
-        await initSigning(); // must precede generatePreKeyBundle() or edIdentityKey/signedPreKeySig get omitted (E2E-found)
+        await ensureSigningReady(); // must precede generatePreKeyBundle() or edIdentityKey/signedPreKeySig get omitted (E2E-found)
         const bundle = await generatePreKeyBundle();
         // Stage-2 step 5: the bundle is ONE identity — it lands on
         // every home relay (for a fresh account that is the serving
@@ -7388,6 +7399,7 @@ async function initMessenger(dbName) {
     _DOM.get('msg-input-bar').classList.remove('hidden');
     _DOM.get('msg-my-name').textContent = myName;
     _armRelayPinGate(); // step 4 follow-up: this session's first calls hold for the pin verdict (checkRelayPin runs inside _startLiveSession below)
+    await ensureSigningReady();
     startPresence();
     startPolling();
     if (Notification && Notification.permission === 'default') {
@@ -7396,7 +7408,6 @@ async function initMessenger(dbName) {
     }
     initTurn();
     initPushNotifications();
-    initSigning(); // v3.3: Ed25519 message signing
     await _startLiveSession();
     _settleRelayPinGate(); // guarantee: releases anything still held if this session's check was never reached (no-op once the check settled it)
     renderAccountTabs();
@@ -7458,11 +7469,11 @@ async function initMessenger(dbName) {
     _DOM.get('msg-input-bar').classList.remove('hidden');
     _DOM.get('msg-my-name').textContent = myName;
     _armRelayPinGate(); // step 4 follow-up: this session's first calls hold for the pin verdict (checkRelayPin runs inside _startLiveSession below)
+    await ensureSigningReady();
     startPresence();
     startPolling();
     initTurn();
     initPushNotifications();
-    initSigning(); // fallback for API-less setups; createIdentity() covers the normal case
     // Same omission class as the cleanup-registration gap below, found by the same
     // line-by-line diff against _boot()'s `if (hasId)` branch: without this call a
     // freshly-created identity's first live session never ran loadSettings(),
@@ -10946,7 +10957,9 @@ async function initMessenger(dbName) {
   }
   async function startPolling() {
     try {  
-      if (!API) return;
+      if (!API || !myId) return;
+      await ensureSigningReady();
+      if (_ac.signal.aborted) return;
       // v3.4: Only leader tab polls the server
       if (!_isLeaderTab) { _dbg(null, 'Follower tab — skipping poll loop'); return; }
       schedulePoll();

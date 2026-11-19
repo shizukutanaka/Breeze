@@ -69,10 +69,10 @@ const upload = (base, idn) => post(base, '/api/prekey/upload', {
   userId: idn.userId, identityKey: idn.identityKey, edIdentityKey: idn.edIdentityKey,
   signedPreKey: 'SPKhost', oneTimePreKeys: ['o0', 'o1', 'o2'],
 });
-async function signWs(idn) {
+async function signWs(idn, op = 'mailbox-ws') {
   const ts = Date.now();
   const sig = toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, idn.ed.privateKey,
-    new TextEncoder().encode(`breeze-mailbox-ws:${idn.userId}:${ts}`))));
+    new TextEncoder().encode(`breeze-${op}:${idn.userId}:${ts}`))));
   return { ts, sig };
 }
 const wsUrl = (host, idn, auth) =>
@@ -124,11 +124,11 @@ describe('Node host — API drill (two identities, sealed round trip, WS wake-up
     expect(sent.status).toBe(200);
     expect(await waitFor(() => frames.some((f) => f.type === 'mail' && f.family === 'sealed'))).toBe(true);
 
-    const polled = await post(host.base, '/api/sealed/poll', { id: alice.userId });
+    const polled = await post(host.base, '/api/sealed/poll', { id: alice.userId, ...await signWs(alice, 'sealed-poll') });
     expect(polled.json.messages?.some((m) => m.envelope === 'HOST-ENVELOPE-1')).toBe(true);
-    const ack = await post(host.base, '/api/sealed/ack', { id: alice.userId });
+    const ack = await post(host.base, '/api/sealed/ack', { id: alice.userId, ...await signWs(alice, 'sealed-ack') });
     expect(ack.json.ok).toBe(true);
-    const again = await post(host.base, '/api/sealed/poll', { id: alice.userId });
+    const again = await post(host.base, '/api/sealed/poll', { id: alice.userId, ...await signWs(alice, 'sealed-poll') });
     expect(again.json.messages || []).toEqual([]);
     ws.close();
     expect(await waitFor(() => host.env.MAILBOX_DO.socketCount(alice.userId) === 0)).toBe(true);
@@ -138,7 +138,7 @@ describe('Node host — API drill (two identities, sealed round trip, WS wake-up
     await post(host.base, '/api/sealed/send', { to: alice.userId, envelope: 'HOST-ENVELOPE-2' });
     await host.close();
     host = await boot(dbPath);
-    const afterRestart = await post(host.base, '/api/sealed/poll', { id: alice.userId });
+    const afterRestart = await post(host.base, '/api/sealed/poll', { id: alice.userId, ...await signWs(alice, 'sealed-poll') });
     expect(afterRestart.json.messages?.some((m) => m.envelope === 'HOST-ENVELOPE-2')).toBe(true);
     const bundleAfter = await post(host.base, '/api/prekey/fetch', { userId: alice.userId });
     expect(bundleAfter.json.identityKey).toBe(alice.identityKey);
