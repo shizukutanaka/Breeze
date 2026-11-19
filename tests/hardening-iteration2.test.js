@@ -249,27 +249,35 @@ describe('D — fatal-error counter uses a 60 s sliding window in both handlers'
     expect(html).toContain('const _FATAL_WINDOW_MS = 60000;');
   });
 
-  it("the 'error' handler resets the counter before incrementing it", () => {
+  // The reset-then-increment sequence lives in _noteError() (shared by
+  // both handlers since the stage 5 step 2 line-budget pass); each
+  // handler must call it before any other work.
+  it('_noteError resets the counter before incrementing it', () => {
+    const helper = sliceBetween('function _noteError() {', "window.addEventListener('error'", 'error boundary (_noteError)');
+    const resetIdx = helper.indexOf('if (Date.now() - _lastErrorAt > _FATAL_WINDOW_MS) { _fatalErrors = 0;');
+    expect(resetIdx).toBeGreaterThanOrEqual(0);
+    expect(helper.indexOf('_fatalErrors++;')).toBeGreaterThan(resetIdx);
+  });
+
+  it("the 'error' handler counts via _noteError before anything else", () => {
     const handler = sliceBetween(
       "window.addEventListener('error', (event) => {",
       "window.addEventListener('unhandledrejection'",
       'error boundary (error)',
     );
-    const resetIdx = handler.indexOf('if (Date.now() - _lastErrorAt > _FATAL_WINDOW_MS) { _fatalErrors = 0;');
-    expect(resetIdx).toBeGreaterThanOrEqual(0);
-    expect(handler.indexOf('_fatalErrors++;')).toBeGreaterThan(resetIdx);
+    expect(handler.indexOf('_noteError();')).toBeGreaterThanOrEqual(0);
+    expect(handler.indexOf('_noteError();')).toBeLessThan(handler.indexOf('_dbg'));
     expect(handler).toContain('if (_fatalErrors >= 3'); // crash overlay threshold
   });
 
-  it("the 'unhandledrejection' handler resets the counter before incrementing it", () => {
+  it("the 'unhandledrejection' handler counts via _noteError before anything else", () => {
     const handler = sliceBetween(
       "window.addEventListener('unhandledrejection', (event) => {",
       '\n// v3.5: Auto theme',
       'error boundary (unhandledrejection)',
     );
-    const resetIdx = handler.indexOf('if (Date.now() - _lastErrorAt > _FATAL_WINDOW_MS) { _fatalErrors = 0;');
-    expect(resetIdx).toBeGreaterThanOrEqual(0);
-    expect(handler.indexOf('_fatalErrors++;')).toBeGreaterThan(resetIdx);
+    expect(handler.indexOf('_noteError();')).toBeGreaterThanOrEqual(0);
+    expect(handler.indexOf('_noteError();')).toBeLessThan(handler.indexOf('const msg'));
   });
 });
 

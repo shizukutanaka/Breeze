@@ -1220,6 +1220,8 @@ window.__breezeSeed = createSeedHelper();
 // src/app/import-parsers.js is a set of pure functions.
 import { createCallManager } from './src/app/call.js';
 window.__breezeCall = { createCallManager };
+import { createGroupCallManager } from './src/app/group-call.js';
+window.__breezeGCall = { createGroupCallManager };
 import { createBackupTools } from './src/app/backup.js';
 window.__breezeBackup = { createBackupTools };
 import { createQRHelper } from './src/app/qr.js';
@@ -1265,9 +1267,9 @@ const CONFIG = {
   // encrypt WebRTC call signaling (offer/answer/ICE) via the 1:1 ratchet. The /signal relay is
   // unauthenticated + SDP is plaintext, so someone who knows both user IDs can inject a
   // call-answer with their own DTLS fingerprint → call MITM. Default ON since stage 5
-  // step 1, negotiated per peer (src/app/call.js createCallSignal): a peer is encrypted
-  // to when its bundle advertises 'call-e2e' or it has proven it encrypts; plaintext
-  // from a proven peer is dropped as forged, from anyone else it is the legacy format.
+  // step 1, negotiated per peer (src/app/call.js createCallSignal): encrypt when the
+  // peer's bundle advertises 'call-e2e' or it has proven it encrypts; plaintext from a
+  // proven peer is dropped as forged, from anyone else it is the legacy format.
   CALL_E2E_SIGNAL: true,
   // v3.6 SECURITY (default OFF — coordinated rollout, breaking for groups): replace the static
   // group sender-key HKDF (same key all messages, counter as salt) with a hash ratchet that
@@ -1462,6 +1464,10 @@ const _I = {
     camOff: 'Camera Off',
     camOn: 'Camera On',
     micDenied: 'Microphone access denied',
+    gcallIncoming: 'Group call',
+    gcallJoin: 'Join the call',
+    gcallLeave: 'Leave the call',
+    gcallWaiting: 'Waiting for others…',
     voiceCall: 'Voice call',
     videoCall: 'Video call',
     // Errors
@@ -2410,13 +2416,15 @@ let _lastErrorAt = 0;
 const _ERROR_FLOOD_LIMIT = 10;
 const _FATAL_WINDOW_MS = 60000; // only a burst of errors within this window counts as a crash loop
 
-window.addEventListener('error', (event) => {
-  // Reset both counters when outside the window — otherwise _errorCount only ever
-  // grows and the flood limit silences all error toasts permanently after 10 errors.
+// Reset both counters when outside the window — otherwise _errorCount only ever
+// grows and the flood limit silences all error toasts permanently after 10 errors.
+function _noteError() {
   if (Date.now() - _lastErrorAt > _FATAL_WINDOW_MS) { _fatalErrors = 0; _errorCount = 0; }
-  _lastErrorAt = Date.now();
-  _fatalErrors++;
-  _errorCount++;
+  _lastErrorAt = Date.now(); _fatalErrors++; _errorCount++;
+}
+
+window.addEventListener('error', (event) => {
+  _noteError();
   if (typeof _dbg === 'function') _dbg(event.error || event.message, 'UNCAUGHT');
   if (typeof auditLog === 'function') auditLog('error', 'JS Error: ' + (event.message || '').slice(0, 200), 'error');
   if (_errorCount <= _ERROR_FLOOD_LIMIT && typeof showToast === 'function') {
@@ -2441,10 +2449,7 @@ window.addEventListener('error', (event) => {
 });
 
 window.addEventListener('unhandledrejection', (event) => {
-  if (Date.now() - _lastErrorAt > _FATAL_WINDOW_MS) { _fatalErrors = 0; _errorCount = 0; }
-  _lastErrorAt = Date.now();
-  _fatalErrors++;
-  _errorCount++;
+  _noteError();
   const msg = event.reason?.message || String(event.reason || 'Promise rejected');
   if (typeof _dbg === 'function') _dbg(event.reason, 'UNHANDLED_PROMISE');
   if (typeof auditLog === 'function') auditLog('error', 'Unhandled: ' + msg.slice(0, 200), 'error');
@@ -2545,13 +2550,7 @@ function _wireDialogDismiss(dlg, close, cancelVal = null) {
 
 function showPrompt(title, defaultVal = '', opts = {}) {
   return new Promise(resolve => {
-    const dlg = document.createElement('dialog');
-    // a11y: give the dialog an accessible name (its title) and label the input by it,
-    // so a screen reader announces "<title> dialog" + names the field (APG dialog pattern).
-    // Native <dialog>.showModal() already provides role=dialog, aria-modal, focus trap,
-    // ESC, and focus restore on close.
-    const titleId = 'mdl-' + uid();
-    dlg.setAttribute('aria-labelledby', titleId);
+    const [dlg, titleId] = _makeDialog(); // a11y: accessible name from the title; showModal() handles the rest
     safeSetHTML(dlg, `<div class="modal-title" id="${titleId}">${esc(title)}</div>
       <input class="modal-input" type="${opts.type || 'text'}" value="${esc(defaultVal)}" placeholder="${esc(opts.placeholder || '')}" autocomplete="${esc(opts.autocomplete || 'off')}" aria-labelledby="${titleId}">
       <div class="modal-actions">
@@ -2570,10 +2569,7 @@ function showPrompt(title, defaultVal = '', opts = {}) {
 
 function showConfirm(title, opts = {}) {
   return new Promise(resolve => {
-    const dlg = document.createElement('dialog');
-    // a11y: accessible name from the title (see showPrompt). showModal() handles the rest.
-    const titleId = 'mdl-' + uid();
-    dlg.setAttribute('aria-labelledby', titleId);
+    const [dlg, titleId] = _makeDialog(); // a11y: accessible name from the title; showModal() handles the rest
     safeSetHTML(dlg, `<div class="modal-title" id="${titleId}">${esc(title)}</div>
       ${opts.desc ? `<div class="modal-desc">${esc(opts.desc)}</div>` : ''}
       <div class="modal-actions">
@@ -8564,7 +8560,7 @@ async function initMessenger(dbName) {
     _DOM.get('b-msg-clear')?.classList.remove('hidden');
     _DOM.get('b-msg-timer')?.classList.remove('hidden');
     // Call buttons (1:1 only, not groups)
-    contact.isGroup ? _DOM.get('b-msg-call').classList.add('hidden') : _DOM.get('b-msg-call').classList.remove('hidden');
+    _DOM.get('b-msg-call').classList.remove('hidden'); // groups too: stage 5 step 2 group calls are voice-only
     contact.isGroup ? _DOM.get('b-msg-video').classList.add('hidden') : _DOM.get('b-msg-video').classList.remove('hidden');
 
     // Mobile: hide sidebar, show back button
@@ -10679,8 +10675,19 @@ async function initMessenger(dbName) {
     getCallICEConfig: () => ({ iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }, { urls: 'stun:stun.services.mozilla.com' }] }), state: () => 'idle' };
   const { startCall, handleCallOffer, endCall, pollCallSignals, getCallICEConfig, getRTCCertificate, hasRTCCertificate } = _callMgr;
 
+  // Group voice calls (stage 5 step 2) — src/app/group-call.js.
+  const _gcall = globalThis.__breezeGCall?.createGroupCallManager({
+    encryptFor, decryptFrom, fetchCaps: _fetchMemberCapsBatch, signal: _signal, signalAwait: _signalAwait,
+    distributeSenderKey, encryptGroupMsg, relaySend, iceConfig: () => getCallICEConfig(), intervals: _intervals,
+    myId: () => myId, myPubB64: () => myPubB64, myName: () => myName,
+    isBusy: () => _callMgr.state() !== 'idle', isSecondary: () => _isSecondaryDevice,
+  }) || { start() {}, route() {}, state: () => 'idle' };
+
   // Call button handlers
-  _DOM.get('b-msg-call')?.addEventListener('click', () => { if (activeContact) startCall(activeContact, false); });
+  _DOM.get('b-msg-call')?.addEventListener('click', () => {
+    if (activeContact?.isGroup) { _gcall.start(activeContact); return; }
+    if (activeContact) startCall(activeContact, false);
+  });
   _DOM.get('b-msg-video')?.addEventListener('click', () => { if (activeContact) startCall(activeContact, true); });
 
   // Listen for incoming calls via signal poll (piggyback on existing messenger signal poll)
@@ -11606,6 +11613,10 @@ async function initMessenger(dbName) {
       const msgId = member.id + ':' + msg.ts;
       if (_replayCache.has(msgId)) return; // Fast in-memory dedup
       _replayCache.add(msgId); // Speculative mark before first await — blocks concurrent-path duplicates
+      if (msg.gctl) { // Stage 5 step 2: group-call control — routed to the call manager, never stored or rendered.
+        try { const ctl = JSON.parse(text); if (ctl && ctl.gctl) _gcall.route(group, member, ctl); } catch(e) { _dbg(e, 'gctl'); }
+        return;
+      }
       if (await dbGet('messages', msgId)) { if (ackOut) ackOut.stored = true; return; } // Already persisted
       const senderContact = await dbGet('contacts', member.id);
       const senderName = (senderContact?.pubB64 === member.pubB64 && typeof senderContact.name === 'string')
