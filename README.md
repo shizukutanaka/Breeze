@@ -5,7 +5,7 @@
 
 End-to-end encrypted P2P messenger. No phone number. No registration. No app store. No paywall — every feature is free.
 
-> **Single HTML file** — deploys to Cloudflare Pages in 60 seconds. The default relay is a free entrance only up to its free tier and fair-use quota; at larger scale a relay costs money, and by design that cost is paid on the user's own placement (their own relay or account), not by one central operator — see [Running Costs](#running-costs) and [docs/SUSTAINABILITY.md](docs/SUSTAINABILITY.md).
+> **Software, not a web page** — Breeze ships as installable apps (Electron desktop for Windows/macOS/Linux, Tauri, Capacitor for Android/iOS) built from this repository with `./build.sh`. The same code also runs as a self-hosted web app on Cloudflare Pages in 60 seconds. The default relay is a free entrance only up to its free tier and fair-use quota; at larger scale a relay costs money, and by design that cost is paid on the user's own placement (their own relay or account), not by one central operator — see [Running Costs](#running-costs) and [docs/SUSTAINABILITY.md](docs/SUSTAINABILITY.md).
 
 ![Breeze Messenger screenshot — the main window right after creating an identity](docs/images/screenshot.png)
 
@@ -23,6 +23,12 @@ Try the hosted version: **[breeze.pages.dev](https://breeze.pages.dev)**
 ```
 
 ## Quick Start
+
+**As an app (recommended):** build the desktop software from this repo —
+`./build.sh linux` (or `win` / `mac`) produces the installer/AppImage in
+`desktop/dist/`. Android/iOS builds live under `mobile/` (Capacitor).
+
+**As a self-hosted web app:**
 
 1. Deploy to Cloudflare Pages: `wrangler pages deploy . --project-name=breeze`
 2. Open in browser → enter your name → share your Breeze ID

@@ -31,7 +31,11 @@ self.addEventListener('install', (e) => {
       ]);
     } catch (err) { /* Static Routing not supported */ }
   }
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
+  // The cache is a web-only optimization: under the desktop
+  // shell's file:// origin addAll rejects ('file' scheme
+  // unsupported) — swallow it instead of an uncaught rejection
+  // on every packaged launch (found 2026-11-20).
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).catch(() => {}));
   self.skipWaiting();
 });
 

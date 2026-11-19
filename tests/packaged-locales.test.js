@@ -23,7 +23,10 @@ describe('every packaging path ships locales/ next to index.html', () => {
   it('build.sh copy_web copies locales/ into the packaged bundle', () => {
     const src = readFileSync(join(root, 'build.sh'), 'utf8');
     expect(src).toContain('locales/');
-    expect(src).toMatch(/cp\s+locales\/\*\.json/);
+    // Sources resolve against $SCRIPT_DIR since 2026-11-20 (the
+    // cwd-relative form broke every packaged build); the pin is
+    // on the copy itself, not the prefix spelling.
+    expect(src).toMatch(/cp\s+"\$SCRIPT_DIR\/locales"\/\*\.json\s+"\$dst\/locales\/"/);
   });
 
   it('desktop/package.json extraResources includes ../locales → locales', () => {

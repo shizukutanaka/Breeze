@@ -28,6 +28,8 @@
       "main.js",
       "preload.js",
       "bounds-guard.js",
+      "nav-guard.js",
+      "csp-guard.js",
       "icon.*",
       "tray*.png"
     ],
@@ -59,6 +61,14 @@
       {
         "from": "../_headers",
         "to": "_headers"
+      },
+      {
+        "from": "../src/crypto",
+        "to": "src/crypto"
+      },
+      {
+        "from": "../src/app",
+        "to": "src/app"
       }
     ],
     "asar": true,

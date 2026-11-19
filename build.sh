@@ -22,27 +22,32 @@ echo ""
 
 copy_web() {
   local dst="$1"
+  # Sources resolve against the repo root (SCRIPT_DIR), never the
+  # caller's cwd: the desktop/mobile targets cd into their shell
+  # directory before calling this, and index.html does not live
+  # there — resolving from cwd made every packaged build fail
+  # with "index.html missing" (found 2026-11-20).
   for f in "${WEB_FILES[@]}"; do
-    [ -f "$f" ] && cp "$f" "$dst/" || { echo "✗ $f missing"; exit 1; }
+    [ -f "$SCRIPT_DIR/$f" ] && cp "$SCRIPT_DIR/$f" "$dst/" || { echo "✗ $f missing"; exit 1; }
   done
   # Ship the crypto modules with their path preserved so `./src/crypto/*.js` resolves
   # in Electron/mobile bundles (Cloudflare Pages already serves the repo tree directly).
-  if [ -d "$CRYPTO_DIR" ]; then
+  if [ -d "$SCRIPT_DIR/$CRYPTO_DIR" ]; then
     mkdir -p "$dst/$CRYPTO_DIR"
-    cp "$CRYPTO_DIR"/*.js "$dst/$CRYPTO_DIR/"
+    cp "$SCRIPT_DIR/$CRYPTO_DIR"/*.js "$dst/$CRYPTO_DIR/"
     echo "✓ Crypto modules copied to $dst/$CRYPTO_DIR/"
   fi
-  if [ -d "$APP_DIR" ]; then
+  if [ -d "$SCRIPT_DIR/$APP_DIR" ]; then
     mkdir -p "$dst/$APP_DIR"
-    cp "$APP_DIR"/*.js "$dst/$APP_DIR/"
+    cp "$SCRIPT_DIR/$APP_DIR"/*.js "$dst/$APP_DIR/"
     echo "✓ App modules copied to $dst/$APP_DIR/"
   fi
   # locales/*.json are fetched at boot by _loadLocale() — skip them and the packaged
   # app silently renders English for every non-EN user (same class of bug fixed for
   # the Capacitor bundle in bf771a2).
-  if [ -d locales ]; then
+  if [ -d "$SCRIPT_DIR/locales" ]; then
     mkdir -p "$dst/locales"
-    cp locales/*.json "$dst/locales/"
+    cp "$SCRIPT_DIR/locales"/*.json "$dst/locales/"
     echo "✓ Locales copied to $dst/locales/"
   fi
   echo "✓ Web files copied to $dst/"

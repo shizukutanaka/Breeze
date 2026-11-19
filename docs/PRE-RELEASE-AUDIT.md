@@ -40,3 +40,30 @@ evidence is unmet, and unmet items are named, not hidden.*
 2. Restore the hosted demo (owner's Cloudflare account).
 3. Real-device checks (two devices, group call, location
    sharing) and a refreshed screenshot.
+
+## Addendum — 2026-11-20, software form (owner: "if it is not software, make it software")
+
+The desktop build was exercised for real after this audit, and
+it was NOT in releasable shape: (1) no package-lock.json existed
+for desktop/, mobile/ or tauri/, so every scripted `npm ci`
+failed immediately; (2) build.sh's copy_web resolved sources
+from the caller's cwd, so packaged builds died with
+"index.html missing"; (3) the Electron extraResources omitted
+src/crypto and src/app — the packaged app would have booted
+without its runtime-imported modules; (4) build.files omitted
+nav-guard.js and csp-guard.js, so the packaged app crashed on
+launch ("Cannot find module './nav-guard'", reproduced
+headlessly under xvfb). All four are fixed, the Linux build now
+produces AppImages whose unpacked tree carries the full module
+set, and a headless launch runs without main-process or bridge
+errors. The launch also exposed a fifth defect, in every form
+including web: the location bridge referenced sanitizeLoc &
+friends without importing them (ReferenceError aborted the
+module block; the location bridge — and the backup bridge after
+it — never registered). Fixed, and pinned by
+tests/bridge-resolution.test.js; packaging shape is pinned by
+tests/desktop-packaging.test.js. sw.js no longer raises an
+uncaught addAll rejection under the desktop file:// origin.
+README now presents the installable apps as the primary form.
+Windows/macOS packaged builds and a real-machine launch remain
+unverified (owner's PC).
