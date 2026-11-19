@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## P2P_PLAN step 3, third slice: renegotiation recovery prerequisites
+
+`index.html`, `tests/sdp-auth.test.js`, `tests/p2p-heartbeat.test.js`, `tests/hardening-iteration2.test.js`, `docs/P2P_PLAN.md`; CSP hashes re-pinned.
+
+- **Connected renegotiation.** Process restart offers/answers while connected, preserving SDP signature verification, signing-key pins/TOFU and polite/impolite glare handling with rollback. Ignore duplicate SDP, older origin versions and answers without a pending local offer.
+- **Heartbeat.** Count unanswered probes and throwing sends; three misses trigger ICE recovery. Ping/pong reception works on either DC. Main-channel fallback requires an explicit support announcement because older clients only answer state-channel pings; their state-channel exchange remains compatible.
+- **Fast recovery.** Reset signaling polls to the two-second cadence before local ICE restarts and negotiation offers, including heartbeat, RTT, presence/network recovery and manual retry. Established sessions return to 15 seconds. Worker signal wakes and pausing the connected poll remain the next slice; neither changes here.
+
 ## P2P_PLAN step 3, second slice: on-device signaling poll measurements
 
 `src/app/p2p-stats.js`, `index.html`, `locales/ja.json`, `tests/p2p-stats.test.js`, `tests/relay-fanout.test.js`, `docs/P2P_PLAN.md` (Step 3 implementation record); CSP hashes re-pinned.
