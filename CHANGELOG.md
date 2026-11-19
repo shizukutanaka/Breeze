@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## Device link by QR (SHARE_PLAN stage 4 step 2) + line-ceiling reduction pass
+
+- /link now shows the device key as a QR code as well as text, and both link panels carry a camera scan button (same BarcodeDetector availability rule as the rendezvous dialog; the paste commands remain the fallback). The two halves of the ceremony were extracted into `_linkDevicePub` / `_linkToRoot`, called verbatim by the paste commands and the scan callbacks, so a scanned key runs the identical format checks, confirmation, and signed registry write — the root Ed25519 pin remains the trust anchor. `/linkto` with no argument opens the scan panel for the root code. New strings in English and Japanese (the device-link family's existing coverage).
+- This change plus the quota notice crossed the 16K line ceiling in validate.sh; per the ceiling note it was met with a reduction pass, not a raise: the six modal dialogs' identical dismiss wiring (cancel button / Esc / backdrop click) is now one `_wireDialogDismiss` helper. index.html lands at 15,987 lines.
+- Regression coverage: `tests/device-link-qr.test.js` (deployed-wiring pins: single definitions, handler delegation, the signed write inside the shared function, QR/scan wiring, EN+JA strings).
+
 ## Relay quota notice (client side of the stage-6 cost model)
 
 - The client now tells USAGE_QUOTA_EXCEEDED apart from MAILBOX_RATE_LIMITED at every deposit path (fan-out copies, the primary sealed path, the primary plain path) via the new pure module `src/app/quota.js`, reached through the `window.__breezeQuota` bridge like the other src/app modules. A spent fair-use budget no longer falls through to the plain fallback (which only spent a second deposit against the same budget) and no longer surfaces as a "retrying in N seconds" toast for a window that resets in hours.

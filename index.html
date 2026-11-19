@@ -1725,7 +1725,11 @@ const _I = {
     select: 'Select',
     report: 'Report',
     devLinkTitle: "Link this device",
-    devLinkHint: "1. Copy this device key. 2. On your PRIMARY device run /link <key>. 3. Back here, add the primary's key as a contact, open it, and run /linkto <primary's key>.",
+    devLinkHint: "Show this code to your PRIMARY device: there, run /link and scan it (or paste this key via /link <key>). Then back here, run /linkto and scan the primary's code (or paste its key).",
+    devScanAdd: "Scan a device code",
+    devScanRoot: "Scan the primary's code",
+    devLinkToTitle: "Link to your primary device",
+    devLinkToHint: "Scan the code shown by /link on your PRIMARY device (or paste its key with /linkto <key>). The primary must have added this device first.",
     devLinkConfirm: "Add device {0} to your account? It will receive copies of your new messages.",
     devLinked: "Device linked to the account",
     devAdded: "Device added — it should now run /linkto with your key",
@@ -2509,6 +2513,18 @@ function showToast(message, type = 'info', duration = CONFIG.TOAST_DURATION_MS) 
 }
 
 // v3.6: Native <dialog> modal (auto inert bg, focus trap, ESC, ::backdrop) replacing browser prompt() and hand-rolled overlay divs/z-index/ARIA/focus-trap JS.
+// Shared dismiss wiring for the modal <dialog> helpers: the cancel
+// button, Esc (the 'close' event), and a backdrop click all resolve
+// with the dialog's cancel value (null, or false for showConfirm).
+function _wireDialogDismiss(dlg, close, cancelVal = null) {
+  dlg.querySelector('[value="cancel"]').onclick = () => close(cancelVal);
+  dlg.addEventListener('close', () => close(cancelVal));
+  dlg.addEventListener('click', (e) => {
+    const rect = dlg.getBoundingClientRect();
+    if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) close(cancelVal);
+  });
+}
+
 function showPrompt(title, defaultVal = '', opts = {}) {
   return new Promise(resolve => {
     const dlg = document.createElement('dialog');
@@ -2530,12 +2546,7 @@ function showPrompt(title, defaultVal = '', opts = {}) {
     input.focus(); input.select();
     const close = (val) => { dlg.close(); dlg.remove(); resolve(val); };
     dlg.querySelector('[value="ok"]').onclick = () => close(input.value);
-    dlg.querySelector('[value="cancel"]').onclick = () => close(null);
-    dlg.addEventListener('close', () => close(null)); // ESC key
-    dlg.addEventListener('click', (e) => { // Click outside (::backdrop)
-      const rect = dlg.getBoundingClientRect();
-      if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) close(null);
-    });
+        _wireDialogDismiss(dlg, close);
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') close(input.value); });
   });
 }
@@ -2557,12 +2568,7 @@ function showConfirm(title, opts = {}) {
     dlg.querySelector('[value="ok"]').focus();
     const close = (val) => { dlg.close(); dlg.remove(); resolve(val); };
     dlg.querySelector('[value="ok"]').onclick = () => close(true);
-    dlg.querySelector('[value="cancel"]').onclick = () => close(false);
-    dlg.addEventListener('close', () => close(false));
-    dlg.addEventListener('click', (e) => {
-      const rect = dlg.getBoundingClientRect();
-      if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) close(false);
-    });
+        _wireDialogDismiss(dlg, close, false);
   });
 }
 
@@ -2595,12 +2601,7 @@ function _promptRecoveryPhraseNew(phrase, okText) {
     let settled = false;
     const close = (val) => { if (settled) return; settled = true; dlg.close(); dlg.remove(); resolve(val); };
     okBtn.onclick = () => close(dlg.querySelector('input[type="password"]').value || '');
-    dlg.querySelector('[value="cancel"]').onclick = () => close(null);
-    dlg.addEventListener('close', () => close(null));
-    dlg.addEventListener('click', (e) => {
-      const rect = dlg.getBoundingClientRect();
-      if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) close(null);
-    });
+        _wireDialogDismiss(dlg, close);
   });
 }
 
@@ -2634,12 +2635,7 @@ function _promptRecoveryPhraseRestore() {
       passphrase: dlg.querySelector('.rp-pass').value || '',
       kitFile: dlg.querySelector('.rp-kit').files?.[0] || null,
     });
-    dlg.querySelector('[value="cancel"]').onclick = () => close(null);
-    dlg.addEventListener('close', () => close(null));
-    dlg.addEventListener('click', (e) => {
-      const rect = dlg.getBoundingClientRect();
-      if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) close(null);
-    });
+        _wireDialogDismiss(dlg, close);
   });
 }
 
@@ -2676,12 +2672,7 @@ function _promptSimpleRecoveryNew() {
       account: dlg.querySelector('.rp-account').value,
       passphrase: dlg.querySelector('.rp-pass').value || '',
     });
-    dlg.querySelector('[value="cancel"]').onclick = () => close(null);
-    dlg.addEventListener('close', () => close(null));
-    dlg.addEventListener('click', (e) => {
-      const rect = dlg.getBoundingClientRect();
-      if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) close(null);
-    });
+        _wireDialogDismiss(dlg, close);
   });
 }
 
@@ -2713,12 +2704,7 @@ function _promptSimpleRecoveryRestore() {
       account: dlg.querySelector('.rp-account').value,
       passphrase: dlg.querySelector('.rp-pass').value || '',
     });
-    dlg.querySelector('[value="cancel"]').onclick = () => close(null);
-    dlg.addEventListener('close', () => close(null));
-    dlg.addEventListener('click', (e) => {
-      const rect = dlg.getBoundingClientRect();
-      if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) close(null);
-    });
+        _wireDialogDismiss(dlg, close);
   });
 }
 
@@ -6354,6 +6340,74 @@ async function initMessenger(dbName) {
       return rec.devices.map(d => d.pub);
     } catch(e) { _dbg(e, 'device-list'); return null; }
   }
+  // SHARE_PLAN stage 4 step 2: the two halves of device linking, shared
+  // verbatim by the paste commands (/link <pub>, /linkto <pub>) and the
+  // QR scan buttons — a scanned key runs the identical checks and the
+  // identical signed registry write, so the trust anchor (the root's
+  // Ed25519 pin, verified in _fetchDeviceList) is just as strong.
+  async function _linkDevicePub(arg) {
+    if (arg === myPubB64) { showToast(t('devSelfLink'), 'error'); return; }
+    if (!/^[A-Za-z0-9+/=_-]{40,200}$/.test(arg)) { showToast(t('devBadPub'), 'error'); return; }
+    if (!await showConfirm(t('devLinkConfirm', arg.slice(0, 16) + '…'))) return;
+    try {
+      const acct = (await dbGet('identity', 'account')) || { root: myPubB64, isPrimary: true };
+      if (acct.root !== myPubB64) { showToast(t('devPrimaryOnly'), 'error'); return; }
+      const current = (await _fetchDeviceList(myId, myPubB64)) || [myPubB64];
+      if (current.includes(arg)) { showToast(t('devAlready'), 'info'); return; }
+      const devices = [...new Set([myPubB64, ...current, arg])].map(p => ({ pub: p, name: p === myPubB64 ? 'primary' : '' }));
+      const ts = Date.now();
+      const digestBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(devices.map(d => d.pub))));
+      const digest = Array.from(new Uint8Array(digestBuf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
+      const sig = await signMessage(`breeze-device-set:${myId}:${ts}:${digest}`);
+      const resp = await postAPIRaw('/device/set', { accountId: myId, root: myPubB64, devices, ts, sig });
+      if (resp?.ok) {
+        await dbPut('identity', acct, 'account');
+        _myDevCache = null; // bust the cache so self-sync starts immediately
+        showToast(t('devAdded'), 'success');
+      } else showToast(t('devSetFail'), 'error');
+    } catch(err) { _dbg(err, 'link'); showToast(t('devSetFail'), 'error'); }
+  }
+
+  async function _linkToRoot(rootPub) {
+    if (!/^[A-Za-z0-9+/=_-]{40,200}$/.test(rootPub)) { showToast(t('devBadPub'), 'error'); return; }
+    if (rootPub === myPubB64) { showToast(t('devSelfLink'), 'error'); return; }
+    try {
+      const resp = await postAPIRaw('/device/list', { accountId: rootPub.slice(0, 12) });
+      const rec = resp?.ok ? await resp.json() : null;
+      if (!rec?.devices || rec.root !== rootPub) { showToast(t('devNotListed'), 'error'); return; }
+      if (!rec.devices.some(d => d.pub === myPubB64)) { showToast(t('devNotListed'), 'error'); return; }
+      await dbPut('identity', { root: rootPub, rootEd: rec.rootEd || null, isPrimary: false }, 'account');
+      _myDevCache = null; await _refreshDeviceRole();
+      showToast(t('devLinked'), 'success');
+    } catch(err) { _dbg(err, 'linkto'); showToast(t('devSetFail'), 'error'); }
+  }
+
+  // A camera-scan button for the link panels, mirroring the rendezvous
+  // dialog's availability rule: no BarcodeDetector (or no QR helper)
+  // means the button stays disabled with the reason shown, and the
+  // paste commands remain the route. onValue receives the raw scanned
+  // string; the shared functions above do all validation.
+  function _deviceScanButton(labelKey, onValue) {
+    const wrap = document.createElement('div');
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-o btn-sm';
+    btn.textContent = t(labelKey);
+    const status = document.createElement('p');
+    status.setAttribute('role', 'status');
+    const cam = document.createElement('div');
+    const canScan = !!globalThis.__breezeQR?.startScan && typeof BarcodeDetector !== 'undefined';
+    btn.disabled = !canScan;
+    if (!canScan) status.textContent = t('rvScanUnavailable');
+    btn.onclick = () => {
+      btn.disabled = true;
+      status.textContent = t('scanning');
+      globalThis.__breezeQR.startScan({ container: cam,
+        onResult: (value) => { status.textContent = ''; onValue(String(value || '').trim()); },
+        onError: () => { btn.disabled = false; status.textContent = t('toastCameraFail'); } });
+    };
+    wrap.append(btn, status, cam);
+    return wrap;
+  }
   // Devices of a CONTACT (for send fan-out). 5-min cache on the contact object.
   async function _devicesFor(contact) {
     if (!contact?.pubB64) return [];
@@ -6752,11 +6806,10 @@ async function initMessenger(dbName) {
   // relay's limit never touches the others. Any other sealed failure
   // falls through to plain exactly like the legacy path.
   // SHARE_PLAN stage 6, client side of the cost model: when a relay
-  // refuses a deposit because the identity's free quota is spent, say so
-  // once per episode — the particulars go to the audit log, the user
-  // gets the way out (their own relay), not a per-message alarm. The
-  // message itself is never dropped over a quota: it stays in the same
-  // retry queue an ordinary failure uses.
+  // refuses a deposit because the free quota is spent, say so once per
+  // episode — details to the audit log, the user gets the way out
+  // (their own relay). The message is never dropped over a quota: it
+  // stays in the same retry queue an ordinary failure uses.
   const _classifyRejection = (body) => globalThis.__breezeQuota?.classifyRelayRejection(body) || null;
   const _quotaNotice = globalThis.__breezeQuota?.createQuotaNotice({ cooldownMs: MS.HOUR, notify: (info) => {
     auditLog('relay', `Deposit refused: free quota used up on this relay (${info.scope || 'window'} limit ${info.limit ?? 'unknown'}). Delivery resumes when the quota resets, or via your own relay.`);
@@ -15140,55 +15193,43 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const arg = val.slice(5).trim();
       if (!API) { showToast(t('uiNoServer'), 'error'); return; }
       if (!arg) {
-        // Secondary-device side: expose my pub for the primary to add, then poll for inclusion.
+        // Show my pub as text AND as a QR (stage 4 step 2), with the
+        // primary-side scan in the same panel: whichever of the two
+        // devices you are holding, one of the two directions is yours.
         const box = _DOM.get('msg-messages');
         const d = document.createElement('div'); d.className = 'cmd-panel';
         safeSetHTML(d, '<b class="i-g">' + t('devLinkTitle') + '</b><br>' + t('devLinkHint') + '<br><code class="i-select-all">' + esc(myPubB64) + '</code>');
+        try {
+          const qr = globalThis.__breezeQR?.generateQR(myPubB64);
+          if (qr) { qr.className = 'qr-code'; d.appendChild(qr); }
+        } catch(e) { _dbg(e, 'link-qr'); }
+        d.appendChild(_deviceScanButton('devScanAdd', (v) => { _linkDevicePub(v); }));
         box.appendChild(d); box.scrollTop = box.scrollHeight;
         try { await navigator.clipboard.writeText(myPubB64); showToast(t('toastCopied'), 'success'); } catch {}
         return;
       }
       // Primary side: add the pasted device pub to my registry and sign it.
-      if (arg === myPubB64) { showToast(t('devSelfLink'), 'error'); return; }
-      if (!/^[A-Za-z0-9+/=_-]{40,200}$/.test(arg)) { showToast(t('devBadPub'), 'error'); return; }
-      if (!await showConfirm(t('devLinkConfirm', arg.slice(0, 16) + '…'))) return;
-      try {
-        const acct = (await dbGet('identity', 'account')) || { root: myPubB64, isPrimary: true };
-        if (acct.root !== myPubB64) { showToast(t('devPrimaryOnly'), 'error'); return; }
-        const current = (await _fetchDeviceList(myId, myPubB64)) || [myPubB64];
-        if (current.includes(arg)) { showToast(t('devAlready'), 'info'); return; }
-        const devices = [...new Set([myPubB64, ...current, arg])].map(p => ({ pub: p, name: p === myPubB64 ? 'primary' : '' }));
-        const ts = Date.now();
-        const digestBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(devices.map(d => d.pub))));
-        const digest = Array.from(new Uint8Array(digestBuf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
-        const sig = await signMessage(`breeze-device-set:${myId}:${ts}:${digest}`);
-        const resp = await postAPIRaw('/device/set', { accountId: myId, root: myPubB64, devices, ts, sig });
-        if (resp?.ok) {
-          await dbPut('identity', acct, 'account');
-          _myDevCache = null; // bust the cache so self-sync starts immediately
-          showToast(t('devAdded'), 'success');
-        } else showToast(t('devSetFail'), 'error');
-      } catch(err) { _dbg(err, 'link'); showToast(t('devSetFail'), 'error'); }
+      await _linkDevicePub(arg);
       return;
     }
     // Secondary device, final step: bind THIS device to the account whose root pub the user
     // physically carried over. That gesture is the trust anchor (same TOFU as adding a contact
     // by raw key); the root's Ed25519 signing key is pinned here and required stable afterwards.
+    if (val === '/linkto') {
+      e.preventDefault(); clearInput();
+      if (!API) { showToast(t('uiNoServer'), 'error'); return; }
+      const box = _DOM.get('msg-messages');
+      const d = document.createElement('div'); d.className = 'cmd-panel';
+      safeSetHTML(d, '<b class="i-g">' + t('devLinkToTitle') + '</b><br>' + t('devLinkToHint'));
+      d.appendChild(_deviceScanButton('devScanRoot', (v) => { _linkToRoot(v); }));
+      box.appendChild(d); box.scrollTop = box.scrollHeight;
+      return;
+    }
     if (val.startsWith('/linkto ')) {
       e.preventDefault(); clearInput();
       const rootPub = val.slice(8).trim();
       if (!API) { showToast(t('uiNoServer'), 'error'); return; }
-      if (!/^[A-Za-z0-9+/=_-]{40,200}$/.test(rootPub)) { showToast(t('devBadPub'), 'error'); return; }
-      if (rootPub === myPubB64) { showToast(t('devSelfLink'), 'error'); return; }
-      try {
-        const resp = await postAPIRaw('/device/list', { accountId: rootPub.slice(0, 12) });
-        const rec = resp?.ok ? await resp.json() : null;
-        if (!rec?.devices || rec.root !== rootPub) { showToast(t('devNotListed'), 'error'); return; }
-        if (!rec.devices.some(d => d.pub === myPubB64)) { showToast(t('devNotListed'), 'error'); return; }
-        await dbPut('identity', { root: rootPub, rootEd: rec.rootEd || null, isPrimary: false }, 'account');
-        _myDevCache = null; await _refreshDeviceRole();
-        showToast(t('devLinked'), 'success');
-      } catch(err) { _dbg(err, 'linkto'); showToast(t('devSetFail'), 'error'); }
+      await _linkToRoot(rootPub);
       return;
     }
     if (val === '/devices') {
