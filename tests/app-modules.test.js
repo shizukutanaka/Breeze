@@ -128,7 +128,8 @@ describe('call manager factory (src/app/call.js)', () => {
     expect(await stub.getRTCCertificate()).toBe(null);
     expect(stub.hasRTCCertificate()).toBe(false);
     expect(html).toContain('const cert = await getRTCCertificate();');
-    expect(html).toContain("t('secLblRTCCert') + ': ' + (hasRTCCertificate() ?");
+    const panels = readFileSync(new URL('../src/app/info-panels.js', import.meta.url), 'utf8');
+    expect(panels).toContain("D.t('secLblRTCCert') + ': ' + (D.hasRTCCertificate() ?");
     expect(html).not.toMatch(/\b_rtcCert\b/);
   });
   it('starts idle; ICE config is the STUN base without a TURN credential', () => {

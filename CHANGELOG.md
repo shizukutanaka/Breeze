@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## Stickers with an authorable pack format (SHARE_PLAN stage 5 step 5)
+
+- Stickers ship: a 🎨 button opens a pack picker (built-in emoji pack plus your own packs), and /stickers manages packs. The pack format is plain documented JSON ({"format":"breeze-stickers","v":1,"id","name","stickers":[{id, emoji|img}]}) — author one in a text editor, import it, export yours to share the file. "Add images" builds a personal pack on-device (downscaled to ≤256px PNG/WebP, transparency kept).
+- Distribution is E2EE and capability-gated ('sticker-v1'), like profiles: 1:1 stickers ride a dedicated envelope flag with a ratchet-encrypted payload (the voice pattern), group stickers ride the sender-key channel as a {stk} document and require every member to advertise the capability. Un-upgraded peers never see garbage: a built-in emoji sticker degrades to sending the emoji as a normal message, and an image sticker refuses with an explanation instead of sending something broken. Received images are re-validated strictly (data:image/png|webp|jpeg, pure base64, ≤48 KB) before they reach an <img src>; the relay stores only opaque ciphertext and has no sticker handling.
+- Also fixed: the call button had TWO click handlers registered (a leftover duplicate) — for a group, the second one additionally fired a 1:1 call attempt at the group contact. The duplicate is removed; the group-aware handler is the only one.
+- Line-budget pass (index.html 15,962): the device-link ceremony (/link, /linkto, /devices, /unlink plus the shared signed-registry functions) moved to src/app/device-link.js, and the /security + /who panels and the /files + GDPR export moved to src/app/info-panels.js — behavior unchanged, pins follow the code.
+
 ## Profiles travel E2EE-only (SHARE_PLAN stage 5 step 4)
 
 - Display name, avatar emoji and a photo avatar now distribute as a ratchet-encrypted control payload (src/app/profile.js) — never in plaintext: the prekey bundle gains only the 'profile-v1' capability string, the relay stores the same opaque ciphertext shape as any message, and the Worker has no profile handling at all (audited in tests/profile.test.js). Sending is capability-gated, so un-upgraded peers are never sent a payload they would render as a chat message; receivers apply only strictly newer profile versions (pv), so a replayed deposit can't roll a contact's face back.

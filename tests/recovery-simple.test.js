@@ -601,7 +601,8 @@ describe('simple mode — wiring pins', () => {
   });
 
   it('/security renders the simple mode and /wipe erases the slot', () => {
-    expect(html).toContain("_identRec?.recoveryMode === 'simple' ? '<span class=\"i-g\">✓ ' + t('secRecoverySimple')");
+    const panels = readFileSync(new URL('../src/app/info-panels.js', import.meta.url), 'utf8');
+    expect(panels).toContain("_identRec?.recoveryMode === 'simple' ? '<span class=\"i-g\">✓ ' + D.t('secRecoverySimple')");
     const wipe = html.slice(html.indexOf("if (val === '/wipe')"), html.indexOf("if (val === '/wipe')") + 4000);
     expect(wipe).toContain('await eraseSimpleBackup();');
     // The backup tools arrive in index.html through the bridge bindings.

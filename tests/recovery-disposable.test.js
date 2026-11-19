@@ -212,10 +212,11 @@ describe('disposable mode — wiring pins', () => {
   });
 
   it('/security renders the recorded recovery mode', () => {
-    expect(html).toContain("_identRec?.recoveryMode === 'none'");
-    expect(html).toContain("t('secRecoveryNone')");
-    expect(html).toContain("t('secRecoveryPhrase')");
-    expect(html).toContain("t('secRecoveryLegacy')");
+    const panels = readFileSync(new URL('../src/app/info-panels.js', import.meta.url), 'utf8');
+    expect(panels).toContain("_identRec?.recoveryMode === 'none'");
+    expect(panels).toContain("D.t('secRecoveryNone')");
+    expect(panels).toContain("D.t('secRecoveryPhrase')");
+    expect(panels).toContain("D.t('secRecoveryLegacy')");
   });
 
   it('the kit guard reads the identity record', () => {

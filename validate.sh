@@ -207,7 +207,11 @@ LINES=$(wc -l < index.html)
 # into history-sync.js as createHistorySender) landed it at 15,990.
 # Stage-5 step 4 crossed it a sixth time; a sixth pass (group
 # creation, the member poller, the join flow and safeMemberList into
-# group-create.js) landed it at 15,977.
+# group-create.js) landed it at 15,977. Stage-5 step 5 crossed it a
+# seventh time; a seventh pass (the device-link ceremony into
+# device-link.js, /security + /who into info-panels.js, /files +
+# GDPR export into the same module as data panels) landed it at
+# 15,962.
 if [ "$LINES" -lt 12000 ]; then pass "Total lines: $LINES (<12K)" 5
 elif [ "$LINES" -lt 16000 ]; then warn "Total lines: $LINES (12-16K)" 5
 else fail "Total lines: $LINES (≥16K) — reduction pass required (see ceiling note above)" 5; fi

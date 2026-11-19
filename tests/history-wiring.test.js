@@ -41,7 +41,9 @@ describe('history sync wiring (deployed inline)', () => {
   });
 
   it('the link flow offers the transfer and /history re-offers it', () => {
-    expect(html).toContain("if (await showConfirm(t('histSendAsk')))");
+    // The offer lives in the device-link module since the stage 5 step 5 move.
+    const dl = readFileSync(new URL('../src/app/device-link.js', import.meta.url), 'utf8');
+    expect(dl).toContain("if (await D.showConfirm(D.t('histSendAsk')))");
     expect(html).toContain("if (val === '/history') {");
   });
 

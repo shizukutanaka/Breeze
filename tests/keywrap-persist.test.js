@@ -74,6 +74,7 @@ async function bundleBuilder(w) {
     const _signingPubB64 = 'signing-public';
     const homeRelays = () => [];
     const CAPS_PROFILE = 'profile-v1';
+    const CAPS_STICKER = 'sticker-v1';
     const genRatchetKey = async () => ({ priv: { d: 'new-spk' }, pub: new Uint8Array(32) });
     ${slice('async function generatePreKeyBundle', 'async function createIdentity')}
     return generatePreKeyBundle;

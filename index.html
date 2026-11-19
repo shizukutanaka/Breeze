@@ -202,6 +202,13 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .avatar-img { width: 100%; height: 100%; object-fit: cover; border-radius: 50% }
 .pf-photo { width: 48px; height: 48px; border-radius: 50%; object-fit: cover }
 .pf-photo-row { display: flex; gap: 8px; align-items: center; margin: 6px 0 10px }
+.msg-sticker { width: 120px; height: 120px; object-fit: contain }
+.msg-sticker-emoji { font-size: 92px; line-height: 1.1 }
+.sticker-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 8px; overflow-y: auto }
+.sticker-cell { background: none; border: none; cursor: pointer; padding: 4px; border-radius: 8px }
+.sticker-cell:hover { background: var(--s2) }
+.sticker-cell img { width: 56px; height: 56px; object-fit: contain }
+.sticker-cell .stk-emoji { font-size: 40px }
 .contact .info { flex: 1; min-width: 0 }
 .contact .info .name { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
 .contact .info .preview { font-size: 12px; color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px }
@@ -1172,6 +1179,7 @@ del.md-del { opacity: .6 }
           <button id="b-msg-stt" class="tool hidden" data-i18n-aria="ariaDict" aria-pressed="false">🗣</button>
           <textarea id="msg-input" dir="auto" data-i18n-ph="msgPlaceholder" data-i18n-aria="ariaMessage" maxlength="4096" rows="1" enterkeyhint="send"></textarea>
           <span id="msg-char-count" class="char-count hidden"></span>
+          <button id="b-msg-sticker" class="tool" data-i18n-aria="ttStickers" data-i18n-title="ttStickers" aria-expanded="false" aria-haspopup="dialog">🎨</button>
           <button id="b-msg-emoji" class="tool" data-i18n-aria="ttEmoji" data-i18n-title="ttEmoji" aria-expanded="false" aria-haspopup="dialog">😀</button>
           <button class="btn btn-o btn-sm" id="b-msg-nrn" data-i18n-aria="nrnAria" data-i18n-title="nrnAria">🕊</button>
           <button class="send" id="b-msg-send" data-i18n-aria="send">↑</button>
@@ -1229,6 +1237,12 @@ import { CAPS_PROFILE as _CAPS_PROFILE_STR, sanitizeProfile, buildProfilePayload
 window.__breezeProfile = { sanitizeProfile, buildProfilePayload, parseProfilePayload, profileNewer };
 import { createGroupCreate } from './src/app/group-create.js';
 window.__breezeGroupCreate = { createGroupCreate };
+import { createDeviceLink } from './src/app/device-link.js';
+window.__breezeDeviceLink = { createDeviceLink };
+import { CAPS_STICKER as _CAPS_STICKER_STR, BUILTIN_PACK, sanitizeSticker, sanitizePack, parsePackFile, packToFile, buildStickerPayload, parseStickerPayload, groupTextForSticker, parseGroupStickerText, stickerLabel } from './src/app/stickers.js';
+window.__breezeStickers = { BUILTIN_PACK, sanitizeSticker, sanitizePack, parsePackFile, packToFile, buildStickerPayload, parseStickerPayload, groupTextForSticker, parseGroupStickerText, stickerLabel };
+import { createInfoPanels, createDataPanels } from './src/app/info-panels.js';
+window.__breezeInfoPanels = { createInfoPanels, createDataPanels };
 import { createBackupTools } from './src/app/backup.js';
 window.__breezeBackup = { createBackupTools };
 import { createQRHelper } from './src/app/qr.js';
@@ -1484,6 +1498,19 @@ const _I = {
     profileRemove: 'Remove',
     profileSave: 'Save & share',
     profileSaved: 'Profile saved and shared',
+    ttStickers: 'Stickers',
+    stickersTitle: 'Sticker packs',
+    stickersAddImages: 'Add images',
+    stickersImport: 'Import pack',
+    stickersExport: 'Export',
+    stickersDelete: 'Delete',
+    stickersEmpty: 'No custom packs yet. Add images or import a pack file.',
+    stickersTooBig: 'That image is too detailed to be a sticker',
+    stickersPeerNoCap: 'This contact cannot receive stickers yet',
+    stickersGroupNoCap: 'Some members cannot receive stickers yet',
+    stickersMyPack: 'My stickers',
+    stickersSaved: 'Sticker packs saved',
+    stickersBadPack: 'That file is not a valid sticker pack',
     voiceCall: 'Voice call',
     videoCall: 'Video call',
     // Errors
@@ -5128,46 +5155,9 @@ async function initMessenger(dbName) {
 
   // v3.3: ENTERPRISE — FILE MANAGER
   // List all sent/received files across all conversations
-  async function getFileList() {
-    const allMsgs = await dbGetAll('messages');
-    return allMsgs.filter(m => m.fileData || m.voice).map(m => {
-      let name = 'Unknown', size = 0, type = 'file';
-      try {
-        if (m.voice) { name = t('voiceMsg'); size = m.voice.length; type = 'audio'; }
-        else if (m.fileData) {
-          const fd = typeof m.fileData === 'string' ? JSON.parse(m.fileData) : m.fileData;
-          name = fd.name || 'Unnamed'; size = fd.size || 0; type = fd.type || 'file';
-        }
-      } catch(e) { _dbg(e, 'file-parse'); }
-      return { msgId: m.msgId, contactId: m.contactId, name, size, type, ts: m.ts, mine: m.mine };
-    }).sort((a, b) => b.ts - a.ts);
-  }
 
   // v3.3: ENTERPRISE — GDPR DATA EXPORT
   // Export all personal data as structured JSON (GDPR Art. 20)
-  async function gdprExport() {
-    try {  
-      const identity = await dbGet('identity', 'keys');
-      const contacts = await dbGetAll('contacts');
-      const messages = await dbGetAll('messages');
-      const audit = db.objectStoreNames.contains('audit') ? await dbGetAll('audit') : [];
-      const settings = db.objectStoreNames.contains('settings') ? await dbGet('settings', 'app') : null;
-      return {
-        exportType: 'GDPR Data Export (Art. 15/20)',
-        exportedAt: new Date().toISOString(),
-        version: CONFIG.VERSION,
-        identity: identity ? { name: identity.name, alias: identity.alias, pubB64: identity.pubB64, createdAt: identity.createdAt } : null,
-        contacts: contacts.map(c => ({ id: c.id, name: c.name, alias: c.alias, isGroup: c.isGroup, createdAt: c.createdAt, pinned: c.pinned, muted: c.muted, blocked: c.blocked, archived: c.archived, notes: c.notes, labels: c.labels || [] })),
-        messages: messages.map(m => ({ msgId: m.msgId, contactId: m.contactId, text: m.text?.slice(0, 200), mine: m.mine, ts: m.ts, hasFile: !!m.fileData, hasVoice: !!m.voice })),
-        auditLog: audit.slice(-1000),
-        settings,
-        totalMessages: messages.length,
-        totalContacts: contacts.length,
-        totalFiles: messages.filter(m => m.fileData || m.voice).length,
-      };
-    
-    } catch(_e) { _dbg(_e, 'gdprExport'); }
-  }
 
   // v3.3: ENTERPRISE — REMOTE WIPE
   // Check server for wipe signal; if found, destroy all local data
@@ -5358,6 +5348,7 @@ async function initMessenger(dbName) {
     if (CONFIG.MULTI_RELAY_ENABLED) caps.push(CAPS_MULTI_RELAY);
     if (CONFIG.CALL_E2E_SIGNAL) caps.push(CAPS_CALL_E2E);
     caps.push(CAPS_PROFILE); // stage 5 step 4: E2EE profile distribution is always offered
+    caps.push(CAPS_STICKER); // stage 5 step 5: sticker distribution is always offered
     // Stage-3 step 5 (plan D5): advertise 'pqxdh' only behind the flag AND only
     // when this bundle actually carries the signed PQ pair — never advertise a
     // capability the served bundle cannot fulfil (a mint failure above degrades
@@ -5613,6 +5604,7 @@ async function initMessenger(dbName) {
   const CAPS_PQXDH = 'pqxdh';
   const CAPS_CALL_E2E = 'call-e2e'; // must match the literal in src/app/call.js (createCallSignal)
   const CAPS_PROFILE = 'profile-v1'; // must match src/app/profile.js (CAPS_PROFILE)
+  const CAPS_STICKER = 'sticker-v1'; // must match src/app/stickers.js (CAPS_STICKER)
 
   function _parsePeerCaps(bundle) {
     if (!bundle) return [];
@@ -6366,51 +6358,6 @@ async function initMessenger(dbName) {
       return rec.devices.map(d => d.pub);
     } catch(e) { _dbg(e, 'device-list'); return null; }
   }
-  // SHARE_PLAN stage 4 step 2: the two halves of device linking, shared
-  // verbatim by the paste commands (/link <pub>, /linkto <pub>) and the
-  // QR scan buttons — a scanned key runs the identical signed write.
-  async function _linkDevicePub(arg) {
-    if (arg === myPubB64) { showToast(t('devSelfLink'), 'error'); return; }
-    if (!/^[A-Za-z0-9+/=_-]{40,200}$/.test(arg)) { showToast(t('devBadPub'), 'error'); return; }
-    if (!await showConfirm(t('devLinkConfirm', arg.slice(0, 16) + '…'))) return;
-    try {
-      const acct = (await dbGet('identity', 'account')) || { root: myPubB64, isPrimary: true };
-      if (acct.root !== myPubB64) { showToast(t('devPrimaryOnly'), 'error'); return; }
-      const current = (await _fetchDeviceList(myId, myPubB64)) || [myPubB64];
-      if (current.includes(arg)) { showToast(t('devAlready'), 'info'); return; }
-      const devices = [...new Set([myPubB64, ...current, arg])].map(p => ({ pub: p, name: p === myPubB64 ? 'primary' : '' }));
-      const ts = Date.now();
-      const digestBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(devices.map(d => d.pub))));
-      const digest = Array.from(new Uint8Array(digestBuf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
-      const sig = await signMessage(`breeze-device-set:${myId}:${ts}:${digest}`);
-      const resp = await postAPIRaw('/device/set', { accountId: myId, root: myPubB64, devices, ts, sig });
-      if (resp?.ok) {
-        await dbPut('identity', acct, 'account');
-        _myDevCache = null; // bust the cache so self-sync starts immediately
-        showToast(t('devAdded'), 'success');
-        // Stage 4 step 3: offer the history transfer right after the link.
-        if (await showConfirm(t('histSendAsk'))) {
-          const r = await _sendHistoryTo(arg);
-          showToast(r.sent ? t('histSent') : t('histEmpty'), r.sent ? 'success' : 'info');
-        }
-      } else showToast(t('devSetFail'), 'error');
-    } catch(err) { _dbg(err, 'link'); showToast(t('devSetFail'), 'error'); }
-  }
-
-  async function _linkToRoot(rootPub) {
-    if (!/^[A-Za-z0-9+/=_-]{40,200}$/.test(rootPub)) { showToast(t('devBadPub'), 'error'); return; }
-    if (rootPub === myPubB64) { showToast(t('devSelfLink'), 'error'); return; }
-    try {
-      const resp = await postAPIRaw('/device/list', { accountId: rootPub.slice(0, 12) });
-      const rec = resp?.ok ? await resp.json() : null;
-      if (!rec?.devices || rec.root !== rootPub) { showToast(t('devNotListed'), 'error'); return; }
-      if (!rec.devices.some(d => d.pub === myPubB64)) { showToast(t('devNotListed'), 'error'); return; }
-      await dbPut('identity', { root: rootPub, rootEd: rec.rootEd || null, isPrimary: false }, 'account');
-      _myDevCache = null; await _refreshDeviceRole();
-      showToast(t('devLinked'), 'success');
-    } catch(err) { _dbg(err, 'linkto'); showToast(t('devSetFail'), 'error'); }
-  }
-
   // A camera-scan button for the link panels, mirroring the rendezvous
   // dialog's availability rule: no BarcodeDetector (or no QR helper)
   // means the button stays disabled with the reason shown, and the
@@ -6453,6 +6400,16 @@ async function initMessenger(dbName) {
   const _sendHistoryTo = (devPub) => globalThis.__breezeHistory?.createHistorySender
     ? globalThis.__breezeHistory.createHistorySender({ collect: _collectHistory, dbGetAll, encryptFor, relaySend, myId: () => myId, myPubB64: () => myPubB64, myName: () => myName }).sendHistoryTo(devPub)
     : Promise.resolve({ sent: 0, skipped: 0 });
+  // Device linking lives in src/app/device-link.js (stage 5 step 5
+  // line-budget move); the dispatcher delegates the four commands to it.
+  const _deviceLink = globalThis.__breezeDeviceLink?.createDeviceLink({
+    dbGet, dbPut, postAPIRaw, signMessage, showToast, showConfirm, t, esc, safeSetHTML,
+    cmdPanel: (id) => _cmdPanelEl(id), deviceScanButton: _deviceScanButton,
+    fetchDeviceList: _fetchDeviceList, refreshDeviceRole: _refreshDeviceRole, sendHistoryTo: _sendHistoryTo,
+    bustDevCache: () => { _myDevCache = null; },
+    clipboardWrite: (text) => navigator.clipboard.writeText(text),
+    hasApi: () => !!API, myId: () => myId, myPubB64: () => myPubB64, dbg: _dbg,
+  });
   // SHARE_PLAN stage 5 step 4: my profile (display name / avatar emoji /
   // photo), distributed ONLY as ratchet ciphertexts to peers whose
   // bundle advertises 'profile-v1' — the relay never sees it in clear.
@@ -6480,22 +6437,21 @@ async function initMessenger(dbName) {
   }
   // Downscale a chosen photo to a 96×96 center-cropped JPEG data URL —
   // small enough to ride a message deposit, large enough to recognize.
-  function _downscaleAvatar(file) {
+  function _imgFromFile(file) {
     return new Promise((resolve, reject) => {
       const url = URL.createObjectURL(file);
       const im = new Image();
-      im.onload = () => {
-        try {
-          const cv = document.createElement('canvas'); cv.width = 96; cv.height = 96;
-          const s = Math.min(im.width, im.height);
-          cv.getContext('2d').drawImage(im, (im.width - s) / 2, (im.height - s) / 2, s, s, 0, 0, 96, 96);
-          URL.revokeObjectURL(url);
-          resolve(cv.toDataURL('image/jpeg', 0.85));
-        } catch(e) { reject(e); }
-      };
+      im.onload = () => { URL.revokeObjectURL(url); resolve(im); };
       im.onerror = reject;
       im.src = url;
     });
+  }
+  async function _downscaleAvatar(file) {
+    const im = await _imgFromFile(file);
+    const cv = document.createElement('canvas'); cv.width = 96; cv.height = 96;
+    const s = Math.min(im.width, im.height);
+    cv.getContext('2d').drawImage(im, (im.width - s) / 2, (im.height - s) / 2, s, s, 0, 0, 96, 96);
+    return cv.toDataURL('image/jpeg', 0.85);
   }
   async function _showProfilePanel() {
     const prof = await _myProfile();
@@ -6559,6 +6515,207 @@ async function initMessenger(dbName) {
     let sent = 0;
     for (const c of contacts) if (await _sendProfileTo(c)) sent++;
     return sent;
+  }
+  // SHARE_PLAN stage 5 step 5: stickers (src/app/stickers.js holds the
+  // pack format and wire shapes). 1:1 stickers ride a dedicated
+  // envelope flag like voice; group stickers ride the sender-key text
+  // channel as a {stk} document. Both are capability-gated.
+  async function _customStickerPacks() {
+    const S = globalThis.__breezeStickers;
+    const saved = await dbGet('settings', 'stickerPacks').catch(() => null);
+    return (Array.isArray(saved) ? saved : []).map(p => S?.sanitizePack(p)).filter(Boolean);
+  }
+  async function _downscaleSticker(file) {
+    const im = await _imgFromFile(file).catch(() => null);
+    if (!im) return null;
+    try {
+      const scale = Math.min(1, 256 / Math.max(im.width, im.height));
+      const cv = document.createElement('canvas');
+      cv.width = Math.max(1, Math.round(im.width * scale)); cv.height = Math.max(1, Math.round(im.height * scale));
+      cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
+      let out = cv.toDataURL('image/png');
+      if (out.length > 49152) out = cv.toDataURL('image/webp', 0.9); // STICKER_IMG_MAX in stickers.js
+      return out.length <= 49152 ? out : null;
+    } catch { return null; }
+  }
+  async function _sendTextFallback(text) {
+    const input = _DOM.get('msg-input');
+    const draft = input.value;
+    input.value = text;
+    try { await sendMessage(); } catch(e) { _dbg(e, 'sticker-fallback'); }
+    if (input.value === '') input.value = draft;
+  }
+  async function _sendSticker(sticker) {
+    const S = globalThis.__breezeStickers;
+    const contact = activeContact;
+    const clean = S?.sanitizeSticker(sticker);
+    if (!clean || !contact) return;
+    const label = S.stickerLabel(clean);
+    let ts = correctedNow();
+    if (ts <= _lastSendTs) ts = _lastSendTs + 1;
+    _lastSendTs = ts;
+    const msgId = myId + ':' + ts;
+    if (contact.isGroup) {
+      if (_isSecondaryDevice) { showToast(t('groupPrimaryOnly'), 'error'); return; }
+      const members = (contact.members || []).filter(m => m.id !== myId);
+      if (!members.every(m => (m.caps || []).includes(CAPS_STICKER))) {
+        if (clean.emoji) { await _sendTextFallback(clean.emoji); return; }
+        showToast(t('stickersGroupNoCap'), 'error'); return;
+      }
+      const wire = S.groupTextForSticker(clean);
+      if (!wire) return;
+      for (const m of members) await distributeSenderKey(contact.id, m.pubB64, false, (contact.members || []).length).catch(e => _dbg(e, 'sk-dist'));
+      const groupCiphertext = await encryptGroupMsg(contact.id, wire);
+      if (!groupCiphertext) { showToast(t('toastSendFail'), 'error'); return; }
+      await dbPut('messages', { msgId, contactId: contact.id, text: label, mine: true, ts, sticker: clean, senderName: myName });
+      appendMsg(label, true, ts, null, null, { msgId, sticker: clean, senderName: myName });
+      const waits = new Map();
+      for (const m of members) {
+        const peer = peers[m.pubB64];
+        if (peer?.connected && peer.dc?.readyState === 'open') {
+          const w = _directAck?.expect(m.pubB64, ts);
+          try {
+            peer.dc.send(JSON.stringify({ v: CONFIG.PROTOCOL_VERSION, type: 'group_msg', msgId, payload: groupCiphertext, ts, groupId: contact.id, groupName: contact.name, sender: myPubB64, name: myName, isGroupSK: true }));
+            if (w) waits.set(m.id, w);
+          } catch(e) { _dbg(e, 'group-p2p-send'); if (w) _directAck.cancel(m.pubB64, ts); }
+        }
+      }
+      const owed = [];
+      for (const m of members) {
+        let acked = false;
+        const w = waits.get(m.id);
+        if (w) { acked = await w; _p2pDirectStat(acked ? 'directAck' : 'directNoAck'); if (acked) updateMsgStatus(ts, 'delivered'); }
+        if (!acked) owed.push(m);
+      }
+      await _poolMap(owed, 8, async (m) => {
+        try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCiphertext, ts, groupId: contact.id, groupName: contact.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
+      });
+    } else {
+      const capsById = await _fetchMemberCapsBatch([contact.id]);
+      if (!(capsById[contact.id] || []).includes(CAPS_STICKER)) {
+        if (clean.emoji) { await _sendTextFallback(clean.emoji); return; }
+        showToast(t('stickersPeerNoCap'), 'error'); return;
+      }
+      const wire = S.buildStickerPayload(clean);
+      const enc = wire && await encryptFor(wire, contact.pubB64);
+      if (!enc) { showToast(t('toastSendFail'), 'error'); return; }
+      await dbPut('messages', { msgId, contactId: contact.id, text: label, mine: true, ts, sticker: clean });
+      appendMsg(label, true, ts, null, null, { msgId, sticker: clean });
+      await relaySend(contact.id, { to: contact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: enc, ts, isSticker: true }, contact.pubB64);
+      _fanOut(contact, wire, ts, { isSticker: true }, { isSticker: true, sfFor: contact.id, sfPub: contact.pubB64, sfName: contact.name });
+    }
+    contact.lastMsg = label; contact.lastMsgAt = ts;
+    const stored = await dbGet('contacts', contact.id).catch(() => null);
+    if (stored) { stored.lastMsg = label; stored.lastMsgAt = ts; await dbPut('contacts', stored); }
+    _renderContactsThrottled();
+    playSendSound(); haptic.send();
+  }
+  let _stickerPanel = null;
+  async function _toggleStickerPanel() {
+    if (_stickerPanel) { _stickerPanel.remove(); _stickerPanel = null; return; }
+    const S = globalThis.__breezeStickers;
+    if (!S || !activeContact) return;
+    const packs = [S.BUILTIN_PACK, ...(await _customStickerPacks())];
+    const panel = document.createElement('div');
+    panel.className = 'emoji-picker';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-label', t('ttStickers'));
+    const tabs = document.createElement('div');
+    tabs.className = 'emoji-picker-tabs';
+    const grid = document.createElement('div');
+    grid.className = 'sticker-grid';
+    const showPack = (pack) => {
+      grid.replaceChildren();
+      for (const st of pack.stickers) {
+        const cell = document.createElement('button');
+        cell.className = 'sticker-cell';
+        if (st.img) { const im = document.createElement('img'); im.src = st.img; im.alt = st.id; cell.appendChild(im); }
+        else { const sp = document.createElement('span'); sp.className = 'stk-emoji'; sp.textContent = st.emoji; cell.appendChild(sp); }
+        cell.onclick = () => { _toggleStickerPanel(); _sendSticker({ pack: pack.id, ...st }).catch(e => _dbg(e, 'sticker-send')); };
+        grid.appendChild(cell);
+      }
+    };
+    packs.forEach((pack, i) => {
+      const b = document.createElement('button');
+      b.textContent = pack.id === 'builtin' ? '😀' : '🖼️';
+      b.title = pack.name;
+      if (i === 0) b.className = 'active';
+      b.onclick = () => { tabs.querySelectorAll('button').forEach(x => x.classList.remove('active')); b.classList.add('active'); showPack(pack); };
+      tabs.appendChild(b);
+    });
+    const manage = document.createElement('button');
+    manage.textContent = '⚙️'; manage.title = t('stickersTitle');
+    manage.onclick = () => { _toggleStickerPanel(); _showStickersPanel().catch(e => _dbg(e, 'stickers-panel')); };
+    tabs.appendChild(manage);
+    panel.append(tabs, grid);
+    showPack(packs[0]);
+    _DOM.get('msg-input-bar')?.appendChild(panel);
+    _stickerPanel = panel;
+  }
+  async function _showStickersPanel() {
+    const S = globalThis.__breezeStickers;
+    if (!S) return;
+    const packs = await _customStickerPacks();
+    const [dlg, titleId] = _makeDialog();
+    const rows = packs.map((p, i) => `<div class="pf-photo-row"><span>${esc(p.name)} (${p.stickers.length})</span><button type="button" class="btn btn-g btn-sm stk-export" data-i="${i}">${esc(t('stickersExport'))}</button><button type="button" class="btn btn-g btn-sm stk-del" data-i="${i}">${esc(t('stickersDelete'))}</button></div>`).join('');
+    safeSetHTML(dlg, `
+      <h3 id="${titleId}" class="i-m-0-12">${esc(t('stickersTitle'))}</h3>
+      ${rows || `<p class="i-tiny-meta">${esc(t('stickersEmpty'))}</p>`}
+      <div class="pf-photo-row">
+        <button type="button" class="btn btn-g btn-sm stk-add">${esc(t('stickersAddImages'))}</button>
+        <button type="button" class="btn btn-g btn-sm stk-import">${esc(t('stickersImport'))}</button>
+      </div>
+      <input type="file" class="stk-files hidden" accept="image/*" multiple>
+      <input type="file" class="stk-packfile hidden" accept="application/json,.json">
+      <div class="dlg-btns"><button class="btn btn-p btn-sm" value="cancel">${esc(t('ok'))}</button></div>`);
+    _showDialog(dlg);
+    const close = () => { dlg.close(); dlg.remove(); };
+    dlg.querySelector('[value="cancel"]').onclick = close;
+    _wireDialogDismiss(dlg, close);
+    const reload = () => { close(); _showStickersPanel().catch(e => _dbg(e, 'stickers-panel')); };
+    dlg.querySelector('.stk-add').onclick = () => dlg.querySelector('.stk-files').click();
+    dlg.querySelector('.stk-import').onclick = () => dlg.querySelector('.stk-packfile').click();
+    dlg.querySelector('.stk-files').onchange = async (e) => {
+      const files = [...(e.target.files || [])];
+      if (!files.length) return;
+      const mine = packs.find(p => p.id === 'mine') || { id: 'mine', name: t('stickersMyPack'), stickers: [] };
+      let added = 0;
+      for (const f of files) {
+        const img = await _downscaleSticker(f);
+        if (!img) { showToast(t('stickersTooBig'), 'error'); continue; }
+        mine.stickers.push({ id: 's' + Date.now().toString(36) + added, img });
+        added++;
+      }
+      if (added) {
+        const cleanMine = S.sanitizePack(mine);
+        const next = packs.filter(p => p.id !== 'mine');
+        if (cleanMine) next.push(cleanMine);
+        await dbPut('settings', next, 'stickerPacks');
+        showToast(t('stickersSaved'), 'success');
+      }
+      reload();
+    };
+    dlg.querySelector('.stk-packfile').onchange = async (e) => {
+      const f = e.target.files?.[0];
+      if (!f) return;
+      const pack = S.parsePackFile(await f.text().catch(() => ''));
+      if (!pack) { showToast(t('stickersBadPack'), 'error'); return; }
+      await dbPut('settings', [...packs.filter(p => p.id !== pack.id), pack], 'stickerPacks');
+      showToast(t('stickersSaved'), 'success');
+      reload();
+    };
+    dlg.querySelectorAll('.stk-export, .stk-del').forEach(btn => btn.onclick = async () => {
+      const pack = packs[+btn.dataset.i];
+      if (!pack) return;
+      if (btn.classList.contains('stk-del')) { await dbPut('settings', packs.filter(p => p.id !== pack.id), 'stickerPacks'); reload(); return; }
+      const text = S.packToFile(pack);
+      if (!text) return;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+      a.download = pack.id + '.bstick.json';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    });
   }
   // Devices of a CONTACT (for send fan-out). 5-min cache on the contact object.
   async function _devicesFor(contact) {
@@ -8730,7 +8887,7 @@ async function initMessenger(dbName) {
         appendMsg(m.text, m.mine, m.ts, box, m.fileData, {
           msgId: m.msgId, replyTo: m.replyTo, edited: m.edited,
           deleted: m.deleted, pinned: m.pinned, senderName: m.senderName,
-          disappearAt: m.disappearAt, voice: m.voice, reactions: m.reactions,
+          disappearAt: m.disappearAt, voice: m.voice, reactions: m.reactions, sticker: m.sticker,
           forwarded: m.forwarded, bookmarked: m.bookmarked,
           verified: m.verified, tampered: m.tampered,
           replyCount: _replyCounts[m.msgId] || 0,
@@ -9013,8 +9170,15 @@ async function initMessenger(dbName) {
       : meta.tampered ? ' <span class="msg-sig bad" title="' + esc(t('ttSigFailed')) + '">⚠sig</span>'
       : '';
 
+    // Sticker (stage 5 step 5): re-validated here — the stored record is
+    // peer-supplied, and the img lands in an <img src>.
+    if (meta.sticker) {
+      const st = globalThis.__breezeStickers?.sanitizeSticker(meta.sticker);
+      if (st?.img) content += `<img class="msg-sticker" src="${esc(st.img)}" alt="">`;
+      else if (st?.emoji) content += `<div class="msg-sticker-emoji">${esc(st.emoji)}</div>`;
+    }
     // Voice message
-    if (meta.voice) {
+    else if (meta.voice) {
       try {
         const bytes = Uint8Array.from(atob(meta.voice), c => c.charCodeAt(0));
         const blob = new Blob([bytes], { type: 'audio/webm' });
@@ -10811,14 +10975,11 @@ async function initMessenger(dbName) {
     if (activeContact) startCall(activeContact, false);
   });
   _DOM.get('b-msg-video')?.addEventListener('click', () => { if (activeContact) startCall(activeContact, true); });
+  _DOM.get('b-msg-sticker')?.addEventListener('click', () => { _toggleStickerPanel().catch(e => _dbg(e, 'sticker-panel')); });
 
   // Listen for incoming calls via signal poll (piggyback on existing messenger signal poll)
   // Incoming calls are detected in the signal poll's message handling
   // We add 'call-offer' detection to the existing connectPeer signal loop
-
-  // Call button handlers
-  _DOM.get('b-msg-call')?.addEventListener('click', () => { if (activeContact) startCall(activeContact, false); });
-  _DOM.get('b-msg-video')?.addEventListener('click', () => { if (activeContact) startCall(activeContact, true); });
 
   // Listen for incoming calls via signal poll (piggyback on existing messenger signal poll)
   // Incoming calls are detected in the signal poll's message handling
@@ -10883,6 +11044,22 @@ async function initMessenger(dbName) {
 
   // Group creation lives in src/app/group-create.js (stage 5 step 4
   // line-budget move); these wrappers keep the call sites unchanged.
+  // The /security and /who panels live in src/app/info-panels.js
+  // (stage 5 step 5 line-budget move); the dispatcher delegates to them.
+  const _infoPanels = globalThis.__breezeInfoPanels?.createInfoPanels({
+    dbGet, getSession, hasRTCCertificate, t, esc, safeSetHTML,
+    cmdPanel: (id) => _cmdPanelEl(id),
+    cryptoStack: () => _cryptoStack, activeContact: () => activeContact,
+    atRestIsWrapped: _atRestIsWrapped, p2pStats: () => _p2pStats, turnCredential: () => _turnCredential,
+    signingPubB64: () => _signingPubB64, hasX25519: () => _hasX25519, hasEd25519: () => _hasEd25519, hasPQ: () => _hasPQ,
+    replayCacheSize: () => _replayCache.size(), config: () => CONFIG, settings: () => _settings,
+    relayPinGate: () => _relayPinGate, relayPinFp: () => _relayPinFp,
+    myId: () => myId, myName: () => myName, myPubB64: () => myPubB64, myAlias: () => myAlias,
+  });
+  const _dataPanels = globalThis.__breezeInfoPanels?.createDataPanels({
+    dbGet, dbGetAll, fmtSize, downloadBlob, auditLog, showToast, t, esc, safeSetHTML,
+    cmdPanel: (id) => _cmdPanelEl(id), db: () => db, config: () => CONFIG, dbg: _dbg,
+  });
   const _groupCreate = globalThis.__breezeGroupCreate?.createGroupCreate({
     dbGetAll, dbPut, showPrompt, fetchCaps: _fetchMemberCapsBatch, encryptFor, relaySend, postAPIRaw, groupCreateAuth,
     showToast, t, esc, renderContacts, auditLog, uid, safeSetHTML, dbGet, addContact, openConversation,
@@ -11604,6 +11781,21 @@ async function initMessenger(dbName) {
       const senderName = (senderContact?.pubB64 === member.pubB64 && typeof senderContact.name === 'string')
         ? senderContact.name : (typeof member.name === 'string' ? member.name : member.id);
       const meta = { msgId, senderName, replyTo: msg.replyTo, disappearAt: msg.disappearAt };
+      const stk = globalThis.__breezeStickers?.parseGroupStickerText(text);
+      if (stk) { // Stage 5 step 5: group sticker — stored/rendered as a sticker, never as text.
+        const label = globalThis.__breezeStickers.stickerLabel(stk);
+        const smeta = { ...meta, sticker: stk };
+        await dbPut('messages', { msgId, contactId: msg.groupId, text: label, mine: false, ts: msg.ts, ...smeta });
+        if (ackOut) ackOut.stored = true;
+        group.lastMsg = label;
+        group.lastMsgSender = senderName;
+        group.lastMsgAt = msg.ts;
+        if (activeContact?.id !== msg.groupId) { group.unread = (group.unread || 0) + 1; if (_shouldAlert(group, label)) playNotif(); }
+        await dbPut('contacts', group);
+        if (activeContact?.id === msg.groupId) { smeta._animate = true; appendMsg(label, false, msg.ts, null, null, smeta); }
+        _renderContactsThrottled();
+        return;
+      }
       await dbPut('messages', { msgId, contactId: msg.groupId, text, mine: false, ts: msg.ts, ...meta });
       if (ackOut) ackOut.stored = true;
       group.lastMsg = text.slice(0, 30);
@@ -11628,9 +11820,33 @@ async function initMessenger(dbName) {
       return;
     }
 
-    // === Voice message ===
-    if (msg.isVoice) {
+    // === Sticker message (stage 5 step 5) ===
+    if (msg.isSticker) {
       const contact = await dbGet('contacts', msg.from);
+      if (!contact) return;
+      try {
+        const decrypted = await decryptFrom(msg.payload, contact.pubB64);
+        if (!decrypted) return;
+        const S = globalThis.__breezeStickers;
+        const sticker = S?.parseStickerPayload(decrypted);
+        if (!sticker) return;
+        const msgId = msg.from + ':' + msg.ts;
+        if (_replayCache.has(msgId)) return;
+        _replayCache.add(msgId);
+        if (await dbGet('messages', msgId)) return;
+        const label = S.stickerLabel(sticker);
+        await dbPut('messages', { msgId, contactId: msg.from, text: label, mine: false, ts: msg.ts, sticker });
+        contact.lastMsg = label; contact.lastMsgAt = msg.ts;
+        if (activeContact?.id !== msg.from) { contact.unread = (contact.unread || 0) + 1; if (_shouldAlert(contact, label)) playNotif(); }
+        await dbPut('contacts', contact);
+        if (activeContact?.id === msg.from) appendMsg(label, false, msg.ts, null, null, { msgId, sticker });
+        _renderContactsThrottled();
+      } catch(e) { _dbg(e, 'sticker'); }
+      return;
+    }
+
+    // === Voice message ===
+    if (msg.isVoice) {      const contact = await dbGet('contacts', msg.from);
       if (!contact) return;
       try {
         const decrypted = await decryptFrom(msg.payload, contact.pubB64);
@@ -13983,7 +14199,7 @@ async function initMessenger(dbName) {
         '<b>' + t('helpSecurity') + '</b>',
         '/security · /verify · /audit · /retention · /backup · /keywrap',
         '/sessions · /wipe · /gdpr · /panic (Ctrl+Shift+Backspace)',
-        '/devices · /link [pub] · /linkto &lt;pub&gt; · /unlink &lt;n&gt; · /history · /migrate · /profile',
+        '/devices · /link [pub] · /linkto &lt;pub&gt; · /unlink &lt;n&gt; · /history · /migrate · /profile · /stickers',
         '',
         '<b>' + t('helpDiag') + '</b>',
         '/retry',
@@ -14357,35 +14573,8 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     }
 
         // v3.3: ENTERPRISE — /files — File manager
-    if (val === '/files') {
-      e.preventDefault(); clearInput();
-      const files = await getFileList();
-      const [box, d] = _cmdPanelEl('cmd-panel');
-      if (files.length === 0) {
-        d.textContent = t('uiNoFiles');
-      } else {
-        const contactMap = {};
-        for (const c of await dbGetAll('contacts')) contactMap[c.id] = c.name;
-        safeSetHTML(d, '<b class="i-g">' + t('sharedFiles', files.length) + '</b><br>' +
-          files.slice(0, 30).map(f => {
-            const date = new Date(f.ts).toLocaleDateString();
-            const who = f.mine ? t('you') : (contactMap[f.contactId] || t('unknown'));
-            return `${esc(f.name)} · ${fmtSize(f.size)} · ${esc(who)} · ${date}`;
-          }).join('<br>') + (files.length > 30 ? '<br>... ' + t('uiMoreCount', files.length - 30) : ''));
-      }
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
-    }
-
-    // v3.3: ENTERPRISE — /gdpr — GDPR data export (Art. 15/20)
-    if (val === '/gdpr') {
-      e.preventDefault(); clearInput();
-      const data = await gdprExport();
-      if (!data) { showToast(t('toastServerError'), 'error'); return; }
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      downloadBlob(blob, `breeze-gdpr-export-${new Date().toISOString().slice(0,10)}.json`);
-      auditLog('settings', 'GDPR data export performed');
-      showToast(t('toastGdprExport', data.totalMessages, data.totalContacts, data.totalFiles), 'success');
-    }
+    if (val === '/files') { e.preventDefault(); clearInput(); _dataPanels?.showFiles().catch(e2 => _dbg(e2, 'files')); return; }
+    if (val === '/gdpr') { e.preventDefault(); clearInput(); _dataPanels?.runGdpr().catch(e2 => _dbg(e2, 'gdpr')); return; }
 
     // v3.3: ENTERPRISE — /wipe — Remote wipe (send wipe signal to other devices)
     if (val === '/wipe') {
@@ -14580,31 +14769,6 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     }
 
     // v3.1: /who — Display own identity info (shareable)
-    if (val === '/who') {
-      e.preventDefault(); clearInput();
-      const [box, d] = _cmdPanelEl('cmd-panel-mono');
-      const addUrl = location.origin + '/?add=' + myPubB64 + '&name=' + encodeURIComponent(myName);
-      const aliasUrl = myAlias ? location.origin + '/?add=' + myAlias : '';
-      safeSetHTML(d, [
-        '<b class="i-g">' + t('cmdMyIdentity') + '</b>',
-        t('cmdLblName') + ': <b>' + esc(myName) + '</b>',
-        t('cmdLblUserId') + ': <code class="i-fs10">' + esc(myId) + '</code>',
-        myAlias ? t('cmdLblAlias') + ': <b class="i-g">' + esc(myAlias) + '</b>' : t('cmdLblAlias') + ': ' + t('cmdNoAlias'),
-        t('cmdLblCrypto') + ': ' + (_hasX25519 ? 'X25519' : 'P-256'),
-        '',
-        '<b>' + t('cmdShareLinks') + '</b>',
-        '<code class="i-id-small">' + esc(addUrl) + '</code>',
-        aliasUrl ? '<code class="i-id-small">' + esc(aliasUrl) + '</code>' : '',
-      ].filter(Boolean).join('<br>'));
-      // Copy button
-      const copyBtn = document.createElement('button');
-      copyBtn.className = 'btn btn-o btn-sm mt-2';
-      copyBtn.textContent = t('uiCopyAddLink');
-      copyBtn.onclick = () => { navigator.clipboard?.writeText(addUrl); copyBtn.textContent = t('uiCopied'); setTimeout(() => copyBtn.textContent = t('uiCopyAddLink'), CONFIG.TOAST_DURATION_MS); };
-      d.appendChild(document.createElement('br'));
-      d.appendChild(copyBtn);
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
-    }
 
     // v3.1: /whoami — Show own identity info
     if (val === '/whoami') {
@@ -14648,123 +14812,9 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     }
 
     // v3.5: /storage — Show storage usage
-    if (val === '/security') {
-      e.preventDefault(); clearInput();
-      const [box, d] = _cmdPanelEl('cmd-panel-mono');
-      const cs = _cryptoStack;
-      const sess = activeContact ? await getSession(activeContact.pubB64?.slice(0, 12)) : null;
-      // Honest runtime state of opt-in/flag-gated protections — list what is ACTUALLY
-      // protecting the user on this device, not just compiled-in capabilities.
-      const _identRec = await dbGet('identity', 'keys').catch(() => null);
-      const _atRestOn = _atRestIsWrapped(_identRec);
-      // P2P_PLAN Step 1 display: this device's own delivery/route
-      // aggregates (on-device only, never transmitted — src/app/
-      // p2p-stats.js). Fallback reads the delivery counters directly so
-      // the lines still render if the module failed to load.
-      const _p2pSnap = _p2pStats ? _p2pStats.snapshot() : (() => { try { const s = JSON.parse(localStorage.getItem('brz-p2p-direct') || '{}'); const a = s.directAck || 0, n = s.directNoAck || 0; return { directAck: a, directNoAck: n, directTotal: a + n, directRate: (a + n) > 0 ? a / (a + n) : null, conn: null, connTotal: 0, connFailed: 0 }; } catch { return null; } })();
-      const _directRateLine = !_p2pSnap ? '—'
-        : _p2pSnap.directRate === null ? t('secDirectNoData')
-        : Math.round(_p2pSnap.directRate * 100) + '% (' + _p2pSnap.directAck + '/' + _p2pSnap.directTotal + ')';
-      const _connRouteLine = !_p2pSnap?.conn ? '—'
-        : 'Direct ' + _p2pSnap.conn.direct + ' · STUN ' + _p2pSnap.conn.srflx + ' · TURN ' + _p2pSnap.conn.turn + ' · ' + t('secConnFailed') + ' ' + _p2pSnap.connFailed;
-      const _signalStats = _p2pSnap?.signal;
-      const _signalPollLine = !_signalStats?.sessions ? t('secDirectNoData')
-        : t('secSignalSessions') + ' ' + _signalStats.sessions + ' · '
-          + t('secSignalPre') + ' ' + _signalStats.preEstablished + ' (' + (_signalStats.preEstablished / _signalStats.sessions).toFixed(1) + ' ' + t('secSignalPerSession') + ') · '
-          + t('secSignalPost') + ' ' + _signalStats.postEstablished + ' (' + (_signalStats.postEstablished / _signalStats.sessions).toFixed(1) + ' ' + t('secSignalPerSession') + ')';
-      // TURN provider honesty (Step 5): name WHO relays media when a call
-      // or relay-only connection falls back to TURN — in particular the
-      // third-party free Open Relay an unconfigured relay silently uses.
-      const _turnLine = !_turnCredential ? '✗ ' + t('secNotConfigured')
-        : _turnCredential.provider === 'none' ? '✗ ' + t('secTurnNone')
-        : '✓ ' + t('secActive') + ' (' + (_turnCredential.provider === 'cloudflare' ? 'Cloudflare Calls'
-          : _turnCredential.provider === 'custom' ? t('secTurnCustom')
-          : _turnCredential.provider === 'static' ? t('secTurnStatic')
-          : _turnCredential.provider === 'openrelay' ? t('secTurnOpenRelay')
-          : (_turnCredential.provider || '?')) + ')';
-      safeSetHTML(d, [
-        '<b class="i-g13">' + t('cmdCryptoTitle') + '</b>',
-        '',
-        '<b>' + t('secPledgeTitle') + '</b>',
-        t('secPledgeNoAds'),
-        t('secPledgeE2ee'),
-        t('secPledgeRetention'),
-        '',
-        '<b>' + t('secActiveProtections') + '</b>',
-        t(_atRestOn ? 'secAtRestWrapOn' : 'secAtRestWrapOff'),
-        t('secLblRecovery') + ': ' + (_identRec?.recoveryMode === 'none' ? '✗ ' + t('secRecoveryNone') : _identRec?.recoveryMode === 'phrase' ? '<span class="i-g">✓ ' + t('secRecoveryPhrase') + '</span>' : _identRec?.recoveryMode === 'simple' ? '<span class="i-g">✓ ' + t('secRecoverySimple') + '</span>' : t('secRecoveryLegacy')),
-        t(CONFIG.GROUP_RATCHET_V5 ? 'secGroupFSOn' : 'secGroupFSOff'),
-        t(CONFIG.CALL_E2E_SIGNAL ? 'secCallSignalOn' : 'secCallSignalOff'),
-        '',
-        '<b>' + t('cmdSectionCryptoStack') + '</b>',
-        t('cmdLblKeyExchange') + ': <span class="i-g">' + cs.keyExchange + '</span> ' + (_hasX25519 ? t('secBrowserNative') : t('secWebCryptoFallback')),
-        t('secLblMsgSigning') + ': <span class="i-g">' + cs.signing + '</span>' + (_hasEd25519 ? ' ' + t('secBrowserNative') : ''),
-        t('secLblSigningKey') + ': ' + (_signingPubB64 ? '✓ ' + _signingPubB64.slice(0, 8) + '...' : '✗ ' + t('secNotAvail')),
-        t('secLblEncryption') + ': <span class="i-g">' + cs.encryption + '</span> ' + t('secBrowserNative'),
-        t('secLblKDF') + ': ' + cs.kdf + ' ' + t('secBrowserNative'),
-        t('secLblRatchet') + ': ' + cs.ratchet + ' ' + t('secFwdSecParen'),
-        t('secLblGroup') + ': ' + cs.groupCrypto,
-        '',
-        '<b>' + t('cmdSectionPQ') + '</b>',
-        'ML-KEM: ' + (_hasPQ ? '<span class="i-g">✓ ' + t('secNativeSupport') + '</span>' : '✗ ' + t('secNotYetBrowser')),
-        t('cmdCryptoPqHybrid'),
-        t('secLblStatus') + ': ' + cs.pqReady,
-        // Stage-3 step 6: the ACTIVE session's own PQ state (the pq:true marker
-        // recorded at establishment), as opposed to the browser-capability
-        // lines above — a PQXDH session runs on the vendored software KEM
-        // regardless of native ML-KEM support.
-        'PQXDH: ' + (sess ? (sess.pq ? '<span class="i-g">✓ ' + t('secPqxdhInUse') + '</span>' : t('secPqxdhClassical')) : '—'),
-        '',
-        '<b>' + t('cmdSectionSession') + '</b>',
-        activeContact ? t('cmdLblPeer') + ': ' + activeContact.name : t('cmdNoContact'),
-        t('cmdLblSession') + ': ' + (sess ? '<span class="i-g">✓ ' + t('statusActive') + ' (counter: ' + (sess.sendCounter || 0) + ')</span>' : '✗ ' + t('statusNoSession')),
-        t('secLblFwdSec') + ': ' + (sess ? t('cmdCryptoFwdSec') : '—'),
-        t('secLblReplay') + ': ' + _replayCache.size() + '/' + CONFIG.REPLAY_CACHE_SIZE + ' ' + t('secInLruCache'),
-        t('secSkippedKeys'),
-        t('cmdCryptoCompression'),
-        'Protocol: v4 (pad-only; legacy compressed msgs still read) / v3 (pad-only) / v2 (legacy)',
-        t('secLblMsgPadding') + ': ' + CONFIG.MSG_PAD_BOUNDARY + t('secByteBoundary'),
-        '',
-        '<b>' + t('cmdSectionBrowser') + '</b>',
-        'X25519: ' + (_hasX25519 ? '✓' : '✗') + ' | Ed25519: ' + (_hasEd25519 ? '✓' : '✗') + ' | ML-KEM: ' + (_hasPQ ? '✓' : '✗'),
-        t('secLblSecureCtx') + ': ' + (window.isSecureContext ? '✓' : '✗'),
-        'WebCrypto: ' + (crypto?.subtle ? '✓' : '✗'),
-        'WebRTC: ' + (typeof RTCPeerConnection !== 'undefined' ? '✓' : '✗'),
-        '',
-        '<b>' + t('cmdSectionNetwork') + '</b>',
-        t('secIceCandFilter'),
-        t('secLblRelayOnly') + ': ' + (_settings.relayOnly ? '<span class="i-g">✓ ON</span> ' + t('secRelayEnabled') : t('secRelayDisabled')),
-        t('secLblRelayPin') + ': ' + (_relayPinGate.blocked ? '<span class="color-y">⚠ ' + t('secRelayPinMismatch') + '</span>' : _relayPinFp ? '<span class="i-g">✓</span> ' + _relayPinFp : '—'),
-        'TURN: ' + _turnLine,
-        t('secLblDirectRate') + ': ' + _directRateLine,
-        t('secLblConnRoutes') + ': ' + _connRouteLine,
-        t('secLblSignalPolls') + ': ' + _signalPollLine,
-        t('secLblRTCCert') + ': ' + (hasRTCCertificate() ? '✓ Per-session ECDSA P-256' : '✗ ' + t('secDefault')),
-        'DataChannel: negotiated:true (DCEP skip)',
-        'Negotiation: Perfect Negotiation (glare-safe, MDN spec)',
-        'Backpressure: bufferedAmountLowThreshold (' + CONFIG.DC_BUFFER_LOW + 'B)',
-        'Chunk size: ' + CONFIG.CHUNK_SIZE + 'B (safe cross-browser)',
-        'External scripts: none (nothing to pin with SRI)',
-        'CSP: ' + (document.querySelector('meta[http-equiv="Content-Security-Policy"]') ? '✓ ' + t('secActive') : '✗'),
-        'HTTPS: ' + (location.protocol === 'https:' ? '✓' : '⚠ HTTP'),
-        '',
-        '<b>' + t('cmdSectionLock') + '</b>',
-        t('secLblPassword') + ': ' + (localStorage.getItem('brz-lock-hash') ? '✓ ' + t('secPwdSet') : '✗ ' + t('secPwdNotSet')),
-        t('secLblAutoLock') + ': ' + (localStorage.getItem('brz-autolock') === '1' ? '✓ ' + t('secOnTabSwitch') : '✗ ' + t('secOff')),
-        t('secLblIdleLock') + ': ' + (parseInt(localStorage.getItem('brz-idle-lock') || '0', 10) > 0 ? '✓ ' + localStorage.getItem('brz-idle-lock') + ' min' : '✗ ' + t('secOff')),
-        t('secBruteForce'),
-        t('secTimingSafe'),
-        '',
-        '<b>' + t('cmdSectionCSP') + '</b>',
-        'CSP: script-src self unsafe-inline; object-src none; base-uri self; frame-ancestors none',
-        'COOP: same-origin',
-        'XSS sanitizer: esc() → renderMarkdown → renderLinks (chain order fixed)',
-        t('secMemoryZero'),
-        t('secKeyStorage'),
-        t('secAntiReplay'),
-      ].join('<br>'));
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
-    }
+
+    if (val === '/who') { e.preventDefault(); clearInput(); _infoPanels?.showWho().catch(e2 => _dbg(e2, 'who')); return; }
+    if (val === '/security') { e.preventDefault(); clearInput(); _infoPanels?.showSecurity().catch(e2 => _dbg(e2, 'security')); return; }
 
     // v3.2: /rename — Change your display name
     if (val.startsWith('/rename ')) {
@@ -15195,43 +15245,12 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     // /link            -> show THIS device's pub (paste it on the primary to link)
     // /link <pub>      -> (primary) add that device to the account and sign the registry
     // /devices         -> list account devices    /unlink <n> -> remove device n (primary only)
-    if (val === '/link' || val.startsWith('/link ')) {
+    if (val === '/link' || val.startsWith('/link ') || val === '/linkto' || val.startsWith('/linkto ') || val === '/devices' || val.startsWith('/unlink ')) {
       e.preventDefault(); clearInput();
-      const arg = val.slice(5).trim();
-      if (!API) { showToast(t('uiNoServer'), 'error'); return; }
-      if (!arg) {
-        // Show my pub as text AND as a QR (stage 4 step 2), with the
-        // primary-side scan in the same panel: whichever of the two
-        // devices you are holding, one of the two directions is yours.
-        const [box, d] = _cmdPanelEl('cmd-panel');
-        safeSetHTML(d, '<b class="i-g">' + t('devLinkTitle') + '</b><br>' + t('devLinkHint') + '<br><code class="i-select-all">' + esc(myPubB64) + '</code>');
-        try {
-          const qr = globalThis.__breezeQR?.generateQR(myPubB64);
-          if (qr) { qr.className = 'qr-code'; d.appendChild(qr); }
-        } catch(e) { _dbg(e, 'link-qr'); }
-        d.appendChild(_deviceScanButton('devScanAdd', (v) => { _linkDevicePub(v); }));
-        box.appendChild(d); box.scrollTop = box.scrollHeight;
-        try { await navigator.clipboard.writeText(myPubB64); showToast(t('toastCopied'), 'success'); } catch {}
-        return;
-      }
-      // Primary side: add the pasted device pub to my registry and sign it.
-      await _linkDevicePub(arg);
+      await _deviceLink?.handleCommand(val);
       return;
     }
-    // Secondary device, final step: bind THIS device to the account whose root pub the user
-    // physically carried over. That gesture is the trust anchor (same TOFU as adding a contact
-    // by raw key); the root's Ed25519 signing key is pinned here and required stable afterwards.
-    if (val === '/linkto' || val.startsWith('/linkto ')) {
-      e.preventDefault(); clearInput();
-      if (!API) { showToast(t('uiNoServer'), 'error'); return; }
-      const rootPub = val.slice(8).trim();
-      if (rootPub) { await _linkToRoot(rootPub); return; }
-      const [box, d] = _cmdPanelEl('cmd-panel');
-      safeSetHTML(d, '<b class="i-g">' + t('devLinkToTitle') + '</b><br>' + t('devLinkToHint'));
-      d.appendChild(_deviceScanButton('devScanRoot', (v) => { _linkToRoot(v); }));
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
-      return;
-    }
+    if (val === '/stickers') { e.preventDefault(); clearInput(); _showStickersPanel().catch(e2 => _dbg(e2, 'stickers-panel')); return; }
     if (val === '/profile') { e.preventDefault(); clearInput(); _showProfilePanel().catch(e2 => _dbg(e2, 'profile-panel')); return; }
     if (val === '/history') {
       e.preventDefault(); clearInput();
@@ -15242,40 +15261,6 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       showToast(sent ? t('histSent') : t('histEmpty'), sent ? 'success' : 'info');
       return;
     }
-    if (val === '/devices') {
-      e.preventDefault(); clearInput();
-      const [box, d] = _cmdPanelEl('cmd-panel');
-      const acct = await dbGet('identity', 'account');
-      const rootPub = acct?.root || myPubB64;
-      const list = await _fetchDeviceList(rootPub.slice(0, 12), rootPub);
-      const rows = (list || [myPubB64]).map((p, i) =>
-        `${i + 1}. <code>${esc(p.slice(0, 20))}…</code>${p === myPubB64 ? ' ← ' + t('devThis') : ''}`);
-      safeSetHTML(d, '<b class="i-g">' + t('devListTitle') + '</b><br>' + rows.join('<br>'));
-      box.appendChild(d); box.scrollTop = box.scrollHeight;
-      return;
-    }
-    if (val.startsWith('/unlink ')) {
-      e.preventDefault(); clearInput();
-      const idx = parseInt(val.slice(8).trim(), 10);
-      const acct = await dbGet('identity', 'account');
-      if (!acct || acct.root !== myPubB64) { showToast(t('devPrimaryOnly'), 'error'); return; }
-      const current = (await _fetchDeviceList(myId, myPubB64)) || [myPubB64];
-      const victim = current[idx - 1];
-      if (!victim || victim === myPubB64) { showToast(t('devBadIndex'), 'error'); return; }
-      if (!await showConfirm(t('devUnlinkConfirm', victim.slice(0, 16) + '…'), { danger: true })) return;
-      try {
-        const devices = current.filter(p => p !== victim).map(p => ({ pub: p, name: p === myPubB64 ? 'primary' : '' }));
-        const ts = Date.now();
-        const digestBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(devices.map(d => d.pub))));
-        const digest = Array.from(new Uint8Array(digestBuf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
-        const sig = await signMessage(`breeze-device-set:${myId}:${ts}:${digest}`);
-        const resp = await postAPIRaw('/device/set', { accountId: myId, root: myPubB64, devices, ts, sig });
-        if (resp?.ok) { _myDevCache = null; showToast(t('devRemoved'), 'success'); }
-        else showToast(t('devSetFail'), 'error');
-      } catch(err) { _dbg(err, 'unlink'); showToast(t('devSetFail'), 'error'); }
-      return;
-    }
-
     if (val.startsWith('/alias ')) {
       e.preventDefault(); clearInput();
       const newAlias = val.slice(7).trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
