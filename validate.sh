@@ -211,7 +211,9 @@ LINES=$(wc -l < index.html)
 # seventh time; a seventh pass (the device-link ceremony into
 # device-link.js, /security + /who into info-panels.js, /files +
 # GDPR export into the same module as data panels) landed it at
-# 15,962.
+# 15,962. Stage-5 step 6 crossed it an eighth time; an eighth pass
+# (the location engine into location.js as a factory, the profile
+# panel + distribution into profile.js) landed it at 15,967.
 if [ "$LINES" -lt 12000 ]; then pass "Total lines: $LINES (<12K)" 5
 elif [ "$LINES" -lt 16000 ]; then warn "Total lines: $LINES (12-16K)" 5
 else fail "Total lines: $LINES (≥16K) — reduction pass required (see ceiling note above)" 5; fi
