@@ -245,7 +245,8 @@ describe('origin mailbox socket waits for the verdict', () => {
       'postAPIRelay', 'homeRelays', '_pollCursorByUrl', 'queueAuth', 'handleIncoming',
       'myId', '_isOffline', 'API', 'window', '_dbg', 'showToast', 't', 'unsealMeta',
       'myKeys', 'checkAndReplenishPreKeys', 'MS',
-      `${sliceBetween('let _pollTimer = null;', 'function schedulePoll')}
+      `const peers = {};
+       ${sliceBetween('let _pollTimer = null;', 'function schedulePoll')}
        return { _mailWsState };`);
     const poll = stateFn(
       client.postAPIRelay || (async () => null), client.homeRelays, new Map(),
