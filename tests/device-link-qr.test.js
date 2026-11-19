@@ -38,7 +38,8 @@ describe('device link QR wiring (deployed inline)', () => {
   });
 
   it('/linkto without an argument opens a scan panel for the root code', () => {
-    expect(html).toContain("if (val === '/linkto') {");
+    expect(html).toContain("if (val === '/linkto' || val.startsWith('/linkto ')) {");
+    expect(html).toContain('if (rootPub) { await _linkToRoot(rootPub); return; }');
     expect(html).toContain("_deviceScanButton('devScanRoot', (v) => { _linkToRoot(v); })");
   });
 

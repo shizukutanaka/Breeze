@@ -1663,6 +1663,8 @@ const _I = {
     groupNamePrompt: 'Group name:',
     groupNamePh: 'My Group',
     addContactPh: 'Public key, @alias, or invite link',
+    addContactTitle: 'Add a contact',
+    addBtn: 'Add',
     accountNamePh: 'Account name',
     connP2P: 'Direct encrypted connection',
     connRelay: 'Online (server relay)',
@@ -2523,6 +2525,13 @@ function showToast(message, type = 'info', duration = CONFIG.TOAST_DURATION_MS) 
 // Shared dismiss wiring for the modal <dialog> helpers: the cancel
 // button, Esc (the 'close' event), and a backdrop click all resolve
 // with the dialog's cancel value (null, or false for showConfirm).
+function _makeDialog() {
+  const dlg = document.createElement('dialog');
+  const titleId = 'mdl-' + uid();
+  dlg.setAttribute('aria-labelledby', titleId);
+  return [dlg, titleId];
+}
+function _showDialog(dlg) { document.body.appendChild(dlg); dlg.showModal(); }
 function _wireDialogDismiss(dlg, close, cancelVal = null) {
   dlg.querySelector('[value="cancel"]').onclick = () => close(cancelVal);
   dlg.addEventListener('close', () => close(cancelVal));
@@ -2547,8 +2556,7 @@ function showPrompt(title, defaultVal = '', opts = {}) {
         <button class="btn btn-o btn-sm" value="cancel">${t('cancel')}</button>
         <button class="btn btn-g btn-sm" value="ok">${opts.okText || t('ok')}</button>
       </div>`);
-    document.body.appendChild(dlg);
-    dlg.showModal(); // Auto: inert bg, focus trap, top-layer, ESC to close
+    _showDialog(dlg); // Auto: inert bg, focus trap, top-layer, ESC to close
     const input = dlg.querySelector('.modal-input');
     input.focus(); input.select();
     const close = (val) => { dlg.close(); dlg.remove(); resolve(val); };
@@ -2570,8 +2578,7 @@ function showConfirm(title, opts = {}) {
         <button class="btn btn-o btn-sm" value="cancel">${t('cancel')}</button>
         <button class="btn ${opts.danger ? 'btn-r' : 'btn-g'} btn-sm" value="ok">${opts.okText || t('ok')}</button>
       </div>`);
-    document.body.appendChild(dlg);
-    dlg.showModal();
+    _showDialog(dlg);
     dlg.querySelector('[value="ok"]').focus();
     const close = (val) => { dlg.close(); dlg.remove(); resolve(val); };
     dlg.querySelector('[value="ok"]').onclick = () => close(true);
@@ -2589,9 +2596,7 @@ function showConfirm(title, opts = {}) {
 // recovery-kit creation: same phrase, same promise.
 function _promptRecoveryPhraseNew(phrase, okText) {
   return new Promise(resolve => {
-    const dlg = document.createElement('dialog');
-    const titleId = 'mdl-' + uid();
-    dlg.setAttribute('aria-labelledby', titleId);
+    const [dlg, titleId] = _makeDialog();
     safeSetHTML(dlg, `<div class="modal-title" id="${titleId}">${esc(t('recoveryPhraseTitle'))}</div>
       <div class="modal-desc">${esc(t('recoveryPhraseDesc'))}</div>
       <textarea class="modal-input" rows="3" readonly aria-labelledby="${titleId}">${esc(phrase)}</textarea>
@@ -2601,8 +2606,7 @@ function _promptRecoveryPhraseNew(phrase, okText) {
         <button class="btn btn-o btn-sm" value="cancel">${t('cancel')}</button>
         <button class="btn btn-g btn-sm" value="ok" disabled>${esc(okText || t('ok'))}</button>
       </div>`);
-    document.body.appendChild(dlg);
-    dlg.showModal();
+    _showDialog(dlg);
     const okBtn = dlg.querySelector('[value="ok"]');
     dlg.querySelector('.rp-saved').addEventListener('change', (e) => { okBtn.disabled = !e.target.checked; });
     let settled = false;
@@ -2621,9 +2625,7 @@ function _promptRecoveryPhraseNew(phrase, okText) {
 // writes live in restoreFromPhrase — this dialog only collects.
 function _promptRecoveryPhraseRestore() {
   return new Promise(resolve => {
-    const dlg = document.createElement('dialog');
-    const titleId = 'mdl-' + uid();
-    dlg.setAttribute('aria-labelledby', titleId);
+    const [dlg, titleId] = _makeDialog();
     safeSetHTML(dlg, `<div class="modal-title" id="${titleId}">${esc(t('recoveryRestoreTitle'))}</div>
       <textarea class="modal-input rp-phrase" rows="3" placeholder="${esc(t('recoveryPhraseLabel'))}" autocomplete="off" autocapitalize="none" spellcheck="false" aria-labelledby="${titleId}"></textarea>
       <input class="modal-input rp-pass" type="password" placeholder="${esc(t('recoveryPassLabel'))}" autocomplete="current-password" aria-label="${esc(t('recoveryPassLabel'))}">
@@ -2632,8 +2634,7 @@ function _promptRecoveryPhraseRestore() {
         <button class="btn btn-o btn-sm" value="cancel">${t('cancel')}</button>
         <button class="btn btn-g btn-sm" value="ok">${t('restoreBtn')}</button>
       </div>`);
-    document.body.appendChild(dlg);
-    dlg.showModal();
+    _showDialog(dlg);
     dlg.querySelector('.rp-phrase').focus();
     let settled = false;
     const close = (val) => { if (settled) return; settled = true; dlg.close(); dlg.remove(); resolve(val); };
@@ -2656,9 +2657,7 @@ function _promptRecoveryPhraseRestore() {
 // length floors live in enrollSimpleRecovery) or null on cancel.
 function _promptSimpleRecoveryNew() {
   return new Promise(resolve => {
-    const dlg = document.createElement('dialog');
-    const titleId = 'mdl-' + uid();
-    dlg.setAttribute('aria-labelledby', titleId);
+    const [dlg, titleId] = _makeDialog();
     safeSetHTML(dlg, `<div class="modal-title" id="${titleId}">${esc(t('simpleTitle'))}</div>
       <div class="modal-desc">${esc(t('simpleNewDesc'))}</div>
       <input class="modal-input rp-account" type="text" placeholder="${esc(t('simpleAccountLabel'))}" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="${esc(t('simpleAccountLabel'))}">
@@ -2668,8 +2667,7 @@ function _promptSimpleRecoveryNew() {
         <button class="btn btn-o btn-sm" value="cancel">${t('cancel')}</button>
         <button class="btn btn-g btn-sm" value="ok" disabled>${t('simpleOk')}</button>
       </div>`);
-    document.body.appendChild(dlg);
-    dlg.showModal();
+    _showDialog(dlg);
     const okBtn = dlg.querySelector('[value="ok"]');
     dlg.querySelector('.rp-saved').addEventListener('change', (e) => { okBtn.disabled = !e.target.checked; });
     dlg.querySelector('.rp-account').focus();
@@ -2691,9 +2689,7 @@ function _promptSimpleRecoveryNew() {
 // this dialog only collects.
 function _promptSimpleRecoveryRestore() {
   return new Promise(resolve => {
-    const dlg = document.createElement('dialog');
-    const titleId = 'mdl-' + uid();
-    dlg.setAttribute('aria-labelledby', titleId);
+    const [dlg, titleId] = _makeDialog();
     safeSetHTML(dlg, `<div class="modal-title" id="${titleId}">${esc(t('simpleRestoreTitle'))}</div>
       <div class="modal-desc">${esc(t('simpleRestoreDesc'))}</div>
       <input class="modal-input rp-account" type="text" placeholder="${esc(t('simpleAccountLabel'))}" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="${esc(t('simpleAccountLabel'))}">
@@ -2702,8 +2698,7 @@ function _promptSimpleRecoveryRestore() {
         <button class="btn btn-o btn-sm" value="cancel">${t('cancel')}</button>
         <button class="btn btn-g btn-sm" value="ok">${t('restoreBtn')}</button>
       </div>`);
-    document.body.appendChild(dlg);
-    dlg.showModal();
+    _showDialog(dlg);
     dlg.querySelector('.rp-account').focus();
     let settled = false;
     const close = (val) => { if (settled) return; settled = true; dlg.close(); dlg.remove(); resolve(val); };
@@ -6355,9 +6350,7 @@ async function initMessenger(dbName) {
   }
   // SHARE_PLAN stage 4 step 2: the two halves of device linking, shared
   // verbatim by the paste commands (/link <pub>, /linkto <pub>) and the
-  // QR scan buttons — a scanned key runs the identical checks and the
-  // identical signed registry write, so the trust anchor (the root's
-  // Ed25519 pin, verified in _fetchDeviceList) is just as strong.
+  // QR scan buttons — a scanned key runs the identical signed write.
   async function _linkDevicePub(arg) {
     if (arg === myPubB64) { showToast(t('devSelfLink'), 'error'); return; }
     if (!/^[A-Za-z0-9+/=_-]{40,200}$/.test(arg)) { showToast(t('devBadPub'), 'error'); return; }
@@ -6377,9 +6370,7 @@ async function initMessenger(dbName) {
         await dbPut('identity', acct, 'account');
         _myDevCache = null; // bust the cache so self-sync starts immediately
         showToast(t('devAdded'), 'success');
-        // Stage 4 step 3: offer the history transfer right after the
-        // link — the new device has the account but an empty past.
-        // Declining is final for this prompt; /history re-offers it.
+        // Stage 4 step 3: offer the history transfer right after the link.
         if (await showConfirm(t('histSendAsk'))) {
           const r = await _sendHistoryTo(arg);
           showToast(r.sent ? t('histSent') : t('histEmpty'), r.sent ? 'success' : 'info');
@@ -6431,8 +6422,7 @@ async function initMessenger(dbName) {
   // SHARE_PLAN stage 4 step 3: conversation-history transfer to a linked
   // device. Chunks ride the self-sync channel (ratchet-encrypted deposits
   // to a registry-verified sibling), so the relay sees the same envelope
-  // shape as any message. Records travel as stored; expired disappearing
-  // messages stay behind (src/app/history-sync.js has the pure half).
+  // shape as any message. Records travel as stored.
   async function _collectHistory(contactId) {
     return new Promise(r => {
       try {
@@ -6461,8 +6451,8 @@ async function initMessenger(dbName) {
         const enc = await encryptFor(packed.chunks[i], devPub);
         if (!enc) continue;
         await relaySend(devPub.slice(0, 12), { to: devPub.slice(0, 12), from: myId, fromPub: myPubB64, fromName: myName,
-          payload: enc, ts: base + (seq++), selfSync: true, historySync: true, sfFor: c.id, sfPub: c.pubB64,
-          sfName: c.name || '', hTid: tid, hIdx: i, hTotal: packed.chunks.length }, devPub);
+          payload: enc, ts: base + (seq++), selfSync: true, historySync: true, sfFor: c.id, sfPub: c.pubB64, sfName: c.name || '',
+          hTid: tid, hIdx: i, hTotal: packed.chunks.length }, devPub);
         sent++;
       }
     }
@@ -6868,8 +6858,7 @@ async function initMessenger(dbName) {
   // SHARE_PLAN stage 6, client side of the cost model: when a relay
   // refuses a deposit because the free quota is spent, say so once per
   // episode — details to the audit log, the user gets the way out
-  // (their own relay). The message is never dropped over a quota: it
-  // stays in the same retry queue an ordinary failure uses.
+  // (their own relay). The message stays in the retry queue.
   const _classifyRejection = (body) => globalThis.__breezeQuota?.classifyRelayRejection(body) || null;
   const _quotaNotice = globalThis.__breezeQuota?.createQuotaNotice({ cooldownMs: MS.HOUR, notify: (info) => {
     auditLog('relay', `Deposit refused: free quota used up on this relay (${info.scope || 'window'} limit ${info.limit ?? 'unknown'}). Delivery resumes when the quota resets, or via your own relay.`);
@@ -10760,18 +10749,7 @@ async function initMessenger(dbName) {
   // Group: stored in IDB 'contacts' with isGroup:true, members:[{id, pubB64, name}]
   // Messages use contactId = groupId. Each message encrypted per-member.
 
-  _DOM.get('b-msg-add')?.addEventListener('click', async () => {
-    const input = await showPrompt(t('addContact'), '', { placeholder: t('addContactPh') });
-    if (!input) return;
-    if (input.startsWith('group:')) {
-      const groupName = input.slice(6).trim() || 'Group';
-      await createGroup(groupName);
-    } else {
-      // Extract URL from pasted invite message if needed
-      const urlMatch = input.match(/https?:\/\/[^\s]+\?add=[^\s]+/);
-      await resolveAndAdd(urlMatch ? urlMatch[0] : input.trim());
-    }
-  });
+  _DOM.get('b-msg-add')?.addEventListener('click', () => _showAddContactPanel());
 
   // Local-members groups have no server registry to snapshot caps from (invite-link groups
   // get them free via /group/info) — fetch once via the batch prekey endpoint, chunked at
@@ -11356,8 +11334,7 @@ async function initMessenger(dbName) {
     // SHARE_PLAN stage 4 step 3: a history chunk from one of my own
     // devices. Same trust gate as self-sync (sender must be in the
     // signature-verified registry); chunks are buffered in the settings
-    // store so a reload mid-transfer loses nothing, and the completed
-    // conversation is imported as stored, never overwriting local records.
+    // store so a reload mid-transfer loses nothing.
     if (msg.selfSync && msg.historySync && msg.fromPub && msg.sfFor) {
       try {
         const H = globalThis.__breezeHistory;
@@ -11365,8 +11342,7 @@ async function initMessenger(dbName) {
         const mine = await _myOtherDevices();
         if (!mine.includes(msg.fromPub)) { _dbg(null, 'historySync from non-account device — dropped'); return; }
         const total = msg.hTotal, idx = msg.hIdx, tid = String(msg.hTid || '');
-        if (!tid || tid.length > 32 || !Number.isInteger(total) || total < 1 || total > H.HISTORY_MAX_CHUNKS
-          || !Number.isInteger(idx) || idx < 0 || idx >= total) return;
+        if (!tid || tid.length > 32 || !Number.isInteger(total) || total < 1 || total > H.HISTORY_MAX_CHUNKS || !Number.isInteger(idx) || idx < 0 || idx >= total) return;
         const text = await decryptFrom(msg.payload, msg.fromPub);
         const records = text ? H.parseHistoryChunk(text) : null;
         if (!records) return;
@@ -12824,6 +12800,33 @@ async function initMessenger(dbName) {
   });
 
 
+  // SHARE_PLAN stage 4 step 4: the one add-contact surface. Every path
+  // in — invite link, QR scan, @alias, raw key, group: creation —
+  // dispatches through _dispatchAddInput into the SAME resolveAndAdd
+  // the boot landing uses, so each path keeps exactly its existing
+  // validation (alias stays exact-match with the key-transparency audit).
+  async function _dispatchAddInput(raw) {
+    const input = String(raw || '').trim();
+    if (!input) return;
+    if (input.startsWith('group:')) { await createGroup(input.slice(6).trim() || 'Group'); return; }
+    const urlMatch = input.match(/https?:\/\/[^\s]+\?add=[^\s]+/);
+    await resolveAndAdd(urlMatch ? urlMatch[0] : input);
+  }
+  function _showAddContactPanel() {
+    const [box, d] = _cmdPanelEl('cmd-panel');
+    safeSetHTML(d, '<b class="i-g">' + esc(t('addContactTitle')) + '</b><br>' + esc(t('addContact')).replace(/\n/g, '<br>'));
+    const input = document.createElement('input');
+    input.className = 'modal-input'; input.placeholder = t('addContactPh');
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-g btn-sm'; btn.textContent = t('addBtn');
+    const submit = () => { const v = input.value; d.remove(); _dispatchAddInput(v); };
+    btn.onclick = submit;
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+    d.append(input, btn, _deviceScanButton('scanQR', (v) => { d.remove(); _dispatchAddInput(v); }));
+    box.appendChild(d); box.scrollTop = box.scrollHeight;
+    input.focus();
+  }
+
   async function resolveAndAdd(input, homeHintOverride) {
     let pubB64, name = 'Contact', aliasResolved = false;
     // Parse URL
@@ -13992,7 +13995,7 @@ async function initMessenger(dbName) {
         '',
         '<b>' + t('helpContacts') + '</b>',
         '/info · /note · /pin · /mute · /archive · /unblock · /members · /admin',
-        '/label · /sort · /newgroup · /rename · /invite · /qr · /share',
+        '/add · /label · /sort · /newgroup · /rename · /invite · /qr · /share',
         '/contacts export · /contacts import',
         '',
         '<b>' + t('helpSettings') + '</b>',
@@ -14058,6 +14061,12 @@ async function initMessenger(dbName) {
     if (val === '/rendezvous') {
       e.preventDefault(); clearInput();
       await _rendezvous?.open(activeContact);
+      return;
+    }
+
+    if (val === '/add') {
+      e.preventDefault(); clearInput();
+      _showAddContactPanel();
       return;
     }
 
@@ -15235,23 +15244,17 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     // Secondary device, final step: bind THIS device to the account whose root pub the user
     // physically carried over. That gesture is the trust anchor (same TOFU as adding a contact
     // by raw key); the root's Ed25519 signing key is pinned here and required stable afterwards.
-    if (val === '/linkto') {
+    if (val === '/linkto' || val.startsWith('/linkto ')) {
       e.preventDefault(); clearInput();
       if (!API) { showToast(t('uiNoServer'), 'error'); return; }
+      const rootPub = val.slice(8).trim();
+      if (rootPub) { await _linkToRoot(rootPub); return; }
       const [box, d] = _cmdPanelEl('cmd-panel');
       safeSetHTML(d, '<b class="i-g">' + t('devLinkToTitle') + '</b><br>' + t('devLinkToHint'));
       d.appendChild(_deviceScanButton('devScanRoot', (v) => { _linkToRoot(v); }));
       box.appendChild(d); box.scrollTop = box.scrollHeight;
       return;
     }
-    if (val.startsWith('/linkto ')) {
-      e.preventDefault(); clearInput();
-      const rootPub = val.slice(8).trim();
-      if (!API) { showToast(t('uiNoServer'), 'error'); return; }
-      await _linkToRoot(rootPub);
-      return;
-    }
-    // Stage 4 step 3: (re)send this device's history to my linked devices.
     if (val === '/history') {
       e.preventDefault(); clearInput();
       const devs = await _myOtherDevices();

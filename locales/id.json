@@ -275,6 +275,8 @@
  "groupNamePrompt": "Nama grup:",
  "groupNamePh": "Grup Saya",
  "addContactPh": "Kunci publik, @alias, atau tautan undangan",
+ "addContactTitle": "Tambah kontak",
+ "addBtn": "Tambah",
  "accountNamePh": "Nama akun",
  "connP2P": "Koneksi langsung terenkripsi",
  "connRelay": "Daring (relai server)",

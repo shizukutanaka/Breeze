@@ -277,6 +277,8 @@
  "groupNamePrompt": "Nome do grupo:",
  "groupNamePh": "Meu grupo",
  "addContactPh": "Chave pública, @apelido ou link de convite",
+ "addContactTitle": "Adicionar um contato",
+ "addBtn": "Adicionar",
  "accountNamePh": "Nome da conta",
  "connP2P": "Conexão direta criptografada",
  "connRelay": "Online (relay do servidor)",

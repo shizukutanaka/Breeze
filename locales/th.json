@@ -275,6 +275,8 @@
  "groupNamePrompt": "ชื่อกลุ่ม:",
  "groupNamePh": "กลุ่มของฉัน",
  "addContactPh": "กุญแจสาธารณะ, @ชื่อเล่น หรือลิงก์เชิญ",
+ "addContactTitle": "เพิ่มผู้ติดต่อ",
+ "addBtn": "เพิ่ม",
  "accountNamePh": "ชื่อบัญชี",
  "connP2P": "เชื่อมต่อตรงแบบเข้ารหัส",
  "connRelay": "ออนไลน์ (รีเลย์เซิร์ฟเวอร์)",

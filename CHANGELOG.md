@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## One add-contact surface (SHARE_PLAN stage 4 step 4)
+
+- The + button used to open a bare text prompt; it now opens an add-contact panel (also reachable as /add) with the input field, the same guidance text, and a QR scan button. Every spelling of an add — a pasted invite link or message, a scanned QR code, an @alias, a raw public key, and the group: shortcut — dispatches through one function into the same resolveAndAdd the invite-link landing uses, so each path keeps exactly its existing validation: aliases still resolve by exact match only and still pass the key-transparency audit before the key is trusted, and a scanned code is just another spelling of the invite URL. Step count for typing is unchanged; adding by QR is now one tap from the panel instead of impossible in-app. The two new strings ship in all 8 locales (they sit in the i18n core set, whose per-locale coverage floor is 95%).
+- The line ceiling was crossed again and met with a third reduction pass, not a raise: the five hand-rolled dialog creations now share _makeDialog/_showDialog, and the two /linkto command branches merged into one handler. index.html lands at 15,999 lines.
+
 ## Conversation-history transfer to a linked device (SHARE_PLAN stage 4 step 3)
 
 - After a device is added with /link, the primary offers to send its conversation history; /history re-sends it to all linked devices at any time. Declining is always an option and nothing is sent without the ask. The transfer rides the existing self-sync channel — ratchet-encrypted deposits addressed to the sibling device — so the relay sees the same envelope shape as an ordinary message: no plaintext, and no metadata beyond the chunk counters. The receiver accepts chunks only from a device in the signature-verified registry, buffers them in the settings store (a reload mid-transfer loses nothing), and imports the records as stored: validation never rebuilds a record, existing local records are never overwritten, and expired disappearing messages are not resurrected. 1:1 conversations only in this step; group history stays per-device. The pure packing/validation half is `src/app/history-sync.js`; its tests include the step's completion condition — a byte-for-byte round trip of a conversation (canonical serialization equal on both sides).

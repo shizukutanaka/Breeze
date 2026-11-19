@@ -275,6 +275,8 @@
  "groupNamePrompt": "그룹 이름:",
  "groupNamePh": "내 그룹",
  "addContactPh": "공개 키, @별명, 초대 링크",
+ "addContactTitle": "연락처 추가",
+ "addBtn": "추가",
  "accountNamePh": "계정 이름",
  "connP2P": "직접 암호화 연결",
  "connRelay": "온라인 (서버 릴레이)",

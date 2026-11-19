@@ -275,6 +275,8 @@
  "groupNamePrompt": "群組名稱：",
  "groupNamePh": "我的群組",
  "addContactPh": "公鑰、@別名或邀請連結",
+ "addContactTitle": "新增聯絡人",
+ "addBtn": "新增",
  "accountNamePh": "帳號名稱",
  "connP2P": "直接加密連線",
  "connRelay": "線上（伺服器中繼）",
