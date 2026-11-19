@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## P2P_PLAN step 3, second slice: on-device signaling poll measurements
+
+`src/app/p2p-stats.js`, `index.html`, `locales/ja.json`, `tests/p2p-stats.test.js`, `tests/relay-fanout.test.js`, `docs/P2P_PLAN.md` (Step 3 implementation record); CSP hashes re-pinned.
+
+- **Measurement.** `brz-p2p-signal` persists poll sessions plus pre-established / post-established request totals. Each 1:1 poll request counts, including extra home relays and failed requests; pin-blocked sends do not. Established means both peer connection and message DataChannel are ready; reconnecting returns to the pre-established bucket.
+- **Display.** `/security` shows both totals and requests per poll session, with EN/JA labels and an honest no-data state. Counts stay on-device and start at installation of this slice; no telemetry, Worker changes, or polling behavior changes.
+
 ## Sustainability page: the cost structure as a public, verifiable claim (branch feat/breeze-sustainability, 2026-11-18)
 
 `docs/SUSTAINABILITY.md` (new), `README.md` (Running Costs gains the pointer). Docs only — no code, no new dependencies.
