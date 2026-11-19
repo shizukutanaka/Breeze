@@ -7,6 +7,7 @@
 // which now slice from src/app/backup.js; this file pins that the modules
 // load, wire their deps/globals, and answer their contracts in isolation.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { createBackupTools } from '../src/app/backup.js';
 import { createCallManager } from '../src/app/call.js';
 import { createQRHelper } from '../src/app/qr.js';
@@ -21,7 +22,7 @@ beforeAll(() => {
   // plain assignment in afterAll cannot put the original back and throws
   // "Cannot assign to read only property 'navigator'". Restoring by
   // descriptor handles data and accessor globals alike.
-  for (const k of ['t', '_dbg', 'showToast', 'CONFIG', 'MS', '_DOM', 'API', '_turnCredential', 'document', 'window', 'localStorage', 'navigator']) saved[k] = Object.getOwnPropertyDescriptor(globalThis, k);
+  for (const k of ['t', '_dbg', 'showToast', 'CONFIG', 'MS', '_DOM', 'API', '_turnCredential', 'document', 'window', 'localStorage', 'navigator', 'RTCPeerConnection']) saved[k] = Object.getOwnPropertyDescriptor(globalThis, k);
   globalThis.t = (k) => k;
   globalThis._dbg = () => {};
   globalThis.showToast = (msg, type) => { (globalThis.__toasts ||= []).push({ msg, type }); };
@@ -91,6 +92,44 @@ describe('call manager factory (src/app/call.js)', () => {
     _signal: () => {}, _signalAwait: async () => ({ ok: false }), relaySend: async () => {},
     _intervals: [], _ac: { signal: undefined }, _settings: {},
     myId: () => 'me000000000', myPubB64: () => 'PUB', myName: () => 'Me',
+  });
+  it('exposes shared certificate generation and live status, caching a successful certificate', async () => {
+    const certificate = {};
+    let calls = 0;
+    globalThis.RTCPeerConnection = { generateCertificate: async (algorithm) => {
+      expect(algorithm).toEqual({ name: 'ECDSA', namedCurve: 'P-256' });
+      calls++;
+      return certificate;
+    } };
+    const m = createCallManager(deps());
+    expect(m.hasRTCCertificate()).toBe(false);
+    expect(await m.getRTCCertificate()).toBe(certificate);
+    expect(m.hasRTCCertificate()).toBe(true);
+    expect(await m.getRTCCertificate()).toBe(certificate);
+    expect(calls).toBe(1);
+  });
+  it('returns null with false status when certificate generation fails or is unavailable', async () => {
+    for (const rtc of [undefined, { generateCertificate: async () => { throw Error('unsupported'); } }]) {
+      globalThis.RTCPeerConnection = rtc;
+      const m = createCallManager(deps());
+      expect(await m.getRTCCertificate()).toBe(null);
+      expect(m.hasRTCCertificate()).toBe(false);
+    }
+  });
+  it('wires certificate methods and safe module-absent fallbacks into the classic script', async () => {
+    const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+    const start = html.indexOf('  const _callMgr =');
+    const end = html.indexOf('\n  // Call button handlers', start);
+    const wiring = html.slice(start, end);
+    const names = wiring.match(/const \{ ([^}]+) \} = _callMgr;/)[1].split(', ');
+    expect(names).toContain('getRTCCertificate');
+    expect(names).toContain('hasRTCCertificate');
+    const stub = new Function('globalThis', wiring + '\nreturn _callMgr;')({});
+    expect(await stub.getRTCCertificate()).toBe(null);
+    expect(stub.hasRTCCertificate()).toBe(false);
+    expect(html).toContain('const cert = await getRTCCertificate();');
+    expect(html).toContain("t('secLblRTCCert') + ': ' + (hasRTCCertificate() ?");
+    expect(html).not.toMatch(/\b_rtcCert\b/);
   });
   it('starts idle; ICE config is the STUN base without a TURN credential', () => {
     const m = createCallManager(deps());

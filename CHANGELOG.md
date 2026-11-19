@@ -8,6 +8,9 @@
 
 - **Measurement.** `brz-p2p-signal` persists poll sessions plus pre-established / post-established request totals. Each 1:1 poll request counts, including extra home relays and failed requests; pin-blocked sends do not. Established means both peer connection and message DataChannel are ready; reconnecting returns to the pre-established bucket.
 - **Display.** `/security` shows both totals and requests per poll session, with EN/JA labels and an honest no-data state. Counts stay on-device and start at installation of this slice; no telemetry, Worker changes, or polling behavior changes.
+- **Certificate wiring follow-up.** Expose the call manager's shared certificate getter and live generated-status accessor, with inert fallbacks, so 1:1 connection setup and `/security` no longer reference bindings left behind by modularization; regression tests cover generation, caching, failure, and classic-script wiring.
+- **SDP authentication follow-up.** Replace the never-defined `verifyMessage` call with the existing UTF-8 Ed25519 `verifySignature` helper, preserving the contact signing-key pin and TOFU binding. Signed SDP now requires a positive verification result (including rejection on malformed signatures or unavailable verification); unsigned legacy SDP remains compatible. Executable sliced-path tests cover authentication and binding.
+- **Cold-boot ordering.** Wait for deferred module initialization via a shared DOMContentLoaded readiness promise before initializing any messenger session, including account switches. Slow module loading no longer permanently captures inert factories; genuine load failures still boot with the existing fallbacks. Unit and browser regressions cover delayed and failed module loading.
 
 ## Sustainability page: the cost structure as a public, verifiable claim (branch feat/breeze-sustainability, 2026-11-18)
 

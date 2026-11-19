@@ -263,7 +263,7 @@ describe('E — message signature check pins the contact signing key (TOFU)', ()
       'signed SDP check',
     );
     expect(sdp).toContain('continue;'); // mismatched SDP is rejected
-    expect(sdp).toContain('verifyMessage(wrapper.sdp, wrapper.sig, wrapper.sigPub)');
+    expect(sdp).toContain('verifySignature(wrapper.sdp, wrapper.sig, wrapper.sigPub)');
     expect(sdp).toContain('if (!contact.sigPub && wrapper.sigPub');
     expect(sdp).toContain('contact.sigPub = wrapper.sigPub;');
   });
