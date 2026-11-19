@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## A comparison page that can be checked (SHARE_PLAN stage 7 step 1)
+
+- New public document: docs/COMPARISON.md — Breeze vs Signal vs LINE with a verification path for every Breeze claim (the test file or source anchor that proves it), sources for every competitor claim, and a plainly-stated "where Breeze loses" section (scale, continuous PQ re-keying, no external audit yet, everyday-platform thickness, real-device verification). The internal plan table it is drawn from was updated to the shipped facts (groups 1,000, call signalling E2EE by default, PQ on by default, group calls).
+- tests/comparison-claims.test.js pins the page's load-bearing numbers to the code, so the page and the product cannot silently drift apart again.
+
 ## One-command releases (SHARE_PLAN stage 6 step 4)
 
 - The version lived in twelve places and was bumped by hand — that is how the dist manifests once sat a full release behind. `node tools/bump-version.mjs <x.y.z>` now rewrites every site (app config, service worker, PWA manifest, the four package manifests, Tauri config + Cargo, build-all.sh, the worker health literal, deploy.sh) from one argument, refusing loudly if any anchor has moved; `--check` reports any disagreement.

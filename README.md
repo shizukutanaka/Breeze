@@ -40,6 +40,10 @@ Try the hosted version: **[breeze.pages.dev](https://breeze.pages.dev)**
 | **Dependencies** | Zero (vanilla JS + WebCrypto) | Hundreds of npm packages |
 | **Data location** | Your browser's IndexedDB | Their servers |
 
+For the full, sourced comparison against Signal and LINE — including
+where Breeze loses, and a verification path for every claim — see
+[docs/COMPARISON.md](docs/COMPARISON.md).
+
 ## What Breeze will never do
 
 - **No ads.** Not in the app, not anywhere else. Ever.
