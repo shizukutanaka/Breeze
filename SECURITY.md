@@ -305,6 +305,19 @@ separate, explicitly-scoped future work if it's wanted.
 
 ## Security Architecture
 
+### First-session identity binding
+
+Relay-fetched and offline-injected bundles must match the contact's exact encryption public key and,
+when present, its pinned Ed25519 signing key. Identity mismatches stop the send with
+a localized warning: they do not trigger another relay lookup or legacy bootstrap.
+Without a signing pin, a relay bundle key is TOFU-pinned only after its signed prekey
+verifies; offline bundles still require the pairing's existing pin. Incoming signed
+text likewise pins only after successful verification.
+Before bootstrapping a received first message, `pkm.ik` must equal the expected
+peer encryption key, including messages forwarded through a peer relay. A mismatch
+is dropped before a session or message is saved. These checks do not authenticate
+a person's name or replace out-of-band identity verification; KT remains warn-only.
+
 Breeze uses the following cryptographic primitives:
 
 | Layer | Algorithm | Purpose |

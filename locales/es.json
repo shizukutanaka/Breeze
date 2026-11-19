@@ -313,6 +313,7 @@
  "select": "Seleccionar",
  "report": "Denunciar",
  "toastAliasTampered": "Bloqueado: el historial de claves de este alias ha sido manipulado. Pide la clave pública directamente a la persona.",
+ "identityBindingFailed": "Bloqueado: las claves de identidad del contacto no coinciden. Verifica el contacto y vuelve a intentarlo.",
  "toastAliasRolled": "Aviso: la clave de este alias cambió hace poco. Verifica el número de seguridad antes de confiar.",
  "confirmReport": "¿Denunciar este mensaje al operador? Se envían el texto del mensaje y una prueba de un solo uso para verificarlo. Los demás mensajes permanecen privados.",
  "toastReported": "Denunciado",

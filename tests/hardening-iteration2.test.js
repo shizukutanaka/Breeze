@@ -280,9 +280,11 @@ describe('E — message signature check pins the contact signing key (TOFU)', ()
     'handleIncoming signature check',
   );
 
-  it('pins contact.sigPub on first sighting', () => {
+  it('pins contact.sigPub only on first verified sighting', () => {
     expect(block).toContain('if (!contact.sigPub) {');
-    expect(block).toContain('contact.sigPub = msg.sigPub; // trust on first use');
+    const pinIdx = block.indexOf('contact.sigPub = msg.sigPub;');
+    const verifiedIdx = block.indexOf('if (verified === true)', block.indexOf('} else if (msg.sig && msg.sigPub)'));
+    expect(pinIdx).toBeGreaterThan(verifiedIdx);
   });
 
   it('flags a changed signing key as tampered and raises the key-change warning', () => {
@@ -293,10 +295,11 @@ describe('E — message signature check pins the contact signing key (TOFU)', ()
     expect(mismatch).toContain('showKeyChangeWarning(');
   });
 
-  it('verifies the signature against the pinned key only when not tampered', () => {
-    const gateIdx = block.indexOf('if (!meta.tampered) {');
-    expect(gateIdx).toBeGreaterThanOrEqual(0);
-    expect(block.indexOf('verifySignature(text, msg.sig, msg.sigPub)', gateIdx)).toBeGreaterThan(gateIdx);
+  it('verifies before pinning and shows verified only when not tampered', () => {
+    const verifyIdx = block.indexOf('verifySignature(text, msg.sig, msg.sigPub)');
+    expect(verifyIdx).toBeGreaterThanOrEqual(0);
+    expect(block.indexOf('contact.sigPub = msg.sigPub;')).toBeGreaterThan(verifyIdx);
+    expect(block).toContain('if (!meta.tampered) meta.verified = true;');
   });
 
   it('the signed-SDP path enforces the same pin', () => {

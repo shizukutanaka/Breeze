@@ -313,6 +313,7 @@
  "select": "Selecionar",
  "report": "Denunciar",
  "toastAliasTampered": "Bloqueado: o histórico de chaves deste apelido foi adulterado. Peça a chave pública diretamente à pessoa.",
+ "identityBindingFailed": "Bloqueado: as chaves de identidade do contato não correspondem. Verifique o contato e tente novamente.",
  "toastAliasRolled": "Aviso: a chave deste apelido mudou recentemente. Verifique o número de segurança antes de confiar.",
  "confirmReport": "Denunciar esta mensagem ao operador? O texto da mensagem e uma prova de uso único serão enviados para verificação. As outras mensagens permanecem privadas.",
  "toastReported": "Denunciada",

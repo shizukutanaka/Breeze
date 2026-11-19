@@ -740,7 +740,7 @@ describe('client — prekey fetch tries the contact\u2019s relays in order', () 
       : ed.privateKey;
     const sig = new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, signer, spkPub));
     return {
-      userId: PEER_ID, identityKey: PEER_ID + b64(crypto.getRandomValues(new Uint8Array(32))),
+      userId: PEER_ID, identityKey: PEER_PUB,
       edIdentityKey: b64(edPub), signedPreKey: b64(spkPub), signedPreKeySig: b64(sig),
       oneTimePreKeys: Array.from({ length: 10 }, (_, i) => 'otp' + i),
       caps: ['x3dh-v5', 'multi-relay'],
@@ -833,7 +833,7 @@ async function makeBobBundle(home) {
   const spkPub = crypto.getRandomValues(new Uint8Array(32));
   const sig = new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey, spkPub));
   return {
-    userId: PEER_ID, identityKey: PEER_ID + b64(crypto.getRandomValues(new Uint8Array(32))),
+    userId: PEER_ID, identityKey: PEER_PUB,
     edIdentityKey: b64(edPub), signedPreKey: b64(spkPub), signedPreKeySig: b64(sig),
     oneTimePreKeys: Array.from({ length: 10 }, (_, i) => 'otp' + i),
     caps: ['x3dh-v5', 'seal-v2', 'group-v5', 'multi-relay'], home,
