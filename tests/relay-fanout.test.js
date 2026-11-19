@@ -667,7 +667,9 @@ describe('client — signal rendezvous across the peer\u2019s relays', () => {
     const body = { room, sender: PEER_ID, type: 'answer', data: 'SDP-ANSWER-1' };
     await post(envA, API, '/signal', body);
     await post(envB, B_API, '/signal', body);
-    const resp = await w._signalAwait(room, 'poll', '');
+    let requests = 0;
+    const resp = await w._signalAwait(room, 'poll', '', () => { requests++; });
+    expect(requests).toBe(2);
     const merged = await resp.json();
     expect(merged.messages).toHaveLength(1);
     expect(merged.messages[0].data).toBe('SDP-ANSWER-1');

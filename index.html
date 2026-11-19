@@ -1984,6 +1984,11 @@ const _I = {
     secActive: 'Active',
     secNotConfigured: 'Not configured',
     secLblDirectRate: 'Direct delivery rate',
+    secLblSignalPolls: 'Signaling poll requests (on-device)',
+    secSignalSessions: 'Poll sessions',
+    secSignalPre: 'Pre-established',
+    secSignalPost: 'Post-established',
+    secSignalPerSession: 'per poll session',
     secLblConnRoutes: 'Connection routes (this device)',
     secDirectNoData: 'no data yet',
     secConnFailed: 'failed',
@@ -6487,11 +6492,12 @@ async function initMessenger(dbName) {
     }
     return verdictP;
   }
-  async function _contactRelayPost(entry, path, body) {
+  async function _contactRelayPost(entry, path, body, onRequest) {
     try {
       if (isOriginRelay(entry)) return await postAPIRaw(path, body);
       const verdict = await _contactRelayVerdict(entry);
       if (verdict === 'mismatch' || verdict === 'unreachable') return null;
+      onRequest?.();
       return await fetchT(relayApiBase(entry) + path, { method: 'POST', headers: _H, body: JSON.stringify(body) });
     } catch(e) { _dbg(e, 'contact-relay-post'); return null; }
   }
@@ -7614,7 +7620,7 @@ async function initMessenger(dbName) {
     }).catch(e => _dbg(e, 'signal:' + type));
   }
   // _signalAwait — same but returns response for poll pattern
-  async function _signalAwait(room, type, data) {
+  async function _signalAwait(room, type, data, onRequest) {
     if (_relayPinGate.blocked) return new Response(null, { status: 503 }); // step 4 hard stop (see _signal)
     if (_relayPinGate.verdict) { // boot-window hold (step 4 follow-up, see _signal)
       await _relayPinGate.verdict;
@@ -7622,7 +7628,10 @@ async function initMessenger(dbName) {
     }
     const auth = await _signalAuth(room);
     const body = { room, sender: myId, type, data: data || '', ...auth };
-    const primary = () => fetchT(API + '/signal', { method: 'POST', headers: _H, body: JSON.stringify(body) });
+    const primary = () => {
+      onRequest?.();
+      return fetchT(API + '/signal', { method: 'POST', headers: _H, body: JSON.stringify(body) });
+    };
     // Stage-2 step 6: a 'poll' also drains the peer's home relays —
     // a signal deposited there (by a step-6 peer calling us) is only
     // visible if we look. Every other type is a plain deposit and
@@ -7650,7 +7659,7 @@ async function initMessenger(dbName) {
         messages.push(s);
       }
     };
-    const results = await Promise.allSettled([primary(), ...extra.map(e => _contactRelayPost(e, '/signal', body))]);
+    const results = await Promise.allSettled([primary(), ...extra.map(e => _contactRelayPost(e, '/signal', body, onRequest))]);
     for (const r of results) { if (r.status === 'fulfilled') await collect(r.value); }
     return new Response(JSON.stringify({ messages }), { status: 200, headers: _H });
   }
@@ -11889,10 +11898,12 @@ async function initMessenger(dbName) {
       }
 
       if (_ac.signal.aborted || peerState.connState === 'CLOSED') return;
+      _p2pStats?.noteSignalSession();
       peerState._sigPoll = startSignalPoll(async (isStopped) => {
         let activity = false;
         try {
-          const resp = await _signalAwait(sigRoom, 'poll');
+          const established = peerState.connected && peerState.dc?.readyState === 'open';
+          const resp = await _signalAwait(sigRoom, 'poll', undefined, () => _p2pStats?.noteSignalPoll(established));
           if (isStopped() || !resp.ok) return false;
           const data = await resp.json();
           for (const s of (data.messages || [])) {
@@ -14150,6 +14161,11 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         : Math.round(_p2pSnap.directRate * 100) + '% (' + _p2pSnap.directAck + '/' + _p2pSnap.directTotal + ')';
       const _connRouteLine = !_p2pSnap?.conn ? '—'
         : 'Direct ' + _p2pSnap.conn.direct + ' · STUN ' + _p2pSnap.conn.srflx + ' · TURN ' + _p2pSnap.conn.turn + ' · ' + t('secConnFailed') + ' ' + _p2pSnap.connFailed;
+      const _signalStats = _p2pSnap?.signal;
+      const _signalPollLine = !_signalStats?.sessions ? t('secDirectNoData')
+        : t('secSignalSessions') + ' ' + _signalStats.sessions + ' · '
+          + t('secSignalPre') + ' ' + _signalStats.preEstablished + ' (' + (_signalStats.preEstablished / _signalStats.sessions).toFixed(1) + ' ' + t('secSignalPerSession') + ') · '
+          + t('secSignalPost') + ' ' + _signalStats.postEstablished + ' (' + (_signalStats.postEstablished / _signalStats.sessions).toFixed(1) + ' ' + t('secSignalPerSession') + ')';
       // TURN provider honesty (Step 5): name WHO relays media when a call
       // or relay-only connection falls back to TURN — in particular the
       // third-party free Open Relay an unconfigured relay silently uses.
@@ -14216,6 +14232,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         'TURN: ' + _turnLine,
         t('secLblDirectRate') + ': ' + _directRateLine,
         t('secLblConnRoutes') + ': ' + _connRouteLine,
+        t('secLblSignalPolls') + ': ' + _signalPollLine,
         t('secLblRTCCert') + ': ' + (_rtcCert ? '✓ Per-session ECDSA P-256' : '✗ ' + t('secDefault')),
         'DataChannel: negotiated:true (DCEP skip)',
         'Negotiation: Perfect Negotiation (glare-safe, MDN spec)',

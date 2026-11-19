@@ -34,6 +34,7 @@ export function classifyCandidateType(type) {
 
 const DELIVERY_KEY = 'brz-p2p-direct';
 const CONN_KEY = 'brz-p2p-conn';
+const SIGNAL_KEY = 'brz-p2p-signal';
 
 function saneCount(v) {
   return (typeof v === 'number' && Number.isFinite(v) && v > 0) ? Math.floor(v) : 0;
@@ -74,6 +75,9 @@ export function createP2pStats(D = {}) {
     // One connection attempt that never established (connect timeout).
     noteConnectionFailed() { bump(CONN_KEY, 'failed'); },
 
+    noteSignalSession() { bump(SIGNAL_KEY, 'sessions'); },
+    noteSignalPoll(established) { bump(SIGNAL_KEY, established ? 'postEstablished' : 'preEstablished'); },
+
     snapshot() {
       const d = read(DELIVERY_KEY);
       const directAck = saneCount(d.directAck);
@@ -87,6 +91,12 @@ export function createP2pStats(D = {}) {
         failed: saneCount(c.failed),
       };
       const connTotal = conn.direct + conn.srflx + conn.turn;
+      const p = read(SIGNAL_KEY);
+      const signal = {
+        sessions: saneCount(p.sessions),
+        preEstablished: saneCount(p.preEstablished),
+        postEstablished: saneCount(p.postEstablished),
+      };
       return {
         directAck,
         directNoAck,
@@ -97,6 +107,7 @@ export function createP2pStats(D = {}) {
         conn,
         connTotal,
         connFailed: conn.failed,
+        signal,
       };
     },
   };

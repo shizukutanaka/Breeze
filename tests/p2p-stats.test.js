@@ -4,6 +4,7 @@
 // rate from the Step 2 seed counters, route classification of the
 // selected ICE candidate, and honest nulls when nothing is measured.
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { createP2pStats, classifyCandidateType } from '../src/app/p2p-stats.js';
 
 function fakeStore(initial = {}) {
@@ -14,6 +15,34 @@ function fakeStore(initial = {}) {
     save: (k, v) => { map.set(k, v); },
   };
 }
+
+describe('signaling poll statistics', () => {
+  it('starts without samples and persists both phases across instances', () => {
+    const store = fakeStore();
+    const stats = createP2pStats(store);
+    expect(stats.snapshot().signal).toEqual({ sessions: 0, preEstablished: 0, postEstablished: 0 });
+    stats.noteSignalSession();
+    stats.noteSignalPoll(false);
+    stats.noteSignalPoll(false);
+    stats.noteSignalPoll(true);
+    stats.noteSignalSession();
+    expect(createP2pStats(store).snapshot().signal).toEqual({ sessions: 2, preEstablished: 2, postEstablished: 1 });
+  });
+
+  it('sanitizes malformed stored counts and tolerates unavailable storage', () => {
+    const stats = createP2pStats(fakeStore({ 'brz-p2p-signal': { sessions: -1, preEstablished: 'bad', postEstablished: 2.9 } }));
+    expect(stats.snapshot().signal).toEqual({ sessions: 0, preEstablished: 0, postEstablished: 2 });
+    const broken = createP2pStats({ load() { throw Error('unavailable'); }, save() { throw Error('unavailable'); } });
+    expect(() => { broken.noteSignalSession(); broken.noteSignalPoll(true); }).not.toThrow();
+  });
+
+  it('wires one session at poll creation and classifies requests using the live connection and channel', () => {
+    const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+    expect(html).toContain('_p2pStats?.noteSignalSession();\n      peerState._sigPoll = startSignalPoll(');
+    expect(html).toContain("const established = peerState.connected && peerState.dc?.readyState === 'open';\n          const resp = await _signalAwait(sigRoom, 'poll', undefined, () => _p2pStats?.noteSignalPoll(established));");
+    expect(html).toContain("t('secLblSignalPolls') + ': ' + _signalPollLine");
+  });
+});
 
 describe('classifyCandidateType', () => {
   it('maps ICE candidate types to route buckets', () => {
