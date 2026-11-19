@@ -7102,12 +7102,7 @@ async function initMessenger(dbName) {
       // share a contact by public key. Messages were already persisted to this account's IDB.
       _outbox.clear();
       Object.values(peers).forEach(p => {
-        if (p._healthTimer) clearInterval(p._healthTimer);
-        // Leak fix: pc.close() does NOT fire connectionstatechange (per spec), so the
-        // state-change handler that normally clears _heartbeat never runs on teardown.
-        // Clear it here too — otherwise every peer's heartbeat interval keeps firing
-        // against a closed channel after an account switch, pinning the old peer object.
-        if (p._heartbeat) clearInterval(p._heartbeat);
+        p.transition('CLOSED');
         try { p.pc?.close(); } catch(e) { _dbg(e); }
       });
       // Clear stale peer entries: connectPeer guards on peers[pubB64]?.pc to avoid
@@ -8080,7 +8075,7 @@ async function initMessenger(dbName) {
             _DOM.get('msg-conv-name').textContent = t('uiSelectContact');
             _DOM.get('msg-input-bar').classList.add('hidden');
           }
-          if (peers[c.pubB64]) { if (peers[c.pubB64]._healthTimer) clearInterval(peers[c.pubB64]._healthTimer); peers[c.pubB64].pc?.close(); delete peers[c.pubB64]; }
+          if (peers[c.pubB64]) { peers[c.pubB64].transition('CLOSED'); peers[c.pubB64].pc?.close(); delete peers[c.pubB64]; }
           delete _peerRelayQueue[c.id]; // Remove orphaned relay queue entries for deleted contact
           renderContacts();
         } else if (action === 'safety') {
@@ -8095,7 +8090,7 @@ async function initMessenger(dbName) {
           c.blocked = !c.blocked;
           await dbPut('contacts', c);
           auditLog('contact', (c.blocked ? 'Blocked' : 'Unblocked') + ' ' + c.name, c.blocked ? 'warn' : 'info');
-          if (c.blocked && peers[c.pubB64]) { if (peers[c.pubB64]._healthTimer) clearInterval(peers[c.pubB64]._healthTimer); peers[c.pubB64].pc?.close(); delete peers[c.pubB64]; }
+          if (c.blocked && peers[c.pubB64]) { peers[c.pubB64].transition('CLOSED'); peers[c.pubB64].pc?.close(); delete peers[c.pubB64]; }
           if (c.blocked && c.pubB64) { _outbox.delete(c.pubB64); _persistOutbox(); }
           renderContacts();
         } else if (action === 'vip') {
@@ -11461,6 +11456,48 @@ async function initMessenger(dbName) {
   }
 
   // ===== P2P connection per contact =====
+  function startSignalPoll(poll) {
+    const base = 2 * MS.SEC;
+    const maxBackoff = 8 * MS.SEC;
+    const connectedInterval = 15 * MS.SEC;
+    let timer, running = false, stopped = false, connected = false, phaseChanged = false;
+    let delay = base;
+
+    function schedule(wait) {
+      clearTimeout(timer);
+      timer = setTimeout(tick, wait);
+    }
+
+    async function tick() {
+      running = true;
+      phaseChanged = false;
+      let activity = false;
+      try { activity = await poll(() => stopped); } catch(e) { _dbg(e, 'signal-poll'); }
+      finally {
+        running = false;
+        if (!stopped) {
+          if (!connected) delay = activity || phaseChanged ? base : Math.min(delay * 2, maxBackoff);
+          schedule(connected ? connectedInterval : delay);
+        }
+      }
+    }
+
+    schedule(base);
+    return {
+      setConnected(value) {
+        if (stopped || connected === value) return;
+        connected = value;
+        delay = base;
+        if (running) phaseChanged = true;
+        else schedule(connected ? connectedInterval : base);
+      },
+      stop() {
+        stopped = true;
+        clearTimeout(timer);
+      },
+    };
+  }
+
   async function connectPeer(contact) {
     if (!contact.pubB64 || peers[contact.pubB64]?.pc) return;
     const isInit = myPubB64 > contact.pubB64;
@@ -11469,6 +11506,7 @@ async function initMessenger(dbName) {
     const iceConfig = getCallICEConfig();
     // v3.6: Fresh ECDSA cert per session (anti-fingerprinting)
     const cert = await getRTCCertificate();
+    if (_ac.signal.aborted) return;
     if (cert) iceConfig.certificates = [cert];
 
     const pc = new RTCPeerConnection(iceConfig);
@@ -11482,13 +11520,14 @@ async function initMessenger(dbName) {
         this.connState = newState;
         this.stateTs = Date.now();
         this.connected = newState === 'CONNECTED';
-        // Clear ALL per-peer intervals on teardown — every teardown path routes
+        // Clear per-peer timers on teardown — every teardown path routes
         // through CLOSED, so centralizing here stops heartbeat/sigPoll loops from
         // leaking when the peerState is deleted and replaced on reconnect.
         if (newState === 'CLOSED') {
+          clearTimeout(connTimeout);
           if (this._healthTimer) { clearInterval(this._healthTimer); this._healthTimer = null; }
           if (this._heartbeat) { clearInterval(this._heartbeat); this._heartbeat = null; }
-          if (this._sigPoll) { clearInterval(this._sigPoll); this._sigPoll = null; }
+          if (this._sigPoll) { this._sigPoll.stop(); this._sigPoll = null; }
           // Release handler closures immediately so GC can collect the RTCPeerConnection
           // and the contact/peerState it captures; without this they survive until the
           // next GC cycle even after pc.close() is called.
@@ -11531,6 +11570,7 @@ async function initMessenger(dbName) {
 
     pc.onconnectionstatechange = () => {
       peerState.connected = pc.connectionState === 'connected';
+      peerState._sigPoll?.setConnected(peerState.connected && peerState.dc?.readyState === 'open');
       if (peerState.connected) { clearTimeout(connTimeout); peerState.transition('CONNECTED'); }
       updateConvStatus();
       renderContacts();
@@ -11552,7 +11592,7 @@ async function initMessenger(dbName) {
           peerState._reconnAttempts = attempts + 1;
           _dbg(null, `P2P reconnect attempt ${attempts + 1} in ${Math.round(delay + jitter)}ms for ${contact.id}`);
           setTimeout(() => {
-            if (!peerState.connected) {
+            if (peerState.connState !== 'CLOSED' && !peerState.connected) {
               peerState.transition('CLOSED'); try { pc.close(); } catch(e) { _dbg(e); }
               delete peers[contact.pubB64];
               connectPeer(contact);
@@ -11715,6 +11755,7 @@ async function initMessenger(dbName) {
     // Connection open → deliver peer relay queue
     function onPeerConnected() {
       peerState.connected = true;
+      peerState._sigPoll?.setConnected(true);
       peerState.transition('CONNECTED');
       _noteConnRoute(pc);
       updateConvStatus();
@@ -11847,12 +11888,15 @@ async function initMessenger(dbName) {
         finally { makingOffer = false; }
       }
 
-      const sigPoll = setInterval(async () => {
+      if (_ac.signal.aborted || peerState.connState === 'CLOSED') return;
+      peerState._sigPoll = startSignalPoll(async (isStopped) => {
+        let activity = false;
         try {
           const resp = await _signalAwait(sigRoom, 'poll');
-          if (!resp.ok) return;
+          if (isStopped() || !resp.ok) return false;
           const data = await resp.json();
           for (const s of (data.messages || [])) {
+            if (isStopped()) break;
             if (s.sender === myId) continue;
             // Typing/read indicators (works both pre- and post-P2P connection)
             if (s.type === 'typing') { showTyping(contact.id, s.senderName || contact.name); continue; }
@@ -11862,6 +11906,7 @@ async function initMessenger(dbName) {
 
             try {
               if (s.type === 'offer' || s.type === 'answer') {
+                activity = true;
                 // Verify Ed25519 signature before trusting the SDP.
                 // An unauthenticated relay lets anyone inject a crafted SDP and MITM DTLS.
                 // Signed SDPs carry { sdp, sig, sigPub }; unsigned (legacy) are accepted for compat.
@@ -11874,6 +11919,7 @@ async function initMessenger(dbName) {
                       continue;
                     }
                     const valid = await verifyMessage(wrapper.sdp, wrapper.sig, wrapper.sigPub);
+                    if (isStopped()) return false;
                     if (valid === false) { _dbg(null, 'P2P: SDP signature invalid — rejecting'); continue; }
                     // TOFU: pin the peer's signing key on first signed SDP
                     if (!contact.sigPub && wrapper.sigPub && _hasEd25519) {
@@ -11890,11 +11936,12 @@ async function initMessenger(dbName) {
                 ignoreOffer = !polite && offerCollision;
                 if (ignoreOffer) { _dbg(null, 'P2P: ignoring colliding offer (impolite)'); continue; }
                 await pc.setRemoteDescription(description);
-                if (description.type === 'offer') {
+                if (!isStopped() && description.type === 'offer') {
                   await pc.setLocalDescription(); // auto-answer
-                  await _sendSignedSDP(sigRoom, 'answer', pc.localDescription);
+                  if (!isStopped()) await _sendSignedSDP(sigRoom, 'answer', pc.localDescription);
                 }
               } else if (s.type === 'ice') {
+                activity = true;
                 try {
                   await pc.addIceCandidate(JSON.parse(s.data));
                 } catch(e) {
@@ -11904,9 +11951,9 @@ async function initMessenger(dbName) {
             } catch(e) { _dbg(e, 'signal-handle'); }
           }
         } catch(e) { _dbg(e); }
-      }, 2000);
-      peerState._sigPoll = sigPoll; // cleared on CLOSED transition (prevents leak on reconnect)
-      _intervals.push(sigPoll);     // safety net: also cleared on account switch
+        return activity;
+      });
+      peerState._sigPoll.setConnected(peerState.connected && peerState.dc?.readyState === 'open');
     })();
   }
 

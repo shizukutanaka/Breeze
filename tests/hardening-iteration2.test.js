@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -117,17 +117,71 @@ describe('B — per-peer interval cleanup is centralized in the CLOSED transitio
     const closedIdx = transition.indexOf("if (newState === 'CLOSED')");
     expect(closedIdx).toBeGreaterThanOrEqual(0);
     const closed = transition.slice(closedIdx);
-    for (const name of ['_healthTimer', '_heartbeat', '_sigPoll']) {
+    for (const name of ['_healthTimer', '_heartbeat']) {
       expect(closed).toContain(`clearInterval(this.${name})`);
       expect(closed).toContain(`this.${name} = null`);
     }
+    expect(closed).toContain('this._sigPoll.stop(); this._sigPoll = null;');
   });
 
-  it('all three intervals are stored on peerState at creation', () => {
+  it('all three timers are stored on peerState at creation', () => {
     expect(html).toContain('peerState._heartbeat = setInterval(');
     expect(html).toContain('peerState._healthTimer = setInterval(');
-    expect(html).toContain('peerState._sigPoll = sigPoll;'); // cleared on CLOSED (see above)
-    expect(html).toContain('const sigPoll = setInterval(');
+    expect(html).toContain('peerState._sigPoll = startSignalPoll(');
+    expect(html).toContain("p.transition('CLOSED');");
+  });
+});
+
+describe('P2P step 3 — DM signaling poll cadence', () => {
+  const scheduler = sliceBetween('  function startSignalPoll(', '\n  async function connectPeer(', 'startSignalPoll');
+  const startPoll = new Function('MS', '_dbg', scheduler + '\nreturn startSignalPoll;')({ SEC: 1000 }, () => {});
+
+  it('backs off to eight seconds while idle and resets after negotiation traffic', async () => {
+    vi.useFakeTimers();
+    try {
+      const times = [];
+      startPoll(async () => times.push(Date.now() - start) === 4);
+      const start = Date.now();
+      await vi.advanceTimersByTimeAsync(24_000);
+      expect(times).toEqual([2000, 6000, 14000, 22000, 24000]);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('does four polls per connected minute instead of thirty and restores the fast poll on disconnect', async () => {
+    vi.useFakeTimers();
+    try {
+      const poll = vi.fn(async () => false);
+      const controller = startPoll(poll);
+      controller.setConnected(true);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(poll).toHaveBeenCalledTimes(4);
+      controller.setConnected(false);
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(poll).toHaveBeenCalledTimes(5);
+      controller.stop();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(poll).toHaveBeenCalledTimes(5);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('never overlaps requests or schedules another poll after stopping in flight', async () => {
+    vi.useFakeTimers();
+    try {
+      let complete;
+      const poll = vi.fn(isStopped => new Promise(resolve => {
+        complete = () => resolve(isStopped());
+      }));
+      const controller = startPoll(poll);
+      await vi.advanceTimersByTimeAsync(2_000);
+      controller.setConnected(true);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(poll).toHaveBeenCalledTimes(1);
+      controller.stop();
+      expect(poll.mock.calls[0][0]()).toBe(true);
+      complete();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(poll).toHaveBeenCalledTimes(1);
+    } finally { vi.useRealTimers(); }
   });
 });
 
