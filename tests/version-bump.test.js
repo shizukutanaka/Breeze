@@ -22,7 +22,7 @@ describe('every version site agrees (the full dozen)', () => {
   });
 
   it('the bump tool knows every site', () => {
-    for (const f of ['index.html', 'sw.js', 'manifest.json', 'package.json', 'desktop/package.json', 'mobile/package.json', 'tauri/package.json', 'tauri/src-tauri/tauri.conf.json', 'tauri/src-tauri/Cargo.toml', 'build-all.sh', '_worker.js', 'deploy.sh']) {
+    for (const f of ['index.html', 'sw.js', 'manifest.json', 'package.json', 'desktop/package.json', 'mobile/package.json', 'tauri/package.json', 'tauri/src-tauri/tauri.conf.json', 'tauri/src-tauri/Cargo.toml', 'build-all.sh', 'build.sh', '_worker.js', 'deploy.sh']) {
       expect(tool).toContain(`file: '${f}'`);
     }
     expect(tool).toContain("arg === '--check'");

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Breeze version bumper — SHARE_PLAN stage 6 step 4.
-// The app version lives in a dozen places (app config, service
+// The app version lives in fourteen places (app config, service
 // worker, PWA manifest, four package manifests, Cargo, the build
 // script, the worker's health response). They drifted before — the
 // dist manifests sat a full release behind — because a bump was a
@@ -32,7 +32,9 @@ const SITES = [
   { file: 'tauri/src-tauri/tauri.conf.json', re: /"version": "(\d+\.\d+\.\d+)"/, fmt: (v) => `"version": "${v}"` },
   { file: 'tauri/src-tauri/Cargo.toml', re: /(\[package\][\s\S]*?version\s*=\s*")(\d+\.\d+\.\d+)(")/, fmt: null }, // group-aware, handled below
   { file: 'build-all.sh', re: /VERSION="(\d+\.\d+\.\d+)"/, fmt: (v) => `VERSION="${v}"` },
+  { file: 'build.sh', re: /^VERSION="(\d+\.\d+\.\d+)"/m, fmt: (v) => `VERSION="${v}"` },
   { file: '_worker.js', re: /version: '(\d+\.\d+\.\d+)',/, fmt: (v) => `version: '${v}',` },
+  { file: '_worker.js', re: /'X-Breeze-Version': '(\d+\.\d+\.\d+)'/, fmt: (v) => `'X-Breeze-Version': '${v}'` },
   { file: 'deploy.sh', re: /"v(\d+\.\d+\.\d+)"/, fmt: (v) => `"v${v}"` },
 ];
 
@@ -61,7 +63,9 @@ if (arg === '--check') {
   console.log(`bump-version: all ${SITES.length} sites at ${want}`);
 } else if (/^\d+\.\d+\.\d+$/.test(arg || '')) {
   const from = currentVersion();
-  if (arg === from) { console.log(`bump-version: already at ${from}`); process.exit(0); }
+  // No early exit when arg === from: a same-version run is the
+  // repair path for sites that drifted (found in the wild by
+  // tests/app-version.test.js during the 3.7.0 audit).
   for (const site of SITES) {
     const text = read(site.file);
     if (!site.re.test(text)) { console.error(`bump-version: anchor missing in ${site.file} — refusing to bump partially`); process.exit(2); }

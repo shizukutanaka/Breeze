@@ -20,7 +20,7 @@ command -v wrangler &>/dev/null || { npm install -g wrangler; }; ok "wrangler"
 
 # ── 2. Git ──
 h1 "2. Git"
-[ ! -d .git ] && git init && git add . && git commit -m "v3.6.1"
+[ ! -d .git ] && git init && git add . && git commit -m "v3.7.0"
 if git remote get-url origin &>/dev/null; then ok "$(git remote get-url origin)"
 else
   read -p "  GitHub URL: " RU

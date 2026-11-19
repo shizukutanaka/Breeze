@@ -34,9 +34,9 @@ Try the hosted version: **[breeze.pages.dev](https://breeze.pages.dev)**
 |---|--------|--------|
 | **Registration** | None — identity = crypto key pair | Phone number required |
 | **Server trust** | Zero-knowledge relay (can't read messages) | Trust the company |
-| **Self-hosting** | 60-second deploy, $0/month | Not possible |
+| **Self-hosting** | 60-second deploy, $0 within free tiers | Not possible |
 | **Open source** | MIT — fork, modify, sell | Proprietary or AGPL |
-| **Architecture** | Single HTML file (13K lines) | Millions of lines, build systems |
+| **Architecture** | Single HTML file + small ES modules, no build step | Millions of lines, build systems |
 | **Dependencies** | Zero (vanilla JS + WebCrypto) | Hundreds of npm packages |
 | **Data location** | Your browser's IndexedDB | Their servers |
 
@@ -51,7 +51,7 @@ where Breeze loses, and a verification path for every claim — see
 - **The creator holds no user data.** There is no account database on any server — your identity is a key pair on your device, and your messages live in your device's storage.
 - **Message content is end-to-end encrypted.** Relays handle only sealed envelopes they cannot read.
 
-One honest qualification, stated plainly: delivery needs a small amount of short-lived relay storage, and all of it expires on its own. On the default relay, an undelivered encrypted envelope is kept for at most **7 days**; signaling data lasts **5 minutes**; aliases and device records expire after **90 days**; group metadata and push subscriptions after **30 days**. None of it is readable content. Cloud backup storage is **off by default** — it exists only on relays whose operator explicitly turns it on. Run your own relay (60 seconds, $0/month) and even that temporary storage sits on infrastructure you control.
+One honest qualification, stated plainly: delivery needs a small amount of short-lived relay storage, and all of it expires on its own. On the default relay, an undelivered encrypted envelope is kept for at most **7 days**; signaling data lasts **5 minutes**; aliases and device records expire after **90 days**; group metadata and push subscriptions after **30 days**. None of it is readable content. Cloud backup storage is **off by default** — it exists only on relays whose operator explicitly turns it on. Run your own relay (60 seconds; $0 within the free tiers) and even that temporary storage sits on infrastructure you control.
 
 日本語: 広告は出しません。追跡もしません（解析・広告ネットワーク・データブローカーは不使用）。作成者は利用者のデータを持ちません — サーバー側にアカウントのデータベース自体がなく、身元はあなたの端末の中の鍵ペアです。会話の中身は端末間暗号で、中継にも読めません。正直に範囲を書くと、配送のために中継には短期間の保持があります: 未配送の暗号化された封筒は最大7日、合図データは5分、宛名と端末の記録は90日、グループ情報とプッシュ購読は30日で自動的に消えます。クラウドへの予備保存は既定で無効で、置き場所の運営者が明示的に有効にした場合だけ存在します。自分の置き場所を立てれば、その一時保持も自分の管理下に置けます。
 

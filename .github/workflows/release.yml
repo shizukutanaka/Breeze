@@ -107,6 +107,9 @@ jobs:
           Self-hostable release: unzip, then run Breeze on your own placement
           (Cloudflare Pages, Docker, or bare Node) — see `DEPLOY.txt` inside
           the ZIP and `docs/SELF_HOSTING.md` for the full guide.
+          What changed: see `CHANGELOG.md` in the repository for this
+          version's section. Known limitations are stated in
+          `docs/COMPARISON.md` ("Where Breeze loses").
 
           Verify the download:
 

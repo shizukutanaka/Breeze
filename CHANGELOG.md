@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [3.7.0] - 2026-11-20
+
 ## Transparency, on a schedule (SHARE_PLAN stage 7 step 3)
 
 - docs/transparency/ is now the standing transparency record: README.md defines the monthly procedure — every published field with its source of truth (platform analytics for request aggregates, the health endpoint for TURN issuance, KV record counts for registered identities, the platform bill read through COST_MODEL) and the hard rule that content, contacts and per-user data are never published.

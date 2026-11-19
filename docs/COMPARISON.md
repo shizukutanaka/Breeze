@@ -1,6 +1,6 @@
 # How Breeze compares — and how to check every claim
 
-*Last verified against the code: 2026-11-20 (app version 3.6.1).*
+*Last verified against the code: 2026-11-20 (app version 3.7.0).*
 
 This page exists so you do not have to trust it. Every Breeze claim
 below names the test file or source anchor that proves it, and the
