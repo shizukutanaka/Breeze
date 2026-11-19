@@ -116,7 +116,7 @@ describe('manual peer and gathered ICE privacy', () => {
     expect(await p).toEqual(pc.localDescription);
   });
   it('strips raw host candidates and relayOnly srflx/prflx; fails closed without candidates', async () => {
-    const lines = ['a=candidate:1 1 udp 1 192.168.1.1 123 typ host', 'a=candidate:2 1 udp 1 203.0.113.1 123 typ srflx', 'a=candidate:3 1 udp 1 203.0.113.2 123 typ prflx'];
+    const lines = ['a=candidate:1 1 udp 1 192.168.1.1 123 typ host', 'a=candidate:2 1 udp 1 203.0.113.1 123 typ srflx', 'a=candidate:3 1 udp 1 203.0.113.2 123 typ prflx', 'a=candidate:4 1 udp 1 abc.local 123 typ host'];
     await expect(gatherDescription(fakePC('complete', lines.join('\r\n')), { MS, relayOnly: true })).rejects.toThrow('rvCandidates');
     const result = await gatherDescription(fakePC('complete', [...lines, 'a=candidate:4 1 udp 1 203.0.113.3 123 typ relay'].join('\r\n')), { MS, relayOnly: true });
     expect(result.sdp).not.toContain('typ host'); expect(result.sdp).not.toContain('typ srflx'); expect(result.sdp).not.toContain('typ prflx'); expect(result.sdp).toContain('typ relay');
@@ -125,13 +125,79 @@ describe('manual peer and gathered ICE privacy', () => {
   it('bounds gathering and cleans up listeners on timeout / cancellation', async () => {
     vi.useFakeTimers();
     try {
-      const pc = fakePC('gathering'), remove = vi.spyOn(pc, 'removeEventListener');
+      const pc = fakePC('gathering', 'v=0\r\n'), remove = vi.spyOn(pc, 'removeEventListener');
       const pending = expect(gatherDescription(pc, { MS })).rejects.toThrow('rvTimeout');
       await vi.advanceTimersByTimeAsync(MS.MIN); await pending;
-      expect(remove).toHaveBeenCalledTimes(2);
+      expect(remove).toHaveBeenCalledTimes(3);
+      expect(vi.getTimerCount()).toBe(0);
+      pc.localDescription = desc;
       const stopped = gatherDescription(pc, { MS });
+      expect(vi.getTimerCount()).toBe(2);
       pc.connectionState = 'closed'; pc.dispatchEvent(new Event('connectionstatechange'));
       await expect(stopped).rejects.toThrow('rvRedo');
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
+  it.each(['offer', 'answer'])('exports a quiet usable %s without waiting for blocked STUN', async kind => {
+    vi.useFakeTimers();
+    try {
+      const pc = fakePC('gathering'), remove = vi.spyOn(pc, 'removeEventListener');
+      pc.localDescription.type = kind;
+      const peer = attachManualPeer({ pc }, { MS, notify: vi.fn() });
+      let result;
+      const pending = (kind === 'offer' ? peer.manualOffer() : peer.manualAnswer(desc)).then(value => { result = value; });
+      await vi.advanceTimersByTimeAsync(3 * MS.SEC - 1);
+      expect(result).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1); await pending;
+      expect(result).toEqual(pc.localDescription);
+      expect(pc.iceGatheringState).toBe('gathering');
+      expect(remove).toHaveBeenCalledTimes(3); expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
+  it('resets the quiet period for every new candidate and filters the latest SDP on export', async () => {
+    vi.useFakeTimers();
+    try {
+      const pc = fakePC('gathering');
+      let result;
+      const pending = gatherDescription(pc, { MS }).then(value => { result = value; });
+      await vi.advanceTimersByTimeAsync(2 * MS.SEC);
+      pc.localDescription.sdp += 'a=candidate:2 1 udp 1 203.0.113.1 123 typ srflx\r\n';
+      pc.dispatchEvent(Object.assign(new Event('icecandidate'), { candidate: { type: 'srflx' } }));
+      await vi.advanceTimersByTimeAsync(2 * MS.SEC);
+      pc.localDescription.sdp += 'a=candidate:3 1 udp 1 192.168.1.1 123 typ host\r\n';
+      pc.dispatchEvent(Object.assign(new Event('icecandidate'), { candidate: { type: 'host' } }));
+      await vi.advanceTimersByTimeAsync(3 * MS.SEC - 1);
+      expect(result).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1); await pending;
+      expect(result.sdp).toContain('typ srflx'); expect(result.sdp).not.toContain('192.168.1.1');
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
+  it('does not quiet-export privacy-filtered candidates and waits for a usable relay in relayOnly mode', async () => {
+    vi.useFakeTimers();
+    try {
+      const pc = fakePC('gathering');
+      pc.localDescription.sdp += 'a=candidate:2 1 udp 1 203.0.113.1 123 typ srflx\r\n';
+      let result;
+      const pending = gatherDescription(pc, { MS, relayOnly: true }).then(value => { result = value; });
+      await vi.advanceTimersByTimeAsync(10 * MS.SEC);
+      expect(result).toBeUndefined();
+      pc.localDescription.sdp += 'a=candidate:3 1 udp 1 203.0.113.2 123 typ relay\r\n';
+      pc.dispatchEvent(Object.assign(new Event('icecandidate'), { candidate: { type: 'relay' } }));
+      await vi.advanceTimersByTimeAsync(3 * MS.SEC); await pending;
+      expect(result.sdp).toContain('typ relay'); expect(result.sdp).not.toMatch(/typ (host|srflx)/);
+    } finally { vi.useRealTimers(); }
+  });
+  it('keeps the one-minute hard cap even if a usable candidate arrives just before it', async () => {
+    vi.useFakeTimers();
+    try {
+      const pc = fakePC('gathering', 'v=0\r\n');
+      const pending = expect(gatherDescription(pc, { MS })).rejects.toThrow('rvTimeout');
+      await vi.advanceTimersByTimeAsync(MS.MIN - MS.SEC);
+      pc.localDescription = desc;
+      pc.dispatchEvent(Object.assign(new Event('icecandidate'), { candidate: { type: 'host' } }));
+      await vi.advanceTimersByTimeAsync(MS.SEC); await pending;
+      expect(vi.getTimerCount()).toBe(0);
     } finally { vi.useRealTimers(); }
   });
   it('manually generates/applies SDP; recovery and negotiation never call relay signaling', async () => {
@@ -181,16 +247,18 @@ describe('deployed rendezvous wiring and relay preservation', () => {
       const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
       const factory = new AsyncFunction('D', 'with (D) { ' + setup + '\n } return connectPeer; }');
       const D = { peers, myPubB64: 'me', MS, _ac: { signal: { aborted: false } }, _settings: {}, _dbg: vi.fn(),
-        getCallICEConfig: () => ({}), getRTCCertificate: async () => ({}), CONFIG: {},
+        getCallICEConfig: () => ({ iceCandidatePoolSize: 4 }), getRTCCertificate: async () => ({}), CONFIG: {},
         globalThis: { __breezeRendezvous: { attachManualPeer } }, showToast: notify, t: s => s,
         _signal: signal, updateConvStatus: vi.fn(), renderContacts: vi.fn(),
         RTCPeerConnection: class extends EventTarget {
-          constructor() { super(); this.createDataChannel = vi.fn(() => ({ readyState: 'connecting' })); this.close = vi.fn(); }
+          constructor(config) { super(); this.config = config; this.createDataChannel = vi.fn(() => ({ readyState: 'connecting' })); this.close = vi.fn(); }
         },
       };
       const connect = await factory(D);
       const peer = await connect({ id: 'peer', pubB64: 'peer-full' }, { signalingMode: 'manual' });
       expect(peer.manual).toBe(true); expect(peer._sigPoll).toBeUndefined(); expect(peer.pc.createDataChannel).toHaveBeenCalledTimes(2);
+      expect(peer.pc.config.iceCandidatePoolSize).toBe(0);
+      expect(setup).toContain('if (manual) iceConfig.iceCandidatePoolSize = 0;');
       peer.pc.onicecandidate({ candidate: { type: 'host', address: 'private' } });
       peer.pc.connectionState = 'failed'; peer.pc.onconnectionstatechange(); peer.pc.restartIce();
       expect(signal).not.toHaveBeenCalled(); expect(notify).toHaveBeenCalledOnce();

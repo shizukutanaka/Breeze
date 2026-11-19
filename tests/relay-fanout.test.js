@@ -181,7 +181,7 @@ function buildWorld({ fetchT, settings = {}, origin = ORIGIN, api = API, stubs =
      ${sliceBetween('async function addContact', '// v3.1: Chat folder filtering')}
      ${sliceBetween('async function resolveAndAdd', '// PRESENCE POLLING')}
      ${sliceBetween('async function generatePreKeyBundle', 'async function createIdentity')}
-     ${sliceBetween('async function initSessionV5Initiator', '// Derive the X3DH root key from a pkm envelope')}
+     ${sliceBetween('async function _fetchSessionBundleV5', '// Derive the X3DH root key from a pkm envelope')}
      return { homeRelays, isOriginRelay, relayApiBase, postAPIRelay, _relayBlockedUrls, _pollCursorByUrl,
        sanitizeHomeList, _fanoutCount, _resolveSendTargets, _depositCopy, _buildWire, relaySend,
        _signal, _signalAwait, _signalPeerId, addContact, _setContactHomeFlow, resolveAndAdd,

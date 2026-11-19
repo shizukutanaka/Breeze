@@ -20,6 +20,13 @@
 // ratchet) should land in this module first, under test.
 // ============================================================================
 
+export function pairingPreKeyMatches(p, identityKey, pq) {
+  const bytes = (value, length) => Array.isArray(value) && value.length === length && value.every(n => Number.isInteger(n) && n >= 0 && n <= 255);
+  return !!p && p.v === 5 && p.t === 'pkm' && p.opkId === null && typeof p.msg === 'string' &&
+    bytes(p.ik, identityKey.length) && p.ik.every((n, i) => n === identityKey[i]) && bytes(p.ek, 32) &&
+    (pq ? bytes(p.pqct, 1088) : p.pqct === undefined);
+}
+
 const DEFAULTS = {
   HKDF_HASH: 'SHA-256',
   PREFERRED_CURVE: 'P-256', // tests default to P-256 (deterministic across Node versions)

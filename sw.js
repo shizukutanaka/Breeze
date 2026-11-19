@@ -1,5 +1,5 @@
 const VERSION = '3.6.1';
-const CACHE = 'breeze-v' + VERSION + '-rendezvous-qr';
+const CACHE = 'breeze-v' + VERSION + '-offline-pairing';
 const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png',
   // Stage-3 step 3: the PQ prekey helper module closure index.html imports
   // at runtime (INTEGRATION.md §0(A)) — precached so a first offline boot
@@ -18,7 +18,7 @@ const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-51
   // degrading to their inert fallbacks.
   '/src/app/call.js', '/src/app/backup.js', '/src/app/qr.js',
   '/src/app/import-parsers.js', '/src/app/sound.js', '/src/app/share.js',
-  '/src/app/direct-ack.js', '/src/app/p2p-stats.js', '/src/app/rendezvous.js'];
+  '/src/app/direct-ack.js', '/src/app/p2p-stats.js', '/src/app/rendezvous.js', '/src/app/offline-pairing.js'];
 const MAX_CACHE_ITEMS = 50; // v3.6: Prevent unbounded cache growth
 
 self.addEventListener('install', (e) => {

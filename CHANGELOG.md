@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## Manual rendezvous: blocked-STUN gathering recovery
+
+- Manual peers disable ICE candidate pooling: a blocked-STUN browser reproduction left the pooled answer gathering without candidates beyond the one-minute cap; disabling only the pool restored immediate host candidates. Relay-mode pooling is unchanged.
+- Both offer and answer export on gathering complete, or after a privacy-usable candidate and three seconds without a new candidate. The one-minute hard cap and candidate filtering remain; relayOnly requires relay candidates. Diagnostics retain candidate types/timestamps and gathering transitions; offline E2E also covers unreachable STUN.
+
+## P2P_PLAN step 4, third slice: new-contact offline pairing
+
+- Separate `/offlinepair` identity-invite screen (also reachable by typing the command in contact search), compressed signed `breeze-inv1z:` codes and QR. Mutual exchange, a fingerprint binding both encryption/signing keys and nonces, and explicit comparison confirmation precede contact creation/pinning. Existing keys and sessions are retained; mismatches fail closed.
+- Confirmed pending contacts can use manual rendezvous without a session. Dedicated memory-retained SPK/PQ material is exchanged over the authenticated manual DC, bound to the full pairing transcript. One elected initiator bootstraps the existing no-OTP v5/PQXDH ratchet from the injected bundle; encrypted key confirmation in both directions gates messaging. No relay/alias/KT bootstrap or legacy fallback. KT is explicitly unavailable.
+- Pending material is cleared on confirmation, cancellation (`/offlinepair cancel`), expiry or account teardown. Reload cancels unfinished pairing; retry requires fresh invites on both devices. Existing completed sessions are not cancelled. Requires X25519, Ed25519 and deflate-raw support and an already installed/cached app. Background relay requests may still fail; this is not a global relay-isolation mode. Physical camera and real two-device LAN behavior remain unverified.
+
 ## P2P_PLAN step 4, second slice: QR rendezvous
 
 - **Compressed signed codes.** Manual envelopes use lossless deflate-raw (`breeze-sdp1z:`); import also accepts the original format. Canonical signature verification and contact/session restrictions are unchanged. A streamed 64KiB decompressed limit guards against zip bombs.
