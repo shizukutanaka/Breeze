@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## One-command releases (SHARE_PLAN stage 6 step 4)
+
+- The version lived in twelve places and was bumped by hand — that is how the dist manifests once sat a full release behind. `node tools/bump-version.mjs <x.y.z>` now rewrites every site (app config, service worker, PWA manifest, the four package manifests, Tauri config + Cargo, build-all.sh, the worker health literal, deploy.sh) from one argument, refusing loudly if any anchor has moved; `--check` reports any disagreement.
+- The Release workflow gained a parity gate: after the tests, it runs the check and refuses to package when the release label (tag or dispatch input) differs from the in-repo version. A mislabeled artifact can no longer ship — cutting a release is now: bump, update the changelog, commit, push the tag.
+
 ## TURN budget and call-traffic measurement (SHARE_PLAN stage 6 step 3)
 
 - Calls now measure themselves: when a 1:1 or group call (per leg) ends, the selected ICE pair is sampled — route and bytes — into on-device counters (never transmitted, per the no-telemetry rule). /security shows this month's TURN-relayed share of call traffic in MB, so "how much of our calling actually needs TURN" is a number, not a guess.

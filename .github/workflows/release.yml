@@ -68,6 +68,19 @@ jobs:
           echo "label=$LABEL" >> "$GITHUB_OUTPUT"
           echo "Release label: $LABEL"
 
+      # Stage 6 step 4 gate: a release whose label disagrees with
+      # ANY in-repo version site is a mislabeled artifact — refuse
+      # it here instead of shipping it. --check anchors every site
+      # to CONFIG.VERSION; the label must equal it (with the v).
+      - name: Version parity gate
+        run: |
+          node tools/bump-version.mjs --check
+          APP="v$(grep -o "VERSION: '[^']*'" index.html | head -1 | sed "s/VERSION: '//; s/'//")"
+          if [ "${{ steps.version.outputs.label }}" != "$APP" ]; then
+            echo "::error::Release label ${{ steps.version.outputs.label }} != in-repo version $APP — bump with tools/bump-version.mjs first"
+            exit 1
+          fi
+
       - name: Build distribution ZIP + checksums
         run: bash tools/package-release.sh "${{ steps.version.outputs.label }}" dist-release
 
