@@ -107,6 +107,9 @@ jobs:
           Self-hostable release: unzip, then run Breeze on your own placement
           (Cloudflare Pages, Docker, or bare Node) — see `DEPLOY.txt` inside
           the ZIP and `docs/SELF_HOSTING.md` for the full guide.
+          Desktop apps for Windows, macOS and Linux are attached below
+          (built natively per OS by the `desktop` job); the same code
+          also builds for Android/iOS from `mobile/`.
           What changed: see `CHANGELOG.md` in the repository for this
           version's section. Known limitations are stated in
           `docs/COMPARISON.md` ("Where Breeze loses").
@@ -122,3 +125,89 @@ jobs:
             "dist-release/SHA256SUMS.txt" \
             --title "Breeze $LABEL" \
             --notes-file release-notes.md
+
+  # All-OS desktop builds (owner instruction 2026-11-20: target
+  # every OS). Each installer is built NATIVELY on its own runner —
+  # no wine cross-builds, no mac signing workarounds — from the
+  # same tree the package job just tested. On tag pushes the
+  # artifacts attach to the Release the package job created; on
+  # dispatch they land as workflow artifacts only.
+  desktop:
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            script: win
+            files: "desktop/dist/*.exe"
+          - os: macos-latest
+            script: mac
+            files: "desktop/dist/*.dmg desktop/dist/*.zip"
+          - os: ubuntu-latest
+            script: linux
+            files: "desktop/dist/*.AppImage"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Build desktop app (${{ matrix.script }})
+        shell: bash
+        run: bash build.sh ${{ matrix.script }}
+
+      - name: Upload as workflow artifact (always)
+        uses: actions/upload-artifact@v4
+        with:
+          name: breeze-desktop-${{ matrix.script }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error
+
+      - name: Attach to GitHub Release (tag pushes only)
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for f in ${{ matrix.files }}; do
+            gh release upload "${{ github.ref_name }}" "$f" --clobber
+          done
+
+  # Android verification build. The APK is uploaded as a workflow
+  # artifact only — attaching an installable Android package to
+  # the public Release waits for release signing (keystore
+  # secrets are the owner's to provide; a debug-signed APK is
+  # not a distribution artifact).
+  android:
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build debug APK
+        shell: bash
+        run: |
+          cd mobile
+          npm ci
+          bash scripts/build-mobile.sh android debug
+
+      - name: Upload APK as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: breeze-android-debug
+          path: mobile/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error

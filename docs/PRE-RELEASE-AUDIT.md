@@ -67,3 +67,24 @@ uncaught addAll rejection under the desktop file:// origin.
 README now presents the installable apps as the primary form.
 Windows/macOS packaged builds and a real-machine launch remain
 unverified (owner's PC).
+
+## Addendum 2 — 2026-11-20, all-OS targeting (owner instruction)
+
+Windows: a sixth defect — desktop/icon.ico held only 16x16 and
+a malformed 192 entry, and electron-builder rejects icons
+without a 256x256 entry; regenerated multi-resolution from
+icon-1024.png and pinned by test. The Windows app package
+itself (win-unpacked, x64 + arm64, Breeze.exe) builds, and the
+NSIS payloads build; the final installer assembly on Linux
+requires wine (electron-builder 24.x), so on this VM it stops
+there — the release workflow builds it natively on
+windows-latest instead. macOS DMG tooling is macOS-only
+(dmg-license), likewise built on macos-latest. Android: the
+Capacitor sync and asset preparation pass locally; the Gradle
+distribution download is blocked by this VM's egress proxy
+(environment limit, not a code defect). release.yml now has
+package + desktop (win/mac/linux, native per OS, attached to
+the Release on tag pushes) + android (debug APK as a workflow
+artifact; public attachment waits for release signing secrets,
+which are the owner's). iOS builds require a Mac with Xcode;
+the mobile project is in-tree and syncs from the same tree.

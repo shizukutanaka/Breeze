@@ -8,8 +8,7 @@
 // runtime-imported modules (PQ, calls, recovery, everything the
 // bridges provide). These pins keep the packaging honest.
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { readFileSync, existsSync } from 'node:fs';import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -40,6 +39,16 @@ describe('desktop packaging carries the whole app', () => {
     const reqs = [...main.matchAll(/require\('\.\/([a-z0-9-]+)'\)/g)].map((m) => `${m[1]}.js`);
     expect(reqs.length).toBeGreaterThan(0);
     for (const r of reqs) expect(files, `build.files missing ${r}`).toContain(r);
+  });
+
+  it('the Windows icon carries a 256x256 entry (packaging rejects anything smaller)', () => {
+    // icon.ico shipped with only 16x16 and a malformed 192 entry;
+    // electron-builder refused the Windows build outright.
+    const ico = readFileSync(join(root, 'desktop', 'icon.ico'));
+    const count = ico.readUInt16LE(4);
+    const sizes = [];
+    for (let i = 0; i < count; i++) sizes.push(ico[6 + i * 16] || 256);
+    expect(Math.max(...sizes)).toBe(256);
   });
 
   it('build.sh resolves web sources from the repo root, not the cwd', () => {
