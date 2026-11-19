@@ -1220,8 +1220,8 @@ window.__breezeSeed = createSeedHelper();
 // src/app/import-parsers.js is a set of pure functions.
 import { createCallManager } from './src/app/call.js';
 window.__breezeCall = { createCallManager };
-import { createGroupCallManager } from './src/app/group-call.js';
-window.__breezeGCall = { createGroupCallManager };
+import { createGroupCallManager, poolMap } from './src/app/group-call.js';
+window.__breezeGCall = { createGroupCallManager, poolMap };
 import { createBackupTools } from './src/app/backup.js';
 window.__breezeBackup = { createBackupTools };
 import { createQRHelper } from './src/app/qr.js';
@@ -1241,8 +1241,8 @@ window.__breezeRendezvous = { createRendezvous, attachManualPeer };
 import { createOfflinePairing } from './src/app/offline-pairing.js';
 import { classifyRelayRejection, createQuotaNotice } from './src/app/quota.js';
 window.__breezeQuota = { classifyRelayRejection, createQuotaNotice };
-import { chunkHistoryRecords, parseHistoryChunk, planHistoryImport, HISTORY_MAX_CHUNKS } from './src/app/history-sync.js';
-window.__breezeHistory = { chunkHistoryRecords, parseHistoryChunk, planHistoryImport, HISTORY_MAX_CHUNKS };
+import { chunkHistoryRecords, parseHistoryChunk, planHistoryImport, createHistorySender, HISTORY_MAX_CHUNKS } from './src/app/history-sync.js';
+window.__breezeHistory = { chunkHistoryRecords, parseHistoryChunk, planHistoryImport, createHistorySender, HISTORY_MAX_CHUNKS };
 window.__breezeOfflinePairing = { createOfflinePairing, blockedPeerIds: new Set() };
 </script>
 
@@ -1279,6 +1279,7 @@ const CONFIG = {
   // so a kicked member's stale key can't decrypt new-epoch messages. OFF: byte-identical to v3.
   GROUP_RATCHET_V5: true,
   GROUP_MAX_SKIP: 50, // max tolerated out-of-order gap in the group v5 hash ratchet
+  SK_REDIST_EVERY: 25, // stage 5 step 3: sender-key redistribution cadence — half the GROUP_MAX_SKIP window, so a catching-up member can always ratchet forward to a fresh key
   // Authenticated X3DH (I1/G1): default initSession() is a bare unverified DH(IK_A, IK_B) — an
   // undetected MITM risk. ON: verifies the peer's signed pre-key against their Ed25519 key when
   // BOTH sides negotiate it (else falls back byte-identically). Also runs the KT chain+rollover audit.
@@ -1301,7 +1302,7 @@ const CONFIG = {
   // Limits
   FILE_MAX: 50 * 1024 * 1024, // All users: 50MB
   
-  GROUP_MAX: 100, // All users: 100 members
+  GROUP_MAX: 1000, // stage 5 step 3: raised 100 → 300 → 1,000 on the fan-out drill measurements (tests/group-scale.test.js)
   
   MAX_MSG_LENGTH: 4096,
   CHUNK_SIZE: 16 * 1024,           // Safe cross-browser DataChannel max (16 KiB)
@@ -6420,9 +6421,10 @@ async function initMessenger(dbName) {
     return wrap;
   }
   // SHARE_PLAN stage 4 step 3: conversation-history transfer to a linked
-  // device. Chunks ride the self-sync channel (ratchet-encrypted deposits
-  // to a registry-verified sibling), so the relay sees the same envelope
-  // shape as any message. Records travel as stored.
+  // device. The sender lives in src/app/history-sync.js (createHistorySender);
+  // chunks ride the self-sync channel (ratchet-encrypted deposits to a
+  // registry-verified sibling), so the relay sees the same envelope shape
+  // as any message. Records travel as stored.
   async function _collectHistory(contactId) {
     return new Promise(r => {
       try {
@@ -6431,33 +6433,9 @@ async function initMessenger(dbName) {
       } catch { r([]); }
     });
   }
-  async function _sendHistoryTo(devPub) {
-    const H = globalThis.__breezeHistory;
-    if (!H || !devPub) return { sent: 0, skipped: 0 };
-    let sent = 0, skipped = 0, seq = 0;
-    const base = Date.now(); // chunk ts must be unique per run: the inbox dedup keys on from+ts
-    const contacts = (await dbGetAll('contacts').catch(() => [])) || [];
-    for (const c of contacts) {
-      if (!c || c.isGroup || !c.pubB64) continue; // 1:1 only; group history stays per-device for now
-      const now = Date.now();
-      const records = (await _collectHistory(c.id))
-        .filter(r => !(typeof r.disappearAt === 'number' && r.disappearAt <= now))
-        .sort((a, b) => (a.ts - b.ts) || (a.msgId < b.msgId ? -1 : 1));
-      if (!records.length) continue;
-      const packed = H.chunkHistoryRecords(records);
-      skipped += packed.skipped;
-      const tid = now.toString(36) + Math.floor(Math.random() * 1e6).toString(36);
-      for (let i = 0; i < packed.chunks.length; i++) {
-        const enc = await encryptFor(packed.chunks[i], devPub);
-        if (!enc) continue;
-        await relaySend(devPub.slice(0, 12), { to: devPub.slice(0, 12), from: myId, fromPub: myPubB64, fromName: myName,
-          payload: enc, ts: base + (seq++), selfSync: true, historySync: true, sfFor: c.id, sfPub: c.pubB64, sfName: c.name || '',
-          hTid: tid, hIdx: i, hTotal: packed.chunks.length }, devPub);
-        sent++;
-      }
-    }
-    return { sent, skipped };
-  }
+  const _sendHistoryTo = (devPub) => globalThis.__breezeHistory?.createHistorySender
+    ? globalThis.__breezeHistory.createHistorySender({ collect: _collectHistory, dbGetAll, encryptFor, relaySend, myId: () => myId, myPubB64: () => myPubB64, myName: () => myName }).sendHistoryTo(devPub)
+    : Promise.resolve({ sent: 0, skipped: 0 });
   // Devices of a CONTACT (for send fan-out). 5-min cache on the contact object.
   async function _devicesFor(contact) {
     if (!contact?.pubB64) return [];
@@ -7343,16 +7321,27 @@ async function initMessenger(dbName) {
 
   // Distribute sender key to a specific group member (via 1:1 encrypted channel).
   // v5 sends { chainKey, epoch, v:5 } so the receiver can initialize their hash ratchet.
-  async function distributeSenderKey(groupId, memberPubB64) {
+  // Stage 5 step 3: distribution is tracked per (group, member) — the
+  // pre-step-3 code redistributed to EVERY member before EVERY message
+  // (n extra deposits per message, the dominant fan-out cost at any
+  // group size). Redistribute on first sight, epoch change (kick /
+  // rotation), roster change, or every SK_REDIST_EVERY sends; the
+  // in-memory map means a reload redistributes once — the safe side.
+  const _skDist = new Map();
+  async function distributeSenderKey(groupId, memberPubB64, force = false, rosterSize = 0) {
     try {
       const sk = await getGroupSenderKey(groupId);
+      const memberId = memberPubB64.slice(0, 12);
+      const dkey = groupId + ':' + memberId;
+      const rec = _skDist.get(dkey);
+      if (!force && rec && rec.epoch === sk.epoch && rec.count < CONFIG.SK_REDIST_EVERY && (!rosterSize || rec.roster === rosterSize)) { rec.count++; return; }
       const skPayload = (CONFIG.GROUP_RATCHET_V5 && sk.v === 5)
         ? { type: 'sender_key', groupId, chainKey: sk.chainKey, epoch: sk.epoch, v: 5 }
         : { type: 'sender_key', groupId, key: sk.raw, epoch: sk.epoch };
       const encrypted = await encryptFor(JSON.stringify(skPayload), memberPubB64);
       if (!encrypted) { _dbg(null, 'encrypt failed'); return; }
-      const memberId = memberPubB64.slice(0, 12);
       await relaySend(memberId, { to: memberId, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: Date.now(), isSenderKey: true }, memberPubB64);
+      _skDist.set(dkey, { epoch: sk.epoch, count: 0, roster: rosterSize || rec?.roster || 0 });
     } catch(_e) { _dbg(_e, 'distributeSenderKey'); }
   }
 
@@ -7385,7 +7374,7 @@ async function initMessenger(dbName) {
       await dbPut('identity', { chainKey: freshChain, counter: 0, epoch, v: 5, skipped: {} }, 'gsk:' + groupId);
       const targets = (group?.members || []).filter(m => m.id !== myId && m.id !== kickedId && m.pubB64);
       for (const m of targets) {
-        distributeSenderKey(groupId, m.pubB64).catch(e => _dbg(e, 'kick-notice-sk-redist'));
+        distributeSenderKey(groupId, m.pubB64, true).catch(e => _dbg(e, 'kick-notice-sk-redist'));
       }
       if (activeContact?.id === groupId) renderContacts();
     } catch(_e) { _dbg(_e, 'rotateGroupKeyOnKickNotice'); }
@@ -9819,7 +9808,7 @@ async function initMessenger(dbName) {
       // Awaited: fire-and-forget let the content send below reach the relay first, so the
       // receiver's decryptGroupMsg (no key yet) fell back to decryptFrom and dropped it (E2E-found).
       for (const m of members) {
-        await distributeSenderKey(groupId, m.pubB64).catch(e => _dbg(e, 'sk-dist'));
+        await distributeSenderKey(groupId, m.pubB64, false, (activeContact.members || []).length).catch(e => _dbg(e, 'sk-dist'));
       }
       // Encrypt once with Sender Key (O(1))
       const groupCiphertext = await encryptGroupMsg(groupId, text);
@@ -9844,6 +9833,7 @@ async function initMessenger(dbName) {
           } catch(e) { _dbg(e, 'group-p2p-send'); if (ackWait) _directAck.cancel(m.pubB64, ts); }
         }
       }
+      const owed = [];
       for (const m of members) {
         let directAcked = false;
         const ackWait = _groupAckWaits.get(m.id);
@@ -9854,14 +9844,19 @@ async function initMessenger(dbName) {
           // the direct ack now carries that side effect instead.
           if (directAcked) updateMsgStatus(ts, 'delivered');
         }
-        if (directAcked) continue;
-        // Sealed sender relay (ensures delivery even if P2P drops)
+        if (!directAcked) owed.push(m);
+      }
+      // Sealed sender relay for everyone the direct path missed (ensures
+      // delivery even if P2P drops). Stage 5 step 3: the deposits run
+      // through an 8-wide pool — the serial loop made worst-case send
+      // time linear in group size.
+      await _poolMap(owed, 8, async (m) => {
         try {
           await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName,
             payload: groupCiphertext, ts, groupId, groupName: activeContact.name,
             replyTo: meta.replyTo, disappearAt: meta.disappearAt, isGroupSK: true }, m.pubB64);
         } catch(e) { _dbg(e); }
-      }
+      });
     } else {
       // 1:1: v3 Double Ratchet + P2P + Sealed Sender
       const _frank = {};
@@ -10682,6 +10677,7 @@ async function initMessenger(dbName) {
     myId: () => myId, myPubB64: () => myPubB64, myName: () => myName,
     isBusy: () => _callMgr.state() !== 'idle', isSecondary: () => _isSecondaryDevice,
   }) || { start() {}, route() {}, state: () => 'idle' };
+  const _poolMap = (items, n, fn) => globalThis.__breezeGCall?.poolMap ? globalThis.__breezeGCall.poolMap(items, n, fn) : Promise.all(items.map(fn));
 
   // Call button handlers
   _DOM.get('b-msg-call')?.addEventListener('click', () => {
@@ -13910,7 +13906,7 @@ async function initMessenger(dbName) {
               const freshChain = Array.from(crypto.getRandomValues(new Uint8Array(32)));
               await dbPut('identity', { chainKey: freshChain, counter: 0, epoch: newEpoch, v: 5, skipped: {} }, 'gsk:' + activeContact.id);
               for (const m of (activeContact.members || []).filter(m => m.id !== myId && m.pubB64)) {
-                distributeSenderKey(activeContact.id, m.pubB64).catch(e => _dbg(e, 'post-kick-sk-dist'));
+                distributeSenderKey(activeContact.id, m.pubB64, true).catch(e => _dbg(e, 'post-kick-sk-dist'));
               }
               notifyGroupKick(activeContact.id, member.id, newEpoch).catch(e => _dbg(e, 'notify-kick'));
               auditLog('group', `Epoch rotated to ${newEpoch} after kicking ${member.name}`);

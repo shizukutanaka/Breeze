@@ -108,8 +108,8 @@ describe('group call wiring (deployed files)', () => {
   const sw = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
 
   it('the module is imported, bridged, instantiated and precached', () => {
-    expect(html).toContain("import { createGroupCallManager } from './src/app/group-call.js';");
-    expect(html).toContain('window.__breezeGCall = { createGroupCallManager };');
+    expect(html).toContain("import { createGroupCallManager, poolMap } from './src/app/group-call.js';");
+    expect(html).toContain('window.__breezeGCall = { createGroupCallManager, poolMap };');
     expect(html).toContain('globalThis.__breezeGCall?.createGroupCallManager({');
     expect(sw).toContain("'/src/app/group-call.js'");
   });

@@ -18,6 +18,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createDirectAckWaiter } from '../src/app/direct-ack.js';
+import { poolMap } from '../src/app/group-call.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(join(HERE, '..', 'index.html'), 'utf8');
@@ -119,7 +120,7 @@ function buildSendMessage({ peers = {}, waiter = null, activeContact, auxiliaryP
     'distributeSenderKey', 'encryptGroupMsg', 'encryptFor', 'API', 'postAPIRaw',
     '_signingKey', 'signMessage', '_signingPubB64', '_rateLimiter', 'timingDelay',
     'peers', 'waitForBuffer', 'queueOutbox', 'relaySend', '_fanOut', 'renderContacts',
-    'CONFIG', '_directAck', '_p2pDirectStat', 'updateMsgStatus',
+    'CONFIG', '_directAck', '_p2pDirectStat', 'updateMsgStatus', '_poolMap',
     `${sliceBetween('async function sendMessage()', '// File send (v3: binary chunks for P2P, sealed relay fallback)')}
      return sendMessage;`);
   const sendMessage = fn(
@@ -147,6 +148,7 @@ function buildSendMessage({ peers = {}, waiter = null, activeContact, auxiliaryP
     waiter,
     (field) => { calls.stats.push(field); },
     (ts, status) => { calls.status.push({ ts, status }); },
+    poolMap,
   );
   return { sendMessage, calls, input };
 }

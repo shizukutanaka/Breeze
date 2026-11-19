@@ -202,7 +202,9 @@ LINES=$(wc -l < index.html)
 # /linkto branches merged) landed it at 15,999. Stage-5 step 2 crossed
 # it a fourth time; a fourth pass (showPrompt/showConfirm onto
 # _makeDialog, the error handlers onto _noteError, the group-call
-# control sender into group-call.js) landed it at 15,994.
+# control sender into group-call.js) landed it at 15,994. Stage-5
+# step 3 crossed it a fifth time; a fifth pass (the history sender
+# into history-sync.js as createHistorySender) landed it at 15,990.
 if [ "$LINES" -lt 12000 ]; then pass "Total lines: $LINES (<12K)" 5
 elif [ "$LINES" -lt 16000 ]; then warn "Total lines: $LINES (12-16K)" 5
 else fail "Total lines: $LINES (≥16K) — reduction pass required (see ceiling note above)" 5; fi

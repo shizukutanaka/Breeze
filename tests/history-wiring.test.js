@@ -12,18 +12,22 @@ const sw = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
 
 describe('history sync wiring (deployed inline)', () => {
   it('bridges the module and defines the sender/collection once', () => {
-    expect(html).toContain("window.__breezeHistory = { chunkHistoryRecords, parseHistoryChunk, planHistoryImport, HISTORY_MAX_CHUNKS }");
-    expect(html.match(/async function _sendHistoryTo\(/g)).toHaveLength(1);
+    expect(html).toContain("window.__breezeHistory = { chunkHistoryRecords, parseHistoryChunk, planHistoryImport, createHistorySender, HISTORY_MAX_CHUNKS }");
+    expect(html.match(/const _sendHistoryTo = /g)).toHaveLength(1);
     expect(html.match(/async function _collectHistory\(/g)).toHaveLength(1);
   });
 
   it('the sender encrypts chunks to the device and tags them historySync', () => {
-    const start = html.indexOf('async function _sendHistoryTo(');
-    const body = html.slice(start, start + 2200);
-    expect(body).toContain('encryptFor(packed.chunks[i], devPub)');
+    // The sender body lives in src/app/history-sync.js since the stage 5
+    // step 3 line-budget move; the design pins follow it there.
+    const mod = readFileSync(new URL('../src/app/history-sync.js', import.meta.url), 'utf8');
+    const start = mod.indexOf('export function createHistorySender(');
+    const body = mod.slice(start, start + 2400);
+    expect(body).toContain('D.encryptFor(packed.chunks[i], devPub)');
     expect(body).toContain('selfSync: true, historySync: true');
     expect(body).toContain('hTid: tid, hIdx: i, hTotal: packed.chunks.length');
     expect(body).toContain('c.isGroup'); // groups excluded in this step
+    expect(html).toContain('createHistorySender({ collect: _collectHistory, dbGetAll, encryptFor, relaySend,');
   });
 
   it('the receiver branch is gated on the verified registry and imports via the module', () => {

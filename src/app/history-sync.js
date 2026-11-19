@@ -107,3 +107,38 @@ export function canonicalHistory(records) {
     (a.ts - b.ts) || (a.msgId < b.msgId ? -1 : a.msgId > b.msgId ? 1 : 0));
   return JSON.stringify(sorted);
 }
+
+// Sender side (stage 5 step 3 line-budget move): walks the 1:1
+// contacts, collects each conversation from the host's store, and
+// deposits the chunks to the sibling device. Host deps supply the
+// store walk and the crypto/relay primitives; the chunking itself is
+// the pure layer above.
+export function createHistorySender(D) {
+  async function sendHistoryTo(devPub) {
+    if (!devPub) return { sent: 0, skipped: 0 };
+    let sent = 0, skipped = 0, seq = 0;
+    const base = Date.now(); // chunk ts must be unique per run: the inbox dedup keys on from+ts
+    const contacts = (await D.dbGetAll('contacts').catch(() => [])) || [];
+    for (const c of contacts) {
+      if (!c || c.isGroup || !c.pubB64) continue; // 1:1 only; group history stays per-device for now
+      const now = Date.now();
+      const records = (await D.collect(c.id))
+        .filter(r => !(typeof r.disappearAt === 'number' && r.disappearAt <= now))
+        .sort((a, b) => (a.ts - b.ts) || (a.msgId < b.msgId ? -1 : 1));
+      if (!records.length) continue;
+      const packed = chunkHistoryRecords(records);
+      skipped += packed.skipped;
+      const tid = now.toString(36) + Math.floor(Math.random() * 1e6).toString(36);
+      for (let i = 0; i < packed.chunks.length; i++) {
+        const enc = await D.encryptFor(packed.chunks[i], devPub);
+        if (!enc) continue;
+        await D.relaySend(devPub.slice(0, 12), { to: devPub.slice(0, 12), from: D.myId(), fromPub: D.myPubB64(), fromName: D.myName(),
+          payload: enc, ts: base + (seq++), selfSync: true, historySync: true, sfFor: c.id, sfPub: c.pubB64, sfName: c.name || '',
+          hTid: tid, hIdx: i, hTotal: packed.chunks.length }, devPub);
+        sent++;
+      }
+    }
+    return { sent, skipped };
+  }
+  return { sendHistoryTo };
+}

@@ -28,6 +28,17 @@ export function gcallPairRoom(groupId, a, b) {
   return 'gcall:' + groupId + ':' + [a, b].sort().join(':');
 }
 
+// Bounded-concurrency map: at most n workers in flight, results in
+// input order. The host's group fan-out uses it (stage 5 step 3) so a
+// 1,000-member deposit storm runs 8-wide instead of strictly serial.
+export async function poolMap(items, n, fn) {
+  const out = new Array(items.length);
+  let next = 0;
+  async function worker() { while (next < items.length) { const i = next++; out[i] = await fn(items[i], i); } }
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(n, items.length)) }, worker));
+  return out;
+}
+
 // Who should I offer to when entering? Everyone the roster already
 // holds (except me), up to the mesh cap.
 export function planOffers(rosterIds, myId) {
@@ -99,7 +110,7 @@ export function createGroupCallManager(D) {
     if (D.isSecondary()) return false;
     try {
       const members = (group.members || []).filter(m => m.id !== D.myId());
-      for (const m of members) await D.distributeSenderKey(group.id, m.pubB64).catch(e => _dbg(e, 'sk-dist'));
+      for (const m of members) await D.distributeSenderKey(group.id, m.pubB64, false, (group.members || []).length).catch(e => _dbg(e, 'sk-dist'));
       const ct = await D.encryptGroupMsg(group.id, JSON.stringify(obj));
       if (!ct) return false;
       const ts = Date.now();
