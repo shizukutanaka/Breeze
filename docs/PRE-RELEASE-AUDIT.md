@@ -90,3 +90,40 @@ the Release on tag pushes) + android (debug APK as a workflow
 artifact; public attachment waits for release signing secrets,
 which are the owner's). iOS builds require a Mac with Xcode;
 the mobile project is in-tree and syncs from the same tree.
+
+## Addendum 3 — 2026-11-20: v3.7.0 published; desktop legs fixed and the tag re-pointed
+
+The v3.7.0 tag was pushed and the Release published on 2026-11-20 (the
+package job's ZIP + SHA256SUMS attached as designed). The three desktop
+legs of that first run then each failed at a *different* point — none of
+them visible to the local builds, which had only ever exercised the
+Linux AppImage target on a machine with the author's tree already in
+place:
+
+- **Linux** died at the DEB target: electron-builder's fpm requires an
+  author email for DEB/RPM metadata, and `desktop/package.json` carried
+  a bare `"Breeze Project"` string. Reproduced from a clean checkout
+  before fixing. The AppImages themselves had built fine.
+- **macOS** built its DMG/ZIP, then failed at electron-builder's own
+  publish step (`GH_TOKEN is not set`): the `publish` block — which
+  must stay, because electron-updater reads its update feed from it —
+  makes a tag build try to publish by itself, while this workflow
+  attaches assets on its own. `build.sh` now passes `-p never` on
+  every electron-builder invocation.
+- **Windows** crashed inside `WinPackager.signApp` although no signing
+  certificate exists anywhere: with nothing to sign with, the honest
+  configuration is to not enter that path — `win.signAndEditExecutable`
+  is now `false` until a certificate exists.
+
+Fixes are pinned in `tests/desktop-packaging.test.js`. Two workflow
+changes ride along: the Linux leg now also attaches the `.deb`/`.rpm`
+it builds (they were built but never attached), and it provisions
+`rpmbuild` explicitly instead of assuming the runner image has it.
+
+Because a workflow re-run reuses the tagged commit, the fixes could
+not reach the v3.7.0 run by re-running it. The Release was therefore
+deleted and the `v3.7.0` tag re-pointed at the fixed tree on the same
+day, before any announcement; the recreated Release carries the same
+ZIP (its allowlist excludes everything the fix touched) plus the
+desktop installers. Recorded here so the tag's history is not a
+surprise to anyone who looks.
