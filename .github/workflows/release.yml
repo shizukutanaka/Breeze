@@ -167,19 +167,45 @@ jobs:
 
       # The Linux leg also builds DEB and RPM targets (both are
       # attached to the Release); electron-builder shells out to
-      # rpmbuild for the RPM. The v3.7.0 second run still failed at
-      # the RPM target with the earlier conditional provisioning in
-      # place (and fpm swallows rpmbuild's stderr, so the log could
-      # not say why), while a local full build with a working
-      # rpmbuild completes every target. Install unconditionally and
-      # print the version actually used, so any recurrence is
-      # diagnosable from the log alone.
+      # rpmbuild for the RPM via fpm 1.9.3. fpm's generated spec
+      # assumes the pre-6.0 buildroot contract (`--define buildroot`
+      # plus `BuildRoot: %buildroot`, with %install a noop over a
+      # tree fpm pre-populates); rpmbuild 6 ignores the BuildRoot
+      # tag and checks the files under its own per-package
+      # buildroot, so every file is reported "not found" —
+      # reproduced locally against rpmbuild 6.1 with fpm's swallowed
+      # stderr captured (PRE-RELEASE-AUDIT Addendum 5). The runner's
+      # apt now serves rpm 6.x, so pin the pre-rework line instead:
+      # the Debian bookworm rpm 4.18 .deb set, extracted (not
+      # installed) into a prefix and placed first on PATH. The same
+      # set was verified locally to build this package's RPM end to
+      # end.
       - name: Provision RPM tooling (Linux leg only)
         if: matrix.script == 'linux'
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq rpm
-          rpmbuild --version
+          set -euo pipefail
+          prefix="$RUNNER_TEMP/rpm418"
+          mkdir -p "$prefix/debs"
+          base="https://deb.debian.org/debian/pool/main"
+          cd "$prefix/debs"
+          curl -fsSLO "$base/r/rpm/rpm_4.18.0+dfsg-1+deb12u1_amd64.deb"
+          curl -fsSLO "$base/r/rpm/rpm-common_4.18.0+dfsg-1+deb12u1_amd64.deb"
+          curl -fsSLO "$base/r/rpm/librpm9_4.18.0+dfsg-1+deb12u1_amd64.deb"
+          curl -fsSLO "$base/r/rpm/librpmbuild9_4.18.0+dfsg-1+deb12u1_amd64.deb"
+          curl -fsSLO "$base/r/rpm/librpmio9_4.18.0+dfsg-1+deb12u1_amd64.deb"
+          curl -fsSLO "$base/r/rpm/librpmsign9_4.18.0+dfsg-1+deb12u1_amd64.deb"
+          curl -fsSLO "$base/p/popt/libpopt0_1.19+dfsg-3_amd64.deb"
+          curl -fsSLO "$base/l/lua5.3/liblua5.3-0_5.3.6-2_amd64.deb"
+          curl -fsSLO "$base/e/elfutils/libelf1_0.188-2.1_amd64.deb"
+          curl -fsSLO "$base/e/elfutils/libdw1_0.188-2.1_amd64.deb"
+          curl -fsSLO "$base/d/debugedit/debugedit_5.0-5_amd64.deb"
+          for f in *.deb; do dpkg -x "$f" "$prefix/root"; done
+          echo "$prefix/root/usr/bin" >> "$GITHUB_PATH"
+          echo "LD_LIBRARY_PATH=$prefix/root/usr/lib/x86_64-linux-gnu" >> "$GITHUB_ENV"
+          echo "RPM_CONFIGDIR=$prefix/root/usr/lib/rpm" >> "$GITHUB_ENV"
+          export LD_LIBRARY_PATH="$prefix/root/usr/lib/x86_64-linux-gnu"
+          export RPM_CONFIGDIR="$prefix/root/usr/lib/rpm"
+          "$prefix/root/usr/bin/rpmbuild" --version
 
       - name: Build desktop app (${{ matrix.script }})
         shell: bash
@@ -198,9 +224,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          for f in ${{ matrix.files }}; do
-            gh release upload "${{ github.ref_name }}" "$f" --clobber
-          done
+          # matrix.files is newline-separated (upload-artifact splits
+          # on newlines), and a newline terminates a `for ... in`
+          # list — the v3.7.0 third run's mac leg died here with a
+          # syntax error on the second pattern. Read the patterns
+          # line by line and glob each one instead.
+          while IFS= read -r pattern; do
+            [ -z "$pattern" ] && continue
+            for f in $pattern; do
+              gh release upload "${{ github.ref_name }}" "$f" --clobber
+            done
+          done <<< "${{ matrix.files }}"
 
   # Android verification build. The APK is uploaded as a workflow
   # artifact only — attaching an installable Android package to
