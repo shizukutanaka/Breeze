@@ -73,12 +73,18 @@ describe('desktop packaging carries the whole app', () => {
     expect(build.publish?.provider).toBe('github');
   });
 
-  it('Windows builds skip the sign/edit-executable path (no certificate exists)', () => {
-    // The v3.7.0 Windows job crashed inside WinPackager.signApp even
-    // though no signing certificate is configured anywhere. Until a
-    // certificate exists, the honest configuration is to not enter
-    // that path at all.
-    expect(build.win.signAndEditExecutable).toBe(false);
+  it('the win config carries no sign key (its mere presence forces the signing path)', () => {
+    // The v3.7.0 Windows job crashed inside doSign with
+    // "Cannot use 'in' operator to search for 'file' in undefined".
+    // Reading app-builder-lib showed why: WinPackager.sign() treats
+    // `platformSpecificBuildOptions.sign != null` as "a custom signing
+    // configuration exists" and calls into doSign even when there is
+    // no certificate at all (cscInfo undefined) — so the well-meant
+    // `"sign": false` did the opposite of its intent on
+    // electron-builder 24. No sign key, no signing path; when a real
+    // certificate arrives it comes via the CSC_* environment, not a
+    // config key.
+    expect('sign' in build.win).toBe(false);
   });
 
   it('build.sh resolves web sources from the repo root, not the cwd', () => {
