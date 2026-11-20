@@ -127,3 +127,41 @@ day, before any announcement; the recreated Release carries the same
 ZIP (its allowlist excludes everything the fix touched) plus the
 desktop installers. Recorded here so the tag's history is not a
 surprise to anyone who looks.
+
+## Addendum 4 — 2026-11-20: second run — three new failure points, and a correction to Addendum 3
+
+The re-pointed tag's run got further on every leg and still failed on
+all three desktop legs, each at a *new* point:
+
+- **Linux** built the AppImages and the DEB targets, then failed at
+  the RPM target with `rpmbuild` exiting 1; fpm swallows rpmbuild's
+  own stderr, so the log holds no more than that. A local full
+  `build.sh linux` run with a working rpmbuild completes every
+  target including the RPM, so the packaging configuration is not
+  the suspect — the runner-side provisioning is. The provisioning
+  step is now unconditional and prints `rpmbuild --version`, so a
+  recurrence is diagnosable from the log alone.
+- **macOS** built successfully (the `-p never` fix held), then its
+  upload step failed with "No files were found": upload-artifact
+  splits its `path` input on newlines, and the matrix carried the
+  two patterns space-separated — one pattern that matches nothing.
+  The matrix now uses newline-separated lists. The mac target list
+  also lacked the `zip` that electron-updater needs alongside the
+  DMG; it is added.
+- **Windows** crashed inside doSign again, which corrects
+  Addendum 3: `signAndEditExecutable: false` was *not* the fix.
+  Reading app-builder-lib 24.13.3 showed the actual cause —
+  `WinPackager.sign()` treats the mere presence of a `sign` key in
+  the win config (`platformSpecificBuildOptions.sign != null`) as
+  "a custom signing configuration exists" and calls doSign with
+  `cscInfo` undefined, where `"file" in cscInfo` throws. The
+  well-meant `"sign": false` therefore forced the very signing path
+  it meant to skip. Both keys are now removed; when a certificate
+  exists one day it arrives via the `CSC_*` environment, not a
+  config key. The packaging test pin now asserts the *absence* of
+  the `sign` key and records this reasoning.
+
+The Release was deleted and the `v3.7.0` tag re-pointed a second
+time, again on the same day and before any announcement; the ZIP
+payload is unchanged (this fix touches only desktop packaging, the
+workflow, this audit trail and one test).

@@ -95,8 +95,6 @@
         }
       ],
       "icon": "icon.ico",
-      "sign": false,
-      "signAndEditExecutable": false,
       "requestedExecutionLevel": "asInvoker"
     },
     "nsis": {
@@ -114,6 +112,12 @@
       "target": [
         {
           "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
           "arch": [
             "universal"
           ]
