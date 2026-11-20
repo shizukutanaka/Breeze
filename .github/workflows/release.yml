@@ -146,7 +146,7 @@ jobs:
             files: "desktop/dist/*.dmg desktop/dist/*.zip"
           - os: ubuntu-latest
             script: linux
-            files: "desktop/dist/*.AppImage"
+            files: "desktop/dist/*.AppImage desktop/dist/*.deb desktop/dist/*.rpm"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -155,6 +155,18 @@ jobs:
         with:
           node-version: 22
           cache: npm
+
+      # The Linux leg also builds DEB and RPM targets (both are
+      # attached to the Release); electron-builder shells out to
+      # rpmbuild for the RPM, which is not guaranteed on the runner
+      # image, so provision it explicitly.
+      - name: Provision RPM tooling (Linux leg only)
+        if: matrix.script == 'linux'
+        run: |
+          if ! command -v rpmbuild >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq rpm
+          fi
 
       - name: Build desktop app (${{ matrix.script }})
         shell: bash

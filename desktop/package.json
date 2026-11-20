@@ -96,6 +96,7 @@
       ],
       "icon": "icon.ico",
       "sign": false,
+      "signAndEditExecutable": false,
       "requestedExecutionLevel": "asInvoker"
     },
     "nsis": {
@@ -228,5 +229,8 @@
   },
   "homepage": "https://breeze.pages.dev",
   "bugs": "https://github.com/shizukutanaka/Breeze/issues",
-  "author": "Breeze Project"
+  "author": {
+    "name": "Breeze Project",
+    "email": "shizukutanaka@users.noreply.github.com"
+  }
 }

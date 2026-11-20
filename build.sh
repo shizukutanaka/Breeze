@@ -67,27 +67,27 @@ case "${1:-help}" in
     echo "[Desktop] Building all platforms..."
     cd desktop && npm ci
     copy_web .
-    npx electron-builder --win --x64
-    npx electron-builder --linux --x64
+    npx electron-builder --win -p never --x64
+    npx electron-builder --linux -p never --x64
     echo "✓ Win+Linux in desktop/dist/"
     ;;
 
   win|windows)
     cd desktop && npm ci
     copy_web .
-    npx electron-builder --win --x64
+    npx electron-builder --win -p never --x64
     ;;
 
   mac|macos)
     cd desktop && npm ci
     copy_web .
-    npx electron-builder --mac --universal
+    npx electron-builder --mac -p never --universal
     ;;
 
   linux)
     cd desktop && npm ci
     copy_web .
-    npx electron-builder --linux --x64
+    npx electron-builder --linux -p never --x64
     ;;
 
   android)

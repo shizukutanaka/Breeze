@@ -51,6 +51,36 @@ describe('desktop packaging carries the whole app', () => {
     expect(Math.max(...sizes)).toBe(256);
   });
 
+  it('the author carries an email (DEB/RPM metadata refuses the build without one)', () => {
+    // The v3.7.0 release run built the AppImages, then died at the DEB
+    // target: fpm requires an author/maintainer email. Reproduced from a
+    // clean checkout before fixing.
+    const pkg = JSON.parse(read('desktop/package.json'));
+    expect(typeof pkg.author).toBe('object');
+    expect(pkg.author.email).toMatch(/^[^@\s]+@[^@\s]+$/);
+  });
+
+  it('builds never publish from inside electron-builder (the workflow attaches assets itself)', () => {
+    // The publish block must stay (electron-updater reads its feed from
+    // it), but the v3.7.0 macOS job built its DMG and then failed with
+    // "GH_TOKEN is not set, and cannot publish": on a tag build,
+    // electron-builder tries to publish on its own. build.sh therefore
+    // passes -p never on every invocation.
+    const buildSh = read('build.sh');
+    const invocations = buildSh.split('\n').filter((l) => l.includes('electron-builder'));
+    expect(invocations.length).toBeGreaterThan(0);
+    for (const line of invocations) expect(line).toContain('-p never');
+    expect(build.publish?.provider).toBe('github');
+  });
+
+  it('Windows builds skip the sign/edit-executable path (no certificate exists)', () => {
+    // The v3.7.0 Windows job crashed inside WinPackager.signApp even
+    // though no signing certificate is configured anywhere. Until a
+    // certificate exists, the honest configuration is to not enter
+    // that path at all.
+    expect(build.win.signAndEditExecutable).toBe(false);
+  });
+
   it('build.sh resolves web sources from the repo root, not the cwd', () => {
     const buildSh = read('build.sh');
     expect(buildSh).toContain('cp "$SCRIPT_DIR/$f"');
