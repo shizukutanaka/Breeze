@@ -10,7 +10,7 @@ evidence is unmet, and unmet items are named, not hidden.*
 |---|---|---|---|
 | 1 | Claims match reality | **Pass after fixes** | The comparison page is test-pinned (`tests/comparison-claims.test.js`). This audit found and fixed two stale README claims: "Single HTML file (13K lines)" (the file is ~16K lines plus ES modules) and an unqualified "$0/month" (now "$0 within free tiers", matching the Running Costs table) |
 | 2 | The artifact is obtainable and hash-verifiable | **Pass (mechanism)** | `tools/package-release.sh v3.7.0` built locally: ZIP (77 files) + `SHA256SUMS.txt`, `sha256sum -c` OK. The tag itself does not exist yet — cutting it is the owner's publication decision |
-| 3 | A newcomer reaches first success in ~5 minutes, with a real screenshot | **Partial** | Quick Start is three steps and self-hosting is drilled by `tests/node-host.test.js`. The README screenshot predates the stage 4–7 UI (profile, stickers, location, group calls); the first-run screen it depicts is the identity-creation screen, but the shot should be refreshed on a real device before wide promotion |
+| 3 | A newcomer reaches first success in ~5 minutes, with a real screenshot | **Partial** | Quick Start is three steps and self-hosting is drilled by `tests/node-host.test.js`. The README screenshot was refreshed on 2026-11-20 from the current build (headless capture of the real app: identity created, main window, current composer with location/sticker actions); a real-device shot is still recommended before wide promotion |
 | 4 | Tests honestly green | **Pass** | Full suite run at audit time: 1,961/1,962 with a single PoW-solving test flaking under parallel load (a different PoW test flaked on each of two runs; both files pass standalone — worker 463/463, mirror-drift 93/93 — the known shared-VM load effect, not a code failure). `validate.sh` PASSED (165/171) |
 | 5 | Main flows actually run | **Partial, disclosed** | Messaging, groups (to n=1,000), two-relay discovery, TURN budget and recovery flows are drilled in-process against the real handlers. NOT yet done: two physical devices, real-network WebRTC, a real 3-party call. Disclosed in `docs/COMPARISON.md` ("Where Breeze loses") and the transparency report |
 | 6 | Failures are never silent | **Pass** | Quota refusals name their scope and notify; a spent TURN budget notifies; the release workflow refuses a mismatched version label; errors surface with reasons in the UI/audit log |
@@ -39,7 +39,9 @@ evidence is unmet, and unmet items are named, not hidden.*
    then tests, gates, packages and creates the Release.
 2. Restore the hosted demo (owner's Cloudflare account).
 3. Real-device checks (two devices, group call, location
-   sharing) and a refreshed screenshot.
+   sharing). The screenshot was refreshed headlessly on
+   2026-11-20; a real-device shot remains a promotion-time
+   nicety, not a release blocker.
 
 ## Addendum — 2026-11-20, software form (owner: "if it is not software, make it software")
 
