@@ -165,3 +165,46 @@ The Release was deleted and the `v3.7.0` tag re-pointed a second
 time, again on the same day and before any announcement; the ZIP
 payload is unchanged (this fix touches only desktop packaging, the
 workflow, this audit trail and one test).
+
+## Addendum 5 — 2026-11-20: third run — Windows green; an attach-step bug of this audit's own making, and the rpmbuild 6 break
+
+The third run is the first in which the **Windows leg succeeded end
+to end** — removing the `sign` key was the actual fix, as Addendum 4
+concluded. package and android were green as before. The two
+remaining failures:
+
+- **macOS** built successfully and, with the newline-separated
+  `files` list, its upload-artifact step succeeded too — then the
+  *attach* step died with a shell syntax error (exit 2). The step
+  looped `for f in ${{ matrix.files }}`, and a newline terminates a
+  `for ... in` list, so the second pattern line was not a word to
+  iterate but a syntax error. Addendum 4's aside that the attach
+  loop would keep working was wrong; the step now reads the
+  patterns line by line and globs each. The DMG and the new ZIP
+  were built fine — only the attach was broken.
+- **Linux** failed at the RPM target a second time, and this time
+  the cause is pinned with evidence instead of inference. The
+  provisioning step printed **RPM version 6.0.1** — the runner's
+  apt has moved to the rpm 6 line. Reproduced locally with
+  rpmbuild 6.1 (Debian's build) behind a wrapper that captures the
+  stderr fpm swallows: rpmbuild reports *every* packaged file
+  "File not found" under
+  `BUILD/breeze-desktop-3.7.0-build/BUILDROOT/...`. rpm 6 ignores
+  the spec's `BuildRoot:` tag and checks files under its own
+  per-package buildroot, while fpm 1.9.3 (bundled with
+  electron-builder 24) is built entirely on the old contract: it
+  passes `--define buildroot <dir>`, generates
+  `BuildRoot: %buildroot`, pre-populates that directory itself and
+  makes `%install` a noop. The two are structurally incompatible,
+  and no package.json option reaches the mismatch. The workflow
+  therefore pins rpmbuild to the pre-rework line — the Debian
+  bookworm **rpm 4.18** .deb set, extracted into a prefix and
+  placed first on PATH. The identical set was verified locally to
+  build this package's RPM end to end, as rpmbuild 4.12 was in the
+  earlier full-build reproduction; 6.x is the outlier, not the
+  package.
+
+The Release was deleted and the `v3.7.0` tag re-pointed a third
+time, again on the same day and before any announcement; the ZIP
+payload is unchanged (this fix touches only the workflow and this
+audit trail).
