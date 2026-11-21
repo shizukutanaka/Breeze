@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [3.7.1] - 2026-11-21
+
+### Defect wave 1 (2026-11-21 audit, PR #458)
+
+- **Backups are authenticated by default.** Backup upload and download now require the account's Ed25519 signature unless the operator explicitly sets BACKUP_REQUIRE_AUTH=false (logged as deprecated). Before, knowing a userId was enough to fetch or overwrite that account's encrypted backup blob.
+- Authenticated backup downloads renew the backup's 90-day retention (touch-on-read), so an actively used backup no longer expires just because it was uploaded once.
+- Read receipts are delayed by 120 seconds (with jitter) by default, and /security now states plainly that sealed sender hides the sender from the relay, not from the recipient.
+- Fresh installs default voice/video calls to relay-only, and the relay operator's own STUN server leads the ICE list instead of third-party (Google/Mozilla) servers.
+- Device revocation propagates faster: device-list caches drop from 5 minutes to 1 minute, and presence beats carry signature-verified registry revisions so peers invalidate cached lists immediately.
+- Reply-preview close controls are real buttons (keyboard-operable), image-send previews carry alt text, and two previously swallowed persistence failures (dead-letter / retry-queue) are now recorded in diagnostics.
+
 - Pre-release audit (docs/PRE-RELEASE-AUDIT.md) and the 3.7.0 bump itself: two stale README claims fixed, the bump tool extended to all 14 version sites after tests caught two it missed (build.sh, the X-Breeze-Version header), and a same-version bump run now repairs drift.
 
 ## [3.7.0] - 2026-11-20

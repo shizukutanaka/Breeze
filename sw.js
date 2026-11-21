@@ -1,4 +1,4 @@
-const VERSION = '3.7.0';
+const VERSION = '3.7.1';
 const CACHE = 'breeze-v' + VERSION + '-offline-pairing';
 const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png',
   // Stage-3 step 3: the PQ prekey helper module closure index.html imports
