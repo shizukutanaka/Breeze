@@ -4232,7 +4232,7 @@ async function initMessenger(dbName) {
   }
   // Worker sanitizeString twin — challenge digests bind its OUTPUT, so the
   // client must apply the identical truncation + control-char strip before hashing.
-  const sanStr = (v, n) => (typeof v === 'string' ? v.slice(0, n).replace(/[\x00-\x08\x0a-\x0c\x0d\x0e-\x1f]/g, '') : '');
+  const sanStr = (v, n) => (typeof v === 'string' ? v.slice(0, n).replace(/[\x00-\x08\x0a-\x0c\x0d\x0e-\x1f\u202a-\u202e\u2066-\u2069]/g, '') : '');
   // prekey/upload: breeze-prekey-upload:{userId}:{ts}:{digest over every mutable field}.
   async function prekeyUploadAuth(userId, identityKey, b) {
     return authFields(async ts => `breeze-prekey-upload:${userId}:${ts}:${await digestHex16(JSON.stringify([

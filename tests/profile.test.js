@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
-  CAPS_PROFILE, sanitizeProfile, sanitizeProfileImg,
+  CAPS_PROFILE, sanitizeProfile, sanitizeProfileImg, stripBidi,
   buildProfilePayload, parseProfilePayload, profileNewer,
 } from '../src/app/profile.js';
 
@@ -27,6 +27,17 @@ describe('profile sanitization', () => {
     expect(sanitizeProfile({ name: '   ' })).toBeNull();
     expect(sanitizeProfile(null)).toBeNull();
     expect(sanitizeProfile('Ana')).toBeNull();
+  });
+
+  it('strips bidi control characters from name and emoji (D27)', () => {
+    // U+202E (RLO) renders the following text reversed — a spoofed name must
+    // not survive sanitization on either the sending or receiving side.
+    const p = sanitizeProfile({ name: 'Al\u202eice', emoji: '\u2066🌊' });
+    expect(p.name).toBe('Alice');
+    expect(p.emoji).toBe('🌊');
+    expect(sanitizeProfile({ name: '\u202a\u2069' })).toBeNull(); // bidi-only → empty → rejected
+    expect(stripBidi('a\u202bb\u2067c')).toBe('abc');
+    expect(stripBidi(42)).toBe('');
   });
 
   it('the photo must be a strict data:image jpeg/png base64 URL', () => {

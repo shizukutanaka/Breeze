@@ -2990,6 +2990,19 @@ describe('alias set / get (PoW anti-spam)', () => {
     expect((await res.json()).code).toBe('POW_REQUIRED');
   });
 
+  it('strips bidi control characters from the stored display name (D27)', async () => {
+    // sanitizeString drops U+202A–U+202E / U+2066–U+2069 so a name carrying
+    // RLO cannot render reversed on peers (Trojan-Source-style spoofing).
+    const pub = 'BIDIPUBKEY';
+    const pow = await solvePoW(pub, 16, `${pub}:breeze-test`);
+    const env = makeEnv({ ALIAS_REQUIRE_AUTH: 'false' });
+    const res = await handleAliasSet(
+      { alias: 'biditest', pub, name: 'Alice\u202eBob\u2066', pow }, env, req({}));
+    expect(res.status).toBe(200);
+    const rec = JSON.parse(await env.KV.get('alias:biditest'));
+    expect(rec.name).toBe('AliceBob');
+  }, 60000);
+
   it('rejects a PoW whose challenge does not include the pub key', async () => {
     const res = await handleAliasSet(
       { alias: 'alice', pub: 'PUBKEY', pow: { challenge: 'no-pub-here', nonce: 0, difficulty: 16 } },

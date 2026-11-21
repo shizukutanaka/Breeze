@@ -110,7 +110,10 @@ function usageQuotaConfig(env) {
 
 function sanitizeString(val, maxLen = MAX_STRING_LEN) {
   if (typeof val !== 'string') return '';
-  return val.slice(0, maxLen).replace(/[\x00-\x08\x0a-\x0c\x0d\x0e-\x1f]/g, '');
+  // Strip C0 controls (except \t/\n kept by callers' own handling) and the bidi
+  // controls U+202A–U+202E / U+2066–U+2069: a display name carrying RLO renders
+  // reversed, enabling Trojan-Source-style name spoofing (D27).
+  return val.slice(0, maxLen).replace(/[\x00-\x08\x0a-\x0c\x0d\x0e-\x1f\u202a-\u202e\u2066-\u2069]/g, '');
 }
 
 function validateUserId(id) {
