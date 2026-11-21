@@ -448,7 +448,7 @@ describe('fan-out — presence + push unsubscribe reach every home relay', () =>
     const presenceFn = new Function(
       'API', 'dbGet', 'dbPut', 'signMessage', 'homeRelays', 'postAPIRelay', 'showToast',
       't', '_dbg', 'MS', 'CONFIG', 'document', '_ac', 'activeContact', 'updateConvStatus',
-      'myId', 'myPubB64', 'myName', 'authFields', 'digestHex16', 'sanStr',
+      'myId', 'myPubB64', 'myName', 'authFields', 'digestHex16', 'sanStr', '_ownRegistryTs',
       `${sliceBetween('// ===== Presence heartbeat', '// v3.3: Shared lock screen function')}
        return { startPresence };`);
     const presence = presenceFn(
@@ -465,6 +465,10 @@ describe('fan-out — presence + push unsubscribe reach every home relay', () =>
       async (signFn) => { const ts = Date.now(); await signFn(ts, MY_ID); return { ts, sig: 'c2ln' }; },
       async (str) => createHash('sha256').update(str).digest('hex').slice(0, 32),
       (s, max) => (typeof s === 'string' ? s.replace(/[<>"'&\x00-\x1f\x7f]/g, '').slice(0, max) : ''),
+      // D14: the beat advertises the client's own registry revision; this
+      // client has not fetched its registry yet, so the revision is 0
+      // (the beat then sends devTs: undefined, exactly like production).
+      0,
     );
     presence.startPresence();
     // The beat reaches each relay only after that relay's attestation
