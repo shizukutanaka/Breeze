@@ -76,3 +76,23 @@ describe('S03 — message-store open failures are counted in /security diagnosti
     }
   });
 });
+
+describe('S04 — clickable message affordances are keyboard-operable', () => {
+  it('all four render sites carry role="button" and tabindex="0"', () => {
+    expect(html).toContain('data-action="retry-msg" role="button" tabindex="0"');
+    expect(html).toContain('data-action="reply-scroll" role="button" tabindex="0"');
+    expect(html).toContain('data-action="react" role="button" tabindex="0"');
+    expect(html).toContain('data-action="vote" role="button" tabindex="0"');
+  });
+
+  it('the DOM-patched retry status gets the same attributes, and loses them on success', () => {
+    expect(html.split("statusEl.setAttribute('role', 'button'); statusEl.setAttribute('tabindex', '0');").length - 1).toBe(2);
+    expect(html).toContain("statusEl.removeAttribute('role'); statusEl.removeAttribute('tabindex');");
+  });
+
+  it('one keydown delegation re-dispatches Enter/Space as a click for exactly those actions', () => {
+    expect(html).toContain("if (e.key !== 'Enter' && e.key !== ' ') return;");
+    expect(html).toContain(`'[data-action="retry-msg"],[data-action="reply-scroll"],[data-action="react"],[data-action="vote"]'`);
+    expect(html).toContain('if (el) { e.preventDefault(); el.click(); }');
+  });
+});
