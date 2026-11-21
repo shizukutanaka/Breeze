@@ -4486,9 +4486,15 @@ async function handleBackupUpload(body, env, request) {
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   if (typeof backup !== 'string') return json({ error: 'backup must be a string', code: 'INVALID_FIELD' }, 400, request);
 
-  // Optional Ed25519 auth: callers may include { ts, sig } to prove ownership of the
-  // account's identity key before overwriting the backup. When omitted the upload is
-  // unauthenticated (backward-compat). Both fields must be present or both absent.
+  // Ed25519 auth: callers include { ts, sig } to prove ownership of the
+  // account's identity key before overwriting the backup. Both fields must be
+  // present or both absent. Unsigned requests are REJECTED BY DEFAULT (same
+  // pattern as PREKEY_REQUIRE_AUTH / PRESENCE_REQUIRE_AUTH): without a
+  // signature, knowing a userId is enough to overwrite that user's encrypted
+  // backup blob. The current client always signs (src/app/backup.js), so the
+  // only way back to unsigned acceptance is the operator's explicit opt-out
+  // BACKUP_REQUIRE_AUTH=false (e.g. a client migration window), and every
+  // acceptance under it is logged below.
   const hasSig = ts !== undefined || sig !== undefined;
   if (hasSig) {
     if (ts === undefined || sig === undefined)
@@ -4504,8 +4510,10 @@ async function handleBackupUpload(body, env, request) {
     const challenge = `breeze-backup-upload:${userId}:${ts}`;
     const ok = await verifyEd25519(bundle.edIdentityKey, btoa(challenge), sig);
     if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
-  } else if (env.BACKUP_REQUIRE_AUTH === 'true') {
+  } else if (env.BACKUP_REQUIRE_AUTH !== 'false') {
     return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+  } else {
+    console.warn('[auth] deprecated unsigned backup upload accepted under BACKUP_REQUIRE_AUTH=false — unsigned requests are rejected by default; set the flag only during a client migration window');
   }
 
   // Store (max 5MB per backup)
@@ -4526,12 +4534,14 @@ async function handleBackupDownload(body, env, request) {
   if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
 
-  // Optional Ed25519 auth: callers may include { ts, sig } to prove ownership before
+  // Ed25519 auth: callers include { ts, sig } to prove ownership before
   // retrieving the backup. Both fields must be present or both absent.
-  // Set BACKUP_REQUIRE_AUTH=true to reject unauthenticated requests — recommended once
-  // all clients register an Ed25519 identity key (same pattern as GROUP_REQUIRE_AUTH,
-  // PRESENCE_REQUIRE_AUTH, etc.). Without it, knowing a userId is enough to download the
-  // encrypted blob and brute-force the passphrase offline.
+  // Unsigned requests are REJECTED BY DEFAULT (same pattern as
+  // PREKEY_REQUIRE_AUTH / PRESENCE_REQUIRE_AUTH, etc.): without a signature,
+  // knowing a userId is enough to download the encrypted blob and brute-force
+  // the passphrase offline. The current client always signs
+  // (src/app/backup.js); the only way back to unsigned acceptance is the
+  // operator's explicit opt-out BACKUP_REQUIRE_AUTH=false, logged below.
   const hasSig = ts !== undefined || sig !== undefined;
   if (hasSig) {
     if (ts === undefined || sig === undefined)
@@ -4547,8 +4557,10 @@ async function handleBackupDownload(body, env, request) {
     const challenge = `breeze-backup-download:${userId}:${ts}`;
     const ok = await verifyEd25519(bundle.edIdentityKey, btoa(challenge), sig);
     if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
-  } else if (env.BACKUP_REQUIRE_AUTH === 'true') {
+  } else if (env.BACKUP_REQUIRE_AUTH !== 'false') {
     return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+  } else {
+    console.warn('[auth] deprecated unsigned backup download accepted under BACKUP_REQUIRE_AUTH=false — unsigned requests are rejected by default; set the flag only during a client migration window');
   }
 
   const backup = await kvGet(env, `backup:${userId}`);

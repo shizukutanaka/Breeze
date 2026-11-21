@@ -72,7 +72,10 @@ describe('cloud backup storage gate (BACKUP_STORAGE_ENABLED, default off)', () =
   });
 
   it('opt-in restores the round trip, with the 90-day retention on the record', async () => {
-    const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
+    // BACKUP_REQUIRE_AUTH=false: this test pins TTL mechanics, not the auth
+    // gate (D06 made signed backup access the default; the gate itself is
+    // covered in worker.test.js item-54).
+    const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true', BACKUP_REQUIRE_AUTH: 'false' });
     const before = Date.now();
     const up = await handleBackupUpload({ userId: 'user00001', backup: 'blob' }, e, upReq({}));
     expect(up.status).toBe(200);
