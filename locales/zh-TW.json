@@ -75,6 +75,7 @@
  "upgGroup": "群組最多支援 {0} 位成員。",
  "calling": "撥打中...",
  "incoming": "來電",
+ "callSasLabel": "通話驗證碼 — 唸給對方聽，確認兩邊畫面一致",
  "connecting": "連線中...",
  "mute": "靜音",
  "unmute": "取消靜音",

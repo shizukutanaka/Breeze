@@ -75,6 +75,7 @@
  "upgGroup": "Grup mendukung hingga {0} anggota.",
  "calling": "Memanggil...",
  "incoming": "Panggilan masuk",
+ "callSasLabel": "Kode verifikasi panggilan — bacakan satu sama lain; kode harus sama di kedua layar",
  "connecting": "Menghubungkan...",
  "mute": "Bisukan",
  "unmute": "Bunyikan",

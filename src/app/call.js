@@ -70,6 +70,36 @@ export function createCallSignal(D) {
   return { wrap, unwrap, noteCaps, hasProof: (p) => proven.has(p), knowsCaps: (p) => capsKnown.has(p) };
 }
 
+// D26 / ROADMAP C5 (the SAS half): a short authentication string both
+// call screens derive from the two DTLS fingerprints in the exchanged
+// SDPs. The fingerprints are sorted before hashing, so caller and
+// callee compute the SAME string from their mirrored local/remote
+// views; a relay-in-the-middle terminating DTLS twice presents a
+// different fingerprint pair on each leg, so the strings disagree and
+// reading them aloud exposes it. This does not close the signalling
+// TOFU window (a first-call attacker who also controls the first
+// key exchange is still out of scope) — it gives users the standard
+// out-of-band check, bound to the media path actually negotiated.
+const SAS_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'; // Crockford base32 — no I/L/O/U to misread aloud
+export function extractDtlsFingerprint(sdp) {
+  if (typeof sdp !== 'string') return null;
+  const m = sdp.match(/a=fingerprint:sha-256 ([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2})+)/);
+  return m ? m[1].replace(/:/g, '').toUpperCase() : null;
+}
+export async function computeCallSAS(localSdp, remoteSdp) {
+  const a = extractDtlsFingerprint(localSdp), b = extractDtlsFingerprint(remoteSdp);
+  if (!a || !b) return null;
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('breeze-call-sas-v1:' + [a, b].sort().join(':'))));
+  let out = '', acc = 0, bits = 0;
+  for (const byte of digest) {
+    acc = (acc << 8) | byte; bits += 8;
+    while (bits >= 5 && out.length < 8) { bits -= 5; out += SAS_ALPHABET[(acc >>> bits) & 31]; }
+    acc &= (1 << bits) - 1;
+    if (out.length >= 8) break;
+  }
+  return out.slice(0, 4) + '-' + out.slice(4);
+}
+
 export function createCallManager(D) {
   const { _signal, _signalAwait, relaySend, _intervals, _ac, _settings } = D;
   const _sig = createCallSignal({ encryptFor: D.encryptFor, decryptFrom: D.decryptFrom, enabled: () => CONFIG.CALL_E2E_SIGNAL });
@@ -211,6 +241,7 @@ export function createCallManager(D) {
           _callState = 'connected';
           _callStartTime = Date.now();
           updateCallUI('connected');
+          showCallSAS();
           _callTimerInterval = setInterval(updateCallTimer, MS.SEC);
         }
         if (_callPC.connectionState === 'disconnected' || _callPC.connectionState === 'failed') {
@@ -296,6 +327,7 @@ export function createCallManager(D) {
           _callState = 'connected';
           _callStartTime = Date.now();
           updateCallUI('connected');
+          showCallSAS();
           _callTimerInterval = setInterval(updateCallTimer, MS.SEC);
         }
         if (_callPC.connectionState === 'disconnected' || _callPC.connectionState === 'failed') endCall();
@@ -394,6 +426,9 @@ export function createCallManager(D) {
     const timerEl = document.createElement('div');
     timerEl.className = 'call-timer'; timerEl.id = 'call-timer'; timerEl.textContent = '00:00';
 
+    const sasEl = document.createElement('div');
+    sasEl.className = 'call-timer hidden'; sasEl.id = 'call-sas';
+
     const video = document.createElement('video');
     video.id = 'call-remote-video'; video.className = 'call-video hidden';
     video.autoplay = true; video.playsInline = true;
@@ -427,7 +462,7 @@ export function createCallManager(D) {
       secondary.appendChild(camBtn);
     }
 
-    overlay.append(stateEl, nameEl, timerEl, video, audio, actions, secondary);
+    overlay.append(stateEl, nameEl, timerEl, sasEl, video, audio, actions, secondary);
     document.body.appendChild(overlay);
   }
 
@@ -437,6 +472,18 @@ export function createCallManager(D) {
       if (state === 'connected') el.textContent = t('uiConnected');
       else if (state === 'connecting') el.textContent = t('uiConnecting');
     }
+  }
+
+  // D26: fill the SAS row once both descriptions exist (connected).
+  // Both sides derive the identical string (computeCallSAS sorts the
+  // fingerprints), so the users can read it aloud and compare.
+  async function showCallSAS() {
+    try {
+      const el = _DOM.get('call-sas');
+      if (!el || !_callPC) return;
+      const sas = await computeCallSAS(_callPC.localDescription?.sdp, _callPC.remoteDescription?.sdp);
+      if (sas) { el.textContent = t('callSasLabel') + ': ' + sas; el.classList.remove('hidden'); }
+    } catch(e) { _dbg(e, 'call-sas'); }
   }
 
   function updateCallTimer() {
