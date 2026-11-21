@@ -76,6 +76,7 @@
  "upgGroup": "Grupos suportam até {0} membros.",
  "calling": "Chamando...",
  "incoming": "Chamada recebida",
+ "callSasLabel": "Código de verificação da chamada — leiam um para o outro; deve ser igual nas duas telas",
  "connecting": "Conectando...",
  "mute": "Silenciar",
  "unmute": "Ativar som",

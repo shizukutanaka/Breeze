@@ -1246,6 +1246,7 @@ window.__breezeDeviceLink = { createDeviceLink };
 import { CAPS_STICKER as _CAPS_STICKER_STR, BUILTIN_PACK, sanitizeSticker, sanitizePack, parsePackFile, packToFile, buildStickerPayload, parseStickerPayload, groupTextForSticker, parseGroupStickerText, stickerLabel } from './src/app/stickers.js';
 window.__breezeStickers = { BUILTIN_PACK, sanitizeSticker, sanitizePack, parsePackFile, packToFile, buildStickerPayload, parseStickerPayload, groupTextForSticker, parseGroupStickerText, stickerLabel };
 import { parseContactAddress } from './src/app/address.js'; window.__breezeAddress = { parseContactAddress };
+import { installModalA11y } from './src/app/modal-a11y.js'; installModalA11y(); // D17: focus trap + aria-modal for every overlay modal, watched from <body>
 import { createTurnFetcher } from './src/app/turn.js'; window.__breezeTurn = { createTurnFetcher };
 import { createInfoPanels, createDataPanels } from './src/app/info-panels.js';
 window.__breezeInfoPanels = { createInfoPanels, createDataPanels };
@@ -1490,6 +1491,7 @@ const _I = {
     // Calls
     calling: 'Calling...',
     incoming: 'Incoming call',
+    callSasLabel: 'Call verification code — read it to each other; it must match on both screens',
     connecting: 'Connecting...',
     mute: 'Mute',
     camOff: 'Camera Off',
@@ -8789,7 +8791,7 @@ async function initMessenger(dbName) {
       _notifRequested = true;
       Notification.requestPermission().catch(e => _dbg(e));
     }
-    activeContact = contact;
+    activeContact = contact; refreshSignalPolls(); // D12: the newly open conversation's poll returns to the 15s fallback at once; the one left behind thins out
     contact.unread = 0;
     await dbPut('contacts', contact);
     _locUI?.renderLiveChip();
@@ -12122,30 +12124,28 @@ async function initMessenger(dbName) {
   }
 
   // ===== P2P connection per contact =====
-  function startSignalPoll(poll, canPause = () => false) {
-    const base = 2 * MS.SEC;
-    const maxBackoff = 8 * MS.SEC;
-    const connectedInterval = 15 * MS.SEC;
+  // D12: the connected cadence is wake-first — covered connections pause
+  // outright (canPause); uncovered ones keep the 15s fallback only while
+  // this conversation is open (isActive), else a 5-min recovery poll.
+  function startSignalPoll(poll, canPause = () => false, isActive = () => true) {
+    const base = 2 * MS.SEC, maxBackoff = 8 * MS.SEC, connectedInterval = 15 * MS.SEC, slowInterval = 5 * MS.MIN;
     let timer, running = false, stopped = false, connected = false, phaseChanged = false;
     let delay = base;
-    let wakePending = false;
-    let retryPending = false;
+    let wakePending = false, retryPending = false, scheduledFor = -1;
 
-    function schedule(wait) {
-      clearTimeout(timer);
-      timer = setTimeout(tick, wait);
-    }
+    function schedule(wait) { clearTimeout(timer); timer = setTimeout(tick, wait); scheduledFor = wait; }
 
     function refresh() {
       if (stopped || running) return;
       if (!wakePending && !retryPending && connected && canPause()) {
         clearTimeout(timer);
         timer = null;
-      } else if (!timer) schedule(wakePending ? 0 : retryPending ? base : connected ? connectedInterval : delay);
+      } else if (!timer) schedule(wakePending ? 0 : retryPending ? base : connected ? (isActive() ? connectedInterval : slowInterval) : delay);
+      else if (connected && !wakePending && !retryPending) { const want = isActive() ? connectedInterval : slowInterval; if (scheduledFor !== want) schedule(want); } // D12: a cadence flip (conversation opened/closed) re-arms at the new interval
     }
 
     async function tick() {
-      timer = null;
+      timer = null; scheduledFor = -1;
       running = true;
       phaseChanged = false;
       wakePending = false;
@@ -12711,7 +12711,7 @@ async function initMessenger(dbName) {
           if (data.signalPollFailed) throw new Error('signal relay poll failed');
         } catch(e) { _dbg(e); throw e; }
         return activity;
-      }, () => signalPollCovered(peerState));
+      }, () => signalPollCovered(peerState), () => activeContact?.id === contact.id);
       peerState._sigPoll.setConnected(peerState.connected && peerState.dc?.readyState === 'open');
     })();
   }

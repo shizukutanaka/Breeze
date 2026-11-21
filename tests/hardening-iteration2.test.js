@@ -134,7 +134,7 @@ describe('B — per-peer interval cleanup is centralized in the CLOSED transitio
 
 describe('P2P step 3 — DM signaling poll cadence', () => {
   const scheduler = sliceBetween('  function startSignalPoll(', '\n  async function connectPeer(', 'startSignalPoll');
-  const startPoll = new Function('MS', '_dbg', scheduler + '\nreturn startSignalPoll;')({ SEC: 1000 }, () => {});
+  const startPoll = new Function('MS', '_dbg', scheduler + '\nreturn startSignalPoll;')({ SEC: 1000, MIN: 60000 }, () => {});
 
   it('backs off to eight seconds while idle and resets after negotiation traffic', async () => {
     vi.useFakeTimers();
