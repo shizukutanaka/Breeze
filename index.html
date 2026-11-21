@@ -1274,6 +1274,7 @@ import { classifyRelayRejection, createQuotaNotice } from './src/app/quota.js';
 window.__breezeQuota = { classifyRelayRejection, createQuotaNotice };
 import { chunkHistoryRecords, parseHistoryChunk, planHistoryImport, createHistorySender, HISTORY_MAX_CHUNKS } from './src/app/history-sync.js';
 window.__breezeHistory = { chunkHistoryRecords, parseHistoryChunk, planHistoryImport, createHistorySender, HISTORY_MAX_CHUNKS };
+import { createDataLifecycle } from './src/app/data-lifecycle.js'; window.__breezeDataLifecycle = { createDataLifecycle };
 window.__breezeOfflinePairing = { createOfflinePairing, blockedPeerIds: new Set() };
 </script>
 
@@ -3392,6 +3393,40 @@ async function _atRestMigrate(record, passphrase, context = '') {
   return { ...rest, wrapped };
 }
 
+// C9 (D23): message-store encryption at rest — inline mirror of src/crypto/msgstore.js (keep in sync). Bodies are sealed under the 'msgkey' keywrap slot (an ordinary I4 slot: plaintext JWK with app-lock off, wrapped with it on); the in-memory key is _msgStoreKey, loaded by _initMsgStoreKey. AAD binds each ciphertext to its msgId. Divergence from the reference: open failure keeps the sealed record (text stays '') instead of returning null, so a read can never destroy the stored row.
+const _MSG_AAD_DOMAIN = 'breeze-msgstore-v1';
+let _msgStoreKey = null;
+const _msgMigrated = new Set();
+function _msgAad(msgId) { return new TextEncoder().encode(_MSG_AAD_DOMAIN + ':' + msgId); }
+function _msgIsSealed(rec) { return !!(rec && rec.enc && rec.enc.v === 1 && typeof rec.enc.iv === 'string' && typeof rec.enc.ct === 'string'); }
+async function _msgSealRecord(rec) {
+  if (!_msgStoreKey || !rec || _msgIsSealed(rec) || !rec.msgId || typeof rec.text !== 'string' || rec.text === '') return rec;
+  try {
+    const iv = crypto.getRandomValues(new Uint8Array(CONFIG.IV_BYTES));
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: _msgAad(rec.msgId) }, _msgStoreKey, new TextEncoder().encode(rec.text));
+    return { ...rec, text: '', enc: { v: 1, iv: _atRestB64(iv), ct: _atRestB64(new Uint8Array(ct)) } };
+  } catch(e) { _dbg(e, 'msg-seal'); return rec; }
+}
+async function _msgOpenRecord(rec) {
+  if (!rec || !_msgIsSealed(rec) || !_msgStoreKey) return rec;
+  try {
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: _atRestUnb64(rec.enc.iv), additionalData: _msgAad(rec.msgId) }, _msgStoreKey, _atRestUnb64(rec.enc.ct));
+    const { enc: _enc, ...rest } = rec;
+    return { ...rest, text: new TextDecoder().decode(new Uint8Array(pt)) };
+  } catch(e) { _dbg(e, 'msg-open'); return rec; }
+}
+// Open a batch from a read helper; legacy plaintext records (the STORED form
+// had no enc — an opened record is not legacy) go to `migrate` for re-sealing.
+async function _msgOpenAll(records, migrate) {
+  const list = records || [];
+  const out = await Promise.all(list.map(r => _msgOpenRecord(r)));
+  if (_msgStoreKey && migrate) list.forEach((orig, i) => {
+    const rec = out[i];
+    if (orig && !orig.enc && rec && rec.msgId && typeof rec.text === 'string' && rec.text !== '' && !_msgMigrated.has(rec.msgId)) { _msgMigrated.add(rec.msgId); migrate(rec); }
+  });
+  return out;
+}
+
 function arr(u8a) { return Array.from(u8a); }
 function u8(a) { return new Uint8Array(a); }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
@@ -4837,9 +4872,11 @@ async function initMessenger(dbName) {
   await acquireLeaderLock();
 
   async function dbGet(store, key) {
-    return new Promise(r => { try { const tx = db.transaction(store); const req = tx.objectStore(store).get(key); req.onsuccess = () => r(req.result); req.onerror = () => r(null); } catch(e) { _dbg(e, 'db-get'); r(null); } });
+    const rec = await new Promise(r => { try { const tx = db.transaction(store); const req = tx.objectStore(store).get(key); req.onsuccess = () => r(req.result); req.onerror = () => r(null); } catch(e) { _dbg(e, 'db-get'); r(null); } });
+    return store === 'messages' && rec ? _msgOpenRecord(rec) : rec;
   }
   async function dbPut(store, val, key) {
+    if (store === 'messages') val = await _msgSealRecord(val);
     if (store === 'identity' && _keywrapSlots.includes(key)) {
       try {
         const seed = key === 'pq-priv' ? val.seed : null;
@@ -4859,7 +4896,7 @@ async function initMessenger(dbName) {
       } else { _dbg(e.target?.error, 'db-put'); r(false); }
     }; } catch(e) { _dbg(e, 'db-put'); r(false); } });
   }
-  const _keywrapSlots = ['keys', 'signing', 'pq-priv'];
+  const _keywrapSlots = ['keys', 'signing', 'pq-priv', 'msgkey'];
   let _keywrapWriter = null;
   async function _keywrapUnlock(pass, record) {
     const envelope = record.wrapped || record;
@@ -4928,14 +4965,44 @@ async function initMessenger(dbName) {
       return true;
     } catch(e) { _dbg(e, 'keywrap-change'); return false; }
   }
+  // C9 (D23): load or create the message-store key. The 'msgkey' slot is
+  // ordinary keywrap material: a wrapped record is unwrapped with the boot
+  // passphrase loadIdentity already collected (the _unlockPqSeed pattern);
+  // a missing record is created through the keywrap-aware dbPut, so it is
+  // sealed at once when app-lock is on. Failure NEVER blocks sign-in.
+  async function _initMsgStoreKey(passphrase, prompt = false) {
+    if (_msgStoreKey) return true;
+    try {
+      const rec = await dbGet('identity', 'msgkey');
+      if (rec) {
+        let jwk = null;
+        if (_atRestIsWrapped(rec)) {
+          let pass = passphrase;
+          if (pass == null && prompt) pass = await showPrompt(t('keyWrapUnlockPrompt'), '', { type: 'password', autocomplete: 'current-password' });
+          if (pass == null) { _dbg(null, 'msgkey: wrapped, no passphrase — store stays sealed this boot'); return false; }
+          jwk = await _atRestUnwrap(rec.wrapped || rec, pass, 'msgkey');
+        } else jwk = rec.priv;
+        if (!jwk || jwk.kty !== 'oct' || !jwk.k) { _dbg(null, 'msgkey: unusable record'); return false; }
+        _msgStoreKey = await crypto.subtle.importKey('jwk', jwk, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+        return true;
+      }
+      const fresh = await crypto.subtle.generateKey({ name: 'AES-GCM', length: CONFIG.AES_KEY_BITS }, true, ['encrypt', 'decrypt']);
+      const jwk = await crypto.subtle.exportKey('jwk', fresh);
+      if (!await dbPut('identity', { priv: jwk }, 'msgkey')) { _dbg(null, 'msgkey: persist failed'); return false; }
+      _msgStoreKey = fresh;
+      return true;
+    } catch(e) { _dbg(e, 'msgkey-init'); return false; }
+  }
+  const _msgMigrate = (rec) => { dbPut('messages', rec).catch(e => _dbg(e, 'msg-migrate')); };
   async function dbGetAll(store) {
-    try {  
-      return new Promise(r => { const tx = db.transaction(store); const req = tx.objectStore(store).getAll(); req.onsuccess = () => r(req.result || []); req.onerror = () => r([]); });
-    
+    try {
+      const all = await new Promise(r => { const tx = db.transaction(store); const req = tx.objectStore(store).getAll(); req.onsuccess = () => r(req.result || []); req.onerror = () => r([]); });
+      return store === 'messages' ? _msgOpenAll(all, _msgMigrate) : all;
     } catch(_e) { _dbg(_e, 'dbGetAll'); }
   }
   async function dbGetByIndex(store, idx, key) {
-    return new Promise(r => { try { const tx = db.transaction(store); const req = tx.objectStore(store).index(idx).getAll(key); req.onsuccess = () => r(req.result || []); req.onerror = () => r([]); } catch(e) { _dbg(e, 'db-idx'); r([]); } });
+    const rows = await new Promise(r => { try { const tx = db.transaction(store); const req = tx.objectStore(store).index(idx).getAll(key); req.onsuccess = () => r(req.result || []); req.onerror = () => r([]); } catch(e) { _dbg(e, 'db-idx'); r([]); } });
+    return store === 'messages' ? _msgOpenAll(rows, _msgMigrate) : rows;
   }
   // v3.4: Efficient paginated message loading via compound index [contactId, ts]
   // Returns last N messages for a contact, sorted by ts ascending, using reverse cursor
@@ -4953,7 +5020,7 @@ async function initMessenger(dbName) {
             const req = idx.getAllRecords({ query: range, count: limit, direction: 'prev' });
             req.onsuccess = () => {
               const records = req.result || [];
-              r(records.map(rec => rec.value).reverse()); // Reverse to chronological
+              _msgOpenAll(records.map(rec => rec.value).reverse(), _msgMigrate).then(r); // Reverse to chronological
             };
             req.onerror = () => fallback();
             return;
@@ -4965,7 +5032,7 @@ async function initMessenger(dbName) {
           const req = idx.getAll(range);
           req.onsuccess = () => {
             const all = req.result || [];
-            r(all.length <= limit ? all : all.slice(-limit));
+            _msgOpenAll(all.length <= limit ? all : all.slice(-limit), _msgMigrate).then(r);
           };
           req.onerror = () => r([]);
         }
@@ -5160,28 +5227,12 @@ async function initMessenger(dbName) {
     return _isImportant(contact, text);
   }
 
-  // v3.3: ENTERPRISE — MESSAGE RETENTION POLICY
-  // Auto-delete messages older than N days (compliance)
-  async function enforceRetentionPolicy() {
-    if (!_settings.retentionDays || _settings.retentionDays <= 0) return;
-    try {
-      const cutoff = Date.now() - (_settings.retentionDays * MS.DAY);
-      const allMsgs = await dbGetAll('messages');
-      const toDelete = allMsgs.filter(m => m.ts < cutoff && !m.pinned);
-      if (toDelete.length === 0) return;
-      // v3.3: PERFORMANCE — Batch delete in single transaction
-      await new Promise((resolve) => {
-        try {
-          const tx = db.transaction('messages', 'readwrite');
-          const os = tx.objectStore('messages');
-          for (const m of toDelete) { os.delete(m.msgId); _replayCache.delete(m.msgId); }
-          tx.oncomplete = () => resolve(true);
-          tx.onerror = () => resolve(false);
-        } catch(e) { _dbg(e, 'retention-batch'); resolve(false); }
-      });
-      auditLog('settings', `Retention policy: deleted ${toDelete.length} messages older than ${_settings.retentionDays} days`);
-    } catch(e) { _dbg(e, 'retention'); }
-  }
+  // v3.3: ENTERPRISE — MESSAGE RETENTION POLICY / REMOTE WIPE / QUOTA CLEANUP
+  // Bodies live in src/app/data-lifecycle.js (wave-4 line-budget pass); these wrappers keep the original names.
+  const _dataLifecycle = () => globalThis.__breezeDataLifecycle?.createDataLifecycle({
+    settings: () => _settings, MS, dbGetAll, db: () => db, replayCache: _replayCache, auditLog, _dbg,
+    api: () => API, myId: () => myId, postAPIRaw, queueAuth, showToast, t, CONFIG, reload: () => location.reload() });
+  async function enforceRetentionPolicy() { return _dataLifecycle()?.enforceRetentionPolicy(); }
 
   // v3.3: ENTERPRISE — GROUP ADMIN ROLES
   // Group creator = admin. Admin can: rename, kick, set announce-only.
@@ -5190,57 +5241,8 @@ async function initMessenger(dbName) {
     return group.createdBy === myId || group.admins?.includes(myId);
   }
 
-  // v3.3: ENTERPRISE — FILE MANAGER
-  // List all sent/received files across all conversations
-
-  // v3.3: ENTERPRISE — GDPR DATA EXPORT
-  // Export all personal data as structured JSON (GDPR Art. 20)
-
-  // v3.3: ENTERPRISE — REMOTE WIPE
-  // Check server for wipe signal; if found, destroy all local data
-  async function checkRemoteWipe() {
-    if (!API || !myId) return;
-    try {
-      const resp = await postAPIRaw('/msg/poll', { id: myId, lastTs: 0, ...(await queueAuth('msg-poll')) });
-      if (!resp.ok) return;
-      const data = await resp.json();
-      for (const msg of (data.messages || [])) {
-        if (msg.type === 'remote_wipe' && msg.from === myId) {
-          auditLog('security', 'Remote wipe signal received', 'critical');
-          // Destroy all data
-          const stores = [...db.objectStoreNames];
-          for (const store of stores) {
-            const tx = db.transaction(store, 'readwrite');
-            tx.objectStore(store).clear();
-          }
-          localStorage.clear();
-          sessionStorage.clear();
-          showToast(t('toastWiped'), 'error');
-          setTimeout(() => location.reload(), CONFIG.TOAST_DURATION_MS);
-          return;
-        }
-      }
-    } catch(e) { _dbg(e, 'remote-wipe-check'); }
-  }
-  async function cleanupOldMessages() {
-    try {
-      const allMsgs = await dbGetAll('messages');
-      if (allMsgs.length < 200) return; // Not enough to clean
-      // Sort by timestamp, keep newest 80%
-      allMsgs.sort((a, b) => a.ts - b.ts);
-      const deleteCount = Math.floor(allMsgs.length * 0.2);
-      const toDelete = allMsgs.slice(0, deleteCount).filter(m => !m.pinned && !m.bookmarked);
-      // Await the transaction so callers can retry saves after space is freed
-      await new Promise((resolve) => {
-        const tx = db.transaction('messages', 'readwrite');
-        const store = tx.objectStore('messages');
-        for (const m of toDelete) store.delete(m.msgId);
-        tx.oncomplete = () => resolve(true);
-        tx.onerror = () => resolve(false);
-      });
-      _dbg(null, 'Cleaned ' + toDelete.length + ' old messages (quota recovery)');
-    } catch(e) { _dbg(e, 'cleanup'); }
-  }
+  async function checkRemoteWipe() { return _dataLifecycle()?.checkRemoteWipe(); }
+  async function cleanupOldMessages() { return _dataLifecycle()?.cleanupOldMessages(); }
 
   // ===== Identity (persistent ECDH keypair) =====
   let myKeys = null;
@@ -5331,6 +5333,7 @@ async function initMessenger(dbName) {
       // Stage-3 step 6: unlock a /keywrap-wrapped PQ prekey seed for this
       // boot (no-op when the record is absent or plaintext).
       await _unlockPqSeed(bootPassphrase);
+      await _initMsgStoreKey(bootPassphrase, true); // C9 (D23): message-store key for this boot
       return true;
     }
     return false;
@@ -5504,6 +5507,7 @@ async function initMessenger(dbName) {
     identityRecord.alias = registeredAlias;
     myAlias = registeredAlias;
     await dbPut('identity', identityRecord, 'keys');
+    await _initMsgStoreKey(null); // C9 (D23): fresh accounts get a message-store key from day one
     auditLog('auth', 'Identity created: ' + myShortId + (registeredAlias ? ' @' + registeredAlias : ''));
     return true;
   }
@@ -6427,17 +6431,11 @@ async function initMessenger(dbName) {
     return wrap;
   }
   // SHARE_PLAN stage 4 step 3: conversation-history transfer to a linked
-  // device. The sender lives in src/app/history-sync.js (createHistorySender);
-  // chunks ride the self-sync channel (ratchet-encrypted deposits to a
-  // registry-verified sibling), so the relay sees the same envelope shape
-  // as any message. Records travel as stored.
+  // device (sender: src/app/history-sync.js). Chunks ride the self-sync
+  // channel (ratchet-encrypted), so records travel OPENED — the C9/D23
+  // at-rest seal is per-device, and the receiver re-seals on dbPut.
   async function _collectHistory(contactId) {
-    return new Promise(r => {
-      try {
-        const req = db.transaction('messages').objectStore('messages').index('contact').getAll(contactId);
-        req.onsuccess = () => r(req.result || []); req.onerror = () => r([]);
-      } catch { r([]); }
-    });
+    return dbGetByIndex('messages', 'contact', contactId);
   }
   const _sendHistoryTo = (devPub) => globalThis.__breezeHistory?.createHistorySender
     ? globalThis.__breezeHistory.createHistorySender({ collect: _collectHistory, dbGetAll, encryptFor, relaySend, myId: () => myId, myPubB64: () => myPubB64, myName: () => myName }).sendHistoryTo(devPub)

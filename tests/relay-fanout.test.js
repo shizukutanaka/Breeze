@@ -555,8 +555,8 @@ describe('client — redundant deposit at the contact\u2019s home relays', () =>
     const mb = mailboxStore(envC, 'sealed', PEER_ID);
     await mb.checkDeposit();
     const now = Date.now();
-    envC.MAILBOX_DO.instances.get(PEER_ID).state.storage.map.set('deposits',
-      Array.from({ length: 120 }, (_, i) => now - 59000 + i * 400));
+    envC.MAILBOX_DO.instances.get(PEER_ID).state.storage.map.set('gate',
+      { log: Array.from({ length: 120 }, (_, i) => now - 59000 + i * 400), usage: null }); // D31: log rides in the gate record
     await w.relaySend(PEER_ID, payload(1700000000010), null);
     expect(sealedPosts(log, B_API)).toHaveLength(1); // B unaffected
     expect(w.calls.delivered).toEqual([{ ts: 1700000000010, status: 'deposited' }]); // B's ack counts (as a deposit)

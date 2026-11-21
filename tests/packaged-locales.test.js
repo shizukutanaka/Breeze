@@ -43,3 +43,46 @@ describe('every packaging path ships locales/ next to index.html', () => {
     expect(conf.build?.frontendDist).toBe('../../');
   });
 });
+
+// D11: key completeness is pinned, not aspirational. Until wave 4, every
+// non-ja locale silently fell back to English for 179 of 859 keys — including
+// the key-transparency verdicts (ktChecking/ktOk/ktRolled/ktTampered), so a
+// Spanish or Korean user saw the security-critical strings in English. Every
+// locale file must now carry EXACTLY the English key set: a missing key
+// (silent English fallback) or an extra key (dead translation) fails here.
+// Placeholder sets and plural shapes follow the tools/i18n-check.mjs rules.
+describe('every locale file is key-complete against the inline English reference (D11)', () => {
+  const html = readFileSync(join(root, 'index.html'), 'utf8');
+  const start = html.indexOf('const _I = {');
+  let depth = 0, raw = '';
+  for (let i = html.indexOf('{', start); i < html.length; i++) {
+    if (html[i] === '{') depth++;
+    else if (html[i] === '}') { depth--; if (depth === 0) { raw = html.slice(html.indexOf('{', start), i + 1); break; } }
+  }
+  const EN = (0, eval)('(' + raw + ')').en;
+  const enKeys = Object.keys(EN).sort();
+  const placeholders = (s) => [...new Set((String(s).match(/\{(\d+)\}/g) || []))].sort().join(',');
+  const categoriesFor = (loc) => new Set([0, 1, 2, 3, 5, 11, 21, 101, 1.5].map((n) => new Intl.PluralRules(loc).select(n)));
+
+  for (const file of locales) {
+    const loc = file.replace(/\.json$/, '');
+    it(`${loc}: exactly the English key set, placeholders and plural shapes intact`, () => {
+      const T = JSON.parse(readFileSync(join(root, 'locales', file), 'utf8'));
+      expect(Object.keys(T).sort(), `${loc} key set differs from English`).toEqual(enKeys);
+      const cats = categoriesFor(loc);
+      for (const [key, v] of Object.entries(T)) {
+        const rv = EN[key];
+        const rPlural = rv && typeof rv === 'object';
+        const vPlural = v && typeof v === 'object';
+        expect(vPlural, `${loc}.${key} plural shape`).toBe(rPlural);
+        if (vPlural) {
+          expect(Object.keys(v).sort(), `${loc}.${key} plural categories`).toEqual([...cats].sort());
+          expect(placeholders(Object.values(v).join('')), `${loc}.${key} placeholders`).toBe(placeholders(Object.values(rv).join('')));
+        } else {
+          expect(typeof v, `${loc}.${key} is a string`).toBe('string');
+          expect(placeholders(v), `${loc}.${key} placeholders`).toBe(placeholders(rv));
+        }
+      }
+    });
+  }
+});

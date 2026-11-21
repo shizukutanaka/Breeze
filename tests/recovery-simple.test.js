@@ -536,13 +536,13 @@ function buildCreate(db) {
     sliceHtml('async function createIdentity(name, alias, disposable', '// DOUBLE RATCHET CRYPTO ENGINE'),
   ].join('\n');
   const factory = new Function('db', '_dbg', 'showToast', 't', '_hasX25519', '_hasEd25519',
-    '_promptRecoveryPhraseNew', 'genIdentityKey', 'dbPut', 'auditLog', 'generateShortId', 'localStorage', 'API',
+    '_promptRecoveryPhraseNew', 'genIdentityKey', 'dbPut', 'auditLog', 'generateShortId', 'localStorage', 'API', '_initMsgStoreKey',
     src + '; return { createIdentity };');
   const api2 = factory(
     db, () => {}, () => {}, (k) => k, true, true,
     async () => { shown.calls++; return 'drill-pass'; },
     async () => crypto.subtle.generateKey({ name: 'X25519' }, true, ['deriveBits']),
-    dbPutInto(db), () => {}, async () => 'breeze-test-test', { setItem() {} }, null,
+    dbPutInto(db), () => {}, async () => 'breeze-test-test', { setItem() {} }, null, async () => true,
   );
   return { ...api2, shown };
 }

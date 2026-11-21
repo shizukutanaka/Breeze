@@ -88,13 +88,13 @@ function buildCreate(db, { promptAnswer = 'drill-pass', api = null } = {}) {
     slice('async function createIdentity(name, alias, disposable', '// DOUBLE RATCHET CRYPTO ENGINE'),
   ].join('\n');
   const factory = new Function('db', '_dbg', 'showToast', 't', '_hasX25519', '_hasEd25519',
-    '_promptRecoveryPhraseNew', 'genIdentityKey', 'dbPut', 'auditLog', 'generateShortId', 'localStorage', 'API',
+    '_promptRecoveryPhraseNew', 'genIdentityKey', 'dbPut', 'auditLog', 'generateShortId', 'localStorage', 'API', '_initMsgStoreKey',
     src + '; return { createIdentity, get: () => ({ myPubB64, myId }) };');
   const api2 = factory(
     db, () => {}, (msg, type) => { toasts.push({ msg, type }); }, (k) => k, true, true,
     async (phrase) => { shown.calls++; shown.phrase = phrase; return promptAnswer; },
     async () => crypto.subtle.generateKey({ name: 'X25519' }, true, ['deriveBits']),
-    dbPutInto(db), () => {}, async () => 'breeze-test-test', { setItem() {} }, api,
+    dbPutInto(db), () => {}, async () => 'breeze-test-test', { setItem() {} }, api, async () => true,
   );
   return { ...api2, toasts, shown };
 }
