@@ -614,7 +614,7 @@ function makeX3dhInline(myKeys, config, myId, opts = {}) {
     'crypto', 'CONFIG', '_hasX25519', 'dbGet', 'dbPut', '_dbg', 'hkdf', 'arr', 'u8', 'myKeys', 'myId',
     '_atRestIsWrapped', '_pqSeedUnlocked',
     'API', 'postAPIRaw', '_contactRelayPost', '_seedRelayInfo', 'sanitizeHomeList', 'isOriginRelay',
-    '_servingRelayUrl', '_auditKeyHistory', 'showKeyChangeWarning', 'myPubB64', 'showToast', 't', 'MS',
+    '_servingRelayUrl', '_auditKeyHistory', 'showKeyChangeWarning', 'myPubB64', 'showToast', 't', 'MS', '_settings',
     html.slice(x3s, x3e) +
       '\nreturn { genRatchetKey, ecdhBits, _x3dhInitiator, _x3dhResponder, _x3dhInitiatorParts, _x3dhResponderParts, _parsePeerCaps, _peerSupportsX3dhV5, _peerSupportsPqxdh, _pqxdhInitiator, _pqxdhResponder, _negotiateGroupCaps, _computeGroupV5, _importEcdhPriv, _loadSpkPriv, _resolveOtpPriv, _bootstrapResponderSessionV5, initSessionV5Initiator };',
   );
@@ -627,7 +627,7 @@ function makeX3dhInline(myKeys, config, myId, opts = {}) {
     async (path, body) => (net.fetchImpl ? net.fetchImpl(path, body) : null),
     async () => null, () => {}, () => [], () => true,
     () => 'https://relay.test', async () => ({ verdict: 'new' }), async () => {},
-    opts.myPubB64 || '', () => {}, key => key, { SEC: 1000 },
+    opts.myPubB64 || '', () => {}, key => key, { SEC: 1000 }, { ktBlockOnTamper: false },
   );
   return { ...api, idb };
 }

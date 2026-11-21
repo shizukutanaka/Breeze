@@ -79,3 +79,43 @@ describe('D02 — padded lengths snap to size buckets (256 / 1024 / 4096)', () =
     expect(html).not.toContain('Math.ceil((raw.length + 2) / CONFIG.MSG_PAD_BOUNDARY)');
   });
 });
+
+// Extract the one-line inline _ktHeadC helper for direct exercise.
+const ktHeadLine = html.split('\n').find(l => l.includes('const _ktHeadC ='));
+const _ktHeadC = new Function(ktHeadLine + '\nreturn _ktHeadC;')();
+
+describe('D05 — KT chain-head pin + opt-in session block on tampered', () => {
+  it('_ktHeadC returns the c of the newest chained entry, ignoring legacy entries', () => {
+    const log = [
+      { ts: 1000, h: 'h1' },              // legacy, no c
+      { ts: 2000, h: 'h2', c: 'c2' },
+      { ts: 3000, h: 'h3', c: 'c3' },
+      { ts: 2500, h: 'hX', c: 'cX' },     // out of order: older than the head
+    ];
+    expect(_ktHeadC(log)).toBe('c3');
+    expect(_ktHeadC([{ ts: 1, h: 'h' }])).toBeNull(); // no chained entries yet
+    expect(_ktHeadC([])).toBeNull();
+    expect(_ktHeadC(undefined)).toBeNull();
+  });
+
+  it('session start pins the chain head and treats a vanished pin as tampered', () => {
+    // First fetch stores the pin; later fetches must still contain it.
+    expect(html).toContain("dbGet('identity', 'ktPin:' + ktPeerId)");
+    expect(html).toContain("dbPut('identity', { c: hc }, 'ktPin:' + ktPeerId)");
+    expect(html).toContain('const pinBroken = !!(ktPin && ktPin.c');
+    expect(html).toContain('!(bundle.keyHistory || []).some(e => e && e.c === ktPin.c)');
+    // The pin is only (re)stored when the audit did not condemn the chain.
+    expect(html).toContain("if (audit.verdict !== 'tampered' && !pinBroken) { const hc = _ktHeadC(bundle.keyHistory);");
+    // The safety-number panel runs the same pin check for its verdict.
+    expect(html).toContain("if (ktPin && ktPin.c && !(log || []).some(e => e && e.c === ktPin.c)) audit.verdict = 'tampered';");
+  });
+
+  it('the block is an opt-in setting, default off, wired through the settings panel', () => {
+    expect(html).toContain('ktBlockOnTamper: false');
+    expect(html).toContain('if (_settings.ktBlockOnTamper) return false;');
+    expect(html).toContain('data-setting="kt-block"');
+    expect(html).toContain("s === 'kt-block') { _settings.ktBlockOnTamper = cb.checked; saveSettings(); }");
+    expect(html).toContain("ktBlockLabel: 'Block new sessions when the key-transparency log looks tampered'");
+    for (const l of LOCALES) expect(locale(l).ktBlockLabel, l).toBeTruthy();
+  });
+});

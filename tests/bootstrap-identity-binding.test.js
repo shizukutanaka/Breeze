@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { createRatchet } from '../src/crypto/ratchet.js';
+import { createRatchet, padBucketSize } from '../src/crypto/ratchet.js';
 import { createPQSessionHelper } from '../src/crypto/pqxdh.js';
 import { mintPQPreKey } from '../src/crypto/pqkey.js';
 
@@ -56,6 +56,8 @@ async function world({ keys, contact, bundles = [], spk, pqSeed, pq = false } = 
     playNotif() {}, Notification: undefined, announceToSR() {}, appendMsg() {}, showSmartReplies() {},
     _renderContactsThrottled() {}, broadcastToTabs() {}, _myOtherDevices: async () => [],
     _focusActive: () => false, _attribDevCache: new Map(),
+    _padBucketSize: padBucketSize, // D02: the inline encrypt path resolves the bucket helper as a free variable
+    _settings: { ktBlockOnTamper: false }, // D05: initSessionV5Initiator reads the opt-in KT block flag
   };
   const api = new Function('D', `with (D) {
     ${cryptoSource}
