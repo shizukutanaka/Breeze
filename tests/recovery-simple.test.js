@@ -144,6 +144,18 @@ describe('simple-mode worker endpoints (BACKUP_STORAGE_ENABLED opt-in)', () => {
     expect(JSON.parse(await e.KV.get(`sbackup:${LOCATOR}`)).backup).toBe('BLOB2');
   });
 
+  it('a successful download renews the 90-day retention window (touch-on-read, D15)', async () => {
+    const fx = await edFixture();
+    const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
+    const raw = JSON.stringify({ backup: 'BLOB', pub: fx.pub, updatedAt: 1 });
+    await e.KV.put(`sbackup:${LOCATOR}`, raw, { expirationTtl: 60 }); // about to lapse
+    const expBefore = e.KV.exp.get(`sbackup:${LOCATOR}`);
+    const res = await handleBackupSimpleDownload({ locator: LOCATOR }, e, dlReq({}));
+    expect(res.status).toBe(200);
+    expect(e.KV.exp.get(`sbackup:${LOCATOR}`)).toBeGreaterThan(expBefore + 89 * DAY_MS);
+    expect(await e.KV.get(`sbackup:${LOCATOR}`)).toBe(raw); // stored bytes untouched
+  });
+
   it('download serves the blob to whoever names the slot — and only then', async () => {
     const fx = await edFixture();
     const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });

@@ -4565,6 +4565,15 @@ async function handleBackupDownload(body, env, request) {
 
   const backup = await kvGet(env, `backup:${userId}`);
   if (!backup) return json({ error: 'No backup found', code: 'NOT_FOUND' }, 404, request);
+  // Touch-on-read (D15): a VERIFIED download renews the 90-day retention
+  // window, so a backup that is actively used as a recovery path cannot
+  // silently lapse the way a write-only one can — the same renewal the
+  // alias path applies on heartbeat. Content-identical rewrite (only the
+  // expiry moves), and unsigned downloads under the BACKUP_REQUIRE_AUTH=false
+  // opt-out do NOT renew: renewal is an owner's privilege, never something
+  // a stranger holding a userId can trigger. Best-effort — the download
+  // itself has already succeeded.
+  if (hasSig) await kvPut(env, `backup:${userId}`, backup, { expirationTtl: TTL.QUARTER });
   return json({ backup, authenticated: hasSig }, 200, request);
 }
 
@@ -4659,8 +4668,15 @@ async function handleBackupSimpleDownload(body, env, request) {
   // The owner's pub rides along so the client can bind the restored
   // signing record to the key that owns the slot (defence in depth —
   // the GCM envelope already refuses a swapped blob).
-  const rec = safeJsonParse(await kvGet(env, `sbackup:${locator}`));
+  const raw = await kvGet(env, `sbackup:${locator}`);
+  const rec = safeJsonParse(raw);
   if (!rec || typeof rec.backup !== 'string') return json({ error: 'No backup found', code: 'NOT_FOUND' }, 404, request);
+  // Touch-on-read (D15): presenting the locator IS the authentication in
+  // this mode, so a successful download renews the 90-day retention window
+  // exactly like the signed legacy path. Content-identical rewrite (the
+  // raw stored bytes go back untouched; only the expiry moves).
+  // Best-effort — the download itself has already succeeded.
+  await kvPut(env, `sbackup:${locator}`, raw, { expirationTtl: TTL.QUARTER });
   return json({ backup: rec.backup, pub: rec.pub || null }, 200, request);
 }
 

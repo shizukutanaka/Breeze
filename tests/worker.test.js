@@ -4121,6 +4121,29 @@ describe('backup BACKUP_REQUIRE_AUTH enforcement (item 54)', () => {
     expect((await res.json()).code).toBe('AUTH_REQUIRED');
   });
 
+  it('a verified download renews the 90-day retention window (touch-on-read, D15)', async () => {
+    const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
+    // Seed a backup whose retention is about to lapse (60s left).
+    await e.KV.put('backup:bakflg08', 'enc-blob', { expirationTtl: 60 });
+    const expBefore = e.KV.exp.get('backup:bakflg08');
+    const { ts, sig } = await registerAndSign(e, 'bakflg08', 'download');
+    const res = await handleBackupDownload({ userId: 'bakflg08', ts, sig }, e, dlReq({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).backup).toBe('enc-blob');
+    const expAfter = e.KV.exp.get('backup:bakflg08');
+    expect(expAfter).toBeGreaterThan(expBefore + 89 * 86400 * 1000);
+    expect(await e.KV.get('backup:bakflg08')).toBe('enc-blob'); // content untouched
+  });
+
+  it('an unsigned download under the opt-out does NOT renew retention (D15)', async () => {
+    const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true', BACKUP_REQUIRE_AUTH: 'false' });
+    await e.KV.put('backup:bakflg09', 'enc-blob', { expirationTtl: 60 });
+    const expBefore = e.KV.exp.get('backup:bakflg09');
+    const res = await handleBackupDownload({ userId: 'bakflg09' }, e, dlReq({}));
+    expect(res.status).toBe(200);
+    expect(e.KV.exp.get('backup:bakflg09')).toBe(expBefore);
+  });
+
   it('unauthenticated upload/download still works only with explicit BACKUP_REQUIRE_AUTH=false (operator opt-out)', async () => {
     const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true', BACKUP_REQUIRE_AUTH: 'false' });
     const up = await handleBackupUpload({ userId: 'bakflg07', backup: 'blob' }, e, req({}));
