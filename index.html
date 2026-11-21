@@ -1843,6 +1843,7 @@ const _I = {
     p2pDirect: 'Direct',
     addAccountBtn: 'Add account',
     groupPrimaryOnly: 'Group messages must be sent from your primary device',
+    groupNoFileVoice: 'Files and voice messages can\'t be sent in group chats yet',
     nrnAria: 'Mark this message as needing no reply',
     nrnBadge: 'no reply needed',
     nrnOn: 'Next message: no reply needed',
@@ -6717,11 +6718,9 @@ async function initMessenger(dbName) {
       if (_myDevCache && now - _myDevCacheTs < MS.MIN) return _myDevCache;
       const rootId = acct.root.slice(0, 12);
       const list = (await _fetchDeviceRegistry(rootId, acct.root))?.list || null;
-      // Unlink self-awareness (Socratic round — "does an unlinked device KNOW?"): a VERIFIED
-      // registry that no longer lists this device means the account holder removed it. Tell
-      // the user instead of letting fan-out silently stop, and drop the stale account binding
-      // so this install cleanly reverts to a standalone identity. Only a verified, non-empty
-      // list may trigger this — a failed/unverifiable fetch (null) must never unlink anyone.
+      // Unlink self-awareness: a VERIFIED registry that no longer lists this device means
+      // the account holder removed it — tell the user and drop the stale account binding
+      // (clean revert to standalone). Only a verified, non-empty list may trigger this.
       if (acct.root !== myPubB64 && Array.isArray(list) && list.length && !list.includes(myPubB64)) {
         if (!_unlinkNoticed) { _unlinkNoticed = true; showToast(t('devUnlinkedNotice'), 'error', 10000); }
         await dbDel('identity', 'account'); // clean revert to a standalone identity (/link works again)
@@ -6736,23 +6735,19 @@ async function initMessenger(dbName) {
   }
 
   // ═══ Sealed Sender v2 (inline mirror of src/crypto/seal.js) ═══
-  // The pre-v2 "sealed" envelope carried from/fromPub/fromName — and the replyTo PLAINTEXT
-  // preview — in the clear inside the JSON string the relay stores, so "the Worker doesn't
-  // see the sender" was only true of a Worker that chose not to look (Socratic-found). v2
-  // encrypts ALL sender-identifying metadata to the RECIPIENT's identity key: ephemeral
-  // X25519/P-256 ECDH → HKDF('breeze-seal-v2') → AES-256-GCM with AAD binding to+ts (no
-  // cross-recipient/cross-time splicing). The relay now sees only {to, ts, ratchet
-  // ciphertext, sealed blob}. Capability-gated: recipients advertise 'seal-v2' in their
-  // prekey-bundle caps; senders read caps via /prekey/status (consumes NO one-time prekey)
-  // and fall back to the legacy envelope for un-upgraded peers — delivery over privacy,
-  // and the /msg fallback + offline retry queue stay legacy (documented in SECURITY.md).
+  // Pre-v2 envelopes carried from/fromPub/fromName (and the replyTo preview) in the
+  // clear, so "the Worker doesn't see the sender" held only for a Worker that chose
+  // not to look. v2 encrypts ALL sender-identifying metadata to the RECIPIENT's
+  // identity key: ephemeral X25519/P-256 ECDH → HKDF('breeze-seal-v2') → AES-256-GCM,
+  // AAD binding to+ts. The relay sees only {to, ts, ratchet ciphertext, sealed blob}.
+  // Capability-gated ('seal-v2' in prekey-bundle caps, read via /prekey/status, which
+  // consumes NO one-time prekey); un-upgraded peers get the legacy envelope, and the
+  // /msg fallback + offline retry queue stay legacy (SECURITY.md).
   const SEAL_INFO = 'breeze-seal-v2';
-  // Metadata padding frame (mirror of src/crypto/seal.js): without it, se.ct's
-  // length revealed the exact metadata byte length (+16 GCM tag) to the relay —
-  // display-name length and replyTo-preview presence were inferable (step-3
-  // padding audit, Low). The frame lives inside the plaintext, so key/AAD
-  // derivation is unchanged and pre-padding blobs still open: legacy plaintext
-  // is raw JSON starting with '{' (0x7B); the frame starts with marker 0x01.
+  // Metadata padding frame (mirror of src/crypto/seal.js): without it, se.ct's length
+  // revealed the exact metadata byte length to the relay. The frame lives inside the
+  // plaintext, so key/AAD derivation is unchanged and pre-padding blobs still open:
+  // legacy plaintext is raw JSON starting with '{' (0x7B); the frame starts with 0x01.
   //   framed = [0x01][len:2 BE][JSON bytes][0x00 …], total snapped to a size bucket.
   const SEAL_PAD_MARKER = 0x01;
   function _padBucketSize(n, boundary = 256) { const top = boundary * 16; // D02 buckets: boundary / ×4 / ×16, then multiples of the top bucket
@@ -10332,6 +10327,12 @@ async function initMessenger(dbName) {
     try {  
       if (!activeContact) return;
       if (activeContact.isGroup && _isSecondaryDevice) { showToast(t('groupPrimaryOnly'), 'error'); return; }
+      // S01: groups have no file transport — the paths below key off the 1:1
+      // session (encryptFor(pubB64)), and a group contact's pubB64 is '', so a
+      // group file "send" rendered and saved locally, then died at encryptFor:
+      // sent in appearance only. Refuse honestly, before anything is drawn or
+      // stored. (Group file transport itself is a separate, larger item.)
+      if (activeContact.isGroup) { showToast(t('groupNoFileVoice'), 'error'); return; }
       // v3.6: Auto-compress images
       file = await _compressImage(file);
       const ts = correctedNow();
@@ -10364,19 +10365,13 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, '_sendFile'); }
   }
 
-  // A slash command is never a message — but only the Enter key knew that. Its keydown
-  // handler skips sendMessage() for '/' text and lets the command listener take it
-  // (see the "used to send them as literal text first" note there); the send button —
-  // the big obvious ↑ affordance a beginner reaches for — called sendMessage() directly
-  // and TRANSMITTED the command to the contact as plaintext chat. E2E-confirmed end to
-  // end: the peer's IndexedDB held a message whose text was "/help". The same click sends
-  // '/note <private note about that contact>' to that very contact, and '/drop <secret>'
-  // — a feature whose entire purpose is not putting a secret in a chat — straight into
-  // the chat. Synthesise the Enter the command listener is already waiting for, so one
-  // dispatcher serves both affordances instead of a second copy of the command table.
-  // Deliberately wired here and not inside sendMessage(): its other callers (notification
-  // quick-reply, and /reply, which itself runs inside that listener) must keep calling it
-  // directly, or a '/'-leading reply body would re-enter the listener.
+  // A slash command is never a message — but only the Enter key knew that: its keydown
+  // handler skips sendMessage() for '/' text and lets the command listener take it,
+  // while the send button called sendMessage() directly and TRANSMITTED the command
+  // as plaintext chat (E2E-confirmed: a peer's IndexedDB held "/help"; '/note …' and
+  // '/drop <secret>' leaked the same way). Synthesise the Enter the command listener
+  // waits for, so one dispatcher serves both. Wired here, not inside sendMessage():
+  // its other callers (notification quick-reply, /reply) must keep calling it directly.
   _DOM.get('b-msg-send')?.addEventListener('click', () => {
     const input = _DOM.get('msg-input');
     if (input?.value.trim().startsWith('/')) {
@@ -10620,6 +10615,9 @@ async function initMessenger(dbName) {
         clearInterval(_recTimer); _recTimer = null;
         return;
       }
+      // S01: no voice transport in groups (same encryptFor('') dead end as
+      // files) — refuse BEFORE recording, not after a full take is recorded.
+      if (activeContact.isGroup) { showToast(t('groupNoFileVoice'), 'error'); return; }
       // Start recording
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -10652,6 +10650,9 @@ async function initMessenger(dbName) {
             const b64 = reader.result.split(',')[1];
             const filePayload = JSON.stringify({ name: file.name, type: file.type, size: file.size, data: b64 });
             try {
+              // S01 backstop: the chat may have been switched to a group while
+              // recording — refuse honestly instead of dying silently at encryptFor('').
+              if (activeContact?.isGroup) { showToast(t('groupNoFileVoice'), 'error'); return; }
               const encrypted = await encryptFor(filePayload, activeContact.pubB64);
               if (!encrypted) { _dbg(null, 'encrypt failed'); return; }
               const ts = correctedNow();

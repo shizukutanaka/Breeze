@@ -647,6 +647,7 @@
  "focusLabel": "โหมดโฟกัส 1 ชั่วโมง",
  "focusStrictLabel": "ปิดเสียงทั้งหมด (ไม่ยกเว้น VIP)",
  "groupPrimaryOnly": "ต้องส่งข้อความกลุ่มจากอุปกรณ์หลักของคุณ",
+ "groupNoFileVoice": "ยังไม่สามารถส่งไฟล์และข้อความเสียงในแชทกลุ่มได้",
  "settingsAccounts": "บัญชี",
  "addAccountBtn": "เพิ่มบัญชี",
  "devUnlinkConfirm": "นำอุปกรณ์ {0} ออกจากบัญชีหรือไม่?",

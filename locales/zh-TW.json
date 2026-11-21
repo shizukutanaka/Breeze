@@ -647,6 +647,7 @@
  "focusLabel": "專注模式 1 小時",
  "focusStrictLabel": "全部靜音（VIP 也不例外）",
  "groupPrimaryOnly": "群組訊息必須從主要裝置傳送",
+ "groupNoFileVoice": "群組聊天目前還不能傳送檔案和語音訊息",
  "settingsAccounts": "帳號",
  "addAccountBtn": "新增帳號",
  "devUnlinkConfirm": "要將裝置 {0} 從帳號移除嗎？",

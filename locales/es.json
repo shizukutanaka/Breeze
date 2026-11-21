@@ -654,6 +654,7 @@
  "focusLabel": "Modo concentración durante 1 hora",
  "focusStrictLabel": "Silenciar todo (sin excepciones VIP)",
  "groupPrimaryOnly": "Los mensajes de grupo deben enviarse desde tu dispositivo principal",
+ "groupNoFileVoice": "Los archivos y los mensajes de voz aún no se pueden enviar en los chats de grupo",
  "settingsAccounts": "Cuentas",
  "addAccountBtn": "Añadir cuenta",
  "devUnlinkConfirm": "¿Quitar el dispositivo {0} de tu cuenta?",
