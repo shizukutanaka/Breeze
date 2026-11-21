@@ -1246,6 +1246,7 @@ window.__breezeDeviceLink = { createDeviceLink };
 import { CAPS_STICKER as _CAPS_STICKER_STR, BUILTIN_PACK, sanitizeSticker, sanitizePack, parsePackFile, packToFile, buildStickerPayload, parseStickerPayload, groupTextForSticker, parseGroupStickerText, stickerLabel } from './src/app/stickers.js';
 window.__breezeStickers = { BUILTIN_PACK, sanitizeSticker, sanitizePack, parsePackFile, packToFile, buildStickerPayload, parseStickerPayload, groupTextForSticker, parseGroupStickerText, stickerLabel };
 import { parseContactAddress } from './src/app/address.js'; window.__breezeAddress = { parseContactAddress };
+import { installModalA11y } from './src/app/modal-a11y.js'; installModalA11y(); // D17: focus trap + aria-modal for every overlay modal, watched from <body>
 import { createTurnFetcher } from './src/app/turn.js'; window.__breezeTurn = { createTurnFetcher };
 import { createInfoPanels, createDataPanels } from './src/app/info-panels.js';
 window.__breezeInfoPanels = { createInfoPanels, createDataPanels };
