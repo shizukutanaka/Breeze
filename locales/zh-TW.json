@@ -2,7 +2,7 @@
  "opTitle": "離線聯絡人配對",
  "secTurnUsage": "本月通話流量的 TURN 比例",
  "secDiagPersist": "持久化失敗（死信／重試還原）",
- "secDiagMsgStore": "訊息儲存金鑰失敗／明文儲存",
+ "secDiagMsgStore": "訊息儲存金鑰失敗／明文儲存／開啟失敗",
  "secDiagLifecycle": "資料生命週期中斷（保留／遠端清除／清理被跳過）",
  "secDiagSealed": "中繼修復的密封佇列寫入競寫（無遺失）",
  "secSealedSenderNote": "密封寄件者：中繼無法看到訊息由誰寄出 — 但這不等同於不可連結性。時間與中繼資料仍可能將活動相互連結。",

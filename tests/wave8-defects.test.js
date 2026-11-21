@@ -54,3 +54,25 @@ describe('S02 — the primary can read its own secondary\'s group sends', () => 
     expect(handler).toContain('if (!c) return;');
   });
 });
+
+describe('S03 — message-store open failures are counted in /security diagnostics', () => {
+  const infoPanels = readFileSync(new URL('../src/app/info-panels.js', import.meta.url), 'utf8');
+
+  it('_msgOpenRecord bumps msgOpenFail on a failed open (the R02 seal side already did)', () => {
+    expect(html).toContain("} catch(e) { _dbg(e, 'msg-open'); _msgDiagBump('msgOpenFail'); return rec; }");
+    expect(html).toContain("} catch(e) { _dbg(e, 'msg-seal'); _msgDiagBump('msgPlaintextSave'); return rec; }");
+  });
+
+  it('/security renders the open-failure count as the third msgstore figure', () => {
+    expect(infoPanels).toContain("(_diagPersist.msgPlaintextSave || 0) + ' / ' + (_diagPersist.msgOpenFail || 0)");
+    expect(html).toContain("secDiagMsgStore: 'Message-store key failures / plaintext saves / open failures',");
+  });
+
+  it('every locale carries the extended secDiagMsgStore label', () => {
+    for (const loc of LOCALES) {
+      const json = JSON.parse(readFileSync(new URL(`../locales/${loc}.json`, import.meta.url), 'utf8'));
+      expect(json.secDiagMsgStore, loc).not.toBe('Message-store key failures / plaintext saves');
+      expect(typeof json.secDiagMsgStore, loc).toBe('string');
+    }
+  });
+});

@@ -2,7 +2,7 @@
  "opTitle": "Emparejamiento sin conexión",
  "secTurnUsage": "Proporción TURN del tráfico de llamadas este mes",
  "secDiagPersist": "Fallos de persistencia (dead-letter / restauración de reintentos)",
- "secDiagMsgStore": "Fallos de la clave de mensajes / guardados en texto plano",
+ "secDiagMsgStore": "Fallos de la clave de mensajes / guardados en texto plano / fallos de apertura",
  "secDiagLifecycle": "Interrupciones del ciclo de vida de datos (retención / borrado remoto / limpieza omitidos)",
  "secDiagSealed": "Carreras de escritura en la cola sellada que el relé reparó (nada se perdió)",
  "secSealedSenderNote": "Remitente sellado: el relé no puede ver quién envió un mensaje, pero eso no es desvinculabilidad. Los tiempos y los metadatos aún pueden vincular la actividad.",

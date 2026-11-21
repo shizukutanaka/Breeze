@@ -642,7 +642,7 @@
  "secTurnOpenRelay": "Open Relay（第三者の無料枠）",
  "secTurnUsage": "今月の通話のTURN中継割合",
  "secDiagPersist": "永続化の失敗（デッドレター／再送リストア）",
- "secDiagMsgStore": "メッセージストア鍵の失敗／平文保存",
+ "secDiagMsgStore": "メッセージストア鍵の失敗／平文保存／復号失敗",
  "secDiagLifecycle": "データライフサイクルの停止（保持／リモートワイプ／掃除のスキップ）",
  "secDiagSealed": "シールドキューの書き込み競合をリレーが修復した回数（喪失なし）",
  "toastTurnQuota": "このリレーの今月のTURN予算を使い切りました。当面、通話は直接接続のみで試みます。設定で自分のTURNを追加すると中継通話が戻ります。",

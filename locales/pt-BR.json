@@ -2,7 +2,7 @@
  "opTitle": "Pareamento offline de contato",
  "secTurnUsage": "Parcela TURN do tráfego de chamadas deste mês",
  "secDiagPersist": "Falhas de persistência (dead-letter / restauração de reenvios)",
- "secDiagMsgStore": "Falhas da chave de mensagens / salvamentos em texto plano",
+ "secDiagMsgStore": "Falhas da chave de mensagens / salvamentos em texto plano / falhas de abertura",
  "secDiagLifecycle": "Interrupções do ciclo de vida dos dados (retenção / exclusão remota / limpeza ignorados)",
  "secDiagSealed": "Corridas de escrita na fila selada que o relé reparou (nada foi perdido)",
  "secSealedSenderNote": "Remetente selado: o relé não pode ver quem enviou uma mensagem — mas isso não é impossibilidade de vinculação. Tempos e metadados ainda podem vincular atividades.",

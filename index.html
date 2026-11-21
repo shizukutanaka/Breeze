@@ -2088,7 +2088,7 @@ const _I = {
     secInLruCache: 'in LRU cache',
     secSkippedKeys: 'Skipped Keys: ✓ Out-of-order message recovery (max 100 keys/session)',
     secDiagPersist: 'Persistence failures (dead-letter / retry-restore)',
-    secDiagMsgStore: 'Message-store key failures / plaintext saves',
+    secDiagMsgStore: 'Message-store key failures / plaintext saves / open failures',
     secDiagLifecycle: 'Data-lifecycle outages (retention / remote wipe / cleanup skipped)',
     secDiagSealed: 'Sealed-queue write races the relay repaired (nothing lost)',
     secLblMsgPadding: 'Message Padding',
@@ -3396,7 +3396,7 @@ async function _atRestMigrate(record, passphrase, context = '') {
   return { ...rest, wrapped };
 }
 
-// C9 (D23): message-store encryption at rest — inline mirror of src/crypto/msgstore.js (keep in sync). Bodies are sealed under the 'msgkey' keywrap slot (an ordinary I4 slot: plaintext JWK with app-lock off, wrapped with it on); the in-memory key is _msgStoreKey, loaded by _initMsgStoreKey. AAD binds each ciphertext to its msgId. Divergences from the reference: open failure keeps the sealed record (text stays '') instead of returning null, so a read can never destroy the stored row; and (R02) a no-key or failed seal falls back to a PLAINTEXT write, bumped into the D20 diagnostics via _msgDiagBump (the reference has no diagnostics channel).
+// C9 (D23): message-store encryption at rest — inline mirror of src/crypto/msgstore.js (keep in sync). Bodies are sealed under the 'msgkey' keywrap slot (an ordinary I4 slot: plaintext JWK with app-lock off, wrapped with it on); the in-memory key is _msgStoreKey, loaded by _initMsgStoreKey. AAD binds each ciphertext to its msgId. Divergences from the reference: open failure keeps the sealed record (text stays '') instead of returning null, so a read can never destroy the stored row; and (R02) a no-key or failed seal falls back to a PLAINTEXT write, bumped into the D20 diagnostics via _msgDiagBump, as are open failures (S03) (the reference has no diagnostics channel).
 const _MSG_AAD_DOMAIN = 'breeze-msgstore-v1';
 let _msgStoreKey = null;
 const _msgMigrated = new Set();
@@ -3419,7 +3419,7 @@ async function _msgOpenRecord(rec) {
     const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: _atRestUnb64(rec.enc.iv), additionalData: _msgAad(rec.msgId) }, _msgStoreKey, _atRestUnb64(rec.enc.ct));
     const { enc: _enc, ...rest } = rec;
     return { ...rest, text: new TextDecoder().decode(new Uint8Array(pt)) };
-  } catch(e) { _dbg(e, 'msg-open'); return rec; }
+  } catch(e) { _dbg(e, 'msg-open'); _msgDiagBump('msgOpenFail'); return rec; } // S03: an open failure (e.g. key mismatch) leaves every sealed body '' — count it like the seal side, never silent
 }
 // Open a batch from a read helper; legacy plaintext records (the STORED form had no enc — an opened record is not legacy) go to `migrate` for re-sealing.
 async function _msgOpenAll(records, migrate) {
