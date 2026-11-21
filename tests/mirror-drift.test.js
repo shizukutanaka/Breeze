@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { createAtRest } from '../src/crypto/atrest.js';
 import { makeChallengeString, solve as powSolve, verify as powVerify } from '../src/crypto/pow.js';
-import { createRatchet } from '../src/crypto/ratchet.js';
+import { createRatchet, padBucketSize as refPadBucketSize } from '../src/crypto/ratchet.js';
 import { checkRollover, auditBundle, appendChainEntry } from '../src/crypto/ktlog.js';
 import { negotiateGroup, negotiate } from '../src/crypto/negotiate.js';
 import { createPQSessionHelper } from '../src/crypto/pqxdh.js';
@@ -407,14 +407,14 @@ function makeGroupInline(config) {
   const { _computeGroupV5 } = makeX3dhInline(null, config, 'me');
   const factory = new Function(
     'crypto', 'CONFIG', 'dbGet', 'dbPut', 'hkdf', 'arr', 'u8', '_dbg', 'TextEncoder', 'TextDecoder', '_computeGroupV5',
-    '_keyCommit', '_cmOk', 'MS',
+    '_keyCommit', '_cmOk', 'MS', '_padBucketSize',
     html.slice(gs, ge) +
       '\nreturn { getGroupSenderKey, encryptGroupMsg, decryptGroupMsg };',
   );
   const api = factory(
     globalThis.crypto, config, dbGet, dbPut, inlineKdf.hkdf,
     (a) => Array.from(a), (a) => new Uint8Array(a), () => {}, TextEncoder, TextDecoder, _computeGroupV5,
-    _injKeyCommit, _injCmOk, { WEEK: 604800000 },
+    _injKeyCommit, _injCmOk, { WEEK: 604800000 }, inlinePadBucketSize,
   );
   return { ...api, store };
 }
@@ -1425,14 +1425,14 @@ function makeSessionDevice(myKeys, myPubB64) {
   const factory = new Function(
     'CONFIG', '_hasX25519', 'dbGet', 'dbPut', 'zeroBuffer', 'workerCrypto', 'postAPIRaw', 'API',
     '_signingKey', '_signingPubB64', 'signMessage', 'verifySignature', 'myKeys', 'myPubB64', '_dbg', 'arr', 'u8',
-    'timingSafeEqual', 'MS',
+    'timingSafeEqual', 'MS', '_padBucketSize',
     html.slice(bs, be) + '\nreturn { encryptFor, decryptFrom };',
   );
   const R = factory(
     CONFIG, true, dbGet, dbPut, () => {}, async () => null, async () => { throw new Error('not used'); }, null,
     null, '', async () => null, async () => true, myKeys, myPubB64, () => {},
     (a) => Array.from(a), (a) => new Uint8Array(a),
-    async (x, y) => x === y, { WEEK: 604800000 },
+    async (x, y) => x === y, { WEEK: 604800000 }, inlinePadBucketSize,
   );
   return R;
 }
@@ -1721,9 +1721,9 @@ const _sealDeps = (() => {
   };
   return { genRatchetKey, ecdhBits, hkdf };
 })();
-const { sealMeta: inlineSealMeta, unsealMeta: inlineUnsealMeta } = new Function(
+const { sealMeta: inlineSealMeta, unsealMeta: inlineUnsealMeta, _padBucketSize: inlinePadBucketSize } = new Function(
   'crypto', 'CONFIG', '_dbg', 'genRatchetKey', 'ecdhBits', 'hkdf', 'zeroBuffer', 'arr',
-  sealBlock + '\nreturn { sealMeta, unsealMeta };',
+  sealBlock + '\nreturn { sealMeta, unsealMeta, _padBucketSize };',
 )(globalThis.crypto, { IV_BYTES: 12 }, () => {},
   _sealDeps.genRatchetKey, _sealDeps.ecdhBits, _sealDeps.hkdf, (b) => b.fill?.(0), (u8) => Array.from(u8));
 
