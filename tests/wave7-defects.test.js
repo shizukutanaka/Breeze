@@ -35,3 +35,44 @@ describe('D16 — sealed-queue recovery count is accumulated and surfaced in /se
     }
   });
 });
+
+const location = readFileSync(new URL('../src/app/location.js', import.meta.url), 'utf8');
+
+describe('D25 — secondary devices send to groups via per-device sender keys + registry attribution', () => {
+  it('the device role tracks the account root for acctRoot naming', () => {
+    expect(html).toContain('let _myAcctRoot = null;');
+    expect(html).toContain('_myAcctRoot = acct?.root || null;');
+  });
+
+  it('group sends name acctRoot on relay deposits (transport, composer, sender-key distribution)', () => {
+    const needle = "...(_isSecondaryDevice && _myAcctRoot ? { acctRoot: _myAcctRoot } : {})";
+    expect(html.split(needle).length - 1).toBe(3);
+  });
+
+  it('secondaries skip the P2P direct leg for groups (relay-only), in both send paths', () => {
+    expect(html.split('for (const m of _isSecondaryDevice ? [] : members)').length - 1).toBe(2);
+  });
+
+  it('the composer and sticker paths no longer refuse secondary group sends', () => {
+    expect(html).not.toContain("input.value = text; // give the message back rather than eating it");
+    expect(html).not.toContain("if (_isSecondaryDevice) { showToast(t('groupPrimaryOnly'), 'error'); return; }");
+    expect(location).not.toContain("contact.isGroup && D.isSecondary()");
+  });
+
+  it('receivers attribute device senders through the root-signed registry verdict', () => {
+    expect(html).toContain('async function _deviceAttributionOk(rootPubB64, devicePub)');
+    expect(html).toContain('if (rootMember && await _deviceAttributionOk(msg.acctRoot, msg.fromPub)) { member = rootMember; peerPub = msg.fromPub; }');
+    expect(html).toContain("if (rootC?.pubB64 === msg.acctRoot && await _deviceAttributionOk(msg.acctRoot, msg.fromPub)) { c = rootC; peerPub = msg.fromPub; }");
+  });
+
+  it('attributed traffic keeps account identity: msgId and reactor use the member id', () => {
+    expect(html).toContain('const reactorId = member.id;');
+    expect(html).toContain("const msgId = member.id + ':' + msg.ts;");
+  });
+
+  it('group calls and group file sends remain primary-only (separate transports, unchanged)', () => {
+    const groupCall = readFileSync(new URL('../src/app/group-call.js', import.meta.url), 'utf8');
+    expect(groupCall).toContain("if (D.isSecondary()) { showToast(t('groupPrimaryOnly'), 'error'); return; }");
+    expect(html).toContain("if (activeContact.isGroup && _isSecondaryDevice) { showToast(t('groupPrimaryOnly'), 'error'); return; }");
+  });
+});

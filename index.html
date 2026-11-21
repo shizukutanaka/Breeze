@@ -4372,26 +4372,19 @@ async function initMessenger(dbName) {
 
   // ===== Relay identity pin (stage-2 step 4) =====
   // TOFU pin of the SERVING relay's identity key (design D3 in
-  // docs/RELAY_STAGE2_PLAN.md: the pin authenticates continuity, not
-  // virtue). checkRelayPin() runs at session start, after loadSettings()
-  // — so the pin lives in _settings and is per-account by construction.
-  // It reads the key /api/health advertises, then proves the relay at
-  // the other end HOLDS that key: POST /api/relay/attest returns a live
-  // Ed25519 signature over a fresh nonce, verified with the same
-  // verifySignature() queue auth uses. First contact stores the pin;
-  // the fingerprint (below) is what the user compares out-of-band
-  // against the operator's published one.
-  // A later session that sees a DIFFERENT advertised key, or an
-  // attestation signature that does not verify, has positive evidence
-  // of a substituted relay: the key-change warning pattern fires and
-  // _relayPinGate refuses every API call for the rest of the session.
-  // The pin is NEVER silently re-written. A relay with no key at all
-  // (a pre-step-4 server — including the official deployment until its
-  // operator provisions one) keeps today's implicit serving-origin
-  // trust: no pin, no block (an ADDED relay, step 5, refuses that case
-  // instead). Attestation being merely UNREACHABLE (offline, 429, 5xx,
-  // an inconsistent answer) is not evidence: it neither pins nor
-  // blocks — only a verified answer moves the state.
+  // docs/RELAY_STAGE2_PLAN.md: the pin authenticates continuity, not virtue).
+  // checkRelayPin() runs at session start, after loadSettings() — the pin lives
+  // in _settings and is per-account by construction. It reads the key
+  // /api/health advertises, then proves the relay HOLDS it: POST
+  // /api/relay/attest returns a live Ed25519 signature over a fresh nonce.
+  // First contact stores the pin; the fingerprint (below) is what the user
+  // compares out-of-band. A later session seeing a DIFFERENT advertised key or
+  // a failing attestation has positive evidence of a substituted relay: the
+  // key-change warning fires and _relayPinGate refuses every API call for the
+  // session. The pin is NEVER silently re-written. A relay with no key at all
+  // keeps today's implicit serving-origin trust: no pin, no block (an ADDED
+  // relay, step 5, refuses that case). Attestation merely UNREACHABLE (offline,
+  // 429, 5xx, an inconsistent answer) is not evidence: it neither pins nor blocks.
   let _relayPinFp = ''; // fingerprint of the trusted relay key, for the /security display
   async function relayFingerprint(keyB64) {
     try {
@@ -4479,34 +4472,26 @@ async function initMessenger(dbName) {
   }
 
   // ===== Home relays (stage-2 step 5) =====
-  // The relays this account calls home: where its mailbox, prekey
-  // bundle, presence and backup live (design in
-  // docs/RELAY_STAGE2_PLAN.md). _settings.relays stores the ADDED
-  // relays as { url, pin, label }; the effective list homeRelays()
-  // resolves always starts with the serving origin (whose pin is
-  // step 4's _settings.relayPin), so an untouched install resolves
-  // to exactly one relay — this one — and behaves exactly as before
-  // this step. Only OWN-account traffic fans out (poll + ack,
-  // presence, prekey upload/status, backup, push subscribe, mailbox
-  // WS, health); everything addressed to a contact — sends, prekey
-  // fetches, groups, signal rendezvous — stays on the primary
-  // (first) relay until step 6 teaches senders about home relays.
-  //
-  // Pins are PER RELAY: the origin keeps step 4's session check and
-  // its global gate; an added relay is verified lazily, inside the
-  // resolver, before its first call of the session — which also
-  // closes step 4's recorded boot window for added relays, because
-  // an added relay can only enter the list via _settings (loaded
-  // before any fan-out can name it) and its first call waits for
-  // the verdict. The verdict rules are step 4's: a key that differs
-  // from the pin, an attestation signature that fails against the
-  // advertised key, or a key that was pinned and is no longer
-  // presented at all are POSITIVE evidence — that relay (and only
-  // that relay) is latched off for the session and the key-change
-  // warning fires; the pin is never silently re-written. An
-  // unreachable relay is no evidence: the call is refused (nothing
-  // goes to an unverified relay) but nothing latches, and the next
-  // call re-checks.
+  // The relays this account calls home: where its mailbox, prekey bundle,
+  // presence and backup live (docs/RELAY_STAGE2_PLAN.md). _settings.relays
+  // stores the ADDED relays as { url, pin, label }; the effective list
+  // homeRelays() always starts with the serving origin (pin = step 4's
+  // _settings.relayPin), so an untouched install resolves to exactly one
+  // relay — this one — and behaves as before. Only OWN-account traffic fans
+  // out (poll + ack, presence, prekey upload/status, backup, push subscribe,
+  // mailbox WS, health); everything addressed to a contact — sends, prekey
+  // fetches, groups, signal rendezvous — stays on the primary (first) relay
+  // until step 6 teaches senders about home relays.
+  // Pins are PER RELAY: the origin keeps step 4's session check and global
+  // gate; an added relay is verified lazily inside the resolver before its
+  // first call of the session (which also closes step 4's boot window for
+  // added relays: one enters the list only via _settings, loaded before any
+  // fan-out can name it, and its first call waits for the verdict). Verdict
+  // rules are step 4's: a key differing from the pin, a failing attestation
+  // signature, or a pinned key no longer presented are POSITIVE evidence —
+  // that relay (only) latches off for the session, the key-change warning
+  // fires, and the pin is never silently re-written. An unreachable relay is
+  // no evidence: the call is refused but nothing latches; the next call re-checks.
   const _relayBlockedUrls = new Set(); // added relays latched off by a verified pin failure (this session)
   const _relayVerifyMemo = new Map();  // url -> Promise<boolean>: the session's conclusive verdicts
   const _relayHealthByUrl = new Map(); // url -> last health JSON seen (per-relay features / VAPID key)
@@ -5178,14 +5163,17 @@ async function initMessenger(dbName) {
   let _focusTimer = null;
   let _readTimer = null; // pending delayed read receipt (see openConversation)
   let _noReplyNeeded = false; // one-shot: marks the NEXT message as needing no reply
-  // True when this install is a LINKED secondary (see /linkto). Group sending is primary-only
-  // by design; resolved at boot and refreshed by /link, /linkto and /unlink.
+  // True when this install is a LINKED secondary (see /linkto); resolved at boot and
+  // refreshed by /link, /linkto and /unlink. _myAcctRoot is the account root pub this
+  // device is bound to (null on a primary) — a secondary's group sends name it (D25).
   let _isSecondaryDevice = false;
+  let _myAcctRoot = null;
   async function _refreshDeviceRole() {
     try {
       const acct = await dbGet('identity', 'account');
       _isSecondaryDevice = !!(acct?.root && acct.root !== myPubB64);
-    } catch { _isSecondaryDevice = false; }
+      _myAcctRoot = acct?.root || null;
+    } catch { _isSecondaryDevice = false; _myAcctRoot = null; }
   }
   function _updateNrnButton() {
     const b = _DOM.get('b-msg-nrn');
@@ -6514,7 +6502,9 @@ async function initMessenger(dbName) {
     if (!groupCiphertext) return false;
     if (onEncrypted) await onEncrypted();
     const waits = new Map();
-    for (const m of members) {
+    // D25: a secondary skips the direct path — DC connections are keyed by the ROOT
+    // pub and drop group_msg from any other sender. Relay deposits are its path.
+    for (const m of _isSecondaryDevice ? [] : members) {
       const peer = peers[m.pubB64];
       if (peer?.connected && peer.dc?.readyState === 'open') {
         const w = _directAck?.expect(m.pubB64, ts);
@@ -6532,7 +6522,7 @@ async function initMessenger(dbName) {
       if (!acked) owed.push(m);
     }
     await _poolMap(owed, 8, async (m) => {
-      try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCiphertext, ts, groupId: contact.id, groupName: contact.name, isGroupSK: true }, m.pubB64); } catch(e) { _dbg(e); }
+      try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCiphertext, ts, groupId: contact.id, groupName: contact.name, isGroupSK: true, ...(_isSecondaryDevice && _myAcctRoot ? { acctRoot: _myAcctRoot } : {}) }, m.pubB64); } catch(e) { _dbg(e); }
     });
     return true;
   }
@@ -6548,7 +6538,6 @@ async function initMessenger(dbName) {
     _lastSendTs = ts;
     const msgId = myId + ':' + ts;
     if (contact.isGroup) {
-      if (_isSecondaryDevice) { showToast(t('groupPrimaryOnly'), 'error'); return; }
       const members = (contact.members || []).filter(m => m.id !== myId);
       if (!members.every(m => (m.caps || []).includes(CAPS_STICKER))) {
         if (clean.emoji) { await _sendTextFallback(clean.emoji); return; }
@@ -6703,6 +6692,21 @@ async function initMessenger(dbName) {
   // Receiver-side registry cache for sender attribution (handleIncoming) — keyed by root id,
   // 1-min TTL like the sender-side caches (D14). Bounds /device/list traffic to 1 per account/min.
   const _attribDevCache = new Map(); const _devRegTs = {}; let _ownRegistryTs = 0;
+  // D25 (group Phase 2): the group receive paths share the 1:1 path's attribution
+  // verdict — devicePub is a device of rootPubB64's account only if it appears in
+  // that root's SIGNED device registry (verified inside _fetchDeviceRegistry).
+  async function _deviceAttributionOk(rootPubB64, devicePub) {
+    if (!rootPubB64 || !devicePub) return false;
+    const rootId = rootPubB64.slice(0, 12);
+    let devs = _attribDevCache.get(rootId);
+    if (!devs || Date.now() - devs.ts > MS.MIN) {
+      const reg = await _fetchDeviceRegistry(rootId, rootPubB64);
+      if (reg?.ts) _devRegTs[rootId] = reg.ts;
+      devs = { list: reg?.list || [], ts: Date.now() };
+      _attribDevCache.set(rootId, devs);
+    }
+    return devs.list.includes(devicePub);
+  }
   // My OWN other devices (for self-sync). Uses the local account record written by /link.
   let _myDevCache = null, _myDevCacheTs = 0, _unlinkNoticed = false;
   async function _myOtherDevices() {
@@ -6853,30 +6857,23 @@ async function initMessenger(dbName) {
 
   // ============================================================
   // Stage-2 step 6: contacts' home relays + redundant deposit.
-  //
-  // Step 5 fanned out MY traffic to MY home relays; this step fans a
-  // message OUT to the CONTACT's home relays — the same sealed bytes
-  // at up to _settings.fanout of them (default 2). Safety is the
-  // plan's D4 (id space unchanged, ordering from ratchet counter +
-  // internal ts, recipient dedup by message id), and the plan's one
-  // open question — a duplicated IDENTICAL ciphertext vs the ratchet
-  // — was settled against the code first: handleIncoming checks the
-  // replay cache and the IDB store BEFORE decrypting, and the msgId
-  // embeds the payload ts (identical across copies), so a duplicate
-  // never reaches the ratchet; if one slipped through, ratchetDecrypt
-  // returns null for a consumed counter / seen id and state commits
-  // only after a successful AEAD open (group sends fail the same
-  // checks after decrypt). No double display, no desync — so the
-  // per-copy ACK stays unconditional: a copy the recipient will
-  // dedup is still a copy DELIVERED.
-  //
-  // Discovery: a contact's home list is [{ url, pin }] in preference
-  // order — the carrier that introduced them (invite origin / pasted
-  // URL), the contact settings, or the home hint on their prekey
-  // bundle (served by fetch and by the OTP-free status). A hint is
-  // used for the send but never silently persisted: stored carriers
-  // outrank it. Caps gate the count: no 'multi-relay', first home
-  // only — old clients see no change.
+  // Step 5 fanned out MY traffic to MY home relays; this step fans a message
+  // OUT to the CONTACT's home relays — the same sealed bytes at up to
+  // _settings.fanout of them (default 2). Safety is the plan's D4 (id space
+  // unchanged, ordering from ratchet counter + internal ts, recipient dedup
+  // by message id). The plan's open question — a duplicated IDENTICAL
+  // ciphertext vs the ratchet — was settled against the code: handleIncoming
+  // checks the replay cache and IDB BEFORE decrypting, and the msgId embeds
+  // the payload ts (identical across copies), so a duplicate never reaches
+  // the ratchet; if one slipped through, ratchetDecrypt returns null for a
+  // consumed counter / seen id and state commits only after a successful AEAD
+  // open. No double display, no desync — so the per-copy ACK stays
+  // unconditional: a copy the recipient will dedup is still a copy DELIVERED.
+  // Discovery: a contact's home list is [{ url, pin }] in preference order —
+  // the carrier that introduced them, contact settings, or the home hint on
+  // their prekey bundle. A hint is used for the send but never silently
+  // persisted: stored carriers outrank it. Caps gate the count: no
+  // 'multi-relay' → first home only — old clients see no change.
   const CAPS_MULTI_RELAY = 'multi-relay';
 
   // Invite-carried home lists (H3): an invite link bundles the
@@ -7596,7 +7593,7 @@ async function initMessenger(dbName) {
         : { type: 'sender_key', groupId, key: sk.raw, epoch: sk.epoch };
       const encrypted = await encryptFor(JSON.stringify(skPayload), memberPubB64);
       if (!encrypted) { _dbg(null, 'encrypt failed'); return; }
-      await relaySend(memberId, { to: memberId, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: Date.now(), isSenderKey: true }, memberPubB64);
+      await relaySend(memberId, { to: memberId, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: Date.now(), isSenderKey: true, ...(_isSecondaryDevice && _myAcctRoot ? { acctRoot: _myAcctRoot } : {}) }, memberPubB64);
       _skDist.set(dkey, { epoch: sk.epoch, count: 0, roster: rosterSize || rec?.roster || 0 });
     } catch(_e) { _dbg(_e, 'distributeSenderKey'); }
   }
@@ -10020,20 +10017,11 @@ async function initMessenger(dbName) {
     // it applies to this message only, so it can never silently mute a conversation.
     if (_noReplyNeeded) { meta.nrn = true; _noReplyNeeded = false; _updateNrnButton(); }
     if (activeContact.isGroup) {
-      // A linked SECONDARY device is not in the group roster — the roster holds the account
-      // ROOT's id — so every member's `if (!member) return` drops its group messages on the
-      // floor while this device cheerfully renders them as sent. Refusing out loud is the
-      // honest behaviour: the limitation is a deliberate scope decision (per-device roster
-      // entries would multiply membership, epoch churn and kick semantics by device count),
-      // but silently discarding a message the user watched "send" is a lie, and this product
-      // spent a whole audit removing those. Group send stays on the primary device.
-      if (_isSecondaryDevice) {
-        showToast(t('groupPrimaryOnly'), 'error');
-        input.value = text; // give the message back rather than eating it
-        _isSending = false;
-        if (sendBtn) { sendBtn.disabled = false; sendBtn.classList.add('i-op-full'); sendBtn.classList.remove('pulse'); }
-        return;
-      }
+      // D25 (Phase 2): a linked SECONDARY device sends with its OWN per-device
+      // sender key (getGroupSenderKey is per-device storage) and names its
+      // account root (acctRoot) on every deposit; receivers attribute the device
+      // to the roster member via the root's SIGNED device registry — the roster
+      // still holds accounts only, so membership/epoch/kick semantics are unchanged.
       meta.senderName = myName;
       meta.mentions = [...text.matchAll(/@(\w+)/g)].map(m => m[1]);
     }
@@ -10082,7 +10070,7 @@ async function initMessenger(dbName) {
       // runs ONLY for members whose post-persistence ack did not
       // arrive. Pre-Step-2 this was unconditional dual-path (plan W1).
       const _groupAckWaits = new Map(); // member id -> ack promise
-      for (const m of members) {
+      for (const m of _isSecondaryDevice ? [] : members) { // D25: secondaries are relay-only for groups (see _sendGroupTransport)
         const peer = peers[m.pubB64];
         if (peer?.connected && peer.dc?.readyState === 'open') {
           const ackWait = _directAck?.expect(m.pubB64, ts);
@@ -10116,7 +10104,7 @@ async function initMessenger(dbName) {
         try {
           await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName,
             payload: groupCiphertext, ts, groupId, groupName: activeContact.name,
-            replyTo: meta.replyTo, disappearAt: meta.disappearAt, isGroupSK: true }, m.pubB64);
+            replyTo: meta.replyTo, disappearAt: meta.disappearAt, isGroupSK: true, ...(_isSecondaryDevice && _myAcctRoot ? { acctRoot: _myAcctRoot } : {}) }, m.pubB64);
         } catch(e) { _dbg(e); }
       });
     } else {
@@ -11629,13 +11617,22 @@ async function initMessenger(dbName) {
     // === Sender Key distribution (v3 group crypto) ===
     if (msg.isSenderKey) {
       try {
-        const c = await dbGet('contacts', (msg.from || '').slice?.(0, 12) || msg.from);
+        let c = await dbGet('contacts', (msg.from || '').slice?.(0, 12) || msg.from);
+        let peerPub = c?.pubB64;
+        // D25: a distribution may come from a member's linked DEVICE (unknown as a
+        // contact) — accept it only when the named account root is a known contact
+        // AND the device pub is in that root's SIGNED device registry; the session
+        // peer is then the device's own pub, the key filed under its sender id.
+        if (!c && msg.fromPub && typeof msg.acctRoot === 'string') {
+          const rootC = await dbGet('contacts', msg.acctRoot.slice(0, 12));
+          if (rootC?.pubB64 === msg.acctRoot && await _deviceAttributionOk(msg.acctRoot, msg.fromPub)) { c = rootC; peerPub = msg.fromPub; }
+        }
         // Only accept sender keys from known contacts. An unknown sender who is not in
         // the contacts DB would otherwise use msg.fromPub (attacker-controlled) as the
         // decryption peer key, letting them inject arbitrary sender keys into identity
         // store (DB pollution; defense-in-depth since group messages also require membership).
         if (!c) return;
-        const decrypted = await decryptFrom(msg.payload, c.pubB64);
+        const decrypted = await decryptFrom(msg.payload, peerPub);
         if (!decrypted) return;
         const skMsg = JSON.parse(decrypted);
         // v5 payloads carry `chainKey` not `key` — requiring skMsg.key would drop them all.
@@ -11731,16 +11728,27 @@ async function initMessenger(dbName) {
       const group = await dbGet('contacts', msg.groupId);
       if (!group) return;
       const senderId = typeof msg.from === 'string' ? msg.from.slice(0, 12) : '';
-      const member = (group.members || []).find(m => m.id === senderId);
-      if (!member || (msg.from !== member.id && msg.from !== member.pubB64) ||
-          (msg.fromPub && msg.fromPub !== member.pubB64)) return;
+      let member = (group.members || []).find(m => m.id === senderId);
+      let peerPub = member?.pubB64 || null; // 1:1 session peer: the member root, or its device when attributed
+      if (member) {
+        if ((msg.from !== member.id && msg.from !== member.pubB64) ||
+            (msg.fromPub && msg.fromPub !== member.pubB64)) return;
+      } else if (msg.fromPub && typeof msg.acctRoot === 'string') {
+        // D25: the sender is a roster member's linked DEVICE — attribute it
+        // through the root's SIGNED device registry (the 1:1 path's trust
+        // anchor). Sender-key state stays keyed by the device's own id; display
+        // name and msgId stay the member's. Unverifiable claims drop as before.
+        const rootMember = (group.members || []).find(m => m.pubB64 === msg.acctRoot);
+        if (rootMember && await _deviceAttributionOk(msg.acctRoot, msg.fromPub)) { member = rootMember; peerPub = msg.fromPub; }
+      }
+      if (!member) return;
 
       // v3.6: Encrypted signal for group (edit/delete/reaction)
       if (msg.isSignal && msg.payload) {
         try {
           // Reject signals from non-members — same injection vector as group messages:
           // a contact with a 1:1 session key can forge a signal that decryptFrom accepts.
-          const senderPub = member.pubB64;
+          const senderPub = peerPub;
           const signalJson = await decryptFrom(msg.payload, senderPub);
           if (!signalJson) return;
           const signal = JSON.parse(signalJson);
@@ -11770,8 +11778,9 @@ async function initMessenger(dbName) {
               if (!stored.reactions[signal.emoji]) {
                 if (Object.keys(stored.reactions).length < 20) stored.reactions[signal.emoji] = [];
               }
-              // Use the verified sender identity from decryption, not the self-reported signal.userId
-              const reactorId = (senderPub || '').slice(0, 12);
+              // Use the verified sender identity from decryption, not the self-reported signal.userId.
+              // The ACCOUNT's id (D25): the same person reacting from two devices is one reactor.
+              const reactorId = member.id;
               if (signal.add) { if (!stored.reactions[signal.emoji]?.includes(reactorId) && (stored.reactions[signal.emoji]?.length ?? 100) < 100) stored.reactions[signal.emoji].push(reactorId); }
               else { stored.reactions[signal.emoji] = stored.reactions[signal.emoji].filter(u => u !== reactorId); if (stored.reactions[signal.emoji].length === 0) delete stored.reactions[signal.emoji]; }
               await dbPut('messages', stored);
@@ -11789,8 +11798,9 @@ async function initMessenger(dbName) {
         text = await decryptGroupMsg(msg.groupId, (msg.from || '').slice(0, 12), msg.payload);
       }
       if (!text) {
-        // Fallback: legacy per-member encryption, using the local member key.
-        text = await decryptFrom(msg.payload, member.pubB64);
+        // Fallback: legacy per-member encryption, using the local member key
+        // (the attributed device's own pub when the sender is a linked device).
+        text = await decryptFrom(msg.payload, peerPub);
       }
       if (!text) return;
       // Cap group message text — relay enforces 256 KB but the P2P group path has no server check.
@@ -13839,29 +13849,16 @@ async function initMessenger(dbName) {
     }
   });
 
-  // The v3.5 delegated right-click handler that used to live here is deleted, not fixed
-  // in place. Every `.msg[data-msgid]` already gets its own `oncontextmenu` (above,
-  // `showMsgMenu`) which is a strict superset: react, reply, copy, edit/delete, forward,
-  // pin, bookmark, select, report — vs. this one's reply/forward/copy/pin/edit/delete.
-  // Both fired on the SAME right-click (this one via bubbling from the message up to
-  // #msg-messages), and since showContextMenu() clears any existing `.ctx-menu` before
-  // building its own, whichever ran SECOND won — which was always this one, so
-  // showMsgMenu's menu was created and destroyed in the same synchronous event dispatch,
-  // before a single paint. The user only ever saw THIS menu, and it was strictly worse:
-  // - React, Bookmark, Select (multi-select mode had no other entry point at all) and
-  //   Report (the ONLY way to file an abuse report on desktop) were unreachable — not
-  //   degraded, unreachable, since showMsgMenu's DOM never survived to be clicked.
-  // - Its own "forward" action didn't forward anything — it stuffed
-  //   `/reply <text>` into YOUR OWN composer, unrelated to forwardMsg()'s real
-  //   multi-contact picker that showMsgMenu's "forward" already calls.
-  // - Its pin/edit/delete needed a hand-rolled re-fetch from IndexedDB to work at all
-  //   (a comment here explained a msgId-shape bug an earlier session had to patch).
-  //   showMsgMenu never had that bug: it already builds the full message object once,
-  //   at showMsgMenu(el, msg)'s call site, instead of re-deriving it from a bare id.
-  // - Its reply action duplicated startReply()'s body inline instead of calling it — the
-  //   same function the swipe-to-reply gesture already uses — so this handler's reply UI
-  //   could drift from the gesture's over time even though both claim to do the same thing.
-  // Nothing here was worth carrying forward; showMsgMenu already does all of it, correctly.
+  // The v3.5 delegated right-click handler that used to live here is deleted, not
+  // fixed in place. Every `.msg[data-msgid]` already gets its own `oncontextmenu`
+  // (showMsgMenu, above) — a strict superset (react, reply, copy, edit/delete,
+  // forward, pin, bookmark, select, report). Both fired on the SAME right-click
+  // (this one via bubbling up to #msg-messages), and since showContextMenu()
+  // clears any existing `.ctx-menu` before building its own, whichever ran SECOND
+  // won — always this one — so showMsgMenu's menu was created and destroyed in
+  // the same synchronous dispatch, before a paint: React, Bookmark, Select and
+  // Report were unreachable, and its "forward" stuffed `/reply <text>` into the
+  // composer instead of calling forwardMsg()'s picker. Nothing worth keeping.
 
   // v3.5: Global delegation — overlay close buttons (data-close="overlay")
   document.addEventListener('click', (e) => {

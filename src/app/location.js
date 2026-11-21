@@ -159,7 +159,6 @@ export function createLocationShare(D) {
     async function _startLiveShare(contact, minutes) {
       const L = L;
       if (!L || _liveShares.has(contact.id)) { if (_liveShares.has(contact.id)) D.showToast(D.t('locLiveAlready'), 'info'); return; }
-      if (contact.isGroup && D.isSecondary()) { D.showToast(D.t('groupPrimaryOnly'), 'error'); return; }
       if (!await _peerLocCap(contact)) { D.showToast(D.t(contact.isGroup ? 'locGroupNoCap' : 'locPeerNoCap'), 'error'); return; }
       let pos;
       try { pos = await _geoPos(); } catch(e) { D.showToast(D.t(e?.code === 1 ? 'locDenied' : 'locUnavailable'), 'error'); return; }
