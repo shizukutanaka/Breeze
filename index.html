@@ -1534,7 +1534,7 @@ const _I = {
     locDenied: "Location permission denied",
     locUnavailable: "Could not get your location",
     locPeerNoCap: "This contact's app does not support location sharing yet",
-    locGroupNoCap: "Location sharing needs every group member on a supporting version",
+    locGroupNoCap: "Location sharing needs every group member on a supporting version", groupLegacyNoFs: '⚠️ Forward secrecy is off for this group: a member is on an older version without group v5. Ask them to update to enable it.',
     locLiveAlready: "You are already sharing live location here",
     locStop: "Stop",
     voiceCall: 'Voice call',
@@ -15357,7 +15357,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         members.map(m => {
           const isOn = peers[m.pubB64]?.connected || _presenceCache[m.id];
           return (isOn ? '🟢' : '⚫') + ' ' + esc(m.name || m.id) + (m.id === myId ? ' ' + t('cmdMemberYou') : '');
-        }).join('<br>'));
+        }).join('<br>') + (CONFIG.GROUP_RATCHET_V5 && !_computeGroupV5(activeContact) ? '<br><span class="i-t3-10">' + t('groupLegacyNoFs') + '</span>' : '')); // D30: a legacy member holds the whole group on v3 (no FS) — say so, and what fixes it
       box.appendChild(d); box.scrollTop = box.scrollHeight;
     }
 

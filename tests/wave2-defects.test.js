@@ -119,3 +119,15 @@ describe('D05 — KT chain-head pin + opt-in session block on tampered', () => {
     for (const l of LOCALES) expect(locale(l).ktBlockLabel, l).toBeTruthy();
   });
 });
+
+describe('D30 — /members states when a legacy member disables group forward secrecy', () => {
+  it('the member list appends the no-FS notice only when v5 is configured but not negotiated', () => {
+    expect(html).toContain("CONFIG.GROUP_RATCHET_V5 && !_computeGroupV5(activeContact)");
+    expect(html).toContain("'<br><span class=\"i-t3-10\">' + t('groupLegacyNoFs') + '</span>'");
+  });
+
+  it('the notice ships in en + all 7 locales', () => {
+    expect(html).toContain("groupLegacyNoFs: '⚠️ Forward secrecy is off for this group");
+    for (const l of LOCALES) expect(locale(l).groupLegacyNoFs, l).toBeTruthy();
+  });
+});
