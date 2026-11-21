@@ -664,11 +664,14 @@ function capQueueBytes(items, sizeOf, maxBytes = 16 * 1024 * 1024) {
 //   misconfigured deploy degrades to the pre-step-2 behaviour instead
 //   of losing queues.
 //
-// The handlers above the seam are backend-agnostic — they keep their
-// read-back recovery logic, which against the DO operates on strongly
-// consistent reads (a committed write is always visible to the
-// read-back) instead of racing eventual consistency. The staged
-// remainder is in docs/MAILBOX_STAGE1_PLAN.md.
+// The handlers above the seam are backend-agnostic. D16 stage 2
+// moved the append itself behind the seam as one composite op
+// (appendQueue, plus claimPoll for the sealed poll's recovery-count
+// claim): on the DO backend the op runs inside MailboxCore's
+// per-mailbox serialization and is exactly-once; the KV methods carry
+// the stage-1 read-back recovery the handlers used to run inline.
+// SECURITY.md states the two tiers; the staged remainder is in
+// docs/MAILBOX_STAGE1_PLAN.md.
 // Non-mailbox storage (prekey bundles, groups, …) stays on the kv*
 // helpers by design. Presence was the one other write-budget consumer
 // of the same class; it got its own seam in step 4 (PRESENCE STORE,
@@ -687,6 +690,7 @@ function mailboxStoreForKey(env, queueKey) {
 function kvMailboxStoreForKey(env, queueKey) {
   const hwmKey = `${queueKey}:hwm`;
   const droppedKey = `${queueKey}:dropped`;
+  const kind = queueKey.slice(0, queueKey.indexOf(':'));
   return {
     queueKey,
     readQueue: () => kvGet(env, queueKey),
@@ -701,6 +705,135 @@ function kvMailboxStoreForKey(env, queueKey) {
     // No per-mailbox deposit gate on KV (see the store header), and
     // no fair-use quota either — both ride the same op: always ok.
     checkDeposit: async () => ({ ok: true }),
+    // D16 stage 2 (KV tier): the append as ONE store call. KV has no
+    // serialization to move it into, so this method carries the
+    // stage-1 semantics unchanged — for the sealed family: write,
+    // read back, and if a racing writer's last-write-wins put erased
+    // the entry, re-append and READ BACK AGAIN, up to
+    // SEALED_MAX_REPAIRS rounds (identity is the envelope itself,
+    // never the ts — a racer's entry can share the millisecond). A
+    // send still unseen after every round reports `unconfirmed` so
+    // the handler fails honestly (STORE_UNCONFIRMED) instead of
+    // answering a delivery that never landed; each repair bumps the
+    // recovery count folded into the queue value, surfaced once by
+    // the recipient's next poll claim. The D31 hwm fold repair rides
+    // along: a poll that raced the write and recorded a higher hwm
+    // gets its mark restored from the read-back (monotonic — a stale
+    // read-back never lowers it). The plain family carries its own
+    // read-back (identity is the server-assigned msg.id) and the
+    // tail+hwm ts recompute. Best-effort with verified recovery, NOT
+    // exactly-once — the DO tier's append op is the exactly-once one
+    // (SECURITY.md states the tiers).
+    appendQueue: async (item, ttlSec) => {
+      if (kind === 'sealed') {
+        const envelope = item?.envelope;
+        if (typeof envelope !== 'string' || !envelope) return { ok: false };
+        const existing = await kvGet(env, queueKey);
+        const { q: queue, hwm: queueHwm, rc: queueRc } = parseSealedQueue(existing);
+        const newTs = queue.length > 0 && Number.isFinite(queue[queue.length - 1].ts)
+          ? Math.max(Date.now(), queue[queue.length - 1].ts + 1)
+          : Date.now();
+        queue.push({ envelope, ts: newTs });
+        const trimmed = capQueueBytes(queue.slice(-100), m => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
+        const droppedNow = queue.length - trimmed.length;
+        if (droppedNow > 0) {
+          const prev = parseInt(await kvGet(env, droppedKey) || '0') || 0;
+          await kvPut(env, droppedKey, String(Math.min(prev + droppedNow, 99999)), { expirationTtl: TTL.WEEK });
+        }
+        const stored = await kvPut(env, queueKey, sealedQueueValue(trimmed, queueHwm, queueRc), { expirationTtl: ttlSec });
+        if (!stored) return { ok: false };
+        const mine = (m) => m && typeof m.envelope === 'string'
+          && m.envelope.length === envelope.length && m.envelope === envelope;
+        let snap = parseSealedQueue(await kvGet(env, queueKey));
+        let repairs = 0;
+        while (!snap.q.some(mine) && repairs < SEALED_MAX_REPAIRS) {
+          // Recompute the re-append ts from the CURRENT tail: reusing
+          // newTs could re-enter with a ts equal to the racing
+          // winner's, and an ack filtering on `m.ts > hwm` would then
+          // delete this envelope unpolled (audit 2026-11-13 §2.3).
+          const tailTs = snap.q.length > 0 && Number.isFinite(snap.q[snap.q.length - 1].ts) ? snap.q[snap.q.length - 1].ts : 0;
+          const reTs = Math.max(newTs, tailTs + 1);
+          snap.q.push({ envelope, ts: reTs });
+          const requeued = capQueueBytes(snap.q.slice(-100), (m) => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
+          repairs++;
+          // The count written is the snapshot's plus THIS send's
+          // repair rounds: a clobbered repair takes its own increment
+          // with it, so snapshot-only counting would under-report
+          // exactly the multi-clobber cases the count exists to catch.
+          await kvPut(env, queueKey, sealedQueueValue(requeued, snap.hwm, snap.rc + repairs), { expirationTtl: ttlSec });
+          snap = parseSealedQueue(await kvGet(env, queueKey));
+        }
+        if (!snap.q.some(mine)) return { ok: false, unconfirmed: true };
+        if (repairs === 0 && snap.hwm !== null && (queueHwm === null || snap.hwm > queueHwm)) {
+          await kvPut(env, queueKey, sealedQueueValue(snap.q, snap.hwm, snap.rc), { expirationTtl: ttlSec });
+        }
+        return { ok: true, ts: newTs };
+      }
+      // Plain inbox: the same read-modify-write shape, with the
+      // read-back keyed on the server-assigned msg.id (unique per
+      // message, so it cannot false-positive on a racer's entry) and
+      // the re-append ts recomputed from the current tail AND the
+      // persistent hwm, so the recovered message stays strictly above
+      // the recipient's poll cursor.
+      const existing = await kvGet(env, queueKey);
+      const inboxParsed = existing ? safeJsonParse(existing, []) : [];
+      const inbox = Array.isArray(inboxParsed) ? inboxParsed : [];
+      const hwmRaw = await kvGet(env, hwmKey);
+      const hwmParsed = hwmRaw !== null ? parseInt(hwmRaw) : NaN;
+      const inboxHwm = Number.isFinite(hwmParsed) ? hwmParsed : null;
+      const msg = { ...item };
+      // Strictly-increasing ts against the tail, then past the
+      // persistent hwm (the §4 residual anchor that survives drains).
+      if (inbox.length > 0) {
+        const lastStoredTs = inbox[inbox.length - 1].ts;
+        if (Number.isFinite(lastStoredTs) && msg.ts <= lastStoredTs) msg.ts = lastStoredTs + 1;
+      }
+      if (inboxHwm !== null && msg.ts <= inboxHwm) msg.ts = inboxHwm + 1;
+      inbox.push(msg);
+      const trimmed = capQueueBytes(inbox.slice(-100), m => (typeof m.payload === 'string' ? m.payload.length : 0) + 1024);
+      const noteDropped = async (n) => {
+        if (n <= 0) return;
+        const prev = parseInt(await kvGet(env, droppedKey) || '0') || 0;
+        await kvPut(env, droppedKey, String(Math.min(prev + n, 99999)), { expirationTtl: TTL.WEEK });
+      };
+      await noteDropped(inbox.length - trimmed.length);
+      const stored = await kvPut(env, queueKey, JSON.stringify(trimmed), { expirationTtl: ttlSec });
+      if (!stored) return { ok: false };
+      let storedTs = msg.ts;
+      const verifyRaw = await kvGet(env, queueKey);
+      const seenInbox = verifyRaw ? safeJsonParse(verifyRaw, []) : [];
+      if (Array.isArray(seenInbox) && !seenInbox.some(m => m && m.id === msg.id)) {
+        const tail = seenInbox.length > 0 ? seenInbox[seenInbox.length - 1] : null;
+        let reTs = msg.ts;
+        if (tail && Number.isFinite(tail.ts)) reTs = Math.max(reTs, tail.ts + 1);
+        if (inboxHwm !== null) reTs = Math.max(reTs, inboxHwm + 1);
+        seenInbox.push({ ...msg, ts: reTs });
+        const reTrimmed = capQueueBytes(seenInbox.slice(-100), m => (typeof m.payload === 'string' ? m.payload.length : 0) + 1024);
+        await noteDropped(seenInbox.length - reTrimmed.length);
+        if (await kvPut(env, queueKey, JSON.stringify(reTrimmed), { expirationTtl: ttlSec })) storedTs = reTs;
+      }
+      // Advance the persistent hwm to the newest ts this append stored
+      // (best-effort: a failed hwm write degrades to pre-fix behaviour).
+      if (inboxHwm === null || storedTs > inboxHwm) {
+        await kvPut(env, hwmKey, String(storedTs), { expirationTtl: ttlSec });
+      }
+      return { ok: true, ts: storedTs };
+    },
+    // S08 (KV tier): the poll claim as a read-modify-write — the same
+    // shape the handler used before, so on KV it stays best-effort:
+    // two racing polls can still both read the count before either
+    // reset lands. The DO tier's poll-claim op is the atomic one.
+    // Returns the claimed count, 0 when the queue is absent (nothing
+    // claimed, nothing reset — a later poll retries), or null when
+    // the reset write failed (the count stays stored for a later poll).
+    claimPoll: async (hwm, ttlSec) => {
+      const raw = await kvGet(env, queueKey);
+      if (raw === null) return 0;
+      const { q, hwm: curHwm, rc } = parseSealedQueue(raw);
+      const newHwm = Number.isFinite(hwm) ? Math.max(curHwm || 0, hwm) : curHwm;
+      const ok = await kvPut(env, queueKey, sealedQueueValue(q, newHwm, 0), { expirationTtl: ttlSec });
+      return ok ? rc : null;
+    },
   };
 }
 
@@ -837,6 +970,21 @@ export class MailboxCore {
     // 'deposit' (stage-1 step 3) is a mailbox-wide op: it carries no
     // slot and is meaningless for the presence record.
     if (op === 'deposit' && isPresence) return { status: 400, body: { ok: false } };
+    // D16 stage 2 composite ops (append / poll-claim): slot-less and
+    // mailbox-family only. Each runs its whole read-modify-write
+    // inside this serialized execute() — that is what makes it atomic
+    // where the plain get/put ops are not.
+    if (op === 'append' || op === 'poll-claim') {
+      if (isPresence) return { status: 400, body: { ok: false } };
+      if (op === 'poll-claim' && family !== 'sealed') return { status: 400, body: { ok: false } };
+      if (typeof userId === 'string' && userId && this._seedMailbox) await this._seedMailbox(userId);
+      try {
+        return op === 'append' ? await this._append(family, body) : await this._pollClaim(body);
+      } catch (e) {
+        console.error('[mailbox-core] storage op failed:', e?.message ?? e);
+        return { status: 500, body: { ok: false } };
+      }
+    }
     if (op !== 'deposit' && (isPresence ? slot !== 'record' : (slot !== 'queue' && slot !== 'hwm' && slot !== 'dropped'))) return { status: 400, body: { ok: false } };
     if (typeof userId === 'string' && userId) {
       if (isPresence) { if (this._seedPresence) await this._seedPresence(userId); }
@@ -970,6 +1118,120 @@ export class MailboxCore {
     }
     return { status: 400, body: { ok: false } };
   }
+
+  // Entry read with the get op's expiry semantics: an expired entry
+  // reads as absent (the next write replaces it).
+  async _readLiveValue(key) {
+    const e = await this._storage.get(key);
+    if (!e || typeof e.v !== 'string') return null;
+    if (e.exp !== null && e.exp !== undefined && Date.now() >= e.exp) return null;
+    return e.v;
+  }
+
+  // D16 stage 2: the composite append. The dedup check, the
+  // strictly-increasing ts assignment, the 100-entry / byte caps and
+  // the dropped accounting all happen HERE, inside the per-mailbox
+  // serialization — so on this backend an append is exactly-once: no
+  // second writer can interleave between the read and the write, and
+  // a duplicate (the same envelope for sealed; the same server id for
+  // the plain family) is answered from the stored queue itself rather
+  // than a per-isolate memory. The KV store's appendQueue keeps the
+  // stage-1 verified-recovery semantics instead — SECURITY.md states
+  // the two tiers plainly.
+  async _append(family, body) {
+    const st = this._storage;
+    const item = body.item;
+    if (!item || typeof item !== 'object') return { status: 400, body: { ok: false } };
+    const ttl = Number.isFinite(body.ttlSec) ? body.ttlSec : null;
+    const exp = ttl !== null ? Date.now() + Math.max(ttl, 0) * 1000 : null;
+    const qKey = `${family}:queue`;
+    const raw = await this._readLiveValue(qKey);
+    let dropped = 0;
+    let result;
+    if (family === 'sealed') {
+      const env = item.envelope;
+      if (typeof env !== 'string' || !env) return { status: 400, body: { ok: false } };
+      const { q, hwm, rc } = parseSealedQueue(raw);
+      const dup = q.find(e => e && e.envelope === env);
+      if (dup) return { status: 200, body: { ok: true, duplicate: true, ts: dup.ts } };
+      // Strictly-increasing ts: handleSealedAck filters on `m.ts > hwm`,
+      // so an entry sharing the last entry's millisecond would be acked
+      // away unpolled (the handler-side bump this replaces raced across
+      // isolates; here the tail read and the write are one step).
+      const ts = q.length > 0 && Number.isFinite(q[q.length - 1].ts)
+        ? Math.max(Date.now(), q[q.length - 1].ts + 1)
+        : Date.now();
+      q.push({ envelope: env, ts });
+      const trimmed = capQueueBytes(q.slice(-100), m => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
+      dropped = q.length - trimmed.length;
+      await st.put(qKey, { v: sealedQueueValue(trimmed, hwm, rc), exp });
+      result = { ok: true, ts };
+    } else {
+      if (typeof item.payload !== 'string' || !item.payload) return { status: 400, body: { ok: false } };
+      if (!Number.isFinite(item.ts)) return { status: 400, body: { ok: false } };
+      let msgs = [];
+      if (raw) { try { const p = JSON.parse(raw); if (Array.isArray(p)) msgs = p; } catch { msgs = []; } }
+      if (item.id) {
+        const dup = msgs.find(m => m && m.id === item.id);
+        if (dup) return { status: 200, body: { ok: true, duplicate: true, ts: dup.ts } };
+      }
+      // Strictly-increasing ts against BOTH anchors — the current tail
+      // and the persistent hwm (which survives the queue draining to
+      // empty, when the tail anchor is gone) — so the poll cursor
+      // `m.ts > lastTs` can never skip a stored message.
+      const hwmRaw = await this._readLiveValue(`${family}:hwm`);
+      const hwmParsed = hwmRaw !== null ? parseInt(hwmRaw, 10) : NaN;
+      const hwm = Number.isFinite(hwmParsed) ? hwmParsed : null;
+      let ts = item.ts;
+      const tail = msgs.length > 0 ? msgs[msgs.length - 1].ts : null;
+      if (Number.isFinite(tail) && ts <= tail) ts = tail + 1;
+      if (hwm !== null && ts <= hwm) ts = hwm + 1;
+      msgs.push({ ...item, ts });
+      const trimmed = capQueueBytes(msgs.slice(-100), m => (typeof m.payload === 'string' ? m.payload.length : 0) + 1024);
+      dropped = msgs.length - trimmed.length;
+      await st.put(qKey, { v: JSON.stringify(trimmed), exp });
+      await st.put(`${family}:hwm`, { v: String(ts), exp });
+      result = { ok: true, ts };
+    }
+    if (dropped > 0) {
+      // Overflow drops the OLDEST entries; count them so the
+      // recipient's next poll can say "N messages were lost".
+      const prev = parseInt(await this._readLiveValue(`${family}:dropped`) || '0', 10) || 0;
+      await st.put(`${family}:dropped`, { v: String(Math.min(prev + dropped, 99999)), exp: Date.now() + TTL.WEEK * 1000 });
+      result.dropped = dropped;
+    }
+    // A deposit landed: wake the mailbox's sockets (the put op's rule).
+    if (this._onQueueChanged) {
+      try { this._onQueueChanged(family); } catch { /* socket already gone; polling still delivers */ }
+    }
+    return { status: 200, body: result };
+  }
+
+  // S08: claim a sealed poll's recovery count. The grace rewrite
+  // (fold the new hwm in, reset rc to 0) and the read of the count
+  // being surfaced are ONE serialized step, so exactly one poll
+  // claims a given count. The handler-side sequence it replaces
+  // (read rc → rewrite → surface the pre-read count) let two racing
+  // polls both surface the same count, and an EMPTY poll never
+  // rewrote at all, re-surfacing the count on every poll until a
+  // message arrived. An absent queue claims nothing, writes nothing.
+  async _pollClaim(body) {
+    const st = this._storage;
+    const key = 'sealed:queue';
+    const raw = await this._readLiveValue(key);
+    if (raw === null) return { status: 200, body: { ok: true, claimed: 0 } };
+    const { q, hwm, rc } = parseSealedQueue(raw);
+    const newHwm = Number.isFinite(body.hwm) ? Math.max(hwm || 0, body.hwm) : hwm;
+    const ttl = Number.isFinite(body.ttlSec) ? body.ttlSec : null;
+    const exp = ttl !== null ? Date.now() + Math.max(ttl, 0) * 1000 : null;
+    await st.put(key, { v: sealedQueueValue(q, newHwm, 0), exp });
+    // The grace rewrite is a queue put; the put op wakes the mailbox's
+    // sockets for the same reason — parity kept.
+    if (this._onQueueChanged) {
+      try { this._onQueueChanged('sealed'); } catch { /* socket already gone; polling still delivers */ }
+    }
+    return { status: 200, body: { ok: true, claimed: rc } };
+  }
 }
 
 // ============================================================
@@ -1068,6 +1330,27 @@ function doMailboxStoreForKey(env, queueKey) {
         };
       }
       return { ok: false, retryAfterSec: Number.isFinite(r.retryAfterSec) ? r.retryAfterSec : 60 };
+    },
+    // D16 stage 2 (DO tier): the composite append op — dedup, ts
+    // assignment, caps and dropped accounting run inside the
+    // recipient's MailboxCore serialization, so an append on this
+    // tier is exactly-once. The result shape mirrors the KV store's
+    // appendQueue; `unconfirmed` never occurs here (a committed op
+    // is visible to every later op by construction). An RPC failure
+    // maps to { ok: false } — the handler's STORE_FAILED — never a
+    // throw into the handler.
+    appendQueue: async (item, ttlSec) => {
+      const r = await call('append', undefined, undefined, ttlSec, { item });
+      if (!r || !r.ok) return { ok: false };
+      return { ok: true, ts: r.ts, ...(r.duplicate ? { duplicate: true } : {}), ...(r.dropped ? { dropped: r.dropped } : {}) };
+    },
+    // S08 (DO tier): the atomic poll claim — exactly one poll claims
+    // a given recovery count. null on RPC failure: the handler
+    // surfaces nothing and the count stays stored for a later poll.
+    claimPoll: async (hwm, ttlSec) => {
+      const r = await call('poll-claim', undefined, undefined, ttlSec, { hwm });
+      if (!r || !r.ok) return null;
+      return Number.isFinite(r.claimed) ? r.claimed : null;
     },
   };
 }
@@ -1393,19 +1676,6 @@ async function handleMsgSend(body, ip, env, request) {
   }
 
   const mb = mailboxStore(env, 'inbox', to);
-  const existing = await mb.readQueue();
-  const inboxParsed = existing ? safeJsonParse(existing, []) : [];
-  const inbox = Array.isArray(inboxParsed) ? inboxParsed : [];
-  // §4 residual fix: the recipient's PERSISTENT high-water mark — the highest ts ever
-  // stored to or delivered from this inbox, kept in its own key so it survives the
-  // inbox draining to empty (poll cleanup deletes the inbox key itself). The tail
-  // bump below anchors on the CURRENT queue; once the queue has drained, that anchor
-  // is gone and a later message stamped at or below the recipient's poll cursor was
-  // stored unbumped, invisible to the cursor, and purged by the same poll's cleanup
-  // (audit 2026-11-13 §2.2). The hwm restores the anchor across drains.
-  const hwmRaw = await mb.readHwm();
-  const hwmParsed = hwmRaw !== null ? parseInt(hwmRaw) : NaN;
-  const inboxHwm = Number.isFinite(hwmParsed) ? hwmParsed : null;
   const safePub  = typeof fromPub  === 'string' ? fromPub.slice(0, 200)  : undefined;
   const safeName = typeof fromName === 'string' ? fromName.slice(0, 64)  : undefined;
   const msg = { from, fromPub: safePub, fromName: safeName, payload, ts: ts || Date.now() };
@@ -1452,72 +1722,25 @@ async function handleMsgSend(body, ip, env, request) {
   if (disappearAt) msg.disappearAt = (typeof disappearAt === 'number' && Number.isFinite(disappearAt)) ? disappearAt : undefined;
   if (sig) msg.sig = typeof sig === 'string' ? sig.slice(0, 200) : undefined;
   if (sigPub) msg.sigPub = typeof sigPub === 'string' ? sigPub.slice(0, 200) : undefined;
-  // Guarantee strictly-increasing ts within this inbox so the poll cursor (m.ts > lastTs)
-  // can never silently drop a message that shares a millisecond with an already-delivered
-  // one. The loss: client polls up to lastTs=T, a SECOND message then stores with ts=T,
-  // and the next poll's `m.ts > T` excludes it forever (cleanup eventually purges it
-  // undelivered). Bumping a colliding ts by 1ms makes the existing cursor lossless with no
-  // client change — appends are sequential so the last element always holds the max ts;
-  // display order is preserved and the sub-ms drift is invisible. (msg.id is the dedup key,
-  // so a bumped ts never causes a re-render.)
-  if (inbox.length > 0) {
-    const lastStoredTs = inbox[inbox.length - 1].ts;
-    if (Number.isFinite(lastStoredTs) && msg.ts <= lastStoredTs) msg.ts = lastStoredTs + 1;
-  }
-  // …and past the persistent high-water mark, so a post-drain arrival stamped at or
-  // below the recipient's poll cursor is still stored strictly above it (see above).
-  if (inboxHwm !== null && msg.ts <= inboxHwm) msg.ts = inboxHwm + 1;
-  inbox.push(msg);
-  const trimmed = capQueueBytes(inbox.slice(-100), m => (typeof m.payload === 'string' ? m.payload.length : 0) + 1024);
-  // Queue overflow drops the OLDEST messages. Don't do it silently: count
-  // the drops so the recipient's next poll can say "N messages were lost"
-  // — the same accounting handleSealedSend already keeps for the sealed
-  // queue (D4 honesty fix; the plain family was the one queue without it).
-  const noteDropped = async (n) => {
-    if (n <= 0) return;
-    const prev = parseInt(await mb.readDropped() || '0') || 0;
-    await mb.writeDropped(String(Math.min(prev + n, 99999)), TTL.WEEK);
-  };
-  await noteDropped(inbox.length - trimmed.length);
-  const stored = await mb.writeQueue(JSON.stringify(trimmed), TTL.WEEK);
-  if (!stored) {
-    // Un-mark the dedup key on a failed store: it was set BEFORE this write, so leaving it
-    // would make the client's retry of the identical ciphertext hit the dedup short-circuit
-    // (ok:true, dedup:true) and be silently dropped — a message lost despite never being
-    // stored. Deleting it lets the retry actually persist.
+  // D16 stage 2: the append is ONE store op now. The strictly-
+  // increasing ts guarantee (against the queue tail AND the persistent
+  // hwm — the §4 residual anchor that survives the inbox draining to
+  // empty, audit 2026-11-13 §2.2), the caps and the dropped accounting
+  // all live inside it: on the DO backend they run in the recipient's
+  // serialized mailbox core (exactly-once); on KV the store method
+  // carries the read-back recovery this handler used to run inline
+  // (identity is the server-assigned msg.id, the re-append ts is
+  // recomputed from the current tail and hwm). SECURITY.md states
+  // the two tiers.
+  const appended = await mb.appendQueue(msg, TTL.WEEK);
+  if (!appended.ok) {
+    // Un-mark the dedup key on a failed store: it was set BEFORE this
+    // write, so leaving it would make the client's retry of the
+    // identical ciphertext hit the dedup short-circuit (ok:true,
+    // dedup:true) and be silently dropped — a message lost despite
+    // never being stored. Deleting it lets the retry actually persist.
     globalThis._msgDedup.delete(dedupKey);
     return json({ error: 'Failed to store message', code: 'STORE_FAILED' }, 500, request);
-  }
-
-  // Lost-write recovery — the plain inbox is the same single-KV-value
-  // read-modify-write as the sealed queue, and until now was the only queue
-  // WITHOUT a read-back: two senders writing to the same recipient in the same
-  // instant both built on the same snapshot, and the later put silently erased
-  // the earlier message while both senders were answered 200 (audit 2026-11-13
-  // §2.4). Mirror handleSealedSend: read the key back and re-append if our entry
-  // is missing. Identity is the server-assigned msg.id — unique per message, so
-  // unlike a ts match it cannot false-positive on the racing writer's entry.
-  // The re-appended ts is recomputed from the CURRENT tail (and the hwm), never
-  // the stale pre-race value, so the recovered message stays strictly above the
-  // recipient's poll cursor. Like the sealed path this is recovery, not
-  // exactly-once: a stale read just skips the retry.
-  let storedTs = msg.ts;
-  const verifyRaw = await mb.readQueue();
-  const seenInbox = verifyRaw ? safeJsonParse(verifyRaw, []) : [];
-  if (Array.isArray(seenInbox) && !seenInbox.some(m => m && m.id === msg.id)) {
-    const tail = seenInbox.length > 0 ? seenInbox[seenInbox.length - 1] : null;
-    let reTs = msg.ts;
-    if (tail && Number.isFinite(tail.ts)) reTs = Math.max(reTs, tail.ts + 1);
-    if (inboxHwm !== null) reTs = Math.max(reTs, inboxHwm + 1);
-    seenInbox.push({ ...msg, ts: reTs });
-    const reTrimmed = capQueueBytes(seenInbox.slice(-100), m => (typeof m.payload === 'string' ? m.payload.length : 0) + 1024);
-    await noteDropped(seenInbox.length - reTrimmed.length);
-    if (await mb.writeQueue(JSON.stringify(reTrimmed), TTL.WEEK)) storedTs = reTs;
-  }
-  // Advance the persistent high-water mark to the newest ts this send stored
-  // (best-effort: a failed hwm write only degrades to the pre-fix behaviour).
-  if (inboxHwm === null || storedTs > inboxHwm) {
-    await mb.writeHwm(String(storedTs), TTL.WEEK);
   }
 
   // Trigger Web Push notification (non-blocking)
@@ -4403,112 +4626,25 @@ async function handleSealedSend(body, env, request) {
     }
     return json({ error: 'Mailbox deposit rate limited', code: 'MAILBOX_RATE_LIMITED', retryAfter: gate.retryAfterSec }, 429, request);
   }
-  const existing = await mb.readQueue();
-  const { q: queue, hwm: queueHwm, rc: queueRc } = parseSealedQueue(existing);
-  // Guarantee strictly-increasing ts within the sealed queue (mirrors handleMsgSend).
-  // handleSealedAck uses `m.ts > hwm` (strict greater-than); if a new envelope
-  // arrives in the SAME millisecond as the last polled entry (hwm), it shares that
-  // ts and is deleted by the ack even though it was never polled. A +1ms bump makes
-  // every appended entry strictly newer than all preceding entries — the same fix
-  // already applied to the plain inbox path. The last element holds the max ts since
-  // appends are sequential; no full-scan needed.
-  const newTs = queue.length > 0 && Number.isFinite(queue[queue.length - 1].ts)
-    ? Math.max(Date.now(), queue[queue.length - 1].ts + 1)
-    : Date.now();
-  queue.push({ envelope, ts: newTs });
-  const trimmed = capQueueBytes(queue.slice(-100), m => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
-  // Queue overflow drops the OLDEST envelopes. Don't do it silently (Socratic round —
-  // "what happens to message 101 while the recipient is offline?"): count the drops so the
-  // recipient's next poll can say "N messages were lost", instead of them never knowing.
-  const droppedNow = queue.length - trimmed.length;
-  if (droppedNow > 0) {
-    const prev = parseInt(await mb.readDropped() || '0') || 0;
-    await mb.writeDropped(String(Math.min(prev + droppedNow, 99999)), TTL.WEEK);
-  }
-  const stored = await mb.writeQueue(sealedQueueValue(trimmed, queueHwm, queueRc), TTL.WEEK);
-  if (!stored) {
-    // Un-mark the dedup key on a failed store (set before this write): otherwise the
-    // client's retry of the identical envelope is swallowed as a duplicate and lost on
-    // the "reliable" sealed path. Mirrors handleMsgSend.
+  // D16 stage 2: the append is ONE store op now. The strictly-
+  // increasing ts guarantee (handleSealedAck filters on `m.ts > hwm`,
+  // so a same-millisecond entry would be acked away unpolled), the
+  // caps and the dropped accounting all live inside it: on the DO
+  // backend they run in the recipient's serialized mailbox core —
+  // dedup included — and the append is exactly-once; on KV the store
+  // method carries the stage-1 verified recovery (see its comment)
+  // and reports `unconfirmed` when the envelope cannot be seen after
+  // every repair round. SECURITY.md states the two tiers.
+  const appended = await mb.appendQueue({ envelope }, TTL.WEEK);
+  if (!appended.ok) {
+    // Un-mark the dedup key on a failed store (set before this write):
+    // otherwise the client's retry of the identical envelope is
+    // swallowed as a duplicate and lost on the "reliable" sealed path.
     globalThis._sealedDedup.delete(dedupKey);
+    if (appended.unconfirmed) {
+      return json({ error: 'Failed to confirm sealed delivery', code: 'STORE_UNCONFIRMED' }, 500, request);
+    }
     return json({ error: 'Failed to store sealed message', code: 'STORE_FAILED' }, 500, request);
-  }
-  // Lost-write recovery. `sealed:{to}` is one KV value mutated read-modify-write, and KV is
-  // last-write-wins with no transactions: two senders writing to the SAME recipient in the same
-  // instant both read the old queue, one envelope disappears — and BOTH senders are answered
-  // 200. The silence is the defect, not the race: a rare loss you can see is an inconvenience,
-  // a rare loss you cannot is a messenger that drops messages.
-  //
-  // Reading the key back catches the common case for ONE extra read on the SEND path, which is
-  // cold next to polling (every 3 s per user). Deliberately NOT the textbook fix — splitting
-  // the queue into a key per envelope removes the race outright, but replaces one `get` per
-  // poll with a `list` plus a `get` per message on the hottest path in a relay that already
-  // throttles presence writes to survive the free tier's 1000 writes/day. This is recovery,
-  // not exactly-once (SECURITY.md says so plainly), and it cannot make delivery worse: a stale
-  // read just skips the retry, and a duplicate re-append is dropped by the recipient's msgId
-  // dedup.
-  //
-  // Identity is the ENVELOPE, not the timestamp. Matching on ts alone looked cheaper and was
-  // wrong: the racing writer's entry can carry the same millisecond, so the check would report
-  // "mine is present" in exactly the case it exists to detect. The length test short-circuits
-  // the string compare for the common case. (Caught by the deterministic race test, which is
-  // the point of writing one.)
-  //
-  // D16 stage 1: the repair itself is now VERIFIED. The original code
-  // re-appended once and answered 200 without looking again — but the
-  // re-append is the same read-modify-write, so a second racer could
-  // clobber it in turn and the loss stayed silent. The loop below
-  // re-reads after every repair and repairs again, up to
-  // SEALED_MAX_REPAIRS rounds; a send whose envelope still cannot be
-  // seen afterwards fails honestly (STORE_UNCONFIRMED, dedup un-marked)
-  // so the sender's outbox retries instead of believing a delivery that
-  // never landed. Each repair bumps the mailbox's recovery count (the
-  // `rc` folded into the queue value), which the recipient's next poll
-  // surfaces once — the track record the staged key-split decision
-  // will be made from. Still not exactly-once: under KV a stale read
-  // can confirm a value that a later clobber removes, so the promise
-  // is "present at the final read, or an honest failure" — a loss now
-  // has to win every repair round AND have the final read lie.
-  const mine = (m) => m && typeof m.envelope === 'string'
-    && m.envelope.length === envelope.length && m.envelope === envelope;
-  let snap = parseSealedQueue(await mb.readQueue());
-  let repairs = 0;
-  while (!snap.q.some(mine) && repairs < SEALED_MAX_REPAIRS) {
-    // §4 residual fix: recompute the re-append ts from the CURRENT tail of the
-    // read-back snapshot instead of reusing the original newTs. The racing winner
-    // computed its ts from the same stale base, so reusing newTs could re-enter
-    // the queue with a ts EQUAL to the winner's; a poll that landed inside the
-    // recovery window recorded hwm from the winner alone, and the ack's
-    // `m.ts > hwm` filter then deleted this envelope unpolled (audit 2026-11-13
-    // §2.3). max(newTs, tail+1) keeps the recovered envelope strictly newer than
-    // everything actually in the queue, so the ack can only clear what was
-    // genuinely polled.
-    const tailTs = snap.q.length > 0 && Number.isFinite(snap.q[snap.q.length - 1].ts) ? snap.q[snap.q.length - 1].ts : 0;
-    const reTs = Math.max(newTs, tailTs + 1);
-    snap.q.push({ envelope, ts: reTs });
-    const requeued = capQueueBytes(snap.q.slice(-100), (m) => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
-    repairs++;
-    // The count written is the snapshot's count plus THIS send's repair
-    // rounds: a clobbered repair takes its own increment with it, so
-    // counting from the snapshot alone would under-report exactly the
-    // multi-clobber cases the measurement exists to catch.
-    await mb.writeQueue(sealedQueueValue(requeued, snap.hwm, snap.rc + repairs), TTL.WEEK);
-    snap = parseSealedQueue(await mb.readQueue());
-  }
-  if (!snap.q.some(mine)) {
-    // Un-mark the dedup key (the STORE_FAILED rule above): the envelope
-    // was NOT confirmed stored, so the client's retry of the identical
-    // envelope must not be swallowed as a duplicate.
-    globalThis._sealedDedup.delete(dedupKey);
-    return json({ error: 'Failed to confirm sealed delivery', code: 'STORE_UNCONFIRMED' }, 500, request);
-  }
-  if (repairs === 0 && snap.hwm !== null && (queueHwm === null || snap.hwm > queueHwm)) {
-    // D31 fold repair: a poll raced the write above and recorded a higher
-    // hwm than the stale snapshot this send carried; the write clobbered
-    // it. Restore the higher mark from the read-back — the ack filters on
-    // it, and a regressed mark would widen its delete to unpolled mail.
-    // Monotonic guard: a stale read-back never lowers the mark.
-    await mb.writeQueue(sealedQueueValue(snap.q, snap.hwm, snap.rc), TTL.WEEK);
   }
   sendPushToUser(to, { title: 'Breeze', body: 'New message', tag: 'breeze-sealed', contactId: to }, env).catch(() => {});
   return json({ ok: true, ack: Date.now() }, 200, request);
@@ -4533,21 +4669,36 @@ async function handleSealedPoll(body, env, request) {
   // polled — one write instead of the previous grace + hwm pair. (The mark
   // exists because handleSealedAck once blind-deleted the whole queue, and
   // any envelope appended in the poll→ack window was destroyed undelivered.)
-  // Only written when there are messages, so idle polls stay write-free.
   // D16 stage 1: the same rewrite resets the recovery count, which this
-  // poll surfaces once (below) — the reset rides a write that already
-  // happens, so the measurement costs no extra write.
+  // poll surfaces once — the reset rides a write that already happens.
+  // S08 / D16 stage 2: the rewrite is now ONE store op (claimPoll) that
+  // also RETURNS the count it reset. The handler-side sequence it
+  // replaces (read rc above → rewrite with rc=0 → surface the pre-read
+  // count) was not atomic: two racing polls could both read rc > 0
+  // before either reset landed and surface the same recoveries twice,
+  // and it only ran when messages were present — an empty poll
+  // re-surfaced the same count on every poll until a message arrived
+  // (the ack carries rc forward, so q-empty + rc>0 is a real state).
+  // The claim therefore also runs when only a count is pending. On
+  // the DO backend the op is serialized (exactly one claim wins); on
+  // KV it is the same read-modify-write shape as before, best-effort
+  // like every KV mutation (SECURITY.md states the tiers). A failed
+  // claim (null) surfaces nothing: the count stays stored and a
+  // later poll claims it then. Idle polls (no messages, no count)
+  // stay write-free, as before.
   let maxTs = 0;
   for (const m of messages) { if (Number.isFinite(m?.ts) && m.ts > maxTs) maxTs = m.ts; }
-  if (messages.length > 0) {
+  let recoveredClaimed = 0;
+  if (messages.length > 0 || prevRc > 0) {
     const newHwm = maxTs > 0 ? Math.max(prevHwm || 0, maxTs) : prevHwm;
-    await mb.writeQueue(sealedQueueValue(messages, newHwm, 0), TTL.MIN * 5); // 5 min grace
+    const claimed = await mb.claimPoll(newHwm, TTL.MIN * 5); // 5 min grace
+    if (typeof claimed === 'number') recoveredClaimed = claimed;
   }
   // Surface queue-overflow losses once, then reset the counter (see handleSealedSend).
   const droppedStr = await mb.readDropped();
   const dropped = parseInt(droppedStr || '0') || 0;
   if (dropped > 0) await mb.deleteDropped();
-  return json({ messages, ...(dropped > 0 ? { dropped } : {}), ...(prevRc > 0 ? { recovered: prevRc } : {}), ...signalInfo }, 200, request);
+  return json({ messages, ...(dropped > 0 ? { dropped } : {}), ...(recoveredClaimed > 0 ? { recovered: recoveredClaimed } : {}), ...signalInfo }, 200, request);
 }
 
 // v3.6: Sealed ACK — client confirms processing, worker deletes messages

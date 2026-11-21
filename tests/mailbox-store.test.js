@@ -111,3 +111,59 @@ describe('MailboxStore (KV-backed)', () => {
     expect(await mb.deleteDropped()).toBe(false);
   });
 });
+
+describe('MailboxStore appendQueue / claimPoll (KV tier, D16 stage 2)', () => {
+  it('sealed append stores the envelope and confirms it via the read-back', async () => {
+    const env = makeEnv();
+    const mb = mailboxStore(env, 'sealed', 'user42');
+    const r = await mb.appendQueue({ envelope: 'env-1' }, 7 * 24 * 3600);
+    expect(r.ok).toBe(true);
+    const stored = JSON.parse(env.KV.store.get('sealed:user42'));
+    expect(stored.q.map((e) => e.envelope)).toEqual(['env-1']);
+    expect(stored.q[0].ts).toBe(r.ts);
+  });
+
+  it('sealed append under a full clobber reports unconfirmed after the repair rounds', async () => {
+    // Every queue put is replaced by the pre-send snapshot (the D16 race
+    // tests' clobber): the envelope can never be seen, so the append must
+    // say so — { ok: false, unconfirmed: true } — with exactly the
+    // stage-1 put count (initial write + SEALED_MAX_REPAIRS repairs).
+    const kv = makeKV({ 'sealed:victim': JSON.stringify({ q: [], hwm: null, rc: null }) });
+    let queuePuts = 0;
+    const origPut = kv.put.bind(kv);
+    kv.put = async (k, v, opts) => {
+      if (k === 'sealed:victim') { queuePuts++; return origPut(k, JSON.stringify({ q: [], hwm: null, rc: null }), opts); }
+      return origPut(k, v, opts);
+    };
+    const mb = mailboxStore({ KV: kv }, 'sealed', 'victim');
+    const r = await mb.appendQueue({ envelope: 'env-x' }, 7 * 24 * 3600);
+    expect(r).toEqual({ ok: false, unconfirmed: true });
+    expect(queuePuts).toBe(3);
+  });
+
+  it('inbox append bumps ts past the hwm and advances it', async () => {
+    const kv = makeKV({ 'inbox:user42:hwm': '5000' });
+    const env = { KV: kv };
+    const mb = mailboxStore(env, 'inbox', 'user42');
+    const r = await mb.appendQueue({ from: 'alice', payload: 'ct', ts: 100, id: 'm1' }, 7 * 24 * 3600);
+    expect(r).toEqual({ ok: true, ts: 5001 });
+    expect(JSON.parse(kv.store.get('inbox:user42'))[0]).toMatchObject({ payload: 'ct', ts: 5001, id: 'm1' });
+    expect(kv.store.get('inbox:user42:hwm')).toBe('5001');
+  });
+
+  it('claimPoll returns the pending count once and resets it in the stored value', async () => {
+    const kv = makeKV({ 'sealed:user42': JSON.stringify({ q: [], hwm: 9, rc: 2 }) });
+    const env = { KV: kv };
+    const mb = mailboxStore(env, 'sealed', 'user42');
+    expect(await mb.claimPoll(9, 300)).toBe(2);
+    expect(JSON.parse(kv.store.get('sealed:user42')).rc).toBeNull();
+    expect(await mb.claimPoll(9, 300)).toBe(0);
+  });
+
+  it('claimPoll on an absent queue claims 0 and writes nothing', async () => {
+    const env = makeEnv();
+    const mb = mailboxStore(env, 'sealed', 'ghost');
+    expect(await mb.claimPoll(1, 300)).toBe(0);
+    expect(env.KV.store.has('sealed:ghost')).toBe(false);
+  });
+});
