@@ -49,6 +49,7 @@ in-process against mock KV/DO stores (`tests/helpers/`).
 | `negotiate.js` | Capability negotiation (v4↔v5, PQ, group AND-rule) | deployed (inline) |
 | `ktlog.js` | Key-transparency hash chain (audit path) | deployed (inline mirror) |
 | `atrest.js` | At-rest key wrapping | deployed (inline mirror) |
+| `msgstore.js` | Message-body encryption at rest (AES-256-GCM under the keywrap `msgkey` slot, per-record AAD) | deployed (inline mirror) |
 | `pow.js` | Proof-of-work anti-spam | deployed (inline mirror) |
 | `franking.js` | Message franking for abuse reports (commitment deployed; full report verification reference-only) | partial |
 | `fingerprint.js` | Iterated safety numbers | reference-only (enhancement; the deployed number is already 96-bit — see CLAUDE.md) |
