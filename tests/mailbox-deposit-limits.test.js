@@ -23,7 +23,7 @@ describe('MailboxStore.checkDeposit (DO-backed)', () => {
     const env = makeDOEnv();
     const mb = mailboxStore(env, 'sealed', 'user42');
     for (let i = 0; i < 5; i++) expect(await mb.checkDeposit()).toEqual({ ok: true });
-    const log = env.MAILBOX_DO.instances.get('user42').state.storage.map.get('deposits');
+    const log = env.MAILBOX_DO.instances.get('user42').state.storage.map.get('gate')?.log;
     expect(Array.isArray(log)).toBe(true);
     expect(log.length).toBe(5);
   });
@@ -37,7 +37,7 @@ describe('MailboxStore.checkDeposit (DO-backed)', () => {
     expect(denied.retryAfterSec).toBeGreaterThanOrEqual(1);
     expect(denied.retryAfterSec).toBeLessThanOrEqual(60);
     // A denial does not record: the log stays at the cap.
-    expect(env.MAILBOX_DO.instances.get('user42').state.storage.map.get('deposits').length).toBe(120);
+    expect(env.MAILBOX_DO.instances.get('user42').state.storage.map.get('gate')?.log.length).toBe(120);
   });
 
   it('spans the whole mailbox: sealed deposits count against the inbox handle too', async () => {
@@ -61,7 +61,7 @@ describe('MailboxStore.checkDeposit (DO-backed)', () => {
     await mb.checkDeposit(); // materialise the instance
     const storage = env.MAILBOX_DO.instances.get('user42').state.storage.map;
     const now = Date.now();
-    storage.set('deposits', Array.from({ length: 120 }, (_, i) => now - 61000 + i));
+    storage.set('gate', { log: Array.from({ length: 120 }, (_, i) => now - 61000 + i), usage: null });
     expect(await mb.checkDeposit()).toEqual({ ok: true });
   });
 
@@ -72,7 +72,7 @@ describe('MailboxStore.checkDeposit (DO-backed)', () => {
     const storage = env.MAILBOX_DO.instances.get('user42').state.storage.map;
     const now = Date.now();
     // 1200 deposits spread over the last 30 minutes: none in the last minute.
-    storage.set('deposits', Array.from({ length: 1200 }, (_, i) => now - 1800000 + i * 1000));
+    storage.set('gate', { log: Array.from({ length: 1200 }, (_, i) => now - 1800000 + i * 1000), usage: null });
     const denied = await mb.checkDeposit();
     expect(denied.ok).toBe(false);
     expect(denied.retryAfterSec).toBeGreaterThanOrEqual(1);
@@ -85,10 +85,28 @@ describe('MailboxStore.checkDeposit (DO-backed)', () => {
     await mb.checkDeposit();
     const storage = env.MAILBOX_DO.instances.get('user42').state.storage.map;
     const now = Date.now();
-    storage.set('deposits', Array.from({ length: 1200 }, (_, i) => now - 7200000 + i * 1000));
+    storage.set('gate', { log: Array.from({ length: 1200 }, (_, i) => now - 7200000 + i * 1000), usage: null });
     expect(await mb.checkDeposit()).toEqual({ ok: true });
     // The admitted call re-stored the pruned log: just the new deposit.
-    expect(storage.get('deposits').length).toBe(1);
+    expect(storage.get('gate')?.log).toHaveLength(1);
+  });
+
+  it('migrates legacy deposits/usage rows into the gate record (D31 fold)', async () => {
+    const env = makeDOEnv();
+    const mb = mailboxStore(env, 'sealed', 'user42');
+    await mb.checkDeposit(); // materialise the instance
+    const storage = env.MAILBOX_DO.instances.get('user42').state.storage.map;
+    // Pre-fold state: separate rows, no gate record yet.
+    storage.delete('gate');
+    const now = Date.now();
+    storage.set('deposits', [now - 5000, now - 4000]);
+    storage.set('usage', { d: new Date(now).toISOString().slice(0, 10), dc: 7, m: new Date(now).toISOString().slice(0, 7), mc: 7 });
+    expect(await mb.checkDeposit()).toEqual({ ok: true });
+    const gate = storage.get('gate');
+    expect(gate?.log).toHaveLength(3); // legacy window preserved + the new deposit
+    expect(gate?.usage?.dc).toBe(8); // legacy budget carried, then counted
+    expect(storage.get('deposits')).toBeUndefined(); // legacy rows cleaned up
+    expect(storage.get('usage')).toBeUndefined();
   });
 
   it('fails open when the DO RPC fails (gate is mitigation, not a gate on delivery)', async () => {

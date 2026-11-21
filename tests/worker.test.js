@@ -2484,7 +2484,7 @@ describe('sealed sender send / poll / ack', () => {
       vi.restoreAllMocks();
     }
     const raw = await env.KV.get('sealed:mono0001');
-    const msgs = JSON.parse(raw);
+    const msgs = JSON.parse(raw).q; // D31: stored form is { q, hwm }
     expect(msgs.length).toBe(2);
     expect(msgs[1].ts).toBeGreaterThan(msgs[0].ts); // strictly increasing
   });
@@ -2565,7 +2565,7 @@ describe('sealed sender send / poll / ack', () => {
     expect(polledEnvelopes).toEqual(['B-WINNER']); // A had not yet been re-appended
     // Recovery re-appended A with its ts recomputed from the current tail:
     // strictly above B's ts (== the recorded hwm), not a duplicate of it.
-    const queue = JSON.parse(await origGet(key));
+    const queue = JSON.parse(await origGet(key)).q; // D31: stored form is { q, hwm }
     expect(queue.map(m => m.envelope)).toEqual(['B-WINNER', 'A-REAPPENDED']);
     expect(queue.map(m => m.ts)).toEqual([frozenTs, frozenTs + 1]);
     // The client's ack (for the batch it actually polled: B only) clears B and
@@ -2574,7 +2574,7 @@ describe('sealed sender send / poll / ack', () => {
     const ackJson = await ack.json();
     expect(ackJson.ok).toBe(true);
     expect(ackJson.kept).toBe(1);
-    const remaining = JSON.parse(await origGet(key));
+    const remaining = JSON.parse(await origGet(key)).q; // D31: stored form is { q, hwm }
     expect(remaining.map(m => m.envelope)).toEqual(['A-REAPPENDED']);
   });
 });
@@ -5694,7 +5694,7 @@ describe('relay dedup released on STORE_FAILED so retry persists (item 57)', () 
     const r2 = await handleSealedSend(body, env, req({}));
     expect(r2.status).toBe(200);
     expect((await r2.json()).dedup).toBeUndefined();
-    const queue = JSON.parse(await env.KV.get('sealed:user00097'));
+    const queue = JSON.parse(await env.KV.get('sealed:user00097')).q; // D31: stored form is { q, hwm }
     expect(queue.length).toBe(1);
     expect(queue[0].envelope).toBe('sealed-envelope-xyz');
   });

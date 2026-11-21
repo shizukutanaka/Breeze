@@ -858,7 +858,24 @@ export class MailboxCore {
         // content, and a re-registered id inherits at most an hour of
         // window instead of a reset button.
         const now = Date.now();
-        const rawLog = await st.get('deposits');
+        // D31 gate fold (COST_MODEL §7 lever 2): the frequency log and the
+        // usage counters below are ONE 'gate' record, written once per
+        // admitted deposit — they share this op, this lifecycle, and the
+        // same "budget state, not mailbox content" status, so keeping them
+        // in two rows bought nothing. Legacy 'deposits'/'usage' rows from
+        // before the fold are read as a fallback and deleted by the first
+        // admitted deposit that rewrites the gate, so no mailbox loses
+        // its rate window or its spent budget in the transition (a denial
+        // still records nothing, in either form).
+        const gateRaw = await st.get('gate');
+        const gate = (gateRaw && typeof gateRaw === 'object') ? gateRaw : null;
+        let rawLog, rawUsage, legacyGate = false;
+        if (gate) { rawLog = gate.log; rawUsage = gate.usage; }
+        else {
+          rawLog = await st.get('deposits');
+          rawUsage = await st.get('usage');
+          legacyGate = rawLog !== undefined || rawUsage !== undefined;
+        }
         const log = Array.isArray(rawLog)
           ? rawLog.filter(t => Number.isFinite(t) && now - t < DEPOSIT_LIMIT.HOUR_WINDOW_MS)
           : [];
@@ -878,13 +895,13 @@ export class MailboxCore {
         // frequency log untouched just as a frequency denial leaves
         // the usage record untouched — neither gate's denial is
         // itself a billable event. Windows are UTC calendar day and
-        // month; retryAfterSec runs to the window's end. The record
-        // ('usage', { d, dc, m, mc }) is budget state, not mailbox
+        // month; retryAfterSec runs to the window's end. The usage
+        // record ({ d, dc, m, mc }) is budget state, not mailbox
         // content — like the log above it is NOT erased by the slot
         // deletes account deletion performs, so delete-and-re-register
-        // inherits the spent budget instead of a reset button. Cost
-        // of the layer: one extra get + put per admitted deposit
-        // (DO rows 7r/6w → 8r/7w per cycle), the price of the bound.
+        // inherits the spent budget instead of a reset button. Since
+        // the D31 fold it rides inside the 'gate' record, so the layer
+        // costs no extra put: the cycle is 4 row-writes total.
         const quota = (body.quota && Number.isFinite(body.quota.daily) && Number.isFinite(body.quota.monthly)
           && body.quota.daily > 0 && body.quota.monthly > 0) ? body.quota : null;
         let usageNext = null;
@@ -892,7 +909,6 @@ export class MailboxCore {
           const dNow = new Date(now);
           const dayKey = dNow.toISOString().slice(0, 10);
           const monthKey = dayKey.slice(0, 7);
-          const rawUsage = await st.get('usage');
           const u = (rawUsage && typeof rawUsage === 'object') ? rawUsage : {};
           const dayCount = (u.d === dayKey && Number.isFinite(u.dc)) ? u.dc : 0;
           const monthCount = (u.m === monthKey && Number.isFinite(u.mc)) ? u.mc : 0;
@@ -907,8 +923,12 @@ export class MailboxCore {
           usageNext = { d: dayKey, dc: dayCount + 1, m: monthKey, mc: monthCount + 1 };
         }
         log.push(now);
-        await st.put('deposits', log);
-        if (usageNext) await st.put('usage', usageNext);
+        // Carry the previous usage record when this deposit did not
+        // update it (quota not configured on this call): folding must
+        // not erase a spent budget the operator may re-enable.
+        const usageCarry = usageNext || (rawUsage && typeof rawUsage === 'object' ? rawUsage : null);
+        await st.put('gate', { log, usage: usageCarry });
+        if (legacyGate) { await st.delete('deposits'); await st.delete('usage'); }
         return { status: 200, body: { ok: true } };
       }
       if (op === 'get') {
@@ -4262,6 +4282,32 @@ async function handleAbuseReport(body, env, request) {
 // Worker only sees recipient ID. Sender is encrypted inside payload.
 // ============================================================
 
+// D31 (COST_MODEL §7 lever 2): the sealed queue's stored form. The poll
+// high-water mark rides INSIDE the queue value ({ q, hwm }) instead of its
+// own slot. The separation was never load-bearing for the sealed family —
+// unlike the plain inbox, whose hwm must survive the queue draining to
+// empty (it anchors later sends), the sealed hwm is written by a poll and
+// consumed by the ack of that same batch, and the poll's grace rewrite
+// keeps the queue alive for exactly the hwm's lifetime. Folding removes
+// one write from every poll (grace rewrite + hwm → one write) and one
+// from every ack (queue delete/rewrite + hwm delete → one write).
+// Readers accept BOTH forms: queues written before the fold are bare
+// arrays ([{ envelope, ts }, …]) and drain naturally within their 7-day
+// TTL; a bare array parses with hwm = null, and handleSealedAck still
+// consults the legacy :hwm slot in that case (it expires within 5
+// minutes of the last pre-fold poll, so the fallback is short-lived).
+function parseSealedQueue(raw) {
+  const parsed = raw ? safeJsonParse(raw, null) : null;
+  if (Array.isArray(parsed)) return { q: parsed, hwm: null };
+  if (parsed && Array.isArray(parsed.q)) {
+    return { q: parsed.q, hwm: Number.isFinite(parsed.hwm) ? parsed.hwm : null };
+  }
+  return { q: [], hwm: null };
+}
+function sealedQueueValue(q, hwm) {
+  return JSON.stringify({ q, hwm: Number.isFinite(hwm) ? hwm : null });
+}
+
 async function handleSealedSend(body, env, request) {
   const { to, envelope } = body;
   if (!to || !envelope) return json({ error: 'to and envelope required', code: 'MISSING_FIELDS' }, 400, request);
@@ -4319,8 +4365,7 @@ async function handleSealedSend(body, env, request) {
     return json({ error: 'Mailbox deposit rate limited', code: 'MAILBOX_RATE_LIMITED', retryAfter: gate.retryAfterSec }, 429, request);
   }
   const existing = await mb.readQueue();
-  const queueParsed = existing ? safeJsonParse(existing, []) : [];
-  const queue = Array.isArray(queueParsed) ? queueParsed : [];
+  const { q: queue, hwm: queueHwm } = parseSealedQueue(existing);
   // Guarantee strictly-increasing ts within the sealed queue (mirrors handleMsgSend).
   // handleSealedAck uses `m.ts > hwm` (strict greater-than); if a new envelope
   // arrives in the SAME millisecond as the last polled entry (hwm), it shares that
@@ -4341,7 +4386,7 @@ async function handleSealedSend(body, env, request) {
     const prev = parseInt(await mb.readDropped() || '0') || 0;
     await mb.writeDropped(String(Math.min(prev + droppedNow, 99999)), TTL.WEEK);
   }
-  const stored = await mb.writeQueue(JSON.stringify(trimmed), TTL.WEEK);
+  const stored = await mb.writeQueue(sealedQueueValue(trimmed, queueHwm), TTL.WEEK);
   if (!stored) {
     // Un-mark the dedup key on a failed store (set before this write): otherwise the
     // client's retry of the identical envelope is swallowed as a duplicate and lost on
@@ -4370,10 +4415,10 @@ async function handleSealedSend(body, env, request) {
   // the string compare for the common case. (Caught by the deterministic race test, which is
   // the point of writing one.)
   const verifyRaw = await mb.readQueue();
-  const seen = verifyRaw ? safeJsonParse(verifyRaw, []) : [];
+  const { q: seen, hwm: seenHwm } = parseSealedQueue(verifyRaw);
   const mine = (m) => m && typeof m.envelope === 'string'
     && m.envelope.length === envelope.length && m.envelope === envelope;
-  if (Array.isArray(seen) && !seen.some(mine)) {
+  if (!seen.some(mine)) {
     // §4 residual fix: recompute the re-append ts from the CURRENT tail of the
     // read-back snapshot instead of reusing the original newTs. The racing winner
     // computed its ts from the same stale base, so reusing newTs could re-enter
@@ -4387,7 +4432,14 @@ async function handleSealedSend(body, env, request) {
     const reTs = Math.max(newTs, tailTs + 1);
     seen.push({ envelope, ts: reTs });
     const requeued = capQueueBytes(seen.slice(-100), (m) => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
-    await mb.writeQueue(JSON.stringify(requeued), TTL.WEEK);
+    await mb.writeQueue(sealedQueueValue(requeued, seenHwm), TTL.WEEK);
+  } else if (seenHwm !== null && (queueHwm === null || seenHwm > queueHwm)) {
+    // D31 fold repair: a poll raced the write above and recorded a higher
+    // hwm than the stale snapshot this send carried; the write clobbered
+    // it. Restore the higher mark from the read-back — the ack filters on
+    // it, and a regressed mark would widen its delete to unpolled mail.
+    // Monotonic guard: a stale read-back never lowers the mark.
+    await mb.writeQueue(sealedQueueValue(seen, seenHwm), TTL.WEEK);
   }
   sendPushToUser(to, { title: 'Breeze', body: 'New message', tag: 'breeze-sealed', contactId: to }, env).catch(() => {});
   return json({ ok: true, ack: Date.now() }, 200, request);
@@ -4403,20 +4455,22 @@ async function handleSealedPoll(body, env, request) {
   const signalInfo = {};
   const data = await mb.readQueue(mailboxWsEnabled(env) ? sigGen => { signalInfo.sigGen = sigGen; } : undefined);
   if (!data) return json({ messages: [], ...signalInfo }, 200, request);
-  const messages = safeJsonParse(data, []);
-  if (!Array.isArray(messages)) return json({ messages: [], ...signalInfo }, 200, request);
+  const { q: messages, hwm: prevHwm } = parseSealedQueue(data);
   // v3.6: Grace period — set short TTL instead of immediate delete
   // If client crashes after poll but before processing, messages survive 5 min
-  // Client-side _replayCache + IDB dedup prevents re-rendering on re-poll
-  await mb.writeQueue(data, TTL.MIN * 5); // 5 min grace
-  // Record a high-water mark (max ts returned) so the later ACK clears ONLY what was
-  // actually polled. handleSealedAck previously blind-deleted the whole queue, so any
-  // envelope appended by handleSealedSend in the poll→ack window was destroyed
-  // undelivered — a silent loss on the "reliable" sealed path. Only written when there
-  // are messages, so idle polls (the common case) still do zero extra KV writes.
+  // Client-side _replayCache + IDB dedup prevents re-rendering on re-poll.
+  // D31: the grace rewrite also records the high-water mark (max ts returned)
+  // INSIDE the queue value, so the later ACK clears ONLY what was actually
+  // polled — one write instead of the previous grace + hwm pair. (The mark
+  // exists because handleSealedAck once blind-deleted the whole queue, and
+  // any envelope appended in the poll→ack window was destroyed undelivered.)
+  // Only written when there are messages, so idle polls stay write-free.
   let maxTs = 0;
   for (const m of messages) { if (Number.isFinite(m?.ts) && m.ts > maxTs) maxTs = m.ts; }
-  if (maxTs > 0) await mb.writeHwm(String(maxTs), TTL.MIN * 5);
+  if (messages.length > 0) {
+    const newHwm = maxTs > 0 ? Math.max(prevHwm || 0, maxTs) : prevHwm;
+    await mb.writeQueue(sealedQueueValue(messages, newHwm), TTL.MIN * 5); // 5 min grace
+  }
   // Surface queue-overflow losses once, then reset the counter (see handleSealedSend).
   const droppedStr = await mb.readDropped();
   const dropped = parseInt(droppedStr || '0') || 0;
@@ -4437,17 +4491,27 @@ async function handleSealedAck(body, env, request) {
   // kvDel/kvPut return false on a genuine KV API error (not on key-not-found, which is
   // idempotent); report failure so the client retries rather than believing it was cleared.
   const mb = mailboxStore(env, 'sealed', id);
-  const hwmRaw = await mb.readHwm();
-  const hwm = hwmRaw !== null ? parseInt(hwmRaw) : NaN;
-  if (Number.isFinite(hwm)) {
-    const raw = await mb.readQueue();
-    const queue = raw ? safeJsonParse(raw, []) : [];
-    const remaining = Array.isArray(queue) ? queue.filter(m => Number.isFinite(m?.ts) && m.ts > hwm) : [];
+  const raw = await mb.readQueue();
+  const { q: queue, hwm: foldedHwm } = parseSealedQueue(raw);
+  // D31: the mark normally rides inside the queue value. A bare-array
+  // value (written before the fold) may still pair with a legacy :hwm
+  // slot from a pre-fold poll — consult it only then; it expires within
+  // 5 minutes of that poll, so the fallback is short-lived.
+  let hwm = foldedHwm;
+  if (hwm === null) {
+    const hwmRaw = await mb.readHwm();
+    const legacy = hwmRaw !== null ? parseInt(hwmRaw) : NaN;
+    if (Number.isFinite(legacy)) {
+      hwm = legacy;
+      await mb.deleteHwm(); // one-time cleanup of the legacy slot
+    }
+  }
+  if (hwm !== null) {
+    const remaining = queue.filter(m => Number.isFinite(m?.ts) && m.ts > hwm);
     let ok;
     if (remaining.length === 0) ok = await mb.deleteQueue();
-    else ok = await mb.writeQueue(JSON.stringify(remaining), TTL.WEEK);
+    else ok = await mb.writeQueue(sealedQueueValue(remaining, null), TTL.WEEK);
     if (!ok) return json({ error: 'Failed to confirm delivery', code: 'ACK_FAILED' }, 500, request);
-    await mb.deleteHwm(); // best-effort marker cleanup (also expires via its own TTL)
     return json({ ok: true, kept: remaining.length }, 200, request);
   }
   // No high-water mark (client never polled, or a pre-hwm ACK): fall back to full delete.

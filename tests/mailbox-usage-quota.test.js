@@ -26,7 +26,7 @@ const req = (b) => apiRequest('/api/sealed/x', b);
 const env_i = (i) => `E${String(i).padStart(4, '0')}-${'x'.repeat(40)}`;
 const dayKey = () => new Date().toISOString().slice(0, 10);
 const monthKey = () => dayKey().slice(0, 7);
-const usageOf = (env, id) => env.MAILBOX_DO.instances.get(id).state.storage.map.get('usage');
+const usageOf = (env, id) => env.MAILBOX_DO.instances.get(id).state.storage.map.get('gate')?.usage; // D31: usage rides in the gate record
 const storageOf = (env, id) => env.MAILBOX_DO.instances.get(id).state.storage.map;
 
 describe('MailboxStore.checkDeposit usage quota (DO-backed)', () => {
@@ -53,7 +53,7 @@ describe('MailboxStore.checkDeposit usage quota (DO-backed)', () => {
     // The denial recorded nothing: usage stays at the cap, and the
     // frequency log did not gain an entry either.
     expect(usageOf(env, 'user42').dc).toBe(3);
-    expect(storageOf(env, 'user42').get('deposits').length).toBe(3);
+    expect(storageOf(env, 'user42').get('gate')?.log.length).toBe(3);
   });
 
   it('denies past the monthly cap even when the daily window is clear', async () => {
@@ -74,6 +74,7 @@ describe('MailboxStore.checkDeposit usage quota (DO-backed)', () => {
     const env = makeDOEnv({ USAGE_QUOTA_DAILY: '5' });
     const mb = mailboxStore(env, 'sealed', 'user42');
     await mb.checkDeposit(); // materialise the instance
+    storageOf(env, 'user42').delete('gate'); // model a pre-fold mailbox: legacy row only (D31 dual-read)
     storageOf(env, 'user42').set('usage', { d: dayKey(), dc: 5, m: monthKey(), mc: 5 });
     const denied = await mb.checkDeposit();
     expect(denied.ok).toBe(false);
@@ -84,6 +85,7 @@ describe('MailboxStore.checkDeposit usage quota (DO-backed)', () => {
     const env = makeDOEnv({ USAGE_QUOTA_DAILY: '5', USAGE_QUOTA_MONTHLY: '500' });
     const mb = mailboxStore(env, 'sealed', 'user42');
     await mb.checkDeposit(); // materialise the instance
+    storageOf(env, 'user42').delete('gate'); // model a pre-fold mailbox: legacy row only (D31 dual-read)
     const y = new Date(Date.now() - 86400000);
     const yDay = y.toISOString().slice(0, 10);
     storageOf(env, 'user42').set('usage', {
@@ -106,8 +108,10 @@ describe('MailboxStore.checkDeposit usage quota (DO-backed)', () => {
     const mb = mailboxStore(env, 'sealed', 'user42');
     await mb.checkDeposit(); // materialise + one admitted deposit
     const now = Date.now();
-    storageOf(env, 'user42').set('deposits',
-      Array.from({ length: 120 }, (_, i) => now - 1000 + i));
+    storageOf(env, 'user42').set('gate', {
+      log: Array.from({ length: 120 }, (_, i) => now - 1000 + i),
+      usage: { d: dayKey(), dc: 1, m: monthKey(), mc: 1 },
+    });
     const denied = await mb.checkDeposit();
     expect(denied.ok).toBe(false);
     expect(denied.quotaExceeded).toBeUndefined();
@@ -131,7 +135,7 @@ describe('MailboxStore.checkDeposit usage quota (DO-backed)', () => {
     const env = makeDOEnv({ USAGE_QUOTA_ENABLED: 'false', USAGE_QUOTA_DAILY: '1' });
     const mb = mailboxStore(env, 'sealed', 'user42');
     for (let i = 0; i < 5; i++) expect(await mb.checkDeposit()).toEqual({ ok: true });
-    expect(usageOf(env, 'user42')).toBeUndefined();
+    expect(usageOf(env, 'user42')).toBeNull(); // D31: gate record exists, its usage slot stays empty
   });
 
   it('an unparseable limit falls back to the defaults instead of blocking', async () => {

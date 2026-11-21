@@ -151,16 +151,16 @@ function coreContract(label, makeDriver) {
         expect(await d.exec(op({ op: 'deposit', family: 'sealed' })))
           .toEqual({ status: 200, body: { ok: true } });
       }
-      const log = await d.readRaw('deposits');
-      expect(Array.isArray(log)).toBe(true);
-      expect(log).toHaveLength(3);
+      const gate = await d.readRaw('gate'); // D31: log rides in the folded gate record
+      expect(Array.isArray(gate?.log)).toBe(true);
+      expect(gate.log).toHaveLength(3);
       for (let i = 3; i < 120; i++) await d.exec(op({ op: 'deposit', family: 'sealed' }));
       const denied = await d.exec(op({ op: 'deposit', family: 'sealed' }));
       expect(denied.status).toBe(200);
       expect(denied.body.ok).toBe(false);
       expect(denied.body.retryAfterSec).toBeGreaterThanOrEqual(1);
       expect(denied.body.retryAfterSec).toBeLessThanOrEqual(60);
-      expect(await d.readRaw('deposits')).toHaveLength(120);
+      expect((await d.readRaw('gate'))?.log).toHaveLength(120);
     });
 
     it('deposit gate spans both families of the one mailbox', async () => {
@@ -177,7 +177,7 @@ function coreContract(label, makeDriver) {
       );
       expect(results.filter((r) => r.body.ok)).toHaveLength(120);
       expect(results.filter((r) => !r.body.ok)).toHaveLength(10);
-      expect(await d.readRaw('deposits')).toHaveLength(120);
+      expect((await d.readRaw('gate'))?.log).toHaveLength(120);
     });
   });
 }
