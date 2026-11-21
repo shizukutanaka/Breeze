@@ -108,10 +108,10 @@ once existed ("the billing system is gone but the TURN fetch must remain") — b
 never documented the way the AI/translation and link-preview removals were, so the docs and
 in-app legal text kept describing it as live. Today there is no checkout, webhook, or portal
 route anywhere in `_worker.js`, and no call to `api.stripe.com` anywhere in the repo. The
-`slots:{userId}` KV record (`{ slots, plan, customerId, updatedAt }`) is still scaffolded in the
-storage schema and read/deleted on account deletion, but nothing writes a real plan into it, and
-the client never checks it — every account, self-hosted or hosted, can add unlimited local
-accounts today with no plan enforcement. Documentation and in-app legal text have been corrected
+`slots:{userId}` KV record that once scaffolded plans was removed from the Worker entirely
+(D29) — no route reads, writes, or deletes it — and the client never checked it: every
+account, self-hosted or hosted, can add unlimited local accounts today with no plan
+enforcement. Documentation and in-app legal text have been corrected
 to stop advertising this as available rather than rebuilding it retroactively; that remains
 separate, explicitly-scoped future work if it's wanted.
 
@@ -185,20 +185,26 @@ separate, explicitly-scoped future work if it's wanted.
   disabled that signal silently no-ops (the wipe itself still proceeds locally).
 - **Read-receipt timing.** A receipt fired the instant a conversation opens is a precise
   timestamp of when a specific person looked at their phone, and correlating those against
-  sends is a known de-anonymisation route against sealed-sender systems (NDSS'21). `/quiet N`
-  holds receipts for N seconds with ±20% jitter, so the signal an observer gets is blurred.
-  The stronger setting remains "hide read receipts" (send none at all); the delay is the
-  middle option for people who want to keep the courtesy without the precision.
-- **Symmetric franking (I17)** proves a reported ciphertext was genuinely sent, but under
-  Sealed Sender it does not cryptographically bind *which* sender sent it — a malicious
-  reporter cannot forge a report, but sender-binding needs asymmetric franking / Hecate
-  (CRYPTO-SPEC §9 N4).
-- **Defaults (v3.6.1)**: authenticated X3DH v5 and group forward secrecy are now **ON by
+  sends is a known de-anonymisation route against sealed-sender systems (NDSS'21). Since D01
+  a fresh install holds receipts for 120 seconds with ±20% jitter by default, so the signal an
+  observer gets is blurred without anyone opting in; `/quiet N` adjusts the hold (0 restores
+  instant receipts; saved settings are never rewritten, so the new default reaches fresh
+  installs only). The stronger setting remains "hide read receipts" (send none at all); the
+  delay is the middle option for people who want to keep the courtesy without the precision.
+- **Franking (I17)** proves a reported ciphertext was genuinely sent. The original symmetric
+  commitment did not cryptographically bind *which* sender sent it under Sealed Sender; since
+  D08 the sender additionally signs the commitment with their Ed25519 identity key (AMF,
+  Tyagi et al. — CRYPTO-SPEC §6a), so a verified report is bound to its sender and a reporter
+  cannot forge or re-attribute one. The residual limit is the mirror image: an adversarial
+  client can withhold its AMF tag, which makes its messages unreportable rather than
+  forgeable; reports from pre-AMF clients still verify at the symmetric level only.
+- **Defaults (v3.7.1)**: authenticated X3DH v5 and group forward secrecy are **ON by
   default**. Both are capability-negotiated with an AND rule and fall back to the legacy path
   whenever any peer/member is un-upgraded, so first contact is authenticated and group messages
-  are forward-secret without breaking older clients. Still opt-in: at-rest key wrapping (needs a
-  user passphrase, `/keywrap`) and call-signaling E2E (`CALL_E2E_SIGNAL` has no capability
-  negotiation yet, so enabling it requires both ends). Worker-side auth gates: the two
+  are forward-secret without breaking older clients. Call-signaling E2E (`CALL_E2E_SIGNAL`) is
+  likewise on by default and capability-negotiated (`CAPS_CALL_E2E` in the prekey-bundle
+  caps), so it engages only when both ends advertise it. Still opt-in: at-rest key wrapping
+  (needs a user passphrase, `/keywrap`). Worker-side auth gates: the two
   registration gates (`PRESENCE_REQUIRE_AUTH`, `TURN_REQUIRE_AUTH` — prekey-bundle existence
   only, no signature) are **on by default** since the 2026-11-13 stage-0 hardening; the
   Ed25519-signature `*_REQUIRE_AUTH` flags remain operator choices, because clients on
@@ -223,7 +229,8 @@ separate, explicitly-scoped future work if it's wanted.
   public key or QR avoids the question entirely — there the key *is* the identity.
 - **The plan/account-slot limit is not a security control.** `getAccountSlots()` reads
   `localStorage['brz-acc-slots']` and the check is a client-side `if (accs.length >= slots)
-  return`. The relay stores `slots:{userId}` but gates no actual resource on it, because
+  return`. The relay keeps no per-account slot record at all (the legacy `slots:{userId}` KV
+  entry was removed in D29) and gates no actual resource on it, because
   "accounts" are local browser profiles — nothing is allocated server-side per slot. Anyone can
   raise their own limit with one `localStorage.setItem`. This is noted so the limit is not
   mistaken for an enforced boundary; it is a nudge. Making it real would require the server to
