@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const infoPanels = readFileSync(new URL('../src/app/info-panels.js', import.meta.url), 'utf8');
+const callJs = readFileSync(new URL('../src/app/call.js', import.meta.url), 'utf8');
 const LOCALES = ['es', 'id', 'ja', 'ko', 'pt-BR', 'th', 'zh-TW'];
 
 describe('D19 — image-send previews carry alt text', () => {
@@ -27,6 +28,20 @@ describe('D19 — image-send previews carry alt text', () => {
 
   it('both paste and drag-drop flows route through the shared builder', () => {
     expect(html.match(/_confirmImageSend\(/g)?.length).toBeGreaterThanOrEqual(3); // def + 2 call sites
+  });
+});
+
+describe('D10 — fresh installs default to relay-only; own STUN leads the ICE list', () => {
+  it('fresh-install default is relayOnly: true', () => {
+    expect(html).toMatch(/relayOnly:\s*true,/);
+    expect(html).not.toMatch(/relayOnly:\s*false,/);
+  });
+
+  it("the relay's own STUN is in the default ICE list (call module + stub)", () => {
+    expect(callJs).toContain("stun:stun.cloudflare.com:3478");
+    expect(html).toContain("stun:stun.cloudflare.com:3478");
+    // …and it precedes the third-party entries in the call module's list.
+    expect(callJs.indexOf('stun.cloudflare.com')).toBeLessThan(callJs.indexOf('stun.l.google.com'));
   });
 });
 

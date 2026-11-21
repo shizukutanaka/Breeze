@@ -5052,7 +5052,7 @@ async function initMessenger(dbName) {
     sound: true,             // notification sound
     hideReadReceipts: false, // privacy: hide read receipts
     hideTyping: false,       // privacy: hide typing indicator
-    relayOnly: false,        // privacy: force TURN relay (hide IP from peers)
+    relayOnly: true,         // privacy: force TURN relay (hide IP from peers). Default ON for fresh installs (D10): a first call otherwise exposes the user's IP to the peer before they ever find this toggle. Saved settings are never rewritten.
     autoLock: false,         // auto-lock on tab switch
     retentionDays: 0,        // 0 = forever, 7/30/90/365
     wallpaper: '',           // chat background color
@@ -10939,7 +10939,7 @@ async function initMessenger(dbName) {
     myId: () => myId, myPubB64: () => myPubB64, myName: () => myName,
   }) || { startCall() {}, handleCallOffer() {}, endCall() {}, pollCallSignals() {},
     getRTCCertificate: async () => null, hasRTCCertificate: () => false,
-    getCallICEConfig: () => ({ iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }, { urls: 'stun:stun.services.mozilla.com' }] }), state: () => 'idle' };
+    getCallICEConfig: () => ({ iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }, { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }, { urls: 'stun:stun.services.mozilla.com' }] }), state: () => 'idle' };
   const { startCall, handleCallOffer, endCall, pollCallSignals, getCallICEConfig, getRTCCertificate, hasRTCCertificate } = _callMgr;
 
   // Group voice calls (stage 5 step 2) — src/app/group-call.js.

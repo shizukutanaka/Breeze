@@ -94,6 +94,10 @@ export function createCallManager(D) {
   function getCallICEConfig() {
     const cfg = {
       iceServers: [
+        // The relay's own STUN first (D10) — the same endpoint the Worker's
+        // TURN response leads with (_worker.js handleTurnCredentials), so a
+        // pre-credential call setup does not depend on third-party STUN.
+        { urls: 'stun:stun.cloudflare.com:3478' },
         { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
         { urls: 'stun:stun.services.mozilla.com' },
       ],
