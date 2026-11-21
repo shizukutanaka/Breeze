@@ -4317,17 +4317,35 @@ async function handleAbuseReport(body, env, request) {
 // TTL; a bare array parses with hwm = null, and handleSealedAck still
 // consults the legacy :hwm slot in that case (it expires within 5
 // minutes of the last pre-fold poll, so the fallback is short-lived).
+//
+// D16 stage 1: the recovery count `rc` rides the same value — how many
+// times the send path's read-back found its own envelope missing and
+// had to re-append (see handleSealedSend). It exists so the staged
+// plan for this queue (measure the recovery's track record; split a
+// mailbox into per-envelope keys only where loss is actually observed)
+// has something to measure: before this fold the recovery fired — or
+// failed — without leaving any trace. handleSealedPoll surfaces the
+// count once as `recovered` (the `dropped` pattern) and resets it in
+// the grace rewrite it already performs; writers that rewrite the
+// value for other reasons (send append, ack) carry the count through.
 function parseSealedQueue(raw) {
   const parsed = raw ? safeJsonParse(raw, null) : null;
-  if (Array.isArray(parsed)) return { q: parsed, hwm: null };
+  if (Array.isArray(parsed)) return { q: parsed, hwm: null, rc: 0 };
   if (parsed && Array.isArray(parsed.q)) {
-    return { q: parsed.q, hwm: Number.isFinite(parsed.hwm) ? parsed.hwm : null };
+    return { q: parsed.q, hwm: Number.isFinite(parsed.hwm) ? parsed.hwm : null, rc: Number.isFinite(parsed.rc) && parsed.rc > 0 ? Math.floor(parsed.rc) : 0 };
   }
-  return { q: [], hwm: null };
+  return { q: [], hwm: null, rc: 0 };
 }
-function sealedQueueValue(q, hwm) {
-  return JSON.stringify({ q, hwm: Number.isFinite(hwm) ? hwm : null });
+function sealedQueueValue(q, hwm, rc) {
+  return JSON.stringify({ q, hwm: Number.isFinite(hwm) ? hwm : null, rc: Number.isFinite(rc) && rc > 0 ? Math.floor(rc) : null });
 }
+
+// D16 stage 1: how many verified repair rounds handleSealedSend runs
+// before it answers STORE_UNCONFIRMED instead of 200. Each round is one
+// extra write + read on the send path and only runs when a race was
+// actually detected, so the bound costs nothing in the common case;
+// two rounds mean a loss must beat the initial write and both repairs.
+const SEALED_MAX_REPAIRS = 2;
 
 async function handleSealedSend(body, env, request) {
   const { to, envelope } = body;
@@ -4386,7 +4404,7 @@ async function handleSealedSend(body, env, request) {
     return json({ error: 'Mailbox deposit rate limited', code: 'MAILBOX_RATE_LIMITED', retryAfter: gate.retryAfterSec }, 429, request);
   }
   const existing = await mb.readQueue();
-  const { q: queue, hwm: queueHwm } = parseSealedQueue(existing);
+  const { q: queue, hwm: queueHwm, rc: queueRc } = parseSealedQueue(existing);
   // Guarantee strictly-increasing ts within the sealed queue (mirrors handleMsgSend).
   // handleSealedAck uses `m.ts > hwm` (strict greater-than); if a new envelope
   // arrives in the SAME millisecond as the last polled entry (hwm), it shares that
@@ -4407,7 +4425,7 @@ async function handleSealedSend(body, env, request) {
     const prev = parseInt(await mb.readDropped() || '0') || 0;
     await mb.writeDropped(String(Math.min(prev + droppedNow, 99999)), TTL.WEEK);
   }
-  const stored = await mb.writeQueue(sealedQueueValue(trimmed, queueHwm), TTL.WEEK);
+  const stored = await mb.writeQueue(sealedQueueValue(trimmed, queueHwm, queueRc), TTL.WEEK);
   if (!stored) {
     // Un-mark the dedup key on a failed store (set before this write): otherwise the
     // client's retry of the identical envelope is swallowed as a duplicate and lost on
@@ -4435,11 +4453,27 @@ async function handleSealedSend(body, env, request) {
   // "mine is present" in exactly the case it exists to detect. The length test short-circuits
   // the string compare for the common case. (Caught by the deterministic race test, which is
   // the point of writing one.)
-  const verifyRaw = await mb.readQueue();
-  const { q: seen, hwm: seenHwm } = parseSealedQueue(verifyRaw);
+  //
+  // D16 stage 1: the repair itself is now VERIFIED. The original code
+  // re-appended once and answered 200 without looking again — but the
+  // re-append is the same read-modify-write, so a second racer could
+  // clobber it in turn and the loss stayed silent. The loop below
+  // re-reads after every repair and repairs again, up to
+  // SEALED_MAX_REPAIRS rounds; a send whose envelope still cannot be
+  // seen afterwards fails honestly (STORE_UNCONFIRMED, dedup un-marked)
+  // so the sender's outbox retries instead of believing a delivery that
+  // never landed. Each repair bumps the mailbox's recovery count (the
+  // `rc` folded into the queue value), which the recipient's next poll
+  // surfaces once — the track record the staged key-split decision
+  // will be made from. Still not exactly-once: under KV a stale read
+  // can confirm a value that a later clobber removes, so the promise
+  // is "present at the final read, or an honest failure" — a loss now
+  // has to win every repair round AND have the final read lie.
   const mine = (m) => m && typeof m.envelope === 'string'
     && m.envelope.length === envelope.length && m.envelope === envelope;
-  if (!seen.some(mine)) {
+  let snap = parseSealedQueue(await mb.readQueue());
+  let repairs = 0;
+  while (!snap.q.some(mine) && repairs < SEALED_MAX_REPAIRS) {
     // §4 residual fix: recompute the re-append ts from the CURRENT tail of the
     // read-back snapshot instead of reusing the original newTs. The racing winner
     // computed its ts from the same stale base, so reusing newTs could re-enter
@@ -4449,18 +4483,32 @@ async function handleSealedSend(body, env, request) {
     // §2.3). max(newTs, tail+1) keeps the recovered envelope strictly newer than
     // everything actually in the queue, so the ack can only clear what was
     // genuinely polled.
-    const tailTs = seen.length > 0 && Number.isFinite(seen[seen.length - 1].ts) ? seen[seen.length - 1].ts : 0;
+    const tailTs = snap.q.length > 0 && Number.isFinite(snap.q[snap.q.length - 1].ts) ? snap.q[snap.q.length - 1].ts : 0;
     const reTs = Math.max(newTs, tailTs + 1);
-    seen.push({ envelope, ts: reTs });
-    const requeued = capQueueBytes(seen.slice(-100), (m) => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
-    await mb.writeQueue(sealedQueueValue(requeued, seenHwm), TTL.WEEK);
-  } else if (seenHwm !== null && (queueHwm === null || seenHwm > queueHwm)) {
+    snap.q.push({ envelope, ts: reTs });
+    const requeued = capQueueBytes(snap.q.slice(-100), (m) => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
+    repairs++;
+    // The count written is the snapshot's count plus THIS send's repair
+    // rounds: a clobbered repair takes its own increment with it, so
+    // counting from the snapshot alone would under-report exactly the
+    // multi-clobber cases the measurement exists to catch.
+    await mb.writeQueue(sealedQueueValue(requeued, snap.hwm, snap.rc + repairs), TTL.WEEK);
+    snap = parseSealedQueue(await mb.readQueue());
+  }
+  if (!snap.q.some(mine)) {
+    // Un-mark the dedup key (the STORE_FAILED rule above): the envelope
+    // was NOT confirmed stored, so the client's retry of the identical
+    // envelope must not be swallowed as a duplicate.
+    globalThis._sealedDedup.delete(dedupKey);
+    return json({ error: 'Failed to confirm sealed delivery', code: 'STORE_UNCONFIRMED' }, 500, request);
+  }
+  if (repairs === 0 && snap.hwm !== null && (queueHwm === null || snap.hwm > queueHwm)) {
     // D31 fold repair: a poll raced the write above and recorded a higher
     // hwm than the stale snapshot this send carried; the write clobbered
     // it. Restore the higher mark from the read-back — the ack filters on
     // it, and a regressed mark would widen its delete to unpolled mail.
     // Monotonic guard: a stale read-back never lowers the mark.
-    await mb.writeQueue(sealedQueueValue(seen, seenHwm), TTL.WEEK);
+    await mb.writeQueue(sealedQueueValue(snap.q, snap.hwm, snap.rc), TTL.WEEK);
   }
   sendPushToUser(to, { title: 'Breeze', body: 'New message', tag: 'breeze-sealed', contactId: to }, env).catch(() => {});
   return json({ ok: true, ack: Date.now() }, 200, request);
@@ -4476,7 +4524,7 @@ async function handleSealedPoll(body, env, request) {
   const signalInfo = {};
   const data = await mb.readQueue(mailboxWsEnabled(env) ? sigGen => { signalInfo.sigGen = sigGen; } : undefined);
   if (!data) return json({ messages: [], ...signalInfo }, 200, request);
-  const { q: messages, hwm: prevHwm } = parseSealedQueue(data);
+  const { q: messages, hwm: prevHwm, rc: prevRc } = parseSealedQueue(data);
   // v3.6: Grace period — set short TTL instead of immediate delete
   // If client crashes after poll but before processing, messages survive 5 min
   // Client-side _replayCache + IDB dedup prevents re-rendering on re-poll.
@@ -4486,17 +4534,20 @@ async function handleSealedPoll(body, env, request) {
   // exists because handleSealedAck once blind-deleted the whole queue, and
   // any envelope appended in the poll→ack window was destroyed undelivered.)
   // Only written when there are messages, so idle polls stay write-free.
+  // D16 stage 1: the same rewrite resets the recovery count, which this
+  // poll surfaces once (below) — the reset rides a write that already
+  // happens, so the measurement costs no extra write.
   let maxTs = 0;
   for (const m of messages) { if (Number.isFinite(m?.ts) && m.ts > maxTs) maxTs = m.ts; }
   if (messages.length > 0) {
     const newHwm = maxTs > 0 ? Math.max(prevHwm || 0, maxTs) : prevHwm;
-    await mb.writeQueue(sealedQueueValue(messages, newHwm), TTL.MIN * 5); // 5 min grace
+    await mb.writeQueue(sealedQueueValue(messages, newHwm, 0), TTL.MIN * 5); // 5 min grace
   }
   // Surface queue-overflow losses once, then reset the counter (see handleSealedSend).
   const droppedStr = await mb.readDropped();
   const dropped = parseInt(droppedStr || '0') || 0;
   if (dropped > 0) await mb.deleteDropped();
-  return json({ messages, ...(dropped > 0 ? { dropped } : {}), ...signalInfo }, 200, request);
+  return json({ messages, ...(dropped > 0 ? { dropped } : {}), ...(prevRc > 0 ? { recovered: prevRc } : {}), ...signalInfo }, 200, request);
 }
 
 // v3.6: Sealed ACK — client confirms processing, worker deletes messages
@@ -4513,7 +4564,7 @@ async function handleSealedAck(body, env, request) {
   // idempotent); report failure so the client retries rather than believing it was cleared.
   const mb = mailboxStore(env, 'sealed', id);
   const raw = await mb.readQueue();
-  const { q: queue, hwm: foldedHwm } = parseSealedQueue(raw);
+  const { q: queue, hwm: foldedHwm, rc } = parseSealedQueue(raw);
   // D31: the mark normally rides inside the queue value. A bare-array
   // value (written before the fold) may still pair with a legacy :hwm
   // slot from a pre-fold poll — consult it only then; it expires within
@@ -4531,7 +4582,10 @@ async function handleSealedAck(body, env, request) {
     const remaining = queue.filter(m => Number.isFinite(m?.ts) && m.ts > hwm);
     let ok;
     if (remaining.length === 0) ok = await mb.deleteQueue();
-    else ok = await mb.writeQueue(sealedQueueValue(remaining, null), TTL.WEEK);
+    // D16 stage 1: the recovery count rides through the ack's rewrite —
+    // a count a racing repair added after the poll's snapshot must
+    // survive to be surfaced by the NEXT poll, not be zeroed here.
+    else ok = await mb.writeQueue(sealedQueueValue(remaining, null, rc), TTL.WEEK);
     if (!ok) return json({ error: 'Failed to confirm delivery', code: 'ACK_FAILED' }, 500, request);
     return json({ ok: true, kept: remaining.length }, 200, request);
   }

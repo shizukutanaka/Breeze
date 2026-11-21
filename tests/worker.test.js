@@ -2387,6 +2387,85 @@ describe('sealed sender send / poll / ack', () => {
     expect(polled.messages.filter((m) => m.envelope === 'only-once').length).toBe(1);
   });
 
+  // D16 stage 1 (measurement): a repaired race leaves a count in the queue
+  // value, and the recipient's next poll surfaces it once as `recovered` —
+  // the track record the staged per-envelope key-split decision needs.
+  // Before this, the recovery fired (or failed) without any trace.
+  it('reports repaired write races on the next poll, exactly once (D16 measurement)', async () => {
+    const env = makeEnv();
+    const key = 'sealed:rcmeasure';
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbered = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true;
+        await origPut(k, JSON.stringify([{ envelope: 'RACER-ONE', ts: Date.now() }]), o);
+      }
+    };
+    const res = await handleSealedSend({ to: 'rcmeasure', envelope: 'MINE-counted' }, env, req({}));
+    expect(res.status).toBe(200);
+    const first = await (await handleSealedPoll({ id: 'rcmeasure' }, env, req({}))).json();
+    expect(first.messages.map((m) => m.envelope)).toContain('MINE-counted');
+    expect(first.recovered).toBe(1); // one race detected, one repair
+    const second = await (await handleSealedPoll({ id: 'rcmeasure' }, env, req({}))).json();
+    expect(second.recovered).toBeUndefined(); // confessed once, counter reset by the grace rewrite
+  });
+
+  // D16 stage 1 (verified repair): the re-append is itself a read-modify-write
+  // and can be clobbered in turn. The send now re-reads after each repair and
+  // repairs again (bounded), instead of answering 200 after one blind retry.
+  it('keeps repairing across repeated clobbers until the envelope is confirmed (D16 verified repair)', async () => {
+    const env = makeEnv();
+    const key = 'sealed:rcverify';
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbers = 0;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && clobbers < 2) {
+        clobbers++; // clobber the initial write AND the first repair
+        await origPut(k, JSON.stringify([{ envelope: `RACER-${clobbers}`, ts: Date.now() }]), o);
+      }
+    };
+    const res = await handleSealedSend({ to: 'rcverify', envelope: 'MINE-persists' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect(clobbers).toBe(2); // both clobbers really happened
+    const polled = await (await handleSealedPoll({ id: 'rcverify' }, env, req({}))).json();
+    expect(polled.messages.map((m) => m.envelope)).toContain('MINE-persists');
+    expect(polled.recovered).toBe(2); // both detections counted
+  });
+
+  // D16 stage 1 (honest failure): if EVERY write is clobbered, the bounded
+  // loop gives up and the send fails visibly — STORE_UNCONFIRMED, exactly
+  // SEALED_MAX_REPAIRS repairs attempted — instead of the old behaviour
+  // (one blind re-append, then a 200 for a delivery that never landed).
+  // The dedup key is un-marked, so the client's retry is judged afresh.
+  it('fails honestly when every write is clobbered, and the retry is not swallowed (D16 STORE_UNCONFIRMED)', async () => {
+    const env = makeEnv();
+    const key = 'sealed:rcdoomed';
+    const origPut = env.KV.put.bind(env.KV);
+    let puts = 0;
+    env.KV.put = async (k, v, o) => {
+      if (k === key) {
+        puts++;
+        await origPut(k, JSON.stringify([{ envelope: 'RACER-ETERNAL', ts: Date.now() }]), o);
+        return;
+      }
+      await origPut(k, v, o);
+    };
+    const res = await handleSealedSend({ to: 'rcdoomed', envelope: 'MINE-unconfirmable' }, env, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_UNCONFIRMED');
+    expect(puts).toBe(3); // initial write + SEALED_MAX_REPAIRS (2) repairs — bounded, not a spin
+    // Restore the store: the identical retry must store, not dedup-swallow.
+    env.KV.put = origPut;
+    const retry = await handleSealedSend({ to: 'rcdoomed', envelope: 'MINE-unconfirmable' }, env, req({}));
+    expect(retry.status).toBe(200);
+    expect((await retry.json()).dedup).toBeUndefined();
+    const polled = await (await handleSealedPoll({ id: 'rcdoomed' }, env, req({}))).json();
+    expect(polled.messages.map((m) => m.envelope)).toContain('MINE-unconfirmable');
+  });
+
   it('a queue that never overflows reports no drops', async () => {
     const env = makeEnv();
     await handleSealedSend({ to: 'quietone', envelope: 'just-one' }, env, req({}));

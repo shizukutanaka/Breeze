@@ -644,6 +644,7 @@
  "secDiagPersist": "永続化の失敗（デッドレター／再送リストア）",
  "secDiagMsgStore": "メッセージストア鍵の失敗／平文保存",
  "secDiagLifecycle": "データライフサイクルの停止（保持／リモートワイプ／掃除のスキップ）",
+ "secDiagSealed": "シールドキューの書き込み競合をリレーが修復した回数（喪失なし）",
  "toastTurnQuota": "このリレーの今月のTURN予算を使い切りました。当面、通話は直接接続のみで試みます。設定で自分のTURNを追加すると中継通話が戻ります。",
  "secLblRTCCert": "RTC証明書（セッション毎）",
  "secDefault": "デフォルト",

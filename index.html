@@ -2089,6 +2089,7 @@ const _I = {
     secDiagPersist: 'Persistence failures (dead-letter / retry-restore)',
     secDiagMsgStore: 'Message-store key failures / plaintext saves',
     secDiagLifecycle: 'Data-lifecycle outages (retention / remote wipe / cleanup skipped)',
+    secDiagSealed: 'Sealed-queue write races the relay repaired (nothing lost)',
     secLblMsgPadding: 'Message Padding',
     secByteBoundary: '-byte boundary',
     secLblSecureCtx: 'Secure Context',
@@ -2547,7 +2548,7 @@ const _DBG = (() => { try { return localStorage.getItem('brz-debug') === '1'; } 
 const _appStartTime = Date.now();
 function _dbg(e, ctx) { if (_DBG) console.warn('[Breeze]', ctx || '', e?.message || e); }
 // D20: on-device diagnostics counters (localStorage 'brz-diag') for failures that must never be silent even with debug off — surfaced in /security.
-function _diagBump(field) { try { const d = JSON.parse(localStorage.getItem('brz-diag') || '{}'); d[field] = (d[field] || 0) + 1; localStorage.setItem('brz-diag', JSON.stringify(d)); } catch { /* counters are best-effort by design */ } }
+function _diagBump(field, n) { try { const d = JSON.parse(localStorage.getItem('brz-diag') || '{}'); d[field] = (d[field] || 0) + (Number.isFinite(n) && n > 0 ? Math.floor(n) : 1); localStorage.setItem('brz-diag', JSON.stringify(d)); } catch { /* counters are best-effort by design */ } }
 
 // v3.5: GDPR/CCPA data consent banner
 (() => {
@@ -11261,11 +11262,9 @@ async function initMessenger(dbName) {
     if (resp?.ok) {
       const data = await resp.json();
       noteSignalGeneration(relay, data);
-      // Honesty over silence — the same rule the sealed queue below
-      // already follows: the relay counts plain-inbox envelopes its
-      // queue caps forced it to drop while we were offline, and the
-      // poll surfaces the count once. Tell the user instead of
-      // losing them wordlessly.
+      // Honesty over silence — the same rule the sealed queue below follows:
+      // the relay counts plain-inbox envelopes its queue caps dropped while
+      // we were offline, and the poll surfaces the count once, not wordlessly.
       if (Number.isInteger(data.dropped) && data.dropped > 0) showToast(t('toastMsgsDropped', data.dropped), 'error');
       for (const msg of (data.messages || [])) {
         try { await handleIncoming(msg); } catch(e) { _dbg(e, 'msg-process'); }
@@ -11281,6 +11280,7 @@ async function initMessenger(dbName) {
         // Honesty over silence: the relay counts envelopes its queue caps forced it to
         // drop while we were offline — tell the user instead of losing them wordlessly.
         if (Number.isInteger(sData.dropped) && sData.dropped > 0) showToast(t('toastMsgsDropped', sData.dropped), 'error');
+        if (Number.isInteger(sData.recovered) && sData.recovered > 0) _diagBump('sealedRecovered', sData.recovered); // D16: write races the relay repaired — counted in /security, not toasted (nothing was lost)
         let sealedProcessed = 0;
         for (const sealed of (sData.messages || [])) {
           try {
