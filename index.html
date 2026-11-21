@@ -10838,6 +10838,33 @@ async function initMessenger(dbName) {
     });
   });
 
+  // v3.1: Shared image-preview confirmation for paste + drag-drop (the two
+  // flows built the same overlay twice; consolidated in the D19 pass, which
+  // also gives the preview img its alt — the attachment renderer has always
+  // carried one). header/sub arrive pre-escaped from the caller; the send
+  // action owns what happens after confirm (the overlay is dismissed and
+  // the object URL revoked first, exactly as both originals did).
+  function _confirmImageSend(url, headerHtml, subHtml, altText, onSend) {
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    safeSetHTML(overlay, `<div class="modal i-center">
+      ${headerHtml}
+      <img src="${url}" class="i-img-preview" alt="${esc(altText)}" decoding="async">
+      ${subHtml}
+      <div class="i-flex-c">
+        <button class="btn btn-g btn-sm" data-act="confirm-send">${t('send')}</button>
+        <button class="btn btn-o btn-sm" data-close="overlay">${t('cancel')}</button>
+      </div>
+    </div>`);
+    document.body.appendChild(overlay);
+    overlay.querySelector('[data-act="confirm-send"]').onclick = async () => {
+      overlay.remove();
+      URL.revokeObjectURL(url);
+      await onSend();
+    };
+    overlay.onclick = (ev) => { if (ev.target === overlay) { overlay.remove(); URL.revokeObjectURL(url); } };
+  }
+
   // v3.1: Clipboard paste → preview before send
   _DOM.get('msg-input')?.addEventListener('paste', async (e) => {
     const items = e.clipboardData?.items;
@@ -10850,27 +10877,12 @@ async function initMessenger(dbName) {
         const maxSize = CONFIG.FILE_MAX;
         if (file.size > maxSize) { showToast(t('toastMax50MB'), 'error'); return; }
         // v3.1: Show preview before sending
-        const url = URL.createObjectURL(file);
-        const overlay = document.createElement('div');
-        overlay.className = 'overlay';
         const name = 'paste-' + Date.now() + '.' + (file.type.split('/')[1] || 'png');
-        safeSetHTML(overlay, `<div class="modal i-center">
-          <div class="i-sub12">${esc(t('sendImageConfirm'))}</div>
-          <img src="${url}" class="i-img-preview" decoding="async">
-          <div class="i-small-muted">${fmtSize(file.size)}</div>
-          <div class="i-flex-c">
-            <button class="btn btn-g btn-sm" id="paste-send">${t('send')}</button>
-            <button class="btn btn-o btn-sm" data-close="overlay">${t('cancel')}</button>
-          </div>
-        </div>`);
-        document.body.appendChild(overlay);
-        overlay.querySelector('#paste-send').onclick = async () => {
-          overlay.remove();
-          URL.revokeObjectURL(url);
+        _confirmImageSend(URL.createObjectURL(file),
+          `<div class="i-sub12">${esc(t('sendImageConfirm'))}</div>`,
+          `<div class="i-small-muted">${fmtSize(file.size)}</div>`, name,
           // v3.6: Route through _sendFile (respects /compress setting + DRY)
-          await _sendFile(new File([file], name, { type: file.type }));
-        };
-        overlay.onclick = (ev) => { if (ev.target === overlay) { overlay.remove(); URL.revokeObjectURL(url); } };
+          async () => { await _sendFile(new File([file], name, { type: file.type })); });
         return;
       }
     }
@@ -12948,38 +12960,21 @@ async function initMessenger(dbName) {
         return;
       }
       if (isBlockedFile(file.name)) { showToast(t('toastBlockedFile'), 'error'); return; }
-      // Image preview before send
-      if (file.type.startsWith('image/')) {
-        const url = URL.createObjectURL(file);
-        const overlay = document.createElement('div');
-        overlay.className = 'overlay';
-        safeSetHTML(overlay, `<div class="modal i-center">
-          <img src="${url}" class="i-img-preview" decoding="async">
-          <div class="i-desc12">${esc(file.name)} (${fmtSize(file.size)})</div>
-          <div class="i-flex-c">
-            <button class="btn btn-g btn-sm" id="dd-send">${t('send')}</button>
-            <button class="btn btn-o btn-sm" data-close="overlay">${t('cancel')}</button>
-          </div>
-        </div>`);
-        document.body.appendChild(overlay);
-        overlay.querySelector('#dd-send').onclick = () => {
-          overlay.remove();
-          URL.revokeObjectURL(url);
-          // Trigger file input programmatically
-          const dt = new DataTransfer();
-          dt.items.add(file);
-          const fi = _DOM.get('msg-file');
-          fi.files = dt.files;
-          fi.dispatchEvent(new Event('change'));
-        };
-        overlay.onclick = (ev) => { if (ev.target === overlay) { overlay.remove(); URL.revokeObjectURL(url); } };
-      } else {
-        // Non-image: send directly
+      // Route the file through the hidden file input (its change handler
+      // owns the actual send) — used by both branches below.
+      const sendViaInput = () => {
         const dt = new DataTransfer();
         dt.items.add(file);
         const fi = _DOM.get('msg-file');
         fi.files = dt.files;
         fi.dispatchEvent(new Event('change'));
+      };
+      // Image preview before send
+      if (file.type.startsWith('image/')) {
+        _confirmImageSend(URL.createObjectURL(file), '',
+          `<div class="i-desc12">${esc(file.name)} (${fmtSize(file.size)})</div>`, file.name, sendViaInput);
+      } else {
+        sendViaInput(); // Non-image: send directly
       }
     });
   }
