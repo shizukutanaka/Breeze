@@ -18,7 +18,12 @@ const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-51
   // degrading to their inert fallbacks.
   '/src/app/call.js', '/src/app/backup.js', '/src/app/qr.js',
   '/src/app/import-parsers.js', '/src/app/sound.js', '/src/app/share.js',
-  '/src/app/direct-ack.js', '/src/app/p2p-stats.js', '/src/app/rendezvous.js', '/src/app/offline-pairing.js', '/src/app/quota.js', '/src/app/history-sync.js', '/src/app/group-call.js', '/src/app/profile.js', '/src/app/group-create.js', '/src/app/device-link.js', '/src/app/stickers.js', '/src/app/info-panels.js', '/src/app/location.js', '/src/app/address.js', '/src/app/turn.js', '/src/app/data-lifecycle.js', '/src/crypto/msgstore.js'];
+  '/src/app/direct-ack.js', '/src/app/p2p-stats.js', '/src/app/rendezvous.js', '/src/app/offline-pairing.js', '/src/app/quota.js', '/src/app/history-sync.js', '/src/app/group-call.js', '/src/app/profile.js', '/src/app/group-create.js', '/src/app/device-link.js', '/src/app/stickers.js', '/src/app/info-panels.js', '/src/app/location.js', '/src/app/address.js', '/src/app/turn.js', '/src/app/data-lifecycle.js', '/src/crypto/msgstore.js',
+  // D17 modal-a11y bridge (wave-6 R01): index.html statically imports it
+  // in the same single module block as every bridge above, so a first
+  // offline boot without it in the precache fails the WHOLE block, not
+  // just the modal feature. tests/sw-assets.test.js pins closure ⊆ ASSETS.
+  '/src/app/modal-a11y.js'];
 const MAX_CACHE_ITEMS = 50; // v3.6: Prevent unbounded cache growth
 
 self.addEventListener('install', (e) => {
