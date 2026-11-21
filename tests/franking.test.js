@@ -92,3 +92,78 @@ describe('commit / verify', () => {
     expect(await F.verifyReport({ message: 'abuse', opening, recordedCommitment: undefined })).toBe(false);
   });
 });
+
+// D08: asymmetric extension (AMF) — the sender's Ed25519 identity key signs
+// the commitment context, so a verified report binds the SENDER (the
+// symmetric core above cannot: anyone holding the opening can present it,
+// and a malicious sender could commit to a message they never sent).
+describe('AMF sender binding (D08)', () => {
+  const b64 = (a) => Buffer.from(Uint8Array.from(a)).toString('base64');
+  async function identity() {
+    const pair = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    return { priv: pair.privateKey, pubRaw: new Uint8Array(await crypto.subtle.exportKey('raw', pair.publicKey)) };
+  }
+
+  it('amfMessage is the canonical domain-separated string', () => {
+    expect(F.amfMessage('fid12345', 'QUJD')).toBe('breeze-amf-v1:fid12345:QUJD');
+  });
+
+  it('a genuine tag verifies (roundtrip)', async () => {
+    const id = await identity();
+    const { commitment } = await F.commit('abusive message');
+    const sig = await F.amfSign(id.priv, 'fid-0001', b64(commitment));
+    expect(await F.amfVerify(id.pubRaw, sig, 'fid-0001', b64(commitment))).toBe(true);
+  });
+
+  it('recipient-side check catches a sender who signed a commitment to a DIFFERENT message', async () => {
+    // The sender encrypts message A to the recipient but signs the commitment
+    // to message B (fabrication attempt: later "prove" B was sent). The
+    // recipient recomputes the commitment from the RECEIVED plaintext and the
+    // tag no longer matches — the message's report capability is dropped.
+    const id = await identity();
+    const sent = await F.commit('what was actually sent');       // A: opening ships to recipient
+    const fabricated = await F.commit('what the sender wishes they had sent'); // B
+    const sig = await F.amfSign(id.priv, 'fid-0002', b64(fabricated.commitment));
+    // Recipient side: commitment recomputed from (opening, received plaintext A).
+    const recomputed = await F._hmac(Uint8Array.from(sent.opening), new TextEncoder().encode('what was actually sent'));
+    expect(b64(recomputed)).toBe(b64(sent.commitment)); // sanity: A's own commitment
+    expect(await F.amfVerify(id.pubRaw, sig, 'fid-0002', b64(recomputed))).toBe(false);
+    // …while the tag DOES match B's commitment — the mismatch is the detection.
+    expect(await F.amfVerify(id.pubRaw, sig, 'fid-0002', b64(fabricated.commitment))).toBe(true);
+  });
+
+  it('a tag from a different signer does not verify (no forged attribution)', async () => {
+    const sender = await identity();
+    const attacker = await identity();
+    const { commitment } = await F.commit('abusive message');
+    const forged = await F.amfSign(attacker.priv, 'fid-0003', b64(commitment));
+    expect(await F.amfVerify(sender.pubRaw, forged, 'fid-0003', b64(commitment))).toBe(false);
+  });
+
+  it('verifyAmfReport binds a genuine report to the sender end-to-end', async () => {
+    const id = await identity();
+    const msg = 'abusive message';
+    const { commitment, opening } = await F.commit(msg);
+    const sig = await F.amfSign(id.priv, 'fid-0004', b64(commitment));
+    expect(await F.verifyAmfReport({ message: msg, opening, recordedCommitment: commitment, frankId: 'fid-0004', sig, senderPub: id.pubRaw })).toBe(true);
+  });
+
+  it('verifyAmfReport rejects when the HMAC half fails even with a genuine tag', async () => {
+    const id = await identity();
+    const { commitment, opening } = await F.commit('real message');
+    const sig = await F.amfSign(id.priv, 'fid-0005', b64(commitment));
+    // Reporter swaps in a different message under the same opening.
+    expect(await F.verifyAmfReport({ message: 'invented message', opening, recordedCommitment: commitment, frankId: 'fid-0005', sig, senderPub: id.pubRaw })).toBe(false);
+  });
+
+  it('amfVerify fails closed (false, no throw) on malformed input', async () => {
+    const id = await identity();
+    const { commitment } = await F.commit('x');
+    const sig = await F.amfSign(id.priv, 'fid-0006', b64(commitment));
+    expect(await F.amfVerify(null, sig, 'fid-0006', b64(commitment))).toBe(false);
+    expect(await F.amfVerify(id.pubRaw, null, 'fid-0006', b64(commitment))).toBe(false);
+    expect(await F.amfVerify(id.pubRaw, [1, 2, 3], 'fid-0006', b64(commitment))).toBe(false);
+    expect(await F.amfVerify(id.pubRaw, sig, 'fid-0006', 'not-a-commitment')).toBe(false);
+    expect(await F.amfVerify(new Uint8Array(10), sig, 'fid-0006', b64(commitment))).toBe(false);
+  });
+});

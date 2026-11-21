@@ -5532,15 +5532,12 @@ async function initMessenger(dbName) {
   // Wire MUST stay arr() to match the reference. _cmOk = verify-if-present, constant-time.
   async function _keyCommit(mk) { return arr(await hkdf(u8(mk), new Uint8Array(32), 'breeze-commit', 32)); }
   async function _cmOk(p, mk) { return !p.cm || await timingSafeEqual(u8(p.cm).join(','), (await _keyCommit(mk)).join(',')); }
-  // I17 message franking. Cf = HMAC(Kf, plaintext) is recorded at the relay at send time; a
-  // recipient reporting abuse reveals (frankId, plaintext, Kf) and the relay recomputes the HMAC,
-  // so it can verify a reported message was really sent WITHOUT ever seeing un-reported content.
-  // Kf is DERIVED from the message key rather than drawn randomly and shipped (as
-  // src/crypto/franking.js does): both parties already hold msgKey, so deriving removes the key
-  // transport entirely — only the opaque frankId goes on the wire, and old clients ignore it.
-  // HKDF is one-way, so revealing Kf in a report discloses nothing about msgKey or any other message.
-  // Limit (CRYPTO-SPEC §9 N4): symmetric franking cannot bind a MALICIOUS sender, who can simply
-  // skip the /abuse/record call; it stops forged reports, not a determined abuser.
+  // I17 message franking. Cf = HMAC(Kf, plaintext), Kf DERIVED from msgKey (HKDF 'breeze-frank'):
+  // no key transport — only the opaque frankId rides the wire, old clients ignore it, and a
+  // report revealing Kf cannot expose msgKey. The relay records Cf by frankId and verifies
+  // reports by recomputing the HMAC, never seeing un-reported content. D08 AMF: the sender's
+  // Ed25519 key signs the commitment inside the payload (p.fs); recipients drop the report
+  // affordance when it fails, and the relay re-verifies it, binding the sender (CRYPTO-SPEC §6a).
   async function _frankKey(mk) { return hkdf(u8(mk), new Uint8Array(32), 'breeze-frank', 32); }
   async function _frankCommit(kf, text) {
     const k = await crypto.subtle.importKey('raw', kf, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
@@ -6088,9 +6085,10 @@ async function initMessenger(dbName) {
         const kf = await _frankKey(msgKey);
         fi = bufToB64(crypto.getRandomValues(new Uint8Array(12)));
         frank.frankId = fi; frank.opening = bufToB64(kf); frank.commitment = await _frankCommit(kf, text);
+        frank.tag = await signMessage('breeze-amf-v1:' + fi + ':' + frank.commitment); // D08 AMF sender-binding tag (ships as p.fs)
       }
       zeroBuffer(msgKey); // Best-effort key erasure
-      const innerMsg = JSON.stringify({ v: 4, i: arr(iv), d: arr(new Uint8Array(ct)), rk: sess.ratchetPub, c: sess.sendCounter, cm, ...(fi ? { fi } : {}) });
+      const innerMsg = JSON.stringify({ v: 4, i: arr(iv), d: arr(new Uint8Array(ct)), rk: sess.ratchetPub, c: sess.sendCounter, cm, ...(fi ? { fi } : {}), ...(frank?.tag ? { fs: frank.tag } : {}) });
       // X3DH v5 first message only: wrap for the responder's bootstrap, drop the marker.
       let outMsg = innerMsg;
       if (sess._pkm) {
@@ -6175,7 +6173,7 @@ async function initMessenger(dbName) {
             // Consume the key only after a successful decrypt — a forged replay must
             // not burn the cached key the legitimate delayed message still needs.
             delete sess.skippedKeys[skKey];
-            if (frank && p.fi) { frank.frankId = p.fi; frank.opening = bufToB64(await _frankKey(mkData)); }
+            if (frank && p.fi) { frank.frankId = p.fi; frank.opening = bufToB64(await _frankKey(mkData)); if (p.fs) frank.tag = p.fs; }
             const text = await _unpadAndDecompress(padded, p.v);
             await saveSession(peerId, sess);
             delete _decryptFailures[peerId];
@@ -6241,7 +6239,7 @@ async function initMessenger(dbName) {
         if (!sess.seenMsgIds) sess.seenMsgIds = [];
         sess.seenMsgIds.push(msgId);
         if (sess.seenMsgIds.length > CONFIG.REPLAY_CACHE_SIZE) sess.seenMsgIds = sess.seenMsgIds.slice(-CONFIG.REPLAY_CACHE_SIZE);
-        if (frank && p.fi) { frank.frankId = p.fi; frank.opening = bufToB64(await _frankKey(msgKey)); }
+        if (frank && p.fi) { frank.frankId = p.fi; frank.opening = bufToB64(await _frankKey(msgKey)); if (p.fs) frank.tag = p.fs; }
         zeroBuffer(msgKey);
         const text = await _unpadAndDecompress(padded, p.v);
         await saveSession(peerId, sess);
@@ -9608,14 +9606,13 @@ async function initMessenger(dbName) {
     document.addEventListener('keydown', escHandler, { signal: _ac.signal });
   }
 
-  // I17: report an abusive message. Reveals (frankId, plaintext, Kf) for THIS message only; the
-  // relay recomputes HMAC(Kf, plaintext) against the commitment it recorded at send time, so it
-  // can confirm the message was genuinely sent without ever seeing un-reported messages.
+  // I17 + D08: report an abusive message. Reveals (frankId, plaintext, Kf) — plus the stored
+  // AMF tag when present — for THIS message only; the relay re-verifies both (CRYPTO-SPEC §6a).
   async function reportMsg(msg) {
     if (!msg?.frankId || !msg.frankOpening || !API) return;
     if (!await showConfirm(t('confirmReport'), { danger: true, okText: t('report') })) return;
     try {
-      const resp = await postAPIRaw('/abuse/report', { frankId: msg.frankId, message: msg.text, opening: msg.frankOpening });
+      const resp = await postAPIRaw('/abuse/report', { frankId: msg.frankId, message: msg.text, opening: msg.frankOpening, ...(msg.frankTag ? { amfSig: msg.frankTag, senderId: msg.contactId } : {}) });
       const data = await resp.json().catch(() => ({}));
       showToast(t(resp.ok && data.verified ? 'toastReported' : 'toastReportFail'), resp.ok && data.verified ? 'success' : 'error');
     } catch(e) { _dbg(e, 'report'); showToast(t('toastReportFail'), 'error'); }
@@ -12086,7 +12083,12 @@ async function initMessenger(dbName) {
         }
         // null = cannot verify (no Ed25519 support)
       }
-      await dbPut('messages', { msgId, contactId, text, mine: false, ts: msg.ts, ...meta, ...(_frank.frankId ? { frankId: _frank.frankId, frankOpening: _frank.opening } : {}) });
+      // D08 AMF: drop reportability if the sender's signed tag mismatches the received plaintext.
+      if (_frank.frankId && _frank.tag && contact.sigPub) {
+        const _cf = await _frankCommit(Uint8Array.from(atob(_frank.opening), c => c.charCodeAt(0)), text);
+        if (await verifySignature('breeze-amf-v1:' + _frank.frankId + ':' + _cf, _frank.tag, contact.sigPub) === false) { _frank.frankId = null; _frank.tag = null; _dbg(null, 'AMF tag mismatch: ' + contactId); }
+      }
+      await dbPut('messages', { msgId, contactId, text, mine: false, ts: msg.ts, ...meta, ...(_frank.frankId ? { frankId: _frank.frankId, frankOpening: _frank.opening, ...(_frank.tag ? { frankTag: _frank.tag } : {}) } : {}) });
     }
     // Both branches above persisted the message (file and text alike);
     // every drop path returned earlier. Step 2: this is the point the

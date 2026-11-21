@@ -236,6 +236,41 @@ jobs:
             done
           done <<< "${{ matrix.files }}"
 
+  # Final checksums: the package job created the Release with a
+  # SHA256SUMS.txt covering only the self-host ZIP, and the desktop
+  # job attached its installers afterwards — on v3.7.1 the shipped
+  # SHA256SUMS.txt was 84 bytes (1 line) against 11 downloads, so
+  # most assets had no published checksum at all. Once every desktop
+  # leg has attached, download the complete asset set, regenerate
+  # the sums over ALL of it (tools/release-checksums.sh, the same
+  # generator the packager uses) and replace the file on the Release.
+  checksums:
+    needs: desktop
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all Release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p release-assets
+          gh release download "${{ github.ref_name }}" --dir release-assets
+
+      - name: Regenerate SHA256SUMS.txt over every asset
+        run: bash tools/release-checksums.sh release-assets
+
+      - name: Verify the regenerated sums before replacing them
+        run: |
+          cd release-assets
+          sha256sum -c SHA256SUMS.txt
+
+      - name: Replace SHA256SUMS.txt on the Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.ref_name }}" release-assets/SHA256SUMS.txt --clobber
+
   # Android verification build. The APK is uploaded as a workflow
   # artifact only — attaching an installable Android package to
   # the public Release waits for release signing (keystore

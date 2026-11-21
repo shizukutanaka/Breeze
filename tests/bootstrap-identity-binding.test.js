@@ -193,7 +193,10 @@ describe('deployed bootstrap identity binding', () => {
       sig: 'signature', sigPub: 'signing-key' };
     const textSource = slice('      // v3.3: Verify Ed25519 signature if present.', "      await dbPut('messages', { msgId, contactId, text, mine: false");
     await new Function('D', 'msg', 'contact', `with(D) { return (async () => {
-      const text = 'signed text', meta = {}, _attribPub = null, contactId = contact.id;
+      // _frank mirrors the production local declared just above the slice
+      // (const _frank = {} before decryptFrom); the D08 AMF check inside the
+      // sliced region reads it. Empty = this message carries no franking tag.
+      const text = 'signed text', meta = {}, _attribPub = null, contactId = contact.id, _frank = {};
       ${textSource}
     })(); }`)(w.D, msg, w.records.contacts.get(f.aContact.id));
     expect(w.records.contacts.get(f.aContact.id).sigPub).toBe(verified === true ? 'signing-key' : undefined);
