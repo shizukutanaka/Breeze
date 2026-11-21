@@ -70,3 +70,28 @@ describe('R08 — a missing data-lifecycle bridge is reported, and the wipe chec
     }
   });
 });
+
+describe('R09 — SPEC.md figures match the shipped code', () => {
+  const spec = readFileSync(new URL('../SPEC.md', import.meta.url), 'utf8');
+
+  it('the stale v3.6.0 figures are gone and the current ones are stated', () => {
+    expect(spec).not.toContain('Detailed Specification v3.6.0');
+    expect(spec).not.toContain('15,191 lines');
+    expect(spec).not.toContain('GROUP_MAX: 100\n'); // trailing \n: 'GROUP_MAX: 1000' contains the prefix
+    expect(spec).not.toContain('MAX_MSG_LENGTH: 10000');
+    expect(spec).not.toContain('PRESENCE_INTERVAL_MS: 10000');
+    expect(spec).toContain('GROUP_MAX: 1000');
+    expect(spec).toContain('MAX_MSG_LENGTH: 4096');
+    expect(spec).toContain('PRESENCE_INTERVAL_MS: 30000');
+    // The values above are the ones the code actually ships.
+    expect(html).toContain('GROUP_MAX: 1000,');
+    expect(html).toContain('MAX_MSG_LENGTH: 4096,');
+    expect(html).toContain('PRESENCE_INTERVAL_MS: 30000,');
+  });
+
+  it('the platform table no longer presents Tauri as the shipped desktop build', () => {
+    expect(spec).not.toContain('Windows (alt) | Electron');
+    expect(spec).toContain('Electron (NSIS, ~150MB) — shipped');
+    expect(spec).toContain('Tauri — source only, not shipped');
+  });
+});
