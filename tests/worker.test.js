@@ -1713,7 +1713,6 @@ describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
     await env.KV.put(`push:${userId}`, JSON.stringify([{ endpoint: 'https://fcm.googleapis.com/x' }]));
     await env.KV.put(`backup:${userId}`, 'encrypted-backup-blob');
     await env.KV.put(`presence:${userId}`, JSON.stringify({ at: Date.now() }));
-    await env.KV.put(`slots:${userId}`, JSON.stringify({ slots: 4, plan: 'plus' }));
     return { ed };
   }
 
@@ -1735,7 +1734,7 @@ describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
       `sealed:${userId}:dropped`, `devices:${userId}`,
       `prekey:${userId}`,
       `ktlog:${userId}`, `push:${userId}`, `backup:${userId}`,
-      `presence:${userId}`, `slots:${userId}`,
+      `presence:${userId}`,
       `prekey:otp:${userId}:0`, `prekey:otp:${userId}:1`, `prekey:otp:${userId}:count`]) {
       expect(await env.KV.get(key)).toBeNull();
     }
@@ -1788,15 +1787,14 @@ describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
     expect(await env.KV.get('alias:victim')).not.toBeNull();
   });
 
-  // Item 38: the reverse cust:{customerId} -> userId mapping must also be erased, or the
-  // payment-identity linkage (and a webhook resolution path to the deleted account)
-  // survives deletion. The handler reads slots:{userId}.customerId before deleting slots.
-  it('erases the cust:{customerId} reverse mapping when the billing record has a customerId', async () => {
+  // D29: the legacy billing records (slots:{userId} / cust:{customerId}) are dead —
+  // billing was removed in v3.6.1, nothing writes them, and the erasure handler no
+  // longer reads or deletes them (the slots record was the cust lookup's only key
+  // source, so the whole path went together). Pin that they stay unconsulted.
+  it('does not consult the legacy billing records (slots/cust stay out of erasure)', async () => {
     const env = makeEnv();
     const userId = 'delcust01';
     const { ed } = await registeredAccount(env, userId);
-    // Overwrite the slots record with one carrying a Stripe customerId, and add the
-    // reverse mapping the webhook would have created.
     await env.KV.put(`slots:${userId}`, JSON.stringify({ slots: 4, plan: 'plus', customerId: 'cus_del38' }));
     await env.KV.put('cust:cus_del38', userId);
 
@@ -1804,23 +1802,8 @@ describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
     const res = await handleAccountDelete({ userId, ts, sig: await signDelete(ed, userId, ts) }, env, req({}));
     expect(res.status).toBe(200);
     const j = await res.json();
-    expect(j.erased).toContain('cust');
-    expect(await env.KV.get('cust:cus_del38')).toBeNull(); // reverse mapping gone
-    expect(await env.KV.get(`slots:${userId}`)).toBeNull();
-  });
-
-  it('omits cust from erased and touches no cust mapping when the account has no customerId (free tier)', async () => {
-    const env = makeEnv();
-    const userId = 'delcust02';
-    const { ed } = await registeredAccount(env, userId); // slots has no customerId
-    // An unrelated cust mapping must NOT be deleted (we only erase this account's own).
-    await env.KV.put('cust:cus_other', 'someoneelse');
-
-    const ts = Date.now();
-    const res = await handleAccountDelete({ userId, ts, sig: await signDelete(ed, userId, ts) }, env, req({}));
-    expect(res.status).toBe(200);
-    expect((await res.json()).erased).not.toContain('cust');
-    expect(await env.KV.get('cust:cus_other')).toBe('someoneelse'); // untouched
+    expect(j.erased).not.toContain('slots');
+    expect(j.erased).not.toContain('cust');
   });
 
   it('rejects an invalid signature without deleting anything', async () => {
