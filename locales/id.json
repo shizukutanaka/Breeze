@@ -4,6 +4,7 @@
  "secDiagPersist": "Kegagalan penyimpanan (dead-letter / pemulihan antrean)",
  "secDiagMsgStore": "Kegagalan kunci penyimpanan pesan / penyimpanan teks biasa",
  "secDiagLifecycle": "Gangguan siklus data (retensi / penghapusan jarak jauh / pembersihan dilewati)",
+ "secDiagSealed": "Perlombaan tulis antrean tersegel yang diperbaiki relai (tidak ada yang hilang)",
  "secSealedSenderNote": "Pengirim tersegel: relay tidak dapat melihat siapa yang mengirim pesan — tetapi itu bukan ketidaktertautan. Waktu dan metadata tetap dapat mengaitkan aktivitas.",
  "groupLegacyNoFs": "⚠️ Kerahasiaan ke depan nonaktif untuk grup ini: ada anggota yang memakai versi lama tanpa group v5. Minta mereka memperbarui untuk mengaktifkannya.",
  "ktBlockLabel": "Blokir sesi baru bila log transparansi kunci terindikasi telah diubah",

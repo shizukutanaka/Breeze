@@ -35,18 +35,18 @@ describe('distributeSenderKey cadence (deployed inline code, sliced)', () => {
   const src = html.slice(start, end).trimEnd();
   const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 
-  async function harness() {
+  async function harness({ secondary = false, acctRoot = null } = {}) {
     const deposits = [];
     let epoch = 7;
     const state = { get epoch() { return epoch; }, setEpoch(e) { epoch = e; } };
-    const run = new AsyncFunction('CONFIG', 'getGroupSenderKey', 'encryptFor', 'relaySend', 'myId', 'myPubB64', 'myName', '_dbg',
+    const run = new AsyncFunction('CONFIG', 'getGroupSenderKey', 'encryptFor', 'relaySend', 'myId', 'myPubB64', 'myName', '_dbg', '_isSecondaryDevice', '_myAcctRoot',
       src + '\nreturn distributeSenderKey;');
     const fn = await run(
       { GROUP_RATCHET_V5: true, SK_REDIST_EVERY: 25 },
       async () => ({ v: 5, chainKey: 'CK', epoch: state.epoch }),
       async (pt) => 'ENC[' + pt + ']',
       async (to, payload) => { deposits.push({ to, payload }); },
-      'me000000000', 'MEPUBKEY0001', 'Me', () => {},
+      'me000000000', 'MEPUBKEY0001', 'Me', () => {}, secondary, acctRoot,
     );
     return { fn, deposits, state };
   }
@@ -87,6 +87,16 @@ describe('distributeSenderKey cadence (deployed inline code, sliced)', () => {
     await fn('g1', 'OTHERPUB0002', false, 3);
     expect(deposits).toHaveLength(2);
     expect(deposits[1].to).toBe('OTHERPUB0002');
+  });
+
+  it('D25: a primary names no account root; a secondary names its root on the deposit', async () => {
+    const primary = await harness();
+    await primary.fn('g1', PUB, false, 3);
+    expect(primary.deposits[0].payload.acctRoot).toBeUndefined();
+    const secondary = await harness({ secondary: true, acctRoot: 'ROOTPUBKEY001' });
+    await secondary.fn('g1', PUB, false, 3);
+    expect(secondary.deposits[0].payload.acctRoot).toBe('ROOTPUBKEY001');
+    expect(secondary.deposits[0].payload.isSenderKey).toBe(true);
   });
 });
 

@@ -138,10 +138,16 @@ separate, explicitly-scoped future work if it's wanted.
   the same recipient in the same instant from different PoPs — and both senders would be
   answered 200, making the loss silent. The send path now **reads the key back and re-appends
   its own envelope if it is missing**, which recovers the common case for one extra read on the
-  cold send path. Deliberately not the textbook fix: a key per envelope removes the race
+  cold send path. Since D16 stage 1 the repair is itself verified: the send re-reads after
+  every re-append and retries (bounded), and a send whose envelope still cannot be confirmed
+  fails honestly (`STORE_UNCONFIRMED`) so the sender's outbox retries, instead of a 200 for a
+  delivery that never landed. Every repair is also counted per mailbox and confessed to the
+  recipient's next poll (`recovered: n`, shown in `/security`) — the track record from which a
+  per-envelope key split will be decided for mailboxes where loss is actually observed.
+  Deliberately not the textbook fix yet: a key per envelope removes the race
   outright but replaces one `get` per poll with a `list` plus a `get` per message on the
   hottest path, in a relay that already throttles presence writes to survive the free tier.
-  So the sealed path remains **best-effort with recovery, not exactly-once**; content-keyed
+  So the sealed path remains **best-effort with verified recovery, not exactly-once**; content-keyed
   dedup, the client retry queue and the overflow confession (`dropped: n`) still back it, and
   P2P delivery plus re-send remain the ultimate recovery paths.
 - **Metadata**: Sealed Sender **v2** hides the sender from the relay *cryptographically*:
