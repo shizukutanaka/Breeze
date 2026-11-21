@@ -2,6 +2,8 @@
  "opTitle": "Pareamento offline de contato",
  "secTurnUsage": "Parcela TURN do tráfego de chamadas deste mês",
  "secDiagPersist": "Falhas de persistência (dead-letter / restauração de reenvios)",
+ "secDiagMsgStore": "Falhas da chave de mensagens / salvamentos em texto plano",
+ "secDiagLifecycle": "Interrupções do ciclo de vida dos dados (retenção / exclusão remota / limpeza ignorados)",
  "secSealedSenderNote": "Remetente selado: o relé não pode ver quem enviou uma mensagem — mas isso não é impossibilidade de vinculação. Tempos e metadados ainda podem vincular atividades.",
  "groupLegacyNoFs": "⚠️ O sigilo futuro está desativado neste grupo: um membro usa uma versão antiga sem o group v5. Peça que atualize para ativá-lo.",
  "ktBlockLabel": "Bloquear novas sessões quando o registro de transparência de chaves parecer adulterado",

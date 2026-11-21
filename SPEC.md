@@ -1,14 +1,14 @@
-# Breeze Messenger — Detailed Specification v3.6.0
+# Breeze Messenger — Detailed Specification
 
-**Document version**: 2026-03-14 R210
-**Status**: Production-ready
-**Total codebase**: 13,116 (client) + 1,930 (worker) + 145 (SW) = 15,191 lines
+**Document version**: 2026-03-14 R210; header, §4.2 and §7 re-verified 2026-11-21 (R09)
+**Status**: Living reference. Originally written for v3.6.0; the header figures, the §4.2 CONFIG table and the §7 platform table were re-measured against the v3.7.1 codebase on 2026-11-21. Other sections describe the design as of v3.6.0 and may lag the code — where this document and the code disagree, the code and its tests win.
+**Total codebase**: 15,999 (index.html) + 11,515 (src/ modules) + 4,982 (worker) + 229 (SW) = 32,725 lines
 
 ---
 
 ## 1. Product Overview
 
-Breeze is a serverless, end-to-end encrypted P2P messenger deployed as a single HTML file on Cloudflare Pages. Messages travel directly between devices via WebRTC; the server only relays connection signals. No phone number, email, or app store required.
+Breeze is a serverless, end-to-end encrypted P2P messenger deployed on Cloudflare Pages (an `index.html` entry plus ES modules under `src/`; it was a single HTML file up to v3.6.0). Messages travel directly between devices via WebRTC; the server only relays connection signals. No phone number, email, or app store required.
 
 ### 1.1 Design Philosophy
 
@@ -189,19 +189,19 @@ Sender                          Server                         Receiver
 | audit | id (autoIncrement) | ts, type | Security audit log |
 | settings | string key | — | User preferences |
 
-### 4.2 CONFIG Constants (45 unique)
+### 4.2 CONFIG Constants (61 keys; excerpt re-verified 2026-11-21)
 
 ```javascript
-VERSION: '3.5.0'              PROTOCOL_VERSION: 4
+VERSION: '3.7.1'              PROTOCOL_VERSION: 4
 POLL_FAST_MS: 3000            POLL_SLOW_MS: 15000
-PRESENCE_INTERVAL_MS: 10000   TYPING_THROTTLE_MS: 2000
-TYPING_TIMEOUT_MS: 5000       CALL_TIMEOUT_MS: 60000
-FILE_MAX: 52428800 (50MB)     GROUP_MAX: 100
-MAX_MSG_LENGTH: 10000         CHUNK_SIZE: 16384
+PRESENCE_INTERVAL_MS: 30000   TYPING_THROTTLE_MS: 3000
+TYPING_TIMEOUT_MS: 3000       CALL_TIMEOUT_MS: 60000
+FILE_MAX: 52428800 (50MB)     GROUP_MAX: 1000
+MAX_MSG_LENGTH: 4096          CHUNK_SIZE: 16384
 DC_BUFFER_MAX: 262144         HEALTH_CHECK_MS: 15000
 REPLAY_CACHE_SIZE: 2000       MSG_DOM_LIMIT: 200
-MSG_PAD_BOUNDARY: 256         PREKEY_OTP_COUNT: 10
-ICE_CANDIDATE_POOL_SIZE: 2    PBKDF2_ITERATIONS: 600000
+MSG_PAD_BOUNDARY: 256         PREKEY_OTP_COUNT: 20
+ICE_CANDIDATE_POOL_SIZE: 4    PBKDF2_ITERATIONS: 100000
 HKDF_HASH: 'SHA-256'          AES_KEY_BITS: 256
 IV_BYTES: 12                   PREFERRED_CURVE: 'X25519'
 SESSION_RESET_THRESHOLD: 3
@@ -350,19 +350,19 @@ was built at one point and removed, but the docs kept describing it as live.
 
 ---
 
-## 7. Platform Support (11 targets)
+## 7. Platform Support
+
+Shipped builds come from `.github/workflows/release.yml` (verified 2026-11-21): the web package, the Electron desktop builds and the Android APK. The Tauri sources are in the repo but are **not** built by the release pipeline and have no shipped builds; iOS is likewise not part of the pipeline.
 
 | Platform | Technology | Build Command |
 |----------|-----------|---------------|
 | Web (PWA) | Cloudflare Pages | `wrangler pages deploy .` |
-| Windows | Tauri (NSIS + MSI, ~5MB) | `cd tauri && npx @tauri-apps/cli build` |
-| macOS | Tauri (DMG universal, ~8MB) | `cd tauri && npx @tauri-apps/cli build` |
-| Linux | Tauri (AppImage/deb/rpm, ~5MB) | `cd tauri && npx @tauri-apps/cli build` |
-| Windows (alt) | Electron (NSIS, ~150MB) | `cd desktop && npx electron-builder --win` |
-| macOS (alt) | Electron (DMG, ~150MB) | `cd desktop && npx electron-builder --mac` |
-| Linux (alt) | Electron + Flatpak + Snap | `cd desktop && npx electron-builder --linux` |
-| Android | Capacitor (APK) | `cd mobile && ./scripts/build-mobile.sh android` |
-| iOS | Capacitor (Xcode) | `cd mobile && ./scripts/build-mobile.sh ios` |
+| Windows | Electron (NSIS, ~150MB) — shipped | `cd desktop && npx electron-builder --win` |
+| macOS | Electron (DMG, ~150MB) — shipped | `cd desktop && npx electron-builder --mac` |
+| Linux | Electron + Flatpak + Snap — shipped | `cd desktop && npx electron-builder --linux` |
+| Android | Capacitor (APK) — shipped | `cd mobile && ./scripts/build-mobile.sh android` |
+| Windows / macOS / Linux | Tauri — source only, not shipped | `cd tauri && npx @tauri-apps/cli build` |
+| iOS | Capacitor (Xcode) — not in the release pipeline | `cd mobile && ./scripts/build-mobile.sh ios` |
 | All platforms | Unified | `./build-all.sh <target>` |
 
 ---

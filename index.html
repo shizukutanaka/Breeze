@@ -1195,7 +1195,7 @@ del.md-del { opacity: .6 }
 
 </div></main>
 
-<footer><div class="wrap">Breeze v3.6.1 — P2P encrypted messenger. <a href="?terms">Terms</a> · <a href="?privacy">Privacy</a></div></footer>
+<footer><div class="wrap">Breeze v3.7.1 — P2P encrypted messenger. <a href="?terms">Terms</a> · <a href="?privacy">Privacy</a></div></footer>
 
 <script type="module">
 // Stage-3 step 3 (docs/PQ_STAGE3_PLAN.md): load the PQ prekey helper
@@ -2087,6 +2087,8 @@ const _I = {
     secInLruCache: 'in LRU cache',
     secSkippedKeys: 'Skipped Keys: ✓ Out-of-order message recovery (max 100 keys/session)',
     secDiagPersist: 'Persistence failures (dead-letter / retry-restore)',
+    secDiagMsgStore: 'Message-store key failures / plaintext saves',
+    secDiagLifecycle: 'Data-lifecycle outages (retention / remote wipe / cleanup skipped)',
     secLblMsgPadding: 'Message Padding',
     secByteBoundary: '-byte boundary',
     secLblSecureCtx: 'Secure Context',
@@ -2544,8 +2546,7 @@ if (localStorage.getItem('brz-theme') === 'auto' || !localStorage.getItem('brz-t
 const _DBG = (() => { try { return localStorage.getItem('brz-debug') === '1'; } catch { return false; } })();
 const _appStartTime = Date.now();
 function _dbg(e, ctx) { if (_DBG) console.warn('[Breeze]', ctx || '', e?.message || e); }
-// D20: on-device diagnostics counters (localStorage 'brz-diag') for failures
-// that must never be silent even with debug off — surfaced in /security.
+// D20: on-device diagnostics counters (localStorage 'brz-diag') for failures that must never be silent even with debug off — surfaced in /security.
 function _diagBump(field) { try { const d = JSON.parse(localStorage.getItem('brz-diag') || '{}'); d[field] = (d[field] || 0) + 1; localStorage.setItem('brz-diag', JSON.stringify(d)); } catch { /* counters are best-effort by design */ } }
 
 // v3.5: GDPR/CCPA data consent banner
@@ -3393,19 +3394,22 @@ async function _atRestMigrate(record, passphrase, context = '') {
   return { ...rest, wrapped };
 }
 
-// C9 (D23): message-store encryption at rest — inline mirror of src/crypto/msgstore.js (keep in sync). Bodies are sealed under the 'msgkey' keywrap slot (an ordinary I4 slot: plaintext JWK with app-lock off, wrapped with it on); the in-memory key is _msgStoreKey, loaded by _initMsgStoreKey. AAD binds each ciphertext to its msgId. Divergence from the reference: open failure keeps the sealed record (text stays '') instead of returning null, so a read can never destroy the stored row.
+// C9 (D23): message-store encryption at rest — inline mirror of src/crypto/msgstore.js (keep in sync). Bodies are sealed under the 'msgkey' keywrap slot (an ordinary I4 slot: plaintext JWK with app-lock off, wrapped with it on); the in-memory key is _msgStoreKey, loaded by _initMsgStoreKey. AAD binds each ciphertext to its msgId. Divergence from the reference: open failure keeps the sealed record (text stays '') instead of returning null, so a read can never destroy the stored row. Second divergence (R02): a no-key or failed seal falls back to a PLAINTEXT write — that path bumps the D20 diagnostics counters via _msgDiagBump (the reference has no diagnostics channel).
 const _MSG_AAD_DOMAIN = 'breeze-msgstore-v1';
 let _msgStoreKey = null;
 const _msgMigrated = new Set();
+// R02: _diagBump is declared outside this mirrored block and test harnesses slice the block standalone — resolve it defensively, never throw.
+function _msgDiagBump(field) { if (typeof _diagBump === 'function') _diagBump(field); }
 function _msgAad(msgId) { return new TextEncoder().encode(_MSG_AAD_DOMAIN + ':' + msgId); }
 function _msgIsSealed(rec) { return !!(rec && rec.enc && rec.enc.v === 1 && typeof rec.enc.iv === 'string' && typeof rec.enc.ct === 'string'); }
 async function _msgSealRecord(rec) {
-  if (!_msgStoreKey || !rec || _msgIsSealed(rec) || !rec.msgId || typeof rec.text !== 'string' || rec.text === '') return rec;
+  if (!rec || _msgIsSealed(rec) || !rec.msgId || typeof rec.text !== 'string' || rec.text === '') return rec;
+  if (!_msgStoreKey) { _msgDiagBump('msgPlaintextSave'); return rec; } // R02: no key loaded — body persists as plaintext; counted, never silent
   try {
     const iv = crypto.getRandomValues(new Uint8Array(CONFIG.IV_BYTES));
     const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: _msgAad(rec.msgId) }, _msgStoreKey, new TextEncoder().encode(rec.text));
     return { ...rec, text: '', enc: { v: 1, iv: _atRestB64(iv), ct: _atRestB64(new Uint8Array(ct)) } };
-  } catch(e) { _dbg(e, 'msg-seal'); return rec; }
+  } catch(e) { _dbg(e, 'msg-seal'); _msgDiagBump('msgPlaintextSave'); return rec; }
 }
 async function _msgOpenRecord(rec) {
   if (!rec || !_msgIsSealed(rec) || !_msgStoreKey) return rec;
@@ -3415,8 +3419,7 @@ async function _msgOpenRecord(rec) {
     return { ...rest, text: new TextDecoder().decode(new Uint8Array(pt)) };
   } catch(e) { _dbg(e, 'msg-open'); return rec; }
 }
-// Open a batch from a read helper; legacy plaintext records (the STORED form
-// had no enc — an opened record is not legacy) go to `migrate` for re-sealing.
+// Open a batch from a read helper; legacy plaintext records (the STORED form had no enc — an opened record is not legacy) go to `migrate` for re-sealing.
 async function _msgOpenAll(records, migrate) {
   const list = records || [];
   const out = await Promise.all(list.map(r => _msgOpenRecord(r)));
@@ -4965,11 +4968,9 @@ async function initMessenger(dbName) {
       return true;
     } catch(e) { _dbg(e, 'keywrap-change'); return false; }
   }
-  // C9 (D23): load or create the message-store key. The 'msgkey' slot is
-  // ordinary keywrap material: a wrapped record is unwrapped with the boot
-  // passphrase loadIdentity already collected (the _unlockPqSeed pattern);
-  // a missing record is created through the keywrap-aware dbPut, so it is
-  // sealed at once when app-lock is on. Failure NEVER blocks sign-in.
+  // C9 (D23): load or create the message-store key ('msgkey' slot = ordinary keywrap material,
+  // unwrapped with the boot passphrase — the _unlockPqSeed pattern; a missing record is created via
+  // the keywrap-aware dbPut). Failure NEVER blocks sign-in; since R02 every failure exit bumps msgkeyInitFail.
   async function _initMsgStoreKey(passphrase, prompt = false) {
     if (_msgStoreKey) return true;
     try {
@@ -4979,19 +4980,19 @@ async function initMessenger(dbName) {
         if (_atRestIsWrapped(rec)) {
           let pass = passphrase;
           if (pass == null && prompt) pass = await showPrompt(t('keyWrapUnlockPrompt'), '', { type: 'password', autocomplete: 'current-password' });
-          if (pass == null) { _dbg(null, 'msgkey: wrapped, no passphrase — store stays sealed this boot'); return false; }
+          if (pass == null) { _dbg(null, 'msgkey: wrapped, no passphrase — no key this boot: stored rows stay sealed, NEW writes fall back to plaintext (R02: counted in /security diagnostics)'); _diagBump('msgkeyInitFail'); return false; }
           jwk = await _atRestUnwrap(rec.wrapped || rec, pass, 'msgkey');
         } else jwk = rec.priv;
-        if (!jwk || jwk.kty !== 'oct' || !jwk.k) { _dbg(null, 'msgkey: unusable record'); return false; }
+        if (!jwk || jwk.kty !== 'oct' || !jwk.k) { _dbg(null, 'msgkey: unusable record'); _diagBump('msgkeyInitFail'); return false; }
         _msgStoreKey = await crypto.subtle.importKey('jwk', jwk, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
         return true;
       }
       const fresh = await crypto.subtle.generateKey({ name: 'AES-GCM', length: CONFIG.AES_KEY_BITS }, true, ['encrypt', 'decrypt']);
       const jwk = await crypto.subtle.exportKey('jwk', fresh);
-      if (!await dbPut('identity', { priv: jwk }, 'msgkey')) { _dbg(null, 'msgkey: persist failed'); return false; }
+      if (!await dbPut('identity', { priv: jwk }, 'msgkey')) { _dbg(null, 'msgkey: persist failed'); _diagBump('msgkeyInitFail'); return false; }
       _msgStoreKey = fresh;
       return true;
-    } catch(e) { _dbg(e, 'msgkey-init'); return false; }
+    } catch(e) { _dbg(e, 'msgkey-init'); _diagBump('msgkeyInitFail'); return false; }
   }
   const _msgMigrate = (rec) => { dbPut('messages', rec).catch(e => _dbg(e, 'msg-migrate')); };
   async function dbGetAll(store) {
@@ -5227,22 +5228,24 @@ async function initMessenger(dbName) {
     return _isImportant(contact, text);
   }
 
-  // v3.3: ENTERPRISE — MESSAGE RETENTION POLICY / REMOTE WIPE / QUOTA CLEANUP
-  // Bodies live in src/app/data-lifecycle.js (wave-4 line-budget pass); these wrappers keep the original names.
+  // v3.3: ENTERPRISE — MESSAGE RETENTION POLICY / REMOTE WIPE / QUOTA CLEANUP (bodies in src/app/data-lifecycle.js, wave-4 pass; wrappers keep the original names)
+  // R08: a missing bridge (app module block failed — R01 scenario) used to disable all three SILENTLY;
+  // absence is now _dbg'd + counted once per boot (D20 channel, /security) and the wipe check retries ~30s.
   const _dataLifecycle = () => globalThis.__breezeDataLifecycle?.createDataLifecycle({
     settings: () => _settings, MS, dbGetAll, db: () => db, replayCache: _replayCache, auditLog, _dbg,
     api: () => API, myId: () => myId, postAPIRaw, queueAuth, showToast, t, CONFIG, reload: () => location.reload() });
-  async function enforceRetentionPolicy() { return _dataLifecycle()?.enforceRetentionPolicy(); }
+  const _dlState = { bumped: false, wipeRetries: 0 };
+  const _dlMiss = (name) => { _dbg(null, 'data-lifecycle bridge missing: ' + name + ' skipped'); if (!_dlState.bumped) { _dlState.bumped = true; _diagBump('dataLifecycleBridgeMissing'); } };
+  async function enforceRetentionPolicy() { const b = _dataLifecycle(); if (!b) { _dlMiss('enforceRetentionPolicy'); return; } return b.enforceRetentionPolicy(); }
 
-  // v3.3: ENTERPRISE — GROUP ADMIN ROLES
-  // Group creator = admin. Admin can: rename, kick, set announce-only.
+  // v3.3: ENTERPRISE — GROUP ADMIN ROLES (creator = admin: rename, kick, set announce-only)
   function isGroupAdmin(group) {
     if (!group?.isGroup) return false;
     return group.createdBy === myId || group.admins?.includes(myId);
   }
 
-  async function checkRemoteWipe() { return _dataLifecycle()?.checkRemoteWipe(); }
-  async function cleanupOldMessages() { return _dataLifecycle()?.cleanupOldMessages(); }
+  async function checkRemoteWipe() { const b = _dataLifecycle(); if (b) return b.checkRemoteWipe(); _dlMiss('checkRemoteWipe'); if (++_dlState.wipeRetries <= 6) setTimeout(() => { checkRemoteWipe().catch(e => _dbg(e, 'wipe-retry')); }, 5 * MS.SEC); }
+  async function cleanupOldMessages() { const b = _dataLifecycle(); if (!b) { _dlMiss('cleanupOldMessages'); return; } return b.cleanupOldMessages(); }
 
   // ===== Identity (persistent ECDH keypair) =====
   let myKeys = null;
@@ -7746,10 +7749,8 @@ async function initMessenger(dbName) {
   // short-ID display/copy — and, most seriously, never registered the
   // enforceRetentionPolicy()/pruneAuditLog() maintenance intervals, so a disappearing-
   // messages retention policy silently did not self-enforce for that account's entire
-  // first session (until the user switched accounts and back, which runs _boot()'s
-  // `if (hasId)` branch and registers them for the first time). Found by diffing _boot()
-  // against the setup-completion handler line-by-line, the same method that found the
-  // cleanup-registration gap.
+  // first session (until an account switch ran _boot()'s `if (hasId)` branch). Found by
+  // diffing _boot() against the setup-completion handler line-by-line.
   async function _startLiveSession() {
     // v3.3: Show human-readable short ID
     const shortIdEl = _DOM.get('msg-short-id');
@@ -7961,10 +7962,9 @@ async function initMessenger(dbName) {
     // _startLiveSession()'s own header comment (above _boot()) for the full account.
     await _startLiveSession();
     _settleRelayPinGate(); // guarantee: releases anything still held if this session's check was never reached (no-op once the check settled it)
-    // A freshly-created identity's boot never runs _boot()'s `if (hasId)` branch (that
-    // check is false for it), so without this call _messengerCleanup stayed null for
-    // this account's entire first session: the first switch AWAY from it found nothing
-    // to call and left every _ac-scoped listener attached forever.
+    // A freshly-created identity's boot never runs _boot()'s `if (hasId)` branch, so without
+    // this call _messengerCleanup stayed null for its entire first session: the first switch
+    // AWAY found nothing to call and left every _ac-scoped listener attached forever.
     _registerMessengerCleanup();
     // Recovery plan step 4 (simple mode): the identity is live and its
     // signing key can authorise the upload — enrol now. The credentials

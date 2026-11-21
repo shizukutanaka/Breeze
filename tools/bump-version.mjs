@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Breeze version bumper — SHARE_PLAN stage 6 step 4.
-// The app version lives in fourteen places (app config, service
+// The app version lives in fifteen places (app config, service
 // worker, PWA manifest, four package manifests, Cargo, the build
-// script, the worker's health response). They drifted before — the
+// script, the worker's health response, the page footer). They drifted before — the
 // dist manifests sat a full release behind — because a bump was a
 // dozen manual edits. Now it is one command:
 //
@@ -23,6 +23,9 @@ const read = (f) => readFileSync(join(ROOT, f), 'utf8');
 
 const SITES = [
   { file: 'index.html', re: /VERSION: '(\d+\.\d+\.\d+)'/, fmt: (v) => `VERSION: '${v}'` },
+  // R06: the always-visible page footer carried a hand-edited version
+  // that sat two releases stale (3.6.1) because no site covered it.
+  { file: 'index.html', re: /Breeze v(\d+\.\d+\.\d+)/, fmt: (v) => `Breeze v${v}` },
   { file: 'sw.js', re: /const VERSION = '(\d+\.\d+\.\d+)'/, fmt: (v) => `const VERSION = '${v}'` },
   { file: 'manifest.json', re: /"version": "(\d+\.\d+\.\d+)"/, fmt: (v) => `"version": "${v}"` },
   { file: 'package.json', re: /"version": "(\d+\.\d+\.\d+)"/, fmt: (v) => `"version": "${v}"` },

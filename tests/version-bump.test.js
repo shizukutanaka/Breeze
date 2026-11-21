@@ -21,6 +21,11 @@ describe('every version site agrees (the full dozen)', () => {
     expect(read('deploy.sh')).toContain(`"v${appVersion}"`);
   });
 
+  it('the page footer carries the app version and is a bump site (R06)', () => {
+    expect(read('index.html')).toContain(`Breeze v${appVersion} — P2P encrypted messenger`);
+    expect(tool).toContain('Breeze v(\\d+\\.\\d+\\.\\d+)');
+  });
+
   it('the bump tool knows every site', () => {
     for (const f of ['index.html', 'sw.js', 'manifest.json', 'package.json', 'desktop/package.json', 'mobile/package.json', 'tauri/package.json', 'tauri/src-tauri/tauri.conf.json', 'tauri/src-tauri/Cargo.toml', 'build-all.sh', 'build.sh', '_worker.js', 'deploy.sh']) {
       expect(tool).toContain(`file: '${f}'`);

@@ -250,7 +250,7 @@ unwraps → derives identical SK → decrypts).
 { v:4, i:[iv], d:[ciphertext‖tag], rk:[ratchetPub], c:counter, cm:[keyCommitment] }
 ```
 - Symmetric chain: `msgKey=HKDF(ck,0^32,'msg')`, `ck=HKDF(ck,0^32,'chain')`.
-- Frame (inside AEAD): `[flags:1][len:2][data]`, padded to 256 B. (`flags.bit0`=compressed.)
+- Frame (inside AEAD): `[flags:1][len:2][data]`, padded to a size bucket (D02: 256 / 1024 / 4096 B, then multiples of 4096 — `_padBucketSize`). (`flags.bit0`=compressed.)
 - DH ratchet step on new `rk`: resets **both** `Ns` and `Nr`.
 - Replay: reject `c ≤ Nr` (unless a skipped key exists); dedup by msgId (first 8 ct bytes).
 - Skipped keys: bounded (`MAX_SKIP`), reject gaps `> MAX_GAP`, **TTL-expired** (I7).

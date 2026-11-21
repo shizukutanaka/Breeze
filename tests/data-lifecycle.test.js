@@ -94,9 +94,11 @@ describe('data-lifecycle module (src/app/data-lifecycle.js)', () => {
     const { readFileSync } = await import('node:fs');
     const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
     expect(html).toContain("from './src/app/data-lifecycle.js'; window.__breezeDataLifecycle = { createDataLifecycle };");
-    expect(html).toContain('async function enforceRetentionPolicy() { return _dataLifecycle()?.enforceRetentionPolicy(); }');
-    expect(html).toContain('async function checkRemoteWipe() { return _dataLifecycle()?.checkRemoteWipe(); }');
-    expect(html).toContain('async function cleanupOldMessages() { return _dataLifecycle()?.cleanupOldMessages(); }');
+    // R08: the wrappers no longer delegate blindly — a missing bridge is
+    // reported via _dlMiss (see wave6-defects.test.js for the full pins).
+    expect(html).toContain("async function enforceRetentionPolicy() { const b = _dataLifecycle(); if (!b) { _dlMiss('enforceRetentionPolicy'); return; } return b.enforceRetentionPolicy(); }");
+    expect(html).toContain("async function cleanupOldMessages() { const b = _dataLifecycle(); if (!b) { _dlMiss('cleanupOldMessages'); return; } return b.cleanupOldMessages(); }");
+    expect(html).toContain("if (b) return b.checkRemoteWipe(); _dlMiss('checkRemoteWipe');");
     expect((html.match(/\n/g) || []).length).toBeLessThan(16000); // same count validate.sh gates on
   });
 });
