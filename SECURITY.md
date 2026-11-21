@@ -156,8 +156,11 @@ separate, explicitly-scoped future work if it's wanted.
   capability-negotiated (`seal-v2` in the prekey-bundle caps, read via `/prekey/status`
   which consumes no one-time prekey): messages to un-upgraded peers, the `/msg` fallback
   path, and the offline retry queue still use legacy envelopes and remain sender-visible.
-  The relay still sees recipient, timing, and message size (padded to 256 B boundaries);
-  cover traffic / onion routing are deferred (see SPEC §12).
+  The relay still sees recipient, timing, and message size (padded to size buckets —
+  256 / 1024 / 4096 B, then multiples of 4096, since D02 — so only the bucket leaks).
+  Cover traffic was considered and rejected in D02 (constant dummy traffic would burn the
+  default relay's free quota and put relay costs on the creator); onion routing is
+  deferred (see SPEC §12).
 - **Relay identity (stage-2 step 4)**: the relay holds a persistent Ed25519 key
   (`relayKey` in `/api/health`). On first contact a client verifies the key by
   challenge — the relay must sign `breeze-relay-attest:{relayKey}:{nonce}` for
