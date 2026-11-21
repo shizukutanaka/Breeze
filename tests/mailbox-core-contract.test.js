@@ -179,6 +179,91 @@ function coreContract(label, makeDriver) {
       expect(results.filter((r) => !r.body.ok)).toHaveLength(10);
       expect((await d.readRaw('gate'))?.log).toHaveLength(120);
     });
+
+    it('D16 stage 2: rejects malformed composite ops with 400', async () => {
+      const d = makeDriver();
+      const bad = [
+        { op: 'append', family: 'presence', item: { envelope: 'x' } }, // no composite ops on presence
+        { op: 'poll-claim', family: 'inbox' }, // claims are sealed-only
+        { op: 'poll-claim', family: 'presence' },
+        { op: 'append', family: 'sealed' }, // item missing
+        { op: 'append', family: 'sealed', item: {} }, // envelope missing
+        { op: 'append', family: 'inbox', item: { payload: 'p' } }, // ts missing
+        { op: 'append', family: 'bogus', item: { envelope: 'x' } },
+      ];
+      for (const fields of bad) {
+        expect(await d.exec(op(fields))).toEqual({ status: 400, body: { ok: false } });
+      }
+    });
+
+    it('D16 stage 2: sealed append assigns strictly-increasing ts and dedups in-op', async () => {
+      const d = makeDriver();
+      const a = await d.exec(op({ op: 'append', family: 'sealed', item: { envelope: 'env-a' }, ttlSec: 604800 }));
+      expect(a.status).toBe(200);
+      expect(a.body.ok).toBe(true);
+      const b = await d.exec(op({ op: 'append', family: 'sealed', item: { envelope: 'env-b' }, ttlSec: 604800 }));
+      expect(b.body.ts).toBeGreaterThan(a.body.ts);
+      // The identical envelope is a duplicate, answered from the queue
+      // itself — no second entry, the original ts reported.
+      const dup = await d.exec(op({ op: 'append', family: 'sealed', item: { envelope: 'env-a' }, ttlSec: 604800 }));
+      expect(dup.body).toEqual({ ok: true, duplicate: true, ts: a.body.ts });
+      const stored = JSON.parse((await d.readRaw('sealed:queue')).v);
+      expect(stored.q.map((e) => e.envelope)).toEqual(['env-a', 'env-b']);
+    });
+
+    it('D16 stage 2: parallel sealed appends all land exactly once (serialized RMW)', async () => {
+      const d = makeDriver();
+      const results = await Promise.all(
+        Array.from({ length: 10 }, (_, i) => d.exec(op({ op: 'append', family: 'sealed', item: { envelope: `env-${i}` }, ttlSec: 604800 }))),
+      );
+      expect(results.every((r) => r.body.ok)).toBe(true);
+      const stored = JSON.parse((await d.readRaw('sealed:queue')).v);
+      expect(stored.q).toHaveLength(10);
+      const tss = stored.q.map((e) => e.ts);
+      expect([...tss].sort((x, y) => x - y)).toEqual(tss); // stored in strictly-increasing order
+      expect(new Set(tss).size).toBe(10);
+    });
+
+    it('D16 stage 2: inbox append bumps ts past tail and hwm, advances the hwm, dedups by id', async () => {
+      const d = makeDriver();
+      await d.exec(op({ op: 'put', family: 'inbox', slot: 'hwm', value: '5000', ttlSec: 604800 }));
+      const item = { from: 'alice', payload: 'ciphertext', ts: 100, id: 'abc123' };
+      const a = await d.exec(op({ op: 'append', family: 'inbox', item, ttlSec: 604800 }));
+      expect(a.body).toEqual({ ok: true, ts: 5001 }); // bumped past the hwm
+      expect((await d.readRaw('inbox:hwm')).v).toBe('5001');
+      const dup = await d.exec(op({ op: 'append', family: 'inbox', item, ttlSec: 604800 }));
+      expect(dup.body).toEqual({ ok: true, duplicate: true, ts: 5001 });
+      const stored = JSON.parse((await d.readRaw('inbox:queue')).v);
+      expect(stored).toHaveLength(1);
+      expect(stored[0]).toMatchObject({ from: 'alice', payload: 'ciphertext', ts: 5001, id: 'abc123' });
+    });
+
+    it('S08: poll-claim surfaces the recovery count exactly once and folds the hwm', async () => {
+      const d = makeDriver();
+      await d.exec(op({ op: 'put', family: 'sealed', slot: 'queue', value: JSON.stringify({ q: [{ envelope: 'e1', ts: 5 }], hwm: 5, rc: 3 }), ttlSec: 604800 }));
+      const first = await d.exec(op({ op: 'poll-claim', family: 'sealed', hwm: 5, ttlSec: 300 }));
+      expect(first.body).toEqual({ ok: true, claimed: 3 });
+      const stored = JSON.parse((await d.readRaw('sealed:queue')).v);
+      expect(stored.rc).toBeNull(); // reset by the claim (sealedQueueValue writes rc:null at 0)
+      expect(stored.q).toHaveLength(1); // the grace rewrite keeps the messages
+      const second = await d.exec(op({ op: 'poll-claim', family: 'sealed', hwm: 5, ttlSec: 300 }));
+      expect(second.body).toEqual({ ok: true, claimed: 0 });
+    });
+
+    it('S08: poll-claim claims a count pending on an EMPTY queue (the re-surface case)', async () => {
+      const d = makeDriver();
+      await d.exec(op({ op: 'put', family: 'sealed', slot: 'queue', value: JSON.stringify({ q: [], hwm: 9, rc: 2 }), ttlSec: 604800 }));
+      const claim = await d.exec(op({ op: 'poll-claim', family: 'sealed', hwm: 9, ttlSec: 300 }));
+      expect(claim.body).toEqual({ ok: true, claimed: 2 });
+      expect(JSON.parse((await d.readRaw('sealed:queue')).v).rc).toBeNull();
+    });
+
+    it('S08: poll-claim on an absent queue claims nothing and writes nothing', async () => {
+      const d = makeDriver();
+      const claim = await d.exec(op({ op: 'poll-claim', family: 'sealed', hwm: 1, ttlSec: 300 }));
+      expect(claim.body).toEqual({ ok: true, claimed: 0 });
+      expect(await d.hasRaw('sealed:queue')).toBe(false);
+    });
   });
 }
 

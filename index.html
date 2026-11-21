@@ -1843,6 +1843,7 @@ const _I = {
     p2pDirect: 'Direct',
     addAccountBtn: 'Add account',
     groupPrimaryOnly: 'Group messages must be sent from your primary device',
+    groupNoFileVoice: 'Files and voice messages can\'t be sent in group chats yet',
     nrnAria: 'Mark this message as needing no reply',
     nrnBadge: 'no reply needed',
     nrnOn: 'Next message: no reply needed',
@@ -2087,7 +2088,7 @@ const _I = {
     secInLruCache: 'in LRU cache',
     secSkippedKeys: 'Skipped Keys: ✓ Out-of-order message recovery (max 100 keys/session)',
     secDiagPersist: 'Persistence failures (dead-letter / retry-restore)',
-    secDiagMsgStore: 'Message-store key failures / plaintext saves',
+    secDiagMsgStore: 'Message-store key failures / plaintext saves / open failures',
     secDiagLifecycle: 'Data-lifecycle outages (retention / remote wipe / cleanup skipped)',
     secDiagSealed: 'Sealed-queue write races the relay repaired (nothing lost)',
     secLblMsgPadding: 'Message Padding',
@@ -3395,7 +3396,7 @@ async function _atRestMigrate(record, passphrase, context = '') {
   return { ...rest, wrapped };
 }
 
-// C9 (D23): message-store encryption at rest — inline mirror of src/crypto/msgstore.js (keep in sync). Bodies are sealed under the 'msgkey' keywrap slot (an ordinary I4 slot: plaintext JWK with app-lock off, wrapped with it on); the in-memory key is _msgStoreKey, loaded by _initMsgStoreKey. AAD binds each ciphertext to its msgId. Divergence from the reference: open failure keeps the sealed record (text stays '') instead of returning null, so a read can never destroy the stored row. Second divergence (R02): a no-key or failed seal falls back to a PLAINTEXT write — that path bumps the D20 diagnostics counters via _msgDiagBump (the reference has no diagnostics channel).
+// C9 (D23): message-store encryption at rest — inline mirror of src/crypto/msgstore.js (keep in sync). Bodies are sealed under the 'msgkey' keywrap slot (an ordinary I4 slot: plaintext JWK with app-lock off, wrapped with it on); the in-memory key is _msgStoreKey, loaded by _initMsgStoreKey. AAD binds each ciphertext to its msgId. Divergences from the reference: open failure keeps the sealed record (text stays '') instead of returning null, so a read can never destroy the stored row; and (R02) a no-key or failed seal falls back to a PLAINTEXT write, bumped into the D20 diagnostics via _msgDiagBump, as are open failures (S03) (the reference has no diagnostics channel).
 const _MSG_AAD_DOMAIN = 'breeze-msgstore-v1';
 let _msgStoreKey = null;
 const _msgMigrated = new Set();
@@ -3418,7 +3419,7 @@ async function _msgOpenRecord(rec) {
     const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: _atRestUnb64(rec.enc.iv), additionalData: _msgAad(rec.msgId) }, _msgStoreKey, _atRestUnb64(rec.enc.ct));
     const { enc: _enc, ...rest } = rec;
     return { ...rest, text: new TextDecoder().decode(new Uint8Array(pt)) };
-  } catch(e) { _dbg(e, 'msg-open'); return rec; }
+  } catch(e) { _dbg(e, 'msg-open'); _msgDiagBump('msgOpenFail'); return rec; } // S03: an open failure (e.g. key mismatch) leaves every sealed body '' — count it like the seal side, never silent
 }
 // Open a batch from a read helper; legacy plaintext records (the STORED form had no enc — an opened record is not legacy) go to `migrate` for re-sealing.
 async function _msgOpenAll(records, migrate) {
@@ -6490,11 +6491,9 @@ async function initMessenger(dbName) {
     try { await sendMessage(); } catch(e) { _dbg(e, 'sticker-fallback'); }
     if (input.value === '') input.value = draft;
   }
-  // Shared group transport (stage 5 step 6): distribute the sender
-  // key, encrypt the document, try direct delivery with acks, then
-  // pool the owed relay deposits. onEncrypted runs after a
-  // successful encrypt, before any send — the sticker path stores
-  // and renders its record there, matching its original ordering.
+  // Shared group transport (stage 5 step 6): distribute the sender key, encrypt
+  // the document, try direct delivery with acks, then pool the owed relay
+  // deposits. onEncrypted runs after a successful encrypt, before any send.
   async function _sendGroupTransport(contact, wireText, ts, msgId, onEncrypted) {
     const members = (contact.members || []).filter(m => m.id !== myId);
     for (const m of members) await distributeSenderKey(contact.id, m.pubB64, false, (contact.members || []).length).catch(e => _dbg(e, 'sk-dist'));
@@ -6717,11 +6716,9 @@ async function initMessenger(dbName) {
       if (_myDevCache && now - _myDevCacheTs < MS.MIN) return _myDevCache;
       const rootId = acct.root.slice(0, 12);
       const list = (await _fetchDeviceRegistry(rootId, acct.root))?.list || null;
-      // Unlink self-awareness (Socratic round — "does an unlinked device KNOW?"): a VERIFIED
-      // registry that no longer lists this device means the account holder removed it. Tell
-      // the user instead of letting fan-out silently stop, and drop the stale account binding
-      // so this install cleanly reverts to a standalone identity. Only a verified, non-empty
-      // list may trigger this — a failed/unverifiable fetch (null) must never unlink anyone.
+      // Unlink self-awareness: a VERIFIED registry that no longer lists this device means
+      // the account holder removed it — tell the user and drop the stale account binding
+      // (clean revert to standalone). Only a verified, non-empty list may trigger this.
       if (acct.root !== myPubB64 && Array.isArray(list) && list.length && !list.includes(myPubB64)) {
         if (!_unlinkNoticed) { _unlinkNoticed = true; showToast(t('devUnlinkedNotice'), 'error', 10000); }
         await dbDel('identity', 'account'); // clean revert to a standalone identity (/link works again)
@@ -6736,23 +6733,19 @@ async function initMessenger(dbName) {
   }
 
   // ═══ Sealed Sender v2 (inline mirror of src/crypto/seal.js) ═══
-  // The pre-v2 "sealed" envelope carried from/fromPub/fromName — and the replyTo PLAINTEXT
-  // preview — in the clear inside the JSON string the relay stores, so "the Worker doesn't
-  // see the sender" was only true of a Worker that chose not to look (Socratic-found). v2
-  // encrypts ALL sender-identifying metadata to the RECIPIENT's identity key: ephemeral
-  // X25519/P-256 ECDH → HKDF('breeze-seal-v2') → AES-256-GCM with AAD binding to+ts (no
-  // cross-recipient/cross-time splicing). The relay now sees only {to, ts, ratchet
-  // ciphertext, sealed blob}. Capability-gated: recipients advertise 'seal-v2' in their
-  // prekey-bundle caps; senders read caps via /prekey/status (consumes NO one-time prekey)
-  // and fall back to the legacy envelope for un-upgraded peers — delivery over privacy,
-  // and the /msg fallback + offline retry queue stay legacy (documented in SECURITY.md).
+  // Pre-v2 envelopes carried from/fromPub/fromName (and the replyTo preview) in the
+  // clear, so "the Worker doesn't see the sender" held only for a Worker that chose
+  // not to look. v2 encrypts ALL sender-identifying metadata to the RECIPIENT's
+  // identity key: ephemeral X25519/P-256 ECDH → HKDF('breeze-seal-v2') → AES-256-GCM,
+  // AAD binding to+ts. The relay sees only {to, ts, ratchet ciphertext, sealed blob}.
+  // Capability-gated ('seal-v2' in prekey-bundle caps, read via /prekey/status, which
+  // consumes NO one-time prekey); un-upgraded peers get the legacy envelope, and the
+  // /msg fallback + offline retry queue stay legacy (SECURITY.md).
   const SEAL_INFO = 'breeze-seal-v2';
-  // Metadata padding frame (mirror of src/crypto/seal.js): without it, se.ct's
-  // length revealed the exact metadata byte length (+16 GCM tag) to the relay —
-  // display-name length and replyTo-preview presence were inferable (step-3
-  // padding audit, Low). The frame lives inside the plaintext, so key/AAD
-  // derivation is unchanged and pre-padding blobs still open: legacy plaintext
-  // is raw JSON starting with '{' (0x7B); the frame starts with marker 0x01.
+  // Metadata padding frame (mirror of src/crypto/seal.js): without it, se.ct's length
+  // revealed the exact metadata byte length to the relay. The frame lives inside the
+  // plaintext, so key/AAD derivation is unchanged and pre-padding blobs still open:
+  // legacy plaintext is raw JSON starting with '{' (0x7B); the frame starts with 0x01.
   //   framed = [0x01][len:2 BE][JSON bytes][0x00 …], total snapped to a size bucket.
   const SEAL_PAD_MARKER = 0x01;
   function _padBucketSize(n, boundary = 256) { const top = boundary * 16; // D02 buckets: boundary / ×4 / ×16, then multiples of the top bucket
@@ -8136,7 +8129,7 @@ async function initMessenger(dbName) {
               statusEl.className = 'msg-status failed';
               statusEl.textContent = '✗';
               statusEl.title = t('sendFailed');
-              statusEl.setAttribute('data-action', 'retry-msg');
+              statusEl.setAttribute('data-action', 'retry-msg'); statusEl.setAttribute('role', 'button'); statusEl.setAttribute('tabindex', '0'); // S04: keyboard-activatable like the template-rendered one
             }
           }
         }
@@ -9224,9 +9217,9 @@ async function initMessenger(dbName) {
     else if (isMine && meta.ack) statusTitle = t('delivered');
     else if (isMine && meta.dep) statusTitle = t('deposited');
     else if (isMine) statusTitle = t('sent');
-    const statusHtml = isMine ? `<span class="msg-status ${statusClass}" title="${statusTitle}"${meta.failed ? ' data-action="retry-msg"' : ''}>${statusIcon}</span>` : '';
+    const statusHtml = isMine ? `<span class="msg-status ${statusClass}" title="${statusTitle}"${meta.failed ? ' data-action="retry-msg" role="button" tabindex="0"' : ''}>${statusIcon}</span>` : '';
     // v3.3: Reply count (how many messages quote this one)
-    const replyCountHtml = meta.replyCount > 0 ? `<span class="reply-count" data-action="reply-scroll" title="${t('replyCountLabel', meta.replyCount)}">${meta.replyCount} 💬</span>` : '';
+    const replyCountHtml = meta.replyCount > 0 ? `<span class="reply-count" data-action="reply-scroll" role="button" tabindex="0" title="${t('replyCountLabel', meta.replyCount)}">${meta.replyCount} 💬</span>` : '';
     safeSetHTML(d, content + editMark + sigMark + timerBadge + statusHtml + replyCountHtml + `<span class="ts" title="${fullDate}">${time}</span>` + reactionsHtml);
     // v3.2: Copy text button (hover to show)
     if (text && !meta.deleted) {
@@ -9374,13 +9367,12 @@ async function initMessenger(dbName) {
             statusEl.classList.add('failed');
             statusEl.textContent = '✗';
             statusEl.title = t('sendFailed');
-            statusEl.setAttribute('data-action', 'retry-msg');
+            statusEl.setAttribute('data-action', 'retry-msg'); statusEl.setAttribute('role', 'button'); statusEl.setAttribute('tabindex', '0'); // S04: keyboard-activatable like the template-rendered one
           }
           break; // Only update the most recent matching message
         }
       }
-      // Also update in IDB. The persisted flag mirrors the same
-      // semantics: a relay deposit records dep (never ack), peer
+      // Also update in IDB: a relay deposit records dep (never ack), peer
       // receipt records ack, giving-up records failed.
       if (activeContact && typeof dbGetByIndex === 'function') {
         dbGetByIndex('messages', 'contact', activeContact.id).then(msgs => {
@@ -9397,16 +9389,15 @@ async function initMessenger(dbName) {
   function renderReactions(reactions, msgId) {
     if (!reactions || Object.keys(reactions).length === 0) return '';
     // reactions: { emoji: [userId1, userId2, ...] }
-    // Escape emoji and title: both are peer-supplied values that reach innerHTML/outerHTML.
-    // esc() converts < > " & to entities; dataset.emoji auto-decodes them back so the click
-    // handler still receives the original string for IDB lookup.
+    // Escape emoji and title: peer-supplied values reaching innerHTML. dataset.emoji
+    // auto-decodes the entities back, so the click handler gets the original string.
     const sMid = safeMsgId(msgId);
     let html = '<div class="msg-reactions">';
     for (const [emoji, users] of Object.entries(reactions)) {
       const isMine = users.includes(myId);
       const safeE = esc(emoji);
       const safeT = esc(users.join(', '));
-      html += `<span class="msg-react${isMine ? ' mine' : ''}" data-action="react" data-msgid="${sMid}" data-emoji="${safeE}" title="${safeT}"><span class="rc">${safeE}</span><span class="rn">${users.length}</span></span>`;
+      html += `<span class="msg-react${isMine ? ' mine' : ''}" data-action="react" role="button" tabindex="0" data-msgid="${sMid}" data-emoji="${safeE}" title="${safeT}"><span class="rc">${safeE}</span><span class="rn">${users.length}</span></span>`;
     }
     html += '</div>';
     return html;
@@ -9514,7 +9505,7 @@ async function initMessenger(dbName) {
       const safeVotes = Array.isArray(opt.votes) ? opt.votes : [];
       const pct = totalVotes > 0 ? Math.round(safeVotes.length / totalVotes * 100) : 0;
       const voted = safeVotes.includes(myId);
-      html += `<div class="poll-opt${voted ? ' voted' : ''}" data-action="vote" data-msgid="${msgId}" data-idx="${i}">
+      html += `<div class="poll-opt${voted ? ' voted' : ''}" data-action="vote" role="button" tabindex="0" data-msgid="${msgId}" data-idx="${i}">
         <span class="i-flex1">${esc(String(opt.text || '').slice(0, 200))}</span>
         <div class="i-flex2"><div class="poll-bar" style="width:${pct}%"></div></div>
         <span class="poll-pct">${pct}%</span>
@@ -10332,6 +10323,12 @@ async function initMessenger(dbName) {
     try {  
       if (!activeContact) return;
       if (activeContact.isGroup && _isSecondaryDevice) { showToast(t('groupPrimaryOnly'), 'error'); return; }
+      // S01: groups have no file transport — the paths below key off the 1:1
+      // session (encryptFor(pubB64)), and a group contact's pubB64 is '', so a
+      // group file "send" rendered and saved locally, then died at encryptFor:
+      // sent in appearance only. Refuse honestly, before anything is drawn or
+      // stored. (Group file transport itself is a separate, larger item.)
+      if (activeContact.isGroup) { showToast(t('groupNoFileVoice'), 'error'); return; }
       // v3.6: Auto-compress images
       file = await _compressImage(file);
       const ts = correctedNow();
@@ -10364,19 +10361,13 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, '_sendFile'); }
   }
 
-  // A slash command is never a message — but only the Enter key knew that. Its keydown
-  // handler skips sendMessage() for '/' text and lets the command listener take it
-  // (see the "used to send them as literal text first" note there); the send button —
-  // the big obvious ↑ affordance a beginner reaches for — called sendMessage() directly
-  // and TRANSMITTED the command to the contact as plaintext chat. E2E-confirmed end to
-  // end: the peer's IndexedDB held a message whose text was "/help". The same click sends
-  // '/note <private note about that contact>' to that very contact, and '/drop <secret>'
-  // — a feature whose entire purpose is not putting a secret in a chat — straight into
-  // the chat. Synthesise the Enter the command listener is already waiting for, so one
-  // dispatcher serves both affordances instead of a second copy of the command table.
-  // Deliberately wired here and not inside sendMessage(): its other callers (notification
-  // quick-reply, and /reply, which itself runs inside that listener) must keep calling it
-  // directly, or a '/'-leading reply body would re-enter the listener.
+  // A slash command is never a message — but only the Enter key knew that: its keydown
+  // handler skips sendMessage() for '/' text and lets the command listener take it,
+  // while the send button called sendMessage() directly and TRANSMITTED the command
+  // as plaintext chat (E2E-confirmed: a peer's IndexedDB held "/help"; '/note …' and
+  // '/drop <secret>' leaked the same way). Synthesise the Enter the command listener
+  // waits for, so one dispatcher serves both. Wired here, not inside sendMessage():
+  // its other callers (notification quick-reply, /reply) must keep calling it directly.
   _DOM.get('b-msg-send')?.addEventListener('click', () => {
     const input = _DOM.get('msg-input');
     if (input?.value.trim().startsWith('/')) {
@@ -10620,6 +10611,9 @@ async function initMessenger(dbName) {
         clearInterval(_recTimer); _recTimer = null;
         return;
       }
+      // S01: no voice transport in groups (same encryptFor('') dead end as
+      // files) — refuse BEFORE recording, not after a full take is recorded.
+      if (activeContact.isGroup) { showToast(t('groupNoFileVoice'), 'error'); return; }
       // Start recording
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -10652,6 +10646,9 @@ async function initMessenger(dbName) {
             const b64 = reader.result.split(',')[1];
             const filePayload = JSON.stringify({ name: file.name, type: file.type, size: file.size, data: b64 });
             try {
+              // S01 backstop: the chat may have been switched to a group while
+              // recording — refuse honestly instead of dying silently at encryptFor('').
+              if (activeContact?.isGroup) { showToast(t('groupNoFileVoice'), 'error'); return; }
               const encrypted = await encryptFor(filePayload, activeContact.pubB64);
               if (!encrypted) { _dbg(null, 'encrypt failed'); return; }
               const ts = correctedNow();
@@ -11620,17 +11617,20 @@ async function initMessenger(dbName) {
         let c = await dbGet('contacts', (msg.from || '').slice?.(0, 12) || msg.from);
         let peerPub = c?.pubB64;
         // D25: a distribution may come from a member's linked DEVICE (unknown as a
-        // contact) — accept it only when the named account root is a known contact
-        // AND the device pub is in that root's SIGNED device registry; the session
-        // peer is then the device's own pub, the key filed under its sender id.
+        // contact) — accept only when the named root is a known contact AND the
+        // device pub is in that root's SIGNED registry; the peer is the device pub.
         if (!c && msg.fromPub && typeof msg.acctRoot === 'string') {
           const rootC = await dbGet('contacts', msg.acctRoot.slice(0, 12));
           if (rootC?.pubB64 === msg.acctRoot && await _deviceAttributionOk(msg.acctRoot, msg.fromPub)) { c = rootC; peerPub = msg.fromPub; }
+          // S02: the root may be MY OWN account — my identity is never a contact, so
+          // the lookup above cannot resolve it, and my secondary's distributions were
+          // dropped here (its group messages then undecryptable on this device).
+          // Resolve through my own signed registry instead (the _myOtherDevices path).
+          else if (msg.acctRoot === _myAcctRoot && (await _myOtherDevices()).includes(msg.fromPub)) { c = { pubB64: msg.acctRoot }; peerPub = msg.fromPub; }
         }
-        // Only accept sender keys from known contacts. An unknown sender who is not in
-        // the contacts DB would otherwise use msg.fromPub (attacker-controlled) as the
-        // decryption peer key, letting them inject arbitrary sender keys into identity
-        // store (DB pollution; defense-in-depth since group messages also require membership).
+        // Only accept sender keys from known contacts (or my own account, S02): an
+        // unknown sender would otherwise use msg.fromPub (attacker-controlled) as the
+        // decryption peer key and inject arbitrary sender keys (DB pollution).
         if (!c) return;
         const decrypted = await decryptFrom(msg.payload, peerPub);
         if (!decrypted) return;
@@ -11734,10 +11734,9 @@ async function initMessenger(dbName) {
         if ((msg.from !== member.id && msg.from !== member.pubB64) ||
             (msg.fromPub && msg.fromPub !== member.pubB64)) return;
       } else if (msg.fromPub && typeof msg.acctRoot === 'string') {
-        // D25: the sender is a roster member's linked DEVICE — attribute it
-        // through the root's SIGNED device registry (the 1:1 path's trust
-        // anchor). Sender-key state stays keyed by the device's own id; display
-        // name and msgId stay the member's. Unverifiable claims drop as before.
+        // D25: the sender is a roster member's linked DEVICE — attribute it through
+        // the root's SIGNED registry (the 1:1 trust anchor). Sender-key state stays
+        // keyed by the device's own id; display name and msgId stay the member's.
         const rootMember = (group.members || []).find(m => m.pubB64 === msg.acctRoot);
         if (rootMember && await _deviceAttributionOk(msg.acctRoot, msg.fromPub)) { member = rootMember; peerPub = msg.fromPub; }
       }
@@ -13850,15 +13849,10 @@ async function initMessenger(dbName) {
   });
 
   // The v3.5 delegated right-click handler that used to live here is deleted, not
-  // fixed in place. Every `.msg[data-msgid]` already gets its own `oncontextmenu`
-  // (showMsgMenu, above) — a strict superset (react, reply, copy, edit/delete,
-  // forward, pin, bookmark, select, report). Both fired on the SAME right-click
-  // (this one via bubbling up to #msg-messages), and since showContextMenu()
-  // clears any existing `.ctx-menu` before building its own, whichever ran SECOND
-  // won — always this one — so showMsgMenu's menu was created and destroyed in
-  // the same synchronous dispatch, before a paint: React, Bookmark, Select and
-  // Report were unreachable, and its "forward" stuffed `/reply <text>` into the
-  // composer instead of calling forwardMsg()'s picker. Nothing worth keeping.
+  // fixed in place: every `.msg[data-msgid]` already gets its own `oncontextmenu`
+  // (showMsgMenu) — a strict superset — and both firing on the same right-click
+  // meant this one always won (showContextMenu clears any existing menu first),
+  // leaving showMsgMenu's React/Bookmark/Select/Report unreachable.
 
   // v3.5: Global delegation — overlay close buttons (data-close="overlay")
   document.addEventListener('click', (e) => {
@@ -13883,7 +13877,7 @@ async function initMessenger(dbName) {
               if (encrypted) {
                 await relaySend(activeContact.id, { to: activeContact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: stored.ts }, activeContact.pubB64);
                 const statusEl = msgEl.querySelector('.msg-status');
-                if (statusEl) { statusEl.className = 'msg-status sent'; statusEl.textContent = '✓'; statusEl.title = t('sent'); statusEl.removeAttribute('data-action'); }
+                if (statusEl) { statusEl.className = 'msg-status sent'; statusEl.textContent = '✓'; statusEl.title = t('sent'); statusEl.removeAttribute('data-action'); statusEl.removeAttribute('role'); statusEl.removeAttribute('tabindex'); }
               }
             }
           } catch(err) { _dbg(err, 'retry-msg'); }
@@ -13905,6 +13899,15 @@ async function initMessenger(dbName) {
     // Recovery plan step 3: the recovery kit for existing (random-key)
     // identities — phrase + passphrase wrap of the full key material.
     if (e.target.closest('[data-action="recovery-kit"]')) { createRecoveryKit(); return; }
+  }, { signal: _ac.signal });
+  // S04: keyboard activation for the clickable-but-not-button message affordances
+  // (retry / reply-scroll / react / vote carry role="button" tabindex="0" at their
+  // render sites): Enter/Space re-dispatches a click, so the delegated click
+  // handlers above stay the single implementation (the D18 pattern, generalized).
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const el = e.target.closest?.('[data-action="retry-msg"],[data-action="reply-scroll"],[data-action="react"],[data-action="vote"]');
+    if (el) { e.preventDefault(); el.click(); }
   }, { signal: _ac.signal });
   window.toggleCompact = function() {
     document.body.classList.toggle('compact');

@@ -1,8 +1,8 @@
 # Breeze Messenger — Detailed Specification
 
-**Document version**: 2026-03-14 R210; header, §4.2 and §7 re-verified 2026-11-21 (R09)
+**Document version**: 2026-03-14 R210; header, §4.2 and §7 re-verified 2026-11-21 (R09); total codebase figure re-measured 2026-11-22 (S06)
 **Status**: Living reference. Originally written for v3.6.0; the header figures, the §4.2 CONFIG table and the §7 platform table were re-measured against the v3.7.1 codebase on 2026-11-21. Other sections describe the design as of v3.6.0 and may lag the code — where this document and the code disagree, the code and its tests win.
-**Total codebase**: 15,999 (index.html) + 11,515 (src/ modules) + 4,982 (worker) + 229 (SW) = 32,725 lines
+**Total codebase**: 15,999 (index.html) + 11,517 (src/ modules) + 5,187 (worker) + 229 (SW) = 32,932 lines
 
 ---
 

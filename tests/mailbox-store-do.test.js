@@ -201,4 +201,30 @@ describe('queue handlers on the DO backend', () => {
     expect(messages[0].envelope).toBe('QUEUED_ON_KV');
     expect(kvEnv.KV.store.has('sealed:carol001')).toBe(false); // drained
   });
+
+  it('D16 stage 2: a duplicate sealed send across isolates dedups in the append op', async () => {
+    const env = makeDOEnv();
+    const first = await handleSealedSend({ to: 'dave0001', envelope: 'SAME_ENVELOPE' }, env, req({}));
+    expect(first.status).toBe(200);
+    // A retransmission landing on ANOTHER isolate: its in-memory dedup
+    // map is empty, so only the in-op dedup can catch it.
+    globalThis._sealedDedup = new Map();
+    const second = await handleSealedSend({ to: 'dave0001', envelope: 'SAME_ENVELOPE' }, env, req({}));
+    expect(second.status).toBe(200);
+    const { messages } = await (await handleSealedPoll({ id: 'dave0001' }, env, req({}))).json();
+    expect(messages.map((m) => m.envelope)).toEqual(['SAME_ENVELOPE']);
+  });
+
+  it('S08: a pending recovery count is surfaced by exactly one poll, even an empty one', async () => {
+    const env = makeDOEnv();
+    // Seed a mailbox whose queue is empty but carries rc=2 (the state
+    // the ack leaves behind when it carries the count forward).
+    const mb = mailboxStore(env, 'sealed', 'erin0001');
+    await mb.writeQueue(JSON.stringify({ q: [], hwm: 9, rc: 2 }), 7 * 24 * 3600);
+    const first = await (await handleSealedPoll({ id: 'erin0001' }, env, req({}))).json();
+    expect(first.messages).toEqual([]);
+    expect(first.recovered).toBe(2);
+    const second = await (await handleSealedPoll({ id: 'erin0001' }, env, req({}))).json();
+    expect(second.recovered).toBeUndefined();
+  });
 });

@@ -133,23 +133,35 @@ separate, explicitly-scoped future work if it's wanted.
   cannot be swept — sealed sender means the relay cannot tell who sent an envelope, so
   undelivered sealed copies expire with the 7-day queue TTL instead — and a moderation
   webhook that already fired for a report lives outside KV and is not recalled.
-- **The sealed queue is a bounded, last-write-wins KV value.** Cloudflare KV offers no
-  transactions, so the queue's read-modify-write can lose an envelope if two senders write to
-  the same recipient in the same instant from different PoPs — and both senders would be
-  answered 200, making the loss silent. The send path now **reads the key back and re-appends
-  its own envelope if it is missing**, which recovers the common case for one extra read on the
-  cold send path. Since D16 stage 1 the repair is itself verified: the send re-reads after
-  every re-append and retries (bounded), and a send whose envelope still cannot be confirmed
-  fails honestly (`STORE_UNCONFIRMED`) so the sender's outbox retries, instead of a 200 for a
-  delivery that never landed. Every repair is also counted per mailbox and confessed to the
-  recipient's next poll (`recovered: n`, shown in `/security`) — the track record from which a
-  per-envelope key split will be decided for mailboxes where loss is actually observed.
-  Deliberately not the textbook fix yet: a key per envelope removes the race
-  outright but replaces one `get` per poll with a `list` plus a `get` per message on the
-  hottest path, in a relay that already throttles presence writes to survive the free tier.
-  So the sealed path remains **best-effort with verified recovery, not exactly-once**; content-keyed
-  dedup, the client retry queue and the overflow confession (`dropped: n`) still back it, and
-  P2P delivery plus re-send remain the ultimate recovery paths.
+- **The sealed queue is a bounded value whose append semantics depend on the mailbox
+  backend (D16, two stages).** The append is one composite store operation; what it
+  guarantees is stated per tier, because the two backends genuinely differ:
+  - **Durable Object backend (`MAILBOX_BACKEND=do`): exactly-once.** The append runs as a
+    single operation inside the recipient's per-mailbox serialized core — the dedup check,
+    the strictly-increasing timestamp assignment, the caps and the overflow accounting are
+    one atomic step, so no second writer can interleave and erase an envelope, and a
+    retransmitted envelope is deduplicated from the stored queue itself, across isolates.
+    The same serialization makes the poll's recovery-count claim atomic: exactly one poll
+    surfaces a given count.
+  - **KV backend (default): best-effort with verified recovery, not exactly-once.**
+    Cloudflare KV offers no transactions, so the queue's read-modify-write can lose an
+    envelope if two senders write to the same recipient in the same instant from different
+    PoPs — and both senders would be answered 200, making the loss silent. The append
+    therefore **reads the key back and re-appends its own envelope if it is missing**,
+    which recovers the common case for one extra read on the cold send path. Since D16
+    stage 1 the repair is itself verified: the append re-reads after every re-append and
+    retries (bounded), and a send whose envelope still cannot be confirmed fails honestly
+    (`STORE_UNCONFIRMED`) so the sender's outbox retries, instead of a 200 for a delivery
+    that never landed. Every repair is also counted per mailbox and confessed to the
+    recipient's next poll (`recovered: n`, shown in `/security`) — the track record from
+    which a per-envelope key split will be decided for mailboxes where loss is actually
+    observed. Deliberately not the textbook fix on this tier: a key per envelope removes
+    the race outright but replaces one `get` per poll with a `list` plus a `get` per
+    message on the hottest path, in a relay that already throttles presence writes to
+    survive the free tier.
+  On both tiers, content-keyed dedup, the client retry queue and the overflow confession
+  (`dropped: n`) still back the path, and P2P delivery plus re-send remain the ultimate
+  recovery paths.
 - **Metadata**: Sealed Sender **v2** hides the sender from the relay *cryptographically*:
   all sender-identifying fields (id, public key, display name, signature keys, the reply
   preview, multi-device markers — and the X3DH bootstrap header's initiator identity key,
