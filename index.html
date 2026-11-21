@@ -657,7 +657,7 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 .ctx-item:hover { background: var(--s2) }
 .ctx-item:active { transform: scale(.96); background: var(--gl) }
 @keyframes ctxPop { from { opacity: 0; transform: scale(.92) } to { opacity: 1; transform: scale(1) } }
-.reply-preview { background: var(--s2); border-left: 3px solid var(--g); padding: 6px 12px; font-size: 12px; color: var(--t3); border-radius: 0 var(--rad) var(--rad) 0; margin-bottom: 4px; display: flex; align-items: center; gap: 8px }
+.reply-preview { background: var(--s2); border-left: 3px solid var(--g); padding: 6px 12px; font-size: 12px; color: var(--t3); border-radius: 0 var(--rad) var(--rad) 0; margin-bottom: 4px; display: flex; align-items: center; gap: 8px } .reply-preview button { background: none; border: none; padding: 0; font: inherit; color: inherit }
 .import-result { font-size: 12px; color: var(--t2); line-height: 1.6; margin-top: 8px }
 .delivery-state { font-size: 10px; opacity: .5; margin-left: 2px }
 .overlay-dark { background: rgba(0,0,0,.85) }
@@ -9309,7 +9309,7 @@ async function initMessenger(dbName) {
           if (existing) existing.remove();
           const preview = document.createElement('div');
           preview.className = 'reply-preview';
-          safeSetHTML(preview, `<span class="i-ellip">${esc((text||'').slice(0, 60))}</span><span data-action="close-reply" class="i-cur-dim">✕</span>`);
+          safeSetHTML(preview, `<span class="i-ellip">${esc((text||'').slice(0, 60))}</span><button type="button" data-action="close-reply" class="i-cur-dim" aria-label="${esc(t('close'))}">✕</button>`);
           bar.insertBefore(preview, bar.firstChild);
         }
         _DOM.get('msg-input')?.focus();
@@ -9697,7 +9697,7 @@ async function initMessenger(dbName) {
       preview.className = 'reply-preview';
       bar.insertBefore(preview, bar.firstChild);
     }
-    safeSetHTML(preview, `<span class="i-ellip">${esc(msg.text?.slice(0, 60) || '')}</span><span class="i-cur-dim" data-action="close-reply">✕</span>`);
+    safeSetHTML(preview, `<span class="i-ellip">${esc(msg.text?.slice(0, 60) || '')}</span><button type="button" class="i-cur-dim" data-action="close-reply" aria-label="${esc(t('close'))}">✕</button>`);
     window._breezeReplyTo = _replyTo;
     _DOM.get('msg-input').focus();
   }

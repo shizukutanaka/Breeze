@@ -31,6 +31,18 @@ describe('D19 — image-send previews carry alt text', () => {
   });
 });
 
+describe('D18 — reply-preview close control is a real button', () => {
+  it('no span carries the close-reply action anymore', () => {
+    expect(html).not.toMatch(/<span[^>]*data-action="close-reply"/);
+  });
+
+  it('both preview builders emit a labelled button (delegated handler unchanged)', () => {
+    const buttons = html.match(/<button type="button"[^>]*data-action="close-reply"[^>]*aria-label="\$\{esc\(t\('close'\)\)\}"/g) || [];
+    expect(buttons.length).toBe(2);
+    expect(html).toContain("e.target.closest('[data-action=\"close-reply\"]')");
+  });
+});
+
 describe('D10 — fresh installs default to relay-only; own STUN leads the ICE list', () => {
   it('fresh-install default is relayOnly: true', () => {
     expect(html).toMatch(/relayOnly:\s*true,/);
