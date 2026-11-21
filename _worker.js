@@ -1779,6 +1779,10 @@ async function handlePresence(body, env, request) {
   // to near 0 reads/min while isolates are warm.
   if (isCheck && ids && Array.isArray(ids)) {
     const online = {};
+    // D14: registry-revision hints (see the beat path). Collected alongside
+    // `online` and returned only when at least one record carries one, so
+    // the legacy response shape is byte-identical for pre-D14 beats.
+    const devTs = {};
     const memCache = globalThis._presenceCache || null;
     const validIds = ids.slice(0, 50).filter(x => typeof x === 'string' && validateUserId(x));
     // Cache hits resolve synchronously; only cache misses need a KV round-trip, and those
@@ -1791,6 +1795,7 @@ async function handlePresence(body, env, request) {
       if (memRaw) {
         const p = safeJsonParse(memRaw);
         online[cid] = p ? (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH : false;
+        if (p?.devTs) devTs[cid] = p.devTs;
       } else {
         misses.push(cid);
       }
@@ -1800,11 +1805,12 @@ async function handlePresence(body, env, request) {
       if (data) {
         const p = safeJsonParse(data);
         online[cid] = p ? (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH : false;
+        if (p?.devTs) devTs[cid] = p.devTs;
       } else {
         online[cid] = false;
       }
     }));
-    return json({ online }, 200, request);
+    return json(Object.keys(devTs).length ? { online, devTs } : { online }, 200, request);
   }
 
   if (!id) return json({ error: 'id required', code: 'MISSING_ID' }, 400, request);
@@ -1862,6 +1868,15 @@ async function handlePresence(body, env, request) {
   const safePub = typeof pub === 'string' ? pub.slice(0, 200) : undefined;
   const safeName = sanitizeString(name, 64);
   const rawInst = typeof body.inst === 'string' ? body.inst.slice(0, 32) : undefined;
+  // D14: the beat may carry the ts of the sender's OWN device registry
+  // (devTs) so peers can invalidate cached device lists the moment a
+  // link/unlink lands, instead of waiting out the cache TTL. It is only
+  // honoured from a beat whose install signature VERIFIED (same trust
+  // rule as `inst` itself and the alias renewal below), and it is only a
+  // HINT: the registry peers refetch is root-signed and verified
+  // client-side, so a forged hint costs one verified refetch, never
+  // false data.
+  const rawDevTs = typeof body.devTs === 'number' && Number.isFinite(body.devTs) && body.devTs > 0 ? body.devTs : undefined;
   // Ownership proof for the beat itself (see checkPresenceAuth). Runs
   // before any cache/store mutation, so a rejected beat changes nothing.
   const presAuthErr = await checkPresenceAuth(body, env, request, { pub: safePub, name: safeName, caps: safeCaps, inst: rawInst });
@@ -1909,6 +1924,7 @@ async function handlePresence(body, env, request) {
   }
   const presData = { pub: safePub, name: safeName, at: Date.now() };
   if (safeInst) presData.inst = safeInst;
+  if (safeInst && rawDevTs) presData.devTs = rawDevTs;
   if (safeCaps) presData.caps = safeCaps;
   if (Date.now() - lastWrite > TIMEOUT_MS.PRESENCE_WRITE) { // throttle store writes (see PRESENCE STORE: the throttle now bounds DO writes too)
     await presenceStore(env, id).write(JSON.stringify(presData), TTL.MIN * 6); // 6min TTL (covers 5min interval + slack)

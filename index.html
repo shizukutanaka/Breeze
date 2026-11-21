@@ -6361,7 +6361,8 @@ async function initMessenger(dbName) {
   // root-signed registry on the relay (see _worker.js handleDeviceSet). The registry is
   // client-verified: we check the root's Ed25519 signature ourselves, so the relay can
   // withhold the list (degrades to single-device) but cannot forge devices into it.
-  async function _fetchDeviceList(accountId, rootPubB64) {
+  // Returns { list, ts }: verified device pubs + the registry's signed revision ts (D14).
+  async function _fetchDeviceRegistry(accountId, rootPubB64) {
     if (!API) return null;
     try {
       const resp = await postAPIRaw('/device/list', { accountId });
@@ -6391,7 +6392,8 @@ async function initMessenger(dbName) {
       if (!sigPub) { _dbg(null, 'device list: no pinned signing key for ' + accountId + ' — staying single-device'); return null; }
       const okSig = await verifySignature(`breeze-device-set:${accountId}:${rec.ts}:${digest}`, rec.sig, sigPub);
       if (okSig !== true) { _dbg(null, 'device list signature not verified — ignoring registry'); return null; }
-      return rec.devices.map(d => d.pub);
+      if (accountId === myId && rec.ts) _ownRegistryTs = rec.ts; // my next presence beat advertises this revision (D14)
+      return { list: rec.devices.map(d => d.pub), ts: rec.ts || 0 };
     } catch(e) { _dbg(e, 'device-list'); return null; }
   }
   // A camera-scan button for the link panels, mirroring the rendezvous
@@ -6441,7 +6443,7 @@ async function initMessenger(dbName) {
   const _deviceLink = globalThis.__breezeDeviceLink?.createDeviceLink({
     dbGet, dbPut, postAPIRaw, signMessage, showToast, showConfirm, t, esc, safeSetHTML,
     cmdPanel: (id) => _cmdPanelEl(id), deviceScanButton: _deviceScanButton,
-    fetchDeviceList: _fetchDeviceList, refreshDeviceRole: _refreshDeviceRole, sendHistoryTo: _sendHistoryTo,
+    fetchDeviceList: async (a, r) => (await _fetchDeviceRegistry(a, r))?.list || null, refreshDeviceRole: _refreshDeviceRole, sendHistoryTo: _sendHistoryTo,
     bustDevCache: () => { _myDevCache = null; },
     clipboardWrite: (text) => navigator.clipboard.writeText(text),
     hasApi: () => !!API, myId: () => myId, myPubB64: () => myPubB64, dbg: _dbg,
@@ -6682,19 +6684,21 @@ async function initMessenger(dbName) {
       setTimeout(() => URL.revokeObjectURL(a.href), 5000);
     });
   }
-  // Devices of a CONTACT (for send fan-out). 5-min cache on the contact object.
+  // Devices of a CONTACT (for send fan-out). 1-min cache on the contact object
+  // (D14: was 5 min; the presence devTs push below invalidates sooner).
   async function _devicesFor(contact) {
     if (!contact?.pubB64) return [];
     const now = Date.now();
-    if (contact._devCache && now - contact._devCacheTs < 5 * MS.MIN) return contact._devCache;
-    const list = await _fetchDeviceList(contact.id, contact.pubB64);
+    if (contact._devCache && now - contact._devCacheTs < MS.MIN) return contact._devCache;
+    const reg = await _fetchDeviceRegistry(contact.id, contact.pubB64);
+    const list = reg?.list; if (reg?.ts) _devRegTs[contact.id] = reg.ts;
     contact._devCache = (list && list.length) ? list : [contact.pubB64];
     contact._devCacheTs = now;
     return contact._devCache;
   }
   // Receiver-side registry cache for sender attribution (handleIncoming) — keyed by root id,
-  // 5-min TTL like the sender-side caches. Bounds /device/list traffic to 1 per account/5 min.
-  const _attribDevCache = new Map();
+  // 1-min TTL like the sender-side caches (D14). Bounds /device/list traffic to 1 per account/min.
+  const _attribDevCache = new Map(); const _devRegTs = {}; let _ownRegistryTs = 0;
   // My OWN other devices (for self-sync). Uses the local account record written by /link.
   let _myDevCache = null, _myDevCacheTs = 0, _unlinkNoticed = false;
   async function _myOtherDevices() {
@@ -6702,9 +6706,9 @@ async function initMessenger(dbName) {
       const acct = await dbGet('identity', 'account');
       if (!acct?.root) return [];
       const now = Date.now();
-      if (_myDevCache && now - _myDevCacheTs < 5 * MS.MIN) return _myDevCache;
+      if (_myDevCache && now - _myDevCacheTs < MS.MIN) return _myDevCache;
       const rootId = acct.root.slice(0, 12);
-      const list = await _fetchDeviceList(rootId, acct.root);
+      const list = (await _fetchDeviceRegistry(rootId, acct.root))?.list || null;
       // Unlink self-awareness (Socratic round — "does an unlinked device KNOW?"): a VERIFIED
       // registry that no longer lists this device means the account holder removed it. Tell
       // the user instead of letting fan-out silently stop, and drop the stale account binding
@@ -7865,6 +7869,16 @@ async function initMessenger(dbName) {
   // This is the SECOND occurrence of this class here; see the _perf note near the top.
   // Keep boot last, and keep it a function: that is what makes the ordering safe rather than
   // lucky. tests/e2e/smoke.spec.js guards both symptoms.
+  // Shared tail of _boot and _runSetupCreate (extracted in the D14 line-budget pass).
+  async function _enterMainUI() {
+    _DOM.get('msg-setup').classList.add('hidden');
+    _DOM.get('msg-main').classList.remove('hidden');
+    _DOM.get('msg-input-bar').classList.remove('hidden');
+    _DOM.get('msg-my-name').textContent = myName;
+    _armRelayPinGate(); // step 4 follow-up: this session's first calls hold for the pin verdict (checkRelayPin runs inside _startLiveSession below)
+    await ensureSigningReady();
+    startPresence(); startPolling();
+  }
   async function _boot() {
   const hasId = await loadIdentity();
   if (hasId) {
@@ -7874,14 +7888,7 @@ async function initMessenger(dbName) {
     // the per-account IndexedDB, so restore is safe to await here.
     _outbox.clear();
     await _restoreOutbox(myId);
-    _DOM.get('msg-setup').classList.add('hidden');
-    _DOM.get('msg-main').classList.remove('hidden');
-    _DOM.get('msg-input-bar').classList.remove('hidden');
-    _DOM.get('msg-my-name').textContent = myName;
-    _armRelayPinGate(); // step 4 follow-up: this session's first calls hold for the pin verdict (checkRelayPin runs inside _startLiveSession below)
-    await ensureSigningReady();
-    startPresence();
-    startPolling();
+    await _enterMainUI();
     if (Notification && Notification.permission === 'default') {
       // v3.1: Defer notification permission to first conversation open (better UX)
       // Don't request on page load — wait until user is engaged
@@ -7944,14 +7951,7 @@ async function initMessenger(dbName) {
     // the setup screen with nothing created.
     if (!await createIdentity(name, alias, disposable)) return;
     _outbox.clear();
-    _DOM.get('msg-setup').classList.add('hidden');
-    _DOM.get('msg-main').classList.remove('hidden');
-    _DOM.get('msg-input-bar').classList.remove('hidden');
-    _DOM.get('msg-my-name').textContent = myName;
-    _armRelayPinGate(); // step 4 follow-up: this session's first calls hold for the pin verdict (checkRelayPin runs inside _startLiveSession below)
-    await ensureSigningReady();
-    startPresence();
-    startPolling();
+    await _enterMainUI();
     initTurn();
     initPushNotifications();
     // Same omission class as the cleanup-registration gap below, found by the same
@@ -10968,10 +10968,6 @@ async function initMessenger(dbName) {
   // Incoming calls are detected in the signal poll's message handling
   // We add 'call-offer' detection to the existing connectPeer signal loop
 
-  // Listen for incoming calls via signal poll (piggyback on existing messenger signal poll)
-  // Incoming calls are detected in the signal poll's message handling
-  // We add 'call-offer' detection to the existing connectPeer signal loop
-
   // DISAPPEARING MESSAGES TIMER
   _DOM.get('b-msg-timer')?.addEventListener('click', () => {
     const options = [0, 30, 300, 3600, 86400];
@@ -11928,7 +11924,7 @@ async function initMessenger(dbName) {
     let contact = await dbGet('contacts', contactId);
     // Multi-device sender attribution: an unknown sender claiming an account root is checked
     // against that root's SIGNED device registry (verified with the root's pinned signing key
-    // in _fetchDeviceList). Listed -> the message belongs to the root's conversation; the
+    // in _fetchDeviceRegistry). Listed -> the message belongs to the root's conversation; the
     // session peer stays the DEVICE's pub (its own ratchet). The claim alone is never trusted:
     // unverifiable/absent registry falls through to the stranger-contact path below.
     let _attribPub = null;
@@ -11938,8 +11934,10 @@ async function initMessenger(dbName) {
         const rootContact = rootId !== contactId ? await dbGet('contacts', rootId) : null;
         if (rootContact?.pubB64 === msg.acctRoot) {
           let devs = _attribDevCache.get(rootId);
-          if (!devs || Date.now() - devs.ts > 5 * MS.MIN) {
-            devs = { list: await _fetchDeviceList(rootId, msg.acctRoot) || [], ts: Date.now() };
+          if (!devs || Date.now() - devs.ts > MS.MIN) {
+            const reg = await _fetchDeviceRegistry(rootId, msg.acctRoot);
+            if (reg?.ts) _devRegTs[rootId] = reg.ts;
+            devs = { list: reg?.list || [], ts: Date.now() };
             _attribDevCache.set(rootId, devs);
           }
           if (devs.list.includes(msg.fromPub)) { contact = rootContact; contactId = rootContact.id; _attribPub = msg.fromPub; }
@@ -12750,7 +12748,7 @@ async function initMessenger(dbName) {
         // is per relay as well; the warning stays once per window.
         let conflict = false;
         for (const relay of homeRelays()) {
-          const resp = await postAPIRelay(relay, '/presence', { id: myId, pub: myPubB64, name: myName, inst: inst.v, instSig, ...beatAuth });
+          const resp = await postAPIRelay(relay, '/presence', { id: myId, pub: myPubB64, name: myName, inst: inst.v, instSig, devTs: _ownRegistryTs || undefined, ...beatAuth });
           const data = resp?.ok ? await resp.json().catch(() => null) : null;
           if (data?.conflict) conflict = true;
         }
@@ -13140,6 +13138,8 @@ async function initMessenger(dbName) {
               deliverPeerRelayQueue(id);
             }
           }
+          // D14: a registry revision newer than our caches were built from drops both device caches now.
+          if (d.devTs) for (const c of contacts) { const ts = d.devTs[c.id]; if (ts && ts > (_devRegTs[c.id] || 0)) { _devRegTs[c.id] = ts; c._devCache = null; c._devCacheTs = 0; _attribDevCache.delete(c.id); } }
         }
       } catch(e) { _dbg(e); }
       renderContacts();

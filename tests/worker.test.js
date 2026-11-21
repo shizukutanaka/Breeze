@@ -4684,6 +4684,36 @@ describe('presence heartbeat and check', () => {
     expect(forged.conflict).toBeUndefined();
   });
 
+  // D14: a beat may advertise the ts of the sender's own device registry so
+  // peers can invalidate cached device lists on link/unlink. Only a beat
+  // whose install signature VERIFIED may advertise it — the same trust rule
+  // as `inst` itself — and the batch check surfaces it as a devTs map.
+  it('a verified beat advertises devTs; the batch check returns it', async () => {
+    const e = makeEnv();
+    const sign = await instSigner(e, 'devtsusr1');
+    await handlePresence({ id: 'devtsusr1', pub: 'p', name: 'X', inst: 'inst0001', instSig: await sign('inst0001'), devTs: 1735689600000 }, e, req({}));
+    const j = await (await handlePresence({ ids: ['devtsusr1'], check: true }, e, req({}))).json();
+    expect(j.online.devtsusr1).toBe(true);
+    expect(j.devTs).toEqual({ devtsusr1: 1735689600000 });
+  });
+
+  it('an unsigned beat cannot advertise devTs (no forced refetch, no spoofed revision)', async () => {
+    const e = makeEnv();
+    await instSigner(e, 'devtsusr2'); // registers the identity key, but the beat below carries no instSig
+    await handlePresence({ id: 'devtsusr2', pub: 'p', name: 'X', inst: 'inst0002', devTs: 1735689600000 }, e, req({}));
+    const j = await (await handlePresence({ ids: ['devtsusr2'], check: true }, e, req({}))).json();
+    expect(j.devTs).toBeUndefined();
+  });
+
+  it('batch check keeps the legacy shape when no beat advertised devTs', async () => {
+    const e = makeEnv();
+    const sign = await instSigner(e, 'devtsusr3');
+    await beat(e, 'devtsusr3', 'inst0003', await sign('inst0003'));
+    const j = await (await handlePresence({ ids: ['devtsusr3'], check: true }, e, req({}))).json();
+    expect(j.online.devtsusr3).toBe(true);
+    expect('devTs' in j).toBe(false);
+  });
+
   // Socratic metadata lens: the unauthenticated single-check used to hand the account's
   // chosen DISPLAY NAME to anyone holding a 12-char id.
   it('single presence check never discloses the display name', async () => {

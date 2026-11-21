@@ -31,6 +31,30 @@ describe('D19 — image-send previews carry alt text', () => {
   });
 });
 
+describe('D14 — device-list caches expire fast and yield to presence-pushed revisions', () => {
+  it('all three device caches use the 1-minute TTL (was 5 minutes)', () => {
+    expect(html).toContain('now - contact._devCacheTs < MS.MIN');
+    expect(html).toContain('now - _myDevCacheTs < MS.MIN');
+    expect(html).toContain('Date.now() - devs.ts > MS.MIN');
+    expect(html).not.toContain('_devCacheTs < 5 * MS.MIN');
+    expect(html).not.toContain('_myDevCacheTs < 5 * MS.MIN');
+  });
+
+  it('the registry fetch returns the signed revision ts and tracks our own', () => {
+    expect(html).toContain('return { list: rec.devices.map(d => d.pub), ts: rec.ts || 0 };');
+    expect(html).toContain('if (accountId === myId && rec.ts) _ownRegistryTs = rec.ts;');
+  });
+
+  it('the presence beat advertises our registry revision', () => {
+    expect(html).toContain('devTs: _ownRegistryTs || undefined');
+  });
+
+  it('the presence poll invalidates both caches on a newer advertised revision', () => {
+    expect(html).toContain('if (d.devTs) for (const c of contacts)');
+    expect(html).toContain('_attribDevCache.delete(c.id)');
+  });
+});
+
 describe('D20 — persistence failures are recorded, not swallowed', () => {
   it('the dead-letter store failure logs and bumps the diagnostics counter', () => {
     expect(html).toContain("catch(e) { _dbg(e, 'dead-letter-store'); _diagBump('deadLetterStoreFail'); }");
