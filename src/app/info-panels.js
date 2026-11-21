@@ -95,6 +95,7 @@ export function createInfoPanels(D) {
         D.t('secSkippedKeys'),
         D.t('secDiagPersist') + ': ' + _diagPersistLine,
         D.t('secDiagMsgStore') + ': ' + _diagMsgStoreLine,
+        D.t('secDiagLifecycle') + ': ' + (_diagPersist.dataLifecycleBridgeMissing || 0),
         D.t('cmdCryptoCompression'),
         'Protocol: v4 (pad-only; legacy compressed msgs still read) / v3 (pad-only) / v2 (legacy)',
         D.t('secLblMsgPadding') + ': ' + D.config().MSG_PAD_BOUNDARY + D.t('secByteBoundary'),

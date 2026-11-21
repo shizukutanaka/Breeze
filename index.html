@@ -2088,6 +2088,7 @@ const _I = {
     secSkippedKeys: 'Skipped Keys: ✓ Out-of-order message recovery (max 100 keys/session)',
     secDiagPersist: 'Persistence failures (dead-letter / retry-restore)',
     secDiagMsgStore: 'Message-store key failures / plaintext saves',
+    secDiagLifecycle: 'Data-lifecycle outages (retention / remote wipe / cleanup skipped)',
     secLblMsgPadding: 'Message Padding',
     secByteBoundary: '-byte boundary',
     secLblSecureCtx: 'Secure Context',
@@ -5227,22 +5228,24 @@ async function initMessenger(dbName) {
     return _isImportant(contact, text);
   }
 
-  // v3.3: ENTERPRISE — MESSAGE RETENTION POLICY / REMOTE WIPE / QUOTA CLEANUP
-  // Bodies live in src/app/data-lifecycle.js (wave-4 line-budget pass); these wrappers keep the original names.
+  // v3.3: ENTERPRISE — MESSAGE RETENTION POLICY / REMOTE WIPE / QUOTA CLEANUP (bodies in src/app/data-lifecycle.js, wave-4 pass; wrappers keep the original names)
+  // R08: a missing bridge (app module block failed — R01 scenario) used to disable all three SILENTLY;
+  // absence is now _dbg'd + counted once per boot (D20 channel, /security) and the wipe check retries ~30s.
   const _dataLifecycle = () => globalThis.__breezeDataLifecycle?.createDataLifecycle({
     settings: () => _settings, MS, dbGetAll, db: () => db, replayCache: _replayCache, auditLog, _dbg,
     api: () => API, myId: () => myId, postAPIRaw, queueAuth, showToast, t, CONFIG, reload: () => location.reload() });
-  async function enforceRetentionPolicy() { return _dataLifecycle()?.enforceRetentionPolicy(); }
+  const _dlState = { bumped: false, wipeRetries: 0 };
+  const _dlMiss = (name) => { _dbg(null, 'data-lifecycle bridge missing: ' + name + ' skipped'); if (!_dlState.bumped) { _dlState.bumped = true; _diagBump('dataLifecycleBridgeMissing'); } };
+  async function enforceRetentionPolicy() { const b = _dataLifecycle(); if (!b) { _dlMiss('enforceRetentionPolicy'); return; } return b.enforceRetentionPolicy(); }
 
-  // v3.3: ENTERPRISE — GROUP ADMIN ROLES
-  // Group creator = admin. Admin can: rename, kick, set announce-only.
+  // v3.3: ENTERPRISE — GROUP ADMIN ROLES (creator = admin: rename, kick, set announce-only)
   function isGroupAdmin(group) {
     if (!group?.isGroup) return false;
     return group.createdBy === myId || group.admins?.includes(myId);
   }
 
-  async function checkRemoteWipe() { return _dataLifecycle()?.checkRemoteWipe(); }
-  async function cleanupOldMessages() { return _dataLifecycle()?.cleanupOldMessages(); }
+  async function checkRemoteWipe() { const b = _dataLifecycle(); if (b) return b.checkRemoteWipe(); _dlMiss('checkRemoteWipe'); if (++_dlState.wipeRetries <= 6) setTimeout(() => { checkRemoteWipe().catch(e => _dbg(e, 'wipe-retry')); }, 5 * MS.SEC); }
+  async function cleanupOldMessages() { const b = _dataLifecycle(); if (!b) { _dlMiss('cleanupOldMessages'); return; } return b.cleanupOldMessages(); }
 
   // ===== Identity (persistent ECDH keypair) =====
   let myKeys = null;
@@ -7746,10 +7749,8 @@ async function initMessenger(dbName) {
   // short-ID display/copy — and, most seriously, never registered the
   // enforceRetentionPolicy()/pruneAuditLog() maintenance intervals, so a disappearing-
   // messages retention policy silently did not self-enforce for that account's entire
-  // first session (until the user switched accounts and back, which runs _boot()'s
-  // `if (hasId)` branch and registers them for the first time). Found by diffing _boot()
-  // against the setup-completion handler line-by-line, the same method that found the
-  // cleanup-registration gap.
+  // first session (until an account switch ran _boot()'s `if (hasId)` branch). Found by
+  // diffing _boot() against the setup-completion handler line-by-line.
   async function _startLiveSession() {
     // v3.3: Show human-readable short ID
     const shortIdEl = _DOM.get('msg-short-id');
@@ -7961,10 +7962,9 @@ async function initMessenger(dbName) {
     // _startLiveSession()'s own header comment (above _boot()) for the full account.
     await _startLiveSession();
     _settleRelayPinGate(); // guarantee: releases anything still held if this session's check was never reached (no-op once the check settled it)
-    // A freshly-created identity's boot never runs _boot()'s `if (hasId)` branch (that
-    // check is false for it), so without this call _messengerCleanup stayed null for
-    // this account's entire first session: the first switch AWAY from it found nothing
-    // to call and left every _ac-scoped listener attached forever.
+    // A freshly-created identity's boot never runs _boot()'s `if (hasId)` branch, so without
+    // this call _messengerCleanup stayed null for its entire first session: the first switch
+    // AWAY found nothing to call and left every _ac-scoped listener attached forever.
     _registerMessengerCleanup();
     // Recovery plan step 4 (simple mode): the identity is live and its
     // signing key can authorise the upload — enrol now. The credentials

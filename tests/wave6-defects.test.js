@@ -44,3 +44,29 @@ describe('R02 — msgkey degradation is counted and surfaced, never silent', () 
     }
   });
 });
+
+describe('R08 — a missing data-lifecycle bridge is reported, and the wipe check retries', () => {
+  it('absence goes through _dlMiss: _dbg plus a once-per-boot diagnostics bump', () => {
+    expect(html).toContain("const _dlMiss = (name) => { _dbg(null, 'data-lifecycle bridge missing: ' + name + ' skipped'); if (!_dlState.bumped) { _dlState.bumped = true; _diagBump('dataLifecycleBridgeMissing'); } };");
+    expect(html).toContain("if (!b) { _dlMiss('enforceRetentionPolicy'); return; }");
+    expect(html).toContain("if (!b) { _dlMiss('cleanupOldMessages'); return; }");
+    // The old silent-delegation shapes are gone.
+    expect(html).not.toContain('async function enforceRetentionPolicy() { return _dataLifecycle()?.enforceRetentionPolicy(); }');
+    expect(html).not.toContain('async function cleanupOldMessages() { return _dataLifecycle()?.cleanupOldMessages(); }');
+  });
+
+  it('the wipe check retries a bounded number of times while the bridge is missing', () => {
+    expect(html).toContain("if (b) return b.checkRemoteWipe(); _dlMiss('checkRemoteWipe'); if (++_dlState.wipeRetries <= 6) setTimeout(() => { checkRemoteWipe().catch(e => _dbg(e, 'wipe-retry')); }, 5 * MS.SEC);");
+    expect(html).not.toContain('async function checkRemoteWipe() { return _dataLifecycle()?.checkRemoteWipe(); }');
+  });
+
+  it('/security surfaces the outage count via secDiagLifecycle (all locales)', () => {
+    expect(infoPanels).toContain("D.t('secDiagLifecycle')");
+    expect(infoPanels).toContain('_diagPersist.dataLifecycleBridgeMissing');
+    expect(html).toContain('secDiagLifecycle:');
+    for (const loc of LOCALES) {
+      const json = JSON.parse(readFileSync(new URL(`../locales/${loc}.json`, import.meta.url), 'utf8'));
+      expect(typeof json.secDiagLifecycle, loc).toBe('string');
+    }
+  });
+});
