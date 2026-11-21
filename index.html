@@ -657,7 +657,7 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 .ctx-item:hover { background: var(--s2) }
 .ctx-item:active { transform: scale(.96); background: var(--gl) }
 @keyframes ctxPop { from { opacity: 0; transform: scale(.92) } to { opacity: 1; transform: scale(1) } }
-.reply-preview { background: var(--s2); border-left: 3px solid var(--g); padding: 6px 12px; font-size: 12px; color: var(--t3); border-radius: 0 var(--rad) var(--rad) 0; margin-bottom: 4px; display: flex; align-items: center; gap: 8px }
+.reply-preview { background: var(--s2); border-left: 3px solid var(--g); padding: 6px 12px; font-size: 12px; color: var(--t3); border-radius: 0 var(--rad) var(--rad) 0; margin-bottom: 4px; display: flex; align-items: center; gap: 8px } .reply-preview button { background: none; border: none; padding: 0; font: inherit; color: inherit }
 .import-result { font-size: 12px; color: var(--t2); line-height: 1.6; margin-top: 8px }
 .delivery-state { font-size: 10px; opacity: .5; margin-left: 2px }
 .overlay-dark { background: rgba(0,0,0,.85) }
@@ -2083,6 +2083,7 @@ const _I = {
     secLblReplay: 'Replay Protection',
     secInLruCache: 'in LRU cache',
     secSkippedKeys: 'Skipped Keys: ✓ Out-of-order message recovery (max 100 keys/session)',
+    secDiagPersist: 'Persistence failures (dead-letter / retry-restore)',
     secLblMsgPadding: 'Message Padding',
     secByteBoundary: '-byte boundary',
     secLblSecureCtx: 'Secure Context',
@@ -2125,6 +2126,7 @@ const _I = {
     secPledgeTitle: 'What Breeze never does',
     secPledgeNoAds: 'Ads: none. Tracking: none. Analytics: none.',
     secPledgeE2ee: 'Message content: end-to-end encrypted — the relay only holds sealed envelopes it cannot read',
+    secSealedSenderNote: 'Sealed sender: the relay cannot see who sent a message — but that is not unlinkability. Timing and network metadata can still link activity.',
     secPledgeRetention: 'Relay storage is temporary: undelivered envelopes ≤ 7 days, aliases ≤ 90 days, all auto-expiring. Relay backup storage: OFF unless its operator enables it',
     toastNotifSound: "Notification sound: {0}",
     toastNoteSavedFor: "Note saved for {0}",
@@ -2539,6 +2541,9 @@ if (localStorage.getItem('brz-theme') === 'auto' || !localStorage.getItem('brz-t
 const _DBG = (() => { try { return localStorage.getItem('brz-debug') === '1'; } catch { return false; } })();
 const _appStartTime = Date.now();
 function _dbg(e, ctx) { if (_DBG) console.warn('[Breeze]', ctx || '', e?.message || e); }
+// D20: on-device diagnostics counters (localStorage 'brz-diag') for failures
+// that must never be silent even with debug off — surfaced in /security.
+function _diagBump(field) { try { const d = JSON.parse(localStorage.getItem('brz-diag') || '{}'); d[field] = (d[field] || 0) + 1; localStorage.setItem('brz-diag', JSON.stringify(d)); } catch { /* counters are best-effort by design */ } }
 
 // v3.5: GDPR/CCPA data consent banner
 (() => {
@@ -5051,14 +5056,14 @@ async function initMessenger(dbName) {
     sound: true,             // notification sound
     hideReadReceipts: false, // privacy: hide read receipts
     hideTyping: false,       // privacy: hide typing indicator
-    relayOnly: false,        // privacy: force TURN relay (hide IP from peers)
+    relayOnly: true,         // privacy: force TURN relay (hide IP from peers). Default ON for fresh installs (D10): a first call otherwise exposes the user's IP to the peer before they ever find this toggle. Saved settings are never rewritten.
     autoLock: false,         // auto-lock on tab switch
     retentionDays: 0,        // 0 = forever, 7/30/90/365
     wallpaper: '',           // chat background color
     language: 'auto',        // auto | en | ja
     // "Quiet messenger" settings — the app's job is to reduce the obligation it imposes,
     // not to maximise engagement. All three are local-only; nothing reaches the relay.
-    readReceiptDelay: 0,     // seconds to hold a read receipt (0 = send immediately)
+    readReceiptDelay: 120,   // seconds to hold a read receipt (0 = send immediately). Default ON at the panel's own value (D01): instant receipts leak presence timing to every sender, and the settings checkbox already maps on→120 with ±20% jitter applied at send time. Saved settings are never rewritten — fresh installs only.
     focusUntil: 0,           // epoch ms; while in the future, notifications are suppressed
     focusStrict: false,      // focus mode: true = silence everything, false = let VIPs through
     relayPin: '',            // stage-2 step 4: TOFU pin of the serving relay's Ed25519 identity key ('' = none pinned)
@@ -6348,7 +6353,7 @@ async function initMessenger(dbName) {
       // Clean up both sources
       await dbPut('settings', [], 'retryQueue');
       localStorage.removeItem('brz-retry-queue');
-    } catch {}
+    } catch(e) { _dbg(e, 'retry-restore'); _diagBump('retryRestoreFail'); }
   }
 
   // ---- Multi-device (Phase 1) ----
@@ -6356,7 +6361,8 @@ async function initMessenger(dbName) {
   // root-signed registry on the relay (see _worker.js handleDeviceSet). The registry is
   // client-verified: we check the root's Ed25519 signature ourselves, so the relay can
   // withhold the list (degrades to single-device) but cannot forge devices into it.
-  async function _fetchDeviceList(accountId, rootPubB64) {
+  // Returns { list, ts }: verified device pubs + the registry's signed revision ts (D14).
+  async function _fetchDeviceRegistry(accountId, rootPubB64) {
     if (!API) return null;
     try {
       const resp = await postAPIRaw('/device/list', { accountId });
@@ -6386,7 +6392,8 @@ async function initMessenger(dbName) {
       if (!sigPub) { _dbg(null, 'device list: no pinned signing key for ' + accountId + ' — staying single-device'); return null; }
       const okSig = await verifySignature(`breeze-device-set:${accountId}:${rec.ts}:${digest}`, rec.sig, sigPub);
       if (okSig !== true) { _dbg(null, 'device list signature not verified — ignoring registry'); return null; }
-      return rec.devices.map(d => d.pub);
+      if (accountId === myId && rec.ts) _ownRegistryTs = rec.ts; // my next presence beat advertises this revision (D14)
+      return { list: rec.devices.map(d => d.pub), ts: rec.ts || 0 };
     } catch(e) { _dbg(e, 'device-list'); return null; }
   }
   // A camera-scan button for the link panels, mirroring the rendezvous
@@ -6436,7 +6443,7 @@ async function initMessenger(dbName) {
   const _deviceLink = globalThis.__breezeDeviceLink?.createDeviceLink({
     dbGet, dbPut, postAPIRaw, signMessage, showToast, showConfirm, t, esc, safeSetHTML,
     cmdPanel: (id) => _cmdPanelEl(id), deviceScanButton: _deviceScanButton,
-    fetchDeviceList: _fetchDeviceList, refreshDeviceRole: _refreshDeviceRole, sendHistoryTo: _sendHistoryTo,
+    fetchDeviceList: async (a, r) => (await _fetchDeviceRegistry(a, r))?.list || null, refreshDeviceRole: _refreshDeviceRole, sendHistoryTo: _sendHistoryTo,
     bustDevCache: () => { _myDevCache = null; },
     clipboardWrite: (text) => navigator.clipboard.writeText(text),
     hasApi: () => !!API, myId: () => myId, myPubB64: () => myPubB64, dbg: _dbg,
@@ -6677,19 +6684,21 @@ async function initMessenger(dbName) {
       setTimeout(() => URL.revokeObjectURL(a.href), 5000);
     });
   }
-  // Devices of a CONTACT (for send fan-out). 5-min cache on the contact object.
+  // Devices of a CONTACT (for send fan-out). 1-min cache on the contact object
+  // (D14: was 5 min; the presence devTs push below invalidates sooner).
   async function _devicesFor(contact) {
     if (!contact?.pubB64) return [];
     const now = Date.now();
-    if (contact._devCache && now - contact._devCacheTs < 5 * MS.MIN) return contact._devCache;
-    const list = await _fetchDeviceList(contact.id, contact.pubB64);
+    if (contact._devCache && now - contact._devCacheTs < MS.MIN) return contact._devCache;
+    const reg = await _fetchDeviceRegistry(contact.id, contact.pubB64);
+    const list = reg?.list; if (reg?.ts) _devRegTs[contact.id] = reg.ts;
     contact._devCache = (list && list.length) ? list : [contact.pubB64];
     contact._devCacheTs = now;
     return contact._devCache;
   }
   // Receiver-side registry cache for sender attribution (handleIncoming) — keyed by root id,
-  // 5-min TTL like the sender-side caches. Bounds /device/list traffic to 1 per account/5 min.
-  const _attribDevCache = new Map();
+  // 1-min TTL like the sender-side caches (D14). Bounds /device/list traffic to 1 per account/min.
+  const _attribDevCache = new Map(); const _devRegTs = {}; let _ownRegistryTs = 0;
   // My OWN other devices (for self-sync). Uses the local account record written by /link.
   let _myDevCache = null, _myDevCacheTs = 0, _unlinkNoticed = false;
   async function _myOtherDevices() {
@@ -6697,9 +6706,9 @@ async function initMessenger(dbName) {
       const acct = await dbGet('identity', 'account');
       if (!acct?.root) return [];
       const now = Date.now();
-      if (_myDevCache && now - _myDevCacheTs < 5 * MS.MIN) return _myDevCache;
+      if (_myDevCache && now - _myDevCacheTs < MS.MIN) return _myDevCache;
       const rootId = acct.root.slice(0, 12);
-      const list = await _fetchDeviceList(rootId, acct.root);
+      const list = (await _fetchDeviceRegistry(rootId, acct.root))?.list || null;
       // Unlink self-awareness (Socratic round — "does an unlinked device KNOW?"): a VERIFIED
       // registry that no longer lists this device means the account holder removed it. Tell
       // the user instead of letting fan-out silently stop, and drop the stale account binding
@@ -7327,7 +7336,7 @@ async function initMessenger(dbName) {
           const dlq = (await dbGet('settings', 'deadLetterQueue')) || [];
           dlq.push({ to: item.to, payload: item.payload, failedAt: Date.now() });
           await dbPut('settings', dlq.slice(-100), 'deadLetterQueue'); // Keep last 100
-        } catch {}
+        } catch(e) { _dbg(e, 'dead-letter-store'); _diagBump('deadLetterStoreFail'); }
         showToast(t('toastDeliveryFailed'), 'error');
         _updateOutboxBadge(); _saveRetryQueue(); return;
       }
@@ -7860,6 +7869,16 @@ async function initMessenger(dbName) {
   // This is the SECOND occurrence of this class here; see the _perf note near the top.
   // Keep boot last, and keep it a function: that is what makes the ordering safe rather than
   // lucky. tests/e2e/smoke.spec.js guards both symptoms.
+  // Shared tail of _boot and _runSetupCreate (extracted in the D14 line-budget pass).
+  async function _enterMainUI() {
+    _DOM.get('msg-setup').classList.add('hidden');
+    _DOM.get('msg-main').classList.remove('hidden');
+    _DOM.get('msg-input-bar').classList.remove('hidden');
+    _DOM.get('msg-my-name').textContent = myName;
+    _armRelayPinGate(); // step 4 follow-up: this session's first calls hold for the pin verdict (checkRelayPin runs inside _startLiveSession below)
+    await ensureSigningReady();
+    startPresence(); startPolling();
+  }
   async function _boot() {
   const hasId = await loadIdentity();
   if (hasId) {
@@ -7869,14 +7888,7 @@ async function initMessenger(dbName) {
     // the per-account IndexedDB, so restore is safe to await here.
     _outbox.clear();
     await _restoreOutbox(myId);
-    _DOM.get('msg-setup').classList.add('hidden');
-    _DOM.get('msg-main').classList.remove('hidden');
-    _DOM.get('msg-input-bar').classList.remove('hidden');
-    _DOM.get('msg-my-name').textContent = myName;
-    _armRelayPinGate(); // step 4 follow-up: this session's first calls hold for the pin verdict (checkRelayPin runs inside _startLiveSession below)
-    await ensureSigningReady();
-    startPresence();
-    startPolling();
+    await _enterMainUI();
     if (Notification && Notification.permission === 'default') {
       // v3.1: Defer notification permission to first conversation open (better UX)
       // Don't request on page load — wait until user is engaged
@@ -7939,14 +7951,7 @@ async function initMessenger(dbName) {
     // the setup screen with nothing created.
     if (!await createIdentity(name, alias, disposable)) return;
     _outbox.clear();
-    _DOM.get('msg-setup').classList.add('hidden');
-    _DOM.get('msg-main').classList.remove('hidden');
-    _DOM.get('msg-input-bar').classList.remove('hidden');
-    _DOM.get('msg-my-name').textContent = myName;
-    _armRelayPinGate(); // step 4 follow-up: this session's first calls hold for the pin verdict (checkRelayPin runs inside _startLiveSession below)
-    await ensureSigningReady();
-    startPresence();
-    startPolling();
+    await _enterMainUI();
     initTurn();
     initPushNotifications();
     // Same omission class as the cleanup-registration gap below, found by the same
@@ -9308,7 +9313,7 @@ async function initMessenger(dbName) {
           if (existing) existing.remove();
           const preview = document.createElement('div');
           preview.className = 'reply-preview';
-          safeSetHTML(preview, `<span class="i-ellip">${esc((text||'').slice(0, 60))}</span><span data-action="close-reply" class="i-cur-dim">✕</span>`);
+          safeSetHTML(preview, `<span class="i-ellip">${esc((text||'').slice(0, 60))}</span><button type="button" data-action="close-reply" class="i-cur-dim" aria-label="${esc(t('close'))}">✕</button>`);
           bar.insertBefore(preview, bar.firstChild);
         }
         _DOM.get('msg-input')?.focus();
@@ -9696,7 +9701,7 @@ async function initMessenger(dbName) {
       preview.className = 'reply-preview';
       bar.insertBefore(preview, bar.firstChild);
     }
-    safeSetHTML(preview, `<span class="i-ellip">${esc(msg.text?.slice(0, 60) || '')}</span><span class="i-cur-dim" data-action="close-reply">✕</span>`);
+    safeSetHTML(preview, `<span class="i-ellip">${esc(msg.text?.slice(0, 60) || '')}</span><button type="button" class="i-cur-dim" data-action="close-reply" aria-label="${esc(t('close'))}">✕</button>`);
     window._breezeReplyTo = _replyTo;
     _DOM.get('msg-input').focus();
   }
@@ -10838,6 +10843,33 @@ async function initMessenger(dbName) {
     });
   });
 
+  // v3.1: Shared image-preview confirmation for paste + drag-drop (the two
+  // flows built the same overlay twice; consolidated in the D19 pass, which
+  // also gives the preview img its alt — the attachment renderer has always
+  // carried one). header/sub arrive pre-escaped from the caller; the send
+  // action owns what happens after confirm (the overlay is dismissed and
+  // the object URL revoked first, exactly as both originals did).
+  function _confirmImageSend(url, headerHtml, subHtml, altText, onSend) {
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    safeSetHTML(overlay, `<div class="modal i-center">
+      ${headerHtml}
+      <img src="${url}" class="i-img-preview" alt="${esc(altText)}" decoding="async">
+      ${subHtml}
+      <div class="i-flex-c">
+        <button class="btn btn-g btn-sm" data-act="confirm-send">${t('send')}</button>
+        <button class="btn btn-o btn-sm" data-close="overlay">${t('cancel')}</button>
+      </div>
+    </div>`);
+    document.body.appendChild(overlay);
+    overlay.querySelector('[data-act="confirm-send"]').onclick = async () => {
+      overlay.remove();
+      URL.revokeObjectURL(url);
+      await onSend();
+    };
+    overlay.onclick = (ev) => { if (ev.target === overlay) { overlay.remove(); URL.revokeObjectURL(url); } };
+  }
+
   // v3.1: Clipboard paste → preview before send
   _DOM.get('msg-input')?.addEventListener('paste', async (e) => {
     const items = e.clipboardData?.items;
@@ -10850,27 +10882,12 @@ async function initMessenger(dbName) {
         const maxSize = CONFIG.FILE_MAX;
         if (file.size > maxSize) { showToast(t('toastMax50MB'), 'error'); return; }
         // v3.1: Show preview before sending
-        const url = URL.createObjectURL(file);
-        const overlay = document.createElement('div');
-        overlay.className = 'overlay';
         const name = 'paste-' + Date.now() + '.' + (file.type.split('/')[1] || 'png');
-        safeSetHTML(overlay, `<div class="modal i-center">
-          <div class="i-sub12">${esc(t('sendImageConfirm'))}</div>
-          <img src="${url}" class="i-img-preview" decoding="async">
-          <div class="i-small-muted">${fmtSize(file.size)}</div>
-          <div class="i-flex-c">
-            <button class="btn btn-g btn-sm" id="paste-send">${t('send')}</button>
-            <button class="btn btn-o btn-sm" data-close="overlay">${t('cancel')}</button>
-          </div>
-        </div>`);
-        document.body.appendChild(overlay);
-        overlay.querySelector('#paste-send').onclick = async () => {
-          overlay.remove();
-          URL.revokeObjectURL(url);
+        _confirmImageSend(URL.createObjectURL(file),
+          `<div class="i-sub12">${esc(t('sendImageConfirm'))}</div>`,
+          `<div class="i-small-muted">${fmtSize(file.size)}</div>`, name,
           // v3.6: Route through _sendFile (respects /compress setting + DRY)
-          await _sendFile(new File([file], name, { type: file.type }));
-        };
-        overlay.onclick = (ev) => { if (ev.target === overlay) { overlay.remove(); URL.revokeObjectURL(url); } };
+          async () => { await _sendFile(new File([file], name, { type: file.type })); });
         return;
       }
     }
@@ -10926,7 +10943,7 @@ async function initMessenger(dbName) {
     myId: () => myId, myPubB64: () => myPubB64, myName: () => myName,
   }) || { startCall() {}, handleCallOffer() {}, endCall() {}, pollCallSignals() {},
     getRTCCertificate: async () => null, hasRTCCertificate: () => false,
-    getCallICEConfig: () => ({ iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }, { urls: 'stun:stun.services.mozilla.com' }] }), state: () => 'idle' };
+    getCallICEConfig: () => ({ iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }, { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }, { urls: 'stun:stun.services.mozilla.com' }] }), state: () => 'idle' };
   const { startCall, handleCallOffer, endCall, pollCallSignals, getCallICEConfig, getRTCCertificate, hasRTCCertificate } = _callMgr;
 
   // Group voice calls (stage 5 step 2) — src/app/group-call.js.
@@ -10946,10 +10963,6 @@ async function initMessenger(dbName) {
   });
   _DOM.get('b-msg-video')?.addEventListener('click', () => { if (activeContact) startCall(activeContact, true); });
   _DOM.get('b-msg-sticker')?.addEventListener('click', () => { _toggleStickerPanel().catch(e => _dbg(e, 'sticker-panel')); });
-
-  // Listen for incoming calls via signal poll (piggyback on existing messenger signal poll)
-  // Incoming calls are detected in the signal poll's message handling
-  // We add 'call-offer' detection to the existing connectPeer signal loop
 
   // Listen for incoming calls via signal poll (piggyback on existing messenger signal poll)
   // Incoming calls are detected in the signal poll's message handling
@@ -11911,7 +11924,7 @@ async function initMessenger(dbName) {
     let contact = await dbGet('contacts', contactId);
     // Multi-device sender attribution: an unknown sender claiming an account root is checked
     // against that root's SIGNED device registry (verified with the root's pinned signing key
-    // in _fetchDeviceList). Listed -> the message belongs to the root's conversation; the
+    // in _fetchDeviceRegistry). Listed -> the message belongs to the root's conversation; the
     // session peer stays the DEVICE's pub (its own ratchet). The claim alone is never trusted:
     // unverifiable/absent registry falls through to the stranger-contact path below.
     let _attribPub = null;
@@ -11921,8 +11934,10 @@ async function initMessenger(dbName) {
         const rootContact = rootId !== contactId ? await dbGet('contacts', rootId) : null;
         if (rootContact?.pubB64 === msg.acctRoot) {
           let devs = _attribDevCache.get(rootId);
-          if (!devs || Date.now() - devs.ts > 5 * MS.MIN) {
-            devs = { list: await _fetchDeviceList(rootId, msg.acctRoot) || [], ts: Date.now() };
+          if (!devs || Date.now() - devs.ts > MS.MIN) {
+            const reg = await _fetchDeviceRegistry(rootId, msg.acctRoot);
+            if (reg?.ts) _devRegTs[rootId] = reg.ts;
+            devs = { list: reg?.list || [], ts: Date.now() };
             _attribDevCache.set(rootId, devs);
           }
           if (devs.list.includes(msg.fromPub)) { contact = rootContact; contactId = rootContact.id; _attribPub = msg.fromPub; }
@@ -12733,7 +12748,7 @@ async function initMessenger(dbName) {
         // is per relay as well; the warning stays once per window.
         let conflict = false;
         for (const relay of homeRelays()) {
-          const resp = await postAPIRelay(relay, '/presence', { id: myId, pub: myPubB64, name: myName, inst: inst.v, instSig, ...beatAuth });
+          const resp = await postAPIRelay(relay, '/presence', { id: myId, pub: myPubB64, name: myName, inst: inst.v, instSig, devTs: _ownRegistryTs || undefined, ...beatAuth });
           const data = resp?.ok ? await resp.json().catch(() => null) : null;
           if (data?.conflict) conflict = true;
         }
@@ -12948,38 +12963,21 @@ async function initMessenger(dbName) {
         return;
       }
       if (isBlockedFile(file.name)) { showToast(t('toastBlockedFile'), 'error'); return; }
-      // Image preview before send
-      if (file.type.startsWith('image/')) {
-        const url = URL.createObjectURL(file);
-        const overlay = document.createElement('div');
-        overlay.className = 'overlay';
-        safeSetHTML(overlay, `<div class="modal i-center">
-          <img src="${url}" class="i-img-preview" decoding="async">
-          <div class="i-desc12">${esc(file.name)} (${fmtSize(file.size)})</div>
-          <div class="i-flex-c">
-            <button class="btn btn-g btn-sm" id="dd-send">${t('send')}</button>
-            <button class="btn btn-o btn-sm" data-close="overlay">${t('cancel')}</button>
-          </div>
-        </div>`);
-        document.body.appendChild(overlay);
-        overlay.querySelector('#dd-send').onclick = () => {
-          overlay.remove();
-          URL.revokeObjectURL(url);
-          // Trigger file input programmatically
-          const dt = new DataTransfer();
-          dt.items.add(file);
-          const fi = _DOM.get('msg-file');
-          fi.files = dt.files;
-          fi.dispatchEvent(new Event('change'));
-        };
-        overlay.onclick = (ev) => { if (ev.target === overlay) { overlay.remove(); URL.revokeObjectURL(url); } };
-      } else {
-        // Non-image: send directly
+      // Route the file through the hidden file input (its change handler
+      // owns the actual send) — used by both branches below.
+      const sendViaInput = () => {
         const dt = new DataTransfer();
         dt.items.add(file);
         const fi = _DOM.get('msg-file');
         fi.files = dt.files;
         fi.dispatchEvent(new Event('change'));
+      };
+      // Image preview before send
+      if (file.type.startsWith('image/')) {
+        _confirmImageSend(URL.createObjectURL(file), '',
+          `<div class="i-desc12">${esc(file.name)} (${fmtSize(file.size)})</div>`, file.name, sendViaInput);
+      } else {
+        sendViaInput(); // Non-image: send directly
       }
     });
   }
@@ -13140,6 +13138,8 @@ async function initMessenger(dbName) {
               deliverPeerRelayQueue(id);
             }
           }
+          // D14: a registry revision newer than our caches were built from drops both device caches now.
+          if (d.devTs) for (const c of contacts) { const ts = d.devTs[c.id]; if (ts && ts > (_devRegTs[c.id] || 0)) { _devRegTs[c.id] = ts; c._devCache = null; c._devCacheTs = 0; _attribDevCache.delete(c.id); } }
         }
       } catch(e) { _dbg(e); }
       renderContacts();

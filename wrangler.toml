@@ -61,6 +61,7 @@ new_sqlite_classes = ["MailboxDO"]
 # wrangler pages secret put PRESENCE_REQUIRE_AUTH      # false — opt out: allow presence writes from unregistered ids (default: registered only)
 # wrangler pages secret put TURN_REQUIRE_AUTH          # false — opt out: issue TURN credentials to unregistered ids (default: registered only)
 # wrangler pages secret put ALIAS_REQUIRE_AUTH         # false — opt out: allow unsigned @alias registration (default: Ed25519 signature required, since recovery-plan step 5)
+# wrangler pages secret put BACKUP_REQUIRE_AUTH        # false — opt out: allow unsigned backup upload/download (default: Ed25519 signature required; the backup client has always signed, and backup storage itself is opt-in per relay)
 #
 # The remaining flags reject requests that omit/fail an Ed25519 ownership
 # signature. Every current client already signs these actions; the flags stay
@@ -74,7 +75,6 @@ new_sqlite_classes = ["MailboxDO"]
 # wrangler pages secret put PUSH_REQUIRE_AUTH          # true — reject unsigned push subscribe/unsubscribe
 # wrangler pages secret put QUEUE_REQUIRE_AUTH         # true — reject unsigned msg/sealed poll + sealed ack (queue read/delete)
 # wrangler pages secret put PREKEY_REQUIRE_AUTH        # true — reject unsigned prekey uploads (bundle overwrite = identity takeover)
-# wrangler pages secret put BACKUP_REQUIRE_AUTH        # true — without this, knowing a userId is enough to download that user's encrypted backup blob
 # wrangler pages secret put BACKUP_STORAGE_ENABLED     # true — opt IN to storing users' encrypted backup blobs on this relay. Default is OFF (the creator holds no user data): /api/backup/* refuses with BACKUP_DISABLED. Enable only on a relay you run for your own accounts.
 #
 # --- Plain relay path (deprecated) ---

@@ -72,11 +72,16 @@ describe('deployed queue signing readiness', () => {
   });
 
   it('both boot paths and leader promotion await readiness; every queue entry point uses queueAuth', () => {
+    // Both paths run the sequence through _enterMainUI (extracted in the
+    // D14 line-budget pass): the invariant is unchanged — each path awaits
+    // the helper, and inside the helper readiness precedes polling.
     for (const [start, end] of [['  async function _boot()', '  } // end _boot'], ['  async function _runSetupCreate(', '    // Same omission class']]) {
       const body = html.slice(html.indexOf(start), html.indexOf(end));
-      expect(body.indexOf('await ensureSigningReady()')).toBeGreaterThan(0);
-      expect(body.indexOf('await ensureSigningReady()')).toBeLessThan(body.indexOf('startPolling()'));
+      expect(body.indexOf('await _enterMainUI()')).toBeGreaterThan(0);
     }
+    const enter = html.slice(html.indexOf('  async function _enterMainUI()'), html.indexOf('  async function _boot()'));
+    expect(enter.indexOf('await ensureSigningReady()')).toBeGreaterThan(0);
+    expect(enter.indexOf('await ensureSigningReady()')).toBeLessThan(enter.indexOf('startPolling()'));
     const polling = html.slice(html.indexOf('  async function startPolling()'), html.indexOf('  // ===== Mailbox WebSocket delivery'));
     expect(polling.indexOf('await ensureSigningReady()')).toBeLessThan(polling.indexOf('schedulePoll()'));
     for (const op of ['msg-poll', 'sealed-poll', 'sealed-ack', 'mailbox-ws']) expect(html).toContain(`queueAuth('${op}')`);

@@ -1779,6 +1779,10 @@ async function handlePresence(body, env, request) {
   // to near 0 reads/min while isolates are warm.
   if (isCheck && ids && Array.isArray(ids)) {
     const online = {};
+    // D14: registry-revision hints (see the beat path). Collected alongside
+    // `online` and returned only when at least one record carries one, so
+    // the legacy response shape is byte-identical for pre-D14 beats.
+    const devTs = {};
     const memCache = globalThis._presenceCache || null;
     const validIds = ids.slice(0, 50).filter(x => typeof x === 'string' && validateUserId(x));
     // Cache hits resolve synchronously; only cache misses need a KV round-trip, and those
@@ -1791,6 +1795,7 @@ async function handlePresence(body, env, request) {
       if (memRaw) {
         const p = safeJsonParse(memRaw);
         online[cid] = p ? (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH : false;
+        if (p?.devTs) devTs[cid] = p.devTs;
       } else {
         misses.push(cid);
       }
@@ -1800,11 +1805,12 @@ async function handlePresence(body, env, request) {
       if (data) {
         const p = safeJsonParse(data);
         online[cid] = p ? (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH : false;
+        if (p?.devTs) devTs[cid] = p.devTs;
       } else {
         online[cid] = false;
       }
     }));
-    return json({ online }, 200, request);
+    return json(Object.keys(devTs).length ? { online, devTs } : { online }, 200, request);
   }
 
   if (!id) return json({ error: 'id required', code: 'MISSING_ID' }, 400, request);
@@ -1862,6 +1868,15 @@ async function handlePresence(body, env, request) {
   const safePub = typeof pub === 'string' ? pub.slice(0, 200) : undefined;
   const safeName = sanitizeString(name, 64);
   const rawInst = typeof body.inst === 'string' ? body.inst.slice(0, 32) : undefined;
+  // D14: the beat may carry the ts of the sender's OWN device registry
+  // (devTs) so peers can invalidate cached device lists the moment a
+  // link/unlink lands, instead of waiting out the cache TTL. It is only
+  // honoured from a beat whose install signature VERIFIED (same trust
+  // rule as `inst` itself and the alias renewal below), and it is only a
+  // HINT: the registry peers refetch is root-signed and verified
+  // client-side, so a forged hint costs one verified refetch, never
+  // false data.
+  const rawDevTs = typeof body.devTs === 'number' && Number.isFinite(body.devTs) && body.devTs > 0 ? body.devTs : undefined;
   // Ownership proof for the beat itself (see checkPresenceAuth). Runs
   // before any cache/store mutation, so a rejected beat changes nothing.
   const presAuthErr = await checkPresenceAuth(body, env, request, { pub: safePub, name: safeName, caps: safeCaps, inst: rawInst });
@@ -1909,6 +1924,7 @@ async function handlePresence(body, env, request) {
   }
   const presData = { pub: safePub, name: safeName, at: Date.now() };
   if (safeInst) presData.inst = safeInst;
+  if (safeInst && rawDevTs) presData.devTs = rawDevTs;
   if (safeCaps) presData.caps = safeCaps;
   if (Date.now() - lastWrite > TIMEOUT_MS.PRESENCE_WRITE) { // throttle store writes (see PRESENCE STORE: the throttle now bounds DO writes too)
     await presenceStore(env, id).write(JSON.stringify(presData), TTL.MIN * 6); // 6min TTL (covers 5min interval + slack)
@@ -4486,9 +4502,15 @@ async function handleBackupUpload(body, env, request) {
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   if (typeof backup !== 'string') return json({ error: 'backup must be a string', code: 'INVALID_FIELD' }, 400, request);
 
-  // Optional Ed25519 auth: callers may include { ts, sig } to prove ownership of the
-  // account's identity key before overwriting the backup. When omitted the upload is
-  // unauthenticated (backward-compat). Both fields must be present or both absent.
+  // Ed25519 auth: callers include { ts, sig } to prove ownership of the
+  // account's identity key before overwriting the backup. Both fields must be
+  // present or both absent. Unsigned requests are REJECTED BY DEFAULT (same
+  // pattern as PREKEY_REQUIRE_AUTH / PRESENCE_REQUIRE_AUTH): without a
+  // signature, knowing a userId is enough to overwrite that user's encrypted
+  // backup blob. The current client always signs (src/app/backup.js), so the
+  // only way back to unsigned acceptance is the operator's explicit opt-out
+  // BACKUP_REQUIRE_AUTH=false (e.g. a client migration window), and every
+  // acceptance under it is logged below.
   const hasSig = ts !== undefined || sig !== undefined;
   if (hasSig) {
     if (ts === undefined || sig === undefined)
@@ -4504,8 +4526,10 @@ async function handleBackupUpload(body, env, request) {
     const challenge = `breeze-backup-upload:${userId}:${ts}`;
     const ok = await verifyEd25519(bundle.edIdentityKey, btoa(challenge), sig);
     if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
-  } else if (env.BACKUP_REQUIRE_AUTH === 'true') {
+  } else if (env.BACKUP_REQUIRE_AUTH !== 'false') {
     return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+  } else {
+    console.warn('[auth] deprecated unsigned backup upload accepted under BACKUP_REQUIRE_AUTH=false — unsigned requests are rejected by default; set the flag only during a client migration window');
   }
 
   // Store (max 5MB per backup)
@@ -4526,12 +4550,14 @@ async function handleBackupDownload(body, env, request) {
   if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
 
-  // Optional Ed25519 auth: callers may include { ts, sig } to prove ownership before
+  // Ed25519 auth: callers include { ts, sig } to prove ownership before
   // retrieving the backup. Both fields must be present or both absent.
-  // Set BACKUP_REQUIRE_AUTH=true to reject unauthenticated requests — recommended once
-  // all clients register an Ed25519 identity key (same pattern as GROUP_REQUIRE_AUTH,
-  // PRESENCE_REQUIRE_AUTH, etc.). Without it, knowing a userId is enough to download the
-  // encrypted blob and brute-force the passphrase offline.
+  // Unsigned requests are REJECTED BY DEFAULT (same pattern as
+  // PREKEY_REQUIRE_AUTH / PRESENCE_REQUIRE_AUTH, etc.): without a signature,
+  // knowing a userId is enough to download the encrypted blob and brute-force
+  // the passphrase offline. The current client always signs
+  // (src/app/backup.js); the only way back to unsigned acceptance is the
+  // operator's explicit opt-out BACKUP_REQUIRE_AUTH=false, logged below.
   const hasSig = ts !== undefined || sig !== undefined;
   if (hasSig) {
     if (ts === undefined || sig === undefined)
@@ -4547,12 +4573,23 @@ async function handleBackupDownload(body, env, request) {
     const challenge = `breeze-backup-download:${userId}:${ts}`;
     const ok = await verifyEd25519(bundle.edIdentityKey, btoa(challenge), sig);
     if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
-  } else if (env.BACKUP_REQUIRE_AUTH === 'true') {
+  } else if (env.BACKUP_REQUIRE_AUTH !== 'false') {
     return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+  } else {
+    console.warn('[auth] deprecated unsigned backup download accepted under BACKUP_REQUIRE_AUTH=false — unsigned requests are rejected by default; set the flag only during a client migration window');
   }
 
   const backup = await kvGet(env, `backup:${userId}`);
   if (!backup) return json({ error: 'No backup found', code: 'NOT_FOUND' }, 404, request);
+  // Touch-on-read (D15): a VERIFIED download renews the 90-day retention
+  // window, so a backup that is actively used as a recovery path cannot
+  // silently lapse the way a write-only one can — the same renewal the
+  // alias path applies on heartbeat. Content-identical rewrite (only the
+  // expiry moves), and unsigned downloads under the BACKUP_REQUIRE_AUTH=false
+  // opt-out do NOT renew: renewal is an owner's privilege, never something
+  // a stranger holding a userId can trigger. Best-effort — the download
+  // itself has already succeeded.
+  if (hasSig) await kvPut(env, `backup:${userId}`, backup, { expirationTtl: TTL.QUARTER });
   return json({ backup, authenticated: hasSig }, 200, request);
 }
 
@@ -4647,8 +4684,15 @@ async function handleBackupSimpleDownload(body, env, request) {
   // The owner's pub rides along so the client can bind the restored
   // signing record to the key that owns the slot (defence in depth —
   // the GCM envelope already refuses a swapped blob).
-  const rec = safeJsonParse(await kvGet(env, `sbackup:${locator}`));
+  const raw = await kvGet(env, `sbackup:${locator}`);
+  const rec = safeJsonParse(raw);
   if (!rec || typeof rec.backup !== 'string') return json({ error: 'No backup found', code: 'NOT_FOUND' }, 404, request);
+  // Touch-on-read (D15): presenting the locator IS the authentication in
+  // this mode, so a successful download renews the 90-day retention window
+  // exactly like the signed legacy path. Content-identical rewrite (the
+  // raw stored bytes go back untouched; only the expiry moves).
+  // Best-effort — the download itself has already succeeded.
+  await kvPut(env, `sbackup:${locator}`, raw, { expirationTtl: TTL.QUARTER });
   return json({ backup: rec.backup, pub: rec.pub || null }, 200, request);
 }
 

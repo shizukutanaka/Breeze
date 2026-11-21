@@ -136,7 +136,9 @@ describe('call manager factory (src/app/call.js)', () => {
     const m = createCallManager(deps());
     expect(m.state()).toBe('idle');
     const cfg = m.getCallICEConfig();
-    expect(cfg.iceServers.length).toBe(2);
+    expect(cfg.iceServers.length).toBe(3);
+    // D10: the relay's own STUN leads the list, ahead of the third parties.
+    expect(cfg.iceServers[0].urls).toBe('stun:stun.cloudflare.com:3478');
     expect(cfg.iceTransportPolicy).toBeUndefined();
     expect(() => m.endCall()).not.toThrow(); // idle endCall is a guarded no-op
     expect(m.state()).toBe('idle');

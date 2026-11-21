@@ -19,6 +19,11 @@ export function createInfoPanels(D) {
       // p2p-stats.js). Fallback reads the delivery counters directly so
       // the lines still render if the module failed to load.
       const _p2pSnap = D.p2pStats() ? D.p2pStats().snapshot() : (() => { try { const s = JSON.parse(localStorage.getItem('brz-p2p-direct') || '{}'); const a = s.directAck || 0, n = s.directNoAck || 0; return { directAck: a, directNoAck: n, directTotal: a + n, directRate: (a + n) > 0 ? a / (a + n) : null, conn: null, connTotal: 0, connFailed: 0 }; } catch { return null; } })();
+      // D20: persistence-failure counters (index.html _diagBump) — dead-letter
+      // and retry-queue writes that failed silently before; shown as
+      // "dead-letter / retry-restore" counts, zero when never hit.
+      const _diagPersist = (() => { try { return JSON.parse(localStorage.getItem('brz-diag') || '{}'); } catch { return {}; } })();
+      const _diagPersistLine = (_diagPersist.deadLetterStoreFail || 0) + ' / ' + (_diagPersist.retryRestoreFail || 0);
       const _directRateLine = !_p2pSnap ? '—'
         : _p2pSnap.directRate === null ? D.t('secDirectNoData')
         : Math.round(_p2pSnap.directRate * 100) + '% (' + _p2pSnap.directAck + '/' + _p2pSnap.directTotal + ')';
@@ -50,6 +55,7 @@ export function createInfoPanels(D) {
         '<b>' + D.t('secPledgeTitle') + '</b>',
         D.t('secPledgeNoAds'),
         D.t('secPledgeE2ee'),
+        D.t('secSealedSenderNote'),
         D.t('secPledgeRetention'),
         '',
         '<b>' + D.t('secActiveProtections') + '</b>',
@@ -83,6 +89,7 @@ export function createInfoPanels(D) {
         D.t('secLblFwdSec') + ': ' + (sess ? D.t('cmdCryptoFwdSec') : '—'),
         D.t('secLblReplay') + ': ' + D.replayCacheSize() + '/' + D.config().REPLAY_CACHE_SIZE + ' ' + D.t('secInLruCache'),
         D.t('secSkippedKeys'),
+        D.t('secDiagPersist') + ': ' + _diagPersistLine,
         D.t('cmdCryptoCompression'),
         'Protocol: v4 (pad-only; legacy compressed msgs still read) / v3 (pad-only) / v2 (legacy)',
         D.t('secLblMsgPadding') + ': ' + D.config().MSG_PAD_BOUNDARY + D.t('secByteBoundary'),
