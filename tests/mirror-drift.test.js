@@ -1266,6 +1266,17 @@ describe('franking mirror (I17) — inline _frankCommit vs franking.js', () => {
     const enc = html.slice(html.indexOf('async function _encryptForRaw'), html.indexOf('async function _decryptFromRaw'));
     expect(enc).toContain('...(fi ? { fi } : {})');
   });
+
+  it('the deployed client and relay carry the AMF sender-binding tag (D08)', () => {
+    // The sender signs the canonical AMF string inside _encryptForRaw and the
+    // tag rides the payload as p.fs; the relay re-verifies the same string at
+    // report time and answers with a senderBound verdict. The reference
+    // counterpart is franking.js amfSign/amfVerify (tests/franking.test.js).
+    expect(html).toContain("'breeze-amf-v1:'");
+    expect(html).toContain('...(frank?.tag ? { fs: frank.tag } : {})');
+    expect(worker).toContain('breeze-amf-v1:');
+    expect(worker).toContain('senderBound');
+  });
 });
 
 describe('reference-drift tracking — modules that are tested references, NOT yet deployed', () => {

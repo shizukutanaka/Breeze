@@ -4185,6 +4185,12 @@ async function handleKtLogGet(body, env, request) {
 // report, the recipient reveals (frankId, plaintext, Kf); the relay recomputes
 // HMAC(Kf, plaintext) and checks it equals the recorded Cf. The relay never sees
 // plaintext of un-reported messages.
+//
+// D08 (AMF): current clients also carry a sender-binding tag — the sender's
+// Ed25519 signature over the commitment context, shipped inside the E2E
+// payload. handleAbuseReport verifies it against the claimed sender's
+// registered edIdentityKey, so a bound report attributes the message to its
+// sender; the symmetric-only flow remains for pre-AMF clients.
 // ============================================================
 async function hmacVerifyFrank(commitmentB64, openingB64, message) {
   try {
@@ -4229,6 +4235,21 @@ async function handleAbuseReport(body, env, request) {
   if (!commitment) return json({ error: 'No such franking record', code: 'NOT_FOUND' }, 404, request);
   const verified = await hmacVerifyFrank(commitment, opening, message);
   if (!verified) return json({ verified: false, error: 'Report does not match the sent message', code: 'FRANK_MISMATCH' }, 400, request);
+  // D08 (AMF): when the report carries the sender-binding tag, verify it against
+  // the claimed sender's registered identity key. The tag signs exactly the
+  // commitment string recorded at send time (fetched above), so a bound report
+  // attributes the message to that sender cryptographically; an unbound one
+  // keeps the legacy semantics (content verified, sender unattributed).
+  // Absent fields = pre-AMF client, handled identically.
+  let senderBound = false;
+  const hasAmf = typeof body.amfSig === 'string' && typeof body.senderId === 'string';
+  if (hasAmf && body.amfSig.length <= 128 && /^[A-Za-z0-9+/=]+$/.test(body.amfSig) && validateUserId(body.senderId)) {
+    const bundleRaw = await kvGet(env, `prekey:${body.senderId}`);
+    const bundle = bundleRaw ? safeJsonParse(bundleRaw) : null;
+    if (bundle && typeof bundle.edIdentityKey === 'string' && bundle.edIdentityKey) {
+      senderBound = await verifyEd25519(bundle.edIdentityKey, btoa(`breeze-amf-v1:${frankId}:${commitment}`), body.amfSig);
+    }
+  }
   // Fire the moderation webhook (and stamp the report) only the FIRST time a given
   // frankId is reported. The opening key Kf is delivered to the recipient inside the E2E
   // payload, so a recipient holding a valid (frankId, message, opening) tuple — or a
@@ -4249,7 +4270,7 @@ async function handleAbuseReport(body, env, request) {
   // Object (out of scope). This comment states what the code actually guarantees.
   const alreadyReported = await kvGet(env, `report:${frankId}`);
   // Record the verified report for moderation (idempotent on frankId — same key).
-  const stored = await kvPut(env, `report:${frankId}`, JSON.stringify({ at: Date.now(), len: message.length }), { expirationTtl: TTL.QUARTER });
+  const stored = await kvPut(env, `report:${frankId}`, JSON.stringify({ at: Date.now(), len: message.length, ...(senderBound ? { amf: true, sender: body.senderId } : {}) }), { expirationTtl: TTL.QUARTER });
   if (!stored) return json({ error: 'Failed to record report', code: 'STORE_FAILED' }, 500, request);
   // Decide whether THIS request fires the webhook: not already in KV, and not already
   // fired by this isolate. The has()/set() pair is synchronous — do not insert an await.
@@ -4270,10 +4291,10 @@ async function handleAbuseReport(body, env, request) {
     fetchWithTimeout(env.ABUSE_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'abuse_report', frankId, messageLen: message.length, at: Date.now() }),
+      body: JSON.stringify({ type: 'abuse_report', frankId, messageLen: message.length, at: Date.now(), ...(hasAmf ? { senderBound } : {}), ...(senderBound ? { sender: body.senderId } : {}) }),
     }, TIMEOUT_MS.WEBHOOK).catch(() => {});
   }
-  return json({ verified: true, duplicate: !fireWebhook }, 200, request);
+  return json({ verified: true, duplicate: !fireWebhook, ...(hasAmf ? { senderBound } : {}) }, 200, request);
 }
 
 // ============================================================

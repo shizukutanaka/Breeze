@@ -330,15 +330,33 @@ iter-DoS ceiling, isWrapped/loadKey detection + unwrap + prompt-throw).
 - To report, the recipient reveals `(message, Kf)`; the relay checks
   `HMAC(Kf, message) == Cf` → proof the message was genuinely sent. No plaintext
   escrow; un-reported messages stay hidden (HMAC hiding under a secret key).
+- **AMF sender binding (D08,** Tyagi et al. asymmetric message franking — the
+  sender-binding half of the Hecate model): the sender's Ed25519 identity key
+  signs `breeze-amf-v1:{frankId}:{Cf}` and the tag ships **inside** the E2E
+  payload (recipient-only, like `Kf`), so the relay learns nothing new at
+  send time and un-reported messages keep their deniability. The recipient
+  verifies the tag at receipt against the commitment recomputed from the
+  received plaintext — a mismatch drops the message's report affordance, so a
+  sender who committed to a different message than the one delivered is
+  caught immediately. At report time the relay re-verifies the tag against
+  the claimed sender's registered `edIdentityKey`: a bound report attributes
+  the message to that sender in the moderation record.
 
-Impl: client core `src/crypto/franking.js` (`commit`/`verify`/`verifyReport`) +
-**relay endpoints** `_worker.js` `/api/abuse/record` (store `Cf`) and
-`/api/abuse/report` (verify revealed `(message, Kf)` against the recorded `Cf`).
-Tests: `tests/franking.test.js` (core) + `tests/worker.test.js` (end-to-end:
-client commitment → relay verifies; binding reject, unknown-id 404, no-overwrite,
-oversized-message + oversized-opening DoS guards).
-**Implemented (core + relay).** Gap: bind the **sender** under sealed sender via
-asymmetric franking / Hecate (§9 N4); client send/report UI wiring (browser).
+Impl: client core `src/crypto/franking.js` (`commit`/`verify`/`verifyReport` +
+`amfSign`/`amfVerify`/`verifyAmfReport`) + **relay endpoints** `_worker.js`
+`/api/abuse/record` (store `Cf`) and `/api/abuse/report` (verify revealed
+`(message, Kf)` against the recorded `Cf`; verify the AMF tag when present).
+Deployed client: inline `_frankKey`/`_frankCommit` with **derived** `Kf`
+(HKDF from the message key — see CLAUDE.md for the divergence) + `signMessage`
+tag as payload field `p.fs`.
+Tests: `tests/franking.test.js` (core + AMF) + `tests/worker.test.js`
+(end-to-end: client commitment → relay verifies; binding reject, unknown-id
+404, no-overwrite, oversized-message + oversized-opening DoS guards; AMF
+bound/unbound/legacy report verdicts).
+**Implemented (core + relay + AMF sender binding).** Residual limits: a
+hostile client can withhold the record or the tag — its messages then arrive
+unreportable rather than forgeable; reports from pre-AMF clients remain
+symmetric-only (content verified, sender unattributed).
 
 ## 6b. Safety number — out-of-band MITM verification (key fingerprint)
 
@@ -475,8 +493,11 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   returned on fetch so the initiator can call `parsePeerCaps(bundle)` and `negotiate()`
   to select v4 vs v5 path. Pending: wire `advertise()` into presence/bundle in
   `index.html` and call `negotiate()` before session init.
-- N4. **Franking core** (I17) — ✅ implemented (§6a); remaining: sealed-sender
-  sender-binding (asymmetric franking / Hecate) + relay record/report endpoints (§8).
+- N4. **Franking core** (I17) — ✅ implemented (§6a), including the AMF
+  sender-binding (D08: Ed25519 tag over the commitment, recipient-checked at
+  receipt, relay-re-verified at report) and the relay record/report
+  endpoints (§8). Remaining: none structural — the hostile-client
+  withholding residual is documented in §6a.
   **PQXDH** (I8) — ✅ implemented and deployed (§2a; stage 3, on by
   default since step 6 — the vetted-ML-KEM premise was met by the pinned
   pure-JS @noble/post-quantum, ACVP-verified, not WASM). **PQ ratchet**

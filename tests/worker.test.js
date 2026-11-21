@@ -2029,6 +2029,73 @@ describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => 
     expect(await env.KV.get('report:m-001xxx')).toBeTruthy(); // recorded for moderation
   });
 
+  // D08 (AMF): a report carrying the sender-binding tag is verified against the
+  // claimed sender's registered edIdentityKey; a bound report attributes the
+  // message to that sender in the moderation record.
+  async function amfIdentity(env, senderId) {
+    const pair = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const pubRaw = new Uint8Array(await crypto.subtle.exportKey('raw', pair.publicKey));
+    await env.KV.put(`prekey:${senderId}`, JSON.stringify({ identityKey: 'aWQtdGVzdA', edIdentityKey: b64(pubRaw) }));
+    return pair.privateKey;
+  }
+
+  it('binds a genuine AMF report to the sender (D08)', async () => {
+    const env = makeEnv();
+    const priv = await amfIdentity(env, 'amfsender1');
+    const message = 'abusive content';
+    const { commitment, opening } = await F.commit(message);
+    await handleAbuseRecord({ frankId: 'm-amf-01', commitment: b64(commitment) }, env, req({}));
+    const sig = await F.amfSign(priv, 'm-amf-01', b64(commitment));
+    const rep = await handleAbuseReport({ frankId: 'm-amf-01', message, opening: b64(opening), amfSig: b64(sig), senderId: 'amfsender1' }, env, req({}));
+    expect(rep.status).toBe(200);
+    const j = await rep.json();
+    expect(j.verified).toBe(true);
+    expect(j.senderBound).toBe(true);
+    const record = JSON.parse(await env.KV.get('report:m-amf-01'));
+    expect(record.amf).toBe(true);
+    expect(record.sender).toBe('amfsender1');
+  });
+
+  it('an AMF tag signed over a different commitment does not bind (D08)', async () => {
+    const env = makeEnv();
+    const priv = await amfIdentity(env, 'amfsender1');
+    const message = 'abusive content';
+    const { commitment, opening } = await F.commit(message);
+    await handleAbuseRecord({ frankId: 'm-amf-02', commitment: b64(commitment) }, env, req({}));
+    // Tag signs a DIFFERENT frankId/commitment context (e.g. harvested from
+    // another message): content still verifies, attribution must not.
+    const sig = await F.amfSign(priv, 'm-amf-99', b64(commitment));
+    const rep = await handleAbuseReport({ frankId: 'm-amf-02', message, opening: b64(opening), amfSig: b64(sig), senderId: 'amfsender1' }, env, req({}));
+    const j = await rep.json();
+    expect(j.verified).toBe(true);
+    expect(j.senderBound).toBe(false);
+    const record = JSON.parse(await env.KV.get('report:m-amf-02'));
+    expect(record.amf).toBeUndefined();
+    expect(record.sender).toBeUndefined();
+  });
+
+  it('a report naming an unregistered sender stays unbound (D08)', async () => {
+    const env = makeEnv();
+    const message = 'abusive content';
+    const { commitment, opening } = await F.commit(message);
+    await handleAbuseRecord({ frankId: 'm-amf-03', commitment: b64(commitment) }, env, req({}));
+    const rep = await handleAbuseReport({ frankId: 'm-amf-03', message, opening: b64(opening), amfSig: b64(new Uint8Array(64)), senderId: 'amfghost99' }, env, req({}));
+    const j = await rep.json();
+    expect(j.verified).toBe(true);
+    expect(j.senderBound).toBe(false);
+  });
+
+  it('a legacy report without AMF fields has no senderBound verdict (D08)', async () => {
+    const env = makeEnv();
+    const message = 'abusive content';
+    const { commitment, opening } = await F.commit(message);
+    await handleAbuseRecord({ frankId: 'm-amf-04', commitment: b64(commitment) }, env, req({}));
+    const rep = await handleAbuseReport({ frankId: 'm-amf-04', message, opening: b64(opening) }, env, req({}));
+    const j = await rep.json();
+    expect(j.verified).toBe(true);
+    expect('senderBound' in j).toBe(false);
+  });
+
   // Item 46: a silently-dropped commitment makes the message unreportable later, so the
   // sender must see the failure rather than a false ok.
   it('returns 500 STORE_FAILED when the franking commitment KV write fails', async () => {
