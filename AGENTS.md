@@ -112,7 +112,7 @@ _worker.js          — Cloudflare Worker: API endpoints (count drifts — grep 
                       for the live count rather than trust a number here)
   Rate limiting     — Per-IP, per-endpoint, per-minute
   Input validation  — sanitizeString, validateUserId, size limits
-  KV structure      — slots:{userId} (scaffolded, unused — see SECURITY.md), sig:{room}, msg:{}, etc.
+  KV structure      — sig:{room}, prekey:{userId}, inbox:{id} / sealed:{id} mailboxes, etc. (the scaffolded `slots:{userId}` key and the /account/slots endpoint were removed in D29 — see SECURITY.md)
 
 sw.js               — Service Worker: offline cache + push notifications
 ```
@@ -121,11 +121,11 @@ sw.js               — Service Worker: offline cache + push notifications
 
 ```javascript
 // API call — GOOD
-const resp = await postAPIRaw('/account/slots', { userId: _userId });
+const resp = await postAPIRaw('/prekey/fetch', { userId: _userId });
 if (resp.ok) { const data = await resp.json(); ... }
 
 // API call — BAD (don't do this)
-const resp = await fetchT(API + '/account/slots', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId }) });
+const resp = await fetchT(API + '/prekey/fetch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId }) });
 
 // DOM — GOOD
 const el = _DOM.get('msg-input');
@@ -192,7 +192,7 @@ async function handleExample(body, env, request) {
 }
 
 // KV — always use helpers with error handling
-const val = await kvGet(env, `slots:${userId}`);   // returns null on error
+const val = await kvGet(env, `sig:${room}`);   // returns null on error
 const ok = await kvPut(env, key, value, { expirationTtl: 300 }); // returns false on error
 ```
 
