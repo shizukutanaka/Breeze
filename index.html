@@ -3396,7 +3396,7 @@ async function _atRestMigrate(record, passphrase, context = '') {
   return { ...rest, wrapped };
 }
 
-// C9 (D23): message-store encryption at rest — inline mirror of src/crypto/msgstore.js (keep in sync). Bodies are sealed under the 'msgkey' keywrap slot (an ordinary I4 slot: plaintext JWK with app-lock off, wrapped with it on); the in-memory key is _msgStoreKey, loaded by _initMsgStoreKey. AAD binds each ciphertext to its msgId. Divergence from the reference: open failure keeps the sealed record (text stays '') instead of returning null, so a read can never destroy the stored row. Second divergence (R02): a no-key or failed seal falls back to a PLAINTEXT write — that path bumps the D20 diagnostics counters via _msgDiagBump (the reference has no diagnostics channel).
+// C9 (D23): message-store encryption at rest — inline mirror of src/crypto/msgstore.js (keep in sync). Bodies are sealed under the 'msgkey' keywrap slot (an ordinary I4 slot: plaintext JWK with app-lock off, wrapped with it on); the in-memory key is _msgStoreKey, loaded by _initMsgStoreKey. AAD binds each ciphertext to its msgId. Divergences from the reference: open failure keeps the sealed record (text stays '') instead of returning null, so a read can never destroy the stored row; and (R02) a no-key or failed seal falls back to a PLAINTEXT write, bumped into the D20 diagnostics via _msgDiagBump (the reference has no diagnostics channel).
 const _MSG_AAD_DOMAIN = 'breeze-msgstore-v1';
 let _msgStoreKey = null;
 const _msgMigrated = new Set();
@@ -11621,17 +11621,20 @@ async function initMessenger(dbName) {
         let c = await dbGet('contacts', (msg.from || '').slice?.(0, 12) || msg.from);
         let peerPub = c?.pubB64;
         // D25: a distribution may come from a member's linked DEVICE (unknown as a
-        // contact) — accept it only when the named account root is a known contact
-        // AND the device pub is in that root's SIGNED device registry; the session
-        // peer is then the device's own pub, the key filed under its sender id.
+        // contact) — accept only when the named root is a known contact AND the
+        // device pub is in that root's SIGNED registry; the peer is the device pub.
         if (!c && msg.fromPub && typeof msg.acctRoot === 'string') {
           const rootC = await dbGet('contacts', msg.acctRoot.slice(0, 12));
           if (rootC?.pubB64 === msg.acctRoot && await _deviceAttributionOk(msg.acctRoot, msg.fromPub)) { c = rootC; peerPub = msg.fromPub; }
+          // S02: the root may be MY OWN account — my identity is never a contact, so
+          // the lookup above cannot resolve it, and my secondary's distributions were
+          // dropped here (its group messages then undecryptable on this device).
+          // Resolve through my own signed registry instead (the _myOtherDevices path).
+          else if (msg.acctRoot === _myAcctRoot && (await _myOtherDevices()).includes(msg.fromPub)) { c = { pubB64: msg.acctRoot }; peerPub = msg.fromPub; }
         }
-        // Only accept sender keys from known contacts. An unknown sender who is not in
-        // the contacts DB would otherwise use msg.fromPub (attacker-controlled) as the
-        // decryption peer key, letting them inject arbitrary sender keys into identity
-        // store (DB pollution; defense-in-depth since group messages also require membership).
+        // Only accept sender keys from known contacts (or my own account, S02): an
+        // unknown sender would otherwise use msg.fromPub (attacker-controlled) as the
+        // decryption peer key and inject arbitrary sender keys (DB pollution).
         if (!c) return;
         const decrypted = await decryptFrom(msg.payload, peerPub);
         if (!decrypted) return;
@@ -11735,10 +11738,9 @@ async function initMessenger(dbName) {
         if ((msg.from !== member.id && msg.from !== member.pubB64) ||
             (msg.fromPub && msg.fromPub !== member.pubB64)) return;
       } else if (msg.fromPub && typeof msg.acctRoot === 'string') {
-        // D25: the sender is a roster member's linked DEVICE — attribute it
-        // through the root's SIGNED device registry (the 1:1 path's trust
-        // anchor). Sender-key state stays keyed by the device's own id; display
-        // name and msgId stay the member's. Unverifiable claims drop as before.
+        // D25: the sender is a roster member's linked DEVICE — attribute it through
+        // the root's SIGNED registry (the 1:1 trust anchor). Sender-key state stays
+        // keyed by the device's own id; display name and msgId stay the member's.
         const rootMember = (group.members || []).find(m => m.pubB64 === msg.acctRoot);
         if (rootMember && await _deviceAttributionOk(msg.acctRoot, msg.fromPub)) { member = rootMember; peerPub = msg.fromPub; }
       }

@@ -40,3 +40,17 @@ describe('S01 — group file/voice sends refuse honestly instead of pretending t
     expect(html).toContain("if (activeContact.isGroup && _isSecondaryDevice) { showToast(t('groupPrimaryOnly'), 'error'); return; }");
   });
 });
+
+describe('S02 — the primary can read its own secondary\'s group sends', () => {
+  it('the sender-key receiver resolves an own-account root through the own registry', () => {
+    expect(html).toContain("else if (msg.acctRoot === _myAcctRoot && (await _myOtherDevices()).includes(msg.fromPub)) { c = { pubB64: msg.acctRoot }; peerPub = msg.fromPub; }");
+  });
+
+  it('the own-account branch sits inside the sender-key handler, after the contact path', () => {
+    const handler = html.slice(html.indexOf('if (msg.isSenderKey)'), html.indexOf('if (msg.isProfile)'));
+    expect(handler.indexOf('rootC?.pubB64 === msg.acctRoot')).toBeGreaterThan(-1);
+    expect(handler.indexOf('msg.acctRoot === _myAcctRoot')).toBeGreaterThan(handler.indexOf('rootC?.pubB64 === msg.acctRoot'));
+    // The known-contact guard still gates everything below.
+    expect(handler).toContain('if (!c) return;');
+  });
+});
