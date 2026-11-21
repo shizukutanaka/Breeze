@@ -43,6 +43,20 @@ const DEFAULTS = {
 
 import { arr, u8, concatBytes, ctEqual } from './bytes.js';
 
+// D02: padded-length buckets. Padding to a multiple of MSG_PAD_BOUNDARY (256)
+// leaked the plaintext length to within 255 bytes; the padded size now snaps
+// to the smallest bucket that fits — boundary / ×4 / ×16 (256 / 1024 / 4096 at
+// the default boundary) — and to a multiple of the top bucket above it, so an
+// observer learns only which bucket a message fell in. The frame stays
+// length-prefixed, so receivers (including pre-bucket clients) unpad any of
+// these sizes unchanged.
+export function padBucketSize(n, boundary = 256) {
+  const top = boundary * 16;
+  if (n <= boundary) return boundary;
+  if (n <= boundary * 4) return boundary * 4;
+  return Math.ceil(n / top) * top;
+}
+
 export function createRatchet(opts = {}) {
   const cfg = { ...DEFAULTS, ...opts };
   const subtle = cfg.subtle || globalThis.crypto.subtle;
@@ -124,7 +138,7 @@ export function createRatchet(opts = {}) {
         if (deflated.length < raw.length * 0.9) { raw = deflated; compressed = true; }
       } catch (e) { dbg(e, 'compress'); }
     }
-    const padded = new Uint8Array(Math.ceil((raw.length + 3) / cfg.MSG_PAD_BOUNDARY) * cfg.MSG_PAD_BOUNDARY);
+    const padded = new Uint8Array(padBucketSize(raw.length + 3, cfg.MSG_PAD_BOUNDARY));
     padded[0] = compressed ? 0x01 : 0x00;
     new DataView(padded.buffer).setUint16(1, raw.length);
     padded.set(raw, 3);
@@ -535,10 +549,10 @@ export function createRatchet(opts = {}) {
     const chainKey = new Uint8Array(sk.chainKey);
     const msgKeyBits = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-msg-v5', 32);
     const nextChainRaw = await hkdf(chainKey, new Uint8Array(32), 'breeze-group-chain-v5', 32);
-    // Pad plaintext to a fixed boundary (hides message length)
+    // Pad plaintext into a size bucket (hides message length, D02)
     const boundary = cfg.MSG_PAD_BOUNDARY || 256;
     const raw = new TextEncoder().encode(plaintext);
-    const padded = new Uint8Array(Math.ceil((raw.length + 2) / boundary) * boundary);
+    const padded = new Uint8Array(padBucketSize(raw.length + 2, boundary));
     new DataView(padded.buffer).setUint16(0, raw.length);
     padded.set(raw, 2);
     const iv = getRandomValues(new Uint8Array(cfg.IV_BYTES || 12));

@@ -1534,7 +1534,7 @@ const _I = {
     locDenied: "Location permission denied",
     locUnavailable: "Could not get your location",
     locPeerNoCap: "This contact's app does not support location sharing yet",
-    locGroupNoCap: "Location sharing needs every group member on a supporting version",
+    locGroupNoCap: "Location sharing needs every group member on a supporting version", groupLegacyNoFs: '⚠️ Forward secrecy is off for this group: a member is on an older version without group v5. Ask them to update to enable it.',
     locLiveAlready: "You are already sharing live location here",
     locStop: "Stop",
     voiceCall: 'Voice call',
@@ -1552,7 +1552,7 @@ const _I = {
     ktChecking: 'Checking server key-transparency log…',
     ktOk: '✅ Automatically verified against the server key-transparency log',
     ktRolled: '⚠️ This contact\'s key changed since your last check — verify the safety number above carefully',
-    ktTampered: '🚨 The server\'s key log looks tampered — do not trust this safety number',
+    ktTampered: '🚨 The server\'s key log looks tampered — do not trust this safety number', ktBlockLabel: 'Block new sessions when the key-transparency log looks tampered',
     ktUnavailable: 'Key-transparency check unavailable (offline or no server)',
     delivered: 'Delivered',
     deposited: 'Deposited at the relay — not yet received by them. Undelivered mail is kept for at most 7 days',
@@ -4232,7 +4232,7 @@ async function initMessenger(dbName) {
   }
   // Worker sanitizeString twin — challenge digests bind its OUTPUT, so the
   // client must apply the identical truncation + control-char strip before hashing.
-  const sanStr = (v, n) => (typeof v === 'string' ? v.slice(0, n).replace(/[\x00-\x08\x0a-\x0c\x0d\x0e-\x1f]/g, '') : '');
+  const sanStr = (v, n) => (typeof v === 'string' ? v.slice(0, n).replace(/[\x00-\x08\x0a-\x0c\x0d\x0e-\x1f\u202a-\u202e\u2066-\u2069]/g, '') : '');
   // prekey/upload: breeze-prekey-upload:{userId}:{ts}:{digest over every mutable field}.
   async function prekeyUploadAuth(userId, identityKey, b) {
     return authFields(async ts => `breeze-prekey-upload:${userId}:${ts}:${await digestHex16(JSON.stringify([
@@ -5069,6 +5069,7 @@ async function initMessenger(dbName) {
     relayPin: '',            // stage-2 step 4: TOFU pin of the serving relay's Ed25519 identity key ('' = none pinned)
     relays: [],              // stage-2 step 5: ADDED home relays [{ url, pin, label }] — the serving origin is implicit (always first in homeRelays(), its pin is relayPin above), so the default [] resolves to exactly one relay
     fanout: 2,               // stage-2 step 6: how many of a contact's home relays receive a copy of each message (1–3; 2 = one redundant copy)
+    ktBlockOnTamper: false,  // D05: opt-in — refuse to start a session when the KT chain verdict is tampered or the pinned chain head vanished (default: warn only)
   };
   let _settings = { ..._defaultSettings };
 
@@ -5682,6 +5683,7 @@ async function initMessenger(dbName) {
     return out;
   }
   // Full inline mirror of ktlog.js's auditBundle (I11): hash-chain tamper check (verifyChain, entries carry c = SHA-256(prevC ‖ h) — a break means a hostile relay rewrote the append-only log) + rollover detection (checkRollover). Verdict precedence: tampered > rolled > new > ok.
+  const _ktHeadC = (log) => { let head = null, ts = -1; for (const e of (Array.isArray(log) ? log : [])) if (e && typeof e.c === 'string' && Number.isFinite(e.ts) && e.ts >= ts) { ts = e.ts; head = e.c; } return head; }; // D05: chain-head pin — the head c commits to the whole log prefix, so a replaced or rolled-back log loses it
   async function _auditKeyHistory(storedIkB64, keyHistory) {
     const sha256b64 = async (bytes) => btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))));
     const b64d = (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
@@ -5861,13 +5863,13 @@ async function initMessenger(dbName) {
       if (fetched === false) return false;
       if (!fetched) return null;
       const { bundle, spkPubPeer } = fetched;
-      // I11 KT audit: independent MITM signal — warns, doesn't block (no hard-abort flow yet).
       if (!supplied) {
         const ktPeerId = peerPubB64.slice(0, 12);
-        const audit = await _auditKeyHistory(await dbGet('identity', 'ktIk:' + ktPeerId), bundle.keyHistory);
-        if (audit.verdict === 'tampered') showKeyChangeWarning(ktPeerId, peerPubB64, 'X3DH key-transparency chain tampered — possible hostile relay.').catch(e => _dbg(e, 'kt-warn'));
+        const ktPin = await dbGet('identity', 'ktPin:' + ktPeerId); const audit = await _auditKeyHistory(await dbGet('identity', 'ktIk:' + ktPeerId), bundle.keyHistory); const pinBroken = !!(ktPin && ktPin.c && !(bundle.keyHistory || []).some(e => e && e.c === ktPin.c)); // D05: pinned chain head gone = the relay replaced or rolled back the log, even if the new one is internally consistent
+        if (audit.verdict === 'tampered' || pinBroken) { showKeyChangeWarning(ktPeerId, peerPubB64, 'X3DH key-transparency chain tampered — possible hostile relay.').catch(e => _dbg(e, 'kt-warn')); if (_settings.ktBlockOnTamper) return false; }
         else if (audit.verdict === 'rolled') showKeyChangeWarning(ktPeerId, peerPubB64, 'X3DH key-history rollover.').catch(e => _dbg(e, 'kt-warn'));
-        if (audit.verdict !== 'tampered') await dbPut('identity', bundle.identityKey, 'ktIk:' + ktPeerId); // don't pin a key vouched for by a broken chain (no silent TOFU baseline from a tampered log)
+        if (audit.verdict !== 'tampered' && !pinBroken) await dbPut('identity', bundle.identityKey, 'ktIk:' + ktPeerId); // don't pin a key vouched for by a broken chain (no silent TOFU baseline from a tampered log)
+        if (audit.verdict !== 'tampered' && !pinBroken) { const hc = _ktHeadC(bundle.keyHistory); if (hc) await dbPut('identity', { c: hc }, 'ktPin:' + ktPeerId); }
       }
       const ikPubPeer = Uint8Array.from(atob(bundle.identityKey), c => c.charCodeAt(0));
       const opkPubPeer = bundle.oneTimePreKey ? Uint8Array.from(atob(bundle.oneTimePreKey), c => c.charCodeAt(0)) : null;
@@ -6056,8 +6058,8 @@ async function initMessenger(dbName) {
       // This matches src/crypto/ratchet.js (frameEncrypt defaults compressMin: Infinity).
       const raw = new TextEncoder().encode(text);
       const compressed = false;
-      // Pad plaintext to 256-byte boundary (traffic analysis protection)
-      const padded = new Uint8Array(Math.ceil((raw.length + 3) / CONFIG.MSG_PAD_BOUNDARY) * CONFIG.MSG_PAD_BOUNDARY);
+      // Pad plaintext into a size bucket (traffic analysis protection, D02)
+      const padded = new Uint8Array(_padBucketSize(raw.length + 3, CONFIG.MSG_PAD_BOUNDARY));
       // Header: [flags:1][length:2][data...]
       padded[0] = compressed ? 0x01 : 0x00; // flags: bit0 = compressed
       new DataView(padded.buffer).setUint16(1, raw.length);
@@ -6739,20 +6741,19 @@ async function initMessenger(dbName) {
   // and fall back to the legacy envelope for un-upgraded peers — delivery over privacy,
   // and the /msg fallback + offline retry queue stay legacy (documented in SECURITY.md).
   const SEAL_INFO = 'breeze-seal-v2';
-  // Metadata padding frame (mirror of src/crypto/seal.js): the message body has
-  // always been bucket-padded to 256-byte boundaries, but the sealed metadata was
-  // encrypted as raw JSON, so se.ct's length revealed the exact metadata byte
-  // length (+16 GCM tag) to the relay — display-name length and replyTo-preview
-  // presence/length were inferable (step-3 padding audit, Low). The frame lives
-  // inside the plaintext, so key/AAD derivation is unchanged and pre-padding
-  // blobs still open: legacy plaintext is raw JSON and always starts with '{'
-  // (0x7B); the frame starts with marker 0x01 instead.
-  //   framed = [0x01][len:2 BE][JSON bytes][0x00 …], total a multiple of 256.
+  // Metadata padding frame (mirror of src/crypto/seal.js): without it, se.ct's
+  // length revealed the exact metadata byte length (+16 GCM tag) to the relay —
+  // display-name length and replyTo-preview presence were inferable (step-3
+  // padding audit, Low). The frame lives inside the plaintext, so key/AAD
+  // derivation is unchanged and pre-padding blobs still open: legacy plaintext
+  // is raw JSON starting with '{' (0x7B); the frame starts with marker 0x01.
+  //   framed = [0x01][len:2 BE][JSON bytes][0x00 …], total snapped to a size bucket.
   const SEAL_PAD_MARKER = 0x01;
-  const SEAL_PAD_BOUNDARY = 256;
+  function _padBucketSize(n, boundary = 256) { const top = boundary * 16; // D02 buckets: boundary / ×4 / ×16, then multiples of the top bucket
+    return n <= boundary ? boundary : n <= boundary * 4 ? boundary * 4 : Math.ceil(n / top) * top; }
   function padSealMeta(jsonBytes) {
     if (jsonBytes.length > 0xffff) return jsonBytes; // too long to length-prefix: seal legacy-shaped
-    const total = Math.ceil((jsonBytes.length + 3) / SEAL_PAD_BOUNDARY) * SEAL_PAD_BOUNDARY;
+    const total = _padBucketSize(jsonBytes.length + 3);
     const framed = new Uint8Array(total);
     framed[0] = SEAL_PAD_MARKER;
     new DataView(framed.buffer).setUint16(1, jsonBytes.length);
@@ -7491,7 +7492,7 @@ async function initMessenger(dbName) {
       sk.counter++;
       await dbPut('identity', sk, 'gsk:' + groupId);
       const raw = new TextEncoder().encode(text);
-      const padded = new Uint8Array(Math.ceil((raw.length + 2) / CONFIG.MSG_PAD_BOUNDARY) * CONFIG.MSG_PAD_BOUNDARY);
+      const padded = new Uint8Array(_padBucketSize(raw.length + 2, CONFIG.MSG_PAD_BOUNDARY));
       new DataView(padded.buffer).setUint16(0, raw.length);
       padded.set(raw, 2);
       const iv = crypto.getRandomValues(new Uint8Array(CONFIG.IV_BYTES));
@@ -13591,9 +13592,8 @@ async function initMessenger(dbName) {
   }
 
   // v3: SAFETY NUMBER (fingerprint verification)
-  // I11: user-triggered KT audit (independent of X3DH_V5_ENABLED) — fetches the server's
-  // append-only key log and runs the same _auditKeyHistory the v5 handshake uses. Only pins
-  // contact.pubB64 as the new baseline on ok/new: pinning on 'rolled' would launder an unconfirmed key change into a trusted baseline.
+  // I11: user-triggered KT audit (independent of X3DH_V5_ENABLED) — same _auditKeyHistory as the
+  // v5 handshake, plus the D05 chain-head pin check; key baseline pinned only on ok/new (never on 'rolled').
   async function _auditKeyTransparency(contact) {
     if (contact.offlineVerified) return null;
     if (!API) return null;
@@ -13602,8 +13602,8 @@ async function initMessenger(dbName) {
       if (!resp.ok) return null;
       const { log } = await resp.json();
       const stored = (await dbGet('identity', 'ktIk:' + contact.id)) ?? contact.pubB64;
-      const audit = await _auditKeyHistory(stored, log);
-      if (audit.verdict === 'ok' || audit.verdict === 'new') await dbPut('identity', contact.pubB64, 'ktIk:' + contact.id);
+      const audit = await _auditKeyHistory(stored, log); const ktPin = await dbGet('identity', 'ktPin:' + contact.id); if (ktPin && ktPin.c && !(log || []).some(e => e && e.c === ktPin.c)) audit.verdict = 'tampered'; // D05: pinned chain head vanished — log replaced or rolled back
+      if (audit.verdict === 'ok' || audit.verdict === 'new') { await dbPut('identity', contact.pubB64, 'ktIk:' + contact.id); const hc = _ktHeadC(log); if (hc) await dbPut('identity', { c: hc }, 'ktPin:' + contact.id); }
       return audit;
     } catch(e) { _dbg(e, 'kt-audit'); return null; }
   }
@@ -15357,7 +15357,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         members.map(m => {
           const isOn = peers[m.pubB64]?.connected || _presenceCache[m.id];
           return (isOn ? '🟢' : '⚫') + ' ' + esc(m.name || m.id) + (m.id === myId ? ' ' + t('cmdMemberYou') : '');
-        }).join('<br>'));
+        }).join('<br>') + (CONFIG.GROUP_RATCHET_V5 && !_computeGroupV5(activeContact) ? '<br><span class="i-t3-10">' + t('groupLegacyNoFs') + '</span>' : '')); // D30: a legacy member holds the whole group on v3 (no FS) — say so, and what fixes it
       box.appendChild(d); box.scrollTop = box.scrollHeight;
     }
 
@@ -15408,7 +15408,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         <label class="i-cur"><input type="checkbox" data-setting="hide-rr" ${_privacyHideReadReceipts ? 'checked' : ''}> ${t('hideReadReceipts')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="rr-delay" ${_settings.readReceiptDelay ? 'checked' : ''}> ${t('rrDelayLabel')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="hide-typing" ${_privacyHideTyping ? 'checked' : ''}> ${t('hideTyping')}</label><br>
-        <label class="i-cur"><input type="checkbox" data-setting="relay-only" ${_settings.relayOnly ? 'checked' : ''}> ${t('relayOnly')}</label><br>
+        <label class="i-cur"><input type="checkbox" data-setting="relay-only" ${_settings.relayOnly ? 'checked' : ''}> ${t('relayOnly')}</label><br><label class="i-cur"><input type="checkbox" data-setting="kt-block" ${_settings.ktBlockOnTamper ? 'checked' : ''}> ${t('ktBlockLabel')}</label><br>
         <br><b class="i-g">${t('settingsSound')}</b><br>
         <label class="i-cur"><input type="checkbox" data-setting="notif-sound" ${_notifSoundEnabled ? 'checked' : ''}> ${t('notifSound')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="send-sound" ${_sendSoundEnabled ? 'checked' : ''}> ${t('sendSound')}</label><br>
@@ -15481,7 +15481,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         if (s === 'focus-strict') { _settings.focusStrict = cb.checked; saveSettings(); _updateFocusBanner(); return; }
         if (s === 'hide-rr') { localStorage.setItem('brz-hide-rr', cb.checked ? '1' : '0'); _privacyHideReadReceipts = cb.checked; window._privacyHideReadReceipts = cb.checked; }
         else if (s === 'hide-typing') { localStorage.setItem('brz-hide-typing', cb.checked ? '1' : '0'); _privacyHideTyping = cb.checked; window._privacyHideTyping = cb.checked; }
-        else if (s === 'relay-only') { localStorage.setItem('brz-relay-only', cb.checked ? '1' : '0'); _settings.relayOnly = cb.checked; }
+        else if (s === 'relay-only') { localStorage.setItem('brz-relay-only', cb.checked ? '1' : '0'); _settings.relayOnly = cb.checked; } else if (s === 'kt-block') { _settings.ktBlockOnTamper = cb.checked; saveSettings(); }
         else if (s === 'notif-sound') { localStorage.setItem('brz-notif-sound', cb.checked ? '1' : '0'); }
         else if (s === 'send-sound') { localStorage.setItem('brz-send-sound', cb.checked ? '1' : '0'); }
         else if (s === 'notif-perm') { if (cb.checked) Notification?.requestPermission().then(p => { if (p !== 'granted') cb.checked = false; }).catch(() => { cb.checked = false; }); }

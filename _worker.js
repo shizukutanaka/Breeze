@@ -3,9 +3,6 @@
  * 41 API endpoints. Cloudflare Pages Functions.
  *
  * KV schema:
- *   slots:{userId}     → LEGACY billing record — nothing writes it (billing was
- *                          removed in v3.6.1); read + deleted only by account erasure
- *   cust:{customerId}  → LEGACY reverse lookup — same: delete-only, never written
  *   sig:{room}         → signal data (TTL)
  *   msg:{userId}:{ts}  → relay message (TTL)
  *   alias:{name}       → { pub, name, setAt } (TTL 90d — dead handles recycle)
@@ -113,7 +110,10 @@ function usageQuotaConfig(env) {
 
 function sanitizeString(val, maxLen = MAX_STRING_LEN) {
   if (typeof val !== 'string') return '';
-  return val.slice(0, maxLen).replace(/[\x00-\x08\x0a-\x0c\x0d\x0e-\x1f]/g, '');
+  // Strip C0 controls (except \t/\n kept by callers' own handling) and the bidi
+  // controls U+202A–U+202E / U+2066–U+2069: a display name carrying RLO renders
+  // reversed, enabling Trojan-Source-style name spoofing (D27).
+  return val.slice(0, maxLen).replace(/[\x00-\x08\x0a-\x0c\x0d\x0e-\x1f\u202a-\u202e\u2066-\u2069]/g, '');
 }
 
 function validateUserId(id) {
@@ -3437,20 +3437,6 @@ async function handleAccountDelete(body, env, request) {
     }
   }
 
-  // Read the billing record BEFORE deleting it so the reverse cust:{customerId} → userId
-  // mapping can be erased too. Otherwise that mapping (Stripe payment identity linked to
-  // this userId) survives account deletion — residual user-linked data the rest of this
-  // handler erases — and a later subscription webhook lacking metadata.userId could still
-  // resolve the deleted account through it. (Subscriptions created via Breeze also carry
-  // userId in their metadata, so the user should still cancel via the portal before
-  // deleting; this only removes the relay-side linkage.)
-  let customerId = null;
-  const slotsRaw = await kvGet(env, `slots:${userId}`);
-  if (slotsRaw) {
-    const s = safeJsonParse(slotsRaw);
-    if (s && typeof s.customerId === 'string' && s.customerId) customerId = s.customerId;
-  }
-
   const dels = [
     // Both mailboxes, all six keys: plain queue + its high-water mark
     // (else a re-registered id inherits a stale delivery cursor anchor)
@@ -3472,9 +3458,7 @@ async function handleAccountDelete(body, env, request) {
     // live in the user's DO, the KV copy, or both (never drained) —
     // erasePresence covers all three (see PRESENCE STORE).
     ...erasePresence(env, userId),
-    kvDel(env, `slots:${userId}`),
   ];
-  if (customerId) dels.push(kvDel(env, `cust:${customerId}`));
   await Promise.all(dels);
   // Evict the in-memory presence cache too, or a same-isolate presence check
   // would keep answering "online" from stale cached data after erasure.
@@ -3570,8 +3554,7 @@ async function handleAccountDelete(body, env, request) {
     }
   }
 
-  const erased = ['inbox', 'sealed', 'prekeys', 'ktlog', 'push', 'backup', 'presence', 'slots', 'devices'];
-  if (customerId) erased.push('cust');
+  const erased = ['inbox', 'sealed', 'prekeys', 'ktlog', 'push', 'backup', 'presence', 'devices'];
   return json({
     ok: true,
     erased,

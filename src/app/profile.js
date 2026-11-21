@@ -26,13 +26,21 @@ export function sanitizeProfileImg(img) {
   return img;
 }
 
+// Bidi controls (U+202A–U+202E, U+2066–U+2069) make a rendered name reverse
+// or reorder — Trojan-Source-style spoofing (D27). The Worker's sanitizeString
+// strips the same set, but profiles ride E2EE and never pass the Worker, so
+// the strip has to happen here too.
+export function stripBidi(s) {
+  return typeof s === 'string' ? s.replace(/[\u202a-\u202e\u2066-\u2069]/g, '') : '';
+}
+
 export function sanitizeProfile(p) {
   if (!p || typeof p !== 'object') return null;
-  const name = typeof p.name === 'string' ? p.name.trim().slice(0, PROFILE_NAME_MAX) : '';
+  const name = typeof p.name === 'string' ? stripBidi(p.name.trim()).slice(0, PROFILE_NAME_MAX) : '';
   if (!name) return null;
   return {
     name,
-    emoji: typeof p.emoji === 'string' ? p.emoji.slice(0, PROFILE_EMOJI_MAX) : '',
+    emoji: typeof p.emoji === 'string' ? stripBidi(p.emoji).slice(0, PROFILE_EMOJI_MAX) : '',
     img: sanitizeProfileImg(p.img),
   };
 }

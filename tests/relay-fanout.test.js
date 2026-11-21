@@ -88,6 +88,11 @@ const envWith = (id, extra = {}) => makeEnv({
 });
 
 // ─── Extraction harness (the step-4/5 pattern) ───────────────────
+// D05: the genuine inline _ktHeadC (a one-line const in index.html), extracted
+// verbatim so the world below runs the shipped pin logic, not a copy.
+const _ktHeadCInline = new Function(
+  INDEX.split('\n').find(l => l.includes('const _ktHeadC =')) + '\nreturn _ktHeadC;')();
+
 function sliceBetween(startMarker, endMarker) {
   const start = INDEX.indexOf(startMarker);
   const end = INDEX.indexOf(endMarker);
@@ -170,7 +175,7 @@ function buildWorld({ fetchT, settings = {}, origin = ORIGIN, api = API, stubs =
     'renderContacts', '_signalAuth', '_auditKeyHistory', '_auditKeyTransparency',
     'showKeyChangeWarning', 'genRatchetKey', '_x3dhInitiator', 'ecdhBits', 'hkdf', 'myKeys',
     '_hasEd25519', '_signingKey', '_signingPubB64', 'updateMsgStatus', 'registerBackgroundSync',
-    '_updateOutboxBadge', 'setTimeout', '_peerSealV2', '_saveRetryQueue',
+    '_updateOutboxBadge', 'setTimeout', '_peerSealV2', '_saveRetryQueue', '_ktHeadC',
     `let _retryTimer = null;
      const _retryQueue = [];
      const _isOffline = false;
@@ -221,6 +226,7 @@ function buildWorld({ fetchT, settings = {}, origin = ORIGIN, api = API, stubs =
     (fn) => { capturedTimer = fn; return 1; },
     async () => false,
     () => { calls.retrySaves++; },
+    _ktHeadCInline,
   );
   return {
     ...world, gate: gate._relayPinGate, postAPIRaw: gate.postAPIRaw, settings, calls, stores,
