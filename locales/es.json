@@ -1,6 +1,7 @@
 {
  "opTitle": "Emparejamiento sin conexión",
  "secTurnUsage": "Proporción TURN del tráfico de llamadas este mes",
+ "secDiagPersist": "Fallos de persistencia (dead-letter / restauración de reintentos)",
  "secSealedSenderNote": "Remitente sellado: el relé no puede ver quién envió un mensaje, pero eso no es desvinculabilidad. Los tiempos y los metadatos aún pueden vincular la actividad.",
  "toastTurnQuota": "El presupuesto TURN mensual de este relé se agotó: por ahora las llamadas solo intentan conexión directa. Añade tu propio TURN en Ajustes para recuperar las llamadas con relé.",
  "opScope": "Intercambia estas invitaciones en ambos sentidos y en persona. Caducan en 30 minutos. Compara la huella en ambos dispositivos y confirma solo si coincide. Mantén la aplicación abierta hasta terminar /rendezvous; recargar cancela el proceso pendiente. Sin búsqueda de alias ni verificación por relé.",

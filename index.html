@@ -2083,6 +2083,7 @@ const _I = {
     secLblReplay: 'Replay Protection',
     secInLruCache: 'in LRU cache',
     secSkippedKeys: 'Skipped Keys: ✓ Out-of-order message recovery (max 100 keys/session)',
+    secDiagPersist: 'Persistence failures (dead-letter / retry-restore)',
     secLblMsgPadding: 'Message Padding',
     secByteBoundary: '-byte boundary',
     secLblSecureCtx: 'Secure Context',
@@ -2540,6 +2541,9 @@ if (localStorage.getItem('brz-theme') === 'auto' || !localStorage.getItem('brz-t
 const _DBG = (() => { try { return localStorage.getItem('brz-debug') === '1'; } catch { return false; } })();
 const _appStartTime = Date.now();
 function _dbg(e, ctx) { if (_DBG) console.warn('[Breeze]', ctx || '', e?.message || e); }
+// D20: on-device diagnostics counters (localStorage 'brz-diag') for failures
+// that must never be silent even with debug off — surfaced in /security.
+function _diagBump(field) { try { const d = JSON.parse(localStorage.getItem('brz-diag') || '{}'); d[field] = (d[field] || 0) + 1; localStorage.setItem('brz-diag', JSON.stringify(d)); } catch { /* counters are best-effort by design */ } }
 
 // v3.5: GDPR/CCPA data consent banner
 (() => {
@@ -6349,7 +6353,7 @@ async function initMessenger(dbName) {
       // Clean up both sources
       await dbPut('settings', [], 'retryQueue');
       localStorage.removeItem('brz-retry-queue');
-    } catch {}
+    } catch(e) { _dbg(e, 'retry-restore'); _diagBump('retryRestoreFail'); }
   }
 
   // ---- Multi-device (Phase 1) ----
@@ -7328,7 +7332,7 @@ async function initMessenger(dbName) {
           const dlq = (await dbGet('settings', 'deadLetterQueue')) || [];
           dlq.push({ to: item.to, payload: item.payload, failedAt: Date.now() });
           await dbPut('settings', dlq.slice(-100), 'deadLetterQueue'); // Keep last 100
-        } catch {}
+        } catch(e) { _dbg(e, 'dead-letter-store'); _diagBump('deadLetterStoreFail'); }
         showToast(t('toastDeliveryFailed'), 'error');
         _updateOutboxBadge(); _saveRetryQueue(); return;
       }

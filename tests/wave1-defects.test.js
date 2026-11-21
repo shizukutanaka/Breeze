@@ -31,6 +31,25 @@ describe('D19 — image-send previews carry alt text', () => {
   });
 });
 
+describe('D20 — persistence failures are recorded, not swallowed', () => {
+  it('the dead-letter store failure logs and bumps the diagnostics counter', () => {
+    expect(html).toContain("catch(e) { _dbg(e, 'dead-letter-store'); _diagBump('deadLetterStoreFail'); }");
+  });
+
+  it('the retry-queue restore failure logs and bumps the diagnostics counter', () => {
+    expect(html).toContain("catch(e) { _dbg(e, 'retry-restore'); _diagBump('retryRestoreFail'); }");
+  });
+
+  it('/security surfaces the counters via secDiagPersist (all locales)', () => {
+    expect(infoPanels).toContain("D.t('secDiagPersist')");
+    expect(html).toContain('secDiagPersist:');
+    for (const loc of LOCALES) {
+      const json = JSON.parse(readFileSync(new URL(`../locales/${loc}.json`, import.meta.url), 'utf8'));
+      expect(typeof json.secDiagPersist, loc).toBe('string');
+    }
+  });
+});
+
 describe('D18 — reply-preview close control is a real button', () => {
   it('no span carries the close-reply action anymore', () => {
     expect(html).not.toMatch(/<span[^>]*data-action="close-reply"/);
