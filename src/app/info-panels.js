@@ -24,6 +24,10 @@ export function createInfoPanels(D) {
       // "dead-letter / retry-restore" counts, zero when never hit.
       const _diagPersist = (() => { try { return JSON.parse(localStorage.getItem('brz-diag') || '{}'); } catch { return {}; } })();
       const _diagPersistLine = (_diagPersist.deadLetterStoreFail || 0) + ' / ' + (_diagPersist.retryRestoreFail || 0);
+      // R02: message-store (D23) degradation — msgkey init failures and the
+      // plaintext body saves they cause. Non-zero here means C9 at-rest
+      // sealing is NOT fully in effect on this device.
+      const _diagMsgStoreLine = (_diagPersist.msgkeyInitFail || 0) + ' / ' + (_diagPersist.msgPlaintextSave || 0);
       const _directRateLine = !_p2pSnap ? '—'
         : _p2pSnap.directRate === null ? D.t('secDirectNoData')
         : Math.round(_p2pSnap.directRate * 100) + '% (' + _p2pSnap.directAck + '/' + _p2pSnap.directTotal + ')';
@@ -90,6 +94,7 @@ export function createInfoPanels(D) {
         D.t('secLblReplay') + ': ' + D.replayCacheSize() + '/' + D.config().REPLAY_CACHE_SIZE + ' ' + D.t('secInLruCache'),
         D.t('secSkippedKeys'),
         D.t('secDiagPersist') + ': ' + _diagPersistLine,
+        D.t('secDiagMsgStore') + ': ' + _diagMsgStoreLine,
         D.t('cmdCryptoCompression'),
         'Protocol: v4 (pad-only; legacy compressed msgs still read) / v3 (pad-only) / v2 (legacy)',
         D.t('secLblMsgPadding') + ': ' + D.config().MSG_PAD_BOUNDARY + D.t('secByteBoundary'),

@@ -2087,6 +2087,7 @@ const _I = {
     secInLruCache: 'in LRU cache',
     secSkippedKeys: 'Skipped Keys: ✓ Out-of-order message recovery (max 100 keys/session)',
     secDiagPersist: 'Persistence failures (dead-letter / retry-restore)',
+    secDiagMsgStore: 'Message-store key failures / plaintext saves',
     secLblMsgPadding: 'Message Padding',
     secByteBoundary: '-byte boundary',
     secLblSecureCtx: 'Secure Context',
@@ -2544,8 +2545,7 @@ if (localStorage.getItem('brz-theme') === 'auto' || !localStorage.getItem('brz-t
 const _DBG = (() => { try { return localStorage.getItem('brz-debug') === '1'; } catch { return false; } })();
 const _appStartTime = Date.now();
 function _dbg(e, ctx) { if (_DBG) console.warn('[Breeze]', ctx || '', e?.message || e); }
-// D20: on-device diagnostics counters (localStorage 'brz-diag') for failures
-// that must never be silent even with debug off — surfaced in /security.
+// D20: on-device diagnostics counters (localStorage 'brz-diag') for failures that must never be silent even with debug off — surfaced in /security.
 function _diagBump(field) { try { const d = JSON.parse(localStorage.getItem('brz-diag') || '{}'); d[field] = (d[field] || 0) + 1; localStorage.setItem('brz-diag', JSON.stringify(d)); } catch { /* counters are best-effort by design */ } }
 
 // v3.5: GDPR/CCPA data consent banner
@@ -3393,19 +3393,22 @@ async function _atRestMigrate(record, passphrase, context = '') {
   return { ...rest, wrapped };
 }
 
-// C9 (D23): message-store encryption at rest — inline mirror of src/crypto/msgstore.js (keep in sync). Bodies are sealed under the 'msgkey' keywrap slot (an ordinary I4 slot: plaintext JWK with app-lock off, wrapped with it on); the in-memory key is _msgStoreKey, loaded by _initMsgStoreKey. AAD binds each ciphertext to its msgId. Divergence from the reference: open failure keeps the sealed record (text stays '') instead of returning null, so a read can never destroy the stored row.
+// C9 (D23): message-store encryption at rest — inline mirror of src/crypto/msgstore.js (keep in sync). Bodies are sealed under the 'msgkey' keywrap slot (an ordinary I4 slot: plaintext JWK with app-lock off, wrapped with it on); the in-memory key is _msgStoreKey, loaded by _initMsgStoreKey. AAD binds each ciphertext to its msgId. Divergence from the reference: open failure keeps the sealed record (text stays '') instead of returning null, so a read can never destroy the stored row. Second divergence (R02): a no-key or failed seal falls back to a PLAINTEXT write — that path bumps the D20 diagnostics counters via _msgDiagBump (the reference has no diagnostics channel).
 const _MSG_AAD_DOMAIN = 'breeze-msgstore-v1';
 let _msgStoreKey = null;
 const _msgMigrated = new Set();
+// R02: _diagBump is declared outside this mirrored block and test harnesses slice the block standalone — resolve it defensively, never throw.
+function _msgDiagBump(field) { if (typeof _diagBump === 'function') _diagBump(field); }
 function _msgAad(msgId) { return new TextEncoder().encode(_MSG_AAD_DOMAIN + ':' + msgId); }
 function _msgIsSealed(rec) { return !!(rec && rec.enc && rec.enc.v === 1 && typeof rec.enc.iv === 'string' && typeof rec.enc.ct === 'string'); }
 async function _msgSealRecord(rec) {
-  if (!_msgStoreKey || !rec || _msgIsSealed(rec) || !rec.msgId || typeof rec.text !== 'string' || rec.text === '') return rec;
+  if (!rec || _msgIsSealed(rec) || !rec.msgId || typeof rec.text !== 'string' || rec.text === '') return rec;
+  if (!_msgStoreKey) { _msgDiagBump('msgPlaintextSave'); return rec; } // R02: no key loaded — body persists as plaintext; counted, never silent
   try {
     const iv = crypto.getRandomValues(new Uint8Array(CONFIG.IV_BYTES));
     const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: _msgAad(rec.msgId) }, _msgStoreKey, new TextEncoder().encode(rec.text));
     return { ...rec, text: '', enc: { v: 1, iv: _atRestB64(iv), ct: _atRestB64(new Uint8Array(ct)) } };
-  } catch(e) { _dbg(e, 'msg-seal'); return rec; }
+  } catch(e) { _dbg(e, 'msg-seal'); _msgDiagBump('msgPlaintextSave'); return rec; }
 }
 async function _msgOpenRecord(rec) {
   if (!rec || !_msgIsSealed(rec) || !_msgStoreKey) return rec;
@@ -3415,8 +3418,7 @@ async function _msgOpenRecord(rec) {
     return { ...rest, text: new TextDecoder().decode(new Uint8Array(pt)) };
   } catch(e) { _dbg(e, 'msg-open'); return rec; }
 }
-// Open a batch from a read helper; legacy plaintext records (the STORED form
-// had no enc — an opened record is not legacy) go to `migrate` for re-sealing.
+// Open a batch from a read helper; legacy plaintext records (the STORED form had no enc — an opened record is not legacy) go to `migrate` for re-sealing.
 async function _msgOpenAll(records, migrate) {
   const list = records || [];
   const out = await Promise.all(list.map(r => _msgOpenRecord(r)));
@@ -4965,11 +4967,9 @@ async function initMessenger(dbName) {
       return true;
     } catch(e) { _dbg(e, 'keywrap-change'); return false; }
   }
-  // C9 (D23): load or create the message-store key. The 'msgkey' slot is
-  // ordinary keywrap material: a wrapped record is unwrapped with the boot
-  // passphrase loadIdentity already collected (the _unlockPqSeed pattern);
-  // a missing record is created through the keywrap-aware dbPut, so it is
-  // sealed at once when app-lock is on. Failure NEVER blocks sign-in.
+  // C9 (D23): load or create the message-store key ('msgkey' slot = ordinary keywrap material,
+  // unwrapped with the boot passphrase — the _unlockPqSeed pattern; a missing record is created via
+  // the keywrap-aware dbPut). Failure NEVER blocks sign-in; since R02 every failure exit bumps msgkeyInitFail.
   async function _initMsgStoreKey(passphrase, prompt = false) {
     if (_msgStoreKey) return true;
     try {
@@ -4979,19 +4979,19 @@ async function initMessenger(dbName) {
         if (_atRestIsWrapped(rec)) {
           let pass = passphrase;
           if (pass == null && prompt) pass = await showPrompt(t('keyWrapUnlockPrompt'), '', { type: 'password', autocomplete: 'current-password' });
-          if (pass == null) { _dbg(null, 'msgkey: wrapped, no passphrase — store stays sealed this boot'); return false; }
+          if (pass == null) { _dbg(null, 'msgkey: wrapped, no passphrase — no key this boot: stored rows stay sealed, NEW writes fall back to plaintext (R02: counted in /security diagnostics)'); _diagBump('msgkeyInitFail'); return false; }
           jwk = await _atRestUnwrap(rec.wrapped || rec, pass, 'msgkey');
         } else jwk = rec.priv;
-        if (!jwk || jwk.kty !== 'oct' || !jwk.k) { _dbg(null, 'msgkey: unusable record'); return false; }
+        if (!jwk || jwk.kty !== 'oct' || !jwk.k) { _dbg(null, 'msgkey: unusable record'); _diagBump('msgkeyInitFail'); return false; }
         _msgStoreKey = await crypto.subtle.importKey('jwk', jwk, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
         return true;
       }
       const fresh = await crypto.subtle.generateKey({ name: 'AES-GCM', length: CONFIG.AES_KEY_BITS }, true, ['encrypt', 'decrypt']);
       const jwk = await crypto.subtle.exportKey('jwk', fresh);
-      if (!await dbPut('identity', { priv: jwk }, 'msgkey')) { _dbg(null, 'msgkey: persist failed'); return false; }
+      if (!await dbPut('identity', { priv: jwk }, 'msgkey')) { _dbg(null, 'msgkey: persist failed'); _diagBump('msgkeyInitFail'); return false; }
       _msgStoreKey = fresh;
       return true;
-    } catch(e) { _dbg(e, 'msgkey-init'); return false; }
+    } catch(e) { _dbg(e, 'msgkey-init'); _diagBump('msgkeyInitFail'); return false; }
   }
   const _msgMigrate = (rec) => { dbPut('messages', rec).catch(e => _dbg(e, 'msg-migrate')); };
   async function dbGetAll(store) {
