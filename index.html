@@ -5532,12 +5532,12 @@ async function initMessenger(dbName) {
   // Wire MUST stay arr() to match the reference. _cmOk = verify-if-present, constant-time.
   async function _keyCommit(mk) { return arr(await hkdf(u8(mk), new Uint8Array(32), 'breeze-commit', 32)); }
   async function _cmOk(p, mk) { return !p.cm || await timingSafeEqual(u8(p.cm).join(','), (await _keyCommit(mk)).join(',')); }
-  // I17 franking + D08 AMF (CRYPTO-SPEC §6a). Cf = HMAC(Kf, plaintext), Kf DERIVED from msgKey
-  // (HKDF 'breeze-frank'): no key transport — only the opaque frankId rides the wire, old clients
-  // ignore it, and a report revealing Kf cannot expose msgKey. The relay records Cf by frankId
-  // and verifies reports by recomputing the HMAC, never seeing un-reported content. AMF: the
-  // sender's Ed25519 key signs the commitment inside the payload (p.fs); recipients drop the
-  // report affordance when it fails, and the relay re-verifies it, binding the sender.
+  // I17 message franking. Cf = HMAC(Kf, plaintext), Kf DERIVED from msgKey (HKDF 'breeze-frank'):
+  // no key transport — only the opaque frankId rides the wire, old clients ignore it, and a
+  // report revealing Kf cannot expose msgKey. The relay records Cf by frankId and verifies
+  // reports by recomputing the HMAC, never seeing un-reported content. D08 AMF: the sender's
+  // Ed25519 key signs the commitment inside the payload (p.fs); recipients drop the report
+  // affordance when it fails, and the relay re-verifies it, binding the sender (CRYPTO-SPEC §6a).
   async function _frankKey(mk) { return hkdf(u8(mk), new Uint8Array(32), 'breeze-frank', 32); }
   async function _frankCommit(kf, text) {
     const k = await crypto.subtle.importKey('raw', kf, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
