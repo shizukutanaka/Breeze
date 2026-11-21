@@ -2125,6 +2125,7 @@ const _I = {
     secPledgeTitle: 'What Breeze never does',
     secPledgeNoAds: 'Ads: none. Tracking: none. Analytics: none.',
     secPledgeE2ee: 'Message content: end-to-end encrypted — the relay only holds sealed envelopes it cannot read',
+    secSealedSenderNote: 'Sealed sender: the relay cannot see who sent a message — but that is not unlinkability. Timing and network metadata can still link activity.',
     secPledgeRetention: 'Relay storage is temporary: undelivered envelopes ≤ 7 days, aliases ≤ 90 days, all auto-expiring. Relay backup storage: OFF unless its operator enables it',
     toastNotifSound: "Notification sound: {0}",
     toastNoteSavedFor: "Note saved for {0}",
@@ -5058,7 +5059,7 @@ async function initMessenger(dbName) {
     language: 'auto',        // auto | en | ja
     // "Quiet messenger" settings — the app's job is to reduce the obligation it imposes,
     // not to maximise engagement. All three are local-only; nothing reaches the relay.
-    readReceiptDelay: 0,     // seconds to hold a read receipt (0 = send immediately)
+    readReceiptDelay: 120,   // seconds to hold a read receipt (0 = send immediately). Default ON at the panel's own value (D01): instant receipts leak presence timing to every sender, and the settings checkbox already maps on→120 with ±20% jitter applied at send time. Saved settings are never rewritten — fresh installs only.
     focusUntil: 0,           // epoch ms; while in the future, notifications are suppressed
     focusStrict: false,      // focus mode: true = silence everything, false = let VIPs through
     relayPin: '',            // stage-2 step 4: TOFU pin of the serving relay's Ed25519 identity key ('' = none pinned)

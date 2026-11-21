@@ -50,6 +50,7 @@ export function createInfoPanels(D) {
         '<b>' + D.t('secPledgeTitle') + '</b>',
         D.t('secPledgeNoAds'),
         D.t('secPledgeE2ee'),
+        D.t('secSealedSenderNote'),
         D.t('secPledgeRetention'),
         '',
         '<b>' + D.t('secActiveProtections') + '</b>',
