@@ -34,7 +34,7 @@
 | 通知の確実性 | 前面は WS 起床＋低速ポーリング、背面は Web Push。メールボックスは DO で受信者ごとに直列化 | 段階1計画書 Step 5 |
 | プラットフォーム | Web（PWA、オフライン可）、Electron、Tauri、Android／iOS（Capacitor）。全て版数 3.6.1 で repo 内に実在 | `desktop/`、`tauri/`、`mobile/` の各 package.json |
 | 言語 | 8言語（en＋ja・ko・zh-TW・es・th・id・pt-BR の locales 実在）、RTL レイアウト対応 | `locales/`（7ファイル＋英語） |
-| スパム対策 | PoW（難易度20）を alias 登録・グループ作成・参加に要求。IP／エンドポイント別の頻度制限。通報はメッセージ・フランキング（暗号学的な通報証明、配備済み） | `CONFIG.POW_REQUIRED_ACTIONS`、`CLAUDE.md` deployed 表 |
+| スパム対策 | PoW（難易度20）を alias 登録・変更に要求。グループ作成・参加の防御は署名認証と IP／エンドポイント別の頻度制限。通報はメッセージ・フランキング（暗号学的な通報証明、配備済み） | `CONFIG.POW_DIFFICULTY`、`CLAUDE.md` deployed 表 |
 | プロフィール | 表示名＋**絵文字／文字のアバターのみ（写真なし）** | `chooseAvatar: 'Choose avatar emoji'` |
 | 無いもの | **ステッカー**（検索ヒット0件）、**位置情報共有**（0件）、**画面共有**（0件）、**グループ通話**（0件）、チャンネル／公開コミュニティ、公式アカウント／ボット基盤、決済 | 各キーワードの `index.html` 全文検索 |
 
