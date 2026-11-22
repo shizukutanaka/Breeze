@@ -22,9 +22,10 @@
 // so single-device accounts see byte-identical behaviour.
 //
 // Own-account copies (my primary's group messages on my secondary and
-// vice versa) are flagged selfSync, mirroring the 1:1 fan-out. Group-call
-// control ({gctl}) deliberately does NOT ride this module: group-call.js
-// deposits control signals per root itself, and calls stay primary-only.
+// vice versa) are flagged selfSync, mirroring the 1:1 fan-out. Since
+// wave 12, group-call control ({gctl}) DOES ride depositCopies too —
+// the host wraps it with the gctl flag preserved — so call invites
+// reach linked devices and any device can hold the call seat.
 //
 // Deposit cost: per group message, deposits grow from (members - 1) to
 // the sum of verified devices per member plus my other devices. The

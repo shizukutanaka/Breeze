@@ -36,6 +36,9 @@ function deps(over = {}) {
     distributeSenderKey: async () => {}, encryptGroupMsg: async (g, t) => 'CT:' + t,
     relaySend: async () => {}, iceConfig: () => ({}), intervals: [],
     myId: () => 'me000000000', myPubB64: () => 'MEPUB', myName: () => 'Me',
+    myAccountId: () => 'me000000000', myAccountPub: () => 'MEPUB', acctRoot: () => undefined,
+    devicesFor: async (m) => [m.pubB64], depositControlCopies: async () => {},
+    distributeKeyDevices: async () => {}, distributeOwnKeyDevices: async () => {},
     isBusy: () => false, isSecondary: () => false, ...over,
   };
 }
@@ -80,12 +83,17 @@ describe('control state machine', () => {
     expect(m.state()).toBe('idle');
   });
 
-  it('start refuses groups that are not groups, busy lines and secondary devices', async () => {
+  it('start refuses non-groups and busy lines; since wave 12 a secondary device CAN start', async () => {
     const sent = [];
-    const m = createGroupCallManager(deps({ relaySend: async (...a) => { sent.push(a); }, isSecondary: () => true }));
+    const m = createGroupCallManager(deps({ relaySend: async (...a) => { sent.push(a); }, isSecondary: () => true,
+      myId: () => 'dev00000000', myPubB64: () => 'DEVPUB', acctRoot: () => 'MEPUB' }));
     await m.start(GROUP);
-    expect(sent).toHaveLength(0);
-    expect(m.state()).toBe('idle');
+    expect(sent).toHaveLength(2); // the invite went out from the linked device
+    const env = sent[0][1];
+    expect(env.acctRoot).toBe('MEPUB'); // sent under the account root
+    expect(env.payload).toContain('"seat":1');
+    expect(env.payload).toContain('"dev":"DEVPUB"');
+    expect(env.payload).toContain('"callId":"me000000000:'); // call ids are account-scoped
   });
 
   it('control sends ride the sender-key channel with the gctl flag, one ciphertext per member', async () => {

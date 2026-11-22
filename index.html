@@ -1504,6 +1504,7 @@ const _I = {
     gcallJoin: 'Join the call',
     gcallLeave: 'Leave the call',
     gcallWaiting: 'Waiting for others…',
+    gcallGenGate: 'Group calls from a linked device need everyone in the call on the latest app version',
     profileTitle: 'Your profile',
     profileName: 'Display name',
     profileEmoji: 'Avatar emoji',
@@ -1844,7 +1845,6 @@ const _I = {
     devUnlinkConfirm: 'Remove device {0} from your account?',
     p2pDirect: 'Direct',
     addAccountBtn: 'Add account',
-    groupPrimaryOnly: 'Group messages must be sent from your primary device',
     groupNoVoice: 'Voice messages can\'t be sent in group chats yet',
     groupFileTooLarge: 'That file is too large for a group chat (limit about 50 KB)',
     nrnAria: 'Mark this message as needing no reply',
@@ -10929,6 +10929,7 @@ async function initMessenger(dbName) {
     noteCallSample: (pc, seconds) => _p2pStats?.sampleCall(pc, seconds),
     myId: () => myId, myPubB64: () => myPubB64, myName: () => myName,
     isBusy: () => _callMgr.state() !== 'idle', isSecondary: () => _isSecondaryDevice,
+    myAccountId: () => (_myAcctRoot ? _myAcctRoot.slice(0, 12) : myId), myAccountPub: () => _myAcctRoot || myPubB64, acctRoot: () => (_isSecondaryDevice && _myAcctRoot) ? _myAcctRoot : undefined, devicesFor: _devicesFor, depositControlCopies: (members, ct, fields) => _groupLive?.depositCopies(members, ct, { ...fields, gctl: true }), distributeKeyDevices: (gid, m, force, size) => _groupLive?.distributeKey(gid, m, force, size), distributeOwnKeyDevices: (gid, size) => _groupLive?.distributeOwnKey(gid, size),
   }) || { start() {}, route() {}, state: () => 'idle' };
   const _poolMap = (items, n, fn) => globalThis.__breezeGCall?.poolMap ? globalThis.__breezeGCall.poolMap(items, n, fn) : Promise.all(items.map(fn));
 
@@ -10940,9 +10941,8 @@ async function initMessenger(dbName) {
   _DOM.get('b-msg-video')?.addEventListener('click', () => { if (activeContact) startCall(activeContact, true); });
   _DOM.get('b-msg-sticker')?.addEventListener('click', () => { _toggleStickerPanel().catch(e => _dbg(e, 'sticker-panel')); });
 
-  // Listen for incoming calls via signal poll (piggyback on existing messenger signal poll)
-  // Incoming calls are detected in the signal poll's message handling
-  // We add 'call-offer' detection to the existing connectPeer signal loop
+  // Listen for incoming calls via signal poll (piggyback on the messenger
+  // signal poll): 'call-offer' detection lives in its message handling.
 
   // DISAPPEARING MESSAGES TIMER
   _DOM.get('b-msg-timer')?.addEventListener('click', () => {

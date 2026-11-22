@@ -18,6 +18,30 @@
 // Mesh math caps a call at MAX_PARTICIPANTS (each client holds one
 // connection per other participant; audio keeps that cheap, and the
 // cap keeps it honest on mobile uplinks).
+//
+// D25 wave 12 — linked devices hold seats too (seat-device addressing):
+//   - a participant is an ACCOUNT; the seat is the device of that
+//     account which joined. invite and join payloads carry `dev` (the
+//     seat device's pub) and `seat: 1` (the new-generation marker).
+//     Signals wrap to the seat pub, so a secondary device opens them
+//     with its own ratchet session. A claimed dev is only adopted
+//     after verification against the account root's SIGNED device
+//     registry (host dep devicesFor); anything unverifiable falls
+//     back to the root pub — which is also the pre-wave-12 behaviour.
+//     dev === root pub is exactly the legacy path (primary seat).
+//   - control reaches linked devices through the host's group-live
+//     deposit copies (the same ciphertext, gctl flag preserved), and
+//     a secondary sends control under its account root (acctRoot),
+//     exactly like group messages since wave 6.
+//   - one account, one seat, LAST join wins: if my other device joins
+//     a call I am in, I stand down silently (no leave control — the
+//     account stays seated, on the device last touched). While it
+//     rings here, an own-account join elsewhere stops the ring.
+//   - generation gate: a seat on a LINKED device works only when
+//     every other participant's client is new-generation (seat
+//     marker seen). An old-generation join is refused honestly
+//     (gcallGenGate) instead of producing one-way audio. Primary
+//     seats are not gated: root addressing IS the legacy behaviour.
 // ============================================================================
 
 import { createCallSignal } from './call.js';
@@ -59,8 +83,21 @@ export function createGroupCallManager(D) {
   let _legs = new Map();   // memberId -> { pc, audio, offered }
   let _stream = null, _poll = null, _timer = null, _startedAt = 0, _hadPeer = false;
   let _pending = null;     // { group, callId, roster } while ringing
+  // Wave 12 seat state: memberId -> { dev, gen } from the latest
+  // invite/join (dev is a CLAIM until verified), memberId -> verified
+  // seat pub cache, and the set of MY account's device ids (signal
+  // senders to skip in pair rooms — a sibling device polls the same
+  // rooms during a seat handover).
+  let _seatInfo = new Map(), _seatPubs = new Map(), _myDeviceIds = new Set();
 
-  const roomFor = (memberId) => gcallPairRoom(_group.id, D.myId(), memberId);
+  // Account identity (wave 12): a participant is the account; the seat
+  // is this device. The deps fall back to the device identity when the
+  // host does not provide the account bindings (older hosts/tests).
+  const acctId = () => (D.myAccountId ? D.myAccountId() : D.myId());
+  const acctPub = () => (D.myAccountPub ? D.myAccountPub() : D.myPubB64());
+  const seatIsSecondary = () => D.myPubB64() !== acctPub();
+
+  const roomFor = (memberId) => gcallPairRoom(_group.id, acctId(), memberId);
   const memberOf = (id) => _roster.get(id) || _group?.members?.find(m => m.id === id) || { id, pubB64: null, name: id };
 
   function _showOverlay(mode) {
@@ -102,22 +139,61 @@ export function createGroupCallManager(D) {
     if (st && _state === 'in') st.textContent = t('calling');
   }
 
+  // Seat bookkeeping (wave 12): the latest invite/join from a member
+  // names its seat device (dev) and its generation (seat marker). The
+  // dev stays a claim here; _seatPubOf verifies before any use.
+  function _noteSeat(member, obj) {
+    const dev = typeof obj.dev === 'string' ? obj.dev : null;
+    const prev = _seatInfo.get(member.id);
+    _seatInfo.set(member.id, { dev, gen: !!obj.seat });
+    if (prev && prev.dev !== dev) _seatPubs.delete(member.id);
+  }
+
+  // The pub this member's signals wrap to (wave 12 §4): the claimed
+  // seat dev, but ONLY when it is the member's root pub itself or a
+  // device pub on the root's SIGNED registry (host dep devicesFor,
+  // which falls back to [root] when unverifiable). Anything else —
+  // no claim, unverifiable claim, registry unavailable — wraps to
+  // the root pub, byte-identical to the pre-wave-12 behaviour.
+  async function _seatPubOf(member) {
+    if (!member?.pubB64) return null;
+    if (_seatPubs.has(member.id)) return _seatPubs.get(member.id);
+    const dev = _seatInfo.get(member.id)?.dev;
+    let seat = member.pubB64;
+    if (dev && dev !== member.pubB64 && D.devicesFor) {
+      try {
+        const devs = await D.devicesFor(member);
+        if (Array.isArray(devs) && devs.includes(dev)) seat = dev;
+      } catch(e) { _dbg(e, 'gcall-seat-verify'); }
+    }
+    _seatPubs.set(member.id, seat);
+    return seat;
+  }
+
   // Call control rides the group's sender-key channel (the host passes
   // the primitives in): key distribution awaited, one ciphertext for
   // all members, flagged gctl so receivers route it here instead of
-  // rendering it as chat. Primary device only, like group send.
+  // rendering it as chat. Wave 12: linked devices send too — the
+  // envelope names the account root (acctRoot) like group messages,
+  // sender keys are also distributed to members' verified devices
+  // (host group-live), and the same ciphertext is copied to those
+  // device mailboxes so invites ring on every device of every member.
   async function _sendControl(group, obj) {
-    if (D.isSecondary()) return false;
     try {
-      const members = (group.members || []).filter(m => m.id !== D.myId());
-      for (const m of members) await D.distributeSenderKey(group.id, m.pubB64, false, (group.members || []).length).catch(e => _dbg(e, 'sk-dist'));
+      const members = (group.members || []).filter(m => m.id !== acctId());
+      for (const m of members) {
+        await D.distributeSenderKey(group.id, m.pubB64, false, (group.members || []).length).catch(e => _dbg(e, 'sk-dist'));
+        try { await D.distributeKeyDevices?.(group.id, m, false, (group.members || []).length); } catch(e) { _dbg(e, 'sk-dist-dev'); }
+      }
+      try { await D.distributeOwnKeyDevices?.(group.id, (group.members || []).length); } catch(e) { _dbg(e, 'sk-dist-own'); }
       const ct = await D.encryptGroupMsg(group.id, JSON.stringify(obj));
       if (!ct) return false;
       const ts = Date.now();
       for (const m of members) {
-        try { await D.relaySend(m.id, { to: m.id, from: D.myId(), fromPub: D.myPubB64(), fromName: D.myName(), payload: ct, ts, groupId: group.id, groupName: group.name, isGroupSK: true, gctl: true }, m.pubB64); }
+        try { await D.relaySend(m.id, { to: m.id, from: D.myId(), fromPub: D.myPubB64(), fromName: D.myName(), ...(D.acctRoot?.() ? { acctRoot: D.acctRoot() } : {}), payload: ct, ts, groupId: group.id, groupName: group.name, isGroupSK: true, gctl: true }, m.pubB64); }
         catch(e) { _dbg(e, 'gctl-send'); }
       }
+      try { await D.depositControlCopies?.(members, ct, { ts, groupId: group.id, groupName: group.name }); } catch(e) { _dbg(e, 'gctl-copies'); }
       return true;
     } catch(e) { _dbg(e, 'gctl-send'); return false; }
   }
@@ -136,7 +212,7 @@ export function createGroupCallManager(D) {
     pc.onicecandidate = (e) => {
       if (!e.candidate) return;
       if (e.candidate.type === 'host' && e.candidate.address && !e.candidate.address.includes('.local')) return;
-      _sig.wrap(member.pubB64, e.candidate).then(d => { if (d != null) D.signal(roomFor(member.id), 'gcall-ice', d); }).catch(err => _dbg(err, 'gcall-ice'));
+      _seatPubOf(member).then(seat => seat && _sig.wrap(seat, e.candidate)).then(d => { if (d != null) D.signal(roomFor(member.id), 'gcall-ice', d); }).catch(err => _dbg(err, 'gcall-ice'));
     };
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'connected') { _hadPeer = true; leg.connectedAt = Date.now(); _updateList(); }
@@ -160,26 +236,39 @@ export function createGroupCallManager(D) {
     if (_legs.has(member.id) || !member.pubB64) return;
     try {
       await _sigLearn(member);
+      const seat = await _seatPubOf(member);
+      if (!seat) return;
       const leg = _newLeg(member, true);
       const offer = await leg.pc.createOffer();
       await leg.pc.setLocalDescription(offer);
-      const data = await _sig.wrap(member.pubB64, { sdp: offer, callId: _callId });
+      const data = await _sig.wrap(seat, { sdp: offer, callId: _callId });
       if (data != null) D.signal(roomFor(member.id), 'gcall-offer', data);
     } catch(e) { _dbg(e, 'gcall-offer'); }
   }
   async function _answerTo(member, sdp) {
     try {
       await _sigLearn(member);
+      const seat = await _seatPubOf(member);
+      if (!seat) return;
       const leg = _newLeg(member, false);
       await leg.pc.setRemoteDescription(new RTCSessionDescription(sdp));
       const answer = await leg.pc.createAnswer();
       await leg.pc.setLocalDescription(answer);
-      const data = await _sig.wrap(member.pubB64, answer);
+      const data = await _sig.wrap(seat, answer);
       if (data != null) D.signal(roomFor(member.id), 'gcall-answer', data);
     } catch(e) { _dbg(e, 'gcall-answer'); }
   }
+  // Learn the seat's advertised caps (its own /prekey advertisement,
+  // keyed by the seat device id) so the wrap can encrypt to it. For a
+  // primary seat this is exactly the pre-wave-12 learn (root id/pub).
   async function _sigLearn(member) {
-    try { const byId = await D.fetchCaps([member.id]); _sig.noteCaps(member.pubB64, byId?.[member.id] || []); }
+    try {
+      const seat = await _seatPubOf(member);
+      if (!seat) return;
+      const seatId = seat.slice(0, 12);
+      const byId = await D.fetchCaps([seatId]);
+      _sig.noteCaps(seat, byId?.[seatId] || []);
+    }
     catch(e) { _dbg(e, 'gcall-caps'); }
   }
 
@@ -187,31 +276,40 @@ export function createGroupCallManager(D) {
     _poll = setInterval(async () => {
       if (_state !== 'in') return;
       for (const member of [..._roster.values()]) {
-        if (member.id === D.myId() || !member.pubB64) continue;
+        if (member.id === acctId() || !member.pubB64) continue;
         try {
           const resp = await D.signalAwait(roomFor(member.id), 'poll');
           if (!resp.ok) continue;
           const data = await resp.json();
           for (const s of (data.messages || [])) {
-            if (s.sender === D.myId()) continue;
+            if (_myDeviceIds.has(s.sender)) continue; // my own devices' posts (a sibling polls the same rooms)
             if (s.type === 'gcall-offer') {
-              const obj = await _sig.unwrap(member.pubB64, s.data);
+              const obj = await _sig.unwrap(await _seatPubOf(member), s.data);
               if (!obj || obj.callId !== _callId || !obj.sdp) continue;
               if (!_roster.has(member.id)) { _roster.set(member.id, member); _updateList(); }
               if (_roster.size > GCALL_MAX_PARTICIPANTS) continue;
               const existing = _legs.get(member.id);
               if (existing?.offered) {
-                if (resolveGlare(D.myId(), member.id) === 'keep-mine') continue;
+                if (resolveGlare(acctId(), member.id) === 'keep-mine') continue;
                 _closeLeg(member.id);
-              } else if (existing) continue;
+              } else if (existing) {
+                // Wave 12: a repeated offer against a leg I already
+                // answered (signalingState 'stable') means my answer
+                // was lost — most likely eaten by my other device
+                // polling this same room during a seat handover.
+                // Re-answer on a fresh leg instead of wedging the
+                // pair until someone rejoins.
+                if (existing.pc.signalingState !== 'stable') continue;
+                _closeLeg(member.id);
+              }
               await _answerTo(member, obj.sdp);
             } else if (s.type === 'gcall-answer') {
               const leg = _legs.get(member.id);
-              const ans = leg && await _sig.unwrap(member.pubB64, s.data);
+              const ans = leg && await _sig.unwrap(await _seatPubOf(member), s.data);
               if (ans && typeof ans === 'object' && leg.pc.signalingState === 'have-local-offer') await leg.pc.setRemoteDescription(new RTCSessionDescription(ans));
             } else if (s.type === 'gcall-ice') {
               const leg = _legs.get(member.id);
-              const cand = leg && await _sig.unwrap(member.pubB64, s.data);
+              const cand = leg && await _sig.unwrap(await _seatPubOf(member), s.data);
               if (cand && typeof cand === 'object') await leg.pc.addIceCandidate(cand).catch(e => _dbg(e, 'gcall-ICE'));
             } else if (s.type === 'gcall-end') {
               _closeLeg(member.id);
@@ -226,8 +324,18 @@ export function createGroupCallManager(D) {
   async function _enter(group, callId, rosterIds) {
     _group = group; _callId = callId; _state = 'in'; _hadPeer = false;
     _roster = new Map();
-    _roster.set(D.myId(), { id: D.myId(), pubB64: D.myPubB64(), name: D.myName() });
-    for (const id of rosterIds) if (id !== D.myId()) _roster.set(id, memberOf(id));
+    _roster.set(acctId(), { id: acctId(), pubB64: acctPub(), name: D.myName() });
+    for (const id of rosterIds) if (id !== acctId()) _roster.set(id, memberOf(id));
+    // The signal senders this account posts under (every verified
+    // device id) — pair-room polls must never consume a sibling's
+    // signals as if they were the peer's.
+    _myDeviceIds = new Set([D.myId(), acctId()]);
+    if (D.devicesFor) {
+      try {
+        const devs = await D.devicesFor({ id: acctId(), pubB64: acctPub() });
+        if (Array.isArray(devs)) for (const p of devs) _myDeviceIds.add(p.slice(0, 12));
+      } catch(e) { _dbg(e, 'gcall-mydevs'); }
+    }
     try { await _media(); } catch(e) { _dbg(e, 'gcall-media'); showToast(t('micDenied'), 'error'); _teardown(); return; }
     _showOverlay('in');
     _startedAt = Date.now();
@@ -237,7 +345,28 @@ export function createGroupCallManager(D) {
     }, MS.SEC);
     D.intervals.push(_timer);
     _startPoll();
-    for (const id of planOffers([..._roster.keys()], D.myId())) await _offerTo(memberOf(id));
+    for (const id of planOffers([..._roster.keys()], acctId())) await _offerTo(memberOf(id));
+    // Wave 12 (§3.4 mitigation): pair-room polls are destructive
+    // reads, and during a seat handover my own other device can eat
+    // an answer meant for me. A few seconds after entering, re-send
+    // the offer ONCE to any leg still waiting for its answer.
+    const enteredCallId = callId;
+    setTimeout(async () => {
+      if (_state !== 'in' || _callId !== enteredCallId) return;
+      for (const [memberId, leg] of [..._legs.entries()]) {
+        if (!leg.offered || leg.resent || leg.pc.signalingState !== 'have-local-offer') continue;
+        leg.resent = true;
+        try {
+          const member = memberOf(memberId);
+          const seat = await _seatPubOf(member);
+          if (!seat) continue;
+          const offer = await leg.pc.createOffer();
+          await leg.pc.setLocalDescription(offer);
+          const data = await _sig.wrap(seat, { sdp: offer, callId: _callId });
+          if (data != null) D.signal(roomFor(memberId), 'gcall-offer', data);
+        } catch(e) { _dbg(e, 'gcall-reoffer'); }
+      }
+    }, 3 * MS.SEC);
     // Nobody came: do not poll forever.
     setTimeout(() => { if (_state === 'in' && !_hadPeer) endCall(true); }, 5 * MS.MIN);
   }
@@ -248,31 +377,45 @@ export function createGroupCallManager(D) {
     for (const id of [..._legs.keys()]) _closeLeg(id);
     if (_stream) { for (const tr of _stream.getTracks()) tr.stop(); _stream = null; }
     _state = 'idle'; _group = null; _callId = null; _roster = new Map(); _pending = null;
+    _seatInfo = new Map(); _seatPubs = new Map(); _myDeviceIds = new Set();
     _hideOverlay();
   }
 
   async function start(group) {
     if (_state !== 'idle' || !group?.isGroup || D.isBusy()) return;
-    if (D.isSecondary()) { showToast(t('groupPrimaryOnly'), 'error'); return; }
-    const callId = D.myId() + ':' + Date.now().toString(36);
-    const ok = await _sendControl(group, { gctl: 'invite', callId });
+    const callId = acctId() + ':' + Date.now().toString(36);
+    const ok = await _sendControl(group, { gctl: 'invite', callId, seat: 1, dev: D.myPubB64() });
     if (!ok) { showToast(t('toastSendFail'), 'error'); return; }
-    await _enter(group, callId, [D.myId()]);
+    await _enter(group, callId, [acctId()]);
   }
 
   function endCall(notify) {
     if (_state !== 'in') { _teardown(); return; }
     const group = _group, callId = _callId;
     if (notify && group) _sendControl(group, { gctl: 'leave', callId }).catch(e => _dbg(e, 'gcall-leave'));
-    for (const member of _roster.values()) if (member.id !== D.myId()) D.signal(roomFor(member.id), 'gcall-end');
+    for (const member of _roster.values()) if (member.id !== acctId()) D.signal(roomFor(member.id), 'gcall-end');
     _teardown();
   }
 
   // Inbound control from the host app (sender-key group channel).
   function route(group, member, obj) {
-    if (!obj || member.id === D.myId()) return;
+    if (!obj) return;
+    if (member.id === acctId()) {
+      // Control from MY OWN account (the host attributes my other
+      // devices' sends to my roster entry). My own echo (same device
+      // pub) is ignored, and my account never rings me. A join from
+      // my other device takes the seat (wave 12 last-wins): stand
+      // down WITHOUT sending leave — the account stays in the call.
+      if (obj.dev && obj.dev === D.myPubB64()) return;
+      if (obj.gctl === 'join' || obj.gctl === 'leave') {
+        if (_state === 'in' && obj.callId === _callId) _teardown();
+        else if (_state === 'ringing' && _pending?.callId === obj.callId) { _pending = null; _state = 'idle'; _hideOverlay(); }
+      }
+      return;
+    }
     if (obj.gctl === 'invite') {
       if (_state !== 'idle' || D.isBusy()) return;
+      _noteSeat(member, obj);
       _state = 'ringing';
       _pending = { group, callId: obj.callId, roster: [member.id] };
       _group = group;
@@ -280,9 +423,20 @@ export function createGroupCallManager(D) {
       // Someone who never answers should not ring forever.
       setTimeout(() => { if (_state === 'ringing' && _pending?.callId === obj.callId) { _pending = null; _state = 'idle'; _hideOverlay(); } }, CONFIG.CALL_TIMEOUT_MS);
     } else if (obj.gctl === 'join') {
+      const prevDev = _seatInfo.get(member.id)?.dev;
+      _noteSeat(member, obj);
       if (_state === 'ringing' && _pending?.callId === obj.callId) {
         if (!_pending.roster.includes(member.id)) _pending.roster.push(member.id);
       } else if (_state === 'in' && obj.callId === _callId) {
+        // Generation gate (wave 12): my seat is a linked device and
+        // this member's client is old-generation (no seat marker) —
+        // its signals would wrap to my account root, which this
+        // device cannot open. Leave honestly instead of sitting in
+        // one-way audio.
+        if (seatIsSecondary() && !obj.seat) { showToast(t('gcallGenGate'), 'error'); endCall(true); return; }
+        // The seat moved to another of their devices mid-call: drop
+        // the leg to the old seat; the new seat's offer re-creates it.
+        if (prevDev !== undefined && prevDev !== (obj.dev || null) && _legs.has(member.id)) _closeLeg(member.id);
         if (!_roster.has(member.id)) {
           if (_roster.size >= GCALL_MAX_PARTICIPANTS) return;
           _roster.set(member.id, member); _updateList();
@@ -304,7 +458,15 @@ export function createGroupCallManager(D) {
   async function joinPending() {
     const p = _pending; _pending = null;
     if (!p) return;
-    const ok = await _sendControl(p.group, { gctl: 'join', callId: p.callId });
+    // Generation gate (wave 12): from a LINKED device, join only when
+    // every known participant is new-generation. An old-generation
+    // participant wraps its signals to my account root, which this
+    // device cannot open — the call would be one-way audio, so refuse
+    // honestly instead of joining broken.
+    if (seatIsSecondary() && p.roster.some(id => !_seatInfo.get(id)?.gen)) {
+      _state = 'idle'; _hideOverlay(); showToast(t('gcallGenGate'), 'error'); return;
+    }
+    const ok = await _sendControl(p.group, { gctl: 'join', callId: p.callId, seat: 1, dev: D.myPubB64() });
     if (!ok) { _state = 'idle'; _hideOverlay(); showToast(t('toastSendFail'), 'error'); return; }
     await _enter(p.group, p.callId, p.roster);
   }
