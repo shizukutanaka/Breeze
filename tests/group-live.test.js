@@ -174,9 +174,12 @@ describe('wave 10 wiring', () => {
   });
 
   it('both group send paths deposit device copies and distribute keys to devices', () => {
-    expect(html.split('_groupLive?.depositCopies(').length - 1).toBe(2);
-    expect(html.split('_groupLive?.distributeKey(').length - 1).toBe(3); // sendMessage, transport, kick rotation
-    expect(html.split('_groupLive?.distributeOwnKey(').length - 1).toBe(2);
+    // Wave 12 added one more call site of each: the group-call deps
+    // (depositControlCopies / distributeKeyDevices / distributeOwnKeyDevices)
+    // wrap these for {gctl} control copies.
+    expect(html.split('_groupLive?.depositCopies(').length - 1).toBe(3);
+    expect(html.split('_groupLive?.distributeKey(').length - 1).toBe(4); // sendMessage, transport, kick rotation, group-call control
+    expect(html.split('_groupLive?.distributeOwnKey(').length - 1).toBe(3);
   });
 
   it('signals and kick notices fan out to devices too', () => {
