@@ -1253,6 +1253,7 @@ window.__breezeInfoPanels = { createInfoPanels, createDataPanels };
 import { CAPS_LOC as _CAPS_LOC_STR, createLocationShare, sanitizeLoc, buildLocationPayload, parseLocationPayload, groupTextForLocation, parseGroupLocationText, osmUrl, locLabel, liveRecordId, LIVE_INTERVAL_MS, LIVE_DURATIONS_MIN } from './src/app/location.js';
 window.__breezeLocation = { sanitizeLoc, buildLocationPayload, parseLocationPayload, groupTextForLocation, parseGroupLocationText, osmUrl, locLabel, liveRecordId, LIVE_INTERVAL_MS, LIVE_DURATIONS_MIN };
 window.__breezeLocationUI = { createLocationShare };
+import { sanitizeGroupFile, groupTextForFile, parseGroupFileText, sendGroupFile, GROUP_FILE_RAW_MAX, GROUP_FILE_DATA_MAX, GROUP_FILE_TEXT_MAX } from './src/app/group-file.js'; window.__breezeGroupFile = { sanitizeGroupFile, groupTextForFile, parseGroupFileText, sendGroupFile, GROUP_FILE_RAW_MAX, GROUP_FILE_DATA_MAX, GROUP_FILE_TEXT_MAX };
 import { createBackupTools } from './src/app/backup.js';
 window.__breezeBackup = { createBackupTools };
 import { createQRHelper } from './src/app/qr.js';
@@ -1843,7 +1844,8 @@ const _I = {
     p2pDirect: 'Direct',
     addAccountBtn: 'Add account',
     groupPrimaryOnly: 'Group messages must be sent from your primary device',
-    groupNoFileVoice: 'Files and voice messages can\'t be sent in group chats yet',
+    groupNoVoice: 'Voice messages can\'t be sent in group chats yet',
+    groupFileTooLarge: 'That file is too large for a group chat (limit about 50 KB)',
     nrnAria: 'Mark this message as needing no reply',
     nrnBadge: 'no reply needed',
     nrnOn: 'Next message: no reply needed',
@@ -6491,9 +6493,7 @@ async function initMessenger(dbName) {
     try { await sendMessage(); } catch(e) { _dbg(e, 'sticker-fallback'); }
     if (input.value === '') input.value = draft;
   }
-  // Shared group transport (stage 5 step 6): distribute the sender key, encrypt
-  // the document, try direct delivery with acks, then pool the owed relay
-  // deposits. onEncrypted runs after a successful encrypt, before any send.
+  // Shared group transport (stage 5 step 6): distribute the sender key, encrypt, try direct delivery with acks, then pool the owed relay deposits.
   async function _sendGroupTransport(contact, wireText, ts, msgId, onEncrypted) {
     const members = (contact.members || []).filter(m => m.id !== myId);
     for (const m of members) await distributeSenderKey(contact.id, m.pubB64, false, (contact.members || []).length).catch(e => _dbg(e, 'sk-dist'));
@@ -10322,15 +10322,12 @@ async function initMessenger(dbName) {
   async function _sendFile(file) {
     try {  
       if (!activeContact) return;
-      if (activeContact.isGroup && _isSecondaryDevice) { showToast(t('groupPrimaryOnly'), 'error'); return; }
-      // S01: groups have no file transport — the paths below key off the 1:1
-      // session (encryptFor(pubB64)), and a group contact's pubB64 is '', so a
-      // group file "send" rendered and saved locally, then died at encryptFor:
-      // sent in appearance only. Refuse honestly, before anything is drawn or
-      // stored. (Group file transport itself is a separate, larger item.)
-      if (activeContact.isGroup) { showToast(t('groupNoFileVoice'), 'error'); return; }
-      // v3.6: Auto-compress images
-      file = await _compressImage(file);
+      if (activeContact.isGroup) { // D25 wave 9: group files ride the sender-key transport (src/app/group-file.js).
+        const GF = globalThis.__breezeGroupFile; if (!GF) { showToast(t('toastSendFail'), 'error'); return; }
+        await GF.sendGroupFile({ compressImage: _compressImage, bufToB64, correctedNow, dbGet, dbPut, appendMsg, showToast, t, dbg: _dbg, sendGroupTransport: _sendGroupTransport, renderContacts: _renderContactsThrottled, myId: () => myId, myName: () => myName, lastTs: () => _lastSendTs, setLastTs: (v) => { _lastSendTs = v; } }, activeContact, file);
+        return;
+      }
+      file = await _compressImage(file); // v3.6: auto-compress images
       const ts = correctedNow();
       const text = `📎 ${file.name}`;
       const peer = peers[activeContact.pubB64];
@@ -10343,8 +10340,7 @@ async function initMessenger(dbName) {
         }
       }
       const ab = await file.arrayBuffer();
-      // Relay has 256KB limit — large files require P2P connection
-      if (ab.byteLength > 192 * 1024) {
+      if (ab.byteLength > 192 * 1024) { // Relay has a 256KB limit — large files require P2P connection
         showToast(t('toastFileNeedP2P'), 'error');
         return;
       }
@@ -10602,7 +10598,6 @@ async function initMessenger(dbName) {
       if (!activeContact) return;
       haptic.tap();
       if (_mediaRecorder && _mediaRecorder.state === 'recording') {
-        // Stop recording
         _mediaRecorder.stop();
         voiceBtn.textContent = '🎤';
         voiceBtn.classList.remove('voice-recording');
@@ -10611,18 +10606,15 @@ async function initMessenger(dbName) {
         clearInterval(_recTimer); _recTimer = null;
         return;
       }
-      // S01: no voice transport in groups (same encryptFor('') dead end as
-      // files) — refuse BEFORE recording, not after a full take is recorded.
-      if (activeContact.isGroup) { showToast(t('groupNoFileVoice'), 'error'); return; }
-      // Start recording
+      // Voice still has no group transport — refuse BEFORE recording, not after a full take is recorded.
+      if (activeContact.isGroup) { showToast(t('groupNoVoice'), 'error'); return; }
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         _audioChunks = [];
         _mediaRecorder = new MediaRecorder(stream, { mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm' });
         _mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) _audioChunks.push(e.data); };
 
-        // v3.6: Real-time audio waveform via AnalyserNode
-        let _audioCtx = null, _analyser = null, _waveRaf = null;
+        let _audioCtx = null, _analyser = null, _waveRaf = null; // v3.6: real-time audio waveform via AnalyserNode
         try {
           _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
           const source = _audioCtx.createMediaStreamSource(stream);
@@ -10646,9 +10638,8 @@ async function initMessenger(dbName) {
             const b64 = reader.result.split(',')[1];
             const filePayload = JSON.stringify({ name: file.name, type: file.type, size: file.size, data: b64 });
             try {
-              // S01 backstop: the chat may have been switched to a group while
-              // recording — refuse honestly instead of dying silently at encryptFor('').
-              if (activeContact?.isGroup) { showToast(t('groupNoFileVoice'), 'error'); return; }
+              // Backstop: the chat may have been switched to a group while recording — refuse honestly.
+              if (activeContact?.isGroup) { showToast(t('groupNoVoice'), 'error'); return; }
               const encrypted = await encryptFor(filePayload, activeContact.pubB64);
               if (!encrypted) { _dbg(null, 'encrypt failed'); return; }
               const ts = correctedNow();
@@ -11797,13 +11788,12 @@ async function initMessenger(dbName) {
         text = await decryptGroupMsg(msg.groupId, (msg.from || '').slice(0, 12), msg.payload);
       }
       if (!text) {
-        // Fallback: legacy per-member encryption, using the local member key
-        // (the attributed device's own pub when the sender is a linked device).
+        // Fallback: legacy per-member encryption, using the local member key.
         text = await decryptFrom(msg.payload, peerPub);
       }
       if (!text) return;
-      // Cap group message text — relay enforces 256 KB but the P2P group path has no server check.
-      if (text.length > 65536) return;
+      // Cap group message text — relay enforces 256 KB but the P2P group path has no server check; a {gfile} wire gets the group-file cap (GROUP_FILE_TEXT_MAX in src/app/group-file.js) and is re-sanitized below.
+      if (text.length > (text.startsWith('{"gfile":') ? 69312 : 65536)) return;
       const msgId = member.id + ':' + msg.ts;
       if (_replayCache.has(msgId)) return; // Fast in-memory dedup
       _replayCache.add(msgId); // Speculative mark before first await — blocks concurrent-path duplicates
@@ -11836,6 +11826,16 @@ async function initMessenger(dbName) {
         if (activeContact?.id !== msg.groupId) { group.unread = (group.unread || 0) + 1; if (_shouldAlert(group, label)) playNotif(); }
         await dbPut('contacts', group);
         if (activeContact?.id === msg.groupId) { smeta._animate = true; appendMsg(label, false, msg.ts, null, null, smeta); }
+        _renderContactsThrottled();
+        return;
+      }
+      const gf = globalThis.__breezeGroupFile?.parseGroupFileText(text); if (gf) { // D25 wave 9: group file — stored/rendered as a file, never as text.
+        const fileData = JSON.stringify(gf), label = '📎 ' + gf.name;
+        await dbPut('messages', { msgId, contactId: msg.groupId, text: label, mine: false, ts: msg.ts, fileData, ...meta }); if (ackOut) ackOut.stored = true;
+        group.lastMsg = label.slice(0, 30); group.lastMsgSender = senderName; group.lastMsgAt = msg.ts;
+        if (activeContact?.id !== msg.groupId) { group.unread = (group.unread || 0) + 1; if (_shouldAlert(group, label)) playNotif(); }
+        await dbPut('contacts', group);
+        if (activeContact?.id === msg.groupId) { meta._animate = true; appendMsg(label, false, msg.ts, null, fileData, meta); }
         _renderContactsThrottled();
         return;
       }

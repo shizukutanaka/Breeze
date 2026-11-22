@@ -70,9 +70,9 @@ describe('D25 — secondary devices send to groups via per-device sender keys + 
     expect(html).toContain("const msgId = member.id + ':' + msg.ts;");
   });
 
-  it('group calls and group file sends remain primary-only (separate transports, unchanged)', () => {
+  it('group calls remain primary-only; group file sends joined the sender-key transport in wave 9', () => {
     const groupCall = readFileSync(new URL('../src/app/group-call.js', import.meta.url), 'utf8');
     expect(groupCall).toContain("if (D.isSecondary()) { showToast(t('groupPrimaryOnly'), 'error'); return; }");
-    expect(html).toContain("if (activeContact.isGroup && _isSecondaryDevice) { showToast(t('groupPrimaryOnly'), 'error'); return; }");
+    expect(html).not.toContain("if (activeContact.isGroup && _isSecondaryDevice) { showToast(t('groupPrimaryOnly'), 'error'); return; }");
   });
 });

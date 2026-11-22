@@ -10,34 +10,24 @@ const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const worker = readFileSync(new URL('../_worker.js', import.meta.url), 'utf8');
 const LOCALES = ['es', 'id', 'ja', 'ko', 'pt-BR', 'th', 'zh-TW'];
 
-describe('S01 — group file/voice sends refuse honestly instead of pretending to send', () => {
-  it('_sendFile refuses group chats before anything is rendered or stored', () => {
-    const guard = "if (activeContact.isGroup) { showToast(t('groupNoFileVoice'), 'error'); return; }";
-    expect(html).toContain(guard);
-    const sendFile = html.slice(html.indexOf('async function _sendFile'));
-    expect(sendFile.indexOf(guard)).toBeGreaterThan(-1);
-    expect(sendFile.indexOf(guard)).toBeLessThan(sendFile.indexOf('appendMsg('));
-  });
-
+describe('S01 — group voice sends refuse honestly; group files joined the transport in wave 9', () => {
   it('the voice button refuses group chats before recording starts', () => {
-    expect(html).toContain("if (activeContact.isGroup) { showToast(t('groupNoFileVoice'), 'error'); return; }");
-    expect(html.split("showToast(t('groupNoFileVoice'), 'error')").length - 1).toBe(3);
+    expect(html).toContain("if (activeContact.isGroup) { showToast(t('groupNoVoice'), 'error'); return; }");
+    expect(html.split("showToast(t('groupNoVoice'), 'error')").length - 1).toBe(2);
   });
 
   it('the voice onstop path backstops a mid-recording switch to a group', () => {
-    expect(html).toContain("if (activeContact?.isGroup) { showToast(t('groupNoFileVoice'), 'error'); return; }");
+    expect(html).toContain("if (activeContact?.isGroup) { showToast(t('groupNoVoice'), 'error'); return; }");
   });
 
-  it('the refusal label exists in English and every locale', () => {
-    expect(html).toContain("groupNoFileVoice: 'Files and voice messages can\\'t be sent in group chats yet',");
+  it('the refusal label exists in English and every locale, and the old joint label is gone', () => {
+    expect(html).toContain("groupNoVoice: 'Voice messages can\\'t be sent in group chats yet',");
+    expect(html).not.toContain('groupNoFileVoice');
     for (const loc of LOCALES) {
       const json = readFileSync(new URL(`../locales/${loc}.json`, import.meta.url), 'utf8');
-      expect(json, loc).toContain('"groupNoFileVoice"');
+      expect(json, loc).toContain('"groupNoVoice"');
+      expect(json, loc).not.toContain('"groupNoFileVoice"');
     }
-  });
-
-  it('the secondary-device group refusal is unchanged (still checked first)', () => {
-    expect(html).toContain("if (activeContact.isGroup && _isSecondaryDevice) { showToast(t('groupPrimaryOnly'), 'error'); return; }");
   });
 });
 
