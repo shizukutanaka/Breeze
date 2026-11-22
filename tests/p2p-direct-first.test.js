@@ -120,7 +120,7 @@ function buildSendMessage({ peers = {}, waiter = null, activeContact, auxiliaryP
     'distributeSenderKey', 'encryptGroupMsg', 'encryptFor', 'API', 'postAPIRaw',
     '_signingKey', 'signMessage', '_signingPubB64', '_rateLimiter', 'timingDelay',
     'peers', 'waitForBuffer', 'queueOutbox', 'relaySend', '_fanOut', 'renderContacts',
-    'CONFIG', '_directAck', '_p2pDirectStat', 'updateMsgStatus', '_poolMap',
+    'CONFIG', '_directAck', '_p2pDirectStat', 'updateMsgStatus', '_poolMap', '_groupLive',
     `${sliceBetween('async function sendMessage()', '// File send (v3: binary chunks for P2P, sealed relay fallback)')}
      return sendMessage;`);
   const sendMessage = fn(
@@ -149,6 +149,7 @@ function buildSendMessage({ peers = {}, waiter = null, activeContact, auxiliaryP
     (field) => { calls.stats.push(field); },
     (ts, status) => { calls.status.push({ ts, status }); },
     poolMap,
+    { distributeKey: async () => {}, distributeOwnKey: async () => {}, depositCopies: async () => {} },
   );
   return { sendMessage, calls, input };
 }
@@ -237,7 +238,7 @@ function buildHandleIncoming({ stored = null, decrypt = 'hello text' } = {}) {
     'addContact', 'verifySignature', 'showKeyChangeWarning', 'safeMsgId',
     'activeContact', '_shouldAlert', 'playNotif', 'Notification', 'announceToSR',
     'appendMsg', 'showSmartReplies', '_renderContactsThrottled', 'broadcastToTabs',
-    't', '_dbg', '_myOtherDevices', '_focusActive', '_attribDevCache', 'MS',
+    't', '_dbg', '_myOtherDevices', '_focusActive', '_attribDevCache', 'MS', '_myAcctRoot',
     `${sliceBetween('async function handleIncoming(msg, ackOut) {', '// ===== P2P connection per contact =====')}
      return handleIncoming;`);
   const handleIncoming = fn(
@@ -256,6 +257,7 @@ function buildHandleIncoming({ stored = null, decrypt = 'hello text' } = {}) {
     () => {}, () => {}, () => {}, () => {},
     (k) => k, () => {}, async () => [], () => false, new Map(),
     { SEC: 1000, MIN: 60000 },
+    null,
   );
   return { handleIncoming, puts };
 }

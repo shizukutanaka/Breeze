@@ -1254,6 +1254,7 @@ import { CAPS_LOC as _CAPS_LOC_STR, createLocationShare, sanitizeLoc, buildLocat
 window.__breezeLocation = { sanitizeLoc, buildLocationPayload, parseLocationPayload, groupTextForLocation, parseGroupLocationText, osmUrl, locLabel, liveRecordId, LIVE_INTERVAL_MS, LIVE_DURATIONS_MIN };
 window.__breezeLocationUI = { createLocationShare };
 import { sanitizeGroupFile, groupTextForFile, parseGroupFileText, sendGroupFile, GROUP_FILE_RAW_MAX, GROUP_FILE_DATA_MAX, GROUP_FILE_TEXT_MAX } from './src/app/group-file.js'; window.__breezeGroupFile = { sanitizeGroupFile, groupTextForFile, parseGroupFileText, sendGroupFile, GROUP_FILE_RAW_MAX, GROUP_FILE_DATA_MAX, GROUP_FILE_TEXT_MAX };
+import { planLiveTargets, createGroupLive } from './src/app/group-live.js'; window.__breezeGroupLive = { planLiveTargets, createGroupLive };
 import { createBackupTools } from './src/app/backup.js';
 window.__breezeBackup = { createBackupTools };
 import { createQRHelper } from './src/app/qr.js';
@@ -6496,13 +6497,13 @@ async function initMessenger(dbName) {
   // Shared group transport (stage 5 step 6): distribute the sender key, encrypt, try direct delivery with acks, then pool the owed relay deposits.
   async function _sendGroupTransport(contact, wireText, ts, msgId, onEncrypted) {
     const members = (contact.members || []).filter(m => m.id !== myId);
-    for (const m of members) await distributeSenderKey(contact.id, m.pubB64, false, (contact.members || []).length).catch(e => _dbg(e, 'sk-dist'));
+    for (const m of members) { await distributeSenderKey(contact.id, m.pubB64, false, (contact.members || []).length).catch(e => _dbg(e, 'sk-dist')); await _groupLive?.distributeKey(contact.id, m, false, (contact.members || []).length).catch(e => _dbg(e, 'sk-dist-dev')); }
+    await _groupLive?.distributeOwnKey(contact.id, (contact.members || []).length).catch(e => _dbg(e, 'sk-dist-own'));
     const groupCiphertext = await encryptGroupMsg(contact.id, wireText);
     if (!groupCiphertext) return false;
     if (onEncrypted) await onEncrypted();
     const waits = new Map();
-    // D25: a secondary skips the direct path — DC connections are keyed by the ROOT
-    // pub and drop group_msg from any other sender. Relay deposits are its path.
+    // D25: a secondary skips the direct path (DCs are keyed by the ROOT pub) — relay deposits are its path.
     for (const m of _isSecondaryDevice ? [] : members) {
       const peer = peers[m.pubB64];
       if (peer?.connected && peer.dc?.readyState === 'open') {
@@ -6523,6 +6524,7 @@ async function initMessenger(dbName) {
     await _poolMap(owed, 8, async (m) => {
       try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCiphertext, ts, groupId: contact.id, groupName: contact.name, isGroupSK: true, ...(_isSecondaryDevice && _myAcctRoot ? { acctRoot: _myAcctRoot } : {}) }, m.pubB64); } catch(e) { _dbg(e); }
     });
+    await _groupLive?.depositCopies(members, groupCiphertext, { ts, groupId: contact.id, groupName: contact.name });
     return true;
   }
 
@@ -7567,12 +7569,8 @@ async function initMessenger(dbName) {
 
   // Distribute sender key to a specific group member (via 1:1 encrypted channel).
   // v5 sends { chainKey, epoch, v:5 } so the receiver can initialize their hash ratchet.
-  // Stage 5 step 3: distribution is tracked per (group, member) — the
-  // pre-step-3 code redistributed to EVERY member before EVERY message
-  // (n extra deposits per message, the dominant fan-out cost at any
-  // group size). Redistribute on first sight, epoch change (kick /
-  // rotation), roster change, or every SK_REDIST_EVERY sends; the
-  // in-memory map means a reload redistributes once — the safe side.
+  // Stage 5 step 3: tracked per (group, member) — redistribute on first sight, epoch change,
+  // roster change, or every SK_REDIST_EVERY sends. Device copies: group-live.js (wave 10).
   const _skDist = new Map();
   async function distributeSenderKey(groupId, memberPubB64, force = false, rosterSize = 0) {
     try {
@@ -7601,6 +7599,7 @@ async function initMessenger(dbName) {
         const encrypted = await encryptFor(JSON.stringify({ type: 'group_kick', groupId, kickedId, epoch }), m.pubB64);
         if (!encrypted) continue;
         await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: Date.now(), isGroupKick: true }, m.pubB64);
+        await _groupLive?.depositEncrypted(m, JSON.stringify({ type: 'group_kick', groupId, kickedId, epoch }), { isGroupKick: true }).catch(e => _dbg(e, 'kick-dev'));
       }
     } catch(_e) { _dbg(_e, 'notifyGroupKick'); }
   }
@@ -7621,6 +7620,7 @@ async function initMessenger(dbName) {
       const targets = (group?.members || []).filter(m => m.id !== myId && m.id !== kickedId && m.pubB64);
       for (const m of targets) {
         distributeSenderKey(groupId, m.pubB64, true).catch(e => _dbg(e, 'kick-notice-sk-redist'));
+        _groupLive?.distributeKey(groupId, m, true, 0).catch(e => _dbg(e, 'kick-notice-sk-dev'));
       }
       if (activeContact?.id === groupId) renderContacts();
     } catch(_e) { _dbg(_e, 'rotateGroupKeyOnKickNotice'); }
@@ -9827,6 +9827,7 @@ async function initMessenger(dbName) {
               const encrypted = await encryptFor(signalPayload, member.pubB64);
               if (encrypted) await relaySend(member.id, { to: member.id, from: myId, fromPub: myPubB64, fromName: myName,
                 payload: encrypted, ts: data.ts || Date.now(), isSignal: true, groupId: activeContact.id }, member.pubB64);
+              await _groupLive?.depositEncrypted(member, signalPayload, { ts: data.ts || Date.now(), isSignal: true, groupId: activeContact.id }).catch(e => _dbg(e, 'group-signal-dev'));
             }
           } catch(e) { _dbg(e, 'group-signal'); }
         }
@@ -10008,11 +10009,8 @@ async function initMessenger(dbName) {
     // it applies to this message only, so it can never silently mute a conversation.
     if (_noReplyNeeded) { meta.nrn = true; _noReplyNeeded = false; _updateNrnButton(); }
     if (activeContact.isGroup) {
-      // D25 (Phase 2): a linked SECONDARY device sends with its OWN per-device
-      // sender key (getGroupSenderKey is per-device storage) and names its
-      // account root (acctRoot) on every deposit; receivers attribute the device
-      // to the roster member via the root's SIGNED device registry — the roster
-      // still holds accounts only, so membership/epoch/kick semantics are unchanged.
+      // D25 (Phase 2): a linked SECONDARY sends with its OWN per-device sender key and names its
+      // account root (acctRoot) on every deposit; receivers attribute via the root's SIGNED registry.
       meta.senderName = myName;
       meta.mentions = [...text.matchAll(/@(\w+)/g)].map(m => m[1]);
     }
@@ -10050,7 +10048,9 @@ async function initMessenger(dbName) {
       // receiver's decryptGroupMsg (no key yet) fell back to decryptFrom and dropped it (E2E-found).
       for (const m of members) {
         await distributeSenderKey(groupId, m.pubB64, false, (activeContact.members || []).length).catch(e => _dbg(e, 'sk-dist'));
+        await _groupLive?.distributeKey(groupId, m, false, (activeContact.members || []).length).catch(e => _dbg(e, 'sk-dist-dev'));
       }
+      await _groupLive?.distributeOwnKey(groupId, (activeContact.members || []).length).catch(e => _dbg(e, 'sk-dist-own'));
       // Encrypt once with Sender Key (O(1))
       const groupCiphertext = await encryptGroupMsg(groupId, text);
         if (!groupCiphertext) { showToast(t('toastSendFail'), 'error'); _isSending = false; return; }
@@ -10098,6 +10098,7 @@ async function initMessenger(dbName) {
             replyTo: meta.replyTo, disappearAt: meta.disappearAt, isGroupSK: true, ...(_isSecondaryDevice && _myAcctRoot ? { acctRoot: _myAcctRoot } : {}) }, m.pubB64);
         } catch(e) { _dbg(e); }
       });
+      await _groupLive?.depositCopies(members, groupCiphertext, { ts, groupId, groupName: activeContact.name, replyTo: meta.replyTo, disappearAt: meta.disappearAt });
     } else {
       // 1:1: v3 Double Ratchet + P2P + Sealed Sender
       const _frank = {};
@@ -11032,6 +11033,7 @@ async function initMessenger(dbName) {
     setNoticeDay: (v) => { try { localStorage.setItem('brz-turn-quota-day', v); } catch {} },
     auditLog, showToast, t, dbg: _dbg,
   });
+  const _groupLive = globalThis.__breezeGroupLive?.createGroupLive({ devicesFor: _devicesFor, myOtherDevices: _myOtherDevices, relaySend, encryptFor, getSenderKey: getGroupSenderKey, poolMap: _poolMap, dbg: _dbg, myId: () => myId, myPubB64: () => myPubB64, myName: () => myName, myRootPub: () => _myAcctRoot || myPubB64, acctRoot: () => (_isSecondaryDevice && _myAcctRoot) ? _myAcctRoot : undefined, groupRatchetV5: () => CONFIG.GROUP_RATCHET_V5, skRedistEvery: () => CONFIG.SK_REDIST_EVERY });
   const _locUI = globalThis.__breezeLocationUI?.createLocationShare({
     dbGet, dbPut, encryptFor, relaySend, showToast, t, esc, safeSetHTML, appendMsg,
     fanOut: (c, wire, ts, extra, sfExtra) => _fanOut(c, wire, ts, extra, sfExtra),
@@ -11607,18 +11609,16 @@ async function initMessenger(dbName) {
       try {
         let c = await dbGet('contacts', (msg.from || '').slice?.(0, 12) || msg.from);
         let peerPub = c?.pubB64;
-        // D25: a distribution may come from a member's linked DEVICE (unknown as a
-        // contact) — accept only when the named root is a known contact AND the
-        // device pub is in that root's SIGNED registry; the peer is the device pub.
+        // D25: a distribution from a member's linked DEVICE is accepted only when the named root is a known contact AND the device pub is in that root's SIGNED registry.
         if (!c && msg.fromPub && typeof msg.acctRoot === 'string') {
           const rootC = await dbGet('contacts', msg.acctRoot.slice(0, 12));
           if (rootC?.pubB64 === msg.acctRoot && await _deviceAttributionOk(msg.acctRoot, msg.fromPub)) { c = rootC; peerPub = msg.fromPub; }
-          // S02: the root may be MY OWN account — my identity is never a contact, so
-          // the lookup above cannot resolve it, and my secondary's distributions were
-          // dropped here (its group messages then undecryptable on this device).
-          // Resolve through my own signed registry instead (the _myOtherDevices path).
+          // S02: the root may be MY OWN account (never a contact) — resolve through my own signed registry (the _myOtherDevices path).
           else if (msg.acctRoot === _myAcctRoot && (await _myOtherDevices()).includes(msg.fromPub)) { c = { pubB64: msg.acctRoot }; peerPub = msg.fromPub; }
         }
+        // Wave 10: a distribution from MY OWN ROOT (primary -> this secondary) names no
+        // acctRoot and the root is not a contact; the ratchet AEAD below authenticates it.
+        if (!c && _myAcctRoot && msg.fromPub === _myAcctRoot) { c = { pubB64: _myAcctRoot }; peerPub = _myAcctRoot; }
         // Only accept sender keys from known contacts (or my own account, S02): an
         // unknown sender would otherwise use msg.fromPub (attacker-controlled) as the
         // decryption peer key and inject arbitrary sender keys (DB pollution).
