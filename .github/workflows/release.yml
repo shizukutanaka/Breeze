@@ -104,17 +104,23 @@ jobs:
         run: |
           LABEL="${{ steps.version.outputs.label }}"
           cat > release-notes.md <<'EOF'
-          Self-hostable release: unzip, then run Breeze on your own placement
-          (Cloudflare Pages, Docker, or bare Node) — see `DEPLOY.txt` inside
-          the ZIP and `docs/SELF_HOSTING.md` for the full guide.
-          Desktop apps for Windows, macOS and Linux are attached below
-          (built natively per OS by the `desktop` job); the same code
-          also builds for Android/iOS from `mobile/`.
-          What changed: see `CHANGELOG.md` in the repository for this
-          version's section. Known limitations are stated in
-          `docs/COMPARISON.md` ("Where Breeze loses").
+          電話番号も登録もいらない、暗号化メッセンジャー Breeze の配布ファイルです。
+          会話の中身は、送った人と受け取る人にしか読めません。
 
-          Verify the download:
+          入れ方:
+
+          - Windows / Mac / Linux で使う場合は、このページの下にあるファイルから、
+            お使いの機械に合うものを1つダウンロードして実行してください。
+          - 自分のサーバーに置く場合は、`breeze-` で始まる `.zip` を解凍し、
+            中の `DEPLOY.txt` の手順で置いてください。
+            詳しくは[設置の手順書](https://github.com/shizukutanaka/Breeze/blob/main/docs/SELF_HOSTING.md)をご覧ください。
+
+          今回の変更点は、[変更履歴](https://github.com/shizukutanaka/Breeze/blob/main/CHANGELOG.md)の
+          該当する版の節にあります。Breeze がほかのメッセンジャーに負けている点は、
+          [比較のページ](https://github.com/shizukutanaka/Breeze/blob/main/docs/COMPARISON.md)に隠さず書いてあります。
+
+          ダウンロードが正しいかは、照合用の数値で確認できます
+          （`SHA256SUMS.txt` に全ファイル分が入っています）:
 
           ```
           sha256sum -c SHA256SUMS.txt

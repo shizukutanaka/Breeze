@@ -1,232 +1,118 @@
 # Breeze Messenger
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Deploy to Cloudflare](https://img.shields.io/badge/Deploy-Cloudflare%20Pages-F38020?logo=cloudflare)](https://dash.cloudflare.com/?to=/:account/pages/new/provider/polaris)
 
-End-to-end encrypted P2P messenger. No phone number. No registration. No app store. No paywall — every feature is free.
+**電話番号も登録もいらない、暗号化メッセンジャーです。**
+会話の中身は、送った人と受け取る人にしか読めません。途中で運ぶサーバーにも読めません。
+全機能が無料で、広告もありません。
 
-> **Software, not a web page** — Breeze ships as installable apps (Electron desktop for Windows/macOS/Linux, Tauri, Capacitor for Android/iOS) built from this repository with `./build.sh`. The same code also runs as a self-hosted web app on Cloudflare Pages in 60 seconds. The default relay is a free entrance only up to its free tier and fair-use quota; at larger scale a relay costs money, and by design that cost is paid on the user's own placement (their own relay or account), not by one central operator — see [Running Costs](#running-costs) and [docs/SUSTAINABILITY.md](docs/SUSTAINABILITY.md).
+これはWebページではなく、インストールして使うソフトウェアです（Windows / Mac / Linux / Android / iPhone / ブラウザ）。
 
 ![Breeze Messenger screenshot — the main window right after creating an identity](docs/images/screenshot.png)
 
-## Demo
+## 手に入れる
 
-Try the hosted version: **[breeze.pages.dev](https://breeze.pages.dev)**
+- **アプリを使う（おすすめ）**: [ダウンロードのページ](https://github.com/shizukutanaka/Breeze/releases/latest)から、お使いの機械に合うものを1つ選んでください（ファイル名の数字は版数です）。
+  - Windows: 名前が `-win-x64.exe` で終わるもの（ふつうはこちら。ARM機用もあります）
+  - Mac: 名前が `-mac.dmg` で終わるもの
+  - Linux: 名前が `.AppImage` で終わるもの（そのまま実行できます）か `.deb`
+  - 自分のサーバーに置いて使う場合は `breeze-` で始まる `.zip`
+  - 各ファイルには照合用の数値（SHA256SUMS.txt）が付いているので、ダウンロードが正しいか確認できます
+- **自分のサーバーに置く**: 無料の範囲で動きます。手順は[設置の手順書（英語）](docs/SELF_HOSTING.md)にあります。
+- **試用ページについて（正直なお知らせ）**: 公開していた試用ページ（breeze.pages.dev）は、いま開くと 404 になり停止しています。復旧は運営側の作業待ちです。それまでは上のアプリ版を使ってください。自分のサーバーに置いたものは、この停止の影響を受けません。
 
-> **Note:** the hosted demo at https://breeze.pages.dev currently returns **404**. Restoring it is an owner-side operations task ([docs/SUSTAINABILITY.md](docs/SUSTAINABILITY.md) §4). Until then, deploy your own copy with the [Quick Start](#quick-start) — self-hosted copies do not depend on it.
+## 使い方（3ステップ）
 
-```
-1. Open in browser → enter your name → identity created (no server involved)
-2. Share your Breeze ID or QR code with a friend
-3. When both of you have the app open and a direct connection succeeds, messages flow device-to-device via WebRTC (P2P)
-4. Otherwise — including whenever the other person doesn't have the app open — a sealed-sender relay mailbox holds the sealed envelope until they open the app and collect it (the relay cannot read the content; unclaimed mail is kept for at most 7 days)
-```
+1. アプリを開いて、名前を入れます。それだけで準備完了です（登録も電話番号も不要）。このとき端末の中で「鍵」が作られ、それがあなたの身元になります。
+2. 自分のIDかQRコードを、話したい相手に渡します。
+3. 相手もアプリを開いていれば、直接つながって会話できます。相手が開いていないときは、暗号化されたまま「預かり箱」に置かれ、相手が開いたときに届きます。預かり箱を運ぶサーバーは中身を読めません。届かないままの手紙は最大7日で自動的に消えます。
 
-## Quick Start
+## 約束（しないこと）
 
-**As an app (recommended):** build the desktop software from this repo —
-`./build.sh linux` (or `win` / `mac`) produces the installer/AppImage in
-`desktop/dist/`. Android/iOS builds live under `mobile/` (Capacitor).
+- **広告は出しません。** アプリの中にも、どこにも。
+- **追跡しません。** 利用状況の解析、広告の仕組み、データの売買は一切しません。
+- **作った人は、利用者のデータを持ちません。** サーバー側にアカウントの一覧そのものがありません。身元はあなたの端末の中の鍵だけです。
+- **会話は端末同士で暗号化されます。** サーバーが扱うのは、読めない封筒だけです。
 
-**As a self-hosted web app:**
+正直に範囲も書きます。届けるために、サーバーには短い間の預かりがあります（未配達の封筒は最大7日、接続の合図は5分、宛名と端末の記録は90日、グループの情報と通知の購読は30日。どれも自動で消え、中身は読めません）。クラウドへの予備保存は、最初は無効です。自分のサーバーに置けば、その預かりも自分の管理下に置けます。
 
-1. Deploy to Cloudflare Pages: `wrangler pages deploy . --project-name=breeze`
-2. Open in browser → enter your name → share your Breeze ID
-3. Add contacts by public key, @alias, or invite link
+## できること
 
-## Why Breeze?
+- 1対1の会話と、グループの会話（最大1,000人）
+- 音声通話とビデオ通話
+- ファイルの送信（1対1では最大50MB。グループでも送れますが、大きさの上限は小さめです）
+- 複数の端末・複数のアカウントの使い分け（仕事用と私用など。台数もアカウント数も無料で無制限）
+- 8つの言語（英語・日本語・韓国語・中国語（台湾）・スペイン語・タイ語・インドネシア語・ポルトガル語）から自動で選ばれます
+- 写真つきのプロフィール、ステッカー、位置情報の共有
+- `/help` などのコマンド操作（60種類以上）
 
-| | Breeze | Others |
+## ほかのメッセンジャーとの違い
+
+| | Breeze | 多くのメッセンジャー |
 |---|--------|--------|
-| **Registration** | None — identity = crypto key pair | Phone number required |
-| **Server trust** | Zero-knowledge relay (can't read messages) | Trust the company |
-| **Self-hosting** | 60-second deploy, $0 within free tiers | Not possible |
-| **Open source** | MIT — fork, modify, sell | Proprietary or AGPL |
-| **Architecture** | Single HTML file + small ES modules, no build step | Millions of lines, build systems |
-| **Dependencies** | Zero (vanilla JS + WebCrypto) | Hundreds of npm packages |
-| **Data location** | Your browser's IndexedDB | Their servers |
+| 登録 | 不要（身元は端末の中の鍵） | 電話番号が必要 |
+| サーバー | 中身を読めない | 運営会社を信頼する前提 |
+| 自分のサーバーに置く | できる（無料の範囲で動く） | できない |
+| 中身の公開 | 全て公開（MITライセンス） | 非公開が多い |
+| データの場所 | あなたの端末の中 | 運営会社のサーバー |
 
-For the full, sourced comparison against Signal and LINE — including
-where Breeze loses, and a verification path for every claim — see
-[docs/COMPARISON.md](docs/COMPARISON.md).
+Signal や LINE との詳しい比較は、[比較のページ（英語）](docs/COMPARISON.md)にあります。Breeze の主張には一つずつ「確かめる方法」が付いていて、Breeze が負けている点（利用者の数、外部の監査を受けていないこと等）も隠さず書いてあります。
 
-## What Breeze will never do
+## 自分のサーバーに置く場合の費用
 
-- **No ads.** Not in the app, not anywhere else. Ever.
-- **No tracking.** No analytics, no tracking pixels, no advertising networks, no data brokers.
-- **The creator holds no user data.** There is no account database on any server — your identity is a key pair on your device, and your messages live in your device's storage.
-- **Message content is end-to-end encrypted.** Relays handle only sealed envelopes they cannot read.
+Breeze は Cloudflare の無料の範囲で動きます。クレジットカードも要りません。
 
-One honest qualification, stated plainly: delivery needs a small amount of short-lived relay storage, and all of it expires on its own. On the default relay, an undelivered encrypted envelope is kept for at most **7 days**; signaling data lasts **5 minutes**; aliases and device records expire after **90 days**; group metadata and push subscriptions after **30 days**. None of it is readable content. Cloud backup storage is **off by default** — it exists only on relays whose operator explicitly turns it on. Run your own relay (60 seconds; $0 within the free tiers) and even that temporary storage sits on infrastructure you control.
-
-日本語: 広告は出しません。追跡もしません（解析・広告ネットワーク・データブローカーは不使用）。作成者は利用者のデータを持ちません — サーバー側にアカウントのデータベース自体がなく、身元はあなたの端末の中の鍵ペアです。会話の中身は端末間暗号で、中継にも読めません。正直に範囲を書くと、配送のために中継には短期間の保持があります: 未配送の暗号化された封筒は最大7日、合図データは5分、宛名と端末の記録は90日、グループ情報とプッシュ購読は30日で自動的に消えます。クラウドへの予備保存は既定で無効で、置き場所の運営者が明示的に有効にした場合だけ存在します。自分の置き場所を立てれば、その一時保持も自分の管理下に置けます。
-
-## Features
-
-- **E2E encryption**: X25519 key exchange + AES-256-GCM + Double Ratchet + Ed25519 signing
-- **P2P messaging**: WebRTC DataChannel with Perfect Negotiation + DC heartbeat
-- **Voice/video calls**: WebRTC with TURN relay + real-time waveform
-- **Groups**: Sender Key (O(1)) + Sealed Sender + dual-path P2P delivery
-- **Files**: Up to 50MB, encrypted, auto-compress images (WebP), progress bar
-- **Multi-account**: Work/personal separation — unlimited local accounts, free for everyone (no paid plans, no paywall)
-- **8 languages**: English + full translations for ja, ko, zh-TW, es, th, id, pt-BR (auto-detected); RTL layout for Arabic/Hebrew/Persian/Urdu
-- **60+ slash commands**: /help, /search, /export [json|csv|html|all], /schedule [list|cancel], /contacts, /compress, /retry, /security, /alias, /focus, etc.
-- **PWA**: Engagement-gated install, works offline, push notifications
-- **6 platforms**: Web, Electron, Tauri (~5MB), Android (Capacitor), iOS
-- **Security**: Trusted Types, CSP+COOP, magic bytes validation, key change warning
-- **UX**: Swipe gestures, multi-select, markdown tables, smooth theme transition
-
-## Architecture
-
-```
-Client (E2E encrypted)
-  ├── IndexedDB (messages, contacts, keys)
-  ├── WebRTC P2P (direct messaging)
-  └── Worker API (signal relay only)
-
-Cloudflare Worker
-  ├── Signal relay (/api/signal)
-  ├── Message relay (/api/msg/send, /poll)
-  ├── Sealed Sender (/api/sealed/send, /poll)
-  ├── Groups (create/join/info/rename/kick/admin/transfer/leave/delete)
-  ├── Account management (delete)
-  ├── Key transparency (/api/ktlog/get — audit peer key history without OTP cost)
-  └── Presence + TURN + Push
-
-KV Storage
-  ├── Signals, messages (TTL: ephemeral)
-  └── Aliases, PreKeys (persistent)
-```
-
-## Deploy
-
-### $0 Self-Hosting (5 minutes)
-
-Breeze runs entirely on Cloudflare's free tier. No credit card required.
-
-```bash
-# 1. Deploy
-wrangler pages deploy . --project-name=breeze
-
-# 2. Create KV namespace
-wrangler kv:namespace create KV
-# Add binding in Pages > Settings > Functions > KV
-
-# 3. Done! Open https://breeze.pages.dev
-```
-
-That's it. TURN relay and all core features work with zero configuration.
-See [.env.example](.env.example) for optional features (push notifications).
-Full guide: [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md)
-
-### Full Deployment (with push notifications)
-
-```bash
-# Secrets (only if you want push notifications)
-wrangler secret put VAPID_PUBLIC_KEY       # Push notifications
-# See .env.example for all options
-```
-
-### Desktop (Electron)
-
-```bash
-./build.sh desktop   # All platforms
-./build.sh win       # Windows only
-./build.sh mac       # macOS only
-./build.sh linux     # Linux only
-```
-
-### Mobile (Capacitor)
-
-```bash
-./build.sh android   # APK
-./build.sh ios       # Xcode project (macOS required)
-```
-
-## Cryptographic Stack
-
-| Layer | Algorithm | Standard |
-|-------|-----------|----------|
-| Key Exchange | X25519 (fallback: P-256) | RFC 7748 |
-| Signing | Ed25519 (fallback: HMAC-SHA256) | RFC 8032 |
-| Encryption | AES-256-GCM | NIST SP 800-38D |
-| KDF | HKDF-SHA256 | RFC 5869 |
-| Ratchet | Double Ratchet | Signal Protocol |
-| Group | Sender Key (O(1)) | Signal Protocol |
-| Sender Privacy | Sealed Sender | Signal Protocol |
-
-## Quality Gates
-
-Run `./validate.sh` or `./build.sh validate`:
-
-- Gate 1: Syntax (3 files)
-- Gate 2: Security (eval, innerHTML, CSP, API keys)
-- Gate 3: Internationalization (dead/missing i18n keys in both directions, placeholders, CLDR plurals)
-- Gate 4: Code Quality (.style.X, onclick, DRY, DOM cache, no listeners wired to a missing element)
-- Gate 5: Performance (lines, RAF, Fragment, throttle)
-- Gate 6: Protocol Spec Compliance (crypto features)
-- Gate 7: Required Files
-
-The gate count grows as new checks land across the 7 gates — run
-`./validate.sh` for the live score rather than trust a number here, which
-would only go stale again.
-
-## Development & Tests
-
-The application source lives directly in the repository tree (`index.html`,
-`_worker.js`, `sw.js`, …). The Cloudflare Pages build output dir is the repo
-root (see `wrangler.toml`), so there is no bundling step.
-
-```bash
-npm ci            # install dev dependencies (vitest)
-npm test          # run the unit test suite
-./build.sh zip    # produce breeze.zip (build artifact, git-ignored)
-```
-
-Unit tests (`tests/`) cover the Cloudflare worker's security-critical logic
-(rate limiting, proof-of-work, webhook idempotency, SSRF guard, prekey OTP
-consumption) and the Double Ratchet crypto core (`src/crypto/ratchet.js`:
-round-trip, out-of-order/skipped keys, large-gap recovery, replay rejection).
-CI runs syntax checks, `npm test`, `validate.sh`, and uploads `breeze.zip`.
-
-> `breeze.zip` is a build artifact (produced by `./build.sh zip`), not tracked
-> in git. The repository tree is the source of truth.
-
-## Business Model
-
-Breeze is MIT-licensed and free to self-host — every feature, unlimited local accounts, no
-paywall. The hosted instance at [breeze.pages.dev](https://breeze.pages.dev) is currently
-single-account/free-tier only: multi-account paid plans are not available yet (see
-[SECURITY.md](SECURITY.md) for why — the billing system was never wired up, so it isn't
-advertised as working).
-
-## Running Costs
-
-| Component | Free Tier | Paid ($5/mo minimum) |
+| 項目 | 無料の範囲 | 有料の場合 |
 |-----------|-----------|-------------|
-| Hosting | Cloudflare Pages Free | — |
-| Worker | 100K req/day | 10M req/mo |
-| KV | 100K reads + 1K writes/day | 10M reads + 1M writes/mo |
-| TURN | Open Relay (20GB free) | Cloudflare Calls ($0.05/GB) |
-| STUN | Cloudflare + Google (free) | — |
-| Push | Web Push VAPID (free) | — |
-| Domain | *.pages.dev (free) | Custom ($10/yr) |
-| **Total** | **$0/month** — up to ~20–40 light-use DAU (under 10 heavy); free quotas are hard caps | **$5/month minimum** + domain ($10/yr) — covers ~96 light-use MAU (~11 heavy), metered beyond (1,000 MAU: $34 light / $222 heavy) |
+| 置き場所 | Cloudflare Pages（無料） | — |
+| 処理 | 1日10万回まで | 月1,000万回まで |
+| 保存 | 1日 読み10万回・書き1千回まで | 月 読み1,000万回・書き100万回まで |
+| 通話の中継 | 20GBまで無料 | 1GBあたり0.05ドル |
+| 独自ドメイン | 不要（無料の住所が付きます） | 年10ドル |
+| **合計** | **月0ドル**（軽い使い方で20〜40人程度まで） | **月5ドルから**（軽い使い方で約100人規模。1,000人規模では使い方により月34〜222ドル） |
 
-That table is the personal / small-community scale. For the measured
-cost curve at larger scales — and why no single operator ever has to
-carry the whole network's bill — see
-[docs/SUSTAINABILITY.md](docs/SUSTAINABILITY.md); the full model
-behind the numbers is [docs/COST_MODEL.md](docs/COST_MODEL.md).
+大きな規模での費用の伸び方と、「なぜ一人の運営者が全体の費用を背負わずに済むのか」は、[費用と持続の考え方（英語）](docs/SUSTAINABILITY.md)に、もとになる計算は[費用モデル（英語）](docs/COST_MODEL.md)にあります。
 
-## Contributing
+設置はこの1コマンドからです（詳しくは[設置の手順書（英語）](docs/SELF_HOSTING.md)）。
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
+```bash
+wrangler pages deploy . --project-name=breeze
+```
 
-- Report bugs: [Issue Tracker](https://github.com/shizukutanaka/Breeze/issues)
-- Security: [SECURITY.md](SECURITY.md) (private disclosure)
-- Code of Conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+## 技術の詳細（開発者向け）
 
-## License
+### 暗号の方式
 
-MIT — see [LICENSE](LICENSE)
+| 役割 | 方式 |
+|-------|-----------|
+| 鍵の交換 | X25519（予備: P-256） |
+| 署名 | Ed25519（予備: HMAC-SHA256） |
+| 暗号化 | AES-256-GCM |
+| 鍵の導出 | HKDF-SHA256 |
+| 会話の鍵の更新 | Double Ratchet（Signal と同じ方式） |
+| グループの鍵 | Sender Key |
+| 送り主を中継に隠す | Sealed Sender |
+
+設計の正本は[仕様書 SPEC.md](SPEC.md)、弱点の報告先と方針は[SECURITY.md](SECURITY.md)にあります。
+
+### テストと品質チェック
+
+```bash
+npm ci            # 開発用の道具を入れる
+npm test          # テストを実行する
+./validate.sh     # 品質チェック（構文・安全性・言語・方式の準拠など7分野）
+./build.sh zip    # 配布用ZIPを作る
+```
+
+### 開発への参加
+
+進め方と規約は[CONTRIBUTING.md](CONTRIBUTING.md)にあります。
+不具合の報告は[Issue のページ](https://github.com/shizukutanaka/Breeze/issues)へ。行動規範は[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)です。
+
+## English
+
+Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Get the apps (Windows / macOS / Linux / Android / iOS / web) from the [releases page](https://github.com/shizukutanaka/Breeze/releases/latest), or self-host it on Cloudflare's free tier with the [self-hosting guide](docs/SELF_HOSTING.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [docs/COMPARISON.md](docs/COMPARISON.md).
+
+## ライセンス
+
+MIT — [LICENSE](LICENSE) のとおり、自由に使って、直して、配れます。
