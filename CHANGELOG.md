@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [3.8.0] - 2026-11-23
+
+### Groups on every device (defect waves 9, 10 and 12, PRs #466/#467/#468)
+
+- **Files in group chats.** Group messages can now carry files. The size ceiling is set from the measured deposit model (the sender-key ciphertext is fanned out per member), not from a guessed constant.
+- **Secondary devices receive group messages live.** Before this release, a linked secondary device never received other members' group messages at all: deposits went only to each member's primary mailbox, devices polled only their own mailbox, and history sync explicitly skipped groups — all a secondary device ever saw was its own sends. The sender now replicates the identical sender-key ciphertext to every signature-verified device of every member, and sender-key distribution, persistent signals and kick notices are delivered to devices as well. Nothing is replicated to a device the registry cannot verify.
+- **Group calls from secondary devices.** Call signalling was encrypted to the primary device only, so a secondary device could not even open an invitation. Invitations and joins now address the seat device actually taking part; a seat key is accepted only when it is the member's own or a signature-verified registry device. When any participant still runs an older version, joining from a secondary device is refused with the reason shown — never a call that looks joined but carries no audio.
+
+### Alias registration is faster (defect wave 13, PR #469)
+
+- The proof-of-work gating alias registration and alias changes is now solved with batched parallelism: measured median 15.6s → 9.2s on the audit machine, returning the identical nonce. The difficulty, the verification and the total work are unchanged — the anti-Sybil cost is the same, it is just paid sooner.
+- Removed a dead configuration constant that claimed proof-of-work was required for group operations (it never was, in code or in verification), and corrected the documents that had repeated the claim.
+
+### Assessed and deliberately settled (defect wave 13)
+
+- Continuous post-quantum re-keying and KEM-combiner authentication of the classical handshake were assessed and **not** adopted: the dominant harvest-now-decrypt-later threat is already closed by PQXDH at session establishment, and the residual risk needs three conditions at once (leaked session state, a cryptographically relevant quantum computer, and a months-long session). The decision, its evidence and its re-examination triggers are recorded in the project's decision ledger; if a trigger fires, the standards-faithful SPQR design is the chosen path, not a home-grown one.
+- With this release the defect ledger from the 2026-11-21 audit stands at zero open items: 46 fixes landed across thirteen waves, the two items above closed by recorded judgment.
+
 ## [3.7.1] - 2026-11-21
 
 ### Defect wave 1 (2026-11-21 audit, PR #458)
