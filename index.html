@@ -13056,12 +13056,12 @@ async function initMessenger(dbName) {
     input.className = 'modal-input'; input.placeholder = t('addContactPh');
     const btn = document.createElement('button');
     btn.className = 'btn btn-g btn-sm'; btn.textContent = t('addBtn');
-    const submit = () => { const v = input.value; d.remove(); _dispatchAddInput(v); };
-    btn.onclick = submit;
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
-    d.append(input, btn, _deviceScanButton('scanQR', (v) => { d.remove(); _dispatchAddInput(v); }));
-    box.appendChild(d); box.scrollTop = box.scrollHeight;
-    input.focus();
+    // Phone width: the sidebar overlays the chat column this panel renders into, so "+" showed nothing. Reveal the column while the panel is up; return to the list (where the new contact appears) once it is used.
+    const sb = _DOM.get('msg-sidebar'), narrow = window.innerWidth <= 640 && !sb.classList.contains('hidden');
+    const done = (v) => { d.remove(); if (narrow) sb.classList.remove('hidden'); _dispatchAddInput(v); };
+    btn.onclick = () => done(input.value); input.addEventListener('keydown', (e) => { if (e.key === 'Enter') done(input.value); });
+    d.append(input, btn, _deviceScanButton('scanQR', done)); if (narrow) { sb.classList.add('hidden'); _DOM.get('b-msg-back').classList.remove('hidden'); }
+    box.appendChild(d); box.scrollTop = box.scrollHeight; input.focus();
   }
 
   async function resolveAndAdd(input, homeHintOverride) {
