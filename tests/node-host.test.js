@@ -178,6 +178,17 @@ describe('Node host — static layer reproduces the _headers contract', () => {
     // The later, specific /sw.js block must beat the /*.js cache rule.
     const sw = await fetch(host.base + '/sw.js');
     expect(sw.headers.get('cache-control')).toBe('no-cache');
+    // Modules are unversioned URLs imported by a no-cache index.html — they must
+    // revalidate, and the host must answer that revalidation with a 304.
+    const mod = await fetch(host.base + '/src/app/call.js');
+    expect(mod.headers.get('cache-control')).toBe('no-cache');
+    const etag = mod.headers.get('etag');
+    expect(etag).toMatch(/^"[A-Za-z0-9_-]{27}"$/);
+    const again = await fetch(host.base + '/src/app/call.js', { headers: { 'If-None-Match': etag } });
+    expect(again.status).toBe(304);
+    expect(await again.text()).toBe('');
+    const changed = await fetch(host.base + '/src/app/call.js', { headers: { 'If-None-Match': '"stale"' } });
+    expect(changed.status).toBe(200);
     const manifest = await fetch(host.base + '/manifest.json');
     expect(manifest.headers.get('cache-control')).toBe('public, max-age=86400');
     await host.close();
