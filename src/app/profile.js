@@ -83,6 +83,7 @@ export function createProfileUI(D) {
     // contact id -> the profile version already delivered to it (this page
     // load); the contact record's profileSentPv carries it across reloads.
     const _sentPv = new Map();
+    const _inFlight = new Set();
     // A profile must NEVER be the message that opens a session. The first
     // ratchet message carries the X3DH header exactly once, and receivers
     // treat a profile as a silent control payload: greeting a brand-new
@@ -95,6 +96,8 @@ export function createProfileUI(D) {
     async function _sendProfileTo(contact) {
       const P = { sanitizeProfile, buildProfilePayload };
       if (!P || !contact?.pubB64 || contact.isGroup) return false;
+      if (_inFlight.has(contact.id)) return false;
+      _inFlight.add(contact.id);
       try {
         const prof = await _myProfile();
         const mark = prof.pv || 1;
@@ -102,7 +105,7 @@ export function createProfileUI(D) {
         if (!(await D.hasSession(contact.id))) return false;
         const capsById = await D.fetchMemberCapsBatch([contact.id]);
         if (!(capsById[contact.id] || []).includes(CAPS_PROFILE)) return false;
-        const wire = P.buildProfilePayload(prof, prof.pv || Date.now());
+        const wire = P.buildProfilePayload(prof, mark);
         if (!wire) return false;
         const enc = await D.encryptFor(wire, contact.pubB64);
         if (!enc) return false;
@@ -113,6 +116,7 @@ export function createProfileUI(D) {
         if (rec) { rec.profileSentPv = mark; await D.dbPut('contacts', rec); }
         return true;
       } catch(e) { D.dbg(e, 'profile-send'); return false; }
+      finally { _inFlight.delete(contact.id); }
     }
     async function _showProfilePanel() {
       const prof = await _myProfile();
