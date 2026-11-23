@@ -80,18 +80,37 @@ export function createProfileUI(D) {
       const keys = await D.dbGet('identity', 'keys').catch(() => null);
       return { name: D.myName(), emoji: keys?.avatar || '', img: '', pv: 0 };
     }
+    // contact id -> the profile version already delivered to it (this page
+    // load); the contact record's profileSentPv carries it across reloads.
+    const _sentPv = new Map();
+    // A profile must NEVER be the message that opens a session. The first
+    // ratchet message carries the X3DH header exactly once, and receivers
+    // treat a profile as a silent control payload: greeting a brand-new
+    // contact therefore spent the header on a message the peer could drop
+    // (unknown sender) or answer with its own greeting (two initiator
+    // sessions, no responder) — and the first real message, and every one
+    // after it, failed to decrypt. So: no session yet -> not sent now; the
+    // caller retries after the first chat message (sendMessage), and each
+    // version reaches a contact once.
     async function _sendProfileTo(contact) {
       const P = { sanitizeProfile, buildProfilePayload };
       if (!P || !contact?.pubB64 || contact.isGroup) return false;
       try {
+        const prof = await _myProfile();
+        const mark = prof.pv || 1;
+        if ((_sentPv.get(contact.id) ?? contact.profileSentPv) === mark) return false;
+        if (!(await D.hasSession(contact.id))) return false;
         const capsById = await D.fetchMemberCapsBatch([contact.id]);
         if (!(capsById[contact.id] || []).includes(CAPS_PROFILE)) return false;
-        const prof = await _myProfile();
         const wire = P.buildProfilePayload(prof, prof.pv || Date.now());
         if (!wire) return false;
         const enc = await D.encryptFor(wire, contact.pubB64);
         if (!enc) return false;
         await D.relaySend(contact.id, { to: contact.id, from: D.myId(), fromPub: D.myPubB64(), fromName: D.myName(), payload: enc, ts: Date.now(), isProfile: true }, contact.pubB64);
+        _sentPv.set(contact.id, mark);
+        contact.profileSentPv = mark;
+        const rec = await D.dbGet('contacts', contact.id).catch(() => null);
+        if (rec) { rec.profileSentPv = mark; await D.dbPut('contacts', rec); }
         return true;
       } catch(e) { D.dbg(e, 'profile-send'); return false; }
     }

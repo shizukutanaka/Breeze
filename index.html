@@ -8267,7 +8267,7 @@ async function initMessenger(dbName) {
       }
       const safeName = typeof name === 'string' ? name.slice(0, 64) : 'Contact';
       await dbPut('contacts', { id, pubB64: safePub, name: safeName, addedAt: Date.now(), unread: 0, ...(home.length ? { home } : {}) });
-      _profileUI?.sendTo({ id, pubB64: safePub }).catch(e => _dbg(e, 'profile-add')); // stage 5 step 4: greet with my profile (cap-gated inside)
+      _profileUI?.sendTo({ id, pubB64: safePub }).catch(e => _dbg(e, 'profile-add')); // stage 5 step 4: greet with my profile (cap-gated inside; skipped until a session exists)
       auditLog('contact', 'Added: ' + name + ' (' + id + ')');
       await renderContacts();
 
@@ -10205,8 +10205,8 @@ async function initMessenger(dbName) {
       // sfPub/sfName let a sibling device CREATE a conversation it has never seen, so messages
       // sent before the contact ever replies are not dropped on a freshly linked device.
       _fanOut(activeContact, text, ts,
-        { sig: envelope.sig, sigPub: envelope.sigPub },
-        { sfFor: activeContact.id, sfPub: activeContact.pubB64, sfName: activeContact.name });
+        { sig: envelope.sig, sigPub: envelope.sigPub }, { sfFor: activeContact.id, sfPub: activeContact.pubB64, sfName: activeContact.name });
+      _profileUI?.sendTo(activeContact).catch(e => _dbg(e, 'profile-first')); // my profile follows the first chat message (never opens the session — see profile.js); a no-op once delivered
     }
     renderContacts();
     } catch(err) {
@@ -11024,7 +11024,7 @@ async function initMessenger(dbName) {
     fetchMemberCapsBatch: (ids) => _fetchMemberCapsBatch(ids),
     makeDialog: () => _makeDialog(), showDialog: (d) => _showDialog(d), wireDialogDismiss: (d, c) => _wireDialogDismiss(d, c),
     domGet: (id) => _DOM.get(id), dbg: _dbg, downscaleAvatar: (f) => _downscaleAvatar(f),
-    myId: () => myId, myName: () => myName, myPubB64: () => myPubB64, setMyName: (v) => { myName = v; },
+    myId: () => myId, myName: () => myName, myPubB64: () => myPubB64, setMyName: (v) => { myName = v; }, hasSession: (id) => getSession(id).then(s => !!s),
   });
   const _turnFetch = globalThis.__breezeTurn?.createTurnFetcher({
     apiReady: () => !!API, postTurn: (body) => postAPIRaw('/turn', body),
@@ -11647,9 +11647,9 @@ async function initMessenger(dbName) {
     if (msg.isProfile) {
       try {
         const c = await dbGet('contacts', (msg.from || '').slice?.(0, 12) || msg.from);
-        if (!c) return;
-        const decrypted = await decryptFrom(msg.payload, c.pubB64);
-        if (!decrypted) return;
+        const pub = c?.pubB64 || (typeof msg.fromPub === 'string' && msg.fromPub.slice(0, 12) === msg.from ? msg.fromPub : ''); // unknown sender: still run the ratchet — a 3.7/3.8 peer's add-greeting carries the X3DH first-message header, and dropping it loses the session for good
+        const decrypted = pub ? await decryptFrom(msg.payload, pub) : null;
+        if (!c || !decrypted) return;
         const P = globalThis.__breezeProfile;
         const prof = P?.parseProfilePayload(decrypted);
         if (prof && P.profileNewer(prof, c)) {
