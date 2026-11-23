@@ -14,9 +14,9 @@ const ip = (n) => ({ extraHTTPHeaders: { 'CF-Connecting-IP': `203.0.113.${n}` } 
 
 async function addAndOpen(page, pubB64) {
   await page.locator('#b-msg-add').click();
-  const dialog = page.locator('dialog[aria-labelledby]');
+  const dialog = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
   await dialog.locator('.modal-input').fill(pubB64);
-  await dialog.locator('[value="ok"]').click();
+  await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
   const contact = page.locator('#msg-contacts .contact').first();
   await expect(contact).toBeVisible();
@@ -59,6 +59,11 @@ test('link a second device: contact messages reach BOTH devices; sent messages s
   const confirmDialog = A.locator('dialog[aria-labelledby]');
   await confirmDialog.locator('[value="ok"]').click();
   await expect(A.locator('.toast-container')).toContainText(/added|追加/i, { timeout: 10_000 });
+  // Since stage 4 step 3 the link is followed by an offer to transfer the conversation
+  // history. Decline it: the point below is that the laptop learns about C from the
+  // self-sync copy ALONE — a transferred history would hand it C up front.
+  await A.locator('dialog[open] [value="cancel"]').click();
+  await expect(A.locator('dialog[open]')).toHaveCount(0);
 
   // Registry now lists both devices (server-side truth).
   const reg = await A.request.post('/api/device/list', { data: { accountId: pubA.slice(0, 12) } });
@@ -141,11 +146,14 @@ test('link a second device: contact messages reach BOTH devices; sent messages s
   await ctxA.close(); await ctxB.close(); await ctxC.close();
 });
 
-// A secondary device is not in any group roster (the roster holds the account ROOT's id), so
-// members' `if (!member) return` would drop its group messages on the floor while this device
-// rendered them as sent. Group send is primary-only BY DESIGN — but it must say so, not lie.
-// Single context: the guard reads only the `identity/account` record that /linkto writes.
-test('a linked secondary device refuses to send to a group instead of silently dropping it', async ({ browser }) => {
+// A secondary device is not in any group roster (the roster holds the account ROOT's id).
+// Group send used to be primary-only, and this test pinned the refusal toast. D25 (group
+// Phase 2) replaced that rule: a secondary now sends with its own per-device sender key
+// and names its account root on every deposit (receiver-side attribution is covered by
+// tests/wave7-defects.test.js / wave8-defects.test.js). What must still hold here is the
+// original concern turned around: the send is neither refused nor eaten.
+// Single context: the role is read only from the `identity/account` record /linkto writes.
+test('a linked secondary device can send to a group (D25) — no primary-only refusal', async ({ browser }) => {
   const ctx = await browser.newContext(ip(65));
   const page = await ctx.newPage();
   await createIdentity(page, 'Laptop-Only');
@@ -153,9 +161,9 @@ test('a linked secondary device refuses to send to a group instead of silently d
   // Create a real group the way the app does (group.spec.js's proven path: the "group:" add
   // syntax, then an empty member list to take the invite-link branch).
   await page.locator('#b-msg-add').click();
-  const gDlg = page.locator('dialog[aria-labelledby]');
+  const gDlg = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
   await gDlg.locator('.modal-input').fill('group:Guard Test Group');
-  await gDlg.locator('[value="ok"]').click();
+  await gDlg.locator('button.btn-g').click();
   const membersDlg = page.locator('dialog[aria-labelledby]');
   await expect(membersDlg).toBeVisible();
   await membersDlg.locator('[value="ok"]').click();
@@ -178,9 +186,14 @@ test('a linked secondary device refuses to send to a group instead of silently d
   const attempt = 'this must not vanish ' + Date.now();
   await page.locator('#msg-input').fill(attempt);
   await page.locator('#b-msg-send').click();
-  await expect(page.locator('.toast-container')).toContainText(/primary device|メイン端末/i, { timeout: 10_000 });
-  // The text is handed back, not eaten — the user never loses what they typed.
-  await expect(page.locator('#msg-input')).toHaveValue(attempt);
+  // Sent: rendered as this device's own message, and the composer is cleared.
+  await expect(page.locator('#msg-messages .msg.me, #msg-messages .msg.mine, #msg-messages .msg').filter({ hasText: attempt })).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('#msg-input')).toHaveValue('');
+  // ... with no primary-only refusal, and it is still there after a reload (really stored).
+  await expect(page.locator('.toast', { hasText: /primary device|メイン端末/i })).toHaveCount(0);
+  await page.reload();
+  await page.locator('#msg-contacts .contact', { hasText: 'Guard Test Group' }).click();
+  await expect(page.locator('#msg-messages')).toContainText(attempt);
   await ctx.close();
 });
 

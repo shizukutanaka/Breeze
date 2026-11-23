@@ -18,10 +18,10 @@ test('delayed app modules are used by the first messenger session', async ({ pag
   await createIdentity(page, 'Delayed Modules', { navigate: false });
 
   await page.locator('#b-msg-add').click();
-  const dialog = page.locator('dialog[aria-labelledby]');
+  const dialog = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
   const pub = await page.evaluate(() => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))));
   await dialog.locator('.modal-input').fill(pub);
-  await dialog.locator('[value="ok"]').click();
+  await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
   await page.locator('#msg-contacts .contact').click();
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('brz-p2p-signal') || '{}').preEstablished || 0)).toBeGreaterThan(0);

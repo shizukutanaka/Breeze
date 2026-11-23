@@ -17,9 +17,9 @@ const ip = (n) => ({ extraHTTPHeaders: { 'CF-Connecting-IP': `203.0.113.${n}` } 
 
 async function addAndOpen(page, pubB64) {
   await page.locator('#b-msg-add').click();
-  const dialog = page.locator('dialog[aria-labelledby]');
+  const dialog = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
   await dialog.locator('.modal-input').fill(pubB64);
-  await dialog.locator('[value="ok"]').click();
+  await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
   await page.locator('#msg-contacts .contact').first().click();
   await expect(page.locator('#msg-input-bar')).toBeVisible();
@@ -84,9 +84,9 @@ test('a reloaded member still receives group messages (sender-key state survives
 
   // Owner creates a server-backed group and takes the invite link (group.spec.js's path).
   await A.locator('#b-msg-add').click();
-  const gDlg = A.locator('dialog[aria-labelledby]');
+  const gDlg = A.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
   await gDlg.locator('.modal-input').fill('group:Lifecycle Group');
-  await gDlg.locator('[value="ok"]').click();
+  await gDlg.locator('button.btn-g').click();
   const membersDlg = A.locator('dialog[aria-labelledby]');
   await expect(membersDlg).toBeVisible();
   await membersDlg.locator('[value="ok"]').click();
