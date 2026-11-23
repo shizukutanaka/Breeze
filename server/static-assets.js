@@ -23,6 +23,7 @@
 
 import { readFile, stat } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join, normalize, extname, sep } from 'node:path';
 
 const MIME = {
@@ -103,7 +104,7 @@ export function makeAssets({ rootDir, extraBlocked = [] }) {
   const rules = parseHeadersFile(readFileSync(join(rootDir, '_headers'), 'utf8'));
   const blockedAbs = new Set(extraBlocked.map((p) => normalize(p)));
 
-  async function serve(path, method) {
+  async function serve(path, method, ifNoneMatch) {
     const headers = new Headers();
     for (const [name, value] of headersForPath(rules, path)) headers.set(name, value);
 
@@ -142,6 +143,13 @@ export function makeAssets({ rootDir, extraBlocked = [] }) {
     }
     const body = await readFile(filePath);
     headers.set('Content-Type', MIME[extname(filePath).toLowerCase()] || 'application/octet-stream');
+    // Validator for the `no-cache` assets (index.html, modules, locales):
+    // a revalidation costs a 304 instead of the full body.
+    const etag = '"' + createHash('sha256').update(body).digest('base64url').slice(0, 27) + '"';
+    headers.set('ETag', etag);
+    if (ifNoneMatch && ifNoneMatch.split(',').some((t) => t.trim().replace(/^W\//, '') === etag)) {
+      return new Response(null, { status: 304, headers });
+    }
     headers.set('Content-Length', String(body.length));
     return new Response(method === 'HEAD' ? null : body, { status, headers });
   }
@@ -155,7 +163,7 @@ export function makeAssets({ rootDir, extraBlocked = [] }) {
       try { path = decodeURIComponent(new URL(request.url).pathname); } catch {
         return new Response('Not found', { status: 404 });
       }
-      return serve(path, request.method);
+      return serve(path, request.method, request.headers.get('if-none-match'));
     },
   };
 }

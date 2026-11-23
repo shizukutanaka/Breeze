@@ -39,6 +39,8 @@ const SITES = [
   { file: '_worker.js', re: /version: '(\d+\.\d+\.\d+)',/, fmt: (v) => `version: '${v}',` },
   { file: '_worker.js', re: /'X-Breeze-Version': '(\d+\.\d+\.\d+)'/, fmt: (v) => `'X-Breeze-Version': '${v}'` },
   { file: 'deploy.sh', re: /"v(\d+\.\d+\.\d+)"/, fmt: (v) => `"v${v}"` },
+  // SPEC.md §4.2 quotes CONFIG.VERSION; it sat one release behind after v3.8.0.
+  { file: 'SPEC.md', re: /^VERSION: '(\d+\.\d+\.\d+)'/m, fmt: (v) => `VERSION: '${v}'` },
 ];
 
 function siteVersion(site) {

@@ -40,7 +40,10 @@ self.addEventListener('install', (e) => {
   // shell's file:// origin addAll rejects ('file' scheme
   // unsupported) — swallow it instead of an uncaught rejection
   // on every packaged launch (found 2026-11-20).
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).catch(() => {}));
+  // cache:'reload' bypasses the browser HTTP cache: the modules were once served
+  // `immutable` for 7 days, so a plain addAll could precache the PREVIOUS release's
+  // copy next to the new index.html (new shell + old modules = a failed import).
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS.map(a => new Request(a, { cache: 'reload' })))).catch(() => {}));
   self.skipWaiting();
 });
 
@@ -93,7 +96,9 @@ self.addEventListener('fetch', (e) => {
   // v3.6: Assets — stale-while-revalidate (instant load + background update)
   e.respondWith(
     caches.match(e.request).then(cached => {
-      const fetchPromise = fetch(e.request).then(resp => {
+      // 'no-cache' = always revalidate with the server (a 304 is cheap) — never let a
+      // stale HTTP-cache copy overwrite the entry the install step just refreshed.
+      const fetchPromise = fetch(e.request, { cache: 'no-cache' }).then(resp => {
         cachePut(e.request, resp);
         return resp;
       }).catch(() => cached);

@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Security
+
+- **Self-hosted relay: `TRUST_PROXY` no longer trusts a client-forged address.** The Node host took the *first* `X-Forwarded-For` entry as the client address. Common proxies (nginx `$proxy_add_x_forwarded_for`, Traefik) append to whatever the client sent, so a client could put any value first and get a fresh per-IP rate-limit bucket on every request — or spend someone else's. The host now uses the last entry, the one the operator's proxy appended.
+
+### Fixed
+
+- **A new release no longer runs with the previous release's modules.** `index.html` (always revalidated) imports `src/crypto/*.js` and `src/app/*.js` by unversioned URL, but `_headers` served every `*.js` as `immutable` for 7 days, and the service worker precached and re-cached through that HTTP cache. For up to a week after a deploy a returning browser could pair the new shell with old modules; one missing export fails the whole module block and every bridge (PQXDH, calls, backup) degrades silently. Scripts and locale files are now `no-cache` (revalidated by ETag), the service worker installs with `cache: 'reload'` and revalidates with `cache: 'no-cache'`, and the Node host answers revalidations with `304`.
+
+### Documentation checked by tests
+
+- SPEC.md §4.2 quoted `CONFIG` by hand and had drifted again two days after its last re-verification: the version was one release behind, `DISAPPEAR_CHECK_MS` and `POW_DIFFICULTY` showed old values, and two listed constants no longer exist. A new test reads every pair in that excerpt and compares it with the `CONFIG` object `index.html` ships; the version line is now one of the sites `tools/bump-version.mjs` rewrites. The prekey batch size, the locale list and the file sizes in SPEC.md are corrected and checked the same way.
+
 ## [3.8.0] - 2026-11-23
 
 ### Groups on every device (defect waves 9, 10 and 12, PRs #466/#467/#468)
