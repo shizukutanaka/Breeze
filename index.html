@@ -3459,7 +3459,7 @@ function fetchT(url, opts = {}, timeoutMs = 10000) {
   return fetch(url, opts);
 }
 
-function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+function esc(s) { return (s == null ? '' : String(s)).replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';'); } // quotes too: esc() output is interpolated into attribute values (href="…", alt="…", data-name="…")
 // Grapheme-aware avatar truncator: takes up to `max` grapheme clusters so compound emoji (ZWJ sequences, skin-tone modifiers) aren't split into half-surrogates.
 function avatarSlice(s, max = 2) {
   if (!s) return '';
@@ -9176,7 +9176,7 @@ async function initMessenger(dbName) {
           const blob = new Blob([bytes], { type: f.mime || 'application/octet-stream' });
           href = URL.createObjectURL(blob);
           _blobUrls.add(href);
-        } else if (f.blobUrl) {
+        } else if (typeof f.blobUrl === 'string' && /^blob:[^\s"'<>]+$/.test(f.blobUrl)) { // peer-supplied JSON: only a real blob: URL may reach src/href
           // v3.6: P2P binary received files — blob URL created in handleBinaryChunk
           href = f.blobUrl;
           _blobUrls.add(href);
@@ -10582,8 +10582,8 @@ async function initMessenger(dbName) {
       if (!regex.test(node.textContent)) return;
       const span = document.createElement('span');
       safeSetHTML(span, esc(node.textContent).replace(
-        new RegExp(`(${esc(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
-        '<mark class="search-match">$1</mark>'));
+        new RegExp(`(${esc(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})|&#\\d+;`, 'gi'), // 2nd alternative swallows a whole esc() entity so a hit never lands inside one
+        (m, hit) => hit ? '<mark class="search-match">' + hit + '</mark>' : m));
       node.replaceWith(span);
     });
   }
@@ -13961,7 +13961,7 @@ async function initMessenger(dbName) {
   // QR CODE: the ISO 18004 encoder and the share-ID modal live in
   // src/app/qr.js (modularization); read opportunistically through the
   // bridge — absent ⇒ no modal (the share link itself is shown as text).
-  const showQRModal = (url) => { globalThis.__breezeQR?.showQRModal(url); };
+  const showQRModal = (url) => { globalThis.__breezeQR?.showQRModal(url, v => _dispatchAddInput(v)); };
 
   // BULK INVITE: Send one link to invite multiple people
 
@@ -14526,7 +14526,7 @@ async function initMessenger(dbName) {
             const d = document.createElement('div');
             d.className = 'help-body';
             const time = new Date(m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            safeSetHTML(d, esc(m.text.slice(0, 120)).replace(new RegExp('(' + esc(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi'), '<mark class="i-highlight">$1</mark>') + '<span class="ts">' + time + '</span>');
+            safeSetHTML(d, esc(m.text.slice(0, 120)).replace(new RegExp('(' + esc(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')|&#\\d+;', 'gi'), (x, hit) => hit ? '<mark class="i-highlight">' + hit + '</mark>' : x) + '<span class="ts">' + time + '</span>');
             box.appendChild(d);
           }
           if (cmsgs.length > 5) { const more = document.createElement('div'); more.className = 'text-xs color-t3 i-pad-more'; more.textContent = '... ' + t('uiMoreCount', cmsgs.length - 5); box.appendChild(more); }

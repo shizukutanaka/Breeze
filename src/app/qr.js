@@ -189,7 +189,7 @@ export function createQRHelper() {
     return stop;
   }
 
-  function showQRModal(url) {
+  function showQRModal(url, onScan) {
     closeCurrent?.();
     const modal = document.createElement('div'), card = document.createElement('div');
     modal.className = 'upgrade-overlay'; card.className = 'qr-modal';
@@ -217,7 +217,13 @@ export function createQRHelper() {
         scanBtn.disabled = true;
         stop = startScan({ container: card, onResult: value => {
           close();
-          if (value.includes('?add=')) window.location.href = value;
+          // A scanned code is untrusted input: hand it to the in-app add flow
+          // (same parser as a pasted link) instead of navigating the app to
+          // whatever URL the code names. Without a handler, only http(s) may
+          // be navigated to — never javascript:/data:/custom schemes.
+          if (!value.includes('?add=')) showToast(t('toastInvalidQR'), 'error');
+          else if (onScan) onScan(value);
+          else if (/^https?:\/\//i.test(value)) window.location.href = value;
           else showToast(t('toastInvalidQR'), 'error');
         }, onError: e => { _dbg(e, 'qr-scan'); scanBtn.disabled = false; showToast(t('toastCameraFail'), 'error'); } });
       };
