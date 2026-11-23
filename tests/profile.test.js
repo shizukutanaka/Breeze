@@ -182,6 +182,25 @@ describe('profile delivery never opens a session', () => {
     expect(state.sends).toHaveLength(2);
   });
 
+  it('pv=0 uses the same default version (1) on both wire payload and delivery marker, never sending twice', async () => {
+    const { ui, state } = harness({ session: true, saved: null });
+    const c = contact();
+    state.contacts.set(c.id, { ...c });
+    // Concurrent calls for the same contact must not race past the marker check.
+    const [r1, r2] = await Promise.all([ui.sendTo(c), ui.sendTo(c)]);
+    expect([r1, r2]).toEqual([true, false]);
+    expect(state.sends).toHaveLength(1);
+    const wire = state.sends[0].payload.replace(/^enc:/, '');
+    const parsed = parseProfilePayload(wire);
+    expect(parsed.pv).toBe(1);
+    expect(c.profileSentPv).toBe(1);
+    expect(state.contacts.get(c.id).profileSentPv).toBe(1);
+    // Subsequent call after reload with stored profileSentPv=1 is a no-op.
+    const reloaded = harness({ session: true, saved: null });
+    expect(await reloaded.ui.sendTo({ ...contact(), profileSentPv: 1 })).toBe(false);
+    expect(reloaded.state.sends).toHaveLength(0);
+  });
+
   it('wiring: the host supplies hasSession, retries after a chat send, and still ratchets a greeting from an unknown sender', () => {
     expect(html).toContain('hasSession: (id) => getSession(id).then(s => !!s),');
     expect(html).toContain("_profileUI?.sendTo(activeContact).catch(e => _dbg(e, 'profile-first'));");
