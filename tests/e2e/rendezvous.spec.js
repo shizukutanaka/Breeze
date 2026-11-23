@@ -13,9 +13,9 @@ async function renderedQR(page) {
 
 async function addAndOpen(page, pub) {
   await page.locator('#b-msg-add').click();
-  const dialog = page.locator('dialog[aria-labelledby]');
+  const dialog = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
   await dialog.locator('.modal-input').fill(pub);
-  await dialog.locator('[value="ok"]').click();
+  await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
   await page.locator('#msg-contacts .contact').click();
 }

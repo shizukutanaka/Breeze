@@ -15,20 +15,20 @@
 // IndexedDB (a standard Web API, unlike the app's own closure state) and every other
 // step is driven through real clicks/inputs against the shipped UI.
 import { test, expect } from '@playwright/test';
-import { createIdentity } from './helpers.mjs';
+import { createIdentity, readMessages } from './helpers.mjs';
 import { createHash } from 'node:crypto';
 
 
-// Drives the real add-contact dialog (#b-msg-add -> showPrompt -> resolveAndAdd ->
+// Drives the real add-contact panel (#b-msg-add -> _showAddContactPanel -> resolveAndAdd ->
 // addContact -> renderContacts) and opens the resulting contact-list item by clicking it,
 // exactly as a user would. resolveAndAdd() names a raw-pubkey add "Contact" (no name
 // field in that flow) — each test page adds exactly one contact, so selecting the sole
 // rendered .contact item is unambiguous without matching on name.
 async function addAndOpen(page, pubB64) {
   await page.locator('#b-msg-add').click();
-  const dialog = page.locator('dialog[aria-labelledby]');
+  const dialog = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
   await dialog.locator('.modal-input').fill(pubB64);
-  await dialog.locator('[value="ok"]').click();
+  await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
 
   const contact = page.locator('#msg-contacts .contact');
@@ -184,13 +184,7 @@ test('franking (I17): a received message can be reported and the relay verifies 
   await expect(bob.locator('#msg-messages')).toContainText(abusive, { timeout: 15_000 });
 
   // Bob's stored copy must carry the frankId and the derived opening.
-  const stored = await bob.evaluate(() => new Promise((resolve) => {
-    const req = indexedDB.open('breeze-messenger', 5);
-    req.onsuccess = () => {
-      const all = req.result.transaction('messages', 'readonly').objectStore('messages').getAll();
-      all.onsuccess = () => resolve(all.result.filter((m) => m.frankId));
-    };
-  }));
+  const stored = (await readMessages(bob)).filter((m) => m.frankId);
   expect(stored.length, 'received message carries franking material').toBeGreaterThan(0);
   const rec = stored.find((m) => m.text === abusive);
   expect(rec, 'the abusive message itself is frankable').toBeTruthy();

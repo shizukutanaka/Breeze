@@ -5,7 +5,7 @@
 // a runtime error during boot, a broken DOM id a script references, or the setup flow
 // silently failing in a real Chromium.
 import { test, expect } from '@playwright/test';
-import { submitSetup } from './helpers.mjs';
+import { submitSetup, readMessages } from './helpers.mjs';
 
 test('boots to the setup screen with no console errors', async ({ page }) => {
   const errors = [];
@@ -56,9 +56,9 @@ test('the contact list survives a reload', async ({ browser }) => {
   const pubB = await idOf(B, 'Kept');
 
   await A.locator('#b-msg-add').click();
-  const dialog = A.locator('dialog[aria-labelledby]');
+  const dialog = A.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
   await dialog.locator('.modal-input').fill(pubB);
-  await dialog.locator('[value="ok"]').click();
+  await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
   await expect(A.locator('#msg-contacts .contact')).toHaveCount(1);
 
@@ -99,18 +99,18 @@ test('messages still arrive after a reload (boot runs to completion)', async ({ 
 
   // A adds B, then RELOADS — simulating simply reopening the app tomorrow.
   await A.locator('#b-msg-add').click();
-  const dlg = A.locator('dialog[aria-labelledby]');
+  const dlg = A.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
   await dlg.locator('.modal-input').fill(pubB);
-  await dlg.locator('[value="ok"]').click();
+  await dlg.locator('button.btn-g').click();
   await expect(dlg).toBeHidden();
   await A.reload();
   await expect(A.locator('#msg-main')).toBeVisible();
 
   // B sends. If boot aborted, startPolling() never ran and this never arrives.
   await B.locator('#b-msg-add').click();
-  const dlgB = B.locator('dialog[aria-labelledby]');
+  const dlgB = B.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
   await dlgB.locator('.modal-input').fill(pubA);
-  await dlgB.locator('[value="ok"]').click();
+  await dlgB.locator('button.btn-g').click();
   await expect(dlgB).toBeHidden();
   await B.locator('#msg-contacts .contact').first().click();
   await expect(B.locator('#msg-input-bar')).toBeVisible();
@@ -123,16 +123,7 @@ test('messages still arrive after a reload (boot runs to completion)', async ({ 
   // same flake class fixed in lifecycle.spec.js and multidevice.spec.js. Foregrounding is also
   // the honest scenario: a user who just reopened the app is looking at it.
   await A.bringToFront();
-  await expect.poll(async () => A.evaluate((needle) => new Promise((r) => {
-    const q = indexedDB.open('breeze-messenger', 5);
-    q.onsuccess = () => {
-      let found = false;
-      q.result.transaction('messages', 'readonly').objectStore('messages').openCursor().onsuccess = (e) => {
-        const cur = e.target.result;
-        if (cur) { if ((cur.value.text || '').includes(needle)) found = true; cur.continue(); } else r(found);
-      };
-    };
-  }), probe), { timeout: 15_000 }).toBe(true);
+  await expect.poll(async () => (await readMessages(A)).some((m) => (m.text || '').includes(probe)), { timeout: 15_000 }).toBe(true);
 
   await ctxA.close(); await ctxB.close();
 });
