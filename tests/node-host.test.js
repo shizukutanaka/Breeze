@@ -34,10 +34,10 @@ beforeEach(() => {
   globalThis._queueAuthKey = new Map();
 });
 
-async function boot(dbPath) {
+async function boot(dbPath, { trustProxy = false } = {}) {
   const db = new DatabaseSync(dbPath);
   const env = buildRelayEnv({ db, rootDir: REPO_ROOT, source: {}, dbPath });
-  const server = createRelayServer({ env });
+  const server = createRelayServer({ env, trustProxy });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address();
   return {
@@ -226,5 +226,40 @@ describe('Node host — static layer reproduces the _headers contract', () => {
     const head = await assets.fetch(new Request('http://x/', { method: 'HEAD' }));
     expect(head.status).toBe(200);
     expect(await head.text()).toBe('');
+  });
+});
+
+// TRUST_PROXY: the per-IP rate limiter is the relay's only abuse control on
+// most routes. A reverse proxy APPENDS the address it saw to whatever
+// X-Forwarded-For the client sent, so only the rightmost hop is trustworthy.
+describe('node host — TRUST_PROXY client address', () => {
+  const hit = (base, xff) => fetch(base + '/api/account/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(xff ? { 'X-Forwarded-For': xff } : {}) },
+    body: '{}',
+  }).then((r) => r.status);
+
+  it('a forged leftmost hop cannot mint a fresh rate-limit bucket', async () => {
+    const host = await boot(join(tmp, 'xff-forged.db'), { trustProxy: true });
+    const statuses = [];
+    // /api/account/delete allows 3 requests per minute per client address.
+    for (let i = 0; i < 6; i++) statuses.push(await hit(host.base, `10.9.8.${i}, 198.51.100.7`));
+    expect(statuses.slice(0, 3).every((s) => s !== 429)).toBe(true);
+    expect(statuses.slice(3)).toEqual([429, 429, 429]);
+    await host.close();
+  });
+
+  it('distinct real clients (rightmost hop) keep distinct buckets', async () => {
+    const host = await boot(join(tmp, 'xff-distinct.db'), { trustProxy: true });
+    for (let i = 0; i < 6; i++) expect(await hit(host.base, `203.0.113.99, 198.51.100.${i + 10}`)).not.toBe(429);
+    await host.close();
+  });
+
+  it('without TRUST_PROXY the header is ignored entirely', async () => {
+    const host = await boot(join(tmp, 'xff-untrusted.db'));
+    const statuses = [];
+    for (let i = 0; i < 5; i++) statuses.push(await hit(host.base, `198.51.100.${i + 40}`));
+    expect(statuses.slice(3)).toEqual([429, 429]);
+    await host.close();
   });
 });

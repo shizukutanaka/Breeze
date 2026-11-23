@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Security
+
+- **Self-hosted relay: `TRUST_PROXY` no longer trusts a client-forged address.** The Node host took the *first* `X-Forwarded-For` entry as the client address. Common proxies (nginx `$proxy_add_x_forwarded_for`, Traefik) append to whatever the client sent, so a client could put any value first and get a fresh per-IP rate-limit bucket on every request — or spend someone else's. The host now uses the last entry, the one the operator's proxy appended.
+
 ### Documentation checked by tests
 
 - SPEC.md §4.2 quoted `CONFIG` by hand and had drifted again two days after its last re-verification: the version was one release behind, `DISAPPEAR_CHECK_MS` and `POW_DIFFICULTY` showed old values, and two listed constants no longer exist. A new test reads every pair in that excerpt and compares it with the `CONFIG` object `index.html` ships; the version line is now one of the sites `tools/bump-version.mjs` rewrites. The prekey batch size, the locale list and the file sizes in SPEC.md are corrected and checked the same way.
