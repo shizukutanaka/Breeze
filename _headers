@@ -21,13 +21,13 @@
   Cache-Control: no-store
 
 /*.js
-  Cache-Control: public, max-age=604800, immutable
+  Cache-Control: no-cache
 
 /*.png
   Cache-Control: public, max-age=604800, immutable
 
 /locales/*
-  Cache-Control: public, max-age=86400
+  Cache-Control: no-cache
 
 /manifest.json
   Cache-Control: public, max-age=86400
