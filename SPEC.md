@@ -22,10 +22,10 @@ Breeze is a serverless, end-to-end encrypted P2P messenger deployed on Cloudflar
 
 | File | Size | Purpose |
 |------|------|---------|
-| index.html | 712 KB | Client: UI + CSS + JS (single file) |
-| _worker.js | 160 KB | Cloudflare Worker: API + signals |
-| sw.js | 8 KB | Service Worker: offline cache + push |
-| manifest.json | 4 KB | PWA manifest |
+| index.html | 872 KB | Client: UI + CSS + JS (single file) |
+| _worker.js | 296 KB | Cloudflare Worker: API + signals |
+| sw.js | 11 KB | Service Worker: offline cache + push |
+| manifest.json | 2 KB | PWA manifest |
 | icon-192.png / icon-512.png | — | PWA icons |
 | 404.html | — | Custom 404 page |
 | _headers | — | Cloudflare Pages HTTP headers |
@@ -65,7 +65,7 @@ Breeze is a serverless, end-to-end encrypted P2P messenger deployed on Cloudflar
 
 - **Identity Key Pair**: X25519 (or P-256), generated on first setup, stored in IDB `identity` store
 - **Signed PreKey (SPK)**: Uploaded to server, rotated periodically
-- **One-Time PreKeys (OTP)**: 10 keys generated, auto-replenished when < 5 remain
+- **One-Time PreKeys (OTP)**: `PREKEY_OTP_COUNT` (20) keys generated; the relay's `/prekey/status` tells the client when to replenish
 - **Session Rekey**: *not implemented* (removed v3.7). A threshold-based forced rekey shipped
   as dead code — it called `dhRatchetStep` with the wrong arguments, threw on every call, and
   still wrote a "Session rekeyed" audit entry. Forward secrecy comes from the per-message KDF
@@ -189,10 +189,10 @@ Sender                          Server                         Receiver
 | audit | id (autoIncrement) | ts, type | Security audit log |
 | settings | string key | — | User preferences |
 
-### 4.2 CONFIG Constants (61 keys; excerpt re-verified 2026-11-21)
+### 4.2 CONFIG Constants (excerpt — every pair below is checked against `CONFIG` in index.html by tests/spec-config-drift.test.js)
 
 ```javascript
-VERSION: '3.7.1'              PROTOCOL_VERSION: 4
+VERSION: '3.8.0'              PROTOCOL_VERSION: 4
 POLL_FAST_MS: 3000            POLL_SLOW_MS: 15000
 PRESENCE_INTERVAL_MS: 30000   TYPING_THROTTLE_MS: 3000
 TYPING_TIMEOUT_MS: 3000       CALL_TIMEOUT_MS: 60000
@@ -207,11 +207,10 @@ IV_BYTES: 12                   PREFERRED_CURVE: 'X25519'
 SESSION_RESET_THRESHOLD: 3
 TOAST_DURATION_MS: 2000       BANNER_HIDE_MS: 2000
 FADE_OUT_MS: 300              DEBOUNCE_MS: 800
-DISAPPEAR_CHECK_MS: 30000     SMART_REPLY_HIDE_MS: 30000
-CLEANUP_INTERVAL_MS: 3600000  AUTO_BACKUP_MS: 86400000
-POW_DIFFICULTY: 16            RECONNECT_BASE_MS: 1000
+DISAPPEAR_CHECK_MS: 10000     SMART_REPLY_HIDE_MS: 30000
+CLEANUP_INTERVAL_MS: 3600000
+POW_DIFFICULTY: 20            RECONNECT_BASE_MS: 1000
 RECONNECT_MAX_MS: 60000       RECONNECT_MAX_ATTEMPTS: 8
-COMPRESS_MIN_BYTES: 256
 ```
 
 ### 4.3 DRY Helper Functions
@@ -452,7 +451,8 @@ Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline';
 
 ## 11. i18n
 
-- **Built-in**: English (372 keys), Japanese (372 keys)
+- **Built-in**: English only — the inline reference table and runtime fallback
+- **Locale files**: `locales/<lang>.json` for es, id, ja, ko, pt-BR, th, zh-TW, fetched at boot and merged over English; `node tools/i18n-check.mjs` prints the live key count and per-locale coverage
 - **External**: none — the 924-language `lang.js` table was deleted (supplied zero strings to the UI at 44% of payload; see SECURITY.md)
 - **Hardcoded UI strings**: 0 (100% coverage via `t()` function)
 - **Toast i18n**: 100%

@@ -23,7 +23,7 @@ make one possible from the repository alone.*
 
 ```bash
 npm ci
-npm test        # the full suite (1,958 tests at time of writing)
+npm test        # the full suite (it prints the live test count)
 ./validate.sh   # structural/convention gates; must print PASSED
 ```
 

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Documentation checked by tests
+
+- SPEC.md §4.2 quoted `CONFIG` by hand and had drifted again two days after its last re-verification: the version was one release behind, `DISAPPEAR_CHECK_MS` and `POW_DIFFICULTY` showed old values, and two listed constants no longer exist. A new test reads every pair in that excerpt and compares it with the `CONFIG` object `index.html` ships; the version line is now one of the sites `tools/bump-version.mjs` rewrites. The prekey batch size, the locale list and the file sizes in SPEC.md are corrected and checked the same way.
+
 ## [3.8.0] - 2026-11-23
 
 ### Groups on every device (defect waves 9, 10 and 12, PRs #466/#467/#468)
