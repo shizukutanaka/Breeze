@@ -32,12 +32,24 @@ test('delayed app modules are used by the first messenger session', async ({ pag
   await expect(panel).toContainText('✓ Per-session ECDSA P-256');
 });
 
-test('a failed app-module dependency still boots with inert fallbacks', async ({ page }) => {
+// The app bridges are STATIC imports of one <script type="module"> block, so one failed
+// fetch aborts the whole block and every bridge stays unset (tests/sw-assets.test.js pins
+// the precache that makes this rare). This test used to expect /security to render an
+// inert "no data yet" panel — true only while /security lived in the classic script; since
+// it moved into src/app/info-panels.js the command had nothing to call and printed
+// nothing at all. What must hold: the app still boots and messaging still works, and the
+// user is TOLD that features are missing instead of commands silently doing nothing.
+test('a failed app-module dependency still boots, and says features are missing', async ({ page }) => {
   await page.route('**/src/app/p2p-stats.js', route => route.abort('failed'));
   await createIdentity(page, 'Failed Modules');
-  await page.locator('#msg-input').fill('/security');
-  await page.locator('#msg-input').press('Enter');
-  const panel = page.locator('.cmd-panel-mono').last();
-  await expect(panel).toContainText('Signaling poll requests (on-device): no data yet');
-  await expect(panel).toContainText('Fresh RTC Certificate: ✗ Default');
+  await expect(page.locator('.toast', { hasText: 'Some features failed to load. Please reload.' })).toBeVisible();
+  // Booted for real: the composer is live and the add-contact surface (classic script) works.
+  await page.locator('#b-msg-add').click();
+  await expect(page.locator('#msg-messages .cmd-panel .modal-input')).toBeVisible();
+});
+
+test('no missing-features notice when every app module loads', async ({ page }) => {
+  await createIdentity(page, 'Healthy Modules');
+  await expect(page.locator('#msg-input')).toBeVisible();
+  await expect(page.locator('.toast', { hasText: 'Some features failed to load' })).toHaveCount(0);
 });

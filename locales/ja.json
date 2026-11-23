@@ -471,6 +471,7 @@
  "toastInstalled": "Breezeがインストールされました！",
  "toastWiped": "リモートでデータが消去されました",
  "toastDbConflict": "DB競合が発生しました。リロードしてください。",
+ "toastModulesFailed": "一部の機能を読み込めませんでした。再読み込みしてください。",
  "toastFwdTo": {
   "other": "{0}件のコンタクトに転送しました"
  },
