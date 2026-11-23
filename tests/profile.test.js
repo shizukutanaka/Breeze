@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
   CAPS_PROFILE, sanitizeProfile, sanitizeProfileImg, stripBidi,
-  buildProfilePayload, parseProfilePayload, profileNewer,
+  buildProfilePayload, parseProfilePayload, profileNewer, createProfileUI,
 } from '../src/app/profile.js';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
@@ -115,5 +115,80 @@ describe('stage 5 step 4 wiring + server-blindness audit', () => {
     expect(body).toContain('const [dlg, titleId] = D.makeDialog();');
     expect(body).toContain('D.safeSetHTML(dlg,');
     expect(html).not.toContain("_makeDialog('profile-title'");
+  });
+});
+
+// Regression (found by driving two real browsers, bisected to the commit that added the
+// add-contact greeting): the greeting was the FIRST ratchet message to a new contact, so
+// it carried the one-shot X3DH header. The peer either dropped it (profile from an
+// unknown sender) or was itself greeting at that moment (two initiator sessions, no
+// responder) — and every chat message after it failed to decrypt. A profile may only
+// ride a session that already exists.
+describe('profile delivery never opens a session', () => {
+  function harness({ session = false, caps = ['profile-v1'], saved = { name: 'Alice', emoji: '', img: '', pv: 7 } } = {}) {
+    const state = { session, sends: [], encrypts: 0, contacts: new Map() };
+    const ui = createProfileUI({
+      dbGet: async (store, key) => (store === 'settings' ? saved : store === 'contacts' ? state.contacts.get(key) ?? null : null),
+      dbPut: async (store, rec) => { if (store === 'contacts') state.contacts.set(rec.id, rec); },
+      dbGetAll: async () => [...state.contacts.values()],
+      encryptFor: async (wire) => { state.encrypts++; return 'enc:' + wire; },
+      relaySend: async (id, env) => { state.sends.push(env); },
+      fetchMemberCapsBatch: async (ids) => Object.fromEntries(ids.map((id) => [id, caps])),
+      hasSession: async () => state.session,
+      myId: () => 'me', myName: () => 'Alice', myPubB64: () => 'mePub', dbg: () => {},
+    });
+    return { ui, state };
+  }
+  const contact = () => ({ id: 'bobbobbobbob', pubB64: 'bobbobbobbobPUB' });
+
+  it('does not encrypt or send while there is no session with the contact', async () => {
+    const { ui, state } = harness({ session: false });
+    expect(await ui.sendTo(contact())).toBe(false);
+    expect(state.encrypts).toBe(0);
+    expect(state.sends).toHaveLength(0);
+  });
+
+  it('sends once the session exists, flagged isProfile, and records the delivered version', async () => {
+    const { ui, state } = harness({ session: false });
+    const c = contact();
+    state.contacts.set(c.id, { ...c });
+    await ui.sendTo(c);
+    state.session = true; // the first chat message has opened it
+    expect(await ui.sendTo(c)).toBe(true);
+    expect(state.sends).toHaveLength(1);
+    expect(state.sends[0].isProfile).toBe(true);
+    expect(c.profileSentPv).toBe(7);
+    expect(state.contacts.get(c.id).profileSentPv).toBe(7);
+  });
+
+  it('is a no-op for a version the contact already has — in memory and after a reload', async () => {
+    const { ui, state } = harness({ session: true });
+    const c = contact();
+    expect(await ui.sendTo(c)).toBe(true);
+    expect(await ui.sendTo(contact())).toBe(false); // fresh object, same page load
+    const reloaded = harness({ session: true });
+    expect(await reloaded.ui.sendTo({ ...contact(), profileSentPv: 7 })).toBe(false); // marker from the stored record
+    expect(state.sends).toHaveLength(1);
+    expect(reloaded.state.sends).toHaveLength(0);
+  });
+
+  it('a newer profile version is delivered again', async () => {
+    const saved = { name: 'Alice', emoji: '', img: '', pv: 7 };
+    const { ui, state } = harness({ session: true, saved });
+    const c = contact();
+    await ui.sendTo(c);
+    saved.pv = 8;
+    expect(await ui.sendTo(c)).toBe(true);
+    expect(state.sends).toHaveLength(2);
+  });
+
+  it('wiring: the host supplies hasSession, retries after a chat send, and still ratchets a greeting from an unknown sender', () => {
+    expect(html).toContain('hasSession: (id) => getSession(id).then(s => !!s),');
+    expect(html).toContain("_profileUI?.sendTo(activeContact).catch(e => _dbg(e, 'profile-first'));");
+    // The isProfile branch must reach decryptFrom without a stored contact.
+    const branch = html.slice(html.indexOf('if (msg.isProfile) {'), html.indexOf('P.profileNewer(prof, c)'));
+    expect(branch).toContain("msg.fromPub.slice(0, 12) === msg.from ? msg.fromPub : ''");
+    expect(branch).toContain('const decrypted = pub ? await decryptFrom(msg.payload, pub) : null;');
+    expect(branch).not.toMatch(/if \(!c\) return;\s*const decrypted/);
   });
 });
