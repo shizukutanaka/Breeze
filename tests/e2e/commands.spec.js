@@ -11,17 +11,12 @@
 // <secret>' — a feature that exists so a secret does NOT sit in a chat log — puts it
 // straight into one. So this asserts the peer's own database, not just the sender's UI.
 import { test, expect } from '@playwright/test';
-import { createIdentity } from './helpers.mjs';
+import { createIdentity, readMessages } from './helpers.mjs';
 
 
-const messageTexts = (page) => page.evaluate(() => new Promise((resolve) => {
-  const req = indexedDB.open('breeze-messenger', 5);
-  req.onsuccess = () => {
-    const out = [];
-    req.result.transaction('messages', 'readonly').objectStore('messages').openCursor()
-      .onsuccess = (e) => { const c = e.target.result; if (c) { out.push((c.value.text || '').trim()); c.continue(); } else resolve(out); };
-  };
-}));
+// readMessages opens the at-rest-sealed bodies (D23) — raw `rec.text` is '' for every
+// stored message, which would make the "never received /help" assertions below vacuous.
+const messageTexts = async (page) => (await readMessages(page)).map((m) => (m.text || '').trim());
 
 test('clicking send on a slash command runs it instead of messaging it to the contact', async ({ browser }) => {
   const ctxA = await browser.newContext({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.84' } });
@@ -32,9 +27,9 @@ test('clicking send on a slash command runs it instead of messaging it to the co
   const pubB = await createIdentity(B, 'Receiver');
 
   await A.locator('#b-msg-add').click();
-  const dialog = A.locator('dialog[aria-labelledby]');
+  const dialog = A.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
   await dialog.locator('.modal-input').fill(pubB);
-  await dialog.locator('[value="ok"]').click();
+  await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
   await A.locator('#msg-contacts .contact').click();
   await expect(A.locator('#msg-input-bar')).toBeVisible();
@@ -68,9 +63,9 @@ test('the send button still sends ordinary text that merely mentions a command',
   const pubB = await createIdentity(B, 'Receiver2');
 
   await A.locator('#b-msg-add').click();
-  const dialog = A.locator('dialog[aria-labelledby]');
+  const dialog = A.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
   await dialog.locator('.modal-input').fill(pubB);
-  await dialog.locator('[value="ok"]').click();
+  await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
   await A.locator('#msg-contacts .contact').click();
   await expect(A.locator('#msg-input-bar')).toBeVisible();
@@ -98,11 +93,11 @@ test('/searchall result headers are keyboard-reachable and jump to the conversat
   await createIdentity(A, 'SearchAll A11y');
 
   await A.locator('#b-msg-add').click();
-  const dialog = A.locator('dialog[aria-labelledby]');
+  const dialog = A.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
   const fakePub = await A.evaluate(() => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''));
   await dialog.locator('.modal-input').fill(fakePub);
-  await dialog.locator('[value="ok"]').click();
+  await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
   const contactId = await A.evaluate(() => new Promise((r) => {
     const q = indexedDB.open('breeze-messenger', 5);

@@ -55,3 +55,36 @@ export async function createIdentity(page, name, { navigate = true, alias = '' }
     };
   }));
 }
+
+// Every stored message, with its body opened. Since D23 (C9) the 'messages' store holds
+// bodies sealed at rest ({ text: '', enc: { v, iv, ct } }) under the 'msgkey' keywrap slot
+// — a plaintext JWK while app-lock is off, which is how every spec runs — so reading
+// `rec.text` straight off IndexedDB sees '' for every message the app wrote. This mirrors
+// _msgOpenRecord (AES-GCM, AAD 'breeze-msgstore-v1:<msgId>'); legacy plaintext rows pass
+// through unchanged, exactly as the app treats them.
+export function readMessages(page) {
+  return page.evaluate(() => new Promise((resolve, reject) => {
+    const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+    const req = indexedDB.open('breeze-messenger', 5);
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const tx = req.result.transaction(['messages', 'identity'], 'readonly');
+      const all = tx.objectStore('messages').getAll();
+      const keyReq = tx.objectStore('identity').get('msgkey');
+      tx.onerror = () => reject(tx.error);
+      tx.oncomplete = async () => {
+        try {
+          const jwk = keyReq.result?.priv;
+          const key = jwk ? await crypto.subtle.importKey('jwk', jwk, { name: 'AES-GCM' }, false, ['decrypt']) : null;
+          resolve(await Promise.all((all.result || []).map(async (rec) => {
+            if (!rec.enc || !key) return rec;
+            const pt = await crypto.subtle.decrypt(
+              { name: 'AES-GCM', iv: unb64(rec.enc.iv), additionalData: new TextEncoder().encode('breeze-msgstore-v1:' + rec.msgId) },
+              key, unb64(rec.enc.ct));
+            return { ...rec, text: new TextDecoder().decode(pt) };
+          })));
+        } catch (e) { reject(e); }
+      };
+    };
+  }));
+}

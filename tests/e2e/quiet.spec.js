@@ -5,7 +5,7 @@
 // actually suppress. None of those throw — they just quietly restore the pressure the
 // features exist to remove. So they are asserted in a real browser, end to end.
 import { test, expect } from '@playwright/test';
-import { createIdentity } from './helpers.mjs';
+import { createIdentity, readMessages } from './helpers.mjs';
 
 const ip = (n) => ({ extraHTTPHeaders: { 'CF-Connecting-IP': `203.0.113.${n}` } });
 
@@ -14,18 +14,18 @@ const ip = (n) => ({ extraHTTPHeaders: { 'CF-Connecting-IP': `203.0.113.${n}` } 
 // conversation, so the badge assertions need a contact that was never opened.
 async function addOnly(page, pubB64) {
   await page.locator('#b-msg-add').click();
-  const dialog = page.locator('dialog[aria-labelledby]');
+  const dialog = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
   await dialog.locator('.modal-input').fill(pubB64);
-  await dialog.locator('[value="ok"]').click();
+  await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
   await expect(page.locator('#msg-contacts .contact').first()).toBeVisible();
 }
 
 async function addAndOpen(page, pubB64) {
   await page.locator('#b-msg-add').click();
-  const dialog = page.locator('dialog[aria-labelledby]');
+  const dialog = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
   await dialog.locator('.modal-input').fill(pubB64);
-  await dialog.locator('[value="ok"]').click();
+  await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
   const contact = page.locator('#msg-contacts .contact').first();
   await expect(contact).toBeVisible();
@@ -63,16 +63,7 @@ test('a "no reply needed" message arrives in full but raises no unread badge', a
   await A.locator('#b-msg-send').click();
 
   // It really arrives (stored on B) ...
-  await expect.poll(async () => B.evaluate((needle) => new Promise((r) => {
-    const q = indexedDB.open('breeze-messenger', 5);
-    q.onsuccess = () => {
-      let found = false;
-      q.result.transaction('messages', 'readonly').objectStore('messages').openCursor().onsuccess = (e) => {
-        const cur = e.target.result;
-        if (cur) { if ((cur.value.text || '').includes(needle)) found = true; cur.continue(); } else r(found);
-      };
-    };
-  }), quiet), { timeout: 20_000 }).toBe(true);
+  await expect.poll(async () => (await readMessages(B)).some((m) => (m.text || '').includes(quiet)), { timeout: 20_000 }).toBe(true);
 
   // ... and the unread count did not grow.
   const after = parseInt((await B.locator('#msg-contacts .cbadge').first().textContent()) || '0', 10);
@@ -93,16 +84,13 @@ test('the settings panel holds the read receipt instead of firing it the instant
   await addAndOpen(A, pubB);
   await addAndOpen(B, pubA);
 
-  // Set the delay the way a real user does — through the settings panel, not a command
-  // only a power user would guess. (The command was deleted for exactly that reason: a
-  // persistent preference belongs in settings; the command line is for actions.)
+  // The delay is ON by default since D01 (instant receipts leak presence timing to every
+  // sender) at the settings panel's own value, so nothing has to be switched on — and
+  // ticking an already-ticked box saves nothing, so there is no stored value to read.
+  // Assert the default where a user sees it: the settings panel, not a command only a
+  // power user would guess.
   await runCommand(A, '/settings');
-  await A.locator('input[data-setting="rr-delay"]').check();
-  const delay = await A.evaluate(() => new Promise((r) => {
-    const q = indexedDB.open('breeze-messenger', 5);
-    q.onsuccess = () => { q.result.transaction('settings', 'readonly').objectStore('settings').get('app').onsuccess = (e) => r(e.target.result?.readReceiptDelay); };
-  }));
-  expect(delay).toBe(120); // the panel's one sensible default
+  await expect(A.locator('input[data-setting="rr-delay"]')).toBeChecked();
 
   // Watch the wire: opening the conversation must not produce a 'read' signal right away.
   const reads = [];

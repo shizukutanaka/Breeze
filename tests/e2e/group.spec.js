@@ -19,9 +19,9 @@ function ctxOpts(ip) {
 // returns the extracted invite URL.
 async function createGroupWithInviteLink(page, name) {
   await page.locator('#b-msg-add').click();
-  const groupDialog = page.locator('dialog[aria-labelledby]');
+  const groupDialog = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
   await groupDialog.locator('.modal-input').fill('group:' + name);
-  await groupDialog.locator('[value="ok"]').click();
+  await groupDialog.locator('button.btn-g').click();
 
   const membersDialog = page.locator('dialog[aria-labelledby]');
   await expect(membersDialog).toBeVisible();

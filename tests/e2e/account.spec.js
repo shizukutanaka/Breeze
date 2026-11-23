@@ -21,9 +21,9 @@ test('a second account is reachable, isolated, and switching back restores the f
 
   // Account 1 gets a contact — the thing that must NOT leak into account 2.
   await page.locator('#b-msg-add').click();
-  const addDlg = page.locator('dialog[aria-labelledby]');
+  const addDlg = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
   await addDlg.locator('.modal-input').fill(pubOther);
-  await addDlg.locator('[value="ok"]').click();
+  await addDlg.locator('button.btn-g').click();
   await expect(addDlg).toBeHidden();
   await expect(page.locator('#msg-contacts .contact')).toHaveCount(1);
 
