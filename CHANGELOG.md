@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Security
+
+- **Self-hosted relay: `TRUST_PROXY` no longer trusts a client-forged address.** The Node host took the *first* `X-Forwarded-For` entry as the client address. Common proxies (nginx `$proxy_add_x_forwarded_for`, Traefik) append to whatever the client sent, so a client could put any value first and get a fresh per-IP rate-limit bucket on every request — or spend someone else's. The host now uses the last entry, the one the operator's proxy appended.
+
 ## [3.8.0] - 2026-11-23
 
 ### Groups on every device (defect waves 9, 10 and 12, PRs #466/#467/#468)

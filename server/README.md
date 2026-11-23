@@ -44,7 +44,12 @@ of the entry (browsers will only use the relay over HTTPS/WSS) and
 set `TRUST_PROXY=true` so rate limiting keys on the forwarded client
 address. **Never set `TRUST_PROXY` without such a proxy**: it makes
 the host believe the `X-Forwarded-For` header, which anyone can
-forge when they can reach the entry directly.
+forge when they can reach the entry directly. The host uses the
+**last** address in that header — the one your proxy appended — so a
+client-supplied `X-Forwarded-For` cannot choose its own rate-limit
+bucket. Behind two proxies (CDN → nginx), have the inner one write the
+real client address as the final entry (e.g. nginx `real_ip_header` +
+`proxy_set_header X-Forwarded-For $remote_addr`).
 
 Backups are the database file (plus its `-wal`/`-shm` sidecars if
 present while running): stop the process, copy the file, restart.

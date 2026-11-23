@@ -23,8 +23,9 @@
 // client cannot spoof there. This host OWNS that header instead: it
 // is overwritten on every adapted request with the socket's remote
 // address — except when the operator sets TRUST_PROXY (they run a
-// reverse proxy that sets X-Forwarded-For), in which case the first
-// forwarded hop is used. An unconditionally trusted X-Forwarded-For
+// reverse proxy that sets X-Forwarded-For), in which case the LAST
+// forwarded hop is used — the one that proxy appended; hops to its
+// left are client-supplied and would let anyone pick their bucket. An unconditionally trusted X-Forwarded-For
 // would hand rate-limit evasion to anyone, so the default never
 // looks at it.
 //
@@ -94,7 +95,11 @@ export function buildRelayEnv({ db, rootDir = REPO_ROOT, source = process.env, d
 function clientIp(req, trustProxy) {
   if (trustProxy) {
     const xff = req.headers['x-forwarded-for'];
-    if (typeof xff === 'string' && xff.trim()) return xff.split(',')[0].trim();
+    // RIGHTMOST hop: the entry the operator's own proxy appended. Everything
+    // to its left arrived from the client and is forgeable (nginx's
+    // $proxy_add_x_forwarded_for and Traefik append to what the client sent).
+    const hop = typeof xff === 'string' ? xff.split(',').pop().trim() : '';
+    if (hop) return hop.startsWith('::ffff:') ? hop.slice(7) : hop;
   }
   const remote = req.socket.remoteAddress || '';
   // Normalize the IPv4-mapped IPv6 form so one client has one bucket.
