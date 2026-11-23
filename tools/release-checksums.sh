@@ -31,7 +31,10 @@ DIR="${1:?usage: release-checksums.sh <asset-dir>}"
 cd "$DIR"
 
 rm -f SHA256SUMS.txt
-find . -maxdepth 1 -type f ! -name 'SHA256SUMS.txt' -printf '%P\n' \
+# No GNU-only `find -printf`: BSD find (macOS) rejects it, which failed this
+# script — and its test — on every non-Linux machine.
+find . -maxdepth 1 -type f ! -name 'SHA256SUMS.txt' \
+  | sed 's|^\./||' \
   | LC_ALL=C sort \
   | while IFS= read -r f; do sha256sum "$f"; done > SHA256SUMS.txt
 
