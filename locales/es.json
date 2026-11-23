@@ -449,6 +449,7 @@
  "toastInstalled": "¡Breeze instalado!",
  "toastWiped": "Dispositivo borrado remotamente",
  "toastDbConflict": "Conflicto de versión de la base de datos. Recarga la página.",
+ "toastModulesFailed": "Algunas funciones no se pudieron cargar. Recarga la página.",
  "toastFwdTo": {
   "one": "Reenviado a 1 contacto",
   "other": "Reenviado a {0} contactos"

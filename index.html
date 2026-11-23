@@ -1224,14 +1224,13 @@ window.__breezeSeed = createSeedHelper();
 </script>
 <script type="module">
 // Modularization: app-logic subsystems extracted from the classic script
-// below (index.html carries a hard line budget — validate.sh). Same
-// loading doctrine as the crypto facades above: the bridges are read
-// opportunistically at call/instantiation time, so a module that has not
-// loaded or fails outright degrades its own feature only, never boot.
-// src/app/call.js and src/app/backup.js export factories — the classic
-// script instantiates them inside initMessenger with that closure's live
-// bindings as deps. src/app/qr.js needs no deps and is built here;
-// src/app/import-parsers.js is a set of pure functions.
+// below (index.html carries a hard line budget — validate.sh). The bridges
+// are read opportunistically, so boot survives without them — but these are
+// static imports: ONE failed fetch aborts this whole block and every bridge
+// stays unset (sw.js precaches the closure; initMessenger says so if it still
+// happens). call.js / backup.js export factories the classic script
+// instantiates inside initMessenger with that closure's live bindings as
+// deps; qr.js needs no deps; import-parsers.js is a set of pure functions.
 import { createCallManager } from './src/app/call.js';
 window.__breezeCall = { createCallManager };
 import { createGroupCallManager, poolMap } from './src/app/group-call.js';
@@ -1946,6 +1945,7 @@ const _I = {
     toastInstalled: 'Breeze installed!',
     toastWiped: 'Device wiped remotely',
     toastDbConflict: 'Database version conflict. Please reload.',
+    toastModulesFailed: 'Some features failed to load. Please reload.',
     toastFwdTo: { one: "Forwarded to 1 contact", other: "Forwarded to {0} contacts" },
     toastFwdFail: 'Forward failed',
     toastSendFail: 'Send failed — will retry',
@@ -4059,7 +4059,7 @@ document.addEventListener('keydown', (e) => {
 
 // ======================== MESSENGER ========================
 async function initMessenger(dbName) {
-  try { await _appModulesReady; } catch(e) { _dbg(e, 'app-modules-ready'); }
+  try { await _appModulesReady; if (!globalThis.__breezeOfflinePairing) showToast(t('toastModulesFailed'), 'error', MS.MIN); } catch(e) { _dbg(e, 'app-modules-ready'); } // last bridge of the block unset ⇒ the block aborted: /security, calls, backup… would otherwise do nothing, silently
   _perf.mark('initMessenger');
   const _ac = new AbortController(); // Abort all listeners on account switch
   dbName = dbName || 'breeze-messenger';

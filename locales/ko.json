@@ -446,6 +446,7 @@
  "toastInstalled": "Breeze 설치 완료!",
  "toastWiped": "원격으로 기기가 초기화되었습니다",
  "toastDbConflict": "데이터베이스 버전 충돌. 새로고침해 주세요.",
+ "toastModulesFailed": "일부 기능을 불러오지 못했습니다. 새로고침해 주세요.",
  "toastFwdTo": {
   "other": "연락처 {0}명에게 전달됨"
  },

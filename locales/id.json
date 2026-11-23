@@ -446,6 +446,7 @@
  "toastInstalled": "Breeze terpasang!",
  "toastWiped": "Perangkat dihapus dari jarak jauh",
  "toastDbConflict": "Konflik versi basis data. Muat ulang halaman.",
+ "toastModulesFailed": "Beberapa fitur gagal dimuat. Silakan muat ulang.",
  "toastFwdTo": {
   "other": "Diteruskan ke {0} kontak"
  },
