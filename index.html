@@ -1242,8 +1242,9 @@ import { createGroupCreate } from './src/app/group-create.js';
 window.__breezeGroupCreate = { createGroupCreate };
 import { createDeviceLink } from './src/app/device-link.js';
 window.__breezeDeviceLink = { createDeviceLink };
-import { CAPS_STICKER as _CAPS_STICKER_STR, BUILTIN_PACK, sanitizeSticker, sanitizePack, parsePackFile, packToFile, buildStickerPayload, parseStickerPayload, groupTextForSticker, parseGroupStickerText, stickerLabel } from './src/app/stickers.js';
+import { CAPS_STICKER as _CAPS_STICKER_STR, BUILTIN_PACK, sanitizeSticker, sanitizePack, parsePackFile, packToFile, buildStickerPayload, parseStickerPayload, groupTextForSticker, parseGroupStickerText, stickerLabel, createStickersUI } from './src/app/stickers.js';
 window.__breezeStickers = { BUILTIN_PACK, sanitizeSticker, sanitizePack, parsePackFile, packToFile, buildStickerPayload, parseStickerPayload, groupTextForSticker, parseGroupStickerText, stickerLabel };
+window.__breezeStickersUI = { createStickersUI };
 import { parseContactAddress } from './src/app/address.js'; window.__breezeAddress = { parseContactAddress };
 import { installModalA11y } from './src/app/modal-a11y.js'; installModalA11y(); // D17: focus trap + aria-modal for every overlay modal, watched from <body>
 import { createTurnFetcher } from './src/app/turn.js'; window.__breezeTurn = { createTurnFetcher };
@@ -6465,28 +6466,6 @@ async function initMessenger(dbName) {
     cv.getContext('2d').drawImage(im, (im.width - s) / 2, (im.height - s) / 2, s, s, 0, 0, 96, 96);
     return cv.toDataURL('image/jpeg', 0.85);
   }
-  // SHARE_PLAN stage 5 step 5: stickers (src/app/stickers.js holds the
-  // pack format and wire shapes). 1:1 stickers ride a dedicated
-  // envelope flag like voice; group stickers ride the sender-key text
-  // channel as a {stk} document. Both are capability-gated.
-  async function _customStickerPacks() {
-    const S = globalThis.__breezeStickers;
-    const saved = await dbGet('settings', 'stickerPacks').catch(() => null);
-    return (Array.isArray(saved) ? saved : []).map(p => S?.sanitizePack(p)).filter(Boolean);
-  }
-  async function _downscaleSticker(file) {
-    const im = await _imgFromFile(file).catch(() => null);
-    if (!im) return null;
-    try {
-      const scale = Math.min(1, 256 / Math.max(im.width, im.height));
-      const cv = document.createElement('canvas');
-      cv.width = Math.max(1, Math.round(im.width * scale)); cv.height = Math.max(1, Math.round(im.height * scale));
-      cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
-      let out = cv.toDataURL('image/png');
-      if (out.length > 49152) out = cv.toDataURL('image/webp', 0.9); // STICKER_IMG_MAX in stickers.js
-      return out.length <= 49152 ? out : null;
-    } catch { return null; }
-  }
   async function _sendTextFallback(text) {
     const input = _DOM.get('msg-input');
     const draft = input.value;
@@ -6528,156 +6507,6 @@ async function initMessenger(dbName) {
     return true;
   }
 
-  async function _sendSticker(sticker) {
-    const S = globalThis.__breezeStickers;
-    const contact = activeContact;
-    const clean = S?.sanitizeSticker(sticker);
-    if (!clean || !contact) return;
-    const label = S.stickerLabel(clean);
-    let ts = correctedNow();
-    if (ts <= _lastSendTs) ts = _lastSendTs + 1;
-    _lastSendTs = ts;
-    const msgId = myId + ':' + ts;
-    if (contact.isGroup) {
-      const members = (contact.members || []).filter(m => m.id !== myId);
-      if (!members.every(m => (m.caps || []).includes(CAPS_STICKER))) {
-        if (clean.emoji) { await _sendTextFallback(clean.emoji); return; }
-        showToast(t('stickersGroupNoCap'), 'error'); return;
-      }
-      const wire = S.groupTextForSticker(clean);
-      if (!wire) return;
-      const sent = await _sendGroupTransport(contact, wire, ts, msgId, async () => {
-        await dbPut('messages', { msgId, contactId: contact.id, text: label, mine: true, ts, sticker: clean, senderName: myName });
-        appendMsg(label, true, ts, null, null, { msgId, sticker: clean, senderName: myName });
-      });
-      if (!sent) { showToast(t('toastSendFail'), 'error'); return; }
-    } else {
-      const capsById = await _fetchMemberCapsBatch([contact.id]);
-      if (!(capsById[contact.id] || []).includes(CAPS_STICKER)) {
-        if (clean.emoji) { await _sendTextFallback(clean.emoji); return; }
-        showToast(t('stickersPeerNoCap'), 'error'); return;
-      }
-      const wire = S.buildStickerPayload(clean);
-      const enc = wire && await encryptFor(wire, contact.pubB64);
-      if (!enc) { showToast(t('toastSendFail'), 'error'); return; }
-      await dbPut('messages', { msgId, contactId: contact.id, text: label, mine: true, ts, sticker: clean });
-      appendMsg(label, true, ts, null, null, { msgId, sticker: clean });
-      await relaySend(contact.id, { to: contact.id, from: myId, fromPub: myPubB64, fromName: myName, payload: enc, ts, isSticker: true }, contact.pubB64);
-      _fanOut(contact, wire, ts, { isSticker: true }, { isSticker: true, sfFor: contact.id, sfPub: contact.pubB64, sfName: contact.name });
-    }
-    contact.lastMsg = label; contact.lastMsgAt = ts;
-    const stored = await dbGet('contacts', contact.id).catch(() => null);
-    if (stored) { stored.lastMsg = label; stored.lastMsgAt = ts; await dbPut('contacts', stored); }
-    _renderContactsThrottled();
-    playSendSound(); haptic.send();
-  }
-  let _stickerPanel = null;
-  async function _toggleStickerPanel() {
-    if (_stickerPanel) { _stickerPanel.remove(); _stickerPanel = null; return; }
-    const S = globalThis.__breezeStickers;
-    if (!S || !activeContact) return;
-    const packs = [S.BUILTIN_PACK, ...(await _customStickerPacks())];
-    const panel = document.createElement('div');
-    panel.className = 'emoji-picker';
-    panel.setAttribute('role', 'dialog');
-    panel.setAttribute('aria-label', t('ttStickers'));
-    const tabs = document.createElement('div');
-    tabs.className = 'emoji-picker-tabs';
-    const grid = document.createElement('div');
-    grid.className = 'sticker-grid';
-    const showPack = (pack) => {
-      grid.replaceChildren();
-      for (const st of pack.stickers) {
-        const cell = document.createElement('button');
-        cell.className = 'sticker-cell';
-        if (st.img) { const im = document.createElement('img'); im.src = st.img; im.alt = st.id; cell.appendChild(im); }
-        else { const sp = document.createElement('span'); sp.className = 'stk-emoji'; sp.textContent = st.emoji; cell.appendChild(sp); }
-        cell.onclick = () => { _toggleStickerPanel(); _sendSticker({ pack: pack.id, ...st }).catch(e => _dbg(e, 'sticker-send')); };
-        grid.appendChild(cell);
-      }
-    };
-    packs.forEach((pack, i) => {
-      const b = document.createElement('button');
-      b.textContent = pack.id === 'builtin' ? '😀' : '🖼️';
-      b.title = pack.name;
-      if (i === 0) b.className = 'active';
-      b.onclick = () => { tabs.querySelectorAll('button').forEach(x => x.classList.remove('active')); b.classList.add('active'); showPack(pack); };
-      tabs.appendChild(b);
-    });
-    const manage = document.createElement('button');
-    manage.textContent = '⚙️'; manage.title = t('stickersTitle');
-    manage.onclick = () => { _toggleStickerPanel(); _showStickersPanel().catch(e => _dbg(e, 'stickers-panel')); };
-    tabs.appendChild(manage);
-    panel.append(tabs, grid);
-    showPack(packs[0]);
-    _DOM.get('msg-input-bar')?.appendChild(panel);
-    _stickerPanel = panel;
-  }
-  async function _showStickersPanel() {
-    const S = globalThis.__breezeStickers;
-    if (!S) return;
-    const packs = await _customStickerPacks();
-    const [dlg, titleId] = _makeDialog();
-    const rows = packs.map((p, i) => `<div class="pf-photo-row"><span>${esc(p.name)} (${p.stickers.length})</span><button type="button" class="btn btn-g btn-sm stk-export" data-i="${i}">${esc(t('stickersExport'))}</button><button type="button" class="btn btn-g btn-sm stk-del" data-i="${i}">${esc(t('stickersDelete'))}</button></div>`).join('');
-    safeSetHTML(dlg, `
-      <h3 id="${titleId}" class="i-m-0-12">${esc(t('stickersTitle'))}</h3>
-      ${rows || `<p class="i-tiny-meta">${esc(t('stickersEmpty'))}</p>`}
-      <div class="pf-photo-row">
-        <button type="button" class="btn btn-g btn-sm stk-add">${esc(t('stickersAddImages'))}</button>
-        <button type="button" class="btn btn-g btn-sm stk-import">${esc(t('stickersImport'))}</button>
-      </div>
-      <input type="file" class="stk-files hidden" accept="image/*" multiple>
-      <input type="file" class="stk-packfile hidden" accept="application/json,.json">
-      <div class="dlg-btns"><button class="btn btn-p btn-sm" value="cancel">${esc(t('ok'))}</button></div>`);
-    _showDialog(dlg);
-    const close = () => { dlg.close(); dlg.remove(); };
-    dlg.querySelector('[value="cancel"]').onclick = close;
-    _wireDialogDismiss(dlg, close);
-    const reload = () => { close(); _showStickersPanel().catch(e => _dbg(e, 'stickers-panel')); };
-    dlg.querySelector('.stk-add').onclick = () => dlg.querySelector('.stk-files').click();
-    dlg.querySelector('.stk-import').onclick = () => dlg.querySelector('.stk-packfile').click();
-    dlg.querySelector('.stk-files').onchange = async (e) => {
-      const files = [...(e.target.files || [])];
-      if (!files.length) return;
-      const mine = packs.find(p => p.id === 'mine') || { id: 'mine', name: t('stickersMyPack'), stickers: [] };
-      let added = 0;
-      for (const f of files) {
-        const img = await _downscaleSticker(f);
-        if (!img) { showToast(t('stickersTooBig'), 'error'); continue; }
-        mine.stickers.push({ id: 's' + Date.now().toString(36) + added, img });
-        added++;
-      }
-      if (added) {
-        const cleanMine = S.sanitizePack(mine);
-        const next = packs.filter(p => p.id !== 'mine');
-        if (cleanMine) next.push(cleanMine);
-        await dbPut('settings', next, 'stickerPacks');
-        showToast(t('stickersSaved'), 'success');
-      }
-      reload();
-    };
-    dlg.querySelector('.stk-packfile').onchange = async (e) => {
-      const f = e.target.files?.[0];
-      if (!f) return;
-      const pack = S.parsePackFile(await f.text().catch(() => ''));
-      if (!pack) { showToast(t('stickersBadPack'), 'error'); return; }
-      await dbPut('settings', [...packs.filter(p => p.id !== pack.id), pack], 'stickerPacks');
-      showToast(t('stickersSaved'), 'success');
-      reload();
-    };
-    dlg.querySelectorAll('.stk-export, .stk-del').forEach(btn => btn.onclick = async () => {
-      const pack = packs[+btn.dataset.i];
-      if (!pack) return;
-      if (btn.classList.contains('stk-del')) { await dbPut('settings', packs.filter(p => p.id !== pack.id), 'stickerPacks'); reload(); return; }
-      const text = S.packToFile(pack);
-      if (!text) return;
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
-      a.download = pack.id + '.bstick.json';
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-    });
-  }
   // Devices of a CONTACT (for send fan-out). 1-min cache on the contact object
   // (D14: was 5 min; the presence devTs push below invalidates sooner).
   async function _devicesFor(contact) {
@@ -10939,7 +10768,7 @@ async function initMessenger(dbName) {
     if (activeContact) startCall(activeContact, false);
   });
   _DOM.get('b-msg-video')?.addEventListener('click', () => { if (activeContact) startCall(activeContact, true); });
-  _DOM.get('b-msg-sticker')?.addEventListener('click', () => { _toggleStickerPanel().catch(e => _dbg(e, 'sticker-panel')); });
+  _DOM.get('b-msg-sticker')?.addEventListener('click', () => { _stickersUI?.togglePanel().catch(e => _dbg(e, 'sticker-panel')); });
 
   // Listen for incoming calls via signal poll (piggyback on the messenger
   // signal poll): 'call-offer' detection lives in its message handling.
@@ -11048,6 +10877,20 @@ async function initMessenger(dbName) {
     activeContact: () => activeContact, activeId: () => activeContact?.id,
     myId: () => myId, myName: () => myName, myPubB64: () => myPubB64,
     isSecondary: () => _isSecondaryDevice, replayCache: () => _replayCache, intervals: () => _intervals,
+    lastSendTs: () => _lastSendTs, setLastSendTs: (v) => { _lastSendTs = v; },
+  });
+  const _stickersUI = globalThis.__breezeStickersUI?.createStickersUI({
+    dbGet, dbPut, encryptFor, relaySend, showToast, t, esc, safeSetHTML, appendMsg, downloadBlob,
+    imgFromFile: (f) => _imgFromFile(f),
+    fanOut: (c, wire, ts, extra, sfExtra) => _fanOut(c, wire, ts, extra, sfExtra),
+    sendGroupTransport: (c, wire, ts, mid, cb) => _sendGroupTransport(c, wire, ts, mid, cb),
+    fetchMemberCapsBatch: (ids) => _fetchMemberCapsBatch(ids),
+    sendTextFallback: (text) => _sendTextFallback(text),
+    renderContactsThrottled: () => _renderContactsThrottled(),
+    playSendSound: () => playSendSound(), hapticSend: () => haptic.send(),
+    makeDialog: () => _makeDialog(), showDialog: (d) => _showDialog(d), wireDialogDismiss: (d, c) => _wireDialogDismiss(d, c),
+    domGet: (id) => _DOM.get(id), correctedNow: () => correctedNow(), dbg: _dbg,
+    activeContact: () => activeContact, myId: () => myId, myName: () => myName, myPubB64: () => myPubB64,
     lastSendTs: () => _lastSendTs, setLastSendTs: (v) => { _lastSendTs = v; },
   });
   const _groupCreate = globalThis.__breezeGroupCreate?.createGroupCreate({
@@ -15286,7 +15129,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       await _deviceLink?.handleCommand(val);
       return;
     }
-    if (val === '/stickers') { e.preventDefault(); clearInput(); _showStickersPanel().catch(e2 => _dbg(e2, 'stickers-panel')); return; }
+    if (val === '/stickers') { e.preventDefault(); clearInput(); _stickersUI?.showPanel().catch(e2 => _dbg(e2, 'stickers-panel')); return; }
     if (val === '/location') { e.preventDefault(); clearInput(); _locUI?.showPanel().catch(e2 => _dbg(e2, 'loc-panel')); return; }
     if (val === '/profile') { e.preventDefault(); clearInput(); _profileUI?.showPanel().catch(e2 => _dbg(e2, 'profile-panel')); return; }
     if (val === '/history') {
