@@ -7,17 +7,18 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+const voiceMod = readFileSync(new URL('../src/app/voice-input.js', import.meta.url), 'utf8');
 const worker = readFileSync(new URL('../_worker.js', import.meta.url), 'utf8');
 const LOCALES = ['es', 'id', 'ja', 'ko', 'pt-BR', 'th', 'zh-TW'];
 
 describe('S01 — group voice sends refuse honestly; group files joined the transport in wave 9', () => {
   it('the voice button refuses group chats before recording starts', () => {
-    expect(html).toContain("if (activeContact.isGroup) { showToast(t('groupNoVoice'), 'error'); return; }");
-    expect(html.split("showToast(t('groupNoVoice'), 'error')").length - 1).toBe(2);
+    expect(voiceMod).toContain("if (contact.isGroup) { showToast(t('groupNoVoice'), 'error'); return; }");
+    expect(voiceMod.split("showToast(t('groupNoVoice'), 'error')").length - 1).toBe(2);
   });
 
   it('the voice onstop path backstops a mid-recording switch to a group', () => {
-    expect(html).toContain("if (activeContact?.isGroup) { showToast(t('groupNoVoice'), 'error'); return; }");
+    expect(voiceMod).toContain("if (cur?.isGroup) { showToast(t('groupNoVoice'), 'error'); return; }");
   });
 
   it('the refusal label exists in English and every locale, and the old joint label is gone', () => {

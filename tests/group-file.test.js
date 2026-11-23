@@ -163,8 +163,9 @@ describe('wiring', () => {
   });
 
   it('voice keeps an honest, voice-only refusal in every locale', () => {
+    const voiceMod = readFileSync(new URL('../src/app/voice-input.js', import.meta.url), 'utf8');
     expect(html).toContain("groupNoVoice: 'Voice messages can\\'t be sent in group chats yet',");
-    expect(html.split("showToast(t('groupNoVoice'), 'error')").length - 1).toBe(2);
+    expect(voiceMod.split("showToast(t('groupNoVoice'), 'error')").length - 1).toBe(2);
     for (const loc of LOCALES) {
       const json = readFileSync(new URL(`../locales/${loc}.json`, import.meta.url), 'utf8');
       expect(json, loc).toContain('"groupNoVoice"');
