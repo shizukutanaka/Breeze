@@ -575,6 +575,8 @@
  "uiNewVersion": "Versi baru tersedia.",
  "uiUpdateReady": "Pembaruan siap.",
  "uiRestartUpdate": "Mulai ulang untuk memperbarui",
+ "uiUpdateDownloading": "Mengunduh pembaruan...",
+ "uiUpdateError": "Verifikasi atau pengunduhan pembaruan gagal. Pembaruan dibatalkan.",
  "uiDbReconnect": "Menghubungkan ulang basis data...",
  "uiConnected": "Terhubung",
  "uiConnecting": "Menghubungkan...",
