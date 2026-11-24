@@ -886,5 +886,10 @@
  "cmdCryptoPqHybrid": "Plano híbrido: X25519 + ML-KEM-768 (quando disponível)",
  "cmdCryptoFwdSec": "✓ Cada mensagem usa uma chave única",
  "cmdCryptoCompression": "✗ desativada por design (evita CRIME/BREACH)",
- "cmdInfoFilesBookmarks": "📎 Arquivos: {0} | 🔖 Favoritos: {1}"
+ "cmdInfoFilesBookmarks": "📎 Arquivos: {0} | 🔖 Favoritos: {1}",
+ "powerModeLabel": "Uso de energia:",
+ "powerAuto": "Automático (pela bateria)",
+ "powerNormal": "Normal",
+ "powerSaver": "Economia de energia",
+ "powerEmergency": "Emergência (desastre)"
 }

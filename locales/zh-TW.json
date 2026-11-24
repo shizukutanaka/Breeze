@@ -879,5 +879,10 @@
  "cmdCryptoPqHybrid": "混合計畫：X25519 + ML-KEM-768（可用時）",
  "cmdCryptoFwdSec": "✓ 每則訊息使用專屬金鑰",
  "cmdCryptoCompression": "✗ 依設計關閉（避免 CRIME/BREACH）",
- "cmdInfoFilesBookmarks": "📎 檔案：{0} | 🔖 書籤：{1}"
+ "cmdInfoFilesBookmarks": "📎 檔案：{0} | 🔖 書籤：{1}",
+ "powerModeLabel": "電力使用：",
+ "powerAuto": "自動（依電池）",
+ "powerNormal": "一般",
+ "powerSaver": "省電",
+ "powerEmergency": "非常時（災害）"
 }
