@@ -116,6 +116,9 @@ const UPGRADE_KEEP = new Set([
   'upgrade', 'connection', 'sec-websocket-key', 'sec-websocket-version',
   'sec-websocket-protocol', 'sec-websocket-extensions',
 ]);
+// Matches _worker.js MAX_BODY_BYTES: cap buffering at the HTTP boundary so a
+// large or chunked POST cannot exhaust Node RAM before the worker sees it.
+const MAX_BODY_BYTES = 524288;
 
 async function toFetchRequest(req, { trustProxy, forUpgrade = false }) {
   const host = req.headers.host || 'localhost';
@@ -131,9 +134,24 @@ async function toFetchRequest(req, { trustProxy, forUpgrade = false }) {
   headers.set('CF-Connecting-IP', clientIp(req, trustProxy));
   let body;
   if (req.method !== 'GET' && req.method !== 'HEAD') {
+    const contentLength = parseInt(req.headers['content-length'] || '0', 10);
+    if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
+      const err = new Error('Request too large');
+      err.code = 'BODY_TOO_LARGE';
+      throw err;
+    }
     const chunks = [];
-    for await (const chunk of req) chunks.push(chunk);
-    const buf = Buffer.concat(chunks);
+    let total = 0;
+    for await (const chunk of req) {
+      total += chunk.length;
+      if (total > MAX_BODY_BYTES) {
+        const err = new Error('Request too large');
+        err.code = 'BODY_TOO_LARGE';
+        throw err;
+      }
+      chunks.push(chunk);
+    }
+    const buf = Buffer.concat(chunks, total);
     if (buf.length) body = buf;
   }
   return new Request(`http://${host}${req.url}`, {
@@ -172,6 +190,17 @@ export function createRelayServer({ env, trustProxy = false } = {}) {
       const response = await worker.fetch(request, env);
       await writeFetchResponse(res, response);
     })().catch((e) => {
+      if (e?.code === 'BODY_TOO_LARGE') {
+        if (!res.headersSent) {
+          res.writeHead(413, {
+            'Content-Type': 'application/json',
+            'Connection': 'close',
+          });
+        }
+        res.end(JSON.stringify({ error: 'Request too large', code: 'BODY_TOO_LARGE', max: MAX_BODY_BYTES }));
+        req.resume();
+        return;
+      }
       console.error('[relay] request failed:', e?.message ?? e);
       if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('Internal Server Error');

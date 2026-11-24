@@ -14,6 +14,7 @@
 // beforeEach resets them like every other suite, and the drill keeps
 // per-IP request counts far under the router's per-minute limits.
 import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
+import http from 'node:http';
 import { createRequire } from 'node:module';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -271,6 +272,57 @@ describe('node host — TRUST_PROXY client address', () => {
     const statuses = [];
     for (let i = 0; i < 5; i++) statuses.push(await hit(host.base, `198.51.100.${i + 40}`));
     expect(statuses.slice(3)).toEqual([429, 429]);
+    await host.close();
+  });
+});
+
+describe('node host — request body size cap (OOM DoS guard)', () => {
+  it('rejects oversized chunked POST streams with 413 BODY_TOO_LARGE before buffering unbounded data', async () => {
+    const host = await boot(join(tmp, 'body-limit-chunked.db'));
+    const res = await new Promise((resolve, reject) => {
+      const req = http.request({
+        host: '127.0.0.1',
+        port: host.port,
+        path: '/api/sealed/send',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Transfer-Encoding': 'chunked',
+        },
+      }, (r) => {
+        const chunks = [];
+        r.on('data', (c) => chunks.push(c));
+        r.on('end', () => resolve({
+          status: r.statusCode,
+          body: JSON.parse(Buffer.concat(chunks).toString('utf8')),
+        }));
+      });
+      req.on('error', () => { /* expected when server closes after 413 */ });
+      const chunk = Buffer.alloc(64 * 1024, 0x61);
+      // 10 * 64KB = 640KB > 512KB MAX_BODY_BYTES
+      for (let i = 0; i < 10; i++) {
+        if (!req.destroyed) req.write(chunk);
+      }
+      req.end();
+    });
+    expect(res.status).toBe(413);
+    expect(res.body.code).toBe('BODY_TOO_LARGE');
+    expect(res.body.max).toBe(524288);
+    await host.close();
+  });
+
+  it('rejects oversized Content-Length POST with 413 BODY_TOO_LARGE', async () => {
+    const host = await boot(join(tmp, 'body-limit-cl.db'));
+    const big = 'x'.repeat(524289);
+    const res = await fetch(host.base + '/api/sealed/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: big,
+    });
+    expect(res.status).toBe(413);
+    const body = await res.json();
+    expect(body.code).toBe('BODY_TOO_LARGE');
+    expect(body.max).toBe(524288);
     await host.close();
   });
 });
