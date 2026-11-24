@@ -263,3 +263,55 @@ describe('sw.js — never precaches or re-caches a stale HTTP-cache copy', () =>
     } finally { vi.unstubAllGlobals(); }
   });
 });
+
+describe('sw.js — install fails closed on web origins when precache fails', () => {
+  it('rejects install and does NOT call skipWaiting when addAll fails on https:', async () => {
+    class FakeRequest { constructor(url, init) { this.url = url; this.cache = init?.cache; } }
+    vi.stubGlobal('Request', FakeRequest);
+    try {
+      const handlers = {};
+      const skipWaiting = vi.fn();
+      const self = {
+        location: { origin: ORIGIN, protocol: 'https:' },
+        addEventListener: (t, fn) => { handlers[t] = fn; },
+        skipWaiting,
+      };
+      const caches = {
+        open: () => Promise.resolve({
+          addAll: () => Promise.reject(new Error('network failure')),
+        }),
+      };
+      // eslint-disable-next-line no-new-func
+      new Function('self', 'clients', 'caches', swSource)(self, {}, caches);
+      let waited;
+      handlers.install({ waitUntil: (p) => { waited = p; } });
+      await expect(waited).rejects.toThrow('network failure');
+      expect(skipWaiting).not.toHaveBeenCalled();
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it('swallows addAll failure on file: origin (desktop shell) without throwing', async () => {
+    class FakeRequest { constructor(url, init) { this.url = url; this.cache = init?.cache; } }
+    vi.stubGlobal('Request', FakeRequest);
+    try {
+      const handlers = {};
+      const skipWaiting = vi.fn();
+      const self = {
+        location: { origin: 'null', protocol: 'file:' },
+        addEventListener: (t, fn) => { handlers[t] = fn; },
+        skipWaiting,
+      };
+      const caches = {
+        open: () => Promise.resolve({
+          addAll: () => Promise.reject(new TypeError('Request scheme file is unsupported')),
+        }),
+      };
+      // eslint-disable-next-line no-new-func
+      new Function('self', 'clients', 'caches', swSource)(self, {}, caches);
+      let waited;
+      handlers.install({ waitUntil: (p) => { waited = p; } });
+      await expect(waited).resolves.toBeUndefined();
+      expect(skipWaiting).toHaveBeenCalledTimes(1);
+    } finally { vi.unstubAllGlobals(); }
+  });
+});
