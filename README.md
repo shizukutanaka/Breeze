@@ -2,6 +2,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
+**他の言語で読む**: 日本語（このページ） · [English](docs/i18n/README-en.md) · [中文（简体）](docs/i18n/README-zh-CN.md) · [中文（繁體）](docs/i18n/README-zh-TW.md) · [Español](docs/i18n/README-es.md) · [Français](docs/i18n/README-fr.md) · [Deutsch](docs/i18n/README-de.md) · [Italiano](docs/i18n/README-it.md) · [Português (Brasil)](docs/i18n/README-pt-BR.md) · [Русский](docs/i18n/README-ru.md) · [Українська](docs/i18n/README-uk.md) · [Polski](docs/i18n/README-pl.md) · [Nederlands](docs/i18n/README-nl.md) · [Svenska](docs/i18n/README-sv.md) · [Norsk](docs/i18n/README-nb.md) · [Dansk](docs/i18n/README-da.md) · [Suomi](docs/i18n/README-fi.md) · [Čeština](docs/i18n/README-cs.md) · [Magyar](docs/i18n/README-hu.md) · [Română](docs/i18n/README-ro.md) · [Ελληνικά](docs/i18n/README-el.md) · [Türkçe](docs/i18n/README-tr.md) · [العربية](docs/i18n/README-ar.md) · [فارسی](docs/i18n/README-fa.md) · [עברית](docs/i18n/README-he.md) · [हिन्दी](docs/i18n/README-hi.md) · [বাংলা](docs/i18n/README-bn.md) · [اردو](docs/i18n/README-ur.md) · [ਪੰਜਾਬੀ](docs/i18n/README-pa.md) · [தமிழ்](docs/i18n/README-ta.md) · [తెలుగు](docs/i18n/README-te.md) · [മലയാളം](docs/i18n/README-ml.md) · [Bahasa Indonesia](docs/i18n/README-id.md) · [Bahasa Melayu](docs/i18n/README-ms.md) · [Tiếng Việt](docs/i18n/README-vi.md) · [ไทย](docs/i18n/README-th.md) · [မြန်မာ](docs/i18n/README-my.md) · [ខ្មែរ](docs/i18n/README-km.md) · [한국어](docs/i18n/README-ko.md) · [Filipino](docs/i18n/README-tl.md) · [Kiswahili](docs/i18n/README-sw.md) · [Hausa](docs/i18n/README-ha.md) · [Yorùbá](docs/i18n/README-yo.md) · [Igbo](docs/i18n/README-ig.md) · [አማርኛ](docs/i18n/README-am.md) · [ქართული](docs/i18n/README-ka.md) · [Azərbaycan](docs/i18n/README-az.md) · [Қазақша](docs/i18n/README-kk.md) · [Oʻzbek](docs/i18n/README-uz.md) · [Српски](docs/i18n/README-sr.md) · [Hrvatski](docs/i18n/README-hr.md)
+
 **電話番号も登録もいらない、暗号化メッセンジャーです。**
 会話の中身は、送った人と受け取る人にしか読めません。途中で運ぶサーバーにも読めません。
 全機能が無料で、広告もありません。
@@ -10,22 +12,19 @@
 
 ![Breeze Messenger screenshot — the main window right after creating an identity](docs/images/screenshot.png)
 
-## 手に入れる
+## 使うには、自分のサーバーに置きます
 
-- **アプリを使う（おすすめ）**: [ダウンロードのページ](https://github.com/shizukutanaka/Breeze/releases/latest)から、お使いの機械に合うものを1つ選んでください（ファイル名の数字は版数です）。
-  - Windows: 名前が `-win-x64.exe` で終わるもの（ふつうはこちら。ARM機用もあります）
-  - Mac: 名前が `-mac.dmg` で終わるもの
-  - Linux: 名前が `.AppImage` で終わるもの（そのまま実行できます）か `.deb`
-  - 自分のサーバーに置いて使う場合は `breeze-` で始まる `.zip`
-  - 各ファイルには照合用の数値（SHA256SUMS.txt）が付いているので、ダウンロードが正しいか確認できます
-- **自分のサーバーに置く**: 無料の範囲で動きます。手順は[設置の手順書（英語）](docs/SELF_HOSTING.md)にあります。
-- **試用ページについて（正直なお知らせ）**: 公開していた試用ページ（breeze.pages.dev）は、いま開くと 404 になり停止しています。復旧は運営側の作業待ちです。それまでは上のアプリ版を使ってください。自分のサーバーに置いたものは、この停止の影響を受けません。
+Breeze には「運営会社のサーバー」がありません。**使うには、あなた自身が置き場所（サーバー）を用意して、そこに Breeze を置きます。これが正式な使い方です。**
 
-詳しい使い方は[説明書（日本語）](docs/MANUAL-ja.md)にあります。
+- 置き場所は無料の範囲で足ります。Cloudflare の無料枠で動き、クレジットカードも要りません。手順は[設置の手順書](docs/SELF_HOSTING.md)（多言語版は手順書の冒頭から選べます）にあります。
+- アプリ（Windows / Mac / Linux / Android / iPhone）は[ダウンロードのページ](https://github.com/shizukutanaka/Breeze/releases/latest)から取り、自分のサーバーに接続して使います。
+- **見本の設置について（正直なお知らせ）**: 動作確認のための見本（https://breeze-469.pages.dev/）を置いてあります。置いてあるのは同じソフトウェアですが、実利用は自分のサーバーでお願いします。見本は予告なく変わったり止まったりします。自分のサーバーに置いたものは、見本の停止の影響を受けません。
+
+詳しい使い方は[説明書](docs/MANUAL-ja.md)（多言語版は説明書の冒頭から選べます）にあります。
 
 ## 使い方（3ステップ）
 
-1. アプリを開いて、名前を入れます。それだけで準備完了です（登録も電話番号も不要）。このとき端末の中で「鍵」が作られ、それがあなたの身元になります。
+1. 自分のサーバーに置いた Breeze（または、置いた人から教えてもらった住所）を開いて、名前を入れます。それだけで準備完了です（登録も電話番号も不要）。このとき端末の中で「鍵」が作られ、それがあなたの身元になります。
 2. 自分のIDかQRコードを、話したい相手に渡します。
 3. 相手もアプリを開いていれば、直接つながって会話できます。相手が開いていないときは、暗号化されたまま「預かり箱」に置かれ、相手が開いたときに届きます。預かり箱を運ぶサーバーは中身を読めません。届かないままの手紙は最大7日で自動的に消えます。
 
@@ -37,6 +36,15 @@
 - **会話は端末同士で暗号化されます。** サーバーが扱うのは、読めない封筒だけです。
 
 正直に範囲も書きます。届けるために、サーバーには短い間の預かりがあります（未配達の封筒は最大7日、接続の合図は5分、宛名と端末の記録は90日、グループの情報と通知の購読は30日。どれも自動で消え、中身は読めません）。クラウドへの予備保存は、最初は無効です。自分のサーバーに置けば、その預かりも自分の管理下に置けます。
+
+## 犯罪に使うと、割に合わない設計
+
+Breeze は、悪用する側に費用と手間がかかるように作ってあります。「犯罪を不可能にする」とは言いません。「割に合わなくする」設計です。
+
+- **ただ乗りの土台がありません。** 中央の無料サーバーが無いので、悪用する人も、自分の名前のアカウントと自分の費用で置き場所を用意するしかありません。
+- **送信に負担がかかります。** 送信のたびに小さな計算（作業の証明）を求め、量の上限も決まっています。大量の荒らし送信は割に合いません。
+- **言い逃れのできない通報ができます。** 受け取った人は、届いた送信そのものを証拠として通報できます。送った側は「送っていない」と言い逃れできません。
+- **止める権限は、置いた人にあります。** 自分のサーバーで起きたことは、自分で止められます。誰かの許可は要りません。
 
 ## できること
 
@@ -54,7 +62,7 @@
 |---|--------|--------|
 | 登録 | 不要（身元は端末の中の鍵） | 電話番号が必要 |
 | サーバー | 中身を読めない | 運営会社を信頼する前提 |
-| 自分のサーバーに置く | できる（無料の範囲で動く） | できない |
+| 自分のサーバーに置く | 前提（置いて使うもの） | できない |
 | 中身の公開 | 全て公開（MITライセンス） | 非公開が多い |
 | データの場所 | あなたの端末の中 | 運営会社のサーバー |
 
@@ -75,7 +83,7 @@ Breeze は Cloudflare の無料の範囲で動きます。クレジットカー�
 
 大きな規模での費用の伸び方と、「なぜ一人の運営者が全体の費用を背負わずに済むのか」は、[費用と持続の考え方（英語）](docs/SUSTAINABILITY.md)に、もとになる計算は[費用モデル（英語）](docs/COST_MODEL.md)にあります。
 
-設置はこの1コマンドからです（詳しくは[設置の手順書（英語）](docs/SELF_HOSTING.md)）。
+設置はこの1コマンドからです（詳しくは[設置の手順書](docs/SELF_HOSTING.md)）。
 
 ```bash
 wrangler pages deploy . --project-name=breeze
@@ -113,7 +121,7 @@ npm test          # テストを実行する
 
 ## English
 
-Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Get the apps (Windows / macOS / Linux / Android / iOS / web) from the [releases page](https://github.com/shizukutanaka/Breeze/releases/latest), or self-host it on Cloudflare's free tier with the [self-hosting guide](docs/SELF_HOSTING.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [docs/COMPARISON.md](docs/COMPARISON.md).
+Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server (Cloudflare's free tier is enough) and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [docs/i18n/README-en.md](docs/i18n/README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [docs/COMPARISON.md](docs/COMPARISON.md).
 
 ## ライセンス
 
