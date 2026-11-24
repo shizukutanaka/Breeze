@@ -884,5 +884,6 @@
  "powerAuto": "자동(배터리)",
  "powerNormal": "일반",
  "powerSaver": "절전",
- "powerEmergency": "비상(재난)"
+ "powerEmergency": "비상(재난)",
+ "profileIdLabel": "내 ID"
 }

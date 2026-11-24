@@ -133,6 +133,10 @@ export function createProfileUI(D) {
           <button type="button" class="btn btn-g btn-sm pf-remove">${D.esc(D.t('profileRemove'))}</button>
         </div>
         <input type="file" class="pf-file hidden" accept="image/*">
+        <label class="i-tiny-meta">${D.esc(D.t('profileIdLabel'))}</label>
+        <div class="pf-photo-row"><input type="text" class="pf-id i-input-full" readonly value="${D.esc(D.myPubB64())}">
+          <button type="button" class="btn btn-g btn-sm pf-copy-id">${D.esc(D.t('copy'))}</button>
+        </div>
         <div class="dlg-btns">
           <button class="btn btn-g btn-sm" value="cancel">${D.esc(D.t('cancel'))}</button>
           <button class="btn btn-p btn-sm" value="ok">${D.esc(D.t('profileSave'))}</button>
@@ -146,6 +150,15 @@ export function createProfileUI(D) {
         const im = document.createElement('img'); im.className = 'pf-photo'; im.src = img; preview.appendChild(im);
       };
       showImg();
+      // The ID row: read-only (the key is the identity — it is shown and
+      // copied, never edited here). Owner request: the ID must be checkable
+      // from the profile, not only from the header's short-ID line.
+      const idInput = dlg.querySelector('.pf-id');
+      idInput.onclick = () => idInput.select();
+      dlg.querySelector('.pf-copy-id').onclick = async () => {
+        try { await navigator.clipboard.writeText(D.myPubB64()); D.showToast(D.t('toastCopied'), 'success'); }
+        catch(e) { D.dbg(e, 'profile-copy-id'); idInput.select(); }
+      };
       const fileInput = dlg.querySelector('.pf-file');
       dlg.querySelector('.pf-choose').onclick = () => fileInput.click();
       dlg.querySelector('.pf-remove').onclick = () => { img = ''; showImg(); };
