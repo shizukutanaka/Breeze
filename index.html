@@ -1281,6 +1281,7 @@ import { createVoiceInput } from './src/app/voice-input.js'; window.__breezeVoic
 import { createEmojiPicker } from './src/app/emoji-picker.js'; window.__breezeEmojiPicker = { createEmojiPicker };
 import { initInstallBanner } from './src/app/install-banner.js'; window.__breezeInstallBanner = { initInstallBanner };
 import { showContextMenu as _showContextMenuMod } from './src/app/context-menu.js'; window.__breezeContextMenu = { showContextMenu: _showContextMenuMod };
+import { createLightbox } from './src/app/lightbox.js'; window.__breezeLightbox = { createLightbox };
 import { createChatSearch } from './src/app/chat-search.js'; window.__breezeChatSearch = { createChatSearch };
 window.__breezeOfflinePairing = { createOfflinePairing, blockedPeerIds: new Set() };
 </script>
@@ -13102,93 +13103,10 @@ async function initMessenger(dbName) {
     }, CONFIG.TYPING_TIMEOUT_MS);
   }
 
-  // v3.1: Image lightbox
-  // v3.2: IntersectionObserver for lazy image loading in chat
-  const _imgObserver = typeof IntersectionObserver !== 'undefined' ? new IntersectionObserver((entries) => {
-    for (const entry of entries) {
-      if (entry.isIntersecting && entry.target.dataset.src) {
-        entry.target.src = entry.target.dataset.src;
-        delete entry.target.dataset.src;
-        _imgObserver.unobserve(entry.target);
-      }
-    }
-  }, { rootMargin: '200px' }) : null;
-
-  window.showLightbox = function(src) {
-    // v3.3: XSS-safe: use DOM API, validate URL scheme
-    if (!src || (!src.startsWith('blob:') && !src.startsWith('data:') && !src.startsWith('https:'))) return;
-    const lb = document.createElement('div');
-    lb.className = 'lightbox';
-    const img = document.createElement('img');
-    img.decoding = 'async';
-    img.src = src;
-    img.alt = t('fullSizeImage');
-    // Closing via backdrop click or an image load error used to leave this keydown
-    // listener attached to document forever — same leak class as showContextMenu/
-    // showMsgMenu. Route every exit path through one cleanup.
-    const handler = (e) => { if (e.key === 'Escape') cleanup(); };
-    function cleanup() { lb.remove(); document.removeEventListener('keydown', handler); }
-    img.onerror = cleanup;
-    lb.appendChild(img);
-    lb.onclick = (e) => { if (e.target === lb) cleanup(); };
-    document.body.appendChild(lb);
-    document.addEventListener('keydown', handler, { signal: _ac.signal });
-
-    // v3.6: Mobile pinch-to-zoom + drag
-    if (IS_TOUCH) {
-      let scale = 1, lastScale = 1, posX = 0, posY = 0, lastDist = 0;
-      let startX = 0, startY = 0, isDragging = false;
-
-      img.classList.add('i-no-touch');
-
-      const getDistance = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
-
-      img.addEventListener('touchstart', (e) => {
-        if (e.touches.length === 2) {
-          e.preventDefault();
-          lastDist = getDistance(e.touches);
-        } else if (e.touches.length === 1 && scale > 1) {
-          isDragging = true;
-          startX = e.touches[0].clientX - posX;
-          startY = e.touches[0].clientY - posY;
-        }
-      }, { passive: false });
-
-      img.addEventListener('touchmove', (e) => {
-        if (e.touches.length === 2) {
-          e.preventDefault();
-          const dist = getDistance(e.touches);
-          scale = Math.max(0.5, Math.min(5, lastScale * (dist / lastDist)));
-          img.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`;
-        } else if (e.touches.length === 1 && isDragging && scale > 1) {
-          posX = e.touches[0].clientX - startX;
-          posY = e.touches[0].clientY - startY;
-          img.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`;
-        }
-      }, { passive: false });
-
-      img.addEventListener('touchend', (e) => {
-        isDragging = false;
-        if (e.touches.length < 2) lastScale = scale;
-        // Reset if zoomed out too far
-        if (scale < 0.8) { scale = 1; lastScale = 1; posX = 0; posY = 0; img.style.transform = ''; }
-        // Swipe down to dismiss (when not zoomed)
-        if (scale <= 1 && posY > 80) cleanup();
-      }, { passive: true });
-
-      // Double-tap to zoom
-      let lastTap = 0;
-      img.addEventListener('touchend', (e) => {
-        if (e.touches.length > 0) return;
-        const now = Date.now();
-        if (now - lastTap < 300) {
-          if (scale > 1) { scale = 1; lastScale = 1; posX = 0; posY = 0; img.style.transform = ''; }
-          else { scale = 2.5; lastScale = 2.5; img.style.transform = `scale(${scale})`; }
-        }
-        lastTap = now;
-      }, { passive: true });
-    }
-  };
+  // v3.1: Image lightbox + v3.2 lazy image observer live in src/app/lightbox.js
+  const _lightbox = globalThis.__breezeLightbox?.createLightbox({ t, isTouch: IS_TOUCH, signal: _ac.signal });
+  const _imgObserver = _lightbox?.observer || null;
+  window.showLightbox = function(src) { _lightbox?.showLightbox(src); };
   // v3.4: Event delegation for lightbox (no inline onclick)
   _DOM.get('msg-messages')?.addEventListener('click', (e) => {
     // v3.6: Reply quote click → scroll to original message

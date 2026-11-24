@@ -77,12 +77,69 @@ describe('every locale file is key-complete against the inline English reference
         expect(vPlural, `${loc}.${key} plural shape`).toBe(rPlural);
         if (vPlural) {
           expect(Object.keys(v).sort(), `${loc}.${key} plural categories`).toEqual([...cats].sort());
+          for (const [cat, s] of Object.entries(v)) {
+            expect(typeof s === 'string' && s.trim().length > 0, `${loc}.${key}.${cat} non-empty`).toBe(true);
+          }
           expect(placeholders(Object.values(v).join('')), `${loc}.${key} placeholders`).toBe(placeholders(Object.values(rv).join('')));
         } else {
           expect(typeof v, `${loc}.${key} is a string`).toBe('string');
+          expect(v.trim().length, `${loc}.${key} non-empty`).toBeGreaterThan(0);
           expect(placeholders(v), `${loc}.${key} placeholders`).toBe(placeholders(rv));
         }
       }
     });
   }
+});
+
+describe('every UI t("key") and data-i18n* reference exists in EN and all 7 locale files', () => {
+  const html = readFileSync(join(root, 'index.html'), 'utf8');
+  const appFiles = readdirSync(join(root, 'src', 'app')).filter(f => f.endsWith('.js'));
+  const appSrc = html + '\n' + appFiles.map(f => readFileSync(join(root, 'src', 'app', f), 'utf8')).join('\n');
+
+  const start = html.indexOf('const _I = {');
+  let depth = 0, raw = '';
+  for (let i = html.indexOf('{', start); i < html.length; i++) {
+    if (html[i] === '{') depth++;
+    else if (html[i] === '}') { depth--; if (depth === 0) { raw = html.slice(html.indexOf('{', start), i + 1); break; } }
+  }
+  const EN = (0, eval)('(' + raw + ')').en;
+
+  const referenced = new Set();
+  for (const m of appSrc.matchAll(/\bt\(\s*['"]([A-Za-z][A-Za-z0-9_]*)['"]/g)) {
+    referenced.add(m[1]);
+  }
+  for (const m of appSrc.matchAll(/data-i18n(?:-ph|-aria|-title|-html)?=["']([A-Za-z][A-Za-z0-9_]*)["']/g)) {
+    referenced.add(m[1]);
+  }
+  const usedKeys = [...referenced].sort();
+
+  const findMissingKeys = (keys, table) => keys.filter((k) => {
+    const v = table[k];
+    if (v === undefined) return true;
+    if (typeof v === 'string') return v.trim().length === 0;
+    if (v && typeof v === 'object') return Object.values(v).some(s => typeof s !== 'string' || s.trim().length === 0);
+    return true;
+  });
+
+  it('finds UI i18n references and every one is defined and non-empty in EN', () => {
+    expect(usedKeys.length).toBeGreaterThan(500);
+    expect(findMissingKeys(usedKeys, EN), 'missing or empty in EN').toEqual([]);
+  });
+
+  it('every referenced UI key exists and is non-empty in all 7 locale files', () => {
+    expect(locales.length).toBe(7);
+    for (const file of locales) {
+      const loc = file.replace(/\.json$/, '');
+      const T = JSON.parse(readFileSync(join(root, 'locales', file), 'utf8'));
+      expect(findMissingKeys(usedKeys, T), `missing or empty in ${loc}`).toEqual([]);
+    }
+  });
+
+  it('missing-key detector fails when a key is omitted or blank in any locale', () => {
+    const sample = usedKeys[0];
+    const incomplete = { ...EN };
+    delete incomplete[sample];
+    expect(findMissingKeys(usedKeys, incomplete)).toEqual([sample]);
+    expect(findMissingKeys(usedKeys, { ...EN, [sample]: '   ' })).toEqual([sample]);
+  });
 });
