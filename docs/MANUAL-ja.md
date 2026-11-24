@@ -1,5 +1,8 @@
 # Breeze 説明書
 
+**他の言語で読む / Read in another language**: 日本語（このページ） · [English](i18n/MANUAL-en.md) · [中文（简体）](i18n/MANUAL-zh-CN.md) · [中文（繁體）](i18n/MANUAL-zh-TW.md) · [Español](i18n/MANUAL-es.md) · [Français](i18n/MANUAL-fr.md) · [Deutsch](i18n/MANUAL-de.md) · [Italiano](i18n/MANUAL-it.md) · [Português (Brasil)](i18n/MANUAL-pt-BR.md) · [Русский](i18n/MANUAL-ru.md) · [Українська](i18n/MANUAL-uk.md) · [Polski](i18n/MANUAL-pl.md) · [Nederlands](i18n/MANUAL-nl.md) · [Svenska](i18n/MANUAL-sv.md) · [Norsk](i18n/MANUAL-nb.md) · [Dansk](i18n/MANUAL-da.md) · [Suomi](i18n/MANUAL-fi.md) · [Čeština](i18n/MANUAL-cs.md) · [Magyar](i18n/MANUAL-hu.md) · [Română](i18n/MANUAL-ro.md) · [Ελληνικά](i18n/MANUAL-el.md) · [Türkçe](i18n/MANUAL-tr.md) · [العربية](i18n/MANUAL-ar.md) · [فارسی](i18n/MANUAL-fa.md) · [עברית](i18n/MANUAL-he.md) · [हिन्दी](i18n/MANUAL-hi.md) · [বাংলা](i18n/MANUAL-bn.md) · [اردو](i18n/MANUAL-ur.md) · [ਪੰਜਾਬੀ](i18n/MANUAL-pa.md) · [தமிழ்](i18n/MANUAL-ta.md) · [తెలుగు](i18n/MANUAL-te.md) · [മലയാളം](i18n/MANUAL-ml.md) · [Bahasa Indonesia](i18n/MANUAL-id.md) · [Bahasa Melayu](i18n/MANUAL-ms.md) · [Tiếng Việt](i18n/MANUAL-vi.md) · [ไทย](i18n/MANUAL-th.md) · [မြန်မာ](i18n/MANUAL-my.md) · [ខ្មែរ](i18n/MANUAL-km.md) · [한국어](i18n/MANUAL-ko.md) · [Filipino](i18n/MANUAL-tl.md) · [Kiswahili](i18n/MANUAL-sw.md) · [Hausa](i18n/MANUAL-ha.md) · [Yorùbá](i18n/MANUAL-yo.md) · [Igbo](i18n/MANUAL-ig.md) · [አማርኛ](i18n/MANUAL-am.md) · [ქართული](i18n/MANUAL-ka.md) · [Azərbaycan](i18n/MANUAL-az.md) · [Қазақша](i18n/MANUAL-kk.md) · [Oʻzbek](i18n/MANUAL-uz.md) · [Српски](i18n/MANUAL-sr.md) · [Hrvatski](i18n/MANUAL-hr.md)
+
+
 Breeze（ブリーズ）は、電話番号も登録もいらない暗号化メッセンジャーです。
 会話の中身は、送った人と受け取る人にしか読めません。途中で運ぶサーバーにも読めません。
 全機能が無料で、広告もありません。
