@@ -125,7 +125,9 @@ export function createGroupCreate(D) {
     if (!D.hasApi()) return;
     try {
       // Join the group on server
-      const resp = await D.postAPIRaw('/group/join', { token, memberId: D.myId(), memberPub: D.myPubB64(), memberName: D.myName(), caps: D.groupV5() ? [D.capsGroupV5()] : undefined });
+      const joinCaps = D.groupV5() ? [D.capsGroupV5()] : undefined;
+      const joinAuth = D.groupJoinAuth ? await D.groupJoinAuth(token, D.myPubB64(), D.myName(), joinCaps) : {};
+      const resp = await D.postAPIRaw('/group/join', { token, memberId: D.myId(), memberPub: D.myPubB64(), memberName: D.myName(), caps: joinCaps, ...joinAuth });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
         D.showToast(err.error || D.t('toastJoinFail'), 'error');
