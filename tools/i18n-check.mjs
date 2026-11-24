@@ -87,7 +87,13 @@ const coreKeys = refKeys.filter((k) => !isDiag(k) && !isLegal(k));
 const placeholders = (s) => [...new Set((s.match(/\{(\d+)\}/g) || []))].sort().join(',');
 const categoriesFor = (loc) => {
   const pr = new Intl.PluralRules(loc);
-  return new Set([0, 1, 2, 3, 5, 11, 21, 101, 1.5].map((n) => pr.select(n)));
+  // Dense sampling: a sparse set falsely flags categories a language only selects for
+  // specific endings (tl selects "other" for numbers ending in 4/6/9 — 4, 6, 9, 14, …
+  // — none of which a [0,1,2,3,5,11,21,101] sample ever hits).
+  const samples = [];
+  for (let n = 0; n <= 120; n++) samples.push(n);
+  samples.push(201, 1001, 0.5, 1.5);
+  return new Set(samples.map((n) => pr.select(n)));
 };
 
 const localeFiles = readdirSync(join(ROOT, 'locales')).filter((f) => f.endsWith('.json'));

@@ -452,7 +452,7 @@ Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline';
 ## 11. i18n
 
 - **Built-in**: English only — the inline reference table and runtime fallback
-- **Locale files**: `locales/<lang>.json` for es, id, ja, ko, pt-BR, th, zh-TW, fetched at boot and merged over English; `node tools/i18n-check.mjs` prints the live key count and per-locale coverage
+- **Locale files**: `locales/<lang>.json` for am, ar, az, bn, cs, da, de, el, es, fa, fi, fr, ha, he, hi, hr, hu, id, ig, it, ja, ka, kk, km, ko, ml, ms, my, nb, nl, pa, pl, pt-BR, ro, ru, sr, sv, sw, ta, te, th, tl, tr, uk, ur, uz, vi, yo, zh-CN, zh-TW, fetched at boot and merged over English; `node tools/i18n-check.mjs` prints the live key count and per-locale coverage
 - **External**: none — the 924-language `lang.js` table was deleted (supplied zero strings to the UI at 44% of payload; see SECURITY.md)
 - **Hardcoded UI strings**: 0 (100% coverage via `t()` function)
 - **Toast i18n**: 100%
