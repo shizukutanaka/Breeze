@@ -38,13 +38,24 @@ self.addEventListener('install', (e) => {
   }
   // The cache is a web-only optimization: under the desktop
   // shell's file:// origin addAll rejects ('file' scheme
-  // unsupported) — swallow it instead of an uncaught rejection
-  // on every packaged launch (found 2026-11-20).
+  // unsupported) — swallow it ONLY on file: origins instead of
+  // an uncaught rejection on packaged launch (found 2026-11-20).
+  // On https:/http: web origins, precache failure must fail the
+  // install cleanly and NEVER call skipWaiting(), so a partial or
+  // corrupted update cannot activate and wipe the previous good cache.
   // cache:'reload' bypasses the browser HTTP cache: the modules were once served
   // `immutable` for 7 days, so a plain addAll could precache the PREVIOUS release's
   // copy next to the new index.html (new shell + old modules = a failed import).
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS.map(a => new Request(a, { cache: 'reload' })))).catch(() => {}));
-  self.skipWaiting();
+  const isFileOrigin = self.location?.protocol === 'file:';
+  e.waitUntil(
+    caches.open(CACHE)
+      .then(c => c.addAll(ASSETS.map(a => new Request(a, { cache: 'reload' }))))
+      .then(() => self.skipWaiting())
+      .catch((err) => {
+        if (isFileOrigin) return self.skipWaiting();
+        throw err;
+      })
+  );
 });
 
 self.addEventListener('activate', (e) => {
