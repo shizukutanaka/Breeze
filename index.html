@@ -1125,8 +1125,7 @@ del.md-del { opacity: .6 }
           <span id="msg-my-name" class="name clickable" data-i18n-title="ttEditProfile"></span>
           <span id="peer-count" class="sidebar-meta"></span>
           <button class="btn btn-o btn-sm" id="b-msg-theme" data-i18n-aria="ariaTheme">☀</button>
-          <button class="btn btn-o btn-sm" id="b-msg-share" data-i18n="btnShareId" data-i18n-aria="ariaShare" data-i18n-title="ariaShare">ID</button>
-          <button class="btn btn-g btn-sm" id="b-msg-add" data-i18n-aria="ariaAddContact">+</button>
+          <button class="btn btn-g btn-sm" id="b-msg-add" data-i18n="addContactTitle" data-i18n-aria="ariaAddContact">Add friend</button>
         </div>
         <div id="msg-short-id" class="sidebar-id" data-i18n-title="ttClickToCopy"></div>
         <div class="folder-tabs" id="folder-tabs" role="tablist">
@@ -1170,7 +1169,7 @@ del.md-del { opacity: .6 }
         <div id="pin-banner" class="pin-banner hidden" role="status"></div>
         <div id="msg-messages" role="log" data-i18n-aria="ariaMessages" aria-live="polite" aria-relevant="additions" class="msg-area">
           <div id="drop-overlay" class="drop-overlay"><span class="drop-overlay-text" data-i18n="dropToSend">Drop to send file</span></div>
-          <div class="msg-empty" data-i18n-html="emptyContacts">Press <b class="i-g">+</b> to add a contact.</div>
+          <div class="msg-empty" data-i18n-html="emptyContacts">Use the <b class="i-g">Add friend</b> button to add a contact.</div>
         </div>
         <button class="scroll-fab hidden" id="scroll-fab" data-i18n-aria="ariaScrollBottom">↓</button>
         <div id="typing-indicator" class="typing-ind" aria-live="polite"></div>
@@ -1478,7 +1477,7 @@ const _I = {
     searchContactsHint: 'Search contacts or type / for commands',
     // Messenger
     selectContact: 'Select a contact',
-    emptyContacts: 'Press <b class="i-g">+</b> to add a contact.',
+    emptyContacts: 'Use the <b class="i-g">Add friend</b> button to add a contact.',
     msgPlaceholder: 'Message...',
     addContact: 'Add contact:\n\nPaste a Breeze link, @alias, public key, or invite message.\nType "group:Name" to create a group.',
     // Status
@@ -1659,8 +1658,6 @@ const _I = {
     ariaVideoCall: 'Start video call',
     ariaTimer: 'Toggle disappearing messages',
     ariaClearChat: 'Clear conversation',
-    ariaShare: 'Share invite link',
-    btnShareId: 'ID',
     ariaPrev: 'Previous result',
     ariaNext: 'Next result',
     ariaMessages: 'Messages',
@@ -1751,7 +1748,7 @@ const _I = {
     groupNamePrompt: 'Group name:',
     groupNamePh: 'My Group',
     addContactPh: 'Public key, @alias, or invite link',
-    addContactTitle: 'Add a contact',
+    addContactTitle: 'Add friend',
     addBtn: 'Add',
     accountNamePh: 'Account name',
     connP2P: 'Direct encrypted connection',
@@ -2191,7 +2188,7 @@ const _I = {
     searchAllResults: { one: "{0} result across {1} chats", other: "{0} results across {1} chats" },
     uiAllCaughtUp: 'All caught up',
     uiNoGroups: 'No groups yet',
-    uiAddFirst: 'Add your first contact with +',
+    uiAddFirst: 'Add your first contact',
     uiNoPins: 'No pinned messages',
     uiNoFiles: 'No files shared yet.',
     uiNoReactions: 'No reactions in this chat yet.',
@@ -7508,7 +7505,7 @@ async function initMessenger(dbName) {
     _outbox.clear();
     await _restoreOutbox(myId);
     await _enterMainUI();
-    if (Notification && Notification.permission === 'default') {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
       // v3.1: Defer notification permission to first conversation open (better UX)
       // Don't request on page load — wait until user is engaged
     }
@@ -8402,7 +8399,7 @@ async function initMessenger(dbName) {
     // user types in that gap must never be clobbered (fast type-after-click loses text — E2E-found).
     const _inputAtSwitch = _DOM.get('msg-input')?.value ?? '';
     // v3.1: Request notification permission on first conversation (contextual)
-    if (!_notifRequested && Notification?.permission === 'default') {
+    if (!_notifRequested && typeof Notification !== 'undefined' && Notification.permission === 'default') {
       _notifRequested = true;
       Notification.requestPermission().catch(e => _dbg(e));
     }
@@ -10957,7 +10954,7 @@ async function initMessenger(dbName) {
       pollCallSignals(contact, room);
       // A ringing call is inherently important; only strict focus ("/focus N all") silences it.
       if (!(_focusActive() && _settings.focusStrict)) playNotif();
-      if (Notification?.permission === 'granted') {
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
         new Notification(contact.name, { body: msg.isVideoCall ? t('videoCall') : t('voiceCall'), tag: 'breeze-call' });
       }
       return;
@@ -11473,7 +11470,7 @@ async function initMessenger(dbName) {
       // count and never rings: the sender explicitly said it does not require you.
       if (!meta.nrn) contact.unread = (contact.unread || 0) + 1;
       if (!meta.nrn && _shouldAlert(contact, text)) { playNotif();
-        if (Notification?.permission === 'granted') {
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
           const unread = contact.unread || 1;
           const body = unread > 1
             ? `(${unread}) ${text.slice(0, 60)}`
@@ -12326,17 +12323,6 @@ async function initMessenger(dbName) {
   _intervals.push(setInterval(measureNetworkQuality, MS.MIN));
 
   // ===== Share ID (with QR option) =====
-  _DOM.get('b-msg-share')?.addEventListener('click', (e) => {
-    const { url } = generateInviteMessage();
-    if (e.shiftKey || IS_MOBILE) {
-      showQRModal(url);
-    } else {
-      navigator.clipboard?.writeText(url);
-      const btn = _DOM.get('b-msg-share'); if (!btn) return;
-      btn.textContent = '✓'; setTimeout(() => { btn.textContent = t('btnShareId'); }, CONFIG.TOAST_DURATION_MS);
-    }
-  });
-
   // Drag-drop: import chat history OR send file to active contact
   const msgArea = _DOM.get('msg-messages');
   if (msgArea) {
@@ -12442,11 +12428,18 @@ async function initMessenger(dbName) {
     input.className = 'modal-input'; input.placeholder = t('addContactPh');
     const btn = document.createElement('button');
     btn.className = 'btn btn-g btn-sm'; btn.textContent = t('addBtn');
-    // Phone width: the sidebar overlays the chat column this panel renders into, so "+" showed nothing. Reveal the column while the panel is up; return to the list (where the new contact appears) once it is used.
+    // Phone width: the sidebar overlays the chat column this panel renders into, so the panel showed nothing. Reveal the column while the panel is up; return to the list (where the new contact appears) once it is used.
     const sb = _DOM.get('msg-sidebar'), narrow = window.innerWidth <= 640 && !sb.classList.contains('hidden');
     const done = (v) => { d.remove(); if (narrow) sb.classList.remove('hidden'); _dispatchAddInput(v); };
     btn.onclick = () => done(input.value); input.addEventListener('keydown', (e) => { if (e.key === 'Enter') done(input.value); });
     d.append(input, btn, _deviceScanButton('scanQR', done)); if (narrow) { sb.classList.add('hidden'); _DOM.get('b-msg-back').classList.remove('hidden'); }
+    // Adding a friend has two halves: paste theirs (above) or share yours. The header's old
+    // "ID" share button is gone (owner direction: one labelled Add-friend button, no "+"),
+    // so the share half lives here, next to the paste half it was always paired with.
+    const invBtn = document.createElement('button');
+    invBtn.className = 'btn btn-o btn-sm'; invBtn.textContent = t('btnInviteFriend');
+    invBtn.onclick = () => { d.remove(); if (narrow) sb.classList.remove('hidden'); shareInvite(); };
+    d.append(document.createElement('br'), invBtn);
     box.appendChild(d); box.scrollTop = box.scrollHeight; input.focus();
   }
 
@@ -12623,6 +12616,7 @@ async function initMessenger(dbName) {
   // WEB PUSH NOTIFICATIONS — subscribe for background notifications
   async function initPushNotifications() {
     if (!API || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    if (typeof Notification === 'undefined') return;
     try {
       const reg = await navigator.serviceWorker.ready;
       let sub = await reg.pushManager.getSubscription();
@@ -14719,7 +14713,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         <br><b class="i-g">${t('settingsNotif')}</b><br>
         <label class="i-cur"><input type="checkbox" data-setting="focus" ${_focusActive() ? 'checked' : ''}> ${t('focusLabel')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="focus-strict" ${_settings.focusStrict ? 'checked' : ''}> ${t('focusStrictLabel')}</label><br>
-        <label class="i-cur"><input type="checkbox" data-setting="notif-perm" ${Notification?.permission === 'granted' ? 'checked' : ''}> ${t('enableNotif')}</label><br>
+        <label class="i-cur"><input type="checkbox" data-setting="notif-perm" ${typeof Notification !== 'undefined' && Notification.permission === 'granted' ? 'checked' : ''}> ${t('enableNotif')}</label><br>
         <br><b class="i-g">${t('settingsAccounts')}</b><br>
         <button class="btn btn-o btn-sm" data-action="add-account">${t('addAccountBtn')}</button><br>
         <label class="i-cur"><input type="checkbox" data-setting="auto-lock" ${localStorage.getItem('brz-autolock') === '1' ? 'checked' : ''}> ${t('autoLockLabel')}</label><br>
