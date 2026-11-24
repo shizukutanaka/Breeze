@@ -885,5 +885,6 @@
  "powerNormal": "일반",
  "powerSaver": "절전",
  "powerEmergency": "비상(재난)",
- "profileIdLabel": "내 ID"
+ "profileIdLabel": "내 ID",
+ "settingsBackup": "백업 및 복원"
 }

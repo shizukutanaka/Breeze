@@ -885,5 +885,6 @@
  "powerNormal": "Normal",
  "powerSaver": "Hemat daya",
  "powerEmergency": "Darurat (bencana)",
- "profileIdLabel": "ID Anda"
+ "profileIdLabel": "ID Anda",
+ "settingsBackup": "Cadangan & pemulihan"
 }
