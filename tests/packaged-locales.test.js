@@ -62,7 +62,16 @@ describe('every locale file is key-complete against the inline English reference
   const EN = (0, eval)('(' + raw + ')').en;
   const enKeys = Object.keys(EN).sort();
   const placeholders = (s) => [...new Set((String(s).match(/\{(\d+)\}/g) || []))].sort().join(',');
-  const categoriesFor = (loc) => new Set([0, 1, 2, 3, 5, 11, 21, 101, 1.5].map((n) => new Intl.PluralRules(loc).select(n)));
+  // Dense sampling (mirrors tools/i18n-check.mjs): a sparse set misses categories a
+  // language only selects for specific endings (tl selects "other" for numbers ending
+  // in 4/6/9), which would falsely demand dropping a category real counts can select.
+  const categoriesFor = (loc) => {
+    const pr = new Intl.PluralRules(loc);
+    const samples = [];
+    for (let n = 0; n <= 120; n++) samples.push(n);
+    samples.push(201, 1001, 0.5, 1.5);
+    return new Set(samples.map((n) => pr.select(n)));
+  };
 
   for (const file of locales) {
     const loc = file.replace(/\.json$/, '');
@@ -91,7 +100,7 @@ describe('every locale file is key-complete against the inline English reference
   }
 });
 
-describe('every UI t("key") and data-i18n* reference exists in EN and all 7 locale files', () => {
+describe('every UI t("key") and data-i18n* reference exists in EN and all shipped locale files', () => {
   const html = readFileSync(join(root, 'index.html'), 'utf8');
   const appFiles = readdirSync(join(root, 'src', 'app')).filter(f => f.endsWith('.js'));
   const appSrc = html + '\n' + appFiles.map(f => readFileSync(join(root, 'src', 'app', f), 'utf8')).join('\n');
@@ -126,8 +135,11 @@ describe('every UI t("key") and data-i18n* reference exists in EN and all 7 loca
     expect(findMissingKeys(usedKeys, EN), 'missing or empty in EN').toEqual([]);
   });
 
-  it('every referenced UI key exists and is non-empty in all 7 locale files', () => {
-    expect(locales.length).toBe(7);
+  it('every referenced UI key exists and is non-empty in all shipped locale files', () => {
+    // The files on disk must be exactly the FULL_LOCALES set index.html can load —
+    // a hardcoded count rots the moment a language ships (7 until 2026-11-25, 50 after).
+    const fullLocales = [...html.match(/const FULL_LOCALES = \[([^\]]+)\]/)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+    expect(locales.map((f) => f.replace(/\.json$/, '')).sort()).toEqual([...fullLocales].sort());
     for (const file of locales) {
       const loc = file.replace(/\.json$/, '');
       const T = JSON.parse(readFileSync(join(root, 'locales', file), 'utf8'));
