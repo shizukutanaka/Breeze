@@ -892,5 +892,6 @@
  "powerNormal": "Normal",
  "powerSaver": "Ahorro de energía",
  "powerEmergency": "Emergencia (desastre)",
+ "profileIdLabel": "Tu ID",
  "settingsBackup": "Copia de seguridad y restauración"
 }

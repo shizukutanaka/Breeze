@@ -885,5 +885,6 @@
  "powerNormal": "一般",
  "powerSaver": "省電",
  "powerEmergency": "非常時（災害）",
+ "profileIdLabel": "你的 ID",
  "settingsBackup": "備份與還原"
 }

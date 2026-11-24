@@ -211,3 +211,20 @@ describe('profile delivery never opens a session', () => {
     expect(branch).not.toMatch(/if \(!c\) return;\s*const decrypted/);
   });
 });
+
+describe('profile panel shows my ID (owner request)', () => {
+  const src = readFileSync(new URL('../src/app/profile.js', import.meta.url), 'utf8');
+  it('renders a read-only ID row bound to myPubB64 with a copy button', () => {
+    expect(src).toContain("D.t('profileIdLabel')");
+    expect(src).toContain('class="pf-id i-input-full" readonly');
+    expect(src).toContain('D.myPubB64()');
+    expect(src).toContain('pf-copy-id');
+    expect(src).toContain('navigator.clipboard.writeText(D.myPubB64())');
+  });
+  it('the copy action writes only to the clipboard (no store writes)', () => {
+    const panel = src.slice(src.indexOf('pf-copy-id'));
+    const handler = panel.slice(0, panel.indexOf('const fileInput'));
+    expect(handler).toContain('clipboard.writeText');
+    expect(handler).not.toContain('dbPut');
+  });
+});
