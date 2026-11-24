@@ -709,7 +709,7 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 .msg-empty { text-align: center; color: var(--t3); font-size: 14px; padding: 80px 20px }
 
 /* ─── One-off component styles (extracted from cssText) ─── */
-.lock-overlay { position: fixed; inset: 0; background: rgba(5,5,5,.85); backdrop-filter: blur(32px); -webkit-backdrop-filter: blur(32px); z-index: 99999; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px; animation: overlayFade .3s ease }
+.lock-overlay { position: fixed; inset: 0; width: 100vw; height: 100vh; max-width: none; max-height: none; margin: 0; padding: 0; border-radius: 0; box-shadow: none; background: rgba(5,5,5,.85); backdrop-filter: blur(32px); -webkit-backdrop-filter: blur(32px); z-index: 99999; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px; animation: overlayFade .3s ease }
 .lock-input { padding: 12px 16px; border: 1px solid var(--b1); border-radius: var(--rad); background: var(--s2); color: var(--t1); font-size: 16px; outline: none; width: 240px; text-align: center; transition: border-color .15s ease, box-shadow .15s ease }
 .lock-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(52,211,153,.15) }
 .lock-input.i-border-err { border-color: var(--r); animation: lockShake .4s ease; box-shadow: 0 0 0 3px rgba(255,107,107,.15) }
@@ -3914,6 +3914,8 @@ document.addEventListener('keydown', (e) => {
 
 // ======================== MESSENGER ========================
 async function initMessenger(dbName) {
+  // Still locked from before this page load (reload, reopened tab): lock before anything renders.
+  try { if (localStorage.getItem('brz-locked')) showLockScreen(); } catch(e) { _dbg(e, 'lock-restore'); }
   try { await _appModulesReady; if (!globalThis.__breezeOfflinePairing) showToast(t('toastModulesFailed'), 'error', MS.MIN); } catch(e) { _dbg(e, 'app-modules-ready'); } // last bridge of the block unset ⇒ the block aborted: /security, calls, backup… would otherwise do nothing, silently
   _perf.mark('initMessenger');
   const _ac = new AbortController(); // Abort all listeners on account switch
@@ -12137,9 +12139,13 @@ async function initMessenger(dbName) {
     if (_DOM.get('lock-screen')) return;
     const raw = localStorage.getItem('brz-lock-hash');
     if (!raw) return;
-    const overlay = document.createElement('div');
+    // A modal <dialog>, not a <div>: a div only covers the app, and Tab walked focus to the
+    // composer behind it, where '/lock reset' deleted the password. showModal() makes the
+    // rest of the document inert.
+    const overlay = document.createElement('dialog');
     overlay.id = 'lock-screen';
     overlay.className = 'lock-overlay'; overlay.classList.add('i-flex-col');
+    overlay.setAttribute('aria-label', t('lockTitle'));
     const inp = document.createElement('input');
     inp.type = 'password'; inp.placeholder = t('enterPassword'); inp.autocomplete = 'off';
     inp.className = 'lock-input';
@@ -12147,9 +12153,27 @@ async function initMessenger(dbName) {
     btn.className = 'btn btn-g i-pad-unlock'; btn.textContent = t('uiUnlock');
     safeSetHTML(overlay, `<div class="i-icon48">🔒</div><div class="i-title16">${esc(t('lockTitle'))}</div>`);
     overlay.appendChild(inp); overlay.appendChild(btn);
-    document.body.appendChild(overlay);
+    _showDialog(overlay);
+    // Esc must not dismiss it, and the document-level shortcuts must not run behind it
+    // (panic wipe stays reachable: it destroys data, it does not reveal any).
+    overlay.addEventListener('cancel', (ev) => ev.preventDefault());
+    overlay.addEventListener('close', () => { if (overlay.isConnected) overlay.showModal(); });
+    overlay.addEventListener('keydown', (ev) => {
+      if (!(ev.ctrlKey && ev.shiftKey && ev.key === 'Backspace')) ev.stopPropagation();
+    });
     let _attempts = 0;
     let _backoffUntil = 0; // timestamp: block unlock() until this passes (0 = no block)
+    // The locked state outlives the page: initMessenger re-shows the lock at boot while this
+    // key exists, so a reload no longer drops it (or resets the failed-attempt backoff).
+    try {
+      const held = JSON.parse(localStorage.getItem('brz-locked') || 'null');
+      if (held) {
+        _attempts = Math.max(0, held.n | 0);
+        _backoffUntil = Math.min(Number(held.until) || 0, Date.now() + MS.MIN);
+      }
+    } catch(e) { _dbg(e, 'lock-state'); }
+    const _holdLock = () => localStorage.setItem('brz-locked', JSON.stringify({ n: _attempts, until: _backoffUntil }));
+    _holdLock();
     const unlock = async () => {
       // v3.5: Brute force protection — exponential backoff
       // Use a timestamp (not just a counter) so the correct password can still
@@ -12181,6 +12205,7 @@ async function initMessenger(dbName) {
       if (hashB64.length === stored.hash.length && await timingSafeEqual(hashB64, stored.hash)) {
         overlay.remove();
         _attempts = 0; _backoffUntil = 0;
+        localStorage.removeItem('brz-locked');
         auditLog('security', 'Lock screen unlocked');
         // Migrate legacy hash to PBKDF2
         if (isLegacy) {
@@ -12199,6 +12224,7 @@ async function initMessenger(dbName) {
           const wait = Math.min(Math.pow(2, _attempts - 4), 60);
           _backoffUntil = Date.now() + wait * MS.SEC;
         }
+        _holdLock();
       }
     };
     btn.onclick = unlock;
@@ -14427,6 +14453,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     if (val === '/lock reset') {
       e.preventDefault(); clearInput();
       localStorage.removeItem('brz-lock-hash');
+      localStorage.removeItem('brz-locked');
       localStorage.removeItem('brz-autolock');
       localStorage.removeItem('brz-idle-lock');
       auditLog('security', 'Lock password removed');
