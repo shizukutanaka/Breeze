@@ -582,6 +582,8 @@
  "uiNewVersion": "Nueva versión disponible.",
  "uiUpdateReady": "Actualización lista.",
  "uiRestartUpdate": "Reinicia para actualizar",
+ "uiUpdateDownloading": "Descargando actualización...",
+ "uiUpdateError": "Error al verificar o descargar la actualización. Actualización cancelada.",
  "uiDbReconnect": "Reconectando base de datos...",
  "uiConnected": "Conectado",
  "uiConnecting": "Conectando...",

@@ -30,6 +30,7 @@
       "bounds-guard.js",
       "nav-guard.js",
       "csp-guard.js",
+      "update-guard.js",
       "icon.*",
       "tray*.png"
     ],

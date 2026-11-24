@@ -731,6 +731,8 @@
  "uiNewVersion": "新バージョンが利用可能です",
  "uiUpdateReady": "アップデート準備完了",
  "uiRestartUpdate": "再起動して更新",
+ "uiUpdateDownloading": "アップデートをダウンロード中...",
+ "uiUpdateError": "アップデートの検証またはダウンロードに失敗しました。更新を中止しました。",
  "uiDbReconnect": "データベース再接続中...",
  "uiConnected": "接続済",
  "uiConnecting": "接続中...",

@@ -2203,6 +2203,8 @@ const _I = {
     uiNewVersion: 'New version available.',
     uiUpdateReady: 'Update ready.',
     uiRestartUpdate: 'Restart to update',
+    uiUpdateDownloading: 'Downloading update...',
+    uiUpdateError: 'Update verification or download failed. Update cancelled.',
     uiDbReconnect: 'Database reconnecting...',
     uiConnected: 'Connected',
     uiConnecting: 'Connecting...',
@@ -14998,7 +15000,12 @@ if (PLATFORM === 'electron' && window.breeze) {
       msg.textContent = t('uiNewVersion') + ' v' + esc(String(info.version)) + ' ';
       const btn = document.createElement('button');
       btn.className = 'update-btn';
-      btn.textContent = t('uiInstall'); btn.onclick = () => window.breeze.installUpdate();
+      btn.textContent = t('uiInstall');
+      btn.onclick = () => {
+        btn.disabled = true;
+        msg.textContent = t('uiUpdateDownloading');
+        window.breeze.downloadUpdate();
+      };
       msg.appendChild(btn);
     }
   });
@@ -15013,6 +15020,16 @@ if (PLATFORM === 'electron' && window.breeze) {
       msg.appendChild(btn);
     }
   });
+  if (window.breeze.onUpdateError) {
+    window.breeze.onUpdateError(() => {
+      const msg = _DOM.get('msg-server-banner');
+      if (msg) {
+        msg.classList.remove('hidden'); msg.classList.remove('bg-g'); msg.classList.add('bg-t3');
+        msg.textContent = t('uiUpdateError');
+      }
+      showToast(t('uiUpdateError'), 'error');
+    });
+  }
 
   // Check for updates on startup
   setTimeout(() => window.breeze.checkForUpdates(), MS.SEC * 5);

@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('breeze', {
   toggleFullscreen: () => ipcRenderer.send('win-fullscreen'),
 
   checkForUpdates: () => ipcRenderer.send('check-update'),
+  downloadUpdate: () => ipcRenderer.send('download-update'),
   installUpdate: () => ipcRenderer.send('install-update'),
   onUpdateAvailable: (cb) => {
     ipcRenderer.on('update-available', (_, info) => cb(info));
@@ -28,5 +29,9 @@ contextBridge.exposeInMainWorld('breeze', {
   onUpdateDownloaded: (cb) => {
     ipcRenderer.on('update-downloaded', (_, info) => cb(info));
     return () => ipcRenderer.removeAllListeners('update-downloaded');
+  },
+  onUpdateError: (cb) => {
+    ipcRenderer.on('update-error', (_, info) => cb(info));
+    return () => ipcRenderer.removeAllListeners('update-error');
   },
 });

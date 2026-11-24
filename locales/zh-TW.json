@@ -575,6 +575,8 @@
  "uiNewVersion": "有新版本。",
  "uiUpdateReady": "更新已就緒。",
  "uiRestartUpdate": "重新啟動以更新",
+ "uiUpdateDownloading": "正在下載更新...",
+ "uiUpdateError": "更新驗證或下載失敗，已取消更新。",
  "uiDbReconnect": "資料庫重新連線中...",
  "uiConnected": "已連線",
  "uiConnecting": "連線中...",

@@ -575,6 +575,8 @@
  "uiNewVersion": "새 버전이 있습니다.",
  "uiUpdateReady": "업데이트 준비됨.",
  "uiRestartUpdate": "재시작하여 업데이트",
+ "uiUpdateDownloading": "업데이트 다운로드 중...",
+ "uiUpdateError": "업데이트 검증 또는 다운로드에 실패했습니다. 업데이트가 취소되었습니다.",
  "uiDbReconnect": "데이터베이스 재연결 중...",
  "uiConnected": "연결됨",
  "uiConnecting": "연결 중...",
