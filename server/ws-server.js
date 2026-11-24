@@ -22,12 +22,16 @@
 // MAX_PAYLOAD closes with 1009. The message cap exists so a hostile
 // or broken peer cannot grow host memory with an endless fragment
 // stream; the legitimate protocol's only inbound message is the
-// 4-byte keepalive.
+// 4-byte keepalive. The byte cap alone does not bound that stream:
+// a zero-length continuation frame adds no bytes, so empty fragments
+// are dropped instead of queued and the number of queued fragments is
+// capped at MAX_FRAGMENTS (1009 beyond it).
 
 import { createHash } from 'node:crypto';
 
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 const MAX_PAYLOAD = 1024 * 1024; // 1 MiB — see header
+const MAX_FRAGMENTS = 1024; // queued fragments per message — see header
 
 export function wsAcceptKey(key) {
   return createHash('sha1').update(key + WS_GUID).digest('base64');
@@ -156,9 +160,11 @@ export class RelayWebSocket {
     }
     if (op === 0x0) { // continuation
       if (this._fragOp === -1) { this._fail(1002); return; }
-      this._frags.push(payload);
-      this._fragBytes += payload.length;
-      if (this._fragBytes > MAX_PAYLOAD) { this._fail(1009); return; }
+      if (payload.length) {
+        this._frags.push(payload);
+        this._fragBytes += payload.length;
+        if (this._fragBytes > MAX_PAYLOAD || this._frags.length > MAX_FRAGMENTS) { this._fail(1009); return; }
+      }
       if (fin) {
         const whole = Buffer.concat(this._frags);
         this._fragOp = -1;

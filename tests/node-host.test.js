@@ -20,7 +20,9 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildRelayEnv, createRelayServer, REPO_ROOT } from '../server/node-host.js';
-import { makeAssets, parseHeadersFile, headersForPath } from '../server/static-assets.js';
+import { RelayWebSocket } from '../server/ws-server.js';
+import { EventEmitter } from 'node:events';
+import { makeAssets, parseHeadersFile, headersForPath, isBlocked } from '../server/static-assets.js';
 
 const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite');
 const toB64 = (bytes) => Buffer.from(bytes).toString('base64');
@@ -275,6 +277,73 @@ describe('Node host — static layer reproduces the _headers contract', () => {
       expect(res.status, p).toBe(404);
     }
   });
+
+  // Round-7 re-audit of the blocklist hardening. A case-insensitive
+  // filesystem (APFS, NTFS) folds more than ASCII case: U+017F (ſ) opens
+  // an `s`, U+212A (Kelvin) a `k`, U+0131 (ı) an `i`. toLowerCase() leaves
+  // ſ and ı alone, so `/breeze.%C5%BFqlite` matched no blocked name and
+  // the filesystem then opened breeze.sqlite. The name verdict is
+  // filesystem-independent, so it is asserted directly.
+  it('treats Unicode case-fold aliases of blocked names as blocked', () => {
+    for (const p of [
+      '/_worker.j\u017F',
+      '/_wor\u212Aer.js',
+      '/_header\u017F',
+      '/_route\u017F.json',
+      '/_red\u0131rects',
+      '/node_module\u017F/pkg/index.js',
+      '/breeze.\u017Fqlite',
+      '/breeze.sql\u0131te',
+      '/state.\u017Fqlite3-wal',
+      '/sub/.\u017Fecret',
+    ]) expect(isBlocked(p), p).toBe(true);
+    for (const p of ['/index.html', '/src/app/backup.js', '/locales/ja.json', '/dbs/readme.txt']) {
+      expect(isBlocked(p), p).toBe(false);
+    }
+  });
+
+  // Over the real filesystem, on whatever this suite runs on. Where the
+  // filesystem is case-insensitive the alias IS the protected file; where
+  // it is case-sensitive the alias is written as a decoy of its own. In
+  // both cases the answer must be the 404 page, never either body.
+  it('never serves a blocked file through a Unicode alias of its name', async () => {
+    const root = join(tmp, 'assets-unicode-alias');
+    mkdirSync(join(root, 'node_modules', 'pkg'), { recursive: true });
+    mkdirSync(join(root, 'data'), { recursive: true });
+    const put = (rel, body) => writeFileSync(join(root, rel), body);
+    put('_headers', '/*\n  X-Test: yes\n');
+    put('404.html', 'lost');
+    put('index.html', '<h1>root</h1>');
+    const customDb = join(root, 'data', 'relay-state.bin');
+    const targets = [
+      ['_worker.js', '_worker.j\u017F'],
+      ['breeze.sqlite', 'breeze.\u017Fqlite'],
+      ['node_modules/pkg/index.js', 'node_modules/pkg/index.j\u017F'],
+      ['data/relay-state.bin', 'data/relay-\u017Ftate.bin'],
+      ['data/relay-state.bin-wal', 'data/relay-\u017Ftate.bin-wal'],
+    ];
+    for (const [real, alias] of targets) { put(alias, 'DECOY'); put(real, 'SECRET'); }
+    const assets = makeAssets({
+      rootDir: root,
+      extraBlocked: [customDb, `${customDb}-wal`, `${customDb}-shm`, `${customDb}-journal`],
+    });
+    const get = (p) => assets.fetch(new Request(`http://x${p}`));
+    for (const p of [
+      '/_worker.j%C5%BF',
+      '/breeze.%C5%BFqlite',
+      '/node_module%C5%BF/pkg/index.js',
+      '/node_modules/pkg/index.j%C5%BF',
+      '/data/relay-%C5%BFtate.bin',
+      '/data/relay-%C5%BFtate.bin-wal',
+      '/DATA/RELAY-%C5%BFTATE.BIN',
+    ]) {
+      const res = await get(p);
+      expect(res.status, p).toBe(404);
+      expect(await res.text(), p).toBe('lost');
+    }
+    expect((await get('/index.html')).status).toBe(200);
+    expect((await get('/')).status).toBe(200);
+  });
 });
 
 // TRUST_PROXY: the per-IP rate limiter is the relay's only abuse control on
@@ -360,5 +429,68 @@ describe('node host — request body size cap (OOM DoS guard)', () => {
     expect(body.code).toBe('BODY_TOO_LARGE');
     expect(body.max).toBe(524288);
     await host.close();
+  });
+});
+
+// Round-7 re-audit: the fragment queue was bounded by BYTES only. A
+// zero-length continuation frame adds no bytes, so an endless run of
+// them never reached MAX_PAYLOAD while each one queued a Buffer object
+// (measured: 2,000,000 empty frames = 12 MB on the wire held ~397 MB of
+// heap on a socket that stayed open). Driven through the real frame
+// codec over a stand-in socket.
+describe('node host — WebSocket fragment queue is bounded', () => {
+  function open() {
+    const socket = new EventEmitter();
+    socket.destroyed = false;
+    socket.written = [];
+    socket.write = (b) => { socket.written.push(b); return true; };
+    socket.end = () => { socket.ended = true; };
+    const ws = new RelayWebSocket(socket, null);
+    const messages = [];
+    ws.onMessage = (m) => messages.push(m);
+    return { socket, ws, messages };
+  }
+  function frame(fin, op, text = '') {
+    const body = Buffer.from(text, 'utf8');
+    const mask = Buffer.from([1, 2, 3, 4]);
+    const head = body.length < 126
+      ? Buffer.from([(fin ? 0x80 : 0) | op, 0x80 | body.length])
+      : Buffer.from([(fin ? 0x80 : 0) | op, 0x80 | 126, body.length >> 8, body.length & 0xff]);
+    const masked = Buffer.from(body);
+    for (let i = 0; i < masked.length; i++) masked[i] ^= mask[i & 3];
+    return Buffer.concat([head, mask, masked]);
+  }
+  const closeCode = (socket) => {
+    const last = socket.written[socket.written.length - 1];
+    return last && (last[0] & 0x0f) === 0x8 ? last.readUInt16BE(2) : null;
+  };
+
+  it('does not queue empty continuation frames', () => {
+    const { socket, ws, messages } = open();
+    socket.emit('data', frame(false, 0x1, 'pi'));
+    const empties = Buffer.concat(Array.from({ length: 500 }, () => frame(false, 0x0)));
+    for (let i = 0; i < 100; i++) socket.emit('data', empties); // 50,000 empty fragments
+    expect(ws.closed).toBe(false);
+    expect(ws._frags.length).toBe(1);
+    socket.emit('data', frame(true, 0x0, 'ng'));
+    expect(messages).toEqual(['ping']); // an interleaved empty fragment is legal and changes nothing
+    expect(ws._frags.length).toBe(0);
+  });
+
+  it('closes with 1009 when a message is split into too many fragments', () => {
+    const { socket, ws, messages } = open();
+    socket.emit('data', frame(false, 0x1, 'a'));
+    const ones = Buffer.concat(Array.from({ length: 500 }, () => frame(false, 0x0, 'a')));
+    for (let i = 0; i < 100 && !ws.closed; i++) socket.emit('data', ones); // 50 KB, far under the byte cap
+    expect(ws.closed).toBe(true);
+    expect(closeCode(socket)).toBe(1009);
+    expect(messages).toEqual([]);
+  });
+
+  it('still reassembles an ordinary fragmented message', () => {
+    const { socket, ws, messages } = open();
+    socket.emit('data', Buffer.concat([frame(false, 0x1, 'he'), frame(false, 0x0, 'll'), frame(true, 0x0, 'o')]));
+    expect(messages).toEqual(['hello']);
+    expect(ws.closed).toBe(false);
   });
 });
