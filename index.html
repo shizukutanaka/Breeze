@@ -1282,6 +1282,7 @@ import { createEmojiPicker } from './src/app/emoji-picker.js'; window.__breezeEm
 import { initInstallBanner } from './src/app/install-banner.js'; window.__breezeInstallBanner = { initInstallBanner };
 import { showContextMenu as _showContextMenuMod } from './src/app/context-menu.js'; window.__breezeContextMenu = { showContextMenu: _showContextMenuMod };
 import { createLightbox } from './src/app/lightbox.js'; window.__breezeLightbox = { createLightbox };
+import { createSmartReplies } from './src/app/smart-replies.js'; window.__breezeSmartReplies = { createSmartReplies };
 window.__breezeOfflinePairing = { createOfflinePairing, blockedPeerIds: new Set() };
 </script>
 
@@ -3969,65 +3970,12 @@ async function initMessenger(dbName) {
     // Future: WebNN (neural network API), local LLM inference
   };
 
-  // Smart Reply: Generate 3 contextual reply suggestions (rule-based, no LLM)
-  function generateSmartReplies(lastMsg) {
-    if (!lastMsg || typeof lastMsg !== 'string') return [];
-    const lower = lastMsg.toLowerCase().trim();
-    const len = lower.length;
-    const ja = LANG === 'ja' || /[\u3000-\u9fff]/.test(lastMsg);
-
-    // Question patterns
-    if (lower.endsWith('?') || lower.endsWith('？')) {
-      if (/how are you|how's it going|元気/.test(lower)) return ja ? ['元気です！', '元気ですよ！そちらは？', 'まあまあです'] : ['Good, thanks!', "I'm doing well, you?", 'Not bad!'];
-      if (/can you|could you|できる|してくれ/.test(lower)) return ja ? ['もちろん！', '確認します', 'ちょっと考えさせて'] : ['Sure!', "I'll check", 'Let me think about it'];
-      if (/when|いつ/.test(lower)) return ja ? ['予定を確認します', '明日でどう？', '来週はどう？'] : ['Let me check my schedule', 'Tomorrow works', 'How about next week?'];
-      if (/where|どこ/.test(lower)) return ja ? ['場所送るね', '調べてみる', 'いつもの場所？'] : ["I'll send the location", 'Let me find out', 'The usual place?'];
-      if (/what do you think|どう思/.test(lower)) return ja ? ['賛成', 'いいね！', 'ちょっと考えさせて'] : ['I agree', 'Good idea!', 'Let me think about it'];
-      return ja ? ['はい', 'いいえ', '確認します'] : ['Yes', 'No', 'Let me check'];
-    }
-    // Greeting
-    if (/^(hi|hello|hey|yo|sup|おはよう|こんにちは|こんばんは|お疲れ)/.test(lower)) return ja ? ['おはよう！', 'こんにちは！', 'お疲れ様！'] : ['Hey!', 'Hi there!', "What's up?"];
-    // Thanks
-    if (/thank|thanks|ありがとう|thx/.test(lower)) return ja ? ['どういたしまして！', 'いえいえ！', 'いつでも！'] : ["You're welcome!", 'No problem!', 'Anytime!'];
-    // Agreement
-    if (/^(ok|okay|sure|got it|了解|わかった|おk)/.test(lower)) return ja ? ['良かった！', '了解！', 'いいね'] : ['Great!', 'Perfect', 'Sounds good'];
-    // Farewell
-    if (/bye|see you|later|またね|じゃあね|おやすみ/.test(lower)) return ja ? ['またね！', 'お疲れ様！', 'おやすみ！'] : ['See you!', 'Take care!', 'Bye!'];
-    // Short
-    if (len < 20) return ja ? ['👍', '了解', 'ありがとう'] : ['👍', 'Got it', 'Thanks'];
-    // Long
-    return ja ? ['なるほど', '詳しくありがとう', 'ちょっと考えさせて'] : ['That makes sense', 'I see, thanks for sharing', 'Let me think about this'];
-  }
-
-  // Local message summarization (extractive, no LLM)
+  // Smart Reply + Local message summarization live in src/app/smart-replies.js
+  const _smartReplies = globalThis.__breezeSmartReplies?.createSmartReplies({
+    DOM: _DOM, config: CONFIG, t, getLang: () => LANG, getActiveContact: () => activeContact, sendMessage: () => sendMessage(),
+  });
   function summarizeMessages(messages, maxSentences = 3) {
-    if (!messages || messages.length === 0) return t('aiSummarizeEmpty');
-    // Filter to text messages only
-    const texts = messages.filter(m => m.text && !m.deleted && m.text.length > 5).map(m => ({
-      text: m.text, mine: m.mine, ts: m.ts, sender: m.senderName || (m.mine ? t('you') : activeContact?.name || '?'),
-    }));
-    if (texts.length === 0) return t('aiSummarizeNoText');
-    // Simple extractive summary: first, middle, last important messages
-    const total = texts.length;
-    const summary = [];
-    summary.push(t('aiSummarizeMsgCount', total));
-    // Topics: extract unique nouns/phrases > 4 chars
-    const words = {};
-    for (const msg of texts) {
-      msg.text.split(/\s+/).forEach(w => {
-        const clean = w.replace(/[^a-zA-Z\u3000-\u9fff\uff00-\uffef]/g, '');
-        if (clean.length > 4) words[clean.toLowerCase()] = (words[clean.toLowerCase()] || 0) + 1;
-      });
-    }
-    const topWords = Object.entries(words).sort((a, b) => b[1] - a[1]).slice(0, 5).map(w => w[0]);
-    if (topWords.length > 0) summary.push(t('aiSummarizeTopics') + ': ' + topWords.join(', '));
-    // Key messages
-    const key = texts.filter(t => t.text.endsWith('?') || t.text.endsWith('!') || t.text.length > 50);
-    const shown = key.slice(-maxSentences);
-    for (const m of shown) {
-      summary.push(`${m.sender}: "${m.text.slice(0, 80)}${m.text.length > 80 ? '...' : ''}"`);
-    }
-    return summary.join('\n');
+    return _smartReplies ? _smartReplies.summarizeMessages(messages, maxSentences) : '';
   }
 
   // Crypto abstraction: use X25519 when available, P-256 fallback
@@ -10128,24 +10076,8 @@ async function initMessenger(dbName) {
     activeContact: () => activeContact, myId: () => myId, myPubB64: () => myPubB64, myName: () => myName,
   }) || { cleanup() {} };
 
-  // v3.3: AI — Smart Reply (show suggestions after receiving a message)
-  function showSmartReplies(lastMsgText) {
-    const bar = _DOM.get('smart-reply-bar');
-    if (!bar) return;
-    // Show local replies immediately (no latency)
-    const localReplies = generateSmartReplies(lastMsgText);
-    if (localReplies.length === 0) { bar.classList.add('hidden'); return; }
-    bar.replaceChildren();
-    bar.classList.remove('hidden');
-    for (const r of localReplies) {
-      const btn = document.createElement('button');
-      btn.className = 'btn btn-o btn-sm smart-reply';
-      btn.textContent = r;
-      btn.onclick = () => { _DOM.get('msg-input').value = r; sendMessage(); bar.classList.add('hidden'); };
-      bar.appendChild(btn);
-    }
-    setTimeout(() => { bar.classList.add('hidden'); }, CONFIG.SMART_REPLY_HIDE_MS);
-  }
+  // v3.3: AI — Smart Reply (lives in src/app/smart-replies.js)
+  function showSmartReplies(lastMsgText) { _smartReplies?.showSmartReplies(lastMsgText); }
 
   _DOM.get('msg-input')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.target.value.trim().startsWith('/')) { e.preventDefault(); sendMessage(); } // slash commands: separate listener below (E2E-found: used to send them as literal text first)
