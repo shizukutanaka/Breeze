@@ -884,5 +884,6 @@
  "powerAuto": "Otomatis (dari baterai)",
  "powerNormal": "Normal",
  "powerSaver": "Hemat daya",
- "powerEmergency": "Darurat (bencana)"
+ "powerEmergency": "Darurat (bencana)",
+ "settingsBackup": "Cadangan & pemulihan"
 }

@@ -891,5 +891,6 @@
  "powerAuto": "Automático (por batería)",
  "powerNormal": "Normal",
  "powerSaver": "Ahorro de energía",
- "powerEmergency": "Emergencia (desastre)"
+ "powerEmergency": "Emergencia (desastre)",
+ "settingsBackup": "Copia de seguridad y restauración"
 }

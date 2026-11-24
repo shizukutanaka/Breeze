@@ -1783,6 +1783,7 @@ const _I = {
     relayKeyChanged: "⚠️ This relay's security key has changed — relay communication is paused. Verify the relay fingerprint with the operator before trusting it again.",
     relayPinned: "Relay identity pinned — fingerprint {0}. Compare it with the fingerprint your relay operator published.",
     settingsRelays: 'Home relays',
+    settingsBackup: 'Backup & restore',
     relayOriginTag: '(this relay)',
     relayAddBtn: 'Add relay',
     relayRemoveBtn: 'Remove',
@@ -14762,6 +14763,10 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         <br><b class="i-g">${t('settingsShare')}</b><br>
         <button class="btn btn-o btn-sm" data-action="invite-friend">${t('btnInviteFriend')}</button>
         <button class="btn btn-o btn-sm" data-action="migrate-apps">${t('btnMigrateApps')}</button><br>
+        <br><b class="i-g">${t('settingsBackup')}</b><br>
+        <button class="btn btn-g btn-sm" data-action="backup">${t('backupBtn')}</button>
+        <button class="btn btn-o btn-sm" data-action="restore">${t('restoreBtn')}</button>
+        <button class="btn btn-o btn-sm" data-action="restore-file">${t('restoreFileBtn')}</button><br>
         <br><b class="i-g">${t('settingsRelays')}</b><br>
         ${_relayRows}
         <button class="btn btn-o btn-sm" data-action="add-relay">${t('relayAddBtn')}</button><br>
