@@ -100,6 +100,10 @@ export function liveRecordId(senderId, sid) {
 // send paths, live-session management and the receive/render side.
 // Sessions live in memory only — a reload ends sharing (fail-safe) —
 // and stop clears the timer BEFORE the stopped update goes out.
+// The engine reaches the wire helpers through `L` — the shape it had
+// as index.html's `globalThis.__breezeLocation` alias before the move.
+const L = { sanitizeLoc, buildLocationPayload, groupTextForLocation };
+
 export function createLocationShare(D) {
     const _liveShares = new Map();
     function _geoPos() {
@@ -114,7 +118,6 @@ export function createLocationShare(D) {
       return (capsById[contact.id] || []).includes(CAPS_LOC);
     }
     async function _sendLocationWire(contact, payload, ts, msgId) {
-      const L = L;
       if (contact.isGroup) {
         const wire = L?.groupTextForLocation(payload);
         return wire ? D.sendGroupTransport(contact, wire, ts, msgId, null) : false;
@@ -138,7 +141,6 @@ export function createLocationShare(D) {
     }
     async function _shareLocationOnce() {
       const contact = D.activeContact();
-      const L = L;
       if (!contact || !L) return;
       let pos;
       try { pos = await _geoPos(); } catch(e) { D.showToast(D.t(e?.code === 1 ? 'locDenied' : 'locUnavailable'), 'error'); return; }
@@ -157,7 +159,6 @@ export function createLocationShare(D) {
       D.playSendSound(); D.hapticSend();
     }
     async function _startLiveShare(contact, minutes) {
-      const L = L;
       if (!L || _liveShares.has(contact.id)) { if (_liveShares.has(contact.id)) D.showToast(D.t('locLiveAlready'), 'info'); return; }
       if (!await _peerLocCap(contact)) { D.showToast(D.t(contact.isGroup ? 'locGroupNoCap' : 'locPeerNoCap'), 'error'); return; }
       let pos;
@@ -186,7 +187,6 @@ export function createLocationShare(D) {
       if (!contact) { _stopLiveShare(contactId, true); return; }
       let pos;
       try { pos = await _geoPos(); } catch(e) { D.dbg(e, 'live-geo'); _stopLiveShare(contactId); return; }
-      const L = L;
       const loc = sanitizeLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy });
       if (!loc) return;
       sess.seq++;
@@ -203,7 +203,6 @@ export function createLocationShare(D) {
       _liveShares.delete(contactId);
       _renderLiveChip();
       (async () => {
-        const L = L;
         const msgId = liveRecordId(D.myId(), sess.sid);
         const rec = await D.dbGet('messages', msgId).catch(() => null);
         if (rec) { rec.liveEnded = true; await D.dbPut('messages', rec); _rerenderLocBubble(rec); }
@@ -215,7 +214,6 @@ export function createLocationShare(D) {
       })().catch(e => D.dbg(e, 'live-stop'));
     }
     function _locCardInner(rec) {
-      const L = L;
       const loc = L?.sanitizeLoc(rec.loc);
       if (!loc) return '';
       const liveLine = rec.liveUntil ? (rec.liveEnded || Date.now() > rec.liveUntil
@@ -230,7 +228,6 @@ export function createLocationShare(D) {
       if (card) D.safeSetHTML(card, _locCardInner(rec));
     }
     async function _applyLocation(contactId, senderId, p, ts, senderName) {
-      const L = L;
       if (!L || !p) return;
       if (p.live) {
         const msgId = liveRecordId(senderId, p.live);
