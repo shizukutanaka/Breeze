@@ -803,6 +803,8 @@
  "secSignalPost": "建立後",
  "secSignalPerSession": "每個輪詢工作階段",
  "secLblConnRoutes": "連線路徑（此裝置）",
+ "secLblLanDirect": "LAN 直連",
+ "secLanDirectNote": "網頁版不支援自動 LAN 探索；若要確保在 LAN 上直接連線，請使用手動交換（/rendezvous）。",
  "secDirectNoData": "尚無資料",
  "secConnFailed": "失敗",
  "secTurnNone": "未設定（僅 STUN）",

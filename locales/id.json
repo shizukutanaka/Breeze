@@ -803,6 +803,8 @@
  "secSignalPost": "Setelah terbentuk",
  "secSignalPerSession": "per sesi poll",
  "secLblConnRoutes": "Rute koneksi (perangkat ini)",
+ "secLblLanDirect": "LAN langsung",
+ "secLanDirectNote": "Tidak ada penemuan LAN otomatis di web; untuk koneksi LAN langsung yang pasti, gunakan pertukaran manual (/rendezvous).",
  "secDirectNoData": "belum ada data",
  "secConnFailed": "gagal",
  "secTurnNone": "Tidak dikonfigurasi (hanya STUN)",

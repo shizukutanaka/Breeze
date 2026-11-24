@@ -803,6 +803,8 @@
  "secSignalPost": "หลังสร้างแล้ว",
  "secSignalPerSession": "ต่อเซสชันโพลลิง",
  "secLblConnRoutes": "เส้นทางการเชื่อมต่อ (อุปกรณ์นี้)",
+ "secLblLanDirect": "LAN โดยตรง",
+ "secLanDirectNote": "เวอร์ชันเว็บไม่ค้นหาอุปกรณ์ใน LAN อัตโนมัติ หากต้องการเชื่อมต่อตรงใน LAN แน่นอน ให้ใช้การแลกเปลี่ยนด้วยตนเอง (/rendezvous)",
  "secDirectNoData": "ยังไม่มีข้อมูล",
  "secConnFailed": "ล้มเหลว",
  "secTurnNone": "ยังไม่ได้กำหนดค่า (STUN เท่านั้น)",
