@@ -884,5 +884,6 @@
  "powerAuto": "อัตโนมัติ (ตามแบตเตอรี่)",
  "powerNormal": "ปกติ",
  "powerSaver": "ประหยัดพลังงาน",
- "powerEmergency": "ฉุกเฉิน (ภัยพิบัติ)"
+ "powerEmergency": "ฉุกเฉิน (ภัยพิบัติ)",
+ "profileIdLabel": "ID ของคุณ"
 }

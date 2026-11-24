@@ -891,5 +891,6 @@
  "powerAuto": "Automático (pela bateria)",
  "powerNormal": "Normal",
  "powerSaver": "Economia de energia",
- "powerEmergency": "Emergência (desastre)"
+ "powerEmergency": "Emergência (desastre)",
+ "profileIdLabel": "Seu ID"
 }
