@@ -448,7 +448,7 @@ describe('fan-out — presence + push unsubscribe reach every home relay', () =>
     const presenceFn = new Function(
       'API', 'dbGet', 'dbPut', 'signMessage', 'homeRelays', 'postAPIRelay', 'showToast',
       't', '_dbg', 'MS', 'CONFIG', 'document', '_ac', 'activeContact', 'updateConvStatus',
-      'myId', 'myPubB64', 'myName', 'authFields', 'digestHex16', 'sanStr', '_ownRegistryTs',
+      'myId', 'myPubB64', 'myName', 'authFields', 'digestHex16', 'sanStr', '_ownRegistryTs', '_powerPresenceOff',
       `${sliceBetween('// ===== Presence heartbeat', '// v3.3: Shared lock screen function')}
        return { startPresence };`);
     const presence = presenceFn(
@@ -469,6 +469,9 @@ describe('fan-out — presence + push unsubscribe reach every home relay', () =>
       // client has not fetched its registry yet, so the revision is 0
       // (the beat then sends devTs: undefined, exactly like production).
       0,
+      // Power saving: this client is in normal mode, so presence is on
+      // (the saving-mode suppression is covered by tests/power-mode.test.js).
+      () => false,
     );
     presence.startPresence();
     // The beat reaches each relay only after that relay's attestation
