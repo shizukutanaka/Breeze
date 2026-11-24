@@ -20,7 +20,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildRelayEnv, createRelayServer, REPO_ROOT } from '../server/node-host.js';
-import { makeAssets, parseHeadersFile, headersForPath } from '../server/static-assets.js';
+import { makeAssets, parseHeadersFile, headersForPath, isBlocked } from '../server/static-assets.js';
 
 const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite');
 const toB64 = (bytes) => Buffer.from(bytes).toString('base64');
@@ -274,6 +274,73 @@ describe('Node host — static layer reproduces the _headers contract', () => {
       const res = await get(p);
       expect(res.status, p).toBe(404);
     }
+  });
+
+  // Round-7 re-audit of the blocklist hardening. A case-insensitive
+  // filesystem (APFS, NTFS) folds more than ASCII case: U+017F (ſ) opens
+  // an `s`, U+212A (Kelvin) a `k`, U+0131 (ı) an `i`. toLowerCase() leaves
+  // ſ and ı alone, so `/breeze.%C5%BFqlite` matched no blocked name and
+  // the filesystem then opened breeze.sqlite. The name verdict is
+  // filesystem-independent, so it is asserted directly.
+  it('treats Unicode case-fold aliases of blocked names as blocked', () => {
+    for (const p of [
+      '/_worker.j\u017F',
+      '/_wor\u212Aer.js',
+      '/_header\u017F',
+      '/_route\u017F.json',
+      '/_red\u0131rects',
+      '/node_module\u017F/pkg/index.js',
+      '/breeze.\u017Fqlite',
+      '/breeze.sql\u0131te',
+      '/state.\u017Fqlite3-wal',
+      '/sub/.\u017Fecret',
+    ]) expect(isBlocked(p), p).toBe(true);
+    for (const p of ['/index.html', '/src/app/backup.js', '/locales/ja.json', '/dbs/readme.txt']) {
+      expect(isBlocked(p), p).toBe(false);
+    }
+  });
+
+  // Over the real filesystem, on whatever this suite runs on. Where the
+  // filesystem is case-insensitive the alias IS the protected file; where
+  // it is case-sensitive the alias is written as a decoy of its own. In
+  // both cases the answer must be the 404 page, never either body.
+  it('never serves a blocked file through a Unicode alias of its name', async () => {
+    const root = join(tmp, 'assets-unicode-alias');
+    mkdirSync(join(root, 'node_modules', 'pkg'), { recursive: true });
+    mkdirSync(join(root, 'data'), { recursive: true });
+    const put = (rel, body) => writeFileSync(join(root, rel), body);
+    put('_headers', '/*\n  X-Test: yes\n');
+    put('404.html', 'lost');
+    put('index.html', '<h1>root</h1>');
+    const customDb = join(root, 'data', 'relay-state.bin');
+    const targets = [
+      ['_worker.js', '_worker.j\u017F'],
+      ['breeze.sqlite', 'breeze.\u017Fqlite'],
+      ['node_modules/pkg/index.js', 'node_modules/pkg/index.j\u017F'],
+      ['data/relay-state.bin', 'data/relay-\u017Ftate.bin'],
+      ['data/relay-state.bin-wal', 'data/relay-\u017Ftate.bin-wal'],
+    ];
+    for (const [real, alias] of targets) { put(alias, 'DECOY'); put(real, 'SECRET'); }
+    const assets = makeAssets({
+      rootDir: root,
+      extraBlocked: [customDb, `${customDb}-wal`, `${customDb}-shm`, `${customDb}-journal`],
+    });
+    const get = (p) => assets.fetch(new Request(`http://x${p}`));
+    for (const p of [
+      '/_worker.j%C5%BF',
+      '/breeze.%C5%BFqlite',
+      '/node_module%C5%BF/pkg/index.js',
+      '/node_modules/pkg/index.j%C5%BF',
+      '/data/relay-%C5%BFtate.bin',
+      '/data/relay-%C5%BFtate.bin-wal',
+      '/DATA/RELAY-%C5%BFTATE.BIN',
+    ]) {
+      const res = await get(p);
+      expect(res.status, p).toBe(404);
+      expect(await res.text(), p).toBe('lost');
+    }
+    expect((await get('/index.html')).status).toBe(200);
+    expect((await get('/')).status).toBe(200);
   });
 });
 
