@@ -57,6 +57,8 @@ test('a "no reply needed" message arrives in full but raises no unread badge', a
 
   // Now the same thing marked "no reply needed": delivered, but the badge must not move.
   const quiet = 'no reply needed here ' + Date.now();
+  // Phase 1B moved the toggle into the composer's "+" panel; open it first.
+  await A.locator('#b-msg-more').click();
   await A.locator('#b-msg-nrn').click();
   await expect(A.locator('#b-msg-nrn')).toHaveClass(/nrn-on/);
   await A.locator('#msg-input').fill(quiet);

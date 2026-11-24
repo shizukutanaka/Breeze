@@ -224,6 +224,7 @@
  "ariaMessage": "訊息",
  "ariaVoice": "錄製語音訊息",
  "ariaDict": "語音輸入訊息",
+ "ariaMoreActions": "More actions",
  "ariaTheme": "切換主題",
  "ariaAddContact": "新增聯絡人",
  "ariaFolderAll": "所有聯絡人",

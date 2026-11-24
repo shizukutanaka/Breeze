@@ -220,6 +220,7 @@
  "ariaMessage": "Meddelande",
  "ariaVoice": "Spela in röstmeddelande",
  "ariaDict": "Diktera meddelande",
+ "ariaMoreActions": "More actions",
  "ariaTheme": "Växla tema",
  "ariaAddContact": "Lägg till kontakt",
  "ariaFolderAll": "Alla kontakter",

@@ -219,6 +219,7 @@
  "ariaMessage": "メッセージ",
  "ariaVoice": "ボイスメッセージを録音",
  "ariaDict": "メッセージを音声入力",
+ "ariaMoreActions": "その他の機能",
  "ariaTheme": "テーマ切替",
  "ariaAddContact": "連絡先を追加",
  "ariaFolderAll": "すべての連絡先",

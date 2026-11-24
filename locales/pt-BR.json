@@ -225,6 +225,7 @@
  "ariaMessage": "Mensagem",
  "ariaVoice": "Gravar mensagem de voz",
  "ariaDict": "Ditar mensagem",
+ "ariaMoreActions": "More actions",
  "ariaTheme": "Alternar tema",
  "ariaAddContact": "Adicionar contato",
  "ariaFolderAll": "Todos os contatos",
