@@ -132,10 +132,17 @@ for (const file of localeFiles) {
   const totalPct = Math.round((Object.keys(T).filter((k) => EN[k] !== undefined).length / refKeys.length) * 100);
   summary.push(`${loc}: ${corePct}% core (${coveredCore}/${coreKeys.length}), ${totalPct}% total`);
 
-  if (loc === 'ja') {
-    for (const k of refKeys) if (T[k] === undefined) problems.push(`ja: missing key "${k}" (ja must stay 100%)`);
-  } else if (corePct < 95) {
-    problems.push(`${loc}: core coverage ${corePct}% is below the 95% floor`);
+  for (const k of refKeys) {
+    const val = T[k];
+    if (val === undefined) {
+      problems.push(`${loc}: missing key "${k}" (all locales must stay 100% complete)`);
+    } else if (typeof val === 'string' && val.trim() === '') {
+      problems.push(`${loc}."${k}": empty translation string`);
+    } else if (val && typeof val === 'object') {
+      for (const [cat, s] of Object.entries(val)) {
+        if (typeof s === 'string' && s.trim() === '') problems.push(`${loc}."${k}.${cat}": empty plural translation string`);
+      }
+    }
   }
 }
 
