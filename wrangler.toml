@@ -2,14 +2,19 @@ name = "breeze"
 pages_build_output_dir = "."
 compatibility_date = "2024-12-01"
 
-# KV Binding — configured on the Pages project, NOT in this file.
-# Bind your namespace in the Dashboard: Pages project > Settings >
-# Functions > KV namespace bindings, variable name "KV".
-# An [[kv_namespaces]] section is deliberately absent here: an empty id
-# fails Pages builds, and a filled-in id would hardcode one account's
-# namespace into every self-hoster's copy. If you deploy with the
-# Wrangler CLI instead of the Dashboard, add the section locally with
-# your own namespace ID (wrangler kv:namespace create KV).
+# KV Binding — declared here because Pages Git deployments take their
+# bindings from this file: a binding set only in the Dashboard is not
+# applied while a wrangler.toml exists (measured 2026-11-24: dashboard
+# showed KV bound, yet /api/health reported kv:false). An empty id
+# fails Pages builds, so the id must be filled in. The id is a public
+# identifier, not a credential — access still requires the account's
+# own authentication.
+# SELF-HOSTERS: this id points at the reference deployment's namespace.
+# Create your own (wrangler kv:namespace create KV) and replace the id
+# below with yours before deploying.
+[[kv_namespaces]]
+binding = "KV"
+id = "42edcaffc1474f73bca2c6f89817e8aa"
 
 # Durable Object mailbox backend (stage-1 step 2, 2026-11-13). MailboxDO
 # lives in _worker.js: one instance per recipient holds both queue families
