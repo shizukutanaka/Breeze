@@ -20,6 +20,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildRelayEnv, createRelayServer, REPO_ROOT } from '../server/node-host.js';
+import { RelayWebSocket } from '../server/ws-server.js';
+import { EventEmitter } from 'node:events';
 import { makeAssets, parseHeadersFile, headersForPath, isBlocked } from '../server/static-assets.js';
 
 const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite');
@@ -427,5 +429,68 @@ describe('node host — request body size cap (OOM DoS guard)', () => {
     expect(body.code).toBe('BODY_TOO_LARGE');
     expect(body.max).toBe(524288);
     await host.close();
+  });
+});
+
+// Round-7 re-audit: the fragment queue was bounded by BYTES only. A
+// zero-length continuation frame adds no bytes, so an endless run of
+// them never reached MAX_PAYLOAD while each one queued a Buffer object
+// (measured: 2,000,000 empty frames = 12 MB on the wire held ~397 MB of
+// heap on a socket that stayed open). Driven through the real frame
+// codec over a stand-in socket.
+describe('node host — WebSocket fragment queue is bounded', () => {
+  function open() {
+    const socket = new EventEmitter();
+    socket.destroyed = false;
+    socket.written = [];
+    socket.write = (b) => { socket.written.push(b); return true; };
+    socket.end = () => { socket.ended = true; };
+    const ws = new RelayWebSocket(socket, null);
+    const messages = [];
+    ws.onMessage = (m) => messages.push(m);
+    return { socket, ws, messages };
+  }
+  function frame(fin, op, text = '') {
+    const body = Buffer.from(text, 'utf8');
+    const mask = Buffer.from([1, 2, 3, 4]);
+    const head = body.length < 126
+      ? Buffer.from([(fin ? 0x80 : 0) | op, 0x80 | body.length])
+      : Buffer.from([(fin ? 0x80 : 0) | op, 0x80 | 126, body.length >> 8, body.length & 0xff]);
+    const masked = Buffer.from(body);
+    for (let i = 0; i < masked.length; i++) masked[i] ^= mask[i & 3];
+    return Buffer.concat([head, mask, masked]);
+  }
+  const closeCode = (socket) => {
+    const last = socket.written[socket.written.length - 1];
+    return last && (last[0] & 0x0f) === 0x8 ? last.readUInt16BE(2) : null;
+  };
+
+  it('does not queue empty continuation frames', () => {
+    const { socket, ws, messages } = open();
+    socket.emit('data', frame(false, 0x1, 'pi'));
+    const empties = Buffer.concat(Array.from({ length: 500 }, () => frame(false, 0x0)));
+    for (let i = 0; i < 100; i++) socket.emit('data', empties); // 50,000 empty fragments
+    expect(ws.closed).toBe(false);
+    expect(ws._frags.length).toBe(1);
+    socket.emit('data', frame(true, 0x0, 'ng'));
+    expect(messages).toEqual(['ping']); // an interleaved empty fragment is legal and changes nothing
+    expect(ws._frags.length).toBe(0);
+  });
+
+  it('closes with 1009 when a message is split into too many fragments', () => {
+    const { socket, ws, messages } = open();
+    socket.emit('data', frame(false, 0x1, 'a'));
+    const ones = Buffer.concat(Array.from({ length: 500 }, () => frame(false, 0x0, 'a')));
+    for (let i = 0; i < 100 && !ws.closed; i++) socket.emit('data', ones); // 50 KB, far under the byte cap
+    expect(ws.closed).toBe(true);
+    expect(closeCode(socket)).toBe(1009);
+    expect(messages).toEqual([]);
+  });
+
+  it('still reassembles an ordinary fragmented message', () => {
+    const { socket, ws, messages } = open();
+    socket.emit('data', Buffer.concat([frame(false, 0x1, 'he'), frame(false, 0x0, 'll'), frame(true, 0x0, 'o')]));
+    expect(messages).toEqual(['hello']);
+    expect(ws.closed).toBe(false);
   });
 });
