@@ -238,6 +238,42 @@ describe('Node host — static layer reproduces the _headers contract', () => {
     expect(head.status).toBe(200);
     expect(await head.text()).toBe('');
   });
+
+  it('blocks repeated-slash, dot-segment, case-variant, and SQLite journal/sidecar bypasses', async () => {
+    const root = join(tmp, 'assets-bypass');
+    mkdirSync(join(root, 'node_modules', 'pkg'), { recursive: true });
+    mkdirSync(join(root, 'sub'), { recursive: true });
+    writeFileSync(join(root, '_headers'), '/*\n  X-Test: yes\n');
+    writeFileSync(join(root, '_worker.js'), 'SECRET_WORKER_SOURCE');
+    writeFileSync(join(root, '_routes.json'), '{"routes":[]}');
+    writeFileSync(join(root, '404.html'), 'lost');
+    writeFileSync(join(root, 'node_modules', 'pkg', 'index.js'), 'SECRET_MOD');
+    writeFileSync(join(root, 'state.db-journal'), 'SECRET_JOURNAL');
+    const customDb = join(root, 'relaydata');
+    writeFileSync(customDb, 'SECRET_CUSTOM_DB');
+    writeFileSync(`${customDb}-wal`, 'SECRET_CUSTOM_WAL');
+    const assets = makeAssets({
+      rootDir: root,
+      extraBlocked: [customDb, `${customDb}-wal`, `${customDb}-shm`, `${customDb}-journal`],
+    });
+    const get = (p) => assets.fetch(new Request(`http://x${p}`));
+    for (const p of [
+      '//_worker.js',
+      '///_headers',
+      '/sub/../_worker.js',
+      '/_WORKER.JS',
+      '//node_modules/pkg/index.js',
+      '/NODE_MODULES/pkg/index.js',
+      '/state.db-journal',
+      '//state.db-journal',
+      '/relaydata',
+      '/relaydata-wal',
+      '//relaydata-wal',
+    ]) {
+      const res = await get(p);
+      expect(res.status, p).toBe(404);
+    }
+  });
 });
 
 // TRUST_PROXY: the per-IP rate limiter is the relay's only abuse control on

@@ -59,7 +59,10 @@ export function buildRelayEnv({ db, rootDir = REPO_ROOT, source = process.env, d
   }
   env.KV = makeSqliteKV(db);
   env.MAILBOX_DO = makeMailboxNamespace(db);
-  env.ASSETS = makeAssets({ rootDir, extraBlocked: dbPath ? [dbPath] : [] });
+  env.ASSETS = makeAssets({
+    rootDir,
+    extraBlocked: dbPath ? [dbPath, `${dbPath}-wal`, `${dbPath}-shm`, `${dbPath}-journal`] : [],
+  });
   // Relay identity (stage-2 step 4): the step-3 volume key becomes the
   // worker's RELAY_PUBLIC_KEY / RELAY_PRIVATE_KEY pair, so /api/health
   // can publish the public half and /api/relay/attest can sign with it.
