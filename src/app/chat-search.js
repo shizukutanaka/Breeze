@@ -6,6 +6,8 @@
 // ============================================================================
 
 export function createChatSearch({ DOM, getActiveContact } = {}) {
+  // Honor prefers-reduced-motion for JS-driven scrolling, like index.html.
+  const _scrollBehavior = () => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'; } catch { return 'smooth'; } };
   const _searchBar = DOM.get('search-bar');
   const _searchInput = DOM.get('search-chat-input');
   const _searchCount = DOM.get('search-match-count');
@@ -60,7 +62,7 @@ export function createChatSearch({ DOM, getActiveContact } = {}) {
       }
     });
     _searchCount.textContent = _searchMatches.length > 0 ? `${1}/${_searchMatches.length}` : '0';
-    if (_searchMatches.length > 0) _searchMatches[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (_searchMatches.length > 0) _searchMatches[0].scrollIntoView({ block: 'center', behavior: _scrollBehavior() });
   }
 
   function searchNext(dir) {
@@ -68,7 +70,7 @@ export function createChatSearch({ DOM, getActiveContact } = {}) {
     _searchMatches[_searchIdx].classList.remove('i-search-hl-current');
     _searchIdx = (_searchIdx + dir + _searchMatches.length) % _searchMatches.length;
     _searchMatches[_searchIdx].classList.add('i-search-hl-current');
-    _searchMatches[_searchIdx].scrollIntoView({ block: 'center', behavior: 'smooth' });
+    _searchMatches[_searchIdx].scrollIntoView({ block: 'center', behavior: _scrollBehavior() });
     _searchCount.textContent = `${_searchIdx + 1}/${_searchMatches.length}`;
   }
 

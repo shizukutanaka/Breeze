@@ -10,12 +10,13 @@ import { readFileSync } from 'node:fs';
 //  (b) Delivery states are shape-coded, not just color/opacity-coded:
 //      sent = one check, deposited = one check inside a ring, delivered =
 //      two checks, read = two checks on a filled chip, failed = cross on a
-//      filled chip. The legacy P2P ack badge keeps ✓ vs ✓✓.
+//      filled chip. The live P2P ack path updates the same .msg-status
+//      element, so it is shape-coded too.
 //  (c) Status text is real text: >= 12px, no opacity dimming, and every
 //      status color pairing reaches WCAG AA 4.5:1, computed with the same
 //      relative-luminance math as tests/ui-contrast.test.js. This closes
 //      the two leftovers PR #519 deferred: light --y as small-glyph text
-//      color, and the 10px + opacity .ts / .delivery-state rules.
+//      color, and the 10px + opacity .ts rules.
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
 // ── contrast helpers (same math as ui-contrast.test.js) ─────────────
@@ -177,19 +178,21 @@ describe('delivery states differ by shape, not only by color or opacity', () => 
     }
   });
 
-  it('the legacy P2P ack badge keeps ✓ (delivered) vs ✓✓ (read) and its own class', () => {
+  it('the P2P ack path updates the shared .msg-status element, creating no legacy badge', () => {
     const src = sliceBetween('function updateDeliveryState', '// v3: BINARY FILE CHUNK');
-    expect(src).toContain("span.className = 'delivery-state';");
-    expect(src).not.toContain('enc-badge');
-    expect(src).toContain("span.textContent = '✓';");
-    expect(src).toContain("span.textContent = '✓✓';");
+    expect(src).toContain('.msg-status');
+    expect(src).toContain("statusEl.classList.add('delivered');");
+    expect(src).toContain("statusEl.classList.add('read');");
+    expect(src).toContain("statusEl.textContent = '✓✓';");
+    expect(src).not.toContain('delivery-state');
+    expect(src).not.toContain('createElement');
   });
 });
 
 // ── (c) status text size + contrast floor ───────────────────────────
 describe('status text is at least 12px with no opacity dimming', () => {
-  it('.ts, .msg-status, .delivery-state and .msg-timer-badge all meet the floor', () => {
-    for (const sel of ['.ts', '.msg-status', '.delivery-state', '.msg-timer-badge']) {
+  it('.ts, .msg-status and .msg-timer-badge all meet the floor', () => {
+    for (const sel of ['.ts', '.msg-status', '.msg-timer-badge']) {
       expect(fontSizeOf(sel), sel).toBeGreaterThanOrEqual(12);
       expect(ruleBody(sel), sel).not.toContain('opacity');
     }

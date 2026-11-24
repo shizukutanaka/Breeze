@@ -17,6 +17,15 @@ export function createVoiceInput(D) {
   let _recTimer = null;
   let _recStartTs = 0;
 
+  // The voice/dictation buttons each carry two line icons (idle / active).
+  // State changes swap which icon is hidden; writing emoji into textContent
+  // (the old approach) destroyed the shared SVG icon set on first use.
+  function _setBtnIcon(btn, activeCls, active) {
+    btn.querySelectorAll('.ico').forEach(svg => {
+      svg.classList.toggle('hidden', svg.classList.contains(activeCls) !== active);
+    });
+  }
+
   // v3.3: Voice message recording
   const voiceBtn = DOM.get('b-msg-voice');
   if (voiceBtn) {
@@ -26,7 +35,7 @@ export function createVoiceInput(D) {
       haptic.tap();
       if (_mediaRecorder && _mediaRecorder.state === 'recording') {
         _mediaRecorder.stop();
-        voiceBtn.textContent = '🎤';
+        _setBtnIcon(voiceBtn, 'ico-stop', false);
         voiceBtn.classList.remove('voice-recording');
         voiceBtn.setAttribute('aria-pressed', 'false');
         DOM.get('voice-rec-indicator')?.remove();
@@ -93,7 +102,7 @@ export function createVoiceInput(D) {
         };
         _mediaRecorder.start();
         _recStartTs = Date.now();
-        voiceBtn.textContent = '⏹';
+        _setBtnIcon(voiceBtn, 'ico-stop', true);
         voiceBtn.classList.add('voice-recording');
         voiceBtn.setAttribute('aria-pressed', 'true');
         haptic.send();
@@ -110,7 +119,7 @@ export function createVoiceInput(D) {
             const timerEl = ind.querySelector('.rec-timer');
             if (timerEl) timerEl.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
           }, 500);
-          if (_analyser) {
+          if (_analyser && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
             const bars = ind.querySelectorAll('.rec-wave span');
             const dataArray = new Uint8Array(_analyser.frequencyBinCount);
             const updateWave = () => {
@@ -154,7 +163,7 @@ export function createVoiceInput(D) {
       _sttActive = false;
       sttBtn.classList.remove('color-g', 'color-r');
       sttBtn.classList.add('color-t3');
-      sttBtn.textContent = '🗣';
+      _setBtnIcon(sttBtn, 'ico-rec', false);
       sttBtn.setAttribute('aria-pressed', 'false');
     };
     _recognition.onerror = (e) => {
@@ -168,7 +177,7 @@ export function createVoiceInput(D) {
       _sttActive = true;
       sttBtn.classList.remove('color-g', 'color-t3');
       sttBtn.classList.add('color-r');
-      sttBtn.textContent = '🔴';
+      _setBtnIcon(sttBtn, 'ico-rec', true);
       sttBtn.setAttribute('aria-pressed', 'true');
       _recognition.start();
     });

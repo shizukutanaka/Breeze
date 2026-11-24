@@ -138,8 +138,8 @@ export function createProfileUI(D) {
           <button type="button" class="btn btn-g btn-sm pf-copy-id">${D.esc(D.t('copy'))}</button>
         </div>
         <div class="dlg-btns">
-          <button class="btn btn-g btn-sm" value="cancel">${D.esc(D.t('cancel'))}</button>
-          <button class="btn btn-p btn-sm" value="ok">${D.esc(D.t('profileSave'))}</button>
+          <button class="btn btn-o btn-sm" value="cancel">${D.esc(D.t('cancel'))}</button>
+          <button class="btn btn-g btn-sm" value="ok">${D.esc(D.t('profileSave'))}</button>
         </div>`);
       D.showDialog(dlg);
       let img = prof.img || '';

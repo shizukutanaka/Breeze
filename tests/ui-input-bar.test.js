@@ -83,8 +83,10 @@ describe('"+" panel wiring', () => {
     const handler = html.slice(html.indexOf("_DOM.get('msg-more-panel')?.addEventListener"), html.indexOf("document.addEventListener('click', (e) => {\n    const p = _DOM.get('msg-more-panel');"));
     expect(handler).toContain("if (e.target.closest('#b-msg-voice, #b-msg-stt')) return;");
     expect(handler).toContain('_closeMorePanel();');
-    // A tap on the text under an icon forwards to the control itself.
-    expect(handler).toContain("item.querySelector('button, label')?.click();");
+    // A tap anywhere in the cell that missed the control (the text under
+    // an icon, or the cell padding) forwards to the control itself.
+    expect(handler).toContain("const control = item.querySelector('button, label');");
+    expect(handler).toContain('if (control && !control.contains(e.target)) { control.click(); return; }');
   });
   it('closes on send and when the emoji picker opens', () => {
     expect(html).toContain("_DOM.get('b-msg-send')?.addEventListener('click', () => _closeMorePanel());");

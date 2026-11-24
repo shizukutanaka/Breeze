@@ -288,12 +288,12 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .msg-status { font-size: 12px; margin-left: 2px; display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; min-height: 20px }
 .msg-status.deposited { border: 1.5px solid currentColor; border-radius: 50%; width: 22px; height: 22px }
 .msg-status.read { background: var(--blue); color: #000; border-radius: var(--rad-full); padding: 0 6px; font-weight: 700 }
-.msg-status.failed { background: var(--r); color: #000; border-radius: var(--rad-full); padding: 0 6px; font-weight: 700; cursor: pointer }
+.msg-status.failed { background: var(--r); color: #000; border-radius: var(--rad-full); padding: 0 6px; font-weight: 700; cursor: pointer; min-width: 24px; min-height: 24px }
 .msg-copy {
   position: absolute; top: 4px; right: 4px; font-size: 12px; opacity: 0;
   cursor: pointer; background: var(--s3); border: none; color: var(--t3);
   border-radius: 4px; padding: 2px 6px; transition: .15s;
-  min-width: 24px; min-height: 24px; display: flex; align-items: center; justify-content: center
+  min-width: 32px; min-height: 32px; display: flex; align-items: center; justify-content: center
 }
 .msg:hover .msg-copy { opacity: .5 }
 .msg-copy:hover { opacity: 1 !important }
@@ -329,11 +329,10 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .poll-opt {
   padding: 10px 14px; border: 1px solid var(--b1); border-radius: var(--rad);
   margin: 4px 0; cursor: pointer; transition: transform .12s var(--bounce), background .15s ease; font-size: 13px;
+  position: relative; overflow: hidden; min-height: var(--touch); display: flex; align-items: center
 }
 .poll-opt:hover { background: var(--s2); transform: scale(1.01) }
 .poll-opt:active { transform: scale(.98) }
-  position: relative; overflow: hidden; min-height: var(--touch); display: flex; align-items: center
-}
 .poll-opt:hover { border-color: var(--g) }
 .poll-opt.voted { border-color: var(--g); background: var(--gl) }
 .poll-bar { position: absolute; left: 0; top: 0; height: 100%; background: var(--gl); transition: width .4s ease; z-index: 0 }
@@ -361,7 +360,7 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 }
 .input-bar .send {
   background: var(--g); color: #000; border: none; border-radius: 50%;
-  width: 42px; height: 42px; font-size: 18px; font-weight: 700;
+  width: 44px; height: 44px; font-size: 18px; font-weight: 700;
   cursor: pointer; transition: transform .15s var(--bounce), background .15s ease, box-shadow .15s ease;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   box-shadow: 0 2px 10px rgba(52,211,153,.3)
@@ -421,7 +420,7 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .presence-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; flex-shrink: 0 }
 .presence-dot.online { background: var(--g); box-shadow: 0 0 4px var(--g) }
 .presence-dot.offline { background: transparent; border: 1.5px solid var(--t3) }
-.presence-dot.away { background: #f59e0b }
+.presence-dot.away { background: var(--y); border-radius: 2px }
 /* v3.6: P2P direct connection indicator (double ring) */
 .presence-dot.p2p { background: var(--g); box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--g); animation: presencePulse 2s ease-in-out infinite }
 /* v3.6: Presence pulse animation */
@@ -530,6 +529,10 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .i-muted { color: var(--t2) }
 .focus-bar { background: var(--gl); color: var(--g); cursor: pointer }
 #b-msg-nrn.nrn-on { background: var(--gl); color: var(--g); border-color: var(--g) }
+/* The "+" button carries a dot while "no reply needed" is armed, so the
+   one-shot state stays visible after the panel closes. */
+#b-msg-more { position: relative }
+#b-msg-more.nrn-on::after { content: ''; position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--g); box-shadow: 0 0 0 2px var(--s1) }
 .msg-nrn { font-size: 12px; color: var(--t3); margin-left: 6px; opacity: .8 }
 .i-fs10 { font-size: 10px }
 /* ─── Account tabs ─── */
@@ -685,7 +688,6 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 @keyframes ctxPop { from { opacity: 0; transform: scale(.92) } to { opacity: 1; transform: scale(1) } }
 .reply-preview { background: var(--s2); border-left: 3px solid var(--g); padding: 6px 12px; font-size: 12px; color: var(--t3); border-radius: 0 var(--rad) var(--rad) 0; margin-bottom: 4px; display: flex; align-items: center; gap: 8px } .reply-preview button { background: none; border: none; padding: 0; font: inherit; color: inherit }
 .import-result { font-size: 12px; color: var(--t2); line-height: 1.6; margin-top: 8px }
-.delivery-state { font-size: 12px; margin-left: 2px }
 .overlay-dark { background: rgba(0,0,0,.85) }
 .qr-modal { text-align: center }
 .qr-code { display: block; max-width: 100%; height: auto; margin: 0 auto 12px; image-rendering: pixelated }
@@ -857,6 +859,15 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 .skip-to-content { position: absolute; top: -100%; left: 0; background: var(--g); color: #000; padding: 8px 16px; z-index: 999; font-size: 14px; border-radius: 0 0 var(--rad) 0 }
 .skip-to-content:focus { top: 0 }
 
+/* ─── Touch targets: coarse pointers get 44px minimum hit areas ─── */
+@media (pointer: coarse) {
+  .btn-sm { min-height: 44px; min-width: 44px }
+  .folder-tab { min-height: 44px; min-width: 44px }
+  .acc-tab { min-width: 44px; min-height: 44px }
+  .msg-status.failed { min-width: 44px; min-height: 44px }
+  .msg-copy { min-width: 44px; min-height: 44px }
+}
+
 /* ─── Consent banner ─── */
 .consent-banner { position: fixed; bottom: 0; left: 0; right: 0; background: var(--s1); border-top: 1px solid var(--b1); padding: 12px 16px; z-index: 150; display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--t2) }
 .consent-banner .text { flex: 1 }
@@ -899,7 +910,6 @@ del.md-del { opacity: .6 }
   #msg-messages { overflow: visible !important; height: auto !important }
   .conv-header .name::after { content: ' — Breeze Messenger'; font-weight: 400; font-size: 12px; color: #888 }
 }
-@media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important; transition-duration: .01ms !important } }
 @media (prefers-contrast: more) { :root { --b1: rgba(255,255,255,.2); --t3: #a8a8b6 } .light { --b1: rgba(0,0,0,.28); --t3: #4a4a4e } }
 @media (prefers-contrast: more) and (prefers-color-scheme: light) { :root.auto-theme { --b1: rgba(0,0,0,.28); --t3: #4a4a4e } }
 
@@ -1228,11 +1238,11 @@ del.md-del { opacity: .6 }
               <span class="more-label" data-i18n="ttAttach">Attach</span>
             </div>
             <div class="more-item">
-              <button id="b-msg-voice" class="tool" data-i18n-aria="ariaVoice" aria-pressed="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></button>
+              <button id="b-msg-voice" class="tool" data-i18n-aria="ariaVoice" aria-pressed="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg><svg class="ico ico-stop hidden" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></button>
               <span class="more-label" data-i18n="ariaVoice">Record voice message</span>
             </div>
             <div class="more-item">
-              <button id="b-msg-stt" class="tool hidden" data-i18n-aria="ariaDict" aria-pressed="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="12.5" x2="13" y2="12.5"/></svg></button>
+              <button id="b-msg-stt" class="tool hidden" data-i18n-aria="ariaDict" aria-pressed="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="12.5" x2="13" y2="12.5"/></svg><svg class="ico ico-rec hidden" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6"/></svg></button>
               <span class="more-label" data-i18n="ariaDict">Dictate message</span>
             </div>
             <div class="more-item">
@@ -1244,7 +1254,7 @@ del.md-del { opacity: .6 }
               <span class="more-label" data-i18n="ttStickers">Stickers</span>
             </div>
             <div class="more-item">
-              <button class="btn btn-o btn-sm" id="b-msg-nrn" data-i18n-aria="nrnAria" data-i18n-title="nrnAria"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/><polyline points="8.5 11.5 11 14 15.5 9.5"/></svg></button>
+              <button class="tool" id="b-msg-nrn" data-i18n-aria="nrnAria" data-i18n-title="nrnAria"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/><polyline points="8.5 11.5 11 14 15.5 9.5"/></svg></button>
               <span class="more-label" data-i18n="nrnBadge">no reply needed</span>
             </div>
           </div>
@@ -1516,6 +1526,10 @@ const _DOM = {
   clear() { this._cache = {}; },
 };
 const _H = Object.freeze({ 'Content-Type': 'application/json' }); // Shared JSON headers
+// Reduced motion: JS-driven scrolls honor the same preference the CSS
+// media query applies to transitions/animations.
+const _prefersReducedMotion = () => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
+const _scrollBehavior = () => _prefersReducedMotion() ? 'auto' : 'smooth';
 
 const _I = {
   en: {
@@ -5106,6 +5120,10 @@ async function initMessenger(dbName) {
   function _updateNrnButton() {
     const b = _DOM.get('b-msg-nrn');
     if (b) b.classList.toggle('nrn-on', _noReplyNeeded);
+    // The armed state must survive the panel closing: mirror it as a dot
+    // on the "+" button in the bar itself.
+    const more = _DOM.get('b-msg-more');
+    if (more) more.classList.toggle('nrn-on', _noReplyNeeded);
   }
   function _updateFocusBanner() {
     const bar = _DOM.get('focus-bar');
@@ -8700,7 +8718,7 @@ async function initMessenger(dbName) {
         pinBanner.classList.remove('hidden');
         pinBanner.onclick = () => {
           const target = document.querySelector(`[data-msgid="${latest.msgId}"]`);
-          if (target) { target.scrollIntoView({ block: 'center', behavior: 'smooth' }); target.classList.add('msg-highlight'); setTimeout(() => target.classList.remove('msg-highlight'), CONFIG.TOAST_DURATION_MS); }
+          if (target) { target.scrollIntoView({ block: 'center', behavior: _scrollBehavior() }); target.classList.add('msg-highlight'); setTimeout(() => target.classList.remove('msg-highlight'), CONFIG.TOAST_DURATION_MS); }
         };
       } else {
         pinBanner.classList.add('hidden');
@@ -9085,7 +9103,7 @@ async function initMessenger(dbName) {
     // v3.6: Smart auto-scroll — smooth if near bottom, badge if scrolled up
     const isNearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 200;
     if (isNearBottom || isMine) {
-      box.scrollTo({ top: box.scrollHeight, behavior: isMine ? 'instant' : 'smooth' });
+      box.scrollTo({ top: box.scrollHeight, behavior: isMine || _prefersReducedMotion() ? 'instant' : 'smooth' });
     } else if (!isMine && typeof onNewMsgWhileScrolled === 'function') {
       onNewMsgWhileScrolled();
     }
@@ -12981,15 +12999,23 @@ async function initMessenger(dbName) {
   // v3: DELIVERY STATE (ACK)
   function updateDeliveryState(msgId, state) {
     // state: 0=delivered, 1=read, 2=deleted
-    const el = document.querySelector(`[data-msgid="${msgId}"] .ts`);
-    if (!el) return;
-    const existing = el.querySelector('.delivery-state');
-    if (existing) existing.remove();
-    const span = document.createElement('span');
-    span.className = 'delivery-state';
-    if (state === 0) { span.textContent = '✓'; span.title = t('delivered'); }
-    else if (state === 1) { span.textContent = '✓✓'; span.title = t('read'); }
-    el.appendChild(span);
+    // Update the message's shared .msg-status element so live P2P acks get
+    // the same shape coding as rendered messages (phase 3) instead of a
+    // separate legacy badge appended to the timestamp.
+    const statusEl = document.querySelector(`[data-msgid="${msgId}"] .msg-status`);
+    if (statusEl) {
+      if (state === 0) {
+        statusEl.classList.remove('sent', 'deposited');
+        statusEl.classList.add('delivered');
+        statusEl.textContent = '✓✓';
+        statusEl.title = t('delivered');
+      } else if (state === 1) {
+        statusEl.classList.remove('sent', 'deposited', 'delivered');
+        statusEl.classList.add('read');
+        statusEl.textContent = '✓✓';
+        statusEl.title = t('read');
+      }
+    }
     // v3.3: Persist delivery state to IDB
     dbGet('messages', msgId).then(stored => {
       if (stored) { stored.ack = state; dbPut('messages', stored); }
@@ -13228,7 +13254,7 @@ async function initMessenger(dbName) {
       const replyId = quote.dataset.reply;
       const target = document.querySelector(`.msg[data-msgid="${replyId}"]`);
       if (target) {
-        target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        target.scrollIntoView({ block: 'center', behavior: _scrollBehavior() });
         target.classList.add('msg-highlight');
         setTimeout(() => target.classList.remove('msg-highlight'), CONFIG.TOAST_DURATION_MS);
         haptic.tap();
@@ -13264,7 +13290,7 @@ async function initMessenger(dbName) {
     // v3.5: Quote scroll → handled by v3.6 reply-jump above (with highlight + haptic)
     // v3.5: Reply count scroll
     const replyScroll = e.target.closest('[data-action="reply-scroll"]');
-    if (replyScroll) { replyScroll.closest('.msg')?.scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
+    if (replyScroll) { replyScroll.closest('.msg')?.scrollIntoView({ block: 'center', behavior: _scrollBehavior() }); return; }
     // v3.5: External link safety — confirm before opening unknown domains
     const link = e.target.closest('a.md-link[href]');
     if (link) {
@@ -13401,16 +13427,23 @@ async function initMessenger(dbName) {
   _DOM.get('msg-more-panel')?.addEventListener('click', (e) => {
     const item = e.target.closest('.more-item');
     if (!item) return;
-    // A tap on the text under an icon activates the control itself, so the
-    // whole cell is one tap target (the forwarded click re-enters here with
-    // the control as target and is handled by the rules below).
-    if (e.target.classList?.contains('more-label')) item.querySelector('button, label')?.click();
+    // The whole cell is one tap target: a tap on the cell padding or the
+    // text under an icon is forwarded to the control itself (the forwarded
+    // click re-enters here with the control as target and is handled by
+    // the rules below); a tap that already landed on the control is left
+    // alone so nothing fires twice.
+    const control = item.querySelector('button, label');
+    if (control && !control.contains(e.target)) { control.click(); return; }
     if (e.target.closest('#b-msg-voice, #b-msg-stt')) return;
     _closeMorePanel();
   });
   document.addEventListener('click', (e) => {
     const p = _DOM.get('msg-more-panel');
     if (!p || p.classList.contains('hidden')) return;
+    // While recording, the stop control lives inside the panel — an
+    // outside tap must not hide it mid-take.
+    if (_DOM.get('b-msg-voice')?.classList.contains('voice-recording')) return;
+    if (_DOM.get('b-msg-stt')?.getAttribute('aria-pressed') === 'true') return;
     if (!_DOM.get('msg-input-bar')?.contains(e.target)) _closeMorePanel();
   }, { signal: _ac.signal });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') _closeMorePanel(); }, { signal: _ac.signal });
@@ -15179,7 +15212,7 @@ if (PLATFORM === 'capacitor') {
 if (IS_IOS) {
   document.addEventListener('click', (e) => {
     if (e.target.closest('.conv-header .name')) {
-      _DOM.get('msg-messages')?.scrollTo({ top: 0, behavior: 'smooth' });
+      _DOM.get('msg-messages')?.scrollTo({ top: 0, behavior: _scrollBehavior() });
     }
   });
 }
