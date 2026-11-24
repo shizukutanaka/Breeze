@@ -810,6 +810,8 @@
  "secSignalPost": "Pós-estabelecimento",
  "secSignalPerSession": "por sessão de polling",
  "secLblConnRoutes": "Rotas de conexão (este dispositivo)",
+ "secLblLanDirect": "LAN direta",
+ "secLanDirectNote": "Sem descoberta automática em LAN na web; para conexão direta garantida na LAN, use a troca manual (/rendezvous).",
  "secDirectNoData": "sem dados ainda",
  "secConnFailed": "falhou",
  "secTurnNone": "Não configurado (somente STUN)",

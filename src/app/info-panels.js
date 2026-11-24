@@ -118,6 +118,7 @@ export function createInfoPanels(D) {
         D.t('secLblDirectRate') + ': ' + _directRateLine,
         D.t('secLblConnRoutes') + ': ' + _connRouteLine,
         D.t('secLblSignalPolls') + ': ' + _signalPollLine,
+        D.t('secLblLanDirect') + ': ' + D.t('secLanDirectNote') + ' <button class="btn btn-o btn-sm" data-action="open-rendezvous">' + D.esc(D.t('rvTitle')) + '</button>',
         D.t('secLblRTCCert') + ': ' + (D.hasRTCCertificate() ? '✓ Per-session ECDSA P-256' : '✗ ' + D.t('secDefault')),
         'DataChannel: negotiated:true (DCEP skip)',
         'Negotiation: Perfect Negotiation (glare-safe, MDN spec)',
@@ -142,6 +143,10 @@ export function createInfoPanels(D) {
         D.t('secKeyStorage'),
         D.t('secAntiReplay'),
       ].join('<br>'));
+      d.addEventListener('click', (ev) => {
+        if (!ev.target.closest('[data-action="open-rendezvous"]')) return;
+        D.openRendezvous?.();
+      });
       box.appendChild(d); box.scrollTop = box.scrollHeight;
   }
 

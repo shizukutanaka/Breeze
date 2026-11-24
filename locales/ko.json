@@ -803,6 +803,8 @@
  "secSignalPost": "설정 후",
  "secSignalPerSession": "폴링 세션당",
  "secLblConnRoutes": "연결 경로 (이 기기)",
+ "secLblLanDirect": "LAN 직접 연결",
+ "secLanDirectNote": "웹 버전에서는 자동 LAN 탐색을 지원하지 않습니다. LAN에서 확실히 직접 연결하려면 수동 교환(/rendezvous)을 사용하세요.",
  "secDirectNoData": "아직 데이터 없음",
  "secConnFailed": "실패",
  "secTurnNone": "구성되지 않음 (STUN만)",
