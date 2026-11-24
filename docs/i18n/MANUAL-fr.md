@@ -91,6 +91,9 @@ Certaines opérations, comme les réglages et la liaison d'appareils, se font de
 
 - Pour utiliser la même identité sur plusieurs appareils, liez les appareils entre eux avec la commande `/link`.
 - Vous pouvez créer plusieurs comptes et les utiliser séparément (par exemple travail et personnel). Le nombre d'appareils comme le nombre de comptes sont gratuits et illimités.
+- **Comment créer un compte** : ouvrez les Réglages et touchez le bouton « Ajouter un compte » dans la section « Compte ». Saisissez un nom et choisissez un emoji comme icône, et le nouveau compte est créé et vous y basculez automatiquement.
+- **Comment changer de compte** : lorsque vous avez deux comptes ou plus, des onglets de compte apparaissent tout en haut de la liste des contacts. Touchez un onglet pour changer de compte (sur un ordinateur, vous pouvez aussi utiliser Ctrl+1–9). Touchez longuement un onglet pour le renommer, changer son icône ou le supprimer.
+- Chaque compte a ses propres contacts et ses propres clés. Échangez vos contacts séparément pour chaque compte.
 - La langue est choisie automatiquement parmi 8 langues : anglais, japonais, coréen, chinois (Taïwan), espagnol, thaï, indonésien et portugais (Brésil).
 
 ---

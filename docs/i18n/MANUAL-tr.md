@@ -91,6 +91,9 @@ Ayarlar ve cihaz bağlama gibi bazı işlemler komutlardan yapılır.
 
 - Aynı kimliği birden çok cihazda kullanmak için, cihazları `/link` komutuyla birbirine bağlarsınız.
 - Hesaplar birden çok oluşturulup ayrı ayrı kullanılabilir (iş ve özel gibi). Cihaz sayısı da hesap sayısı da ücretsiz ve sınırsızdır.
+- **Hesap nasıl oluşturulur**: Ayarları açın ve "Hesap" bölümündeki "Hesap ekle" düğmesine dokunun. Bir ad girin ve simge olarak bir emoji seçin; yeni hesap oluşturulur ve otomatik olarak ona geçilir.
+- **Hesaplar arasında nasıl geçiş yapılır**: İki veya daha fazla hesabınız olduğunda, kişi listesinin en üstünde hesap sekmeleri görünür. Geçiş yapmak için bir sekmeye dokunun (bilgisayarda Ctrl+1–9 da kullanılabilir). Bir sekmeyi yeniden adlandırmak, simgesini değiştirmek veya silmek için sekmeye uzun basın.
+- Her hesabın kendi kişileri ve anahtarları vardır. Kişileri her hesap için ayrı ayrı değiş tokuş edin.
 - Dil, şu 8 dil arasından otomatik seçilir: İngilizce, Japonca, Korece, Çince (Tayvan), İspanyolca, Tayca, Endonezyaca, Portekizce (Brezilya).
 
 ---

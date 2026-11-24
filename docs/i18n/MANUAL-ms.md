@@ -91,6 +91,9 @@ Sebahagian operasi seperti tetapan dan pautan peranti dilakukan melalui arahan.
 
 - Untuk menggunakan identiti yang sama pada berbilang peranti, pautkan peranti sesama sendiri dengan arahan `/link`.
 - Akaun boleh dibuat berbilang dan digunakan secara berasingan (seperti untuk kerja dan peribadi). Bilangan peranti dan akaun kedua-duanya percuma dan tanpa had.
+- **Cara membuat akaun**: Buka Tetapan dan ketuk butang "Tambah akaun" dalam bahagian "Akaun". Masukkan nama dan pilih emoji ikon, dan akaun baharu akan dibuat dan ditukar secara automatik.
+- **Cara menukar akaun**: Apabila anda mempunyai dua atau lebih akaun, tab akaun akan muncul di bahagian paling atas senarai kenalan. Ketuk tab untuk menukar (pada komputer, anda juga boleh menggunakan Ctrl+1–9). Tekan lama tab untuk menamakan semula, menukar ikonnya, atau memadamnya.
+- Setiap akaun mempunyai kenalan dan kuncinya sendiri. Tukar kenalan secara berasingan untuk setiap akaun.
 - Bahasa dipilih secara automatik daripada 8 bahasa: Bahasa Inggeris, Bahasa Jepun, Bahasa Korea, Bahasa Cina (Taiwan), Bahasa Sepanyol, Bahasa Thai, Bahasa Indonesia dan Bahasa Portugis (Brazil).
 
 ---

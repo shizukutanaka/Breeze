@@ -91,6 +91,9 @@ Vissa åtgärder, som inställningar och enhetslänkning, görs via kommandon.
 
 - För att använda samma identitet på flera enheter länkar du enheterna med kommandot `/link`.
 - Du kan skapa flera konton och använda dem för olika ändamål (till exempel arbete och privat). Både antal enheter och konton är gratis och obegränsade.
+- **Så här skapar du ett konto**: Öppna Inställningar och tryck på knappen "Lägg till konto" i avsnittet "Konto". Ange ett namn och välj en emoji som ikon, så skapas det nya kontot och du växlar automatiskt till det.
+- **Så här växlar du konto**: När du har två eller flera konton visas kontoflikar allra högst upp i kontaktlistan. Tryck på en flik för att växla (på en dator kan du också använda Ctrl+1–9). Tryck länge på en flik för att byta namn på den, ändra dess ikon eller ta bort den.
+- Varje konto har sina egna kontakter och nycklar. Byt kontakter separat för varje konto.
 - Språket väljs automatiskt bland 8: engelska, japanska, koreanska, kinesiska (Taiwan), spanska, thailändska, indonesiska och portugisiska (Brasilien).
 
 ---

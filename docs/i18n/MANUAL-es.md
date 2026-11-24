@@ -91,6 +91,9 @@ Algunas operaciones, como los ajustes y la vinculación de dispositivos, se hace
 
 - Para usar la misma identidad en varios dispositivos, vincula los dispositivos entre sí con el comando `/link`.
 - Se pueden crear varias cuentas y usarlas por separado (por ejemplo, trabajo y personal). Tanto el número de dispositivos como el de cuentas es gratuito e ilimitado.
+- **Cómo crear una cuenta**: abre Ajustes y toca el botón «Añadir cuenta» en la sección «Cuenta». Introduce un nombre y elige un emoji como icono, y se creará la nueva cuenta y se cambiará automáticamente a ella.
+- **Cómo cambiar de cuenta**: cuando tienes dos o más cuentas, aparecen pestañas de cuenta en la parte superior de la lista de contactos. Toca una pestaña para cambiar (en un ordenador, también puedes usar Ctrl+1–9). Mantén pulsada una pestaña para cambiarle el nombre, cambiar su icono o eliminarla.
+- Cada cuenta tiene sus propios contactos y claves. Intercambia los contactos por separado para cada cuenta.
 - El idioma se elige automáticamente entre 8: inglés, japonés, coreano, chino (Taiwán), español, tailandés, indonesio y portugués (Brasil).
 
 ---

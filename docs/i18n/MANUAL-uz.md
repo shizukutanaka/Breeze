@@ -91,6 +91,9 @@ Sozlamalar va qurilmalarni bog'lash kabi ba'zi amallar buyruqlardan bajariladi.
 
 - Bitta shaxsni bir nechta qurilmada ishlatish uchun `/link` buyrug'i bilan qurilmalarni bog'lang.
 - Hisoblarni bir nechta yaratib, alohida ishlatish mumkin (masalan, ish va shaxsiy). Qurilmalar soni ham, hisoblar soni ham bepul va cheksiz.
+- **Hisob yaratish**: Sozlamalarni oching va «Hisob» bo'limidagi «Hisob qo'shish» tugmasiga bosing. Ism kiriting va belgi sifatida emoji tanlang — yangi hisob yaratiladi va avtomatik ravishda unga o'tasiz.
+- **Hisoblarni almashtirish**: Ikki yoki undan ortiq hisobingiz bo'lsa, kontaktlar ro'yxatining eng yuqorisida hisob yorliqlari paydo bo'ladi. Almashtirish uchun yorliqqa bosing (kompyuterda Ctrl+1–9 tugmalaridan ham foydalanishingiz mumkin). Yorliq nomini o'zgartirish, belgisini o'zgartirish yoki uni o'chirish uchun uni bosib turing.
+- Har bir hisobning o'z kontaktlari va kalitlari bor. Kontaktlarni har bir hisob uchun alohida almashing.
 - Til 8 tildan avtomatik tanlanadi: ingliz, yapon, koreys, xitoy (Tayvan), ispan, tay, indonez va portugal (Braziliya).
 
 ---

@@ -91,6 +91,9 @@ Baadhi ya shughuli, kama mipangilio na kuunganisha vifaa, hufanywa kupitia amri.
 
 - Ili kutumia utambulisho ule ule kwenye vifaa vingi, viunganishe vifaa kwa amri ya `/link`.
 - Unaweza kuunda akaunti nyingi na kuzitumia kwa madhumuni tofauti (kwa kazi na kwa binafsi, kwa mfano). Idadi ya vifaa na akaunti haina kikomo na ni bure.
+- **Jinsi ya kuunda akaunti**: Fungua Mipangilio na uguse kitufe cha "Ongeza akaunti" katika sehemu ya "Akaunti". Weka jina na uchague emoji ya ikoni, na akaunti mpya itaundwa na kubadilishwa kwenda kwake kiotomatiki.
+- **Jinsi ya kubadilisha akaunti**: Ukiwa na akaunti mbili au zaidi, vichupo vya akaunti huonekana juu kabisa ya orodha ya anwani. Gusa kichupo ili kubadilisha (kwenye kompyuta, unaweza pia kutumia Ctrl+1–9). Bonyeza kichupo kwa muda mrefu ili kukipa jina jipya, kubadilisha ikoni yake, au kukifuta.
+- Kila akaunti ina anwani na funguo zake. Badilishana anwani kando kwa kila akaunti.
 - Lugha huchaguliwa kiotomatiki kutoka lugha 8: Kiingereza, Kijapani, Kikorea, Kichina (Taiwan), Kihispania, Kithai, Kiindonesia, na Kireno (Brazil).
 
 ---

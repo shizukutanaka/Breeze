@@ -91,6 +91,9 @@ Einige Vorgänge wie Einstellungen und Geräteverknüpfung erfolgen über Befehl
 
 - Um dieselbe Identität auf mehreren Geräten zu nutzen, verknüpfen Sie die Geräte mit dem Befehl `/link` miteinander.
 - Konten können mehrfach erstellt und getrennt genutzt werden (z. B. beruflich und privat). Sowohl die Geräteanzahl als auch die Kontenanzahl ist kostenlos und unbegrenzt.
+- **So erstellen Sie ein Konto**: Öffnen Sie die Einstellungen und tippen Sie im Abschnitt „Konto“ auf die Schaltfläche „Konto hinzufügen“. Geben Sie einen Namen ein und wählen Sie ein Emoji als Symbol aus, und das neue Konto wird erstellt und automatisch zu ihm gewechselt.
+- **So wechseln Sie zwischen Konten**: Wenn Sie zwei oder mehr Konten haben, erscheinen ganz oben in der Kontaktliste Konto-Tabs. Tippen Sie auf einen Tab, um zu wechseln (auf einem Computer können Sie auch Ctrl+1–9 verwenden). Halten Sie einen Tab lange gedrückt, um ihn umzubenennen, sein Symbol zu ändern oder ihn zu löschen.
+- Jedes Konto hat seine eigenen Kontakte und Schlüssel. Tauschen Sie Kontakte für jedes Konto getrennt aus.
 - Die Sprache wird automatisch aus 8 Sprachen gewählt: Englisch, Japanisch, Koreanisch, Chinesisch (Taiwan), Spanisch, Thailändisch, Indonesisch und Portugiesisch (Brasilien).
 
 ---

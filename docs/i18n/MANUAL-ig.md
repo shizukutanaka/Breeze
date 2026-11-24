@@ -91,6 +91,9 @@ A na-eme ụfọdụ ọrụ, dịka nhazi na ijikọ ngwaọrụ, site na iwu.
 
 - Iji jiri otu njirimara na ọtụtụ ngwaọrụ, jikọọ ngwaọrụ na iwu `/link`.
 - Ị nwere ike ịmepụta ọtụtụ akaụntụ ma jiri ha n'ụzọ dị iche iche (dịka maka ọrụ na nke onwe). Ọnụọgụ ngwaọrụ na akaụntụ bụ n'efu na-enweghị oke.
+- **Otu esi emepụta akaụntụ**: Mepee Ntọala ma pịa bọtịnụ "Tinye akaụntụ" na ngalaba "Akaụntụ". Tinye aha ma họrọ emoji akara, a ga-emepụtakwa akaụntụ ọhụrụ ahụ ma gbanwee gaa na ya na-akpaghị aka.
+- **Otu esi agbanwe akaụntụ**: Mgbe ị nwere akaụntụ abụọ ma ọ bụ karịa, taabụ akaụntụ na-apụta n'elu ndepụta kọntaktị. Pịa taabụ iji gbanwee (na kọmputa, ị nwekwara ike iji Ctrl+1–9). Pịa taabụ ogologo oge iji nyegharịa ya aha, gbanwee akara ya, ma ọ bụ ihichapụ ya.
+- Akaụntụ ọ bụla nwere kọntaktị na igodo nke ya. Gbanwee kọntaktị iche iche maka akaụntụ ọ bụla.
 - A na-ahọrọ asụsụ na-akpaghị aka site na asụsụ 8: Bekee, Japanese, Korean, Chinese (Taiwan), Spanish, Thai, Indonesian, na Portuguese (Brazil).
 
 ---

@@ -91,6 +91,9 @@ Wasu ayyuka, kamar saitawa da haɗa na'urori, ana yin su daga umarnai.
 
 - Don amfani da asali ɗaya a na'urori da yawa, haɗa na'urorin da umarnin `/link`.
 - Za ka iya ƙirƙirar asusu da yawa ka yi amfani da su daban-daban (misali na aiki da na sirri). Adadin na'urori da asusu kyauta ne ba tare da iyaka ba.
+- **Yadda ake ƙirƙirar asusu**: Buɗe Saituna ka taɓa maɓallin "Ƙara asusu" a sashin "Asusu". Shigar da suna ka zaɓi emoji na alama, kuma za a ƙirƙiri sabon asusun a canza zuwa gare shi ta atomatik.
+- **Yadda ake canza asusu**: Idan kana da asusu biyu ko fiye, shafukan asusu suna bayyana a saman jerin lambobin sadarwa. Taɓa shafi don canzawa (a kwamfuta, za ka iya amfani da Ctrl+1–9 ma). Danna shafin na dogon lokaci don sake masa suna, canza alamarsa, ko goge shi.
+- Kowane asusu yana da lambobin sadarwarsa da maɓallansa. Musayar lambobin sadarwa daban-daban ga kowane asusu.
 - Ana zaɓar harshe ta atomatik daga harsuna 8: Turanci, Jafananci, Koriyanci, Sinanci (Taiwan), Sifaniyanci, Thai, Indonesiyanci, da Fotugisanci (Brazil).
 
 ---

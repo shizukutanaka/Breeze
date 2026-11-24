@@ -91,6 +91,9 @@ Sommige handelingen, zoals instellingen en het koppelen van apparaten, doe je me
 
 - Om dezelfde identiteit op meerdere apparaten te gebruiken, koppel je de apparaten met het commando `/link`.
 - Je kunt meerdere accounts aanmaken en apart gebruiken (bijv. werk en privé). Zowel het aantal apparaten als het aantal accounts is gratis en onbeperkt.
+- **Zo maak je een account aan**: Open Instellingen en tik op de knop “Account toevoegen” in het gedeelte “Account”. Voer een naam in en kies een emoji als pictogram, en het nieuwe account wordt aangemaakt en er wordt automatisch naar overgeschakeld.
+- **Zo wissel je van account**: Als je twee of meer accounts hebt, verschijnen er helemaal bovenaan de contactenlijst accounttabbladen. Tik op een tabblad om te wisselen (op een computer kun je ook Ctrl+1–9 gebruiken). Houd een tabblad lang ingedrukt om het te hernoemen, het pictogram ervan te wijzigen of het te verwijderen.
+- Elk account heeft zijn eigen contacten en sleutels. Wissel contacten voor elk account apart uit.
 - De taal wordt automatisch gekozen uit 8 talen: Engels, Japans, Koreaans, Chinees (Taiwan), Spaans, Thais, Indonesisch en Portugees (Brazilië).
 
 ---

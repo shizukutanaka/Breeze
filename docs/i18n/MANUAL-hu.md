@@ -91,6 +91,9 @@ Egyes műveletek, például a beállítások és az eszközök összekapcsolása
 
 - Ahhoz, hogy ugyanazt a személyazonosságot több eszközön használja, a `/link` paranccsal kapcsolja össze az eszközöket.
 - Több fiók is létrehozható és külön használható (például munkahelyi és magán). Mind az eszközök, mind a fiókok száma ingyenes és korlátlan.
+- **Fiók létrehozása**: nyissa meg a beállításokat, és koppintson a „Fiók” szakaszban a „Fiók hozzáadása” gombra. Adjon meg egy nevet, és válasszon egy hangulatjelet ikonnak — az új fiók létrejön, és a rendszer automatikusan átvált rá.
+- **Fiókváltás**: ha két vagy több fiókja van, a névjegyzék legtetején fióklapok jelennek meg. Koppintson egy lapra a váltáshoz (számítógépen a Ctrl+1–9 billentyűkombinációt is használhatja). Tartsa lenyomva a lapot az átnevezéséhez, az ikon megváltoztatásához vagy a törléséhez.
+- Minden fióknak saját névjegyei és kulcsai vannak. A névjegyeket fiókonként külön cserélje ki.
 - A nyelv automatikusan kerül kiválasztásra 8 nyelv közül: angol, japán, koreai, kínai (tajvani), spanyol, thai, indonéz, portugál (brazíliai).
 
 ---

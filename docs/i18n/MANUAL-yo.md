@@ -91,6 +91,9 @@ Tí o bá tẹ `/help` sí nínú pápá ìtẹ̀sí, àkọsílẹ̀ àwọn à
 
 - Láti lo ìdánimọ̀ kan náà lórí àwọn ẹ̀rọ púpọ̀, so àwọn ẹ̀rọ pọ̀ pẹ̀lú àṣẹ `/link`.
 - O lè ṣẹ̀dá àwọn àkáǹtì púpọ̀ kí o sì lò wọ́n ní ọ̀nà ọ̀tọ̀ọ̀tọ̀ (bí ti iṣẹ́ àti ti ara ẹni). Iye àwọn ẹ̀rọ àti àkáǹtì ọ̀fẹ́ ni láìsí ààlà.
+- **Bí a ṣe ń ṣẹ̀dá àkáǹtì**: Ṣí Àwọn ìṣètò kí o sì tẹ bọ́tìnì "Fi àkáǹtì kún" nínú abala "Àkáǹtì". Tẹ orúkọ sí kí o sì yan emoji àmì, àkáǹtì tuntun náà yóò sì ṣẹ̀dá, a ó sì yí padà sí ọ̀dọ̀ rẹ̀ fúnra rẹ̀.
+- **Bí a ṣe ń yí àkáǹtì padà**: Tí o bá ní àkáǹtì méjì tàbí jù bẹ́ẹ̀ lọ, àwọn tab àkáǹtì yóò hàn ní òkè jùlọ ti àkọsílẹ̀ àwọn olùbáṣepọ̀. Tẹ tab kan láti yí padà (lórí kọ̀ǹpútà, o tún lè lo Ctrl+1–9). Tẹ tab náà mọ́lẹ̀ pẹ́ láti tún orúkọ rẹ̀ sọ, yí àmì rẹ̀ padà, tàbí pa á rẹ́.
+- Àkáǹtì kọ̀ọ̀kan ní àwọn olùbáṣepọ̀ àti àwọn kọ́kọ́rọ́ tirẹ̀. Ṣe pàṣípààrọ̀ àwọn olùbáṣepọ̀ lọ́tọ̀ọ̀tọ̀ fún àkáǹtì kọ̀ọ̀kan.
 - A ń yan èdè fúnra rẹ̀ láti inú èdè 8: Gẹ̀ẹ́sì, Japanese, Korean, Chinese (Taiwan), Spanish, Thai, Indonesian, àti Portuguese (Brazil).
 
 ---

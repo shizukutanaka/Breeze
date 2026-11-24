@@ -91,6 +91,9 @@ Beberapa operasi, seperti pengaturan dan penautan perangkat, dilakukan melalui p
 
 - Untuk menggunakan identitas yang sama di banyak perangkat, tautkan perangkat-perangkat itu dengan perintah `/link`.
 - Anda dapat membuat banyak akun dan menggunakannya untuk tujuan yang berbeda (misalnya untuk pekerjaan dan pribadi). Jumlah perangkat dan akun gratis dan tidak terbatas.
+- **Cara membuat akun**: Buka Pengaturan dan ketuk tombol "Tambah akun" di bagian "Akun". Masukkan nama dan pilih emoji ikon, maka akun baru akan dibuat dan Anda akan otomatis beralih ke akun tersebut.
+- **Cara beralih akun**: Jika Anda memiliki dua akun atau lebih, tab akun akan muncul di bagian paling atas daftar kontak. Ketuk tab untuk beralih (di komputer, Anda juga dapat menggunakan Ctrl+1–9). Tekan lama tab untuk mengganti namanya, mengubah ikonnya, atau menghapusnya.
+- Setiap akun memiliki kontak dan kuncinya sendiri. Tukarkan kontak secara terpisah untuk setiap akun.
 - Bahasa dipilih secara otomatis dari 8 bahasa — Inggris, Jepang, Korea, Mandarin (Taiwan), Spanyol, Thai, Indonesia, Portugis (Brasil).
 
 ---

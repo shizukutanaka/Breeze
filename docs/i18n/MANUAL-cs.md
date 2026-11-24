@@ -91,6 +91,9 @@ Některé operace, například nastavení a propojení zařízení, se provádě
 
 - Chcete-li používat stejnou identitu na více zařízeních, propojíte zařízení příkazem `/link`.
 - Můžete vytvořit více účtů a používat je pro různé účely (například pracovní a soukromé). Počet zařízení i účtů je zdarma a neomezený.
+- **Jak vytvořit účet**: otevřete nastavení a klepněte na tlačítko „Přidat účet” v části „Účet”. Zadejte jméno a vyberte emoji jako ikonu — nový účet se vytvoří a automaticky se na něj přepnete.
+- **Jak přepínat účty**: pokud máte dva nebo více účtů, úplně nahoře v seznamu kontaktů se zobrazí záložky účtů. Klepnutím na záložku se přepnete (na počítači můžete použít také Ctrl+1–9). Dlouhým stisknutím záložky ji můžete přejmenovat, změnit její ikonu nebo ji odstranit.
+- Každý účet má své vlastní kontakty a klíče. Kontakty si vyměňujte pro každý účet zvlášť.
 - Jazyk se automaticky vybírá z 8: angličtina, japonština, korejština, čínština (Tchaj-wan), španělština, thajština, indonéština a portugalština (Brazílie).
 
 ---

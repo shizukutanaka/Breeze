@@ -91,6 +91,9 @@ Jotkin toiminnot, kuten asetukset ja laitteiden linkitys, tehdään komennoilla.
 
 - Käyttääksesi samaa identiteettiä useilla laitteilla linkität laitteet komennolla `/link`.
 - Voit luoda useita tilejä ja käyttää niitä eri tarkoituksiin (esimerkiksi työ ja yksityinen). Sekä laitteiden että tilien määrä on ilmainen ja rajoittamaton.
+- **Tilin luominen**: Avaa Asetukset ja napauta "Tili"-osiossa olevaa "Lisää tili" -painiketta. Syötä nimi ja valitse kuvakkeeksi emoji, niin uusi tili luodaan ja siihen vaihdetaan automaattisesti.
+- **Tilin vaihtaminen**: Kun sinulla on kaksi tai useampia tilejä, yhteystietoluettelon aivan yläreunaan ilmestyy tilivälilehtiä. Vaihda napauttamalla välilehteä (tietokoneella voit käyttää myös näppäinyhdistelmää Ctrl+1–9). Paina välilehteä pitkään, jos haluat nimetä sen uudelleen, vaihtaa sen kuvakkeen tai poistaa sen.
+- Jokaisella tilillä on omat yhteystietonsa ja avaimensa. Vaihda yhteystietoja erikseen jokaiselle tilille.
 - Kieli valitaan automaattisesti 8 kielestä: englanti, japani, korea, kiina (Taiwan), espanja, thai, indonesia ja portugali (Brasilia).
 
 ---

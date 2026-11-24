@@ -91,6 +91,9 @@ Niektóre operacje, takie jak ustawienia czy łączenie urządzeń, wykonuje si�
 
 - Aby używać tej samej tożsamości na wielu urządzeniach, połącz urządzenia poleceniem `/link`.
 - Kont można utworzyć kilka i używać ich oddzielnie (np. służbowe i prywatne). Zarówno liczba urządzeń, jak i kont jest bezpłatna i nieograniczona.
+- **Jak utworzyć konto**: otwórz ustawienia i dotknij przycisku „Dodaj konto” w sekcji „Konto”. Wpisz nazwę i wybierz emoji jako ikonę — nowe konto zostanie utworzone i automatycznie się na nie przełączysz.
+- **Jak przełączać konta**: gdy masz dwa konta lub więcej, na samej górze listy kontaktów pojawią się karty kont. Dotknij karty, aby przełączyć (na komputerze możesz też użyć Ctrl+1–9). Przytrzymaj kartę, aby zmienić jej nazwę, zmienić ikonę lub ją usunąć.
+- Każde konto ma własne kontakty i klucze. Wymieniaj się kontaktami oddzielnie dla każdego konta.
 - Język jest wybierany automatycznie spośród 8: angielski, japoński, koreański, chiński (Tajwan), hiszpański, tajski, indonezyjski i portugalski (Brazylia).
 
 ---

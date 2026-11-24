@@ -91,6 +91,9 @@ Một số thao tác như cài đặt và liên kết thiết bị được th�
 
 - Để dùng cùng một danh tính trên nhiều thiết bị, hãy liên kết các thiết bị với nhau bằng lệnh `/link`.
 - Tài khoản có thể tạo nhiều và dùng riêng (chẳng hạn công việc và cá nhân). Cả số thiết bị và số tài khoản đều miễn phí và không giới hạn.
+- **Cách tạo tài khoản**: Mở Cài đặt và nhấn nút "Thêm tài khoản" trong phần "Tài khoản". Nhập tên và chọn một biểu tượng cảm xúc làm biểu tượng, tài khoản mới sẽ được tạo và tự động chuyển sang.
+- **Cách chuyển tài khoản**: Khi bạn có từ hai tài khoản trở lên, các tab tài khoản sẽ xuất hiện ở phía trên cùng của danh sách liên hệ. Nhấn vào tab để chuyển (trên máy tính, bạn cũng có thể dùng Ctrl+1–9). Nhấn và giữ tab để đổi tên, thay đổi biểu tượng hoặc xóa tab đó.
+- Mỗi tài khoản có danh sách liên hệ và khóa riêng. Hãy trao đổi liên hệ riêng cho từng tài khoản.
 - Ngôn ngữ được tự động chọn từ 8 ngôn ngữ: tiếng Anh, tiếng Nhật, tiếng Hàn, tiếng Trung (Đài Loan), tiếng Tây Ban Nha, tiếng Thái, tiếng Indonesia và tiếng Bồ Đào Nha (Brazil).
 
 ---

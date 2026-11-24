@@ -91,6 +91,9 @@ Unele operațiuni, precum setările și legarea dispozitivelor, se fac prin come
 
 - Pentru a folosi aceeași identitate pe mai multe dispozitive, legați dispozitivele între ele cu comanda `/link`.
 - Conturile pot fi create mai multe și folosite separat (de exemplu pentru serviciu și pentru uz personal). Atât numărul de dispozitive, cât și numărul de conturi sunt gratuite și nelimitate.
+- **Cum se creează un cont**: deschideți setările și atingeți butonul „Adăugați un cont” din secțiunea „Cont”. Introduceți un nume și alegeți un emoji ca pictogramă — noul cont va fi creat și veți fi comutat automat la el.
+- **Cum se comută între conturi**: când aveți două sau mai multe conturi, în partea de sus a listei de contacte apar filele conturilor. Atingeți o filă pentru a comuta (pe computer puteți folosi și Ctrl+1–9). Apăsați lung o filă pentru a o redenumi, a-i schimba pictograma sau a o șterge.
+- Fiecare cont are propriile contacte și chei. Faceți schimb de contacte separat pentru fiecare cont.
 - Limba este selectată automat dintre 8 limbi: engleză, japoneză, coreeană, chineză (Taiwan), spaniolă, thailandeză, indoneziană, portugheză (Brazilia).
 
 ---

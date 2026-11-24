@@ -91,6 +91,9 @@ Parametrlər və cihazların əlaqələndirilməsi kimi bəzi əməliyyatlar əm
 
 - Eyni şəxsiyyəti bir neçə cihazda istifadə etmək üçün `/link` əmri ilə cihazları əlaqələndirin.
 - Hesabları bir neçə yaradıb ayrı-ayrı istifadə etmək olar (məsələn, iş və şəxsi). Həm cihaz sayı, həm də hesab sayı pulsuz və limitsizdir.
+- **Hesab yaratmaq**: Parametrləri açın və «Hesab» bölməsindəki «Hesab əlavə et» düyməsinə toxunun. Ad daxil edin və ikon kimi emoji seçin — yeni hesab yaradılacaq və avtomatik olaraq ona keçəcəksiniz.
+- **Hesablar arasında keçid**: İki və ya daha çox hesabınız olduqda, kontakt siyahısının ən yuxarısında hesab nişanları görünür. Keçid etmək üçün nişana toxunun (kompüterdə Ctrl+1–9 kombinasiyasından da istifadə edə bilərsiniz). Nişanın adını dəyişmək, ikonunu dəyişmək və ya silmək üçün onu basıb saxlayın.
+- Hər hesabın öz kontaktları və açarları var. Kontaktları hər hesab üçün ayrıca mübadilə edin.
 - Dil 8 dildən avtomatik seçilir: ingilis, yapon, koreya, Çin (Tayvan), ispan, tay, indoneziya və portuqal (Braziliya).
 
 ---

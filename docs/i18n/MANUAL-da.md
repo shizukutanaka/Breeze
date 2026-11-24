@@ -91,6 +91,9 @@ Nogle handlinger, som indstillinger og enhedslinkning, udføres via kommandoer.
 
 - For at bruge den samme identitet på flere enheder linker du enhederne med kommandoen `/link`.
 - Du kan oprette flere konti og bruge dem til forskellige formål (f.eks. arbejde og privat). Både antal enheder og konti er gratis og ubegrænsede.
+- **Sådan opretter du en konto**: Åbn Indstillinger, og tryk på knappen "Tilføj konto" i afsnittet "Konto". Indtast et navn, og vælg en emoji som ikon, så oprettes den nye konto, og du skifter automatisk til den.
+- **Sådan skifter du konto**: Når du har to eller flere konti, vises kontofaner allerøverst i kontaktlisten. Tryk på en fane for at skifte (på en computer kan du også bruge Ctrl+1–9). Tryk længe på en fane for at omdøbe den, ændre dens ikon eller slette den.
+- Hver konto har sine egne kontakter og nøgler. Udveksl kontakter separat for hver konto.
 - Sproget vælges automatisk blandt 8: engelsk, japansk, koreansk, kinesisk (Taiwan), spansk, thai, indonesisk og portugisisk (Brasilien).
 
 ---

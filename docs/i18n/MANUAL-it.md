@@ -91,6 +91,9 @@ Alcune operazioni, come le impostazioni e il collegamento dei dispositivi, si ef
 
 - Per usare la stessa identità su più dispositivi, collega i dispositivi tra loro con il comando `/link`.
 - Si possono creare più account e usarli separatamente (per esempio lavoro e uso personale). Sia il numero di dispositivi sia il numero di account sono gratuiti e illimitati.
+- **Come creare un account**: apri le Impostazioni e tocca il pulsante «Aggiungi account» nella sezione «Account». Inserisci un nome e scegli un'emoji come icona, e il nuovo account verrà creato e passerai automaticamente a esso.
+- **Come cambiare account**: quando hai due o più account, in cima all'elenco dei contatti compaiono le schede degli account. Tocca una scheda per cambiare account (su un computer puoi usare anche Ctrl+1–9). Tieni premuta una scheda per rinominarla, cambiarne l'icona o eliminarla.
+- Ogni account ha i propri contatti e le proprie chiavi. Scambia i contatti separatamente per ciascun account.
 - La lingua viene scelta automaticamente tra 8 lingue: inglese, giapponese, coreano, cinese (Taiwan), spagnolo, tailandese, indonesiano e portoghese (Brasile).
 
 ---

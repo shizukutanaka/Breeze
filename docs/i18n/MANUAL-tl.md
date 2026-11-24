@@ -91,6 +91,9 @@ Ang ilang operasyon, tulad ng mga setting at pag-link ng device, ay ginagawa sa 
 
 - Para magamit ang parehong pagkakakilanlan sa maraming device, i-link ang mga device sa isa't isa gamit ang utos na `/link`.
 - Maaari kang gumawa ng maraming account at paghiwalayin ang gamit (para sa trabaho at personal, halimbawa). Walang limitasyon sa bilang ng device at account, at libre.
+- **Paano gumawa ng account**: Buksan ang Mga setting at i-tap ang button na "Magdagdag ng account" sa seksyong "Account". Maglagay ng pangalan at pumili ng emoji bilang icon, at awtomatikong magagawa at lilipat sa bagong account.
+- **Paano lumipat ng account**: Kapag mayroon kang dalawa o higit pang account, lalabas ang mga tab ng account sa pinakatuktok ng listahan ng mga contact. I-tap ang tab para lumipat (sa computer, maaari mo ring gamitin ang Ctrl+1–9). Pindutin nang matagal ang tab para palitan ang pangalan nito, baguhin ang icon nito, o burahin ito.
+- May sariling mga contact at key ang bawat account. Makipagpalitan ng mga contact nang hiwalay para sa bawat account.
 - Ang wika ay awtomatikong pinipili mula sa 8: Ingles, Hapon, Koreano, Tsino (Taiwan), Espanyol, Thai, Indones, at Portuges (Brazil).
 
 ---

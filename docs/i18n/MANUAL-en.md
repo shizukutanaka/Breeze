@@ -91,6 +91,9 @@ Some operations, such as settings and device linking, are done from commands.
 
 - To use the same identity on multiple devices, link the devices together with the `/link` command.
 - You can create multiple accounts and use them separately (for example, work and personal). Both the number of devices and the number of accounts are free and unlimited.
+- **How to create an account**: Open Settings and tap the "Add account" button in the "Account" section. Enter a name and choose an icon emoji, and the new account is created and switched to automatically.
+- **How to switch accounts**: When you have two or more accounts, account tabs appear at the very top of the contact list. Tap a tab to switch (on a computer, you can also use Ctrl+1–9). Long-press a tab to rename it, change its icon, or delete it.
+- Each account has its own contacts and keys. Exchange contacts separately for each account.
 - The language is selected automatically from 8 languages: English, Japanese, Korean, Chinese (Taiwan), Spanish, Thai, Indonesian, and Portuguese (Brazil).
 
 ---

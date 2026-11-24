@@ -91,6 +91,9 @@ Neke operacije, poput postavki i povezivanja uređaja, izvode se iz naredbi.
 
 - Da biste isti identitet koristili na više uređaja, povežite uređaje naredbom `/link`.
 - Račune možete napraviti više i koristiti ih odvojeno (na primjer, poslovni i privatni). I broj uređaja i broj računa besplatni su i neograničeni.
+- **Kako napraviti račun**: otvorite postavke i dodirnite gumb „Dodaj račun” u odjeljku „Račun”. Unesite ime i odaberite emoji za ikonu — novi račun bit će napravljen i automatski ćete biti prebačeni na njega.
+- **Kako mijenjati račune**: kada imate dva ili više računa, na samom vrhu popisa kontakata pojavit će se kartice računa. Dodirnite karticu za prebacivanje (na računalu možete koristiti i Ctrl+1–9). Dugo pritisnite karticu da biste je preimenovali, promijenili joj ikonu ili je izbrisali.
+- Svaki račun ima svoje kontakte i ključeve. Kontakte razmjenjujte zasebno za svaki račun.
 - Jezik se automatski bira iz 8 jezika: engleski, japanski, korejski, kineski (Tajvan), španjolski, tajlandski, indonezijski i portugalski (Brazil).
 
 ---
