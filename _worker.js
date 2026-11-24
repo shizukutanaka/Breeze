@@ -2505,6 +2505,13 @@ async function handleDeviceSet(body, env, request) {
   const ok = await verifyEd25519(bundle.edIdentityKey, utf8ToB64(`breeze-device-set:${accountId}:${ts}:${digest}`), sig);
   if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
 
+  // A signed set is public (/device/list returns it verbatim), so the signature alone does
+  // not say who is posting it. Never step back to an older set: otherwise a device that was
+  // just unlinked re-posts the previous one inside the ts window and is linked again.
+  const prev = safeJsonParse(await kvGet(env, `devices:${accountId}`) || 'null');
+  if (prev && typeof prev.ts === 'number' && ts < prev.ts)
+    return json({ error: 'A newer device list is already stored', code: 'STALE_REGISTRY' }, 409, request);
+
   const stored = await kvPut(env, `devices:${accountId}`,
     JSON.stringify({ root, devices, ts, sig }), { expirationTtl: TTL.MONTH * 3 });
   if (!stored) return json({ error: 'Failed to store device list', code: 'STORE_FAILED' }, 500, request);

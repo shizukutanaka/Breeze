@@ -6165,6 +6165,43 @@ describe('device registry (/api/device/set + /api/device/list)', () => {
     expect((await res.json()).code).toBe('INVALID_TIMESTAMP');
   });
 
+  // Round-7 audit: /device/list hands the signed record to anyone, so a signed set is not
+  // a secret. Without an ordering check, whoever was just unlinked could re-post the
+  // previous set while its ts was still inside the 5-min window and put itself back.
+  it('rejects a replay of an OLDER signed list — an /unlink cannot be rolled back', async () => {
+    const env = makeEnv();
+    const sign = await makeRoot(env, ACCT, ROOT_PUB);
+    const linked = [{ pub: ROOT_PUB, name: 'primary' }, { pub: DEV2, name: '' }];
+    const t1 = Date.now() - 60 * 1000;
+    expect((await setList(env, sign, linked, t1)).status).toBe(200);
+    // What the unlinked device (or any bystander) can read and keep:
+    const captured = await (await handleDeviceList({ accountId: ACCT }, env, rq())).json();
+
+    // The owner unlinks DEV2 a minute later.
+    expect((await setList(env, sign, [{ pub: ROOT_PUB, name: 'primary' }])).status).toBe(200);
+
+    // The replay: the captured record, verbatim, no key needed.
+    const replay = await handleDeviceSet({ accountId: ACCT, root: captured.root,
+      devices: captured.devices, ts: captured.ts, sig: captured.sig }, env, rq());
+    expect(replay.status).toBe(409);
+    expect((await replay.json()).code).toBe('STALE_REGISTRY');
+    const after = await (await handleDeviceList({ accountId: ACCT }, env, rq())).json();
+    expect(after.devices.map((d) => d.pub)).toEqual([ROOT_PUB]);
+  });
+
+  it('still accepts a newer list, and a re-post of the list already stored', async () => {
+    const env = makeEnv();
+    const sign = await makeRoot(env, ACCT, ROOT_PUB);
+    const t1 = Date.now() - 60 * 1000;
+    const one = [{ pub: ROOT_PUB, name: 'primary' }];
+    expect((await setList(env, sign, one, t1)).status).toBe(200);
+    expect((await setList(env, sign, one, t1)).status).toBe(200); // client retry of the same request
+    const two = [{ pub: ROOT_PUB, name: 'primary' }, { pub: DEV2, name: '' }];
+    expect((await setList(env, sign, two)).status).toBe(200);
+    const after = await (await handleDeviceList({ accountId: ACCT }, env, rq())).json();
+    expect(after.devices.map((d) => d.pub)).toEqual([ROOT_PUB, DEV2]);
+  });
+
   it('rejects an accountId that does not match the root pub', async () => {
     const env = makeEnv();
     const sign = await makeRoot(env, ACCT, ROOT_PUB);
