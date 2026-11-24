@@ -1676,6 +1676,18 @@ async function handleMsgSend(body, ip, env, request) {
   }
 
   const mb = mailboxStore(env, 'inbox', to);
+  // Enforce the same per-mailbox deposit frequency gate and usage quota as
+  // handleSealedSend: MailboxCore tracks ONE window spanning both families
+  // (`inbox` and `sealed`), so omitting checkDeposit here let callers bypass
+  // DEPOSIT_LIMIT and USAGE_QUOTA via the legacy plain path.
+  const gate = await mb.checkDeposit();
+  if (!gate.ok) {
+    globalThis._msgDedup.delete(dedupKey);
+    if (gate.quotaExceeded) {
+      return json({ error: 'Mailbox usage quota exceeded', code: 'USAGE_QUOTA_EXCEEDED', quotaScope: gate.quotaScope, quotaLimit: gate.quotaLimit, retryAfter: gate.retryAfterSec }, 429, request);
+    }
+    return json({ error: 'Mailbox deposit rate limited', code: 'MAILBOX_RATE_LIMITED', retryAfter: gate.retryAfterSec }, 429, request);
+  }
   const safePub  = typeof fromPub  === 'string' ? fromPub.slice(0, 200)  : undefined;
   const safeName = typeof fromName === 'string' ? fromName.slice(0, 64)  : undefined;
   const msg = { from, fromPub: safePub, fromName: safeName, payload, ts: ts || Date.now() };
