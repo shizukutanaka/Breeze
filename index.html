@@ -11047,7 +11047,10 @@ async function initMessenger(dbName) {
         if (!decrypted) return;
         const invite = JSON.parse(decrypted);
         // Validate and cap invite fields to prevent storage DoS from a malicious contact
-        const inviteGroupId = typeof invite.groupId === 'string' ? invite.groupId.slice(0, 64) : null;
+        // Group ids live in their own 'g_' namespace (every mint site prefixes it). Without
+        // this check a contact's invite could occupy another person's contact id: addContact
+        // then sees an existing record and never adds them, and that id opens a fake group.
+        const inviteGroupId = typeof invite.groupId === 'string' && /^g_[A-Za-z0-9_-]{1,62}$/.test(invite.groupId) ? invite.groupId : null;
         const inviteName = typeof invite.name === 'string' ? invite.name.slice(0, 64) : 'Group';
         // Member entries are (id, pubB64) bindings used for fan-out encryption — enforce
         // id === pubB64.slice(0,12), otherwise a crafted invite can bind a victim member's
