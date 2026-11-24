@@ -2334,7 +2334,7 @@ const _I = {
 // English table, which t() consults first, and the other 7 are never passed to t() anywhere.
 // It cost 569 KB, 44% of the app's payload, on every cold load. Even working it could only
 // ever reach ~25 of 667 strings: a 96%-English UI, which is not "supporting a language".)
-const FULL_LOCALES = ['ja', 'ko', 'zh-TW', 'es', 'th', 'id', 'pt-BR'];
+const FULL_LOCALES = ['ja', 'ko', 'zh-TW', 'es', 'th', 'id', 'pt-BR', 'zh-CN', 'fr', 'de', 'it', 'ru', 'uk', 'pl', 'nl', 'sv', 'nb', 'da', 'fi', 'cs', 'hu', 'ro', 'el', 'tr', 'ar', 'fa', 'he', 'hi', 'bn', 'ur', 'pa', 'ta', 'te', 'ml', 'ms', 'vi', 'my', 'km', 'tl', 'sw', 'ha', 'yo', 'ig', 'am', 'ka', 'az', 'kk', 'uz', 'sr', 'hr'];
 function detectLang() {
   const nav = (navigator.language || 'en');
   const lower = nav.toLowerCase();
@@ -2358,10 +2358,10 @@ let LANG = detectLang();
 // chrome (contact list, headers, input bar) stayed LTR for Arabic/Hebrew/Persian/Urdu readers.
 const RTL_LANGS = ['ar', 'he', 'fa', 'ur', 'ps', 'sd', 'ckb', 'dv', 'yi'];
 function applyDir() {
-  // Read the BROWSER language, not LANG: none of FULL_LOCALES is RTL, so keying off LANG would
-  // mean an Arabic/Hebrew/Persian/Urdu reader always gets an LTR chrome. This used to work only
-  // because the deleted 924-language table let LANG become 'ar' — RTL never needed 569 KB of
-  // strings to know a script direction, just the browser's own tag.
+  // Read the BROWSER language, not LANG: the browser tag is the ground truth for script
+  // direction (ar-EG resolves to LANG 'ar' either way, but a not-yet-translated RTL language
+  // must still flip the chrome). RTL never needed 569 KB of strings to know a script
+  // direction, just the browser's own tag.
   try {
     const base = (navigator.language || 'en').toLowerCase().split('-')[0];
     document.documentElement.dir = RTL_LANGS.includes(base) ? 'rtl' : 'ltr';
