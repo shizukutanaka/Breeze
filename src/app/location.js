@@ -100,8 +100,7 @@ export function liveRecordId(senderId, sid) {
 // send paths, live-session management and the receive/render side.
 // Sessions live in memory only — a reload ends sharing (fail-safe) —
 // and stop clears the timer BEFORE the stopped update goes out.
-// The engine reaches the wire helpers through `L` — the shape it had
-// as index.html's `globalThis.__breezeLocation` alias before the move.
+// The wire helpers the engine reaches through `L`.
 const L = { sanitizeLoc, buildLocationPayload, groupTextForLocation };
 
 export function createLocationShare(D) {
