@@ -1421,6 +1421,19 @@ describe('group leave / delete (lifecycle completion)', () => {
 describe('group moderation auth (item 45 — caller identity proof)', () => {
   const req = (b) => apiRequest('/api/group/x', b);
 
+  async function joinSigned(env, token, memberId, memberPub) {
+    const mEd = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const mPub = new Uint8Array(await crypto.subtle.exportKey('raw', mEd.publicKey));
+    await env.KV.put(`prekey:${memberId}`, JSON.stringify({ identityKey: memberPub, edIdentityKey: toB64(mPub), uploadedAt: Date.now() }));
+    const tsJ = Date.now();
+    const bindBuf = await crypto.subtle.digest('SHA-256',
+      new TextEncoder().encode(JSON.stringify([memberPub, '', []])));
+    const bind = Array.from(new Uint8Array(bindBuf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
+    const sigJ = toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, mEd.privateKey,
+      new TextEncoder().encode(`breeze-group-join:${token}:${memberId}:${tsJ}:${bind}`))));
+    await handleGroupJoin({ token, memberId, memberPub, ts: tsJ, sig: sigJ }, env, req({}));
+  }
+
   async function setup(env, opts = {}) {
     const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
     const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
@@ -1436,7 +1449,7 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
     const createSig = toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey,
       new TextEncoder().encode(`breeze-group-create::creator1:${tsC}:${bind}`))));
     const { token } = await (await handleGroupCreate({ ...createBody, ts: tsC, sig: createSig }, env, req({}))).json();
-    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
+    await joinSigned(env, token, 'member01', 'member01mpub');
     return { token, ed };
   }
   // bind carries the operation's target(s), matching checkGroupAuth's signed format
@@ -1483,7 +1496,7 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
   it('rejects a kick whose kickId was swapped by the relay (target not the one signed)', async () => {
     const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
     const { token, ed } = await setup(env);
-    await handleGroupJoin({ token, memberId: 'member02', memberPub: 'member02mpub2' }, env, req({}));
+    await joinSigned(env, token, 'member02', 'member02mpub2');
     const ts = Date.now();
     // Creator signs to kick member01, relay rewrites kickId → member02.
     const sig = await signGroup(ed, 'kick', token, 'creator1', ts, 'member01');
@@ -1515,7 +1528,7 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
   it('rejects an admin op whose targetId was swapped by the relay, but honors the signed target', async () => {
     const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
     const { token, ed } = await setup(env);
-    await handleGroupJoin({ token, memberId: 'member02', memberPub: 'member02mpub2' }, env, req({}));
+    await joinSigned(env, token, 'member02', 'member02mpub2');
     const ts = Date.now();
     // Creator signs to promote member01; relay rewrites targetId → member02.
     const sig = await signGroup(ed, 'admin', token, 'creator1', ts, `promote:member01`);
@@ -1531,7 +1544,7 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
   it('rejects a transfer whose newCreatorId was redirected by the relay (ownership hijack)', async () => {
     const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
     const { token, ed } = await setup(env);
-    await handleGroupJoin({ token, memberId: 'member02', memberPub: 'member02mpub2' }, env, req({}));
+    await joinSigned(env, token, 'member02', 'member02mpub2');
     const ts = Date.now();
     // Creator signs to hand ownership to member01; relay rewrites newCreatorId → member02.
     const sig = await signGroup(ed, 'transfer', token, 'creator1', ts, 'member01');

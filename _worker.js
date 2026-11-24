@@ -1676,6 +1676,18 @@ async function handleMsgSend(body, ip, env, request) {
   }
 
   const mb = mailboxStore(env, 'inbox', to);
+  // Enforce the same per-mailbox deposit frequency gate and usage quota as
+  // handleSealedSend: MailboxCore tracks ONE window spanning both families
+  // (`inbox` and `sealed`), so omitting checkDeposit here let callers bypass
+  // DEPOSIT_LIMIT and USAGE_QUOTA via the legacy plain path.
+  const gate = await mb.checkDeposit();
+  if (!gate.ok) {
+    globalThis._msgDedup.delete(dedupKey);
+    if (gate.quotaExceeded) {
+      return json({ error: 'Mailbox usage quota exceeded', code: 'USAGE_QUOTA_EXCEEDED', quotaScope: gate.quotaScope, quotaLimit: gate.quotaLimit, retryAfter: gate.retryAfterSec }, 429, request);
+    }
+    return json({ error: 'Mailbox deposit rate limited', code: 'MAILBOX_RATE_LIMITED', retryAfter: gate.retryAfterSec }, 429, request);
+  }
   const safePub  = typeof fromPub  === 'string' ? fromPub.slice(0, 200)  : undefined;
   const safeName = typeof fromName === 'string' ? fromName.slice(0, 64)  : undefined;
   const msg = { from, fromPub: safePub, fromName: safeName, payload, ts: ts || Date.now() };
@@ -2692,13 +2704,20 @@ async function handleGroupJoin(body, env, request) {
   if (typeof rawMemberPub !== 'string') return json({ error: 'memberPub must be a string', code: 'INVALID_TYPE' }, 400, request);
   const memberPub = rawMemberPub.slice(0, 200);
   if (!token || !memberId || !memberPub) return json({ error: 'token, memberId, memberPub required', code: 'MISSING_FIELDS' }, 400, request);
-  if (typeof token !== 'string' || token.length > 128 || !/^[a-z0-9]+$/.test(token) || !/^[a-z0-9]+$/.test(token)) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
+  if (typeof token !== 'string' || token.length > 128 || !/^[a-z0-9]+$/.test(token)) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(memberId)) return json({ error: 'invalid memberId', code: 'INVALID_USER_ID' }, 400, request);
   // Ownership proof: memberId = memberPub.slice(0,12), so pub must start with the claimed id.
   // Without this, any invite holder could join/update under a different user's memberId, hijacking
   // that member's pub key slot and capturing messages encrypted to them.
   if (!memberPub.startsWith(memberId))
     return json({ error: 'memberPub does not match memberId', code: 'KEY_MISMATCH' }, 400, request);
+  // Bind memberPub, memberName, and caps into the Ed25519 challenge so an
+  // invite holder cannot impersonate another member to downgrade caps (e.g.
+  // stripping group-v5) or overwrite their key/name when auth is supplied or
+  // GROUP_REQUIRE_AUTH=true is enabled.
+  const jBind = await sha256Short(JSON.stringify([memberPub, memberName || '', sanitizeCaps(caps) || []]));
+  const jAuth = await checkGroupAuth(env, request, 'join', token, memberId, body.ts, body.sig, jBind);
+  if (jAuth) return jAuth;
 
   const data = await kvGet(env, `grp:${token}`);
   if (!data) return json({ error: 'Invite link expired or invalid', code: 'EXPIRED' }, 404, request);

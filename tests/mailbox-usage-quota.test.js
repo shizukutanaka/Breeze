@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { makeEnv, apiRequest } from './helpers/mockKV.js';
 import { makeDOEnv } from './helpers/mockDO.js';
-import { mailboxStore, handleSealedSend } from '../_worker.js';
+import { mailboxStore, handleSealedSend, handleMsgSend } from '../_worker.js';
 
 // Fair-use usage quota (2026-11-14; docs/COST_MODEL.md §10, the "API
 // model" cost policy): per-mailbox day/month deposit budgets on the
@@ -20,6 +20,7 @@ import { mailboxStore, handleSealedSend } from '../_worker.js';
 // duplicate on retry.
 beforeEach(() => {
   globalThis._sealedDedup = new Map();
+  globalThis._msgDedup = new Map();
 });
 
 const req = (b) => apiRequest('/api/sealed/x', b);
@@ -191,5 +192,41 @@ describe('handleSealedSend usage quota', () => {
       const res = await handleSealedSend({ to: 'quotatgt1', envelope: env_i(i) }, env, req({}));
       expect(res.status).toBe(200);
     }
+  });
+});
+
+describe('handleMsgSend deposit gate and usage quota parity', () => {
+  const msgReq = (b) => apiRequest('/api/msg/send', b);
+
+  it('DO backend: handleMsgSend enforces USAGE_QUOTA and shares the mailbox counter with handleSealedSend', async () => {
+    const env = makeDOEnv({ USAGE_QUOTA_DAILY: '2' });
+    // Spend 1 deposit via sealed, 1 via plain msg/send → 2/2 daily budget used
+    expect((await handleSealedSend({ to: 'quotatgt2', envelope: env_i(0) }, env, req({}))).status).toBe(200);
+    expect((await handleMsgSend({ to: 'quotatgt2', from: 'sender001', payload: env_i(1) }, '198.51.100.1', env, msgReq({}))).status).toBe(200);
+    // Third deposit via plain msg/send must be rejected (cannot bypass quota)
+    const denied = await handleMsgSend({ to: 'quotatgt2', from: 'sender001', payload: env_i(2) }, '198.51.100.1', env, msgReq({}));
+    expect(denied.status).toBe(429);
+    const body = await denied.json();
+    expect(body.code).toBe('USAGE_QUOTA_EXCEEDED');
+    expect(body.quotaScope).toBe('daily');
+    expect(body.quotaLimit).toBe(2);
+    expect(body.retryAfter).toBeGreaterThanOrEqual(1);
+    // Retrying the identical denied payload must NOT be swallowed as dedup:true
+    const retry = await handleMsgSend({ to: 'quotatgt2', from: 'sender001', payload: env_i(2) }, '198.51.100.1', env, msgReq({}));
+    expect(retry.status).toBe(429);
+    expect((await retry.json()).code).toBe('USAGE_QUOTA_EXCEEDED');
+  });
+
+  it('DO backend: handleMsgSend enforces DEPOSIT_LIMIT (MAILBOX_RATE_LIMITED)', async () => {
+    const env = makeDOEnv({ USAGE_QUOTA_ENABLED: 'false' });
+    for (let i = 0; i < 120; i++) {
+      const res = await handleMsgSend({ to: 'ratetgt01', from: 'sender001', payload: env_i(i) }, '198.51.100.1', env, msgReq({}));
+      expect(res.status).toBe(200);
+    }
+    const denied = await handleMsgSend({ to: 'ratetgt01', from: 'sender001', payload: env_i(120) }, '198.51.100.1', env, msgReq({}));
+    expect(denied.status).toBe(429);
+    const body = await denied.json();
+    expect(body.code).toBe('MAILBOX_RATE_LIMITED');
+    expect(body.retryAfter).toBeGreaterThanOrEqual(1);
   });
 });

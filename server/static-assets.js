@@ -50,7 +50,7 @@ const MIME = {
 
 const PLATFORM_FILES = new Set(['/_worker.js', '/_headers', '/_routes.json', '/_redirects']);
 const BLOCKED_BASENAME = /(^|\/)\./; // any dotfile / dot-directory segment
-const BLOCKED_EXT = /\.(db|sqlite|sqlite3)$|\.(sqlite|db)-(wal|shm)$/i;
+const BLOCKED_EXT = /\.(db|sqlite|sqlite3)$|\.(sqlite|sqlite3|db)-(wal|shm|journal)$/i;
 
 // Parse the Pages `_headers` format: a path pattern line followed by
 // indented `Name: value` lines, repeated. Exported for the tests.
@@ -89,10 +89,12 @@ export function headersForPath(rules, path) {
 }
 
 function isBlocked(path) {
-  if (PLATFORM_FILES.has(path)) return true;
-  if (BLOCKED_BASENAME.test(path)) return true;
-  if (path === '/node_modules' || path.startsWith('/node_modules/')) return true;
-  if (BLOCKED_EXT.test(path)) return true;
+  const norm = path.replace(/\/+/g, '/');
+  const lower = norm.toLowerCase();
+  if (PLATFORM_FILES.has(lower)) return true;
+  if (BLOCKED_BASENAME.test(norm)) return true;
+  if (lower === '/node_modules' || lower.startsWith('/node_modules/')) return true;
+  if (BLOCKED_EXT.test(norm)) return true;
   return false;
 }
 
@@ -103,18 +105,21 @@ function isBlocked(path) {
 export function makeAssets({ rootDir, extraBlocked = [] }) {
   const rules = parseHeadersFile(readFileSync(join(rootDir, '_headers'), 'utf8'));
   const blockedAbs = new Set(extraBlocked.map((p) => normalize(p)));
+  const blockedAbsLower = new Set(extraBlocked.map((p) => normalize(p).toLowerCase()));
 
   async function serve(path, method, ifNoneMatch) {
+    const cleanPath = path.replace(/\/+/g, '/');
     const headers = new Headers();
-    for (const [name, value] of headersForPath(rules, path)) headers.set(name, value);
+    for (const [name, value] of headersForPath(rules, cleanPath)) headers.set(name, value);
 
     let filePath = null;
     let status = 200;
-    if (!isBlocked(path)) {
-      const candidate = normalize(join(rootDir, '.' + path));
+    if (!isBlocked(cleanPath)) {
+      const candidate = normalize(join(rootDir, '.' + cleanPath));
       // Confine to rootDir: a normalized `..` escape is a 404, never a serve.
       if (candidate === rootDir || candidate.startsWith(rootDir + sep)) {
-        if (blockedAbs.has(candidate)) {
+        const relPath = '/' + candidate.slice(rootDir.length).replace(/\\/g, '/').replace(/^\/+/, '');
+        if (isBlocked(relPath) || blockedAbs.has(candidate) || blockedAbsLower.has(candidate.toLowerCase())) {
           filePath = null;
         } else {
           try {
