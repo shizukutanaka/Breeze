@@ -13,15 +13,24 @@ compatibility_date = "2024-12-01"
 
 # Durable Object mailbox backend (stage-1 step 2, 2026-11-13). MailboxDO
 # lives in _worker.js: one instance per recipient holds both queue families
-# (inbox + sealed) in DO storage once MAILBOX_BACKEND=do (see below and
-# docs/MAILBOX_STAGE1_PLAN.md). KV stays the default backend.
-[[durable_objects.bindings]]
-name = "MAILBOX_DO"
-class_name = "MailboxDO"
-
-[[migrations]]
-tag = "v1-mailbox-do"
-new_sqlite_classes = ["MailboxDO"]
+# (inbox + sealed) in DO storage once MAILBOX_BACKEND=do (see
+# docs/MAILBOX_STAGE1_PLAN.md). KV stays the default backend, and the
+# Worker falls back to KV whenever the MAILBOX_DO binding is absent.
+#
+# The [[durable_objects.bindings]] and [[migrations]] sections are
+# deliberately NOT in this file: Pages configuration validation rejects
+# "migrations" outright and requires a "script_name" for Durable Object
+# bindings, so their presence fails every Pages build. To run the DO
+# backend, deploy _worker.js as a Worker (not Pages) with these sections
+# restored locally:
+#
+#   [[durable_objects.bindings]]
+#   name = "MAILBOX_DO"
+#   class_name = "MailboxDO"
+#
+#   [[migrations]]
+#   tag = "v1-mailbox-do"
+#   new_sqlite_classes = ["MailboxDO"]
 
 # === SECRETS (set via CLI — never commit values) ===
 #
