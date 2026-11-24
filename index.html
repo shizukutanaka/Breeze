@@ -4104,6 +4104,12 @@ async function initMessenger(dbName) {
       Array.isArray(caps) ? caps.slice(0, 20).filter(c => typeof c === 'string').map(c => c.slice(0, 32)) : [],
     ]))}`);
   }
+  async function groupJoinAuth(token, memberPub, memberName, caps) {
+    return authFields(async ts => `breeze-group-join:${token}:${myId}:${ts}:${await digestHex16(JSON.stringify([
+      memberPub, sanStr(memberName, 64) || '',
+      Array.isArray(caps) ? caps.slice(0, 20).filter(c => typeof c === 'string').map(c => c.slice(0, 32)) : [],
+    ]))}`);
+  }
 
   async function verifySignature(text, sigB64, pubKeyB64) {
     if (!_hasEd25519 || !sigB64 || !pubKeyB64) return null; // null = cannot verify
@@ -10397,7 +10403,7 @@ async function initMessenger(dbName) {
     lastSendTs: () => _lastSendTs, setLastSendTs: (v) => { _lastSendTs = v; },
   });
   const _groupCreate = globalThis.__breezeGroupCreate?.createGroupCreate({
-    dbGetAll, dbPut, showPrompt, fetchCaps: _fetchMemberCapsBatch, encryptFor, relaySend, postAPIRaw, groupCreateAuth,
+    dbGetAll, dbPut, showPrompt, fetchCaps: _fetchMemberCapsBatch, encryptFor, relaySend, postAPIRaw, groupCreateAuth, groupJoinAuth,
     showToast, t, esc, renderContacts, auditLog, uid, safeSetHTML, dbGet, addContact, openConversation,
     cmdPanel: (id) => _cmdPanelEl(id), myId: () => myId, myPubB64: () => myPubB64, myName: () => myName,
     cleanUrl: () => history.replaceState(null, '', location.pathname),
