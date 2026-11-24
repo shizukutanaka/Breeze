@@ -879,5 +879,10 @@
  "cmdCryptoPqHybrid": "แผนไฮบริด: X25519 + ML-KEM-768 (เมื่อพร้อมใช้งาน)",
  "cmdCryptoFwdSec": "✓ ทุกข้อความใช้คีย์เฉพาะ",
  "cmdCryptoCompression": "✗ ปิดตามการออกแบบ (หลีกเลี่ยง CRIME/BREACH)",
- "cmdInfoFilesBookmarks": "📎 ไฟล์: {0} | 🔖 ที่คั่นหน้า: {1}"
+ "cmdInfoFilesBookmarks": "📎 ไฟล์: {0} | 🔖 ที่คั่นหน้า: {1}",
+ "powerModeLabel": "การใช้พลังงาน:",
+ "powerAuto": "อัตโนมัติ (ตามแบตเตอรี่)",
+ "powerNormal": "ปกติ",
+ "powerSaver": "ประหยัดพลังงาน",
+ "powerEmergency": "ฉุกเฉิน (ภัยพิบัติ)"
 }

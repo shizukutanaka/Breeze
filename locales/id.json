@@ -879,5 +879,10 @@
  "cmdCryptoPqHybrid": "Rencana hibrida: X25519 + ML-KEM-768 (saat tersedia)",
  "cmdCryptoFwdSec": "✓ Setiap pesan memakai kunci unik",
  "cmdCryptoCompression": "✗ nonaktif secara desain (menghindari CRIME/BREACH)",
- "cmdInfoFilesBookmarks": "📎 Berkas: {0} | 🔖 Penanda: {1}"
+ "cmdInfoFilesBookmarks": "📎 Berkas: {0} | 🔖 Penanda: {1}",
+ "powerModeLabel": "Penggunaan daya:",
+ "powerAuto": "Otomatis (dari baterai)",
+ "powerNormal": "Normal",
+ "powerSaver": "Hemat daya",
+ "powerEmergency": "Darurat (bencana)"
 }

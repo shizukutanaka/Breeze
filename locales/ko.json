@@ -879,5 +879,10 @@
  "cmdCryptoPqHybrid": "하이브리드 계획: X25519 + ML-KEM-768 (사용 가능해지면)",
  "cmdCryptoFwdSec": "✓ 각 메시지가 고유한 키를 사용",
  "cmdCryptoCompression": "✗ 설계상 꺼짐 (CRIME/BREACH 방지)",
- "cmdInfoFilesBookmarks": "📎 파일: {0} | 🔖 북마크: {1}"
+ "cmdInfoFilesBookmarks": "📎 파일: {0} | 🔖 북마크: {1}",
+ "powerModeLabel": "전력 사용:",
+ "powerAuto": "자동(배터리)",
+ "powerNormal": "일반",
+ "powerSaver": "절전",
+ "powerEmergency": "비상(재난)"
 }
