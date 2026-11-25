@@ -77,7 +77,13 @@ describe('"+" panel wiring', () => {
   });
   it('closes on an outside tap and on Escape', () => {
     expect(html).toContain("if (!_DOM.get('msg-input-bar')?.contains(e.target)) _closeMorePanel();");
-    expect(html).toContain("document.addEventListener('keydown', (e) => { if (e.key === 'Escape') _closeMorePanel(); }, { signal: _ac.signal });");
+    // Escape closes only while the panel is open, and focus returns to the
+    // "+" button that opened it (batch 3 keyboard fix).
+    const esc = html.slice(html.indexOf("document.addEventListener('keydown', (e) => {\n    if (e.key !== 'Escape') return;"), html.indexOf("_DOM.get('b-msg-send')?.addEventListener('click', () => _closeMorePanel()"));
+    expect(esc).toContain("if (!p || p.classList.contains('hidden')) return;");
+    expect(esc).toContain('_closeMorePanel();');
+    expect(esc).toContain("_DOM.get('b-msg-more')?.focus();");
+    expect(esc).toContain('{ signal: _ac.signal }');
   });
   it('closes after a one-shot item, but voice/dictation taps keep it open', () => {
     const handler = html.slice(html.indexOf("_DOM.get('msg-more-panel')?.addEventListener"), html.indexOf("document.addEventListener('click', (e) => {\n    const p = _DOM.get('msg-more-panel');"));
@@ -89,7 +95,7 @@ describe('"+" panel wiring', () => {
     expect(handler).toContain('if (control && !control.contains(e.target)) { control.click(); return; }');
   });
   it('closes on send and when the emoji picker opens', () => {
-    expect(html).toContain("_DOM.get('b-msg-send')?.addEventListener('click', () => _closeMorePanel());");
+    expect(html).toContain("_DOM.get('b-msg-send')?.addEventListener('click', () => _closeMorePanel(), { signal: _ac.signal });");
     expect(html).toContain("_DOM.get('b-msg-emoji')?.addEventListener('click', () => _closeMorePanel());");
   });
   it('the location button finally opens the location panel (it shipped unwired)', () => {

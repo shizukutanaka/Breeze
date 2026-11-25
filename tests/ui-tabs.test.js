@@ -22,10 +22,14 @@ describe('bottom tab bar markup', () => {
     expect(bar).toContain('data-action="tab-contacts"');
     expect(bar).toContain('data-action="tab-settings"');
   });
-  it('contacts starts as the active tab', () => {
+  it('contacts starts as the current page (navigation semantics, not tabs)', () => {
     expect(bar).toContain('class="tab-btn active" id="tab-contacts"');
-    expect(bar).toContain('aria-selected="true" data-action="tab-contacts"');
-    expect(bar).toContain('aria-selected="false" data-action="tab-settings"');
+    expect(bar).toContain('role="navigation"');
+    expect(bar).not.toContain('role="tablist"');
+    expect(bar).not.toContain('role="tab"');
+    expect(bar).not.toContain('aria-selected');
+    expect(bar).toContain('aria-current="page" data-action="tab-contacts"');
+    expect(bar.match(/aria-current="page"/g)).toHaveLength(1);
   });
   it('labels reuse existing i18n keys (no new keys introduced)', () => {
     expect(bar).toContain('data-i18n="ariaContacts"');
@@ -42,16 +46,20 @@ describe('bottom tab bar visibility (CSS-derived from the existing view state)',
   it('is hidden by default (wide screens never show it)', () => {
     expect(html).toContain('#msg-tabbar { display: none }');
   });
-  it('shows only under the mobile width breakpoint', () => {
+  it('shows only under the narrow width breakpoint, regardless of UA', () => {
     const css = html.slice(html.indexOf('/* ── Bottom tab bar'), html.indexOf('/* Hide scrollbars on mobile'));
     const mqAt = css.indexOf('@media (max-width: 640px)');
-    const flexAt = css.indexOf('.is-mobile #msg-tabbar { display: flex');
+    const flexAt = css.indexOf('#msg-tabbar { display: flex');
     expect(mqAt).toBeGreaterThan(-1);
     expect(flexAt).toBeGreaterThan(mqAt);
     expect(css.slice(flexAt)).toContain('position: fixed');
+    // Width alone decides: no .is-mobile (UA class) gate on the bar's rules.
+    expect(css).not.toContain('.is-mobile #msg-tabbar');
+    expect(css).not.toContain('.is-mobile #msg-main:has(.sidebar.hidden) #msg-tabbar');
+    expect(css).not.toContain('.is-mobile .contact-list');
   });
   it('hides whenever the sidebar is hidden (chat or settings panel open)', () => {
-    expect(html).toContain('.is-mobile #msg-main:has(.sidebar.hidden) #msg-tabbar { display: none }');
+    expect(html).toContain('#msg-main:has(.sidebar.hidden) #msg-tabbar { display: none }');
   });
   it('the active tab is marked with the accent color variable', () => {
     expect(html).toContain('.tab-btn.active { color: var(--g) }');
@@ -83,7 +91,7 @@ describe('bottom tab bar wiring', () => {
     expect(fn).toContain("_DOM.get('b-msg-back')?.classList.remove('hidden');");
   });
   it('returning to the list re-selects the contacts tab', () => {
-    expect(html).toContain("_DOM.get('b-msg-back')?.addEventListener('click', () => _setActiveTab('contacts'));");
+    expect(html).toContain("_DOM.get('b-msg-back')?.addEventListener('click', () => _setActiveTab('contacts'), { signal: _ac.signal });");
     expect(html).toContain("window.addEventListener('popstate', () => { if (window.innerWidth <= 640) _setActiveTab('contacts'); }, { signal: _ac.signal });");
   });
 });
