@@ -2,24 +2,40 @@ name = "breeze"
 pages_build_output_dir = "."
 compatibility_date = "2024-12-01"
 
-# KV Binding (create via Dashboard or CLI)
-# wrangler kv:namespace create KV
-# Then paste the ID below (or bind via Dashboard: Pages > Settings > Functions > KV)
+# KV Binding — declared here because Pages Git deployments take their
+# bindings from this file: a binding set only in the Dashboard is not
+# applied while a wrangler.toml exists (measured 2026-11-24: dashboard
+# showed KV bound, yet /api/health reported kv:false). An empty id
+# fails Pages builds, so the id must be filled in. The id is a public
+# identifier, not a credential — access still requires the account's
+# own authentication.
+# SELF-HOSTERS: this id points at the reference deployment's namespace.
+# Create your own (wrangler kv:namespace create KV) and replace the id
+# below with yours before deploying.
 [[kv_namespaces]]
 binding = "KV"
-id = ""  # ← REQUIRED: paste your KV namespace ID here
+id = "42edcaffc1474f73bca2c6f89817e8aa"
 
 # Durable Object mailbox backend (stage-1 step 2, 2026-11-13). MailboxDO
 # lives in _worker.js: one instance per recipient holds both queue families
-# (inbox + sealed) in DO storage once MAILBOX_BACKEND=do (see below and
-# docs/MAILBOX_STAGE1_PLAN.md). KV stays the default backend.
-[[durable_objects.bindings]]
-name = "MAILBOX_DO"
-class_name = "MailboxDO"
-
-[[migrations]]
-tag = "v1-mailbox-do"
-new_sqlite_classes = ["MailboxDO"]
+# (inbox + sealed) in DO storage once MAILBOX_BACKEND=do (see
+# docs/MAILBOX_STAGE1_PLAN.md). KV stays the default backend, and the
+# Worker falls back to KV whenever the MAILBOX_DO binding is absent.
+#
+# The [[durable_objects.bindings]] and [[migrations]] sections are
+# deliberately NOT in this file: Pages configuration validation rejects
+# "migrations" outright and requires a "script_name" for Durable Object
+# bindings, so their presence fails every Pages build. To run the DO
+# backend, deploy _worker.js as a Worker (not Pages) with these sections
+# restored locally:
+#
+#   [[durable_objects.bindings]]
+#   name = "MAILBOX_DO"
+#   class_name = "MailboxDO"
+#
+#   [[migrations]]
+#   tag = "v1-mailbox-do"
+#   new_sqlite_classes = ["MailboxDO"]
 
 # === SECRETS (set via CLI — never commit values) ===
 #
@@ -61,6 +77,7 @@ new_sqlite_classes = ["MailboxDO"]
 # wrangler pages secret put PRESENCE_REQUIRE_AUTH      # false — opt out: allow presence writes from unregistered ids (default: registered only)
 # wrangler pages secret put TURN_REQUIRE_AUTH          # false — opt out: issue TURN credentials to unregistered ids (default: registered only)
 # wrangler pages secret put ALIAS_REQUIRE_AUTH         # false — opt out: allow unsigned @alias registration (default: Ed25519 signature required, since recovery-plan step 5)
+# wrangler pages secret put BACKUP_REQUIRE_AUTH        # false — opt out: allow unsigned backup upload/download (default: Ed25519 signature required; the backup client has always signed, and backup storage itself is opt-in per relay)
 #
 # The remaining flags reject requests that omit/fail an Ed25519 ownership
 # signature. Every current client already signs these actions; the flags stay
@@ -74,7 +91,6 @@ new_sqlite_classes = ["MailboxDO"]
 # wrangler pages secret put PUSH_REQUIRE_AUTH          # true — reject unsigned push subscribe/unsubscribe
 # wrangler pages secret put QUEUE_REQUIRE_AUTH         # true — reject unsigned msg/sealed poll + sealed ack (queue read/delete)
 # wrangler pages secret put PREKEY_REQUIRE_AUTH        # true — reject unsigned prekey uploads (bundle overwrite = identity takeover)
-# wrangler pages secret put BACKUP_REQUIRE_AUTH        # true — without this, knowing a userId is enough to download that user's encrypted backup blob
 # wrangler pages secret put BACKUP_STORAGE_ENABLED     # true — opt IN to storing users' encrypted backup blobs on this relay. Default is OFF (the creator holds no user data): /api/backup/* refuses with BACKUP_DISABLED. Enable only on a relay you run for your own accounts.
 #
 # --- Plain relay path (deprecated) ---

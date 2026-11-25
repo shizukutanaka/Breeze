@@ -23,7 +23,10 @@ describe('every packaging path ships locales/ next to index.html', () => {
   it('build.sh copy_web copies locales/ into the packaged bundle', () => {
     const src = readFileSync(join(root, 'build.sh'), 'utf8');
     expect(src).toContain('locales/');
-    expect(src).toMatch(/cp\s+locales\/\*\.json/);
+    // Sources resolve against $SCRIPT_DIR since 2026-11-20 (the
+    // cwd-relative form broke every packaged build); the pin is
+    // on the copy itself, not the prefix spelling.
+    expect(src).toMatch(/cp\s+"\$SCRIPT_DIR\/locales"\/\*\.json\s+"\$dst\/locales\/"/);
   });
 
   it('desktop/package.json extraResources includes ../locales → locales', () => {
@@ -38,5 +41,117 @@ describe('every packaging path ships locales/ next to index.html', () => {
   it('tauri frontendDist covers the repo root (locales/ ships with it)', () => {
     const conf = JSON.parse(readFileSync(join(root, 'tauri/src-tauri/tauri.conf.json'), 'utf8'));
     expect(conf.build?.frontendDist).toBe('../../');
+  });
+});
+
+// D11: key completeness is pinned, not aspirational. Until wave 4, every
+// non-ja locale silently fell back to English for 179 of 859 keys — including
+// the key-transparency verdicts (ktChecking/ktOk/ktRolled/ktTampered), so a
+// Spanish or Korean user saw the security-critical strings in English. Every
+// locale file must now carry EXACTLY the English key set: a missing key
+// (silent English fallback) or an extra key (dead translation) fails here.
+// Placeholder sets and plural shapes follow the tools/i18n-check.mjs rules.
+describe('every locale file is key-complete against the inline English reference (D11)', () => {
+  const html = readFileSync(join(root, 'index.html'), 'utf8');
+  const start = html.indexOf('const _I = {');
+  let depth = 0, raw = '';
+  for (let i = html.indexOf('{', start); i < html.length; i++) {
+    if (html[i] === '{') depth++;
+    else if (html[i] === '}') { depth--; if (depth === 0) { raw = html.slice(html.indexOf('{', start), i + 1); break; } }
+  }
+  const EN = (0, eval)('(' + raw + ')').en;
+  const enKeys = Object.keys(EN).sort();
+  const placeholders = (s) => [...new Set((String(s).match(/\{(\d+)\}/g) || []))].sort().join(',');
+  // Dense sampling (mirrors tools/i18n-check.mjs): a sparse set misses categories a
+  // language only selects for specific endings (tl selects "other" for numbers ending
+  // in 4/6/9), which would falsely demand dropping a category real counts can select.
+  const categoriesFor = (loc) => {
+    const pr = new Intl.PluralRules(loc);
+    const samples = [];
+    for (let n = 0; n <= 120; n++) samples.push(n);
+    samples.push(201, 1001, 0.5, 1.5);
+    return new Set(samples.map((n) => pr.select(n)));
+  };
+
+  for (const file of locales) {
+    const loc = file.replace(/\.json$/, '');
+    it(`${loc}: exactly the English key set, placeholders and plural shapes intact`, () => {
+      const T = JSON.parse(readFileSync(join(root, 'locales', file), 'utf8'));
+      expect(Object.keys(T).sort(), `${loc} key set differs from English`).toEqual(enKeys);
+      const cats = categoriesFor(loc);
+      for (const [key, v] of Object.entries(T)) {
+        const rv = EN[key];
+        const rPlural = rv && typeof rv === 'object';
+        const vPlural = v && typeof v === 'object';
+        expect(vPlural, `${loc}.${key} plural shape`).toBe(rPlural);
+        if (vPlural) {
+          expect(Object.keys(v).sort(), `${loc}.${key} plural categories`).toEqual([...cats].sort());
+          for (const [cat, s] of Object.entries(v)) {
+            expect(typeof s === 'string' && s.trim().length > 0, `${loc}.${key}.${cat} non-empty`).toBe(true);
+          }
+          expect(placeholders(Object.values(v).join('')), `${loc}.${key} placeholders`).toBe(placeholders(Object.values(rv).join('')));
+        } else {
+          expect(typeof v, `${loc}.${key} is a string`).toBe('string');
+          expect(v.trim().length, `${loc}.${key} non-empty`).toBeGreaterThan(0);
+          expect(placeholders(v), `${loc}.${key} placeholders`).toBe(placeholders(rv));
+        }
+      }
+    });
+  }
+});
+
+describe('every UI t("key") and data-i18n* reference exists in EN and all shipped locale files', () => {
+  const html = readFileSync(join(root, 'index.html'), 'utf8');
+  const appFiles = readdirSync(join(root, 'src', 'app')).filter(f => f.endsWith('.js'));
+  const appSrc = html + '\n' + appFiles.map(f => readFileSync(join(root, 'src', 'app', f), 'utf8')).join('\n');
+
+  const start = html.indexOf('const _I = {');
+  let depth = 0, raw = '';
+  for (let i = html.indexOf('{', start); i < html.length; i++) {
+    if (html[i] === '{') depth++;
+    else if (html[i] === '}') { depth--; if (depth === 0) { raw = html.slice(html.indexOf('{', start), i + 1); break; } }
+  }
+  const EN = (0, eval)('(' + raw + ')').en;
+
+  const referenced = new Set();
+  for (const m of appSrc.matchAll(/\bt\(\s*['"]([A-Za-z][A-Za-z0-9_]*)['"]/g)) {
+    referenced.add(m[1]);
+  }
+  for (const m of appSrc.matchAll(/data-i18n(?:-ph|-aria|-title|-html)?=["']([A-Za-z][A-Za-z0-9_]*)["']/g)) {
+    referenced.add(m[1]);
+  }
+  const usedKeys = [...referenced].sort();
+
+  const findMissingKeys = (keys, table) => keys.filter((k) => {
+    const v = table[k];
+    if (v === undefined) return true;
+    if (typeof v === 'string') return v.trim().length === 0;
+    if (v && typeof v === 'object') return Object.values(v).some(s => typeof s !== 'string' || s.trim().length === 0);
+    return true;
+  });
+
+  it('finds UI i18n references and every one is defined and non-empty in EN', () => {
+    expect(usedKeys.length).toBeGreaterThan(500);
+    expect(findMissingKeys(usedKeys, EN), 'missing or empty in EN').toEqual([]);
+  });
+
+  it('every referenced UI key exists and is non-empty in all shipped locale files', () => {
+    // The files on disk must be exactly the FULL_LOCALES set index.html can load —
+    // a hardcoded count rots the moment a language ships (7 until 2026-11-25, 50 after).
+    const fullLocales = [...html.match(/const FULL_LOCALES = \[([^\]]+)\]/)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+    expect(locales.map((f) => f.replace(/\.json$/, '')).sort()).toEqual([...fullLocales].sort());
+    for (const file of locales) {
+      const loc = file.replace(/\.json$/, '');
+      const T = JSON.parse(readFileSync(join(root, 'locales', file), 'utf8'));
+      expect(findMissingKeys(usedKeys, T), `missing or empty in ${loc}`).toEqual([]);
+    }
+  });
+
+  it('missing-key detector fails when a key is omitted or blank in any locale', () => {
+    const sample = usedKeys[0];
+    const incomplete = { ...EN };
+    delete incomplete[sample];
+    expect(findMissingKeys(usedKeys, incomplete)).toEqual([sample]);
+    expect(findMissingKeys(usedKeys, { ...EN, [sample]: '   ' })).toEqual([sample]);
   });
 });

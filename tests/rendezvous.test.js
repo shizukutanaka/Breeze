@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { deflateRawSync } from 'node:zlib';
 import { canonical, createEnvelopeCodec, gatherDescription, attachManualPeer, createRendezvous, MAX_CODE_SIZE, MAX_ENVELOPE_SIZE } from '../src/app/rendezvous.js';
+import { createInfoPanels } from '../src/app/info-panels.js';
 
 const MS = { SEC: 1000, MIN: 60000 };
 const desc = { type: 'offer', sdp: 'v=0\r\na=candidate:1 1 udp 1 abc.local 123 typ host\r\n' };
@@ -237,7 +238,7 @@ describe('deployed rendezvous wiring and relay preservation', () => {
     expect(relay).toContain('contact.sigPub !== wrapper.sigPub');
     expect(relay).toContain('verifySignature(wrapper.sdp, wrapper.sig, wrapper.sigPub)');
     const untouched = html.slice(end, html.indexOf('  // ===== Presence heartbeat', end)) + '  // ===== Presence heartbeat (v3.3: adaptive — slower in background) =====\n';
-    expect(createHash('sha256').update(untouched).digest('hex')).toBe('d9d1374cd37a67e4e26a45f084696aca429267bae9331e886c3ca7a010d28cd2');
+    expect(createHash('sha256').update(untouched).digest('hex')).toBe('bbf2b988032cefa2c3a7edf5363bc198f9ccfe0c8cf59cbbe48e19e03b2b6c29'); // re-pinned for D12: the region's only delta is the sigPoll isActive argument
   });
   it('runs actual connectPeer setup with no API and never trickles / starts polling in manual mode', async () => {
     vi.useFakeTimers();
@@ -272,5 +273,37 @@ describe('deployed rendezvous wiring and relay preservation', () => {
     await createRendezvous(D).open({ id: 'peer' });
     await createRendezvous({ ...D, contact: async () => ({}) }).open({ id: 'peer' });
     expect(connect).not.toHaveBeenCalled(); expect(toast.mock.calls.map(c => c[0])).toEqual(['use1to1', 'use1to1', 'rvTrust', 'rvTrust']);
+  });
+  it('surfaces Step 7(b) LAN direct guidance and /rendezvous button in /security', async () => {
+    expect(html).toContain('openRendezvous: () => _rendezvous?.open(activeContact)');
+    let rendered = '', clickHandler = null;
+    const d = { addEventListener: (ev, fn) => { if (ev === 'click') clickHandler = fn; } };
+    const box = { appendChild: vi.fn(), scrollTop: 0, scrollHeight: 100 };
+    const openRendezvous = vi.fn();
+    const prev = { window: globalThis.window, document: globalThis.document, location: globalThis.location, localStorage: globalThis.localStorage };
+    Object.assign(globalThis, {
+      window: { isSecureContext: true }, document: { querySelector: () => null },
+      location: { protocol: 'https:', origin: 'https://example.test' },
+      localStorage: { getItem: () => null },
+    });
+    try {
+      await createInfoPanels({
+        dbGet: async () => null, getSession: async () => null, hasRTCCertificate: () => false,
+        t: k => k, esc: s => s, safeSetHTML: (_, h) => { rendered = h; },
+        cmdPanel: () => [box, d], cryptoStack: () => ({}), activeContact: () => null,
+        atRestIsWrapped: () => false, p2pStats: () => null, turnCredential: () => null,
+        signingPubB64: () => '', hasX25519: () => true, hasEd25519: () => true, hasPQ: () => false,
+        replayCacheSize: () => 0, config: () => ({ REPLAY_CACHE_SIZE: 100, MSG_PAD_BOUNDARY: 256, DC_BUFFER_LOW: 65536, CHUNK_SIZE: 16384 }),
+        settings: () => ({ relayOnly: false }), relayPinGate: () => ({ blocked: false }), relayPinFp: () => '',
+        openRendezvous,
+      }).showSecurity();
+      expect(rendered).toContain('secLblLanDirect: secLanDirectNote');
+      expect(rendered).toContain('data-action="open-rendezvous"');
+      expect(clickHandler).toBeTypeOf('function');
+      clickHandler({ target: { closest: () => null } });
+      expect(openRendezvous).not.toHaveBeenCalled();
+      clickHandler({ target: { closest: sel => sel === '[data-action="open-rendezvous"]' ? {} : null } });
+      expect(openRendezvous).toHaveBeenCalledOnce();
+    } finally { Object.assign(globalThis, prev); }
   });
 });

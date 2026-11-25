@@ -108,10 +108,10 @@ once existed ("the billing system is gone but the TURN fetch must remain") — b
 never documented the way the AI/translation and link-preview removals were, so the docs and
 in-app legal text kept describing it as live. Today there is no checkout, webhook, or portal
 route anywhere in `_worker.js`, and no call to `api.stripe.com` anywhere in the repo. The
-`slots:{userId}` KV record (`{ slots, plan, customerId, updatedAt }`) is still scaffolded in the
-storage schema and read/deleted on account deletion, but nothing writes a real plan into it, and
-the client never checks it — every account, self-hosted or hosted, can add unlimited local
-accounts today with no plan enforcement. Documentation and in-app legal text have been corrected
+`slots:{userId}` KV record that once scaffolded plans was removed from the Worker entirely
+(D29) — no route reads, writes, or deletes it — and the client never checked it: every
+account, self-hosted or hosted, can add unlimited local accounts today with no plan
+enforcement. Documentation and in-app legal text have been corrected
 to stop advertising this as available rather than rebuilding it retroactively; that remains
 separate, explicitly-scoped future work if it's wanted.
 
@@ -133,17 +133,35 @@ separate, explicitly-scoped future work if it's wanted.
   cannot be swept — sealed sender means the relay cannot tell who sent an envelope, so
   undelivered sealed copies expire with the 7-day queue TTL instead — and a moderation
   webhook that already fired for a report lives outside KV and is not recalled.
-- **The sealed queue is a bounded, last-write-wins KV value.** Cloudflare KV offers no
-  transactions, so the queue's read-modify-write can lose an envelope if two senders write to
-  the same recipient in the same instant from different PoPs — and both senders would be
-  answered 200, making the loss silent. The send path now **reads the key back and re-appends
-  its own envelope if it is missing**, which recovers the common case for one extra read on the
-  cold send path. Deliberately not the textbook fix: a key per envelope removes the race
-  outright but replaces one `get` per poll with a `list` plus a `get` per message on the
-  hottest path, in a relay that already throttles presence writes to survive the free tier.
-  So the sealed path remains **best-effort with recovery, not exactly-once**; content-keyed
-  dedup, the client retry queue and the overflow confession (`dropped: n`) still back it, and
-  P2P delivery plus re-send remain the ultimate recovery paths.
+- **The sealed queue is a bounded value whose append semantics depend on the mailbox
+  backend (D16, two stages).** The append is one composite store operation; what it
+  guarantees is stated per tier, because the two backends genuinely differ:
+  - **Durable Object backend (`MAILBOX_BACKEND=do`): exactly-once.** The append runs as a
+    single operation inside the recipient's per-mailbox serialized core — the dedup check,
+    the strictly-increasing timestamp assignment, the caps and the overflow accounting are
+    one atomic step, so no second writer can interleave and erase an envelope, and a
+    retransmitted envelope is deduplicated from the stored queue itself, across isolates.
+    The same serialization makes the poll's recovery-count claim atomic: exactly one poll
+    surfaces a given count.
+  - **KV backend (default): best-effort with verified recovery, not exactly-once.**
+    Cloudflare KV offers no transactions, so the queue's read-modify-write can lose an
+    envelope if two senders write to the same recipient in the same instant from different
+    PoPs — and both senders would be answered 200, making the loss silent. The append
+    therefore **reads the key back and re-appends its own envelope if it is missing**,
+    which recovers the common case for one extra read on the cold send path. Since D16
+    stage 1 the repair is itself verified: the append re-reads after every re-append and
+    retries (bounded), and a send whose envelope still cannot be confirmed fails honestly
+    (`STORE_UNCONFIRMED`) so the sender's outbox retries, instead of a 200 for a delivery
+    that never landed. Every repair is also counted per mailbox and confessed to the
+    recipient's next poll (`recovered: n`, shown in `/security`) — the track record from
+    which a per-envelope key split will be decided for mailboxes where loss is actually
+    observed. Deliberately not the textbook fix on this tier: a key per envelope removes
+    the race outright but replaces one `get` per poll with a `list` plus a `get` per
+    message on the hottest path, in a relay that already throttles presence writes to
+    survive the free tier.
+  On both tiers, content-keyed dedup, the client retry queue and the overflow confession
+  (`dropped: n`) still back the path, and P2P delivery plus re-send remain the ultimate
+  recovery paths.
 - **Metadata**: Sealed Sender **v2** hides the sender from the relay *cryptographically*:
   all sender-identifying fields (id, public key, display name, signature keys, the reply
   preview, multi-device markers — and the X3DH bootstrap header's initiator identity key,
@@ -156,8 +174,11 @@ separate, explicitly-scoped future work if it's wanted.
   capability-negotiated (`seal-v2` in the prekey-bundle caps, read via `/prekey/status`
   which consumes no one-time prekey): messages to un-upgraded peers, the `/msg` fallback
   path, and the offline retry queue still use legacy envelopes and remain sender-visible.
-  The relay still sees recipient, timing, and message size (padded to 256 B boundaries);
-  cover traffic / onion routing are deferred (see SPEC §12).
+  The relay still sees recipient, timing, and message size (padded to size buckets —
+  256 / 1024 / 4096 B, then multiples of 4096, since D02 — so only the bucket leaks).
+  Cover traffic was considered and rejected in D02 (constant dummy traffic would burn the
+  default relay's free quota and put relay costs on the creator); onion routing is
+  deferred (see SPEC §12).
 - **Relay identity (stage-2 step 4)**: the relay holds a persistent Ed25519 key
   (`relayKey` in `/api/health`). On first contact a client verifies the key by
   challenge — the relay must sign `breeze-relay-attest:{relayKey}:{nonce}` for
@@ -185,20 +206,26 @@ separate, explicitly-scoped future work if it's wanted.
   disabled that signal silently no-ops (the wipe itself still proceeds locally).
 - **Read-receipt timing.** A receipt fired the instant a conversation opens is a precise
   timestamp of when a specific person looked at their phone, and correlating those against
-  sends is a known de-anonymisation route against sealed-sender systems (NDSS'21). `/quiet N`
-  holds receipts for N seconds with ±20% jitter, so the signal an observer gets is blurred.
-  The stronger setting remains "hide read receipts" (send none at all); the delay is the
-  middle option for people who want to keep the courtesy without the precision.
-- **Symmetric franking (I17)** proves a reported ciphertext was genuinely sent, but under
-  Sealed Sender it does not cryptographically bind *which* sender sent it — a malicious
-  reporter cannot forge a report, but sender-binding needs asymmetric franking / Hecate
-  (CRYPTO-SPEC §9 N4).
-- **Defaults (v3.6.1)**: authenticated X3DH v5 and group forward secrecy are now **ON by
+  sends is a known de-anonymisation route against sealed-sender systems (NDSS'21). Since D01
+  a fresh install holds receipts for 120 seconds with ±20% jitter by default, so the signal an
+  observer gets is blurred without anyone opting in; `/quiet N` adjusts the hold (0 restores
+  instant receipts; saved settings are never rewritten, so the new default reaches fresh
+  installs only). The stronger setting remains "hide read receipts" (send none at all); the
+  delay is the middle option for people who want to keep the courtesy without the precision.
+- **Franking (I17)** proves a reported ciphertext was genuinely sent. The original symmetric
+  commitment did not cryptographically bind *which* sender sent it under Sealed Sender; since
+  D08 the sender additionally signs the commitment with their Ed25519 identity key (AMF,
+  Tyagi et al. — CRYPTO-SPEC §6a), so a verified report is bound to its sender and a reporter
+  cannot forge or re-attribute one. The residual limit is the mirror image: an adversarial
+  client can withhold its AMF tag, which makes its messages unreportable rather than
+  forgeable; reports from pre-AMF clients still verify at the symmetric level only.
+- **Defaults (v3.7.1)**: authenticated X3DH v5 and group forward secrecy are **ON by
   default**. Both are capability-negotiated with an AND rule and fall back to the legacy path
   whenever any peer/member is un-upgraded, so first contact is authenticated and group messages
-  are forward-secret without breaking older clients. Still opt-in: at-rest key wrapping (needs a
-  user passphrase, `/keywrap`) and call-signaling E2E (`CALL_E2E_SIGNAL` has no capability
-  negotiation yet, so enabling it requires both ends). Worker-side auth gates: the two
+  are forward-secret without breaking older clients. Call-signaling E2E (`CALL_E2E_SIGNAL`) is
+  likewise on by default and capability-negotiated (`CAPS_CALL_E2E` in the prekey-bundle
+  caps), so it engages only when both ends advertise it. Still opt-in: at-rest key wrapping
+  (needs a user passphrase, `/keywrap`). Worker-side auth gates: the two
   registration gates (`PRESENCE_REQUIRE_AUTH`, `TURN_REQUIRE_AUTH` — prekey-bundle existence
   only, no signature) are **on by default** since the 2026-11-13 stage-0 hardening; the
   Ed25519-signature `*_REQUIRE_AUTH` flags remain operator choices, because clients on
@@ -223,7 +250,8 @@ separate, explicitly-scoped future work if it's wanted.
   public key or QR avoids the question entirely — there the key *is* the identity.
 - **The plan/account-slot limit is not a security control.** `getAccountSlots()` reads
   `localStorage['brz-acc-slots']` and the check is a client-side `if (accs.length >= slots)
-  return`. The relay stores `slots:{userId}` but gates no actual resource on it, because
+  return`. The relay keeps no per-account slot record at all (the legacy `slots:{userId}` KV
+  entry was removed in D29) and gates no actual resource on it, because
   "accounts" are local browser profiles — nothing is allocated server-side per slot. Anyone can
   raise their own limit with one `localStorage.setItem`. This is noted so the limit is not
   mistaken for an enforced boundary; it is a nudge. Making it real would require the server to

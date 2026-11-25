@@ -87,7 +87,13 @@ const coreKeys = refKeys.filter((k) => !isDiag(k) && !isLegal(k));
 const placeholders = (s) => [...new Set((s.match(/\{(\d+)\}/g) || []))].sort().join(',');
 const categoriesFor = (loc) => {
   const pr = new Intl.PluralRules(loc);
-  return new Set([0, 1, 2, 3, 5, 11, 21, 101, 1.5].map((n) => pr.select(n)));
+  // Dense sampling: a sparse set falsely flags categories a language only selects for
+  // specific endings (tl selects "other" for numbers ending in 4/6/9 — 4, 6, 9, 14, …
+  // — none of which a [0,1,2,3,5,11,21,101] sample ever hits).
+  const samples = [];
+  for (let n = 0; n <= 120; n++) samples.push(n);
+  samples.push(201, 1001, 0.5, 1.5);
+  return new Set(samples.map((n) => pr.select(n)));
 };
 
 const localeFiles = readdirSync(join(ROOT, 'locales')).filter((f) => f.endsWith('.json'));
@@ -132,10 +138,17 @@ for (const file of localeFiles) {
   const totalPct = Math.round((Object.keys(T).filter((k) => EN[k] !== undefined).length / refKeys.length) * 100);
   summary.push(`${loc}: ${corePct}% core (${coveredCore}/${coreKeys.length}), ${totalPct}% total`);
 
-  if (loc === 'ja') {
-    for (const k of refKeys) if (T[k] === undefined) problems.push(`ja: missing key "${k}" (ja must stay 100%)`);
-  } else if (corePct < 95) {
-    problems.push(`${loc}: core coverage ${corePct}% is below the 95% floor`);
+  for (const k of refKeys) {
+    const val = T[k];
+    if (val === undefined) {
+      problems.push(`${loc}: missing key "${k}" (all locales must stay 100% complete)`);
+    } else if (typeof val === 'string' && val.trim() === '') {
+      problems.push(`${loc}."${k}": empty translation string`);
+    } else if (val && typeof val === 'object') {
+      for (const [cat, s] of Object.entries(val)) {
+        if (typeof s === 'string' && s.trim() === '') problems.push(`${loc}."${k}.${cat}": empty plural translation string`);
+      }
+    }
   }
 }
 

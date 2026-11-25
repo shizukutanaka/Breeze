@@ -58,7 +58,7 @@ function buildBundleBuilder(ed, signingPubB64, configExtra = {}) {
   });
   const fn = new Function(
     'genRatchetKey', 'dbPut', 'CONFIG', '_signingKey', '_signingPubB64',
-    'CAPS_X3DH_V5', 'CAPS_GROUP_V5', 'CAPS_SEAL_V2', 'CAPS_MULTI_RELAY', 'CAPS_PQXDH',
+    'CAPS_X3DH_V5', 'CAPS_GROUP_V5', 'CAPS_SEAL_V2', 'CAPS_MULTI_RELAY', 'CAPS_PQXDH', 'CAPS_PROFILE', 'CAPS_STICKER', 'CAPS_LOC', '_myHomeWire',
     'homeRelays', '_dbg',
     `${sliceBetween('async function generatePreKeyBundle', 'async function createIdentity')}
      return { generatePreKeyBundle };`);
@@ -66,7 +66,7 @@ function buildBundleBuilder(ed, signingPubB64, configExtra = {}) {
     genRatchetKey, dbPut,
     { PREKEY_OTP_COUNT: 3, X3DH_V5_ENABLED: true, GROUP_RATCHET_V5: true, SEAL_V2_ENABLED: true, MULTI_RELAY_ENABLED: true, ...configExtra },
     { privateKey: ed.privateKey }, signingPubB64,
-    'x3dh-v5', 'group-v5', 'seal-v2', 'multi-relay', 'pqxdh',
+    'x3dh-v5', 'group-v5', 'seal-v2', 'multi-relay', 'pqxdh', 'profile-v1', 'sticker-v1', 'loc-v1', () => [],
     () => [], () => {},
   );
   return { generatePreKeyBundle, stores };
@@ -262,7 +262,7 @@ describe('stage-3 step 3 — generatePreKeyBundle wiring (real function, sliced)
     expect(Object.keys(rec)).toEqual(['seed']);
     expect(pqPublicKeyFromSeed(pqSeedFromRecord(rec))).toEqual(fromB64(bundle.pqPreKey));
     // Negotiation stays OFF: caps are exactly the classical set.
-    expect(bundle.caps).toEqual(['x3dh-v5', 'group-v5', 'seal-v2', 'multi-relay']);
+    expect(bundle.caps).toEqual(['x3dh-v5', 'group-v5', 'seal-v2', 'multi-relay', 'profile-v1', 'sticker-v1', 'loc-v1']);
     expect(bundle.caps).not.toContain('pqxdh');
   });
 

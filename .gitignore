@@ -79,3 +79,20 @@ __pycache__/
 # Rust / Tauri build artifacts
 tauri/src-tauri/target/
 tauri/src-tauri/gen/
+
+# Desktop build outputs (build.sh copy_web + electron-builder);
+# regenerated on every build, never tracked (2026-11-20).
+desktop/index.html
+desktop/sw.js
+desktop/manifest.json
+desktop/404.html
+desktop/404.js
+desktop/_headers
+desktop/_redirects
+desktop/_routes.json
+desktop/locales/
+desktop/src/
+desktop/dist/
+desktop/node_modules/
+mobile/node_modules/
+tauri/node_modules/

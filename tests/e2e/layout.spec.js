@@ -26,15 +26,41 @@ const boot = async (page, name) => {
 // real phone user would have.
 const openAnyContact = async (page) => {
   await page.locator('#b-msg-add').click();
-  const dialog = page.locator('dialog[aria-labelledby]');
+  const dialog = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
   const fakePub = await page.evaluate(() => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''));
   await dialog.locator('.modal-input').fill(fakePub);
-  await dialog.locator('[value="ok"]').click();
+  await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
   await page.locator('#msg-contacts .contact').first().click();
   await expect(page.locator('#msg-input-bar')).toBeVisible();
 };
+
+// The "+" button renders the add-contact panel into the chat column — which, at phone
+// width, sits UNDER the full-screen sidebar until a contact is open. So on a phone with
+// no conversation open (every new user: "Add your first contact with +") tapping "+"
+// showed nothing at all: the input took focus behind the sidebar. Hit-test the input —
+// existence and focus were both true while it was unreachable.
+test('tapping + at phone width shows a reachable add-contact panel', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await boot(page, 'Phone Add');
+  await page.locator('#b-msg-add').click();
+  const input = page.locator('#msg-messages .cmd-panel .modal-input');
+  await expect(input).toBeVisible();
+  const onTop = await input.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === el;
+  });
+  expect(onTop, 'the add-contact input is the topmost element at its own position').toBe(true);
+
+  // Using the panel returns to the contact list, where the new contact shows up.
+  const fakePub = await page.evaluate(() => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''));
+  await input.fill(fakePub);
+  await page.locator('#msg-messages .cmd-panel button.btn-g').click();
+  await expect(page.locator('#msg-sidebar')).toBeVisible();
+  await page.locator('#msg-contacts .contact').first().click({ trial: true });
+});
 
 test('the desktop chat pane sits beside the sidebar, not below it', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -171,9 +197,9 @@ test('a swiped message bubble does not snap back out after the swipe-back animat
   const pubB = await identity(B, 'Swipe Sender');
 
   await A.locator('#b-msg-add').click();
-  const dlgA = A.locator('dialog[aria-labelledby]');
+  const dlgA = A.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
   await dlgA.locator('.modal-input').fill(pubB);
-  await dlgA.locator('[value="ok"]').click();
+  await dlgA.locator('button.btn-g').click();
   await expect(dlgA).toBeHidden();
   await A.locator('#msg-contacts .contact').first().click();
   await expect(A.locator('#msg-input-bar')).toBeVisible();
@@ -182,9 +208,9 @@ test('a swiped message bubble does not snap back out after the swipe-back animat
   // function and gets the actual touchstart/touchmove/touchend listeners wired — a
   // fabricated element would have none of them and prove nothing.
   await B.locator('#b-msg-add').click();
-  const dlgB = B.locator('dialog[aria-labelledby]');
+  const dlgB = B.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
   await dlgB.locator('.modal-input').fill(pubA);
-  await dlgB.locator('[value="ok"]').click();
+  await dlgB.locator('button.btn-g').click();
   await expect(dlgB).toBeHidden();
   await B.locator('#msg-contacts .contact').first().click();
   await expect(B.locator('#msg-input-bar')).toBeVisible();
@@ -297,9 +323,9 @@ test('the scroll-to-bottom FAB counts up when a message arrives while scrolled a
   const pubB = await identity(B, 'FAB Sender');
 
   await A.locator('#b-msg-add').click();
-  const dlgA = A.locator('dialog[aria-labelledby]');
+  const dlgA = A.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
   await dlgA.locator('.modal-input').fill(pubB);
-  await dlgA.locator('[value="ok"]').click();
+  await dlgA.locator('button.btn-g').click();
   await expect(dlgA).toBeHidden();
   await A.locator('#msg-contacts .contact').first().click();
   await expect(A.locator('#msg-input-bar')).toBeVisible();
@@ -320,9 +346,9 @@ test('the scroll-to-bottom FAB counts up when a message arrives while scrolled a
   await expect(A.locator('#scroll-fab')).toHaveText('↓');
 
   await B.locator('#b-msg-add').click();
-  const dlgB = B.locator('dialog[aria-labelledby]');
+  const dlgB = B.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
   await dlgB.locator('.modal-input').fill(pubA);
-  await dlgB.locator('[value="ok"]').click();
+  await dlgB.locator('button.btn-g').click();
   await expect(dlgB).toBeHidden();
   await B.locator('#msg-contacts .contact').first().click();
   await expect(B.locator('#msg-input-bar')).toBeVisible();

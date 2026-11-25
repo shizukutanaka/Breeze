@@ -18,10 +18,108 @@
 // (acceptCall / endCall / toggleCallMute / toggleCallCamera) are installed
 // by the factory body, at instantiation, as before. Behaviour is
 // unchanged — this is a move, not a rewrite.
+//
+// SHARE_PLAN stage 5 step 1: the call-signal wrap/unwrap moved here too,
+// and grew the mixed-version negotiation the default-ON rollout needs.
+// A peer is encrypted to when its prekey bundle advertises the
+// 'call-e2e' cap (index.html's CAPS_CALL_E2E — the strings must match)
+// or when it has PROVEN it encrypts (one of its signals decrypted).
+// Plaintext from a proven peer is dropped as forged/downgraded; from
+// any other peer it is the legacy format and is accepted, so calls
+// with pre-rollout clients keep working in both directions.
 // ============================================================================
 
+// The envelope test that keeps legacy plaintext out of decryptFrom
+// (which throws on malformed payloads and can surface UI): an
+// encryptFor output is {v:5, t:'pkm', msg:'<inner>'} for a first
+// message or {v:4, i:[...], d:[...]} on an established session.
+// Legacy signals ({sdp,…}, {type,sdp}, ICE candidates) never match.
+export function looksEncryptedSignal(data) {
+  try {
+    const p = JSON.parse(data);
+    return !!p && typeof p === 'object'
+      && ((p.v === 5 && typeof p.msg === 'string') || (p.v === 4 && Array.isArray(p.i) && Array.isArray(p.d)));
+  } catch { return false; }
+}
+
+export function createCallSignal(D) {
+  const capsKnown = new Set(), proven = new Set();
+  function noteCaps(peerPub, caps) {
+    if (peerPub && Array.isArray(caps) && caps.includes('call-e2e')) capsKnown.add(peerPub);
+  }
+  async function wrap(peerPub, obj) {
+    if (!D.enabled()) return JSON.stringify(obj);
+    if (!peerPub) return null;
+    if (!capsKnown.has(peerPub) && !proven.has(peerPub)) return JSON.stringify(obj);
+    return await D.encryptFor(JSON.stringify(obj), peerPub);
+  }
+  async function unwrap(peerPub, data) {
+    try {
+      if (!D.enabled()) return JSON.parse(data);
+      if (!peerPub || typeof data !== 'string') return null;
+      if (looksEncryptedSignal(data)) {
+        const pt = await D.decryptFrom(data, peerPub).catch(() => null);
+        if (!pt) return null; // forged or corrupt ciphertext — dropped
+        proven.add(peerPub);
+        return JSON.parse(pt);
+      }
+      if (proven.has(peerPub)) return null; // proven peer, plaintext: forged or downgraded — dropped
+      return JSON.parse(data); // legacy peer: plaintext, as before the rollout
+    } catch(e) { _dbg(e, 'unwrapCallSignal'); return null; }
+  }
+  return { wrap, unwrap, noteCaps, hasProof: (p) => proven.has(p), knowsCaps: (p) => capsKnown.has(p) };
+}
+
+// D26 / ROADMAP C5 (the SAS half): a short authentication string both
+// call screens derive from the two DTLS fingerprints in the exchanged
+// SDPs. The fingerprints are sorted before hashing, so caller and
+// callee compute the SAME string from their mirrored local/remote
+// views; a relay-in-the-middle terminating DTLS twice presents a
+// different fingerprint pair on each leg, so the strings disagree and
+// reading them aloud exposes it. This does not close the signalling
+// TOFU window (a first-call attacker who also controls the first
+// key exchange is still out of scope) — it gives users the standard
+// out-of-band check, bound to the media path actually negotiated.
+const SAS_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'; // Crockford base32 — no I/L/O/U to misread aloud
+export function extractDtlsFingerprint(sdp) {
+  if (typeof sdp !== 'string') return null;
+  const m = sdp.match(/a=fingerprint:sha-256 ([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2})+)/);
+  return m ? m[1].replace(/:/g, '').toUpperCase() : null;
+}
+export async function computeCallSAS(localSdp, remoteSdp) {
+  const a = extractDtlsFingerprint(localSdp), b = extractDtlsFingerprint(remoteSdp);
+  if (!a || !b) return null;
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('breeze-call-sas-v1:' + [a, b].sort().join(':'))));
+  let out = '', acc = 0, bits = 0;
+  for (const byte of digest) {
+    acc = (acc << 8) | byte; bits += 8;
+    while (bits >= 5 && out.length < 8) { bits -= 5; out += SAS_ALPHABET[(acc >>> bits) & 31]; }
+    acc &= (1 << bits) - 1;
+    if (out.length >= 8) break;
+  }
+  return out.slice(0, 4) + '-' + out.slice(4);
+}
+
 export function createCallManager(D) {
-  const { _wrapCallSignal, _unwrapCallSignal, _signal, _signalAwait, relaySend, _intervals, _ac, _settings } = D;
+  const { _signal, _signalAwait, relaySend, _intervals, _ac, _settings } = D;
+  const _sig = createCallSignal({ encryptFor: D.encryptFor, decryptFrom: D.decryptFrom, enabled: () => CONFIG.CALL_E2E_SIGNAL });
+  const _wrapCallSignal = _sig.wrap, _unwrapCallSignal = _sig.unwrap;
+  // Call history (src/app/call-history.js): lifecycle events only, fed
+  // to the on-device recorder wired in index.html. Nothing here touches
+  // the signaling or crypto paths, and a missing/failing recorder can
+  // never break a call.
+  function _hist(kind, extra) {
+    try { const p = D.onCallEvent?.({ kind, ...extra }); if (p && typeof p.catch === 'function') p.catch(e => _dbg(e, 'call-hist')); }
+    catch(e) { _dbg(e, 'call-hist'); }
+  }
+  // Learn the peer's advertised caps before the first wrap of a call:
+  // the fetch starts while the mic prompt is up and is awaited before
+  // the offer is built, so a supporting peer is encrypted to from the
+  // very first signal. Failure leaves the peer unknown (legacy path).
+  async function _learnPeerCaps(contact) {
+    try { const byId = await D.fetchCaps([contact.id]); _sig.noteCaps(contact.pubB64, byId?.[contact.id] || []); }
+    catch(e) { _dbg(e, 'call-caps'); }
+  }
 
   let _callState = 'idle'; // idle | calling | ringing | connected
   let _callPC = null;
@@ -34,6 +132,10 @@ export function createCallManager(D) {
   function getCallICEConfig() {
     const cfg = {
       iceServers: [
+        // The relay's own STUN first (D10) — the same endpoint the Worker's
+        // TURN response leads with (_worker.js handleTurnCredentials), so a
+        // pre-credential call setup does not depend on third-party STUN.
+        { urls: 'stun:stun.cloudflare.com:3478' },
         { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
         { urls: 'stun:stun.services.mozilla.com' },
       ],
@@ -91,6 +193,7 @@ export function createCallManager(D) {
 
   async function startCall(contact, withVideo) {
     if (_callState !== 'idle' || !contact || contact.isGroup) return;
+    const capsReady = _learnPeerCaps(contact);
     _callContact = contact;
     _callState = 'calling';
     showCallUI('calling', contact.name, withVideo);
@@ -145,7 +248,9 @@ export function createCallManager(D) {
         if (_callPC.connectionState === 'connected' && _callState === 'calling') {
           _callState = 'connected';
           _callStartTime = Date.now();
+          _hist('connected', { ts: _callStartTime });
           updateCallUI('connected');
+          showCallSAS();
           _callTimerInterval = setInterval(updateCallTimer, MS.SEC);
         }
         if (_callPC.connectionState === 'disconnected' || _callPC.connectionState === 'failed') {
@@ -153,6 +258,7 @@ export function createCallManager(D) {
         }
       };
 
+      await capsReady;
       const offer = await _callPC.createOffer();
       await _callPC.setLocalDescription(offer);
 
@@ -160,6 +266,10 @@ export function createCallManager(D) {
       const offerSignal = await _wrapCallSignal(contact.pubB64, { sdp: offer, video: withVideo });
       if (offerSignal == null) { _dbg(null, 'call-offer encrypt failed'); endCall(); return; }
       await _signal(room, 'call-offer', offerSignal);
+      // The offer is on the wire — the call has actually started ringing
+      // the peer. (A mic denial above never reaches this line, so a call
+      // that never rang leaves no history record.)
+      _hist('start', { dir: 'out', contactId: contact.id, name: contact.name, video: !!withVideo, ts: Date.now() });
 
       // Also notify via msg relay (so recipient's poll detects the call)
       const callNotif = await _wrapCallSignal(contact.pubB64, { sdp: offer, video: withVideo });
@@ -179,6 +289,7 @@ export function createCallManager(D) {
   async function handleCallOffer(contact, offerData) {
     try {
       if (_callState !== 'idle') return; // busy
+      await _learnPeerCaps(contact);
       // Authenticate the offer before showing any ringing UI: when CALL_E2E_SIGNAL is ON a
       // forged/relay-injected offer fails to decrypt → null → silently ignored (no fake ring).
       const parsed = await _unwrapCallSignal(contact.pubB64, offerData);
@@ -186,6 +297,7 @@ export function createCallManager(D) {
       _callContact = contact;
       _callState = 'ringing';
       showCallUI('ringing', contact.name, parsed.video);
+      _hist('start', { dir: 'in', contactId: contact.id, name: contact.name, video: !!parsed.video, ts: Date.now() });
   
       // Store offer for when user accepts
       window._pendingCallOffer = { contact, sdp: parsed.sdp, video: parsed.video };
@@ -228,7 +340,9 @@ export function createCallManager(D) {
         if (_callPC.connectionState === 'connected') {
           _callState = 'connected';
           _callStartTime = Date.now();
+          _hist('connected', { ts: _callStartTime });
           updateCallUI('connected');
+          showCallSAS();
           _callTimerInterval = setInterval(updateCallTimer, MS.SEC);
         }
         if (_callPC.connectionState === 'disconnected' || _callPC.connectionState === 'failed') endCall();
@@ -253,7 +367,16 @@ export function createCallManager(D) {
 
   function endCall() {
     if (_callState === 'idle') return; // guard double-call
+    // History first, while the session state is intact: every exit path
+    // (local hangup, remote call-end, failure, ring timeout) funnels
+    // through here, and the recorder derives out/in/missed + duration
+    // from the events it saw.
+    _hist('end', { ts: Date.now() });
     if (_callStream) { _callStream.getTracks().forEach(t => t.stop()); _callStream = null; }
+    // Stage 6 step 3: sample the finished call's route/bytes BEFORE
+    // the pc closes (getStats on a closed pc rejects).
+    if (_callPC && _callStartTime) { try { D.noteCallSample?.(_callPC, Math.floor((Date.now() - _callStartTime) / 1000)); } catch(e) { _dbg(e); } }
+    _callStartTime = 0;
     if (_callPC) { try { _callPC.close(); } catch(e) { _dbg(e); } _callPC = null; }
     // Null srcObject before removing elements — without this, the browser keeps a
     // live MediaStream reference on the detached DOM nodes, leaving the camera/mic
@@ -323,6 +446,9 @@ export function createCallManager(D) {
     const timerEl = document.createElement('div');
     timerEl.className = 'call-timer'; timerEl.id = 'call-timer'; timerEl.textContent = '00:00';
 
+    const sasEl = document.createElement('div');
+    sasEl.className = 'call-timer hidden'; sasEl.id = 'call-sas';
+
     const video = document.createElement('video');
     video.id = 'call-remote-video'; video.className = 'call-video hidden';
     video.autoplay = true; video.playsInline = true;
@@ -356,7 +482,7 @@ export function createCallManager(D) {
       secondary.appendChild(camBtn);
     }
 
-    overlay.append(stateEl, nameEl, timerEl, video, audio, actions, secondary);
+    overlay.append(stateEl, nameEl, timerEl, sasEl, video, audio, actions, secondary);
     document.body.appendChild(overlay);
   }
 
@@ -366,6 +492,18 @@ export function createCallManager(D) {
       if (state === 'connected') el.textContent = t('uiConnected');
       else if (state === 'connecting') el.textContent = t('uiConnecting');
     }
+  }
+
+  // D26: fill the SAS row once both descriptions exist (connected).
+  // Both sides derive the identical string (computeCallSAS sorts the
+  // fingerprints), so the users can read it aloud and compare.
+  async function showCallSAS() {
+    try {
+      const el = _DOM.get('call-sas');
+      if (!el || !_callPC) return;
+      const sas = await computeCallSAS(_callPC.localDescription?.sdp, _callPC.remoteDescription?.sdp);
+      if (sas) { el.textContent = t('callSasLabel') + ': ' + sas; el.classList.remove('hidden'); }
+    } catch(e) { _dbg(e, 'call-sas'); }
   }
 
   function updateCallTimer() {

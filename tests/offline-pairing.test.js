@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createOfflinePairing, createInviteCodec, packInvite, unpackInvite, pairingFingerprint, makePairMaterial } from '../src/app/offline-pairing.js';
 import { canonical } from '../src/app/rendezvous.js';
-import { pairingPreKeyMatches } from '../src/crypto/ratchet.js';
+import { pairingPreKeyMatches, padBucketSize } from '../src/crypto/ratchet.js';
 import { createPQSessionHelper } from '../src/crypto/pqxdh.js';
 
 const MS = { MIN: 60000, WEEK: 604800000 };
@@ -28,8 +28,8 @@ async function device(pq = true) {
   };
   const api = vi.fn(() => { throw new Error('Unexpected relay request'); });
   const CONFIG = { X3DH_V5_ENABLED: true, PQXDH_ENABLED: pq, PREFERRED_CURVE: 'X25519', HKDF_HASH: 'SHA-256', IV_BYTES: 12, MSG_PAD_BOUNDARY: 256, REPLAY_CACHE_SIZE: 200, SESSION_RESET_THRESHOLD: 3 };
-  const R = new Function('CONFIG', '_hasX25519', '_hasEd25519', 'dbGet', 'dbPut', 'myKeys', 'myPubB64', 'API', '_dbg', 'arr', 'u8', 'bufToB64', 'zeroBuffer', 'workerCrypto', 'timingSafeEqual', 'MS', 'postAPIRaw', inline + '\nreturn { initSessionV5Initiator, saveSession, getSession, encryptFor, decryptFrom, _withPeerLock, pairingPreKeyMatches };')(
-    CONFIG, true, true, get, put, ik, pub, null, (...e) => errors.push(e), Array.from, x => new Uint8Array(x), b64, () => {}, async () => null, async (a, b) => a === b, MS, api,
+  const R = new Function('CONFIG', '_hasX25519', '_hasEd25519', 'dbGet', 'dbPut', 'myKeys', 'myPubB64', 'API', '_dbg', 'arr', 'u8', 'bufToB64', 'zeroBuffer', 'workerCrypto', 'timingSafeEqual', 'MS', 'postAPIRaw', '_padBucketSize', '_settings', inline + '\nreturn { initSessionV5Initiator, saveSession, getSession, encryptFor, decryptFrom, _withPeerLock, pairingPreKeyMatches };')(
+    CONFIG, true, true, get, put, ik, pub, null, (...e) => errors.push(e), Array.from, x => new Uint8Array(x), b64, () => {}, async () => null, async (a, b) => a === b, MS, api, padBucketSize, { ktBlockOnTamper: false },
   );
   const D = { MS, me: () => pub, sigPub: () => sigPub, name: () => 'Sample <name>', caps: () => ['x3dh-v5', ...(pq ? ['pqxdh'] : [])], signRaw, sign, verify,
     get, put, remove: async (s, id) => store.delete(s + ':' + id), contacts: async () => [...store].filter(([k]) => k.startsWith('contacts:')).map(([, v]) => structuredClone(v)),

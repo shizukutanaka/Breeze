@@ -7,7 +7,10 @@
 #
 # Produces in <output-dir>:
 #   breeze-<version-label>.zip   the deployable unit (layout below)
-#   SHA256SUMS.txt               "<sha256>  breeze-<version-label>.zip"
+#   SHA256SUMS.txt               one "<sha256>  <name>" line per file in the
+#                                output dir (tools/release-checksums.sh);
+#                                the release workflow's checksums job later
+#                                regenerates it over the full asset set
 #
 # What the ZIP is (and is not):
 #   The repository has two documented ways to run a relay on your own
@@ -124,7 +127,7 @@ OUT_ABS="$(cd "$OUT" && pwd)"
 rm -f "$OUT_ABS/$ZIP_NAME" "$OUT_ABS/SHA256SUMS.txt"
 ( cd "$APP" && find . -type f | LC_ALL=C sort | sed 's|^\./||' | zip -q -X "$OUT_ABS/$ZIP_NAME" -@ )
 
-( cd "$OUT_ABS" && sha256sum "$ZIP_NAME" > SHA256SUMS.txt )
+bash "$ROOT/tools/release-checksums.sh" "$OUT_ABS"
 
 echo "✓ $OUT_ABS/$ZIP_NAME ($(du -h "$OUT_ABS/$ZIP_NAME" | cut -f1), $(unzip -Z1 "$OUT_ABS/$ZIP_NAME" | wc -l) files)"
 echo "✓ $OUT_ABS/SHA256SUMS.txt: $(cat "$OUT_ABS/SHA256SUMS.txt")"

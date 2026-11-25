@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { makeEnv, apiRequest } from './helpers/mockKV.js';
 import { makeDOEnv } from './helpers/mockDO.js';
-import { mailboxStore, handleSealedSend } from '../_worker.js';
+import { mailboxStore, handleSealedSend, handleMsgSend } from '../_worker.js';
 
 // Fair-use usage quota (2026-11-14; docs/COST_MODEL.md §10, the "API
 // model" cost policy): per-mailbox day/month deposit budgets on the
@@ -20,13 +20,14 @@ import { mailboxStore, handleSealedSend } from '../_worker.js';
 // duplicate on retry.
 beforeEach(() => {
   globalThis._sealedDedup = new Map();
+  globalThis._msgDedup = new Map();
 });
 
 const req = (b) => apiRequest('/api/sealed/x', b);
 const env_i = (i) => `E${String(i).padStart(4, '0')}-${'x'.repeat(40)}`;
 const dayKey = () => new Date().toISOString().slice(0, 10);
 const monthKey = () => dayKey().slice(0, 7);
-const usageOf = (env, id) => env.MAILBOX_DO.instances.get(id).state.storage.map.get('usage');
+const usageOf = (env, id) => env.MAILBOX_DO.instances.get(id).state.storage.map.get('gate')?.usage; // D31: usage rides in the gate record
 const storageOf = (env, id) => env.MAILBOX_DO.instances.get(id).state.storage.map;
 
 describe('MailboxStore.checkDeposit usage quota (DO-backed)', () => {
@@ -53,7 +54,7 @@ describe('MailboxStore.checkDeposit usage quota (DO-backed)', () => {
     // The denial recorded nothing: usage stays at the cap, and the
     // frequency log did not gain an entry either.
     expect(usageOf(env, 'user42').dc).toBe(3);
-    expect(storageOf(env, 'user42').get('deposits').length).toBe(3);
+    expect(storageOf(env, 'user42').get('gate')?.log.length).toBe(3);
   });
 
   it('denies past the monthly cap even when the daily window is clear', async () => {
@@ -74,6 +75,7 @@ describe('MailboxStore.checkDeposit usage quota (DO-backed)', () => {
     const env = makeDOEnv({ USAGE_QUOTA_DAILY: '5' });
     const mb = mailboxStore(env, 'sealed', 'user42');
     await mb.checkDeposit(); // materialise the instance
+    storageOf(env, 'user42').delete('gate'); // model a pre-fold mailbox: legacy row only (D31 dual-read)
     storageOf(env, 'user42').set('usage', { d: dayKey(), dc: 5, m: monthKey(), mc: 5 });
     const denied = await mb.checkDeposit();
     expect(denied.ok).toBe(false);
@@ -84,6 +86,7 @@ describe('MailboxStore.checkDeposit usage quota (DO-backed)', () => {
     const env = makeDOEnv({ USAGE_QUOTA_DAILY: '5', USAGE_QUOTA_MONTHLY: '500' });
     const mb = mailboxStore(env, 'sealed', 'user42');
     await mb.checkDeposit(); // materialise the instance
+    storageOf(env, 'user42').delete('gate'); // model a pre-fold mailbox: legacy row only (D31 dual-read)
     const y = new Date(Date.now() - 86400000);
     const yDay = y.toISOString().slice(0, 10);
     storageOf(env, 'user42').set('usage', {
@@ -106,8 +109,10 @@ describe('MailboxStore.checkDeposit usage quota (DO-backed)', () => {
     const mb = mailboxStore(env, 'sealed', 'user42');
     await mb.checkDeposit(); // materialise + one admitted deposit
     const now = Date.now();
-    storageOf(env, 'user42').set('deposits',
-      Array.from({ length: 120 }, (_, i) => now - 1000 + i));
+    storageOf(env, 'user42').set('gate', {
+      log: Array.from({ length: 120 }, (_, i) => now - 1000 + i),
+      usage: { d: dayKey(), dc: 1, m: monthKey(), mc: 1 },
+    });
     const denied = await mb.checkDeposit();
     expect(denied.ok).toBe(false);
     expect(denied.quotaExceeded).toBeUndefined();
@@ -131,7 +136,7 @@ describe('MailboxStore.checkDeposit usage quota (DO-backed)', () => {
     const env = makeDOEnv({ USAGE_QUOTA_ENABLED: 'false', USAGE_QUOTA_DAILY: '1' });
     const mb = mailboxStore(env, 'sealed', 'user42');
     for (let i = 0; i < 5; i++) expect(await mb.checkDeposit()).toEqual({ ok: true });
-    expect(usageOf(env, 'user42')).toBeUndefined();
+    expect(usageOf(env, 'user42')).toBeNull(); // D31: gate record exists, its usage slot stays empty
   });
 
   it('an unparseable limit falls back to the defaults instead of blocking', async () => {
@@ -187,5 +192,41 @@ describe('handleSealedSend usage quota', () => {
       const res = await handleSealedSend({ to: 'quotatgt1', envelope: env_i(i) }, env, req({}));
       expect(res.status).toBe(200);
     }
+  });
+});
+
+describe('handleMsgSend deposit gate and usage quota parity', () => {
+  const msgReq = (b) => apiRequest('/api/msg/send', b);
+
+  it('DO backend: handleMsgSend enforces USAGE_QUOTA and shares the mailbox counter with handleSealedSend', async () => {
+    const env = makeDOEnv({ USAGE_QUOTA_DAILY: '2' });
+    // Spend 1 deposit via sealed, 1 via plain msg/send → 2/2 daily budget used
+    expect((await handleSealedSend({ to: 'quotatgt2', envelope: env_i(0) }, env, req({}))).status).toBe(200);
+    expect((await handleMsgSend({ to: 'quotatgt2', from: 'sender001', payload: env_i(1) }, '198.51.100.1', env, msgReq({}))).status).toBe(200);
+    // Third deposit via plain msg/send must be rejected (cannot bypass quota)
+    const denied = await handleMsgSend({ to: 'quotatgt2', from: 'sender001', payload: env_i(2) }, '198.51.100.1', env, msgReq({}));
+    expect(denied.status).toBe(429);
+    const body = await denied.json();
+    expect(body.code).toBe('USAGE_QUOTA_EXCEEDED');
+    expect(body.quotaScope).toBe('daily');
+    expect(body.quotaLimit).toBe(2);
+    expect(body.retryAfter).toBeGreaterThanOrEqual(1);
+    // Retrying the identical denied payload must NOT be swallowed as dedup:true
+    const retry = await handleMsgSend({ to: 'quotatgt2', from: 'sender001', payload: env_i(2) }, '198.51.100.1', env, msgReq({}));
+    expect(retry.status).toBe(429);
+    expect((await retry.json()).code).toBe('USAGE_QUOTA_EXCEEDED');
+  });
+
+  it('DO backend: handleMsgSend enforces DEPOSIT_LIMIT (MAILBOX_RATE_LIMITED)', async () => {
+    const env = makeDOEnv({ USAGE_QUOTA_ENABLED: 'false' });
+    for (let i = 0; i < 120; i++) {
+      const res = await handleMsgSend({ to: 'ratetgt01', from: 'sender001', payload: env_i(i) }, '198.51.100.1', env, msgReq({}));
+      expect(res.status).toBe(200);
+    }
+    const denied = await handleMsgSend({ to: 'ratetgt01', from: 'sender001', payload: env_i(120) }, '198.51.100.1', env, msgReq({}));
+    expect(denied.status).toBe(429);
+    const body = await denied.json();
+    expect(body.code).toBe('MAILBOX_RATE_LIMITED');
+    expect(body.retryAfter).toBeGreaterThanOrEqual(1);
   });
 });

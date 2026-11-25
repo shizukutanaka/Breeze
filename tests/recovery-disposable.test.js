@@ -1,23 +1,28 @@
-// Recovery modes — the disposable mode (docs/IDENTITY_RECOVERY_PLAN.md
-// §5, the second of the owner's three recovery modes, 2026-11-14).
+// Recovery modes — the disposable mode's REMOVAL (2026-11-25) and the
+// read-side protection that stays for identities created with it.
+//
+// History: the disposable mode (docs/IDENTITY_RECOVERY_PLAN.md §5) was
+// the second of the owner's three recovery modes: creation skipped the
+// phrase, used random keys, and recorded recoveryMode: 'none'. The owner
+// removed the creation entry — new identities are never offered it.
 //
 // What is pinned here, executing the REAL index.html functions sliced
 // against a mock IDB (the recovery-seed.test.js pattern):
-//   1. Disposable creation shows NO phrase (the phrase dialog is never
-//      invoked), plants NO derived signing record, keys are freshly
-//      random per creation, and the keys record carries
-//      recoveryMode: 'none'.
-//   2. The default creation path (no disposable flag, or false) is the
+//   1. Creation never writes 'none' any more: no setup-screen entry, no
+//      handler, and createIdentity's record spread has no 'none' arm.
+//      The one-tap 'random' start (the entry that replaced it) uses the
+//      same random generation, shows no phrase, and records NO mode —
+//      modeless, so the identity stays backup/kit-eligible, unlike the
+//      old disposable opt-out.
+//   2. The default creation path (no flag, or false) is still the
 //      phrase path, unchanged: phrase shown once, mode 'phrase'.
-//   3. A disposable identity is refused a recovery kit — with the
-//      dedicated toast, no phrase minted, no file downloaded — while a
-//      legacy (modeless) identity still gets one (control).
-//   4. Wiring: the setup screen's disposable entry exists and reaches
-//      creation ONLY through the no-recovery confirmation; the default
-//      button passes disposable=false; /security renders the recorded
-//      mode; the kit guard reads the record.
+//   3. EXISTING data is untouched by the removal: an identity record
+//      that already carries recoveryMode: 'none' is still refused a
+//      recovery kit — with the dedicated toast, no phrase minted, no
+//      file downloaded — while a legacy (modeless) identity still gets
+//      one (control). /security still renders the recorded mode.
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createSeedHelper } from '../src/crypto/seed.js';
@@ -88,20 +93,20 @@ function buildCreate(db, { promptAnswer = 'drill-pass', api = null } = {}) {
     slice('async function createIdentity(name, alias, disposable', '// DOUBLE RATCHET CRYPTO ENGINE'),
   ].join('\n');
   const factory = new Function('db', '_dbg', 'showToast', 't', '_hasX25519', '_hasEd25519',
-    '_promptRecoveryPhraseNew', 'genIdentityKey', 'dbPut', 'auditLog', 'generateShortId', 'localStorage', 'API',
+    '_promptRecoveryPhraseNew', 'genIdentityKey', 'dbPut', 'auditLog', 'generateShortId', 'localStorage', 'API', '_initMsgStoreKey',
     src + '; return { createIdentity, get: () => ({ myPubB64, myId }) };');
   const api2 = factory(
     db, () => {}, (msg, type) => { toasts.push({ msg, type }); }, (k) => k, true, true,
     async (phrase) => { shown.calls++; shown.phrase = phrase; return promptAnswer; },
     async () => crypto.subtle.generateKey({ name: 'X25519' }, true, ['deriveBits']),
-    dbPutInto(db), () => {}, async () => 'breeze-test-test', { setItem() {} }, api,
+    dbPutInto(db), () => {}, async () => 'breeze-test-test', { setItem() {} }, api, async () => true,
   );
   return { ...api2, toasts, shown };
 }
 
-// Build the real createRecoveryKit out of index.html (the slice runs
-// through resolveAndAdd, so it also carries restoreFromPhrase and its
-// stubs — the recovery-seed.test.js buildRestoreFns pattern).
+// Build the real createRecoveryKit out of src/app/backup.js (the slice
+// runs through restoreFromPhrase and its stubs — the
+// recovery-seed.test.js buildRestoreFns pattern).
 function buildKit(db, { promptNewAnswer = 'kit-pass' } = {}) {
   const toasts = [];
   const downloads = [];
@@ -133,27 +138,28 @@ function buildKit(db, { promptNewAnswer = 'kit-pass' } = {}) {
   return { ...api2, toasts, downloads, shown };
 }
 
-describe('disposable creation — no phrase, random keys, mode recorded', () => {
-  it('creates a random identity labelled none, without ever showing a phrase', async () => {
+describe('random creation (the one-tap start) — random keys, no phrase, NO mode recorded', () => {
+  it('creates a random identity without ever showing a phrase, and leaves the record modeless', async () => {
     const db = mockDb();
     const create = buildCreate(db);
-    expect(await create.createIdentity('Throwaway', '', true)).toBe(true);
+    expect(await create.createIdentity('Quick Start', '', 'random')).toBe(true);
     // The phrase step was skipped entirely: dialog never invoked.
     expect(create.shown.calls).toBe(0);
     expect(create.shown.phrase).toBeNull();
     const keysRec = db._stores.identity.get('keys');
-    expect(keysRec.recoveryMode).toBe('none');
+    // Modeless — NOT 'none'. A modeless record stays eligible for a
+    // backup / recovery kit; 'none' was the removed permanent opt-out.
+    expect(keysRec.recoveryMode).toBeUndefined();
     expect(keysRec.pubB64).toBe(create.get().myPubB64);
-    // No seed-derived signing record was planted (initSigning mints a
-    // random one later in the real flow — derivation never happened).
+    // No seed-derived signing record was planted.
     expect(db._stores.identity.get('signing')).toBeUndefined();
   });
 
-  it('two disposable creations produce different keys (random, not derived)', async () => {
+  it('two random creations produce different keys (random, not derived)', async () => {
     const a = buildCreate(mockDb());
     const b = buildCreate(mockDb());
-    expect(await a.createIdentity('One', '', true)).toBe(true);
-    expect(await b.createIdentity('Two', '', true)).toBe(true);
+    expect(await a.createIdentity('One', '', 'random')).toBe(true);
+    expect(await b.createIdentity('Two', '', 'random')).toBe(true);
     expect(a.get().myPubB64).not.toBe(b.get().myPubB64);
   });
 
@@ -170,7 +176,7 @@ describe('disposable creation — no phrase, random keys, mode recorded', () => 
   });
 });
 
-describe('disposable identities are outside the recovery kit', () => {
+describe('existing disposable identities are outside the recovery kit (unchanged read side)', () => {
   it('refuses the kit with the dedicated toast — no phrase, no download', async () => {
     const db = mockDb();
     db._stores.identity.set('keys', { pubB64: 'AAAA', name: 'Throwaway', recoveryMode: 'none' });
@@ -191,47 +197,54 @@ describe('disposable identities are outside the recovery kit', () => {
   });
 });
 
-describe('disposable mode — wiring pins', () => {
-  it('the setup screen offers the disposable entry next to the phrase entry', () => {
+describe('disposable mode — removal pins', () => {
+  it('the setup screen offers no disposable entry, and no handler reaches creation with it', () => {
     const setup = slice('<div id="msg-setup"', '<!-- Main UI -->');
-    expect(setup).toContain('id="b-msg-setup-none"');
-    expect(setup).toContain('data-i18n="setupDisposable"');
+    expect(setup).not.toContain('b-msg-setup-none');
+    expect(setup).not.toContain('setupDisposable');
+    expect(html).not.toContain("_DOM.get('b-msg-setup-none')");
+    expect(html).not.toContain('_runSetupCreate(true)');
+    expect(html).not.toContain("t('disposableTitle')");
   });
 
-  it('creation runs through one flow: default passes false, disposable only behind the confirmation', () => {
-    expect(html).toContain("if (!await createIdentity(name, alias, disposable)) return;");
-    expect(html).toContain("_DOM.get('b-msg-setup')?.addEventListener('click', () => { _runSetupCreate(false); }, { signal: _ac.signal });");
-    const reg = slice("_DOM.get('b-msg-setup-none')?.addEventListener", "_DOM.get('b-msg-setup-restore')?.addEventListener");
-    expect(reg).toContain('showConfirm');
-    expect(reg).toContain("t('disposableTitle')");
-    expect(reg).toContain("t('disposableDesc')");
-    expect(reg).toContain('_runSetupCreate(true)');
-    // The confirmation is a gate, not a decoration: _runSetupCreate(true)
-    // appears exactly once in the file, inside that gated handler.
-    expect(html.split('_runSetupCreate(true)')).toHaveLength(2);
+  it("createIdentity's record never writes 'none' any more", () => {
+    const fn = slice('async function createIdentity(name, alias, disposable', '// DOUBLE RATCHET CRYPTO ENGINE');
+    expect(fn).not.toContain("recoveryMode: 'none'");
+    expect(fn).toContain("seedMat ? { recoveryMode: 'phrase' } : {}");
   });
 
-  it('/security renders the recorded recovery mode', () => {
-    expect(html).toContain("_identRec?.recoveryMode === 'none'");
-    expect(html).toContain("t('secRecoveryNone')");
-    expect(html).toContain("t('secRecoveryPhrase')");
-    expect(html).toContain("t('secRecoveryLegacy')");
+  it('/security still renders the recorded recovery mode (existing records)', () => {
+    const panels = readFileSync(new URL('../src/app/info-panels.js', import.meta.url), 'utf8');
+    expect(panels).toContain("_identRec?.recoveryMode === 'none'");
+    expect(panels).toContain("D.t('secRecoveryNone')");
+    expect(panels).toContain("D.t('secRecoveryPhrase')");
+    expect(panels).toContain("D.t('secRecoveryLegacy')");
   });
 
-  it('the kit guard reads the identity record', () => {
+  it('the kit guard still reads the identity record (existing records)', () => {
     const kit = sliceBackup('async function createRecoveryKit()', 'async function restoreFromPhrase');
     expect(kit).toContain("identity.recoveryMode === 'none'");
     expect(kit).toContain("t('toastRecoveryNoneKit')");
   });
 
-  it('all new i18n keys exist in EN (inline) and JA (locales/ja.json)', () => {
-    const keys = ['setupDisposable', 'disposableTitle', 'disposableDesc', 'disposableOk',
-      'toastRecoveryNoneKit', 'secLblRecovery', 'secRecoveryPhrase', 'secRecoveryNone', 'secRecoveryLegacy'];
-    for (const k of keys) {
+  it('the creation-entry i18n keys are gone everywhere; the read-side keys remain', () => {
+    const removed = ['setupDisposable', 'disposableTitle', 'disposableDesc', 'disposableOk'];
+    for (const k of removed) {
+      expect(html, `EN still defines ${k}`).not.toContain(`${k}:`);
+      expect(ja[k], `JA still defines ${k}`).toBeUndefined();
+    }
+    const kept = ['toastRecoveryNoneKit', 'toastRecoveryNoneBackup', 'secLblRecovery', 'secRecoveryPhrase', 'secRecoveryNone', 'secRecoveryLegacy'];
+    for (const k of kept) {
       expect(html, `EN missing ${k}`).toContain(`${k}:`);
       expect(typeof ja[k], `JA missing ${k}`).toBe('string');
       expect(ja[k].length).toBeGreaterThan(0);
     }
-    expect(ja.setupDisposable).toBe('使い捨て身元（復旧不可）');
+    // Key sets stay consistent across every locale file: no locale may
+    // still carry a removed key, and every locale carries the kept ones.
+    for (const f of readdirSync(join(HERE, '..', 'locales')).filter(x => x.endsWith('.json'))) {
+      const loc = JSON.parse(readFileSync(join(HERE, '..', 'locales', f), 'utf8'));
+      for (const k of removed) expect(loc[k], `${f} still defines ${k}`).toBeUndefined();
+      for (const k of kept) expect(typeof loc[k], `${f} missing ${k}`).toBe('string');
+    }
   });
 });

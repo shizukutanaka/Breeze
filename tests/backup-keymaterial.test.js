@@ -329,8 +329,14 @@ describe('backup key material — wiring pins', () => {
     // file must never become a recovery artefact). The asymmetry IS
     // the pin: a future change that lets the contacts payload collect
     // key material moves the first count and fails here.
-    expect(backupMod.match(/_collectBackupKeyMaterial\(\)/g)).toHaveLength(5); // def + file + cloud + recovery kit + simple
+    // Updated by feat/auto-backup-migration: _autoUploadCloud is a
+    // FIFTH producer — createCloudBackup's payload twin, driven by
+    // the change scheduler instead of the button — so the collect and
+    // backupV counts rise to 6. The restore count deliberately does
+    // NOT move: the post-recovery auto-restore consumes through
+    // _applySimplePayload, the existing fourth consumer.
+    expect(backupMod.match(/_collectBackupKeyMaterial\(\)/g)).toHaveLength(6); // def + file + cloud + recovery kit + simple + auto cloud
     expect(backupMod.match(/_restoreBackupKeyMaterial\(data\.keyMaterial\)/g)).toHaveLength(4);
-    expect(backupMod.match(/backupV: BACKUP_FORMAT_V/g)).toHaveLength(5); // file + cloud + kit + simple + contacts-only (step 6, no keyMaterial)
+    expect(backupMod.match(/backupV: BACKUP_FORMAT_V/g)).toHaveLength(6); // file + cloud + kit + simple + contacts-only (step 6, no keyMaterial) + auto cloud
   });
 });

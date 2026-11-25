@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { createRatchet } from '../src/crypto/ratchet.js';
+import { createRatchet, padBucketSize } from '../src/crypto/ratchet.js';
 import { createPQSessionHelper } from '../src/crypto/pqxdh.js';
 import { mintPQPreKey } from '../src/crypto/pqkey.js';
 
@@ -56,6 +56,8 @@ async function world({ keys, contact, bundles = [], spk, pqSeed, pq = false } = 
     playNotif() {}, Notification: undefined, announceToSR() {}, appendMsg() {}, showSmartReplies() {},
     _renderContactsThrottled() {}, broadcastToTabs() {}, _myOtherDevices: async () => [],
     _focusActive: () => false, _attribDevCache: new Map(),
+    _padBucketSize: padBucketSize, // D02: the inline encrypt path resolves the bucket helper as a free variable
+    _settings: { ktBlockOnTamper: false }, // D05: initSessionV5Initiator reads the opt-in KT block flag
   };
   const api = new Function('D', `with (D) {
     ${cryptoSource}
@@ -191,7 +193,10 @@ describe('deployed bootstrap identity binding', () => {
       sig: 'signature', sigPub: 'signing-key' };
     const textSource = slice('      // v3.3: Verify Ed25519 signature if present.', "      await dbPut('messages', { msgId, contactId, text, mine: false");
     await new Function('D', 'msg', 'contact', `with(D) { return (async () => {
-      const text = 'signed text', meta = {}, _attribPub = null, contactId = contact.id;
+      // _frank mirrors the production local declared just above the slice
+      // (const _frank = {} before decryptFrom); the D08 AMF check inside the
+      // sliced region reads it. Empty = this message carries no franking tag.
+      const text = 'signed text', meta = {}, _attribPub = null, contactId = contact.id, _frank = {};
       ${textSource}
     })(); }`)(w.D, msg, w.records.contacts.get(f.aContact.id));
     expect(w.records.contacts.get(f.aContact.id).sigPub).toBe(verified === true ? 'signing-key' : undefined);

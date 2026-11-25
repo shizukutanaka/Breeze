@@ -88,6 +88,11 @@ const envWith = (id, extra = {}) => makeEnv({
 });
 
 // ─── Extraction harness (the step-4/5 pattern) ───────────────────
+// D05: the genuine inline _ktHeadC (a one-line const in index.html), extracted
+// verbatim so the world below runs the shipped pin logic, not a copy.
+const _ktHeadCInline = new Function(
+  INDEX.split('\n').find(l => l.includes('const _ktHeadC =')) + '\nreturn _ktHeadC;')();
+
 function sliceBetween(startMarker, endMarker) {
   const start = INDEX.indexOf(startMarker);
   const end = INDEX.indexOf(endMarker);
@@ -170,7 +175,7 @@ function buildWorld({ fetchT, settings = {}, origin = ORIGIN, api = API, stubs =
     'renderContacts', '_signalAuth', '_auditKeyHistory', '_auditKeyTransparency',
     'showKeyChangeWarning', 'genRatchetKey', '_x3dhInitiator', 'ecdhBits', 'hkdf', 'myKeys',
     '_hasEd25519', '_signingKey', '_signingPubB64', 'updateMsgStatus', 'registerBackgroundSync',
-    '_updateOutboxBadge', 'setTimeout', '_peerSealV2', '_saveRetryQueue',
+    '_updateOutboxBadge', 'setTimeout', '_peerSealV2', '_saveRetryQueue', '_ktHeadC',
     `let _retryTimer = null;
      const _retryQueue = [];
      const _isOffline = false;
@@ -221,6 +226,7 @@ function buildWorld({ fetchT, settings = {}, origin = ORIGIN, api = API, stubs =
     (fn) => { capturedTimer = fn; return 1; },
     async () => false,
     () => { calls.retrySaves++; },
+    _ktHeadCInline,
   );
   return {
     ...world, gate: gate._relayPinGate, postAPIRaw: gate.postAPIRaw, settings, calls, stores,
@@ -549,8 +555,8 @@ describe('client — redundant deposit at the contact\u2019s home relays', () =>
     const mb = mailboxStore(envC, 'sealed', PEER_ID);
     await mb.checkDeposit();
     const now = Date.now();
-    envC.MAILBOX_DO.instances.get(PEER_ID).state.storage.map.set('deposits',
-      Array.from({ length: 120 }, (_, i) => now - 59000 + i * 400));
+    envC.MAILBOX_DO.instances.get(PEER_ID).state.storage.map.set('gate',
+      { log: Array.from({ length: 120 }, (_, i) => now - 59000 + i * 400), usage: null }); // D31: log rides in the gate record
     await w.relaySend(PEER_ID, payload(1700000000010), null);
     expect(sealedPosts(log, B_API)).toHaveLength(1); // B unaffected
     expect(w.calls.delivered).toEqual([{ ts: 1700000000010, status: 'deposited' }]); // B's ack counts (as a deposit)

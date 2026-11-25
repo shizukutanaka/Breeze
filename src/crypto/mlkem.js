@@ -5,8 +5,9 @@
 // post-quantum key agreement. The KEM is INJECTED into pq.js's combiner and
 // must never be hand-rolled, so this module is a pinned, verbatim copy of the
 // vetted upstream implementation — the same code the ecosystem ships —
-// vendored into this repo's single-module shape. It is reference-only:
-// nothing deployed imports it yet (the inline copy lands in stage 3 step 5).
+// vendored into this repo's single-module shape. It is DEPLOYED since
+// stage 3 (session use step 5): index.html runtime-imports it as an ESM
+// module — never inlined — and pq.js's combiner uses it via pqxdh.js.
 //
 // PROVENANCE AND SUPPLY-CHAIN VERIFICATION (checked at vendoring time,
 // 2026-11-14, against the npm registry AND the tarballs actually used):

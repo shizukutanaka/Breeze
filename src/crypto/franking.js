@@ -18,10 +18,19 @@
 //     (HMAC is hiding under a secret key).
 //
 // HMAC is a secure commitment for franking (binding via collision-resistance,
-// hiding via PRF). This is the symmetric core; for Breeze's SEALED SENDER, bind
-// the sender too via asymmetric franking / Hecate (see CRYPTO-SPEC §9 N4).
+// hiding via PRF). That is the symmetric core; the AMF extension below binds
+// the SENDER too (Tyagi et al., Asymmetric Message Franking, CRYPTO 2019 —
+// the sender-binding half of the Hecate model, CRYPTO-SPEC §6a): the sender's
+// Ed25519 identity key signs the commitment context, and the tag travels
+// INSIDE the E2E payload next to the opening, so the relay learns nothing
+// new at send time and un-reported messages keep their deniability. The tag
+// becomes verifiable only at report time, when the relay re-checks it
+// against the sender's registered identity key: a verified report then
+// attributes the message to that sender, and a sender who committed to a
+// different message than the one delivered is caught by the recipient's own
+// check (the commitment is recomputed from the received plaintext).
 // ============================================================================
-import { arr, u8, toBytes, ctEqual } from './bytes.js';
+import { arr, u8, toBytes, ctEqual, b64 } from './bytes.js';
 
 export function createFranking(opts = {}) {
   const subtle = opts.subtle || globalThis.crypto.subtle;
@@ -63,7 +72,46 @@ export function createFranking(opts = {}) {
     return verify(message, recordedCommitment, opening);
   }
 
-  return { commit, verify, verifyReport, _hmac: hmac, ctEqual };
+  // --- AMF extension (D08): sender binding ---------------------------------
+  // The canonical string every side signs/verifies byte-identically. The
+  // commitment enters in its base64 wire form (the string the relay records),
+  // so the tag binds exactly the value a report is checked against.
+  const AMF_DOMAIN = 'breeze-amf-v1';
+  function amfMessage(frankId, commitmentB64) {
+    return `${AMF_DOMAIN}:${frankId}:${commitmentB64}`;
+  }
+
+  // Sender side: sign the commitment context with the Ed25519 identity
+  // signing key. Returns the signature as a byte array (arr() convention).
+  async function amfSign(signKey, frankId, commitmentB64) {
+    const sig = await subtle.sign({ name: 'Ed25519' }, signKey, toBytes(amfMessage(frankId, commitmentB64)));
+    return arr(new Uint8Array(sig));
+  }
+
+  // Verify an AMF tag under the sender's raw Ed25519 identity public key.
+  // Used by the recipient at receipt time (against the commitment recomputed
+  // from the received plaintext) and by the relay at report time (against
+  // the recorded commitment). Fails CLOSED (false, never throws), like
+  // verify() above: every input here is peer- or reporter-supplied.
+  async function amfVerify(senderPubRaw, sig, frankId, commitmentB64) {
+    if (senderPubRaw == null || sig == null || !frankId || !commitmentB64) return false;
+    try {
+      const pub = await subtle.importKey('raw', u8(senderPubRaw), { name: 'Ed25519' }, false, ['verify']);
+      return await subtle.verify({ name: 'Ed25519' }, pub, u8(sig), toBytes(amfMessage(frankId, commitmentB64)));
+    } catch { return false; }
+  }
+
+  // Relay-side AMF report verification: the HMAC opening must match the
+  // recorded commitment AND the tag must be the claimed sender's signature
+  // over that same commitment. Either half failing rejects the report as
+  // unbound — the first stops forged content, the second stops forged
+  // attribution and binds a genuine sender to the reported message.
+  async function verifyAmfReport({ message, opening, recordedCommitment, frankId, sig, senderPub }) {
+    if (!await verify(message, recordedCommitment, opening)) return false;
+    return amfVerify(senderPub, sig, frankId, b64(u8(recordedCommitment)));
+  }
+
+  return { commit, verify, verifyReport, amfMessage, amfSign, amfVerify, verifyAmfReport, _hmac: hmac, ctEqual };
 }
 
 export default createFranking;

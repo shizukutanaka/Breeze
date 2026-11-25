@@ -144,6 +144,18 @@ describe('simple-mode worker endpoints (BACKUP_STORAGE_ENABLED opt-in)', () => {
     expect(JSON.parse(await e.KV.get(`sbackup:${LOCATOR}`)).backup).toBe('BLOB2');
   });
 
+  it('a successful download renews the 90-day retention window (touch-on-read, D15)', async () => {
+    const fx = await edFixture();
+    const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
+    const raw = JSON.stringify({ backup: 'BLOB', pub: fx.pub, updatedAt: 1 });
+    await e.KV.put(`sbackup:${LOCATOR}`, raw, { expirationTtl: 60 }); // about to lapse
+    const expBefore = e.KV.exp.get(`sbackup:${LOCATOR}`);
+    const res = await handleBackupSimpleDownload({ locator: LOCATOR }, e, dlReq({}));
+    expect(res.status).toBe(200);
+    expect(e.KV.exp.get(`sbackup:${LOCATOR}`)).toBeGreaterThan(expBefore + 89 * DAY_MS);
+    expect(await e.KV.get(`sbackup:${LOCATOR}`)).toBe(raw); // stored bytes untouched
+  });
+
   it('download serves the blob to whoever names the slot — and only then', async () => {
     const fx = await edFixture();
     const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
@@ -524,13 +536,13 @@ function buildCreate(db) {
     sliceHtml('async function createIdentity(name, alias, disposable', '// DOUBLE RATCHET CRYPTO ENGINE'),
   ].join('\n');
   const factory = new Function('db', '_dbg', 'showToast', 't', '_hasX25519', '_hasEd25519',
-    '_promptRecoveryPhraseNew', 'genIdentityKey', 'dbPut', 'auditLog', 'generateShortId', 'localStorage', 'API',
+    '_promptRecoveryPhraseNew', 'genIdentityKey', 'dbPut', 'auditLog', 'generateShortId', 'localStorage', 'API', '_initMsgStoreKey',
     src + '; return { createIdentity };');
   const api2 = factory(
     db, () => {}, () => {}, (k) => k, true, true,
     async () => { shown.calls++; return 'drill-pass'; },
     async () => crypto.subtle.generateKey({ name: 'X25519' }, true, ['deriveBits']),
-    dbPutInto(db), () => {}, async () => 'breeze-test-test', { setItem() {} }, null,
+    dbPutInto(db), () => {}, async () => 'breeze-test-test', { setItem() {} }, null, async () => true,
   );
   return { ...api2, shown };
 }
@@ -587,8 +599,12 @@ describe('simple mode — wiring pins', () => {
     expect(html).toContain("if (disposable === 'simple' && simpleCreds) await enrollSimpleRecovery(simpleCreds.account, simpleCreds.passphrase);");
   });
 
-  it("createIdentity's mode record stays binary: only literal true means 'none'", () => {
-    expect(html).toContain("disposable === true ? { recoveryMode: 'none' } : {}");
+  it("createIdentity's mode record stays explicit: creation writes 'phrase' or nothing, never 'none'", () => {
+    // 2026-11-25: the disposable mode was removed, and with it the
+    // 'none' arm of this spread. The spread remains the single place a
+    // recovery mode is written at creation time.
+    expect(html).toContain("seedMat ? { recoveryMode: 'phrase' } : {}");
+    expect(html).not.toContain("recoveryMode: 'none'");
     expect(html).toContain("if (!await createIdentity(name, alias, disposable)) return;");
   });
 
@@ -601,7 +617,8 @@ describe('simple mode — wiring pins', () => {
   });
 
   it('/security renders the simple mode and /wipe erases the slot', () => {
-    expect(html).toContain("_identRec?.recoveryMode === 'simple' ? '<span class=\"i-g\">✓ ' + t('secRecoverySimple')");
+    const panels = readFileSync(new URL('../src/app/info-panels.js', import.meta.url), 'utf8');
+    expect(panels).toContain("_identRec?.recoveryMode === 'simple' ? '<span class=\"i-g\">✓ ' + D.t('secRecoverySimple')");
     const wipe = html.slice(html.indexOf("if (val === '/wipe')"), html.indexOf("if (val === '/wipe')") + 4000);
     expect(wipe).toContain('await eraseSimpleBackup();');
     // The backup tools arrive in index.html through the bridge bindings.

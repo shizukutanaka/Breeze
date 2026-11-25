@@ -191,6 +191,34 @@ LINES=$(wc -l < index.html)
 # the unreachable-function and dead-i18n-key gates above already pass. The
 # raise is recorded in docs/RELAY_STAGE2_PLAN.md (step-6 outcome); the NEXT
 # crossing is to be met with a reduction pass, not another raise.
+# 2026-11-19: the 16K crossing (stage-4 step 2 + stage-6 quota notice)
+# was met with a reduction pass — the six dialog dismiss wirings were
+# consolidated into _wireDialogDismiss — landing back under the ceiling
+# with no raise. Stage-4 step 3 crossed it again the same day and was
+# met with a second pass (33 command-panel creations consolidated into
+# _cmdPanelEl; preventDefault/clearInput pairs unified to one line).
+# Stage-4 step 4 crossed it a third time the same day; a third pass
+# (dialog creation consolidated into _makeDialog/_showDialog; the two
+# /linkto branches merged) landed it at 15,999. Stage-5 step 2 crossed
+# it a fourth time; a fourth pass (showPrompt/showConfirm onto
+# _makeDialog, the error handlers onto _noteError, the group-call
+# control sender into group-call.js) landed it at 15,994. Stage-5
+# step 3 crossed it a fifth time; a fifth pass (the history sender
+# into history-sync.js as createHistorySender) landed it at 15,990.
+# Stage-5 step 4 crossed it a sixth time; a sixth pass (group
+# creation, the member poller, the join flow and safeMemberList into
+# group-create.js) landed it at 15,977. Stage-5 step 5 crossed it a
+# seventh time; a seventh pass (the device-link ceremony into
+# device-link.js, /security + /who into info-panels.js, /files +
+# GDPR export into the same module as data panels) landed it at
+# 15,962. Stage-5 step 6 crossed it an eighth time; an eighth pass
+# (the location engine into location.js as a factory, the profile
+# panel + distribution into profile.js) landed it at 15,967.
+# Stage-6 step 2 crossed it a ninth time; a ninth pass (compacting
+# the step-2 additions themselves) landed it at 15,999. Stage-6
+# step 3 crossed it a tenth time; a tenth pass (the TURN credential
+# fetcher into turn.js, the call sampler into the p2p-stats
+# factory) landed it at 15,999.
 if [ "$LINES" -lt 12000 ]; then pass "Total lines: $LINES (<12K)" 5
 elif [ "$LINES" -lt 16000 ]; then warn "Total lines: $LINES (12-16K)" 5
 else fail "Total lines: $LINES (≥16K) — reduction pass required (see ceiling note above)" 5; fi

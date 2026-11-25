@@ -52,13 +52,23 @@ const aad = (to, ts) => new TextEncoder().encode(`${SEAL_INFO}:${to}:${ts}`);
 // plaintext, so key/AAD derivation is untouched and pre-padding blobs
 // still open: legacy plaintext is raw JSON and always starts with '{'
 // (0x7B), the frame starts with the marker byte instead.
-//   framed = [0x01][len:2 BE][JSON bytes][0x00 …], total a multiple of 256.
+//   framed = [0x01][len:2 BE][JSON bytes][0x00 …], total snapped to a size
+//   bucket (D02: 256 / 1024 / 4096, then multiples of 4096 — the same buckets
+//   as the message body, so the metadata length leaks only its bucket too).
 const SEAL_PAD_MARKER = 0x01;
 const SEAL_PAD_BOUNDARY = 256;
 
+// Smallest bucket ≥ n: boundary / ×4 / ×16, then multiples of the top bucket.
+function padBucketSize(n, boundary = SEAL_PAD_BOUNDARY) {
+  const top = boundary * 16;
+  if (n <= boundary) return boundary;
+  if (n <= boundary * 4) return boundary * 4;
+  return Math.ceil(n / top) * top;
+}
+
 function padSealMeta(jsonBytes) {
   if (jsonBytes.length > 0xffff) return jsonBytes; // too long to length-prefix: seal legacy-shaped
-  const total = Math.ceil((jsonBytes.length + 3) / SEAL_PAD_BOUNDARY) * SEAL_PAD_BOUNDARY;
+  const total = padBucketSize(jsonBytes.length + 3);
   const framed = new Uint8Array(total);
   framed[0] = SEAL_PAD_MARKER;
   new DataView(framed.buffer).setUint16(1, jsonBytes.length);

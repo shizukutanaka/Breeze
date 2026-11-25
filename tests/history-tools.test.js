@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createHistoryTools } from '../src/app/history-tools.js';
+import { createDataPanels } from '../src/app/info-panels.js';
 import * as parsers from '../src/app/import-parsers.js';
 
 let D, tools, state, records, downloads;
@@ -210,6 +211,14 @@ describe('history tools factory', () => {
     expect(await tools.gdprExport()).toMatchObject({ identity: null, messages: [], contacts: [], auditLog: [], settings: null, totalMessages: 0, totalContacts: 0, totalFiles: 0 });
   });
 
+  it('retains the newer data-panel API through the single history implementation', async () => {
+    const panels = createDataPanels({ gdprExport: tools.gdprExport, runGdpr: tools.exportGdpr });
+    expect(await panels.gdprExport()).toEqual(await tools.gdprExport());
+    await panels.runGdpr();
+    expect(JSON.parse(await downloads[0].blob.text())).toEqual(await tools.gdprExport());
+    expect(D.auditLog).toHaveBeenCalledWith('settings', 'GDPR data export performed');
+  });
+
   it('logs GDPR storage errors and does not download or audit success', async () => {
     D.dbGet.mockRejectedValue(new Error('read failed'));
     await tools.exportGdpr();
@@ -228,7 +237,8 @@ describe('deployed history tools wiring', () => {
     expect(html.indexOf('await _appModulesReady;')).toBeLessThan(html.indexOf('const _historyTools ='));
     expect(readFileSync(new URL('../sw.js', import.meta.url), 'utf8')).toContain("'/src/app/history-tools.js'");
     expect(html).toContain('await exportChat(val);');
-    expect(html).toContain('await exportGdpr();');
+    expect(html).toContain('gdprExport: () => _historyTools?.gdprExport(), runGdpr: () => exportGdpr(),');
+    expect(html).toContain("_dataPanels?.runGdpr().catch(e2 => _dbg(e2, 'gdpr'))");
   });
 
   it('instantiates inert fallbacks without touching storage if the module is absent', async () => {

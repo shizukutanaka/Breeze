@@ -108,4 +108,35 @@ describe('camera raw-value callback and cleanup', () => {
     card.children.find(child => child.textContent === 'scanQR').onclick();
     await vi.waitFor(() => expect(window.location.href).toBe('https://breeze.example/?add=abc'));
   });
+  // A scanned code is attacker-supplied. With the app's handler wired, the value goes
+  // to the in-app add flow and the page never navigates; without one, only http(s)
+  // may be navigated to.
+  function openModal(onScan) {
+    scannerHarness();
+    const body = node();
+    Object.assign(document, { body, addEventListener() {}, removeEventListener() {} });
+    vi.stubGlobal('window', { location: { href: '' } });
+    const showToast = vi.fn();
+    vi.stubGlobal('t', key => key); vi.stubGlobal('showToast', showToast); vi.stubGlobal('_dbg', vi.fn());
+    createQRHelper().showQRModal('x'.repeat(2332), onScan);
+    return { card: body.children[0].children[0], showToast };
+  }
+  const scanValue = (card, rawValue) => {
+    vi.stubGlobal('BarcodeDetector', class { async detect() { return [{ rawValue }]; } });
+    card.children.find(child => child.textContent === 'scanQR').onclick();
+  };
+  it('hands a scanned invite to the in-app handler instead of navigating', async () => {
+    const onScan = vi.fn();
+    const { card } = openModal(onScan);
+    scanValue(card, 'https://evil.example/?add=abc');
+    await vi.waitFor(() => expect(onScan).toHaveBeenCalledWith('https://evil.example/?add=abc'));
+    expect(window.location.href).toBe('');
+  });
+  it.each(['javascript:alert(1)//?add=abc', 'data:text/html,<p>?add=abc', 'intent://x?add=abc'])(
+    'never navigates to a non-http(s) scanned value: %s', async (value) => {
+      const { card, showToast } = openModal();
+      scanValue(card, value);
+      await vi.waitFor(() => expect(showToast).toHaveBeenCalledWith('toastInvalidQR', 'error'));
+      expect(window.location.href).toBe('');
+    });
 });

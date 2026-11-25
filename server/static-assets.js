@@ -21,9 +21,10 @@
 // download, wherever the operator points BREEZE_DB_PATH. A missing
 // path answers the repo's 404.html with status 404, as Pages does.
 
-import { readFile, stat } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
-import { join, normalize, extname, sep } from 'node:path';
+import { readFile, stat, realpath } from 'node:fs/promises';
+import { readFileSync, realpathSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { join, normalize, extname, sep, dirname, basename } from 'node:path';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -49,7 +50,7 @@ const MIME = {
 
 const PLATFORM_FILES = new Set(['/_worker.js', '/_headers', '/_routes.json', '/_redirects']);
 const BLOCKED_BASENAME = /(^|\/)\./; // any dotfile / dot-directory segment
-const BLOCKED_EXT = /\.(db|sqlite|sqlite3)$|\.(sqlite|db)-(wal|shm)$/i;
+const BLOCKED_EXT = /\.(db|sqlite|sqlite3)$|\.(sqlite|sqlite3|db)-(wal|shm|journal)$/i;
 
 // Parse the Pages `_headers` format: a path pattern line followed by
 // indented `Name: value` lines, repeated. Exported for the tests.
@@ -87,12 +88,30 @@ export function headersForPath(rules, path) {
   return [...out.values()];
 }
 
-function isBlocked(path) {
-  if (PLATFORM_FILES.has(path)) return true;
-  if (BLOCKED_BASENAME.test(path)) return true;
-  if (path === '/node_modules' || path.startsWith('/node_modules/')) return true;
-  if (BLOCKED_EXT.test(path)) return true;
+// Fold a path for blocklist comparison only (never for opening a file).
+// toLowerCase() alone is not what a case-insensitive filesystem compares
+// with: APFS and NTFS also fold U+017F (ſ) to `s`, U+212A (K) to `k` and
+// U+0131 (ı) to `i`, so `/breeze.%C5%BFqlite` opens `breeze.sqlite` while
+// spelling no blocked name in ASCII. Upper-then-lower collapses those
+// onto their ASCII letters; NFC makes composed and decomposed spellings
+// compare equal, as those filesystems do.
+export function foldPath(path) {
+  return path.normalize('NFC').toUpperCase().toLowerCase();
+}
+
+export function isBlocked(path) {
+  const folded = foldPath(path.replace(/\/+/g, '/'));
+  if (PLATFORM_FILES.has(folded)) return true;
+  if (BLOCKED_BASENAME.test(folded)) return true;
+  if (folded === '/node_modules' || folded.startsWith('/node_modules/')) return true;
+  if (BLOCKED_EXT.test(folded)) return true;
   return false;
+}
+
+// The directory part of a path with symlinks resolved, when it exists:
+// the database file may not exist yet, its directory does.
+function withRealDir(p) {
+  try { return join(realpathSync(dirname(p)), basename(p)); } catch { return p; }
 }
 
 // Build the ASSETS binding: { fetch(request) → Response } over
@@ -101,27 +120,46 @@ function isBlocked(path) {
 // to the never-serve list even under an unlisted extension.
 export function makeAssets({ rootDir, extraBlocked = [] }) {
   const rules = parseHeadersFile(readFileSync(join(rootDir, '_headers'), 'utf8'));
-  const blockedAbs = new Set(extraBlocked.map((p) => normalize(p)));
+  let realRoot = rootDir;
+  try { realRoot = realpathSync(rootDir); } catch { /* keep the given root */ }
+  const blockedFolded = new Set();
+  for (const p of extraBlocked) {
+    blockedFolded.add(foldPath(normalize(p)));
+    blockedFolded.add(foldPath(withRealDir(normalize(p))));
+  }
 
-  async function serve(path, method) {
+  // The verdict on a path the filesystem resolved: `abs` is either the
+  // requested candidate or the canonical on-disk name realpath reports
+  // for it. Checking the canonical name is what closes filesystem
+  // aliases the request spelling cannot reveal.
+  function blockedOnDisk(abs, base) {
+    if (blockedFolded.has(foldPath(abs))) return true;
+    if (abs !== base && !abs.startsWith(base + sep)) return false;
+    return isBlocked('/' + abs.slice(base.length).replace(/\\/g, '/').replace(/^\/+/, ''));
+  }
+  async function servable(abs) {
+    if (blockedOnDisk(abs, rootDir)) return false;
+    try { return !blockedOnDisk(await realpath(abs), realRoot); } catch { return false; }
+  }
+
+  async function serve(path, method, ifNoneMatch) {
+    const cleanPath = path.replace(/\/+/g, '/');
     const headers = new Headers();
-    for (const [name, value] of headersForPath(rules, path)) headers.set(name, value);
+    for (const [name, value] of headersForPath(rules, cleanPath)) headers.set(name, value);
 
     let filePath = null;
     let status = 200;
-    if (!isBlocked(path)) {
-      const candidate = normalize(join(rootDir, '.' + path));
+    if (!isBlocked(cleanPath)) {
+      const candidate = normalize(join(rootDir, '.' + cleanPath));
       // Confine to rootDir: a normalized `..` escape is a 404, never a serve.
       if (candidate === rootDir || candidate.startsWith(rootDir + sep)) {
-        if (blockedAbs.has(candidate)) {
-          filePath = null;
-        } else {
+        if (!blockedOnDisk(candidate, rootDir)) {
           try {
             const st = await stat(candidate);
             if (st.isDirectory()) {
               const idx = join(candidate, 'index.html');
-              try { if ((await stat(idx)).isFile()) filePath = idx; } catch { /* no index */ }
-            } else if (st.isFile()) {
+              try { if ((await stat(idx)).isFile() && await servable(idx)) filePath = idx; } catch { /* no index */ }
+            } else if (st.isFile() && await servable(candidate)) {
               filePath = candidate;
             }
           } catch { /* missing → 404 below */ }
@@ -142,6 +180,13 @@ export function makeAssets({ rootDir, extraBlocked = [] }) {
     }
     const body = await readFile(filePath);
     headers.set('Content-Type', MIME[extname(filePath).toLowerCase()] || 'application/octet-stream');
+    // Validator for the `no-cache` assets (index.html, modules, locales):
+    // a revalidation costs a 304 instead of the full body.
+    const etag = '"' + createHash('sha256').update(body).digest('base64url').slice(0, 27) + '"';
+    headers.set('ETag', etag);
+    if (ifNoneMatch && ifNoneMatch.split(',').some((t) => t.trim().replace(/^W\//, '') === etag)) {
+      return new Response(null, { status: 304, headers });
+    }
     headers.set('Content-Length', String(body.length));
     return new Response(method === 'HEAD' ? null : body, { status, headers });
   }
@@ -155,7 +200,7 @@ export function makeAssets({ rootDir, extraBlocked = [] }) {
       try { path = decodeURIComponent(new URL(request.url).pathname); } catch {
         return new Response('Not found', { status: 404 });
       }
-      return serve(path, request.method);
+      return serve(path, request.method, request.headers.get('if-none-match'));
     },
   };
 }

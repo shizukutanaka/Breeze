@@ -1,4 +1,4 @@
-const VERSION = '3.6.1';
+const VERSION = '3.8.0';
 const CACHE = 'breeze-v' + VERSION + '-offline-pairing';
 const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png',
   // Stage-3 step 3: the PQ prekey helper module closure index.html imports
@@ -18,7 +18,12 @@ const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-51
   // degrading to their inert fallbacks.
   '/src/app/call.js', '/src/app/backup.js', '/src/app/history-tools.js', '/src/app/qr.js',
   '/src/app/import-parsers.js', '/src/app/sound.js', '/src/app/share.js',
-  '/src/app/direct-ack.js', '/src/app/p2p-stats.js', '/src/app/rendezvous.js', '/src/app/offline-pairing.js'];
+  '/src/app/direct-ack.js', '/src/app/p2p-stats.js', '/src/app/rendezvous.js', '/src/app/offline-pairing.js', '/src/app/quota.js', '/src/app/history-sync.js', '/src/app/group-call.js', '/src/app/profile.js', '/src/app/group-create.js', '/src/app/device-link.js', '/src/app/stickers.js', '/src/app/info-panels.js', '/src/app/location.js', '/src/app/address.js', '/src/app/turn.js', '/src/app/data-lifecycle.js', '/src/app/group-file.js', '/src/app/group-live.js', '/src/app/voice-input.js', '/src/app/emoji-picker.js', '/src/app/install-banner.js', '/src/app/context-menu.js', '/src/app/lightbox.js', '/src/app/smart-replies.js', '/src/app/chat-search.js', '/src/app/call-history.js', '/src/app/settings-help.js', '/src/app/cloudflare.js', '/src/crypto/msgstore.js',
+  // D17 modal-a11y bridge (wave-6 R01): index.html statically imports it
+  // in the same single module block as every bridge above, so a first
+  // offline boot without it in the precache fails the WHOLE block, not
+  // just the modal feature. tests/sw-assets.test.js pins closure ⊆ ASSETS.
+  '/src/app/modal-a11y.js'];
 const MAX_CACHE_ITEMS = 50; // v3.6: Prevent unbounded cache growth
 
 self.addEventListener('install', (e) => {
@@ -31,8 +36,26 @@ self.addEventListener('install', (e) => {
       ]);
     } catch (err) { /* Static Routing not supported */ }
   }
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
-  self.skipWaiting();
+  // The cache is a web-only optimization: under the desktop
+  // shell's file:// origin addAll rejects ('file' scheme
+  // unsupported) — swallow it ONLY on file: origins instead of
+  // an uncaught rejection on packaged launch (found 2026-11-20).
+  // On https:/http: web origins, precache failure must fail the
+  // install cleanly and NEVER call skipWaiting(), so a partial or
+  // corrupted update cannot activate and wipe the previous good cache.
+  // cache:'reload' bypasses the browser HTTP cache: the modules were once served
+  // `immutable` for 7 days, so a plain addAll could precache the PREVIOUS release's
+  // copy next to the new index.html (new shell + old modules = a failed import).
+  const isFileOrigin = self.location?.protocol === 'file:';
+  e.waitUntil(
+    caches.open(CACHE)
+      .then(c => c.addAll(ASSETS.map(a => new Request(a, { cache: 'reload' }))))
+      .then(() => self.skipWaiting())
+      .catch((err) => {
+        if (isFileOrigin) return self.skipWaiting();
+        throw err;
+      })
+  );
 });
 
 self.addEventListener('activate', (e) => {
@@ -84,7 +107,9 @@ self.addEventListener('fetch', (e) => {
   // v3.6: Assets — stale-while-revalidate (instant load + background update)
   e.respondWith(
     caches.match(e.request).then(cached => {
-      const fetchPromise = fetch(e.request).then(resp => {
+      // 'no-cache' = always revalidate with the server (a 304 is cheap) — never let a
+      // stale HTTP-cache copy overwrite the entry the install step just refreshed.
+      const fetchPromise = fetch(e.request, { cache: 'no-cache' }).then(resp => {
         cachePut(e.request, resp);
         return resp;
       }).catch(() => cached);

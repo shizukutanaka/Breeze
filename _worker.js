@@ -3,9 +3,6 @@
  * 41 API endpoints. Cloudflare Pages Functions.
  *
  * KV schema:
- *   slots:{userId}     → LEGACY billing record — nothing writes it (billing was
- *                          removed in v3.6.1); read + deleted only by account erasure
- *   cust:{customerId}  → LEGACY reverse lookup — same: delete-only, never written
  *   sig:{room}         → signal data (TTL)
  *   msg:{userId}:{ts}  → relay message (TTL)
  *   alias:{name}       → { pub, name, setAt } (TTL 90d — dead handles recycle)
@@ -113,7 +110,10 @@ function usageQuotaConfig(env) {
 
 function sanitizeString(val, maxLen = MAX_STRING_LEN) {
   if (typeof val !== 'string') return '';
-  return val.slice(0, maxLen).replace(/[\x00-\x08\x0a-\x0c\x0d\x0e-\x1f]/g, '');
+  // Strip C0 controls (except \t/\n kept by callers' own handling) and the bidi
+  // controls U+202A–U+202E / U+2066–U+2069: a display name carrying RLO renders
+  // reversed, enabling Trojan-Source-style name spoofing (D27).
+  return val.slice(0, maxLen).replace(/[\x00-\x08\x0a-\x0c\x0d\x0e-\x1f\u202a-\u202e\u2066-\u2069]/g, '');
 }
 
 function validateUserId(id) {
@@ -207,7 +207,7 @@ export default {
       }
       return json({
         ok: kvOk,
-        version: '3.6.1',
+        version: '3.8.0',
         protocol: 4,
         endpoints: 42,
         reqId,
@@ -221,6 +221,10 @@ export default {
         // the open-relay fallback. Operators verify their configuration
         // here; clients may surface it for the same reason.
         turnProvider: turnProviderMode(env),
+        // Stage 6 step 3: the operator's TURN issuance budget state —
+        // how much of this month's metered issuance is already used.
+        turnIssueCap: parseInt(env.TURN_MONTHLY_ISSUE_CAP) || 0,
+        turnIssuedThisMonth: await turnIssueCount(env),
         vapidPublicKey: env.VAPID_PUBLIC_KEY || null,
         // Stage-2 step 4: the relay's persistent Ed25519 identity (public
         // half), for the client's TOFU pin — null when the operator has not
@@ -660,11 +664,14 @@ function capQueueBytes(items, sizeOf, maxBytes = 16 * 1024 * 1024) {
 //   misconfigured deploy degrades to the pre-step-2 behaviour instead
 //   of losing queues.
 //
-// The handlers above the seam are backend-agnostic — they keep their
-// read-back recovery logic, which against the DO operates on strongly
-// consistent reads (a committed write is always visible to the
-// read-back) instead of racing eventual consistency. The staged
-// remainder is in docs/MAILBOX_STAGE1_PLAN.md.
+// The handlers above the seam are backend-agnostic. D16 stage 2
+// moved the append itself behind the seam as one composite op
+// (appendQueue, plus claimPoll for the sealed poll's recovery-count
+// claim): on the DO backend the op runs inside MailboxCore's
+// per-mailbox serialization and is exactly-once; the KV methods carry
+// the stage-1 read-back recovery the handlers used to run inline.
+// SECURITY.md states the two tiers; the staged remainder is in
+// docs/MAILBOX_STAGE1_PLAN.md.
 // Non-mailbox storage (prekey bundles, groups, …) stays on the kv*
 // helpers by design. Presence was the one other write-budget consumer
 // of the same class; it got its own seam in step 4 (PRESENCE STORE,
@@ -683,6 +690,7 @@ function mailboxStoreForKey(env, queueKey) {
 function kvMailboxStoreForKey(env, queueKey) {
   const hwmKey = `${queueKey}:hwm`;
   const droppedKey = `${queueKey}:dropped`;
+  const kind = queueKey.slice(0, queueKey.indexOf(':'));
   return {
     queueKey,
     readQueue: () => kvGet(env, queueKey),
@@ -697,6 +705,135 @@ function kvMailboxStoreForKey(env, queueKey) {
     // No per-mailbox deposit gate on KV (see the store header), and
     // no fair-use quota either — both ride the same op: always ok.
     checkDeposit: async () => ({ ok: true }),
+    // D16 stage 2 (KV tier): the append as ONE store call. KV has no
+    // serialization to move it into, so this method carries the
+    // stage-1 semantics unchanged — for the sealed family: write,
+    // read back, and if a racing writer's last-write-wins put erased
+    // the entry, re-append and READ BACK AGAIN, up to
+    // SEALED_MAX_REPAIRS rounds (identity is the envelope itself,
+    // never the ts — a racer's entry can share the millisecond). A
+    // send still unseen after every round reports `unconfirmed` so
+    // the handler fails honestly (STORE_UNCONFIRMED) instead of
+    // answering a delivery that never landed; each repair bumps the
+    // recovery count folded into the queue value, surfaced once by
+    // the recipient's next poll claim. The D31 hwm fold repair rides
+    // along: a poll that raced the write and recorded a higher hwm
+    // gets its mark restored from the read-back (monotonic — a stale
+    // read-back never lowers it). The plain family carries its own
+    // read-back (identity is the server-assigned msg.id) and the
+    // tail+hwm ts recompute. Best-effort with verified recovery, NOT
+    // exactly-once — the DO tier's append op is the exactly-once one
+    // (SECURITY.md states the tiers).
+    appendQueue: async (item, ttlSec) => {
+      if (kind === 'sealed') {
+        const envelope = item?.envelope;
+        if (typeof envelope !== 'string' || !envelope) return { ok: false };
+        const existing = await kvGet(env, queueKey);
+        const { q: queue, hwm: queueHwm, rc: queueRc } = parseSealedQueue(existing);
+        const newTs = queue.length > 0 && Number.isFinite(queue[queue.length - 1].ts)
+          ? Math.max(Date.now(), queue[queue.length - 1].ts + 1)
+          : Date.now();
+        queue.push({ envelope, ts: newTs });
+        const trimmed = capQueueBytes(queue.slice(-100), m => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
+        const droppedNow = queue.length - trimmed.length;
+        if (droppedNow > 0) {
+          const prev = parseInt(await kvGet(env, droppedKey) || '0') || 0;
+          await kvPut(env, droppedKey, String(Math.min(prev + droppedNow, 99999)), { expirationTtl: TTL.WEEK });
+        }
+        const stored = await kvPut(env, queueKey, sealedQueueValue(trimmed, queueHwm, queueRc), { expirationTtl: ttlSec });
+        if (!stored) return { ok: false };
+        const mine = (m) => m && typeof m.envelope === 'string'
+          && m.envelope.length === envelope.length && m.envelope === envelope;
+        let snap = parseSealedQueue(await kvGet(env, queueKey));
+        let repairs = 0;
+        while (!snap.q.some(mine) && repairs < SEALED_MAX_REPAIRS) {
+          // Recompute the re-append ts from the CURRENT tail: reusing
+          // newTs could re-enter with a ts equal to the racing
+          // winner's, and an ack filtering on `m.ts > hwm` would then
+          // delete this envelope unpolled (audit 2026-11-13 §2.3).
+          const tailTs = snap.q.length > 0 && Number.isFinite(snap.q[snap.q.length - 1].ts) ? snap.q[snap.q.length - 1].ts : 0;
+          const reTs = Math.max(newTs, tailTs + 1);
+          snap.q.push({ envelope, ts: reTs });
+          const requeued = capQueueBytes(snap.q.slice(-100), (m) => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
+          repairs++;
+          // The count written is the snapshot's plus THIS send's
+          // repair rounds: a clobbered repair takes its own increment
+          // with it, so snapshot-only counting would under-report
+          // exactly the multi-clobber cases the count exists to catch.
+          await kvPut(env, queueKey, sealedQueueValue(requeued, snap.hwm, snap.rc + repairs), { expirationTtl: ttlSec });
+          snap = parseSealedQueue(await kvGet(env, queueKey));
+        }
+        if (!snap.q.some(mine)) return { ok: false, unconfirmed: true };
+        if (repairs === 0 && snap.hwm !== null && (queueHwm === null || snap.hwm > queueHwm)) {
+          await kvPut(env, queueKey, sealedQueueValue(snap.q, snap.hwm, snap.rc), { expirationTtl: ttlSec });
+        }
+        return { ok: true, ts: newTs };
+      }
+      // Plain inbox: the same read-modify-write shape, with the
+      // read-back keyed on the server-assigned msg.id (unique per
+      // message, so it cannot false-positive on a racer's entry) and
+      // the re-append ts recomputed from the current tail AND the
+      // persistent hwm, so the recovered message stays strictly above
+      // the recipient's poll cursor.
+      const existing = await kvGet(env, queueKey);
+      const inboxParsed = existing ? safeJsonParse(existing, []) : [];
+      const inbox = Array.isArray(inboxParsed) ? inboxParsed : [];
+      const hwmRaw = await kvGet(env, hwmKey);
+      const hwmParsed = hwmRaw !== null ? parseInt(hwmRaw) : NaN;
+      const inboxHwm = Number.isFinite(hwmParsed) ? hwmParsed : null;
+      const msg = { ...item };
+      // Strictly-increasing ts against the tail, then past the
+      // persistent hwm (the §4 residual anchor that survives drains).
+      if (inbox.length > 0) {
+        const lastStoredTs = inbox[inbox.length - 1].ts;
+        if (Number.isFinite(lastStoredTs) && msg.ts <= lastStoredTs) msg.ts = lastStoredTs + 1;
+      }
+      if (inboxHwm !== null && msg.ts <= inboxHwm) msg.ts = inboxHwm + 1;
+      inbox.push(msg);
+      const trimmed = capQueueBytes(inbox.slice(-100), m => (typeof m.payload === 'string' ? m.payload.length : 0) + 1024);
+      const noteDropped = async (n) => {
+        if (n <= 0) return;
+        const prev = parseInt(await kvGet(env, droppedKey) || '0') || 0;
+        await kvPut(env, droppedKey, String(Math.min(prev + n, 99999)), { expirationTtl: TTL.WEEK });
+      };
+      await noteDropped(inbox.length - trimmed.length);
+      const stored = await kvPut(env, queueKey, JSON.stringify(trimmed), { expirationTtl: ttlSec });
+      if (!stored) return { ok: false };
+      let storedTs = msg.ts;
+      const verifyRaw = await kvGet(env, queueKey);
+      const seenInbox = verifyRaw ? safeJsonParse(verifyRaw, []) : [];
+      if (Array.isArray(seenInbox) && !seenInbox.some(m => m && m.id === msg.id)) {
+        const tail = seenInbox.length > 0 ? seenInbox[seenInbox.length - 1] : null;
+        let reTs = msg.ts;
+        if (tail && Number.isFinite(tail.ts)) reTs = Math.max(reTs, tail.ts + 1);
+        if (inboxHwm !== null) reTs = Math.max(reTs, inboxHwm + 1);
+        seenInbox.push({ ...msg, ts: reTs });
+        const reTrimmed = capQueueBytes(seenInbox.slice(-100), m => (typeof m.payload === 'string' ? m.payload.length : 0) + 1024);
+        await noteDropped(seenInbox.length - reTrimmed.length);
+        if (await kvPut(env, queueKey, JSON.stringify(reTrimmed), { expirationTtl: ttlSec })) storedTs = reTs;
+      }
+      // Advance the persistent hwm to the newest ts this append stored
+      // (best-effort: a failed hwm write degrades to pre-fix behaviour).
+      if (inboxHwm === null || storedTs > inboxHwm) {
+        await kvPut(env, hwmKey, String(storedTs), { expirationTtl: ttlSec });
+      }
+      return { ok: true, ts: storedTs };
+    },
+    // S08 (KV tier): the poll claim as a read-modify-write — the same
+    // shape the handler used before, so on KV it stays best-effort:
+    // two racing polls can still both read the count before either
+    // reset lands. The DO tier's poll-claim op is the atomic one.
+    // Returns the claimed count, 0 when the queue is absent (nothing
+    // claimed, nothing reset — a later poll retries), or null when
+    // the reset write failed (the count stays stored for a later poll).
+    claimPoll: async (hwm, ttlSec) => {
+      const raw = await kvGet(env, queueKey);
+      if (raw === null) return 0;
+      const { q, hwm: curHwm, rc } = parseSealedQueue(raw);
+      const newHwm = Number.isFinite(hwm) ? Math.max(curHwm || 0, hwm) : curHwm;
+      const ok = await kvPut(env, queueKey, sealedQueueValue(q, newHwm, 0), { expirationTtl: ttlSec });
+      return ok ? rc : null;
+    },
   };
 }
 
@@ -833,6 +970,21 @@ export class MailboxCore {
     // 'deposit' (stage-1 step 3) is a mailbox-wide op: it carries no
     // slot and is meaningless for the presence record.
     if (op === 'deposit' && isPresence) return { status: 400, body: { ok: false } };
+    // D16 stage 2 composite ops (append / poll-claim): slot-less and
+    // mailbox-family only. Each runs its whole read-modify-write
+    // inside this serialized execute() — that is what makes it atomic
+    // where the plain get/put ops are not.
+    if (op === 'append' || op === 'poll-claim') {
+      if (isPresence) return { status: 400, body: { ok: false } };
+      if (op === 'poll-claim' && family !== 'sealed') return { status: 400, body: { ok: false } };
+      if (typeof userId === 'string' && userId && this._seedMailbox) await this._seedMailbox(userId);
+      try {
+        return op === 'append' ? await this._append(family, body) : await this._pollClaim(body);
+      } catch (e) {
+        console.error('[mailbox-core] storage op failed:', e?.message ?? e);
+        return { status: 500, body: { ok: false } };
+      }
+    }
     if (op !== 'deposit' && (isPresence ? slot !== 'record' : (slot !== 'queue' && slot !== 'hwm' && slot !== 'dropped'))) return { status: 400, body: { ok: false } };
     if (typeof userId === 'string' && userId) {
       if (isPresence) { if (this._seedPresence) await this._seedPresence(userId); }
@@ -854,7 +1006,24 @@ export class MailboxCore {
         // content, and a re-registered id inherits at most an hour of
         // window instead of a reset button.
         const now = Date.now();
-        const rawLog = await st.get('deposits');
+        // D31 gate fold (COST_MODEL §7 lever 2): the frequency log and the
+        // usage counters below are ONE 'gate' record, written once per
+        // admitted deposit — they share this op, this lifecycle, and the
+        // same "budget state, not mailbox content" status, so keeping them
+        // in two rows bought nothing. Legacy 'deposits'/'usage' rows from
+        // before the fold are read as a fallback and deleted by the first
+        // admitted deposit that rewrites the gate, so no mailbox loses
+        // its rate window or its spent budget in the transition (a denial
+        // still records nothing, in either form).
+        const gateRaw = await st.get('gate');
+        const gate = (gateRaw && typeof gateRaw === 'object') ? gateRaw : null;
+        let rawLog, rawUsage, legacyGate = false;
+        if (gate) { rawLog = gate.log; rawUsage = gate.usage; }
+        else {
+          rawLog = await st.get('deposits');
+          rawUsage = await st.get('usage');
+          legacyGate = rawLog !== undefined || rawUsage !== undefined;
+        }
         const log = Array.isArray(rawLog)
           ? rawLog.filter(t => Number.isFinite(t) && now - t < DEPOSIT_LIMIT.HOUR_WINDOW_MS)
           : [];
@@ -874,13 +1043,13 @@ export class MailboxCore {
         // frequency log untouched just as a frequency denial leaves
         // the usage record untouched — neither gate's denial is
         // itself a billable event. Windows are UTC calendar day and
-        // month; retryAfterSec runs to the window's end. The record
-        // ('usage', { d, dc, m, mc }) is budget state, not mailbox
+        // month; retryAfterSec runs to the window's end. The usage
+        // record ({ d, dc, m, mc }) is budget state, not mailbox
         // content — like the log above it is NOT erased by the slot
         // deletes account deletion performs, so delete-and-re-register
-        // inherits the spent budget instead of a reset button. Cost
-        // of the layer: one extra get + put per admitted deposit
-        // (DO rows 7r/6w → 8r/7w per cycle), the price of the bound.
+        // inherits the spent budget instead of a reset button. Since
+        // the D31 fold it rides inside the 'gate' record, so the layer
+        // costs no extra put: the cycle is 4 row-writes total.
         const quota = (body.quota && Number.isFinite(body.quota.daily) && Number.isFinite(body.quota.monthly)
           && body.quota.daily > 0 && body.quota.monthly > 0) ? body.quota : null;
         let usageNext = null;
@@ -888,7 +1057,6 @@ export class MailboxCore {
           const dNow = new Date(now);
           const dayKey = dNow.toISOString().slice(0, 10);
           const monthKey = dayKey.slice(0, 7);
-          const rawUsage = await st.get('usage');
           const u = (rawUsage && typeof rawUsage === 'object') ? rawUsage : {};
           const dayCount = (u.d === dayKey && Number.isFinite(u.dc)) ? u.dc : 0;
           const monthCount = (u.m === monthKey && Number.isFinite(u.mc)) ? u.mc : 0;
@@ -903,8 +1071,12 @@ export class MailboxCore {
           usageNext = { d: dayKey, dc: dayCount + 1, m: monthKey, mc: monthCount + 1 };
         }
         log.push(now);
-        await st.put('deposits', log);
-        if (usageNext) await st.put('usage', usageNext);
+        // Carry the previous usage record when this deposit did not
+        // update it (quota not configured on this call): folding must
+        // not erase a spent budget the operator may re-enable.
+        const usageCarry = usageNext || (rawUsage && typeof rawUsage === 'object' ? rawUsage : null);
+        await st.put('gate', { log, usage: usageCarry });
+        if (legacyGate) { await st.delete('deposits'); await st.delete('usage'); }
         return { status: 200, body: { ok: true } };
       }
       if (op === 'get') {
@@ -945,6 +1117,120 @@ export class MailboxCore {
       return { status: 500, body: { ok: false } };
     }
     return { status: 400, body: { ok: false } };
+  }
+
+  // Entry read with the get op's expiry semantics: an expired entry
+  // reads as absent (the next write replaces it).
+  async _readLiveValue(key) {
+    const e = await this._storage.get(key);
+    if (!e || typeof e.v !== 'string') return null;
+    if (e.exp !== null && e.exp !== undefined && Date.now() >= e.exp) return null;
+    return e.v;
+  }
+
+  // D16 stage 2: the composite append. The dedup check, the
+  // strictly-increasing ts assignment, the 100-entry / byte caps and
+  // the dropped accounting all happen HERE, inside the per-mailbox
+  // serialization — so on this backend an append is exactly-once: no
+  // second writer can interleave between the read and the write, and
+  // a duplicate (the same envelope for sealed; the same server id for
+  // the plain family) is answered from the stored queue itself rather
+  // than a per-isolate memory. The KV store's appendQueue keeps the
+  // stage-1 verified-recovery semantics instead — SECURITY.md states
+  // the two tiers plainly.
+  async _append(family, body) {
+    const st = this._storage;
+    const item = body.item;
+    if (!item || typeof item !== 'object') return { status: 400, body: { ok: false } };
+    const ttl = Number.isFinite(body.ttlSec) ? body.ttlSec : null;
+    const exp = ttl !== null ? Date.now() + Math.max(ttl, 0) * 1000 : null;
+    const qKey = `${family}:queue`;
+    const raw = await this._readLiveValue(qKey);
+    let dropped = 0;
+    let result;
+    if (family === 'sealed') {
+      const env = item.envelope;
+      if (typeof env !== 'string' || !env) return { status: 400, body: { ok: false } };
+      const { q, hwm, rc } = parseSealedQueue(raw);
+      const dup = q.find(e => e && e.envelope === env);
+      if (dup) return { status: 200, body: { ok: true, duplicate: true, ts: dup.ts } };
+      // Strictly-increasing ts: handleSealedAck filters on `m.ts > hwm`,
+      // so an entry sharing the last entry's millisecond would be acked
+      // away unpolled (the handler-side bump this replaces raced across
+      // isolates; here the tail read and the write are one step).
+      const ts = q.length > 0 && Number.isFinite(q[q.length - 1].ts)
+        ? Math.max(Date.now(), q[q.length - 1].ts + 1)
+        : Date.now();
+      q.push({ envelope: env, ts });
+      const trimmed = capQueueBytes(q.slice(-100), m => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
+      dropped = q.length - trimmed.length;
+      await st.put(qKey, { v: sealedQueueValue(trimmed, hwm, rc), exp });
+      result = { ok: true, ts };
+    } else {
+      if (typeof item.payload !== 'string' || !item.payload) return { status: 400, body: { ok: false } };
+      if (!Number.isFinite(item.ts)) return { status: 400, body: { ok: false } };
+      let msgs = [];
+      if (raw) { try { const p = JSON.parse(raw); if (Array.isArray(p)) msgs = p; } catch { msgs = []; } }
+      if (item.id) {
+        const dup = msgs.find(m => m && m.id === item.id);
+        if (dup) return { status: 200, body: { ok: true, duplicate: true, ts: dup.ts } };
+      }
+      // Strictly-increasing ts against BOTH anchors — the current tail
+      // and the persistent hwm (which survives the queue draining to
+      // empty, when the tail anchor is gone) — so the poll cursor
+      // `m.ts > lastTs` can never skip a stored message.
+      const hwmRaw = await this._readLiveValue(`${family}:hwm`);
+      const hwmParsed = hwmRaw !== null ? parseInt(hwmRaw, 10) : NaN;
+      const hwm = Number.isFinite(hwmParsed) ? hwmParsed : null;
+      let ts = item.ts;
+      const tail = msgs.length > 0 ? msgs[msgs.length - 1].ts : null;
+      if (Number.isFinite(tail) && ts <= tail) ts = tail + 1;
+      if (hwm !== null && ts <= hwm) ts = hwm + 1;
+      msgs.push({ ...item, ts });
+      const trimmed = capQueueBytes(msgs.slice(-100), m => (typeof m.payload === 'string' ? m.payload.length : 0) + 1024);
+      dropped = msgs.length - trimmed.length;
+      await st.put(qKey, { v: JSON.stringify(trimmed), exp });
+      await st.put(`${family}:hwm`, { v: String(ts), exp });
+      result = { ok: true, ts };
+    }
+    if (dropped > 0) {
+      // Overflow drops the OLDEST entries; count them so the
+      // recipient's next poll can say "N messages were lost".
+      const prev = parseInt(await this._readLiveValue(`${family}:dropped`) || '0', 10) || 0;
+      await st.put(`${family}:dropped`, { v: String(Math.min(prev + dropped, 99999)), exp: Date.now() + TTL.WEEK * 1000 });
+      result.dropped = dropped;
+    }
+    // A deposit landed: wake the mailbox's sockets (the put op's rule).
+    if (this._onQueueChanged) {
+      try { this._onQueueChanged(family); } catch { /* socket already gone; polling still delivers */ }
+    }
+    return { status: 200, body: result };
+  }
+
+  // S08: claim a sealed poll's recovery count. The grace rewrite
+  // (fold the new hwm in, reset rc to 0) and the read of the count
+  // being surfaced are ONE serialized step, so exactly one poll
+  // claims a given count. The handler-side sequence it replaces
+  // (read rc → rewrite → surface the pre-read count) let two racing
+  // polls both surface the same count, and an EMPTY poll never
+  // rewrote at all, re-surfacing the count on every poll until a
+  // message arrived. An absent queue claims nothing, writes nothing.
+  async _pollClaim(body) {
+    const st = this._storage;
+    const key = 'sealed:queue';
+    const raw = await this._readLiveValue(key);
+    if (raw === null) return { status: 200, body: { ok: true, claimed: 0 } };
+    const { q, hwm, rc } = parseSealedQueue(raw);
+    const newHwm = Number.isFinite(body.hwm) ? Math.max(hwm || 0, body.hwm) : hwm;
+    const ttl = Number.isFinite(body.ttlSec) ? body.ttlSec : null;
+    const exp = ttl !== null ? Date.now() + Math.max(ttl, 0) * 1000 : null;
+    await st.put(key, { v: sealedQueueValue(q, newHwm, 0), exp });
+    // The grace rewrite is a queue put; the put op wakes the mailbox's
+    // sockets for the same reason — parity kept.
+    if (this._onQueueChanged) {
+      try { this._onQueueChanged('sealed'); } catch { /* socket already gone; polling still delivers */ }
+    }
+    return { status: 200, body: { ok: true, claimed: rc } };
   }
 }
 
@@ -1044,6 +1330,27 @@ function doMailboxStoreForKey(env, queueKey) {
         };
       }
       return { ok: false, retryAfterSec: Number.isFinite(r.retryAfterSec) ? r.retryAfterSec : 60 };
+    },
+    // D16 stage 2 (DO tier): the composite append op — dedup, ts
+    // assignment, caps and dropped accounting run inside the
+    // recipient's MailboxCore serialization, so an append on this
+    // tier is exactly-once. The result shape mirrors the KV store's
+    // appendQueue; `unconfirmed` never occurs here (a committed op
+    // is visible to every later op by construction). An RPC failure
+    // maps to { ok: false } — the handler's STORE_FAILED — never a
+    // throw into the handler.
+    appendQueue: async (item, ttlSec) => {
+      const r = await call('append', undefined, undefined, ttlSec, { item });
+      if (!r || !r.ok) return { ok: false };
+      return { ok: true, ts: r.ts, ...(r.duplicate ? { duplicate: true } : {}), ...(r.dropped ? { dropped: r.dropped } : {}) };
+    },
+    // S08 (DO tier): the atomic poll claim — exactly one poll claims
+    // a given recovery count. null on RPC failure: the handler
+    // surfaces nothing and the count stays stored for a later poll.
+    claimPoll: async (hwm, ttlSec) => {
+      const r = await call('poll-claim', undefined, undefined, ttlSec, { hwm });
+      if (!r || !r.ok) return null;
+      return Number.isFinite(r.claimed) ? r.claimed : null;
     },
   };
 }
@@ -1369,19 +1676,18 @@ async function handleMsgSend(body, ip, env, request) {
   }
 
   const mb = mailboxStore(env, 'inbox', to);
-  const existing = await mb.readQueue();
-  const inboxParsed = existing ? safeJsonParse(existing, []) : [];
-  const inbox = Array.isArray(inboxParsed) ? inboxParsed : [];
-  // §4 residual fix: the recipient's PERSISTENT high-water mark — the highest ts ever
-  // stored to or delivered from this inbox, kept in its own key so it survives the
-  // inbox draining to empty (poll cleanup deletes the inbox key itself). The tail
-  // bump below anchors on the CURRENT queue; once the queue has drained, that anchor
-  // is gone and a later message stamped at or below the recipient's poll cursor was
-  // stored unbumped, invisible to the cursor, and purged by the same poll's cleanup
-  // (audit 2026-11-13 §2.2). The hwm restores the anchor across drains.
-  const hwmRaw = await mb.readHwm();
-  const hwmParsed = hwmRaw !== null ? parseInt(hwmRaw) : NaN;
-  const inboxHwm = Number.isFinite(hwmParsed) ? hwmParsed : null;
+  // Enforce the same per-mailbox deposit frequency gate and usage quota as
+  // handleSealedSend: MailboxCore tracks ONE window spanning both families
+  // (`inbox` and `sealed`), so omitting checkDeposit here let callers bypass
+  // DEPOSIT_LIMIT and USAGE_QUOTA via the legacy plain path.
+  const gate = await mb.checkDeposit();
+  if (!gate.ok) {
+    globalThis._msgDedup.delete(dedupKey);
+    if (gate.quotaExceeded) {
+      return json({ error: 'Mailbox usage quota exceeded', code: 'USAGE_QUOTA_EXCEEDED', quotaScope: gate.quotaScope, quotaLimit: gate.quotaLimit, retryAfter: gate.retryAfterSec }, 429, request);
+    }
+    return json({ error: 'Mailbox deposit rate limited', code: 'MAILBOX_RATE_LIMITED', retryAfter: gate.retryAfterSec }, 429, request);
+  }
   const safePub  = typeof fromPub  === 'string' ? fromPub.slice(0, 200)  : undefined;
   const safeName = typeof fromName === 'string' ? fromName.slice(0, 64)  : undefined;
   const msg = { from, fromPub: safePub, fromName: safeName, payload, ts: ts || Date.now() };
@@ -1398,6 +1704,16 @@ async function handleMsgSend(body, ip, env, request) {
   // "No reply needed" marker: opaque to the relay, consumed by the recipient's UI. Passed
   // through on the /msg fallback so the flag survives when sealed sending is unavailable.
   if (body.nrn === true) msg.nrn = true;
+  // Stage 5 flags, same fallback reasoning as nrn: without these the
+  // recipient renders the control payload as raw text.
+  if (body.isSticker === true) msg.isSticker = true;
+  if (body.isProfile === true) msg.isProfile = true;
+  if (body.isLocation === true) msg.isLocation = true;
+  // SHARE_PLAN stage 6 step 2: the sender's asserted home relays, so
+  // the recipient can deposit replies where the sender actually
+  // polls. Sanitized to the home-list contract; opaque beyond that.
+  const fromRelays = sanitizeHomeList(body.fromRelays);
+  if (fromRelays) msg.fromRelays = fromRelays;
   // Server-assigned unique message id — groundwork for an exclusive poll cursor.
   // Two messages stored in the same millisecond share a ts, and the ts-only cursor
   // (`m.ts > lastTs`) drops the second one if a poll lands between them. Current
@@ -1418,72 +1734,25 @@ async function handleMsgSend(body, ip, env, request) {
   if (disappearAt) msg.disappearAt = (typeof disappearAt === 'number' && Number.isFinite(disappearAt)) ? disappearAt : undefined;
   if (sig) msg.sig = typeof sig === 'string' ? sig.slice(0, 200) : undefined;
   if (sigPub) msg.sigPub = typeof sigPub === 'string' ? sigPub.slice(0, 200) : undefined;
-  // Guarantee strictly-increasing ts within this inbox so the poll cursor (m.ts > lastTs)
-  // can never silently drop a message that shares a millisecond with an already-delivered
-  // one. The loss: client polls up to lastTs=T, a SECOND message then stores with ts=T,
-  // and the next poll's `m.ts > T` excludes it forever (cleanup eventually purges it
-  // undelivered). Bumping a colliding ts by 1ms makes the existing cursor lossless with no
-  // client change — appends are sequential so the last element always holds the max ts;
-  // display order is preserved and the sub-ms drift is invisible. (msg.id is the dedup key,
-  // so a bumped ts never causes a re-render.)
-  if (inbox.length > 0) {
-    const lastStoredTs = inbox[inbox.length - 1].ts;
-    if (Number.isFinite(lastStoredTs) && msg.ts <= lastStoredTs) msg.ts = lastStoredTs + 1;
-  }
-  // …and past the persistent high-water mark, so a post-drain arrival stamped at or
-  // below the recipient's poll cursor is still stored strictly above it (see above).
-  if (inboxHwm !== null && msg.ts <= inboxHwm) msg.ts = inboxHwm + 1;
-  inbox.push(msg);
-  const trimmed = capQueueBytes(inbox.slice(-100), m => (typeof m.payload === 'string' ? m.payload.length : 0) + 1024);
-  // Queue overflow drops the OLDEST messages. Don't do it silently: count
-  // the drops so the recipient's next poll can say "N messages were lost"
-  // — the same accounting handleSealedSend already keeps for the sealed
-  // queue (D4 honesty fix; the plain family was the one queue without it).
-  const noteDropped = async (n) => {
-    if (n <= 0) return;
-    const prev = parseInt(await mb.readDropped() || '0') || 0;
-    await mb.writeDropped(String(Math.min(prev + n, 99999)), TTL.WEEK);
-  };
-  await noteDropped(inbox.length - trimmed.length);
-  const stored = await mb.writeQueue(JSON.stringify(trimmed), TTL.WEEK);
-  if (!stored) {
-    // Un-mark the dedup key on a failed store: it was set BEFORE this write, so leaving it
-    // would make the client's retry of the identical ciphertext hit the dedup short-circuit
-    // (ok:true, dedup:true) and be silently dropped — a message lost despite never being
-    // stored. Deleting it lets the retry actually persist.
+  // D16 stage 2: the append is ONE store op now. The strictly-
+  // increasing ts guarantee (against the queue tail AND the persistent
+  // hwm — the §4 residual anchor that survives the inbox draining to
+  // empty, audit 2026-11-13 §2.2), the caps and the dropped accounting
+  // all live inside it: on the DO backend they run in the recipient's
+  // serialized mailbox core (exactly-once); on KV the store method
+  // carries the read-back recovery this handler used to run inline
+  // (identity is the server-assigned msg.id, the re-append ts is
+  // recomputed from the current tail and hwm). SECURITY.md states
+  // the two tiers.
+  const appended = await mb.appendQueue(msg, TTL.WEEK);
+  if (!appended.ok) {
+    // Un-mark the dedup key on a failed store: it was set BEFORE this
+    // write, so leaving it would make the client's retry of the
+    // identical ciphertext hit the dedup short-circuit (ok:true,
+    // dedup:true) and be silently dropped — a message lost despite
+    // never being stored. Deleting it lets the retry actually persist.
     globalThis._msgDedup.delete(dedupKey);
     return json({ error: 'Failed to store message', code: 'STORE_FAILED' }, 500, request);
-  }
-
-  // Lost-write recovery — the plain inbox is the same single-KV-value
-  // read-modify-write as the sealed queue, and until now was the only queue
-  // WITHOUT a read-back: two senders writing to the same recipient in the same
-  // instant both built on the same snapshot, and the later put silently erased
-  // the earlier message while both senders were answered 200 (audit 2026-11-13
-  // §2.4). Mirror handleSealedSend: read the key back and re-append if our entry
-  // is missing. Identity is the server-assigned msg.id — unique per message, so
-  // unlike a ts match it cannot false-positive on the racing writer's entry.
-  // The re-appended ts is recomputed from the CURRENT tail (and the hwm), never
-  // the stale pre-race value, so the recovered message stays strictly above the
-  // recipient's poll cursor. Like the sealed path this is recovery, not
-  // exactly-once: a stale read just skips the retry.
-  let storedTs = msg.ts;
-  const verifyRaw = await mb.readQueue();
-  const seenInbox = verifyRaw ? safeJsonParse(verifyRaw, []) : [];
-  if (Array.isArray(seenInbox) && !seenInbox.some(m => m && m.id === msg.id)) {
-    const tail = seenInbox.length > 0 ? seenInbox[seenInbox.length - 1] : null;
-    let reTs = msg.ts;
-    if (tail && Number.isFinite(tail.ts)) reTs = Math.max(reTs, tail.ts + 1);
-    if (inboxHwm !== null) reTs = Math.max(reTs, inboxHwm + 1);
-    seenInbox.push({ ...msg, ts: reTs });
-    const reTrimmed = capQueueBytes(seenInbox.slice(-100), m => (typeof m.payload === 'string' ? m.payload.length : 0) + 1024);
-    await noteDropped(seenInbox.length - reTrimmed.length);
-    if (await mb.writeQueue(JSON.stringify(reTrimmed), TTL.WEEK)) storedTs = reTs;
-  }
-  // Advance the persistent high-water mark to the newest ts this send stored
-  // (best-effort: a failed hwm write only degrades to the pre-fix behaviour).
-  if (inboxHwm === null || storedTs > inboxHwm) {
-    await mb.writeHwm(String(storedTs), TTL.WEEK);
   }
 
   // Trigger Web Push notification (non-blocking)
@@ -1765,6 +2034,10 @@ async function handlePresence(body, env, request) {
   // to near 0 reads/min while isolates are warm.
   if (isCheck && ids && Array.isArray(ids)) {
     const online = {};
+    // D14: registry-revision hints (see the beat path). Collected alongside
+    // `online` and returned only when at least one record carries one, so
+    // the legacy response shape is byte-identical for pre-D14 beats.
+    const devTs = {};
     const memCache = globalThis._presenceCache || null;
     const validIds = ids.slice(0, 50).filter(x => typeof x === 'string' && validateUserId(x));
     // Cache hits resolve synchronously; only cache misses need a KV round-trip, and those
@@ -1777,6 +2050,7 @@ async function handlePresence(body, env, request) {
       if (memRaw) {
         const p = safeJsonParse(memRaw);
         online[cid] = p ? (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH : false;
+        if (p?.devTs) devTs[cid] = p.devTs;
       } else {
         misses.push(cid);
       }
@@ -1786,11 +2060,12 @@ async function handlePresence(body, env, request) {
       if (data) {
         const p = safeJsonParse(data);
         online[cid] = p ? (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH : false;
+        if (p?.devTs) devTs[cid] = p.devTs;
       } else {
         online[cid] = false;
       }
     }));
-    return json({ online }, 200, request);
+    return json(Object.keys(devTs).length ? { online, devTs } : { online }, 200, request);
   }
 
   if (!id) return json({ error: 'id required', code: 'MISSING_ID' }, 400, request);
@@ -1848,6 +2123,15 @@ async function handlePresence(body, env, request) {
   const safePub = typeof pub === 'string' ? pub.slice(0, 200) : undefined;
   const safeName = sanitizeString(name, 64);
   const rawInst = typeof body.inst === 'string' ? body.inst.slice(0, 32) : undefined;
+  // D14: the beat may carry the ts of the sender's OWN device registry
+  // (devTs) so peers can invalidate cached device lists the moment a
+  // link/unlink lands, instead of waiting out the cache TTL. It is only
+  // honoured from a beat whose install signature VERIFIED (same trust
+  // rule as `inst` itself and the alias renewal below), and it is only a
+  // HINT: the registry peers refetch is root-signed and verified
+  // client-side, so a forged hint costs one verified refetch, never
+  // false data.
+  const rawDevTs = typeof body.devTs === 'number' && Number.isFinite(body.devTs) && body.devTs > 0 ? body.devTs : undefined;
   // Ownership proof for the beat itself (see checkPresenceAuth). Runs
   // before any cache/store mutation, so a rejected beat changes nothing.
   const presAuthErr = await checkPresenceAuth(body, env, request, { pub: safePub, name: safeName, caps: safeCaps, inst: rawInst });
@@ -1895,6 +2179,7 @@ async function handlePresence(body, env, request) {
   }
   const presData = { pub: safePub, name: safeName, at: Date.now() };
   if (safeInst) presData.inst = safeInst;
+  if (safeInst && rawDevTs) presData.devTs = rawDevTs;
   if (safeCaps) presData.caps = safeCaps;
   if (Date.now() - lastWrite > TIMEOUT_MS.PRESENCE_WRITE) { // throttle store writes (see PRESENCE STORE: the throttle now bounds DO writes too)
     await presenceStore(env, id).write(JSON.stringify(presData), TTL.MIN * 6); // 6min TTL (covers 5min interval + slack)
@@ -2093,7 +2378,14 @@ async function handleAliasSet(body, env, request) {
   // also refreshes the TTL. Between registrations, verified ordinary
   // account activity renews the TTL via renewAliasForActivity (the reverse
   // record written just below is what authorizes that).
-  const aliasSaved = await kvPut(env, `alias:${clean}`, JSON.stringify({ pub, name: sanitizeString(name, 64), setAt: Date.now() }), { expirationTtl: TTL.QUARTER });
+  // SHARE_PLAN stage 6 step 2: a registration may publish the owner's
+  // home relays (sanitized to the home-list contract), so resolving
+  // the alias on ANY relay that holds the record — including the
+  // owner's own, reached via an @alias@relay address — teaches the
+  // resolver where the owner actually lives. The record is returned
+  // whole by handleAliasGet, so the field flows with no get change.
+  const aliasRelays = sanitizeHomeList(body.relays);
+  const aliasSaved = await kvPut(env, `alias:${clean}`, JSON.stringify({ pub, name: sanitizeString(name, 64), setAt: Date.now(), ...(aliasRelays ? { relays: aliasRelays } : {}) }), { expirationTtl: TTL.QUARTER });
   if (!aliasSaved) return json({ error: 'Failed to store alias', code: 'STORE_FAILED' }, 500, request);
 
   // Lost-write verify: the taken-check above is check-then-act — two concurrent
@@ -2212,6 +2504,13 @@ async function handleDeviceSet(body, env, request) {
   const digest = await sha256Short(JSON.stringify(devices.map(d => d.pub)));
   const ok = await verifyEd25519(bundle.edIdentityKey, utf8ToB64(`breeze-device-set:${accountId}:${ts}:${digest}`), sig);
   if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
+
+  // A signed set is public (/device/list returns it verbatim), so the signature alone does
+  // not say who is posting it. Never step back to an older set: otherwise a device that was
+  // just unlinked re-posts the previous one inside the ts window and is linked again.
+  const prev = safeJsonParse(await kvGet(env, `devices:${accountId}`) || 'null');
+  if (prev && typeof prev.ts === 'number' && ts < prev.ts)
+    return json({ error: 'A newer device list is already stored', code: 'STALE_REGISTRY' }, 409, request);
 
   const stored = await kvPut(env, `devices:${accountId}`,
     JSON.stringify({ root, devices, ts, sig }), { expirationTtl: TTL.MONTH * 3 });
@@ -2412,13 +2711,20 @@ async function handleGroupJoin(body, env, request) {
   if (typeof rawMemberPub !== 'string') return json({ error: 'memberPub must be a string', code: 'INVALID_TYPE' }, 400, request);
   const memberPub = rawMemberPub.slice(0, 200);
   if (!token || !memberId || !memberPub) return json({ error: 'token, memberId, memberPub required', code: 'MISSING_FIELDS' }, 400, request);
-  if (typeof token !== 'string' || token.length > 128 || !/^[a-z0-9]+$/.test(token) || !/^[a-z0-9]+$/.test(token)) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
+  if (typeof token !== 'string' || token.length > 128 || !/^[a-z0-9]+$/.test(token)) return json({ error: 'invalid token', code: 'INVALID_TOKEN' }, 400, request);
   if (!validateUserId(memberId)) return json({ error: 'invalid memberId', code: 'INVALID_USER_ID' }, 400, request);
   // Ownership proof: memberId = memberPub.slice(0,12), so pub must start with the claimed id.
   // Without this, any invite holder could join/update under a different user's memberId, hijacking
   // that member's pub key slot and capturing messages encrypted to them.
   if (!memberPub.startsWith(memberId))
     return json({ error: 'memberPub does not match memberId', code: 'KEY_MISMATCH' }, 400, request);
+  // Bind memberPub, memberName, and caps into the Ed25519 challenge so an
+  // invite holder cannot impersonate another member to downgrade caps (e.g.
+  // stripping group-v5) or overwrite their key/name when auth is supplied or
+  // GROUP_REQUIRE_AUTH=true is enabled.
+  const jBind = await sha256Short(JSON.stringify([memberPub, memberName || '', sanitizeCaps(caps) || []]));
+  const jAuth = await checkGroupAuth(env, request, 'join', token, memberId, body.ts, body.sig, jBind);
+  if (jAuth) return jAuth;
 
   const data = await kvGet(env, `grp:${token}`);
   if (!data) return json({ error: 'Invite link expired or invalid', code: 'EXPIRED' }, 404, request);
@@ -3210,6 +3516,23 @@ function turnProviderMode(env) {
   return env.TURN_OPENRELAY_FALLBACK === 'false' ? 'none' : 'openrelay';
 }
 
+// Stage 6 step 3: the issuance budget for METERED modes (Cloudflare
+// Calls is billed per GB; the open-relay free tier is a shared
+// 20GB/month). The worker cannot see media bytes, so the enforceable
+// lever is credential ISSUANCE, counted per month in KV: one issued
+// credential set serves a day (ttl), so the cap bounds distinct
+// user-days of TURN. Operators set TURN_MONTHLY_ISSUE_CAP; unset or
+// 0 means no cap. Self-hosted modes (custom/static) are the
+// operator's own infrastructure and are never capped here.
+function turnMonthKey() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
+async function turnIssueCount(env) {
+  const n = parseInt(await kvGet(env, 'turn-issue:' + turnMonthKey()));
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+async function noteTurnIssue(env) {
+  await kvPut(env, 'turn-issue:' + turnMonthKey(), String((await turnIssueCount(env)) + 1), { expirationTtl: TTL.MONTH * 2 });
+}
+
 async function handleTurn(body, env, request) {
   const { userId } = body;
   if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
@@ -3245,6 +3568,17 @@ async function handleTurn(body, env, request) {
     { urls: 'stun:stun.l.google.com:19302' },
   ];
 
+  // Stage 6 step 3: the monthly issuance budget for metered modes.
+  // Exceeding it is a NOTIFICATION, not a silent degradation: the
+  // response is STUN-only with provider 'none' PLUS a turnQuota flag
+  // the client surfaces to the user (direct connections still work;
+  // only relay-dependent peers lose their fallback).
+  const issueCap = parseInt(env.TURN_MONTHLY_ISSUE_CAP) || 0;
+  const turnMode = turnProviderMode(env);
+  if (issueCap > 0 && (turnMode === 'cloudflare' || turnMode === 'openrelay') && (await turnIssueCount(env)) >= issueCap) {
+    return json({ iceServers, ttl: TTL.DAY, provider: 'none', turnQuota: { exceeded: true, cap: issueCap, month: turnMonthKey() } }, 200, request);
+  }
+
   // Option A: Cloudflare Calls TURN (recommended — $0.05/GB, global anycast)
   if (env.TURN_KEY_ID && env.TURN_KEY_API_TOKEN) {
     try {
@@ -3257,6 +3591,7 @@ async function handleTurn(body, env, request) {
       if (resp.ok) {
         const data = await resp.json();
         if (data.iceServers) {
+          await noteTurnIssue(env);
           return json({ iceServers: [...iceServers, ...data.iceServers], ttl, provider: 'cloudflare' }, 200, request);
         }
       }
@@ -3296,6 +3631,7 @@ async function handleTurn(body, env, request) {
     { urls: 'turn:a.relay.metered.ca:80?transport=tcp', username: 'e8dd65b92f60fae75f5aefab', credential: 'uWdWNmkhvyqTEswO' },
     { urls: 'turns:a.relay.metered.ca:443', username: 'e8dd65b92f60fae75f5aefab', credential: 'uWdWNmkhvyqTEswO' },
   );
+  await noteTurnIssue(env);
   return json({ iceServers, ttl: TTL.DAY, provider: 'openrelay' }, 200, request);
 }
 
@@ -3370,20 +3706,6 @@ async function handleAccountDelete(body, env, request) {
     }
   }
 
-  // Read the billing record BEFORE deleting it so the reverse cust:{customerId} → userId
-  // mapping can be erased too. Otherwise that mapping (Stripe payment identity linked to
-  // this userId) survives account deletion — residual user-linked data the rest of this
-  // handler erases — and a later subscription webhook lacking metadata.userId could still
-  // resolve the deleted account through it. (Subscriptions created via Breeze also carry
-  // userId in their metadata, so the user should still cancel via the portal before
-  // deleting; this only removes the relay-side linkage.)
-  let customerId = null;
-  const slotsRaw = await kvGet(env, `slots:${userId}`);
-  if (slotsRaw) {
-    const s = safeJsonParse(slotsRaw);
-    if (s && typeof s.customerId === 'string' && s.customerId) customerId = s.customerId;
-  }
-
   const dels = [
     // Both mailboxes, all six keys: plain queue + its high-water mark
     // (else a re-registered id inherits a stale delivery cursor anchor)
@@ -3405,9 +3727,7 @@ async function handleAccountDelete(body, env, request) {
     // live in the user's DO, the KV copy, or both (never drained) —
     // erasePresence covers all three (see PRESENCE STORE).
     ...erasePresence(env, userId),
-    kvDel(env, `slots:${userId}`),
   ];
-  if (customerId) dels.push(kvDel(env, `cust:${customerId}`));
   await Promise.all(dels);
   // Evict the in-memory presence cache too, or a same-isolate presence check
   // would keep answering "online" from stale cached data after erasure.
@@ -3503,8 +3823,7 @@ async function handleAccountDelete(body, env, request) {
     }
   }
 
-  const erased = ['inbox', 'sealed', 'prekeys', 'ktlog', 'push', 'backup', 'presence', 'slots', 'devices'];
-  if (customerId) erased.push('cust');
+  const erased = ['inbox', 'sealed', 'prekeys', 'ktlog', 'push', 'backup', 'presence', 'devices'];
   return json({
     ok: true,
     erased,
@@ -4115,6 +4434,12 @@ async function handleKtLogGet(body, env, request) {
 // report, the recipient reveals (frankId, plaintext, Kf); the relay recomputes
 // HMAC(Kf, plaintext) and checks it equals the recorded Cf. The relay never sees
 // plaintext of un-reported messages.
+//
+// D08 (AMF): current clients also carry a sender-binding tag — the sender's
+// Ed25519 signature over the commitment context, shipped inside the E2E
+// payload. handleAbuseReport verifies it against the claimed sender's
+// registered edIdentityKey, so a bound report attributes the message to its
+// sender; the symmetric-only flow remains for pre-AMF clients.
 // ============================================================
 async function hmacVerifyFrank(commitmentB64, openingB64, message) {
   try {
@@ -4159,6 +4484,21 @@ async function handleAbuseReport(body, env, request) {
   if (!commitment) return json({ error: 'No such franking record', code: 'NOT_FOUND' }, 404, request);
   const verified = await hmacVerifyFrank(commitment, opening, message);
   if (!verified) return json({ verified: false, error: 'Report does not match the sent message', code: 'FRANK_MISMATCH' }, 400, request);
+  // D08 (AMF): when the report carries the sender-binding tag, verify it against
+  // the claimed sender's registered identity key. The tag signs exactly the
+  // commitment string recorded at send time (fetched above), so a bound report
+  // attributes the message to that sender cryptographically; an unbound one
+  // keeps the legacy semantics (content verified, sender unattributed).
+  // Absent fields = pre-AMF client, handled identically.
+  let senderBound = false;
+  const hasAmf = typeof body.amfSig === 'string' && typeof body.senderId === 'string';
+  if (hasAmf && body.amfSig.length <= 128 && /^[A-Za-z0-9+/=]+$/.test(body.amfSig) && validateUserId(body.senderId)) {
+    const bundleRaw = await kvGet(env, `prekey:${body.senderId}`);
+    const bundle = bundleRaw ? safeJsonParse(bundleRaw) : null;
+    if (bundle && typeof bundle.edIdentityKey === 'string' && bundle.edIdentityKey) {
+      senderBound = await verifyEd25519(bundle.edIdentityKey, btoa(`breeze-amf-v1:${frankId}:${commitment}`), body.amfSig);
+    }
+  }
   // Fire the moderation webhook (and stamp the report) only the FIRST time a given
   // frankId is reported. The opening key Kf is delivered to the recipient inside the E2E
   // payload, so a recipient holding a valid (frankId, message, opening) tuple — or a
@@ -4179,7 +4519,7 @@ async function handleAbuseReport(body, env, request) {
   // Object (out of scope). This comment states what the code actually guarantees.
   const alreadyReported = await kvGet(env, `report:${frankId}`);
   // Record the verified report for moderation (idempotent on frankId — same key).
-  const stored = await kvPut(env, `report:${frankId}`, JSON.stringify({ at: Date.now(), len: message.length }), { expirationTtl: TTL.QUARTER });
+  const stored = await kvPut(env, `report:${frankId}`, JSON.stringify({ at: Date.now(), len: message.length, ...(senderBound ? { amf: true, sender: body.senderId } : {}) }), { expirationTtl: TTL.QUARTER });
   if (!stored) return json({ error: 'Failed to record report', code: 'STORE_FAILED' }, 500, request);
   // Decide whether THIS request fires the webhook: not already in KV, and not already
   // fired by this isolate. The has()/set() pair is synchronous — do not insert an await.
@@ -4200,10 +4540,10 @@ async function handleAbuseReport(body, env, request) {
     fetchWithTimeout(env.ABUSE_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'abuse_report', frankId, messageLen: message.length, at: Date.now() }),
+      body: JSON.stringify({ type: 'abuse_report', frankId, messageLen: message.length, at: Date.now(), ...(hasAmf ? { senderBound } : {}), ...(senderBound ? { sender: body.senderId } : {}) }),
     }, TIMEOUT_MS.WEBHOOK).catch(() => {});
   }
-  return json({ verified: true, duplicate: !fireWebhook }, 200, request);
+  return json({ verified: true, duplicate: !fireWebhook, ...(hasAmf ? { senderBound } : {}) }, 200, request);
 }
 
 // ============================================================
@@ -4211,6 +4551,50 @@ async function handleAbuseReport(body, env, request) {
 //
 // Worker only sees recipient ID. Sender is encrypted inside payload.
 // ============================================================
+
+// D31 (COST_MODEL §7 lever 2): the sealed queue's stored form. The poll
+// high-water mark rides INSIDE the queue value ({ q, hwm }) instead of its
+// own slot. The separation was never load-bearing for the sealed family —
+// unlike the plain inbox, whose hwm must survive the queue draining to
+// empty (it anchors later sends), the sealed hwm is written by a poll and
+// consumed by the ack of that same batch, and the poll's grace rewrite
+// keeps the queue alive for exactly the hwm's lifetime. Folding removes
+// one write from every poll (grace rewrite + hwm → one write) and one
+// from every ack (queue delete/rewrite + hwm delete → one write).
+// Readers accept BOTH forms: queues written before the fold are bare
+// arrays ([{ envelope, ts }, …]) and drain naturally within their 7-day
+// TTL; a bare array parses with hwm = null, and handleSealedAck still
+// consults the legacy :hwm slot in that case (it expires within 5
+// minutes of the last pre-fold poll, so the fallback is short-lived).
+//
+// D16 stage 1: the recovery count `rc` rides the same value — how many
+// times the send path's read-back found its own envelope missing and
+// had to re-append (see handleSealedSend). It exists so the staged
+// plan for this queue (measure the recovery's track record; split a
+// mailbox into per-envelope keys only where loss is actually observed)
+// has something to measure: before this fold the recovery fired — or
+// failed — without leaving any trace. handleSealedPoll surfaces the
+// count once as `recovered` (the `dropped` pattern) and resets it in
+// the grace rewrite it already performs; writers that rewrite the
+// value for other reasons (send append, ack) carry the count through.
+function parseSealedQueue(raw) {
+  const parsed = raw ? safeJsonParse(raw, null) : null;
+  if (Array.isArray(parsed)) return { q: parsed, hwm: null, rc: 0 };
+  if (parsed && Array.isArray(parsed.q)) {
+    return { q: parsed.q, hwm: Number.isFinite(parsed.hwm) ? parsed.hwm : null, rc: Number.isFinite(parsed.rc) && parsed.rc > 0 ? Math.floor(parsed.rc) : 0 };
+  }
+  return { q: [], hwm: null, rc: 0 };
+}
+function sealedQueueValue(q, hwm, rc) {
+  return JSON.stringify({ q, hwm: Number.isFinite(hwm) ? hwm : null, rc: Number.isFinite(rc) && rc > 0 ? Math.floor(rc) : null });
+}
+
+// D16 stage 1: how many verified repair rounds handleSealedSend runs
+// before it answers STORE_UNCONFIRMED instead of 200. Each round is one
+// extra write + read on the send path and only runs when a race was
+// actually detected, so the bound costs nothing in the common case;
+// two rounds mean a loss must beat the initial write and both repairs.
+const SEALED_MAX_REPAIRS = 2;
 
 async function handleSealedSend(body, env, request) {
   const { to, envelope } = body;
@@ -4268,76 +4652,25 @@ async function handleSealedSend(body, env, request) {
     }
     return json({ error: 'Mailbox deposit rate limited', code: 'MAILBOX_RATE_LIMITED', retryAfter: gate.retryAfterSec }, 429, request);
   }
-  const existing = await mb.readQueue();
-  const queueParsed = existing ? safeJsonParse(existing, []) : [];
-  const queue = Array.isArray(queueParsed) ? queueParsed : [];
-  // Guarantee strictly-increasing ts within the sealed queue (mirrors handleMsgSend).
-  // handleSealedAck uses `m.ts > hwm` (strict greater-than); if a new envelope
-  // arrives in the SAME millisecond as the last polled entry (hwm), it shares that
-  // ts and is deleted by the ack even though it was never polled. A +1ms bump makes
-  // every appended entry strictly newer than all preceding entries — the same fix
-  // already applied to the plain inbox path. The last element holds the max ts since
-  // appends are sequential; no full-scan needed.
-  const newTs = queue.length > 0 && Number.isFinite(queue[queue.length - 1].ts)
-    ? Math.max(Date.now(), queue[queue.length - 1].ts + 1)
-    : Date.now();
-  queue.push({ envelope, ts: newTs });
-  const trimmed = capQueueBytes(queue.slice(-100), m => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
-  // Queue overflow drops the OLDEST envelopes. Don't do it silently (Socratic round —
-  // "what happens to message 101 while the recipient is offline?"): count the drops so the
-  // recipient's next poll can say "N messages were lost", instead of them never knowing.
-  const droppedNow = queue.length - trimmed.length;
-  if (droppedNow > 0) {
-    const prev = parseInt(await mb.readDropped() || '0') || 0;
-    await mb.writeDropped(String(Math.min(prev + droppedNow, 99999)), TTL.WEEK);
-  }
-  const stored = await mb.writeQueue(JSON.stringify(trimmed), TTL.WEEK);
-  if (!stored) {
-    // Un-mark the dedup key on a failed store (set before this write): otherwise the
-    // client's retry of the identical envelope is swallowed as a duplicate and lost on
-    // the "reliable" sealed path. Mirrors handleMsgSend.
+  // D16 stage 2: the append is ONE store op now. The strictly-
+  // increasing ts guarantee (handleSealedAck filters on `m.ts > hwm`,
+  // so a same-millisecond entry would be acked away unpolled), the
+  // caps and the dropped accounting all live inside it: on the DO
+  // backend they run in the recipient's serialized mailbox core —
+  // dedup included — and the append is exactly-once; on KV the store
+  // method carries the stage-1 verified recovery (see its comment)
+  // and reports `unconfirmed` when the envelope cannot be seen after
+  // every repair round. SECURITY.md states the two tiers.
+  const appended = await mb.appendQueue({ envelope }, TTL.WEEK);
+  if (!appended.ok) {
+    // Un-mark the dedup key on a failed store (set before this write):
+    // otherwise the client's retry of the identical envelope is
+    // swallowed as a duplicate and lost on the "reliable" sealed path.
     globalThis._sealedDedup.delete(dedupKey);
+    if (appended.unconfirmed) {
+      return json({ error: 'Failed to confirm sealed delivery', code: 'STORE_UNCONFIRMED' }, 500, request);
+    }
     return json({ error: 'Failed to store sealed message', code: 'STORE_FAILED' }, 500, request);
-  }
-  // Lost-write recovery. `sealed:{to}` is one KV value mutated read-modify-write, and KV is
-  // last-write-wins with no transactions: two senders writing to the SAME recipient in the same
-  // instant both read the old queue, one envelope disappears — and BOTH senders are answered
-  // 200. The silence is the defect, not the race: a rare loss you can see is an inconvenience,
-  // a rare loss you cannot is a messenger that drops messages.
-  //
-  // Reading the key back catches the common case for ONE extra read on the SEND path, which is
-  // cold next to polling (every 3 s per user). Deliberately NOT the textbook fix — splitting
-  // the queue into a key per envelope removes the race outright, but replaces one `get` per
-  // poll with a `list` plus a `get` per message on the hottest path in a relay that already
-  // throttles presence writes to survive the free tier's 1000 writes/day. This is recovery,
-  // not exactly-once (SECURITY.md says so plainly), and it cannot make delivery worse: a stale
-  // read just skips the retry, and a duplicate re-append is dropped by the recipient's msgId
-  // dedup.
-  //
-  // Identity is the ENVELOPE, not the timestamp. Matching on ts alone looked cheaper and was
-  // wrong: the racing writer's entry can carry the same millisecond, so the check would report
-  // "mine is present" in exactly the case it exists to detect. The length test short-circuits
-  // the string compare for the common case. (Caught by the deterministic race test, which is
-  // the point of writing one.)
-  const verifyRaw = await mb.readQueue();
-  const seen = verifyRaw ? safeJsonParse(verifyRaw, []) : [];
-  const mine = (m) => m && typeof m.envelope === 'string'
-    && m.envelope.length === envelope.length && m.envelope === envelope;
-  if (Array.isArray(seen) && !seen.some(mine)) {
-    // §4 residual fix: recompute the re-append ts from the CURRENT tail of the
-    // read-back snapshot instead of reusing the original newTs. The racing winner
-    // computed its ts from the same stale base, so reusing newTs could re-enter
-    // the queue with a ts EQUAL to the winner's; a poll that landed inside the
-    // recovery window recorded hwm from the winner alone, and the ack's
-    // `m.ts > hwm` filter then deleted this envelope unpolled (audit 2026-11-13
-    // §2.3). max(newTs, tail+1) keeps the recovered envelope strictly newer than
-    // everything actually in the queue, so the ack can only clear what was
-    // genuinely polled.
-    const tailTs = seen.length > 0 && Number.isFinite(seen[seen.length - 1].ts) ? seen[seen.length - 1].ts : 0;
-    const reTs = Math.max(newTs, tailTs + 1);
-    seen.push({ envelope, ts: reTs });
-    const requeued = capQueueBytes(seen.slice(-100), (m) => (typeof m.envelope === 'string' ? m.envelope.length : 0) + 128);
-    await mb.writeQueue(JSON.stringify(requeued), TTL.WEEK);
   }
   sendPushToUser(to, { title: 'Breeze', body: 'New message', tag: 'breeze-sealed', contactId: to }, env).catch(() => {});
   return json({ ok: true, ack: Date.now() }, 200, request);
@@ -4353,25 +4686,45 @@ async function handleSealedPoll(body, env, request) {
   const signalInfo = {};
   const data = await mb.readQueue(mailboxWsEnabled(env) ? sigGen => { signalInfo.sigGen = sigGen; } : undefined);
   if (!data) return json({ messages: [], ...signalInfo }, 200, request);
-  const messages = safeJsonParse(data, []);
-  if (!Array.isArray(messages)) return json({ messages: [], ...signalInfo }, 200, request);
+  const { q: messages, hwm: prevHwm, rc: prevRc } = parseSealedQueue(data);
   // v3.6: Grace period — set short TTL instead of immediate delete
   // If client crashes after poll but before processing, messages survive 5 min
-  // Client-side _replayCache + IDB dedup prevents re-rendering on re-poll
-  await mb.writeQueue(data, TTL.MIN * 5); // 5 min grace
-  // Record a high-water mark (max ts returned) so the later ACK clears ONLY what was
-  // actually polled. handleSealedAck previously blind-deleted the whole queue, so any
-  // envelope appended by handleSealedSend in the poll→ack window was destroyed
-  // undelivered — a silent loss on the "reliable" sealed path. Only written when there
-  // are messages, so idle polls (the common case) still do zero extra KV writes.
+  // Client-side _replayCache + IDB dedup prevents re-rendering on re-poll.
+  // D31: the grace rewrite also records the high-water mark (max ts returned)
+  // INSIDE the queue value, so the later ACK clears ONLY what was actually
+  // polled — one write instead of the previous grace + hwm pair. (The mark
+  // exists because handleSealedAck once blind-deleted the whole queue, and
+  // any envelope appended in the poll→ack window was destroyed undelivered.)
+  // D16 stage 1: the same rewrite resets the recovery count, which this
+  // poll surfaces once — the reset rides a write that already happens.
+  // S08 / D16 stage 2: the rewrite is now ONE store op (claimPoll) that
+  // also RETURNS the count it reset. The handler-side sequence it
+  // replaces (read rc above → rewrite with rc=0 → surface the pre-read
+  // count) was not atomic: two racing polls could both read rc > 0
+  // before either reset landed and surface the same recoveries twice,
+  // and it only ran when messages were present — an empty poll
+  // re-surfaced the same count on every poll until a message arrived
+  // (the ack carries rc forward, so q-empty + rc>0 is a real state).
+  // The claim therefore also runs when only a count is pending. On
+  // the DO backend the op is serialized (exactly one claim wins); on
+  // KV it is the same read-modify-write shape as before, best-effort
+  // like every KV mutation (SECURITY.md states the tiers). A failed
+  // claim (null) surfaces nothing: the count stays stored and a
+  // later poll claims it then. Idle polls (no messages, no count)
+  // stay write-free, as before.
   let maxTs = 0;
   for (const m of messages) { if (Number.isFinite(m?.ts) && m.ts > maxTs) maxTs = m.ts; }
-  if (maxTs > 0) await mb.writeHwm(String(maxTs), TTL.MIN * 5);
+  let recoveredClaimed = 0;
+  if (messages.length > 0 || prevRc > 0) {
+    const newHwm = maxTs > 0 ? Math.max(prevHwm || 0, maxTs) : prevHwm;
+    const claimed = await mb.claimPoll(newHwm, TTL.MIN * 5); // 5 min grace
+    if (typeof claimed === 'number') recoveredClaimed = claimed;
+  }
   // Surface queue-overflow losses once, then reset the counter (see handleSealedSend).
   const droppedStr = await mb.readDropped();
   const dropped = parseInt(droppedStr || '0') || 0;
   if (dropped > 0) await mb.deleteDropped();
-  return json({ messages, ...(dropped > 0 ? { dropped } : {}), ...signalInfo }, 200, request);
+  return json({ messages, ...(dropped > 0 ? { dropped } : {}), ...(recoveredClaimed > 0 ? { recovered: recoveredClaimed } : {}), ...signalInfo }, 200, request);
 }
 
 // v3.6: Sealed ACK — client confirms processing, worker deletes messages
@@ -4387,17 +4740,30 @@ async function handleSealedAck(body, env, request) {
   // kvDel/kvPut return false on a genuine KV API error (not on key-not-found, which is
   // idempotent); report failure so the client retries rather than believing it was cleared.
   const mb = mailboxStore(env, 'sealed', id);
-  const hwmRaw = await mb.readHwm();
-  const hwm = hwmRaw !== null ? parseInt(hwmRaw) : NaN;
-  if (Number.isFinite(hwm)) {
-    const raw = await mb.readQueue();
-    const queue = raw ? safeJsonParse(raw, []) : [];
-    const remaining = Array.isArray(queue) ? queue.filter(m => Number.isFinite(m?.ts) && m.ts > hwm) : [];
+  const raw = await mb.readQueue();
+  const { q: queue, hwm: foldedHwm, rc } = parseSealedQueue(raw);
+  // D31: the mark normally rides inside the queue value. A bare-array
+  // value (written before the fold) may still pair with a legacy :hwm
+  // slot from a pre-fold poll — consult it only then; it expires within
+  // 5 minutes of that poll, so the fallback is short-lived.
+  let hwm = foldedHwm;
+  if (hwm === null) {
+    const hwmRaw = await mb.readHwm();
+    const legacy = hwmRaw !== null ? parseInt(hwmRaw) : NaN;
+    if (Number.isFinite(legacy)) {
+      hwm = legacy;
+      await mb.deleteHwm(); // one-time cleanup of the legacy slot
+    }
+  }
+  if (hwm !== null) {
+    const remaining = queue.filter(m => Number.isFinite(m?.ts) && m.ts > hwm);
     let ok;
     if (remaining.length === 0) ok = await mb.deleteQueue();
-    else ok = await mb.writeQueue(JSON.stringify(remaining), TTL.WEEK);
+    // D16 stage 1: the recovery count rides through the ack's rewrite —
+    // a count a racing repair added after the poll's snapshot must
+    // survive to be surfaced by the NEXT poll, not be zeroed here.
+    else ok = await mb.writeQueue(sealedQueueValue(remaining, null, rc), TTL.WEEK);
     if (!ok) return json({ error: 'Failed to confirm delivery', code: 'ACK_FAILED' }, 500, request);
-    await mb.deleteHwm(); // best-effort marker cleanup (also expires via its own TTL)
     return json({ ok: true, kept: remaining.length }, 200, request);
   }
   // No high-water mark (client never polled, or a pre-hwm ACK): fall back to full delete.
@@ -4435,9 +4801,15 @@ async function handleBackupUpload(body, env, request) {
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
   if (typeof backup !== 'string') return json({ error: 'backup must be a string', code: 'INVALID_FIELD' }, 400, request);
 
-  // Optional Ed25519 auth: callers may include { ts, sig } to prove ownership of the
-  // account's identity key before overwriting the backup. When omitted the upload is
-  // unauthenticated (backward-compat). Both fields must be present or both absent.
+  // Ed25519 auth: callers include { ts, sig } to prove ownership of the
+  // account's identity key before overwriting the backup. Both fields must be
+  // present or both absent. Unsigned requests are REJECTED BY DEFAULT (same
+  // pattern as PREKEY_REQUIRE_AUTH / PRESENCE_REQUIRE_AUTH): without a
+  // signature, knowing a userId is enough to overwrite that user's encrypted
+  // backup blob. The current client always signs (src/app/backup.js), so the
+  // only way back to unsigned acceptance is the operator's explicit opt-out
+  // BACKUP_REQUIRE_AUTH=false (e.g. a client migration window), and every
+  // acceptance under it is logged below.
   const hasSig = ts !== undefined || sig !== undefined;
   if (hasSig) {
     if (ts === undefined || sig === undefined)
@@ -4453,8 +4825,10 @@ async function handleBackupUpload(body, env, request) {
     const challenge = `breeze-backup-upload:${userId}:${ts}`;
     const ok = await verifyEd25519(bundle.edIdentityKey, btoa(challenge), sig);
     if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
-  } else if (env.BACKUP_REQUIRE_AUTH === 'true') {
+  } else if (env.BACKUP_REQUIRE_AUTH !== 'false') {
     return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+  } else {
+    console.warn('[auth] deprecated unsigned backup upload accepted under BACKUP_REQUIRE_AUTH=false — unsigned requests are rejected by default; set the flag only during a client migration window');
   }
 
   // Store (max 5MB per backup)
@@ -4475,12 +4849,14 @@ async function handleBackupDownload(body, env, request) {
   if (!userId) return json({ error: 'userId required', code: 'MISSING_USER_ID' }, 400, request);
   if (!validateUserId(userId)) return json({ error: 'invalid userId', code: 'INVALID_USER_ID' }, 400, request);
 
-  // Optional Ed25519 auth: callers may include { ts, sig } to prove ownership before
+  // Ed25519 auth: callers include { ts, sig } to prove ownership before
   // retrieving the backup. Both fields must be present or both absent.
-  // Set BACKUP_REQUIRE_AUTH=true to reject unauthenticated requests — recommended once
-  // all clients register an Ed25519 identity key (same pattern as GROUP_REQUIRE_AUTH,
-  // PRESENCE_REQUIRE_AUTH, etc.). Without it, knowing a userId is enough to download the
-  // encrypted blob and brute-force the passphrase offline.
+  // Unsigned requests are REJECTED BY DEFAULT (same pattern as
+  // PREKEY_REQUIRE_AUTH / PRESENCE_REQUIRE_AUTH, etc.): without a signature,
+  // knowing a userId is enough to download the encrypted blob and brute-force
+  // the passphrase offline. The current client always signs
+  // (src/app/backup.js); the only way back to unsigned acceptance is the
+  // operator's explicit opt-out BACKUP_REQUIRE_AUTH=false, logged below.
   const hasSig = ts !== undefined || sig !== undefined;
   if (hasSig) {
     if (ts === undefined || sig === undefined)
@@ -4496,12 +4872,23 @@ async function handleBackupDownload(body, env, request) {
     const challenge = `breeze-backup-download:${userId}:${ts}`;
     const ok = await verifyEd25519(bundle.edIdentityKey, btoa(challenge), sig);
     if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
-  } else if (env.BACKUP_REQUIRE_AUTH === 'true') {
+  } else if (env.BACKUP_REQUIRE_AUTH !== 'false') {
     return json({ error: 'Authentication required', code: 'AUTH_REQUIRED' }, 403, request);
+  } else {
+    console.warn('[auth] deprecated unsigned backup download accepted under BACKUP_REQUIRE_AUTH=false — unsigned requests are rejected by default; set the flag only during a client migration window');
   }
 
   const backup = await kvGet(env, `backup:${userId}`);
   if (!backup) return json({ error: 'No backup found', code: 'NOT_FOUND' }, 404, request);
+  // Touch-on-read (D15): a VERIFIED download renews the 90-day retention
+  // window, so a backup that is actively used as a recovery path cannot
+  // silently lapse the way a write-only one can — the same renewal the
+  // alias path applies on heartbeat. Content-identical rewrite (only the
+  // expiry moves), and unsigned downloads under the BACKUP_REQUIRE_AUTH=false
+  // opt-out do NOT renew: renewal is an owner's privilege, never something
+  // a stranger holding a userId can trigger. Best-effort — the download
+  // itself has already succeeded.
+  if (hasSig) await kvPut(env, `backup:${userId}`, backup, { expirationTtl: TTL.QUARTER });
   return json({ backup, authenticated: hasSig }, 200, request);
 }
 
@@ -4596,8 +4983,15 @@ async function handleBackupSimpleDownload(body, env, request) {
   // The owner's pub rides along so the client can bind the restored
   // signing record to the key that owns the slot (defence in depth —
   // the GCM envelope already refuses a swapped blob).
-  const rec = safeJsonParse(await kvGet(env, `sbackup:${locator}`));
+  const raw = await kvGet(env, `sbackup:${locator}`);
+  const rec = safeJsonParse(raw);
   if (!rec || typeof rec.backup !== 'string') return json({ error: 'No backup found', code: 'NOT_FOUND' }, 404, request);
+  // Touch-on-read (D15): presenting the locator IS the authentication in
+  // this mode, so a successful download renews the 90-day retention window
+  // exactly like the signed legacy path. Content-identical rewrite (the
+  // raw stored bytes go back untouched; only the expiry moves).
+  // Best-effort — the download itself has already succeeded.
+  await kvPut(env, `sbackup:${locator}`, raw, { expirationTtl: TTL.QUARTER });
   return json({ backup: rec.backup, pub: rec.pub || null }, 200, request);
 }
 
@@ -4710,7 +5104,7 @@ function corsHeaders(request) {
     'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload',
     'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), accelerometer=(), gyroscope=(), magnetometer=(), ambient-light-sensor=()',
-    'X-Breeze-Version': '3.6.1',
+    'X-Breeze-Version': '3.8.0',
   };
   // Only echo the Origin back if it is a real browser origin (not the string "null"
   // produced by sandboxed iframes / file:// which would allow those sources to read

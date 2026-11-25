@@ -68,6 +68,19 @@ jobs:
           echo "label=$LABEL" >> "$GITHUB_OUTPUT"
           echo "Release label: $LABEL"
 
+      # Stage 6 step 4 gate: a release whose label disagrees with
+      # ANY in-repo version site is a mislabeled artifact — refuse
+      # it here instead of shipping it. --check anchors every site
+      # to CONFIG.VERSION; the label must equal it (with the v).
+      - name: Version parity gate
+        run: |
+          node tools/bump-version.mjs --check
+          APP="v$(grep -o "VERSION: '[^']*'" index.html | head -1 | sed "s/VERSION: '//; s/'//")"
+          if [ "${{ steps.version.outputs.label }}" != "$APP" ]; then
+            echo "::error::Release label ${{ steps.version.outputs.label }} != in-repo version $APP — bump with tools/bump-version.mjs first"
+            exit 1
+          fi
+
       - name: Build distribution ZIP + checksums
         run: bash tools/package-release.sh "${{ steps.version.outputs.label }}" dist-release
 
@@ -91,11 +104,23 @@ jobs:
         run: |
           LABEL="${{ steps.version.outputs.label }}"
           cat > release-notes.md <<'EOF'
-          Self-hostable release: unzip, then run Breeze on your own placement
-          (Cloudflare Pages, Docker, or bare Node) — see `DEPLOY.txt` inside
-          the ZIP and `docs/SELF_HOSTING.md` for the full guide.
+          電話番号も登録もいらない、暗号化メッセンジャー Breeze の配布ファイルです。
+          会話の中身は、送った人と受け取る人にしか読めません。
 
-          Verify the download:
+          入れ方:
+
+          - Windows / Mac / Linux で使う場合は、このページの下にあるファイルから、
+            お使いの機械に合うものを1つダウンロードして実行してください。
+          - 自分のサーバーに置く場合は、`breeze-` で始まる `.zip` を解凍し、
+            中の `DEPLOY.txt` の手順で置いてください。
+            詳しくは[設置の手順書](https://github.com/shizukutanaka/Breeze/blob/main/docs/SELF_HOSTING.md)をご覧ください。
+
+          今回の変更点は、[変更履歴](https://github.com/shizukutanaka/Breeze/blob/main/CHANGELOG.md)の
+          該当する版の節にあります。Breeze がほかのメッセンジャーに負けている点は、
+          [比較のページ](https://github.com/shizukutanaka/Breeze/blob/main/docs/COMPARISON.md)に隠さず書いてあります。
+
+          ダウンロードが正しいかは、照合用の数値で確認できます
+          （`SHA256SUMS.txt` に全ファイル分が入っています）:
 
           ```
           sha256sum -c SHA256SUMS.txt
@@ -106,3 +131,183 @@ jobs:
             "dist-release/SHA256SUMS.txt" \
             --title "Breeze $LABEL" \
             --notes-file release-notes.md
+
+  # All-OS desktop builds (owner instruction 2026-11-20: target
+  # every OS). Each installer is built NATIVELY on its own runner —
+  # no wine cross-builds, no mac signing workarounds — from the
+  # same tree the package job just tested. On tag pushes the
+  # artifacts attach to the Release the package job created; on
+  # dispatch they land as workflow artifacts only.
+  desktop:
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            script: win
+            files: "desktop/dist/*.exe"
+          - os: macos-latest
+            script: mac
+            # upload-artifact splits paths on newlines, not spaces —
+            # a space-separated list is one pattern that matches
+            # nothing (the v3.7.0 mac leg's build succeeded and its
+            # upload then failed with "No files were found").
+            files: |
+              desktop/dist/*.dmg
+              desktop/dist/*.zip
+          - os: ubuntu-latest
+            script: linux
+            files: |
+              desktop/dist/*.AppImage
+              desktop/dist/*.deb
+              desktop/dist/*.rpm
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # The Linux leg also builds DEB and RPM targets (both are
+      # attached to the Release); electron-builder shells out to
+      # rpmbuild for the RPM via fpm 1.9.3. fpm's generated spec
+      # assumes the pre-6.0 buildroot contract (`--define buildroot`
+      # plus `BuildRoot: %buildroot`, with %install a noop over a
+      # tree fpm pre-populates); rpmbuild 6 ignores the BuildRoot
+      # tag and checks the files under its own per-package
+      # buildroot, so every file is reported "not found" —
+      # reproduced locally against rpmbuild 6.1 with fpm's swallowed
+      # stderr captured (PRE-RELEASE-AUDIT Addendum 5). The runner's
+      # apt now serves rpm 6.x, so pin the pre-rework line instead:
+      # the Debian bookworm rpm 4.18 .deb set, extracted (not
+      # installed) into a prefix and placed first on PATH. The same
+      # set was verified locally to build this package's RPM end to
+      # end.
+      - name: Provision RPM tooling (Linux leg only)
+        if: matrix.script == 'linux'
+        run: |
+          set -euo pipefail
+          prefix="$RUNNER_TEMP/rpm418"
+          mkdir -p "$prefix/debs"
+          base="https://deb.debian.org/debian/pool/main"
+          cd "$prefix/debs"
+          curl -fsSLO "$base/r/rpm/rpm_4.18.0+dfsg-1+deb12u1_amd64.deb"
+          curl -fsSLO "$base/r/rpm/rpm-common_4.18.0+dfsg-1+deb12u1_amd64.deb"
+          curl -fsSLO "$base/r/rpm/librpm9_4.18.0+dfsg-1+deb12u1_amd64.deb"
+          curl -fsSLO "$base/r/rpm/librpmbuild9_4.18.0+dfsg-1+deb12u1_amd64.deb"
+          curl -fsSLO "$base/r/rpm/librpmio9_4.18.0+dfsg-1+deb12u1_amd64.deb"
+          curl -fsSLO "$base/r/rpm/librpmsign9_4.18.0+dfsg-1+deb12u1_amd64.deb"
+          curl -fsSLO "$base/p/popt/libpopt0_1.19+dfsg-3_amd64.deb"
+          curl -fsSLO "$base/l/lua5.3/liblua5.3-0_5.3.6-2_amd64.deb"
+          curl -fsSLO "$base/e/elfutils/libelf1_0.188-2.1_amd64.deb"
+          curl -fsSLO "$base/e/elfutils/libdw1_0.188-2.1_amd64.deb"
+          curl -fsSLO "$base/d/debugedit/debugedit_5.0-5_amd64.deb"
+          for f in *.deb; do dpkg -x "$f" "$prefix/root"; done
+          echo "$prefix/root/usr/bin" >> "$GITHUB_PATH"
+          echo "LD_LIBRARY_PATH=$prefix/root/usr/lib/x86_64-linux-gnu" >> "$GITHUB_ENV"
+          echo "RPM_CONFIGDIR=$prefix/root/usr/lib/rpm" >> "$GITHUB_ENV"
+          export LD_LIBRARY_PATH="$prefix/root/usr/lib/x86_64-linux-gnu"
+          export RPM_CONFIGDIR="$prefix/root/usr/lib/rpm"
+          "$prefix/root/usr/bin/rpmbuild" --version
+
+      - name: Build desktop app (${{ matrix.script }})
+        shell: bash
+        run: bash build.sh ${{ matrix.script }}
+
+      - name: Upload as workflow artifact (always)
+        uses: actions/upload-artifact@v4
+        with:
+          name: breeze-desktop-${{ matrix.script }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error
+
+      - name: Attach to GitHub Release (tag pushes only)
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # matrix.files is newline-separated (upload-artifact splits
+          # on newlines), and a newline terminates a `for ... in`
+          # list — the v3.7.0 third run's mac leg died here with a
+          # syntax error on the second pattern. Read the patterns
+          # line by line and glob each one instead.
+          while IFS= read -r pattern; do
+            [ -z "$pattern" ] && continue
+            for f in $pattern; do
+              gh release upload "${{ github.ref_name }}" "$f" --clobber
+            done
+          done <<< "${{ matrix.files }}"
+
+  # Final checksums: the package job created the Release with a
+  # SHA256SUMS.txt covering only the self-host ZIP, and the desktop
+  # job attached its installers afterwards — on v3.7.1 the shipped
+  # SHA256SUMS.txt was 84 bytes (1 line) against 11 downloads, so
+  # most assets had no published checksum at all. Once every desktop
+  # leg has attached, download the complete asset set, regenerate
+  # the sums over ALL of it (tools/release-checksums.sh, the same
+  # generator the packager uses) and replace the file on the Release.
+  checksums:
+    needs: desktop
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all Release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p release-assets
+          gh release download "${{ github.ref_name }}" --dir release-assets
+
+      - name: Regenerate SHA256SUMS.txt over every asset
+        run: bash tools/release-checksums.sh release-assets
+
+      - name: Verify the regenerated sums before replacing them
+        run: |
+          cd release-assets
+          sha256sum -c SHA256SUMS.txt
+
+      - name: Replace SHA256SUMS.txt on the Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.ref_name }}" release-assets/SHA256SUMS.txt --clobber
+
+  # Android verification build. The APK is uploaded as a workflow
+  # artifact only — attaching an installable Android package to
+  # the public Release waits for release signing (keystore
+  # secrets are the owner's to provide; a debug-signed APK is
+  # not a distribution artifact).
+  android:
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build debug APK
+        shell: bash
+        run: |
+          cd mobile
+          npm ci
+          bash scripts/build-mobile.sh android debug
+
+      - name: Upload APK as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: breeze-android-debug
+          path: mobile/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error

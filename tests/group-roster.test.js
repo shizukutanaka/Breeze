@@ -1,29 +1,15 @@
-// Relay-supplied group rosters: safeMemberList() in index.html sanitizes the
-// member list returned by /group/join, /group/info and the member poll — all
-// untrusted relay output. Member entries are (id, pubB64) bindings and every
-// fan-out encrypts to pubB64 under id's identity; this test compiles the real
-// function extracted from index.html and runs crafted rosters through it so
-// the id↔pub binding check can't silently regress.
+// Relay-supplied group rosters: safeMemberList() (src/app/group-create.js
+// since the stage 5 step 4 line-budget move) sanitizes the member list
+// returned by /group/join, /group/info and the member poll — all
+// untrusted relay output. Member entries are (id, pubB64) bindings and
+// every fan-out encrypts to pubB64 under id's identity; this test runs
+// crafted rosters through the real export so the id↔pub binding check
+// can't silently regress.
 import { describe, it, expect } from 'vitest';
-import fs from 'node:fs';
-import path from 'node:path';
-
-const ROOT = path.resolve(__dirname, '..');
-const INDEX = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-
-function extractFn() {
-  const start = INDEX.indexOf('function safeMemberList');
-  expect(start).toBeGreaterThan(-1);
-  const end = INDEX.indexOf('\n  }\n', start);
-  expect(end).toBeGreaterThan(start);
-  return INDEX.slice(start, end + 5);
-}
+import { safeMemberList } from '../src/app/group-create.js';
 
 function runList(raw) {
-  const src = extractFn();
-  const CONFIG = { GROUP_MAX: 8 };
-  const fn = new Function('CONFIG', `${src} return safeMemberList;`)(CONFIG);
-  return fn(raw);
+  return safeMemberList(raw, 8); // the cap argument tracks CONFIG.GROUP_MAX
 }
 
 const goodPub = (id) => id + 'x'.repeat(32);

@@ -55,14 +55,36 @@ readHwm() / writeHwm(value, ttlSec) / deleteHwm()
 readDropped() / writeDropped(value, ttlSec) / deleteDropped()
 ```
 
+(D16 stage 2, 2026-11-22, added two composite methods to this surface:
+`appendQueue(item, ttlSec)` — the whole append as one store operation —
+and `claimPoll(hwm, ttlSec)` for the sealed family's recovery-count
+claim. See Step 2's corrected bullet and SECURITY.md for the per-tier
+semantics.)
+
 ## Step 2 — Durable Object backend
 
 - One DO class (`MailboxDO`), one instance per recipient
   (`idFromName(userId)`), holding queue + hwm + dropped in DO storage so
-  a send becomes a single serialized, transactional append. Inside the
-  DO, the read-back recovery protocols are unnecessary and are skipped;
-  the strict-monotonic-ts invariants they protect are enforced by
-  serialization instead.
+  a send becomes a single serialized, transactional append.
+  Correction (S05, 2026-11-22 — the original text of this bullet claimed
+  the read-back recovery protocols "are unnecessary and are skipped"
+  inside the DO, with the ts invariants "enforced by serialization
+  instead"; neither half matched what was built): the handlers were
+  backend-agnostic and ran the SAME read-back recovery on both backends
+  — against the DO it simply operated on strongly consistent reads, so
+  the read-back always confirmed and the repair loop never fired. And
+  the DO's serialization is per-OPERATION: a handler sequence spanning
+  several ops (read → compute → write) can still interleave with
+  another request's ops, so serialization alone never guaranteed the
+  strict-monotonic-ts invariants — the tail/hwm bump logic inside the
+  append did. D16 stage 2 (2026-11-22) resolved the mismatch by moving
+  the append itself into the op protocol as one composite op
+  (`append`, plus `poll-claim` for the sealed poll's recovery-count
+  claim): on the DO backend the whole read-modify-write is now a
+  single serialized step and the recovery protocol is genuinely
+  unnecessary there, while the KV store's `appendQueue` method carries
+  the stage-1 verified-recovery semantics. SECURITY.md states the two
+  tiers.
 - Both queue families live in the same DO (one mailbox per recipient,
   not per family) so account erasure and per-mailbox limits span the
   whole mailbox.

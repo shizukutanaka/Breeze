@@ -1,14 +1,15 @@
 // Chat-history tools extracted from initMessenger; live account bindings arrive via deps.
 export function createHistoryTools(D) {
-  // v3.3: ENTERPRISE — GDPR DATA EXPORT
-  // Export all personal data as structured JSON (GDPR Art. 20)
+  // GDPR data export (Art. 15/20): identity summary, contacts, message
+  // metadata (text truncated to 200 chars, no keys, no file bodies).
   async function gdprExport() {
-    try {  
+    try {
       const identity = await D.dbGet('identity', 'keys');
       const contacts = await D.dbGetAll('contacts');
       const messages = await D.dbGetAll('messages');
-      const audit = D.db().objectStoreNames.contains('audit') ? await D.dbGetAll('audit') : [];
-      const settings = D.db().objectStoreNames.contains('settings') ? await D.dbGet('settings', 'app') : null;
+      const db = D.db();
+      const audit = db.objectStoreNames.contains('audit') ? await D.dbGetAll('audit') : [];
+      const settings = db.objectStoreNames.contains('settings') ? await D.dbGet('settings', 'app') : null;
       return {
         exportType: 'GDPR Data Export (Art. 15/20)',
         exportedAt: new Date().toISOString(),
@@ -22,8 +23,7 @@ export function createHistoryTools(D) {
         totalContacts: contacts.length,
         totalFiles: messages.filter(m => m.fileData || m.voice).length,
       };
-    
-    } catch(_e) { _dbg(_e, 'gdprExport'); }
+    } catch(e) { _dbg(e, 'gdprExport'); }
   }
 
   // MIGRATION: Import from LINE / WhatsApp / Telegram — the format parsers
@@ -120,7 +120,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     const data = await gdprExport();
     if (!data) { showToast(t('toastServerError'), 'error'); return; }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    downloadBlob(blob, `breeze-gdpr-export-${new Date().toISOString().slice(0,10)}.json`);
+    downloadBlob(blob, `breeze-gdpr-export-${new Date().toISOString().slice(0, 10)}.json`);
     D.auditLog('settings', 'GDPR data export performed');
     showToast(t('toastGdprExport', data.totalMessages, data.totalContacts, data.totalFiles), 'success');
   }

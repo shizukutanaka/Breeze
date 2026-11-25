@@ -1421,6 +1421,19 @@ describe('group leave / delete (lifecycle completion)', () => {
 describe('group moderation auth (item 45 — caller identity proof)', () => {
   const req = (b) => apiRequest('/api/group/x', b);
 
+  async function joinSigned(env, token, memberId, memberPub) {
+    const mEd = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const mPub = new Uint8Array(await crypto.subtle.exportKey('raw', mEd.publicKey));
+    await env.KV.put(`prekey:${memberId}`, JSON.stringify({ identityKey: memberPub, edIdentityKey: toB64(mPub), uploadedAt: Date.now() }));
+    const tsJ = Date.now();
+    const bindBuf = await crypto.subtle.digest('SHA-256',
+      new TextEncoder().encode(JSON.stringify([memberPub, '', []])));
+    const bind = Array.from(new Uint8Array(bindBuf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
+    const sigJ = toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, mEd.privateKey,
+      new TextEncoder().encode(`breeze-group-join:${token}:${memberId}:${tsJ}:${bind}`))));
+    await handleGroupJoin({ token, memberId, memberPub, ts: tsJ, sig: sigJ }, env, req({}));
+  }
+
   async function setup(env, opts = {}) {
     const ed = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
     const edPub = new Uint8Array(await crypto.subtle.exportKey('raw', ed.publicKey));
@@ -1436,7 +1449,7 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
     const createSig = toB64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, ed.privateKey,
       new TextEncoder().encode(`breeze-group-create::creator1:${tsC}:${bind}`))));
     const { token } = await (await handleGroupCreate({ ...createBody, ts: tsC, sig: createSig }, env, req({}))).json();
-    await handleGroupJoin({ token, memberId: 'member01', memberPub: 'member01mpub' }, env, req({}));
+    await joinSigned(env, token, 'member01', 'member01mpub');
     return { token, ed };
   }
   // bind carries the operation's target(s), matching checkGroupAuth's signed format
@@ -1483,7 +1496,7 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
   it('rejects a kick whose kickId was swapped by the relay (target not the one signed)', async () => {
     const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
     const { token, ed } = await setup(env);
-    await handleGroupJoin({ token, memberId: 'member02', memberPub: 'member02mpub2' }, env, req({}));
+    await joinSigned(env, token, 'member02', 'member02mpub2');
     const ts = Date.now();
     // Creator signs to kick member01, relay rewrites kickId → member02.
     const sig = await signGroup(ed, 'kick', token, 'creator1', ts, 'member01');
@@ -1515,7 +1528,7 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
   it('rejects an admin op whose targetId was swapped by the relay, but honors the signed target', async () => {
     const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
     const { token, ed } = await setup(env);
-    await handleGroupJoin({ token, memberId: 'member02', memberPub: 'member02mpub2' }, env, req({}));
+    await joinSigned(env, token, 'member02', 'member02mpub2');
     const ts = Date.now();
     // Creator signs to promote member01; relay rewrites targetId → member02.
     const sig = await signGroup(ed, 'admin', token, 'creator1', ts, `promote:member01`);
@@ -1531,7 +1544,7 @@ describe('group moderation auth (item 45 — caller identity proof)', () => {
   it('rejects a transfer whose newCreatorId was redirected by the relay (ownership hijack)', async () => {
     const env = makeEnv({ GROUP_REQUIRE_AUTH: 'true' });
     const { token, ed } = await setup(env);
-    await handleGroupJoin({ token, memberId: 'member02', memberPub: 'member02mpub2' }, env, req({}));
+    await joinSigned(env, token, 'member02', 'member02mpub2');
     const ts = Date.now();
     // Creator signs to hand ownership to member01; relay rewrites newCreatorId → member02.
     const sig = await signGroup(ed, 'transfer', token, 'creator1', ts, 'member01');
@@ -1713,7 +1726,6 @@ describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
     await env.KV.put(`push:${userId}`, JSON.stringify([{ endpoint: 'https://fcm.googleapis.com/x' }]));
     await env.KV.put(`backup:${userId}`, 'encrypted-backup-blob');
     await env.KV.put(`presence:${userId}`, JSON.stringify({ at: Date.now() }));
-    await env.KV.put(`slots:${userId}`, JSON.stringify({ slots: 4, plan: 'plus' }));
     return { ed };
   }
 
@@ -1735,7 +1747,7 @@ describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
       `sealed:${userId}:dropped`, `devices:${userId}`,
       `prekey:${userId}`,
       `ktlog:${userId}`, `push:${userId}`, `backup:${userId}`,
-      `presence:${userId}`, `slots:${userId}`,
+      `presence:${userId}`,
       `prekey:otp:${userId}:0`, `prekey:otp:${userId}:1`, `prekey:otp:${userId}:count`]) {
       expect(await env.KV.get(key)).toBeNull();
     }
@@ -1788,15 +1800,14 @@ describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
     expect(await env.KV.get('alias:victim')).not.toBeNull();
   });
 
-  // Item 38: the reverse cust:{customerId} -> userId mapping must also be erased, or the
-  // payment-identity linkage (and a webhook resolution path to the deleted account)
-  // survives deletion. The handler reads slots:{userId}.customerId before deleting slots.
-  it('erases the cust:{customerId} reverse mapping when the billing record has a customerId', async () => {
+  // D29: the legacy billing records (slots:{userId} / cust:{customerId}) are dead —
+  // billing was removed in v3.6.1, nothing writes them, and the erasure handler no
+  // longer reads or deletes them (the slots record was the cust lookup's only key
+  // source, so the whole path went together). Pin that they stay unconsulted.
+  it('does not consult the legacy billing records (slots/cust stay out of erasure)', async () => {
     const env = makeEnv();
     const userId = 'delcust01';
     const { ed } = await registeredAccount(env, userId);
-    // Overwrite the slots record with one carrying a Stripe customerId, and add the
-    // reverse mapping the webhook would have created.
     await env.KV.put(`slots:${userId}`, JSON.stringify({ slots: 4, plan: 'plus', customerId: 'cus_del38' }));
     await env.KV.put('cust:cus_del38', userId);
 
@@ -1804,23 +1815,8 @@ describe('account deletion (server-side erasure, GDPR Art. 17)', () => {
     const res = await handleAccountDelete({ userId, ts, sig: await signDelete(ed, userId, ts) }, env, req({}));
     expect(res.status).toBe(200);
     const j = await res.json();
-    expect(j.erased).toContain('cust');
-    expect(await env.KV.get('cust:cus_del38')).toBeNull(); // reverse mapping gone
-    expect(await env.KV.get(`slots:${userId}`)).toBeNull();
-  });
-
-  it('omits cust from erased and touches no cust mapping when the account has no customerId (free tier)', async () => {
-    const env = makeEnv();
-    const userId = 'delcust02';
-    const { ed } = await registeredAccount(env, userId); // slots has no customerId
-    // An unrelated cust mapping must NOT be deleted (we only erase this account's own).
-    await env.KV.put('cust:cus_other', 'someoneelse');
-
-    const ts = Date.now();
-    const res = await handleAccountDelete({ userId, ts, sig: await signDelete(ed, userId, ts) }, env, req({}));
-    expect(res.status).toBe(200);
-    expect((await res.json()).erased).not.toContain('cust');
-    expect(await env.KV.get('cust:cus_other')).toBe('someoneelse'); // untouched
+    expect(j.erased).not.toContain('slots');
+    expect(j.erased).not.toContain('cust');
   });
 
   it('rejects an invalid signature without deleting anything', async () => {
@@ -2044,6 +2040,73 @@ describe('relay franking endpoints (I17 — verifiable abuse reporting)', () => 
     expect(rep.status).toBe(200);
     expect((await rep.json()).verified).toBe(true);
     expect(await env.KV.get('report:m-001xxx')).toBeTruthy(); // recorded for moderation
+  });
+
+  // D08 (AMF): a report carrying the sender-binding tag is verified against the
+  // claimed sender's registered edIdentityKey; a bound report attributes the
+  // message to that sender in the moderation record.
+  async function amfIdentity(env, senderId) {
+    const pair = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+    const pubRaw = new Uint8Array(await crypto.subtle.exportKey('raw', pair.publicKey));
+    await env.KV.put(`prekey:${senderId}`, JSON.stringify({ identityKey: 'aWQtdGVzdA', edIdentityKey: b64(pubRaw) }));
+    return pair.privateKey;
+  }
+
+  it('binds a genuine AMF report to the sender (D08)', async () => {
+    const env = makeEnv();
+    const priv = await amfIdentity(env, 'amfsender1');
+    const message = 'abusive content';
+    const { commitment, opening } = await F.commit(message);
+    await handleAbuseRecord({ frankId: 'm-amf-01', commitment: b64(commitment) }, env, req({}));
+    const sig = await F.amfSign(priv, 'm-amf-01', b64(commitment));
+    const rep = await handleAbuseReport({ frankId: 'm-amf-01', message, opening: b64(opening), amfSig: b64(sig), senderId: 'amfsender1' }, env, req({}));
+    expect(rep.status).toBe(200);
+    const j = await rep.json();
+    expect(j.verified).toBe(true);
+    expect(j.senderBound).toBe(true);
+    const record = JSON.parse(await env.KV.get('report:m-amf-01'));
+    expect(record.amf).toBe(true);
+    expect(record.sender).toBe('amfsender1');
+  });
+
+  it('an AMF tag signed over a different commitment does not bind (D08)', async () => {
+    const env = makeEnv();
+    const priv = await amfIdentity(env, 'amfsender1');
+    const message = 'abusive content';
+    const { commitment, opening } = await F.commit(message);
+    await handleAbuseRecord({ frankId: 'm-amf-02', commitment: b64(commitment) }, env, req({}));
+    // Tag signs a DIFFERENT frankId/commitment context (e.g. harvested from
+    // another message): content still verifies, attribution must not.
+    const sig = await F.amfSign(priv, 'm-amf-99', b64(commitment));
+    const rep = await handleAbuseReport({ frankId: 'm-amf-02', message, opening: b64(opening), amfSig: b64(sig), senderId: 'amfsender1' }, env, req({}));
+    const j = await rep.json();
+    expect(j.verified).toBe(true);
+    expect(j.senderBound).toBe(false);
+    const record = JSON.parse(await env.KV.get('report:m-amf-02'));
+    expect(record.amf).toBeUndefined();
+    expect(record.sender).toBeUndefined();
+  });
+
+  it('a report naming an unregistered sender stays unbound (D08)', async () => {
+    const env = makeEnv();
+    const message = 'abusive content';
+    const { commitment, opening } = await F.commit(message);
+    await handleAbuseRecord({ frankId: 'm-amf-03', commitment: b64(commitment) }, env, req({}));
+    const rep = await handleAbuseReport({ frankId: 'm-amf-03', message, opening: b64(opening), amfSig: b64(new Uint8Array(64)), senderId: 'amfghost99' }, env, req({}));
+    const j = await rep.json();
+    expect(j.verified).toBe(true);
+    expect(j.senderBound).toBe(false);
+  });
+
+  it('a legacy report without AMF fields has no senderBound verdict (D08)', async () => {
+    const env = makeEnv();
+    const message = 'abusive content';
+    const { commitment, opening } = await F.commit(message);
+    await handleAbuseRecord({ frankId: 'm-amf-04', commitment: b64(commitment) }, env, req({}));
+    const rep = await handleAbuseReport({ frankId: 'm-amf-04', message, opening: b64(opening) }, env, req({}));
+    const j = await rep.json();
+    expect(j.verified).toBe(true);
+    expect('senderBound' in j).toBe(false);
   });
 
   // Item 46: a silently-dropped commitment makes the message unreportable later, so the
@@ -2337,6 +2400,85 @@ describe('sealed sender send / poll / ack', () => {
     expect(polled.messages.filter((m) => m.envelope === 'only-once').length).toBe(1);
   });
 
+  // D16 stage 1 (measurement): a repaired race leaves a count in the queue
+  // value, and the recipient's next poll surfaces it once as `recovered` —
+  // the track record the staged per-envelope key-split decision needs.
+  // Before this, the recovery fired (or failed) without any trace.
+  it('reports repaired write races on the next poll, exactly once (D16 measurement)', async () => {
+    const env = makeEnv();
+    const key = 'sealed:rcmeasure';
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbered = false;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && !clobbered) {
+        clobbered = true;
+        await origPut(k, JSON.stringify([{ envelope: 'RACER-ONE', ts: Date.now() }]), o);
+      }
+    };
+    const res = await handleSealedSend({ to: 'rcmeasure', envelope: 'MINE-counted' }, env, req({}));
+    expect(res.status).toBe(200);
+    const first = await (await handleSealedPoll({ id: 'rcmeasure' }, env, req({}))).json();
+    expect(first.messages.map((m) => m.envelope)).toContain('MINE-counted');
+    expect(first.recovered).toBe(1); // one race detected, one repair
+    const second = await (await handleSealedPoll({ id: 'rcmeasure' }, env, req({}))).json();
+    expect(second.recovered).toBeUndefined(); // confessed once, counter reset by the grace rewrite
+  });
+
+  // D16 stage 1 (verified repair): the re-append is itself a read-modify-write
+  // and can be clobbered in turn. The send now re-reads after each repair and
+  // repairs again (bounded), instead of answering 200 after one blind retry.
+  it('keeps repairing across repeated clobbers until the envelope is confirmed (D16 verified repair)', async () => {
+    const env = makeEnv();
+    const key = 'sealed:rcverify';
+    const origPut = env.KV.put.bind(env.KV);
+    let clobbers = 0;
+    env.KV.put = async (k, v, o) => {
+      await origPut(k, v, o);
+      if (k === key && clobbers < 2) {
+        clobbers++; // clobber the initial write AND the first repair
+        await origPut(k, JSON.stringify([{ envelope: `RACER-${clobbers}`, ts: Date.now() }]), o);
+      }
+    };
+    const res = await handleSealedSend({ to: 'rcverify', envelope: 'MINE-persists' }, env, req({}));
+    expect(res.status).toBe(200);
+    expect(clobbers).toBe(2); // both clobbers really happened
+    const polled = await (await handleSealedPoll({ id: 'rcverify' }, env, req({}))).json();
+    expect(polled.messages.map((m) => m.envelope)).toContain('MINE-persists');
+    expect(polled.recovered).toBe(2); // both detections counted
+  });
+
+  // D16 stage 1 (honest failure): if EVERY write is clobbered, the bounded
+  // loop gives up and the send fails visibly — STORE_UNCONFIRMED, exactly
+  // SEALED_MAX_REPAIRS repairs attempted — instead of the old behaviour
+  // (one blind re-append, then a 200 for a delivery that never landed).
+  // The dedup key is un-marked, so the client's retry is judged afresh.
+  it('fails honestly when every write is clobbered, and the retry is not swallowed (D16 STORE_UNCONFIRMED)', async () => {
+    const env = makeEnv();
+    const key = 'sealed:rcdoomed';
+    const origPut = env.KV.put.bind(env.KV);
+    let puts = 0;
+    env.KV.put = async (k, v, o) => {
+      if (k === key) {
+        puts++;
+        await origPut(k, JSON.stringify([{ envelope: 'RACER-ETERNAL', ts: Date.now() }]), o);
+        return;
+      }
+      await origPut(k, v, o);
+    };
+    const res = await handleSealedSend({ to: 'rcdoomed', envelope: 'MINE-unconfirmable' }, env, req({}));
+    expect(res.status).toBe(500);
+    expect((await res.json()).code).toBe('STORE_UNCONFIRMED');
+    expect(puts).toBe(3); // initial write + SEALED_MAX_REPAIRS (2) repairs — bounded, not a spin
+    // Restore the store: the identical retry must store, not dedup-swallow.
+    env.KV.put = origPut;
+    const retry = await handleSealedSend({ to: 'rcdoomed', envelope: 'MINE-unconfirmable' }, env, req({}));
+    expect(retry.status).toBe(200);
+    expect((await retry.json()).dedup).toBeUndefined();
+    const polled = await (await handleSealedPoll({ id: 'rcdoomed' }, env, req({}))).json();
+    expect(polled.messages.map((m) => m.envelope)).toContain('MINE-unconfirmable');
+  });
+
   it('a queue that never overflows reports no drops', async () => {
     const env = makeEnv();
     await handleSealedSend({ to: 'quietone', envelope: 'just-one' }, env, req({}));
@@ -2501,7 +2643,7 @@ describe('sealed sender send / poll / ack', () => {
       vi.restoreAllMocks();
     }
     const raw = await env.KV.get('sealed:mono0001');
-    const msgs = JSON.parse(raw);
+    const msgs = JSON.parse(raw).q; // D31: stored form is { q, hwm }
     expect(msgs.length).toBe(2);
     expect(msgs[1].ts).toBeGreaterThan(msgs[0].ts); // strictly increasing
   });
@@ -2582,7 +2724,7 @@ describe('sealed sender send / poll / ack', () => {
     expect(polledEnvelopes).toEqual(['B-WINNER']); // A had not yet been re-appended
     // Recovery re-appended A with its ts recomputed from the current tail:
     // strictly above B's ts (== the recorded hwm), not a duplicate of it.
-    const queue = JSON.parse(await origGet(key));
+    const queue = JSON.parse(await origGet(key)).q; // D31: stored form is { q, hwm }
     expect(queue.map(m => m.envelope)).toEqual(['B-WINNER', 'A-REAPPENDED']);
     expect(queue.map(m => m.ts)).toEqual([frozenTs, frozenTs + 1]);
     // The client's ack (for the batch it actually polled: B only) clears B and
@@ -2591,7 +2733,7 @@ describe('sealed sender send / poll / ack', () => {
     const ackJson = await ack.json();
     expect(ackJson.ok).toBe(true);
     expect(ackJson.kept).toBe(1);
-    const remaining = JSON.parse(await origGet(key));
+    const remaining = JSON.parse(await origGet(key)).q; // D31: stored form is { q, hwm }
     expect(remaining.map(m => m.envelope)).toEqual(['A-REAPPENDED']);
   });
 });
@@ -3006,6 +3148,19 @@ describe('alias set / get (PoW anti-spam)', () => {
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('POW_REQUIRED');
   });
+
+  it('strips bidi control characters from the stored display name (D27)', async () => {
+    // sanitizeString drops U+202A–U+202E / U+2066–U+2069 so a name carrying
+    // RLO cannot render reversed on peers (Trojan-Source-style spoofing).
+    const pub = 'BIDIPUBKEY';
+    const pow = await solvePoW(pub, 16, `${pub}:breeze-test`);
+    const env = makeEnv({ ALIAS_REQUIRE_AUTH: 'false' });
+    const res = await handleAliasSet(
+      { alias: 'biditest', pub, name: 'Alice\u202eBob\u2066', pow }, env, req({}));
+    expect(res.status).toBe(200);
+    const rec = JSON.parse(await env.KV.get('alias:biditest'));
+    expect(rec.name).toBe('AliceBob');
+  }, 60000);
 
   it('rejects a PoW whose challenge does not include the pub key', async () => {
     const res = await handleAliasSet(
@@ -3885,7 +4040,9 @@ describe('backup upload / download', () => {
   const dlReq = (body) => apiRequest('/api/backup/download', body);
 
   it('stores a backup and retrieves it', async () => {
-    const e   = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
+    // BACKUP_REQUIRE_AUTH=false: this block exercises storage semantics only;
+    // the auth gate itself is covered by the item-54 block below.
+    const e   = makeEnv({ BACKUP_STORAGE_ENABLED: 'true', BACKUP_REQUIRE_AUTH: 'false' });
     const bak = 'encrypted-backup-data';
     const up  = await handleBackupUpload({ userId: 'user00001', backup: bak }, e, req({}));
     expect(up.status).toBe(200);
@@ -3900,7 +4057,7 @@ describe('backup upload / download', () => {
   });
 
   it('overwrites an existing backup on re-upload', async () => {
-    const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
+    const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true', BACKUP_REQUIRE_AUTH: 'false' });
     await handleBackupUpload({ userId: 'user00001', backup: 'v1' }, e, req({}));
     await handleBackupUpload({ userId: 'user00001', backup: 'v2' }, e, req({}));
     const dl = await handleBackupDownload({ userId: 'user00001' }, e, dlReq({}));
@@ -3908,7 +4065,7 @@ describe('backup upload / download', () => {
   });
 
   it('rejects backup larger than 5MB', async () => {
-    const e   = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
+    const e   = makeEnv({ BACKUP_STORAGE_ENABLED: 'true', BACKUP_REQUIRE_AUTH: 'false' });
     const big = 'x'.repeat(5 * 1024 * 1024 + 1);
     const res = await handleBackupUpload({ userId: 'user00001', backup: big }, e, req({}));
     expect(res.status).toBe(413);
@@ -3916,7 +4073,7 @@ describe('backup upload / download', () => {
   });
 
   it('returns 404 for missing backup', async () => {
-    const e   = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
+    const e   = makeEnv({ BACKUP_STORAGE_ENABLED: 'true', BACKUP_REQUIRE_AUTH: 'false' });
     const res = await handleBackupDownload({ userId: 'nobody001' }, e, dlReq({}));
     expect(res.status).toBe(404);
     expect((await res.json()).code).toBe('NOT_FOUND');
@@ -3977,7 +4134,7 @@ describe('backup upload / download', () => {
     const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
     const userId = 'bakauth02';
     const ed = await registerForBackup(e, userId);
-    await handleBackupUpload({ userId, backup: 'my-backup' }, e, req({}));
+    await e.KV.put(`backup:${userId}`, 'my-backup'); // seed directly: unsigned uploads are rejected by default (D06)
     const ts = Date.now();
     const sig = await signBackup(ed, 'download', userId, ts);
     const res = await handleBackupDownload({ userId, ts, sig }, e, dlReq({}));
@@ -4001,7 +4158,7 @@ describe('backup upload / download', () => {
     const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
     const userId = 'bakauth04';
     await registerForBackup(e, userId);
-    await handleBackupUpload({ userId, backup: 'blob' }, e, req({}));
+    await e.KV.put(`backup:${userId}`, 'blob'); // seed directly: unsigned uploads are rejected by default (D06)
     const ts = Date.now();
     const res = await handleBackupDownload({ userId, ts, sig: toB64(new Uint8Array(64)) }, e, dlReq({}));
     expect(res.status).toBe(403);
@@ -4031,8 +4188,8 @@ describe('backup upload / download', () => {
     expect((await res.json()).code).toBe('PARTIAL_AUTH');
   });
 
-  it('unauthenticated upload still works (backward-compat, authenticated:false)', async () => {
-    const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
+  it('unauthenticated upload works only under the explicit opt-out (BACKUP_REQUIRE_AUTH=false, authenticated:false)', async () => {
+    const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true', BACKUP_REQUIRE_AUTH: 'false' });
     const res = await handleBackupUpload({ userId: 'user00001', backup: 'legacy-blob' }, e, req({}));
     expect(res.status).toBe(200);
     expect((await res.json()).authenticated).toBe(false);
@@ -4051,10 +4208,11 @@ describe('backup upload / download', () => {
 });
 
 // BACKUP_REQUIRE_AUTH enforcement flag (item 54)
-// Without the flag: knowing a userId is enough to download the encrypted blob and
-// brute-force the passphrase offline. With BACKUP_REQUIRE_AUTH=true, both upload
-// and download require a valid Ed25519 signature — same pattern as GROUP_REQUIRE_AUTH
-// and PRESENCE_REQUIRE_AUTH.
+// Without a signature, knowing a userId is enough to download the encrypted
+// blob and brute-force the passphrase offline (or overwrite it outright).
+// Auth is therefore REQUIRED BY DEFAULT (wave-1 defect D06): both upload and
+// download reject unsigned requests unless the operator explicitly opts out
+// with BACKUP_REQUIRE_AUTH=false — same shape as PREKEY_REQUIRE_AUTH.
 describe('backup BACKUP_REQUIRE_AUTH enforcement (item 54)', () => {
   const req  = (body) => apiRequest('/api/backup/upload', body);
   const dlReq = (body) => apiRequest('/api/backup/download', body);
@@ -4103,12 +4261,50 @@ describe('backup BACKUP_REQUIRE_AUTH enforcement (item 54)', () => {
     expect((await res.json()).backup).toBe('my-enc-backup');
   });
 
-  it('unauthenticated upload/download still works when BACKUP_REQUIRE_AUTH is unset (storage opted in)', async () => {
+  it('unauthenticated upload is rejected when BACKUP_REQUIRE_AUTH is unset (required by default)', async () => {
     const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
-    const up = await handleBackupUpload({ userId: 'bakflg05', backup: 'blob' }, e, req({}));
+    const res = await handleBackupUpload({ userId: 'bakflg05', backup: 'blob' }, e, req({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
+  });
+
+  it('unauthenticated download is rejected when BACKUP_REQUIRE_AUTH is unset (required by default)', async () => {
+    const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
+    await e.KV.put('backup:bakflg06', 'encrypted-data');
+    const res = await handleBackupDownload({ userId: 'bakflg06' }, e, dlReq({}));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('AUTH_REQUIRED');
+  });
+
+  it('a verified download renews the 90-day retention window (touch-on-read, D15)', async () => {
+    const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
+    // Seed a backup whose retention is about to lapse (60s left).
+    await e.KV.put('backup:bakflg08', 'enc-blob', { expirationTtl: 60 });
+    const expBefore = e.KV.exp.get('backup:bakflg08');
+    const { ts, sig } = await registerAndSign(e, 'bakflg08', 'download');
+    const res = await handleBackupDownload({ userId: 'bakflg08', ts, sig }, e, dlReq({}));
+    expect(res.status).toBe(200);
+    expect((await res.json()).backup).toBe('enc-blob');
+    const expAfter = e.KV.exp.get('backup:bakflg08');
+    expect(expAfter).toBeGreaterThan(expBefore + 89 * 86400 * 1000);
+    expect(await e.KV.get('backup:bakflg08')).toBe('enc-blob'); // content untouched
+  });
+
+  it('an unsigned download under the opt-out does NOT renew retention (D15)', async () => {
+    const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true', BACKUP_REQUIRE_AUTH: 'false' });
+    await e.KV.put('backup:bakflg09', 'enc-blob', { expirationTtl: 60 });
+    const expBefore = e.KV.exp.get('backup:bakflg09');
+    const res = await handleBackupDownload({ userId: 'bakflg09' }, e, dlReq({}));
+    expect(res.status).toBe(200);
+    expect(e.KV.exp.get('backup:bakflg09')).toBe(expBefore);
+  });
+
+  it('unauthenticated upload/download still works only with explicit BACKUP_REQUIRE_AUTH=false (operator opt-out)', async () => {
+    const e = makeEnv({ BACKUP_STORAGE_ENABLED: 'true', BACKUP_REQUIRE_AUTH: 'false' });
+    const up = await handleBackupUpload({ userId: 'bakflg07', backup: 'blob' }, e, req({}));
     expect(up.status).toBe(200);
-    await e.KV.put('backup:bakflg05', 'blob');
-    const dl = await handleBackupDownload({ userId: 'bakflg05' }, e, dlReq({}));
+    await e.KV.put('backup:bakflg07', 'blob');
+    const dl = await handleBackupDownload({ userId: 'bakflg07' }, e, dlReq({}));
     expect(dl.status).toBe(200);
   });
 });
@@ -4641,6 +4837,36 @@ describe('presence heartbeat and check', () => {
     await beat(e, 'clonefrgd', 'realinst2', await sign('realinst2'));
     const forged = await (await beat(e, 'clonefrgd', 'evilinstX', b64(new Uint8Array(64)))).json();
     expect(forged.conflict).toBeUndefined();
+  });
+
+  // D14: a beat may advertise the ts of the sender's own device registry so
+  // peers can invalidate cached device lists on link/unlink. Only a beat
+  // whose install signature VERIFIED may advertise it — the same trust rule
+  // as `inst` itself — and the batch check surfaces it as a devTs map.
+  it('a verified beat advertises devTs; the batch check returns it', async () => {
+    const e = makeEnv();
+    const sign = await instSigner(e, 'devtsusr1');
+    await handlePresence({ id: 'devtsusr1', pub: 'p', name: 'X', inst: 'inst0001', instSig: await sign('inst0001'), devTs: 1735689600000 }, e, req({}));
+    const j = await (await handlePresence({ ids: ['devtsusr1'], check: true }, e, req({}))).json();
+    expect(j.online.devtsusr1).toBe(true);
+    expect(j.devTs).toEqual({ devtsusr1: 1735689600000 });
+  });
+
+  it('an unsigned beat cannot advertise devTs (no forced refetch, no spoofed revision)', async () => {
+    const e = makeEnv();
+    await instSigner(e, 'devtsusr2'); // registers the identity key, but the beat below carries no instSig
+    await handlePresence({ id: 'devtsusr2', pub: 'p', name: 'X', inst: 'inst0002', devTs: 1735689600000 }, e, req({}));
+    const j = await (await handlePresence({ ids: ['devtsusr2'], check: true }, e, req({}))).json();
+    expect(j.devTs).toBeUndefined();
+  });
+
+  it('batch check keeps the legacy shape when no beat advertised devTs', async () => {
+    const e = makeEnv();
+    const sign = await instSigner(e, 'devtsusr3');
+    await beat(e, 'devtsusr3', 'inst0003', await sign('inst0003'));
+    const j = await (await handlePresence({ ids: ['devtsusr3'], check: true }, e, req({}))).json();
+    expect(j.online.devtsusr3).toBe(true);
+    expect('devTs' in j).toBe(false);
   });
 
   // Socratic metadata lens: the unauthenticated single-check used to hand the account's
@@ -5627,7 +5853,7 @@ describe('relay dedup released on STORE_FAILED so retry persists (item 57)', () 
     const r2 = await handleSealedSend(body, env, req({}));
     expect(r2.status).toBe(200);
     expect((await r2.json()).dedup).toBeUndefined();
-    const queue = JSON.parse(await env.KV.get('sealed:user00097'));
+    const queue = JSON.parse(await env.KV.get('sealed:user00097')).q; // D31: stored form is { q, hwm }
     expect(queue.length).toBe(1);
     expect(queue[0].envelope).toBe('sealed-envelope-xyz');
   });
@@ -5652,7 +5878,9 @@ describe('prekey upload + backup STORE_FAILED propagation (item 33)', () => {
   });
 
   it('handleBackupUpload returns 500 STORE_FAILED when backup KV put throws', async () => {
-    const env = makeEnv({ BACKUP_STORAGE_ENABLED: 'true' });
+    // BACKUP_REQUIRE_AUTH=false so the request reaches the store write this
+    // test is about (unsigned uploads are rejected by default since D06).
+    const env = makeEnv({ BACKUP_STORAGE_ENABLED: 'true', BACKUP_REQUIRE_AUTH: 'false' });
     const real = env.KV.put.bind(env.KV);
     env.KV.put = async (key, ...rest) => {
       if (key.startsWith('backup:')) throw new Error('KV unavailable');
@@ -5935,6 +6163,43 @@ describe('device registry (/api/device/set + /api/device/list)', () => {
     const res = await setList(env, sign, [{ pub: ROOT_PUB, name: 'x' }], Date.now() - 10 * 60 * 1000);
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('INVALID_TIMESTAMP');
+  });
+
+  // Round-7 audit: /device/list hands the signed record to anyone, so a signed set is not
+  // a secret. Without an ordering check, whoever was just unlinked could re-post the
+  // previous set while its ts was still inside the 5-min window and put itself back.
+  it('rejects a replay of an OLDER signed list — an /unlink cannot be rolled back', async () => {
+    const env = makeEnv();
+    const sign = await makeRoot(env, ACCT, ROOT_PUB);
+    const linked = [{ pub: ROOT_PUB, name: 'primary' }, { pub: DEV2, name: '' }];
+    const t1 = Date.now() - 60 * 1000;
+    expect((await setList(env, sign, linked, t1)).status).toBe(200);
+    // What the unlinked device (or any bystander) can read and keep:
+    const captured = await (await handleDeviceList({ accountId: ACCT }, env, rq())).json();
+
+    // The owner unlinks DEV2 a minute later.
+    expect((await setList(env, sign, [{ pub: ROOT_PUB, name: 'primary' }])).status).toBe(200);
+
+    // The replay: the captured record, verbatim, no key needed.
+    const replay = await handleDeviceSet({ accountId: ACCT, root: captured.root,
+      devices: captured.devices, ts: captured.ts, sig: captured.sig }, env, rq());
+    expect(replay.status).toBe(409);
+    expect((await replay.json()).code).toBe('STALE_REGISTRY');
+    const after = await (await handleDeviceList({ accountId: ACCT }, env, rq())).json();
+    expect(after.devices.map((d) => d.pub)).toEqual([ROOT_PUB]);
+  });
+
+  it('still accepts a newer list, and a re-post of the list already stored', async () => {
+    const env = makeEnv();
+    const sign = await makeRoot(env, ACCT, ROOT_PUB);
+    const t1 = Date.now() - 60 * 1000;
+    const one = [{ pub: ROOT_PUB, name: 'primary' }];
+    expect((await setList(env, sign, one, t1)).status).toBe(200);
+    expect((await setList(env, sign, one, t1)).status).toBe(200); // client retry of the same request
+    const two = [{ pub: ROOT_PUB, name: 'primary' }, { pub: DEV2, name: '' }];
+    expect((await setList(env, sign, two)).status).toBe(200);
+    const after = await (await handleDeviceList({ accountId: ACCT }, env, rq())).json();
+    expect(after.devices.map((d) => d.pub)).toEqual([ROOT_PUB, DEV2]);
   });
 
   it('rejects an accountId that does not match the root pub', async () => {

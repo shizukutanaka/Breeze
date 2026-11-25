@@ -1,0 +1,377 @@
+# Self-Hosting Guide
+
+**Read in another language**: English (this page) · [中文（简体）](SELF_HOSTING-zh-CN.md) · [中文（繁體）](SELF_HOSTING-zh-TW.md) · [Español](SELF_HOSTING-es.md) · [Français](SELF_HOSTING-fr.md) · [Deutsch](SELF_HOSTING-de.md) · [Italiano](SELF_HOSTING-it.md) · [Português (Brasil)](SELF_HOSTING-pt-BR.md) · [Русский](SELF_HOSTING-ru.md) · [Українська](SELF_HOSTING-uk.md) · [Polski](SELF_HOSTING-pl.md) · [Nederlands](SELF_HOSTING-nl.md) · [Svenska](SELF_HOSTING-sv.md) · [Norsk](SELF_HOSTING-nb.md) · [Dansk](SELF_HOSTING-da.md) · [Suomi](SELF_HOSTING-fi.md) · [Čeština](SELF_HOSTING-cs.md) · [Magyar](SELF_HOSTING-hu.md) · [Română](SELF_HOSTING-ro.md) · [Ελληνικά](SELF_HOSTING-el.md) · [Türkçe](SELF_HOSTING-tr.md) · [العربية](SELF_HOSTING-ar.md) · [فارسی](SELF_HOSTING-fa.md) · [עברית](SELF_HOSTING-he.md) · [हिन्दी](SELF_HOSTING-hi.md) · [বাংলা](SELF_HOSTING-bn.md) · [اردو](SELF_HOSTING-ur.md) · [ਪੰਜਾਬੀ](SELF_HOSTING-pa.md) · [தமிழ்](SELF_HOSTING-ta.md) · [తెలుగు](SELF_HOSTING-te.md) · [മലയാളം](SELF_HOSTING-ml.md) · [Bahasa Indonesia](SELF_HOSTING-id.md) · [Bahasa Melayu](SELF_HOSTING-ms.md) · [Tiếng Việt](SELF_HOSTING-vi.md) · [ไทย](SELF_HOSTING-th.md) · [မြန်မာ](SELF_HOSTING-my.md) · [ខ្មែរ](SELF_HOSTING-km.md) · [한국어](SELF_HOSTING-ko.md) · [Filipino](SELF_HOSTING-tl.md) · [Kiswahili](SELF_HOSTING-sw.md) · [Hausa](SELF_HOSTING-ha.md) · [Yorùbá](SELF_HOSTING-yo.md) · [Igbo](SELF_HOSTING-ig.md) · [አማርኛ](SELF_HOSTING-am.md) · [ქართული](SELF_HOSTING-ka.md) · [Azərbaycan](SELF_HOSTING-az.md) · [Қазақша](SELF_HOSTING-kk.md) · [Oʻzbek](SELF_HOSTING-uz.md) · [Српски](SELF_HOSTING-sr.md) · [Hrvatski](SELF_HOSTING-hr.md)
+
+
+> **Before you start: the standard setup needs a Cloudflare account.**
+> The standard setup in this guide — the Cloudflare deployment
+> below — runs on Cloudflare, so have a Cloudflare account ready
+> before you begin. If you do not want to use Cloudflare, the
+> Docker and bare-Node setups in this guide do not need a
+> Cloudflare account.
+
+There are two ways to run a Breeze relay:
+
+1. **Self-hosted (Node + Docker)** — the relay on your own machine or
+   VPS: one container, one data volume, registration closed by
+   default. Start here if the relay is for you and your people.
+2. **Cloudflare** — the official-style deployment on Cloudflare's
+   free tier (the relay Breeze itself runs). Start there if you want
+   a public relay with no server to maintain.
+
+Both run the identical handler code; a relay is a dumb,
+interchangeable mailbox either way, and every client works with
+every relay.
+
+## Self-Hosted with Docker
+
+```bash
+# 1. Get the code
+git clone https://github.com/shizukutanaka/Breeze.git && cd Breeze
+
+# 2. Start it, with your own Breeze ID admitted (see "Registration"
+#    below for how to find it — you can also start closed-to-everyone
+#    and add IDs later)
+BREEZE_ALLOWLIST=<your Breeze ID> docker compose up -d
+
+# 3. Watch the first-boot log — it prints your relay identity
+#    fingerprint; write it down (see "Relay identity")
+docker compose logs breeze
+```
+
+The relay serves plain HTTP on port 8787 inside the container.
+**Terminate TLS at a reverse proxy in front of it** (Caddy, nginx,
+Traefik, a Cloudflare Tunnel, …): browsers will only use a relay
+over HTTPS/WSS. When you do, set `TRUST_PROXY: "true"` in
+`docker-compose.yml` so rate limiting keys on the real client
+address — and never set it without such a proxy, because the header
+it trusts is forgeable by anyone who can reach the entry directly.
+
+Run exactly **one** container against the data volume: the rate
+limiter is in-memory per process and each mailbox's operations are
+serialized inside that process, so a second replica would hold
+neither property. Scale by giving the one process a bigger machine.
+
+### Registration: closed by default
+
+A self-hosted relay that anyone on the internet could register on
+would recreate the spam/abuse economics the official relay's limits
+exist to control, so **the Docker packaging ships closed**: the
+compose file passes a `REGISTRATION_ALLOWLIST` (possibly empty) and
+only the Breeze IDs on it may *create accounts* (a first prekey
+upload). Closing registration never affects people already homed on
+the relay — their uploads, deposits, rendezvous and polls are not
+gated — and opening registration is an explicit choice, never the
+default.
+
+- **Your Breeze ID** is the 12-character identifier in your invite
+  link (the first 12 characters of its `pub` value). Ask each person
+  you invite for theirs the same way — the ID is a public identifier
+  contacts already exchange, not a secret.
+- **Admit people** by listing their IDs: set
+  `BREEZE_ALLOWLIST=id1,id2,…` in your shell or a `.env` file next to
+  `docker-compose.yml`, then `docker compose up -d` again.
+- **Start now, admit later**: with no `BREEZE_ALLOWLIST` set, the
+  relay runs closed to everyone — the boot log says so — and nobody
+  can register until you add IDs.
+- **Open relay** (anyone may register): uncomment
+  `REGISTRATION_OPEN: "1"` in `docker-compose.yml`. You own the
+  abuse economics if you do.
+
+### Usage quota: turn it off on your own relay
+
+The worker ships with a **fair-use usage quota** enabled: per
+mailbox, at most 10,000 deposits/day and 200,000/month (a deposit is
+one full delivery cycle — see `docs/COST_MODEL.md` §10 for the
+policy and the numbers). That frame exists for the *shared default
+relay*, which is run as a free entrance whose variable costs the
+operator would otherwise carry for everyone. **On a relay you run
+for yourself and your people, the frame is pointless — disable
+it**:
+
+```bash
+USAGE_QUOTA_ENABLED=false
+```
+
+Set it wherever your relay reads its environment (the shell or
+`.env` next to `docker-compose.yml`, the Node process environment,
+or Cloudflare Pages secrets). Two neighbouring knobs exist if you
+run a community relay and *do* want a frame:
+`USAGE_QUOTA_DAILY` and `USAGE_QUOTA_MONTHLY` retune the caps.
+Notes that matter:
+
+- The quota is enforced only when mailboxes live in Durable
+  Objects (`MAILBOX_BACKEND=do`, the default on this host); on the
+  KV backend it is a documented no-op.
+- Past the cap, senders get an explicit `429 USAGE_QUOTA_EXCEEDED`
+  (with the window and its limit) instead of a silent drop — the
+  message stays in the sender's outbox, and the recipient remains
+  reachable over P2P and via any other home relay.
+
+### Relay identity
+
+On first boot the relay generates a persistent Ed25519 identity key
+*inside the data volume* and prints its fingerprint in the log:
+
+```
+relay identity: NEW key generated — fingerprint 3F2A 9C41 …
+```
+
+The fingerprint identifies *your* relay: give it to your users
+out-of-band (in person, over another channel) so they can recognize
+the relay they were handed as the one you run. The same fingerprint
+prints on every boot; if it ever changes, the data volume was
+replaced — investigate before telling users to trust the new one.
+
+Clients verify and pin this key automatically (stage-2 step 4): on
+first contact a client challenges the relay to sign with the key
+(`/api/relay/attest`), stores the verified key with the account, and
+re-verifies on every later session. The fingerprint the client shows
+(under `/security`, and in the toast on first pin) is derived from
+the same key — compare it with the boot-log line above. If the key
+ever changes, clients **stop talking to the relay** and warn the
+user; they never re-pin silently. Treat a fingerprint change as a
+breaking event: there is no in-app "trust the new key" button in
+step 4, so after a genuine volume loss your users must clear the
+app's stored data for their account and re-pin on first contact —
+announce the new fingerprint out-of-band first, or they cannot tell
+your new key from an attacker's.
+
+### Backup & restore
+
+**The data volume is the entire relay state**: one SQLite file
+holding the directory, the mailboxes, and the relay identity key.
+There is nothing else to back up.
+
+```bash
+# Back up: copy the database out of the (stopped) container
+docker compose stop
+docker cp "$(docker compose ps -aq breeze)":/data/breeze-relay.db ./breeze-relay-backup.db
+docker compose start
+
+# Restore: copy the backup back in as /data/breeze-relay.db before
+# starting, and the relay serves identically — same fingerprint.
+docker compose stop
+docker cp ./breeze-relay-backup.db "$(docker compose ps -aq breeze)":/data/breeze-relay.db
+docker compose start
+```
+
+### Updating
+
+```bash
+git pull origin main
+docker compose up -d --build
+```
+
+State lives in the volume, not the image, so updating never touches
+your users' data.
+
+## Self-Hosted with Bare Node (no Docker)
+
+```bash
+node server/index.js   # Node ≥ 24, no npm dependencies to install
+```
+
+Configuration is environment variables only — `server/README.md`
+lists them all. Two differences from the Docker path:
+
+- The **data file** defaults to `./breeze-relay.db` (override with
+  `BREEZE_DB_PATH`); it is the same single-file state, relay identity
+  included. Back it up the same way: stop, copy, restart.
+- **Registration is open unless you close it**: the closed default
+  is a property of the Docker packaging. To close a bare entry, set
+  `REGISTRATION_ALLOWLIST=id1,id2` (or an empty value for
+  closed-to-everyone); `REGISTRATION_OPEN=1` re-opens explicitly.
+
+## Cloudflare Deployment
+
+### Minimum Deployment ($0/month, 5 minutes)
+
+```bash
+# 1. Install Wrangler CLI
+npm install -g wrangler
+
+# 2. Login to Cloudflare
+wrangler login
+
+# 3. Deploy
+wrangler pages deploy . --project-name=breeze
+
+# 4. Create a KV namespace and declare it in wrangler.toml
+wrangler kv:namespace create KV
+# Copy the new namespace's ID and put it in wrangler.toml, replacing the
+# id in the [[kv_namespaces]] section (binding = "KV"). Pages takes its
+# bindings from wrangler.toml; a binding set only in the Dashboard is
+# NOT applied while a wrangler.toml exists.
+# Then deploy again so the binding takes effect:
+wrangler pages deploy . --project-name=breeze
+
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
+```
+
+**That's it.** All features work except push notifications. Note
+that registration on a Cloudflare deployment is **open** unless you
+set `REGISTRATION_ALLOWLIST` yourself (see `.env.example`); the
+closed-by-default packaging is the Docker path above.
+
+### What Works at $0
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| E2E encrypted chat | ✓ | Full Double Ratchet |
+| P2P messaging | ✓ | WebRTC DataChannel |
+| Voice/video calls | ✓ | WebRTC + free STUN |
+| TURN relay | ✓ | Open Relay (20GB/month free) |
+| Groups (1,000 members) | ✓ | Sender Key O(1) |
+| File transfer | ✓ | Up to 50MB via P2P |
+| 51 languages | ✓ | English built in + 50 full locale files, auto-detected |
+| Offline/PWA | ✓ | Service Worker |
+| Push notifications | ✗ | Needs VAPID keys |
+
+Multi-account billing (Lite/Plus/Pro) is not available — see
+[SECURITY.md](../../SECURITY.md)'s "Removed: multi-account billing" section. Every account gets
+unlimited local sub-accounts for free with no plan gating.
+
+### Free Tier Limits
+
+| Resource | Free Tier | Usage per Active User |
+|----------|-----------|----------------------|
+| Worker requests | 100,000/day | ~500/day (polling + signaling) |
+| KV reads | 100,000/day | ~200/day |
+| KV writes | 1,000/day | ~350/day (optimized) |
+| KV storage | 1 GB | ~10 KB/user |
+| Static assets | Unlimited | ~894 KB (single HTML) |
+
+**Supports ~3 concurrent active users on free tier.**
+
+### Adding Optional Features
+
+#### Push Notifications (free)
+
+```bash
+# Generate VAPID keys
+npx web-push generate-vapid-keys
+
+# Set secrets
+wrangler pages secret put VAPID_PUBLIC_KEY
+wrangler pages secret put VAPID_PRIVATE_KEY
+```
+
+#### TURN Server (for restrictive networks)
+
+TURN is how calls and relay-only (IP-hiding) connections cross
+restrictive NATs. Which TURN your relay hands out is **your** choice as
+operator — the Worker tries, in order:
+
+```bash
+# Option A: Cloudflare Calls ($0.05/GB, global anycast)
+wrangler pages secret put TURN_KEY_ID
+wrangler pages secret put TURN_KEY_API_TOKEN
+
+# Option B: your own coturn (HMAC time-limited credentials — the Worker
+# mints a 24h username/credential per registered user from the secret)
+#   coturn: use-auth-secret, static-auth-secret=<same secret>
+wrangler pages secret put TURN_URL      # turn:your-server:3478
+wrangler pages secret put TURN_SECRET
+
+# Option C: static credentials (metered.ca, Twilio, …)
+wrangler pages secret put TURN_URL
+wrangler pages secret put TURN_USERNAME
+wrangler pages secret put TURN_CREDENTIAL
+
+# Option D: No config → free Open Relay (20GB/month). This is a third
+# party's PUBLIC quota, shared with every unconfigured relay — fine for
+# a first run, not a foundation. Opt out explicitly and callers get
+# STUN only (some restrictive-NAT calls will then fail, visibly):
+wrangler pages secret put TURN_OPENRELAY_FALLBACK   # set to: false
+```
+
+**Verify what you actually configured:** `GET /api/health` reports the
+effective mode as `turnProvider` (`cloudflare` | `custom` | `static` |
+`openrelay` | `none`). The older `turn` boolean only reflects
+`TURN_URL`, so it reads `false` for the recommended Option A — use
+`turnProvider`. Clients show the same provider in `/security`, so a
+user on the Open Relay fallback can see that a third party relays their
+call media (metadata only — media itself is DTLS-SRTP encrypted).
+
+#### Auth Hardening & the Plain Relay Path
+
+Prekey uploads now preserve signing ownership separately at
+`prekey-owner:<userId>` with **no TTL**. Existing bundle ownership migrates lazily
+on the next upload, before a replacement is accepted. New Ed25519 bundles also
+establish that record. Keep these records when pruning expired prekey bundles:
+waiting for bundle expiry must not permit a new owner. Rotation requires an
+upload signed by the previous owner, binding the new key in the existing upload
+digest. Authenticated `/account/delete` erases both records and can authenticate
+against the owner even after bundle expiry. There is no lost-owner-key reset.
+
+For accounts with this record, upload and message/sealed poll, sealed ACK and
+mailbox WebSocket proofs must use the durable owner. **Unsigned requests are
+rejected even with `PREKEY_REQUIRE_AUTH=false` or `QUEUE_REQUIRE_AUTH=false`.**
+Those flags retain their existing defaults and legacy semantics for accounts
+without an owner; explicit `false` acceptance of unsigned upload/queue requests
+logs a content-free deprecation warning. Other auth flags are unchanged.
+Mailbox WebSockets still require signatures for everyone.
+
+The client waits for signing initialization before queue activity, including
+returning-account boot, leader promotion and reconnect. The shared wait is
+bounded at five seconds. Unsupported runtimes continue unsigned immediately;
+stuck IDB/key-unwrapping continues unsigned after the bound, then signs when ready.
+This keeps the poll loop alive, **not** a bypass: owner-backed accounts cannot
+receive from the relay until their signing key is usable. Deploy updated client
+assets alongside the Worker to avoid the old startup race.
+
+Migration cannot recover ownership from a bundle that expired **before** its
+owner was preserved. First registration remains TOFU. Ownership records use the
+existing KV backend: eventual consistency and concurrent writes are not made
+linearizable by this change. Proofs retain the existing five-minute freshness
+window and operation/payload binding; identical in-window retries are not a
+one-time nonce protocol.
+
+Presence writes and TURN credential issuance already require a *registered*
+account (prekey bundle present) by default, and every client registers
+automatically. Presence heartbeats additionally carry an Ed25519 ownership
+proof (the beat signs the fields it stores), which the Worker verifies
+whenever one is presented — `PRESENCE_SIGN_REQUIRE_AUTH=true` makes that
+proof mandatory. The remaining Ed25519-signature flags stay opt-in;
+`wrangler.toml` documents each one and why (clients on runtimes without
+WebCrypto Ed25519 cannot sign at all).
+
+The legacy plain relay (`/api/msg/send`, `/api/msg/poll`) is deprecated: its
+responses carry a `Deprecation: true` header, and the sealed path is the
+default route for every current client. Once you have confirmed no live
+client still needs the fallback, disable it outright:
+
+```bash
+wrangler pages secret put PLAIN_PATH_DISABLED   # set to: true
+```
+
+#### Custom Domain
+
+```bash
+# In Cloudflare Dashboard:
+# Pages > breeze > Custom domains > Add
+# Point your domain's DNS to Cloudflare
+```
+
+### Scaling Beyond Free Tier
+
+When you outgrow the free tier ($5/month Workers Paid plan):
+
+| Resource | Paid Plan |
+|----------|-----------|
+| Worker requests | 10 million/month |
+| KV writes | 1 million/month |
+| KV storage | 1 GB included |
+| CPU time | 30 seconds/request |
+
+This supports **thousands of concurrent users**.
+
+### Updating
+
+```bash
+git pull origin main
+wrangler pages deploy . --project-name=breeze
+```
+
+No build step. No dependencies to install. Just deploy.

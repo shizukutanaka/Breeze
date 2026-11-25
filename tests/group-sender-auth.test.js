@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { padBucketSize } from '../src/crypto/ratchet.js';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 function slice(start, end) {
@@ -53,7 +54,7 @@ function harness({ version = 5, members = [A, B, C], localC = true } = {}) {
   const makeCrypto = getGroupSenderKey => compile(`${groupSource} return { encryptGroupMsg, decryptGroupMsg };`, {
     ...cryptoDeps, CONFIG, MS, _dbg, dbGet, dbPut,
     arr: a => Array.from(a), u8: a => new Uint8Array(a),
-    getGroupSenderKey,
+    getGroupSenderKey, _padBucketSize: padBucketSize, // D02: encryptGroupMsg resolves the bucket helper as a free variable
   });
   const crypt = makeCrypto(async id => sendKeys.get(id));
   const charlie = makeCrypto(async id => cReceivedKeys.get(id));

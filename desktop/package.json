@@ -1,6 +1,6 @@
 {
   "name": "breeze-desktop",
-  "version": "3.6.1",
+  "version": "3.8.0",
   "description": "Breeze \u2014 P2P encrypted messenger",
   "main": "main.js",
   "scripts": {
@@ -28,6 +28,9 @@
       "main.js",
       "preload.js",
       "bounds-guard.js",
+      "nav-guard.js",
+      "csp-guard.js",
+      "update-guard.js",
       "icon.*",
       "tray*.png"
     ],
@@ -59,6 +62,14 @@
       {
         "from": "../_headers",
         "to": "_headers"
+      },
+      {
+        "from": "../src/crypto",
+        "to": "src/crypto"
+      },
+      {
+        "from": "../src/app",
+        "to": "src/app"
       }
     ],
     "asar": true,
@@ -85,7 +96,6 @@
         }
       ],
       "icon": "icon.ico",
-      "sign": false,
       "requestedExecutionLevel": "asInvoker"
     },
     "nsis": {
@@ -103,6 +113,12 @@
       "target": [
         {
           "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
           "arch": [
             "universal"
           ]
@@ -218,5 +234,8 @@
   },
   "homepage": "https://breeze.pages.dev",
   "bugs": "https://github.com/shizukutanaka/Breeze/issues",
-  "author": "Breeze Project"
+  "author": {
+    "name": "Breeze Project",
+    "email": "shizukutanaka@users.noreply.github.com"
+  }
 }

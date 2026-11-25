@@ -1,5 +1,15 @@
 # Self-Hosting Guide
 
+**他の言語で読む / Read in another language**: English (this page) · [English](i18n/SELF_HOSTING-en.md) · [中文（简体）](i18n/SELF_HOSTING-zh-CN.md) · [中文（繁體）](i18n/SELF_HOSTING-zh-TW.md) · [Español](i18n/SELF_HOSTING-es.md) · [Français](i18n/SELF_HOSTING-fr.md) · [Deutsch](i18n/SELF_HOSTING-de.md) · [Italiano](i18n/SELF_HOSTING-it.md) · [Português (Brasil)](i18n/SELF_HOSTING-pt-BR.md) · [Русский](i18n/SELF_HOSTING-ru.md) · [Українська](i18n/SELF_HOSTING-uk.md) · [Polski](i18n/SELF_HOSTING-pl.md) · [Nederlands](i18n/SELF_HOSTING-nl.md) · [Svenska](i18n/SELF_HOSTING-sv.md) · [Norsk](i18n/SELF_HOSTING-nb.md) · [Dansk](i18n/SELF_HOSTING-da.md) · [Suomi](i18n/SELF_HOSTING-fi.md) · [Čeština](i18n/SELF_HOSTING-cs.md) · [Magyar](i18n/SELF_HOSTING-hu.md) · [Română](i18n/SELF_HOSTING-ro.md) · [Ελληνικά](i18n/SELF_HOSTING-el.md) · [Türkçe](i18n/SELF_HOSTING-tr.md) · [العربية](i18n/SELF_HOSTING-ar.md) · [فارسی](i18n/SELF_HOSTING-fa.md) · [עברית](i18n/SELF_HOSTING-he.md) · [हिन्दी](i18n/SELF_HOSTING-hi.md) · [বাংলা](i18n/SELF_HOSTING-bn.md) · [اردو](i18n/SELF_HOSTING-ur.md) · [ਪੰਜਾਬੀ](i18n/SELF_HOSTING-pa.md) · [தமிழ்](i18n/SELF_HOSTING-ta.md) · [తెలుగు](i18n/SELF_HOSTING-te.md) · [മലയാളം](i18n/SELF_HOSTING-ml.md) · [Bahasa Indonesia](i18n/SELF_HOSTING-id.md) · [Bahasa Melayu](i18n/SELF_HOSTING-ms.md) · [Tiếng Việt](i18n/SELF_HOSTING-vi.md) · [ไทย](i18n/SELF_HOSTING-th.md) · [မြန်မာ](i18n/SELF_HOSTING-my.md) · [ខ្មែរ](i18n/SELF_HOSTING-km.md) · [한국어](i18n/SELF_HOSTING-ko.md) · [Filipino](i18n/SELF_HOSTING-tl.md) · [Kiswahili](i18n/SELF_HOSTING-sw.md) · [Hausa](i18n/SELF_HOSTING-ha.md) · [Yorùbá](i18n/SELF_HOSTING-yo.md) · [Igbo](i18n/SELF_HOSTING-ig.md) · [አማርኛ](i18n/SELF_HOSTING-am.md) · [ქართული](i18n/SELF_HOSTING-ka.md) · [Azərbaycan](i18n/SELF_HOSTING-az.md) · [Қазақша](i18n/SELF_HOSTING-kk.md) · [Oʻzbek](i18n/SELF_HOSTING-uz.md) · [Српски](i18n/SELF_HOSTING-sr.md) · [Hrvatski](i18n/SELF_HOSTING-hr.md)
+
+
+> **Before you start: the standard setup needs a Cloudflare account.**
+> The standard setup in this guide — the Cloudflare deployment
+> below — runs on Cloudflare, so have a Cloudflare account ready
+> before you begin. If you do not want to use Cloudflare, the
+> Docker and bare-Node setups in this guide do not need a
+> Cloudflare account.
+
 There are two ways to run a Breeze relay:
 
 1. **Self-hosted (Node + Docker)** — the relay on your own machine or
@@ -187,13 +197,16 @@ wrangler login
 # 3. Deploy
 wrangler pages deploy . --project-name=breeze
 
-# 4. Create KV namespace and bind it
+# 4. Create a KV namespace and declare it in wrangler.toml
 wrangler kv:namespace create KV
-# Copy the ID, then go to:
-# Dashboard > Pages > breeze > Settings > Functions > KV namespace bindings
-# Variable name: KV → Select the namespace you created
+# Copy the new namespace's ID and put it in wrangler.toml, replacing the
+# id in the [[kv_namespaces]] section (binding = "KV"). Pages takes its
+# bindings from wrangler.toml; a binding set only in the Dashboard is
+# NOT applied while a wrangler.toml exists.
+# Then deploy again so the binding takes effect:
+wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **That's it.** All features work except push notifications. Note
@@ -209,9 +222,9 @@ closed-by-default packaging is the Docker path above.
 | P2P messaging | ✓ | WebRTC DataChannel |
 | Voice/video calls | ✓ | WebRTC + free STUN |
 | TURN relay | ✓ | Open Relay (20GB/month free) |
-| Groups (100 members) | ✓ | Sender Key O(1) |
+| Groups (1,000 members) | ✓ | Sender Key O(1) |
 | File transfer | ✓ | Up to 50MB via P2P |
-| 8 languages | ✓ | EN + 7 full locales, auto-detected |
+| 51 languages | ✓ | English built in + 50 full locale files, auto-detected |
 | Offline/PWA | ✓ | Service Worker |
 | Push notifications | ✗ | Needs VAPID keys |
 
@@ -227,7 +240,7 @@ unlimited local sub-accounts for free with no plan gating.
 | KV reads | 100,000/day | ~200/day |
 | KV writes | 1,000/day | ~350/day (optimized) |
 | KV storage | 1 GB | ~10 KB/user |
-| Static assets | Unlimited | ~400 KB (single HTML) |
+| Static assets | Unlimited | ~894 KB (single HTML) |
 
 **Supports ~3 concurrent active users on free tier.**
 

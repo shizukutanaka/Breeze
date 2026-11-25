@@ -250,7 +250,7 @@ unwraps → derives identical SK → decrypts).
 { v:4, i:[iv], d:[ciphertext‖tag], rk:[ratchetPub], c:counter, cm:[keyCommitment] }
 ```
 - Symmetric chain: `msgKey=HKDF(ck,0^32,'msg')`, `ck=HKDF(ck,0^32,'chain')`.
-- Frame (inside AEAD): `[flags:1][len:2][data]`, padded to 256 B. (`flags.bit0`=compressed.)
+- Frame (inside AEAD): `[flags:1][len:2][data]`, padded to a size bucket (D02: 256 / 1024 / 4096 B, then multiples of 4096 — `_padBucketSize`). (`flags.bit0`=compressed.)
 - DH ratchet step on new `rk`: resets **both** `Ns` and `Nr`.
 - Replay: reject `c ≤ Nr` (unless a skipped key exists); dedup by msgId (first 8 ct bytes).
 - Skipped keys: bounded (`MAX_SKIP`), reject gaps `> MAX_GAP`, **TTL-expired** (I7).
@@ -330,15 +330,33 @@ iter-DoS ceiling, isWrapped/loadKey detection + unwrap + prompt-throw).
 - To report, the recipient reveals `(message, Kf)`; the relay checks
   `HMAC(Kf, message) == Cf` → proof the message was genuinely sent. No plaintext
   escrow; un-reported messages stay hidden (HMAC hiding under a secret key).
+- **AMF sender binding (D08,** Tyagi et al. asymmetric message franking — the
+  sender-binding half of the Hecate model): the sender's Ed25519 identity key
+  signs `breeze-amf-v1:{frankId}:{Cf}` and the tag ships **inside** the E2E
+  payload (recipient-only, like `Kf`), so the relay learns nothing new at
+  send time and un-reported messages keep their deniability. The recipient
+  verifies the tag at receipt against the commitment recomputed from the
+  received plaintext — a mismatch drops the message's report affordance, so a
+  sender who committed to a different message than the one delivered is
+  caught immediately. At report time the relay re-verifies the tag against
+  the claimed sender's registered `edIdentityKey`: a bound report attributes
+  the message to that sender in the moderation record.
 
-Impl: client core `src/crypto/franking.js` (`commit`/`verify`/`verifyReport`) +
-**relay endpoints** `_worker.js` `/api/abuse/record` (store `Cf`) and
-`/api/abuse/report` (verify revealed `(message, Kf)` against the recorded `Cf`).
-Tests: `tests/franking.test.js` (core) + `tests/worker.test.js` (end-to-end:
-client commitment → relay verifies; binding reject, unknown-id 404, no-overwrite,
-oversized-message + oversized-opening DoS guards).
-**Implemented (core + relay).** Gap: bind the **sender** under sealed sender via
-asymmetric franking / Hecate (§9 N4); client send/report UI wiring (browser).
+Impl: client core `src/crypto/franking.js` (`commit`/`verify`/`verifyReport` +
+`amfSign`/`amfVerify`/`verifyAmfReport`) + **relay endpoints** `_worker.js`
+`/api/abuse/record` (store `Cf`) and `/api/abuse/report` (verify revealed
+`(message, Kf)` against the recorded `Cf`; verify the AMF tag when present).
+Deployed client: inline `_frankKey`/`_frankCommit` with **derived** `Kf`
+(HKDF from the message key — see CLAUDE.md for the divergence) + `signMessage`
+tag as payload field `p.fs`.
+Tests: `tests/franking.test.js` (core + AMF) + `tests/worker.test.js`
+(end-to-end: client commitment → relay verifies; binding reject, unknown-id
+404, no-overwrite, oversized-message + oversized-opening DoS guards; AMF
+bound/unbound/legacy report verdicts).
+**Implemented (core + relay + AMF sender binding).** Residual limits: a
+hostile client can withhold the record or the tag — its messages then arrive
+unreportable rather than forgeable; reports from pre-AMF clients remain
+symmetric-only (content verified, sender unattributed).
 
 ## 6b. Safety number — out-of-band MITM verification (key fingerprint)
 
@@ -372,6 +390,29 @@ run; scannable: encoding length, cross-party match, MITM reject, malformed/
 version-mismatch reject, stableId binding). **Implemented (module).** Gap: migrate
 index.html `safetyNumber()`/`showSafetyNumber()` onto it (browser-validated pass).
 
+## 6c. Call signalling (stage 5)
+
+Call signalling (SDP offers/answers, ICE candidates) historically
+crossed the relay in plaintext. Since stage 5 step 1 it is
+end-to-end encrypted **by default** (`CONFIG.CALL_E2E_SIGNAL`):
+
+- The wrap/unwrap lives in `src/app/call.js` (`createCallSignal`).
+  When both sides advertise the `call-e2e` capability, signalling
+  payloads travel inside the existing 1:1 Double Ratchet session —
+  no new key material, no separate handshake.
+- Negotiation is per-contact and downgrade-resistant: state is
+  `capsKnown` (the peer advertises `call-e2e`) and `proven` (a
+  wrapped payload from this peer has decrypted successfully).
+  Plaintext signalling from a **proven** peer is discarded (a
+  downgrade attempt); from an **unknown** peer it is accepted
+  (the TOFU window is documented in the stage-5 plan notes).
+- Group calls (step 2) reuse the same wrap per leg: control
+  messages ride the group sender-key channel as `{gctl}`
+  payloads, each media leg is a separate peer connection whose
+  signalling room is `gcall:<groupId>:<a>:<b>`, and glare is
+  resolved deterministically (the smaller member id's offer
+  wins). Media itself is DTLS-SRTP by WebRTC, as usual.
+
 ## 7. Worker endpoints (security-relevant)
 
 Covered by `tests/worker.test.js` (197 tests):
@@ -396,6 +437,16 @@ Covered by `tests/worker.test.js` (197 tests):
 **Implemented.** Gaps: §8.
 
 ## 8. Gaps — integration (needs browser / two-device validation)
+
+> **Status update (2026-11-20, stage 7 step 2):** the wiring gaps
+> below were resolved as the modules were deployed — X3DH v5,
+> PQXDH, sender keys, at-rest wrapping, capability negotiation and
+> the KT audit path all run in the shipped client today. The
+> authoritative deployed-vs-reference map is the table in
+> `CLAUDE.md`; inline↔reference parity is enforced by
+> `tests/mirror-drift.test.js`. What genuinely remains open from
+> this section is **real-device validation** (two physical
+> devices, real networks), which no in-repo test can substitute.
 
 These are **specified + implemented in modules but not yet wired into the live app**;
 they change `index.html`/`_worker.js` runtime and must be validated in a browser:
@@ -422,6 +473,12 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   the receive counter, so the first message of a new receiving chain can be
   misclassified as a replay. The module is fixed (§4); `index.html` is not — fix
   when porting (G4). **Real correctness bug.**
+  **Update (2026-11-20):** the reference `dhRatchetStep` resets BOTH
+  counters (see the comment in `src/crypto/ratchet.js`), and the
+  deployed inline ratchet is held to the reference by
+  `tests/mirror-drift.test.js`; the session vector
+  (`tests/vectors/session-kat.json`) replays a full first-message
+  exchange against the reference.
 - N2. **Group per-message authentication** — ✅ implemented as two-layer Ed25519
   (epoch sig `es` + per-message sig `s`, §5). Partial AFKS: forging requires
   compromising both keys simultaneously; a leaked per-message key cannot forge other
@@ -436,8 +493,11 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   returned on fetch so the initiator can call `parsePeerCaps(bundle)` and `negotiate()`
   to select v4 vs v5 path. Pending: wire `advertise()` into presence/bundle in
   `index.html` and call `negotiate()` before session init.
-- N4. **Franking core** (I17) — ✅ implemented (§6a); remaining: sealed-sender
-  sender-binding (asymmetric franking / Hecate) + relay record/report endpoints (§8).
+- N4. **Franking core** (I17) — ✅ implemented (§6a), including the AMF
+  sender-binding (D08: Ed25519 tag over the commitment, recipient-checked at
+  receipt, relay-re-verified at report) and the relay record/report
+  endpoints (§8). Remaining: none structural — the hostile-client
+  withholding residual is documented in §6a.
   **PQXDH** (I8) — ✅ implemented and deployed (§2a; stage 3, on by
   default since step 6 — the vetted-ML-KEM premise was met by the pinned
   pure-JS @noble/post-quantum, ACVP-verified, not WASM). **PQ ratchet**
@@ -461,42 +521,15 @@ they change `index.html`/`_worker.js` runtime and must be validated in a browser
   `POW_EXPIRED`, preventing indefinite replay of a solved token.
 
 ## Test status
-13 suites, **433 tests** passing (`npm test`); `validate.sh` 33/36. All `src/crypto/`
-modules have test suites: bytes (12), ratchet (24), group (31), atrest (17), franking (9),
-negotiate (21), ktlog (42), pow (21), x3dh (21), kat (6), push (15), fingerprint (17);
-worker (197). `src/crypto/bytes.js` is the shared byte/encoding + constant-time-compare
-helper module (`u8`/`arr`/`toBytes`/`concatBytes`/`b64`/`unb64`/`ctEqual`) consumed by the
-others — one audited `ctEqual` rather than copies that can drift.
-Worker coverage: routing, rate-limit, userId validation (length bounds + charset),
-prekey (0-OTP replenish hint + caps round-trip + caps sanitization + x3dh legacy
-field + N5 chain hash round-trip + tamper detection + upload/fetch malformed-id guard
-+ field size caps: identityKey/edIdentityKey/signedPreKey/signedPreKeySig/OTP entries),
-group create/join/info/kick/epoch (self-kick guard + post-kick join epoch + malformed-id
-guards + token length cap), franking relay
-(opening DoS guard), sealed sender (multi-sender + missing-id + send validation +
-malformed-to guard), msg send/poll (payload-size limit + lastTs cursor + MISSING_FIELDS
-+ malformed-id guards), alias PoW (PoW freshness check + pub size cap), key-history
-log (N5 chain), dead drop, backup (malformed-id guard), signal relay (sanitizeString
-strip ctrl chars + data size cap), presence (heartbeat + malformed-id guards + batch
-filter), online count, push subscribe (SSRF + 5-device
-cap + malformed-id guard + subscription field sanitization), push encryption (RFC 8291),
-TURN credentials (malformed-id guard), body size enforcement (Content-Length spoof).
-Security additions: ratchet MAX_SKIP storage-bound (forward secrecy), consumed-
-skipped-key replay guard (ratchet + group), group future-epoch rejection, N3 caps +
-x3dh legacy compat persistence in worker prekey bundle (v5 capability advertisement
-flow complete), PoW freshness check (maxAge), N5 hash-chained key-transparency log,
-validateUserId() on all KV-key-constructing handlers including presence heartbeat/check
-and OTP write path (KV key injection prevention), Origin:null CORS
-bypass blocked (sandboxed iframe protection), actual body size enforcement (Content-Length
-spoof bypass fix), signal data size cap (64KB DoS guard), batch presence id filter via
-validateUserId (JS coercion + KV injection guard), public key field size caps (identityKey/
-signedPreKey ≤5000 chars, edIdentityKey/signedPreKeySig ≤500 chars, alias pub ≤2000
-chars), OTP per-entry size cap (5000 chars), group token length cap (128 chars), PoW
-freshness check in handleAliasSet (10 min maxAge, backward-compatible with old-format
-challenges), N2 two-layer group authentication (partial AFKS: epoch sig + per-message
-sig, both required; forging requires simultaneous compromise of both keys),
-abuse report `opening` field size cap (128 chars, HMAC key is 44 base64 chars),
-push subscription object sanitization (whitelist endpoint/keys/expirationTime, cap
-p256dh ≤100 chars, auth ≤50 chars; extra fields stripped before KV storage).
-Remaining: browser integration (§8) + N1 index.html Nr fix (module has regression
-test) + N4 sealed-sender franking (§9).
+
+As of 2026-11-20: **117 test files / 1,958 tests, all passing**
+(`npm test`), `validate.sh` PASSED. The counts grow with every
+stage; treat any older per-suite numbers in git history as
+historical. Published vectors live in `tests/vectors/`:
+ML-KEM-768 ACVP (`mlkem768-acvp.json`), rendezvous codes
+(`rendezvous-codes.json`), and a full X3DH→Double-Ratchet
+session vector with test-only keys (`session-kat.json`, replayed
+by `tests/session-vectors.test.js`, generated by
+`tools/gen-session-vectors.mjs`). Primitive known answers
+(HKDF / AES-GCM / X25519) are in `tests/kat.test.js`. See
+`docs/AUDIT.md` for the auditor's map of what runs where.

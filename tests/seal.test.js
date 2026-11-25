@@ -32,6 +32,9 @@ async function legacySealMeta(recipientPubRaw, meta, to, ts) {
   return { ek: b64(ephPubRaw), iv: Array.from(iv), ct: Array.from(new Uint8Array(ct)) };
 }
 
+// D02 size buckets: 256 / 1024 / 4096, then multiples of 4096.
+const bucketOf = (n) => (n <= 256 ? 256 : n <= 1024 ? 1024 : Math.ceil(n / 4096) * 4096);
+
 const TO = 'aaaabbbbcccc';
 const TS = 1755000000000;
 const META = {
@@ -92,12 +95,13 @@ describe('sealed sender v2 (reference)', () => {
     expect(await unsealMeta(subtle, r.kp.privateKey, se, TO, TS)).toEqual(META);
   });
 
-  it('pads the metadata: ct length is the 256-bucket of the framed JSON, never the exact length', async () => {
+  it('pads the metadata: ct length is the size bucket of the framed JSON, never the exact length', async () => {
     const r = await identity();
     const se = await sealMeta(subtle, r.pubRaw, META, TO, TS);
     const jsonLen = new TextEncoder().encode(JSON.stringify(META)).length;
-    // frame = [marker:1][len:2][JSON] zero-padded to a 256 multiple; GCM adds its 16-byte tag
-    expect(se.ct.length).toBe(Math.ceil((jsonLen + 3) / 256) * 256 + 16);
+    // frame = [marker:1][len:2][JSON] zero-padded to a D02 size bucket
+    // (256 / 1024 / 4096, then multiples of 4096); GCM adds its 16-byte tag
+    expect(se.ct.length).toBe(bucketOf(jsonLen + 3) + 16);
     expect(se.ct.length).not.toBe(jsonLen + 16);
   });
 
@@ -112,13 +116,14 @@ describe('sealed sender v2 (reference)', () => {
     expect(await unsealMeta(subtle, r.kp.privateKey, b, TO, TS)).toEqual({ from: 'x', fromName: 'A considerably longer display name' });
   });
 
-  it('a meta crossing a bucket boundary moves up exactly one bucket', async () => {
+  it('a meta crossing the 256 boundary moves up to the 1024 bucket', async () => {
     const r = await identity();
     const big = { from: 'x', replyTo: { text: 'p'.repeat(400) } };
     const se = await sealMeta(subtle, r.pubRaw, big, TO, TS);
     const jsonLen = new TextEncoder().encode(JSON.stringify(big)).length;
     expect(jsonLen + 3).toBeGreaterThan(256);
-    expect(se.ct.length).toBe(Math.ceil((jsonLen + 3) / 256) * 256 + 16);
+    expect(jsonLen + 3).toBeLessThanOrEqual(1024);
+    expect(se.ct.length).toBe(1024 + 16);
     expect(await unsealMeta(subtle, r.kp.privateKey, se, TO, TS)).toEqual(big);
   });
 

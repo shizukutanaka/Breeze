@@ -18,6 +18,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createDirectAckWaiter } from '../src/app/direct-ack.js';
+import { poolMap } from '../src/app/group-call.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(join(HERE, '..', 'index.html'), 'utf8');
@@ -119,7 +120,7 @@ function buildSendMessage({ peers = {}, waiter = null, activeContact, auxiliaryP
     'distributeSenderKey', 'encryptGroupMsg', 'encryptFor', 'API', 'postAPIRaw',
     '_signingKey', 'signMessage', '_signingPubB64', '_rateLimiter', 'timingDelay',
     'peers', 'waitForBuffer', 'queueOutbox', 'relaySend', '_fanOut', 'renderContacts',
-    'CONFIG', '_directAck', '_p2pDirectStat', 'updateMsgStatus',
+    'CONFIG', '_directAck', '_p2pDirectStat', 'updateMsgStatus', '_poolMap', '_groupLive',
     `${sliceBetween('async function sendMessage()', '// File send (v3: binary chunks for P2P, sealed relay fallback)')}
      return sendMessage;`);
   const sendMessage = fn(
@@ -147,6 +148,8 @@ function buildSendMessage({ peers = {}, waiter = null, activeContact, auxiliaryP
     waiter,
     (field) => { calls.stats.push(field); },
     (ts, status) => { calls.status.push({ ts, status }); },
+    poolMap,
+    { distributeKey: async () => {}, distributeOwnKey: async () => {}, depositCopies: async () => {} },
   );
   return { sendMessage, calls, input };
 }
@@ -235,7 +238,7 @@ function buildHandleIncoming({ stored = null, decrypt = 'hello text' } = {}) {
     'addContact', 'verifySignature', 'showKeyChangeWarning', 'safeMsgId',
     'activeContact', '_shouldAlert', 'playNotif', 'Notification', 'announceToSR',
     'appendMsg', 'showSmartReplies', '_renderContactsThrottled', 'broadcastToTabs',
-    't', '_dbg', '_myOtherDevices', '_focusActive', '_attribDevCache', 'MS',
+    't', '_dbg', '_myOtherDevices', '_focusActive', '_attribDevCache', 'MS', '_myAcctRoot',
     `${sliceBetween('async function handleIncoming(msg, ackOut) {', '// ===== P2P connection per contact =====')}
      return handleIncoming;`);
   const handleIncoming = fn(
@@ -254,6 +257,7 @@ function buildHandleIncoming({ stored = null, decrypt = 'hello text' } = {}) {
     () => {}, () => {}, () => {}, () => {},
     (k) => k, () => {}, async () => [], () => false, new Map(),
     { SEC: 1000, MIN: 60000 },
+    null,
   );
   return { handleIncoming, puts };
 }

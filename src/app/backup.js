@@ -341,6 +341,7 @@ export function createBackupTools(D) {
         await dbPut('contacts', c);
       }
       await _restoreBackupKeyMaterial(data.keyMaterial);
+      await _markJustRecovered();
       showToast(t('toastRestoredReload'), 'success');
       setTimeout(() => location.reload(), 1.5 * MS.SEC);
       return;
@@ -393,6 +394,7 @@ export function createBackupTools(D) {
         }
       } catch(e) { _dbg(e, 'phrase-alias'); }
     }
+    await _markJustRecovered();
     showToast(t('toastRestoredReload'), 'success');
     setTimeout(() => location.reload(), 1.5 * MS.SEC);
   }
@@ -503,6 +505,7 @@ export function createBackupTools(D) {
       identity.recoveryAccount = account;
       identity.recoveryLocator = up.locator;
       await dbPut('identity', identity, 'keys');
+      _autoPass = passphrase; // arm automatic backup for this session (memory only — see the auto section)
       showToast(up.expiresAt ? t('simpleEnrolledUntil', new Date(up.expiresAt).toLocaleDateString()) : t('simpleEnrolled'), 'success');
       return true;
     } catch(e) { _dbg(e, 'simple-enroll'); showToast(t('backupFailed'), 'error'); return false; }
@@ -541,6 +544,7 @@ export function createBackupTools(D) {
       if (!up.ok) { showToast(t(up.relayDisabled ? 'backupRelayDisabled' : 'backupFailed'), 'error'); return; }
       identity.recoveryLocator = up.locator;
       await dbPut('identity', identity, 'keys');
+      _autoPass = passphrase; // arm automatic backup for this session (memory only — see the auto section)
       showToast(up.expiresAt ? t('simpleEnrolledUntil', new Date(up.expiresAt).toLocaleDateString()) : t('simpleEnrolled'), 'success');
     } catch(e) { _dbg(e, 'simple-update'); showToast(t('backupFailed'), 'error'); }
   }
@@ -789,7 +793,278 @@ export function createBackupTools(D) {
       setTimeout(() => location.reload(), CONFIG.TOAST_DURATION_MS);
     } catch(e) { _dbg(e, 'restore'); showToast(t('backupWrongPass'), 'error'); }
   }
+  // ===== Automatic backup, post-recovery restore, device migration =====
+  //
+  // Automatic backup runs the SAME uploads the manual buttons run —
+  // the locator-keyed simple upload for a simple-mode identity, the
+  // userId-keyed cloud upload for every other recoverable identity —
+  // when the data a backup carries changes (index.html's dbPut is the
+  // one write path for those stores and calls notifyBackupDataChanged
+  // through a hook registered at wiring time). Three disciplines:
+  //
+  //   Throttling: a change never uploads immediately. A quiet-period
+  //   debounce (30s after the LAST change) plus a floor between
+  //   attempts (15min) keep a busy conversation from becoming an
+  //   upload per message — the payload is the full history, so it is
+  //   the expensive kind.
+  //
+  //   The passphrase is NEVER persisted. Automatic upload needs the
+  //   backup passphrase, and the only copies are in this closure's
+  //   memory: enrollment and simple-mode updates arm it (the user
+  //   just typed it), and armAutoBackup() asks for it once per
+  //   session for the cloud path. A session with no armed passphrase
+  //   does not upload — and says so in Settings (state 'needpass')
+  //   instead of failing silently or, worse, storing the secret.
+  //
+  //   No silent failure: every gate that stops a run names itself in
+  //   the persisted state record Settings renders (off / ineligible /
+  //   noserver / needpass / error), a change that could not be
+  //   uploaded stays `pending`, and an offline device simply keeps it
+  //   pending until the 'online' flush. Disposable ('none')
+  //   identities never run — a backup is a recovery promise, and
+  //   'none' is the promise that none exists (the kit guard's
+  //   doctrine, unchanged).
+  // Timing is resolved lazily and defensively: this section sits in
+  // the region several slice suites lift out of the factory and eval
+  // with a fixed parameter list, where D and MS are not in scope at
+  // eval time — a top-level initializer touching either would throw
+  // before any function runs. (Tests inject D.autoBackupTiming;
+  // production takes the MS-based defaults.)
+  function _autoDebounceMs() { const t = (typeof D !== 'undefined' && D && D.autoBackupTiming) || {}; return t.debounceMs || 30 * MS.SEC; }
+  function _autoMinIntervalMs() { const t = (typeof D !== 'undefined' && D && D.autoBackupTiming) || {}; return t.minIntervalMs || 15 * MS.MIN; }
+  let _autoPass = null;   // session-only backup passphrase (see above)
+  let _autoTimer = null;  // pending debounce / retry timer
+  let _autoRunning = false;
+  let _autoState = null;  // in-memory mirror of the persisted status record
+
+  async function _loadAutoState() {
+    if (_autoState) return _autoState;
+    const st = await dbGet('settings', 'autoBackupState').catch(() => null);
+    _autoState = (st && typeof st === 'object' && !Array.isArray(st)) ? st : {};
+    return _autoState;
+  }
+  async function _saveAutoState() {
+    try { await dbPut('settings', { ..._autoState }, 'autoBackupState'); } catch(e) { _dbg(e, 'autobackup-state'); }
+  }
+  const _autoEnabled = () => (typeof D.autoBackupEnabled === 'function') ? !!D.autoBackupEnabled() : true;
+  const _autoServerReady = () => {
+    if (typeof D.backupServerReady === 'function') return !!D.backupServerReady();
+    return typeof window !== 'undefined' && !!window._serverFeatures?.backupStorage;
+  };
+  const _autoOnline = () => (typeof navigator === 'undefined' || navigator.onLine !== false);
+
+  function _scheduleAutoBackup(delay) {
+    if (_autoTimer) clearTimeout(_autoTimer);
+    _autoTimer = setTimeout(() => { _autoTimer = null; _runAutoBackup().catch(e => _dbg(e, 'autobackup-run')); }, delay);
+    if (_autoTimer && typeof _autoTimer.unref === 'function') _autoTimer.unref();
+  }
+
+  // The dbPut hook's target: record the debt and arm the debounce.
+  // Fire-and-forget by design — a backup bookkeeping failure must
+  // never block or break the write that triggered it.
+  function notifyBackupDataChanged() {
+    (async () => {
+      const st = await _loadAutoState();
+      st.pending = true;
+      await _saveAutoState();
+      _scheduleAutoBackup(_autoDebounceMs());
+    })().catch(e => _dbg(e, 'autobackup-notify'));
+  }
+
+  // Boot / 'online' entry: a change left pending by an offline period
+  // (or a previous session) gets its upload without waiting for the
+  // next edit. The min-interval floor inside the run still applies.
+  function flushAutoBackup() {
+    (async () => {
+      const st = await _loadAutoState();
+      if (st.pending) await _runAutoBackup();
+    })().catch(e => _dbg(e, 'autobackup-flush'));
+  }
+
+  async function _runAutoBackup() {
+    if (_autoRunning) return;
+    const st = await _loadAutoState();
+    if (!st.pending) return;
+    if (!_autoEnabled()) { st.lastResult = 'off'; await _saveAutoState(); return; }
+    const identity = await dbGet('identity', 'keys').catch(() => null);
+    if (!identity || identity.recoveryMode === 'none') {
+      // Nothing here can ever be backed up — the debt is not real.
+      st.pending = false; st.lastResult = identity ? 'ineligible' : st.lastResult;
+      await _saveAutoState(); return;
+    }
+    if (!_autoServerReady() || !homeRelays().length) { st.lastResult = 'noserver'; await _saveAutoState(); return; }
+    if (!_autoOnline()) { st.lastResult = 'offline'; await _saveAutoState(); return; }
+    if (!_autoPass) { st.lastResult = 'needpass'; await _saveAutoState(); return; }
+    const sinceTry = Date.now() - (st.lastTryAt || 0);
+    const minInterval = _autoMinIntervalMs();
+    if (st.lastTryAt && sinceTry < minInterval) {
+      _scheduleAutoBackup(minInterval - sinceTry);
+      return;
+    }
+    _autoRunning = true;
+    st.lastTryAt = Date.now();
+    try {
+      const res = (identity.recoveryMode === 'simple' && identity.recoveryAccount)
+        ? await _autoUploadSimple(identity)
+        : await _autoUploadCloud(_autoPass);
+      if (res.ok) { st.pending = false; st.lastOkAt = Date.now(); st.lastResult = 'ok'; }
+      else {
+        st.lastResult = res.relayDisabled ? 'disabled' : 'error';
+        // A cached passphrase that no longer derives the recorded
+        // locator is worse than none: drop it so Settings asks for a
+        // fresh arm instead of retrying a known-bad secret.
+        if (res.passMismatch) _autoPass = null;
+      }
+    } catch(e) { _dbg(e, 'autobackup-run'); st.lastResult = 'error'; }
+    _autoRunning = false;
+    await _saveAutoState();
+  }
+
+  // Simple path: the SAME signed upload as a manual update, but the
+  // locator guard is silent — a passphrase that derives a different
+  // locator than the record's names a different slot (a passphrase
+  // change made elsewhere), and forking the backup by uploading
+  // anyway is exactly what updateSimpleBackup makes the user confirm.
+  // Automatic backup refuses and reports instead.
+  async function _autoUploadSimple(identity) {
+    const locator = await _simpleLocator(identity.recoveryAccount, _autoPass);
+    if (identity.recoveryLocator && locator !== identity.recoveryLocator) return { ok: false, passMismatch: true };
+    const up = await _uploadSimpleBackup(identity.recoveryAccount, _autoPass);
+    return { ok: up.ok, relayDisabled: up.relayDisabled };
+  }
+
+  // Cloud path: createCloudBackup's payload, envelope and signed
+  // fan-out, minus the prompt and toasts (a twin, like
+  // _simpleEncryptPayload — the manual function's body is pinned by
+  // the data-principle suite and the two producers must not drift in
+  // format). One success is enough: the point of the throttle is
+  // fewer uploads, not a copy on every relay.
+  async function _autoUploadCloud(passphrase) {
+    if (!API) return { ok: false };
+    const identity = await dbGet('identity', 'keys');
+    const contacts = await dbGetAll('contacts');
+    const messages = await dbGetAll('messages');
+    const keyMaterial = await _collectBackupKeyMaterial();
+    const data = JSON.stringify({ v: CONFIG.PROTOCOL_VERSION, backupV: BACKUP_FORMAT_V, identity, contacts, messages, keyMaterial, exportedAt: Date.now() });
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(CONFIG.IV_BYTES));
+    const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+    const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: CONFIG.PBKDF2_AT_REST_ITERATIONS, hash: 'SHA-256' }, km, { name: 'AES-GCM', length: CONFIG.AES_KEY_BITS }, false, ['encrypt']);
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(data));
+    const backup = { s: arr(salt), i: arr(iv), d: arr(new Uint8Array(ct)), v: CONFIG.PROTOCOL_VERSION, iter: CONFIG.PBKDF2_AT_REST_ITERATIONS };
+    const upTs = Date.now();
+    const upBody = { userId: D.myId(), backup: JSON.stringify(backup), ts: upTs };
+    const upSig = await signMessage(`breeze-backup-upload:${D.myId()}:${upTs}`);
+    if (upSig) upBody.sig = upSig;
+    let relayDisabled = false;
+    for (const relay of homeRelays()) {
+      const resp = await postAPIRelay(relay, '/backup/upload', upBody);
+      if (resp?.ok) return { ok: true };
+      if (resp && !relayDisabled) { const ej = await resp.json().catch(() => null); if (ej?.code === 'BACKUP_DISABLED') relayDisabled = true; }
+    }
+    return { ok: false, relayDisabled };
+  }
+
+  // Arm the session cache from Settings: the user types the backup
+  // passphrase once, it is kept in memory only, and any pending change
+  // uploads right away. For a simple-mode identity the passphrase is
+  // verified against the recorded locator first — arming with a wrong
+  // one would fork the backup (the _autoUploadSimple guard's reason).
+  async function armAutoBackup() {
+    const identity = await dbGet('identity', 'keys').catch(() => null);
+    if (!identity) { showToast(t('toastNoIdentityBackup'), 'error'); return false; }
+    if (identity.recoveryMode === 'none') { showToast(t('toastRecoveryNoneBackup'), 'error'); return false; }
+    const passphrase = await showPrompt(t('backupPassPrompt'), '', { type: 'password', autocomplete: 'current-password' });
+    if (!passphrase || passphrase.length < 6) { showToast(t('backupPassMin'), 'error'); return false; }
+    try {
+      if (identity.recoveryMode === 'simple' && identity.recoveryAccount && identity.recoveryLocator) {
+        const locator = await _simpleLocator(identity.recoveryAccount, passphrase);
+        if (locator !== identity.recoveryLocator) { showToast(t('simpleNotFound'), 'error'); return false; }
+      }
+    } catch(e) { _dbg(e, 'autobackup-arm'); showToast(t('backupFailed'), 'error'); return false; }
+    _autoPass = passphrase;
+    const st = await _loadAutoState();
+    if (st.lastResult === 'needpass' || st.lastResult === 'error') st.lastResult = st.lastOkAt ? 'ok' : 'never';
+    await _saveAutoState();
+    if (st.pending) _runAutoBackup().catch(e => _dbg(e, 'autobackup-arm-run'));
+    return true;
+  }
+
+  // What Settings renders: the state machine behind the status line.
+  // The order is deliberate — the most actionable fact wins (off and
+  // ineligible before server, server before secret, a failure before
+  // a merely pending change).
+  async function getAutoBackupStatus() {
+    const st = await _loadAutoState();
+    const identity = await dbGet('identity', 'keys').catch(() => null);
+    let state = 'never';
+    if (!_autoEnabled()) state = 'off';
+    else if (!identity || identity.recoveryMode === 'none') state = 'ineligible';
+    else if (!_autoServerReady() || !homeRelays().length) state = 'noserver';
+    else if (st.lastResult === 'error' || st.lastResult === 'disabled') state = 'error';
+    else if (st.pending) state = _autoPass ? 'pending' : 'needpass';
+    else if (!_autoPass && !st.lastOkAt) state = 'needpass';
+    else if (st.lastOkAt) state = 'ok';
+    return { state, lastOkAt: st.lastOkAt || 0, pending: !!st.pending };
+  }
+
+  // Phrase/kit restore marks the account as just-recovered before its
+  // reload; the boot that follows consumes the marker exactly once
+  // and offers whatever cloud backup the relay still holds for this
+  // identity. The simple cold path needs no marker — it IS the
+  // restore, backup included.
+  async function _markJustRecovered() {
+    try { await dbPut('settings', { at: Date.now() }, 'justRecovered'); } catch(e) { _dbg(e, 'just-recovered'); }
+  }
+
+  async function checkAutoRestore() {
+    try {
+      const marker = await dbGet('settings', 'justRecovered').catch(() => null);
+      if (!marker) return false;
+      await dbPut('settings', null, 'justRecovered').catch(() => {});
+      const identity = await dbGet('identity', 'keys').catch(() => null);
+      if (!identity?.pubB64 || !API) return false;
+      // Probe: the manual restore's signed download, fetch only. A
+      // relay that holds nothing (or refuses) ends this quietly —
+      // the manual buttons remain, and a probe failure is not an
+      // error worth a toast on a fresh device.
+      const dlTs = Date.now();
+      const dlBody = { userId: D.myId(), ts: dlTs };
+      const dlSig = await signMessage(`breeze-backup-download:${D.myId()}:${dlTs}`);
+      if (dlSig) dlBody.sig = dlSig;
+      let backup = null;
+      for (const relay of homeRelays()) {
+        const resp = await postAPIRelay(relay, '/backup/download', dlBody);
+        if (resp?.ok) { backup = (await resp.json().catch(() => null))?.backup || null; if (backup) break; }
+      }
+      if (!backup) return false;
+      // Found — but nothing is written until the user says so, once.
+      if (!await showConfirm(t('autoRestoreFoundTitle'), { desc: t('autoRestoreFoundDesc'), okText: t('restoreBtn') })) return false;
+      const passphrase = await showPrompt(t('backupPassPrompt'), '', { type: 'password', autocomplete: 'current-password' });
+      if (!passphrase) return false;
+      let data;
+      try { data = await _simpleDecryptPayload(passphrase, backup); }
+      catch(e) { _dbg(e, 'autorestore-decrypt'); showToast(t('backupWrongPass'), 'error'); return false; }
+      // The backup must belong to the identity that was just
+      // recovered — a payload naming anyone else writes NOTHING (the
+      // step-2 doctrine, applied to the automatic path too).
+      if (!data?.identity?.pubB64 || data.identity.pubB64 !== identity.pubB64) { showToast(t('toastInvalidBackup'), 'error'); return false; }
+      await _applySimplePayload(data);
+      showToast(t('backupRestored'), 'success');
+      setTimeout(() => location.reload(), CONFIG.TOAST_DURATION_MS);
+      return true;
+    } catch(e) { _dbg(e, 'autorestore'); return false; }
+  }
+
+  // The old device's half of an easy migration: no new mechanism —
+  // the recovery modes above already carry an account to a new
+  // device — just the steps, where the backup controls live.
+  async function showMigrationGuide() {
+    await showConfirm(t('migrateGuideTitle'), { desc: t('migrateGuideDesc') });
+  }
+
   // ===== Backup & Restore (module end) =====
   return { backupToFile, restoreFromFilePicker, restoreBackup, exportContactsEncrypted, importContactsFile, createRecoveryKit, restoreFromPhrase, createCloudBackup, restoreCloudBackup,
-    enrollSimpleRecovery, simpleBackupAction, updateSimpleBackup, restoreSimpleBackup, restoreSimpleBackupLive, restoreBackupSmart, eraseSimpleBackup };
+    enrollSimpleRecovery, simpleBackupAction, updateSimpleBackup, restoreSimpleBackup, restoreSimpleBackupLive, restoreBackupSmart, eraseSimpleBackup,
+    notifyBackupDataChanged, flushAutoBackup, armAutoBackup, getAutoBackupStatus, checkAutoRestore, showMigrationGuide };
 }

@@ -29,11 +29,11 @@ test('a message set to disappear in 1h is not deleted within the first 90 second
   await expect(page.locator('#msg-main')).toBeVisible();
 
   await page.locator('#b-msg-add').click();
-  const dialog = page.locator('dialog[aria-labelledby]');
+  const dialog = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
   const fakePub = await page.evaluate(() => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''));
   await dialog.locator('.modal-input').fill(fakePub);
-  await dialog.locator('[value="ok"]').click();
+  await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
   await page.locator('#msg-contacts .contact').first().click();
   await expect(page.locator('#msg-input-bar')).toBeVisible();

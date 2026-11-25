@@ -11,7 +11,7 @@ function slice(start, end) {
 }
 const verifier = slice('  async function verifySignature(', '\n  // ===== Server health check');
 const signer = slice('  async function signMessage(', '\n  // Ed25519 ownership proof');
-const send = slice('  async function _sendSignedSDP(', '\n  // v3.6 SECURITY: call-signaling');
+const send = slice('  async function _sendSignedSDP(', '\n  // (The call-signal wrap/unwrap live in src/app/call.js');
 const receive = slice('                let sdpJson = s.data;', '\n                if (description.type !== s.type');
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 

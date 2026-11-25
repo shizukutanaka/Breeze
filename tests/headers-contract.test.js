@@ -38,6 +38,25 @@ describe('_headers security baseline', () => {
     expect(m[1]).toContain("'sha256-");
   });
 
+  // index.html (no-cache) statically imports ./src/crypto/*.js and ./src/app/*.js by
+  // UNVERSIONED urls. A long-lived / immutable policy on them pairs a freshly deployed
+  // index.html with the previous release's modules for the cache lifetime; one missing
+  // named export fails the whole module block and every bridge degrades silently.
+  it('unversioned scripts and locale data always revalidate (no release skew)', () => {
+    const block = (path) => {
+      const lines = headers.split('\n');
+      const i = lines.findIndex((l) => l.trim() === path);
+      expect(i, `missing ${path} block`).toBeGreaterThanOrEqual(0);
+      const out = [];
+      for (let j = i + 1; j < lines.length && /^\s+\S/.test(lines[j]); j++) out.push(lines[j].trim());
+      return out.join('\n');
+    };
+    for (const path of ['/*.js', '/locales/*', '/sw.js', '/index.html', '/']) {
+      expect(block(path), path).toContain('Cache-Control: no-cache');
+      expect(block(path), path).not.toMatch(/immutable|max-age=[1-9]/);
+    }
+  });
+
   it('API responses are never stored', () => {
     const api = headers.match(/\/api\/\*([\s\S]*?)(?=\n\/|\s*$)/);
     expect(api[0]).toContain('Cache-Control: no-store');

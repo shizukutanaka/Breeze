@@ -6,7 +6,7 @@
 # ═══════════════════════════════════════════════════════════
 set -euo pipefail
 
-VERSION="3.6.1"
+VERSION="3.8.0"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 OUT="${ROOT}/release"
 

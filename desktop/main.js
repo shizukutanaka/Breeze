@@ -22,6 +22,7 @@ const fs = require('fs');
 const { isAllowedNavigation, isAllowedExternalUrl } = require('./nav-guard');
 const { readWebCSP } = require('./csp-guard');
 const { isVisibleBounds } = require('./bounds-guard');
+const { createUpdateController } = require('./update-guard');
 
 // ── Constants ───────────────────────────────────────────────
 const APP_NAME = 'Breeze';
@@ -210,23 +211,22 @@ function setupAutoUpdate() {
   if (isDev) return;
   try {
     const { autoUpdater } = require('electron-updater');
-    autoUpdater.autoDownload = false;
-    autoUpdater.autoInstallOnAppQuit = true;
-
-    autoUpdater.on('update-available', (info) => {
-      win?.webContents.send('update-available', { version: info.version });
+    const updater = createUpdateController({
+      autoUpdater,
+      currentVersion: app.getVersion(),
+      onAvailable: (info) => win?.webContents.send('update-available', info),
+      onDownloaded: (info) => win?.webContents.send('update-downloaded', info),
+      onError: (info) => win?.webContents.send('update-error', info),
+      onQuit: () => { isQuitting = true; },
     });
-    autoUpdater.on('update-downloaded', (info) => {
-      win?.webContents.send('update-downloaded', { version: info.version });
-    });
-    autoUpdater.on('error', () => {}); // Silent
 
-    ipcMain.on('check-update', () => autoUpdater.checkForUpdates().catch(() => {}));
-    ipcMain.on('install-update', () => { isQuitting = true; autoUpdater.quitAndInstall(); });
+    ipcMain.on('check-update', () => updater.checkForUpdates());
+    ipcMain.on('download-update', () => updater.downloadUpdate());
+    ipcMain.on('install-update', () => updater.installUpdate());
 
     // Check 10s after launch, then every 4 hours
-    setTimeout(() => autoUpdater.checkForUpdates().catch(() => {}), 10000);
-    setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 4 * 60 * 60 * 1000);
+    setTimeout(() => updater.checkForUpdates(), 10000);
+    setInterval(() => updater.checkForUpdates(), 4 * 60 * 60 * 1000);
   } catch {} // electron-updater not installed in dev
 }
 

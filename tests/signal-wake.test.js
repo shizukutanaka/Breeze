@@ -127,7 +127,7 @@ describe('signal wake Worker / DO', () => {
   });
 });
 
-const start = new Function('MS', '_dbg', slice('  function startSignalPoll(', '\n  async function connectPeer(') + '\nreturn startSignalPoll;')({ SEC: 1000 }, () => {});
+const start = new Function('MS', '_dbg', slice('  function startSignalPoll(', '\n  async function connectPeer(') + '\nreturn startSignalPoll;')({ SEC: 1000, MIN: 60000 }, () => {});
 describe('signal scheduler pause / wake', () => {
   it('never pauses before establishment; pauses with no timer when connected, drains once and falls back on lost coverage', async () => {
     vi.useFakeTimers();
@@ -153,6 +153,32 @@ describe('signal scheduler pause / wake', () => {
       await vi.advanceTimersByTimeAsync(2000);
       expect(poll).toHaveBeenCalledTimes(4);
       controller.stop(); controller.wake();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
+  it('thins the uncovered connected fallback to a 5-minute recovery poll while the conversation is closed (D12)', async () => {
+    vi.useFakeTimers();
+    try {
+      let active = false;
+      const poll = vi.fn(async () => false);
+      const c = start(poll, () => false, () => active);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(poll).toHaveBeenCalledTimes(1); // pre-establishment tick
+      c.setConnected(true);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(poll).toHaveBeenCalledTimes(1); // no 15s fallback while the conversation is closed
+      await vi.advanceTimersByTimeAsync(285_000);
+      expect(poll).toHaveBeenCalledTimes(2); // one recovery poll at the 5-minute mark
+      c.wake();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(poll).toHaveBeenCalledTimes(3); // a wake still drains immediately in every state
+      active = true; c.refresh();
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(poll).toHaveBeenCalledTimes(4); // conversation open: the 15s fallback is back
+      active = false; c.refresh();
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(poll).toHaveBeenCalledTimes(4); // closed again: thinned without waiting out the old cadence
+      c.stop();
       expect(vi.getTimerCount()).toBe(0);
     } finally { vi.useRealTimers(); }
   });
@@ -235,7 +261,7 @@ describe('signal wake coverage and generation recovery (deployed helpers)', () =
     expect(ws).toContain('wakeSignalPolls(relay.url);');
     expect(ws).toContain("m.type === 'signal'");
     expect(ws).toContain('refreshSignalPolls();');
-    expect(html).toContain('}, () => signalPollCovered(peerState));');
+    expect(html).toContain('}, () => signalPollCovered(peerState), () => activeContact?.id === contact.id);');
     expect(html).toContain('_p2pStats?.noteSignalPoll(established)');
   });
 });

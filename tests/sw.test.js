@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -221,4 +221,97 @@ describe('sw.js fetch — method guard (only GET is intercepted/cached)', () => 
       expect(fireFetch(ctx, { method })).toBe(false);
     });
   }
+});
+
+// Release-skew guard: the app shell (index.html, no-cache) imports its ES modules by
+// unversioned URL. Those URLs were once served `immutable` for 7 days, so both SW
+// fetch sites must bypass / revalidate the browser HTTP cache, or a new release's
+// service worker precaches (and keeps re-caching) the previous release's modules.
+describe('sw.js — never precaches or re-caches a stale HTTP-cache copy', () => {
+  it('install precaches every asset with cache:"reload"', async () => {
+    class FakeRequest { constructor(url, init) { this.url = url; this.cache = init?.cache; } }
+    vi.stubGlobal('Request', FakeRequest);
+    try {
+      const handlers = {};
+      const added = [];
+      const self = { location: { origin: ORIGIN }, addEventListener: (t, fn) => { handlers[t] = fn; }, skipWaiting: () => {} };
+      const caches = { open: () => Promise.resolve({ addAll: (reqs) => { added.push(...reqs); return Promise.resolve(); } }) };
+      // eslint-disable-next-line no-new-func
+      new Function('self', 'clients', 'caches', swSource)(self, {}, caches);
+      let waited;
+      handlers.install({ waitUntil: (p) => { waited = p; } });
+      await waited;
+      expect(added.length).toBeGreaterThan(10);
+      expect(added.map((r) => r.url)).toContain('/src/crypto/pqxdh.js');
+      expect(added.every((r) => r instanceof FakeRequest && r.cache === 'reload')).toBe(true);
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it('stale-while-revalidate revalidates against the network with cache:"no-cache"', async () => {
+    const ctx = loadSW();
+    const calls = [];
+    vi.stubGlobal('fetch', (req, init) => { calls.push(init); return Promise.resolve(fakeResp()); });
+    try {
+      let responded;
+      ctx.handlers.fetch({
+        request: { url: `${ORIGIN}/src/app/call.js`, mode: 'cors', method: 'GET' },
+        respondWith: (p) => { responded = p; },
+      });
+      await responded;
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).toEqual({ cache: 'no-cache' });
+    } finally { vi.unstubAllGlobals(); }
+  });
+});
+
+describe('sw.js — install fails closed on web origins when precache fails', () => {
+  it('rejects install and does NOT call skipWaiting when addAll fails on https:', async () => {
+    class FakeRequest { constructor(url, init) { this.url = url; this.cache = init?.cache; } }
+    vi.stubGlobal('Request', FakeRequest);
+    try {
+      const handlers = {};
+      const skipWaiting = vi.fn();
+      const self = {
+        location: { origin: ORIGIN, protocol: 'https:' },
+        addEventListener: (t, fn) => { handlers[t] = fn; },
+        skipWaiting,
+      };
+      const caches = {
+        open: () => Promise.resolve({
+          addAll: () => Promise.reject(new Error('network failure')),
+        }),
+      };
+      // eslint-disable-next-line no-new-func
+      new Function('self', 'clients', 'caches', swSource)(self, {}, caches);
+      let waited;
+      handlers.install({ waitUntil: (p) => { waited = p; } });
+      await expect(waited).rejects.toThrow('network failure');
+      expect(skipWaiting).not.toHaveBeenCalled();
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it('swallows addAll failure on file: origin (desktop shell) without throwing', async () => {
+    class FakeRequest { constructor(url, init) { this.url = url; this.cache = init?.cache; } }
+    vi.stubGlobal('Request', FakeRequest);
+    try {
+      const handlers = {};
+      const skipWaiting = vi.fn();
+      const self = {
+        location: { origin: 'null', protocol: 'file:' },
+        addEventListener: (t, fn) => { handlers[t] = fn; },
+        skipWaiting,
+      };
+      const caches = {
+        open: () => Promise.resolve({
+          addAll: () => Promise.reject(new TypeError('Request scheme file is unsupported')),
+        }),
+      };
+      // eslint-disable-next-line no-new-func
+      new Function('self', 'clients', 'caches', swSource)(self, {}, caches);
+      let waited;
+      handlers.install({ waitUntil: (p) => { waited = p; } });
+      await expect(waited).resolves.toBeUndefined();
+      expect(skipWaiting).toHaveBeenCalledTimes(1);
+    } finally { vi.unstubAllGlobals(); }
+  });
 });

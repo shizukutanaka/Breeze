@@ -2,6 +2,146 @@
 
 ## [Unreleased]
 
+### Security
+
+- **Self-hosted relay: `TRUST_PROXY` no longer trusts a client-forged address.** The Node host took the *first* `X-Forwarded-For` entry as the client address. Common proxies (nginx `$proxy_add_x_forwarded_for`, Traefik) append to whatever the client sent, so a client could put any value first and get a fresh per-IP rate-limit bucket on every request — or spend someone else's. The host now uses the last entry, the one the operator's proxy appended.
+
+### Fixed
+
+- **A new release no longer runs with the previous release's modules.** `index.html` (always revalidated) imports `src/crypto/*.js` and `src/app/*.js` by unversioned URL, but `_headers` served every `*.js` as `immutable` for 7 days, and the service worker precached and re-cached through that HTTP cache. For up to a week after a deploy a returning browser could pair the new shell with old modules; one missing export fails the whole module block and every bridge (PQXDH, calls, backup) degrades silently. Scripts and locale files are now `no-cache` (revalidated by ETag), the service worker installs with `cache: 'reload'` and revalidates with `cache: 'no-cache'`, and the Node host answers revalidations with `304`.
+
+### Documentation checked by tests
+
+- SPEC.md §4.2 quoted `CONFIG` by hand and had drifted again two days after its last re-verification: the version was one release behind, `DISAPPEAR_CHECK_MS` and `POW_DIFFICULTY` showed old values, and two listed constants no longer exist. A new test reads every pair in that excerpt and compares it with the `CONFIG` object `index.html` ships; the version line is now one of the sites `tools/bump-version.mjs` rewrites. The prekey batch size, the locale list and the file sizes in SPEC.md are corrected and checked the same way.
+
+## [3.8.0] - 2026-11-23
+
+### Groups on every device (defect waves 9, 10 and 12, PRs #466/#467/#468)
+
+- **Files in group chats.** Group messages can now carry files. The size ceiling is set from the measured deposit model (the sender-key ciphertext is fanned out per member), not from a guessed constant.
+- **Secondary devices receive group messages live.** Before this release, a linked secondary device never received other members' group messages at all: deposits went only to each member's primary mailbox, devices polled only their own mailbox, and history sync explicitly skipped groups — all a secondary device ever saw was its own sends. The sender now replicates the identical sender-key ciphertext to every signature-verified device of every member, and sender-key distribution, persistent signals and kick notices are delivered to devices as well. Nothing is replicated to a device the registry cannot verify.
+- **Group calls from secondary devices.** Call signalling was encrypted to the primary device only, so a secondary device could not even open an invitation. Invitations and joins now address the seat device actually taking part; a seat key is accepted only when it is the member's own or a signature-verified registry device. When any participant still runs an older version, joining from a secondary device is refused with the reason shown — never a call that looks joined but carries no audio.
+
+### Alias registration is faster (defect wave 13, PR #469)
+
+- The proof-of-work gating alias registration and alias changes is now solved with batched parallelism: measured median 15.6s → 9.2s on the audit machine, returning the identical nonce. The difficulty, the verification and the total work are unchanged — the anti-Sybil cost is the same, it is just paid sooner.
+- Removed a dead configuration constant that claimed proof-of-work was required for group operations (it never was, in code or in verification), and corrected the documents that had repeated the claim.
+
+### Assessed and deliberately settled (defect wave 13)
+
+- Continuous post-quantum re-keying and KEM-combiner authentication of the classical handshake were assessed and **not** adopted: the dominant harvest-now-decrypt-later threat is already closed by PQXDH at session establishment, and the residual risk needs three conditions at once (leaked session state, a cryptographically relevant quantum computer, and a months-long session). The decision, its evidence and its re-examination triggers are recorded in the project's decision ledger; if a trigger fires, the standards-faithful SPQR design is the chosen path, not a home-grown one.
+- With this release the defect ledger from the 2026-11-21 audit stands at zero open items: 46 fixes landed across thirteen waves, the two items above closed by recorded judgment.
+
+## [3.7.1] - 2026-11-21
+
+### Defect wave 1 (2026-11-21 audit, PR #458)
+
+- **Backups are authenticated by default.** Backup upload and download now require the account's Ed25519 signature unless the operator explicitly sets BACKUP_REQUIRE_AUTH=false (logged as deprecated). Before, knowing a userId was enough to fetch or overwrite that account's encrypted backup blob.
+- Authenticated backup downloads renew the backup's 90-day retention (touch-on-read), so an actively used backup no longer expires just because it was uploaded once.
+- Read receipts are delayed by 120 seconds (with jitter) by default, and /security now states plainly that sealed sender hides the sender from the relay, not from the recipient.
+- Fresh installs default voice/video calls to relay-only, and the relay operator's own STUN server leads the ICE list instead of third-party (Google/Mozilla) servers.
+- Device revocation propagates faster: device-list caches drop from 5 minutes to 1 minute, and presence beats carry signature-verified registry revisions so peers invalidate cached lists immediately.
+- Reply-preview close controls are real buttons (keyboard-operable), image-send previews carry alt text, and two previously swallowed persistence failures (dead-letter / retry-queue) are now recorded in diagnostics.
+
+- Pre-release audit (docs/PRE-RELEASE-AUDIT.md) and the 3.7.0 bump itself: two stale README claims fixed, the bump tool extended to all 14 version sites after tests caught two it missed (build.sh, the X-Breeze-Version header), and a same-version bump run now repairs drift.
+
+## [3.7.0] - 2026-11-20
+
+## Transparency, on a schedule (SHARE_PLAN stage 7 step 3)
+
+- docs/transparency/ is now the standing transparency record: README.md defines the monthly procedure — every published field with its source of truth (platform analytics for request aggregates, the health endpoint for TURN issuance, KV record counts for registered identities, the platform bill read through COST_MODEL) and the hard rule that content, contacts and per-user data are never published.
+- Report № 001 (2026-11) is published and states the current truth: the default relay is not operating (the demo 404 is an owner-side restoration), so the operational fields say so instead of inventing zeros — and the report publishes anyway, because a quiet month is reported, not skipped.
+- tools/transparency-report.mjs scaffolds the next month's report, prefills what the health endpoint can prove, leaves the rest as explicit TO MEASURE markers, and refuses to overwrite a published report. Deliberate non-feature: the worker keeps no per-request counters of its own — counting the dominant poll operation would roughly double its cost; the platform's analytics already hold those aggregates.
+
+## External-audit readiness (SHARE_PLAN stage 7 step 2)
+
+- New docs/AUDIT.md: the auditor's map — reading order, the deployed-vs-reference authority, the module map for all of src/crypto, reproduction commands, scope notes, and the known limitations stated by us.
+- New published vector: tests/vectors/session-kat.json records a full X3DH v5 → Double Ratchet session establishment with test-only keys (JWK), the shared secret, first chain/message keys and a recorded wire message; tests/session-vectors.test.js replays it end-to-end (regenerate with tools/gen-session-vectors.mjs).
+- CRYPTO-SPEC gained §6c (call signalling E2EE + group-call signalling), a status update on the §8 wiring gaps (resolved as the modules deployed; real-device validation remains), the N1 counter-reset note, and a refreshed test-status section. tests/audit-readiness.test.js pins the map to the module directory so it cannot silently rot.
+
+## A comparison page that can be checked (SHARE_PLAN stage 7 step 1)
+
+- New public document: docs/COMPARISON.md — Breeze vs Signal vs LINE with a verification path for every Breeze claim (the test file or source anchor that proves it), sources for every competitor claim, and a plainly-stated "where Breeze loses" section (scale, continuous PQ re-keying, no external audit yet, everyday-platform thickness, real-device verification). The internal plan table it is drawn from was updated to the shipped facts (groups 1,000, call signalling E2EE by default, PQ on by default, group calls).
+- tests/comparison-claims.test.js pins the page's load-bearing numbers to the code, so the page and the product cannot silently drift apart again.
+
+## One-command releases (SHARE_PLAN stage 6 step 4)
+
+- The version lived in twelve places and was bumped by hand — that is how the dist manifests once sat a full release behind. `node tools/bump-version.mjs <x.y.z>` now rewrites every site (app config, service worker, PWA manifest, the four package manifests, Tauri config + Cargo, build-all.sh, the worker health literal, deploy.sh) from one argument, refusing loudly if any anchor has moved; `--check` reports any disagreement.
+- The Release workflow gained a parity gate: after the tests, it runs the check and refuses to package when the release label (tag or dispatch input) differs from the in-repo version. A mislabeled artifact can no longer ship — cutting a release is now: bump, update the changelog, commit, push the tag.
+
+## TURN budget and call-traffic measurement (SHARE_PLAN stage 6 step 3)
+
+- Calls now measure themselves: when a 1:1 or group call (per leg) ends, the selected ICE pair is sampled — route and bytes — into on-device counters (never transmitted, per the no-telemetry rule). /security shows this month's TURN-relayed share of call traffic in MB, so "how much of our calling actually needs TURN" is a number, not a guess.
+- Metered TURN modes (Cloudflare Calls, and the shared open-relay free tier) now have an operator budget: TURN_MONTHLY_ISSUE_CAP counts credential issuances per month (one issuance serves a day, so the cap bounds user-days of TURN). Past the cap the relay answers STUN-only with a turnQuota flag — and the client announces it ("budget used up, direct connections only for now, add your own TURN in Settings") instead of letting relay-dependent calls silently fail. Self-hosted TURN (coturn HMAC / static) is the operator's own infrastructure and is never capped. The health endpoint reports the cap and this month's issuance count.
+
+## Home-relay discovery, generalized (SHARE_PLAN stage 6 step 2)
+
+- Two users whose only relays are different custom relays can now start a conversation with no invite link and no default relay in the path. An address of the form @alice@relay.example.com resolves the alias on the owner's relay; alias records now publish the owner's home relay list (sanitized to the home-list contract), and resolving a plain @alias adopts the record's list as the contact's home.
+- Every direct message from a multi-relay account asserts its home list inside the envelope — sealed for Sealed-Sender-v2 peers, so relays do not learn it — and the recipient union-merges it into the contact's stored home, so replies are deposited where the sender actually polls. Default-only accounts are byte-identical to before.
+- Found on the way: the stage-5 flags (isSticker / isProfile / isLocation) were not ferried by the plain /msg/send fallback, so a sticker, profile, or location message whose sealed send failed would have arrived as raw payload text. The worker now passes the three flags through opaquely, like isVoice; content stays inside the encrypted payload in all cases. A two-relay drill against the real worker handlers proves the full circle (register → resolve → deposit → reply) with the two relays sharing nothing.
+
+## Location sharing, one-shot and live (SHARE_PLAN stage 5 step 6 — stage 5 complete)
+
+- A 📍 button (or /location) shares your position end-to-end encrypted: "Send current location" drops a one-shot pin, and live sharing runs for 15 minutes / 1 hour / 8 hours with updates every 30 seconds that collapse into a single message on both sides. The card shows coordinates, accuracy, and an "Open in map" link to OpenStreetMap — no map tiles are embedded, because a tile server would learn the viewer's IP and the shared area.
+- Stopping is structural, not best-effort: the stop path clears the timer before the final "stopped" update goes out, sessions live only in memory (a reload ends sharing), every share carries its expiry, and a receiver ignores updates for a share that has ended — a silent share renders as ended, never as current. Capability-gated ('loc-v1'): a one-shot share to an un-upgraded peer degrades to a plain E2EE text message with the map link; live sharing refuses with an explanation. Coordinates are validated on receipt (range-checked, 6-decimal rounding) before rendering.
+- Line-budget pass 8 (index.html 15,967): the location engine moved into src/app/location.js as createLocationShare, and the profile panel + distribution into src/app/profile.js as createProfileUI; the group send transport (sender-key distribution, direct-ack, pooled deposits) is now shared by stickers and locations instead of duplicated. The Toast-i18n validator metric reads 94% because its scanner counts showToast calls in index.html only — module call sites use D.t identically, so the real ratio is unchanged.
+- Stage 5 (media and presence) is now complete: call-signal E2EE by default, group voice calls, the 1,000-member group ceiling with measured distribution, E2EE profiles, stickers, and location sharing.
+
+## Stickers with an authorable pack format (SHARE_PLAN stage 5 step 5)
+
+- Stickers ship: a 🎨 button opens a pack picker (built-in emoji pack plus your own packs), and /stickers manages packs. The pack format is plain documented JSON ({"format":"breeze-stickers","v":1,"id","name","stickers":[{id, emoji|img}]}) — author one in a text editor, import it, export yours to share the file. "Add images" builds a personal pack on-device (downscaled to ≤256px PNG/WebP, transparency kept).
+- Distribution is E2EE and capability-gated ('sticker-v1'), like profiles: 1:1 stickers ride a dedicated envelope flag with a ratchet-encrypted payload (the voice pattern), group stickers ride the sender-key channel as a {stk} document and require every member to advertise the capability. Un-upgraded peers never see garbage: a built-in emoji sticker degrades to sending the emoji as a normal message, and an image sticker refuses with an explanation instead of sending something broken. Received images are re-validated strictly (data:image/png|webp|jpeg, pure base64, ≤48 KB) before they reach an <img src>; the relay stores only opaque ciphertext and has no sticker handling.
+- Also fixed: the call button had TWO click handlers registered (a leftover duplicate) — for a group, the second one additionally fired a 1:1 call attempt at the group contact. The duplicate is removed; the group-aware handler is the only one.
+- Line-budget pass (index.html 15,962): the device-link ceremony (/link, /linkto, /devices, /unlink plus the shared signed-registry functions) moved to src/app/device-link.js, and the /security + /who panels and the /files + GDPR export moved to src/app/info-panels.js — behavior unchanged, pins follow the code.
+
+## Profiles travel E2EE-only (SHARE_PLAN stage 5 step 4)
+
+- Display name, avatar emoji and a photo avatar now distribute as a ratchet-encrypted control payload (src/app/profile.js) — never in plaintext: the prekey bundle gains only the 'profile-v1' capability string, the relay stores the same opaque ciphertext shape as any message, and the Worker has no profile handling at all (audited in tests/profile.test.js). Sending is capability-gated, so un-upgraded peers are never sent a payload they would render as a chat message; receivers apply only strictly newer profile versions (pv), so a replayed deposit can't roll a contact's face back.
+- /profile opens the editor: display name (syncs the account name), avatar emoji, and a photo picker that center-crops and downscales to a 96×96 JPEG on-device before anything leaves it. Saving distributes to every contact whose bundle advertises the capability, and adding a new contact greets them with the profile the same way. A local rename of a contact is marked nameLocked and is never overwritten by that person's distributed name; the photo renders in the contact list when present.
+- The photo is validated strictly on receipt (data:image/jpeg|png, pure base64, ≤32 KB of data URL) because it lands in an <img src>; anything else is dropped to empty.
+- Line-budget pass (index.html 15,977): group creation, the group member poller, the join flow and safeMemberList moved into src/app/group-create.js (the roster test now imports the real export). One validator note: the "Toast i18n" percentage reads 94% because the scanner only reads index.html — the moved flows still localize every toast via t() inside the module; the metric, not the localization, is what moved.
+
+## Group cap 1,000, on measured fan-out (SHARE_PLAN stage 5 step 3)
+
+- CONFIG.GROUP_MAX is 1,000 (from 100, via the plan's stages — the drill below was run at each stage size). The measurements came first, and they found the real bottleneck was not the cap: before every group message, the sender redistributed its sender key to EVERY member (n extra deposits per message, sequentially awaited), and the message deposits themselves were deposited one at a time. Per-message deposits were up to 2n, all serial.
+- Sender-key distribution is now tracked per (group, member): redistribute on first sight, on epoch change (kick/rotation — the kick flows force it), on roster change, or every 25 sends (SK_REDIST_EVERY — half the GROUP_MAX_SKIP ratchet window, so a member catching up can always ratchet forward to the fresh key state; the cadence is behavior-tested against the deployed inline code). Steady state removes the n key deposits per message entirely.
+- Message deposits for members the direct path missed now run through an 8-wide bounded pool (poolMap, src/app/group-call.js) instead of a serial loop; direct-ack semantics are unchanged (the sliced direct-first suite runs the real pool).
+- Relay drill (tests/group-scale.test.js, real handleSealedSend against mock KV): one message's fan-out to 100 / 300 / 1,000 distinct mailboxes completes with zero failures (32 ms / 38 ms / 177 ms in-process; per-deposit cost flat). Two honest limits ride along: the relay's per-IP rate limit (30/min per isolate on the send endpoints) means a full-offline 1,000-member burst drains through retries and isolate scatter rather than landing instantly, and under the fair-use quota a 1,000-member message costs the sender 1,000 deposits — 10% of the default daily budget — so very large groups belong on a self-hosted relay under the API-style cost model. Both are recorded in the plan; neither blocks the cap, and the production-side numbers are stage 6 step 1's measurement.
+- Line-budget pass (index.html 15,990): the history sender moved into history-sync.js as createHistorySender.
+
+## Group voice calls (SHARE_PLAN stage 5 step 2)
+
+- Groups get voice calls: the voice-call button now shows in group chats and starts a small full-mesh call (audio only — video is a later step; the cap is 8 participants, one pairwise WebRTC connection per other participant per client). No SFU and no new server surface: call control (invite / join / leave) rides the group's existing sender-key channel as {gctl} payloads — receivers route them to the new src/app/group-call.js manager and never store or render them as chat — and media legs signal through per-pair rooms ('gcall:<groupId>:<a>:<b>') that the 1:1 call manager never polls, so the two systems cannot cross-talk. Every leg's signals use the same negotiated E2EE wrap as 1:1 calls. The join protocol is joiner-offers (existing members only answer), with deterministic glare resolution (the smaller member id's offer wins) for simultaneous joins; an offer from an unlisted member is adopted as proof of presence, and the starter leaving does not end the call for everyone else. A call nobody joins ends itself after five minutes rather than polling forever. The 1:1 manager is untouched apart from the shared reductions below, and its suite passes unchanged.
+- Line-budget pass (index.html 15,994): showPrompt and showConfirm now build on _makeDialog like the other dialogs, the two global error handlers share _noteError for the sliding-window counter (the hardening pins follow the move), and the group-call control sender lives in group-call.js with the rest of the feature.
+- tests/group-call.test.js covers the mesh planning (pair rooms, offer planning, glare, the cap), the control state machine, the sender-key control send (gctl flag, one ciphertext per member), and the wiring. What remains unverified is the same class as the 1:1 calls: real multi-device media over real networks (this environment cannot run WebRTC media) — the plan's "3+ party call established" measurement is owner-side.
+
+## Call signaling is E2EE by default, negotiated per peer (SHARE_PLAN stage 5 step 1)
+
+- CONFIG.CALL_E2E_SIGNAL is now true. Turning it on naively would have broken every call with a pre-rollout client in both directions (their plaintext fails to decrypt here; our ciphertext is unparseable there), so the wrap/unwrap moved into src/app/call.js as createCallSignal and grew the negotiation: a peer is encrypted to when its prekey bundle advertises the new 'call-e2e' cap (advertised by this client whenever the flag is on) or when it has proven it encrypts — one successfully decrypted signal pins it. Plaintext from a proven peer is dropped as forged or downgraded; plaintext from anyone else is the legacy format and is accepted, which keeps mixed-version calls working both ways and bounds the forgery window to the standard first-contact (TOFU) case: after any genuine encrypted exchange, a forged plaintext offer or answer — the call-MITM vector this feature exists to close — no longer decrypts-or-parses and is silently dropped. Legacy plaintext is never fed into decryptFrom: an envelope-shape check (v5 pkm / v4 ratchet shapes) routes it, so probing costs no session side effects. The caps fetch for a call starts while the microphone prompt is up and is awaited before the offer is built, so a supporting peer is encrypted to from the first signal. tests/call-signal.test.js holds the full matrix (flag-off byte-identity, new→old, old→new, caps upgrade, proof upgrade) and the forgery measurements.
+- index.html lands at 15,983 lines — the move itself was the reduction (the wrap/unwrap pair no longer lives in the line-budgeted file).
+
+## One add-contact surface (SHARE_PLAN stage 4 step 4)
+
+- The + button used to open a bare text prompt; it now opens an add-contact panel (also reachable as /add) with the input field, the same guidance text, and a QR scan button. Every spelling of an add — a pasted invite link or message, a scanned QR code, an @alias, a raw public key, and the group: shortcut — dispatches through one function into the same resolveAndAdd the invite-link landing uses, so each path keeps exactly its existing validation: aliases still resolve by exact match only and still pass the key-transparency audit before the key is trusted, and a scanned code is just another spelling of the invite URL. Step count for typing is unchanged; adding by QR is now one tap from the panel instead of impossible in-app. The two new strings ship in all 8 locales (they sit in the i18n core set, whose per-locale coverage floor is 95%).
+- The line ceiling was crossed again and met with a third reduction pass, not a raise: the five hand-rolled dialog creations now share _makeDialog/_showDialog, and the two /linkto command branches merged into one handler. index.html lands at 15,999 lines.
+
+## Conversation-history transfer to a linked device (SHARE_PLAN stage 4 step 3)
+
+- After a device is added with /link, the primary offers to send its conversation history; /history re-sends it to all linked devices at any time. Declining is always an option and nothing is sent without the ask. The transfer rides the existing self-sync channel — ratchet-encrypted deposits addressed to the sibling device — so the relay sees the same envelope shape as an ordinary message: no plaintext, and no metadata beyond the chunk counters. The receiver accepts chunks only from a device in the signature-verified registry, buffers them in the settings store (a reload mid-transfer loses nothing), and imports the records as stored: validation never rebuilds a record, existing local records are never overwritten, and expired disappearing messages are not resurrected. 1:1 conversations only in this step; group history stays per-device. The pure packing/validation half is `src/app/history-sync.js`; its tests include the step's completion condition — a byte-for-byte round trip of a conversation (canonical serialization equal on both sides).
+- The feature crossed the 16K line ceiling again; met with a second reduction pass, not a raise: the 33 hand-rolled command-panel creations now go through one `_cmdPanelEl` helper (next to the existing `cmdOutput`), and the dispatcher's `e.preventDefault(); clearInput();` pairs are written in the single-line form the file already used elsewhere. index.html lands at 15,996 lines.
+
+## Device link by QR (SHARE_PLAN stage 4 step 2) + line-ceiling reduction pass
+
+- /link now shows the device key as a QR code as well as text, and both link panels carry a camera scan button (same BarcodeDetector availability rule as the rendezvous dialog; the paste commands remain the fallback). The two halves of the ceremony were extracted into `_linkDevicePub` / `_linkToRoot`, called verbatim by the paste commands and the scan callbacks, so a scanned key runs the identical format checks, confirmation, and signed registry write — the root Ed25519 pin remains the trust anchor. `/linkto` with no argument opens the scan panel for the root code. New strings in English and Japanese (the device-link family's existing coverage).
+- This change plus the quota notice crossed the 16K line ceiling in validate.sh; per the ceiling note it was met with a reduction pass, not a raise: the six modal dialogs' identical dismiss wiring (cancel button / Esc / backdrop click) is now one `_wireDialogDismiss` helper. index.html lands at 15,987 lines.
+- Regression coverage: `tests/device-link-qr.test.js` (deployed-wiring pins: single definitions, handler delegation, the signed write inside the shared function, QR/scan wiring, EN+JA strings).
+
+## Relay quota notice (client side of the stage-6 cost model)
+
+- The client now tells USAGE_QUOTA_EXCEEDED apart from MAILBOX_RATE_LIMITED at every deposit path (fan-out copies, the primary sealed path, the primary plain path) via the new pure module `src/app/quota.js`, reached through the `window.__breezeQuota` bridge like the other src/app modules. A spent fair-use budget no longer falls through to the plain fallback (which only spent a second deposit against the same budget) and no longer surfaces as a "retrying in N seconds" toast for a window that resets in hours.
+- On a quota refusal the message is queued as owed exactly like an ordinary failure — nothing is dropped — and the user is told once per hour at most: the relay's free quota is used up, messages stay on this device, delivery resumes when the quota resets, or immediately by adding their own relay under Settings → Home relays. The scope and limit go to the on-device audit log; no telemetry is added. Localized in all eight shipped languages.
+- Regression coverage: `tests/quota-notice.test.js` (classification incl. garbled bodies, notice throttling, deployed-wiring pins for the import, the bridge, the sw.js precache entry and every locale).
+
 ## Bootstrap identity binding
 
 - Reject relay-fetched or offline-injected prekey bundles whose encryption identity differs from the requested contact or whose signing identity differs from an existing pin. A localized warning stops this send without trying another relay or legacy bootstrap; an unpinned relay-bundle signing key is saved only after its SPK signature verifies. Offline bundles still require the pairing's existing signing pin.
