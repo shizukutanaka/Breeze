@@ -10758,6 +10758,7 @@ async function initMessenger(dbName) {
 
   // Disappearing message cleanup: run every 10s
   _intervals.push(setInterval(async () => {
+    if (_powerPresenceOff()) return;
     if (!db) return;
     const now = Date.now();
     try {
