@@ -220,6 +220,7 @@
  "ariaMessage": "Message",
  "ariaVoice": "Enregistrer un message vocal",
  "ariaDict": "Dicter un message",
+ "ariaMoreActions": "More actions",
  "ariaTheme": "Basculer le thème",
  "ariaAddContact": "Ajouter un contact",
  "ariaFolderAll": "Tous les contacts",

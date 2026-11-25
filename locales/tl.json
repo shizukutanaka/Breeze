@@ -220,6 +220,7 @@
  "ariaMessage": "Mensahe",
  "ariaVoice": "Mag-record ng voice message",
  "ariaDict": "I-dictate ang mensahe",
+ "ariaMoreActions": "More actions",
  "ariaTheme": "I-toggle ang tema",
  "ariaAddContact": "Magdagdag ng contact",
  "ariaFolderAll": "Lahat ng contact",

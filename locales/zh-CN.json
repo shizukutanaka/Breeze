@@ -219,6 +219,7 @@
  "ariaMessage": "消息",
  "ariaVoice": "录制语音消息",
  "ariaDict": "口述消息",
+ "ariaMoreActions": "More actions",
  "ariaTheme": "切换主题",
  "ariaAddContact": "添加联系人",
  "ariaFolderAll": "全部联系人",

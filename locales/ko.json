@@ -224,6 +224,7 @@
  "ariaMessage": "메시지",
  "ariaVoice": "음성 메시지 녹음",
  "ariaDict": "메시지 받아쓰기",
+ "ariaMoreActions": "More actions",
  "ariaTheme": "테마 전환",
  "ariaAddContact": "연락처 추가",
  "ariaFolderAll": "모든 연락처",

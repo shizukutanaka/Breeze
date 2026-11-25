@@ -371,6 +371,18 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
    triggers smart replies made the compose box untypable (E2E-found, measured 660px -> 0px).
    flex-basis:100% forces the line break so the textarea keeps a row of its own. */
 .smart-reply-bar { flex: 0 0 100%; width: 100%; padding: 0 0 6px 0; gap: 6px; flex-wrap: wrap; display: flex }
+/* ── Input bar "+" panel (UI/UX phase 1B): the composer's secondary actions
+   (attach / voice / dictation / location / stickers / no-reply) live in one
+   grid row of the bar so the bar itself stays + / input / emoji / send.
+   Own row like .smart-reply-bar (flex-basis 100%) so it grows the bar upward
+   instead of squeezing #msg-input. An item whose control is .hidden (the
+   dictation button before voice-input.js finds SpeechRecognition) hides too,
+   so the grid never shows a labelled empty cell. */
+.more-panel { flex: 0 0 100%; width: 100%; display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 4px; padding: 2px 0 8px }
+.more-item { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 2px; border-radius: var(--rad); cursor: pointer; transition: background .15s ease }
+.more-item:hover { background: var(--s2) }
+.more-item:has(> .hidden) { display: none }
+.more-label { font-size: 11px; color: var(--t2); text-align: center; line-height: 1.3 }
 .typing-ind { display: none; padding: 8px 16px; font-size: 12px; color: var(--t3) }
 .typing-ind.active { display: flex; align-items: center; gap: 8px; animation: typingAppear .25s var(--bounce) }
 @keyframes typingAppear { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
@@ -1188,15 +1200,39 @@ del.md-del { opacity: .6 }
         <div id="typing-indicator" class="typing-ind" aria-live="polite"></div>
         <div id="msg-input-bar" class="input-bar hidden">
           <div id="smart-reply-bar" class="smart-reply-bar hidden" role="toolbar" data-i18n-aria="ariaQuickReplies"></div>
-          <label class="tool" data-i18n-title="ttAttach">📎<input type="file" id="msg-file" class="hidden" data-i18n-aria="ttAttach"></label>
-          <button id="b-msg-voice" class="tool" data-i18n-aria="ariaVoice" aria-pressed="false">🎤</button>
-          <button id="b-msg-stt" class="tool hidden" data-i18n-aria="ariaDict" aria-pressed="false">🗣</button>
+          <!-- "+" panel (phase 1B): secondary compose actions, moved out of the
+               bar row. The controls keep their ids and handlers; only their
+               place in the DOM and the panel's show/hide changed. -->
+          <div id="msg-more-panel" class="more-panel hidden" role="group" data-i18n-aria="ariaMoreActions">
+            <div class="more-item">
+              <label class="tool" data-i18n-title="ttAttach">📎<input type="file" id="msg-file" class="hidden" data-i18n-aria="ttAttach"></label>
+              <span class="more-label" data-i18n="ttAttach">Attach</span>
+            </div>
+            <div class="more-item">
+              <button id="b-msg-voice" class="tool" data-i18n-aria="ariaVoice" aria-pressed="false">🎤</button>
+              <span class="more-label" data-i18n="ariaVoice">Record voice message</span>
+            </div>
+            <div class="more-item">
+              <button id="b-msg-stt" class="tool hidden" data-i18n-aria="ariaDict" aria-pressed="false">🗣</button>
+              <span class="more-label" data-i18n="ariaDict">Dictate message</span>
+            </div>
+            <div class="more-item">
+              <button id="b-msg-loc" class="tool" data-i18n-aria="ttLocation" data-i18n-title="ttLocation" aria-haspopup="dialog">📍</button>
+              <span class="more-label" data-i18n="ttLocation">Share location</span>
+            </div>
+            <div class="more-item">
+              <button id="b-msg-sticker" class="tool" data-i18n-aria="ttStickers" data-i18n-title="ttStickers" aria-expanded="false" aria-haspopup="dialog">🎨</button>
+              <span class="more-label" data-i18n="ttStickers">Stickers</span>
+            </div>
+            <div class="more-item">
+              <button class="btn btn-o btn-sm" id="b-msg-nrn" data-i18n-aria="nrnAria" data-i18n-title="nrnAria">🕊</button>
+              <span class="more-label" data-i18n="nrnBadge">no reply needed</span>
+            </div>
+          </div>
+          <button id="b-msg-more" class="tool" data-action="more-panel" data-i18n-aria="ariaMoreActions" aria-expanded="false" aria-haspopup="true" aria-controls="msg-more-panel">+</button>
           <textarea id="msg-input" dir="auto" data-i18n-ph="msgPlaceholder" data-i18n-aria="ariaMessage" maxlength="4096" rows="1" enterkeyhint="send"></textarea>
           <span id="msg-char-count" class="char-count hidden"></span>
-          <button id="b-msg-loc" class="tool" data-i18n-aria="ttLocation" data-i18n-title="ttLocation" aria-haspopup="dialog">📍</button>
-          <button id="b-msg-sticker" class="tool" data-i18n-aria="ttStickers" data-i18n-title="ttStickers" aria-expanded="false" aria-haspopup="dialog">🎨</button>
           <button id="b-msg-emoji" class="tool" data-i18n-aria="ttEmoji" data-i18n-title="ttEmoji" aria-expanded="false" aria-haspopup="dialog">😀</button>
-          <button class="btn btn-o btn-sm" id="b-msg-nrn" data-i18n-aria="nrnAria" data-i18n-title="nrnAria">🕊</button>
           <button class="send" id="b-msg-send" data-i18n-aria="send">↑</button>
         </div>
       </div>
@@ -1666,6 +1702,7 @@ const _I = {
     ariaMessage: 'Message',
     ariaVoice: 'Record voice message',
     ariaDict: 'Dictate message',
+    ariaMoreActions: 'More actions',
     ariaTheme: 'Toggle theme',
     ariaAddContact: 'Add contact',
     ariaFolderAll: 'All contacts',
@@ -10341,6 +10378,9 @@ async function initMessenger(dbName) {
   });
   _DOM.get('b-msg-video')?.addEventListener('click', () => { if (activeContact) startCall(activeContact, true); });
   _DOM.get('b-msg-sticker')?.addEventListener('click', () => { _stickersUI?.togglePanel().catch(e => _dbg(e, 'sticker-panel')); });
+  // The location button shipped with no handler at all (the panel was only
+  // reachable via /location); wire it to the same panel, like the sticker one.
+  _DOM.get('b-msg-loc')?.addEventListener('click', () => { _locUI?.showPanel().catch(e => _dbg(e, 'loc-panel')); });
 
   // Listen for incoming calls via signal poll (piggyback on the messenger
   // signal poll): 'call-offer' detection lives in its message handling.
@@ -13259,6 +13299,8 @@ async function initMessenger(dbName) {
     // Bottom tab bar (mobile list view)
     if (e.target.closest('[data-action="tab-contacts"]')) { _showContactsTab(); return; }
     if (e.target.closest('[data-action="tab-settings"]')) { _showSettingsTab(); return; }
+    // Input bar "+" panel (phase 1B)
+    if (e.target.closest('[data-action="more-panel"]')) { _toggleMorePanel(); return; }
   }, { signal: _ac.signal });
   // Bottom tab bar: two tabs over the EXISTING views — no new router. Contacts
   // is the list view (the sidebar state the back button already restores);
@@ -13295,6 +13337,38 @@ async function initMessenger(dbName) {
   // Returning to the list (back button / browser back) re-selects Contacts.
   _DOM.get('b-msg-back')?.addEventListener('click', () => _setActiveTab('contacts'));
   window.addEventListener('popstate', () => { if (window.innerWidth <= 640) _setActiveTab('contacts'); }, { signal: _ac.signal });
+  // Input bar "+" panel: show/hide only — the controls inside keep their own
+  // handlers (voice-input.js, stickers, nrn, the file input). Closes on an
+  // outside tap, on Escape, on send, and after a one-shot item is used.
+  // Voice and dictation are toggles the user must be able to stop again, so
+  // their taps keep the panel open.
+  function _closeMorePanel() {
+    _DOM.get('msg-more-panel')?.classList.add('hidden');
+    _DOM.get('b-msg-more')?.setAttribute('aria-expanded', 'false');
+  }
+  function _toggleMorePanel() {
+    const p = _DOM.get('msg-more-panel'); if (!p) return;
+    const open = !p.classList.toggle('hidden');
+    _DOM.get('b-msg-more')?.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  _DOM.get('msg-more-panel')?.addEventListener('click', (e) => {
+    const item = e.target.closest('.more-item');
+    if (!item) return;
+    // A tap on the text under an icon activates the control itself, so the
+    // whole cell is one tap target (the forwarded click re-enters here with
+    // the control as target and is handled by the rules below).
+    if (e.target.classList?.contains('more-label')) item.querySelector('button, label')?.click();
+    if (e.target.closest('#b-msg-voice, #b-msg-stt')) return;
+    _closeMorePanel();
+  });
+  document.addEventListener('click', (e) => {
+    const p = _DOM.get('msg-more-panel');
+    if (!p || p.classList.contains('hidden')) return;
+    if (!_DOM.get('msg-input-bar')?.contains(e.target)) _closeMorePanel();
+  }, { signal: _ac.signal });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') _closeMorePanel(); }, { signal: _ac.signal });
+  _DOM.get('b-msg-send')?.addEventListener('click', () => _closeMorePanel());
+  _DOM.get('b-msg-emoji')?.addEventListener('click', () => _closeMorePanel());
   // S04: keyboard activation for the clickable-but-not-button message affordances
   // (retry / reply-scroll / react / vote carry role="button" tabindex="0" at their
   // render sites): Enter/Space re-dispatches a click, so the delegated click

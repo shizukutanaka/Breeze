@@ -222,6 +222,7 @@
  "ariaMessage": "Сообщение",
  "ariaVoice": "Записать голосовое сообщение",
  "ariaDict": "Надиктовать сообщение",
+ "ariaMoreActions": "More actions",
  "ariaTheme": "Переключить тему",
  "ariaAddContact": "Добавить контакт",
  "ariaFolderAll": "Все контакты",
