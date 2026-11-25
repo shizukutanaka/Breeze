@@ -1,5 +1,53 @@
 # Security Policy
 
+## Persisted contact verification
+
+`/verify` can record an explicit comparison of the new **both-key** safety number.
+The existing encryption-only number is unchanged; the additional comparison uses
+SHA-256 over a versioned, domain-separated canonical array of both participants'
+full encryption and Ed25519 public pins, sorted lexicographically. Both clients
+must support this display. A missing signing pin cannot be confirmed.
+
+Account-local `identity:verify:<contact id>` records bind the full encryption and
+signing pins with SHA-256 (`BreezeContactVerification`, version 1), timestamp and
+method. They and the one-time `verify:policy` migration marker are vault-protected,
+included in its authenticated inventory/migration/backups. With the vault disabled
+they have the same trusted-local-storage boundary as other unwrapped identity rows.
+Contact names, roster metadata and audit entries remain outside the vault; their
+presence is not evidence of verification. No verification assertion is sent on wire.
+
+Key replacement **or disappearance**, rejected bundle/message/SDP key mismatches,
+and KT rolled/tampered verdicts invalidate verification before normal send gates.
+Invalidation is sticky even if the old keys return, is audited, and renders a
+persistent contact/header warning. Re-confirmation binds the current pins, never
+an incoming candidate key. A comparison opened before an invalidation cannot
+confirm stale state. Group member badges use the same records and require both
+member pins; missing roster pins are not silently recovered from a direct contact.
+An incomplete legacy roster shows unverified without treating absent roster metadata
+as removal of a direct contact's pin. Actual contact writes detect replacement/removal
+even before first verification; establishing the first signing pin remains normal TOFU.
+The verification module is mandatory at boot, and verification-record read/write
+failures reject rather than silently bypassing strict policy.
+
+Strict mode defaults on, but blocks only after a key-change warning, not merely
+because a new contact has never been verified. It gates message encryption, normal
+send actions, file chunks, relay/retry/outbox sends, and groups containing an affected
+strict contact. `/verify` can disable strict mode without clearing the warning.
+Already transmitted data cannot be recalled; there is no claim to revoke previously
+shared group keys. Previously blocked outbox/retry work may resume after confirmation.
+
+Explicit in-person pairing confirmation automatically records verification. **Once
+per upgraded account**, existing local `offlineVerified` confirmations whose stored
+remote pins match the contact are imported. This deliberately trusts the pre-upgrade
+local confirmation baseline, not a new cryptographic proof that a human compared
+numbers. The protected migration marker is written first, so later plaintext imports
+cannot repeat this trust upgrade. A crash midway can leave some old pairings unverified
+and requiring manual confirmation; it cannot silently verify later imported flags.
+
+Verification is device/account local. A wholly new identity/contact ID does not
+inherit it. Cross-device verification sync, duplicate/lookalike-name detection and
+new-device alerts are deferred; this is not an identity-continuity or wire change.
+
 ## Origin-wide key vault
 
 `/vault enable` (also `/keywrap`) replaces the old per-slot passphrase wrapping.
@@ -10,7 +58,7 @@ Disable must finish before `/wipe`, account deletion or reset can erase protecte
 The `/lock` action uses the vault lock when the vault is enabled.
 
 Protected IndexedDB identity slots: `keys`, `signing`, `pq-priv`, `spk-priv`,
-`otp-priv`, and every `sess:*`, `gsk:*`, `gsk-peer:*`. Entire records are encrypted,
+`otp-priv`, and every `sess:*`, `gsk:*`, `gsk-peer:*`, `verify:*`. Entire records are encrypted,
 including their public metadata. **History, contacts, drafts and other settings
 remain outside this vault**. Existing message-body encryption is independent: its
 `msgkey` remains unprotected by the vault, so history is readable to someone with

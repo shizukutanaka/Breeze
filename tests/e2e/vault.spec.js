@@ -30,6 +30,7 @@ test('native IDB vault migration, encrypted enumeration/rotation, password rewra
       ['keys', { priv: { d: 'identity' }, pubB64: 'public' }], ['signing', { priv: { d: 'sign' } }],
       ['sess:alice', { chain: new Uint8Array([1, 2]), counter: 4 }], ['gsk:g', { chain: new Uint32Array([9, 8]) }],
       ['gsk-peer:g:a', { key: [4, 5] }], ['pq-priv', { seed: new Uint8Array(64) }],
+      ['verify:peer', { binding: 'both-key-digest', verified: true, method: 'safety-number', at: 123 }],
     ], null);
     raw.close();
     await r.change(pass, true);
@@ -44,7 +45,7 @@ test('native IDB vault migration, encrypted enumeration/rotation, password rewra
     if (!all.some(v => v.pubB64 === 'public')) throw new Error('enumeration not opened');
     await unlocked.prekeys(db, { d: 'rotated' }, [{ d: 'otp' }], { seed: new Uint8Array(64).fill(7) });
     const before = await rows('breeze-messenger');
-    for (const slot of ['keys', 'signing', 'pq-priv', 'spk-priv', 'otp-priv', 'sess:alice', 'gsk:g', 'gsk-peer:g:a']) {
+    for (const slot of ['keys', 'signing', 'pq-priv', 'spk-priv', 'otp-priv', 'sess:alice', 'gsk:g', 'gsk-peer:g:a', 'verify:peer']) {
       if (before[slot].vaultV !== 1 || before[slot].priv || before[slot].seed) throw new Error('plaintext leak: ' + slot);
     }
     const aborted = db.transaction('identity', 'readwrite'), abortedDone = done(aborted);
