@@ -1,5 +1,65 @@
 # Security Policy
 
+## Origin-wide key vault
+
+`/vault enable` (also `/keywrap`) replaces the old per-slot passphrase wrapping.
+Use a **separate strong passphrase, at least 12 characters**, not the `/lock` UI
+password. `/vault lock` locks all accounts and tabs; `/vault password` authenticates
+and changes that passphrase; `/vault disable` authenticates before removing protection.
+Disable must finish before `/wipe`, account deletion or reset can erase protected keys.
+The `/lock` action uses the vault lock when the vault is enabled.
+
+Protected IndexedDB identity slots: `keys`, `signing`, `pq-priv`, `spk-priv`,
+`otp-priv`, and every `sess:*`, `gsk:*`, `gsk-peer:*`. Entire records are encrypted,
+including their public metadata. **History, contacts, drafts and other settings
+remain outside this vault**. Existing message-body encryption is independent: its
+`msgkey` remains unprotected by the vault, so history is readable to someone with
+the origin's files. This is a key/session vault, not full-device encryption.
+
+A random 256-bit data key is AES-256-GCM wrapped under PBKDF2-SHA256 (600,000
+iterations, random 128-bit salt). Only the non-extractable unlocked data key is
+retained by the vault. Each record has a fresh 96-bit IV and authenticated context
+binding format version, vault ID, account database, store and exact record key.
+An explicit tagged codec preserves ArrayBuffers and typed-array byte ranges; unknown
+tags, malformed values, substituted records and plaintext protected rows are rejected.
+An authenticated per-account inventory detects deleted protected records at boot.
+Password change atomically rewraps only the data key in the control database; it
+does not rewrite protected records. No passphrase or unlocked data key is persisted.
+
+Web Locks freeze participating tabs; BroadcastChannel forces quiesce and reload.
+Timers, transport sends and network writes stop, DataChannels/WebSockets/calls close,
+the crypto worker terminates, and a generation guard rejects late crypto results.
+Reload enters a modal **pre-boot** unlock gate before identity/session initialization.
+Locked pages do not decrypt, ACK, send or process quick replies. Web Push is generic
+and has no reply/read actions whenever the vault is enabled, even in unlocked tabs.
+
+Migration first freezes writers and stages encrypted rows in a durable origin journal
+(`breeze-vault`). The phase, account list, restore index and staged-slot inventories
+are authenticated under the data key, preventing journal truncation or phase substitution.
+Each account then commits records plus its authenticated inventory
+in one atomic transaction. Boot remains blocked until *all* accounts finish. Interrupted
+enable/disable/restore resumes after authentication. Old `/keywrap` records are read
+only to migrate them, including unwrapping the out-of-scope history key. No database
+version bump is used: old clients cannot import vault-format identity records and
+must be upgraded. Close older tabs before enabling: known legacy leader tabs block
+migration. Old client code, malicious same-origin code, disk rollback, browser bugs,
+extensions and XSS are **not** a security boundary this vault can enforce against.
+
+Vault file backups contain only encrypted protected rows and the wrapped-key envelope,
+not history/contacts/drafts. Restore requires the vault passphrase and empty account
+databases on a fresh origin/profile; corrupt backups are rejected before writes.
+Disposable identities refuse export. Cloud/automatic/simple/recovery-kit exports and
+in-place legacy backup restore are disabled while enabled, rather than exporting
+decrypted private material. Preserve the existing recovery phrase and a vault backup
+before enabling. If the vault passphrase is lost, use the existing phrase/restore path
+on a fresh installation to recover the identity; **old sessions cannot be recovered**.
+Authentication cannot be bypassed by `/lock reset`.
+
+Deferred: full history/contact encryption, platform keystores/biometrics, automatic
+idle locking, encrypted cloud vault synchronization and in-place backup merging.
+There is no protection against an attacker executing JavaScript while unlocked,
+nor a guarantee that a garbage-collected browser erases every old key copy from RAM.
+
 ## Reporting a Vulnerability
 
 If you discover a security vulnerability in Breeze, please report it responsibly.
@@ -381,7 +441,7 @@ Breeze uses the following cryptographic primitives:
 | At-Rest | PBKDF2 ≥600k SHA-256 + AES-256-GCM | App-lock / identity key wrapping (I4) |
 | Protocol (1:1) | Signal Double Ratchet (v4/v5) | Per-message FS; Nr reset on DH step |
 | Protocol (group) | Sender Key chain-ratchet + epoch rotation | Group FS (I2) + PCS/kick (I3) |
-| Group Auth | Peer-bound direct frames + symmetric Sender Keys | Membership/transport checks; no deployed per-message author signature (N2) |
+| Group Auth | Ed25519 `BreezeGroupAuthor/v1` signatures under locally pinned signing keys | Insider sender forgery rejected in negotiated strict groups; unsigned legacy explicitly unverified |
 | Franking | HMAC-SHA256 commitment/opening | Verifiable abuse reporting without escrow (I17) |
 | Sealed Sender v2 | Ephemeral X25519 ECDH + HKDF('breeze-seal-v2') + AES-256-GCM (AAD: to+ts) | Sender anonymity vs the relay, incl. first-contact X3DH header |
 | Anti-Replay | Counter + msgId dedup + TTL-expiring skipped-key cache | Replay + stale-key FS (I7) |
@@ -390,16 +450,43 @@ Breeze uses the following cryptographic primitives:
 | Timing | Constant-time ctEqual() | Commitment + MAC comparisons |
 | Memory | zeroBuffer() | Key material erasure after use |
 
-Group receive checks membership before either Sender-Key or legacy decryption. Direct
-`group_msg` frames must match the connected peer's full public key; explicitly forwarded
-frames do not gain group-author authentication from the forwarder's identity. Group
-attribution uses local contact/member names, not received display names. Relay sender
-and public-key fields must be consistent with the local member record, but are not
-an author proof: another member receives the same Sender-Key material and can forge
-a ciphertext as that sender with consistent fields. Sealed Sender does not remove
-this insider attack. The Ed25519 author signatures in reference `src/crypto/group.js`
-are not deployed by these checks; per-message author signatures need a separately
-negotiated protocol upgrade. Local names likewise do not establish a human identity.
+Group receive checks membership and author signatures before Sender-Key/legacy decryption,
+ratchet advancement, deduplication, persistence or delivery ACK. Direct `group_msg` frames
+also match the connected peer's full encryption key. Explicit forwarding preserves the
+enclosed author's signature: the forwarding contact supplies neither authority nor name.
+The verification key comes from the author's local contact/member pin (`sigPub`), never
+an envelope or relay roster. Own-account root copies use the locally pinned link-time
+`rootEd`; this is not a remotely supplied signing key. Missing pins reject signed traffic.
+
+`group-author-sig-v1` is independent of `group-v5`. The N-party AND floor uses explicit
+capability proofs signed by every member's pinned identity and carried in authenticated
+1:1 Sender-Key distributions. Relay-only caps cannot activate strict mode. Strict is
+persisted monotonically, survives roster changes/restarts, and never falls back; entering
+strict rotates fresh Sender-Key material into a new epoch. Invalid signatures reject in
+every group. Unsigned legacy messages remain permitted ONLY before strict activation,
+with **Legacy — author not verified** shown live and on history reload. Such groups still
+permit symmetric-key insider forgery of unsigned traffic; the label is not an author proof.
+
+The deployed signature is one long-term Ed25519 identity signature, not reference
+`src/crypto/group.js`'s experimental two-layer/AFKS scheme. It covers the exact transported
+ciphertext string plus group, full encryption author, epoch and counter. It does NOT
+authenticate outer timestamps, reply previews, expiration or display metadata. Local names
+do not establish a human identity. Durable replay windows retain 1024 counters per
+group/full author/current epoch; failed decryption or aborted persistence consumes nothing.
+Acceptance, receiver ratchet and replay state share one IDB transaction. Web Locks serialize
+sender allocation and receiver processing across tabs; runtimes without signing/Web Locks
+stay legacy-only. Message-at-rest sealing and backup-dirty notifications are preserved.
+
+**Deferred rollout work:** explicit downgrade/legacy-admission confirmation UI, membership
+consensus, per-message forward-secure signing keys, selective relay ACK redesign, and
+root-signed **device signing-key** bindings. The existing device registry binds device
+encryption keys only. Secondary senders therefore remain unsigned in legacy groups and
+cannot send into a strict group until they have an authenticated local signing-key pin;
+no message-supplied device key is trusted to work around this. Signed root messages still
+reach linked-device mailboxes. A missing author module fails group sends/receives closed.
+Sealed relays already preserve opaque bytes; older plain `/msg` relays that strip the new
+fields must be upgraded for strict delivery (stripping cannot trigger legacy fallback).
+Protocol, vectors and limits: [Group author signatures](docs/GROUP_AUTHOR_SIG.md).
 
 ## Security Headers
 

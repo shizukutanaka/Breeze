@@ -213,40 +213,8 @@ export function createDataPanels(D) {
     box.appendChild(d); box.scrollTop = box.scrollHeight;
   }
 
-  // GDPR data export (Art. 15/20): identity summary, contacts, message
-  // metadata (text truncated to 200 chars, no keys, no file bodies).
-  async function gdprExport() {
-    try {
-      const identity = await D.dbGet('identity', 'keys');
-      const contacts = await D.dbGetAll('contacts');
-      const messages = await D.dbGetAll('messages');
-      const db = D.db();
-      const audit = db.objectStoreNames.contains('audit') ? await D.dbGetAll('audit') : [];
-      const settings = db.objectStoreNames.contains('settings') ? await D.dbGet('settings', 'app') : null;
-      return {
-        exportType: 'GDPR Data Export (Art. 15/20)',
-        exportedAt: new Date().toISOString(),
-        version: D.config().VERSION,
-        identity: identity ? { name: identity.name, alias: identity.alias, pubB64: identity.pubB64, createdAt: identity.createdAt } : null,
-        contacts: contacts.map(c => ({ id: c.id, name: c.name, alias: c.alias, isGroup: c.isGroup, createdAt: c.createdAt, pinned: c.pinned, muted: c.muted, blocked: c.blocked, archived: c.archived, notes: c.notes, labels: c.labels || [] })),
-        messages: messages.map(m => ({ msgId: m.msgId, contactId: m.contactId, text: m.text?.slice(0, 200), mine: m.mine, ts: m.ts, hasFile: !!m.fileData, hasVoice: !!m.voice })),
-        auditLog: audit.slice(-1000),
-        settings,
-        totalMessages: messages.length,
-        totalContacts: contacts.length,
-        totalFiles: messages.filter(m => m.fileData || m.voice).length,
-      };
-    } catch(e) { D.dbg(e, 'gdprExport'); }
-  }
-
-  async function runGdpr() {
-    const data = await gdprExport();
-    if (!data) { D.showToast(D.t('toastServerError'), 'error'); return; }
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    D.downloadBlob(blob, `breeze-gdpr-export-${new Date().toISOString().slice(0, 10)}.json`);
-    D.auditLog('settings', 'GDPR data export performed');
-    D.showToast(D.t('toastGdprExport', data.totalMessages, data.totalContacts, data.totalFiles), 'success');
-  }
+  async function gdprExport() { return D.gdprExport(); }
+  async function runGdpr() { return D.runGdpr(); }
 
   return { getFileList, showFiles, gdprExport, runGdpr };
 }

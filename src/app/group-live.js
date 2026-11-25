@@ -92,7 +92,7 @@ export function createGroupLive(D) {
     try {
       const sk = await D.getSenderKey(groupId);
       if (!sk) return;
-      const payload = JSON.stringify(senderKeyPayload(sk, groupId));
+      const payload = JSON.stringify({ ...senderKeyPayload(sk, groupId), ...await D.authorCapability?.(groupId) });
       const every = D.skRedistEvery();
       for (const devPub of pubs) {
         const devId = devPub.slice(0, 12);
@@ -130,6 +130,7 @@ export function createGroupLive(D) {
   // copies are flagged selfSync like the 1:1 fan-out's.
   async function depositCopies(members, ciphertext, fields) {
     try {
+      fields = { ...fields, ...await D.authorFields?.(fields.groupId, ciphertext) };
       const byMember = {};
       await Promise.all((members || []).map(async (m) => {
         if (m?.id) byMember[m.id] = await D.devicesFor(m).catch(() => null);

@@ -200,6 +200,14 @@ describe('deployed receive and notification boundaries', () => {
     await new Promise(r => setImmediate(r));
     expect(D.open).toHaveBeenCalledOnce(); expect(D.send).toHaveBeenCalledOnce();
   });
+  it('denies all notification actions before storage or transport access while the vault is blocked', () => {
+    let listener;
+    const D = { serviceWorker: { addEventListener: (_type, fn) => { listener = fn; } },
+      blocked: () => true, get: vi.fn(), flush: vi.fn() };
+    installNotificationActions(D);
+    for (const type of ['sync-outbox', 'quick-reply', 'mark-read']) listener({ data: { type, contactId: 'known', text: 'secret' } });
+    expect(D.get).not.toHaveBeenCalled(); expect(D.flush).not.toHaveBeenCalled();
+  });
 });
 
 describe('private presence reads', () => {

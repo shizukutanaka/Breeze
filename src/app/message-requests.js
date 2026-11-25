@@ -186,6 +186,7 @@ export function createMessageRequests(D) {
 
 export function installNotificationActions(D) {
   D.serviceWorker?.addEventListener('message', e => {
+    if (D.blocked?.()) return;
     if (e.data?.type === 'sync-outbox') D.flush();
     if (e.data?.type === 'quick-reply' && e.data.contactId && typeof e.data.text === 'string' && e.data.text.trim()) {
       D.get('contacts', e.data.contactId).then(async contact => {
