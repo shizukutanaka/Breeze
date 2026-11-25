@@ -62,7 +62,7 @@ function harness({ version = 5, members = [A, B, C], localC = true } = {}) {
   const decryptFrom = vi.fn(async (payload, pub) => payload === `legacy:${pub}` ? 'legacy hello' : null);
   const notifications = Object.assign(vi.fn(), { permission: 'granted' });
   const broadcastToTabs = vi.fn();
-  const deps = { dbGet, dbPut, dbGetAll: async () => [...contacts.values()], _replayCache,
+  const deps = { _requests: { admit: async () => true }, dbGet, dbPut, dbGetAll: async () => [...contacts.values()], _replayCache,
     decryptGroupMsg, decryptFrom, _dbg, MS, activeContact: null, myName: B.name, myAlias: 'bob',
     _shouldAlert: () => true, playNotif: vi.fn(), Notification: notifications,
     appendMsg: vi.fn(), showSmartReplies: vi.fn(), _renderContactsThrottled: vi.fn(),

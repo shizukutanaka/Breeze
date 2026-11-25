@@ -103,6 +103,7 @@ test('messages still arrive after a reload (boot runs to completion)', async ({ 
   await dlg.locator('.modal-input').fill(pubB);
   await dlg.locator('button.btn-g').click();
   await expect(dlg).toBeHidden();
+  await expect(A.locator('#msg-contacts .contact:not(.self-card)')).toHaveCount(1);
   await A.reload();
   await expect(A.locator('#msg-main')).toBeVisible();
 

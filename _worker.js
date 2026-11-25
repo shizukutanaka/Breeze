@@ -2012,7 +2012,9 @@ async function checkPresenceAuth(body, env, request, fields) {
   const bundle = data ? safeJsonParse(data) : null;
   const edKey = (bundle && typeof bundle.edIdentityKey === 'string' && bundle.edIdentityKey) || null;
   if (!edKey) return json({ error: 'No registered identity key', code: 'NO_IDENTITY_KEY' }, 403, request);
-  const digest = await sha256Short(JSON.stringify([fields.pub || '', fields.name || '', fields.caps ?? null, fields.inst || '']));
+  const fieldsToSign = [fields.pub || '', fields.name || '', fields.caps ?? null, fields.inst || ''];
+  if (body.privatePresence === true) fieldsToSign.push(true);
+  const digest = await sha256Short(JSON.stringify(fieldsToSign));
   const ok = await verifyEd25519(edKey, utf8ToB64(`breeze-presence:${id}:${ts}:${digest}`), sig);
   if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
   return null;
@@ -2049,8 +2051,8 @@ async function handlePresence(body, env, request) {
       const memRaw = memCache ? memCache.get(`presence:${cid}:data`) : null;
       if (memRaw) {
         const p = safeJsonParse(memRaw);
-        online[cid] = p ? (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH : false;
-        if (p?.devTs) devTs[cid] = p.devTs;
+        online[cid] = p && !p.privatePresence ? (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH : false;
+        if (p?.devTs && !p.privatePresence) devTs[cid] = p.devTs;
       } else {
         misses.push(cid);
       }
@@ -2059,8 +2061,8 @@ async function handlePresence(body, env, request) {
       const data = await presenceStore(env, cid).read();
       if (data) {
         const p = safeJsonParse(data);
-        online[cid] = p ? (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH : false;
-        if (p?.devTs) devTs[cid] = p.devTs;
+        online[cid] = p && !p.privatePresence ? (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH : false;
+        if (p?.devTs && !p.privatePresence) devTs[cid] = p.devTs;
       } else {
         online[cid] = false;
       }
@@ -2084,13 +2086,13 @@ async function handlePresence(body, env, request) {
     if (memData) {
       const p = safeJsonParse(memData);
       if (!p) return json({ online: false }, 200, request);
-      return json({ online: (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH, caps: p.caps }, 200, request);
+      return json({ online: !p.privatePresence && (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH, caps: p.caps }, 200, request);
     }
     const data = await presenceStore(env, id).read();
     if (!data) return json({ online: false }, 200, request);
     const p = safeJsonParse(data);
     if (!p) return json({ online: false }, 200, request);
-    return json({ online: (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH, caps: p.caps }, 200, request);
+    return json({ online: !p.privatePresence && (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH, caps: p.caps }, 200, request);
   }
 
   // Store presence heartbeat
@@ -2178,10 +2180,12 @@ async function handlePresence(body, env, request) {
     if (prev?.inst && prev.inst !== safeInst && Date.now() - prev.at < 90000) conflict = true;
   }
   const presData = { pub: safePub, name: safeName, at: Date.now() };
+  if (body.privatePresence === true) presData.privatePresence = true;
   if (safeInst) presData.inst = safeInst;
   if (safeInst && rawDevTs) presData.devTs = rawDevTs;
   if (safeCaps) presData.caps = safeCaps;
-  if (Date.now() - lastWrite > TIMEOUT_MS.PRESENCE_WRITE) { // throttle store writes (see PRESENCE STORE: the throttle now bounds DO writes too)
+  const previous = safeJsonParse(globalThis._presenceCache.get(presKey + ':data') || 'null');
+  if (Date.now() - lastWrite > TIMEOUT_MS.PRESENCE_WRITE || previous?.privatePresence !== presData.privatePresence) {
     await presenceStore(env, id).write(JSON.stringify(presData), TTL.MIN * 6); // 6min TTL (covers 5min interval + slack)
     globalThis._presenceCache.set(presKey, Date.now());
   }

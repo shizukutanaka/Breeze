@@ -1,5 +1,5 @@
 const VERSION = '3.8.0';
-const CACHE = 'breeze-v' + VERSION + '-offline-pairing';
+const CACHE = 'breeze-v' + VERSION + '-message-requests';
 const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png',
   // Stage-3 step 3: the PQ prekey helper module closure index.html imports
   // at runtime (INTEGRATION.md §0(A)) — precached so a first offline boot
@@ -11,7 +11,7 @@ const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-51
   // Recovery plan step 3: the account-seed facade and its vendored BIP39
   // wordlist — precached so a first offline boot can still create a
   // seed-derived identity / offer phrase restore instead of degrading.
-  '/src/crypto/seed.js', '/src/crypto/wordlist.js',
+  '/src/crypto/seed.js', '/src/crypto/wordlist.js', '/src/app/message-requests.js',
   // Modularization: the app-logic subsystems extracted from index.html
   // (calls, backup/restore, QR, import parsers, notification sound) —
   // precached so a first offline boot keeps those features instead of
@@ -138,21 +138,12 @@ function cachePut(request, response) {
 
 // Web Push
 self.addEventListener('push', (e) => {
-  let data = {};
-  try { data = e.data.json() || {}; } catch {}
-  // The payload is relay-supplied and cannot be trusted — the worker caps title at 50
-  // chars, but a self-hosted/compromised relay is under no such obligation, and a
-  // non-string field can make showNotification throw (silently swallowing the push).
-  // Coerce + cap everything we render before it reaches the notification.
-  const s = (v, n) => (typeof v === 'string' ? v : String(v ?? '')).slice(0, n);
-  const title = s(data.title, 100) || 'Breeze';
-  const body = s(data.body, 300) || 'New message';
-  const tag = s(data.tag, 64) || 'breeze-msg';
-  const url = s(data.url, 300);
-  // contactId reaches the client's quick-reply/mark-read handlers — same charset and
-  // length class as the worker's validateUserId, so a hostile payload can't smuggle a
-  // value the client would mistake for a different shape of identifier.
-  const contactId = /^[A-Za-z0-9+/=_-]{8,128}$/.test(data.contactId || '') ? data.contactId : undefined;
+  // Sealed pushes cannot classify a trusted sender before the app opens.
+  const title = 'Breeze';
+  const body = (navigator.language || '').startsWith('ja') ? '新しいメッセージまたはリクエスト' : 'New message or request';
+  const tag = 'breeze-msg';
+  const url = '/';
+  const contactId = undefined;
   e.waitUntil(
     self.registration.showNotification(title, {
       body,
@@ -162,14 +153,7 @@ self.addEventListener('push', (e) => {
       vibrate: [100, 50, 100],
       data: { url: url || '/', contactId },
       renotify: true,
-      // v3.6: Notification action buttons (Chrome 48+, Firefox 44+)
-      actions: (navigator.language || '').startsWith('ja') ? [
-        { action: 'reply', title: '返信', type: 'text' },
-        { action: 'mark-read', title: '既読にする' },
-      ] : [
-        { action: 'reply', title: 'Reply', type: 'text' },
-        { action: 'mark-read', title: 'Mark Read' },
-      ],
+      actions: [],
     })
   );
 });

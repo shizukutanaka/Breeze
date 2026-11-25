@@ -18,13 +18,22 @@ import { createIdentity, readMessages, openAddContact } from './helpers.mjs';
 // stored message, which would make the "never received /help" assertions below vacuous.
 const messageTexts = async (page) => (await readMessages(page)).map((m) => (m.text || '').trim());
 
+async function trustSender(page, pub) {
+  await openAddContact(page);
+  const form = page.locator('dialog[open] .add-form-contact');
+  await form.locator('.modal-input').fill(pub);
+  await form.locator('button.btn-g').click();
+  await expect(form).toBeHidden();
+}
+
 test('clicking send on a slash command runs it instead of messaging it to the contact', async ({ browser }) => {
   const ctxA = await browser.newContext({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.84' } });
   const ctxB = await browser.newContext({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.85' } });
   const A = await ctxA.newPage(), B = await ctxB.newPage();
 
-  await createIdentity(A, 'Sender');
+  const pubA = await createIdentity(A, 'Sender');
   const pubB = await createIdentity(B, 'Receiver');
+  await trustSender(B, pubA);
 
   await openAddContact(A);
   const dialog = A.locator('dialog[open] .add-form-contact');
@@ -59,8 +68,9 @@ test('the send button still sends ordinary text that merely mentions a command',
   const ctxB = await browser.newContext({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.87' } });
   const A = await ctxA.newPage(), B = await ctxB.newPage();
 
-  await createIdentity(A, 'Sender2');
+  const pubA = await createIdentity(A, 'Sender2');
   const pubB = await createIdentity(B, 'Receiver2');
+  await trustSender(B, pubA);
 
   await openAddContact(A);
   const dialog = A.locator('dialog[open] .add-form-contact');

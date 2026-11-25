@@ -48,6 +48,7 @@ block pins this status: when a roadmap module gets deployed its marker starts ma
 the tripwire test fails, and you must update this table + add a real mirror-drift guard.
 
 ## Must Use
+`src/app/message-requests.js` is deployed ESM via `__breezeRequests`: bounded persistent ciphertext quarantine, pre-decrypt admission, accept/replay, block/delete UI and contact-only notification actions. Absence fails closed for incoming messages. Precached in `sw.js`; covered by `tests/message-requests.test.js` and `tests/e2e/message-requests.spec.js`.
 - `t('key')` for ALL UI text (never hardcode English)
 - `_DOM.get('id')` for DOM (never raw getElementById)
 - `postAPIRaw(path, body)` for API calls (never raw fetchT)

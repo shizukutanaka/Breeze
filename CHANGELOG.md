@@ -4,6 +4,8 @@
 
 ### Security
 
+- **Message requests and stranger quarantine.** Unknown senders remain outside chats until accepted, with bounded persistent ciphertext queues, persisted block/delete actions and suppressed message/attachment/call/receipt processing. Explicit adds, pairing, joined groups and authenticated linked-device fan-out retain their trust paths. Generic background push without content/actions and signed private presence prevent pre-consent notification/presence disclosure. EN/JA and English fallback locales included; see SECURITY.md for limits.
+
 - **Self-hosted relay: `TRUST_PROXY` no longer trusts a client-forged address.** The Node host took the *first* `X-Forwarded-For` entry as the client address. Common proxies (nginx `$proxy_add_x_forwarded_for`, Traefik) append to whatever the client sent, so a client could put any value first and get a fresh per-IP rate-limit bucket on every request — or spend someone else's. The host now uses the last entry, the one the operator's proxy appended.
 
 ### Fixed
