@@ -1345,6 +1345,9 @@ import { createSeedHelper } from './src/crypto/seed.js';
 window.__breezeSeed = createSeedHelper();
 </script>
 <script type="module">
+import { getVault, vaultGate } from './src/app/vault.js'; window.__breezeVault = { getVault, vaultGate };
+</script>
+<script type="module">
 // Modularization: app-logic subsystems extracted from the classic script
 // below (index.html carries a hard line budget — validate.sh). The bridges
 // are read opportunistically, so boot survives without them — but these are
@@ -1937,6 +1940,18 @@ const _I = {
     typing: 'typing...',
     newMessages: 'New Messages',
     groupAuthorLegacy: 'Legacy — author not verified',
+    vaultTitle: 'Key vault locked',
+    vaultUnlock: 'Enter the separate vault passphrase',
+    vaultNew: 'New vault passphrase (at least 12 characters; not your /lock password)',
+    vaultConfirm: 'Repeat the new vault passphrase',
+    vaultLegacy: 'Existing /keywrap passphrase, or leave blank if none',
+    vaultScope: 'Protect private keys and sessions for all accounts? History, contacts and drafts remain outside the vault. Save your recovery phrase and a vault file backup first. /vault lock locks every tab; /vault password changes the passphrase.',
+    vaultDisable: 'Disable the key vault for every account? Authentication is required. Private keys and sessions will be stored in plaintext.',
+    vaultMismatch: 'The vault passphrases do not match.',
+    vaultFailed: 'Vault operation failed. Check the passphrase and storage; no plaintext fallback is allowed.',
+    vaultRecovery: 'This is not the /lock password. If forgotten, recover your identity using your recovery phrase on a fresh install. Existing vault sessions cannot be recovered without this passphrase.',
+    vaultOldTabs: 'Close older Breeze tabs before changing the vault.',
+    vaultBackupOnly: 'While the vault is enabled, use the vault file backup. Cloud, automatic and recovery-kit exports are disabled.',
     draftLabel: 'Draft',
     dropUsage: 'Usage: /drop <secret message>',
     dropTooLong: 'Secret too long (max 50,000 characters)',
@@ -3611,6 +3626,7 @@ function getCryptoWorker() {
 }
 // Encrypt/decrypt via worker (returns ArrayBuffer), falls back to main thread
 function workerCrypto(op, keyRaw, iv, data) {
+  if (typeof initMessenger !== 'undefined') initMessenger._vault?.assert();
   const w = getCryptoWorker();
   if (!w) return null; // Caller should fallback
   return new Promise((resolve, reject) => {
@@ -4065,6 +4081,7 @@ function renderAccountTabs() {
         const choice = await showPrompt(t('chooseAvatar'), acc.avatar || '👤', { placeholder: t('avatarPlaceholder') });
         if (choice) { acc.avatar = choice.slice(0, 2); saveAccounts(accs); renderAccountTabs(); }
       } else if (action === 'delete' && accs.length > 1) {
+        if (initMessenger._vault?.enabled()) { await initMessenger._vault.command('/vault disable'); return; }
         if (!await showConfirm(t('deleteAccount'), { danger: true, okText: t('delete') })) return;
         const i = accs.indexOf(acc);
         accs.splice(i, 1);
@@ -4121,6 +4138,15 @@ async function initMessenger(dbName) {
   // Still locked from before this page load (reload, reopened tab): lock before anything renders.
   try { if (localStorage.getItem('brz-locked')) showLockScreen(); } catch(e) { _dbg(e, 'lock-restore'); }
   try { await _appModulesReady; if (!globalThis.__breezeOfflinePairing) showToast(t('toastModulesFailed'), 'error', MS.MIN); } catch(e) { _dbg(e, 'app-modules-ready'); } // last bridge of the block unset ⇒ the block aborted: /security, calls, backup… would otherwise do nothing, silently
+  if (!globalThis.__breezeVault) throw new Error(t('vaultFailed'));
+  const _vault = globalThis.__breezeVault.getVault({ t, dbg: _dbg, accounts: getAccounts, restoreAccounts: saveAccounts, reload: () => location.reload(),
+    prompt: text => showPrompt(text, '', { type: 'password', autocomplete: 'current-password' }), confirm: text => showConfirm(text), toast: text => showToast(text, 'error'),
+    gate: unlock => globalThis.__breezeVault.vaultGate({ t }, unlock),
+    quiesce: () => { try { _messengerCleanup?.(); } finally { _cryptoWorker?.terminate(); _cryptoWorker = null; for (const p of Object.values(_cwPending)) p.reject(new Error(t('vaultFailed'))); _cwPending = {}; } },
+  });
+  initMessenger._vault = _vault;
+  if (!initMessenger._vaultGuards) { _vault.installGuards(); initMessenger._vaultGuards = true; }
+  await _vault.boot();
   _perf.mark('initMessenger');
   const _ac = new AbortController(); // Abort all listeners on account switch
   dbName = dbName || 'breeze-messenger';
@@ -4727,7 +4753,7 @@ async function initMessenger(dbName) {
   }
 
   // ===== IndexedDB =====
-  const db = await new Promise((resolve, reject) => {
+  const db = await _vault.database(await new Promise((resolve, reject) => {
     const req = indexedDB.open(dbName, DB_VER);
     req.onerror = (e) => {
       _dbg(e.target.error, 'idb-open-error');
@@ -4782,7 +4808,7 @@ async function initMessenger(dbName) {
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => resolve(null);
-  });
+  }));
   _currentAccountDb = db;
   const _intervals = []; // Track intervals for cleanup on account switch
 
@@ -4880,11 +4906,12 @@ async function initMessenger(dbName) {
   await acquireLeaderLock();
 
   async function dbGet(store, key) {
-    const rec = await new Promise(r => { try { const tx = db.transaction(store); const req = tx.objectStore(store).get(key); req.onsuccess = () => r(req.result); req.onerror = () => r(null); } catch(e) { _dbg(e, 'db-get'); r(null); } });
+    const rec = await new Promise((r, reject) => { const fail = e => { if (store === 'identity' && typeof _vault !== 'undefined' && _vault.enabled()) reject(e); else r(null); }; try { const tx = db.transaction(store); const req = tx.objectStore(store).get(key); req.onsuccess = () => r(req.result); req.onerror = () => fail(req.error); } catch(e) { _dbg(e, 'db-get'); fail(e); } });
     return store === 'messages' && rec ? _msgOpenRecord(rec) : rec;
   }
   async function dbPut(store, val, key) {
     if (store === 'messages') val = await _msgSealRecord(val);
+    if (typeof _vault !== 'undefined' && _vault.enabled()) { const saved = await _vault.put(db, store, val, key); if (saved) _notifyBackupDirty(store); return saved; }
     if (store === 'identity' && _keywrapSlots.includes(key)) {
       try {
         const seed = key === 'pq-priv' ? val.seed : null;
@@ -5015,9 +5042,9 @@ async function initMessenger(dbName) {
   const _msgMigrate = (rec) => { dbPut('messages', rec).catch(e => _dbg(e, 'msg-migrate')); };
   async function dbGetAll(store) {
     try {
-      const all = await new Promise(r => { const tx = db.transaction(store); const req = tx.objectStore(store).getAll(); req.onsuccess = () => r(req.result || []); req.onerror = () => r([]); });
+      const all = await new Promise((r, reject) => { const tx = db.transaction(store); const req = tx.objectStore(store).getAll(); req.onsuccess = () => r(req.result || []); req.onerror = () => reject(req.error); });
       return store === 'messages' ? _msgOpenAll(all, _msgMigrate) : all;
-    } catch(_e) { _dbg(_e, 'dbGetAll'); }
+    } catch(_e) { _dbg(_e, 'dbGetAll'); if (store === 'identity' && typeof _vault !== 'undefined' && _vault.enabled()) throw _e; }
   }
   async function dbGetByIndex(store, idx, key) {
     const rows = await new Promise(r => { try { const tx = db.transaction(store); const req = tx.objectStore(store).index(idx).getAll(key); req.onsuccess = () => r(req.result || []); req.onerror = () => r([]); } catch(e) { _dbg(e, 'db-idx'); r([]); } });
@@ -5411,9 +5438,11 @@ async function initMessenger(dbName) {
         }
       } catch(e) { _dbg(e, 'pqkey-mint'); }
     }
-    if (pqRecord && !await dbPut('identity', pqRecord, 'pq-priv')) { _dbg(null, 'keywrap: prekey rotation skipped'); throw new Error('keywrap: PQ persistence failed'); }
-    await dbPut('identity', { priv: spk.priv }, 'spk-priv');
-    await dbPut('identity', { keys: otpPrivs }, 'otp-priv');
+    if (typeof _vault !== 'undefined' && _vault.enabled()) await _vault.prekeys(db, spk.priv, otpPrivs, pqRecord);
+    else {
+      if (pqRecord && !await dbPut('identity', pqRecord, 'pq-priv')) { _dbg(null, 'keywrap: prekey rotation skipped'); throw new Error('keywrap: PQ persistence failed'); }
+      if (!await dbPut('identity', { priv: spk.priv }, 'spk-priv') || !await dbPut('identity', { keys: otpPrivs }, 'otp-priv')) throw new Error('prekey persistence failed');
+    }
     const caps = [];
     if (CONFIG.X3DH_V5_ENABLED) caps.push(CAPS_X3DH_V5);
     if (CONFIG.GROUP_RATCHET_V5) caps.push(CAPS_GROUP_V5);
@@ -7297,6 +7326,7 @@ async function initMessenger(dbName) {
 
   // v3.3: SW message handler — flush outbox on sync event
   navigator.serviceWorker?.addEventListener('message', (e) => {
+    if (_vault.isBlocked()) return;
     if (e.data?.type === 'sync-outbox' && _retryQueue.length > 0) {
       _dbg(null, 'Background sync: flushing ' + _retryQueue.length + ' messages');
       scheduleRetry();
@@ -7562,6 +7592,7 @@ async function initMessenger(dbName) {
       // setTimeout/clearTimeout instrumentation: switching accounts with focus mode on
       // left the old timer's id out of the cleared set entirely.
       if (_focusTimer) { clearTimeout(_focusTimer); _focusTimer = null; }
+      if (_readTimer) { clearTimeout(_readTimer); _readTimer = null; }
       // Discard this account's in-memory outbox. The Map is module-level and persists
       // across initMessenger calls; without clearing it here, pending P2P messages from
       // the old account would be sent under the new account's identity if both accounts
@@ -7609,6 +7640,9 @@ async function initMessenger(dbName) {
       // Null out cryptographic key material so pending callbacks from this account
       // cannot sign or decrypt under the old identity after the switch.
       _signingKey = null; myKeys = null; _keywrapWriter = null;
+      _pqSeedUnlocked = null; _msgStoreKey = null;
+      for (const url of _mailWsByRelay.keys()) _closeRelayWs(url);
+      if (_gcall?.state() !== 'idle') _gcall?.endCall(false);
       // Clear the in-memory replay cache: msgId entries from this account's sessions
       // should not be used to deduplicate incoming messages for the next account.
       _replayCache._map.clear();
@@ -10556,7 +10590,7 @@ async function initMessenger(dbName) {
   // completes it in the input (with a trailing space for its argument).
   // The 60+ commands stay the single implementation — this is only a
   // discovery surface for them.
-  const _SLASH_COMMANDS = ['/help', '/search', '/searchall', '/pins', '/bookmarks', '/reply', '/poll', '/timer', '/schedule', '/clear', '/export', '/import', '/summarize', '/reactions', '/compact', '/files', '/print', '/rendezvous', '/offlinepair', '/info', '/note', '/pin', '/mute', '/archive', '/unblock', '/members', '/admin', '/add', '/label', '/sort', '/newgroup', '/rename', '/invite', '/qr', '/share', '/contacts', '/focus', '/settings', '/theme', '/wallpaper', '/lock', '/sound', '/compress', '/alias', '/whoami', '/who', '/debug', '/online', '/security', '/verify', '/audit', '/retention', '/backup', '/keywrap', '/sessions', '/wipe', '/gdpr', '/panic', '/devices', '/link', '/linkto', '/unlink', '/history', '/migrate', '/profile', '/stickers', '/location', '/retry', '/drop', '/room'];
+  const _SLASH_COMMANDS = ['/help', '/search', '/searchall', '/pins', '/bookmarks', '/reply', '/poll', '/timer', '/schedule', '/clear', '/export', '/import', '/summarize', '/reactions', '/compact', '/files', '/print', '/rendezvous', '/offlinepair', '/info', '/note', '/pin', '/mute', '/archive', '/unblock', '/members', '/admin', '/add', '/label', '/sort', '/newgroup', '/rename', '/invite', '/qr', '/share', '/contacts', '/focus', '/settings', '/theme', '/wallpaper', '/lock', '/sound', '/compress', '/alias', '/whoami', '/who', '/debug', '/online', '/security', '/verify', '/audit', '/retention', '/backup', '/keywrap', '/vault', '/sessions', '/wipe', '/gdpr', '/panic', '/devices', '/link', '/linkto', '/unlink', '/history', '/migrate', '/profile', '/stickers', '/location', '/retry', '/drop', '/room'];
   _DOM.get('msg-input')?.addEventListener('input', (e) => {
     const input = e.target;
     const m = input.value.match(/^\/(\w*)$/);
@@ -10810,7 +10844,7 @@ async function initMessenger(dbName) {
     dbGet, getSession, hasRTCCertificate, t, esc, safeSetHTML,
     cmdPanel: (id) => _cmdPanelEl(id),
     cryptoStack: () => _cryptoStack, activeContact: () => activeContact,
-    atRestIsWrapped: _atRestIsWrapped, p2pStats: () => _p2pStats, turnCredential: () => _turnCredential,
+    atRestIsWrapped: r => _vault.enabled() || _atRestIsWrapped(r), p2pStats: () => _p2pStats, turnCredential: () => _turnCredential,
     signingPubB64: () => _signingPubB64, hasX25519: () => _hasX25519, hasEd25519: () => _hasEd25519, hasPQ: () => _hasPQ,
     replayCacheSize: () => _replayCache.size(), config: () => CONFIG, settings: () => _settings,
     relayPinGate: () => _relayPinGate, relayPinFp: () => _relayPinFp,
@@ -12593,6 +12627,7 @@ async function initMessenger(dbName) {
 
   // v3.3: Shared lock screen function (used by /lock and auto-lock)
   function showLockScreen() {
+    if (typeof initMessenger !== 'undefined' && initMessenger._vault?.enabled()) { initMessenger._vault.lock(); return; }
     if (_DOM.get('lock-screen')) return;
     const raw = localStorage.getItem('brz-lock-hash');
     if (!raw) return;
@@ -12807,6 +12842,7 @@ async function initMessenger(dbName) {
   // and the one write-back phrase restore performs via adoptRestoredSigning.
   // Absent module ⇒ inert no-op entries (the pq-facade doctrine).
   const _backupTools = globalThis.__breezeBackup?.createBackupTools({
+    vault: _vault,
     db, dbGet, dbPut, dbGetAll, authFields, homeRelays, postAPIRelay, signMessage, renderContacts, auditLog,
     myId: () => myId,
     autoBackupEnabled: () => _settings.autoBackup !== false,
@@ -13234,6 +13270,7 @@ async function initMessenger(dbName) {
   }, { signal: _ac.signal });
 
   async function executePanic() {
+    if (_vault.enabled()) { await _vault.command('/vault disable'); return; }
     safeSetHTML(document.body, '<div class="i-fullscreen"></div>');
     try {
       if (indexedDB.databases) { for (const d of await indexedDB.databases()) { if (d.name) indexedDB.deleteDatabase(d.name); } }
@@ -14373,7 +14410,7 @@ async function initMessenger(dbName) {
         '/alias &lt;name&gt; · /whoami · /who · /debug · /online',
         '',
         '<b>' + t('helpSecurity') + '</b>',
-        '/security · /verify · /audit · /retention · /backup · /keywrap',
+        '/security · /verify · /audit · /retention · /backup · /vault · /keywrap',
         '/sessions · /wipe · /gdpr · /panic (Ctrl+Shift+Backspace)',
         '/devices · /link [pub] · /linkto &lt;pub&gt; · /unlink &lt;n&gt; · /history · /migrate · /profile · /stickers · /location',
         '',
@@ -14710,6 +14747,7 @@ async function initMessenger(dbName) {
     // v3.3: ENTERPRISE — /wipe — Remote wipe (send wipe signal to other devices)
     if (val === '/wipe') {
       e.preventDefault(); clearInput();
+      if (_vault.enabled()) { await _vault.command('/vault disable'); return; }
       const choice = await showConfirm(t('wipeTitle'), { okText: t('wipeBtn'), danger: true, desc: t('wipeDesc') });
       if (!choice) { showToast(t('toastCancelled'), 'info'); return; }
       // Send remote wipe signal to own inbox (wakes other devices)
@@ -15289,7 +15327,8 @@ async function initMessenger(dbName) {
       return;
     }
 
-    // v3.6: /keywrap — Enable or disable at-rest identity key wrapping
+    if (/^\/(?:vault|keywrap)(?:\s|$)/.test(val)) { e.preventDefault(); clearInput(); await _vault.command(val); return; }
+    // Legacy reader compatibility; vault commands above are the only protection writer.
     if (val === '/keywrap' || val === '/keywrap enable' || val === '/keywrap disable') {
       e.preventDefault(); clearInput();
       if (!myKeys) { showToast(t('noIdentity'), 'error'); return; }

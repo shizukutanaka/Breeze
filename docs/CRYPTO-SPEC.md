@@ -1,5 +1,25 @@
 # Breeze Crypto Module Specification (`src/crypto/`)
 
+## Deployed key/session vault (application storage, no wire change)
+
+`src/app/vault.js` implements vault format 1. AES-256-GCM uses fresh 12-byte IVs
+and UTF-8 JSON AAD `["BreezeVault",1,vaultId,accountDatabase,store,recordKey]`.
+A random 32-byte data key is wrapped with the existing PBKDF2-SHA256 600,000
+iteration policy (16-byte salt). Data-key AAD uses database `breeze-vault`, store
+`meta`, key `data-key`. Password change rewraps this key only. Record envelopes
+are `{vaultV:1,vaultId,iv,ct}` with canonical base64 IV/ciphertext. The plaintext
+codec explicitly tags scalars, undefined, arrays, objects, buffers and typed views;
+it never silently JSON-coerces typed arrays into ordinary objects.
+
+Each account's encrypted `vault:manifest` authenticates its protected-slot inventory.
+Control manifests carry an `auth` envelope at database `breeze-vault`, store `meta`,
+key `state`, binding phase, account list, restore index and staged-slot inventories.
+The separate control database journals encrypted stages before atomic per-account
+records+inventory commits. Boot authenticates and resumes incomplete migrations
+before any identity/session work. Backup catalogs and per-account inventories are
+authenticated; restore is fresh-account only. See SECURITY for the exact scope,
+origin lock semantics, legacy-keywrap migration and intentionally unprotected history.
+
 > Specifies the tested crypto reference modules and their wire formats, then maps
 > each requirement to its implementation status. "Gap" = specified but not yet
 > implemented. Complements the repo `SPEC.md` (product/compliance) and

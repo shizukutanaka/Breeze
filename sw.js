@@ -8,7 +8,7 @@ const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-51
   // (pqxdh.js → pq.js → mlkem.js/bytes.js, already listed).
   '/src/crypto/pqkey.js', '/src/crypto/mlkem.js', '/src/crypto/bytes.js',
   '/src/crypto/pqxdh.js', '/src/crypto/pq.js',
-  '/src/app/group-author.js',
+  '/src/app/group-author.js', '/src/app/vault.js',
   // Recovery plan step 3: the account-seed facade and its vendored BIP39
   // wordlist — precached so a first offline boot can still create a
   // seed-derived identity / offer phrase restore instead of degrading.
@@ -138,9 +138,26 @@ function cachePut(request, response) {
 }
 
 // Web Push
+function vaultPushGeneric() {
+  if (typeof indexedDB === 'undefined') return Promise.resolve(false);
+  return new Promise(resolve => {
+    const req = indexedDB.open('breeze-vault');
+    req.onupgradeneeded = () => { req.transaction.abort(); resolve(false); };
+    req.onerror = () => resolve(true);
+    req.onsuccess = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('meta')) { db.close(); resolve(true); return; }
+      const read = db.transaction('meta').objectStore('meta').get('state');
+      read.onsuccess = () => { db.close(); resolve(!!read.result); };
+      read.onerror = () => { db.close(); resolve(true); };
+    };
+  });
+}
 self.addEventListener('push', (e) => {
   let data = {};
   try { data = e.data.json() || {}; } catch {}
+  e.waitUntil(vaultPushGeneric().then(generic => {
+  if (generic) data = {};
   // The payload is relay-supplied and cannot be trusted — the worker caps title at 50
   // chars, but a self-hosted/compromised relay is under no such obligation, and a
   // non-string field can make showNotification throw (silently swallowing the push).
@@ -154,8 +171,7 @@ self.addEventListener('push', (e) => {
   // length class as the worker's validateUserId, so a hostile payload can't smuggle a
   // value the client would mistake for a different shape of identifier.
   const contactId = /^[A-Za-z0-9+/=_-]{8,128}$/.test(data.contactId || '') ? data.contactId : undefined;
-  e.waitUntil(
-    self.registration.showNotification(title, {
+  return self.registration.showNotification(title, {
       body,
       tag,
       icon: '/icon-192.png',
@@ -164,15 +180,15 @@ self.addEventListener('push', (e) => {
       data: { url: url || '/', contactId },
       renotify: true,
       // v3.6: Notification action buttons (Chrome 48+, Firefox 44+)
-      actions: (navigator.language || '').startsWith('ja') ? [
+      actions: generic ? [] : (navigator.language || '').startsWith('ja') ? [
         { action: 'reply', title: '返信', type: 'text' },
         { action: 'mark-read', title: '既読にする' },
       ] : [
         { action: 'reply', title: 'Reply', type: 'text' },
         { action: 'mark-read', title: 'Mark Read' },
       ],
-    })
-  );
+    });
+  }));
 });
 
 // Resolve a notification's target URL against our OWN origin and refuse anything that

@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path';
 
 const SRC = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'sw.js'), 'utf8');
 
-function makeSwEnv() {
+function makeSwEnv(indexedDB) {
   const handlers = {};
   const shown = [];
   const opened = [];
@@ -25,8 +25,8 @@ function makeSwEnv() {
   };
   const caches = { open: () => Promise.resolve({ addAll: () => Promise.resolve(), keys: () => Promise.resolve([]), put: () => Promise.resolve(), delete: () => Promise.resolve() }), keys: () => Promise.resolve([]), match: () => Promise.resolve(undefined), delete: () => Promise.resolve() };
   // eslint-disable-next-line no-new-func -- test harness evaluates the artifact under a mocked scope
-  new Function('self', 'caches', 'clients', 'navigator', SRC)(
-    self, caches, self.clients, { language: 'en' },
+  new Function('self', 'caches', 'clients', 'navigator', 'indexedDB', SRC)(
+    self, caches, self.clients, { language: 'en' }, indexedDB,
   );
   const firePush = async (payload) => {
     let waited;
@@ -49,6 +49,21 @@ function makeSwEnv() {
 describe('sw push payload sanitization', () => {
   let sw;
   beforeEach(() => { sw = makeSwEnv(); });
+
+  it('vault-enabled pushes contain no relay title, body, contact or reply action', async () => {
+    const indexedDB = { open: () => {
+      const req = {};
+      queueMicrotask(() => {
+        req.result = { close: () => {}, objectStoreNames: { contains: () => true }, transaction: () => ({ objectStore: () => ({ get: () => {
+          const read = {}; queueMicrotask(() => { read.result = { phase: 'ready' }; read.onsuccess(); }); return read;
+        } }) }) };
+        req.onsuccess();
+      }); return req;
+    } };
+    const n = await makeSwEnv(indexedDB).firePush({ title: 'Secret name', body: 'Secret text', contactId: 'alice0000001', url: '/?contact=secret' });
+    expect(n.title).toBe('Breeze'); expect(n.opts.body).toBe('New message');
+    expect(n.opts.actions).toEqual([]); expect(n.opts.data).toEqual({ url: '/', contactId: undefined });
+  });
 
   it('renders a well-formed payload verbatim', async () => {
     const n = await sw.firePush({ title: 'Alice', body: 'hi', tag: 'breeze-a', url: '/', contactId: 'alice0000001' });
