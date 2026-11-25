@@ -212,6 +212,79 @@ describe('power mode — network quality probe', () => {
   });
 });
 
+const signalPollBlock = slice('  function startSignalPoll(', '\n  async function connectPeer(');
+function signalPollHarness(floor, poll = vi.fn(async () => false)) {
+  const start = new Function('MS', '_dbg', '_powerPollFloorMs',
+    signalPollBlock + '\nreturn startSignalPoll;')({ SEC: 1000, MIN: 60000 }, () => {}, () => floor);
+  return { controller: start(poll, () => false), poll };
+}
+
+describe('power mode — signal poll discovery floor', () => {
+  it('holds the not-connected discovery loop at the floor instead of the backoff cadence', async () => {
+    vi.useFakeTimers();
+    try {
+      const h = signalPollHarness(600000);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(h.poll).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(58000);
+      expect(h.poll).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(541999);
+      expect(h.poll).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(h.poll).toHaveBeenCalledTimes(2);
+      h.controller.stop();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('keeps the two-second active discovery cadence when the floor is zero', async () => {
+    vi.useFakeTimers();
+    try {
+      const h = signalPollHarness(0, vi.fn(async () => true));
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(h.poll).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1999);
+      expect(h.poll).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(h.poll).toHaveBeenCalledTimes(2);
+      h.controller.stop();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('keeps wake immediate while a floor is set', async () => {
+    vi.useFakeTimers();
+    try {
+      const h = signalPollHarness(600000);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(h.poll).toHaveBeenCalledTimes(1);
+      h.controller.wake();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(h.poll).toHaveBeenCalledTimes(2);
+      h.controller.stop();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('applies the floor to a failed not-connected retry but not to a connected retry', async () => {
+    vi.useFakeTimers();
+    try {
+      const offline = signalPollHarness(600000, vi.fn().mockRejectedValueOnce(Error('offline')).mockResolvedValue(false));
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(offline.poll).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(58000);
+      expect(offline.poll).toHaveBeenCalledTimes(1);
+      offline.controller.stop();
+
+      const connected = signalPollHarness(600000, vi.fn().mockRejectedValueOnce(Error('offline')).mockResolvedValue(false));
+      connected.controller.setConnected(true);
+      await vi.advanceTimersByTimeAsync(15000);
+      expect(connected.poll).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(connected.poll).toHaveBeenCalledTimes(2);
+      connected.controller.stop();
+    } finally { vi.useRealTimers(); }
+  });
+});
+
+
 function lineContaining(needle) {
   const at = html.indexOf(needle);
   if (at < 0) throw Error('device-alerts registration moved');
