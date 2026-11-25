@@ -1379,6 +1379,8 @@ import { sanitizeGroupFile, groupTextForFile, parseGroupFileText, sendGroupFile,
 import { planLiveTargets, createGroupLive } from './src/app/group-live.js'; window.__breezeGroupLive = { planLiveTargets, createGroupLive };
 import { createBackupTools } from './src/app/backup.js';
 window.__breezeBackup = { createBackupTools };
+import { createHistoryTools } from './src/app/history-tools.js';
+window.__breezeHistoryTools = { createHistoryTools };
 import { createQRHelper } from './src/app/qr.js';
 window.__breezeQR = createQRHelper();
 import * as importParsers from './src/app/import-parsers.js';
@@ -10790,6 +10792,7 @@ async function initMessenger(dbName) {
   const _dataPanels = globalThis.__breezeInfoPanels?.createDataPanels({
     dbGet, dbGetAll, fmtSize, downloadBlob, auditLog, showToast, t, esc, safeSetHTML,
     cmdPanel: (id) => _cmdPanelEl(id), db: () => db, config: () => CONFIG, dbg: _dbg,
+    gdprExport: () => _historyTools?.gdprExport(), runGdpr: () => exportGdpr(),
   });
   const _profileUI = globalThis.__breezeProfileUI?.createProfileUI({
     dbGet, dbPut, dbGetAll, encryptFor, relaySend, showToast, t, esc, safeSetHTML,
@@ -13863,45 +13866,13 @@ async function initMessenger(dbName) {
 
   // v1 INTEGRATION: Message Search
 
-  // MIGRATION: Import from LINE / WhatsApp / Telegram — the format parsers
-  // live in src/app/import-parsers.js (modularization); read through the
-  // bridge — absent ⇒ the parsers' own Unknown result.
-  const detectAndParse = (text) => globalThis.__breezeImportParsers?.detectAndParse(text) || { source: 'Unknown', msgs: [] };
-
-  async function importChat(file) {
-    try {  
-      if (!activeContact) { showToast(t('toastOpenChat'), 'error'); return; }
-      const text = await file.text();
-      const { source, msgs } = detectAndParse(text);
-      if (msgs.length === 0) { showToast(t('toastNoImportMsgs'), 'error'); return; }
-  
-      const myNames = [myName.toLowerCase(), myAlias?.toLowerCase(), 'you', 'me', 'self'].filter(Boolean);
-      let imported = 0;
-      for (const m of msgs) {
-        const isMine = myNames.some(n => m.sender.toLowerCase().includes(n));
-        const msgId = 'import:' + m.ts + ':' + (isMine ? '1' : '0');
-        const existing = await dbGet('messages', msgId);
-        if (existing) continue;
-        await dbPut('messages', {
-          msgId, contactId: activeContact.id,
-          text: typeof m.text === 'string' ? m.text.slice(0, CONFIG.MAX_MSG_LENGTH) : '',
-          mine: isMine, ts: m.ts,
-          senderName: isMine ? myName : (typeof m.sender === 'string' ? m.sender.slice(0, 64) : ''),
-          imported: true
-        });
-        imported++;
-      }
-  
-      activeContact.lastMsg = msgs[msgs.length - 1]?.text?.slice(0, 40) || '';
-      activeContact.lastMsgAt = msgs[msgs.length - 1]?.ts || Date.now();
-      await dbPut('contacts', activeContact);
-  
-      // Refresh conversation
-      await openConversation(activeContact);
-      showToast(t('toastImported', imported, source), "success");
-    
-    } catch(_e) { _dbg(_e, 'importChat'); }
-  }
+  const _historyTools = globalThis.__breezeHistoryTools?.createHistoryTools({
+    dbGet, dbGetAll, dbGetByIndex, dbPut, openConversation, auditLog,
+    db: () => db, activeContact: () => activeContact, myName: () => myName, myAlias: () => myAlias,
+  });
+  const importChat = _historyTools?.importChat || (async () => {});
+  const exportChat = _historyTools?.exportChat || (async () => {});
+  const exportGdpr = _historyTools?.exportGdpr || (async () => {});
 
   // QR CODE: the ISO 18004 encoder and the share-ID modal live in
   // src/app/qr.js (modularization); read opportunistically through the
@@ -14688,54 +14659,9 @@ async function initMessenger(dbName) {
     // v3: /export — Export chat history as encrypted JSON
     // v3.3: Unified /export — /export [json|csv|all]
     if (val === '/export' || val.startsWith('/export ')) {
-      e.preventDefault(); clearInput();
-      const sub = val.slice(7).trim() || 'json';
-      if (sub === 'all') {
-        const allContacts = await dbGetAll('contacts');
-        const allMsgs = await dbGetAll('messages');
-        const chats = {};
-        for (const c of allContacts) {
-          const msgs = allMsgs.filter(m => m.contactId === c.id).sort((a, b) => a.ts - b.ts);
-          if (msgs.length === 0) continue;
-          chats[c.name || c.id] = msgs.map(m => ({ ts: m.ts, text: m.text, mine: m.mine }));
-        }
-        const blob = new Blob([JSON.stringify({ version: CONFIG.VERSION, exportedAt: new Date().toISOString(), chats }, null, 2)], { type: 'application/json' });
-        downloadBlob(blob, 'breeze-all-' + new Date().toISOString().slice(0,10) + '.json');
-        showToast(t('toastExportedMessages', allMsgs.length, Object.keys(chats).length), 'success');
-      } else if (sub === 'csv') {
-        if (!activeContact) { showToast(t('toastOpenChat'), 'error'); return; }
-        const msgs = (await dbGetByIndex('messages', 'contact', activeContact.id)).sort((a, b) => a.ts - b.ts);
-        const rows = [t('csvHeader')];
-        for (const m of msgs) { if (!m.deleted) rows.push('"' + new Date(m.ts).toISOString() + '","' + (m.mine ? myName : activeContact.name).replace(/"/g, '""') + '","' + (m.text||'').replace(/"/g,'""').replace(/\n/g,' ') + '"'); }
-        const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
-        downloadBlob(blob, 'breeze-' + activeContact.name.replace(/\s+/g,'-') + '-' + new Date().toISOString().slice(0,10) + '.csv');
-        showToast(t('toastExportedMessagesCSV', msgs.length), 'success');
-      } else if (sub === 'html') {
-        // v3.6: Human-readable HTML chat export (printable, self-contained)
-        if (!activeContact) { showToast(t('toastOpenChat'), 'error'); return; }
-        const msgs = (await dbGetByIndex('messages', 'contact', activeContact.id)).sort((a, b) => a.ts - b.ts);
-        const rows = msgs.filter(m => !m.deleted).map(m => {
-          const sender = m.mine ? myName : (m.senderName || activeContact.name);
-          const time = new Date(m.ts).toLocaleString();
-          const cls = m.mine ? 'me' : 'them';
-          return `<div class="${cls}"><b>${esc(sender)}</b> <span class="ts">${esc(time)}</span><br>${esc(m.text || t('htmlExportFileLabel'))}</div>`;
-        }).join('\n');
-        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(activeContact.name)}</title>
-<style>body{font-family:system-ui;max-width:700px;margin:0 auto;padding:20px;background:#f5f5f5}
-.me,.them{padding:8px 14px;border-radius:12px;margin:4px 0;max-width:80%}
-.me{background:#d1fae5;margin-left:auto;text-align:right}.them{background:#fff}
-b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
-<body><h1>🌊 ${esc(activeContact.name)}</h1><p>${t('htmlExportMeta', msgs.length, new Date().toLocaleDateString())}</p>${rows}</body></html>`;
-        downloadBlob(new Blob([html], { type: 'text/html' }), 'breeze-' + activeContact.name.replace(/\s+/g, '-') + '-' + new Date().toISOString().slice(0, 10) + '.html');
-        showToast(t('toastExportedMessagesHTML', msgs.length), 'success');
-      } else {
-        if (!activeContact) { showToast(t('toastOpenChat'), 'error'); return; }
-        const msgs = (await dbGetByIndex('messages', 'contact', activeContact.id)).sort((a, b) => a.ts - b.ts).map(m => ({ ts: m.ts, text: m.text, mine: m.mine, sender: m.senderName || (m.mine ? myName : activeContact.name) }));
-        const blob = new Blob([JSON.stringify({ version: CONFIG.VERSION, contact: activeContact.name, messages: msgs }, null, 2)], { type: 'application/json' });
-        downloadBlob(blob, 'breeze-' + activeContact.name.replace(/\s+/g,'-') + '-' + new Date().toISOString().slice(0,10) + '.json');
-        showToast(t('toastExportedMessagesJSON', msgs.length), 'success');
-      }
-      auditLog('settings', 'Export: ' + sub);
+      e.preventDefault();
+      clearInput();
+      await exportChat(val);
     }
     // /summarize — Local extractive summary
     if (val === '/summarize') {

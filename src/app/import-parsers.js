@@ -5,7 +5,7 @@
 // validate.sh). The parsers are pure text → message-list functions; the
 // only app binding they use is the top-level t() (Telegram's unknown-sender
 // label), which resolves from the global scope exactly as it did inline.
-// importChat itself stays in index.html and reads these through the
+// importChat lives in src/app/history-tools.js and reads these through the
 // window.__breezeImportParsers bridge. Behaviour is unchanged.
 // ============================================================================
 
