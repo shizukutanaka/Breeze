@@ -75,7 +75,7 @@ Tí ẹ̀kejì náà bá tún ṣí àpù náà, ẹ ó sopọ̀ tààrà kí �
 - **Àkọsílẹ̀ àwọn olùbáṣepọ̀**: Àkókò tí o bá ara yín sọ̀rọ̀ kẹ́yìn ni a fi hàn gẹ́gẹ́ bí àkókò fún òní, "Àná" fún àná, oṣù/ọjọ́ fún ọdún yìí, àti ọdún/oṣù/ọjọ́ fún ohun gbogbo tí ó ṣáájú. Àwọn olùbáṣepọ̀ tí wọ́n ní ìránṣẹ́ tí o kò tíì kà ní orúkọ àti àkókò tí a tẹnu mọ́.
 - **Àwọn orúkọ fún àwọn olùbáṣepọ̀**: Ṣí "Ìwífún olùbáṣepọ̀" (nínú àtòjọ ọ̀tún-tẹ ti olùbáṣepọ̀, tàbí àtòjọ "⋮" ti ìjíròrò) o sì lè ṣètò orúkọ tìrẹ fún olùbáṣepọ̀ yẹn (orúkọ àbùdá). Àwọn orúkọ àbùdá ni a pa mọ́ sí orí ẹ̀rọ yìí nìkan, a kò sì fi wọ́n ránṣẹ́ sí olùbáṣepọ̀ tàbí sáfà olùgbé láé. Nígbà tí o bá ṣètò orúkọ àbùdá, orúkọ tí olùbáṣepọ̀ ṣètò fún ara rẹ̀ náà ni a ó fi hàn lẹ́gbẹ̀ẹ́ rẹ̀ ní àwọ̀ tí ó rẹ̀lẹ̀. O lè pa orúkọ kejì yẹn pẹ̀lú "Fi orúkọ tí olùbáṣepọ̀ kọ̀ọ̀kan ṣètò fún ara rẹ̀ hàn pẹ̀lú" nínú abala "Ìkọ̀kọ̀" ti àwọn ìṣètò.
 - **Káàdì tìrẹ**: Ní òkè àkọsílẹ̀ náà ni káàdì ìdánimọ̀ tìrẹ wà; tẹ ẹ láti ṣí ìdánimọ̀ rẹ. Ó ń yí papọ̀ pẹ̀lú àkọsílẹ̀ náà.
-- **Àwọn tab ìsàlẹ̀ lórí fóònù**: Ní ìbú fóònù, àwọn tab "Àwọn olùbáṣepọ̀" àti "Àwọn ìṣètò" ń jáde ní ìsàlẹ̀ ìbòjú.
+- **Awọn taabu isalẹ lori foonu**: Ni iwọn foonu, awọn taabu marun han ni isalẹ iboju: "Awọn iwiregbe", "Awọn ipe", "Awọn olubasọrọ", "Kaadi mi" ati "Eto". Awọn taabu wo ni a fihan ni o le yan ni ọkọọkan ninu "Awọn taabu isalẹ" ninu eto (Awọn iwiregbe ni a fihan nigbagbogbo. Paapaa ti o ba fi taabu Eto pamọ, o tun le ṣi eto lati bọtini gia lori iboju).
 - **Orí ìjíròrò**: Láti inú àmì ìwárí, o lè ṣàwárí nínú ìjíròrò náà. Láti inú àtòjọ "⋮", o lè ṣàyẹ̀wò nọ́mbà ààbò, pa ìfitónilétí mọ́, fi sípín, ṣẹ̀dá ìdìbò, àti àwọn mìíràn.
 
 ### Àwọn àṣẹ
@@ -99,6 +99,9 @@ Tí o bá tẹ `/` sí nínú pápá ìtẹ̀sí, àwọn ìmọ̀ràn àṣẹ 
 - O lè ṣe ìpè ohùn àti ìpè fídíò ẹnìkan-sí-ẹnìkan. Ìpè ẹgbẹ́ náà wà (títí di ènìyàn 8).
 - **Kódù ìfìdímúlẹ̀ ìpè**: Lórí ìbòjú ìpè, a ó fi kódù ìfìdímúlẹ̀ hàn. Ka á papọ̀ pẹ̀lú ẹ̀kejì, kí ẹ sì ṣàyẹ̀wò pé ó bá ara mu lórí àwọn ìbòjú méjèèjì. Tí kò bá bá ara mu, ó ṣeé ṣe kí ẹnìkan ń gbọ́ ọ̀rọ̀ láàrin. Ní ipò yẹn, gé ìpè náà kúrò.
 - Ìpè ẹgbẹ́ lè má bẹ̀rẹ̀ àyàfi tí àpù gbogbo ènìyàn bá jẹ́ ẹ̀dà tuntun jùlọ.
+- **Itan ipe**: Awọn ipe ẹyọkan si ẹyọkan fi itan silẹ lori ẹrọ yii nikan (ẹni keji, boya ipe naa jade / wọle / padanu, akoko ati iye akoko ipe naa. Ko si ohunkohun ninu ohun ti a sọ ti a tọju). Itan naa ko ni i ranṣẹ si olupin tabi si ẹni keji. Titi de awọn akọsilẹ 200 ni a tọju, awọn ti o pẹ julọ ni a kọkọ yọ kuro. Awọn ipe ẹgbẹ ko han ninu itan naa.
+- Ṣi itan naa lori foonu lati taabu "Awọn ipe". Nigbati ipe ti o padanu ti o ko ti ri i wa, aami nọmba han lori taabu Awọn ipe, o si parẹ nigbati o ba ṣi itan naa. Lati ila kan ninu itan o le ṣi ibaraẹnisọrọ pẹlu ẹni naa tabi pe e pada. O le pa gbogbo itan naa rẹ pẹlu bọtini lori iboju.
+- **Itan ipe kii ṣe apakan afẹyinti.** Lori ẹrọ tuntun, itan naa bẹrẹ ni ofo. Ti o ko ba fẹ ki itan wa ni ipamọ, pa "Tọju itan ipe lori ẹrọ yii" ninu apakan "Aṣiri" ti eto, gbigbasilẹ funrararẹ yoo duro.
 
 ---
 
@@ -121,6 +124,8 @@ Tí o bá tẹ `/` sí nínú pápá ìtẹ̀sí, àwọn ìmọ̀ràn àṣẹ 
 - **Gbólóhùn ìkọ̀kọ̀ kọ́kọ́rọ́**: O lè dáàbò bo kọ́kọ́rọ́ tí ó wà nínú ẹ̀rọ rẹ nípa dída a pẹ̀lú gbólóhùn ìkọ̀kọ̀. A ó béèrè ìtẹ̀sí nígbà tí o bá ṣí àpù náà.
 - **Fi orúkọ tí olùbáṣepọ̀ kọ̀ọ̀kan ṣètò fún ara rẹ̀ hàn pẹ̀lú**: Nínú abala "Ìkọ̀kọ̀". Fún olùbáṣepọ̀ tí o ti fún ní orúkọ àbùdá, o lè yan bóyá orúkọ ara rẹ̀ yóò hàn lẹ́gbẹ̀ẹ́ rẹ̀ (orí 3).
 - **Dídínà**: O lè dínà ẹni tí ó ń yọ ọ́ lẹ́nu. Ìránṣẹ́ láti ọ̀dọ̀ ẹni tí a dínà kò ní dé.
+- **Boya a tọju itan ipe**: Pẹlu "Tọju itan ipe lori ẹrọ yii" ninu apakan "Aṣiri", o le da gbigbasilẹ itan ipe duro (ori 5).
+- **Hihan awọn taabu isalẹ**: Ninu apakan "Awọn taabu isalẹ" o le fihan tabi fi awọn taabu isalẹ foonu pamọ (Awọn ipe / Awọn olubasọrọ / Kaadi mi / Eto) ni ọkọọkan. Awọn iwiregbe ni a fihan nigbagbogbo.
 
 ---
 
@@ -187,6 +192,7 @@ A kò nílò okùn tàbí fífi fáìlì lélẹ̀.
 - **Tí o bá gbàgbé gbólóhùn ìkọ̀kọ̀ náà, a kò lè gbà á padà.** Ẹni tí ó ṣẹ̀dá á náà kò lè tún un ṣe. Kọ gbólóhùn ìkọ̀kọ̀ náà sílẹ̀ ní ibì mìíràn.
 - Títẹ gbólóhùn ìkọ̀kọ̀ fún ìpamọ́ àfikún fúnra rẹ̀ ni a nílò lórí ẹ̀rọ kọ̀ọ̀kan. Lórí ẹ̀rọ tuntun, tún un tẹ sí lẹ́ẹ̀kan sí i.
 - Tún ìpamọ́ àfikún ọwọ́ ṣe nígbà tí àwọn ìdánimọ̀ rẹ bá pọ̀ sí i tàbí nígbà tí o bá yí ẹ̀rọ padà.
+- Itan ipe kii ṣe apakan afẹyinti. Nigbati o ba yi ẹrọ pada, itan ipe ko ni i lọ si ẹrọ tuntun.
 
 ---
 

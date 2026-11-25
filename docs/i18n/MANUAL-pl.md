@@ -75,7 +75,7 @@ Jeśli druga osoba też ma otwartą aplikację, łączycie się bezpośrednio i 
 - **Lista kontaktów**: czas ostatniej rozmowy jest pokazywany jako czas dla dziś, „Wczoraj” dla wczoraj, miesiąc/dzień dla tego roku oraz rok/miesiąc/dzień dla wcześniejszych. Kontakty z nieprzeczytanymi wiadomościami mają wyróżnione imię i czas.
 - **Imiona dla kontaktów**: otwórz „Informacje o kontakcie” (w menu prawego przycisku myszy kontaktu albo w menu „⋮” rozmowy), a będziesz mógł ustawić własne imię dla tego kontaktu (pseudonim). Pseudonimy są przechowywane wyłącznie na tym urządzeniu i nigdy nie są wysyłane ani do kontaktu, ani do serwera przekazującego. Gdy ustawisz pseudonim, obok niego przygaszonym kolorem pokazywane jest też imię, które kontakt ustawił dla siebie. To drugie imię możesz wyłączyć za pomocą „Pokazuj też imię, które każdy kontakt ustawił dla siebie” w sekcji „Prywatność” w ustawieniach.
 - **Twoja karta**: na górze listy znajduje się karta twojego profilu; naciśnij ją, aby otworzyć profil. Przewija się razem z listą.
-- **Dolne karty w telefonie**: przy szerokości telefonu na dole ekranu pojawiają się karty „Kontakty” i „Ustawienia”.
+- **Dolne karty w telefonie**: Przy szerokości telefonu na dole ekranu pojawia się pięć kart: „Czaty”, „Połączenia”, „Kontakty”, „Moja karta” i „Ustawienia”. To, które karty są pokazywane, można wybrać pojedynczo w sekcji „Dolne karty” w ustawieniach (karta Czaty jest pokazywana zawsze. Nawet jeśli ukryjesz kartę Ustawienia, ustawienia nadal można otworzyć przyciskiem z kołem zębatym na ekranie).
 - **Nagłówek rozmowy**: za pomocą ikony wyszukiwania możesz szukać w obrębie rozmowy. Z menu „⋮” możesz sprawdzić numer bezpieczeństwa, wyciszyć powiadomienia, przypiąć, utworzyć ankietę i wiele więcej.
 
 ### Polecenia
@@ -99,6 +99,9 @@ Niektóre operacje, takie jak ustawienia czy łączenie urządzeń, wykonuje si�
 - Możliwe są połączenia głosowe i wideo jeden na jeden. Są też połączenia grupowe (do 8 osób).
 - **Kod potwierdzający połączenie**: na ekranie połączenia wyświetla się kod potwierdzający. Przeczytajcie go sobie nawzajem i sprawdźcie, czy zgadza się na obu ekranach. Jeśli się nie zgadza, możliwe, że ktoś podsłuchuje po drodze. W takim przypadku zakończ połączenie.
 - Połączenia grupowe mogą się nie rozpocząć, jeśli aplikacje wszystkich uczestników nie są w najnowszej wersji.
+- **Historia połączeń**: Połączenia indywidualne zostawiają historię tylko na tym urządzeniu (druga osoba, czy było wychodzące / przychodzące / nieodebrane, godzina i czas trwania połączenia. Nic z tego, co powiedziano, nie jest zapisywane). Historia nigdy nie jest wysyłana na serwer ani do drugiej osoby. Przechowywanych jest do 200 wpisów, a najstarsze są usuwane w pierwszej kolejności. Połączenia grupowe nie pojawiają się w historii.
+- Otwórz historię w telefonie z karty „Połączenia”. Gdy jest nieodebrane połączenie, którego jeszcze nie widziałeś, na karcie Połączenia pojawia się plakietka z liczbą, która znika po otwarciu historii. Z wiersza historii możesz otworzyć rozmowę z tą osobą lub oddzwonić. Całą historię możesz usunąć przyciskiem na ekranie.
+- **Historia połączeń nie jest częścią kopii zapasowej.** Na nowym urządzeniu historia zaczyna się pusta. Jeśli nie chcesz, aby historia była przechowywana, wyłącz „Przechowuj historię połączeń na tym urządzeniu” w sekcji „Prywatność” w ustawieniach, a samo zapisywanie się zatrzyma.
 
 ---
 
@@ -121,6 +124,8 @@ Ustawienia otwierają się jako osobny ekran. W telefonie otwórz je z karty „
 - **Hasło klucza**: klucz wewnątrz urządzenia można chronić hasłem (frazą). Przy otwieraniu aplikacji wymagane będzie jego podanie.
 - **Pokazuj też imię, które każdy kontakt ustawił dla siebie**: w sekcji „Prywatność”. Dla kontaktu, któremu nadałeś pseudonim, możesz wybrać, czy jego własne imię ma być pokazywane obok (rozdział 3).
 - **Blokowanie**: uciążliwe osoby można blokować. Wiadomości od zablokowanych osób nie docierają.
+- **Czy przechowywać historię połączeń**: Za pomocą opcji „Przechowuj historię połączeń na tym urządzeniu” w sekcji „Prywatność” możesz zatrzymać zapisywanie historii połączeń (rozdział 5).
+- **Widoczność dolnych kart**: W sekcji „Dolne karty” możesz pojedynczo pokazywać lub ukrywać dolne karty telefonu (Połączenia / Kontakty / Moja karta / Ustawienia). Karta Czaty jest pokazywana zawsze.
 
 ---
 
@@ -187,6 +192,7 @@ Nie są potrzebne żadne kable ani przekazywanie plików.
 - **Jeśli zapomnisz hasła, odzyskanie nie będzie możliwe.** Twórca też nie może tego naprawić. Zapisz hasło w innym miejscu.
 - Wpisanie hasła do automatycznej kopii zapasowej jest potrzebne na każdym urządzeniu. Na nowym urządzeniu wpisz je jeszcze raz.
 - Twórz ręczną kopię zapasową od nowa, gdy dodajesz tożsamości albo zmieniasz urządzenie.
+- Historia połączeń nie jest częścią kopii zapasowej. Gdy zmieniasz urządzenie, historia połączeń nie przenosi się na nowe urządzenie.
 
 ---
 

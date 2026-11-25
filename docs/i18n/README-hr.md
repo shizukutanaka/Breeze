@@ -41,6 +41,7 @@ Iskreno pišemo i opseg. Radi dostave, na poslužitelju postoji kratkotrajno ču
 
 - Razgovori jedan na jedan i grupni razgovori (najviše 1.000 ljudi)
 - Glasovni pozivi i videopozivi (grupni pozivi do 8 ljudi)
+- Povijest poziva (čuva se samo na ovom uređaju: samo druga osoba, smjer, vrijeme i trajanje poziva — ništa od izgovorenog. Nikada se ne šalje poslužitelju niti drugoj osobi)
 - Slanje datoteka (jedan na jedan najviše 50MB. I u grupama se može slati, ali je granica veličine manja)
 - Korištenje više uređaja i više računa (na primjer, poslovni i privatni. I broj uređaja i broj računa besplatni su i neograničeni)
 - Automatska sigurnosna kopija (kada se nešto promijeni, šifrirana sigurnosna kopija automatski se sprema na vaš poslužitelj. Na novom uređaju, kada oporavite identitet, sigurnosna kopija automatski se pronalazi i nudi vam se. Postavke vas također vode kroz prelazak na novi uređaj)
@@ -49,6 +50,7 @@ Iskreno pišemo i opseg. Radi dostave, na poslužitelju postoji kratkotrajno ču
 - Profil s fotografijom, naljepnice, dijeljenje lokacije
 - Naredbene operacije poput `/help` (71 vrsta)
 - Načini napajanja prilagođeni vašoj bateriji (automatski / normalni / ušteda energije / hitni). Kako se baterija prazni, provjere isporuke razrjeđuju se kako bi baterija dulje trajala. Zaštita za katastrofe i druga vremena kada se ne možete napuniti
+- Donje kartice na telefonu (Razgovori / Pozivi / Kontakti / Moja kartica / Postavke. Koje će se kartice prikazivati može se odabrati u postavkama)
 - Čitljivi zasloni (pozornost na kontrast boja, veličinu teksta i upravljanje samo tipkovnicom)
 
 ## Razlike u odnosu na druge messengere

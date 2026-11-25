@@ -75,7 +75,7 @@ Se anche l'altra persona ha l'app aperta, vi collegate direttamente e potete par
 - **L'elenco dei contatti**: l'ora dell'ultima conversazione è mostrata come ora per oggi, «Ieri» per ieri, mese/giorno per quest'anno e anno/mese/giorno per qualsiasi data precedente. I contatti con messaggi che non hai letto hanno nome e ora messi in evidenza.
 - **Nomi per i contatti**: apri «Informazioni sul contatto» (nel menu con il tasto destro di un contatto, oppure nel menu «⋮» della conversazione) e puoi impostare un nome scelto da te per quel contatto (un soprannome). I soprannomi sono conservati solo su questo dispositivo e non vengono mai inviati al contatto né al server di inoltro. Quando imposti un soprannome, accanto ad esso viene mostrato, in un colore attenuato, anche il nome che il contatto ha impostato per sé. Puoi disattivare quel secondo nome con «Mostra anche il nome che ciascun contatto ha impostato per sé» nella sezione «Privacy» delle impostazioni.
 - **La tua scheda**: in cima all'elenco c'è la tua scheda del profilo; premila per aprire il tuo profilo. Scorre insieme all'elenco.
-- **Schede inferiori su un telefono**: con la larghezza di un telefono, in fondo allo schermo compaiono le schede «Contatti» e «Impostazioni».
+- **Schede inferiori su un telefono**: Con la larghezza di un telefono, nella parte inferiore dello schermo compaiono cinque schede: «Chat», «Chiamate», «Contatti», «La mia scheda» e «Impostazioni». Puoi scegliere quali schede mostrare, una per una, in «Schede inferiori» nelle impostazioni (Chat è sempre mostrata. Anche se nascondi la scheda Impostazioni, puoi comunque aprire le impostazioni dal pulsante con l'ingranaggio sullo schermo).
 - **L'intestazione della conversazione**: dall'icona di ricerca puoi cercare all'interno della conversazione. Dal menu «⋮» puoi verificare il numero di sicurezza, silenziare le notifiche, fissare, creare un sondaggio e altro ancora.
 
 ### Comandi
@@ -99,6 +99,9 @@ Alcune operazioni, come le impostazioni e il collegamento dei dispositivi, si ef
 - Si possono fare chiamate vocali e videochiamate individuali. Ci sono anche le chiamate di gruppo (fino a 8 persone).
 - **Codice di conferma della chiamata**: sullo schermo della chiamata viene mostrato un codice di conferma. Leggetelo a vicenda e verificate che coincida su entrambi gli schermi. Se non coincide, è possibile che qualcuno stia ascoltando lungo il percorso. In tal caso, interrompi la chiamata.
 - Una chiamata di gruppo potrebbe non poter iniziare se l'app di tutti non è l'ultima versione.
+- **Cronologia delle chiamate**: Le chiamate individuali lasciano una cronologia solo su questo dispositivo (l'altra persona, se in uscita / in entrata / persa, l'ora e la durata della chiamata. Nulla di ciò che è stato detto viene conservato). La cronologia non viene mai inviata a un server né all'altra persona. Vengono conservate fino a 200 voci, rimuovendo prima le più vecchie. Le chiamate di gruppo non compaiono nella cronologia.
+- Apri la cronologia dalla scheda «Chiamate» su un telefono. Quando c'è una chiamata persa che non hai ancora visto, sulla scheda Chiamate compare un badge con un numero, che scompare quando apri la cronologia. Da una riga della cronologia puoi aprire la conversazione con quella persona o richiamarla. Puoi eliminare tutta la cronologia con un pulsante sullo schermo.
+- **La cronologia delle chiamate non fa parte di un backup.** Su un nuovo dispositivo, la cronologia inizia vuota. Se non vuoi che venga conservata una cronologia, disattiva «Mantieni una cronologia delle chiamate su questo dispositivo» nella sezione «Privacy» delle impostazioni, e la registrazione stessa si interrompe.
 
 ---
 
@@ -121,6 +124,8 @@ Le impostazioni si aprono come una schermata a sé. Su un telefono, aprile dalla
 - **Frase segreta della chiave**: puoi proteggere la chiave dentro il tuo dispositivo avvolgendola con una frase segreta. Ti verrà chiesto di inserirla quando apri l'app.
 - **Mostra anche il nome che ciascun contatto ha impostato per sé**: nella sezione «Privacy». Per un contatto a cui hai dato un soprannome, puoi scegliere se mostrare accanto anche il suo nome (capitolo 3).
 - **Blocco**: puoi bloccare un interlocutore molesto. I messaggi di un interlocutore bloccato non ti arriveranno.
+- **Se mantenere una cronologia delle chiamate**: Con «Mantieni una cronologia delle chiamate su questo dispositivo» nella sezione «Privacy», puoi interrompere la registrazione della cronologia delle chiamate (capitolo 5).
+- **Visibilità delle schede inferiori**: Nella sezione «Schede inferiori» puoi mostrare o nascondere le schede inferiori del telefono (Chiamate / Contatti / La mia scheda / Impostazioni) una per una. Chat è sempre mostrata.
 
 ---
 
@@ -187,6 +192,7 @@ Non servono cavi né passaggi di file.
 - **Se dimentichi la frase segreta, il recupero è impossibile.** Nemmeno chi lo ha creato può rimediare. Annotati la frase segreta in un altro luogo.
 - L'inserimento della frase segreta per il backup automatico è necessario su ciascun dispositivo. Su un nuovo dispositivo, inseriscila ancora una volta.
 - Ricrea un backup manuale quando le tue identità aumentano o quando cambi dispositivo.
+- La cronologia delle chiamate non fa parte di un backup. Quando cambi dispositivo, la cronologia delle chiamate non si trasferisce sul nuovo dispositivo.
 
 ---
 

@@ -75,7 +75,7 @@ A na-egosi ID nke gị n'ụdị ya zuru oke mgbe ị mepere profaịlụ nke g�
 - **Ndepụta kọntaktị**: A na-egosi oge ikpeazụ unu kwuru dịka oge maka taa, "Nyaahụ" maka nyaahụ, ọnwa/ụbọchị maka afọ a, na afọ/ọnwa/ụbọchị maka ihe ọ bụla tupu nke ahụ. Kọntaktị nwere ozi ị na-agụbeghị nwere aha na oge e mesiri ike.
 - **Aha maka kọntaktị**: Mepee "Ozi kọntaktị" (na menu ịpị aka nri nke kọntaktị, ma ọ bụ menu "⋮" nke mkparịta ụka) ị nwere ike ịtọ aha nke gị maka kọntaktị ahụ (aha nnọchi). Aha nnọchi na-echekwa naanị na ngwaọrụ a, anaghị ezigakwa ya na kọntaktị ma ọ bụ sava nnyefe. Mgbe ị tọrọ aha nnọchi, a na-egosikwa aha kọntaktị ahụ tọrọ maka onwe ya n'akụkụ ya na agba dị nro. Ị nwere ike ịgbanyụ aha nke abụọ ahụ na "Gosikwa aha kọntaktị ọ bụla tọrọ maka onwe ya" na ngalaba "Nzuzo" nke ntọala.
 - **Kaadị nke gị**: N'elu ndepụta ahụ ka kaadị profaịlụ nke gị dị; pịa ya imepe profaịlụ gị. Ọ na-agagharị na ndepụta ahụ.
-- **Taabụ dị n'ala na ekwentị**: Na obosara ekwentị, taabụ "Kọntaktị" na "Ntọala" na-apụta n'ala ihuenyo.
+- **Taabụ ndị dị n'okpuru na ekwentị**: Na obosara ekwentị, taabụ ise na-apụta na ala ihuenyo: "Mkparịta ụka", "Oku", "Kọntaktị", "Kaadị m" na "Ntọala". Taabụ ndị a ga-egosi ị nwere ike ịhọrọ otu otu na "Taabụ ndị dị n'okpuru" na ntọala (A na-egosi Mkparịta ụka mgbe niile. Ọbụlagodi na ị zoo taabụ Ntọala, ị ka nwere ike imepe ntọala site na bọtịnụ gia dị na ihuenyo).
 - **Isi mkparịta ụka**: Site na akara ngosi ọchụchọ ị nwere ike ịchọ n'ime mkparịta ụka. Site na menu "⋮" ị nwere ike ịlele nọmba nchekwa, mechie ọkwa, pịnye, mepụta ntuli aka, na ndị ọzọ.
 
 ### Iwu
@@ -99,6 +99,9 @@ A na-eme ụfọdụ ọrụ, dịka nhazi na ijikọ ngwaọrụ, site na iwu.
 - Ị nwere ike ịkpọ oku olu na oku vidiyo otu-na-otu. Oku otu dikwa (ruo mmadụ 8).
 - **Koodu nkwado oku**: Na ihuenyo oku, a na-egosi koodu nkwado. Gụọ ya ọnụ na onye nke ọzọ, ma lelee ma ọ dabara na ihuenyo abụọ ahụ. Ọ bụrụ na ọ dabaghị, enwere ike na mmadụ na-ege ntị n'etiti. N'ọnọdụ ahụ, kwụsị oku ahụ.
 - Oku otu nwere ike ọ gaghị amalite ma ọ bụrụ na ngwa onye ọ bụla abụghị ụdị kachasị ọhụrụ.
+- **Akụkọ oku**: Oku otu-na-otu na-ahapụ akụkọ naanị na ngwaọrụ a (onye nke ọzọ, ma oku ahụ ọ pụrụ / bata / ọ furu efu, oge na ogologo oge oku ahụ. Ọ dịghị ihe ọ bụla n'ihe e kwuru ka e debere). A naghị eziga akụkọ ahụ na sava ma ọ bụ onye nke ọzọ. A na-edebe ihe ruru ndenye 200, a na-ewepụ ndị kacha ochie na mbụ. Oku otu anaghị apụta na akụkọ ahụ.
+- Mepee akụkọ ahụ na ekwentị site na taabụ "Oku". Mgbe oku furu efu nke ị na-ahụbeghị dị, akara nọmba na-apụta na taabụ Oku, ọ na-apụ n'anya mgbe ị mepere akụkọ ahụ. Site na ahịrị dị na akụkọ ị nwere ike imepe mkparịta ụka gị na onye ahụ ma ọ bụ kpọghachi ya. Ị nwere ike ihichapụ akụkọ ahụ niile site na bọtịnụ dị na ihuenyo.
+- **Akụkọ oku abụghị akụkụ nke ndabere.** Na ngwaọrụ ọhụrụ, akụkọ ahụ na-amalite n'efu. Ọ bụrụ na ịchọghị ka e debe akụkọ, gbanyụọ "Debe akụkọ oku na ngwaọrụ a" na ngalaba "Nzuzo" nke ntọala, ndekọ ahụ n'onwe ya ga-akwụsị.
 
 ---
 
@@ -121,6 +124,8 @@ Ntọala na-emepe dịka ihuenyo nke ha. Na ekwentị, mepee ha site na taabụ 
 - **Okwuntughe igodo**: Ị nwere ike ichekwa igodo dị n'ime ngwaọrụ gị site na ikpuchi ya na okwuntughe. A ga-ajụ ntinye mgbe ị mepere ngwa ahụ.
 - **Gosikwa aha kọntaktị ọ bụla tọrọ maka onwe ya**: Na ngalaba "Nzuzo". Maka kọntaktị ị nyere aha nnọchi, ị nwere ike ịhọrọ ma a ga-egosi aha nke ya n'akụkụ ya (isi 3).
 - **Mgbochi**: Ị nwere ike igbochi onye na-enye nsogbu. Ozi sitere n'aka onye a gbochiri agaghị erute.
+- **Ma a ga-edebe akụkọ oku**: Site na "Debe akụkọ oku na ngwaọrụ a" na ngalaba "Nzuzo", ị nwere ike ịkwụsị ndekọ akụkọ oku (isi nke 5).
+- **Ọhụhụ nke taabụ ndị dị n'okpuru**: Na ngalaba "Taabụ ndị dị n'okpuru" ị nwere ike igosi ma ọ bụ zoo taabụ ndị dị n'okpuru nke ekwentị (Oku / Kọntaktị / Kaadị m / Ntọala) otu otu. A na-egosi Mkparịta ụka mgbe niile.
 
 ---
 
@@ -187,6 +192,7 @@ Enweghị eriri ma ọ bụ nnyefe faịlụ achọrọ.
 - **Ọ bụrụ na ị chefuo okwuntughe, enweghị ike iweghachi.** Onye mepụtara enweghịkwa ike idozi ya. Detuo okwuntughe n'ebe ọzọ.
 - Ịtinye okwuntughe maka nkwado na-akpaghị aka dị mkpa na ngwaọrụ ọ bụla. Na ngwaọrụ ọhụrụ, tinye ya ọzọ otu ugboro.
 - Megharịa nkwado aka mgbe njirimara gị mụbara ma ọ bụ mgbe ị gbanwere ngwaọrụ.
+- Akụkọ oku abụghị akụkụ nke ndabere. Mgbe ị gbanwere ngwaọrụ, akụkọ oku anaghị aga na ngwaọrụ ọhụrụ ahụ.
 
 ---
 

@@ -75,7 +75,7 @@ Ikkinchi tomon ham ilovani ochgan bo'lsa, to'g'ridan-to'g'ri ulanib suhbatlasha 
 - **Kontaktlar ro'yxati**: Oxirgi suhbatlashgan vaqtingiz bugun uchun vaqt sifatida, kecha uchun «Kecha», joriy yil uchun oy/kun, undan oldingilar uchun yil/oy/kun sifatida ko'rsatiladi. O'qilmagan xabarlari bor kontaktlarning ismi va vaqti ajratib ko'rsatiladi.
 - **Kontaktlar uchun ismlar**: «Kontakt haqida ma'lumot»ni ochsangiz (kontaktni o'ng tugma bilan bosish menyusida yoki suhbatning «⋮» menyusida), shu kontaktga o'z ismingizni (taxallus) qo'yishingiz mumkin. Taxalluslar faqat shu qurilmada saqlanadi va hech qachon kontaktga ham, uzatuvchi serverga ham yuborilmaydi. Taxallus qo'yganingizda, kontakt o'zi qo'ygan ism uning yonida xira rangda ko'rsatiladi. Shu ikkinchi ismni sozlamalarning «Maxfiylik» bo'limidagi «Har bir kontakt o'zi qo'ygan ismni ham ko'rsatish» orqali o'chirishingiz mumkin.
 - **O'z kartangiz**: Ro'yxatning yuqorisida o'z profil kartangiz bor; profilingizni ochish uchun uni bosing. U ro'yxat bilan birga aylanadi.
-- **Telefondagi pastki yorliqlar**: Telefon kengligida ekranning pastki qismida «Kontaktlar» va «Sozlamalar» yorliqlari chiqadi.
+- **Telefondagi pastki yorliqlar**: Telefon kengligida ekranning pastki qismida beshta yorliq paydo bo'ladi: "Chatlar", "Qo'ng'iroqlar", "Kontaktlar", "Mening kartam" va "Sozlamalar". Qaysi yorliqlar ko'rsatilishini sozlamalardagi "Pastki yorliqlar" bo'limida birma-bir tanlashingiz mumkin (Chatlar har doim ko'rsatiladi. Sozlamalar yorlig'ini yashirsangiz ham, sozlamalarni ekrandagi tishli tugma orqali ochishingiz mumkin).
 - **Suhbat sarlavhasi**: Qidiruv belgisidan suhbat ichida qidirishingiz mumkin. «⋮» menyusidan xavfsizlik raqamini tekshirishingiz, bildirishnomalarni o'chirishingiz, mahkamlashingiz, so'rovnoma yaratishingiz va boshqalarni qilishingiz mumkin.
 
 ### Buyruqlar
@@ -99,6 +99,9 @@ Sozlamalar va qurilmalarni bog'lash kabi ba'zi amallar buyruqlardan bajariladi.
 - Yakkama-yakka ovozli qo'ng'iroqlar va videoqo'ng'iroqlar qilish mumkin. Guruh qo'ng'iroqlari ham bor (ko'pi bilan 8 kishi).
 - **Qo'ng'iroq tekshirish kodi**: Qo'ng'iroq ekranida tekshirish kodi ko'rsatiladi. Ikkinchi tomon bilan bir-biringizga o'qib, ikkala ekranda ham mos kelishini tekshiring. Mos kelmasa, kimdir yo'lda tinglab o'tirgan bo'lishi mumkin. Bunday holda qo'ng'iroqni uzing.
 - Guruh qo'ng'iroqlari barcha ishtirokchilarning ilovasi eng so'nggi versiyada bo'lmasa boshlanmasligi mumkin.
+- **Qo'ng'iroqlar tarixi**: Yakka tartibdagi qo'ng'iroqlar faqat shu qurilmada tarix qoldiradi (boshqa shaxs, qo'ng'iroq chiquvchi / kiruvchi / o'tkazib yuborilgan bo'lgani, vaqti va qo'ng'iroq davomiyligi. Aytilganlardan hech narsa saqlanmaydi). Tarix hech qachon serverga yoki boshqa shaxsga yuborilmaydi. 200 tagacha yozuv saqlanadi, eng eskilari birinchi bo'lib olib tashlanadi. Guruh qo'ng'iroqlari tarixda ko'rinmaydi.
+- Tarixni telefonda "Qo'ng'iroqlar" yorlig'idan oching. Hali ko'rmagan o'tkazib yuborilgan qo'ng'iroq bo'lganda, Qo'ng'iroqlar yorlig'ida raqam belgisi paydo bo'ladi va tarixni ochganingizda yo'qoladi. Tarix qatoridan o'sha shaxs bilan suhbatni ochishingiz yoki unga qayta qo'ng'iroq qilishingiz mumkin. Butun tarixni ekrandagi tugma bilan o'chirishingiz mumkin.
+- **Qo'ng'iroqlar tarixi zaxira nusxaning bir qismi emas.** Yangi qurilmada tarix bo'sh boshlanadi. Agar tarix saqlanishini xohlamasangiz, sozlamalarning "Maxfiylik" bo'limidagi "Ushbu qurilmada qo'ng'iroqlar tarixini saqlash"ni o'chiring, yozishning o'zi to'xtaydi.
 
 ---
 
@@ -121,6 +124,8 @@ Sozlamalar o'z ekrani sifatida ochiladi. Telefonda ularni ekranning pastki qismi
 - **Kalit parol iborasi**: Qurilma ichidagi kalitni parol iborasi bilan o'rab himoya qilish mumkin. Ilovani ochganda kiritish so'raladi.
 - **Har bir kontakt o'zi qo'ygan ismni ham ko'rsatish**: «Maxfiylik» bo'limida. Taxallus qo'ygan kontaktingiz uchun uning o'z ismi yonida ko'rsatilishini tanlashingiz mumkin (3-bob).
 - **Bloklash**: Bezovta qiluvchi odamlarni bloklash mumkin. Bloklangan odamlardan aloqa kelmaydi.
+- **Qo'ng'iroqlar tarixi saqlansinmi yoki yo'qmi**: "Maxfiylik" bo'limidagi "Ushbu qurilmada qo'ng'iroqlar tarixini saqlash" bilan qo'ng'iroqlar tarixini yozishni to'xtatishingiz mumkin (5-bob).
+- **Pastki yorliqlarning ko'rinishi**: "Pastki yorliqlar" bo'limida telefonning pastki yorliqlarini (Qo'ng'iroqlar / Kontaktlar / Mening kartam / Sozlamalar) birma-bir ko'rsatishingiz yoki yashirishingiz mumkin. Chatlar har doim ko'rsatiladi.
 
 ---
 
@@ -187,6 +192,7 @@ Kabellar ham, fayllarni qo'lda topshirish ham kerak emas.
 - **Parol iborasini unutsangiz, tiklash mumkin emas.** Yaratuvchi ham tuzata olmaydi. Parol iborasini boshqa joyga yozib saqlang.
 - Avtomatik zaxira nusxa uchun maxfiy iborani kiritish har bir qurilmada kerak. Yangi qurilmada uni yana bir marta kiriting.
 - Shaxslar ko'payganda yoki qurilma almashtirganda qo'lda zaxira nusxani qayta yarating.
+- Qo'ng'iroqlar tarixi zaxira nusxaning bir qismi emas. Qurilmani almashtirganingizda qo'ng'iroqlar tarixi yangi qurilmaga ko'chmaydi.
 
 ---
 

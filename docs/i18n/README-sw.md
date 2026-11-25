@@ -41,6 +41,7 @@ Tunaandika pia upeo kwa ukweli. Kwa ajili ya uwasilishaji, kuna uhifadhi wa muda
 
 - Mazungumzo ya mtu mmoja kwa mmoja na mazungumzo ya kikundi (hadi watu 1,000)
 - Simu za sauti na simu za video (simu za kikundi hadi watu 8)
+- Historia ya simu (inahifadhiwa kwenye kifaa hiki tu: mtu mwingine, mwelekeo, muda na urefu wa simu tu — hakuna chochote kilichosemwa. Haitumwi kamwe kwa seva au kwa mtu mwingine)
 - Kutuma faili (kwa mtu mmoja kwa mmoja, hadi 50MB. Unaweza pia kutuma katika vikundi, lakini kikomo cha ukubwa ni kidogo zaidi)
 - Kutumia vifaa vingi na akaunti nyingi kwa madhumuni tofauti (kwa kazi na kwa binafsi, kwa mfano. Idadi ya vifaa na akaunti haina kikomo na ni bure)
 - Akiba ya kiotomatiki (kitu kinapobadilika, akiba iliyofungwa kwa usiri huhifadhiwa kiotomatiki kwenye seva yako mwenyewe. Kwenye kifaa kipya, ukisharejesha utambulisho wako, akiba hupatikana kiotomatiki na kukupendekezwa. Mipangilio pia inakuongoza kuhamia kifaa kipya)
@@ -49,6 +50,7 @@ Tunaandika pia upeo kwa ukweli. Kwa ajili ya uwasilishaji, kuna uhifadhi wa muda
 - Wasifu wenye picha, stika, kushiriki eneo
 - Amri kama `/help` (aina 71)
 - Hali za nishati zinazolingana na betri yako (kiotomatiki / kawaida / kuokoa nishati / dharura). Betri inapopungua, ukaguzi wa uwasilishaji huachwa kwa vipindi virefu zaidi ili betri idumu zaidi. Kinga kwa majanga na nyakati nyingine ambapo huwezi kuchaji tena
+- Vichupo vya chini kwenye simu (Soga / Simu / Anwani / Kadi yangu / Mipangilio. Vichupo vipi vionyeshwe vinaweza kuchaguliwa katika mipangilio)
 - Skrini zinazosomeka kwa urahisi (uangalifu kwa utofauti wa rangi, ukubwa wa maandishi, na kuendesha kwa kibodi pekee)
 
 ## Tofauti na wajumbe wengine

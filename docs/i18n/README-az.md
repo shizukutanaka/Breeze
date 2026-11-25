@@ -41,6 +41,7 @@ Dürüstcəsinə əhatə dairəsini də yazırıq. Çatdırılma üçün serverd
 
 - Təkbətək söhbətlər və qrup söhbətləri (ən çox 1.000 nəfər)
 - Səsli zənglər və videozənglər (qrup zəngləri ən çox 8 nəfər)
+- Zəng tarixçəsi (yalnız bu cihazda saxlanılır: yalnız digər şəxs, istiqamət, vaxt və zəngin müddəti — deyilənlərdən heç nə yoxdur. Heç vaxt serverə və ya digər şəxsə göndərilmir)
 - Fayl göndərmə (təkbətəkdə ən çox 50MB. Qruplarda da göndərmək olur, lakin ölçü limiti daha kiçikdir)
 - Bir neçə cihaz və bir neçə hesabdan istifadə (məsələn, iş və şəxsi. Həm cihaz sayı, həm də hesab sayı pulsuz və limitsizdir)
 - Avtomatik ehtiyat nüsxə (bir şey dəyişəndə şifrələnmiş ehtiyat nüsxə avtomatik olaraq öz serverinizə saxlanılır. Yeni cihazda şəxsiyyətinizi bərpa edən kimi ehtiyat nüsxə avtomatik tapılır və sizə təklif olunur. Parametrlər yeni cihaza keçməyinizə də kömək edir)
@@ -49,6 +50,7 @@ Dürüstcəsinə əhatə dairəsini də yazırıq. Çatdırılma üçün serverd
 - Şəkilli profil, stikerlər, məkan paylaşımı
 - `/help` kimi əmr əməliyyatları (71 növ)
 - Batareyanıza uyğun enerji rejimləri (avtomatik / normal / enerjiyə qənaət / fövqəladə). Batareya azaldıqca çatdırılma yoxlamaları seyrəkləşir ki, batareya daha uzun davam etsin. Fəlakətlər və enerji doldura bilmədiyiniz digər vaxtlar üçün qorunma
+- Telefonda alt nişanlar (Söhbətlər / Zənglər / Kontaktlar / Kartım / Parametrlər. Hansı nişanların göstəriləcəyi parametrlərdə seçilə bilər)
 - Oxunaqlı ekranlar (rəng kontrastına, mətn ölçüsünə və yalnız klaviatura ilə idarəetməyə diqqət)
 
 ## Digər messencerlərdən fərqi

@@ -41,6 +41,7 @@ Nous écrivons aussi la portée honnêtement. Pour pouvoir livrer les messages, 
 
 - Conversations individuelles et conversations de groupe (jusqu'à 1 000 personnes)
 - Appels vocaux et appels vidéo (appels de groupe jusqu'à 8 personnes)
+- Historique des appels (conservé uniquement sur cet appareil : l'autre personne, la direction, l'heure et la durée de l'appel seulement — rien de ce qui a été dit. Jamais envoyé à un serveur ni à l'autre personne)
 - Envoi de fichiers (jusqu'à 50 Mo en individuel. Les groupes peuvent aussi en envoyer, mais la limite de taille est plus petite)
 - Utilisation sur plusieurs appareils et avec plusieurs comptes (par exemple travail et personnel. Le nombre d'appareils comme le nombre de comptes sont gratuits et illimités)
 - Sauvegarde automatique (quand quelque chose change, une sauvegarde chiffrée est enregistrée automatiquement sur votre propre serveur. Sur un nouvel appareil, une fois votre identité récupérée, une sauvegarde est trouvée automatiquement et vous est proposée. Les réglages vous guident aussi pour passer à un nouvel appareil)
@@ -49,6 +50,7 @@ Nous écrivons aussi la portée honnêtement. Pour pouvoir livrer les messages, 
 - Profils avec photo, stickers, partage de position
 - Commandes comme `/help` (71 types)
 - Modes d'énergie adaptés à votre batterie (automatique / normal / économie d'énergie / urgence). Quand la batterie baisse, les vérifications de réception s'espacent pour que la batterie dure plus longtemps. Une sauvegarde pour les catastrophes et les autres moments où vous ne pouvez pas recharger
+- Onglets inférieurs sur un téléphone (Discussions / Appels / Contacts / Ma carte / Réglages. Les onglets affichés peuvent être choisis dans les réglages)
 - Des écrans lisibles (attention au contraste des couleurs, à la taille du texte et à l'utilisation au clavier seul)
 
 ## Différences avec les autres messageries

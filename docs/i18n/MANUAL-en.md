@@ -75,7 +75,7 @@ If the other person also has the app open, you connect directly and can talk.
 - **The contact list**: The time you last talked is shown as the time for today, "Yesterday" for yesterday, month/day for this year, and year/month/day for anything earlier. Contacts with messages you have not read have their name and time emphasised.
 - **Names for contacts**: Open "Contact info" (in the right-click menu of a contact, or the conversation's "⋮" menu) and you can set your own name for that contact (a nickname). Nicknames are stored only on this device and are never sent to the contact or the relay server. When you set a nickname, the name the contact set for themselves is also shown next to it in a muted colour. You can turn that second name off with "Also show the name each contact set for themselves" in the "Privacy" section of the settings.
 - **Your own card**: At the top of the list is your own profile card; press it to open your profile. It scrolls together with the list.
-- **Bottom tabs on a phone**: At phone widths, "Contacts" and "Settings" tabs appear at the bottom of the screen.
+- **Bottom tabs on a phone**: At phone widths, five tabs appear at the bottom of the screen: "Chats", "Calls", "Contacts", "My card", and "Settings". You can choose which tabs are shown, one by one, under "Bottom tabs" in the settings (Chats is always shown. Even if you hide the Settings tab, you can still open the settings from the gear button on the screen).
 - **The conversation header**: From the search icon you can search within the conversation. From the "⋮" menu you can check the safety number, mute notifications, pin, create a poll, and more.
 
 ### Commands
@@ -99,6 +99,9 @@ Some operations, such as settings and device linking, are done from commands.
 - You can make one-to-one voice calls and video calls. There are group calls (up to 8 people) too.
 - **Call verification code**: A verification code is displayed on the call screen. Read it out with the other person and check that it matches on both screens. If it does not match, someone may be eavesdropping in between. In that case, end the call.
 - A group call may not be able to start unless everyone's app is the latest version.
+- **Call history**: One-to-one calls leave a history on this device only (the other person, whether it was outgoing / incoming / missed, the time, and the call duration. Nothing of what was said is kept). The history is never sent to a server or to the other person. Up to 200 entries are kept, with the oldest removed first. Group calls do not appear in the history.
+- Open the history from the "Calls" tab on a phone. When there is a missed call you have not seen yet, a number badge appears on the Calls tab, and it clears when you open the history. From a history row you can open the conversation with that person, or call them back. You can delete the whole history with a button on the screen.
+- **Call history is not part of a backup.** On a new device, the history starts empty. If you do not want a history kept, turn off "Keep a call history on this device" in the "Privacy" section of the settings, and recording itself stops.
 
 ---
 
@@ -121,6 +124,8 @@ Settings open as their own screen. On a phone, open them from the "Settings" tab
 - **Key passphrase**: You can protect the key inside your device by wrapping it in a passphrase. You will be asked to enter it when you open the app.
 - **Also show the name each contact set for themselves**: In the "Privacy" section. For a contact you have given a nickname, you can choose whether their own name is shown alongside it (chapter 3).
 - **Blocking**: You can block a troublesome contact. Messages from a blocked contact will not reach you.
+- **Whether to keep a call history**: With "Keep a call history on this device" in the "Privacy" section, you can stop call-history recording (chapter 5).
+- **Bottom tab visibility**: In the "Bottom tabs" section, you can show or hide the phone's bottom tabs (Calls / Contacts / My card / Settings) one by one. Chats is always shown.
 
 ---
 
@@ -187,6 +192,7 @@ No cables or file hand-offs are needed.
 - **If you forget the passphrase, recovery is impossible.** The people who made this cannot fix that either. Write the passphrase down somewhere else.
 - Entering the passphrase for automatic backup is needed on each device. On a new device, enter it once more.
 - Remake a manual backup when your identities increase or when you change devices.
+- Call history is not part of a backup. When you change devices, the call history does not move to the new device.
 
 ---
 

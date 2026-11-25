@@ -41,6 +41,7 @@ A ó tún kọ ààlà náà pẹ̀lú òtítọ́. Láti fi ránṣẹ́, sáf�
 
 - Ìjíròrò ẹnìkan-sí-ẹnìkan, àti ìjíròrò ẹgbẹ́ (títí di ènìyàn 1,000)
 - Ìpè ohùn àti ìpè fídíò (ìpè ẹgbẹ́ títí di ènìyàn 8)
+- Itan ipe (a tọju lori ẹrọ yii nikan: ẹni keji, itọsọna, akoko ati iye akoko ipe nikan — ko si ohunkohun ninu ohun ti a sọ. Ko ni i ranṣẹ si olupin tabi si ẹni keji)
 - Fífi fáìlì ránṣẹ́ (títí di 50MB nínú ìjíròrò ẹnìkan-sí-ẹnìkan. A lè ránṣẹ́ nínú ẹgbẹ́ náà, ṣùgbọ́n ààlà ìtóbi kéré)
 - Lílo àwọn ẹ̀rọ púpọ̀ àti àwọn àkáǹtì púpọ̀ (bí ti iṣẹ́ àti ti ara ẹni. Iye àwọn ẹ̀rọ àti àkáǹtì ọ̀fẹ́ ni láìsí ààlà)
 - Ìpamọ́ àfikún fúnra rẹ̀ (nígbà tí ohun kan bá yípadà, a ó fi ìpamọ́ àfikún tí a fi ìpamọ́ ṣe pamọ́ sí orí sáfà tìrẹ fúnra rẹ̀. Lórí ẹ̀rọ tuntun, nígbà tí o bá mú ìdánimọ̀ rẹ padà, a ó rí ìpamọ́ àfikún kan fúnra rẹ̀, a ó sì fún ọ ní àǹfààní láti mú un padà. Àwọn ìṣètò náà tún ń tọ́ ọ sọ́nà láti kó lọ sí ẹ̀rọ tuntun)
@@ -49,6 +50,7 @@ A ó tún kọ ààlà náà pẹ̀lú òtítọ́. Láti fi ránṣẹ́, sáf�
 - Àwòrán ìdánimọ̀ pẹ̀lú fọ́tò, àwọn sítíkà, pípín ipò
 - Àwọn iṣẹ́ àṣẹ bíi `/help` (oríṣi 71)
 - Àwọn ọ̀nà agbára tí ó bá bátìrì rẹ mu (fúnra rẹ̀ / déédéé / ìfipamọ́ agbára / pajáwìrì). Bí bátìrì ṣe ń dín kù, a ń fa àwọn àyẹ̀wò ìfìránṣẹ́ síra kí bátìrì ó lè pẹ́. Ààbò fún àjálù àti àwọn àkókò mìíràn tí o kò lè gba agbára
+- Awọn taabu isalẹ lori foonu (Awọn iwiregbe / Awọn ipe / Awọn olubasọrọ / Kaadi mi / Eto. Awọn taabu wo ni a fihan ni a le yan ninu eto)
 - Àwọn ìbòjú tí ó rọrùn láti kà (àkíyèsí sí ìyàtọ̀ àwọ̀, ìtóbi ọ̀rọ̀, àti lílo kọ́bọ̀ọ̀dù nìkan)
 
 ## Ìyàtọ̀ sí àwọn ohun ìránṣẹ́ mìíràn

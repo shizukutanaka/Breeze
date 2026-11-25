@@ -41,6 +41,7 @@ Uczciwie podajemy też zakres. Aby dostarczyć wiadomość, serwer przechowuje d
 
 - Rozmowy jeden na jeden i rozmowy grupowe (do 1 000 osób)
 - Rozmowy głosowe i wideo (rozmowy grupowe do 8 osób)
+- Historia połączeń (przechowywana tylko na tym urządzeniu: tylko druga osoba, kierunek, godzina i czas trwania połączenia — nic z tego, co powiedziano. Nigdy nie jest wysyłana na serwer ani do drugiej osoby)
 - Wysyłanie plików (w rozmowach jeden na jeden do 50 MB. W grupach też się da, ale limit rozmiaru jest mniejszy)
 - Wiele urządzeń i wiele kont (np. służbowe i prywatne. Zarówno liczba urządzeń, jak i kont jest bezpłatna i nieograniczona)
 - Automatyczna kopia zapasowa (gdy coś się zmienia, zaszyfrowana kopia zapasowa jest automatycznie zapisywana na twoim własnym serwerze. Na nowym urządzeniu, gdy odzyskasz swoją tożsamość, kopia zapasowa jest znajdowana automatycznie i ci proponowana. Ustawienia prowadzą cię też przez przejście na nowe urządzenie)
@@ -49,6 +50,7 @@ Uczciwie podajemy też zakres. Aby dostarczyć wiadomość, serwer przechowuje d
 - Profil ze zdjęciem, naklejki, udostępnianie lokalizacji
 - Polecenia takie jak `/help` (71 rodzajów)
 - Tryby zasilania dopasowane do baterii (automatyczny / normalny / oszczędzanie energii / awaryjny). W miarę rozładowywania się baterii kontrole dostarczania są rozkładane w czasie, aby bateria wystarczała dłużej. Zabezpieczenie na wypadek katastrof i innych sytuacji, gdy nie możesz się naładować
+- Dolne karty w telefonie (Czaty / Połączenia / Kontakty / Moja karta / Ustawienia. To, które karty są pokazywane, można wybrać w ustawieniach)
 - Czytelne ekrany (dbałość o kontrast kolorów, rozmiar tekstu i obsługę wyłącznie klawiaturą)
 
 ## Różnice względem innych komunikatorów

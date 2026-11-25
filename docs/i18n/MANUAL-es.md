@@ -75,7 +75,7 @@ Si la otra persona también tiene la aplicación abierta, os conectáis directam
 - **La lista de contactos**: la hora de la última conversación se muestra como la hora para hoy, «Ayer» para ayer, mes/día para este año y año/mes/día para cualquier fecha anterior. Los contactos con mensajes que no has leído tienen el nombre y la hora destacados.
 - **Nombres para los contactos**: abre «Información del contacto» (en el menú contextual de un contacto, o en el menú «⋮» de la conversación) y podrás poner tu propio nombre para ese contacto (un apodo). Los apodos se guardan solo en este dispositivo y nunca se envían al contacto ni al servidor de retransmisión. Cuando pones un apodo, el nombre que el contacto se puso a sí mismo también se muestra junto a él en un color atenuado. Puedes desactivar ese segundo nombre con «Mostrar también el nombre que cada contacto se puso a sí mismo» en la sección «Privacidad» de los ajustes.
 - **Tu propia tarjeta**: en la parte superior de la lista está tu tarjeta de perfil; púlsala para abrir tu perfil. Se desplaza junto con la lista.
-- **Pestañas inferiores en un teléfono**: con el ancho de un teléfono, en la parte inferior de la pantalla aparecen las pestañas «Contactos» y «Ajustes».
+- **Pestañas inferiores en un teléfono**: Con el ancho de un teléfono, aparecen cinco pestañas en la parte inferior de la pantalla: «Chats», «Llamadas», «Contactos», «Mi tarjeta» y «Ajustes». Puedes elegir qué pestañas se muestran, una por una, en «Pestañas inferiores» dentro de los ajustes (Chats se muestra siempre. Aunque ocultes la pestaña de Ajustes, puedes seguir abriendo los ajustes desde el botón de engranaje de la pantalla).
 - **La cabecera de la conversación**: desde el icono de búsqueda puedes buscar dentro de la conversación. Desde el menú «⋮» puedes comprobar el número de seguridad, silenciar las notificaciones, fijar, crear una encuesta y más.
 
 ### Comandos
@@ -99,6 +99,9 @@ Algunas operaciones, como los ajustes y la vinculación de dispositivos, se hace
 - Se pueden hacer llamadas de voz y videollamadas individuales. También hay llamadas en grupo (hasta 8 personas).
 - **Código de confirmación de llamada**: en la pantalla de la llamada se muestra un código de confirmación. Leedlo entre ambos y comprobad que coincide en las dos pantallas. Si no coincide, es posible que alguien esté escuchando en el camino. En ese caso, cuelga la llamada.
 - Es posible que una llamada en grupo no pueda iniciarse si la aplicación de todos no es la última versión.
+- **Historial de llamadas**: Las llamadas individuales dejan un historial solo en este dispositivo (la otra persona, si fue saliente / entrante / perdida, la hora y la duración de la llamada. No se guarda nada de lo que se dijo). El historial nunca se envía a un servidor ni a la otra persona. Se guardan hasta 200 entradas, eliminando primero las más antiguas. Las llamadas en grupo no aparecen en el historial.
+- Abre el historial desde la pestaña «Llamadas» en un teléfono. Cuando hay una llamada perdida que aún no has visto, aparece una insignia con un número en la pestaña Llamadas, y desaparece al abrir el historial. Desde una fila del historial puedes abrir la conversación con esa persona o devolverle la llamada. Puedes eliminar todo el historial con un botón en la pantalla.
+- **El historial de llamadas no forma parte de una copia de seguridad.** En un dispositivo nuevo, el historial empieza vacío. Si no quieres que se guarde un historial, desactiva «Mantener un historial de llamadas en este dispositivo» en la sección «Privacidad» de los ajustes, y la grabación misma se detiene.
 
 ---
 
@@ -121,6 +124,8 @@ Los ajustes se abren como su propia pantalla. En un teléfono, ábrelos desde la
 - **Frase de contraseña de la clave**: puedes proteger la clave dentro de tu dispositivo envolviéndola con una frase de contraseña. Se te pedirá introducirla al abrir la aplicación.
 - **Mostrar también el nombre que cada contacto se puso a sí mismo**: en la sección «Privacidad». Para un contacto al que le has puesto un apodo, puedes elegir si su propio nombre se muestra junto a él (capítulo 3).
 - **Bloqueo de contactos**: puedes bloquear a un contacto molesto. Los mensajes de un contacto bloqueado no te llegarán.
+- **Si se mantiene un historial de llamadas**: Con «Mantener un historial de llamadas en este dispositivo» en la sección «Privacidad», puedes detener el registro del historial de llamadas (capítulo 5).
+- **Visibilidad de las pestañas inferiores**: En la sección «Pestañas inferiores» puedes mostrar u ocultar las pestañas inferiores del teléfono (Llamadas / Contactos / Mi tarjeta / Ajustes) una por una. Chats se muestra siempre.
 
 ---
 
@@ -187,6 +192,7 @@ No hacen falta cables ni pasar archivos.
 - **Si olvidas la frase de contraseña, la recuperación es imposible.** Quienes lo han creado tampoco pueden arreglarlo. Apunta la frase de contraseña en otro lugar.
 - Introducir la frase de contraseña para la copia automática es necesario en cada dispositivo. En un dispositivo nuevo, introdúcela una vez más.
 - Rehace manualmente la copia de seguridad cuando aumenten tus identidades o cuando cambies de dispositivo.
+- El historial de llamadas no forma parte de una copia de seguridad. Cuando cambias de dispositivo, el historial de llamadas no se traslada al nuevo dispositivo.
 
 ---
 

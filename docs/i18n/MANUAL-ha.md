@@ -75,7 +75,7 @@ Idan ɗayan ma ya buɗe manhajar, za ku haɗu kai tsaye ku yi tattaunawa.
 - **Jerin lambobin sadarwa**: Lokacin da ka yi magana ta ƙarshe ana nuna shi a matsayin lokaci ga yau, "Jiya" ga jiya, wata/rana ga wannan shekara, da shekara/wata/rana ga duk abin da ya gabata. Lambobin sadarwa da ke da saƙonnin da ba ka karanta ba, sunansu da lokacinsu an ƙara musu nauyi.
 - **Sunaye ga lambobin sadarwa**: Buɗe "Bayanin lambar sadarwa" (a menu na danna dama na lambar sadarwa, ko menu na "⋮" na tattaunawa) za ka iya sa sunanka ga wannan lambar sadarwa (sunan laƙabi). Ana ajiye sunayen laƙabi a wannan na'ura kaɗai, ba a taɓa aika su ga lambar sadarwa ko sabar isarwa ba. Idan ka sa sunan laƙabi, sunan da lambar sadarwa ta sa wa kanta ma ana nuna shi kusa da shi da launi mai duhu. Za ka iya kashe wannan suna na biyu da "Nuna kuma sunan da kowace lambar sadarwa ta sa wa kanta" a sashen "Sirri" na saituna.
 - **Katinka**: A saman jerin akwai katin bayanin martabarka; danna shi don buɗe bayanin martabarka. Yana gungurawa tare da jerin.
-- **Shafukan ƙasa a waya**: A faɗin waya, shafukan "Lambobin sadarwa" da "Saituna" suna fitowa a ƙasan allo.
+- **Shafukan ƙasa a waya**: A faɗin waya, shafuka biyar suna bayyana a ƙasan allo: "Taɗi", "Kira", "Lambobin sadarwa", "Katina" da "Saituna". Waɗanne shafuka za a nuna za ka iya zaɓa ɗaya bayan ɗaya a cikin "Shafukan ƙasa" a cikin saituna (Taɗi koyaushe ana nunawa. Ko ka ɓoye shafin Saituna, har yanzu za ka iya buɗe saituna daga maɓallin giya a allo).
 - **Kan tattaunawa**: Daga gunkin bincike za ka iya bincike a cikin tattaunawa. Daga menu na "⋮" za ka iya duba lambar tsaro, kashe sanarwa, liƙa, ƙirƙiri zaɓe, da ƙari.
 
 ### Umarnai
@@ -99,6 +99,9 @@ Wasu ayyuka, kamar saitawa da haɗa na'urori, ana yin su daga umarnai.
 - Za ka iya yin kiran murya da kiran bidiyo na mutum ɗaya da ɗaya. Akwai kiran ƙungiya ma (har zuwa mutane 8).
 - **Lambar tabbatar da kira**: A allon kira, ana nuna lambar tabbatarwa. Karanta ta tare da ɗayan, ku duba cewa ta dace a allunan duka. Idan ba ta dace ba, akwai yiwuwar wani yana sauraron a tsakiya. A wannan yanayi, katse kiran.
 - Kiran ƙungiya na iya kasa farawa sai dai idan manhajojin kowa sune sababbin sigogi.
+- **Tarihin kira**: Kira ɗaya-da-ɗaya suna barin tarihi a wannan na'ura kaɗai (ɗayan mutum, ko kiran ya fita / ya shigo / ya ɓace, lokaci da tsawon kira. Babu abin da aka faɗa da aka riƙe). Tarihi ba a taɓa aika shi zuwa uwar garke ko zuwa ɗayan mutum ba. Ana riƙe har zuwa shigarwa 200, ana cire mafi tsufa da farko. Kiran rukuni ba ya bayyana a cikin tarihi.
+- Buɗe tarihi a waya daga shafin "Kira". Lokacin da akwai kiran da ya ɓace wanda ba ka gani ba tukuna, lambar shaida tana bayyana a shafin Kira, kuma tana ɓacewa lokacin da ka buɗe tarihi. Daga layi a cikin tarihi za ka iya buɗe tattaunawa da wannan mutum ko ka kira shi baya. Za ka iya share duk tarihin da maɓalli a allo.
+- **Tarihin kira ba ɓangare ne na ajiyar waje ba.** A sabuwar na'ura, tarihi yana farawa babu komai. Idan ba ka son a riƙe tarihi, kashe "Riƙe tarihin kira a wannan na'ura" a sashen "Sirri" na saituna, kuma yin rikodin kansa zai tsaya.
 
 ---
 
@@ -121,6 +124,8 @@ Saituna suna buɗewa a matsayin allo na kansu. A waya, buɗe su daga shafin "Sai
 - **Kalmar sirri ta maɓalli**: Za ka iya kare maɓallin da ke cikin na'urarka ta hanyar nannaɗe shi da kalmar sirri. Ana buƙatar shigarwa idan ka buɗe manhajar.
 - **Nuna kuma sunan da kowace lambar sadarwa ta sa wa kanta**: A sashen "Sirri". Ga lambar sadarwar da ka ba sunan laƙabi, za ka iya zaɓar ko za a nuna sunanta kusa da shi (babi na 3).
 - **Toshewa**: Za ka iya toshe mutumin da ke damunka. Saƙonni daga wanda aka toshe ba za su isa ba.
+- **Ko za a riƙe tarihin kira**: Da "Riƙe tarihin kira a wannan na'ura" a sashen "Sirri", za ka iya dakatar da yin rikodin tarihin kira (babi na 5).
+- **Bayyanar shafukan ƙasa**: A sashen "Shafukan ƙasa" za ka iya nunawa ko ɓoye shafukan ƙasa na waya (Kira / Lambobin sadarwa / Katina / Saituna) ɗaya bayan ɗaya. Taɗi koyaushe ana nunawa.
 
 ---
 
@@ -187,6 +192,7 @@ Ba a buƙatar kebul ko miƙa fayiloli.
 - **Idan ka manta kalmar sirri, ba za a iya dawo da shi ba.** Wanda ya ƙirƙira ma ba zai iya gyara shi ba. Rubuta kalmar sirri a wani wuri na daban.
 - Shigar da kalmar sirri don ajiya ta atomatik ana buƙatarsa a kowace na'ura. A sabuwar na'ura, sake shigar da ita sau ɗaya.
 - Idan asusu sun ƙaru ko ka canza na'ura, sake yin ajiyar tanadi da hannu.
+- Tarihin kira ba ɓangare ne na ajiyar waje ba. Lokacin da ka canja na'ura, tarihin kira ba ya ƙaura zuwa sabuwar na'ura.
 
 ---
 

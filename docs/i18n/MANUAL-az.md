@@ -75,7 +75,7 @@ Qarşı tərəf də tətbiqi açıbsa, birbaşa qoşulub söhbət edə bilərsin
 - **Kontakt siyahısı**: Son danışdığınız vaxt bu gün üçün saat kimi, dünən üçün «Dünən», bu il üçün ay/gün, daha əvvəlkilər üçün il/ay/gün kimi göstərilir. Oxunmamış mesajları olan kontaktların adı və vaxtı vurğulanır.
 - **Kontaktlar üçün adlar**: «Kontakt məlumatı»nı açın (kontaktın sağ klik menyusunda və ya söhbətin «⋮» menyusunda) və həmin kontakt üçün öz adınızı təyin edə bilərsiniz (ləqəb). Ləqəblər yalnız bu cihazda saxlanılır və heç vaxt kontakta və ya ötürücü serverə göndərilmir. Ləqəb təyin edəndə kontaktın özü üçün təyin etdiyi ad da yanında solğun rənglə göstərilir. Həmin ikinci adı parametrlərin «Məxfilik» bölməsindəki «Hər kontaktın özü üçün təyin etdiyi adı da göstər» ilə söndürə bilərsiniz.
 - **Öz kartınız**: Siyahının yuxarısında öz profil kartınız var; profilinizi açmaq üçün ona basın. Siyahı ilə birlikdə sürüşür.
-- **Telefonda alt vərəqlər**: Telefon enində ekranın alt hissəsində «Kontaktlar» və «Parametrlər» vərəqləri görünür.
+- **Telefonda alt nişanlar**: Telefon enində ekranın altında beş nişan görünür: "Söhbətlər", "Zənglər", "Kontaktlar", "Kartım" və "Parametrlər". Hansı nişanların göstəriləcəyini parametrlərdə "Alt nişanlar" bölməsində bir-bir seçə bilərsiniz (Söhbətlər həmişə göstərilir. Parametrlər nişanını gizlətsəniz belə, parametrləri ekrandakı dişli düyməsindən aça bilərsiniz).
 - **Söhbət başlığı**: Axtarış nişanından söhbət daxilində axtarış edə bilərsiniz. «⋮» menyusundan təhlükəsizlik nömrəsini yoxlaya, bildirişləri susdura, bərkidə, sorğu yarada və daha çoxunu edə bilərsiniz.
 
 ### Əmrlər
@@ -99,6 +99,9 @@ Parametrlər və cihazların əlaqələndirilməsi kimi bəzi əməliyyatlar əm
 - Təkbətək səsli zənglər və videozənglər etmək olar. Qrup zəngləri də var (ən çox 8 nəfər).
 - **Zəng yoxlama kodu**: Zəng ekranında yoxlama kodu göstərilir. Qarşı tərəflə birlikdə ucadan oxuyub hər iki ekranda uyğun gəldiyini yoxlayın. Uyğun gəlmirsə, kimsə yolda dinləyir ola bilər. Belə halda zəngi kəsin.
 - Qrup zəngləri bütün iştirakçıların tətbiqi ən son versiyada olmadıqda başlana bilməyə bilər.
+- **Zəng tarixçəsi**: Təkbətək zənglər yalnız bu cihazda tarixçə qoyur (digər şəxs, zəngin gedən / gələn / buraxılmış olması, vaxtı və zəngin müddəti. Deyilənlərdən heç nə saxlanılmır). Tarixçə heç vaxt serverə və ya digər şəxsə göndərilmir. 200-ə qədər qeyd saxlanılır, ən köhnələri birinci silinir. Qrup zəngləri tarixçədə görünmür.
+- Tarixçəni telefonda "Zənglər" nişanından açın. Hələ görmədiyiniz buraxılmış zəng olduqda, Zənglər nişanında rəqəm nişanı görünür və tarixçəni açdıqda yox olur. Tarixçənin bir sətirindən həmin şəxslə söhbəti aça və ya ona geri zəng edə bilərsiniz. Bütün tarixçəni ekrandakı düymə ilə silə bilərsiniz.
+- **Zəng tarixçəsi ehtiyat nüsxənin bir hissəsi deyil.** Yeni cihazda tarixçə boş başlayır. Tarixçənin saxlanmasını istəmirsinizsə, parametrlərin "Məxfilik" bölməsində "Bu cihazda zəng tarixçəsini saxla" seçimini söndürün, yazılma özü dayanacaq.
 
 ---
 
@@ -121,6 +124,8 @@ Parametrlər öz ekranı kimi açılır. Telefonda onları ekranın alt hissəsi
 - **Açar parol ifadəsi**: Cihazın içindəki açarı parol ifadəsi ilə sarıyıb qorumaq olar. Tətbiqi açanda daxil etməyiniz istənilir.
 - **Hər kontaktın özü üçün təyin etdiyi adı da göstər**: «Məxfilik» bölməsində. Ləqəb verdiyiniz kontakt üçün onun öz adının yanında göstərilib-göstərilməməsini seçə bilərsiniz (fəsil 3).
 - **Bloklama**: Narahat edən şəxsləri bloklamaq olar. Bloklanmış şəxslərdən əlaqə gəlmir.
+- **Zəng tarixçəsinin saxlanıb-saxlanmaması**: "Məxfilik" bölməsindəki "Bu cihazda zəng tarixçəsini saxla" ilə zəng tarixçəsinin yazılmasını dayandıra bilərsiniz (fəsil 5).
+- **Alt nişanların görünməsi**: "Alt nişanlar" bölməsində telefonun alt nişanlarını (Zənglər / Kontaktlar / Kartım / Parametrlər) bir-bir göstərə və ya gizlədə bilərsiniz. Söhbətlər həmişə göstərilir.
 
 ---
 
@@ -187,6 +192,7 @@ Heç bir kabel və ya fayl ötürməsi lazım deyil.
 - **Parol ifadəsini unutsanız, bərpa mümkün deyil.** Yaradan da düzəldə bilməz. Parol ifadəsini başqa yerdə yazıb saxlayın.
 - Avtomatik ehtiyat nüsxə üçün parol ifadəsini daxil etmək hər cihazda lazımdır. Yeni cihazda onu bir dəfə də daxil edin.
 - Şəxsiyyətləriniz artanda və ya cihaz dəyişəndə əl ilə ehtiyat nüsxəni yenidən yaradın.
+- Zəng tarixçəsi ehtiyat nüsxənin bir hissəsi deyil. Cihazı dəyişdikdə zəng tarixçəsi yeni cihaza keçmir.
 
 ---
 

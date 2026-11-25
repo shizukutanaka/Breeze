@@ -41,6 +41,7 @@ Scriviamo onestamente anche la portata. Per poter consegnare i messaggi, il serv
 
 - Conversazioni individuali e conversazioni di gruppo (fino a 1.000 persone)
 - Chiamate vocali e videochiamate (chiamate di gruppo fino a 8 persone)
+- Cronologia delle chiamate (conservata solo su questo dispositivo: solo l'altra persona, la direzione, l'ora e la durata della chiamata — nulla di ciò che è stato detto. Mai inviata a un server o all'altra persona)
 - Invio di file (fino a 50MB nelle conversazioni individuali. Anche nei gruppi si possono inviare, ma il limite di dimensione è più piccolo)
 - Uso su più dispositivi e con più account (per esempio lavoro e uso personale. Sia il numero di dispositivi sia il numero di account sono gratuiti e illimitati)
 - Backup automatico (quando qualcosa cambia, un backup cifrato viene salvato automaticamente sul tuo server. Su un nuovo dispositivo, una volta recuperata la tua identità, un backup viene trovato automaticamente e ti viene proposto. Le impostazioni ti guidano anche nel passaggio a un nuovo dispositivo)
@@ -49,6 +50,7 @@ Scriviamo onestamente anche la portata. Per poter consegnare i messaggi, il serv
 - Profili con foto, adesivi, condivisione della posizione
 - Operazioni a comando come `/help` (71 tipi)
 - Modalità di energia in base alla batteria (automatica / normale / risparmio energetico / emergenza). Quando la batteria cala, i controlli di ricezione si diradano perché la batteria duri più a lungo. Una salvaguardia per le catastrofi e gli altri momenti in cui non puoi ricaricare
+- Schede inferiori su un telefono (Chat / Chiamate / Contatti / La mia scheda / Impostazioni. Quali schede mostrare può essere scelto nelle impostazioni)
 - Schermi facili da leggere (attenzione al contrasto dei colori, alla dimensione del testo e all'uso con la sola tastiera)
 
 ## Differenze rispetto ad altri messenger

@@ -75,7 +75,7 @@ Ikiwa mwenzako naye amefungua programu, mnaweza kuunganishwa moja kwa moja na ku
 - **Orodha ya waasiliani**: Muda wa mwisho kuzungumza unaonyeshwa kama saa kwa leo, "Jana" kwa jana, mwezi/siku kwa mwaka huu, na mwaka/mwezi/siku kwa chochote kilichotangulia. Waasiliani wenye ujumbe ambao hujasoma wana majina na nyakati zilizosisitizwa.
 - **Majina ya waasiliani**: Fungua "Taarifa ya mwasiliani" (katika menyu ya kubofya kulia ya mwasiliani, au menyu ya "⋮" ya mazungumzo) na unaweza kuweka jina lako mwenyewe kwa mwasiliani huyo (jina la utani). Majina ya utani huhifadhiwa kwenye kifaa hiki tu na hayatumwi kamwe kwa mwasiliani au seva ya kipeanaji. Unapoweka jina la utani, jina ambalo mwasiliani amejiwekea mwenyewe pia huonyeshwa karibu nalo kwa rangi iliyofifia. Unaweza kuzima jina hilo la pili kwa "Onyesha pia jina ambalo kila mwasiliani amejiwekea mwenyewe" katika sehemu ya "Faragha" ya mipangilio.
 - **Kadi yako mwenyewe**: Juu ya orodha kuna kadi ya wasifu wako mwenyewe; ibonyeze kufungua wasifu wako. Inasogeza pamoja na orodha.
-- **Vichupo vya chini kwenye simu**: Kwa upana wa simu, vichupo vya "Waasiliani" na "Mipangilio" vinatokea chini ya skrini.
+- **Vichupo vya chini kwenye simu**: Kwa upana wa simu, vichupo vitano huonekana chini ya skrini: "Soga", "Simu", "Anwani", "Kadi yangu" na "Mipangilio". Vichupo vipi vionyeshwe unaweza kuchagua kimoja kimoja katika "Vichupo vya chini" kwenye mipangilio (Soga huonyeshwa kila wakati. Hata ukificha kichupo cha Mipangilio, bado unaweza kufungua mipangilio kutoka kitufe cha gia kwenye skrini).
 - **Kichwa cha mazungumzo**: Kutoka aikoni ya utafutaji unaweza kutafuta ndani ya mazungumzo. Kutoka menyu ya "⋮" unaweza kuangalia namba ya usalama, kunyamazisha arifa, kubandika, kutengeneza kura, na zaidi.
 
 ### Amri
@@ -99,6 +99,9 @@ Baadhi ya shughuli, kama mipangilio na kuunganisha vifaa, hufanywa kupitia amri.
 - Unaweza kufanya simu za sauti na simu za video za mtu mmoja kwa mmoja. Pia kuna simu za kikundi (hadi watu 8).
 - **Msimbo wa uthibitisho wa simu**: Msimbo wa uthibitisho unaonyeshwa kwenye skrini ya simu. Usome pamoja na mwenzako na uthibitishe kama unalingana kwenye skrini zote mbili. Ikiwa haulingani, kuna uwezekano kwamba mtu anasikiliza katikati. Katika hali hiyo, kata simu.
 - Simu za kikundi zinaweza zisianzishwe ikiwa programu za kila mtu si toleo jipya zaidi.
+- **Historia ya simu**: Simu za mtu mmoja kwa mmoja huacha historia kwenye kifaa hiki tu (mtu mwingine, ikiwa simu ilikuwa inayotoka / inayoingia / iliyokosekana, muda na urefu wa simu. Hakuna chochote kilichosemwa kinachohifadhiwa). Historia haitumwi kamwe kwa seva au kwa mtu mwingine. Hadi rekodi 200 huhifadhiwa, na za zamani zaidi huondolewa kwanza. Simu za kikundi hazionekani kwenye historia.
+- Fungua historia kwenye simu kutoka kichupo cha "Simu". Wakati kuna simu iliyokosekana ambayo bado hujaiona, beji ya nambari huonekana kwenye kichupo cha Simu, na hupotea unapofungua historia. Kutoka safu ya historia unaweza kufungua mazungumzo na mtu huyo au kumpigia simu tena. Unaweza kufuta historia yote kwa kitufe kwenye skrini.
+- **Historia ya simu si sehemu ya nakala rudufu.** Kwenye kifaa kipya, historia huanza ikiwa tupu. Ikiwa hutaki historia ihifadhiwe, zima "Weka historia ya simu kwenye kifaa hiki" katika sehemu ya "Faragha" ya mipangilio, na kurekodi wenyewe kusimama.
 
 ---
 
@@ -121,6 +124,8 @@ Mipangilio hufunguka kama skrini yake yenyewe. Kwenye simu, ifungue kutoka kichu
 - **Nenosiri la ufunguo**: Unaweza kuufunika ufunguo ndani ya kifaa kwa nenosiri ili kuulinda. Utaulizwa kuliweka unapofungua programu.
 - **Onyesha pia jina ambalo kila mwasiliani amejiwekea mwenyewe**: Katika sehemu ya "Faragha". Kwa mwasiliani uliyempa jina la utani, unaweza kuchagua kama jina lake mwenyewe lionyeshwe karibu nalo (sura ya 3).
 - **Kuzuia**: Unaweza kuwazuia wenzako wanaokusumbua. Mawasiliano kutoka kwa waliozuiwa hayatafika.
+- **Ikiwa historia ya simu itahifadhiwa**: Kwa "Weka historia ya simu kwenye kifaa hiki" katika sehemu ya "Faragha", unaweza kusimamisha kurekodi historia ya simu (sura ya 5).
+- **Mwonekano wa vichupo vya chini**: Katika sehemu ya "Vichupo vya chini" unaweza kuonyesha au kuficha vichupo vya chini vya simu (Simu / Anwani / Kadi yangu / Mipangilio) kimoja kimoja. Soga huonyeshwa kila wakati.
 
 ---
 
@@ -187,6 +192,7 @@ Hakuna nyaya wala kukabidhiana faili kunakohitajika.
 - **Ukisahau nenosiri, urejeshaji hauwezekani.** Mtengenezaji naye hawezi kuirekebisha. Andika nenosiri mahali pengine.
 - Kuweka nenosiri kwa ajili ya akiba ya kiotomatiki kunahitajika kwenye kila kifaa. Kwenye kifaa kipya, liweke mara moja tena.
 - Tengeneza akiba ya mikono upya wakati utambulisho unapoongezeka au unapobadilisha kifaa.
+- Historia ya simu si sehemu ya nakala rudufu. Unapobadili kifaa, historia ya simu haihamii kwenye kifaa kipya.
 
 ---
 

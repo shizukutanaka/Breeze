@@ -41,6 +41,7 @@ Auch den Umfang schreiben wir ehrlich. Zur Zustellung bewahrt der Server Dinge f
 
 - Einzelunterhaltungen und Gruppenunterhaltungen (bis zu 1.000 Personen)
 - Sprach- und Videoanrufe (Gruppenanrufe mit bis zu 8 Personen)
+- Anrufverlauf (wird nur auf diesem Gerät aufbewahrt: nur die andere Person, Richtung, Uhrzeit und Gesprächsdauer — nichts von dem, was gesagt wurde. Wird niemals an einen Server oder an die andere Person gesendet)
 - Dateiversand (im Einzelgespräch bis zu 50 MB. Auch in Gruppen möglich, aber die Größenobergrenze ist kleiner)
 - Nutzung mit mehreren Geräten und mehreren Konten (z. B. beruflich und privat. Sowohl die Geräteanzahl als auch die Kontenanzahl ist kostenlos und unbegrenzt)
 - Automatische Sicherung (wenn sich etwas ändert, wird eine verschlüsselte Sicherung automatisch auf Ihrem eigenen Server gespeichert. Auf einem neuen Gerät wird nach der Wiederherstellung Ihrer Identität automatisch eine Sicherung gefunden und Ihnen angeboten. Die Einstellungen führen Sie auch durch den Umzug auf ein neues Gerät)
@@ -49,6 +50,7 @@ Auch den Umfang schreiben wir ehrlich. Zur Zustellung bewahrt der Server Dinge f
 - Profile mit Foto, Sticker, Standortfreigabe
 - Befehlsbedienung wie `/help` (71 Arten)
 - Leistungsmodi passend zu Ihrem Akku (automatisch / normal / Energiesparen / Notfall). Wenn der Akku leerer wird, werden die Empfangsprüfungen weiter auseinandergezogen, damit der Akku länger hält. Eine Vorsorge für Katastrophen und andere Zeiten, in denen Sie nicht aufladen können
+- Untere Tabs auf einem Telefon (Chats / Anrufe / Kontakte / Meine Karte / Einstellungen. Welche Tabs angezeigt werden, kann in den Einstellungen gewählt werden)
 - Gut lesbare Bildschirme (Achtung auf Farbkontrast, Textgröße und Bedienung nur mit der Tastatur)
 
 ## Unterschiede zu anderen Messengern

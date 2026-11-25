@@ -41,6 +41,7 @@ Kami juga menulis skopnya dengan jujur. Untuk penghantaran, pelayan menyimpan be
 
 - Perbualan 1 lawan 1 dan perbualan kumpulan (sehingga 1,000 orang)
 - Panggilan suara dan panggilan video (panggilan kumpulan sehingga 8 orang)
+- Sejarah panggilan (disimpan hanya pada peranti ini: hanya orang lain, arah, masa dan tempoh panggilan — tiada apa-apa daripada yang dikatakan. Tidak pernah dihantar ke pelayan atau kepada orang lain)
 - Penghantaran fail (dalam 1 lawan 1, sehingga 50MB. Dalam kumpulan juga boleh dihantar, tetapi had saiznya lebih kecil)
 - Penggunaan berbilang peranti dan berbilang akaun (seperti untuk kerja dan peribadi. Bilangan peranti dan akaun kedua-duanya percuma dan tanpa had)
 - Sandaran automatik (apabila sesuatu berubah, sandaran terenkripsi disimpan secara automatik ke pelayan anda sendiri. Pada peranti baharu, setelah anda memulihkan identiti anda, sandaran ditemui secara automatik dan ditawarkan kepada anda. Tetapan juga memandu anda untuk berpindah ke peranti baharu)
@@ -49,6 +50,7 @@ Kami juga menulis skopnya dengan jujur. Untuk penghantaran, pelayan menyimpan be
 - Profil dengan gambar, pelekat, perkongsian lokasi
 - Operasi arahan seperti `/help` (71 jenis)
 - Mod kuasa mengikut bateri anda (automatik / biasa / penjimatan kuasa / kecemasan). Apabila bateri semakin berkurangan, semakan penghantaran dijarakkan supaya bateri tahan lebih lama. Perlindungan untuk bencana dan ketika anda tidak dapat mengecas
+- Tab bawah pada telefon (Sembang / Panggilan / Kenalan / Kad saya / Tetapan. Tab mana yang dipaparkan boleh dipilih dalam tetapan)
 - Skrin yang mudah dibaca (menitikberatkan kontras warna, saiz teks, dan pengendalian dengan papan kekunci sahaja)
 
 ## Perbezaan dengan pengirim mesej lain

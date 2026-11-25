@@ -1,8 +1,8 @@
 # Breeze Messenger — Detailed Specification
 
-**Document version**: 2026-03-14 R210; header, §4.2 and §7 re-verified 2026-11-21 (R09); total codebase figure re-measured 2026-11-22 (S06); header figures, §1.2, §2.1, §3, §4.3–§4.5, §5, §9, §10.5, §11 and §12 re-measured against the current code 2026-11-25; §4.5 and the header / §1.2 / §3.1 / §4.3 / §9 / §10 / §11 figures updated again the same day for the first-run, automatic-backup and contact-name changes (PR #531–#533)
+**Document version**: 2026-03-14 R210; header, §4.2 and §7 re-verified 2026-11-21 (R09); total codebase figure re-measured 2026-11-22 (S06); header figures, §1.2, §2.1, §3, §4.3–§4.5, §5, §9, §10.5, §11 and §12 re-measured against the current code 2026-11-25; §4.5 and the header / §1.2 / §3.1 / §4.3 / §9 / §10 / §11 figures updated again the same day for the first-run, automatic-backup and contact-name changes (PR #531–#533), and the header / §1.2 / §4.1 / §4.5 / §10 / §11 figures and §4.5 text updated again the same day for the bottom-tab expansion and the on-device call history (PR #534, #536)
 **Status**: Living reference. Originally written for v3.6.0; the sections named above were re-measured against the current codebase (CONFIG VERSION 3.8.0, main as of 2026-11-25). Other sections describe the design as of v3.6.0 and may lag the code — where this document and the code disagree, the code and its tests win.
-**Total codebase**: 15,973 (index.html) + 13,291 (src/ modules) + 5,213 (_worker.js) + 245 (SW) = 34,722 lines (plus the Node self-host under `server/`: 1,037 lines, not part of the historical formula)
+**Total codebase**: 15,999 (index.html) + 13,519 (src/ modules) + 5,213 (_worker.js) + 245 (SW) = 34,976 lines (plus the Node self-host under `server/`: 1,037 lines, not part of the historical formula)
 
 ---
 
@@ -18,11 +18,11 @@ Breeze is a serverless, end-to-end encrypted P2P messenger deployed on Cloudflar
 | Clean architecture, SOLID | Robert C. Martin | Single-responsibility functions, DRY helpers (postAPIRaw, _signal, _autoHeight) |
 | Simplicity, composition | Rob Pike | Single-file client plus ES modules, no build step, no framework, no external AI dependency |
 
-### 1.2 File Inventory (599 tracked files)
+### 1.2 File Inventory (601 tracked files)
 
 | File | Size | Purpose |
 |------|------|---------|
-| index.html | 908 KB | Client: UI + CSS + JS (single file) |
+| index.html | 915 KB | Client: UI + CSS + JS (single file) |
 | _worker.js | 305 KB | Cloudflare Worker: API + signals |
 | server/* | — | Node self-host relay (same handler, SQLite state) |
 | sw.js | 12 KB | Service Worker: offline cache + push |
@@ -212,7 +212,7 @@ saver ≥ 60 s and emergency ≥ 10 min, with presence heartbeats stopped.
 
 ## 4. Client Architecture
 
-### 4.1 IndexedDB Schema (Version 5)
+### 4.1 IndexedDB Schema (Version 6)
 
 | Store | Key | Indexes | Purpose |
 |-------|-----|---------|---------|
@@ -221,6 +221,7 @@ saver ≥ 60 s and emergency ≥ 10 min, with presence heartbeats stopped.
 | messages | msgId (keyPath) | contact (contactId), ts, contact_ts ([contactId, ts]) | Message history |
 | audit | id (autoIncrement) | ts, type | Security audit log |
 | settings | string key | — | User preferences |
+| calls | id (autoIncrement) | ts, contact (contactId) | On-device call history (never synced or backed up) |
 
 ### 4.2 CONFIG Constants (excerpt — every pair below is checked against `CONFIG` in index.html by tests/spec-config-drift.test.js)
 
@@ -298,8 +299,23 @@ WCAG contrast in the 2026-11 UI pass: light `--g` #046c4e, `--gd` #065f46,
 ### 4.5 UI Structure (2026-11 UI pass)
 
 - **Bottom tab bar (mobile)**: at ≤640px in the list view, a tab bar
-  (contacts / settings) is shown; it is `role="navigation"` with
-  `aria-current` on the active tab, and its visibility is width-driven only.
+  with five tabs (chats / calls / contacts / my card / settings) is
+  shown; it is `role="navigation"` with `aria-current` on the active
+  tab. Chats and Contacts are two modes of the sidebar list
+  (`_listTab`: chats keeps recency order plus folder/label filters,
+  contacts shows friends only — no groups, no archived — in name
+  order), Calls is a third list mode owned by the call-history
+  module, My card opens the profile panel, and Settings opens the
+  settings view; selection state follows whichever entry point opened
+  the screen. The Chats tab carries the unread-count badge (the
+  `totalUnread` the contact renderer already computes). Which of the
+  optional tabs (calls / contacts / my card / settings) are shown is
+  a per-tab Settings choice (the "Bottom tabs" section,
+  `_settings.tabCalls / tabContacts / tabSelf / tabSettings`, all
+  default shown); the Chats tab is always shown, hiding the Settings
+  tab never strands the user (the sidebar gear button still opens
+  Settings), and hiding the tab of the mode currently on screen
+  returns the list to Chats.
 - **Input bar + more panel**: the composer keeps only +, text field,
   character count, emoji and send. Attachment, voice recording, dictation,
   location, stickers and no-reply-needed live in the "+" panel (`#msg-more-panel`);
@@ -373,6 +389,23 @@ WCAG contrast in the 2026-11 UI pass: light `--g` #046c4e, `--gd` #065f46,
   nickname and can clear it; nicknames are stored only on the device
   and are never sent to the contact or the relay. Search matches both
   the nickname and the contact's own name.
+- **Call history** (`src/app/call-history.js`): 1:1 calls leave a
+  metadata-only record in the IndexedDB `calls` store (§4.1) — peer
+  id, a name snapshot, direction (out / in / missed, where missed is
+  an incoming call that ended before it was answered), video flag,
+  start time and duration. Records live only on this device: nothing
+  is sent to a relay or the peer, and the log is not part of any
+  backup payload (device-local metadata, in the same category as the
+  audit log and settings), so a new device starts with an empty
+  history and call writes never trigger the automatic backup. The
+  newest 200 records are kept (`CALL_HISTORY_MAX`, older ones pruned
+  on write). The Calls tab renders the history into the sidebar
+  list; rows open the conversation and can redial in the same mode
+  (voice / video), unseen missed calls badge the tab and are marked
+  seen when the list is viewed, and the history screen carries a
+  clear-all button. Settings → Privacy can turn recording off
+  (`_settings.callHistoryLog`, default on). Group calls are not
+  logged (a join/leave room lifecycle, not a call).
 
 ---
 
@@ -535,11 +568,11 @@ Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline';
 | 2. Security | eval=0, CSP present, no API key leaks | All pass |
 | 3. i18n | Hardcoded strings < 10, toast i18n >= 95% | Met |
 | 4. Code Quality | .style.X < 25, onclick=0, DRY headers=100% | Met |
-| 5. Performance | Lines, RAF >= 2, Fragment >= 1, throttle | Met (index.html 15,973 lines, under the 16,000-line test cap) |
+| 5. Performance | Lines, RAF >= 2, Fragment >= 1, throttle | Met (index.html 15,999 lines, under the 16,000-line test cap) |
 | 6. Protocol Spec | 6 crypto features verified | Met |
 | 7. Required Files | 10 files exist | Met |
 
-**Current score: 165/171, 44 checks, 0 failures — `./validate.sh` PASSED, measured 2026-11-25 (the check count grows as gates land, so re-run rather than trust this figure). Test suite at the same date: 160 files / 2,586 tests, all passing.**
+**Current score: 165/171, 44 checks, 0 failures — `./validate.sh` PASSED, measured 2026-11-25 (the check count grows as gates land, so re-run rather than trust this figure). Test suite at the same date: 161 files / 2,630 tests, all passing.**
 
 ---
 
@@ -593,7 +626,7 @@ Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline';
 
 ## 11. i18n
 
-- **Built-in**: English only — the inline reference table (902 keys, pure data) and runtime fallback
+- **Built-in**: English only — the inline reference table (921 keys, pure data) and runtime fallback
 - **Locale files**: 50 files, `locales/<lang>.json` for am, ar, az, bn, cs, da, de, el, es, fa, fi, fr, ha, he, hi, hr, hu, id, ig, it, ja, ka, kk, km, ko, ml, ms, my, nb, nl, pa, pl, pt-BR, ro, ru, sr, sv, sw, ta, te, th, tl, tr, uk, ur, uz, vi, yo, zh-CN, zh-TW, fetched at boot and merged over English — 51 UI languages in total including English. `node tools/i18n-check.mjs` prints the live key count and per-locale coverage; at 2026-11-25 it reports all 50 locales at 100% (core and total). The active locale is auto-detected from `navigator.language` against `FULL_LOCALES`
 - **External**: none — the 924-language `lang.js` table was deleted (supplied zero strings to the UI at 44% of payload; see SECURITY.md)
 - **Hardcoded UI strings**: 0 (100% coverage via `t()` function)
@@ -687,4 +720,4 @@ Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline';
 
 ---
 
-*Generated: 2026-03-15 | Last re-measured: 2026-11-25 | Breeze v3.8.0 (CONFIG VERSION) | 34,722 total lines (index.html + src/ + _worker.js + sw.js) | Tests: 160 files / 2,586 passing*
+*Generated: 2026-03-15 | Last re-measured: 2026-11-25 | Breeze v3.8.0 (CONFIG VERSION) | 34,976 total lines (index.html + src/ + _worker.js + sw.js) | Tests: 161 files / 2,630 passing*

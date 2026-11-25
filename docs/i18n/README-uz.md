@@ -41,6 +41,7 @@ Halollik uchun qamrovni ham yozamiz. Yetkazish uchun serverda qisqa muddatli saq
 
 - Yakkama-yakka suhbatlar va guruh suhbatlari (ko'pi bilan 1 000 kishi)
 - Ovozli qo'ng'iroqlar va videoqo'ng'iroqlar (guruh qo'ng'iroqlari ko'pi bilan 8 kishi)
+- Qo'ng'iroqlar tarixi (faqat shu qurilmada saqlanadi: faqat boshqa shaxs, yo'nalish, vaqt va qo'ng'iroq davomiyligi — aytilganlardan hech narsa yo'q. Hech qachon serverga yoki boshqa shaxsga yuborilmaydi)
 - Fayl yuborish (yakkama-yakkada ko'pi bilan 50MB. Guruhlarda ham yuborish mumkin, lekin hajm chegarasi kichikroq)
 - Bir nechta qurilma va bir nechta hisobdan foydalanish (masalan, ish va shaxsiy. Qurilmalar soni ham, hisoblar soni ham bepul va cheksiz)
 - Avtomatik zaxira nusxa (biror narsa o'zgarganda, shifrlangan zaxira nusxa o'z serveringizga avtomatik saqlanadi. Yangi qurilmada shaxsingizni tiklaganingizdan keyin zaxira nusxa avtomatik topiladi va sizga taklif qilinadi. Sozlamalar yangi qurilmaga ko'chirishda ham yo'l ko'rsatadi)
@@ -49,6 +50,7 @@ Halollik uchun qamrovni ham yozamiz. Yetkazish uchun serverda qisqa muddatli saq
 - Suratli profil, stikerlar, joylashuvni ulashish
 - `/help` kabi buyruq amallari (71 turi)
 - Batareyangizga mos quvvat rejimlari (avtomatik / normal / quvvat tejash / favqulodda). Batareya kamaygan sari, batareya uzoqroq yetishi uchun yetkazishni tekshirish oralig'i uzaytiriladi. Falokatlar va quvvatlay olmaydigan boshqa paytlar uchun ehtiyot
+- Telefondagi pastki yorliqlar (Chatlar / Qo'ng'iroqlar / Kontaktlar / Mening kartam / Sozlamalar. Qaysi yorliqlar ko'rsatilishini sozlamalarda tanlash mumkin)
 - O'qish oson ekranlar (rang kontrasti, matn o'lchami va faqat klaviatura bilan boshqarishga e'tibor)
 
 ## Boshqa messenjerlardan farqi

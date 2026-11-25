@@ -41,6 +41,7 @@ Vi skriver også ærligt om grænserne. For at levere beskeder er der en kortvar
 
 - Samtaler én til én og gruppesamtaler (op til 1.000 personer)
 - Tale- og videoopkald (gruppeopkald med op til 8 personer)
+- Opkaldshistorik (gemmes kun på denne enhed: kun den anden person, retning, tidspunkt og opkaldets varighed — intet af det, der blev sagt. Sendes aldrig til en server eller til den anden person)
 - Afsendelse af filer (op til 50MB i én-til-én-samtaler. Det er også muligt i grupper, men størrelsesgrænsen er mindre)
 - Flere enheder og flere konti til forskellige formål (f.eks. arbejde og privat. Både antal enheder og konti er gratis og ubegrænsede)
 - Automatisk sikkerhedskopi (når noget ændrer sig, gemmes en krypteret sikkerhedskopi automatisk på din egen server. På en ny enhed, når du har gendannet din identitet, findes en sikkerhedskopi automatisk og tilbydes dig. Indstillingerne vejleder dig også gennem flytningen til en ny enhed)
@@ -49,6 +50,7 @@ Vi skriver også ærligt om grænserne. For at levere beskeder er der en kortvar
 - Profiler med foto, klistermærker, deling af placering
 - Kommandoer som `/help` (71 typer)
 - Strømtilstande tilpasset dit batteri (automatisk / normal / strømbesparende / nødstilstand). Når batteriet bliver lavt, spredes leveringstjek ud, så batteriet holder længere. En sikring til katastrofer og andre tidspunkter, hvor du ikke kan oplade
+- Nederste faner på en telefon (Chats / Opkald / Kontakter / Mit kort / Indstillinger. Hvilke faner der vises, kan vælges i indstillingerne)
 - Læsbare skærme (opmærksomhed på farvekontrast, tekststørrelse og betjening med kun tastaturet)
 
 ## Forskelle fra andre beskedtjenester

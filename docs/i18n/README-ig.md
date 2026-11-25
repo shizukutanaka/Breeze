@@ -41,6 +41,7 @@ Anyị ga-edekwa oke ya n'eziokwu. Iji ziga, sava na-echekwa ozi ruo nwa oge (en
 
 - Mkparịta ụka otu-na-otu, na mkparịta ụka otu (ruo mmadụ 1,000)
 - Oku olu na oku vidiyo (oku otu ruo mmadụ 8)
+- Akụkọ oku (a na-edebe naanị na ngwaọrụ a: naanị onye nke ọzọ, ntụziaka, oge na ogologo oge oku — ọ dịghị ihe ọ bụla n'ihe e kwuru. A naghị eziga ya na sava ma ọ bụ onye nke ọzọ)
 - Iziga faịlụ (ruo 50MB na mkparịta ụka otu-na-otu. Enwere ike iziga na otu kwa, mana oke nha pere mpe)
 - Iji ọtụtụ ngwaọrụ na ọtụtụ akaụntụ (dịka maka ọrụ na nke onwe. Ọnụọgụ ngwaọrụ na akaụntụ bụ n'efu na-enweghị oke)
 - Nkwado na-akpaghị aka (mgbe ihe gbanwere, a na-echekwa nkwado ezoro ezo na-akpaghị aka na sava nke gị. Na ngwaọrụ ọhụrụ, ozugbo i weghachitere njirimara gị, a na-achọta nkwado na-akpaghị aka ma nye gị ya. Ntọala na-eduzikwa gị ịkwaga na ngwaọrụ ọhụrụ)
@@ -49,6 +50,7 @@ Anyị ga-edekwa oke ya n'eziokwu. Iji ziga, sava na-echekwa ozi ruo nwa oge (en
 - Profaịlụ nwere foto, stika, ikesa ọnọdụ
 - Ọrụ iwu dịka `/help` (ụdị 71)
 - Ụdị ike dabara na batrị gị (na-akpaghị aka / nkịtị / ichekwa ike / mberede). Ka batrị na-ebelata, a na-agbatị oge nlele nnyefe ka batrị na-adị ogologo. Nchebe maka ọdachi na oge ndị ọzọ ị na-enweghị ike ịchaji
+- Taabụ ndị dị n'okpuru na ekwentị (Mkparịta ụka / Oku / Kọntaktị / Kaadị m / Ntọala. Taabụ ndị a ga-egosi enwere ike ịhọrọ na ntọala)
 - Ihuenyo ndị dị mfe ịgụ (nlebara anya na ọdịiche agba, nha ederede, na iji naanị kiiboodu rụọ ọrụ)
 
 ## Ọdịiche na ndị ozi ndị ọzọ

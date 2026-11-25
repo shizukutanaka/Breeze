@@ -41,6 +41,7 @@ Kami juga menuliskan cakupannya dengan jujur. Untuk pengiriman, ada penyimpanan 
 
 - Percakapan satu lawan satu dan percakapan grup (maksimal 1.000 orang)
 - Panggilan suara dan panggilan video (panggilan grup maksimal 8 orang)
+- Riwayat panggilan (disimpan hanya di perangkat ini: hanya orang lain, arah, waktu, dan durasi panggilan — tidak ada dari yang dikatakan. Tidak pernah dikirim ke server atau ke orang lain)
 - Mengirim file (maksimal 50MB untuk satu lawan satu. Dapat juga dikirim dalam grup, tetapi batas ukurannya lebih kecil)
 - Menggunakan banyak perangkat dan banyak akun (misalnya untuk pekerjaan dan pribadi. Jumlah perangkat dan akun gratis dan tidak terbatas)
 - Cadangan otomatis (ketika ada perubahan, cadangan terenkripsi disimpan secara otomatis ke server Anda sendiri. Di perangkat baru, setelah Anda memulihkan identitas Anda, cadangan ditemukan secara otomatis dan ditawarkan kepada Anda. Pengaturan juga memandu Anda untuk pindah ke perangkat baru)
@@ -49,6 +50,7 @@ Kami juga menuliskan cakupannya dengan jujur. Untuk pengiriman, ada penyimpanan 
 - Profil dengan foto, stiker, berbagi lokasi
 - Perintah seperti `/help` (71 jenis)
 - Mode daya yang disesuaikan dengan baterai Anda (otomatis / normal / hemat daya / darurat). Saat baterai berkurang, pemeriksaan pengiriman diberi jarak agar baterai lebih tahan lama. Sebuah pengaman untuk bencana dan keadaan lain ketika Anda tidak dapat mengisi daya
+- Tab bawah di ponsel (Obrolan / Panggilan / Kontak / Kartu saya / Pengaturan. Tab mana yang ditampilkan dapat dipilih di pengaturan)
 - Layar yang mudah dibaca (memperhatikan kontras warna, ukuran teks, dan pengoperasian hanya dengan keyboard)
 
 ## Perbedaannya dengan aplikasi pesan lain

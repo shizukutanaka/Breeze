@@ -75,7 +75,7 @@ Si l'autre personne a aussi l'application ouverte, vous vous connectez directeme
 - **La liste des correspondants** : l'heure de la dernière discussion s'affiche comme l'heure pour aujourd'hui, « Hier » pour hier, mois/jour pour cette année et année/mois/jour pour tout ce qui est plus ancien. Les correspondants dont vous n'avez pas lu les messages ont leur nom et leur heure mis en valeur.
 - **Noms pour les contacts** : ouvrez « Informations du contact » (dans le menu contextuel d'un contact, ou le menu « ⋮ » de la conversation) et vous pouvez définir votre propre nom pour ce contact (un surnom). Les surnoms sont enregistrés uniquement sur cet appareil et ne sont jamais envoyés au contact ni au serveur relais. Quand vous définissez un surnom, le nom que le contact s'est donné est aussi affiché à côté, dans une couleur atténuée. Vous pouvez désactiver ce second nom avec « Afficher aussi le nom que chaque contact s'est donné » dans la section « Confidentialité » des réglages.
 - **Votre propre carte** : en haut de la liste se trouve votre carte de profil ; touchez-la pour ouvrir votre profil. Elle défile avec la liste.
-- **Onglets du bas sur un téléphone** : à la largeur d'un téléphone, les onglets « Contacts » et « Réglages » apparaissent en bas de l'écran.
+- **Onglets inférieurs sur un téléphone** : À la largeur d'un téléphone, cinq onglets apparaissent en bas de l'écran : « Discussions », « Appels », « Contacts », « Ma carte » et « Réglages ». Vous pouvez choisir quels onglets sont affichés, un par un, dans « Onglets inférieurs » des réglages (Discussions est toujours affiché. Même si vous masquez l'onglet Réglages, vous pouvez toujours ouvrir les réglages depuis le bouton d'engrenage de l'écran).
 - **L'en-tête de la conversation** : depuis l'icône de recherche, vous pouvez chercher dans la conversation. Depuis le menu « ⋮ », vous pouvez vérifier le numéro de sécurité, couper les notifications, épingler, créer un sondage, et plus encore.
 
 ### Commandes
@@ -99,6 +99,9 @@ Certaines opérations, comme les réglages et la liaison d'appareils, se font de
 - Vous pouvez passer des appels vocaux et des appels vidéo individuels. Il y a aussi des appels de groupe (jusqu'à 8 personnes).
 - **Code de vérification d'appel** : un code de vérification s'affiche sur l'écran de l'appel. Lisez-le à voix haute avec l'autre personne et vérifiez qu'il correspond sur les deux écrans. S'il ne correspond pas, il est possible que quelqu'un écoute en chemin. Dans ce cas, raccrochez.
 - Il arrive qu'un appel de groupe ne puisse pas commencer si l'application de tout le monde n'est pas la dernière version.
+- **Historique des appels** : Les appels individuels laissent un historique uniquement sur cet appareil (l'autre personne, s'il s'agissait d'un appel sortant / entrant / manqué, l'heure et la durée de l'appel. Rien de ce qui a été dit n'est conservé). L'historique n'est jamais envoyé à un serveur ni à l'autre personne. Jusqu'à 200 entrées sont conservées, les plus anciennes étant supprimées en premier. Les appels de groupe n'apparaissent pas dans l'historique.
+- Ouvrez l'historique depuis l'onglet « Appels » sur un téléphone. Lorsqu'un appel manqué n'a pas encore été vu, un badge numéroté apparaît sur l'onglet Appels, et il disparaît lorsque vous ouvrez l'historique. Depuis une ligne de l'historique, vous pouvez ouvrir la conversation avec cette personne ou la rappeler. Vous pouvez supprimer tout l'historique avec un bouton sur l'écran.
+- **L'historique des appels ne fait pas partie d'une sauvegarde.** Sur un nouvel appareil, l'historique commence vide. Si vous ne voulez pas qu'un historique soit conservé, désactivez « Conserver un historique des appels sur cet appareil » dans la section « Confidentialité » des réglages, et l'enregistrement lui-même s'arrête.
 
 ---
 
@@ -121,6 +124,8 @@ Les réglages s'ouvrent comme leur propre écran. Sur un téléphone, ouvrez-les
 - **Phrase secrète de la clé** : vous pouvez protéger la clé dans votre appareil en l'enveloppant d'une phrase secrète. Il vous sera demandé de la saisir lorsque vous ouvrez l'application.
 - **Afficher aussi le nom que chaque contact s'est donné** : dans la section « Confidentialité ». Pour un contact auquel vous avez donné un surnom, vous pouvez choisir si son propre nom est affiché à côté (chapitre 3).
 - **Blocage** : vous pouvez bloquer un correspondant gênant. Les messages d'un correspondant bloqué ne vous parviendront pas.
+- **Conserver ou non un historique des appels** : Avec « Conserver un historique des appels sur cet appareil » dans la section « Confidentialité », vous pouvez arrêter l'enregistrement de l'historique des appels (chapitre 5).
+- **Visibilité des onglets inférieurs** : Dans la section « Onglets inférieurs », vous pouvez afficher ou masquer les onglets inférieurs du téléphone (Appels / Contacts / Ma carte / Réglages) un par un. Discussions est toujours affiché.
 
 ---
 
@@ -187,6 +192,7 @@ Aucun câble ni transfert de fichier n'est nécessaire.
 - **Si vous oubliez la phrase secrète, la récupération est impossible.** Les personnes qui l'ont créé ne peuvent pas non plus y remédier. Notez la phrase secrète à un autre endroit.
 - La saisie de la phrase secrète pour la sauvegarde automatique est nécessaire sur chaque appareil. Sur un nouvel appareil, saisissez-la encore une fois.
 - Refaites manuellement la sauvegarde lorsque vos identités augmentent ou lorsque vous changez d'appareil.
+- L'historique des appels ne fait pas partie d'une sauvegarde. Lorsque vous changez d'appareil, l'historique des appels ne se transfère pas vers le nouvel appareil.
 
 ---
 

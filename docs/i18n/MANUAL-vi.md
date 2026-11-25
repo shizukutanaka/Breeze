@@ -75,7 +75,7 @@ Nếu người kia cũng đang mở ứng dụng, hai bạn có thể kết nố
 - **Danh sách liên hệ**: Thời gian trò chuyện gần nhất được hiển thị là giờ đối với hôm nay, "Hôm qua" đối với hôm qua, tháng/ngày đối với năm nay, và năm/tháng/ngày đối với thời gian trước đó. Liên hệ có tin nhắn chưa đọc sẽ được làm nổi bật tên và thời gian.
 - **Tên cho các liên hệ**: Mở "Thông tin liên hệ" (trong menu chuột phải của một liên hệ, hoặc menu "⋮" của cuộc trò chuyện) và bạn có thể đặt tên riêng của bạn cho liên hệ đó (biệt danh). Biệt danh chỉ được lưu trên thiết bị này và không bao giờ được gửi tới liên hệ hay máy chủ chuyển tiếp. Khi bạn đặt biệt danh, tên mà liên hệ đó đã đặt cho chính họ cũng được hiển thị bên cạnh với màu nhạt. Bạn có thể tắt tên thứ hai đó bằng "Cũng hiển thị tên mà mỗi liên hệ đã đặt cho chính họ" trong mục "Quyền riêng tư" của cài đặt.
 - **Thẻ của chính bạn**: Ở đầu danh sách là thẻ hồ sơ của chính bạn; nhấn vào để mở hồ sơ của bạn. Nó cuộn cùng với danh sách.
-- **Tab dưới cùng trên điện thoại**: Ở chiều rộng điện thoại, các tab "Danh bạ" và "Cài đặt" xuất hiện ở cuối màn hình.
+- **Tab dưới cùng trên điện thoại**: Ở chiều rộng điện thoại, năm tab xuất hiện ở cuối màn hình: "Trò chuyện", "Cuộc gọi", "Danh bạ", "Thẻ của tôi" và "Cài đặt". Tab nào được hiển thị, bạn có thể chọn từng cái một tại "Tab dưới cùng" trong phần cài đặt (Trò chuyện luôn được hiển thị. Ngay cả khi bạn ẩn tab Cài đặt, bạn vẫn có thể mở cài đặt từ nút bánh răng trên màn hình).
 - **Phần đầu cuộc trò chuyện**: Từ biểu tượng tìm kiếm, bạn có thể tìm trong cuộc trò chuyện. Từ menu "⋮", bạn có thể kiểm tra số an toàn, tắt thông báo, ghim, tạo cuộc thăm dò, và nhiều hơn nữa.
 
 ### Lệnh
@@ -99,6 +99,9 @@ Một số thao tác như cài đặt và liên kết thiết bị được th�
 - Có thể gọi thoại và gọi video 1 đối 1. Cũng có gọi nhóm (tối đa 8 người).
 - **Mã xác nhận cuộc gọi**: Mã xác nhận được hiển thị trên màn hình cuộc gọi. Hãy đọc cho nhau nghe với người kia và xác nhận xem có khớp trên cả hai màn hình không. Nếu không khớp, có khả năng ai đó đang nghe lén ở giữa. Trong trường hợp đó, hãy kết thúc cuộc gọi.
 - Gọi nhóm có thể không bắt đầu được nếu ứng dụng của mọi người không phải phiên bản mới nhất.
+- **Lịch sử cuộc gọi**: Các cuộc gọi một đối một chỉ để lại lịch sử trên thiết bị này (người kia, cuộc gọi là đi / đến / nhỡ, thời gian và thời lượng cuộc gọi. Không có gì trong những điều đã nói được giữ lại). Lịch sử không bao giờ được gửi đến máy chủ hoặc người kia. Tối đa 200 mục được giữ, mục cũ nhất bị xóa trước. Cuộc gọi nhóm không xuất hiện trong lịch sử.
+- Mở lịch sử trên điện thoại từ tab "Cuộc gọi". Khi có cuộc gọi nhỡ mà bạn chưa xem, một huy hiệu số xuất hiện trên tab Cuộc gọi và biến mất khi bạn mở lịch sử. Từ một hàng trong lịch sử, bạn có thể mở cuộc trò chuyện với người đó hoặc gọi lại cho họ. Bạn có thể xóa toàn bộ lịch sử bằng một nút trên màn hình.
+- **Lịch sử cuộc gọi không phải là một phần của bản sao lưu.** Trên thiết bị mới, lịch sử bắt đầu trống. Nếu bạn không muốn lịch sử được giữ, hãy tắt "Giữ lịch sử cuộc gọi trên thiết bị này" trong phần "Quyền riêng tư" của cài đặt, và việc ghi lại sẽ tự dừng.
 
 ---
 
@@ -121,6 +124,8 @@ Cài đặt mở ra thành màn hình riêng. Trên điện thoại, mở từ t
 - **Mật khẩu khóa**: Khóa bên trong thiết bị có thể được bảo vệ bằng cách bọc trong một mật khẩu. Bạn sẽ được yêu cầu nhập khi mở ứng dụng.
 - **Cũng hiển thị tên mà mỗi liên hệ đã đặt cho chính họ**: Trong mục "Quyền riêng tư". Đối với liên hệ bạn đã đặt biệt danh, bạn có thể chọn có hiển thị tên của chính họ bên cạnh hay không (chương 3).
 - **Chặn**: Bạn có thể chặn người gây phiền toái. Liên lạc từ người bị chặn sẽ không đến được.
+- **Có giữ lịch sử cuộc gọi hay không**: Với "Giữ lịch sử cuộc gọi trên thiết bị này" trong phần "Quyền riêng tư", bạn có thể dừng việc ghi lịch sử cuộc gọi (chương 5).
+- **Hiển thị các tab dưới cùng**: Trong phần "Tab dưới cùng", bạn có thể hiện hoặc ẩn các tab dưới cùng của điện thoại (Cuộc gọi / Danh bạ / Thẻ của tôi / Cài đặt) từng cái một. Trò chuyện luôn được hiển thị.
 
 ---
 
@@ -187,6 +192,7 @@ Không cần cáp hay trao tay tệp.
 - **Nếu quên mật khẩu, không thể khôi phục.** Người tạo ra cũng không sửa được. Hãy ghi mật khẩu lại ở một nơi khác.
 - Việc nhập mật khẩu cho sao lưu tự động là cần thiết trên mỗi thiết bị. Trên thiết bị mới, hãy nhập lại một lần nữa.
 - Hãy tạo lại bản sao lưu thủ công khi danh tính của bạn tăng thêm hoặc khi bạn đổi thiết bị.
+- Lịch sử cuộc gọi không phải là một phần của bản sao lưu. Khi bạn đổi thiết bị, lịch sử cuộc gọi không chuyển sang thiết bị mới.
 
 ---
 
