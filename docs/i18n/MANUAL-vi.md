@@ -20,7 +20,7 @@ Từ [trang tải xuống](https://github.com/shizukutanaka/Breeze/releases/late
 - Windows: bản có tên kết thúc bằng `-win-x64.exe` (cũng có bản cho máy ARM)
 - Mac: bản có tên kết thúc bằng `-mac.dmg`
 - Linux: `.AppImage` (chạy được ngay) hoặc `.deb`
-- Nếu dùng trong trình duyệt, hãy dùng bản đã đặt trên máy chủ của riêng bạn (các bước cài đặt có trong tài liệu riêng "Hướng dẫn cài đặt")
+- Nếu dùng trong trình duyệt, hãy dùng bản đã đặt trên máy chủ của riêng bạn (các bước cài đặt có trong tài liệu riêng "Hướng dẫn cài đặt"). Cách cài đặt tiêu chuẩn sử dụng Cloudflare, vì vậy cần có tài khoản Cloudflare
 
 Mỗi tệp đều kèm theo giá trị đối chiếu (SHA256SUMS.txt). Nếu lo lắng, bạn có thể kiểm tra xem giá trị của tệp đã tải xuống có khớp hay không.
 
@@ -29,20 +29,20 @@ Mỗi tệp đều kèm theo giá trị đối chiếu (SHA256SUMS.txt). Nếu l
 ### Thiết lập lần đầu
 
 1. Mở ứng dụng.
-2. Nhập tên của bạn và nhấn "Tạo tài khoản". Chỉ vậy là xong phần chuẩn bị. Không cần đăng ký, không cần số điện thoại.
+2. Nhấn "Bắt đầu với ID ngẫu nhiên". Chỉ vậy là xong phần chuẩn bị. Không cần đăng ký, không cần số điện thoại.
 
-- Nếu bạn muốn khôi phục lại một danh tính đã tạo trước đây, hãy mở "Khôi phục tài khoản hiện có" và các cách khôi phục (tệp sao lưu, cụm từ khôi phục, v.v.) sẽ hiện ra.
+- Nếu bạn nhập "Tên của bạn (tên hiển thị)" vào ô phía trên nút, bạn sẽ bắt đầu với tên đó. Bạn cũng có thể nhấn nút khi để trống ô. Bạn có thể đổi tên hiển thị sau, trong phần hồ sơ của cài đặt.
+- Cũng có cách tạo danh tính với tên và Breeze ID do chính bạn chọn. Trong trường hợp đó, một cụm từ khôi phục được cấp và hiển thị trên màn hình. Cụm từ khôi phục là những từ cho phép bạn khôi phục danh tính đó trên thiết bị khác. Hãy ghi lại ra giấy hoặc ở nơi an toàn.
+- Nếu bạn muốn khôi phục lại một danh tính đã tạo trước đây, hãy mở "Khôi phục tài khoản hiện có" và các cách khôi phục (khôi phục từ tệp sao lưu, khôi phục bằng cụm từ khôi phục, khôi phục bằng tài khoản + mật khẩu) sẽ hiện ra.
 - Khi tạo xong, một thẻ xuất hiện hướng dẫn bạn bảo vệ khóa bằng cụm mật khẩu (thẻ không biến mất sau một thời gian). Với danh tính quan trọng, hãy làm theo hướng dẫn và thêm lớp bảo vệ.
 
 Lúc này, một "khóa" được tạo ra bên trong thiết bị. Đó chính là danh tính của bạn.
 **Danh sách tài khoản không tồn tại trên máy chủ.** Danh tính chỉ nằm bên trong thiết bị của bạn.
 Điều này trở nên quan trọng trong chương sao lưu (9).
 
-### Về "danh tính dùng một lần"
+### Về "danh tính dùng một lần" trước đây
 
-Nếu bạn chọn "danh tính dùng một lần" khi tạo, đó sẽ là danh tính không có bất kỳ cách khôi phục nào.
-Nếu bạn làm mất thiết bị đó, khôi phục cài đặt gốc, hoặc xóa dữ liệu trình duyệt, danh tính đó sẽ không bao giờ trở lại.
-Điều đó cũng được hiển thị trên màn hình. Đừng chọn nó cho danh tính dùng lâu dài.
+"Danh tính dùng một lần" — danh tính không có bất kỳ cách khôi phục nào — đã không còn. Với các cách tạo danh tính hiện nay, mọi danh tính đều có thể được bảo vệ bằng bản sao lưu.
 
 ---
 
@@ -73,6 +73,7 @@ Nếu người kia cũng đang mở ứng dụng, hai bạn có thể kết nố
 
 - **Trạng thái gửi**: Có thể biết qua dấu bên cạnh tin nhắn. ✓ nghĩa là đã gửi, ✓ trong vòng tròn nghĩa là đã gửi vào hộp lưu giữ, ✓✓ nghĩa là đã đến người kia, đã đọc là dấu màu xanh dương, và thất bại là dấu màu đỏ. Chúng được phân biệt bằng hình dạng ngoài màu sắc.
 - **Danh sách liên hệ**: Thời gian trò chuyện gần nhất được hiển thị là giờ đối với hôm nay, "Hôm qua" đối với hôm qua, tháng/ngày đối với năm nay, và năm/tháng/ngày đối với thời gian trước đó. Liên hệ có tin nhắn chưa đọc sẽ được làm nổi bật tên và thời gian.
+- **Tên cho các liên hệ**: Mở "Thông tin liên hệ" (trong menu chuột phải của một liên hệ, hoặc menu "⋮" của cuộc trò chuyện) và bạn có thể đặt tên riêng của bạn cho liên hệ đó (biệt danh). Biệt danh chỉ được lưu trên thiết bị này và không bao giờ được gửi tới liên hệ hay máy chủ chuyển tiếp. Khi bạn đặt biệt danh, tên mà liên hệ đó đã đặt cho chính họ cũng được hiển thị bên cạnh với màu nhạt. Bạn có thể tắt tên thứ hai đó bằng "Cũng hiển thị tên mà mỗi liên hệ đã đặt cho chính họ" trong mục "Quyền riêng tư" của cài đặt.
 - **Thẻ của chính bạn**: Ở đầu danh sách là thẻ hồ sơ của chính bạn; nhấn vào để mở hồ sơ của bạn. Nó cuộn cùng với danh sách.
 - **Tab dưới cùng trên điện thoại**: Ở chiều rộng điện thoại, các tab "Danh bạ" và "Cài đặt" xuất hiện ở cuối màn hình.
 - **Phần đầu cuộc trò chuyện**: Từ biểu tượng tìm kiếm, bạn có thể tìm trong cuộc trò chuyện. Từ menu "⋮", bạn có thể kiểm tra số an toàn, tắt thông báo, ghim, tạo cuộc thăm dò, và nhiều hơn nữa.
@@ -107,6 +108,7 @@ Một số thao tác như cài đặt và liên kết thiết bị được th�
 - Tài khoản có thể tạo nhiều và dùng riêng (chẳng hạn công việc và cá nhân). Cả số thiết bị và số tài khoản đều miễn phí và không giới hạn.
 - **Cách tạo tài khoản**: Nhấn nút "+" bên cạnh các tab tài khoản ở trên cùng của danh sách liên hệ. Nhập tên và chọn một emoji biểu tượng, tài khoản mới sẽ được tạo và tự động chuyển sang.
 - **Chuyển tài khoản**: Các tab tài khoản luôn hiển thị ở trên cùng của danh sách liên hệ. Nhấn một tab để chuyển (trên máy tính, bạn cũng có thể chuyển bằng Ctrl+1–9). Nhấn và giữ một tab để đổi tên, đổi biểu tượng hoặc xóa nó.
+- Liên hệ và khóa riêng biệt cho mỗi tài khoản. Hãy trao đổi liên hệ lại cho mỗi tài khoản.
 - Ngôn ngữ được tự động chọn từ 51 ngôn ngữ, bao gồm tiếng Anh, theo ngôn ngữ của thiết bị của bạn.
 
 ---
@@ -117,6 +119,7 @@ Cài đặt mở ra thành màn hình riêng. Trên điện thoại, mở từ t
 
 - **Khóa tự động**: Có cài đặt tự động khóa khi bạn chuyển tab.
 - **Mật khẩu khóa**: Khóa bên trong thiết bị có thể được bảo vệ bằng cách bọc trong một mật khẩu. Bạn sẽ được yêu cầu nhập khi mở ứng dụng.
+- **Cũng hiển thị tên mà mỗi liên hệ đã đặt cho chính họ**: Trong mục "Quyền riêng tư". Đối với liên hệ bạn đã đặt biệt danh, bạn có thể chọn có hiển thị tên của chính họ bên cạnh hay không (chương 3).
 - **Chặn**: Bạn có thể chặn người gây phiền toái. Liên lạc từ người bị chặn sẽ không đến được.
 
 ---
@@ -141,11 +144,21 @@ Trên các thiết bị không thể tự động đọc mức pin (như trình 
 Danh tính của Breeze chỉ là khóa bên trong thiết bị của bạn. Danh sách tài khoản không tồn tại trên máy chủ, và người tạo ra cũng không có khóa của bạn.
 **Nếu bạn làm mất thiết bị, danh tính cũng sẽ mất.** Với danh tính quan trọng, hãy nhất định tạo bản sao lưu.
 
-Sao lưu và khôi phục được thực hiện từ mục "Sao lưu và khôi phục" trong cài đặt (có ba nút: "Sao lưu lên đám mây", "Khôi phục" và "Khôi phục từ tệp"). Lần đầu tiên bạn thêm một liên hệ, một thẻ kêu gọi bạn tạo bản sao lưu sẽ xuất hiện đúng một lần.
+Sao lưu và khôi phục được thực hiện từ mục "Sao lưu và khôi phục" trong cài đặt (các nút là "Tạo bản sao lưu", "Khôi phục bản sao lưu" và "Khôi phục từ tệp"). Lần đầu tiên bạn thêm một liên hệ, một thẻ kêu gọi bạn tạo bản sao lưu sẽ xuất hiện đúng một lần.
 
-### Cách tạo bản sao lưu
+### Sao lưu tự động
 
-1. Từ "Sao lưu và khôi phục" trong cài đặt, chọn tạo bản sao lưu.
+Cài đặt "Sao lưu tự động" được bật từ đầu. Khi dữ liệu của bạn thay đổi, một bản sao lưu đã mã hóa được gửi tự động tới máy chủ chuyển tiếp do bạn lưu trữ.
+
+- Nó không gửi theo mỗi thay đổi: nó đợi 30 giây sau thay đổi cuối cùng và gửi tất cả cùng nhau. Các lần thử được giãn cách ít nhất 15 phút.
+- Khi bạn ngoại tuyến, không có gì được gửi; các thay đổi được giữ lại và gửi khi kết nối trở lại và khi bạn mở ứng dụng.
+- Để gửi tự động, bạn cần nhập mật khẩu sao lưu một lần trên thiết bị đó (khi cần, nút "Nhập mật khẩu" xuất hiện trong mục cài đặt). **Mật khẩu không được lưu trữ.** Nó chỉ được ghi nhớ khi ứng dụng đang mở, và biến mất khi bạn đóng ứng dụng. Đối với danh tính khôi phục đơn giản, ngay sau khi bạn nhập mật khẩu lúc đăng ký hoặc cập nhật, việc gửi hoạt động như bình thường.
+- Nếu máy chủ chuyển tiếp không hỗ trợ lưu trữ bản sao lưu, sao lưu tự động sẽ không chạy. Điều đó được hiển thị trong mục cài đặt.
+- Trạng thái (lần gửi thành công gần nhất là khi nào, có thay đổi đang chờ hay không, việc gửi có thất bại hay không) được hiển thị trong mục cài đặt.
+
+### Cách tạo bản sao lưu (thủ công)
+
+1. Từ "Sao lưu và khôi phục" trong cài đặt, chọn "Tạo bản sao lưu".
 2. Đặt mật khẩu cho bản sao lưu (6 ký tự trở lên).
 3. Chọn nơi lưu.
    - **Lưu vào tệp**: Giữ tệp sao lưu trong tay bạn (khuyến nghị).
@@ -157,11 +170,23 @@ Nội dung bản sao lưu đã được mã hóa. Máy chủ ở nơi lưu chỉ
 
 Trên thiết bị mới, khôi phục bằng tệp sao lưu (hoặc bản sao lưu trên máy chủ chuyển tiếp) và mật khẩu bạn đã đặt.
 
+Nếu bạn vừa khôi phục danh tính bằng cụm từ khôi phục, và một bản sao lưu của danh tính đó có trên máy chủ chuyển tiếp, nó sẽ được tìm thấy tự động và bạn được hỏi với "Đã tìm thấy bản sao lưu". Nếu bạn khôi phục nó, dữ liệu trên thiết bị đó sẽ được thay bằng nội dung của bản sao lưu.
+
+### Chuyển sang thiết bị mới
+
+Nhấn nút "Chuyển sang thiết bị mới" trong mục "Sao lưu và khôi phục" của cài đặt và các bước sẽ được hiển thị.
+
+1. Trên thiết bị hiện tại của bạn, hãy giữ một bản sao lưu trên máy chủ chuyển tiếp (sao lưu tự động, hoặc "Tạo bản sao lưu").
+2. Trên thiết bị mới, chọn một cách khôi phục trên màn hình đầu tiên và nhập cụm từ khôi phục của bạn (hoặc tên tài khoản và mật khẩu của bạn).
+3. Khi danh tính của bạn đã trở lại, bản sao lưu trên máy chủ được tìm thấy tự động và việc khôi phục được đề xuất.
+
+Không cần cáp hay trao tay tệp.
+
 ### Lưu ý
 
 - **Nếu quên mật khẩu, không thể khôi phục.** Người tạo ra cũng không sửa được. Hãy ghi mật khẩu lại ở một nơi khác.
-- **Danh tính dùng một lần không trở lại bằng sao lưu hay khôi phục.**
-- Hãy tạo lại bản sao lưu khi danh tính tăng thêm hoặc khi bạn đổi thiết bị.
+- Việc nhập mật khẩu cho sao lưu tự động là cần thiết trên mỗi thiết bị. Trên thiết bị mới, hãy nhập lại một lần nữa.
+- Hãy tạo lại bản sao lưu thủ công khi danh tính của bạn tăng thêm hoặc khi bạn đổi thiết bị.
 
 ---
 

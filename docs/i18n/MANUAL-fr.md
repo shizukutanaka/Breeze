@@ -20,7 +20,7 @@ Choisissez sur la [page de téléchargement](https://github.com/shizukutanaka/Br
 - Windows : celui dont le nom se termine par `-win-x64.exe` (il en existe aussi pour les machines ARM)
 - Mac : celui dont le nom se termine par `-mac.dmg`
 - Linux : `.AppImage` (exécutable tel quel) ou `.deb`
-- Pour l'utiliser dans un navigateur, on utilise ce qui est hébergé sur son propre serveur (la procédure d'installation se trouve dans le document séparé « Guide d'auto-hébergement »)
+- Pour l'utiliser dans un navigateur, on utilise ce qui est hébergé sur son propre serveur (la procédure d'installation se trouve dans le document séparé « Guide d'auto-hébergement »). L'installation standard utilise Cloudflare, donc un compte Cloudflare est requis
 
 Chaque fichier est accompagné d'une valeur de contrôle (SHA256SUMS.txt). Si cela vous inquiète, vous pouvez vérifier que la valeur du fichier que vous avez téléchargé correspond.
 
@@ -29,20 +29,20 @@ Chaque fichier est accompagné d'une valeur de contrôle (SHA256SUMS.txt). Si ce
 ### Première configuration
 
 1. Ouvrez l'application.
-2. Saisissez votre nom et appuyez sur « Créer un compte ». C'est tout, vous êtes prêt. Ni inscription, ni numéro de téléphone.
+2. Appuyez sur « Commencer avec un ID aléatoire ». C'est tout, vous êtes prêt. Ni inscription, ni numéro de téléphone.
 
-- Si vous voulez retrouver une identité que vous avez créée auparavant, ouvrez « Restaurer un compte existant » et les méthodes de récupération (un fichier de sauvegarde, une phrase de récupération, etc.) apparaissent.
+- Si vous saisissez « Votre nom (nom d'affichage) » dans le champ au-dessus du bouton, vous commencez avec ce nom. Vous pouvez aussi appuyer sur le bouton avec le champ vide. Vous pouvez changer le nom d'affichage plus tard, dans la section profil des réglages.
+- Il existe aussi un moyen de créer une identité avec un nom et un ID Breeze que vous choisissez vous-même. Dans ce cas, une phrase de récupération est émise et affichée à l'écran. La phrase de récupération, ce sont les mots qui vous permettent de retrouver cette identité sur un autre appareil. Notez-la sur papier ou dans un endroit sûr.
+- Si vous voulez retrouver une identité que vous avez créée auparavant, ouvrez « Restaurer un compte existant » et les méthodes de récupération (restaurer depuis un fichier de sauvegarde, récupérer avec une phrase de récupération, restaurer avec compte + phrase secrète) apparaissent.
 - Quand la création se termine, une carte apparaît pour vous guider afin de protéger votre clé par une phrase secrète (elle ne disparaît pas au bout d'un moment). Pour une identité importante, suivez le guide et ajoutez la protection.
 
 À ce moment-là, une « clé » est créée dans votre appareil. C'est votre identité elle-même.
 **Il n'y a pas de liste de comptes sur le serveur.** Votre identité n'existe que dans votre appareil.
 Ce point devient important dans le chapitre sur la sauvegarde (9).
 
-### À propos de l'« identité jetable »
+### À propos de l'ancienne « identité jetable »
 
-Si vous choisissez « identité jetable » au moment de la création, vous obtenez une identité sans aucun moyen de récupération.
-Si vous perdez cet appareil, si vous le réinitialisez ou si vous effacez les données du navigateur, cette identité ne reviendra jamais.
-C'est aussi indiqué à l'écran. Ne la choisissez pas pour une identité que vous utiliserez longtemps.
+L'« identité jetable » — une identité sans aucun moyen de récupération — a disparu. Avec les manières actuelles de créer une identité, chaque identité peut être protégée par une sauvegarde.
 
 ---
 
@@ -73,6 +73,7 @@ Si l'autre personne a aussi l'application ouverte, vous vous connectez directeme
 
 - **État d'envoi** : on peut le savoir grâce à la marque à côté d'un message. ✓ signifie envoyé, un ✓ dans un cercle signifie qu'il a été déposé dans la boîte de dépôt, ✓✓ signifie qu'il est arrivé chez l'autre personne, lu est une marque bleue et l'échec est une marque rouge. Ils se distinguent par la forme autant que par la couleur.
 - **La liste des correspondants** : l'heure de la dernière discussion s'affiche comme l'heure pour aujourd'hui, « Hier » pour hier, mois/jour pour cette année et année/mois/jour pour tout ce qui est plus ancien. Les correspondants dont vous n'avez pas lu les messages ont leur nom et leur heure mis en valeur.
+- **Noms pour les contacts** : ouvrez « Informations du contact » (dans le menu contextuel d'un contact, ou le menu « ⋮ » de la conversation) et vous pouvez définir votre propre nom pour ce contact (un surnom). Les surnoms sont enregistrés uniquement sur cet appareil et ne sont jamais envoyés au contact ni au serveur relais. Quand vous définissez un surnom, le nom que le contact s'est donné est aussi affiché à côté, dans une couleur atténuée. Vous pouvez désactiver ce second nom avec « Afficher aussi le nom que chaque contact s'est donné » dans la section « Confidentialité » des réglages.
 - **Votre propre carte** : en haut de la liste se trouve votre carte de profil ; touchez-la pour ouvrir votre profil. Elle défile avec la liste.
 - **Onglets du bas sur un téléphone** : à la largeur d'un téléphone, les onglets « Contacts » et « Réglages » apparaissent en bas de l'écran.
 - **L'en-tête de la conversation** : depuis l'icône de recherche, vous pouvez chercher dans la conversation. Depuis le menu « ⋮ », vous pouvez vérifier le numéro de sécurité, couper les notifications, épingler, créer un sondage, et plus encore.
@@ -107,6 +108,7 @@ Certaines opérations, comme les réglages et la liaison d'appareils, se font de
 - Vous pouvez créer plusieurs comptes et les utiliser séparément (par exemple travail et personnel). Le nombre d'appareils comme le nombre de comptes sont gratuits et illimités.
 - **Comment créer un compte** : appuyez sur le bouton « + » à côté des onglets de comptes, tout en haut de la liste des correspondants. Saisissez un nom et choisissez un emoji d'icône, et un nouveau compte est créé et sélectionné automatiquement.
 - **Changer de compte** : les onglets de comptes sont toujours affichés tout en haut de la liste des correspondants. Touchez-en un pour changer (sur un ordinateur, vous pouvez aussi changer avec Ctrl+1–9). Touchez un onglet longuement pour le renommer, changer son icône ou le supprimer.
+- Les contacts et les clés sont séparés pour chaque compte. Échangez à nouveau les contacts pour chaque compte.
 - La langue est choisie automatiquement parmi 51 langues, anglais compris, selon la langue de votre appareil.
 
 ---
@@ -117,6 +119,7 @@ Les réglages s'ouvrent comme leur propre écran. Sur un téléphone, ouvrez-les
 
 - **Verrouillage automatique** : il existe un réglage qui verrouille automatiquement lorsque vous changez d'onglet.
 - **Phrase secrète de la clé** : vous pouvez protéger la clé dans votre appareil en l'enveloppant d'une phrase secrète. Il vous sera demandé de la saisir lorsque vous ouvrez l'application.
+- **Afficher aussi le nom que chaque contact s'est donné** : dans la section « Confidentialité ». Pour un contact auquel vous avez donné un surnom, vous pouvez choisir si son propre nom est affiché à côté (chapitre 3).
 - **Blocage** : vous pouvez bloquer un correspondant gênant. Les messages d'un correspondant bloqué ne vous parviendront pas.
 
 ---
@@ -141,11 +144,21 @@ Sur les appareils qui ne peuvent pas lire automatiquement le niveau de batterie 
 L'identité Breeze n'est que la clé qui se trouve dans votre appareil. Il n'y a pas de liste de comptes sur le serveur, et les personnes qui l'ont créé n'ont pas non plus votre clé.
 **Si vous perdez votre appareil, vous perdez aussi votre identité.** Pour une identité importante, faites toujours une sauvegarde.
 
-La sauvegarde et la récupération se font depuis la section « Sauvegarde et récupération » des réglages (il y a trois boutons : « Sauvegarder dans le nuage », « Restaurer » et « Restaurer depuis un fichier »). La première fois que vous ajoutez un correspondant, une carte vous invitant à faire une sauvegarde apparaît une seule fois.
+La sauvegarde et la récupération se font depuis la section « Sauvegarde et restauration » des réglages (les boutons sont « Créer une sauvegarde », « Restaurer une sauvegarde » et « 📂 Restaurer depuis un fichier »). La première fois que vous ajoutez un correspondant, une carte vous invitant à faire une sauvegarde apparaît une seule fois.
 
-### Comment faire une sauvegarde
+### Sauvegarde automatique
 
-1. Depuis « Sauvegarde et récupération » dans les réglages, choisissez de créer une sauvegarde.
+Le réglage « Sauvegarde automatique » est activé dès le départ. Quand vos données changent, une sauvegarde chiffrée est envoyée automatiquement au serveur relais que vous hébergez.
+
+- Elle n'envoie pas à chaque changement : elle attend 30 secondes après le dernier changement et envoie tout ensemble. Les tentatives sont espacées d'au moins 15 minutes.
+- Quand vous êtes hors ligne, rien n'est envoyé ; les changements sont gardés et envoyés quand la connexion revient et quand vous ouvrez l'application.
+- Pour l'envoi automatique, vous devez saisir la phrase secrète de la sauvegarde une fois sur cet appareil (quand c'est nécessaire, un bouton « Saisir la phrase secrète » apparaît dans la section des réglages). **La phrase secrète n'est pas enregistrée.** Elle n'est gardée en mémoire que tant que l'application est ouverte, et disparaît quand vous la fermez. Pour une identité à récupération simple, juste après avoir saisi la phrase secrète à l'inscription ou à la mise à jour, l'envoi fonctionne tel quel.
+- Si le serveur relais ne prend pas en charge l'enregistrement des sauvegardes, la sauvegarde automatique ne fonctionne pas. C'est indiqué dans la section des réglages.
+- L'état (la date du dernier envoi réussi, s'il y a des changements en attente, si un envoi a échoué) est affiché dans la section des réglages.
+
+### Comment faire une sauvegarde (manuelle)
+
+1. Depuis « Sauvegarde et récupération » dans les réglages, choisissez « Créer une sauvegarde ».
 2. Définissez une phrase secrète pour la sauvegarde (6 caractères ou plus).
 3. Choisissez la destination.
    - **Enregistrer dans un fichier** : conservez le fichier de sauvegarde entre vos mains (recommandé).
@@ -157,11 +170,23 @@ Le contenu de la sauvegarde est chiffré. Le serveur de la destination ne manipu
 
 Sur un nouvel appareil, restaurez à l'aide du fichier de sauvegarde (ou de la sauvegarde sur le serveur relais) et de la phrase secrète que vous avez définie.
 
+Si vous venez de retrouver votre identité avec une phrase de récupération et qu'une sauvegarde de cette identité se trouve sur le serveur relais, elle est trouvée automatiquement et on vous le demande avec « Sauvegarde trouvée ». Si vous la restaurez, les données de cet appareil sont remplacées par le contenu de la sauvegarde.
+
+### Passer à un nouvel appareil
+
+Appuyez sur le bouton « Passer à un nouvel appareil » dans la section « Sauvegarde et restauration » des réglages et les étapes s'affichent.
+
+1. Sur votre appareil actuel, gardez une sauvegarde sur le serveur relais (sauvegarde automatique, ou « Créer une sauvegarde »).
+2. Sur le nouvel appareil, choisissez une méthode de restauration sur le premier écran et saisissez votre phrase de récupération (ou votre nom de compte et votre phrase secrète).
+3. Quand votre identité est de retour, la sauvegarde sur le serveur est trouvée automatiquement et une restauration vous est proposée.
+
+Aucun câble ni transfert de fichier n'est nécessaire.
+
 ### Remarques
 
 - **Si vous oubliez la phrase secrète, la récupération est impossible.** Les personnes qui l'ont créé ne peuvent pas non plus y remédier. Notez la phrase secrète à un autre endroit.
-- **L'identité jetable ne revient ni par la sauvegarde ni par la récupération.**
-- Refaites la sauvegarde lorsque vos identités augmentent ou lorsque vous changez d'appareil.
+- La saisie de la phrase secrète pour la sauvegarde automatique est nécessaire sur chaque appareil. Sur un nouvel appareil, saisissez-la encore une fois.
+- Refaites manuellement la sauvegarde lorsque vos identités augmentent ou lorsque vous changez d'appareil.
 
 ---
 

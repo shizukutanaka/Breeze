@@ -16,7 +16,7 @@
 
 Breeze에는 "운영 회사의 서버"가 없습니다. **사용하려면, 당신 자신이 둘 장소(서버)를 마련해서 거기에 Breeze를 설치합니다. 이것이 정식 사용 방법입니다.**
 
-- 둘 장소는 무료 범위로 충분합니다. Cloudflare의 무료 한도에서 동작하고, 신용카드도 필요 없습니다. 절차는 [설치 안내서](SELF_HOSTING-ko.md)(다른 언어판은 안내서 첫머리에서 선택할 수 있습니다)에 있습니다.
+- 표준 설치는 Cloudflare를 사용하므로 **Cloudflare 계정이 필요합니다**. 절차는 [설치 안내서](SELF_HOSTING-ko.md)(다른 언어판은 안내서 첫머리에서 선택할 수 있습니다)에 있습니다.
 - 앱(Windows / Mac / Linux / Android / iPhone)은 [다운로드 페이지](https://github.com/shizukutanaka/Breeze/releases/latest)에서 받아서, 자신의 서버에 연결해 사용합니다.
 - **견본 설치에 대하여(솔직한 안내)**: 동작 확인용 견본(https://breeze-469.pages.dev/)이 설치되어 있습니다. 설치되어 있는 것은 같은 소프트웨어이지만, 실제 사용은 자신의 서버에서 부탁드립니다. 견본은 예고 없이 바뀌거나 중단될 수 있습니다. 자신의 서버에 설치한 것은 견본 중단의 영향을 받지 않습니다.
 
@@ -24,7 +24,7 @@ Breeze에는 "운영 회사의 서버"가 없습니다. **사용하려면, 당�
 
 ## 사용법(3단계)
 
-1. 자신의 서버에 설치한 Breeze(또는 설치한 사람에게 들은 주소)를 열고, 이름을 입력합니다. 그것만으로 준비 완료입니다(등록도 전화번호도 불필요). 이때 단말기 안에서 "키"가 만들어지고, 그것이 당신의 신원이 됩니다.
+1. 자신의 서버에 설치한 Breeze(또는 설치한 사람에게 들은 주소)를 열고, "무작위 ID로 시작하기"를 누릅니다(이름은 원하면 입력할 수 있습니다). 그것만으로 준비 완료입니다(등록도 전화번호도 불필요). 이때 단말기 안에서 "키"가 만들어지고, 그것이 당신의 신원이 됩니다.
 2. 자신의 ID나 QR 코드를, 대화하고 싶은 상대에게 건넵니다.
 3. 상대도 앱을 열고 있으면, 직접 연결되어 대화할 수 있습니다. 상대가 열고 있지 않을 때는, 암호화된 채로 "보관함"에 놓이고, 상대가 열었을 때 도착합니다. 보관함을 운반하는 서버는 내용을 읽을 수 없습니다. 도착하지 않은 편지는 최대 7일이 지나면 자동으로 사라집니다.
 
@@ -43,6 +43,8 @@ Breeze에는 "운영 회사의 서버"가 없습니다. **사용하려면, 당�
 - 음성 통화와 영상 통화(그룹 통화는 최대 8명)
 - 파일 전송(1대1에서는 최대 50MB. 그룹에서도 보낼 수 있지만, 크기 상한은 작습니다)
 - 여러 단말기·여러 계정의 구분 사용(업무용과 개인용 등. 대수도 계정 수도 무료로 무제한)
+- 자동 백업(무언가 바뀌면, 암호화된 백업이 자신의 서버에 자동으로 저장됩니다. 새 단말기에서는, 신원을 되돌리면 백업이 자동으로 발견되어 제안됩니다. 설정에서는 새 단말기로의 이동도 안내합니다)
+- 연락처마다 자신이 정하는 이름(연락처마다 이름을 바꿀 수 있고, 이 단말기에만 저장됩니다. 상대가 스스로 정한 이름을 표시할지도 선택할 수 있습니다)
 - 51개 언어(영어와 언어 파일 50개), 단말기의 언어에 맞춰 자동으로 선택됩니다
 - 사진이 있는 프로필, 스티커, 위치 정보 공유
 - `/help` 등의 명령 조작(71종류)
@@ -114,7 +116,7 @@ npm test          # 테스트를 실행한다
 
 ## English
 
-Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server (Cloudflare's free tier is enough) and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
+Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
 
 ## 라이선스
 

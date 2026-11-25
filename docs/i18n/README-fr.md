@@ -16,7 +16,7 @@ Ce n'est pas une page web, mais un logiciel à installer et à utiliser (Windows
 
 Breeze n'a pas de « serveur d'une société exploitante ». **Pour l'utiliser, vous préparez vous-même un endroit où le faire tourner (un serveur) et vous y installez Breeze. C'est la manière officielle de l'utiliser.**
 
-- L'offre gratuite suffit pour l'hébergement. Il fonctionne dans les limites de l'offre gratuite de Cloudflare, et aucune carte bancaire n'est requise. La procédure se trouve dans le [guide d'auto-hébergement](SELF_HOSTING-fr.md) (vous pouvez choisir d'autres langues en haut du guide).
+- L'installation standard utilise Cloudflare, donc **un compte Cloudflare est requis**. La procédure se trouve dans le [guide d'auto-hébergement](SELF_HOSTING-fr.md) (vous pouvez choisir d'autres langues en haut du guide).
 - Les applications (Windows / Mac / Linux / Android / iPhone) s'obtiennent sur la [page de téléchargement](https://github.com/shizukutanaka/Breeze/releases/latest) et s'utilisent en les connectant à votre propre serveur.
 - **À propos de l'installation de démonstration (un avis honnête)** : une démonstration permettant de vérifier le fonctionnement (https://breeze-469.pages.dev/) est mise à disposition. Ce qui y est hébergé est le même logiciel, mais pour un usage réel, veuillez utiliser votre propre serveur. La démonstration peut changer ou s'arrêter sans préavis. Ce que vous avez installé sur votre propre serveur n'est pas affecté par l'arrêt de la démonstration.
 
@@ -24,7 +24,7 @@ Pour l'utilisation détaillée, consultez le [manuel](MANUAL-fr.md) (vous pouvez
 
 ## Utilisation (3 étapes)
 
-1. Ouvrez le Breeze que vous avez hébergé sur votre propre serveur (ou l'adresse que vous a indiquée la personne qui l'a hébergé) et saisissez votre nom. C'est tout, vous êtes prêt (ni inscription, ni numéro de téléphone). À ce moment-là, une « clé » est créée dans votre appareil, et cette clé devient votre identité.
+1. Ouvrez le Breeze que vous avez hébergé sur votre propre serveur (ou l'adresse que vous a indiquée la personne qui l'a hébergé) et appuyez sur « Commencer avec un ID aléatoire » (vous pouvez saisir un nom si vous le souhaitez). C'est tout, vous êtes prêt (ni inscription, ni numéro de téléphone). À ce moment-là, une « clé » est créée dans votre appareil, et cette clé devient votre identité.
 2. Donnez votre ID ou votre code QR à la personne avec qui vous voulez parler.
 3. Si l'autre personne a aussi l'application ouverte, vous vous connectez directement et pouvez discuter. Quand elle ne l'a pas ouverte, le message attend, toujours chiffré, dans une « boîte de dépôt » et lui est remis lorsqu'elle ouvre l'application. Le serveur qui transporte la boîte de dépôt ne peut pas en lire le contenu. Une lettre qui n'est jamais remise est automatiquement supprimée au bout de 7 jours au maximum.
 
@@ -43,6 +43,8 @@ Nous écrivons aussi la portée honnêtement. Pour pouvoir livrer les messages, 
 - Appels vocaux et appels vidéo (appels de groupe jusqu'à 8 personnes)
 - Envoi de fichiers (jusqu'à 50 Mo en individuel. Les groupes peuvent aussi en envoyer, mais la limite de taille est plus petite)
 - Utilisation sur plusieurs appareils et avec plusieurs comptes (par exemple travail et personnel. Le nombre d'appareils comme le nombre de comptes sont gratuits et illimités)
+- Sauvegarde automatique (quand quelque chose change, une sauvegarde chiffrée est enregistrée automatiquement sur votre propre serveur. Sur un nouvel appareil, une fois votre identité récupérée, une sauvegarde est trouvée automatiquement et vous est proposée. Les réglages vous guident aussi pour passer à un nouvel appareil)
+- Un nom que vous choisissez pour chaque contact (vous pouvez renommer chaque contact, enregistré uniquement sur cet appareil. Vous pouvez aussi choisir si le nom que chaque contact s'est donné est affiché)
 - 51 langues (l'anglais plus 50 fichiers de langue), choisies automatiquement selon la langue de votre appareil
 - Profils avec photo, stickers, partage de position
 - Commandes comme `/help` (71 types)
@@ -114,7 +116,7 @@ Les rapports de bugs vont sur la [page des Issues](https://github.com/shizukutan
 
 ## English
 
-Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server (Cloudflare's free tier is enough) and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
+Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
 
 ## Licence
 

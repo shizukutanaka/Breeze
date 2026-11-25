@@ -20,7 +20,7 @@ Wybierz ze [strony pobierania](https://github.com/shizukutanaka/Breeze/releases/
 - Windows: ten, którego nazwa kończy się na `-win-x64.exe` (są też wersje dla maszyn ARM)
 - Mac: ten, którego nazwa kończy się na `-mac.dmg`
 - Linux: `.AppImage` (można uruchomić bez zmian) albo `.deb`
-- Do używania w przeglądarce służy wersja postawiona na własnym serwerze (procedura instalacji jest w osobnym dokumencie „Poradnik instalacji”)
+- Do używania w przeglądarce służy wersja postawiona na własnym serwerze (procedura instalacji jest w osobnym dokumencie „Poradnik instalacji”). Standardowa instalacja korzysta z Cloudflare, więc wymagane jest konto Cloudflare
 
 Każdy plik ma dołączone wartości kontrolne (SHA256SUMS.txt). Osoby, które chcą, mogą sprawdzić, czy wartości pobranego pliku się zgadzają.
 
@@ -29,20 +29,20 @@ Każdy plik ma dołączone wartości kontrolne (SHA256SUMS.txt). Osoby, które c
 ### Pierwsza konfiguracja
 
 1. Otwórz aplikację.
-2. Wpisz imię i naciśnij „Utwórz konto”. Na tym przygotowanie się kończy. Nie trzeba rejestracji ani numeru telefonu.
+2. Naciśnij „Zacznij od losowego ID”. Na tym przygotowanie się kończy. Nie trzeba rejestracji ani numeru telefonu.
 
-- Jeśli chcesz przywrócić tożsamość utworzoną wcześniej, otwórz „Przywróć istniejące konto”, a pojawią się sposoby odzyskiwania (plik kopii zapasowej, fraza odzyskiwania itd.).
+- Jeśli w polu nad przyciskiem wpiszesz „Twoje imię (nazwa wyświetlana)”, zaczniesz z tym imieniem. Możesz też nacisnąć przycisk przy pustym polu. Nazwę wyświetlaną możesz zmienić później, w sekcji profilu w ustawieniach.
+- Istnieje też sposób utworzenia tożsamości z imieniem i identyfikatorem Breeze, które wybierasz sam. W takim przypadku wydawana jest fraza odzyskiwania, pokazywana na ekranie. Fraza odzyskiwania to słowa, które pozwalają przywrócić tę tożsamość na innym urządzeniu. Zapisz ją na papierze lub w bezpiecznym miejscu.
+- Jeśli chcesz przywrócić tożsamość utworzoną wcześniej, otwórz „Przywróć istniejące konto”, a pojawią się sposoby odzyskiwania (przywróć z pliku kopii zapasowej, odzyskaj za pomocą frazy odzyskiwania, przywróć przez konto + hasło).
 - Po zakończeniu tworzenia pojawia się karta zachęcająca do ochrony klucza hasłem (nie znika po pewnym czasie). W przypadku ważnej tożsamości postępuj zgodnie ze wskazówkami i dodaj ochronę.
 
 W tym momencie wewnątrz urządzenia powstaje „klucz”. To on jest samą twoją tożsamością.
 **Listy kont po stronie serwera nie ma.** Twoja tożsamość znajduje się wyłącznie wewnątrz twojego urządzenia.
 Ten punkt staje się ważny w rozdziale o kopii zapasowej (9).
 
-### O „tożsamości jednorazowej”
+### O dawnej „tożsamości jednorazowej”
 
-Jeśli przy tworzeniu wybierzesz „tożsamość jednorazową”, powstanie tożsamość, która nie ma żadnych środków odzyskiwania.
-Jeśli stracisz to urządzenie, zresetujesz je albo usuniesz dane przeglądarki, ta tożsamość nigdy nie wróci.
-Jest to również wyświetlane na ekranie. Nie wybieraj jej dla tożsamości, której chcesz używać przez długi czas.
+„Tożsamości jednorazowej” — tożsamości, która nie ma żadnych środków odzyskiwania — już nie ma. Przy obecnych sposobach tworzenia tożsamości każdą tożsamość można chronić kopią zapasową.
 
 ---
 
@@ -73,6 +73,7 @@ Jeśli druga osoba też ma otwartą aplikację, łączycie się bezpośrednio i 
 
 - **Status wysyłania**: widać go po znaku obok wiadomości. ✓ oznacza wysłano, ✓ w kółku oznacza, że wiadomość została złożona w skrzynce oczekiwania, ✓✓ oznacza, że dotarła do drugiej osoby, odczytanie to niebieski znak, a niepowodzenie to czerwony znak. Różnią się kształtem, a nie tylko kolorem.
 - **Lista kontaktów**: czas ostatniej rozmowy jest pokazywany jako czas dla dziś, „Wczoraj” dla wczoraj, miesiąc/dzień dla tego roku oraz rok/miesiąc/dzień dla wcześniejszych. Kontakty z nieprzeczytanymi wiadomościami mają wyróżnione imię i czas.
+- **Imiona dla kontaktów**: otwórz „Informacje o kontakcie” (w menu prawego przycisku myszy kontaktu albo w menu „⋮” rozmowy), a będziesz mógł ustawić własne imię dla tego kontaktu (pseudonim). Pseudonimy są przechowywane wyłącznie na tym urządzeniu i nigdy nie są wysyłane ani do kontaktu, ani do serwera przekazującego. Gdy ustawisz pseudonim, obok niego przygaszonym kolorem pokazywane jest też imię, które kontakt ustawił dla siebie. To drugie imię możesz wyłączyć za pomocą „Pokazuj też imię, które każdy kontakt ustawił dla siebie” w sekcji „Prywatność” w ustawieniach.
 - **Twoja karta**: na górze listy znajduje się karta twojego profilu; naciśnij ją, aby otworzyć profil. Przewija się razem z listą.
 - **Dolne karty w telefonie**: przy szerokości telefonu na dole ekranu pojawiają się karty „Kontakty” i „Ustawienia”.
 - **Nagłówek rozmowy**: za pomocą ikony wyszukiwania możesz szukać w obrębie rozmowy. Z menu „⋮” możesz sprawdzić numer bezpieczeństwa, wyciszyć powiadomienia, przypiąć, utworzyć ankietę i wiele więcej.
@@ -107,6 +108,7 @@ Niektóre operacje, takie jak ustawienia czy łączenie urządzeń, wykonuje si�
 - Kont można utworzyć kilka i używać ich oddzielnie (np. służbowe i prywatne). Zarówno liczba urządzeń, jak i kont jest bezpłatna i nieograniczona.
 - **Jak utworzyć konto**: naciśnij przycisk „+” obok kart kont na samym górze listy kontaktów. Wpisz imię i wybierz emoji ikony, a nowe konto zostanie utworzone i automatycznie wybrane.
 - **Przełączanie kont**: karty kont są zawsze wyświetlane na samym górze listy kontaktów. Naciśnij kartę, aby się przełączyć (na komputerze możesz też przełączać się za pomocą Ctrl+1–9). Naciśnij i przytrzymaj kartę, aby zmienić jej nazwę, ikonę lub ją usunąć.
+- Kontakty i klucze są oddzielne dla każdego konta. Dla każdego konta wymieniaj kontakty od nowa.
 - Język jest wybierany automatycznie spośród 51 języków, w tym angielskiego, zgodnie z językiem twojego urządzenia.
 
 ---
@@ -117,6 +119,7 @@ Ustawienia otwierają się jako osobny ekran. W telefonie otwórz je z karty „
 
 - **Automatyczna blokada**: istnieje ustawienie automatycznego blokowania przy przełączaniu kart.
 - **Hasło klucza**: klucz wewnątrz urządzenia można chronić hasłem (frazą). Przy otwieraniu aplikacji wymagane będzie jego podanie.
+- **Pokazuj też imię, które każdy kontakt ustawił dla siebie**: w sekcji „Prywatność”. Dla kontaktu, któremu nadałeś pseudonim, możesz wybrać, czy jego własne imię ma być pokazywane obok (rozdział 3).
 - **Blokowanie**: uciążliwe osoby można blokować. Wiadomości od zablokowanych osób nie docierają.
 
 ---
@@ -141,11 +144,21 @@ Na urządzeniach, które nie mogą automatycznie odczytać poziomu baterii (np. 
 Tożsamością w Breeze jest wyłącznie klucz wewnątrz twojego urządzenia. Listy kont na serwerze nie ma, a twórca również nie ma twojego klucza.
 **Jeśli stracisz urządzenie, stracisz też tożsamość.** Dla ważnych tożsamości zawsze twórz kopię zapasową.
 
-Kopię zapasową i odzyskiwanie wykonuje się w sekcji „Kopia zapasowa i odzyskiwanie” w ustawieniach (są tam trzy przyciski: „Kopia zapasowa w chmurze”, „Przywróć” i „Przywróć z pliku”). Gdy po raz pierwszy dodasz kontakt, tylko raz pojawi się karta zachęcająca do utworzenia kopii zapasowej.
+Kopię zapasową i odzyskiwanie wykonuje się w sekcji „Kopia zapasowa i przywracanie” w ustawieniach (przyciski to „Utwórz kopię zapasową”, „Przywróć kopię zapasową” i „📂 Przywróć z pliku”). Gdy po raz pierwszy dodasz kontakt, tylko raz pojawi się karta zachęcająca do utworzenia kopii zapasowej.
 
-### Jak utworzyć kopię zapasową
+### Automatyczna kopia zapasowa
 
-1. W sekcji „Kopia zapasowa i odzyskiwanie” w ustawieniach wybierz utworzenie kopii zapasowej.
+Ustawienie „Automatyczna kopia zapasowa” jest włączone od początku. Gdy twoje dane się zmieniają, zaszyfrowana kopia zapasowa jest automatycznie wysyłana na serwer przekazujący, który sam hostujesz.
+
+- Nie wysyła przy każdej zmianie: czeka 30 sekund po ostatniej zmianie i wysyła wszystko razem. Próby są rozłożone co najmniej co 15 minut.
+- Gdy jesteś offline, nic nie jest wysyłane; zmiany są wstrzymywane i wysyłane, gdy połączenie wróci i gdy otworzysz aplikację.
+- Aby wysyłanie automatyczne działało, musisz raz wpisać hasło kopii zapasowej na tym urządzeniu (gdy jest to potrzebne, w sekcji ustawień pojawia się przycisk „Wpisz hasło”). **Hasło nie jest przechowywane.** Jest pamiętane tylko, gdy aplikacja jest otwarta, i znika, gdy ją zamkniesz. W przypadku tożsamości z prostym odzyskiwaniem, zaraz po wpisaniu hasła przy rejestracji lub aktualizacji, wysyłanie działa bez zmian.
+- Jeśli serwer przekazujący nie obsługuje przechowywania kopii zapasowych, automatyczna kopia zapasowa nie działa. Jest to pokazywane w sekcji ustawień.
+- Stan (kiedy było ostatnie udane wysłanie, czy zmiany czekają, czy wysłanie się nie powiodło) jest pokazywany w sekcji ustawień.
+
+### Jak utworzyć kopię zapasową (ręcznie)
+
+1. W sekcji „Kopia zapasowa i przywracanie” w ustawieniach wybierz „Utwórz kopię zapasową”.
 2. Ustaw hasło kopii zapasowej (co najmniej 6 znaków).
 3. Wybierz miejsce zapisu.
    - **Zapis do pliku**: przechowuj plik kopii zapasowej u siebie (zalecane).
@@ -157,11 +170,23 @@ Zawartość kopii zapasowej jest zaszyfrowana. Serwer, na którym jest przechowy
 
 Na nowym urządzeniu przywróć z pliku kopii zapasowej (lub kopii na serwerze przekazującym), używając ustawionego hasła.
 
+Jeśli właśnie przywróciłeś swoją tożsamość za pomocą frazy odzyskiwania, a kopia zapasowa tej tożsamości znajduje się na serwerze przekazującym, jest ona znajdowana automatycznie i pada pytanie „Znaleziono kopię zapasową”. Jeśli ją przywrócisz, dane na tym urządzeniu zostaną zastąpione zawartością kopii zapasowej.
+
+### Przejście na nowe urządzenie
+
+Naciśnij przycisk „Przejdź na nowe urządzenie” w sekcji „Kopia zapasowa i przywracanie” w ustawieniach, a kroki zostaną pokazane.
+
+1. Na obecnym urządzeniu trzymaj kopię zapasową na serwerze przekazującym (automatyczna kopia zapasowa albo „Utwórz kopię zapasową”).
+2. Na nowym urządzeniu wybierz sposób przywracania na pierwszym ekranie i wpisz frazę odzyskiwania (albo nazwę konta i hasło).
+3. Gdy twoja tożsamość wróci, kopia zapasowa na serwerze jest znajdowana automatycznie i proponowane jest przywrócenie.
+
+Nie są potrzebne żadne kable ani przekazywanie plików.
+
 ### Uwaga
 
 - **Jeśli zapomnisz hasła, odzyskanie nie będzie możliwe.** Twórca też nie może tego naprawić. Zapisz hasło w innym miejscu.
-- **Tożsamości jednorazowe nie wracają ani przez kopię zapasową, ani przez odzyskiwanie.**
-- Twórz kopię zapasową od nowa, gdy dodajesz tożsamości albo zmieniasz urządzenie.
+- Wpisanie hasła do automatycznej kopii zapasowej jest potrzebne na każdym urządzeniu. Na nowym urządzeniu wpisz je jeszcze raz.
+- Twórz ręczną kopię zapasową od nowa, gdy dodajesz tożsamości albo zmieniasz urządzenie.
 
 ---
 

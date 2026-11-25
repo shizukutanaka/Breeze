@@ -20,7 +20,7 @@ A [letöltési oldalról](https://github.com/shizukutanaka/Breeze/releases/lates
 - Windows: a neve `-win-x64.exe` végződésű (ARM gépekhez való is van)
 - Mac: a neve `-mac.dmg` végződésű
 - Linux: `.AppImage` (azonnal futtatható) vagy `.deb`
-- Böngészőben való használathoz a saját szerverére telepített példányt használja (a telepítés módját a külön „telepítési útmutató” írja le)
+- Böngészőben való használathoz a saját szerverére telepített példányt használja (a telepítés módját a külön „telepítési útmutató” írja le). A szokásos beállítás a Cloudflare-t használja, ezért Cloudflare-fiók szükséges hozzá
 
 Minden fájlhoz tartozik egy ellenőrző szám (SHA256SUMS.txt). Aki aggódik, ellenőrizheti, hogy a letöltött fájl száma egyezik-e.
 
@@ -29,20 +29,20 @@ Minden fájlhoz tartozik egy ellenőrző szám (SHA256SUMS.txt). Aki aggódik, e
 ### Első beállítás
 
 1. Nyissa meg az alkalmazást.
-2. Adja meg a nevét, és nyomja meg a „Fiók létrehozása” gombot. Ezzel kész is a beállítás. Sem regisztráció, sem telefonszám nem kell.
+2. Nyomja meg a „Kezdés véletlen azonosítóval” gombot. Ezzel kész is a beállítás. Sem regisztráció, sem telefonszám nem kell.
 
-- Ha egy korábban létrehozott személyazonosságot szeretne visszahozni, nyissa meg a „Meglévő fiók visszaállítása” lehetőséget, és megjelennek a helyreállítási módok (biztonsági mentés fájlja, helyreállító jelmondat stb.).
+- Ha a gomb feletti mezőbe beírja „Az Ön neve (megjelenített név)” értékét, azzal a névvel kezd. A gombot üres mezővel is megnyomhatja. A megjelenített nevet később a beállítások profil szakaszában módosíthatja.
+- Van olyan mód is, amellyel saját maga által választott névvel és Breeze-azonosítóval hoz létre személyazonosságot. Ilyenkor a rendszer helyreállító kifejezést ad ki, amely megjelenik a képernyőn. A helyreállító kifejezés azokból a szavakból áll, amelyekkel ez a személyazonosság egy másik eszközön visszahozható. Írja fel papírra vagy más biztonságos helyre.
+- Ha egy korábban létrehozott személyazonosságot szeretne visszahozni, nyissa meg a „Meglévő fiók visszaállítása” lehetőséget, és megjelennek a helyreállítási módok (visszaállítás biztonsági mentés fájljából, helyreállítás helyreállító kifejezéssel, visszaállítás fiókkal + jelmondattal).
 - Amikor a létrehozás befejeződik, megjelenik egy kártya, amely útmutatást ad a kulcs jelmondattal való védelméhez (nem tűnik el egy idő után). Fontos személyazonosság esetén kövesse az útmutatást, és adja hozzá a védelmet.
 
 Ekkor az eszközön belül létrejön egy „kulcs”. Ez maga az Ön személyazonossága.
 **A fiókok listája nincs meg a szerveren.** A személyazonosság csak az Ön eszközén belül létezik.
 Ez a pont lesz fontos a biztonsági mentésről szóló fejezetben (9).
 
-### Az „eldobható személyazonosságról”
+### A korábbi „eldobható személyazonosságról”
 
-Ha a létrehozáskor az „eldobható személyazonosságot” választja, olyan személyazonosság jön létre, amelynek semmilyen helyreállítási módja nincs.
-Ha elveszíti azt az eszközt, visszaállítja a gyári állapotot, vagy törli a böngésző adatait, az a személyazonosság soha többé nem állítható vissza.
-Ez a képernyőn is megjelenik. Hosszú távon használt személyazonossághoz ne ezt válassza.
+Az „eldobható személyazonosság” — egy olyan személyazonosság, amelynek semmilyen helyreállítási módja nincs — megszűnt. A jelenlegi létrehozási módokkal minden személyazonosság biztonsági mentéssel védhető.
 
 ---
 
@@ -73,6 +73,7 @@ Ha a másik fél is megnyitotta az alkalmazást, közvetlenül kapcsolódhatnak 
 
 - **Küldési állapot**: Az üzenet melletti jelről ismerhető fel. A ✓ azt jelenti, elküldve, a körben lévő ✓ azt, hogy a letéti dobozba került, a ✓✓ azt, hogy megérkezett a másik félhez, az olvasott kék jel, a sikertelen pedig piros jel. Alakjuk is megkülönbözteti őket, nem csak a színük.
 - **A névjegyzék**: A legutóbbi beszélgetés ideje ma esetén óra-perc formában, tegnap esetén „Tegnap”, idén esetén hónap/nap, korábbinál év/hónap/nap formában jelenik meg. Azoknál a névjegyeknél, amelyektől olvasatlan üzenet van, a név és az idő ki van emelve.
+- **Nevek a névjegyekhez**: Nyissa meg a „Névjegy adatai” panelt (a névjegy jobb gombos menüjében vagy a beszélgetés „⋮” menüjében), és saját nevet (becenevet) adhat az adott névjegynek. A becenevek csak ezen az eszközön tárolódnak, és soha nem kerülnek elküldésre sem a névjegynek, sem a közvetítő szervernek. Amikor becenevet állít be, mellette visszafogott színnel megjelenik az a név is, amelyet a névjegy magának beállított. Ezt a második nevet a beállítások „Adatvédelem” szakaszában kapcsolhatja ki „A névjegy által magának beállított név is jelenjen meg” beállítással.
 - **A saját kártyája**: A lista tetején a saját profilkártyája található; nyomja meg a profil megnyitásához. A listával együtt görgetődik.
 - **Alsó lapok telefonon**: Telefonszélességben a képernyő alján a „Névjegyek” és a „Beállítások” lap jelenik meg.
 - **A beszélgetés fejléc**: A keresés ikonból a beszélgetésen belül kereshet. A „⋮” menüből ellenőrizheti a biztonsági számot, némíthatja az értesítéseket, kitűzhet, szavazást hozhat létre és még sok mást.
@@ -107,6 +108,7 @@ Egyes műveletek, például a beállítások és az eszközök összekapcsolása
 - Több fiók is létrehozható és külön használható (például munkahelyi és magán). Mind az eszközök, mind a fiókok száma ingyenes és korlátlan.
 - **Fiók létrehozása**: Nyomja meg a „+” gombot a fióklapok mellett a névjegyzék legtetején. Adjon meg egy nevet, és válasszon egy ikon-emojit; ekkor új fiók jön létre, és a rendszer automatikusan átvált rá.
 - **Fiókváltás**: A fióklapok mindig a névjegyzék legtetején láthatók. Nyomja meg az egyiket a váltáshoz (számítógépen a Ctrl+1–9 billentyűkkel is válthat). Nyomja meg hosszan egy lapot az átnevezéséhez, az ikonja megváltoztatásához vagy a törléséhez.
+- A névjegyek és a kulcsok minden fióknál külön vannak. Minden fiókhoz külön cseréljen névjegyeket.
 - A nyelv automatikusan kerül kiválasztásra 51 nyelv közül, az angolt is beleértve, az eszköz nyelvéhez igazodva.
 
 ---
@@ -117,6 +119,7 @@ A beállítások saját képernyőként nyílnak meg. Telefonon a képernyő alj
 
 - **Automatikus zárolás**: Van olyan beállítás, amely lapváltáskor automatikusan zárol.
 - **Kulcs jelmondata**: Az eszközön belüli kulcs jelmondatba csomagolva védhető. Az alkalmazás megnyitásakor be kell írni.
+- **A névjegy által magának beállított név is jelenjen meg**: Az „Adatvédelem” szakaszban. Annak a névjegynek az esetében, amelynek becenevet adott, kiválaszthatja, hogy a saját neve is megjelenjen-e mellette (3. fejezet).
 - **Letiltás**: A zaklató feleket le lehet tiltani. A letiltott féltől nem érkezik kapcsolat.
 
 ---
@@ -141,11 +144,21 @@ Azokon az eszközökön, amelyek nem tudják automatikusan leolvasni az akkumul�
 A Breeze személyazonossága csak az Ön eszközén belüli kulcs. A szerveren nincs fióklista, és a készítőnél sincs meg az Ön kulcsa.
 **Ha elveszíti az eszközt, a személyazonosság is elveszik.** Fontos személyazonossághoz mindenképpen készítsen biztonsági mentést.
 
-A biztonsági mentés és a helyreállítás a beállítások „Biztonsági mentés és helyreállítás” szakaszából végezhető (három gomb van: „Biztonsági mentés a felhőbe”, „Helyreállítás” és „Helyreállítás fájlból”). Amikor először ad hozzá névjegyet, csak egyszer jelenik meg egy kártya, amely biztonsági mentés készítésére buzdít.
+A biztonsági mentés és a helyreállítás a beállítások „Biztonsági mentés és helyreállítás” szakaszából végezhető (a gombok: „Biztonsági mentés készítése”, „Biztonsági mentés visszaállítása” és „📂 Visszaállítás fájlból”). Amikor először ad hozzá névjegyet, csak egyszer jelenik meg egy kártya, amely biztonsági mentés készítésére buzdít.
 
-### A biztonsági mentés elkészítése
+### Automatikus biztonsági mentés
 
-1. A beállítások „Biztonsági mentés és helyreállítás” szakaszából válassza a biztonsági mentés létrehozását.
+Az „Automatikus biztonsági mentés” beállítás kezdettől be van kapcsolva. Amikor az adatai megváltoznak, a titkosított biztonsági mentés automatikusan elküldésre kerül az Ön által üzemeltetett közvetítő szerverre.
+
+- Nem küld minden változásnál: az utolsó változás után 30 másodpercet vár, és mindent együtt küld el. A próbálkozások között legalább 15 perc telik el.
+- Amíg offline van, semmi sem kerül elküldésre; a változások megmaradnak, és akkor kerülnek elküldésre, amikor a kapcsolat visszatér, és amikor megnyitja az alkalmazást.
+- Az automatikus küldéshez azon az eszközön egyszer meg kell adnia a biztonsági mentés jelmondatát (amikor szükség van rá, a beállítások szakaszában megjelenik egy „Jelmondat megadása” gomb). **A jelmondat nem kerül tárolásra.** Csak addig marad meg az emlékezetben, amíg az alkalmazás nyitva van, és bezáráskor eltűnik. Egyszerű helyreállítású személyazonosság esetén a regisztrációkor vagy frissítéskor megadott jelmondat után a küldés azonnal működik.
+- Ha a közvetítő szerver nem támogatja a biztonsági mentések tárolását, az automatikus biztonsági mentés nem fut. Ez a beállítások szakaszában látható.
+- Az állapot (mikor volt az utolsó sikeres küldés, várnak-e változások, sikertelen volt-e egy küldés) a beállítások szakaszában látható.
+
+### A biztonsági mentés elkészítése (kézi)
+
+1. A beállítások „Biztonsági mentés és helyreállítás” szakaszából válassza a „Biztonsági mentés készítése” lehetőséget.
 2. Állítson be egy jelmondatot a biztonsági mentéshez (legalább 6 karakter).
 3. Válassza ki a mentés helyét.
    - **Mentés fájlba**: A biztonsági mentés fájlját saját magánál tárolja (ajánlott).
@@ -157,11 +170,23 @@ A biztonsági mentés tartalma titkosított. A mentési hely szervere csak a tit
 
 Új eszközön a biztonsági mentés fájljával (vagy a közvetítő szerveren lévő mentéssel) és a beállított jelmondattal állíthatja vissza.
 
+Ha a személyazonosságát épp most hozta vissza helyreállító kifejezéssel, és annak a személyazonosságnak a biztonsági mentése a közvetítő szerveren van, a rendszer automatikusan megtalálja, és a „Biztonsági mentés található” üzenettel megkérdezi. Ha visszaállítja, az eszközön lévő adatok helyébe a biztonsági mentés tartalma lép.
+
+### Átköltözés új eszközre
+
+Nyomja meg az „Átköltözés új eszközre” gombot a beállítások „Biztonsági mentés és helyreállítás” szakaszában, és megjelennek a lépések.
+
+1. A jelenlegi eszközén legyen biztonsági mentése a közvetítő szerveren (automatikus biztonsági mentés, vagy „Biztonsági mentés készítése”).
+2. Az új eszközön válasszon helyreállítási módot az első képernyőn, és adja meg a helyreállító kifejezését (vagy a fióknevét és a jelmondatát).
+3. Amikor a személyazonossága visszakerült, a szerveren lévő biztonsági mentést a rendszer automatikusan megtalálja, és felajánlja a visszaállítást.
+
+Nincs szükség kábelekre vagy fájlátadásra.
+
 ### Figyelmeztetések
 
 - **Ha elfelejti a jelmondatot, a visszaállítás nem lehetséges.** A készítő sem tudja kijavítani. A jelmondatot írja fel egy másik helyre.
-- **Az eldobható személyazonosság sem biztonsági mentéssel, sem helyreállítással nem hozható vissza.**
-- A biztonsági mentést készítse el újra, amikor a személyazonosságok száma nő, vagy eszközt cserél.
+- Az automatikus biztonsági mentéshez a jelmondatot minden eszközön meg kell adni. Új eszközön adja meg még egyszer.
+- A kézi biztonsági mentést készítse el újra, amikor a személyazonosságai szaporodnak, vagy eszközt cserél.
 
 ---
 

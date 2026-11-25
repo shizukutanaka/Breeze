@@ -1,6 +1,6 @@
 # Breeze Messenger
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](../../LICENSE)
 
 **Más nyelven olvasás**: [日本語](../../README.md) · [English](README-en.md) · [中文（简体）](README-zh-CN.md) · [中文（繁體）](README-zh-TW.md) · [Español](README-es.md) · [Français](README-fr.md) · [Deutsch](README-de.md) · [Italiano](README-it.md) · [Português (Brasil)](README-pt-BR.md) · [Русский](README-ru.md) · [Українська](README-uk.md) · [Polski](README-pl.md) · [Nederlands](README-nl.md) · [Svenska](README-sv.md) · [Norsk](README-nb.md) · [Dansk](README-da.md) · [Suomi](README-fi.md) · [Čeština](README-cs.md) · Magyar (ez az oldal) · [Română](README-ro.md) · [Ελληνικά](README-el.md) · [Türkçe](README-tr.md) · [العربية](README-ar.md) · [فارسی](README-fa.md) · [עברית](README-he.md) · [हिन्दी](README-hi.md) · [বাংলা](README-bn.md) · [اردو](README-ur.md) · [ਪੰਜਾਬੀ](README-pa.md) · [தமிழ்](README-ta.md) · [తెలుగు](README-te.md) · [മലയാളം](README-ml.md) · [Bahasa Indonesia](README-id.md) · [Bahasa Melayu](README-ms.md) · [Tiếng Việt](README-vi.md) · [ไทย](README-th.md) · [မြန်မာ](README-my.md) · [ខ្មែរ](README-km.md) · [한국어](README-ko.md) · [Filipino](README-tl.md) · [Kiswahili](README-sw.md) · [Hausa](README-ha.md) · [Yorùbá](README-yo.md) · [Igbo](README-ig.md) · [አማርኛ](README-am.md) · [ქართული](README-ka.md) · [Azərbaycan](README-az.md) · [Қазақша](README-kk.md) · [Oʻzbek](README-uz.md) · [Српски](README-sr.md) · [Hrvatski](README-hr.md)
 
@@ -16,7 +16,7 @@ Ez nem egy weboldal, hanem telepítve használható szoftver (Windows / Mac / Li
 
 A Breeze-nek nincs „üzemeltető vállalati szervere”. **A használatához Önnek kell tárhelyet (szervert) biztosítania, és oda kell telepítenie a Breeze-t. Ez a hivatalos használati mód.**
 
-- A tárhelyhez elegendő az ingyenes szint. A Cloudflare ingyenes keretén fut, bankkártya sem kell hozzá. Az eljárás a [telepítési útmutatóban](SELF_HOSTING-hu.md) található (a többnyelvű változatok az útmutató elején választhatók).
+- A szokásos beállítás a Cloudflare-t használja, ezért **Cloudflare-fiók szükséges hozzá**. Az eljárás a [telepítési útmutatóban](SELF_HOSTING-hu.md) található (a többnyelvű változatok az útmutató elején választhatók).
 - Az alkalmazást (Windows / Mac / Linux / Android / iPhone) a [letöltési oldalról](https://github.com/shizukutanaka/Breeze/releases/latest) szerezheti be, és a saját szerveréhez csatlakozva használhatja.
 - **A mintatelepítésről (őszinte tájékoztatás)**: Működés-ellenőrzés céljából elhelyeztünk egy mintát (https://breeze-469.pages.dev/). Ugyanaz a szoftver fut rajta, de valós használatra kérjük, használja a saját szerverét. A minta előzetes értesítés nélkül megváltozhat vagy leállhat. A saját szerverére telepített példányt a minta leállása nem érinti.
 
@@ -24,7 +24,7 @@ A részletes használati leírás a [kézikönyvben](MANUAL-hu.md) található (
 
 ## Használat (3 lépés)
 
-1. Nyissa meg a saját szerverére telepített Breeze-t (vagy azt a címet, amelyet a telepítést végző személy adott meg), és adja meg a nevét. Ezzel kész is a beállítás (sem regisztráció, sem telefonszám nem kell). Ekkor az eszközön belül létrejön egy „kulcs”, amely az Ön személyazonossága lesz.
+1. Nyissa meg a saját szerverére telepített Breeze-t (vagy azt a címet, amelyet a telepítést végző személy adott meg), és nyomja meg a „Kezdés véletlen azonosítóval” gombot (ha szeretné, nevet is megadhat). Ezzel kész is a beállítás (sem regisztráció, sem telefonszám nem kell). Ekkor az eszközön belül létrejön egy „kulcs”, amely az Ön személyazonossága lesz.
 2. Adja át a saját azonosítóját vagy QR-kódját annak, akivel beszélni szeretne.
 3. Ha a másik fél is megnyitotta az alkalmazást, közvetlenül kapcsolódhatnak és beszélgethetnek. Ha a másik fél nem nyitotta meg, az üzenet titkosítva a „letéti dobozban” marad, és akkor kézbesül, amikor megnyitja. A letéti dobozt továbbító szerver nem tudja elolvasni a tartalmat. A kézbesítetlen levelek legfeljebb 7 nap után automatikusan törlődnek.
 
@@ -43,6 +43,8 @@ Az őszinteség kedvéért a határokat is leírjuk. A kézbesítés érdekében
 - Hanghívások és videohívások (csoportos hívások legfeljebb 8 főig)
 - Fájlküldés (egyéni beszélgetésben legfeljebb 50 MB. Csoportban is küldhető, de ott kisebb a méretkorlát.)
 - Több eszköz és több fiók külön használata (például munkahelyi és magán; az eszközök és a fiókok száma is ingyenes és korlátlan)
+- Automatikus biztonsági mentés (amikor valami megváltozik, a titkosított biztonsági mentés automatikusan a saját szerverére kerül. Új eszközön, a személyazonosság visszaállítása után a rendszer automatikusan megtalálja a biztonsági mentést, és felajánlja Önnek. A beállítások az új eszközre való átköltözésben is útmutatást adnak)
+- Minden névjegyhez saját maga által választott név (minden névjegyet átnevezhet; ez csak ezen az eszközön tárolódik. Azt is kiválaszthatja, hogy megjelenjen-e a név, amelyet az egyes névjegyek maguknak beállítottak)
 - 51 nyelv (angol plusz 50 nyelvi fájl), automatikusan kiválasztva az eszköz nyelvéhez igazodva
 - Fotóval ellátott profil, matricák, helymegosztás
 - Parancsok használata, például `/help` (71 féle)
@@ -114,7 +116,7 @@ Hibajelentés az [Issues oldalon](https://github.com/shizukutanaka/Breeze/issues
 
 ## English
 
-Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server (Cloudflare's free tier is enough) and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
+Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
 
 ## Licenc
 

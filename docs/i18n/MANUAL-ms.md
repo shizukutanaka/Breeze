@@ -20,7 +20,7 @@ Dari [halaman muat turun](https://github.com/shizukutanaka/Breeze/releases/lates
 - Windows: yang namanya berakhir dengan `-win-x64.exe` (ada juga untuk mesin ARM)
 - Mac: yang namanya berakhir dengan `-mac.dmg`
 - Linux: `.AppImage` (boleh dijalankan terus) atau `.deb`
-- Jika menggunakan dalam pelayar, gunakan yang telah diletakkan pada pelayan anda sendiri (langkah pemasangan ada dalam dokumen berasingan "Panduan pemasangan")
+- Jika menggunakan dalam pelayar, gunakan yang telah diletakkan pada pelayan anda sendiri (langkah pemasangan ada dalam dokumen berasingan "Panduan pemasangan"). Persediaan standard menggunakan Cloudflare, jadi akaun Cloudflare diperlukan
 
 Setiap fail disertakan dengan nilai semakan (SHA256SUMS.txt). Jika anda bimbang, anda boleh menyemak sama ada nilai fail yang dimuat turun sepadan.
 
@@ -29,20 +29,20 @@ Setiap fail disertakan dengan nilai semakan (SHA256SUMS.txt). Jika anda bimbang,
 ### Persediaan pertama
 
 1. Buka aplikasi.
-2. Masukkan nama anda dan tekan "Buat akaun". Itu sahaja persediaannya. Tiada pendaftaran, tiada nombor telefon diperlukan.
+2. Tekan "Mulakan dengan ID rawak". Itu sahaja persediaannya. Tiada pendaftaran, tiada nombor telefon diperlukan.
 
-- Jika anda ingin mengembalikan identiti yang pernah anda buat sebelum ini, buka "Pulihkan akaun sedia ada" dan cara pemulihan (fail sandaran, frasa pemulihan, dan sebagainya) akan muncul.
+- Jika anda memasukkan "Nama anda (nama paparan)" dalam medan di atas butang, anda bermula dengan nama itu. Anda juga boleh menekan butang dengan medan dibiarkan kosong. Anda boleh menukar nama paparan kemudian, dalam bahagian profil tetapan.
+- Terdapat juga cara untuk membuat identiti dengan nama dan Breeze ID yang anda pilih sendiri. Dalam kes itu, frasa pemulihan dikeluarkan dan dipaparkan pada skrin. Frasa pemulihan ialah kata-kata yang membolehkan anda mengembalikan identiti itu pada peranti lain. Catatkannya di atas kertas atau di tempat yang selamat.
+- Jika anda ingin mengembalikan identiti yang pernah anda buat sebelum ini, buka "Pulihkan akaun sedia ada" dan cara pemulihan (pulihkan daripada fail sandaran, pulihkan dengan frasa pemulihan, pulihkan dengan akaun + frasa laluan) akan muncul.
 - Apabila penciptaan selesai, sebuah kad muncul yang memandu anda untuk melindungi kunci anda dengan frasa laluan (ia tidak hilang selepas beberapa ketika). Untuk identiti yang penting, ikuti panduan tersebut dan tambahkan perlindungannya.
 
 Pada masa ini, sebuah "kunci" dicipta di dalam peranti. Itulah identiti anda sendiri.
 **Senarai akaun tidak wujud di pelayan.** Identiti hanya berada di dalam peranti anda.
 Perkara ini menjadi penting dalam bab sandaran (9).
 
-### Tentang "identiti pakai buang"
+### Tentang "identiti pakai buang" yang dahulu
 
-Jika anda memilih "identiti pakai buang" semasa penciptaan, ia menjadi identiti yang tiada sebarang cara pemulihan.
-Jika anda kehilangan peranti itu, memformatkannya, atau memadam data pelayar, identiti itu tidak akan kembali selama-lamanya.
-Perkara itu juga dipaparkan pada skrin. Jangan pilih untuk identiti yang akan digunakan lama.
+"Identiti pakai buang" — identiti yang tiada sebarang cara pemulihan langsung — sudah tiada. Dengan cara penciptaan identiti semasa, setiap identiti boleh dilindungi dengan sandaran.
 
 ---
 
@@ -73,6 +73,7 @@ Jika pihak lain juga membuka aplikasi, anda boleh berhubung secara terus dan ber
 
 - **Status penghantaran**: Boleh diketahui daripada tanda di sebelah mesej. ✓ bermaksud telah dihantar, ✓ di dalam bulatan bermaksud telah disimpan dalam peti simpanan, ✓✓ bermaksud telah sampai kepada pihak lain, telah dibaca ialah tanda biru, dan gagal ialah tanda merah. Tanda-tanda itu dibezakan melalui bentuk selain warna.
 - **Senarai kenalan**: Masa terakhir anda berbual dipaparkan sebagai masa untuk hari ini, "Semalam" untuk semalam, bulan/hari untuk tahun ini, dan tahun/bulan/hari untuk yang lebih awal. Kenalan yang mempunyai mesej belum dibaca akan ditonjolkan nama dan masanya.
+- **Nama untuk kenalan**: Buka "Maklumat kenalan" (dalam menu klik kanan pada kenalan, atau menu "⋮" perbualan) dan anda boleh menetapkan nama anda sendiri untuk kenalan itu (nama panggilan). Nama panggilan disimpan hanya pada peranti ini dan tidak pernah dihantar kepada kenalan atau pelayan geganti. Apabila anda menetapkan nama panggilan, nama yang ditetapkan oleh kenalan itu untuk diri mereka sendiri juga dipaparkan di sebelahnya dengan warna yang malap. Anda boleh mematikan nama kedua itu dengan "Tunjukkan juga nama yang ditetapkan oleh setiap kenalan untuk diri mereka sendiri" dalam bahagian "Privasi" tetapan.
 - **Kad anda sendiri**: Di bahagian atas senarai ialah kad profil anda sendiri; tekan untuk membuka profil anda. Ia menatal bersama senarai.
 - **Tab bawah pada telefon**: Pada lebar telefon, tab "Kenalan" dan "Tetapan" muncul di bahagian bawah skrin.
 - **Pengepala perbualan**: Daripada ikon carian, anda boleh mencari di dalam perbualan. Daripada menu "⋮", anda boleh menyemak nombor keselamatan, menyenyapkan pemberitahuan, menyemat, membuat undian, dan lain-lain.
@@ -107,6 +108,7 @@ Sebahagian operasi seperti tetapan dan pautan peranti dilakukan melalui arahan.
 - Akaun boleh dibuat berbilang dan digunakan secara berasingan (seperti untuk kerja dan peribadi). Bilangan peranti dan akaun kedua-duanya percuma dan tanpa had.
 - **Cara membuat akaun**: Tekan butang "+" di sebelah tab akaun di bahagian paling atas senarai kenalan. Masukkan nama dan pilih emoji ikon, maka akaun baharu dibuat dan ditukar secara automatik kepadanya.
 - **Menukar akaun**: Tab akaun sentiasa dipaparkan di bahagian paling atas senarai kenalan. Tekan satu tab untuk menukar (pada komputer, anda juga boleh menukar dengan Ctrl+1–9). Tekan dan tahan tab untuk menamakan semula, menukar ikonnya, atau memadamnya.
+- Kenalan dan kunci adalah berasingan bagi setiap akaun. Bertukar kenalan semula bagi setiap akaun.
 - Bahasa dipilih secara automatik daripada 51 bahasa, termasuk Bahasa Inggeris, mengikut bahasa peranti anda.
 
 ---
@@ -117,6 +119,7 @@ Tetapan dibuka sebagai skrinnya sendiri. Pada telefon, buka dari tab "Tetapan" d
 
 - **Kunci automatik**: Terdapat tetapan untuk mengunci secara automatik apabila anda menukar tab.
 - **Frasa laluan kunci**: Kunci di dalam peranti boleh dilindungi dengan membalutnya dalam frasa laluan. Anda akan diminta memasukkannya apabila membuka aplikasi.
+- **Tunjukkan juga nama yang ditetapkan oleh setiap kenalan untuk diri mereka sendiri**: Dalam bahagian "Privasi". Bagi kenalan yang telah anda berikan nama panggilan, anda boleh memilih sama ada nama mereka sendiri dipaparkan di sebelahnya (bab 3).
 - **Sekat**: Pihak yang mengganggu boleh disekat. Hubungan daripada pihak yang disekat tidak akan sampai.
 
 ---
@@ -141,11 +144,21 @@ Pada peranti yang tidak dapat membaca paras bateri secara automatik (seperti pel
 Identiti Breeze hanyalah kunci di dalam peranti anda. Senarai akaun tidak wujud di pelayan, dan pencipta pun tidak mempunyai kunci anda.
 **Jika anda kehilangan peranti, identiti juga akan hilang.** Untuk identiti yang penting, pastikan anda membuat sandaran.
 
-Sandaran dan pemulihan dilakukan dari bahagian "Sandaran dan pemulihan" dalam tetapan (terdapat tiga butang: "Sandarkan ke awan", "Pulihkan", dan "Pulihkan dari fail"). Kali pertama anda menambah kenalan, kad yang menggesa anda membuat sandaran muncul sekali sahaja.
+Sandaran dan pemulihan dilakukan dari bahagian "Sandaran dan pemulihan" dalam tetapan (butangnya ialah "Cipta Sandaran", "Pulihkan Sandaran", dan "Pulihkan daripada fail"). Kali pertama anda menambah kenalan, kad yang menggesa anda membuat sandaran muncul sekali sahaja.
 
-### Cara membuat sandaran
+### Sandaran automatik
 
-1. Dari "Sandaran dan pemulihan" dalam tetapan, pilih untuk membuat sandaran.
+Tetapan "Sandaran automatik" dihidupkan dari mula. Apabila data anda berubah, sandaran terenkripsi dihantar secara automatik ke pelayan geganti yang anda hoskan.
+
+- Ia tidak menghantar pada setiap perubahan: ia menunggu 30 saat selepas perubahan terakhir dan menghantar semuanya bersama. Percubaan dijarakkan sekurang-kurangnya 15 minit.
+- Semasa anda di luar talian, tiada apa-apa dihantar; perubahan disimpan dan dihantar apabila sambungan kembali dan apabila anda membuka aplikasi.
+- Untuk penghantaran automatik, anda perlu memasukkan frasa laluan sandaran sekali pada peranti itu (apabila diperlukan, butang "Masukkan frasa laluan" muncul dalam bahagian tetapan). **Frasa laluan tidak disimpan.** Ia hanya diingati semasa aplikasi terbuka, dan hilang apabila anda menutupnya. Untuk identiti pemulihan mudah, sejurus selepas anda memasukkan frasa laluan semasa pendaftaran atau kemas kini, penghantaran berfungsi seperti sedia ada.
+- Jika pelayan geganti tidak menyokong penyimpanan sandaran, sandaran automatik tidak berjalan. Itu dipaparkan dalam bahagian tetapan.
+- Keadaannya (bila penghantaran berjaya terakhir, sama ada perubahan sedang menunggu, sama ada penghantaran gagal) dipaparkan dalam bahagian tetapan.
+
+### Cara membuat sandaran (manual)
+
+1. Dari "Sandaran dan pemulihan" dalam tetapan, pilih "Cipta Sandaran".
 2. Tetapkan frasa laluan untuk sandaran (6 aksara atau lebih).
 3. Pilih destinasi simpanan.
    - **Simpan ke fail**: Simpan fail sandaran di tangan anda sendiri (disyorkan).
@@ -157,11 +170,23 @@ Kandungan sandaran dienkripsi. Pelayan di destinasi simpanan hanya mengendalikan
 
 Pada peranti baharu, pulihkan menggunakan fail sandaran (atau sandaran di pelayan geganti) dan frasa laluan yang telah anda tetapkan.
 
+Jika anda baru sahaja mengembalikan identiti anda dengan frasa pemulihan, dan sandaran identiti itu ada pada pelayan geganti, ia ditemui secara automatik dan anda ditanya dengan "Sandaran ditemui". Jika anda memulihkannya, data pada peranti itu digantikan dengan kandungan sandaran.
+
+### Berpindah ke peranti baharu
+
+Tekan butang "Pindah ke peranti baharu" dalam bahagian "Sandaran dan pemulihan" tetapan dan langkah-langkahnya dipaparkan.
+
+1. Pada peranti semasa anda, simpan sandaran pada pelayan geganti (sandaran automatik, atau "Cipta Sandaran").
+2. Pada peranti baharu, pilih cara pemulihan pada skrin pertama dan masukkan frasa pemulihan anda (atau nama akaun dan frasa laluan anda).
+3. Apabila identiti anda kembali, sandaran pada pelayan ditemui secara automatik dan pemulihan ditawarkan.
+
+Tiada kabel atau serahan fail diperlukan.
+
 ### Perhatian
 
 - **Jika anda lupa frasa laluan, pemulihan tidak boleh dilakukan.** Pencipta pun tidak boleh membaikinya. Catatkan frasa laluan di tempat lain.
-- **Identiti pakai buang tidak akan kembali melalui sandaran mahupun pemulihan.**
-- Buat semula sandaran apabila identiti bertambah atau anda menukar peranti.
+- Memasukkan frasa laluan untuk sandaran automatik diperlukan pada setiap peranti. Pada peranti baharu, masukkannya sekali lagi.
+- Buat semula sandaran manual apabila identiti anda bertambah atau apabila anda menukar peranti.
 
 ---
 

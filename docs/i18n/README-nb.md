@@ -1,6 +1,6 @@
 # Breeze Messenger
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](../../LICENSE)
 
 **Les på andre språk**: [日本語](../../README.md) · [English](README-en.md) · [中文（简体）](README-zh-CN.md) · [中文（繁體）](README-zh-TW.md) · [Español](README-es.md) · [Français](README-fr.md) · [Deutsch](README-de.md) · [Italiano](README-it.md) · [Português (Brasil)](README-pt-BR.md) · [Русский](README-ru.md) · [Українська](README-uk.md) · [Polski](README-pl.md) · [Nederlands](README-nl.md) · [Svenska](README-sv.md) · Norsk (denne siden) · [Dansk](README-da.md) · [Suomi](README-fi.md) · [Čeština](README-cs.md) · [Magyar](README-hu.md) · [Română](README-ro.md) · [Ελληνικά](README-el.md) · [Türkçe](README-tr.md) · [العربية](README-ar.md) · [فارسی](README-fa.md) · [עברית](README-he.md) · [हिन्दी](README-hi.md) · [বাংলা](README-bn.md) · [اردو](README-ur.md) · [ਪੰਜਾਬੀ](README-pa.md) · [தமிழ்](README-ta.md) · [తెలుగు](README-te.md) · [മലയാളം](README-ml.md) · [Bahasa Indonesia](README-id.md) · [Bahasa Melayu](README-ms.md) · [Tiếng Việt](README-vi.md) · [ไทย](README-th.md) · [မြန်မာ](README-my.md) · [ខ្មែរ](README-km.md) · [한국어](README-ko.md) · [Filipino](README-tl.md) · [Kiswahili](README-sw.md) · [Hausa](README-ha.md) · [Yorùbá](README-yo.md) · [Igbo](README-ig.md) · [አማርኛ](README-am.md) · [ქართული](README-ka.md) · [Azərbaycan](README-az.md) · [Қазақша](README-kk.md) · [Oʻzbek](README-uz.md) · [Српски](README-sr.md) · [Hrvatski](README-hr.md)
 
@@ -16,7 +16,7 @@ Dette er ikke en nettside, men programvare du installerer og bruker (Windows / M
 
 Breeze har ingen «driftsselskapsserver». **For å bruke Breeze må du selv skaffe et sted (en server) og plassere Breeze der. Det er den offisielle måten å bruke den på.**
 
-- Stedet holder innenfor gratisgrensen. Den kjører på Cloudflares gratisnivå, og du trenger ikke kredittkort. Fremgangsmåten finner du i [installasjonsveiledningen](SELF_HOSTING-nb.md) (versjoner på andre språk kan velges øverst i veiledningen).
+- Standardoppsettet bruker Cloudflare, så **en Cloudflare-konto kreves**. Fremgangsmåten finner du i [installasjonsveiledningen](SELF_HOSTING-nb.md) (versjoner på andre språk kan velges øverst i veiledningen).
 - Ta appen (Windows / Mac / Linux / Android / iPhone) fra [nedlastingssiden](https://github.com/shizukutanaka/Breeze/releases/latest), og bruk den koblet til din egen server.
 - **Om eksempelinstallasjonen (en ærlig merknad)**: Det er satt opp et eksempel for å kontrollere at det virker (https://breeze-469.pages.dev/). Det er den samme programvaren som er plassert der, men bruk din egen server til faktisk bruk. Eksemplet kan endres eller stoppes uten varsel. En Breeze du har plassert på din egen server, påvirkes ikke dersom eksemplet stoppes.
 
@@ -24,7 +24,7 @@ Detaljerte bruksanvisninger finner du i [manualen](MANUAL-nb.md) (versjoner på 
 
 ## Slik bruker du den (3 trinn)
 
-1. Åpne Breeze-en du har plassert på din egen server (eller adressen du har fått oppgitt av den som plasserte den), og skriv inn navnet ditt. Da er du klar (ingen registrering, intet telefonnummer nødvendig). Da opprettes det en «nøkkel» inne i enheten din, og den er identiteten din.
+1. Åpne Breeze-en du har plassert på din egen server (eller adressen du har fått oppgitt av den som plasserte den), og trykk på «Start med en tilfeldig ID» (du kan skrive inn et navn hvis du vil). Da er du klar (ingen registrering, intet telefonnummer nødvendig). Da opprettes det en «nøkkel» inne i enheten din, og den er identiteten din.
 2. Gi ID-en din eller QR-koden til personen du vil snakke med.
 3. Hvis den andre personen også har appen åpen, kan dere koble dere direkte sammen og snakke. Hvis de ikke har den åpen, legges meldingen, fortsatt kryptert, i en «postboks» og leveres når de åpner appen. Serveren som frakter postboksen, kan ikke lese innholdet. Brev som aldri blir levert, slettes automatisk etter maks 7 dager.
 
@@ -43,6 +43,8 @@ Vi skriver også ærlig om grensene. For å levere meldinger finnes det en kortv
 - Tale- og videosamtaler (gruppesamtaler opptil 8 personer)
 - Sende filer (opptil 50MB i én-til-én-samtaler. Det går også i grupper, men størrelsesgrensen er mindre)
 - Flere enheter og flere kontoer til ulike formål (for eksempel jobb og privat. Både antall enheter og antall kontoer er gratis og ubegrenset)
+- Automatisk sikkerhetskopiering (når noe endres, lagres en kryptert sikkerhetskopi automatisk på din egen server. På en ny enhet, når du har gjenopprettet identiteten din, blir en sikkerhetskopi funnet automatisk og tilbudt deg. Innstillingene veileder deg også gjennom flyttingen til en ny enhet)
+- Et navn du velger for hver kontakt (du kan gi hver kontakt nytt navn, lagres bare på denne enheten. Du kan også velge om navnet hver kontakt selv har angitt skal vises)
 - 51 språk (engelsk pluss 50 språkfiler), velges automatisk for å passe til enhetens språk
 - Profiler med bilde, klistremerker, posisjonsdeling
 - Kommandoer som `/help` (71 typer)
@@ -114,7 +116,7 @@ Rapporter feil på [issue-siden](https://github.com/shizukutanaka/Breeze/issues)
 
 ## English
 
-Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server (Cloudflare's free tier is enough) and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
+Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
 
 ## Lisens
 

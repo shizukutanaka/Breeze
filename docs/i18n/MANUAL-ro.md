@@ -20,7 +20,7 @@ De pe [pagina de descărcare](https://github.com/shizukutanaka/Breeze/releases/l
 - Windows: cel al cărui nume se termină cu `-win-x64.exe` (există și pentru aparate ARM)
 - Mac: cel al cărui nume se termină cu `-mac.dmg`
 - Linux: `.AppImage` (poate fi rulat ca atare) sau `.deb`
-- Pentru utilizarea în browser, folosiți copia instalată pe propriul server (modul de instalare este în foaia separată „ghidul de instalare”)
+- Pentru utilizarea în browser, folosiți copia instalată pe propriul server (modul de instalare este în foaia separată „ghidul de instalare”). Instalarea standard folosește Cloudflare, așa că este necesar un cont Cloudflare
 
 Fiecare fișier are atașată o valoare numerică de verificare (SHA256SUMS.txt). Cei care sunt îngrijorați pot verifica dacă valoarea fișierului descărcat coincide.
 
@@ -29,20 +29,20 @@ Fiecare fișier are atașată o valoare numerică de verificare (SHA256SUMS.txt)
 ### Configurarea inițială
 
 1. Deschideți aplicația.
-2. Introduceți-vă numele și apăsați „Creează cont”. Cu asta, pregătirea este gata. Nu este nevoie nici de înregistrare, nici de număr de telefon.
+2. Apăsați „Începe cu un ID aleatoriu”. Cu asta, pregătirea este gata. Nu este nevoie nici de înregistrare, nici de număr de telefon.
 
-- Dacă doriți să readuceți o identitate creată anterior, deschideți „Restaurează un cont existent” și apar metodele de recuperare (un fișier de rezervă, o frază de recuperare etc.).
+- Dacă introduceți „Numele dumneavoastră (nume afișat)” în câmpul de deasupra butonului, începeți cu acel nume. Puteți apăsa butonul și cu câmpul gol. Numele afișat poate fi schimbat ulterior, în secțiunea de profil a setărilor.
+- Există și o modalitate de a crea o identitate cu un nume și un ID Breeze alese de dumneavoastră. În acest caz, este emisă o frază de recuperare, afișată pe ecran. Fraza de recuperare este formată din cuvintele care vă permit să readuceți acea identitate pe un alt dispozitiv. Notați-o pe hârtie sau într-un loc sigur.
+- Dacă doriți să readuceți o identitate creată anterior, deschideți „Restaurează un cont existent” și apar metodele de recuperare (restaurare dintr-un fișier de rezervă, recuperare cu o frază de recuperare, restaurare cu cont + frază secretă).
 - Când crearea se termină, apare un card care vă îndrumă să vă protejați cheia cu o frază de acces (nu dispare după un timp). Pentru o identitate importantă, urmați îndrumarea și adăugați protecția.
 
 În acel moment, în interiorul dispozitivului se creează o „cheie”. Aceasta este însăși identitatea dumneavoastră.
 **Lista conturilor nu se află pe server.** Identitatea există numai în interiorul dispozitivului dumneavoastră.
 Acest punct devine important în capitolul despre copiile de rezervă (9).
 
-### Despre „identitatea de unică folosință”
+### Despre fosta „identitate de unică folosință”
 
-Dacă la creare alegeți „identitate de unică folosință”, devine o identitate pentru care nu există niciun mijloc de recuperare.
-Dacă pierdeți acel dispozitiv, îl resetați sau ștergeți datele browserului, acea identitate nu se va mai întoarce niciodată.
-Acest lucru este afișat și pe ecran. Nu o alegeți pentru o identitate folosită pe termen lung.
+„Identitatea de unică folosință” — o identitate fără niciun mijloc de recuperare — a dispărut. Cu modalitățile actuale de creare, fiecare identitate poate fi protejată printr-o copie de rezervă.
 
 ---
 
@@ -73,6 +73,7 @@ Dacă și cealaltă persoană a deschis aplicația, vă puteți conecta direct �
 
 - **Starea trimiterii**: Se vede după semnul de lângă un mesaj. ✓ înseamnă trimis, un ✓ într-un cerc înseamnă că a fost depus în căsuța de păstrare, ✓✓ înseamnă că a ajuns la cealaltă persoană, citit este un semn albastru, iar eșecul este un semn roșu. Se deosebesc și prin formă, nu doar prin culoare.
 - **Lista de contacte**: Ora ultimei conversații este afișată ca oră pentru azi, „Ieri” pentru ieri, lună/zi pentru acest an și an/lună/zi pentru orice este mai vechi. Contactele cu mesaje necitite au numele și ora evidențiate.
+- **Nume pentru contacte**: Deschideți „Informații despre contact” (în meniul cu clic dreapta al unui contact sau în meniul „⋮” al conversației) și puteți seta un nume propriu pentru acel contact (o poreclă). Poreclele se păstrează numai pe acest dispozitiv și nu sunt trimise niciodată contactului sau serverului releu. Când setați o poreclă, lângă ea este afișat, într-o culoare estompată, și numele pe care contactul și l-a setat singur. Puteți dezactiva acest al doilea nume cu „Afișează și numele pe care fiecare contact și l-a setat singur” din secțiunea „Confidențialitate” a setărilor.
 - **Cardul dumneavoastră**: În partea de sus a listei se află cardul propriului profil; apăsați-l pentru a vă deschide profilul. Se derulează împreună cu lista.
 - **Filele de jos pe telefon**: La lățimea telefonului, în partea de jos a ecranului apar filele „Contacte” și „Setări”.
 - **Antetul conversației**: Din pictograma de căutare puteți căuta în conversație. Din meniul „⋮” puteți verifica numărul de siguranță, dezactiva notificările, fixa, crea un sondaj și altele.
@@ -107,6 +108,7 @@ Unele operațiuni, precum setările și legarea dispozitivelor, se fac prin come
 - Conturile pot fi create mai multe și folosite separat (de exemplu pentru serviciu și pentru uz personal). Atât numărul de dispozitive, cât și numărul de conturi sunt gratuite și nelimitate.
 - **Cum se creează un cont**: Apăsați butonul „+” de lângă filele de conturi din partea de sus a listei de contacte. Introduceți un nume și alegeți un emoji ca pictogramă, iar un cont nou este creat și se trece automat la el.
 - **Schimbarea conturilor**: Filele de conturi sunt afișate întotdeauna în partea de sus a listei de contacte. Apăsați una pentru a schimba (pe un computer puteți schimba și cu Ctrl+1–9). Apăsați lung o filă pentru a o redenumi, a-i schimba pictograma sau a o șterge.
+- Contactele și cheile sunt separate pentru fiecare cont. Faceți din nou schimb de contacte pentru fiecare cont.
 - Limba este selectată automat dintre 51 de limbi, inclusiv engleza, în funcție de limba dispozitivului dumneavoastră.
 
 ---
@@ -117,6 +119,7 @@ Setările se deschid ca un ecran separat. Pe telefon, deschideți-le din fila �
 
 - **Blocare automată**: Există o setare de blocare automată la schimbarea filei.
 - **Fraza de acces a cheii**: Cheia din interiorul dispozitivului poate fi protejată înfășurată într-o frază de acces. La deschiderea aplicației vi se cere introducerea ei.
+- **Afișează și numele pe care fiecare contact și l-a setat singur**: În secțiunea „Confidențialitate”. Pentru un contact căruia i-ați dat o poreclă, puteți alege dacă numele său propriu este afișat alături de ea (capitolul 3).
 - **Blocare**: Persoanele deranjante pot fi blocate. De la o persoană blocată nu mai sosesc contacte.
 
 ---
@@ -141,11 +144,21 @@ Pe dispozitivele care nu pot citi automat nivelul bateriei (cum ar fi un browser
 Identitatea Breeze este doar cheia din interiorul dispozitivului dumneavoastră. Pe server nu există o listă de conturi, iar creatorul nu are nici el cheia dumneavoastră.
 **Dacă pierdeți dispozitivul, se pierde și identitatea.** Pentru o identitate importantă, faceți neapărat o copie de rezervă.
 
-Copierea de rezervă și recuperarea se fac din secțiunea „Copii de rezervă și recuperare” a setărilor (există trei butoane: „Copie de rezervă în cloud”, „Restaurează” și „Restaurează dintr-un fișier”). Prima dată când adăugați un contact, apare o singură dată un card care vă îndeamnă să faceți o copie de rezervă.
+Copierea de rezervă și recuperarea se fac din secțiunea „Backup și restaurare” a setărilor (butoanele sunt „Creează copie de rezervă”, „Restaurează copia de rezervă” și „📂 Restaurează din fișier”). Prima dată când adăugați un contact, apare o singură dată un card care vă îndeamnă să faceți o copie de rezervă.
 
-### Cum se face o copie de rezervă
+### Copie de rezervă automată
 
-1. Din „Copii de rezervă și recuperare” în setări, alegeți să creați o copie de rezervă.
+Setarea „Copie de rezervă automată” este activată de la început. Când datele dumneavoastră se schimbă, o copie de rezervă criptată este trimisă automat la serverul releu pe care îl găzduiți.
+
+- Nu trimite la fiecare schimbare: așteaptă 30 de secunde după ultima schimbare și trimite totul împreună. Încercările sunt spațiate la cel puțin 15 minute.
+- Cât timp sunteți offline, nu se trimite nimic; schimbările sunt păstrate și trimise când conexiunea revine și când deschideți aplicația.
+- Pentru trimiterea automată, trebuie să introduceți o dată, pe acel dispozitiv, fraza de acces a copiei de rezervă (când este nevoie, în secțiunea de setări apare un buton „Introduceți fraza de acces”). **Fraza de acces nu este stocată.** Este reținută numai cât timp aplicația este deschisă și dispare când o închideți. Pentru o identitate cu recuperare simplă, imediat după ce introduceți fraza de acces la înregistrare sau la actualizare, trimiterea funcționează ca atare.
+- Dacă serverul releu nu acceptă stocarea copiilor de rezervă, copia de rezervă automată nu rulează. Acest lucru este arătat în secțiunea de setări.
+- Starea (când a fost ultima trimitere reușită, dacă există schimbări în așteptare, dacă o trimitere a eșuat) este arătată în secțiunea de setări.
+
+### Cum se face o copie de rezervă (manual)
+
+1. Din „Backup și restaurare” în setări, alegeți „Creează copie de rezervă”.
 2. Setați o frază de acces pentru copia de rezervă (cel puțin 6 caractere).
 3. Alegeți destinația salvării.
    - **Salvare într-un fișier**: Păstrați fișierul copiei de rezervă la dumneavoastră (recomandat).
@@ -157,11 +170,23 @@ Conținutul copiei de rezervă este criptat. Serverul destinației gestionează 
 
 Pe un dispozitiv nou, restaurați folosind fișierul copiei de rezervă (sau copia de rezervă de pe serverul releu) și fraza de acces setată.
 
+Dacă tocmai v-ați readus identitatea cu o frază de recuperare și o copie de rezervă a acelei identități se află pe serverul releu, ea este găsită automat și sunteți întrebat cu „Copie de rezervă găsită”. Dacă o restaurați, datele de pe acel dispozitiv sunt înlocuite cu conținutul copiei de rezervă.
+
+### Trecerea la un dispozitiv nou
+
+Apăsați butonul „Trecere la un dispozitiv nou” din secțiunea „Backup și restaurare” a setărilor și pașii sunt afișați.
+
+1. Pe dispozitivul actual, păstrați o copie de rezervă pe serverul releu (copie de rezervă automată sau „Creează copie de rezervă”).
+2. Pe dispozitivul nou, alegeți o metodă de restaurare pe primul ecran și introduceți fraza de recuperare (sau numele contului și fraza secretă).
+3. Când identitatea a revenit, copia de rezervă de pe server este găsită automat și vi se oferă o restaurare.
+
+Nu sunt necesare cabluri sau predări de fișiere.
+
 ### Atenție
 
 - **Dacă uitați fraza de acces, restaurarea nu este posibilă.** Nici creatorul nu o poate repara. Notați fraza de acces într-un alt loc.
-- **Identitatea de unică folosință nu se întoarce nici prin copie de rezervă, nici prin recuperare.**
-- Refăceți copia de rezervă atunci când se adaugă identități sau când schimbați dispozitivul.
+- Introducerea frazei de acces pentru copia de rezervă automată este necesară pe fiecare dispozitiv. Pe un dispozitiv nou, introduceți-o încă o dată.
+- Refăceți manual copia de rezervă atunci când identitățile dumneavoastră se înmulțesc sau când schimbați dispozitivul.
 
 ---
 

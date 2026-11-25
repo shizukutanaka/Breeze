@@ -20,7 +20,7 @@ Na [stránce ke stažení](https://github.com/shizukutanaka/Breeze/releases/late
 - Windows: soubory, jejichž název končí na `-win-x64.exe` (k dispozici i pro zařízení ARM)
 - Mac: soubory, jejichž název končí na `-mac.dmg`
 - Linux: `.AppImage` (lze spustit přímo) nebo `.deb`
-- Chcete-li jej používat v prohlížeči, použijte verzi, kterou jste umístili na vlastní server (postup instalace je v samostatném dokumentu "Průvodce instalací")
+- Chcete-li jej používat v prohlížeči, použijte verzi, kterou jste umístili na vlastní server (postup instalace je v samostatném dokumentu "Průvodce instalací"). Standardní nastavení používá Cloudflare, takže je vyžadován účet Cloudflare
 
 Ke každému souboru je přiložen kontrolní součet (SHA256SUMS.txt). Pokud máte obavy, můžete ověřit, že součet staženého souboru souhlasí.
 
@@ -29,20 +29,20 @@ Ke každému souboru je přiložen kontrolní součet (SHA256SUMS.txt). Pokud m�
 ### První nastavení
 
 1. Otevřete aplikaci.
-2. Zadejte své jméno a stiskněte "Vytvořit účet". Tím jste připraveni. Není potřeba registrace ani telefonní číslo.
+2. Stiskněte "Začít s náhodným ID". Tím jste připraveni. Není potřeba registrace ani telefonní číslo.
 
-- Pokud chcete obnovit identitu, kterou jste vytvořili dříve, otevřete "Obnovit existující účet" a zobrazí se způsoby obnovy (záložní soubor, obnovovací fráze apod.).
+- Pokud do pole nad tlačítkem zadáte "Vaše jméno (zobrazované jméno)", začnete s tímto jménem. Tlačítko můžete stisknout i s prázdným polem. Zobrazované jméno můžete později změnit v části profilu v nastavení.
+- Existuje také způsob, jak vytvořit identitu se jménem a Breeze ID, které si sami zvolíte. V takovém případě se vydá obnovovací fráze a zobrazí se na obrazovce. Obnovovací fráze jsou slova, která vám umožní tuto identitu obnovit na jiném zařízení. Zapište si ji na papír nebo na jiné bezpečné místo.
+- Pokud chcete obnovit identitu, kterou jste vytvořili dříve, otevřete "Obnovit existující účet" a zobrazí se způsoby obnovy (obnova ze záložního souboru, obnova pomocí obnovovací fráze, obnova pomocí účtu + přístupové fráze).
 - Po dokončení vytvoření se zobrazí karta, která vás navede k ochraně klíče přístupovou frází (po čase nezmizí). U důležité identity postupujte podle návodu a ochranu přidejte.
 
 V tu chvíli se uvnitř vašeho zařízení vytvoří "klíč". Ten je vaší samotnou identitou.
 **Na serveru neexistuje seznam účtů.** Vaše identita je pouze uvnitř vašeho zařízení.
 To bude důležité v kapitole o zálohování (9).
 
-### O "jednorázové identitě"
+### O bývalé "jednorázové identitě"
 
-Pokud při vytváření zvolíte "jednorázovou identitu", získáte identitu, kterou nelze žádným způsobem obnovit.
-Pokud zařízení ztratíte, resetujete nebo smažete data prohlížeče, identita je navždy pryč.
-Zobrazuje se to i na obrazovce. Nevolte ji pro identitu, kterou chcete používat dlouho.
+"Jednorázová identita" — identita bez jakéhokoli způsobu obnovy — je pryč. Při současných způsobech vytváření identity lze každou identitu chránit zálohou.
 
 ---
 
@@ -73,6 +73,7 @@ Pokud má i druhá osoba aplikaci otevřenou, můžete se připojit přímo a ml
 
 - **Stav odeslání**: Poznáte jej podle značky vedle zprávy. ✓ znamená odesláno, ✓ v kroužku znamená, že byla uložena do schránky, ✓✓ znamená, že dorazila druhé osobě, přečteno je modrá značka a selhání je červená značka. Rozlišují se i tvarem, nejen barvou.
 - **Seznam kontaktů**: Čas vaší poslední konverzace se zobrazuje jako čas pro dnešek, "Včera" pro včerejšek, měsíc/den pro tento rok a rok/měsíc/den pro vše dřívější. Kontakty se zprávami, které jste nečetli, mají zvýrazněné jméno a čas.
+- **Jména pro kontakty**: Otevřete "Informace o kontaktu" (v nabídce po kliknutí pravým tlačítkem na kontakt nebo v nabídce "⋮" konverzace) a můžete si pro daný kontakt nastavit vlastní jméno (přezdívku). Přezdívky se ukládají pouze v tomto zařízení a nikdy se neposílají kontaktu ani relé serveru. Když přezdívku nastavíte, zobrazí se vedle ní tlumenou barvou také jméno, které si kontakt sám nastavil. Toto druhé jméno můžete vypnout volbou "Zobrazit také jméno, které si každý kontakt sám nastavil" v části "Soukromí" v nastavení.
 - **Vaše vlastní karta**: Na začátku seznamu je vaše vlastní profilová karta; stisknutím ji otevřete svůj profil. Posouvá se spolu se seznamem.
 - **Dolní karty na telefonu**: Při šířce telefonu se v dolní části obrazovky zobrazují karty "Kontakty" a "Nastavení".
 - **Záhlaví konverzace**: Z ikony hledání můžete hledat v konverzaci. Z nabídky "⋮" můžete zkontrolovat bezpečnostní číslo, ztlumit oznámení, připnout, vytvořit anketu a další.
@@ -107,6 +108,7 @@ Některé operace, například nastavení a propojení zařízení, se provádě
 - Můžete vytvořit více účtů a používat je pro různé účely (například pracovní a soukromé). Počet zařízení i účtů je zdarma a neomezený.
 - **Jak vytvořit účet**: Stiskněte tlačítko "+" vedle karet účtů úplně nahoře v seznamu kontaktů. Zadejte jméno a vyberte ikonu emoji a nový účet se vytvoří a automaticky se na něj přepne.
 - **Přepínání účtů**: Karty účtů se vždy zobrazují úplně nahoře v seznamu kontaktů. Stisknutím jedné přepnete (na počítači můžete přepínat i pomocí Ctrl+1–9). Stisknutím a podržením karty ji můžete přejmenovat, změnit její ikonu nebo ji smazat.
+- Kontakty a klíče jsou pro každý účet oddělené. Kontakty si vyměňte znovu pro každý účet.
 - Jazyk se automaticky vybírá z 51 jazyků včetně angličtiny podle jazyka vašeho zařízení.
 
 ---
@@ -117,6 +119,7 @@ Nastavení se otevírají jako vlastní obrazovka. Na telefonu je otevřete z ka
 
 - **Automatický zámek**: Existuje nastavení, které se automaticky uzamkne při přepnutí karty.
 - **Přístupová fráze ke klíči**: Klíč uvnitř zařízení můžete chránit zabalením do přístupové fráze. Při otevření aplikace budete vyzváni k jejímu zadání.
+- **Zobrazit také jméno, které si každý kontakt sám nastavil**: V části "Soukromí". U kontaktu, kterému jste dali přezdívku, si můžete zvolit, zda se vedle ní zobrazí i jeho vlastní jméno (kapitola 3).
 - **Blokování**: Obtěžující osoby můžete zablokovat. Zprávy od zablokované osoby k vám nedorazí.
 
 ---
@@ -141,11 +144,21 @@ Na zařízeních, která nemohou úroveň baterie číst automaticky (napříkla
 Vaše identita Breeze je pouze klíč uvnitř vašeho zařízení. Na serveru není seznam účtů a tvůrce nemá váš klíč také.
 **Pokud zařízení ztratíte, ztratíte i svou identitu.** Pro důležitou identitu si vždy vytvořte zálohu.
 
-Zálohování a obnova se provádějí v části "Zálohování a obnova" v nastavení (jsou tam tři tlačítka: "Zálohovat do cloudu", "Obnovit" a "Obnovit ze souboru"). Když poprvé přidáte kontakt, zobrazí se jen jednou karta, která vás vyzývá k vytvoření zálohy.
+Zálohování a obnova se provádějí v části "Zálohování a obnova" v nastavení (tlačítka jsou "Vytvořit zálohu", "Obnovit zálohu" a "📂 Obnovit ze souboru"). Když poprvé přidáte kontakt, zobrazí se jen jednou karta, která vás vyzývá k vytvoření zálohy.
 
-### Vytvoření zálohy
+### Automatické zálohování
 
-1. V části "Zálohování a obnova" v nastavení zvolte vytvoření zálohy.
+Nastavení "Automatické zálohování" je od začátku zapnuté. Když se vaše data změní, zašifrovaná záloha se automaticky odešle na relé server, který sami provozujete.
+
+- Neodesílá se při každé změně: čeká 30 sekund po poslední změně a vše odešle najednou. Pokusy jsou od sebe vzdáleny nejméně 15 minut.
+- Když jste offline, nic se neodesílá; změny se podrží a odešlou se, až se připojení vrátí a až aplikaci otevřete.
+- Pro automatické odesílání je třeba na daném zařízení jednou zadat přístupovou frázi zálohy (když je to potřeba, v části nastavení se zobrazí tlačítko "Zadat přístupovou frázi"). **Přístupová fráze se neukládá.** Pamatuje se pouze po dobu, kdy je aplikace otevřená, a po jejím zavření zmizí. U identity s jednoduchou obnovou odesílání funguje tak, jak je, hned po zadání přístupové fráze při registraci nebo aktualizaci.
+- Pokud relé server ukládání záloh nepodporuje, automatické zálohování neběží. To je uvedeno v části nastavení.
+- Stav (kdy proběhlo poslední úspěšné odeslání, zda čekají změny, zda odeslání selhalo) je uveden v části nastavení.
+
+### Vytvoření zálohy (ruční)
+
+1. V části "Zálohování a obnova" v nastavení zvolte "Vytvořit zálohu".
 2. Nastavte přístupovou frázi pro zálohu (alespoň 6 znaků).
 3. Vyberte, kam se má uložit.
    - **Uložit do souboru**: Záložní soubor si uchovejte u sebe (doporučeno).
@@ -157,11 +170,23 @@ Obsah zálohy je zašifrován. Server, na kterém je uložena, pracuje pouze se 
 
 Na novém zařízení obnovíte pomocí záložního souboru (nebo zálohy na relé serveru) a přístupové fráze, kterou jste nastavili.
 
+Pokud jste svou identitu právě obnovili pomocí obnovovací fráze a záloha této identity je na relé serveru, najde se automaticky a budete dotázáni hlášením "Záloha nalezena". Pokud ji obnovíte, data v tomto zařízení se nahradí obsahem zálohy.
+
+### Přechod na nové zařízení
+
+Stiskněte tlačítko "Přechod na nové zařízení" v části "Zálohování a obnova" v nastavení a zobrazí se postup.
+
+1. Na současném zařízení mějte zálohu na relé serveru (automatické zálohování, nebo "Vytvořit zálohu").
+2. Na novém zařízení zvolte na první obrazovce způsob obnovy a zadejte svou obnovovací frázi (nebo název účtu a přístupovou frázi).
+3. Až bude vaše identita zpět, záloha na serveru se najde automaticky a nabídne se obnova.
+
+Nejsou potřeba žádné kabely ani předávání souborů.
+
 ### Upozornění
 
 - **Pokud přístupovou frázi zapomenete, obnova není možná.** Ani tvůrce to nemůže napravit. Přístupovou frázi si zapište na jiné místo.
-- **Jednorázovou identitu nelze obnovit, ani zálohou, ani obnovou.**
-- Zálohu vytvořte znovu, když přidáte identity nebo vyměníte zařízení.
+- Zadání přístupové fráze pro automatické zálohování je potřeba na každém zařízení. Na novém zařízení ji zadejte ještě jednou.
+- Ruční zálohu vytvořte znovu, když se vaše identity rozšíří nebo když měníte zařízení.
 
 ---
 

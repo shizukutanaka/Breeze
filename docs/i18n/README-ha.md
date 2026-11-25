@@ -16,7 +16,7 @@ Wannan ba shafin yanar gizo ba ne; manhaja ce da ake girkawa a yi amfani da ita 
 
 Breeze ba shi da "sabar kamfani". **Don amfani da shi, kai da kanka za ka samar da wurin ajiya (saba) ka sa Breeze a ciki. Wannan ne hanyar amfani ta hukuma.**
 
-- Wurin ajiya a cikin iyakar kyauta ya isa. Yana aiki a cikin kyautar Cloudflare, kuma ba a buƙatar katin banki. Matakan suna cikin [littafin jagora na girkawa](SELF_HOSTING-ha.md) (za ka iya zaɓar wasu harsuna daga farkon jagorar).
+- Saitin na yau da kullum yana amfani da Cloudflare, don haka **ana buƙatar asusun Cloudflare**. Matakan suna cikin [littafin jagora na girkawa](SELF_HOSTING-ha.md) (za ka iya zaɓar wasu harsuna daga farkon jagorar).
 - Ɗauki manhajar (Windows / Mac / Linux / Android / iPhone) daga [shafin saukewa](https://github.com/shizukutanaka/Breeze/releases/latest), ka haɗa ta da sabarka, ka yi amfani da ita.
 - **Game da samfurin nunawa (sanarwa ta gaskiya)**: Mun sa samfurin nunawa (https://breeze-469.pages.dev/) don gwajin aiki. Abin da ke ciki manhaja ɗaya ce, amma don amfani na gaske, don Allah ka yi amfani da sabarka. Samfurin na iya canzawa ko tsayawa ba tare da sanarwa ba. Abin da ka sa a sabarka ba zai shafi tsayawar samfurin ba.
 
@@ -24,7 +24,7 @@ Cikakken bayanin amfani yana cikin [littafin bayani](MANUAL-ha.md) (za ka iya za
 
 ## Yadda ake amfani (matakai 3)
 
-1. Buɗe Breeze da ka sa a sabarka (ko adireshin da wanda ya sa shi ya gaya maka), ka shigar da suna. Shi ke nan, an gama shiri (ba rajista, ba lambar waya). A wannan lokacin, ana ƙirƙirar "maɓalli" a cikin na'urarka, kuma shi ne asalinka.
+1. Buɗe Breeze da ka sa a sabarka (ko adireshin da wanda ya sa shi ya gaya maka), ka danna "Fara da ID na bazata" (za ka iya shigar da suna idan kana so). Shi ke nan, an gama shiri (ba rajista, ba lambar waya). A wannan lokacin, ana ƙirƙirar "maɓalli" a cikin na'urarka, kuma shi ne asalinka.
 2. Ba da ID naka ko lambar QR ga wanda kake son magana da shi.
 3. Idan ɗayan ma ya buɗe manhajar, za ku haɗu kai tsaye ku yi tattaunawa. Idan bai buɗe ba, saƙon yana zama a cikin "akwatin ajiya" a ɓoye, kuma yana isa gare shi idan ya buɗe. Sabar da ke ɗauke da akwatin ajiya ba za ta iya karanta abin da ke ciki ba. Wasikun da ba su isa ba suna gogewa ta atomatik bayan kwanaki 7 a mafi yawa.
 
@@ -43,6 +43,8 @@ Za mu kuma rubuta iyakar da gaskiya. Don isarwa, saba tana ajiye saƙonni na ɗa
 - Kiran murya da kiran bidiyo (kiran ƙungiya har zuwa mutane 8)
 - Aika fayiloli (har zuwa 50MB a tattaunawa ta mutum ɗaya da ɗaya. Ana iya aikawa a ƙungiyoyi ma, amma iyakar girma ƙarama ce)
 - Amfani da na'urori da yawa da asusu da yawa (misali na aiki da na sirri. Adadin na'urori da asusu kyauta ne ba tare da iyaka ba)
+- Ajiya ta atomatik (idan wani abu ya canza, ana ajiye ajiyar tanadi da aka ɓoye ta atomatik a sabarka. A sabuwar na'ura, idan ka dawo da asalinka, ana samun ajiyar ta atomatik a miƙa maka ita. Saituna ma suna jagorantar ka zuwa sabuwar na'ura)
+- Sunan da ka zaɓa ga kowace lambar sadarwa (za ka iya sake sunan kowace lambar sadarwa, ana ajiye shi a wannan na'ura kaɗai. Za ka iya zaɓar kuma ko za a nuna sunan da kowace lambar sadarwa ta sa wa kanta)
 - Harsuna 51 (Turanci da fayilolin harsuna 50), ana zaɓa ta atomatik bisa harshen na'urarka
 - Bayanin martaba mai hoto, sitika, raba wuri
 - Ayyukan umarni kamar `/help` (nau'ika 71)
@@ -114,7 +116,7 @@ Rahoton matsala zuwa [shafin Issue](https://github.com/shizukutanaka/Breeze/issu
 
 ## English
 
-Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server (Cloudflare's free tier is enough) and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [docs/i18n/README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [docs/COMPARISON.md](../COMPARISON.md).
+Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [docs/i18n/README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [docs/COMPARISON.md](../COMPARISON.md).
 
 ## Lasisi
 

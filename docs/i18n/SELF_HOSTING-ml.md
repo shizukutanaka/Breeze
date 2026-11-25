@@ -3,6 +3,13 @@
 **മറ്റ് ഭാഷകളിൽ വായിക്കുക / Read in another language**: [English](../SELF_HOSTING.md) · [English](SELF_HOSTING-en.md) · [中文（简体）](SELF_HOSTING-zh-CN.md) · [中文（繁體）](SELF_HOSTING-zh-TW.md) · [Español](SELF_HOSTING-es.md) · [Français](SELF_HOSTING-fr.md) · [Deutsch](SELF_HOSTING-de.md) · [Italiano](SELF_HOSTING-it.md) · [Português (Brasil)](SELF_HOSTING-pt-BR.md) · [Русский](SELF_HOSTING-ru.md) · [Українська](SELF_HOSTING-uk.md) · [Polski](SELF_HOSTING-pl.md) · [Nederlands](SELF_HOSTING-nl.md) · [Svenska](SELF_HOSTING-sv.md) · [Norsk](SELF_HOSTING-nb.md) · [Dansk](SELF_HOSTING-da.md) · [Suomi](SELF_HOSTING-fi.md) · [Čeština](SELF_HOSTING-cs.md) · [Magyar](SELF_HOSTING-hu.md) · [Română](SELF_HOSTING-ro.md) · [Ελληνικά](SELF_HOSTING-el.md) · [Türkçe](SELF_HOSTING-tr.md) · [العربية](SELF_HOSTING-ar.md) · [فارسی](SELF_HOSTING-fa.md) · [עברית](SELF_HOSTING-he.md) · [हिन्दी](SELF_HOSTING-hi.md) · [বাংলা](SELF_HOSTING-bn.md) · [اردو](SELF_HOSTING-ur.md) · [ਪੰਜਾਬੀ](SELF_HOSTING-pa.md) · [தமிழ்](SELF_HOSTING-ta.md) · [తెలుగు](SELF_HOSTING-te.md) · മലയാളം (ഈ പേജ്) · [Bahasa Indonesia](SELF_HOSTING-id.md) · [Bahasa Melayu](SELF_HOSTING-ms.md) · [Tiếng Việt](SELF_HOSTING-vi.md) · [ไทย](SELF_HOSTING-th.md) · [မြန်မာ](SELF_HOSTING-my.md) · [ខ្មែរ](SELF_HOSTING-km.md) · [한국어](SELF_HOSTING-ko.md) · [Filipino](SELF_HOSTING-tl.md) · [Kiswahili](SELF_HOSTING-sw.md) · [Hausa](SELF_HOSTING-ha.md) · [Yorùbá](SELF_HOSTING-yo.md) · [Igbo](SELF_HOSTING-ig.md) · [አማርኛ](SELF_HOSTING-am.md) · [ქართული](SELF_HOSTING-ka.md) · [Azərbaycan](SELF_HOSTING-az.md) · [Қазақша](SELF_HOSTING-kk.md) · [Oʻzbek](SELF_HOSTING-uz.md) · [Српски](SELF_HOSTING-sr.md) · [Hrvatski](SELF_HOSTING-hr.md)
 
 
+> **തുടങ്ങുന്നതിന് മുമ്പ്: സാധാരണ സജ്ജീകരണത്തിന് ഒരു Cloudflare അക്കൗണ്ട് ആവശ്യമാണ്.**
+> ഈ ഗൈഡിലെ സാധാരണ സജ്ജീകരണം — താഴെയുള്ള Cloudflare
+> വിന്യാസം — Cloudflare-ൽ പ്രവർത്തിക്കുന്നു, അതിനാൽ നിങ്ങൾ തുടങ്ങുന്നതിന് മുമ്പ്
+> ഒരു Cloudflare അക്കൗണ്ട് തയ്യാറാക്കി വയ്ക്കുക. നിങ്ങൾക്ക് Cloudflare ഉപയോഗിക്കാൻ
+> താൽപ്പര്യമില്ലെങ്കിൽ, ഈ ഗൈഡിലെ Docker, ബെയർ-Node സജ്ജീകരണങ്ങൾക്ക്
+> ഒരു Cloudflare അക്കൗണ്ട് ആവശ്യമില്ല.
+
 ഒരു Breeze റിലേ പ്രവർത്തിപ്പിക്കാൻ രണ്ട് വഴികളുണ്ട്:
 
 1. **സെൽഫ്-ഹോസ്റ്റ് ചെയ്തത് (Node + Docker)** — നിങ്ങളുടെ സ്വന്തം മെഷീനിലോ

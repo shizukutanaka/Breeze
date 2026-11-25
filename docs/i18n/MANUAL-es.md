@@ -20,7 +20,7 @@ Elige en la [página de descargas](https://github.com/shizukutanaka/Breeze/relea
 - Windows: el que tiene un nombre que termina en `-win-x64.exe` (también los hay para máquinas ARM)
 - Mac: el que tiene un nombre que termina en `-mac.dmg`
 - Linux: `.AppImage` (se puede ejecutar tal cual) o `.deb`
-- Para usarlo en el navegador, se usa lo instalado en tu propio servidor (los pasos de instalación están en el documento aparte «Guía de instalación en tu propio servidor»)
+- Para usarlo en el navegador, se usa lo instalado en tu propio servidor (los pasos de instalación están en el documento aparte «Guía de instalación en tu propio servidor»). La instalación estándar usa Cloudflare, así que se requiere una cuenta de Cloudflare
 
 Cada archivo incluye un valor de comprobación (SHA256SUMS.txt). Si te preocupa, puedes comprobar que el valor del archivo que descargaste coincide.
 
@@ -29,20 +29,20 @@ Cada archivo incluye un valor de comprobación (SHA256SUMS.txt). Si te preocupa,
 ### Configuración inicial
 
 1. Abre la aplicación.
-2. Introduce tu nombre y pulsa «Crear cuenta». Con eso ya está todo listo. Sin registro y sin número de teléfono.
+2. Pulsa «Empezar con un ID aleatorio». Con eso ya está todo listo. Sin registro y sin número de teléfono.
 
-- Si quieres recuperar una identidad que creaste antes, abre «Restaurar una cuenta existente» y aparecerán los métodos de recuperación (un archivo de copia de seguridad, una frase de recuperación, etc.).
+- Si introduces «Tu nombre (nombre visible)» en el campo encima del botón, empiezas con ese nombre. También puedes pulsar el botón con el campo vacío. Puedes cambiar el nombre visible más tarde, en la sección de perfil de los ajustes.
+- También hay una forma de crear una identidad con un nombre y un ID de Breeze que eliges tú mismo. En ese caso, se emite una frase de recuperación y se muestra en la pantalla. La frase de recuperación son las palabras que te permiten recuperar esa identidad en otro dispositivo. Apúntala en papel o en un lugar seguro.
+- Si quieres recuperar una identidad que creaste antes, abre «Restaurar una cuenta existente» y aparecerán los métodos de recuperación (restaurar desde un archivo de copia de seguridad, recuperar con una frase de recuperación, restaurar con cuenta + contraseña).
 - Cuando termina la creación, aparece una tarjeta que te guía para proteger tu clave con una frase de contraseña (no desaparece al cabo de un tiempo). Para una identidad importante, sigue la guía y añade la protección.
 
 En ese momento se crea una «clave» dentro de tu dispositivo. Esa es tu identidad misma.
 **En el servidor no hay una lista de cuentas.** Tu identidad existe solo dentro de tu dispositivo.
 Este punto será importante en el capítulo de la copia de seguridad (9).
 
-### Sobre la «identidad desechable»
+### Sobre la antigua «identidad desechable»
 
-Si al crearla eliges «identidad desechable», obtendrás una identidad sin ningún medio de recuperación.
-Si pierdes ese dispositivo, lo restableces o borras los datos del navegador, esa identidad no volverá nunca.
-También se indica en la pantalla. No la elijas para una identidad que vayas a usar durante mucho tiempo.
+La «identidad desechable» — una identidad sin ningún medio de recuperación — ya no existe. Con las formas actuales de crear una identidad, toda identidad puede protegerse con una copia de seguridad.
 
 ---
 
@@ -73,6 +73,7 @@ Si la otra persona también tiene la aplicación abierta, os conectáis directam
 
 - **Estado de envío**: se puede saber por la marca junto a un mensaje. ✓ significa enviado, un ✓ dentro de un círculo significa que se ha depositado en el buzón, ✓✓ significa que llegó a la otra persona, leído es una marca azul y el fallo es una marca roja. Se distinguen por la forma además de por el color.
 - **La lista de contactos**: la hora de la última conversación se muestra como la hora para hoy, «Ayer» para ayer, mes/día para este año y año/mes/día para cualquier fecha anterior. Los contactos con mensajes que no has leído tienen el nombre y la hora destacados.
+- **Nombres para los contactos**: abre «Información del contacto» (en el menú contextual de un contacto, o en el menú «⋮» de la conversación) y podrás poner tu propio nombre para ese contacto (un apodo). Los apodos se guardan solo en este dispositivo y nunca se envían al contacto ni al servidor de retransmisión. Cuando pones un apodo, el nombre que el contacto se puso a sí mismo también se muestra junto a él en un color atenuado. Puedes desactivar ese segundo nombre con «Mostrar también el nombre que cada contacto se puso a sí mismo» en la sección «Privacidad» de los ajustes.
 - **Tu propia tarjeta**: en la parte superior de la lista está tu tarjeta de perfil; púlsala para abrir tu perfil. Se desplaza junto con la lista.
 - **Pestañas inferiores en un teléfono**: con el ancho de un teléfono, en la parte inferior de la pantalla aparecen las pestañas «Contactos» y «Ajustes».
 - **La cabecera de la conversación**: desde el icono de búsqueda puedes buscar dentro de la conversación. Desde el menú «⋮» puedes comprobar el número de seguridad, silenciar las notificaciones, fijar, crear una encuesta y más.
@@ -107,6 +108,7 @@ Algunas operaciones, como los ajustes y la vinculación de dispositivos, se hace
 - Se pueden crear varias cuentas y usarlas por separado (por ejemplo, trabajo y personal). Tanto el número de dispositivos como el de cuentas es gratuito e ilimitado.
 - **Cómo crear una cuenta**: pulsa el botón «+» junto a las pestañas de cuentas, en la parte superior de la lista de contactos. Introduce un nombre y elige un emoji de icono, y se creará una cuenta nueva y se cambiará a ella automáticamente.
 - **Cambiar de cuenta**: las pestañas de cuentas se muestran siempre en la parte superior de la lista de contactos. Pulsa una para cambiar (en un ordenador también puedes cambiar con Ctrl+1–9). Mantén pulsada una pestaña para cambiarle el nombre, cambiar su icono o eliminarla.
+- Los contactos y las claves están separados por cada cuenta. Intercambia los contactos de nuevo en cada cuenta.
 - El idioma se elige automáticamente entre 51 idiomas, incluido el inglés, según el idioma de tu dispositivo.
 
 ---
@@ -117,6 +119,7 @@ Los ajustes se abren como su propia pantalla. En un teléfono, ábrelos desde la
 
 - **Bloqueo automático**: hay un ajuste para bloquear automáticamente al cambiar de pestaña.
 - **Frase de contraseña de la clave**: puedes proteger la clave dentro de tu dispositivo envolviéndola con una frase de contraseña. Se te pedirá introducirla al abrir la aplicación.
+- **Mostrar también el nombre que cada contacto se puso a sí mismo**: en la sección «Privacidad». Para un contacto al que le has puesto un apodo, puedes elegir si su propio nombre se muestra junto a él (capítulo 3).
 - **Bloqueo de contactos**: puedes bloquear a un contacto molesto. Los mensajes de un contacto bloqueado no te llegarán.
 
 ---
@@ -141,11 +144,21 @@ En los dispositivos que no pueden leer el nivel de batería automáticamente (co
 La identidad de Breeze es solo la clave dentro de tu dispositivo. En el servidor no hay una lista de cuentas, y quienes lo han creado tampoco tienen tu clave.
 **Si pierdes tu dispositivo, también pierdes tu identidad.** Para una identidad importante, crea siempre una copia de seguridad.
 
-La copia de seguridad y la recuperación se hacen desde la sección «Copia de seguridad y recuperación» de los ajustes (hay tres botones: «Hacer copia en la nube», «Restaurar» y «Restaurar desde un archivo»). La primera vez que añades un contacto, aparece una sola vez una tarjeta que te insta a hacer una copia de seguridad.
+La copia de seguridad y la recuperación se hacen desde la sección «Copia de seguridad y restauración» de los ajustes (los botones son «Crear copia», «Restaurar copia» y «📂 Restaurar desde archivo»). La primera vez que añades un contacto, aparece una sola vez una tarjeta que te insta a hacer una copia de seguridad.
 
-### Cómo crear una copia de seguridad
+### Copia de seguridad automática
 
-1. Desde «Copia de seguridad y recuperación» en los ajustes, elige crear una copia de seguridad.
+El ajuste «Copia de seguridad automática» está activado desde el principio. Cuando tus datos cambian, una copia cifrada se envía automáticamente al servidor de retransmisión que alojas.
+
+- No envía con cada cambio: espera 30 segundos tras el último cambio y lo envía todo junto. Los intentos se espacian al menos 15 minutos.
+- Mientras estás sin conexión, no se envía nada; los cambios se guardan y se envían cuando vuelve la conexión y cuando abres la aplicación.
+- Para el envío automático, necesitas introducir la frase de contraseña de la copia una vez en ese dispositivo (cuando hace falta, aparece un botón «Introducir frase de contraseña» en la sección de ajustes). **La frase de contraseña no se guarda.** Solo se recuerda mientras la aplicación está abierta, y desaparece cuando la cierras. Para una identidad de recuperación sencilla, justo después de introducir la frase de contraseña al registrarte o actualizarla, el envío funciona tal cual.
+- Si el servidor de retransmisión no admite guardar copias, la copia automática no funciona. Eso se muestra en la sección de ajustes.
+- El estado (cuándo fue el último envío correcto, si hay cambios esperando, si un envío falló) se muestra en la sección de ajustes.
+
+### Cómo crear una copia de seguridad (manual)
+
+1. Desde «Copia de seguridad y recuperación» en los ajustes, elige «Crear copia».
 2. Establece una frase de contraseña para la copia (6 caracteres o más).
 3. Elige dónde guardarla.
    - **Guardar en un archivo**: conserva el archivo de la copia en tus manos (recomendado).
@@ -157,11 +170,23 @@ El contenido de la copia de seguridad está cifrado. El servidor del destino sol
 
 En un dispositivo nuevo, restaura usando el archivo de la copia (o la copia del servidor de retransmisión) y la frase de contraseña que estableciste.
 
+Si acabas de recuperar tu identidad con una frase de recuperación y hay una copia de esa identidad en el servidor de retransmisión, se encuentra automáticamente y se te pregunta con «Copia encontrada». Si la restauras, los datos de este dispositivo se sustituyen por el contenido de la copia.
+
+### Pasar a un dispositivo nuevo
+
+Pulsa el botón «Pasar a un dispositivo nuevo» en la sección «Copia de seguridad y restauración» de los ajustes y se mostrarán los pasos.
+
+1. En tu dispositivo actual, guarda una copia en el servidor de retransmisión (copia de seguridad automática, o «Crear copia»).
+2. En el dispositivo nuevo, elige un método de restauración en la primera pantalla e introduce tu frase de recuperación (o tu nombre de cuenta y tu contraseña).
+3. Cuando tu identidad esté de vuelta, la copia del servidor se encuentra automáticamente y se te ofrece restaurarla.
+
+No hacen falta cables ni pasar archivos.
+
 ### Notas
 
 - **Si olvidas la frase de contraseña, la recuperación es imposible.** Quienes lo han creado tampoco pueden arreglarlo. Apunta la frase de contraseña en otro lugar.
-- **La identidad desechable no vuelve, ni con copia de seguridad ni con recuperación.**
-- Rehace la copia de seguridad cuando aumenten tus identidades o cuando cambies de dispositivo.
+- Introducir la frase de contraseña para la copia automática es necesario en cada dispositivo. En un dispositivo nuevo, introdúcela una vez más.
+- Rehace manualmente la copia de seguridad cuando aumenten tus identidades o cuando cambies de dispositivo.
 
 ---
 

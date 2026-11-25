@@ -16,7 +16,7 @@
 
 Breeze "የኩባንያ ሰርቨር" የለውም። **ለመጠቀም፣ እርስዎ ራስዎ የማስቀመጫ ቦታ (ሰርቨር) አዘጋጅተው Breezeን በዚያ ያስቀምጣሉ። ይህ ይፋዊ የአጠቃቀም መንገድ ነው።**
 
-- የማስቀመጫ ቦታው በነፃ ክልል ውስጥ በቂ ነው። በCloudflare ነፃ ክልል ውስጥ ይሰራል፣ የባንክ ካርድም አያስፈልግም። እርምጃዎቹ በ[የመጫኛ መመሪያ](SELF_HOSTING-am.md) ውስጥ አሉ (ከመመሪያው መጀመሪያ ሌሎች ቋንቋዎችን መምረጥ ይችላሉ)።
+- መደበኛ አደረጃጀቱ Cloudflareን ይጠቀማል፣ ስለዚህ **የCloudflare መለያ ያስፈልጋል**። እርምጃዎቹ በ[የመጫኛ መመሪያ](SELF_HOSTING-am.md) ውስጥ አሉ (ከመመሪያው መጀመሪያ ሌሎች ቋንቋዎችን መምረጥ ይችላሉ)።
 - መተግበሪያውን (Windows / Mac / Linux / Android / iPhone) ከ[የማውረጃ ገጽ](https://github.com/shizukutanaka/Breeze/releases/latest) ውሰደው፣ ከራስዎ ሰርቨር ጋር አገናኝተው ይጠቀሙበት።
 - **ስለ ማሳያ ናሙና (የእውነት ማስታወቂያ)**፦ ለሥራ ማረጋገጫ የሚሆን ናሙና (https://breeze-469.pages.dev/) አስቀምጠናል። በውስጡ ያለው ተመሳሳይ ሶፍትዌር ነው፣ ነገር ግን ለእውነተኛ አጠቃቀም እባክዎ የራስዎን ሰርቨር ይጠቀሙ። ናሙናው ያለቅድመ ማስታወቂያ ሊቀየር ወይም ሊቆም ይችላል። በራስዎ ሰርቨር ላይ ያስቀመጡት በናሙናው መቋረጥ አይጎዳም።
 
@@ -24,7 +24,7 @@ Breeze "የኩባንያ ሰርቨር" የለውም። **ለመጠቀም፣ እ�
 
 ## አጠቃቀም (3 እርምጃዎች)
 
-1. በራስዎ ሰርቨር ላይ ያስቀመጡትን Breeze (ወይም ያስቀመጠው ሰው የነገረዎትን አድራሻ) ከፍተው ስም ያስገቡ። ያ ብቻ ነው፣ ዝግጅቱ አልቋል (ምዝገባም የስልክ ቁጥርም አያስፈልግም)። በዚህ ጊዜ በመሣሪያዎ ውስጥ "ቁልፍ" ይፈጠራል፣ እሱም ማንነትዎ ይሆናል።
+1. በራስዎ ሰርቨር ላይ ያስቀመጡትን Breeze (ወይም ያስቀመጠው ሰው የነገረዎትን አድራሻ) ከፍተው «በዘፈቀደ መታወቂያ ጀምር» የሚለውን ይጫኑ (ከፈለጉ ስም ማስገባት ይችላሉ)። ያ ብቻ ነው፣ ዝግጅቱ አልቋል (ምዝገባም የስልክ ቁጥርም አያስፈልግም)። በዚህ ጊዜ በመሣሪያዎ ውስጥ "ቁልፍ" ይፈጠራል፣ እሱም ማንነትዎ ይሆናል።
 2. IDዎን ወይም የQR ኮድዎን ማውራት ለሚፈልጉት ሰው ይስጡ።
 3. ሌላውም መተግበሪያውን ከፍቶ ካለ፣ በቀጥታ ተገናኝተው ማውራት ይችላሉ። ካልከፈተ፣ መልእክቱ በተመሰጠረ ሁኔታ በ"መጠበቂያ ሳጥን" ውስጥ ይቆያል፣ ሲከፍትም ይደርሳል። መጠበቂያ ሳጥኑን የሚያጓጉዘው ሰርቨር ይዘቱን ማንበብ አይችልም። ያልደረሱ ደብዳቤዎች ከ7 ቀናት በኋላ በራሳቸው ይሰረዛሉ።
 
@@ -43,6 +43,8 @@ Breeze "የኩባንያ ሰርቨር" የለውም። **ለመጠቀም፣ እ�
 - የድምጽ ጥሪና የቪዲዮ ጥሪ (የቡድን ጥሪ እስከ 8 ሰዎች)
 - ፋይል መላክ (በአንድ-ለ-አንድ እስከ 50MB። በቡድኖችም መላክ ይቻላል፣ ነገር ግን የትልቅነት ወሰን ትንሽ ነው)
 - ብዙ መሣሪያዎችንና ብዙ መለያዎችን ለየብቻ መጠቀም (ለምሳሌ ለሥራና ለግል። የመሣሪያዎችና የመለያዎች ብዛት ነፃና ወሰን የለውም)
+- ራስ-ሰር ምትኬ (አንድ ነገር ሲቀየር፣ የተመሰጠረ ምትኬ በራሱ ወደ ራስዎ ሰርቨር ይቀመጣል። በአዲስ መሣሪያ ላይ፣ ማንነትዎን ካገገሙ በኋላ፣ ምትኬ በራሱ ይገኛል እና ይቀርብልዎታል። አደረጃጀቶች ወደ አዲስ መሣሪያ ለመሸጋገርም ይመራዎታል)
+- ለእያንዳንዱ እውቂያ እርስዎ የሚመርጡት ስም (እያንዳንዱን እውቂያ ዳግም መሰየም ይችላሉ፣ በዚህ መሣሪያ ላይ ብቻ ይቀመጣል። እያንዳንዱ እውቂያ ለራሱ ያዘጋጀው ስም ይታይ እንደሆነም መምረጥ ይችላሉ)
 - 51 ቋንቋዎች (እንግሊዝኛ እና 50 የቋንቋ ፋይሎች)፣ ከመሣሪያዎ ቋንቋ ጋር እንዲስማማ በራሱ ይመረጣል
 - ፎቶ ያለው መገለጫ፣ ስቲከሮች፣ አካባቢ መጋራት
 - እንደ `/help` ያሉ የትእዛዝ ሥራዎች (71 ዓይነቶች)
@@ -114,7 +116,7 @@ npm test          # ፈተናዎችን ማካሄድ
 
 ## English
 
-Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server (Cloudflare's free tier is enough) and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [docs/i18n/README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [docs/COMPARISON.md](../COMPARISON.md).
+Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [docs/i18n/README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [docs/COMPARISON.md](../COMPARISON.md).
 
 ## ፈቃድ
 

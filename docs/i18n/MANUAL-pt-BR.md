@@ -20,7 +20,7 @@ Escolha na [página de downloads](https://github.com/shizukutanaka/Breeze/releas
 - Windows: o que termina com `-win-x64.exe` (também há para máquinas ARM)
 - Mac: o que termina com `-mac.dmg`
 - Linux: `.AppImage` (pode ser executado diretamente) ou `.deb`
-- Para usar no navegador, use a versão instalada no seu próprio servidor (o procedimento de instalação está em outro documento, o “guia de instalação”)
+- Para usar no navegador, use a versão instalada no seu próprio servidor (o procedimento de instalação está em outro documento, o “guia de instalação”). A instalação padrão usa a Cloudflare, portanto é necessária uma conta da Cloudflare
 
 Cada arquivo acompanha valores de verificação (SHA256SUMS.txt). Quem quiser pode conferir se os valores do arquivo baixado coincidem.
 
@@ -29,20 +29,20 @@ Cada arquivo acompanha valores de verificação (SHA256SUMS.txt). Quem quiser po
 ### Configuração inicial
 
 1. Abra o aplicativo.
-2. Digite seu nome e toque em “Criar conta”. Só isso e está pronto. Sem cadastro e sem número de telefone.
+2. Toque em “Começar com um ID aleatório”. Só isso e está pronto. Sem cadastro e sem número de telefone.
 
-- Se você quiser trazer de volta uma identidade que criou antes, abra “Restaurar uma conta existente” e os métodos de recuperação (um arquivo de backup, uma frase de recuperação e assim por diante) aparecem.
+- Se você digitar “Seu nome (nome de exibição)” no campo acima do botão, começará com esse nome. Você também pode tocar no botão com o campo vazio. O nome de exibição pode ser alterado depois, na seção de perfil das configurações.
+- Também há um modo de criar uma identidade com um nome e um ID do Breeze escolhidos por você. Nesse caso, uma frase de recuperação é emitida e exibida na tela. A frase de recuperação são as palavras que permitem trazer essa identidade de volta em outro dispositivo. Anote-a no papel ou em algum lugar seguro.
+- Se você quiser trazer de volta uma identidade que criou antes, abra “Restaurar uma conta existente” e os métodos de recuperação (restaurar de um arquivo de backup, recuperar com uma frase de recuperação, restaurar com conta + senha) aparecem.
 - Quando a criação termina, aparece um cartão orientando você a proteger sua chave com uma frase secreta (ele não desaparece depois de um tempo). Para uma identidade importante, siga a orientação e adicione a proteção.
 
 Nesse momento, uma “chave” é criada dentro do seu dispositivo. Ela é a sua própria identidade.
 **Não há lista de contas no servidor.** Sua identidade existe apenas dentro do seu dispositivo.
 Esse ponto se torna importante no capítulo sobre backup (9).
 
-### Sobre a “identidade descartável”
+### Sobre a antiga “identidade descartável”
 
-Se ao criar você escolher “identidade descartável”, será uma identidade sem nenhum meio de recuperação.
-Se você perder esse dispositivo, restaurá-lo ou apagar os dados do navegador, essa identidade nunca mais voltará.
-Isso também é exibido na tela. Não escolha para uma identidade que pretende usar por muito tempo.
+A “identidade descartável” — uma identidade sem nenhum meio de recuperação — não existe mais. Com os modos atuais de criar uma identidade, toda identidade pode ser protegida por um backup.
 
 ---
 
@@ -73,6 +73,7 @@ Se a outra pessoa também estiver com o aplicativo aberto, vocês se conectam di
 
 - **Status de envio**: dá para saber pela marca ao lado da mensagem. ✓ significa enviado, um ✓ dentro de um círculo significa que foi depositado na caixa de espera, ✓✓ significa que chegou à outra pessoa, lido é uma marca azul e falha é uma marca vermelha. Eles se distinguem pela forma, além da cor.
 - **A lista de contatos**: o horário da última conversa aparece como horário para hoje, “Ontem” para ontem, mês/dia para este ano e ano/mês/dia para antes disso. Contatos com mensagens não lidas têm nome e horário destacados.
+- **Nomes para os contatos**: abra “Informações do contato” (no menu de clique com o botão direito de um contato, ou no menu “⋮” da conversa) e você pode definir um nome seu para esse contato (um apelido). Os apelidos ficam guardados apenas neste dispositivo e nunca são enviados ao contato nem ao servidor de relay. Quando você define um apelido, o nome que o contato definiu para si também é exibido ao lado, em uma cor suave. Você pode desligar esse segundo nome com “Mostrar também o nome que cada contato definiu para si” na seção “Privacidade” das configurações.
 - **Seu próprio cartão**: no topo da lista fica o cartão do seu perfil; toque nele para abrir o seu perfil. Ele rola junto com a lista.
 - **Abas inferiores no celular**: em telas com largura de celular, as abas “Contatos” e “Configurações” aparecem na parte inferior da tela.
 - **O cabeçalho da conversa**: pelo ícone de busca você pode pesquisar dentro da conversa. Pelo menu “⋮” você pode verificar o número de segurança, silenciar notificações, fixar, criar uma enquete e muito mais.
@@ -107,6 +108,7 @@ Algumas operações, como configurações e vínculo de dispositivos, são feita
 - É possível criar várias contas e usá-las separadamente (trabalho e pessoal, por exemplo). Tanto o número de dispositivos quanto o de contas é gratuito e ilimitado.
 - **Como criar uma conta**: toque no botão “+” ao lado das abas de contas, bem no topo da lista de contatos. Digite um nome e escolha um emoji de ícone, e uma nova conta é criada e selecionada automaticamente.
 - **Trocar de conta**: as abas de contas são sempre exibidas bem no topo da lista de contatos. Toque em uma para trocar (em um computador, também é possível trocar com Ctrl+1–9). Toque e segure uma aba para renomeá-la, mudar seu ícone ou excluí-la.
+- Contatos e chaves são separados para cada conta. Troque contatos novamente para cada conta.
 - O idioma é selecionado automaticamente entre 51 idiomas, incluindo o inglês, de acordo com o idioma do seu dispositivo.
 
 ---
@@ -117,6 +119,7 @@ As configurações abrem como uma tela própria. No celular, abra-as pela aba �
 
 - **Bloqueio automático**: há uma configuração para bloquear automaticamente ao trocar de aba.
 - **Frase secreta da chave**: você pode proteger a chave dentro do dispositivo com uma frase secreta. Ela será pedida ao abrir o aplicativo.
+- **Mostrar também o nome que cada contato definiu para si**: na seção “Privacidade”. Para um contato ao qual você deu um apelido, você pode escolher se o nome dele será exibido junto (capítulo 3).
 - **Bloqueio de pessoas**: é possível bloquear pessoas incômodas. Mensagens de pessoas bloqueadas não chegam.
 
 ---
@@ -141,11 +144,21 @@ Em dispositivos que não conseguem ler o nível da bateria automaticamente (como
 A identidade do Breeze é apenas a chave dentro do seu dispositivo. Não há lista de contas no servidor, e quem criou também não tem a sua chave.
 **Se você perder o dispositivo, perde também a identidade.** Para identidades importantes, crie sempre um backup.
 
-Backup e recuperação são feitos na seção “Backup e recuperação” das configurações (há três botões: “Fazer backup na nuvem”, “Restaurar” e “Restaurar de um arquivo”). Na primeira vez que você adiciona um contato, um cartão incentivando você a criar um backup aparece uma única vez.
+Backup e recuperação são feitos na seção “Backup e restauração” das configurações (os botões são “Criar backup”, “Restaurar backup” e “📂 Restaurar de arquivo”). Na primeira vez que você adiciona um contato, um cartão incentivando você a criar um backup aparece uma única vez.
 
-### Como fazer o backup
+### Backup automático
 
-1. Em “Backup e recuperação”, nas configurações, escolha criar um backup.
+A configuração “Backup automático” está ativada desde o início. Quando seus dados mudam, um backup criptografado é enviado automaticamente ao servidor de relay que você hospeda.
+
+- Ele não envia a cada mudança: espera 30 segundos após a última mudança e envia tudo junto. As tentativas são espaçadas em pelo menos 15 minutos.
+- Enquanto você estiver offline, nada é enviado; as mudanças ficam guardadas e são enviadas quando a conexão voltar e quando você abrir o aplicativo.
+- Para o envio automático, é preciso digitar a frase secreta do backup uma vez naquele dispositivo (quando necessário, um botão “Digitar frase secreta” aparece na seção das configurações). **A frase secreta não é guardada.** Ela é lembrada apenas enquanto o aplicativo está aberto e some quando você o fecha. Para uma identidade de recuperação simples, logo depois de digitar a frase secreta no cadastro ou na atualização, o envio funciona como está.
+- Se o servidor de relay não oferecer suporte ao armazenamento de backups, o backup automático não funciona. Isso é exibido na seção das configurações.
+- O estado (quando foi o último envio bem-sucedido, se há mudanças aguardando, se um envio falhou) é exibido na seção das configurações.
+
+### Como fazer o backup (manual)
+
+1. Em “Backup e restauração”, nas configurações, escolha “Criar backup”.
 2. Defina uma frase secreta para o backup (6 caracteres ou mais).
 3. Escolha onde salvar.
    - **Salvar em arquivo**: guarde o arquivo de backup com você (recomendado).
@@ -157,11 +170,23 @@ O conteúdo do backup está criptografado. O servidor onde ele fica guardado só
 
 Em um novo dispositivo, restaure usando o arquivo de backup (ou o backup no servidor de relay) e a frase secreta que você definiu.
 
+Se você acabou de trazer sua identidade de volta com uma frase de recuperação e houver um backup dessa identidade no servidor de relay, ele é encontrado automaticamente e você é perguntado com “Backup encontrado”. Se você o restaurar, os dados naquele dispositivo serão substituídos pelo conteúdo do backup.
+
+### Mudar para um novo dispositivo
+
+Toque no botão “Mudar para um novo dispositivo” na seção “Backup e restauração” das configurações e os passos serão exibidos.
+
+1. No seu dispositivo atual, mantenha um backup no servidor de relay (backup automático, ou “Criar backup”).
+2. No novo dispositivo, escolha um método de restauração na primeira tela e digite sua frase de recuperação (ou o nome da sua conta e a senha).
+3. Quando sua identidade voltar, o backup no servidor é encontrado automaticamente e uma restauração é oferecida.
+
+Não são necessários cabos nem transferências de arquivos.
+
 ### Atenção
 
 - **Se você esquecer a frase secreta, não será possível restaurar.** Nem quem criou consegue corrigir isso. Anote a frase secreta em outro lugar.
-- **Identidades descartáveis não voltam, nem por backup nem por recuperação.**
-- Refaça o backup quando adicionar identidades ou trocar de dispositivo.
+- Digitar a frase secreta para o backup automático é necessário em cada dispositivo. Em um novo dispositivo, digite-a mais uma vez.
+- Refaça um backup manual quando adicionar identidades ou trocar de dispositivo.
 
 ---
 

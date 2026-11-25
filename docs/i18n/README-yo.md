@@ -16,7 +16,7 @@ Gbogbo àwọn iṣẹ́ ọ̀fẹ́ ni, kò sì sí ìpolówó.
 
 Breeze kò ní "sáfà ilé-iṣẹ́". **Láti lò ó, ìwọ fúnra rẹ ni yóò pèsè ibì ìpamọ́ (sáfà) tí yóò sì fi Breeze síbẹ̀. Èyí ni ọ̀nà lílò tí ó jẹ́ òfin.**
 
-- Ibì ìpamọ́ nínú ìwọ̀n ọ̀fẹ́ tó. Ó ń ṣiṣẹ́ nínú ìwọ̀n ọ̀fẹ́ Cloudflare, a kò sì nílò káàdì báńkì. Àwọn ìgbésẹ̀ wà nínú [ìwé ìtọ́ni fífi sílẹ̀](SELF_HOSTING-yo.md) (o lè yan àwọn èdè mìíràn láti ìbẹ̀rẹ̀ ìwé ìtọ́ni náà).
+- Ìṣètò déédéé ń lo Cloudflare, nítorí náà **a nílò àkáǹtì Cloudflare**. Àwọn ìgbésẹ̀ wà nínú [ìwé ìtọ́ni fífi sílẹ̀](SELF_HOSTING-yo.md) (o lè yan àwọn èdè mìíràn láti ìbẹ̀rẹ̀ ìwé ìtọ́ni náà).
 - Gba àpù náà (Windows / Mac / Linux / Android / iPhone) láti [ojúewé ìgbàsílẹ̀](https://github.com/shizukutanaka/Breeze/releases/latest), so ó pọ̀ mọ́ sáfà tìrẹ, kí o sì lò ó.
 - **Nípa àpẹẹrẹ ìfihàn (ìkéde òtítọ́)**: A ti fi àpẹẹrẹ ìfihàn (https://breeze-469.pages.dev/) sílẹ̀ fún ìdánwò iṣẹ́. Ohun tí ó wà nínú rẹ̀ sófítíwéà kan náà ni, ṣùgbọ́n fún lílò gidi, jọ̀wọ́ lo sáfà tìrẹ. Àpẹẹrẹ náà lè yípadà tàbí dúró láìsí ìkéde ṣáájú. Ohun tí o fi sí orí sáfà tìrẹ kò ní nípa láti ọ̀dọ̀ ìdúró àpẹẹrẹ náà.
 
@@ -24,7 +24,7 @@ Breeze kò ní "sáfà ilé-iṣẹ́". **Láti lò ó, ìwọ fúnra rẹ ni y�
 
 ## Bí a ṣe ń lò ó (ìgbésẹ̀ 3)
 
-1. Ṣí Breeze tí o fi sí orí sáfà tìrẹ (tàbí àdírẹ́sì tí ẹni tí ó fi sílẹ̀ sọ fún ọ), kí o sì tẹ orúkọ sí. Ìyẹn nìkan, ìmúrasílẹ̀ ti parí (kò sí ìforúkọsílẹ̀, kò sí nọ́mbà fóònù). Ní àkókò yìí, a ó ṣẹ̀dá "kọ́kọ́rọ́" nínú ẹ̀rọ rẹ, òun sì ni ìdánimọ̀ rẹ.
+1. Ṣí Breeze tí o fi sí orí sáfà tìrẹ (tàbí àdírẹ́sì tí ẹni tí ó fi sílẹ̀ sọ fún ọ), kí o sì tẹ "Bẹ̀rẹ̀ pẹ̀lú ID àìròtẹ́lẹ̀" (o lè tẹ orúkọ sí bí o bá fẹ́). Ìyẹn nìkan, ìmúrasílẹ̀ ti parí (kò sí ìforúkọsílẹ̀, kò sí nọ́mbà fóònù). Ní àkókò yìí, a ó ṣẹ̀dá "kọ́kọ́rọ́" nínú ẹ̀rọ rẹ, òun sì ni ìdánimọ̀ rẹ.
 2. Fún ẹni tí o fẹ́ bá sọ̀rọ̀ ní ID rẹ tàbí kódù QR rẹ.
 3. Tí ẹ̀kejì náà bá tún ṣí àpù náà, ẹ ó so pọ̀ tààrà kí ẹ sì bá ara yín sọ̀rọ̀. Tí kò bá ṣí i, ìránṣẹ́ náà yóò dúró nínú "àpótí ìpamọ́" ní ìpamọ́, yóò sì dé ọ̀dọ̀ rẹ̀ nígbà tí ó bá ṣí i. Sáfà tí ó ń gbé àpótí ìpamọ́ náà kò lè ka ohun tí ó wà nínú rẹ̀. Àwọn lẹ́tà tí kò dé yóò parẹ́ fúnra wọn lẹ́yìn ọjọ́ 7 ní púpọ̀ jùlọ.
 
@@ -43,6 +43,8 @@ A ó tún kọ ààlà náà pẹ̀lú òtítọ́. Láti fi ránṣẹ́, sáf�
 - Ìpè ohùn àti ìpè fídíò (ìpè ẹgbẹ́ títí di ènìyàn 8)
 - Fífi fáìlì ránṣẹ́ (títí di 50MB nínú ìjíròrò ẹnìkan-sí-ẹnìkan. A lè ránṣẹ́ nínú ẹgbẹ́ náà, ṣùgbọ́n ààlà ìtóbi kéré)
 - Lílo àwọn ẹ̀rọ púpọ̀ àti àwọn àkáǹtì púpọ̀ (bí ti iṣẹ́ àti ti ara ẹni. Iye àwọn ẹ̀rọ àti àkáǹtì ọ̀fẹ́ ni láìsí ààlà)
+- Ìpamọ́ àfikún fúnra rẹ̀ (nígbà tí ohun kan bá yípadà, a ó fi ìpamọ́ àfikún tí a fi ìpamọ́ ṣe pamọ́ sí orí sáfà tìrẹ fúnra rẹ̀. Lórí ẹ̀rọ tuntun, nígbà tí o bá mú ìdánimọ̀ rẹ padà, a ó rí ìpamọ́ àfikún kan fúnra rẹ̀, a ó sì fún ọ ní àǹfààní láti mú un padà. Àwọn ìṣètò náà tún ń tọ́ ọ sọ́nà láti kó lọ sí ẹ̀rọ tuntun)
+- Orúkọ tí o yàn fún olùbáṣepọ̀ kọ̀ọ̀kan (o lè tún olùbáṣepọ̀ kọ̀ọ̀kan sọ orúkọ, tí a pa mọ́ sí orí ẹ̀rọ yìí nìkan. O tún lè yan bóyá orúkọ tí olùbáṣepọ̀ kọ̀ọ̀kan ṣètò fún ara rẹ̀ yóò hàn)
 - Àwọn èdè 51 (Gẹ̀ẹ́sì pẹ̀lú àwọn fáìlì èdè 50), a ń yan án fúnra wọn gẹ́gẹ́ bí èdè ẹ̀rọ rẹ
 - Àwòrán ìdánimọ̀ pẹ̀lú fọ́tò, àwọn sítíkà, pípín ipò
 - Àwọn iṣẹ́ àṣẹ bíi `/help` (oríṣi 71)
@@ -114,7 +116,7 @@ npm test          # ṣe àwọn ìdánwò
 
 ## English
 
-Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server (Cloudflare's free tier is enough) and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [docs/i18n/README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [docs/COMPARISON.md](../COMPARISON.md).
+Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [docs/i18n/README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [docs/COMPARISON.md](../COMPARISON.md).
 
 ## Ìwé-àṣẹ
 

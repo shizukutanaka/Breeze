@@ -16,7 +16,7 @@ Mọi tính năng đều miễn phí, và không có quảng cáo.
 
 Breeze không có "máy chủ của công ty vận hành". **Để sử dụng, chính bạn chuẩn bị một nơi (máy chủ) và đặt Breeze lên đó. Đây là cách sử dụng chính thức.**
 
-- Nơi miễn phí là đủ. Nó chạy trong gói miễn phí của Cloudflare, và không cần thẻ tín dụng. Các bước có trong [hướng dẫn cài đặt](SELF_HOSTING-vi.md) (có thể chọn các ngôn ngữ khác ở đầu hướng dẫn).
+- Cách cài đặt tiêu chuẩn sử dụng Cloudflare, vì vậy **cần có tài khoản Cloudflare**. Các bước có trong [hướng dẫn cài đặt](SELF_HOSTING-vi.md) (có thể chọn các ngôn ngữ khác ở đầu hướng dẫn).
 - Các ứng dụng (Windows / Mac / Linux / Android / iPhone) lấy từ [trang tải xuống](https://github.com/shizukutanaka/Breeze/releases/latest), và sử dụng bằng cách kết nối tới máy chủ của riêng bạn.
 - **Về bản cài đặt mẫu (thông báo trung thực)**: Có một bản mẫu để kiểm tra hoạt động (https://breeze-469.pages.dev/). Phần mềm đặt ở đó là cùng một phần mềm, nhưng để sử dụng thực tế, vui lòng dùng máy chủ của riêng bạn. Bản mẫu có thể thay đổi hoặc dừng mà không báo trước. Những gì bạn đặt trên máy chủ của mình sẽ không bị ảnh hưởng bởi việc bản mẫu dừng hoạt động.
 
@@ -24,7 +24,7 @@ Cách sử dụng chi tiết có trong [sách hướng dẫn](MANUAL-vi.md) (có
 
 ## Cách sử dụng (3 bước)
 
-1. Mở Breeze mà bạn đã đặt trên máy chủ của mình (hoặc địa chỉ được người đã đặt cho biết), và nhập tên của bạn. Chỉ vậy là xong phần chuẩn bị (không cần đăng ký, không cần số điện thoại). Lúc này, một "khóa" được tạo ra bên trong thiết bị, và khóa đó trở thành danh tính của bạn.
+1. Mở Breeze mà bạn đã đặt trên máy chủ của mình (hoặc địa chỉ được người đã đặt cho biết), và nhấn "Bắt đầu với ID ngẫu nhiên" (bạn có thể nhập tên nếu muốn). Chỉ vậy là xong phần chuẩn bị (không cần đăng ký, không cần số điện thoại). Lúc này, một "khóa" được tạo ra bên trong thiết bị, và khóa đó trở thành danh tính của bạn.
 2. Đưa ID hoặc mã QR của bạn cho người bạn muốn trò chuyện.
 3. Nếu người kia cũng đang mở ứng dụng, hai bạn có thể kết nối trực tiếp và trò chuyện. Nếu họ chưa mở, tin nhắn được đặt ở trạng thái đã mã hóa trong "hộp lưu giữ", và sẽ được chuyển đến khi họ mở ứng dụng. Máy chủ vận chuyển hộp lưu giữ không thể đọc nội dung. Thư không đến được sẽ tự động bị xóa sau tối đa 7 ngày.
 
@@ -43,6 +43,8 @@ Chúng tôi cũng viết trung thực về phạm vi. Để chuyển phát, máy
 - Gọi thoại và gọi video (gọi nhóm tối đa 8 người)
 - Gửi tệp (trong trò chuyện 1 đối 1, tối đa 50MB. Trong nhóm cũng gửi được, nhưng giới hạn kích thước nhỏ hơn)
 - Sử dụng nhiều thiết bị, nhiều tài khoản (chẳng hạn công việc và cá nhân. Cả số thiết bị và số tài khoản đều miễn phí và không giới hạn)
+- Sao lưu tự động (khi có thay đổi, một bản sao lưu đã mã hóa được lưu tự động vào máy chủ của riêng bạn. Trên thiết bị mới, sau khi bạn khôi phục danh tính, một bản sao lưu được tìm thấy tự động và được đề xuất cho bạn. Cài đặt cũng hướng dẫn bạn chuyển sang thiết bị mới)
+- Tên bạn chọn cho mỗi liên hệ (bạn có thể đổi tên mỗi liên hệ, chỉ lưu trên thiết bị này. Bạn cũng có thể chọn có hiển thị tên mà mỗi liên hệ đã đặt cho chính họ hay không)
 - 51 ngôn ngữ (tiếng Anh cộng thêm 50 tệp ngôn ngữ), được chọn tự động theo ngôn ngữ của thiết bị của bạn
 - Hồ sơ có ảnh, nhãn dán, chia sẻ vị trí
 - Thao tác bằng lệnh như `/help` (71 loại)
@@ -114,7 +116,7 @@ Báo cáo lỗi xin gửi tới [trang Issue](https://github.com/shizukutanaka/B
 
 ## English
 
-Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server (Cloudflare's free tier is enough) and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
+Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
 
 ## Giấy phép
 

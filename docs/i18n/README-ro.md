@@ -1,6 +1,6 @@
 # Breeze Messenger
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](../../LICENSE)
 
 **Citiți în altă limbă**: [日本語](../../README.md) · [English](README-en.md) · [中文（简体）](README-zh-CN.md) · [中文（繁體）](README-zh-TW.md) · [Español](README-es.md) · [Français](README-fr.md) · [Deutsch](README-de.md) · [Italiano](README-it.md) · [Português (Brasil)](README-pt-BR.md) · [Русский](README-ru.md) · [Українська](README-uk.md) · [Polski](README-pl.md) · [Nederlands](README-nl.md) · [Svenska](README-sv.md) · [Norsk](README-nb.md) · [Dansk](README-da.md) · [Suomi](README-fi.md) · [Čeština](README-cs.md) · [Magyar](README-hu.md) · Română (această pagină) · [Ελληνικά](README-el.md) · [Türkçe](README-tr.md) · [العربية](README-ar.md) · [فارسی](README-fa.md) · [עברית](README-he.md) · [हिन्दी](README-hi.md) · [বাংলা](README-bn.md) · [اردو](README-ur.md) · [ਪੰਜਾਬੀ](README-pa.md) · [தமிழ்](README-ta.md) · [తెలుగు](README-te.md) · [മലയാളം](README-ml.md) · [Bahasa Indonesia](README-id.md) · [Bahasa Melayu](README-ms.md) · [Tiếng Việt](README-vi.md) · [ไทย](README-th.md) · [မြန်မာ](README-my.md) · [ខ្មែរ](README-km.md) · [한국어](README-ko.md) · [Filipino](README-tl.md) · [Kiswahili](README-sw.md) · [Hausa](README-ha.md) · [Yorùbá](README-yo.md) · [Igbo](README-ig.md) · [አማርኛ](README-am.md) · [ქართული](README-ka.md) · [Azərbaycan](README-az.md) · [Қазақша](README-kk.md) · [Oʻzbek](README-uz.md) · [Српски](README-sr.md) · [Hrvatski](README-hr.md)
 
@@ -16,7 +16,7 @@ Acesta nu este o pagină web, ci un software care se instalează și se foloseș
 
 Breeze nu are un „server al unei companii operatoare”. **Pentru a-l folosi, trebuie să vă asigurați singur un spațiu de găzduire (un server) și să instalați Breeze acolo. Aceasta este modalitatea oficială de utilizare.**
 
-- Pentru găzduire este suficient nivelul gratuit. Funcționează în limita gratuită Cloudflare și nu este nevoie de card bancar. Procedura se află în [ghidul de instalare](SELF_HOSTING-ro.md) (versiunile în alte limbi pot fi alese la începutul ghidului).
+- Instalarea standard folosește Cloudflare, așa că **este necesar un cont Cloudflare**. Procedura se află în [ghidul de instalare](SELF_HOSTING-ro.md) (versiunile în alte limbi pot fi alese la începutul ghidului).
 - Aplicația (Windows / Mac / Linux / Android / iPhone) se obține de pe [pagina de descărcare](https://github.com/shizukutanaka/Breeze/releases/latest) și se folosește conectată la propriul server.
 - **Despre instalarea demonstrativă (o precizare onestă)**: Am pus la dispoziție un exemplar demonstrativ, pentru verificarea funcționării (https://breeze-469.pages.dev/). Rulează același software, dar pentru utilizarea reală vă rugăm să folosiți propriul server. Exemplarul demonstrativ se poate schimba sau se poate opri fără preaviz. O copie instalată pe propriul server nu este afectată de oprirea exemplarului demonstrativ.
 
@@ -24,7 +24,7 @@ Instrucțiunile detaliate de utilizare se află în [manual](MANUAL-ro.md) (vers
 
 ## Utilizare (3 pași)
 
-1. Deschideți Breeze instalat pe propriul server (sau adresa pe care v-a comunicat-o persoana care l-a instalat) și introduceți-vă numele. Cu asta, pregătirea este gata (nu este nevoie nici de înregistrare, nici de număr de telefon). În acel moment, în interiorul dispozitivului se creează o „cheie”, care devine identitatea dumneavoastră.
+1. Deschideți Breeze instalat pe propriul server (sau adresa pe care v-a comunicat-o persoana care l-a instalat) și apăsați „Începe cu un ID aleatoriu” (dacă doriți, puteți introduce un nume). Cu asta, pregătirea este gata (nu este nevoie nici de înregistrare, nici de număr de telefon). În acel moment, în interiorul dispozitivului se creează o „cheie”, care devine identitatea dumneavoastră.
 2. Dați ID-ul dumneavoastră sau codul QR persoanei cu care doriți să vorbiți.
 3. Dacă și cealaltă persoană a deschis aplicația, vă puteți conecta direct și puteți conversa. Dacă cealaltă persoană nu a deschis-o, mesajul rămâne criptat în „căsuța de păstrare” și este livrat atunci când o deschide. Serverul care transportă căsuța de păstrare nu poate citi conținutul. Scrisorile nelivrate se șterg automat după cel mult 7 zile.
 
@@ -43,6 +43,8 @@ Din onestitate, scriem și limitele. Pentru livrare, pe server există o păstra
 - Apeluri vocale și apeluri video (apeluri de grup cu până la 8 persoane)
 - Trimitere de fișiere (în conversațiile individuale până la 50 MB. Se pot trimite și în grup, dar limita de dimensiune este mai mică.)
 - Utilizarea separată a mai multor dispozitive și a mai multor conturi (de exemplu pentru serviciu și pentru uz personal; atât numărul de dispozitive, cât și numărul de conturi sunt gratuite și nelimitate)
+- Copie de rezervă automată (când ceva se schimbă, o copie de rezervă criptată este salvată automat pe propriul server. Pe un dispozitiv nou, după ce vă recuperați identitatea, o copie de rezervă este găsită automat și vă este oferită. Setările vă îndrumă și la trecerea la un dispozitiv nou)
+- Un nume ales de dumneavoastră pentru fiecare contact (puteți redenumi fiecare contact; se păstrează numai pe acest dispozitiv. Puteți alege și dacă este afișat numele pe care fiecare contact și l-a setat singur)
 - 51 de limbi (engleza plus 50 de fișiere de limbă), selectate automat pentru a se potrivi cu limba dispozitivului dumneavoastră
 - Profil cu fotografie, stickere, partajarea locației
 - Operare prin comenzi, precum `/help` (71 de tipuri)
@@ -114,7 +116,7 @@ Raportarea problemelor se face pe [pagina Issues](https://github.com/shizukutana
 
 ## English
 
-Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server (Cloudflare's free tier is enough) and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
+Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
 
 ## Licență
 

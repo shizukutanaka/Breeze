@@ -16,7 +16,7 @@ Ovo nije web-stranica, već softver koji se instalira i koristi (Windows / Mac /
 
 Breeze nema «poslužitelj operaterske tvrtke». **Da biste ga koristili, sami osiguravate mjesto za postavljanje (poslužitelj) i na njega postavljate Breeze. To je službeni način korištenja.**
 
-- Dovoljan je besplatni okvir. Radi u besplatnom planu Cloudflarea i nije potrebna kreditna kartica. Koraci su u [uputama za postavljanje](SELF_HOSTING-hr.md) (druge jezike možete odabrati na početku uputa).
+- Standardno postavljanje koristi Cloudflare, pa je **potreban Cloudflare račun**. Koraci su u [uputama za postavljanje](SELF_HOSTING-hr.md) (druge jezike možete odabrati na početku uputa).
 - Aplikacije (Windows / Mac / Linux / Android / iPhone) uzimate sa [stranice za preuzimanje](https://github.com/shizukutanaka/Breeze/releases/latest) i koristite ih povezane na svoj poslužitelj.
 - **O oglednom postavljanju (iskrena obavijest)**: Za provjeru rada postavljen je ogledni primjerak (https://breeze-469.pages.dev/). Ondje je isti softver, ali za stvarnu uporabu koristite svoj poslužitelj. Ogledni se primjerak može promijeniti ili zaustaviti bez najave. Ono što ste postavili na svoj poslužitelj ne trpi posljedice zaustavljanja oglednog primjerka.
 
@@ -24,7 +24,7 @@ Detaljna je uporaba u [uputama](MANUAL-hr.md) (druge jezike možete odabrati na 
 
 ## Uporaba (3 koraka)
 
-1. Otvorite Breeze koji ste postavili na svoj poslužitelj (ili adresu koju vam je rekao onaj tko ga je postavio) i unesite ime. Time je priprema gotova (ne treba ni registracija ni broj telefona). Tada se u vašem uređaju stvara «ključ» i on postaje vaš identitet.
+1. Otvorite Breeze koji ste postavili na svoj poslužitelj (ili adresu koju vam je rekao onaj tko ga je postavio) i pritisnite «Započni s nasumičnim ID-jem» (ime možete unijeti ako želite). Time je priprema gotova (ne treba ni registracija ni broj telefona). Tada se u vašem uređaju stvara «ključ» i on postaje vaš identitet.
 2. Dajte svoj ID ili QR kod osobi s kojom želite razgovarati.
 3. Ako i druga strana otvori aplikaciju, možete se izravno povezati i razgovarati. Ako je ne otvori, pismo se šifrirano stavlja u «spremnik za čuvanje» i dostavlja se kad je otvori. Poslužitelj koji prenosi spremnik ne može pročitati sadržaj. Pisma koja ne budu dostavljena automatski se brišu najkasnije za 7 dana.
 
@@ -43,6 +43,8 @@ Iskreno pišemo i opseg. Radi dostave, na poslužitelju postoji kratkotrajno ču
 - Glasovni pozivi i videopozivi (grupni pozivi do 8 ljudi)
 - Slanje datoteka (jedan na jedan najviše 50MB. I u grupama se može slati, ali je granica veličine manja)
 - Korištenje više uređaja i više računa (na primjer, poslovni i privatni. I broj uređaja i broj računa besplatni su i neograničeni)
+- Automatska sigurnosna kopija (kada se nešto promijeni, šifrirana sigurnosna kopija automatski se sprema na vaš poslužitelj. Na novom uređaju, kada oporavite identitet, sigurnosna kopija automatski se pronalazi i nudi vam se. Postavke vas također vode kroz prelazak na novi uređaj)
+- Ime koje sami birate za svaki kontakt (svaki kontakt možete preimenovati, a čuva se samo na ovom uređaju. Možete odabrati i prikazuje li se ime koje je svaki kontakt sam sebi postavio)
 - 51 jezik (engleski i 50 jezičnih datoteka), automatski se bira prema jeziku vašeg uređaja
 - Profil s fotografijom, naljepnice, dijeljenje lokacije
 - Naredbene operacije poput `/help` (71 vrsta)
@@ -114,7 +116,7 @@ Prijave pogrešaka šaljite na [stranicu Issue](https://github.com/shizukutanaka
 
 ## English
 
-Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server (Cloudflare's free tier is enough) and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
+Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
 
 ## Licencija
 

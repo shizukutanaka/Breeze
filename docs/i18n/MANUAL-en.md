@@ -20,7 +20,7 @@ Choose the one that matches your machine from the [download page](https://github
 - Windows: the one whose name ends in `-win-x64.exe` (there is also one for ARM machines)
 - Mac: the one whose name ends in `-mac.dmg`
 - Linux: `.AppImage` (you can run it as is) or `.deb`
-- To use it in a browser, you use the copy hosted on your own server (the installation steps are in the separate "Self-Hosting Guide")
+- To use it in a browser, you use the copy hosted on your own server (the installation steps are in the separate "Self-Hosting Guide"). The standard setup uses Cloudflare, so a Cloudflare account is required
 
 Each file comes with a checksum (SHA256SUMS.txt). If you are concerned, you can check that the checksum of the file you downloaded matches.
 
@@ -29,20 +29,20 @@ Each file comes with a checksum (SHA256SUMS.txt). If you are concerned, you can 
 ### First setup
 
 1. Open the app.
-2. Enter your name and press "Create account." That is all it takes to be ready. No registration, no phone number.
+2. Press "Start with a random ID." That is all it takes to be ready. No registration, no phone number.
 
-- If you want to bring back an identity you made before, open "Restore an existing account" and the recovery methods (a backup file, a recovery phrase, and so on) appear.
+- If you enter "Your name (display name)" in the field above the button, you start with that name. You can also press the button with the field left empty. You can change the display name later, in the profile section of the settings.
+- There is also a way to create an identity with a name and a Breeze ID you choose yourself. In that case, a recovery phrase is issued and shown on the screen. The recovery phrase is the words that let you bring that identity back on another device. Write it down on paper or somewhere safe.
+- If you want to bring back an identity you made before, open "Restore an existing account" and the recovery methods (restore from a backup file, recover with a recovery phrase, restore with account + passphrase) appear.
 - When creation finishes, a card appears guiding you to protect your key with a passphrase (it does not disappear after a time). For an important identity, follow the guidance and add the protection.
 
 At that moment, a "key" is created inside your device. That is your identity itself.
 **There is no list of accounts on the server.** Your identity exists only inside your device.
 This point becomes important in the backup chapter (9).
 
-### About "disposable identities"
+### About the former "disposable identity"
 
-If you choose "disposable identity" at creation time, you get an identity with no means of recovery at all.
-If you lose that device, reset it, or erase the browser's data, that identity will never come back.
-That is also stated on the screen. Do not choose it for an identity you will use for a long time.
+The "disposable identity" — an identity with no means of recovery at all — is gone. With the current ways of creating an identity, every identity can be protected by a backup.
 
 ---
 
@@ -73,6 +73,7 @@ If the other person also has the app open, you connect directly and can talk.
 
 - **Sending status**: You can tell from the mark next to a message. ✓ means sent, a ✓ inside a circle means it has been deposited in the mailbox, ✓✓ means it reached the other person, read is a blue mark, and failure is a red mark. They are distinguished by shape as well as colour.
 - **The contact list**: The time you last talked is shown as the time for today, "Yesterday" for yesterday, month/day for this year, and year/month/day for anything earlier. Contacts with messages you have not read have their name and time emphasised.
+- **Names for contacts**: Open "Contact info" (in the right-click menu of a contact, or the conversation's "⋮" menu) and you can set your own name for that contact (a nickname). Nicknames are stored only on this device and are never sent to the contact or the relay server. When you set a nickname, the name the contact set for themselves is also shown next to it in a muted colour. You can turn that second name off with "Also show the name each contact set for themselves" in the "Privacy" section of the settings.
 - **Your own card**: At the top of the list is your own profile card; press it to open your profile. It scrolls together with the list.
 - **Bottom tabs on a phone**: At phone widths, "Contacts" and "Settings" tabs appear at the bottom of the screen.
 - **The conversation header**: From the search icon you can search within the conversation. From the "⋮" menu you can check the safety number, mute notifications, pin, create a poll, and more.
@@ -118,6 +119,7 @@ Settings open as their own screen. On a phone, open them from the "Settings" tab
 
 - **Auto-lock**: There is a setting that locks automatically when you switch tabs.
 - **Key passphrase**: You can protect the key inside your device by wrapping it in a passphrase. You will be asked to enter it when you open the app.
+- **Also show the name each contact set for themselves**: In the "Privacy" section. For a contact you have given a nickname, you can choose whether their own name is shown alongside it (chapter 3).
 - **Blocking**: You can block a troublesome contact. Messages from a blocked contact will not reach you.
 
 ---
@@ -142,11 +144,21 @@ On devices that cannot read the battery level automatically (such as an iPhone b
 Your Breeze identity is only the key inside your device. There is no list of accounts on the server, and the people who made this do not have your key either.
 **If you lose your device, you lose your identity too.** For an important identity, always make a backup.
 
-Backup and recovery are done from the "Backup and recovery" section of the settings (there are three buttons: "Back up to the cloud," "Restore," and "Restore from a file"). The first time you add a contact, a card urging you to make a backup appears just once.
+Backup and recovery are done from the "Backup and recovery" section of the settings (the buttons are "Create Backup," "Restore Backup," and "Restore from file"). The first time you add a contact, a card urging you to make a backup appears just once.
 
-### How to make a backup
+### Automatic backup
 
-1. From "Backup and recovery" in the settings, choose to create a backup.
+The "Automatic backup" setting is on from the start. When your data changes, an encrypted backup is sent automatically to the relay server you host.
+
+- It does not send on every change: it waits 30 seconds after the last change and sends everything together. Attempts are spaced at least 15 minutes apart.
+- While you are offline, nothing is sent; the changes are held and sent when the connection returns and when you open the app.
+- For automatic sending, you need to enter the backup passphrase once on that device (when it is needed, an "Enter passphrase" button appears in the settings section). **The passphrase is not stored.** It is remembered only while the app is open, and is gone when you close it. For a simple-recovery identity, right after you enter the passphrase at registration or update, sending works as is.
+- If the relay server does not support storing backups, automatic backup does not run. That is shown in the settings section.
+- The state (when the last successful send was, whether changes are waiting, whether a send failed) is shown in the settings section.
+
+### How to make a backup (manual)
+
+1. From "Backup and recovery" in the settings, choose "Create Backup."
 2. Set a passphrase for the backup (6 characters or more).
 3. Choose where to save it.
    - **Save to a file**: Keep the backup file in your own hands (recommended).
@@ -158,11 +170,23 @@ The contents of the backup are encrypted. The server at the save destination onl
 
 On a new device, restore using the backup file (or the backup on the relay server) and the passphrase you set.
 
+If you have just brought your identity back with a recovery phrase, and a backup of that identity is on the relay server, it is found automatically and you are asked with "Backup found." If you restore it, the data on that device is replaced by the contents of the backup.
+
+### Moving to a new device
+
+Press the "Move to a new device" button in the "Backup and recovery" section of the settings and the steps are shown.
+
+1. On your current device, keep a backup on the relay server (automatic backup, or "Create Backup").
+2. On the new device, choose a restore method on the first screen and enter your recovery phrase (or your account name and passphrase).
+3. When your identity is back, the backup on the server is found automatically and a restore is offered.
+
+No cables or file hand-offs are needed.
+
 ### Notes
 
 - **If you forget the passphrase, recovery is impossible.** The people who made this cannot fix that either. Write the passphrase down somewhere else.
-- **A disposable identity cannot be brought back, by backup or by recovery.**
-- Remake the backup when your identities increase or when you change devices.
+- Entering the passphrase for automatic backup is needed on each device. On a new device, enter it once more.
+- Remake a manual backup when your identities increase or when you change devices.
 
 ---
 

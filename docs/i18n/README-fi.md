@@ -1,6 +1,6 @@
 # Breeze Messenger
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](../../LICENSE)
 
 **Lue muilla kielillä**: [日本語](../../README.md) · [English](README-en.md) · [中文（简体）](README-zh-CN.md) · [中文（繁體）](README-zh-TW.md) · [Español](README-es.md) · [Français](README-fr.md) · [Deutsch](README-de.md) · [Italiano](README-it.md) · [Português (Brasil)](README-pt-BR.md) · [Русский](README-ru.md) · [Українська](README-uk.md) · [Polski](README-pl.md) · [Nederlands](README-nl.md) · [Svenska](README-sv.md) · [Norsk](README-nb.md) · [Dansk](README-da.md) · Suomi (tämä sivu) · [Čeština](README-cs.md) · [Magyar](README-hu.md) · [Română](README-ro.md) · [Ελληνικά](README-el.md) · [Türkçe](README-tr.md) · [العربية](README-ar.md) · [فارسی](README-fa.md) · [עברית](README-he.md) · [हिन्दी](README-hi.md) · [বাংলা](README-bn.md) · [اردو](README-ur.md) · [ਪੰਜਾਬੀ](README-pa.md) · [தமிழ்](README-ta.md) · [తెలుగు](README-te.md) · [മലയാളം](README-ml.md) · [Bahasa Indonesia](README-id.md) · [Bahasa Melayu](README-ms.md) · [Tiếng Việt](README-vi.md) · [ไทย](README-th.md) · [မြန်မာ](README-my.md) · [ខ្មែរ](README-km.md) · [한국어](README-ko.md) · [Filipino](README-tl.md) · [Kiswahili](README-sw.md) · [Hausa](README-ha.md) · [Yorùbá](README-yo.md) · [Igbo](README-ig.md) · [አማርኛ](README-am.md) · [ქართული](README-ka.md) · [Azərbaycan](README-az.md) · [Қазақша](README-kk.md) · [Oʻzbek](README-uz.md) · [Српски](README-sr.md) · [Hrvatski](README-hr.md)
 
@@ -16,7 +16,7 @@ Tämä ei ole verkkosivu, vaan ohjelmisto, jonka asennat ja jota käytät (Windo
 
 Breezellä ei ole "ylläpitäjäyrityksen palvelinta". **Käyttääksesi sitä hankit itse sijoituspaikan (palvelimen) ja sijoitat Breezen sinne. Se on virallinen käyttötapa.**
 
-- Sijoituspaikka mahtuu ilmaistasoon. Se toimii Cloudflaren ilmaistasolla, eikä luottokorttia tarvita. Ohjeet ovat [asennusoppaassa](SELF_HOSTING-fi.md) (muunkieliset versiot voi valita oppaan alusta).
+- Vakioasennus käyttää Cloudflarea, joten **Cloudflare-tili vaaditaan**. Ohjeet ovat [asennusoppaassa](SELF_HOSTING-fi.md) (muunkieliset versiot voi valita oppaan alusta).
 - Hae sovellus (Windows / Mac / Linux / Android / iPhone) [lataussivulta](https://github.com/shizukutanaka/Breeze/releases/latest) ja käytä sitä yhdistettynä omaan palvelimeesi.
 - **Esimerkkiasennuksesta (rehellinen huomautus)**: Toiminnan tarkistamista varten on esimerkki (https://breeze-469.pages.dev/). Se on sama ohjelmisto, mutta käytä todelliseen käyttöön omaa palvelintasi. Esimerkki voi muuttua tai pysähtyä ilman ennakkoilmoitusta. Omalle palvelimellesi sijoittamaasi Breezeen esimerkin pysähtyminen ei vaikuta.
 
@@ -24,7 +24,7 @@ Yksityiskohtaiset käyttöohjeet ovat [käyttöoppaassa](MANUAL-fi.md) (muunkiel
 
 ## Käyttötapa (3 vaihetta)
 
-1. Avaa omalle palvelimellesi sijoittamasi Breeze (tai osoite, jonka sen sijoittanut henkilö on sinulle kertonut), ja syötä nimesi. Siinä kaikki – olet valmis (rekisteröitymistä tai puhelinnumeroa ei tarvita). Tällöin laitteesi sisällä luodaan "avain", ja se on identiteettisi.
+1. Avaa omalle palvelimellesi sijoittamasi Breeze (tai osoite, jonka sen sijoittanut henkilö on sinulle kertonut), ja paina "Aloita satunnaisella tunnuksella" (voit syöttää nimen, jos haluat). Siinä kaikki – olet valmis (rekisteröitymistä tai puhelinnumeroa ei tarvita). Tällöin laitteesi sisällä luodaan "avain", ja se on identiteettisi.
 2. Anna tunnuksesi tai QR-koodisi henkilölle, jonka kanssa haluat keskustella.
 3. Jos myös toisella henkilöllä on sovellus auki, voitte yhdistyä suoraan ja keskustella. Jos hänellä ei ole sitä auki, viesti asetetaan edelleen salattuna "postilaatikkoon" ja toimitetaan, kun hän avaa sovelluksen. Postilaatikkoa kuljettava palvelin ei voi lukea sisältöä. Kirjeet, joita ei koskaan toimiteta, poistetaan automaattisesti viimeistään 7 päivän kuluttua.
 
@@ -43,6 +43,8 @@ Kirjoitamme rehellisesti myös rajoista. Viestien toimittamiseksi palvelimella o
 - Ääni- ja videopuhelut (ryhmäpuhelut enintään 8 henkilölle)
 - Tiedostojen lähetys (kahdenkeskisissä keskusteluissa enintään 50MB. Myös ryhmissä voi lähettää, mutta kokoraja on pienempi)
 - Useiden laitteiden ja useiden tilien käyttö eri tarkoituksiin (esimerkiksi työ ja yksityinen. Sekä laitteiden että tilien määrä on ilmainen ja rajoittamaton)
+- Automaattinen varmuuskopiointi (kun jokin muuttuu, salattu varmuuskopio tallennetaan automaattisesti omalle palvelimellesi. Uudella laitteella, kun olet palauttanut identiteettisi, varmuuskopio löydetään automaattisesti ja sitä tarjotaan sinulle. Asetukset opastavat myös uuteen laitteeseen siirtymisessä)
+- Nimi, jonka valitset jokaiselle yhteyshenkilölle (voit nimetä jokaisen yhteyshenkilön uudelleen, tallennetaan vain tähän laitteeseen. Voit myös valita, näytetäänkö nimi, jonka kukin yhteyshenkilö on itse asettanut)
 - 51 kieltä (englanti ja 50 kielitiedostoa), valitaan automaattisesti laitteesi kielen mukaan
 - Profiilit kuvalla, tarrat, sijainnin jakaminen
 - Komennot, kuten `/help` (71 tyyppiä)
@@ -114,7 +116,7 @@ Ilmoita vioista [Issue-sivulla](https://github.com/shizukutanaka/Breeze/issues).
 
 ## English
 
-Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server (Cloudflare's free tier is enough) and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
+Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
 
 ## Lisenssi
 

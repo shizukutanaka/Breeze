@@ -20,7 +20,7 @@ Valitse laitteellesi sopiva tiedosto [lataussivulta](https://github.com/shizukut
 - Windows: tiedostot, joiden nimi päättyy `-win-x64.exe` (saatavilla myös ARM-laitteille)
 - Mac: tiedostot, joiden nimi päättyy `-mac.dmg`
 - Linux: `.AppImage` (voidaan suorittaa sellaisenaan) tai `.deb`
-- Jos haluat käyttää selaimessa, käytä omalle palvelimellesi sijoittamaasi versiota (asennusohjeet ovat erillisessä asiakirjassa "Asennusopas")
+- Jos haluat käyttää selaimessa, käytä omalle palvelimellesi sijoittamaasi versiota (asennusohjeet ovat erillisessä asiakirjassa "Asennusopas"). Vakioasennus käyttää Cloudflarea, joten Cloudflare-tili vaaditaan.
 
 Jokaisen tiedoston mukana on tarkistusluku (SHA256SUMS.txt). Jos olet huolissasi, voit tarkistaa, että lataamasi tiedoston luku täsmää.
 
@@ -29,20 +29,20 @@ Jokaisen tiedoston mukana on tarkistusluku (SHA256SUMS.txt). Jos olet huolissasi
 ### Ensiasetukset
 
 1. Avaa sovellus.
-2. Syötä nimesi ja paina "Luo tili". Siinä kaikki – olet valmis. Rekisteröitymistä tai puhelinnumeroa ei tarvita.
+2. Paina "Aloita satunnaisella tunnuksella". Siinä kaikki – olet valmis. Rekisteröitymistä tai puhelinnumeroa ei tarvita.
 
-- Jos haluat palauttaa aiemmin tekemäsi identiteetin, avaa "Palauta olemassa oleva tili", niin palautustavat (varmuuskopiotiedosto, palautuslauseke jne.) tulevat näkyviin.
+- Jos syötät kenttään painikkeen yläpuolella "Nimesi (näyttönimi)", aloitat sillä nimellä. Voit myös painaa painiketta kentän ollessa tyhjä. Näyttönimen voi vaihtaa myöhemmin asetusten profiiliosiossa.
+- On myös tapa luoda identiteetti nimellä ja Breeze-tunnuksella, jonka valitset itse. Tällöin annetaan palautuslause, joka näytetään näytöllä. Palautuslause on sanat, joilla voit tuoda identiteetin takaisin toisella laitteella. Kirjoita se muistiin paperille tai turvalliseen paikkaan.
+- Jos haluat palauttaa aiemmin tekemäsi identiteetin, avaa "Palauta olemassa oleva tili", niin palautustavat (palauta varmuuskopiotiedostosta, palauta palautuslauseella, palauta tilillä + tunnuslauseella) tulevat näkyviin.
 - Kun luominen on valmis, näkyviin tulee kortti, joka ohjaa sinua suojaamaan avaimesi tunnuslauseella (se ei katoa ajan kuluttua). Tärkeän identiteetin kohdalla noudata ohjetta ja lisää suojaus.
 
 Tällöin laitteesi sisällä luodaan "avain". Se on itse identiteettisi.
 **Palvelimella ei ole tililuetteloa.** Identiteettisi on vain laitteesi sisällä.
 Tämä tulee tärkeäksi varmuuskopiointiluvussa (9).
 
-### "Kertakäyttöidentiteetistä"
+### Entisestä "kertakäyttöidentiteetistä"
 
-Jos valitset luomisen yhteydessä "kertakäyttöidentiteetin", saat identiteetin, jota ei voi palauttaa millään tavalla.
-Jos kadotat laitteen, palautat sen tehdasasetuksiin tai poistat selaimen tiedot, identiteetti on mennyttä ikuisesti.
-Tämä näkyy myös näytöllä. Älä valitse sitä identiteetille, jota aiot käyttää pitkään.
+"Kertakäyttöidentiteetti" — identiteetti, jota ei voi palauttaa millään tavalla — on poistunut. Nykyisillä identiteetin luomistavoilla jokainen identiteetti voidaan suojata varmuuskopiolla.
 
 ---
 
@@ -73,6 +73,7 @@ Jos myös toisella henkilöllä on sovellus auki, voitte yhdistyä suoraan ja ke
 
 - **Lähetystila**: Sen näkee viestin vieressä olevasta merkistä. ✓ tarkoittaa lähetettyä, ympyrässä oleva ✓ tarkoittaa, että se on talletettu postilaatikkoon, ✓✓ tarkoittaa, että se tavoitti toisen henkilön, luettu on sininen merkki ja epäonnistuminen punainen merkki. Ne erotetaan myös muodolla, ei vain värillä.
 - **Yhteystietoluettelo**: Viimeisimmän keskustelun aika näkyy kellonaikana tälle päivälle, "Eilen" eiliselle, kuukausi/päivä tälle vuodelle ja vuosi/kuukausi/päivä sitä vanhemmille. Yhteyshenkilöillä, joilta on lukemattomia viestejä, nimi ja aika ovat korostettuina.
+- **Yhteyshenkilöiden nimet**: Avaa "Yhteystiedot" (yhteyshenkilön oikean napsautuksen valikosta tai keskustelun valikosta "⋮"), niin voit asettaa oman nimesi kyseiselle yhteyshenkilölle (lempinimen). Lempinimet tallennetaan vain tähän laitteeseen, eikä niitä lähetetä koskaan yhteyshenkilölle tai välityspalvelimelle. Kun asetat lempinimen, yhteyshenkilön itse asettama nimi näytetään myös sen vieressä hillityllä värillä. Voit kytkeä toisen nimen pois päältä asetusten "Yksityisyys"-osion kohdalla "Näytä myös nimi, jonka kukin yhteyshenkilö on itse asettanut".
 - **Oma korttisi**: Luettelon yläosassa on oma profiilikorttisi; avaa profiilisi painamalla sitä. Se vierii luettelon mukana.
 - **Alareunan välilehdet puhelimessa**: Puhelimen leveydellä näytön alareunaan ilmestyvät välilehdet "Yhteystiedot" ja "Asetukset".
 - **Keskustelun otsikko**: Hakukuvakkeesta voit hakea keskustelusta. Valikosta "⋮" voit tarkistaa turvanumeron, mykistää ilmoitukset, kiinnittää, luoda äänestyksen ja muuta.
@@ -107,6 +108,7 @@ Jotkin toiminnot, kuten asetukset ja laitteiden linkitys, tehdään komennoilla.
 - Voit luoda useita tilejä ja käyttää niitä eri tarkoituksiin (esimerkiksi työ ja yksityinen). Sekä laitteiden että tilien määrä on ilmainen ja rajoittamaton.
 - **Tilin luominen**: Paina painiketta "+" tilivälilehtien vieressä yhteystietoluettelon aivan yläosassa. Syötä nimi ja valitse kuvake-emoji, niin uusi tili luodaan ja siihen vaihdetaan automaattisesti.
 - **Tilien vaihtaminen**: Tilivälilehdet näkyvät aina yhteystietoluettelon aivan yläosassa. Vaihda painamalla yhtä (tietokoneella voit vaihtaa myös näppäimillä Ctrl+1–9). Paina välilehteä pitkään nimetäksesi sen uudelleen, vaihtaaksesi sen kuvakkeen tai poistaaksesi sen.
+- Yhteystiedot ja avaimet ovat erilliset jokaisella tilillä. Vaihda yhteystietoja uudelleen jokaisella tilillä.
 - Kieli valitaan automaattisesti 51 kielestä, englanti mukaan lukien, laitteesi kielen mukaan.
 
 ---
@@ -117,6 +119,7 @@ Asetukset avautuvat omana näyttönään. Puhelimessa avaa ne näytön alareunan
 
 - **Automaattinen lukitus**: On asetus, joka lukitsee automaattisesti, kun vaihdat välilehteä.
 - **Avaimen tunnuslause**: Voit suojata laitteesi sisällä olevan avaimen käärimällä sen tunnuslauseeseen. Sinua pyydetään syöttämään se, kun avaat sovelluksen.
+- **Näytä myös nimi, jonka kukin yhteyshenkilö on itse asettanut**: "Yksityisyys"-osiossa. Yhteyshenkilölle, jolle olet antanut lempinimen, voit valita, näytetäänkö heidän oma nimensä sen rinnalla (luku 3).
 - **Esto**: Voit estää häiritsevät henkilöt. Estetyn henkilön viestit eivät tavoita sinua.
 
 ---
@@ -141,11 +144,21 @@ Laitteilla, jotka eivät voi lukea akun tasoa automaattisesti (kuten iPhone-sela
 Breeze-identiteettisi on vain laitteesi sisällä oleva avain. Palvelimella ei ole tililuetteloa, eikä tekijälläkään ole avaintasi.
 **Jos kadotat laitteesi, menetät identiteettisi.** Tee tärkeälle identiteetille aina varmuuskopio.
 
-Varmuuskopiointi ja palautus tehdään asetusten osiosta "Varmuuskopiointi ja palautus" (siinä on kolme painiketta: "Varmuuskopioi pilveen", "Palauta" ja "Palauta tiedostosta"). Kun lisäät yhteystiedon ensimmäisen kerran, näkyviin tulee vain kerran kortti, joka kehottaa tekemään varmuuskopion.
+Varmuuskopiointi ja palautus tehdään asetusten osiosta "Varmuuskopiointi & palautus" (painikkeet ovat "Luo varmuuskopio", "Palauta varmuuskopio" ja "Palauta tiedostosta"). Kun lisäät yhteystiedon ensimmäisen kerran, näkyviin tulee vain kerran kortti, joka kehottaa tekemään varmuuskopion.
 
-### Varmuuskopion tekeminen
+### Automaattinen varmuuskopiointi
 
-1. Valitse varmuuskopion tekeminen asetusten kohdasta "Varmuuskopiointi ja palautus".
+Asetus "Automaattinen varmuuskopiointi" on päällä alusta alkaen. Kun tietosi muuttuvat, salattu varmuuskopio lähetetään automaattisesti itse ylläpitämällesi välityspalvelimelle.
+
+- Se ei lähetä jokaisesta muutoksesta: se odottaa 30 sekuntia viimeisen muutoksen jälkeen ja lähettää kaiken yhdessä. Yritysten välillä on vähintään 15 minuuttia.
+- Kun olet offline-tilassa, mitään ei lähetetä; muutokset pidetään tallessa ja lähetetään, kun yhteys palaa ja kun avaat sovelluksen.
+- Automaattista lähetystä varten sinun on syötettävä varmuuskopion tunnuslause kerran kyseisellä laitteella (kun sitä tarvitaan, asetusosioon tulee näkyviin painike "Syötä tunnuslause"). **Tunnuslausetta ei tallenneta.** Se muistetaan vain sovelluksen ollessa auki, ja se katoaa, kun suljet sen. Yksinkertaisen palautuksen identiteetillä lähetys toimii sellaisenaan heti sen jälkeen, kun olet syöttänyt tunnuslauseen rekisteröinnin tai päivityksen yhteydessä.
+- Jos välityspalvelin ei tue varmuuskopioiden tallentamista, automaattinen varmuuskopiointi ei toimi. Se näkyy asetusosiossa.
+- Tila (milloin viimeisin onnistunut lähetys oli, odottaako muutoksia, epäonnistuiko lähetys) näkyy asetusosiossa.
+
+### Varmuuskopion tekeminen (manuaalinen)
+
+1. Valitse asetusten kohdasta "Varmuuskopiointi & palautus" vaihtoehto "Luo varmuuskopio".
 2. Aseta varmuuskopion tunnuslause (vähintään 6 merkkiä).
 3. Valitse tallennuspaikka.
    - **Tallenna tiedostoon**: Säilytä varmuuskopiotiedosto itselläsi (suositeltu).
@@ -157,11 +170,23 @@ Varmuuskopion sisältö on salattu. Palvelin, jolle se tallennetaan, käsittelee
 
 Palauta uudella laitteella varmuuskopiotiedostolla (tai välityspalvelimen varmuuskopiolla) ja asettamallasi tunnuslauseella.
 
+Jos olet juuri tuonut identiteettisi takaisin palautuslauseella ja kyseisen identiteetin varmuuskopio on välityspalvelimella, se löydetään automaattisesti ja sinulta kysytään ilmoituksella "Varmuuskopio löytyi". Jos palautat sen, laitteen tiedot korvataan varmuuskopion sisällöllä.
+
+### Siirry uuteen laitteeseen
+
+Paina asetusten "Varmuuskopiointi & palautus" -osion painiketta "Siirry uuteen laitteeseen", niin vaiheet näytetään.
+
+1. Varmista nykyisellä laitteellasi, että välityspalvelimella on varmuuskopio (automaattinen varmuuskopiointi tai "Luo varmuuskopio").
+2. Valitse uudella laitteella ensimmäisellä näytöllä palautustapa ja syötä palautuslauseesi (tai tilisi nimi ja tunnuslause).
+3. Kun identiteettisi on takaisin, palvelimella oleva varmuuskopio löydetään automaattisesti ja palautusta tarjotaan.
+
+Kaapeleita tai tiedostojen luovutuksia ei tarvita.
+
 ### Huomioita
 
 - **Jos unohdat tunnuslauseen, palautus on mahdotonta.** Tekijäkään ei voi korjata sitä. Kirjoita tunnuslause muistiin toiseen paikkaan.
-- **Kertakäyttöidentiteettiä ei voi palauttaa, ei varmuuskopiolla eikä palautuksella.**
-- Tee varmuuskopio uudelleen, kun lisäät identiteettejä tai vaihdat laitetta.
+- Automaattisen varmuuskopioinnin tunnuslause on syötettävä jokaisella laitteella. Syötä se uudella laitteella vielä kerran.
+- Tee manuaalinen varmuuskopio uudelleen, kun identiteettisi lisääntyvät tai kun vaihdat laitetta.
 
 ---
 

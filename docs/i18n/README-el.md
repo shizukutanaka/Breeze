@@ -1,6 +1,6 @@
 # Breeze Messenger
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](../../LICENSE)
 
 **Διαβάστε σε άλλη γλώσσα**: [日本語](../../README.md) · [English](README-en.md) · [中文（简体）](README-zh-CN.md) · [中文（繁體）](README-zh-TW.md) · [Español](README-es.md) · [Français](README-fr.md) · [Deutsch](README-de.md) · [Italiano](README-it.md) · [Português (Brasil)](README-pt-BR.md) · [Русский](README-ru.md) · [Українська](README-uk.md) · [Polski](README-pl.md) · [Nederlands](README-nl.md) · [Svenska](README-sv.md) · [Norsk](README-nb.md) · [Dansk](README-da.md) · [Suomi](README-fi.md) · [Čeština](README-cs.md) · [Magyar](README-hu.md) · [Română](README-ro.md) · Ελληνικά (αυτή η σελίδα) · [Türkçe](README-tr.md) · [العربية](README-ar.md) · [فارسی](README-fa.md) · [עברית](README-he.md) · [हिन्दी](README-hi.md) · [বাংলা](README-bn.md) · [اردو](README-ur.md) · [ਪੰਜਾਬੀ](README-pa.md) · [தமிழ்](README-ta.md) · [తెలుగు](README-te.md) · [മലയാളം](README-ml.md) · [Bahasa Indonesia](README-id.md) · [Bahasa Melayu](README-ms.md) · [Tiếng Việt](README-vi.md) · [ไทย](README-th.md) · [မြန်မာ](README-my.md) · [ខ្មែរ](README-km.md) · [한국어](README-ko.md) · [Filipino](README-tl.md) · [Kiswahili](README-sw.md) · [Hausa](README-ha.md) · [Yorùbá](README-yo.md) · [Igbo](README-ig.md) · [አማርኛ](README-am.md) · [ქართული](README-ka.md) · [Azərbaycan](README-az.md) · [Қазақша](README-kk.md) · [Oʻzbek](README-uz.md) · [Српски](README-sr.md) · [Hrvatski](README-hr.md)
 
@@ -16,7 +16,7 @@
 
 Το Breeze δεν έχει «διακομιστή εταιρείας που το λειτουργεί». **Για να το χρησιμοποιήσετε, ετοιμάζετε εσείς οι ίδιοι έναν χώρο εγκατάστασης (διακομιστή) και εγκαθιστάτε εκεί το Breeze. Αυτός είναι ο επίσημος τρόπος χρήσης.**
 
-- Για τον χώρο εγκατάστασης αρκεί το δωρεάν επίπεδο. Λειτουργεί εντός του δωρεάν πλαισίου του Cloudflare και δεν χρειάζεται πιστωτική κάρτα. Η διαδικασία βρίσκεται στον [οδηγό εγκατάστασης](SELF_HOSTING-el.md) (οι εκδόσεις σε άλλες γλώσσες επιλέγονται από την αρχή του οδηγού).
+- Η τυπική εγκατάσταση χρησιμοποιεί το Cloudflare, επομένως **απαιτείται λογαριασμός Cloudflare**. Η διαδικασία βρίσκεται στον [οδηγό εγκατάστασης](SELF_HOSTING-el.md) (οι εκδόσεις σε άλλες γλώσσες επιλέγονται από την αρχή του οδηγού).
 - Την εφαρμογή (Windows / Mac / Linux / Android / iPhone) την παίρνετε από τη [σελίδα λήψης](https://github.com/shizukutanaka/Breeze/releases/latest) και τη χρησιμοποιείτε συνδεδεμένη στον δικό σας διακομιστή.
 - **Σχετικά με την ενδεικτική εγκατάσταση (μια ειλικρινής ενημέρωση)**: Έχουμε τοποθετήσει ένα δείγμα για έλεγχο λειτουργίας (https://breeze-469.pages.dev/). Εκεί τρέχει το ίδιο λογισμικό, αλλά για πραγματική χρήση παρακαλούμε χρησιμοποιήστε τον δικό σας διακομιστή. Το δείγμα μπορεί να αλλάξει ή να σταματήσει χωρίς προειδοποίηση. Ένα αντίγραφο εγκατεστημένο στον δικό σας διακομιστή δεν επηρεάζεται από τη διακοπή του δείγματος.
 
@@ -24,7 +24,7 @@
 
 ## Τρόπος χρήσης (3 βήματα)
 
-1. Ανοίγετε το Breeze που είναι εγκατεστημένο στον δικό σας διακομιστή (ή τη διεύθυνση που σας έδωσε το άτομο που το εγκατέστησε) και εισάγετε το όνομά σας. Μόνο με αυτό η προετοιμασία ολοκληρώνεται (δεν χρειάζεται ούτε εγγραφή ούτε αριθμός τηλεφώνου). Εκείνη τη στιγμή, μέσα στη συσκευή δημιουργείται ένα «κλειδί», το οποίο γίνεται η ταυτότητά σας.
+1. Ανοίγετε το Breeze που είναι εγκατεστημένο στον δικό σας διακομιστή (ή τη διεύθυνση που σας έδωσε το άτομο που το εγκατέστησε) και πατάτε «Έναρξη με τυχαίο αναγνωριστικό» (αν θέλετε, μπορείτε να εισαγάγετε ένα όνομα). Μόνο με αυτό η προετοιμασία ολοκληρώνεται (δεν χρειάζεται ούτε εγγραφή ούτε αριθμός τηλεφώνου). Εκείνη τη στιγμή, μέσα στη συσκευή δημιουργείται ένα «κλειδί», το οποίο γίνεται η ταυτότητά σας.
 2. Δίνετε το αναγνωριστικό σας (ID) ή τον κωδικό QR στο άτομο με το οποίο θέλετε να μιλήσετε.
 3. Αν και το άλλο άτομο έχει ανοίξει την εφαρμογή, μπορείτε να συνδεθείτε απευθείας και να συνομιλήσετε. Αν το άλλο άτομο δεν την έχει ανοίξει, το μήνυμα παραμένει κρυπτογραφημένο στο «κουτί φύλαξης» και παραδίδεται όταν την ανοίξει. Ο διακομιστής που μεταφέρει το κουτί φύλαξης δεν μπορεί να διαβάσει το περιεχόμενο. Τα γράμματα που δεν παραδίδονται διαγράφονται αυτόματα μετά από 7 ημέρες το πολύ.
 
@@ -43,6 +43,8 @@
 - Φωνητικές κλήσεις και βιντεοκλήσεις (ομαδικές κλήσεις έως 8 άτομα)
 - Αποστολή αρχείων (στις συνομιλίες ένας προς έναν έως 50 MB. Μπορεί να σταλεί και σε ομάδες, αλλά το όριο μεγέθους είναι μικρότερο.)
 - Ξεχωριστή χρήση πολλών συσκευών και πολλών λογαριασμών (για παράδειγμα επαγγελματικός και προσωπικός· τόσο ο αριθμός συσκευών όσο και ο αριθμός λογαριασμών είναι δωρεάν και απεριόριστοι)
+- Αυτόματο αντίγραφο ασφαλείας (όταν κάτι αλλάζει, ένα κρυπτογραφημένο αντίγραφο ασφαλείας αποθηκεύεται αυτόματα στον δικό σας διακομιστή. Σε μια νέα συσκευή, μόλις ανακτήσετε την ταυτότητά σας, ένα αντίγραφο ασφαλείας βρίσκεται αυτόματα και σας προσφέρεται. Οι ρυθμίσεις σάς καθοδηγούν επίσης στη μετάβαση σε νέα συσκευή)
+- Ένα όνομα που επιλέγετε εσείς για κάθε επαφή (μπορείτε να μετονομάσετε κάθε επαφή· αποθηκεύεται μόνο σε αυτή τη συσκευή. Μπορείτε επίσης να επιλέξετε αν εμφανίζεται το όνομα που κάθε επαφή όρισε η ίδια για τον εαυτό της)
 - 51 γλώσσες (αγγλικά συν 50 αρχεία γλώσσας), επιλέγονται αυτόματα ώστε να ταιριάζουν με τη γλώσσα της συσκευής σας
 - Προφίλ με φωτογραφία, αυτοκόλλητα, κοινοποίηση τοποθεσίας
 - Λειτουργία με εντολές όπως `/help` (71 είδη)
@@ -114,7 +116,7 @@ npm test          # テストを実行する
 
 ## English
 
-Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server (Cloudflare's free tier is enough) and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
+Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
 
 ## Άδεια
 

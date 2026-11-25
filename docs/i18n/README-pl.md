@@ -16,7 +16,7 @@ To nie jest strona internetowa, lecz oprogramowanie do zainstalowania i używani
 
 Breeze nie ma „serwera firmy”. **Aby z niego korzystać, sam przygotowujesz miejsce (serwer) i stawiasz na nim Breeze. To jest oficjalny sposób użycia.**
 
-- Miejsca wystarczy w bezpłatnym zakresie. Działa w bezpłatnym planie Cloudflare, karta kredytowa nie jest potrzebna. Procedura znajduje się w [poradniku instalacji](SELF_HOSTING-pl.md) (wersje w innych językach można wybrać na początku poradnika).
+- Standardowa instalacja korzysta z Cloudflare, więc **wymagane jest konto Cloudflare**. Procedura znajduje się w [poradniku instalacji](SELF_HOSTING-pl.md) (wersje w innych językach można wybrać na początku poradnika).
 - Aplikacje (Windows / Mac / Linux / Android / iPhone) pobierz ze [strony pobierania](https://github.com/shizukutanaka/Breeze/releases/latest) i połącz je z własnym serwerem.
 - **O instalacji pokazowej (uczciwa informacja)**: do sprawdzania działania umieszczono egzemplarz pokazowy (https://breeze-469.pages.dev/). Jest tam to samo oprogramowanie, ale do prawdziwego użytku prosimy korzystać z własnego serwera. Egzemplarz pokazowy może się zmienić lub zostać zatrzymany bez zapowiedzi. To, co postawiłeś na własnym serwerze, nie odczuje skutków zatrzymania egzemplarza pokazowego.
 
@@ -24,7 +24,7 @@ Szczegóły użytkowania znajdują się w [instrukcji obsługi](MANUAL-pl.md) (w
 
 ## Jak korzystać (3 kroki)
 
-1. Otwórz Breeze postawionego na własnym serwerze (lub pod adresem, który podał ci ten, kto go postawił) i wpisz imię. Na tym przygotowanie się kończy (nie trzeba rejestracji ani numeru telefonu). W tym momencie wewnątrz urządzenia powstaje „klucz” i to on jest twoją tożsamością.
+1. Otwórz Breeze postawionego na własnym serwerze (lub pod adresem, który podał ci ten, kto go postawił) i naciśnij „Zacznij od losowego ID” (jeśli chcesz, możesz wpisać imię). Na tym przygotowanie się kończy (nie trzeba rejestracji ani numeru telefonu). W tym momencie wewnątrz urządzenia powstaje „klucz” i to on jest twoją tożsamością.
 2. Przekaż swój identyfikator lub kod QR osobie, z którą chcesz rozmawiać.
 3. Jeśli druga osoba też ma otwartą aplikację, łączycie się bezpośrednio i możecie rozmawiać. Jeśli nie ma otwartej aplikacji, wiadomość trafia w zaszyfrowanej postaci do „skrzynki oczekiwania” i zostaje dostarczona, gdy otworzy aplikację. Serwer, który przenosi skrzynkę oczekiwania, nie może odczytać treści. Niedostarczone listy są automatycznie usuwane najpóźniej po 7 dniach.
 
@@ -43,6 +43,8 @@ Uczciwie podajemy też zakres. Aby dostarczyć wiadomość, serwer przechowuje d
 - Rozmowy głosowe i wideo (rozmowy grupowe do 8 osób)
 - Wysyłanie plików (w rozmowach jeden na jeden do 50 MB. W grupach też się da, ale limit rozmiaru jest mniejszy)
 - Wiele urządzeń i wiele kont (np. służbowe i prywatne. Zarówno liczba urządzeń, jak i kont jest bezpłatna i nieograniczona)
+- Automatyczna kopia zapasowa (gdy coś się zmienia, zaszyfrowana kopia zapasowa jest automatycznie zapisywana na twoim własnym serwerze. Na nowym urządzeniu, gdy odzyskasz swoją tożsamość, kopia zapasowa jest znajdowana automatycznie i ci proponowana. Ustawienia prowadzą cię też przez przejście na nowe urządzenie)
+- Imię, które wybierasz dla każdego kontaktu (każdy kontakt możesz przemianować; jest przechowywane wyłącznie na tym urządzeniu. Możesz też wybrać, czy imię, które każdy kontakt ustawił dla siebie, ma być pokazywane)
 - 51 języków (angielski plus 50 plików językowych), wybieranych automatycznie zgodnie z językiem twojego urządzenia
 - Profil ze zdjęciem, naklejki, udostępnianie lokalizacji
 - Polecenia takie jak `/help` (71 rodzajów)
@@ -114,7 +116,7 @@ Zgłoszenia usterek — na [stronę Issue](https://github.com/shizukutanaka/Bree
 
 ## English
 
-Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server (Cloudflare's free tier is enough) and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [docs/COMPARISON.md](../COMPARISON.md).
+Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [docs/COMPARISON.md](../COMPARISON.md).
 
 ## Licencja
 
